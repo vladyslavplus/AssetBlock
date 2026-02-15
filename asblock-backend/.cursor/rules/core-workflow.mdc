@@ -1,0 +1,14 @@
+---
+description: Core development workflow & safety rules (applies everywhere)
+alwaysApply: true
+priority: 90
+---
+# Core Workflow Rules
+
+- ALWAYS start with a brief <PLAN> section before code: goals, steps, risks, alternatives.
+- Make SMALL, atomic changes: one concern per edit (refactor, feature, fix, test).
+- After code: suggest exact commands to run (lint, test, build, format).
+- Include regression risks & how to verify.
+- If change affects multiple files: list them clearly and prefer sequential edits.
+- Never delete code/comments without explicit reason.
+- Use diff-friendly style: minimal line changes, preserve existing formatting/comments when possible.

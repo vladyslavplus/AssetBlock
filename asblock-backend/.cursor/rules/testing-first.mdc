@@ -1,0 +1,9 @@
+---
+description: Encourage TDD / test suggestions
+---
+# Testing Mindset
+
+Before implementing:
+- Suggest 3–5 key test cases (happy path, edge, failure).
+- Write failing tests first when feasible.
+- After code: add integration/unit test snippets if missing.

@@ -1,0 +1,13 @@
+---
+description: Universal clean code & maintainability rules
+alwaysApply: true
+---
+# Clean Code Principles
+
+- Functions < 30–50 lines ideal; single responsibility.
+- Early returns over deep nesting.
+- Descriptive names: verbs for actions, adjectives for states (isLoading, handleSubmit).
+- No magic numbers/strings → constants with names.
+- Comment WHY, not WHAT (code should be self-explanatory).
+- Favor immutability where possible.
+- Add JSDoc/TS doc comments for public APIs.

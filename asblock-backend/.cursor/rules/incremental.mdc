@@ -1,0 +1,12 @@
+---
+description: Always suggest small, reviewable changes.
+alwaysApply: true
+---
+# Incremental & Review-Friendly Development
+
+- Prefer small, focused diffs: one feature/fix/refactor per edit.
+- ALWAYS explain changes first in a <PLAN> block: what, why, impact, tests needed.
+- Include inline comments in code for non-obvious parts.
+- After edits, suggest running tests/lint/build (e.g., dotnet test, npm run lint).
+- If large refactor needed, propose steps in numbered list and ask for confirmation before full implementation.
+- Use diff-friendly patterns: avoid renaming files/classes unless explicitly requested.

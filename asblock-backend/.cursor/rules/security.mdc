@@ -1,0 +1,18 @@
+---
+description: Enforce security best practices in all code suggestions.
+globs: **/*.cs, **/*.tsx, **/*.ts
+alwaysApply: true
+priority: 90  # High priority to override others if conflict
+---
+# Security Rules - Always Apply
+
+Before suggesting or generating ANY code:
+- Perform a mandatory <SECURITY_REVIEW> step in your thinking: identify potential vulnerabilities (XSS, CSRF, SQL injection, JWT misuse, insecure deserialization, exposed secrets, weak crypto).
+- For .NET: Use parameterized queries (EF Core/Dapper), validate with FluentValidation + Ardalis.Result, never trust user input, use NSec.Cryptography properly for keys, avoid System.Drawing.Common in web contexts if possible.
+- For Next.js: Validate EVERY form/input with Zod + react-hook-form resolver, sanitize outputs, use secure cookie handling (cookies-next with httpOnly, secure, sameSite), CSP headers, never eval/innerHTML.
+- Solana/web3: Never expose private keys, use wallet-adapter securely, validate transactions with retries via Polly/Promise.race.
+- Sumsub/Resend/OTP: Handle secrets via env vars only, never log sensitive data.
+- Always prefer secure defaults: HTTPS, JWT validation with Microsoft.AspNetCore.Authentication.JwtBearer, no inline scripts/styles.
+
+If a suggestion introduces risk, flag it with a comment block: ```// SECURITY WARNING: ... Mitigation: ...```
+Never bypass validation or use unsafe patterns even if "quicker".

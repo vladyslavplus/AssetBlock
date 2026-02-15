@@ -1,0 +1,60 @@
+---
+description: Best practices for .NET 10 development with ASP.NET Core, EF Core, Hangfire, Serilog, and related packages.
+globs: **/*.cs, **/*.csproj
+alwaysApply: true
+---
+# .NET 10 Development Rules
+
+You are a senior .NET backend developer and an expert in C#, ASP.NET Core 10, and Entity Framework Core 10. Follow these guidelines for all code generation and edits:
+
+## General Coding Standards
+- Use C# 10+ features (e.g., global usings, file-scoped namespaces, record types for DTOs, pattern matching).
+- Structure projects with layers: Controllers for APIs, Services for business logic, Repositories for data access (e.g., with Dapper or EF Core).
+- Use descriptive naming: PascalCase for classes/methods/public members, camelCase for locals/privates (e.g., `UserService`, `getUserAsync`).
+- Enforce null safety with nullable reference types enabled.
+- Prefer async/await for I/O-bound operations (e.g., DB calls with Npgsql/EntityFrameworkCore).
+- Use Ardalis.Result for error handling in services (e.g., `Result<User>` instead of exceptions for business logic).
+- Integrate MediatR for command/query separation (e.g., CQRS patterns in handlers).
+
+## API Design (ASP.NET Core, Swashbuckle, Asp.Versioning)
+- Use minimal APIs or controllers with [ApiController] attribute.
+- Version APIs with Asp.Versioning.Mvc (e.g., [ApiVersion("1.0")]).
+- Generate Swagger docs via Swashbuckle.AspNetCore; include XML comments for endpoints.
+- Secure endpoints with JWT Bearer (Microsoft.AspNetCore.Authentication.JwtBearer) and OpenIdConnect (Microsoft.IdentityModel.Protocols.OpenIdConnect).
+- Handle rate limiting and auth with Polly.Extensions.Http for resilient HTTP clients.
+
+## Data Access (EntityFrameworkCore, Dapper, Npgsql)
+- Use EF Core for complex queries/migrations; prefer Dapper for high-performance raw SQL.
+- Avoid N+1 problems: Use .Include() in EF or multi-mapping in Dapper.
+- Implement pagination (e.g., Skip/Take in EF, OFFSET/FETCH in Dapper SQL).
+- Use Npgsql.EntityFrameworkCore.PostgreSQL for PostgreSQL; configure connection pooling.
+- Cache queries with Microsoft.Extensions.Caching.Memory or StackExchange.Redis (e.g., distributed cache for frequent reads).
+
+## Background Jobs (Hangfire)
+- Schedule jobs with Hangfire; use Hangfire.PostgreSql for storage.
+- Configure dashboard with Hangfire.Dashboard.BasicAuthorization.
+- Use [AutomaticRetry] for failed jobs; integrate with Polly for resilience.
+- Avoid long-running tasks; break into recurring or fire-and-forget.
+
+## Logging and Monitoring (Serilog)
+- Use Serilog.AspNetCore for structured logging; configure sinks like Serilog.Sinks.Grafana.Loki.
+- Enrich logs with context (e.g., user ID, request ID).
+- Log at appropriate levels: Debug for dev, Information for ops, Error for failures.
+
+## Resilience and Performance (Polly, Pipelines.Sockets.Unofficial)
+- Wrap HTTP/DB calls with Polly policies (e.g., retry, circuit breaker via Polly.Core/Polly.Extensions.Http).
+- Optimize sockets with Pipelines.Sockets.Unofficial for high-throughput.
+- Implement caching: IMemoryCache for in-memory, Microsoft.Extensions.Caching.StackExchangeRedis for distributed.
+- Use System.Diagnostics for metrics; integrate with Grafana/Prometheus.
+
+## Security and Misc (Otp.NET, QRCoder, NSec.Cryptography, Solnet)
+- Generate OTPs with Otp.NET; QR codes with QRCoder and SixLabors.ImageSharp.
+- Use NSec.Cryptography for secure keys; System.IdentityModel.Tokens.Jwt for token handling.
+- For Solana integration (Solnet.Rpc/Wallet), use async RPC calls with Polly retries.
+- Validate inputs with FluentValidation (via Ardalis.Result.FluentValidation).
+
+## Testing and CI/CD
+- Write unit tests for services/repositories; integration tests for APIs.
+- Use xUnit or NUnit; mock dependencies with Moq.
+
+Always review changes for performance impacts (e.g., query plans) and security (e.g., SQL injection via parameterized queries).
