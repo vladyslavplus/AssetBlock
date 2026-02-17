@@ -9,4 +9,4 @@ public sealed record AssetDetailItem(
     string? CategoryName,
     Guid AuthorId,
     DateTimeOffset CreatedAt,
-    DateTimeOffset UpdatedAt);
+    DateTimeOffset? UpdatedAt);

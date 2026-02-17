@@ -9,7 +9,7 @@ public class RefreshToken
     public required Guid UserId { get; set; }
     /// <summary>Hash of the refresh token (never store plain token).</summary>
     public required string TokenHash { get; set; }
-    public DateTimeOffset ExpiresAt { get; set; }
+    public required DateTimeOffset ExpiresAt { get; set; }
     public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
     public DateTimeOffset? RevokedAt { get; set; }
 

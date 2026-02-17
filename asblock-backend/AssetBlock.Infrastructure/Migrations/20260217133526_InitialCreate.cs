@@ -33,7 +33,7 @@ namespace AssetBlock.Infrastructure.Migrations
                 {
                     Id = table.Column<Guid>(type: "uuid", nullable: false),
                     Email = table.Column<string>(type: "character varying(256)", maxLength: 256, nullable: false),
-                    PasswordHash = table.Column<string>(type: "text", nullable: false),
+                    PasswordHash = table.Column<string>(type: "character varying(256)", maxLength: 256, nullable: false),
                     CreatedAt = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: false),
                     UpdatedAt = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: false)
                 },
@@ -54,7 +54,7 @@ namespace AssetBlock.Infrastructure.Migrations
                     Price = table.Column<decimal>(type: "numeric(18,2)", precision: 18, scale: 2, nullable: false),
                     StorageKey = table.Column<string>(type: "character varying(1024)", maxLength: 1024, nullable: false),
                     FileName = table.Column<string>(type: "character varying(512)", maxLength: 512, nullable: false),
-                    EncryptionNonceBase64 = table.Column<string>(type: "character varying(64)", maxLength: 64, nullable: false),
+                    EncryptionNonceBase64 = table.Column<string>(type: "character varying(16)", maxLength: 16, nullable: false),
                     CreatedAt = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: false),
                     UpdatedAt = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: false)
                 },
@@ -107,7 +107,7 @@ namespace AssetBlock.Infrastructure.Migrations
                     StripePaymentId = table.Column<string>(type: "character varying(256)", maxLength: 256, nullable: true),
                     PurchasedAt = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: false),
                     CreatedAt = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: false),
-                    UpdatedAt = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: false)
+                    UpdatedAt = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: true)
                 },
                 constraints: table =>
                 {
@@ -146,6 +146,12 @@ namespace AssetBlock.Infrastructure.Migrations
                 name: "IX_purchases_AssetId",
                 table: "purchases",
                 column: "AssetId");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_purchases_StripePaymentId",
+                table: "purchases",
+                column: "StripePaymentId",
+                unique: true);
 
             migrationBuilder.CreateIndex(
                 name: "IX_purchases_UserId_AssetId",

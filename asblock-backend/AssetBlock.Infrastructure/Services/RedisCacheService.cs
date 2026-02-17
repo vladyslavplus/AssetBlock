@@ -48,10 +48,20 @@ internal sealed class RedisCacheService(
         try
         {
             var server = connectionMultiplexer.GetServer(connectionMultiplexer.GetEndPoints().First());
-            var keys = server.Keys(pattern: prefix + "*").ToArray();
-            if (keys.Length > 0)
+            const int batchSize = 512;
+            var batch = new List<RedisKey>(batchSize);
+            foreach (var key in server.Keys(pattern: prefix + "*"))
             {
-                await _db.KeyDeleteAsync(keys).WaitAsync(cancellationToken);
+                batch.Add(key);
+                if (batch.Count == batchSize)
+                {
+                    await _db.KeyDeleteAsync(batch.ToArray()).WaitAsync(cancellationToken);
+                    batch.Clear();
+                }
+            }
+            if (batch.Count > 0)
+            {
+                await _db.KeyDeleteAsync(batch.ToArray()).WaitAsync(cancellationToken);
             }
         }
         catch (Exception ex)

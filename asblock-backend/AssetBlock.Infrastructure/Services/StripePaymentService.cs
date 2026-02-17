@@ -14,13 +14,14 @@ internal sealed class StripePaymentService(
     IPurchaseStore purchaseStore,
     ILogger<StripePaymentService> logger) : IPaymentService
 {
+    private readonly StripeClient _stripeClient = new(options.Value.SecretKey);
+
     public async Task<string> CreateCheckoutSession(Guid assetId, Guid userId, string successUrl, string cancelUrl, CancellationToken cancellationToken = default)
     {
         var asset = await assetStore.GetById(assetId, cancellationToken)
             ?? throw new InvalidOperationException("Asset not found.");
-        StripeConfiguration.ApiKey = options.Value.SecretKey;
 
-        var sessionService = new SessionService();
+        var sessionService = new SessionService(_stripeClient);
         var sessionOptions = new SessionCreateOptions
         {
             Mode = "payment",
@@ -108,7 +109,7 @@ internal sealed class StripePaymentService(
             UserId = userId,
             AssetId = assetId,
             StripePaymentId = session.Id,
-            PurchasedAt = DateTime.UtcNow
+            PurchasedAt = DateTimeOffset.UtcNow
         };
         await purchaseStore.Add(purchase, cancellationToken);
         return (userId, assetId);

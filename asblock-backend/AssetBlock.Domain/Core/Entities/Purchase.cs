@@ -11,7 +11,7 @@ public class Purchase : BaseEntity
     public required Guid AssetId { get; set; }
     /// <summary>Stripe PaymentIntent or Checkout Session ID for idempotency and lookup.</summary>
     public string? StripePaymentId { get; set; }
-    public DateTimeOffset PurchasedAt { get; set; } = DateTimeOffset.UtcNow;
+    public DateTimeOffset PurchasedAt { get; init; } = DateTimeOffset.UtcNow;
 
     public User User { get; set; } = null!;
     public Asset Asset { get; set; } = null!;

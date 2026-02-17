@@ -16,6 +16,8 @@ internal sealed class PurchaseConfiguration : IEntityTypeConfiguration<Purchase>
         builder.Property(p => p.StripePaymentId).HasMaxLength(256);
         builder.Property(p => p.PurchasedAt).IsRequired();
 
+        builder.HasIndex(p => p.StripePaymentId).IsUnique();
+
         builder.HasOne(p => p.User)
             .WithMany(u => u.Purchases)
             .HasForeignKey(p => p.UserId)

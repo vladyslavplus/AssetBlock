@@ -23,11 +23,19 @@ internal sealed class GetAssetsQueryHandler(
         var cached = await cache.GetString(key, cancellationToken);
         if (cached is not null)
         {
-            var cachedResult = JsonSerializer.Deserialize<Domain.Core.Dto.Paging.PagedResult<AssetListItem>>(cached, _jsonOptions);
-            if (cachedResult is not null)
+            try
             {
-                logger.LogDebug("Asset list cache hit for key {Key}", key);
-                return Result.Success(cachedResult);
+                var cachedResult = JsonSerializer.Deserialize<Domain.Core.Dto.Paging.PagedResult<AssetListItem>>(cached, _jsonOptions);
+                if (cachedResult is not null)
+                {
+                    logger.LogDebug("Asset list cache hit for key {Key}", key);
+                    return Result.Success(cachedResult);
+                }
+            }
+            catch (JsonException ex)
+            {
+                logger.LogWarning(ex, "Invalid asset list cache payload for key {Key}", key);
+                await cache.RemoveByPrefix(CacheKeys.ASSETS_LIST_PREFIX, cancellationToken);
             }
         }
 

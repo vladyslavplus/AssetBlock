@@ -10,7 +10,7 @@ internal sealed class DatabaseOptionsValidator : IValidateOptions<DatabaseOption
         if (options is { AutoMigrate: true, EnsureCreated: true })
         {
             return ValidateOptionsResult.Fail(
-                "Database: AutoMigrate and EnsureCreated cannot both be true. Use one; EnsureCreated takes precedence if both are set.");
+                "Database: AutoMigrate and EnsureCreated cannot both be true. Please set only one.");
         }
         return ValidateOptionsResult.Success;
     }

@@ -18,7 +18,7 @@ internal sealed class AssetConfiguration : IEntityTypeConfiguration<Asset>
         builder.Property(a => a.Price).HasPrecision(18, 2);
         builder.Property(a => a.StorageKey).IsRequired().HasMaxLength(1024);
         builder.Property(a => a.FileName).IsRequired().HasMaxLength(512);
-        builder.Property(a => a.EncryptionNonceBase64).IsRequired().HasMaxLength(64);
+        builder.Property(a => a.EncryptionNonceBase64).IsRequired().HasMaxLength(16);
         builder.Property(a => a.CreatedAt).IsRequired();
         builder.Property(a => a.UpdatedAt).IsRequired();
 

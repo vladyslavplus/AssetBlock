@@ -43,8 +43,8 @@ namespace AssetBlock.Infrastructure.Migrations
 
                     b.Property<string>("EncryptionNonceBase64")
                         .IsRequired()
-                        .HasMaxLength(64)
-                        .HasColumnType("character varying(64)");
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
 
                     b.Property<string>("FileName")
                         .IsRequired()
@@ -130,7 +130,7 @@ namespace AssetBlock.Infrastructure.Migrations
                         .HasMaxLength(256)
                         .HasColumnType("character varying(256)");
 
-                    b.Property<DateTimeOffset>("UpdatedAt")
+                    b.Property<DateTimeOffset?>("UpdatedAt")
                         .HasColumnType("timestamp with time zone");
 
                     b.Property<Guid>("UserId")
@@ -139,6 +139,9 @@ namespace AssetBlock.Infrastructure.Migrations
                     b.HasKey("Id");
 
                     b.HasIndex("AssetId");
+
+                    b.HasIndex("StripePaymentId")
+                        .IsUnique();
 
                     b.HasIndex("UserId", "AssetId")
                         .IsUnique();
@@ -195,7 +198,8 @@ namespace AssetBlock.Infrastructure.Migrations
 
                     b.Property<string>("PasswordHash")
                         .IsRequired()
-                        .HasColumnType("text");
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)");
 
                     b.Property<DateTimeOffset>("UpdatedAt")
                         .HasColumnType("timestamp with time zone");

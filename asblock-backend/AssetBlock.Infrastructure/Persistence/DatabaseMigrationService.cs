@@ -52,7 +52,7 @@ internal sealed class DatabaseMigrationService(
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, "Database migration or ensure-created failed");
+            logger.LogError(ex, "Database initialization failed");
             throw;
         }
     }
@@ -73,8 +73,7 @@ internal sealed class DatabaseMigrationService(
                 Name = name,
                 Slug = slug,
                 Description = description,
-                CreatedAt = now,
-                UpdatedAt = now
+                CreatedAt = now
             });
         }
 

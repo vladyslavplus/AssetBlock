@@ -69,8 +69,7 @@ internal sealed class UploadAssetCommandHandler(
             StorageKey = storageKey,
             FileName = request.FileName,
             EncryptionNonceBase64 = Convert.ToBase64String(nonce),
-            CreatedAt = now,
-            UpdatedAt = now
+            CreatedAt = now
         };
         try
         {

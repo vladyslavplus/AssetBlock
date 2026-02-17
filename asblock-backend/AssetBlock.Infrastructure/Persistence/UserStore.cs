@@ -1,6 +1,8 @@
 using AssetBlock.Domain.Abstractions.Services;
 using AssetBlock.Domain.Core.Entities;
+using AssetBlock.Domain.Core.Exceptions;
 using Microsoft.EntityFrameworkCore;
+using Npgsql;
 
 namespace AssetBlock.Infrastructure.Persistence;
 
@@ -22,11 +24,17 @@ internal sealed class UserStore(ApplicationDbContext dbContext) : IUserStore
             Id = Guid.NewGuid(),
             Email = email.Trim().ToLowerInvariant(),
             PasswordHash = passwordHash,
-            CreatedAt = now,
-            UpdatedAt = now
+            CreatedAt = now
         };
         dbContext.Users.Add(user);
-        await dbContext.SaveChangesAsync(cancellationToken);
+        try
+        {
+            await dbContext.SaveChangesAsync(cancellationToken);
+        }
+        catch (DbUpdateException ex) when (ex.InnerException is PostgresException { SqlState: PostgresErrorCodes.UniqueViolation })
+        {
+            throw new DuplicateEmailException();
+        }
         return user;
     }
 

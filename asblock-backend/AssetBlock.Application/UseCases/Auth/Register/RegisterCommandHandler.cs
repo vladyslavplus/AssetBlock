@@ -2,8 +2,10 @@ using AssetBlock.Application.Common;
 using AssetBlock.Domain.Abstractions.Services;
 using AssetBlock.Domain.Core.Constants;
 using Ardalis.Result;
+using AssetBlock.Domain.Core.Entities;
 using AssetBlock.Domain.Core.Primitives.Api;
 using MediatR;
+using AssetBlock.Domain.Core.Exceptions;
 using Microsoft.Extensions.Logging;
 
 namespace AssetBlock.Application.UseCases.Auth.Register;
@@ -24,7 +26,17 @@ internal sealed class RegisterCommandHandler(
         }
 
         var hash = passwordHasher.Hash(request.Password);
-        var user = await userStore.Create(request.Email, hash, cancellationToken);
+        User user;
+        try
+        {
+            user = await userStore.Create(request.Email, hash, cancellationToken);
+        }
+        catch (DuplicateEmailException)
+        {
+            logger.LogWarning("Register failed: duplicate email (concurrent)");
+            return ResultError.Error<TokensResponse>(ErrorCodes.ERR_AUTH_EMAIL_ALREADY_EXISTS);
+        }
+
         try
         {
             var tokens = jwtTokenService.GenerateTokenPair(user.Id, user.Email);

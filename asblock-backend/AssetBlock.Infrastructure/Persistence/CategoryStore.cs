@@ -32,10 +32,10 @@ internal sealed class CategoryStore(ApplicationDbContext dbContext) : ICategoryS
             : request.SortBy;
         var isDesc = request.SortDirection == SortDirection.DESC;
 
-        query = sortBy switch
+        query = sortBy.ToLowerInvariant() switch
         {
-            "Slug" => isDesc ? query.OrderByDescending(c => c.Slug) : query.OrderBy(c => c.Slug),
-            "Id" => isDesc ? query.OrderByDescending(c => c.Id) : query.OrderBy(c => c.Id),
+            "slug" => isDesc ? query.OrderByDescending(c => c.Slug) : query.OrderBy(c => c.Slug),
+            "id" => isDesc ? query.OrderByDescending(c => c.Id) : query.OrderBy(c => c.Id),
             _ => isDesc ? query.OrderByDescending(c => c.Name) : query.OrderBy(c => c.Name)
         };
 
