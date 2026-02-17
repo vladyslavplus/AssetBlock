@@ -3,9 +3,9 @@ using System.Security.Cryptography;
 using System.Text;
 using AssetBlock.Domain.Abstractions.Services;
 using AssetBlock.Domain.Core.Constants;
-using AssetBlock.Domain.Entities;
-using AssetBlock.Domain.Primitives.Api;
-using AssetBlock.Domain.Primitives.AppSettingsOptions;
+using AssetBlock.Domain.Core.Entities;
+using AssetBlock.Domain.Core.Primitives.Api;
+using AssetBlock.Domain.Core.Primitives.AppSettingsOptions;
 using AssetBlock.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
@@ -25,13 +25,13 @@ internal sealed class JwtTokenService(
         var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtOptions.Key));
         var credentials = new SigningCredentials(key, SecurityAlgorithms.HmacSha256);
         var accessExpiresAt = DateTime.UtcNow.AddMinutes(jwtOptions.AccessTokenMinutes);
-        var refreshExpiresAt = DateTime.UtcNow.AddDays(jwtOptions.RefreshTokenDays);
+        var refreshExpiresAt = DateTimeOffset.UtcNow.AddDays(jwtOptions.RefreshTokenDays);
 
         var claims = new List<Claim>
         {
             new(ClaimTypes.NameIdentifier, userId.ToString()),
             new(JwtClaimTypes.SUB, userId.ToString()),
-            new(ClaimTypes.Email, email),
+            new(JwtClaimTypes.EMAIL, email),
             new(JwtClaimTypes.JTI, Guid.NewGuid().ToString())
         };
 
@@ -52,7 +52,7 @@ internal sealed class JwtTokenService(
         return new TokensResponse(accessToken, refreshToken, accessExpiresAt, refreshExpiresAt);
     }
 
-    public async Task StoreRefreshToken(Guid userId, string refreshToken, DateTime expiresAt, CancellationToken cancellationToken = default)
+    public async Task StoreRefreshToken(Guid userId, string refreshToken, DateTimeOffset expiresAt, CancellationToken cancellationToken = default)
     {
         var hash = ComputeSha256Hash(refreshToken);
         var entity = new RefreshToken
@@ -61,20 +61,21 @@ internal sealed class JwtTokenService(
             UserId = userId,
             TokenHash = hash,
             ExpiresAt = expiresAt,
-            CreatedAt = DateTime.UtcNow
+            CreatedAt = DateTimeOffset.UtcNow
         };
         dbContext.RefreshTokens.Add(entity);
         await dbContext.SaveChangesAsync(cancellationToken);
         logger.LogDebug("Stored refresh token for user {UserId}", userId);
     }
 
-    public async Task<(Guid UserId, string Email)?> ValidateRefreshToken(string refreshToken, CancellationToken cancellationToken = default)
+    public async Task<(Guid UserId, string Email, Guid TokenId)?> ValidateRefreshToken(string refreshToken, CancellationToken cancellationToken = default)
     {
         var hash = ComputeSha256Hash(refreshToken);
+        var now = DateTimeOffset.UtcNow;
         var entity = await dbContext.RefreshTokens
             .AsNoTracking()
-            .Where(rt => rt.TokenHash == hash && rt.RevokedAt == null && rt.ExpiresAt > DateTime.UtcNow)
-            .Select(rt => new { rt.UserId, rt.User.Email })
+            .Where(rt => rt.TokenHash == hash && rt.RevokedAt == null && rt.ExpiresAt > now)
+            .Select(rt => new { rt.Id, rt.UserId, rt.User.Email })
             .FirstOrDefaultAsync(cancellationToken);
 
         if (entity is null)
@@ -83,7 +84,19 @@ internal sealed class JwtTokenService(
             return null;
         }
 
-        return (entity.UserId, entity.Email);
+        return (entity.UserId, entity.Email, entity.Id);
+    }
+
+    public async Task RevokeRefreshToken(Guid tokenId, CancellationToken cancellationToken = default)
+    {
+        var entity = await dbContext.RefreshTokens.FirstOrDefaultAsync(rt => rt.Id == tokenId, cancellationToken);
+        if (entity is null)
+        {
+            return;
+        }
+        entity.RevokedAt = DateTimeOffset.UtcNow;
+        await dbContext.SaveChangesAsync(cancellationToken);
+        logger.LogDebug("Revoked refresh token {TokenId}", tokenId);
     }
 
     private static string ComputeSha256Hash(string input)

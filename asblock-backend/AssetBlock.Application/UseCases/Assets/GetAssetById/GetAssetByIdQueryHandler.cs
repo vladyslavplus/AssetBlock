@@ -1,8 +1,8 @@
 using AssetBlock.Application.Common;
 using AssetBlock.Domain.Abstractions.Services;
 using AssetBlock.Domain.Core.Constants;
-using AssetBlock.Domain.Dto.Assets;
 using Ardalis.Result;
+using AssetBlock.Domain.Core.Dto.Assets;
 using MediatR;
 
 namespace AssetBlock.Application.UseCases.Assets.GetAssetById;

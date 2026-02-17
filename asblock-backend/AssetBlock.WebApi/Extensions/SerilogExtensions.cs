@@ -25,7 +25,7 @@ internal static class SerilogExtensions
                 if (httpContext.User.Identity?.IsAuthenticated == true)
                 {
                     // ASP.NET Core JWT Bearer maps JWT "sub" claim to ClaimTypes.NameIdentifier when building User.Claims.
-                    diagnosticContext.Set("UserId", httpContext.User.Claims.FirstOrDefault(c => c.Type == ClaimTypes.NameIdentifier)?.Value);
+                    diagnosticContext.Set("UserId", httpContext.User.FindFirstValue(ClaimTypes.NameIdentifier));
                 }
             };
         });

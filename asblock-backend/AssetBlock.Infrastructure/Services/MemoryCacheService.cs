@@ -16,6 +16,7 @@ internal sealed class MemoryCacheService : ICacheService
         {
             return Task.FromResult<string?>(entry.Value);
         }
+        _store.TryRemove(key, out _);
 
         return Task.FromResult<string?>(null);
     }
@@ -24,6 +25,16 @@ internal sealed class MemoryCacheService : ICacheService
     {
         var expiresAt = expiration is null ? (DateTime?)null : DateTime.UtcNow.Add(expiration.Value);
         _store[key] = (value, expiresAt);
+        return Task.CompletedTask;
+    }
+
+    public Task RemoveByPrefix(string prefix, CancellationToken cancellationToken = default)
+    {
+        var toRemove = _store.Keys.Where(k => k.StartsWith(prefix, StringComparison.Ordinal)).ToList();
+        foreach (var key in toRemove)
+        {
+            _store.TryRemove(key, out _);
+        }
         return Task.CompletedTask;
     }
 }

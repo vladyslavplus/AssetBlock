@@ -3,7 +3,8 @@ using AssetBlock.Application.UseCases.Assets.GetAssets;
 using AssetBlock.Application.UseCases.Assets.UploadAsset;
 using AssetBlock.Domain.Abstractions.Services;
 using AssetBlock.Domain.Core.Constants;
-using AssetBlock.Domain.Dto.Assets;
+using AssetBlock.Domain.Core.Dto.Assets;
+using AssetBlock.Domain.Core.Primitives.Api;
 using AssetBlock.WebApi.Constants;
 using AssetBlock.WebApi.Models;
 using MediatR;
@@ -59,13 +60,16 @@ public sealed class AssetsController(ISender sender, IDownloadService downloadSe
         }
 
         var streamResult = await downloadService.GetAssetStream(id, userId.Value, cancellationToken);
-        if (streamResult is null)
+        if (streamResult.Status == AssetDownloadStatus.NotFound)
+        {
+            return NotFound(new { errors = new[] { new { identifier = ErrorCodes.ERR_ASSET_NOT_FOUND, message = ErrorCodesToErrorMessages.GetMessage(ErrorCodes.ERR_ASSET_NOT_FOUND) } } });
+        }
+        if (streamResult.Status == AssetDownloadStatus.Forbidden)
         {
             return StatusCode(403, new { errors = new[] { new { identifier = ErrorCodes.ERR_PURCHASE_ACCESS_DENIED, message = ErrorCodesToErrorMessages.GetMessage(ErrorCodes.ERR_PURCHASE_ACCESS_DENIED) } } });
         }
 
-        (Stream content, var fileName) = streamResult.Value;
-        return File(content, "application/octet-stream", fileName);
+        return File(streamResult.Content!, "application/octet-stream", streamResult.FileName!);
     }
 
     /// <summary>
@@ -88,8 +92,8 @@ public sealed class AssetsController(ISender sender, IDownloadService downloadSe
             return Unauthorized();
         }
 
-        var file = form.File ?? Request.Form.Files.GetFile("file");
-        if (file is null || file.Length == 0)
+        var file = form.File;
+        if (file.Length == 0)
         {
             logger.LogWarning("Upload rejected: no file for user {UserId}", userId);
             return BadRequest(new { errors = new[] { new { identifier = ErrorCodes.ERR_FILE_REQUIRED, message = ErrorCodesToErrorMessages.GetMessage(ErrorCodes.ERR_FILE_REQUIRED) } } });

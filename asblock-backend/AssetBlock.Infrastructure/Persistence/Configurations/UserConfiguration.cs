@@ -1,4 +1,4 @@
-using AssetBlock.Domain.Entities;
+using AssetBlock.Domain.Core.Entities;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 

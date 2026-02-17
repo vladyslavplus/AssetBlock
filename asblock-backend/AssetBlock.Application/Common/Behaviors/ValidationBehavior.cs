@@ -9,7 +9,8 @@ internal sealed class ValidationBehavior<TRequest, TResponse>(IEnumerable<IValid
 {
     public async Task<TResponse> Handle(TRequest request, RequestHandlerDelegate<TResponse> next, CancellationToken cancellationToken)
     {
-        if (validators is not IValidator<TRequest>[] validatorArray || validatorArray.Length == 0)
+        var validatorArray = validators as IValidator<TRequest>[] ?? validators.ToArray();
+        if (validatorArray.Length == 0)
         {
             return await next(cancellationToken);
         }

@@ -1,6 +1,6 @@
-using AssetBlock.Domain.Dto.Assets;
-using AssetBlock.Domain.Dto.Paging;
-using AssetBlock.Domain.Entities;
+using AssetBlock.Domain.Core.Dto.Assets;
+using AssetBlock.Domain.Core.Dto.Paging;
+using AssetBlock.Domain.Core.Entities;
 
 namespace AssetBlock.Domain.Abstractions.Services;
 

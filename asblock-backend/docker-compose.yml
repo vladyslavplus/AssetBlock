@@ -4,7 +4,8 @@
 # API expects: Postgres (5432), MinIO (9000/9001), optional Redis (6379).
 #
 # MinIO: "Host local has more than 0 drives" is expected for single-node dev and can be ignored.
-# Use non-default MINIO_ROOT_USER/MINIO_ROOT_PASSWORD in .env to avoid "default credentials" warning.
+# Set MINIO_ROOT_USER and MINIO_ROOT_PASSWORD in .env (avoid default creds in shared envs).
+# MinIO image pinned: latest no longer updates on Docker Hub; use specific release for reproducibility.
 
 services:
   # Uncomment when postgres is needed
@@ -26,7 +27,7 @@ services:
   #     retries: 5
 
   minio:
-    image: minio/minio:latest
+    image: minio/minio:RELEASE.2025-09-07T16-13-09Z
     container_name: assetblock-minio
     ports:
       - "${MINIO_API_PORT:-9000}:9000"

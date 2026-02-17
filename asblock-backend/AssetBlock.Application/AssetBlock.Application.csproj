@@ -12,7 +12,6 @@
 
   <ItemGroup>
     <ProjectReference Include="..\AssetBlock.Domain\AssetBlock.Domain.csproj" />
-    <ProjectReference Include="..\AssetBlock.Infrastructure\AssetBlock.Infrastructure.csproj" />
   </ItemGroup>
 
   <ItemGroup>
@@ -26,5 +25,5 @@
   <ItemGroup>
     <Folder Include="UseCases\" />
   </ItemGroup>
-  
+
 </Project>

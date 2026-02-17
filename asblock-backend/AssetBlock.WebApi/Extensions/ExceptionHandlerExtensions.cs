@@ -35,7 +35,7 @@ internal static class ExceptionHandlerExtensions
                 }
 
                 context.Response.StatusCode = (int)HttpStatusCode.InternalServerError;
-                context.Response.ContentType = "application/json";
+                context.Response.ContentType = "application/problem+json";
                 await context.Response.WriteAsync(JsonSerializer.Serialize(new ProblemDetails
                 {
                     Title = "An error occurred",

@@ -1,7 +1,7 @@
 using AssetBlock.Application.UseCases.Auth.Login;
 using AssetBlock.Application.UseCases.Auth.RefreshToken;
 using AssetBlock.Application.UseCases.Auth.Register;
-using AssetBlock.Domain.Dto.Auth;
+using AssetBlock.Domain.Core.Dto.Auth;
 using AssetBlock.WebApi.Constants;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;

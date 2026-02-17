@@ -1,11 +1,13 @@
 using AssetBlock.Domain.Abstractions.Services;
-using AssetBlock.Domain.Primitives.AppSettingsOptions;
+using AssetBlock.Domain.Core.Primitives.AppSettingsOptions;
 using AssetBlock.Infrastructure.HostedServices;
+using AssetBlock.Infrastructure.Options;
 using AssetBlock.Infrastructure.Persistence;
 using AssetBlock.Infrastructure.Services;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Options;
 using StackExchange.Redis;
 
 namespace AssetBlock.Infrastructure;
@@ -18,6 +20,7 @@ public static class DependencyInjection
             ?? throw new InvalidOperationException("Connection string 'DefaultConnection' not found.");
 
         services.Configure<DatabaseOptions>(configuration.GetSection(DatabaseOptions.SECTION_NAME));
+        services.AddSingleton<IValidateOptions<DatabaseOptions>, DatabaseOptionsValidator>();
         services.Configure<JwtOptions>(configuration.GetSection(JwtOptions.SECTION_NAME));
         services.Configure<MinioOptions>(configuration.GetSection(MinioOptions.SECTION_NAME));
         services.Configure<EncryptionOptions>(configuration.GetSection(EncryptionOptions.SECTION_NAME));
@@ -40,11 +43,18 @@ public static class DependencyInjection
         var redisConfiguration = configuration.GetConnectionString("Redis");
         if (!string.IsNullOrEmpty(redisConfiguration))
         {
-            services.AddSingleton<IConnectionMultiplexer>(_ => ConnectionMultiplexer.Connect(redisConfiguration));
+            services.AddSingleton<IConnectionMultiplexer>(_ =>
+            {
+                var opts = ConfigurationOptions.Parse(redisConfiguration);
+                opts.AbortOnConnectFail = false;
+                opts.ConnectTimeout = 5000;
+                return ConnectionMultiplexer.Connect(opts);
+            });
             services.AddSingleton<ICacheService, RedisCacheService>();
         }
         else
         {
+            services.AddMemoryCache();
             services.AddSingleton<ICacheService, MemoryCacheService>();
         }
 

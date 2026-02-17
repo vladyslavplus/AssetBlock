@@ -1,6 +1,7 @@
 using AssetBlock.Domain.Abstractions.Services;
-using AssetBlock.Domain.Entities;
-using AssetBlock.Domain.Primitives.AppSettingsOptions;
+using AssetBlock.Domain.Core.Entities;
+using AssetBlock.Domain.Core.Primitives.AppSettingsOptions;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Stripe;
 using Stripe.Checkout;
@@ -10,7 +11,8 @@ namespace AssetBlock.Infrastructure.Services;
 internal sealed class StripePaymentService(
     IOptions<StripeOptions> options,
     IAssetStore assetStore,
-    IPurchaseStore purchaseStore) : IPaymentService
+    IPurchaseStore purchaseStore,
+    ILogger<StripePaymentService> logger) : IPaymentService
 {
     public async Task<string> CreateCheckoutSession(Guid assetId, Guid userId, string successUrl, string cancelUrl, CancellationToken cancellationToken = default)
     {
@@ -64,8 +66,9 @@ internal sealed class StripePaymentService(
         {
             stripeEvent = EventUtility.ConstructEvent(payload, signature, webhookSecret);
         }
-        catch
+        catch (Exception ex)
         {
+            logger.LogWarning(ex, "Stripe webhook signature validation failed");
             return null;
         }
 
@@ -76,6 +79,11 @@ internal sealed class StripePaymentService(
 
         var session = stripeEvent.Data.Object as Session;
         if (session?.Metadata is null || session.Metadata.Count == 0)
+        {
+            return null;
+        }
+
+        if (session.PaymentStatus != "paid")
         {
             return null;
         }

@@ -1,3 +1,4 @@
+using System.ComponentModel.DataAnnotations;
 using Microsoft.AspNetCore.Mvc;
 
 namespace AssetBlock.WebApi.Models;
@@ -14,5 +15,6 @@ public sealed class UploadAssetFormWithFile
 
     /// <summary>Asset file (any extension allowed). Form field name: "file".</summary>
     [FromForm(Name = "file")]
-    public IFormFile? File { get; set; }
+    [Required]
+    public IFormFile File { get; set; } = null!;
 }

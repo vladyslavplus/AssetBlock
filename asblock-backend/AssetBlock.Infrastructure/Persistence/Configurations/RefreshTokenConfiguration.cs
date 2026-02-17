@@ -1,4 +1,4 @@
-using AssetBlock.Domain.Entities;
+using AssetBlock.Domain.Core.Entities;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 
@@ -20,5 +20,8 @@ internal sealed class RefreshTokenConfiguration : IEntityTypeConfiguration<Refre
             .WithMany(u => u.RefreshTokens)
             .HasForeignKey(r => r.UserId)
             .OnDelete(DeleteBehavior.Cascade);
+
+        builder.HasIndex(r => r.UserId);
+        builder.HasIndex(r => r.TokenHash).IsUnique();
     }
 }

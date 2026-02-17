@@ -1,4 +1,4 @@
-using AssetBlock.Domain.Dto.Paging;
+using AssetBlock.Domain.Core.Dto.Paging;
 using FluentValidation;
 
 namespace AssetBlock.Application.Common.Validators;

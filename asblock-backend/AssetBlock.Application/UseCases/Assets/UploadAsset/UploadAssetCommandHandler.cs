@@ -1,8 +1,8 @@
 using AssetBlock.Application.Common;
 using AssetBlock.Domain.Abstractions.Services;
 using AssetBlock.Domain.Core.Constants;
-using AssetBlock.Domain.Entities;
 using Ardalis.Result;
+using AssetBlock.Domain.Core.Entities;
 using MediatR;
 using Microsoft.Extensions.Logging;
 
@@ -11,8 +11,9 @@ namespace AssetBlock.Application.UseCases.Assets.UploadAsset;
 internal sealed class UploadAssetCommandHandler(
     ICategoryStore categoryStore,
     IAssetStore assetStore,
-    IEncryptionService encryptionService,
     IAssetStorageService assetStorageService,
+    IEncryptionService encryptionService,
+    ICacheService cache,
     ILogger<UploadAssetCommandHandler> logger) : IRequestHandler<UploadAssetCommand, Result<Guid>>
 {
     public async Task<Result<Guid>> Handle(UploadAssetCommand request, CancellationToken cancellationToken)
@@ -30,6 +31,7 @@ internal sealed class UploadAssetCommandHandler(
         {
             extension = ".bin";
         }
+
         var storageKey = $"assets/{request.AuthorId}/{assetId}{extension}";
 
         using var cipherStream = new MemoryStream();
@@ -55,7 +57,7 @@ internal sealed class UploadAssetCommandHandler(
             return ResultError.Error<Guid>(ErrorCodes.ERR_ASSET_UPLOAD_FAILED);
         }
 
-        var now = DateTime.UtcNow;
+        var now = DateTimeOffset.UtcNow;
         var asset = new Asset
         {
             Id = assetId,
@@ -70,7 +72,20 @@ internal sealed class UploadAssetCommandHandler(
             CreatedAt = now,
             UpdatedAt = now
         };
-        await assetStore.Add(asset, cancellationToken);
+        try
+        {
+            await assetStore.Add(asset, cancellationToken);
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "DB add failed for asset {AssetId}; removing orphan from storage", assetId);
+            try { await assetStorageService.Delete(storageKey, cancellationToken); }
+            catch (Exception delEx) { logger.LogWarning(delEx, "Storage delete failed for {Key}", storageKey); }
+
+            throw;
+        }
+
+        await cache.RemoveByPrefix(CacheKeys.ASSETS_LIST_PREFIX, cancellationToken);
         logger.LogInformation("Asset uploaded successfully {AssetId} by {AuthorId}", assetId, request.AuthorId);
         return Result.Success(assetId);
     }

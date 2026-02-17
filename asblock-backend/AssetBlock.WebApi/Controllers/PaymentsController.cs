@@ -1,6 +1,6 @@
 using AssetBlock.Application.UseCases.Payments.CreateCheckoutSession;
 using AssetBlock.Application.UseCases.Payments.HandleStripeWebhook;
-using AssetBlock.Domain.Dto.Payments;
+using AssetBlock.Domain.Core.Dto.Payments;
 using AssetBlock.WebApi.Constants;
 using AssetBlock.WebApi.Hubs;
 using MediatR;
@@ -42,6 +42,7 @@ public sealed class PaymentsController(ISender sender, IHubContext<Notifications
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> Webhook(CancellationToken cancellationToken)
     {
+        Request.EnableBuffering();
         var signature = Request.Headers["Stripe-Signature"].FirstOrDefault() ?? string.Empty;
         using var reader = new StreamReader(Request.Body);
         var payload = await reader.ReadToEndAsync(cancellationToken);

@@ -8,7 +8,7 @@ internal static class JwtAuthenticationExtensions
 {
     public static IServiceCollection AddJwtAuthentication(this IServiceCollection services, IConfiguration configuration)
     {
-        var key = configuration["Jwt:Key"] ?? string.Empty;
+        var key = configuration["Jwt:Key"] ?? throw new InvalidOperationException("JWT signing key (Jwt:Key) is not configured.");
         var issuer = configuration["Jwt:Issuer"];
         var audience = configuration["Jwt:Audience"];
 
@@ -31,22 +31,22 @@ internal static class JwtAuthenticationExtensions
                 {
                     OnAuthenticationFailed = ctx =>
                     {
-                        var logger = ctx.HttpContext.RequestServices.GetService(typeof(ILogger<JwtBearerEvents>)) as ILogger<JwtBearerEvents>;
-                        logger?.LogWarning(ctx.Exception, "JWT validation failed: {Reason}", ctx.Exception.Message);
+                        var logger = ctx.HttpContext.RequestServices.GetRequiredService<ILogger<JwtBearerEvents>>();
+                        logger.LogWarning(ctx.Exception, "JWT validation failed: {Reason}", ctx.Exception.Message);
                         return Task.CompletedTask;
                     },
                     OnTokenValidated = ctx =>
                     {
-                        var logger = ctx.HttpContext.RequestServices.GetService(typeof(ILogger<JwtBearerEvents>)) as ILogger<JwtBearerEvents>;
+                        var logger = ctx.HttpContext.RequestServices.GetRequiredService<ILogger<JwtBearerEvents>>();
                         var sub = ctx.Principal?.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
-                        logger?.LogDebug("JWT validated for subject {Subject}", sub);
+                        logger.LogDebug("JWT validated for subject {Subject}", sub);
                         return Task.CompletedTask;
                     },
                     OnChallenge = ctx =>
                     {
-                        var logger = ctx.HttpContext.RequestServices.GetService(typeof(ILogger<JwtBearerEvents>)) as ILogger<JwtBearerEvents>;
+                        var logger = ctx.HttpContext.RequestServices.GetRequiredService<ILogger<JwtBearerEvents>>();
                         var hasAuth = ctx.Request.Headers.Authorization.Count > 0;
-                        logger?.LogInformation(
+                        logger.LogInformation(
                             "JWT challenge: {Path}, HasAuthorizationHeader={HasAuth}, Error={Error}",
                             ctx.Request.Path,
                             hasAuth,

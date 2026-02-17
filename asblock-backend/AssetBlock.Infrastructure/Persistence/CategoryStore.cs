@@ -1,7 +1,7 @@
 using AssetBlock.Domain.Abstractions.Services;
-using AssetBlock.Domain.Dto.Categories;
-using AssetBlock.Domain.Dto.Paging;
-using AssetBlock.Domain.Entities;
+using AssetBlock.Domain.Core.Dto.Categories;
+using AssetBlock.Domain.Core.Dto.Paging;
+using AssetBlock.Domain.Core.Entities;
 using Microsoft.EntityFrameworkCore;
 
 namespace AssetBlock.Infrastructure.Persistence;
@@ -21,8 +21,8 @@ internal sealed class CategoryStore(ApplicationDbContext dbContext) : ICategoryS
 
         if (!string.IsNullOrWhiteSpace(request.Search))
         {
-            var term = request.Search.Trim();
-            query = query.Where(c => c.Name.Contains(term) || (c.Slug.Contains(term)));
+            var term = request.Search.Trim().ToLower();
+            query = query.Where(c => c.Name.ToLower().Contains(term) || c.Slug.ToLower().Contains(term));
         }
 
         var totalCount = await query.CountAsync(cancellationToken);

@@ -31,6 +31,7 @@ public abstract class ApiControllerBase(ISender sender) : ControllerBase
             ResultStatus.Invalid => BadRequest(new { errors = result.ValidationErrors.Select(e => new { identifier = e.Identifier, message = e.ErrorMessage }).ToList() }),
             ResultStatus.NotFound => NotFound(ErrorsBody(ErrorCodes.ERR_NOT_FOUND, result.Errors.FirstOrDefault() ?? ErrorCodesToErrorMessages.GetMessage(ErrorCodes.ERR_NOT_FOUND))),
             ResultStatus.Forbidden => StatusCode(403, ErrorsBody(ErrorCodes.ERR_FORBIDDEN, result.Errors.FirstOrDefault() ?? ErrorCodesToErrorMessages.GetMessage(ErrorCodes.ERR_FORBIDDEN))),
+            ResultStatus.Unauthorized => Unauthorized(ErrorsBody(ErrorCodes.ERR_AUTH_TOKEN_INVALID, result.Errors.FirstOrDefault() ?? ErrorCodesToErrorMessages.GetMessage(ErrorCodes.ERR_AUTH_TOKEN_INVALID))),
             _ => BadRequest(ErrorsBody(ErrorCodes.ERR_BAD_REQUEST, result.Errors.FirstOrDefault() ?? ErrorCodesToErrorMessages.GetMessage(ErrorCodes.ERR_BAD_REQUEST)))
         };
     }
@@ -47,6 +48,7 @@ public abstract class ApiControllerBase(ISender sender) : ControllerBase
             ResultStatus.Invalid => BadRequest(new { errors = result.ValidationErrors.Select(e => new { identifier = e.Identifier, message = e.ErrorMessage }).ToList() }),
             ResultStatus.NotFound => NotFound(ErrorsBody(ErrorCodes.ERR_NOT_FOUND, result.Errors.FirstOrDefault() ?? ErrorCodesToErrorMessages.GetMessage(ErrorCodes.ERR_NOT_FOUND))),
             ResultStatus.Forbidden => StatusCode(403, ErrorsBody(ErrorCodes.ERR_FORBIDDEN, result.Errors.FirstOrDefault() ?? ErrorCodesToErrorMessages.GetMessage(ErrorCodes.ERR_FORBIDDEN))),
+            ResultStatus.Unauthorized => Unauthorized(ErrorsBody(ErrorCodes.ERR_AUTH_TOKEN_INVALID, result.Errors.FirstOrDefault() ?? ErrorCodesToErrorMessages.GetMessage(ErrorCodes.ERR_AUTH_TOKEN_INVALID))),
             _ => BadRequest(ErrorsBody(ErrorCodes.ERR_BAD_REQUEST, result.Errors.FirstOrDefault() ?? ErrorCodesToErrorMessages.GetMessage(ErrorCodes.ERR_BAD_REQUEST)))
         };
     }

@@ -22,7 +22,7 @@ namespace AssetBlock.Infrastructure.Migrations
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
 
-            modelBuilder.Entity("AssetBlock.Domain.Entities.Asset", b =>
+            modelBuilder.Entity("AssetBlock.Domain.Core.Entities.Asset", b =>
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
@@ -34,7 +34,7 @@ namespace AssetBlock.Infrastructure.Migrations
                     b.Property<Guid>("CategoryId")
                         .HasColumnType("uuid");
 
-                    b.Property<DateTime>("CreatedAt")
+                    b.Property<DateTimeOffset>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
 
                     b.Property<string>("Description")
@@ -65,7 +65,7 @@ namespace AssetBlock.Infrastructure.Migrations
                         .HasMaxLength(500)
                         .HasColumnType("character varying(500)");
 
-                    b.Property<DateTime>("UpdatedAt")
+                    b.Property<DateTimeOffset>("UpdatedAt")
                         .HasColumnType("timestamp with time zone");
 
                     b.HasKey("Id");
@@ -77,13 +77,13 @@ namespace AssetBlock.Infrastructure.Migrations
                     b.ToTable("assets", (string)null);
                 });
 
-            modelBuilder.Entity("AssetBlock.Domain.Entities.Category", b =>
+            modelBuilder.Entity("AssetBlock.Domain.Core.Entities.Category", b =>
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
-                    b.Property<DateTime>("CreatedAt")
+                    b.Property<DateTimeOffset>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
 
                     b.Property<string>("Description")
@@ -100,7 +100,7 @@ namespace AssetBlock.Infrastructure.Migrations
                         .HasMaxLength(200)
                         .HasColumnType("character varying(200)");
 
-                    b.Property<DateTime>("UpdatedAt")
+                    b.Property<DateTimeOffset>("UpdatedAt")
                         .HasColumnType("timestamp with time zone");
 
                     b.HasKey("Id");
@@ -111,7 +111,7 @@ namespace AssetBlock.Infrastructure.Migrations
                     b.ToTable("categories", (string)null);
                 });
 
-            modelBuilder.Entity("AssetBlock.Domain.Entities.Purchase", b =>
+            modelBuilder.Entity("AssetBlock.Domain.Core.Entities.Purchase", b =>
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
@@ -120,12 +120,18 @@ namespace AssetBlock.Infrastructure.Migrations
                     b.Property<Guid>("AssetId")
                         .HasColumnType("uuid");
 
-                    b.Property<DateTime>("PurchasedAt")
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTimeOffset>("PurchasedAt")
                         .HasColumnType("timestamp with time zone");
 
                     b.Property<string>("StripePaymentId")
                         .HasMaxLength(256)
                         .HasColumnType("character varying(256)");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
 
                     b.Property<Guid>("UserId")
                         .HasColumnType("uuid");
@@ -140,19 +146,19 @@ namespace AssetBlock.Infrastructure.Migrations
                     b.ToTable("purchases", (string)null);
                 });
 
-            modelBuilder.Entity("AssetBlock.Domain.Entities.RefreshToken", b =>
+            modelBuilder.Entity("AssetBlock.Domain.Core.Entities.RefreshToken", b =>
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
-                    b.Property<DateTime>("CreatedAt")
+                    b.Property<DateTimeOffset>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
 
-                    b.Property<DateTime>("ExpiresAt")
+                    b.Property<DateTimeOffset>("ExpiresAt")
                         .HasColumnType("timestamp with time zone");
 
-                    b.Property<DateTime?>("RevokedAt")
+                    b.Property<DateTimeOffset?>("RevokedAt")
                         .HasColumnType("timestamp with time zone");
 
                     b.Property<string>("TokenHash")
@@ -165,18 +171,21 @@ namespace AssetBlock.Infrastructure.Migrations
 
                     b.HasKey("Id");
 
+                    b.HasIndex("TokenHash")
+                        .IsUnique();
+
                     b.HasIndex("UserId");
 
                     b.ToTable("refresh_tokens", (string)null);
                 });
 
-            modelBuilder.Entity("AssetBlock.Domain.Entities.User", b =>
+            modelBuilder.Entity("AssetBlock.Domain.Core.Entities.User", b =>
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
-                    b.Property<DateTime>("CreatedAt")
+                    b.Property<DateTimeOffset>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
 
                     b.Property<string>("Email")
@@ -188,7 +197,7 @@ namespace AssetBlock.Infrastructure.Migrations
                         .IsRequired()
                         .HasColumnType("text");
 
-                    b.Property<DateTime>("UpdatedAt")
+                    b.Property<DateTimeOffset>("UpdatedAt")
                         .HasColumnType("timestamp with time zone");
 
                     b.HasKey("Id");
@@ -199,15 +208,15 @@ namespace AssetBlock.Infrastructure.Migrations
                     b.ToTable("users", (string)null);
                 });
 
-            modelBuilder.Entity("AssetBlock.Domain.Entities.Asset", b =>
+            modelBuilder.Entity("AssetBlock.Domain.Core.Entities.Asset", b =>
                 {
-                    b.HasOne("AssetBlock.Domain.Entities.User", "Author")
+                    b.HasOne("AssetBlock.Domain.Core.Entities.User", "Author")
                         .WithMany("AuthoredAssets")
                         .HasForeignKey("AuthorId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
-                    b.HasOne("AssetBlock.Domain.Entities.Category", "Category")
+                    b.HasOne("AssetBlock.Domain.Core.Entities.Category", "Category")
                         .WithMany("Assets")
                         .HasForeignKey("CategoryId")
                         .OnDelete(DeleteBehavior.Restrict)
@@ -218,15 +227,15 @@ namespace AssetBlock.Infrastructure.Migrations
                     b.Navigation("Category");
                 });
 
-            modelBuilder.Entity("AssetBlock.Domain.Entities.Purchase", b =>
+            modelBuilder.Entity("AssetBlock.Domain.Core.Entities.Purchase", b =>
                 {
-                    b.HasOne("AssetBlock.Domain.Entities.Asset", "Asset")
+                    b.HasOne("AssetBlock.Domain.Core.Entities.Asset", "Asset")
                         .WithMany("Purchases")
                         .HasForeignKey("AssetId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
-                    b.HasOne("AssetBlock.Domain.Entities.User", "User")
+                    b.HasOne("AssetBlock.Domain.Core.Entities.User", "User")
                         .WithMany("Purchases")
                         .HasForeignKey("UserId")
                         .OnDelete(DeleteBehavior.Restrict)
@@ -237,9 +246,9 @@ namespace AssetBlock.Infrastructure.Migrations
                     b.Navigation("User");
                 });
 
-            modelBuilder.Entity("AssetBlock.Domain.Entities.RefreshToken", b =>
+            modelBuilder.Entity("AssetBlock.Domain.Core.Entities.RefreshToken", b =>
                 {
-                    b.HasOne("AssetBlock.Domain.Entities.User", "User")
+                    b.HasOne("AssetBlock.Domain.Core.Entities.User", "User")
                         .WithMany("RefreshTokens")
                         .HasForeignKey("UserId")
                         .OnDelete(DeleteBehavior.Cascade)
@@ -248,17 +257,17 @@ namespace AssetBlock.Infrastructure.Migrations
                     b.Navigation("User");
                 });
 
-            modelBuilder.Entity("AssetBlock.Domain.Entities.Asset", b =>
+            modelBuilder.Entity("AssetBlock.Domain.Core.Entities.Asset", b =>
                 {
                     b.Navigation("Purchases");
                 });
 
-            modelBuilder.Entity("AssetBlock.Domain.Entities.Category", b =>
+            modelBuilder.Entity("AssetBlock.Domain.Core.Entities.Category", b =>
                 {
                     b.Navigation("Assets");
                 });
 
-            modelBuilder.Entity("AssetBlock.Domain.Entities.User", b =>
+            modelBuilder.Entity("AssetBlock.Domain.Core.Entities.User", b =>
                 {
                     b.Navigation("AuthoredAssets");
 

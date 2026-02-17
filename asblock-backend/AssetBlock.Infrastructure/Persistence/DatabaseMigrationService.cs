@@ -1,5 +1,5 @@
-using AssetBlock.Domain.Entities;
-using AssetBlock.Domain.Primitives.AppSettingsOptions;
+using AssetBlock.Domain.Core.Entities;
+using AssetBlock.Domain.Core.Primitives.AppSettingsOptions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -64,7 +64,7 @@ internal sealed class DatabaseMigrationService(
             return;
         }
 
-        var now = DateTime.UtcNow;
+        var now = DateTimeOffset.UtcNow;
         foreach (var (name, slug, description) in _defaultCategories)
         {
             context.Categories.Add(new Category
@@ -78,8 +78,15 @@ internal sealed class DatabaseMigrationService(
             });
         }
 
-        await context.SaveChangesAsync(cancellationToken);
-        logger.LogInformation("Seeded {Count} categories", _defaultCategories.Length);
+        try
+        {
+            await context.SaveChangesAsync(cancellationToken);
+            logger.LogInformation("Seeded {Count} categories", _defaultCategories.Length);
+        }
+        catch (DbUpdateException ex) when (ex.InnerException is Npgsql.PostgresException { SqlState: Npgsql.PostgresErrorCodes.UniqueViolation })
+        {
+            logger.LogInformation("Categories already seeded by another instance");
+        }
     }
 
     public Task StopAsync(CancellationToken cancellationToken) => Task.CompletedTask;

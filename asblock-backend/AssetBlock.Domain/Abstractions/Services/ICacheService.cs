@@ -7,4 +7,5 @@ public interface ICacheService
 {
     Task<string?> GetString(string key, CancellationToken cancellationToken = default);
     Task SetString(string key, string value, TimeSpan? expiration = null, CancellationToken cancellationToken = default);
+    Task RemoveByPrefix(string prefix, CancellationToken cancellationToken = default);
 }

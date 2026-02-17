@@ -1,5 +1,5 @@
 using AssetBlock.Domain.Abstractions.Services;
-using AssetBlock.Domain.Primitives.AppSettingsOptions;
+using AssetBlock.Domain.Core.Primitives.AppSettingsOptions;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Minio;
@@ -63,12 +63,13 @@ internal sealed class MinioAssetStorageService(
         {
             content.Position = 0;
         }
+        var objectSize = content.CanSeek ? content.Length : -1;
         await client.PutObjectAsync(
             new PutObjectArgs()
                 .WithBucket(opts.Bucket)
                 .WithObject(key)
                 .WithStreamData(content)
-                .WithObjectSize(content.Length),
+                .WithObjectSize(objectSize),
             cancellationToken).ConfigureAwait(false);
 
         logger.LogDebug("Uploaded object {Key} to bucket {Bucket}", key, opts.Bucket);
@@ -92,5 +93,27 @@ internal sealed class MinioAssetStorageService(
             cancellationToken).ConfigureAwait(false);
         ms.Position = 0;
         return ms;
+    }
+
+    public async Task Delete(string key, CancellationToken cancellationToken = default)
+    {
+        var opts = options.Value;
+        var client = new MinioClient()
+            .WithEndpoint(opts.Endpoint)
+            .WithCredentials(opts.AccessKey, opts.SecretKey)
+            .WithSSL(opts.UseSsl)
+            .Build();
+
+        try
+        {
+            await client.RemoveObjectAsync(
+                new RemoveObjectArgs().WithBucket(opts.Bucket).WithObject(key),
+                cancellationToken).ConfigureAwait(false);
+            logger.LogDebug("Deleted object {Key} from bucket {Bucket}", key, opts.Bucket);
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "MinIO delete failed for key {Key}", key);
+        }
     }
 }

@@ -1,5 +1,5 @@
 using AssetBlock.Application.UseCases.Categories.GetCategories;
-using AssetBlock.Domain.Dto.Categories;
+using AssetBlock.Domain.Core.Dto.Categories;
 using AssetBlock.WebApi.Constants;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;

@@ -1,4 +1,4 @@
-using AssetBlock.Domain.Entities;
+using AssetBlock.Domain.Core.Entities;
 using Microsoft.EntityFrameworkCore;
 
 namespace AssetBlock.Infrastructure.Persistence;
@@ -13,6 +13,7 @@ public sealed class ApplicationDbContext(DbContextOptions<ApplicationDbContext> 
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
+        base.OnModelCreating(modelBuilder);
         modelBuilder.ApplyConfigurationsFromAssembly(typeof(ApplicationDbContext).Assembly);
     }
 }
