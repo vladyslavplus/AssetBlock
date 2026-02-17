@@ -38,6 +38,10 @@ internal sealed class GetCategoriesQueryHandler(
                 await cache.RemoveByPrefix(CacheKeys.CATEGORIES_LIST_PREFIX, cancellationToken);
             }
         }
+        else
+        {
+            logger.LogDebug("Categories list cache miss for key {Key}", key);
+        }
 
         var paged = await categoryStore.GetPaged(request.Request, cancellationToken);
         var items = paged.Items

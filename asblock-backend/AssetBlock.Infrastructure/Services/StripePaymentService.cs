@@ -39,7 +39,7 @@ internal sealed class StripePaymentService(
                     PriceData = new SessionLineItemPriceDataOptions
                     {
                         Currency = "usd",
-                        UnitAmount = (long)Math.Round(asset.Price * 100),
+                        UnitAmount = (long)Math.Round(asset.Price * 100, MidpointRounding.AwayFromZero),
                         ProductData = new SessionLineItemPriceDataProductDataOptions
                         {
                             Name = asset.Title, Description = asset.Description ?? string.Empty

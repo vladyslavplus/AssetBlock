@@ -14,7 +14,8 @@ internal sealed class HandleStripeWebhookCommandHandler(
     {
         try
         {
-            var result = await paymentService.HandleCheckoutCompleted(request.Payload, request.Signature, cancellationToken);
+            var result =
+                await paymentService.HandleCheckoutCompleted(request.Payload, request.Signature, cancellationToken);
             if (result is null)
             {
                 return Result.Success<PurchaseCompletedPayload?>(null);
@@ -22,6 +23,10 @@ internal sealed class HandleStripeWebhookCommandHandler(
 
             (Guid userId, Guid assetId) = result.Value;
             return Result.Success<PurchaseCompletedPayload?>(new PurchaseCompletedPayload(userId, assetId));
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
         }
         catch (Exception ex)
         {

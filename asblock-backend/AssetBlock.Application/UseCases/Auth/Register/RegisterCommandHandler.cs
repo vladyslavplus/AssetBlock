@@ -47,7 +47,14 @@ internal sealed class RegisterCommandHandler(
         catch (Exception ex)
         {
             logger.LogWarning(ex, "StoreRefreshToken failed after user create; rolling back user {UserId}", user.Id);
-            await userStore.Delete(user.Id, cancellationToken);
+            try
+            {
+                await userStore.Delete(user.Id, cancellationToken);
+            }
+            catch (Exception deleteEx)
+            {
+                logger.LogError(deleteEx, "Rollback delete failed for user {UserId}", user.Id);
+            }
             throw;
         }
     }

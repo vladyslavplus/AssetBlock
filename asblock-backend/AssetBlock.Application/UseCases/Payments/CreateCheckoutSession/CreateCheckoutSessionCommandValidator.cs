@@ -10,10 +10,12 @@ internal sealed class CreateCheckoutSessionCommandValidator : AbstractValidator<
             .NotEmpty().WithMessage("AssetId is required.");
 
         RuleFor(c => c.SuccessUrl)
+            .Cascade(CascadeMode.Stop)
             .NotEmpty().WithMessage("SuccessUrl is required.")
             .Must(BeAbsoluteHttpsUrl).WithMessage("SuccessUrl must be an absolute HTTPS URL.");
 
         RuleFor(c => c.CancelUrl)
+            .Cascade(CascadeMode.Stop)
             .NotEmpty().WithMessage("CancelUrl is required.")
             .Must(BeAbsoluteHttpsUrl).WithMessage("CancelUrl must be an absolute HTTPS URL.");
     }
@@ -25,7 +27,6 @@ internal sealed class CreateCheckoutSessionCommandValidator : AbstractValidator<
             return false;
         }
         return Uri.TryCreate(url, UriKind.Absolute, out var uri)
-            && (uri.Scheme == "https")
-            && (uri.Host?.Length > 0);
+               && uri is { Scheme: "https", Host.Length: > 0 };
     }
 }

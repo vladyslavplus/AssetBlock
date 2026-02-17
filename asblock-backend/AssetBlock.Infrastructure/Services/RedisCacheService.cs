@@ -17,6 +17,10 @@ internal sealed class RedisCacheService(
             var value = await _db.StringGetAsync(key).WaitAsync(cancellationToken);
             return value.HasValue ? value.ToString() : null;
         }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
         catch (Exception ex)
         {
             logger.LogWarning(ex, "Redis GetString failed for key {Key}", key);
@@ -36,6 +40,10 @@ internal sealed class RedisCacheService(
             {
                 await _db.StringSetAsync(key, value).WaitAsync(cancellationToken);
             }
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
         }
         catch (Exception ex)
         {
@@ -59,10 +67,15 @@ internal sealed class RedisCacheService(
                     batch.Clear();
                 }
             }
+
             if (batch.Count > 0)
             {
                 await _db.KeyDeleteAsync(batch.ToArray()).WaitAsync(cancellationToken);
             }
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
         }
         catch (Exception ex)
         {
