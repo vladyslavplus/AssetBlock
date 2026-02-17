@@ -11,9 +11,7 @@
     </ItemGroup>
 
     <ItemGroup>
-      <Folder Include="Abstraction\Services\" />
       <Folder Include="Core\" />
-      <Folder Include="Primitives\" />
     </ItemGroup>
 
 </Project>

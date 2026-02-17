@@ -360,6 +360,11 @@ ASALocalRun/
 # BeatPulse healthcheck temp database
 healthchecksdb
 
+# Local/development config (secrets, connection strings)
+.env
+**/appsettings.Development.json
+**/appsettings.*.local.json
+
 # Backup folder for Package Reference Convert tool in Visual Studio 2017
 MigrationBackup/
 
@@ -436,6 +441,8 @@ FodyWeavers.xsd
 /.idea/
 
 .idea
+
+docs/
 
 # CMake
 cmake-build-*/
