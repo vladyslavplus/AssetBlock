@@ -1,0 +1,26 @@
+namespace AssetBlock.Domain.Core.Constants;
+
+/// <summary>
+/// Centralized error codes for API responses. All constants UPPER_SNAKE_CASE, values prefixed with ERR_.
+/// </summary>
+public static class ErrorCodes
+{
+    public const string ERR_AUTH_INVALID_CREDENTIALS = "ERR_AUTH_INVALID_CREDENTIALS";
+    public const string ERR_AUTH_TOKEN_EXPIRED = "ERR_AUTH_TOKEN_EXPIRED";
+    public const string ERR_AUTH_TOKEN_INVALID = "ERR_AUTH_TOKEN_INVALID";
+    public const string ERR_AUTH_USER_NOT_FOUND = "ERR_AUTH_USER_NOT_FOUND";
+    public const string ERR_AUTH_EMAIL_ALREADY_EXISTS = "ERR_AUTH_EMAIL_ALREADY_EXISTS";
+
+    public const string ERR_CATEGORY_NOT_FOUND = "ERR_CATEGORY_NOT_FOUND";
+    public const string ERR_ASSET_NOT_FOUND = "ERR_ASSET_NOT_FOUND";
+    public const string ERR_ASSET_UPLOAD_FAILED = "ERR_ASSET_UPLOAD_FAILED";
+
+    public const string ERR_PURCHASE_NOT_FOUND = "ERR_PURCHASE_NOT_FOUND";
+    public const string ERR_PURCHASE_ACCESS_DENIED = "ERR_PURCHASE_ACCESS_DENIED";
+    public const string ERR_PAYMENT_FAILED = "ERR_PAYMENT_FAILED";
+
+    public const string ERR_FILE_REQUIRED = "ERR_FILE_REQUIRED";
+    public const string ERR_NOT_FOUND = "ERR_NOT_FOUND";
+    public const string ERR_FORBIDDEN = "ERR_FORBIDDEN";
+    public const string ERR_BAD_REQUEST = "ERR_BAD_REQUEST";
+}

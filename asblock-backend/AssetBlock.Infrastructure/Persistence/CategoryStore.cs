@@ -1,0 +1,51 @@
+using AssetBlock.Domain.Abstractions.Services;
+using AssetBlock.Domain.Dto.Categories;
+using AssetBlock.Domain.Dto.Paging;
+using AssetBlock.Domain.Entities;
+using Microsoft.EntityFrameworkCore;
+
+namespace AssetBlock.Infrastructure.Persistence;
+
+internal sealed class CategoryStore(ApplicationDbContext dbContext) : ICategoryStore
+{
+    public Task<Category?> GetById(Guid id, CancellationToken cancellationToken = default)
+    {
+        return dbContext.Categories
+            .AsNoTracking()
+            .FirstOrDefaultAsync(c => c.Id == id, cancellationToken);
+    }
+
+    public async Task<PagedResult<Category>> GetPaged(GetCategoriesRequest request, CancellationToken cancellationToken = default)
+    {
+        var query = dbContext.Categories.AsNoTracking();
+
+        if (!string.IsNullOrWhiteSpace(request.Search))
+        {
+            var term = request.Search.Trim();
+            query = query.Where(c => c.Name.Contains(term) || (c.Slug.Contains(term)));
+        }
+
+        var totalCount = await query.CountAsync(cancellationToken);
+
+        var sortBy = string.IsNullOrWhiteSpace(request.SortBy) || !GetCategoriesRequest.AllowedSortBy.Contains(request.SortBy)
+            ? "Name"
+            : request.SortBy;
+        var isDesc = request.SortDirection == SortDirection.DESC;
+
+        query = sortBy switch
+        {
+            "Slug" => isDesc ? query.OrderByDescending(c => c.Slug) : query.OrderBy(c => c.Slug),
+            "Id" => isDesc ? query.OrderByDescending(c => c.Id) : query.OrderBy(c => c.Id),
+            _ => isDesc ? query.OrderByDescending(c => c.Name) : query.OrderBy(c => c.Name)
+        };
+
+        var page = Math.Max(PagedRequest.DEFAULT_PAGE, request.Page);
+        var pageSize = Math.Clamp(request.PageSize, PagedRequest.MIN_PAGE_SIZE, PagedRequest.MAX_PAGE_SIZE);
+        var items = await query
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
+            .ToListAsync(cancellationToken);
+
+        return new PagedResult<Category>(items, totalCount, page, pageSize);
+    }
+}

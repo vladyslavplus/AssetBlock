@@ -1,0 +1,57 @@
+# Local dev stack for AssetBlock backend.
+# Env vars: set in .env (copy from .env.example) or export; defaults used if unset.
+# Run: docker-compose up -d
+# API expects: Postgres (5432), MinIO (9000/9001), optional Redis (6379).
+#
+# MinIO: "Host local has more than 0 drives" is expected for single-node dev and can be ignored.
+# Use non-default MINIO_ROOT_USER/MINIO_ROOT_PASSWORD in .env to avoid "default credentials" warning.
+
+services:
+  # Uncomment when postgres is needed
+  # postgres: 
+  #   image: postgres:16-alpine
+  #   container_name: assetblock-postgres
+  #   ports:
+  #     - "${POSTGRES_PORT:-5432}:5432"
+  #   environment:
+  #     POSTGRES_USER: ${POSTGRES_USER:-postgres}
+  #     POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+  #     POSTGRES_DB: ${POSTGRES_DB:-assetblock}
+  #   volumes:
+  #     - postgres_data:/var/lib/postgresql/data
+  #   healthcheck:
+  #     test: ["CMD-SHELL", "pg_isready -U postgres"]
+  #     interval: 5s
+  #     timeout: 5s
+  #     retries: 5
+
+  minio:
+    image: minio/minio:latest
+    container_name: assetblock-minio
+    ports:
+      - "${MINIO_API_PORT:-9000}:9000"
+      - "${MINIO_CONSOLE_PORT:-9001}:9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-assetblock}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-dev_minio_secret}
+    command: server /data --console-address ":9001"
+    volumes:
+      - minio_data:/data
+
+  redis:
+    image: redis:7-alpine
+    container_name: assetblock-redis
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+volumes:
+  postgres_data:
+  minio_data:
+  redis_data:
