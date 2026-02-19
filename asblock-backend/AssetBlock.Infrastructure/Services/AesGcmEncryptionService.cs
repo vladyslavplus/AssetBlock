@@ -65,20 +65,7 @@ internal sealed class AesGcmEncryptionService(IOptions<EncryptionOptions> option
 
         while (true)
         {
-            // Read chunk length / end marker
-            var read = await ReadExact(cipher, lengthBuffer, cancellationToken);
-            if (read == 0)
-            {
-                // Reached EOF without seeing the end-of-stream marker.
-                throw new CryptographicException("Cipher stream was truncated: missing end-of-stream marker.");
-            }
-
-            if (read < CHUNK_LENGTH_FIELD)
-            {
-                throw new CryptographicException("Cipher stream is corrupt: partial length field.");
-            }
-
-            var chunkLength = BitConverter.ToUInt32(lengthBuffer);
+            var chunkLength = await ReadChunkLengthOrThrow(cipher, lengthBuffer, cancellationToken);
             if (chunkLength == END_OF_STREAM_MARKER)
             {
                 break; // Proper end of stream.
@@ -96,11 +83,10 @@ internal sealed class AesGcmEncryptionService(IOptions<EncryptionOptions> option
             await ReadExactOrThrow(cipher, cipherBytes, cancellationToken);
 
             var plainBytes = new byte[chunkLength];
-            var aad = BitConverter.GetBytes(chunkIndex); // must match index used during Encrypt
+            var aad = BitConverter.GetBytes(chunkIndex);
 
             using (var aes = new AesGcm(key, TAG_SIZE))
             {
-                // Throws AuthenticationTagMismatchException if chunk is tampered or reordered.
                 aes.Decrypt(nonce, cipherBytes, tag, plainBytes, aad);
             }
 
@@ -130,6 +116,17 @@ internal sealed class AesGcmEncryptionService(IOptions<EncryptionOptions> option
 
         _cachedKey = key;
         return key;
+    }
+
+    private static async Task<uint> ReadChunkLengthOrThrow(Stream stream, byte[] lengthBuffer, CancellationToken token)
+    {
+        var read = await ReadExact(stream, lengthBuffer, token);
+        if (read == 0)
+        {
+            throw new CryptographicException("Cipher stream was truncated: missing end-of-stream marker.");
+        }
+
+        return read < lengthBuffer.Length ? throw new CryptographicException("Cipher stream is corrupt: partial length field.") : BitConverter.ToUInt32(lengthBuffer);
     }
 
     private static async Task<int> ReadExact(Stream stream, byte[] buffer, CancellationToken token)

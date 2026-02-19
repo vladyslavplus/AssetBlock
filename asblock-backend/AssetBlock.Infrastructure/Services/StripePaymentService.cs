@@ -19,12 +19,17 @@ internal sealed class StripePaymentService(
 
     public async Task<string> CreateCheckoutSession(Guid assetId, Guid userId, string? successUrl, string? cancelUrl, CancellationToken cancellationToken = default)
     {
-        var asset = await assetStore.GetById(assetId, cancellationToken)
-            ?? throw new InvalidOperationException("Asset not found.");
-
         var opts = options.Value;
         var resolvedSuccessUrl = string.IsNullOrWhiteSpace(successUrl) ? opts.DefaultSuccessUrl : successUrl;
         var resolvedCancelUrl = string.IsNullOrWhiteSpace(cancelUrl) ? opts.DefaultCancelUrl : cancelUrl;
+
+        if (string.IsNullOrWhiteSpace(resolvedSuccessUrl) || string.IsNullOrWhiteSpace(resolvedCancelUrl))
+        {
+            throw new InvalidOperationException("Stripe SuccessUrl and CancelUrl must be configured.");
+        }
+
+        var asset = await assetStore.GetById(assetId, cancellationToken)
+            ?? throw new InvalidOperationException($"Asset {assetId} not found.");
 
         var sessionService = new SessionService(_stripeClient);
         var sessionOptions = new SessionCreateOptions
