@@ -28,16 +28,10 @@ internal sealed class DownloadService(
             return new AssetDownloadResult(AssetDownloadStatus.Forbidden, null, null);
         }
 
-        // Download quota check (per-user, per-asset, per-hour)
-        if (asset.DownloadLimitPerHour.HasValue)
+        if (asset.DownloadLimitPerHour.HasValue &&
+            await IsRateLimited(assetId, userId, asset.DownloadLimitPerHour.Value, cancellationToken))
         {
-            var hour = DateTimeOffset.UtcNow.Hour;
-            var counterKey = $"{DOWNLOAD_COUNTER_PREFIX}:{assetId}:{userId}:{hour}";
-            var count = await cacheService.Increment(counterKey, TimeSpan.FromHours(1), cancellationToken);
-            if (count > asset.DownloadLimitPerHour.Value)
-            {
-                return new AssetDownloadResult(AssetDownloadStatus.RateLimited, null, null);
-            }
+            return new AssetDownloadResult(AssetDownloadStatus.RateLimited, null, null);
         }
 
         await using var encryptedStream = await assetStorageService.Get(asset.StorageKey, cancellationToken);
@@ -67,5 +61,19 @@ internal sealed class DownloadService(
 
             throw;
         }
+    }
+
+    private async Task<bool> IsRateLimited(Guid assetId, Guid userId, int limit, CancellationToken cancellationToken)
+    {
+        var now = DateTimeOffset.UtcNow;
+        var windowKey = now.ToString("yyyyMMddHH");
+        var expiresIn = TimeSpan.FromHours(1)
+            - TimeSpan.FromMinutes(now.Minute)
+            - TimeSpan.FromSeconds(now.Second)
+            - TimeSpan.FromMilliseconds(now.Millisecond);
+        var counterKey = $"{DOWNLOAD_COUNTER_PREFIX}:{assetId}:{userId}:{windowKey}";
+        var count = await cacheService.Increment(counterKey, expiresIn, cancellationToken);
+
+        return count > limit;
     }
 }

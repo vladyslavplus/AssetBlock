@@ -19,6 +19,9 @@ internal sealed class UploadAssetCommandValidator : AbstractValidator<UploadAsse
                     .GreaterThan(0).WithMessage("Price must be greater than zero.");
                 RuleFor(c => c.Request.CategoryId)
                     .NotEmpty().WithMessage("CategoryId is required.");
+                RuleFor(c => c.Request.DownloadLimitPerHour)
+                    .GreaterThan(0).When(c => c.Request.DownloadLimitPerHour.HasValue)
+                    .WithMessage("DownloadLimitPerHour must be greater than zero when specified.");
             });
         RuleFor(c => c.FileName)
             .NotEmpty().WithMessage("FileName is required.")

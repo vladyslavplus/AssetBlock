@@ -96,7 +96,7 @@ internal sealed class MinioAssetStorageService(
                 new GetObjectArgs()
                     .WithBucket(opts.Bucket)
                     .WithObject(key)
-                    .WithCallbackStream(stream => stream.CopyTo(ms)),
+                    .WithCallbackStream(async (stream, token) => await stream.CopyToAsync(ms, token).ConfigureAwait(false)),
                 ct).ConfigureAwait(false),
             cancellationToken);
         ms.Position = 0;

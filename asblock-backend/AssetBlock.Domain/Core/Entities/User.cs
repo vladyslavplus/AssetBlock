@@ -7,7 +7,7 @@ public class User : BaseEntity
 {
     public required string Email { get; set; }
     public required string PasswordHash { get; set; }
-    public string Role { get; set; } = AppRoles.USER;
+    public required string Role { get; set; } = AppRoles.USER;
 
     public ICollection<Asset> AuthoredAssets { get; set; } = new List<Asset>();
     public ICollection<Purchase> Purchases { get; set; } = new List<Purchase>();

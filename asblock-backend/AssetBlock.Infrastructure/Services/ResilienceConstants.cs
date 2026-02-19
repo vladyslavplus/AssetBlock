@@ -16,6 +16,10 @@ internal static class ResilienceConstants
         public const int MAX_RETRIES = 3;
         public const int RETRY_DELAY_MS = 500;
         public const int TIMEOUT_SECONDS = 30;
+        public const double FAILURE_RATIO = 0.5;
+        public const int SAMPLING_DURATION_SECONDS = 30;
+        public const int MIN_THROUGHPUT = 5;
+        public const int BREAK_DURATION_SECONDS = 30;
     }
 
     public static class Minio

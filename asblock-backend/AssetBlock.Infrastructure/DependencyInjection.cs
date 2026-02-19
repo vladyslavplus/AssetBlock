@@ -70,6 +70,13 @@ public static class DependencyInjection
                 BackoffType = DelayBackoffType.Exponential,
                 UseJitter = true
             });
+            builder.AddCircuitBreaker(new Polly.CircuitBreaker.CircuitBreakerStrategyOptions
+            {
+                FailureRatio = ResilienceConstants.Stripe.FAILURE_RATIO,
+                SamplingDuration = TimeSpan.FromSeconds(ResilienceConstants.Stripe.SAMPLING_DURATION_SECONDS),
+                MinimumThroughput = ResilienceConstants.Stripe.MIN_THROUGHPUT,
+                BreakDuration = TimeSpan.FromSeconds(ResilienceConstants.Stripe.BREAK_DURATION_SECONDS)
+            });
             builder.AddTimeout(TimeSpan.FromSeconds(ResilienceConstants.Stripe.TIMEOUT_SECONDS));
         });
 

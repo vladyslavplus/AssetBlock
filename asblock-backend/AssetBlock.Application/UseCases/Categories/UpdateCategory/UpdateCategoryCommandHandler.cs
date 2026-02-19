@@ -17,7 +17,6 @@ internal sealed class UpdateCategoryCommandHandler(ICategoryStore categoryStore,
             return ResultError.Error(ErrorCodes.ERR_CATEGORY_NOT_FOUND);
         }
 
-        // Slug uniqueness check — only when a new slug is provided and differs from current
         if (request.Slug is not null && request.Slug != category.Slug)
         {
             var slugExists = await categoryStore.SlugExists(request.Slug, request.Id, cancellationToken);
@@ -27,7 +26,6 @@ internal sealed class UpdateCategoryCommandHandler(ICategoryStore categoryStore,
             }
         }
 
-        // Apply only the fields that were explicitly provided (partial update / PATCH semantics)
         if (request.Name is not null)
         {
             category.Name = request.Name;

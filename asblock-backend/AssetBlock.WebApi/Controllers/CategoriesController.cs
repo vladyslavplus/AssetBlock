@@ -49,7 +49,7 @@ public sealed class CategoriesController(ISender sender) : ApiControllerBase(sen
     /// </summary>
     [HttpPost(ApiRoutes.Categories.LIST)]
     [Authorize(Roles = AppRoles.ADMIN)]
-    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status201Created)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
@@ -57,7 +57,7 @@ public sealed class CategoriesController(ISender sender) : ApiControllerBase(sen
     {
         var command = new CreateCategoryCommand(request.Name, request.Description, request.Slug);
         var result = await Sender.Send(command, cancellationToken);
-        return MapResultToActionResult(result);
+        return result.IsSuccess ? CreatedAtAction(nameof(GetById), new { id = result.Value.Id }, result.Value) : MapResultToActionResult(result);
     }
 
     /// <summary>

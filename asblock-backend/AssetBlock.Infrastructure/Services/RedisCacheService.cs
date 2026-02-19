@@ -91,7 +91,8 @@ internal sealed class RedisCacheService(
         try
         {
             var count = await _db.StringIncrementAsync(key).WaitAsync(cancellationToken);
-            if (count == 1)
+            var ttl = await _db.KeyTimeToLiveAsync(key).WaitAsync(cancellationToken);
+            if (count == 1 || ttl is null)
             {
                 await _db.KeyExpireAsync(key, expiry).WaitAsync(cancellationToken);
             }
@@ -105,7 +106,7 @@ internal sealed class RedisCacheService(
         catch (Exception ex)
         {
             logger.LogWarning(ex, "Redis IncrementAsync failed for key {Key}", key);
-            return 0;
+            throw;
         }
     }
 }
