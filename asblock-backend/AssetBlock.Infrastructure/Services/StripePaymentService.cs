@@ -23,8 +23,8 @@ internal sealed class StripePaymentService(
             ?? throw new InvalidOperationException("Asset not found.");
 
         var opts = options.Value;
-        var resolvedSuccessUrl = successUrl ?? opts.DefaultSuccessUrl;
-        var resolvedCancelUrl = cancelUrl ?? opts.DefaultCancelUrl;
+        var resolvedSuccessUrl = string.IsNullOrWhiteSpace(successUrl) ? opts.DefaultSuccessUrl : successUrl;
+        var resolvedCancelUrl = string.IsNullOrWhiteSpace(cancelUrl) ? opts.DefaultCancelUrl : cancelUrl;
 
         var sessionService = new SessionService(_stripeClient);
         var sessionOptions = new SessionCreateOptions

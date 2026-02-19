@@ -10,72 +10,102 @@ internal sealed class AesGcmEncryptionService(IOptions<EncryptionOptions> option
     private const int KEY_SIZE = 32;
     private const int NONCE_SIZE = 12;
     private const int TAG_SIZE = 16;
-    private const int CHUNK_SIZE = 1024 * 1024; // 1MB chunk size
+    private const int CHUNK_SIZE = 1024 * 1024; // 1 MB
+    private const int CHUNK_LENGTH_FIELD = 4;   // bytes reserved for length prefix
+    private const uint END_OF_STREAM_MARKER = uint.MaxValue; // 0xFFFFFFFF sentinel
 
     private byte[]? _cachedKey;
+
+    // Wire format per chunk:
+    //   [4 bytes  : uint plaintext chunk length  (0xFFFFFFFF = end marker)]
+    //   [12 bytes : nonce                                                  ]
+    //   [16 bytes : GCM tag                                                ]
+    //   [N bytes  : ciphertext                                             ]
+    // AAD per chunk = chunk index as little-endian int64 (prevents reorder)
+    // Trailing 4-byte end marker (END_OF_STREAM_MARKER) detects truncation.
 
     public async Task Encrypt(Stream plain, Stream cipher, CancellationToken cancellationToken = default)
     {
         var key = GetKey();
         var buffer = new byte[CHUNK_SIZE];
         int bytesRead;
+        long chunkIndex = 0;
 
         while ((bytesRead = await plain.ReadAsync(buffer, cancellationToken)) > 0)
         {
             var nonce = RandomNumberGenerator.GetBytes(NONCE_SIZE);
             var tag = new byte[TAG_SIZE];
             var cipherBytes = new byte[bytesRead];
+            var aad = BitConverter.GetBytes(chunkIndex); // int64 AAD = chunk position
 
             using (var aes = new AesGcm(key, TAG_SIZE))
             {
-                aes.Encrypt(nonce, buffer.AsSpan(0, bytesRead), cipherBytes, tag);
+                aes.Encrypt(nonce, buffer.AsSpan(0, bytesRead), cipherBytes, tag, aad);
             }
 
-            var lengthBytes = BitConverter.GetBytes(bytesRead);
-            await cipher.WriteAsync(lengthBytes, cancellationToken);
+            await cipher.WriteAsync(BitConverter.GetBytes((uint)bytesRead), cancellationToken);
             await cipher.WriteAsync(nonce, cancellationToken);
             await cipher.WriteAsync(tag, cancellationToken);
             await cipher.WriteAsync(cipherBytes, cancellationToken);
+
+            chunkIndex++;
         }
+
+        // Write end-of-stream marker so Decrypt can detect truncation.
+        await cipher.WriteAsync(BitConverter.GetBytes(END_OF_STREAM_MARKER), cancellationToken);
     }
 
     public async Task Decrypt(Stream cipher, Stream plain, CancellationToken cancellationToken = default)
     {
         var key = GetKey();
-        var lengthBuffer = new byte[4];
+        var lengthBuffer = new byte[CHUNK_LENGTH_FIELD];
         var nonce = new byte[NONCE_SIZE];
         var tag = new byte[TAG_SIZE];
+        long chunkIndex = 0;
 
         while (true)
         {
-            // Read chunk length
+            // Read chunk length / end marker
             var read = await ReadExact(cipher, lengthBuffer, cancellationToken);
             if (read == 0)
             {
-                break; // End of stream
+                // Reached EOF without seeing the end-of-stream marker.
+                throw new CryptographicException("Cipher stream was truncated: missing end-of-stream marker.");
             }
 
-            var chunkLength = BitConverter.ToInt32(lengthBuffer);
-            if (chunkLength is < 0 or > CHUNK_SIZE)
+            if (read < CHUNK_LENGTH_FIELD)
             {
-                throw new CryptographicException("Invalid chunk size in cipher stream.");
+                throw new CryptographicException("Cipher stream is corrupt: partial length field.");
             }
 
-            // Read metadata
+            var chunkLength = BitConverter.ToUInt32(lengthBuffer);
+            if (chunkLength == END_OF_STREAM_MARKER)
+            {
+                break; // Proper end of stream.
+            }
+
+            if (chunkLength > CHUNK_SIZE)
+            {
+                throw new CryptographicException($"Invalid chunk size {chunkLength}: exceeds maximum {CHUNK_SIZE}.");
+            }
+
             await ReadExactOrThrow(cipher, nonce, cancellationToken);
             await ReadExactOrThrow(cipher, tag, cancellationToken);
 
-            // Read ciphertext
             var cipherBytes = new byte[chunkLength];
             await ReadExactOrThrow(cipher, cipherBytes, cancellationToken);
 
             var plainBytes = new byte[chunkLength];
+            var aad = BitConverter.GetBytes(chunkIndex); // must match index used during Encrypt
+
             using (var aes = new AesGcm(key, TAG_SIZE))
             {
-                aes.Decrypt(nonce, cipherBytes, tag, plainBytes);
+                // Throws AuthenticationTagMismatchException if chunk is tampered or reordered.
+                aes.Decrypt(nonce, cipherBytes, tag, plainBytes, aad);
             }
 
             await plain.WriteAsync(plainBytes, cancellationToken);
+            chunkIndex++;
         }
     }
 
@@ -93,7 +123,7 @@ internal sealed class AesGcmEncryptionService(IOptions<EncryptionOptions> option
         }
 
         var key = Convert.FromBase64String(keyBase64);
-        if (key.Length != KEY_SIZE && key.Length != 16 && key.Length != 24)
+        if (key.Length != 16 && key.Length != 24 && key.Length != KEY_SIZE)
         {
             throw new InvalidOperationException($"Encryption key must be 16, 24, or 32 bytes. Got {key.Length} bytes.");
         }
@@ -115,6 +145,7 @@ internal sealed class AesGcmEncryptionService(IOptions<EncryptionOptions> option
 
             totalRead += read;
         }
+
         return totalRead;
     }
 

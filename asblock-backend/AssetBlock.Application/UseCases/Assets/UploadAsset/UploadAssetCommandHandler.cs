@@ -35,7 +35,15 @@ internal sealed class UploadAssetCommandHandler(
         var storageKey = $"assets/{request.AuthorId}/{assetId}{extension}";
 
         using var cipherStream = new MemoryStream();
-        await encryptionService.Encrypt(request.FileContent, cipherStream, cancellationToken);
+        try
+        {
+            await encryptionService.Encrypt(request.FileContent, cipherStream, cancellationToken);
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Encryption failed for asset {AssetId}", assetId);
+            return ResultError.Error<Guid>(ErrorCodes.ERR_ASSET_UPLOAD_FAILED);
+        }
 
         cipherStream.Position = 0;
         try

@@ -11,13 +11,13 @@ internal sealed class CreateCheckoutSessionCommandValidator : AbstractValidator<
 
         RuleFor(c => c.SuccessUrl)
             .Cascade(CascadeMode.Stop)
-            .NotEmpty().WithMessage("SuccessUrl is required.")
-            .Must(BeAbsoluteHttpsUrl).WithMessage("SuccessUrl must be an absolute HTTPS URL.");
+            .Must(url => string.IsNullOrWhiteSpace(url) || BeAbsoluteHttpsUrl(url))
+            .WithMessage("SuccessUrl must be an absolute HTTPS URL.");
 
         RuleFor(c => c.CancelUrl)
             .Cascade(CascadeMode.Stop)
-            .NotEmpty().WithMessage("CancelUrl is required.")
-            .Must(BeAbsoluteHttpsUrl).WithMessage("CancelUrl must be an absolute HTTPS URL.");
+            .Must(url => string.IsNullOrWhiteSpace(url) || BeAbsoluteHttpsUrl(url))
+            .WithMessage("CancelUrl must be an absolute HTTPS URL.");
     }
 
     private static bool BeAbsoluteHttpsUrl(string? url)
