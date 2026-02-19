@@ -6,7 +6,7 @@ namespace AssetBlock.Domain.Abstractions.Services;
 /// </summary>
 public interface IEncryptionService
 {
-    /// <summary>Encrypts plain to cipher; writes nonce (12 bytes) at the start of cipher. Returns nonce for DB storage.</summary>
-    Task<byte[]> Encrypt(Stream plain, Stream cipher, CancellationToken cancellationToken = default);
+    /// <summary>Encrypts plain to cipher; writes nonce (12 bytes) at the start of each chunk in cipher stream.</summary>
+    Task Encrypt(Stream plain, Stream cipher, CancellationToken cancellationToken = default);
     Task Decrypt(Stream cipher, Stream plain, CancellationToken cancellationToken = default);
 }

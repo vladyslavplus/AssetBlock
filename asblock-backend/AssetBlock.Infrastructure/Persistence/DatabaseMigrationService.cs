@@ -44,8 +44,12 @@ internal sealed class DatabaseMigrationService(
             }
             else if (dbOptions.AutoMigrate)
             {
-                await context.Database.MigrateAsync(cancellationToken);
-                logger.LogInformation("Migrations applied successfully");
+                var pending = await context.Database.GetPendingMigrationsAsync(cancellationToken);
+                if (pending.Any())
+                {
+                    await context.Database.MigrateAsync(cancellationToken);
+                    logger.LogInformation("Migrations applied successfully");
+                }
             }
 
             await SeedCategoriesIfEmpty(context, cancellationToken);
