@@ -17,7 +17,7 @@ internal sealed class MinioBucketEnsureHostedService(IServiceProvider services, 
         {
             using var scope = services.CreateScope();
             var storage = scope.ServiceProvider.GetRequiredService<IAssetStorageService>();
-            await storage.EnsureBucketAsync(cancellationToken).ConfigureAwait(false);
+            await storage.EnsureBucket(cancellationToken).ConfigureAwait(false);
         }
         catch (Exception ex)
         {

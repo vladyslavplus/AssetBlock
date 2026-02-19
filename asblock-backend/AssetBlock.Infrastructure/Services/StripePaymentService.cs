@@ -1,5 +1,6 @@
 using AssetBlock.Domain.Abstractions.Services;
 using AssetBlock.Domain.Core.Entities;
+using AssetBlock.Domain.Core.Constants;
 using AssetBlock.Domain.Core.Primitives.AppSettingsOptions;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -16,21 +17,30 @@ internal sealed class StripePaymentService(
 {
     private readonly StripeClient _stripeClient = new(options.Value.SecretKey);
 
-    public async Task<string> CreateCheckoutSession(Guid assetId, Guid userId, string successUrl, string cancelUrl, CancellationToken cancellationToken = default)
+    public async Task<string> CreateCheckoutSession(Guid assetId, Guid userId, string? successUrl, string? cancelUrl, CancellationToken cancellationToken = default)
     {
+        var opts = options.Value;
+        var resolvedSuccessUrl = string.IsNullOrWhiteSpace(successUrl) ? opts.DefaultSuccessUrl : successUrl;
+        var resolvedCancelUrl = string.IsNullOrWhiteSpace(cancelUrl) ? opts.DefaultCancelUrl : cancelUrl;
+
+        if (string.IsNullOrWhiteSpace(resolvedSuccessUrl) || string.IsNullOrWhiteSpace(resolvedCancelUrl))
+        {
+            throw new InvalidOperationException("Stripe SuccessUrl and CancelUrl must be configured.");
+        }
+
         var asset = await assetStore.GetById(assetId, cancellationToken)
-            ?? throw new InvalidOperationException("Asset not found.");
+            ?? throw new InvalidOperationException($"Asset {assetId} not found.");
 
         var sessionService = new SessionService(_stripeClient);
         var sessionOptions = new SessionCreateOptions
         {
-            Mode = "payment",
-            SuccessUrl = successUrl,
-            CancelUrl = cancelUrl,
+            Mode = StripeConstants.MODE_PAYMENT,
+            SuccessUrl = resolvedSuccessUrl,
+            CancelUrl = resolvedCancelUrl,
             Metadata = new Dictionary<string, string>
             {
-                { "userId", userId.ToString() },
-                { "assetId", assetId.ToString() }
+                { StripeConstants.MetadataKeys.USER_ID, userId.ToString() },
+                { StripeConstants.MetadataKeys.ASSET_ID, assetId.ToString() }
             },
             LineItems =
             [
@@ -38,7 +48,7 @@ internal sealed class StripePaymentService(
                 {
                     PriceData = new SessionLineItemPriceDataOptions
                     {
-                        Currency = "usd",
+                        Currency = StripeConstants.CURRENCY_USD,
                         UnitAmount = (long)Math.Round(asset.Price * 100, MidpointRounding.AwayFromZero),
                         ProductData = new SessionLineItemPriceDataProductDataOptions
                         {
@@ -73,7 +83,7 @@ internal sealed class StripePaymentService(
             return null;
         }
 
-        if (stripeEvent.Type != "checkout.session.completed")
+        if (stripeEvent.Type != StripeConstants.Events.CHECKOUT_SESSION_COMPLETED)
         {
             return null;
         }
@@ -84,13 +94,13 @@ internal sealed class StripePaymentService(
             return null;
         }
 
-        if (session.PaymentStatus != "paid")
+        if (session.PaymentStatus != StripeConstants.PAYMENT_STATUS_PAID)
         {
             return null;
         }
 
-        if (!session.Metadata.TryGetValue("userId", out var userIdStr) ||
-            !session.Metadata.TryGetValue("assetId", out var assetIdStr) ||
+        if (!session.Metadata.TryGetValue(StripeConstants.MetadataKeys.USER_ID, out var userIdStr) ||
+            !session.Metadata.TryGetValue(StripeConstants.MetadataKeys.ASSET_ID, out var assetIdStr) ||
             !Guid.TryParse(userIdStr, out var userId) ||
             !Guid.TryParse(assetIdStr, out var assetId))
         {

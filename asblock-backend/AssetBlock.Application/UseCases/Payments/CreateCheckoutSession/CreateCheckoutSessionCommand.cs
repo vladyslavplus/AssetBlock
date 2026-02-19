@@ -6,5 +6,5 @@ namespace AssetBlock.Application.UseCases.Payments.CreateCheckoutSession;
 public sealed record CreateCheckoutSessionCommand(
     Guid AssetId,
     Guid UserId,
-    string SuccessUrl,
-    string CancelUrl) : IRequest<Result<CreateCheckoutSessionResponse>>;
+    string? SuccessUrl,
+    string? CancelUrl) : IRequest<Result<CreateCheckoutSessionResponse>>;

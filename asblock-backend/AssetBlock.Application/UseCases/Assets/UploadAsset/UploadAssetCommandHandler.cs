@@ -35,14 +35,13 @@ internal sealed class UploadAssetCommandHandler(
         var storageKey = $"assets/{request.AuthorId}/{assetId}{extension}";
 
         using var cipherStream = new MemoryStream();
-        byte[] nonce;
         try
         {
-            nonce = await encryptionService.Encrypt(request.FileContent, cipherStream, cancellationToken);
+            await encryptionService.Encrypt(request.FileContent, cipherStream, cancellationToken);
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, "Encryption failed for asset upload");
+            logger.LogError(ex, "Encryption failed for asset {AssetId}", assetId);
             return ResultError.Error<Guid>(ErrorCodes.ERR_ASSET_UPLOAD_FAILED);
         }
 
@@ -68,7 +67,6 @@ internal sealed class UploadAssetCommandHandler(
             Price = request.Request.Price,
             StorageKey = storageKey,
             FileName = request.FileName,
-            EncryptionNonceBase64 = Convert.ToBase64String(nonce),
             CreatedAt = now
         };
         try

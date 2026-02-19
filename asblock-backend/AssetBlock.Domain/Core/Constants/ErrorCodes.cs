@@ -18,6 +18,7 @@ public static class ErrorCodes
     public const string ERR_PURCHASE_NOT_FOUND = "ERR_PURCHASE_NOT_FOUND";
     public const string ERR_PURCHASE_ACCESS_DENIED = "ERR_PURCHASE_ACCESS_DENIED";
     public const string ERR_PAYMENT_FAILED = "ERR_PAYMENT_FAILED";
+    public const string ERR_STRIPE_URLS_NOT_CONFIGURED = "ERR_STRIPE_URLS_NOT_CONFIGURED";
 
     public const string ERR_FILE_REQUIRED = "ERR_FILE_REQUIRED";
     public const string ERR_NOT_FOUND = "ERR_NOT_FOUND";

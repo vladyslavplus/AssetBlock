@@ -9,7 +9,7 @@
 
 services:
   # Uncomment when postgres is needed
-  # postgres: 
+  # postgres:
   #   image: postgres:16-alpine
   #   container_name: assetblock-postgres
   #   ports:
@@ -53,6 +53,6 @@ services:
       retries: 5
 
 volumes:
-  postgres_data:
+  # postgres_data:
   minio_data:
   redis_data:

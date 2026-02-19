@@ -11,7 +11,7 @@ internal sealed class MinioAssetStorageService(
     IOptions<MinioOptions> options,
     ILogger<MinioAssetStorageService> logger) : IAssetStorageService
 {
-    public async Task EnsureBucketAsync(CancellationToken cancellationToken = default)
+    public async Task EnsureBucket(CancellationToken cancellationToken = default)
     {
         var opts = options.Value;
         var client = new MinioClient()
