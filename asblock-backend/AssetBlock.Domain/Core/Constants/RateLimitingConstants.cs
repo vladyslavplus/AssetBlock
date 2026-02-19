@@ -16,6 +16,8 @@ public static class RateLimitingConstants
 
     public static class Windows
     {
+        public const int SLIDING_WINDOW_SEGMENTS = 6;
+
         public const int AUTH_REGISTER_LIMIT = 5;
         public const int AUTH_REGISTER_PERIOD_SECONDS = 60;
 

@@ -1,5 +1,6 @@
 using AssetBlock.Domain.Abstractions.Services;
 using AssetBlock.Domain.Core.Primitives.Api;
+using System.Globalization;
 
 namespace AssetBlock.Infrastructure.Services;
 
@@ -11,6 +12,8 @@ internal sealed class DownloadService(
     ICacheService cacheService) : IDownloadService
 {
     private const string DOWNLOAD_COUNTER_PREFIX = "dl";
+    private const string DOWNLOAD_WINDOW_KEY_FORMAT = "yyyyMMddHH";
+    private static readonly TimeSpan _downloadWindow = TimeSpan.FromHours(1);
 
     public async Task<AssetDownloadResult> GetAssetStream(Guid assetId, Guid userId,
         CancellationToken cancellationToken = default)
@@ -66,8 +69,8 @@ internal sealed class DownloadService(
     private async Task<bool> IsRateLimited(Guid assetId, Guid userId, int limit, CancellationToken cancellationToken)
     {
         var now = DateTimeOffset.UtcNow;
-        var windowKey = now.ToString("yyyyMMddHH");
-        var expiresIn = TimeSpan.FromHours(1)
+        var windowKey = now.ToString(DOWNLOAD_WINDOW_KEY_FORMAT, CultureInfo.InvariantCulture);
+        var expiresIn = _downloadWindow
             - TimeSpan.FromMinutes(now.Minute)
             - TimeSpan.FromSeconds(now.Second)
             - TimeSpan.FromMilliseconds(now.Millisecond);
