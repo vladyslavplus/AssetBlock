@@ -1,11 +1,13 @@
 using AssetBlock.Application.UseCases.Payments.CreateCheckoutSession;
 using AssetBlock.Application.UseCases.Payments.HandleStripeWebhook;
+using AssetBlock.Domain.Core.Constants;
 using AssetBlock.Domain.Core.Dto.Payments;
 using AssetBlock.WebApi.Constants;
 using AssetBlock.WebApi.Hubs;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.AspNetCore.SignalR;
 
 namespace AssetBlock.WebApi.Controllers;
@@ -17,6 +19,7 @@ public sealed class PaymentsController(ISender sender, IHubContext<Notifications
     /// </summary>
     [HttpPost(ApiRoutes.Payments.CHECKOUT)]
     [Authorize]
+    [EnableRateLimiting(RateLimitingConstants.Policies.PAYMENTS_CHECKOUT)]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]

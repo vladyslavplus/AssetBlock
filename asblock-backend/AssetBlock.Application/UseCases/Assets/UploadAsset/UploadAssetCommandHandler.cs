@@ -67,6 +67,7 @@ internal sealed class UploadAssetCommandHandler(
             Price = request.Request.Price,
             StorageKey = storageKey,
             FileName = request.FileName,
+            DownloadLimitPerHour = request.Request.DownloadLimitPerHour,
             CreatedAt = now
         };
         try

@@ -4,4 +4,5 @@ public sealed record UploadAssetRequest(
     string Title,
     string? Description,
     decimal Price,
-    Guid CategoryId);
+    Guid CategoryId,
+    int? DownloadLimitPerHour = null);

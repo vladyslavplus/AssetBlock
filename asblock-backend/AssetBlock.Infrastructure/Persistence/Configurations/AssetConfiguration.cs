@@ -21,6 +21,7 @@ internal sealed class AssetConfiguration : IEntityTypeConfiguration<Asset>
 
         builder.Property(a => a.CreatedAt).IsRequired();
         builder.Property(a => a.UpdatedAt);
+        builder.Property(a => a.DownloadLimitPerHour);
 
         builder.HasOne(a => a.Author)
             .WithMany(u => u.AuthoredAssets)

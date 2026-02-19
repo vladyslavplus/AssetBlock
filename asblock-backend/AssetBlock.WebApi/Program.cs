@@ -13,6 +13,7 @@ builder.Services.AddSignalR();
 builder.Services.AddOpenApi();
 builder.Services.AddSwaggerConfiguration();
 builder.Services.AddJwtAuthentication(builder.Configuration);
+builder.Services.AddApiRateLimiting();
 
 var app = builder.Build();
 
@@ -26,6 +27,7 @@ if (app.Environment.IsDevelopment())
 }
 
 app.UseHttpsRedirection();
+app.UseRateLimiter();
 app.UseAuthentication();
 app.UseAuthorization();
 app.MapControllers();

@@ -21,9 +21,9 @@ internal sealed class RefreshTokenCommandHandler(
             return ResultError.Error<TokensResponse>(ErrorCodes.ERR_AUTH_TOKEN_INVALID);
         }
 
-        (Guid userId, var email, Guid tokenId) = payload.Value;
+        (Guid userId, var email, var role, Guid tokenId) = payload.Value;
         await jwtTokenService.RevokeRefreshToken(tokenId, cancellationToken);
-        var tokens = jwtTokenService.GenerateTokenPair(userId, email);
+        var tokens = jwtTokenService.GenerateTokenPair(userId, email, role);
         await jwtTokenService.StoreRefreshToken(userId, tokens.RefreshToken, tokens.RefreshExpiresAt, cancellationToken);
         logger.LogInformation("Refresh token used successfully for user {UserId}", userId);
         return Result.Success(tokens);

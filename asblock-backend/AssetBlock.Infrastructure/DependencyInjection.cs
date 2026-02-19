@@ -8,6 +8,8 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
+using Polly;
+using Polly.Retry;
 using StackExchange.Redis;
 
 namespace AssetBlock.Infrastructure;
@@ -57,6 +59,31 @@ public static class DependencyInjection
             services.AddMemoryCache();
             services.AddSingleton<ICacheService, MemoryCacheService>();
         }
+
+        // Polly v8 resilience pipelines for external services
+        services.AddResiliencePipeline(ResilienceConstants.Pipelines.STRIPE, builder =>
+        {
+            builder.AddRetry(new RetryStrategyOptions
+            {
+                MaxRetryAttempts = ResilienceConstants.Stripe.MAX_RETRIES,
+                Delay = TimeSpan.FromMilliseconds(ResilienceConstants.Stripe.RETRY_DELAY_MS),
+                BackoffType = DelayBackoffType.Exponential,
+                UseJitter = true
+            });
+            builder.AddTimeout(TimeSpan.FromSeconds(ResilienceConstants.Stripe.TIMEOUT_SECONDS));
+        });
+
+        services.AddResiliencePipeline(ResilienceConstants.Pipelines.MINIO, builder =>
+        {
+            builder.AddRetry(new RetryStrategyOptions
+            {
+                MaxRetryAttempts = ResilienceConstants.Minio.MAX_RETRIES,
+                Delay = TimeSpan.FromMilliseconds(ResilienceConstants.Minio.RETRY_DELAY_MS),
+                BackoffType = DelayBackoffType.Exponential,
+                UseJitter = true
+            });
+            builder.AddTimeout(TimeSpan.FromSeconds(ResilienceConstants.Minio.TIMEOUT_SECONDS));
+        });
 
         return services;
     }

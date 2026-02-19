@@ -15,6 +15,7 @@ public static class ApiRoutes
     public static class Categories
     {
         public const string LIST = "";
+        public const string BY_ID = "{id:guid}";
     }
 
     public static class Assets

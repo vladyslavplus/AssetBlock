@@ -19,6 +19,8 @@ public static class ErrorCodesToErrorMessages
         { ErrorCodes.ERR_PURCHASE_ACCESS_DENIED, "You do not have access to this asset." },
         { ErrorCodes.ERR_PAYMENT_FAILED, "Payment failed." },
         { ErrorCodes.ERR_STRIPE_URLS_NOT_CONFIGURED, "Payment redirect URLs are not configured. Contact support." },
+        { ErrorCodes.ERR_DOWNLOAD_LIMIT_EXCEEDED, "Download limit for this asset has been reached. Please try again later." },
+        { ErrorCodes.ERR_CATEGORY_SLUG_EXISTS, "A category with this slug already exists." },
         { ErrorCodes.ERR_FILE_REQUIRED, "File is required." },
         { ErrorCodes.ERR_NOT_FOUND, "Resource not found." },
         { ErrorCodes.ERR_FORBIDDEN, "Forbidden." },
