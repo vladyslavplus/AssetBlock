@@ -31,4 +31,11 @@ public static class ApiRoutes
         public const string CHECKOUT = "checkout";
         public const string WEBHOOK = "webhook";
     }
+
+    public static class Reviews
+    {
+        public const string LIST_FOR_ASSET = "assets/{assetId:guid}/reviews";
+        public const string CREATE_FOR_ASSET = "assets/{assetId:guid}/reviews";
+        public const string BY_ID = "reviews/{id:guid}";
+    }
 }

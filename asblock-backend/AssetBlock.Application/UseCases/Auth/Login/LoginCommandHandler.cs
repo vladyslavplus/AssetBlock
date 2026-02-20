@@ -29,7 +29,7 @@ internal sealed class LoginCommandHandler(
             return ResultError.Error<TokensResponse>(ErrorCodes.ERR_AUTH_INVALID_CREDENTIALS);
         }
 
-        var tokens = jwtTokenService.GenerateTokenPair(user.Id, user.Email, user.Role);
+        var tokens = jwtTokenService.GenerateTokenPair(user.Id, user.Username, user.Email, user.Role);
         await jwtTokenService.StoreRefreshToken(user.Id, tokens.RefreshToken, tokens.RefreshExpiresAt, cancellationToken);
         logger.LogInformation("Login succeeded for user {UserId}", user.Id);
         return Result.Success(tokens);

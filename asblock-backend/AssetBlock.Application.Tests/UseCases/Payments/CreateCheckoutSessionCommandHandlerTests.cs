@@ -42,6 +42,28 @@ public class CreateCheckoutSessionCommandHandlerTests
     }
 
     [Fact]
+    public async Task Handle_WhenUserIsAuthor_ShouldReturnCannotPurchaseOwnAssetError()
+    {
+        // Arrange
+        var userId = Guid.NewGuid();
+        var command = new CreateCheckoutSessionCommand(Guid.NewGuid(), userId, "https://ok", "https://cancel");
+        var asset = new Asset
+        {
+            Id = command.AssetId, AuthorId = userId, CategoryId = Guid.NewGuid(),
+            Title = "Asset", Price = 9.99m, StorageKey = "k", FileName = "f.zip",
+            CreatedAt = DateTimeOffset.UtcNow
+        };
+        _assetStoreMock.GetById(command.AssetId, Arg.Any<CancellationToken>()).Returns(asset);
+
+        // Act
+        var result = await _handler.Handle(command, CancellationToken.None);
+
+        // Assert
+        result.IsSuccess.Should().BeFalse();
+        result.ValidationErrors.Should().Contain(e => e.Identifier == ErrorCodes.ERR_CANNOT_PURCHASE_OWN_ASSET);
+    }
+
+    [Fact]
     public async Task Handle_WhenPaymentServiceThrows_ShouldReturnPaymentError()
     {
         // Arrange

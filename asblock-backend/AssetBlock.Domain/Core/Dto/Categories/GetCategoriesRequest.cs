@@ -5,7 +5,7 @@ namespace AssetBlock.Domain.Core.Dto.Categories;
 /// <summary>
 /// Request for listing categories with paging and sorting.
 /// </summary>
-public sealed class GetCategoriesRequest : PagedRequest
+public sealed record GetCategoriesRequest : PagedRequest
 {
     /// <summary>Optional search by name or slug.</summary>
     public string? Search { get; set; }

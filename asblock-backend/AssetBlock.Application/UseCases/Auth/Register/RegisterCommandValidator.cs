@@ -6,6 +6,9 @@ internal sealed class RegisterCommandValidator : AbstractValidator<RegisterComma
 {
     public RegisterCommandValidator()
     {
+        RuleFor(c => c.Username)
+            .NotEmpty().WithMessage("Username is required.")
+            .MaximumLength(50).WithMessage("Username must not exceed 50 characters.");
         RuleFor(c => c.Email)
             .NotEmpty().WithMessage("Email is required.")
             .EmailAddress().WithMessage("Invalid email format.")

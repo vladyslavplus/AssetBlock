@@ -5,7 +5,7 @@ namespace AssetBlock.Domain.Core.Dto.Assets;
 /// <summary>
 /// Request for listing assets with paging, sort, and filters.
 /// </summary>
-public sealed class GetAssetsRequest : PagedRequest
+public sealed record GetAssetsRequest : PagedRequest
 {
     public string? Search { get; set; }
     public Guid? CategoryId { get; set; }

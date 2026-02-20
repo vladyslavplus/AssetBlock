@@ -12,7 +12,7 @@ public class RegisterCommandValidatorTests
     [InlineData(" ")]
     public async Task Validate_WhenEmailIsEmpty_ShouldFail(string email)
     {
-        var command = new RegisterCommand(email, "password123");
+        var command = new RegisterCommand("username", email, "password123");
         var result = await _validator.ValidateAsync(command);
 
         result.IsValid.Should().BeFalse();
@@ -25,7 +25,7 @@ public class RegisterCommandValidatorTests
     [InlineData("@example.com")]
     public async Task Validate_WhenEmailIsInvalid_ShouldFail(string email)
     {
-        var command = new RegisterCommand(email, "password123");
+        var command = new RegisterCommand("username", email, "password123");
         var result = await _validator.ValidateAsync(command);
 
         result.IsValid.Should().BeFalse();
@@ -36,7 +36,7 @@ public class RegisterCommandValidatorTests
     public async Task Validate_WhenEmailIsTooLong_ShouldFail()
     {
         var email = new string('a', 250) + "@example.com";
-        var command = new RegisterCommand(email, "password123");
+        var command = new RegisterCommand("username", email, "password123");
         var result = await _validator.ValidateAsync(command);
 
         result.IsValid.Should().BeFalse();
@@ -48,7 +48,7 @@ public class RegisterCommandValidatorTests
     [InlineData(" ")]
     public async Task Validate_WhenPasswordIsEmpty_ShouldFail(string password)
     {
-        var command = new RegisterCommand("test@example.com", password);
+        var command = new RegisterCommand("username", "test@example.com", password);
         var result = await _validator.ValidateAsync(command);
 
         result.IsValid.Should().BeFalse();
@@ -58,7 +58,7 @@ public class RegisterCommandValidatorTests
     [Fact]
     public async Task Validate_WhenPasswordIsTooShort_ShouldFail()
     {
-        var command = new RegisterCommand("test@example.com", "short");
+        var command = new RegisterCommand("username", "test@example.com", "short");
         var result = await _validator.ValidateAsync(command);
 
         result.IsValid.Should().BeFalse();
@@ -69,7 +69,7 @@ public class RegisterCommandValidatorTests
     public async Task Validate_WhenPasswordIsTooLong_ShouldFail()
     {
         var password = new string('a', 501);
-        var command = new RegisterCommand("test@example.com", password);
+        var command = new RegisterCommand("username", "test@example.com", password);
         var result = await _validator.ValidateAsync(command);
 
         result.IsValid.Should().BeFalse();
@@ -79,9 +79,32 @@ public class RegisterCommandValidatorTests
     [Fact]
     public async Task Validate_WhenValid_ShouldPass()
     {
-        var command = new RegisterCommand("test@example.com", "valid_password!");
+        var command = new RegisterCommand("username", "test@example.com", "valid_password!");
         var result = await _validator.ValidateAsync(command);
 
         result.IsValid.Should().BeTrue();
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData(" ")]
+    public async Task Validate_WhenUsernameIsEmpty_ShouldFail(string username)
+    {
+        var command = new RegisterCommand(username, "test@example.com", "password123");
+        var result = await _validator.ValidateAsync(command);
+
+        result.IsValid.Should().BeFalse();
+        result.Errors.Should().Contain(e => e.PropertyName == "Username");
+    }
+
+    [Fact]
+    public async Task Validate_WhenUsernameIsTooLong_ShouldFail()
+    {
+        var username = new string('a', 51);
+        var command = new RegisterCommand(username, "test@example.com", "password123");
+        var result = await _validator.ValidateAsync(command);
+
+        result.IsValid.Should().BeFalse();
+        result.Errors.Should().Contain(e => e.PropertyName == "Username");
     }
 }

@@ -5,7 +5,7 @@ using AssetBlock.Domain.Core.Exceptions;
 using Microsoft.EntityFrameworkCore;
 using Npgsql;
 
-namespace AssetBlock.Infrastructure.Persistence;
+namespace AssetBlock.Infrastructure.Persistence.Stores;
 
 internal sealed class UserStore(ApplicationDbContext dbContext) : IUserStore
 {
@@ -17,12 +17,13 @@ internal sealed class UserStore(ApplicationDbContext dbContext) : IUserStore
             .FirstOrDefaultAsync(u => u.Email == normalized, cancellationToken);
     }
 
-    public async Task<User> Create(string email, string passwordHash, CancellationToken cancellationToken = default)
+    public async Task<User> Create(string username, string email, string passwordHash, CancellationToken cancellationToken = default)
     {
         var now = DateTimeOffset.UtcNow;
         var user = new User
         {
             Id = Guid.NewGuid(),
+            Username = username.Trim(),
             Email = email.Trim().ToLowerInvariant(),
             PasswordHash = passwordHash,
             CreatedAt = now,

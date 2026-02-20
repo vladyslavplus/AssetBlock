@@ -2,7 +2,7 @@ using AssetBlock.Domain.Abstractions.Services;
 using AssetBlock.Domain.Core.Entities;
 using Microsoft.EntityFrameworkCore;
 
-namespace AssetBlock.Infrastructure.Persistence;
+namespace AssetBlock.Infrastructure.Persistence.Stores;
 
 internal sealed class PurchaseStore(ApplicationDbContext dbContext) : IPurchaseStore
 {
@@ -25,5 +25,12 @@ internal sealed class PurchaseStore(ApplicationDbContext dbContext) : IPurchaseS
         return dbContext.Purchases
             .AsNoTracking()
             .FirstOrDefaultAsync(p => p.StripePaymentId == stripePaymentId, cancellationToken);
+    }
+
+    public Task<Purchase?> GetPurchase(Guid userId, Guid assetId, CancellationToken cancellationToken = default)
+    {
+        return dbContext.Purchases
+            .AsNoTracking()
+            .FirstOrDefaultAsync(p => p.UserId == userId && p.AssetId == assetId, cancellationToken);
     }
 }

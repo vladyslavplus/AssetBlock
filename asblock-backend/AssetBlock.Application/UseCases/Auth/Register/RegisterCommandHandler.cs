@@ -29,7 +29,7 @@ internal sealed class RegisterCommandHandler(
         User user;
         try
         {
-            user = await userStore.Create(request.Email, hash, cancellationToken);
+            user = await userStore.Create(request.Username, request.Email, hash, cancellationToken);
         }
         catch (DuplicateEmailException)
         {
@@ -39,7 +39,7 @@ internal sealed class RegisterCommandHandler(
 
         try
         {
-            var tokens = jwtTokenService.GenerateTokenPair(user.Id, user.Email, user.Role);
+            var tokens = jwtTokenService.GenerateTokenPair(user.Id, user.Username, user.Email, user.Role);
             await jwtTokenService.StoreRefreshToken(user.Id, tokens.RefreshToken, tokens.RefreshExpiresAt, cancellationToken);
             logger.LogInformation("Register succeeded: UserId={UserId}", user.Id);
             return Result.Success(tokens);

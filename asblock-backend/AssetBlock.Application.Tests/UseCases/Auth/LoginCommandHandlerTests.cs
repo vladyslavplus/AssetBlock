@@ -45,7 +45,7 @@ public class LoginCommandHandlerTests
     public async Task Handle_WhenPasswordIsInvalid_ShouldReturnError()
     {
         var command = new LoginCommand("test@example.com", "wrong-password");
-        var user = new User { Id = Guid.NewGuid(), Email = "test@example.com", PasswordHash = "hashed", Role = AppRoles.USER };
+        var user = new User { Id = Guid.NewGuid(), Username = "testuser", Email = "test@example.com", PasswordHash = "hashed", Role = AppRoles.USER };
 
         _userStoreMock.GetByEmail(command.Email, Arg.Any<CancellationToken>()).Returns(user);
         _passwordHasherMock.Verify(command.Password, user.PasswordHash).Returns(false);
@@ -60,12 +60,12 @@ public class LoginCommandHandlerTests
     public async Task Handle_WhenCredentialsValid_ShouldReturnTokens()
     {
         var command = new LoginCommand("test@example.com", "valid-password");
-        var user = new User { Id = Guid.NewGuid(), Email = "test@example.com", PasswordHash = "hashed", Role = AppRoles.USER };
+        var user = new User { Id = Guid.NewGuid(), Username = "testuser", Email = "test@example.com", PasswordHash = "hashed", Role = AppRoles.USER };
         var tokenResponse = new TokensResponse("acc", "ref", DateTimeOffset.UtcNow.AddMinutes(15), DateTimeOffset.UtcNow.AddDays(7));
 
         _userStoreMock.GetByEmail(command.Email, Arg.Any<CancellationToken>()).Returns(user);
         _passwordHasherMock.Verify(command.Password, user.PasswordHash).Returns(true);
-        _jwtTokenServiceMock.GenerateTokenPair(user.Id, user.Email, user.Role).Returns(tokenResponse);
+        _jwtTokenServiceMock.GenerateTokenPair(user.Id, user.Username, user.Email, user.Role).Returns(tokenResponse);
 
         var result = await _handler.Handle(command, CancellationToken.None);
 

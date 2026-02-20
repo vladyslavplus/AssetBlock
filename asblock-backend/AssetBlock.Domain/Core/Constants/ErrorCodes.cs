@@ -20,8 +20,15 @@ public static class ErrorCodes
     public const string ERR_PAYMENT_FAILED = "ERR_PAYMENT_FAILED";
     public const string ERR_STRIPE_URLS_NOT_CONFIGURED = "ERR_STRIPE_URLS_NOT_CONFIGURED";
     public const string ERR_DOWNLOAD_LIMIT_EXCEEDED = "ERR_DOWNLOAD_LIMIT_EXCEEDED";
+    public const string ERR_CANNOT_PURCHASE_OWN_ASSET = "ERR_CANNOT_PURCHASE_OWN_ASSET";
 
     public const string ERR_CATEGORY_SLUG_EXISTS = "ERR_CATEGORY_SLUG_EXISTS";
+
+    public const string ERR_REVIEW_ALREADY_EXISTS = "ERR_REVIEW_ALREADY_EXISTS";
+    public const string ERR_REVIEW_TIME_WINDOW_EXPIRED = "ERR_REVIEW_TIME_WINDOW_EXPIRED";
+    public const string ERR_ASSET_NOT_PURCHASED = "ERR_ASSET_NOT_PURCHASED";
+    public const string ERR_REVIEW_NOT_FOUND = "ERR_REVIEW_NOT_FOUND";
+    public const string ERR_CANNOT_REVIEW_OWN_ASSET = "ERR_CANNOT_REVIEW_OWN_ASSET";
 
     public const string ERR_FILE_REQUIRED = "ERR_FILE_REQUIRED";
     public const string ERR_NOT_FOUND = "ERR_NOT_FOUND";

@@ -52,7 +52,7 @@ public sealed class AuthController(ISender sender) : ApiControllerBase(sender)
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> Register([FromBody] RegisterRequest request, CancellationToken cancellationToken)
     {
-        var command = new RegisterCommand(request.Email, request.Password);
+        var command = new RegisterCommand(request.Username, request.Email, request.Password);
         var result = await Sender.Send(command, cancellationToken);
         return MapResultToActionResult(result);
     }

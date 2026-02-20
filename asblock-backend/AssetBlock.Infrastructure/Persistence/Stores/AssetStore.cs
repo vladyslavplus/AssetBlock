@@ -4,7 +4,7 @@ using AssetBlock.Domain.Core.Dto.Paging;
 using AssetBlock.Domain.Core.Entities;
 using Microsoft.EntityFrameworkCore;
 
-namespace AssetBlock.Infrastructure.Persistence;
+namespace AssetBlock.Infrastructure.Persistence.Stores;
 
 internal sealed class AssetStore(ApplicationDbContext dbContext) : IAssetStore
 {
