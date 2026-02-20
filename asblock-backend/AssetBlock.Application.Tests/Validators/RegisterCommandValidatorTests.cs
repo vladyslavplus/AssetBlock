@@ -5,6 +5,8 @@ namespace AssetBlock.Application.Tests.Validators;
 
 public class RegisterCommandValidatorTests
 {
+    private const int MAX_USERNAME_LENGTH = 50;
+    private const int TOO_LONG_USERNAME_LENGTH = MAX_USERNAME_LENGTH + 1;
     private readonly RegisterCommandValidator _validator = new();
 
     [Theory]
@@ -100,7 +102,7 @@ public class RegisterCommandValidatorTests
     [Fact]
     public async Task Validate_WhenUsernameIsTooLong_ShouldFail()
     {
-        var username = new string('a', 51);
+        var username = new string('a', TOO_LONG_USERNAME_LENGTH);
         var command = new RegisterCommand(username, "test@example.com", "password123");
         var result = await _validator.ValidateAsync(command);
 

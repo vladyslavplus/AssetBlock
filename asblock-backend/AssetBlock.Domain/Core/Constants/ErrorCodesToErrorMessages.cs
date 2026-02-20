@@ -28,6 +28,7 @@ public static class ErrorCodesToErrorMessages
         { ErrorCodes.ERR_ASSET_NOT_PURCHASED, "You must purchase this asset before reviewing it." },
         { ErrorCodes.ERR_REVIEW_NOT_FOUND, "Review not found." },
         { ErrorCodes.ERR_CANNOT_REVIEW_OWN_ASSET, "You cannot review your own asset." },
+        { ErrorCodes.ERR_REVIEW_CREATE_FAILED, "Failed to create review." },
         { ErrorCodes.ERR_NOT_FOUND, "Resource not found." },
         { ErrorCodes.ERR_FORBIDDEN, "Forbidden." },
         { ErrorCodes.ERR_BAD_REQUEST, "An error occurred." }

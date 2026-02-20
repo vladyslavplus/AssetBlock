@@ -17,11 +17,11 @@ public static class CacheKeys
     /// <summary>Prefix for all categories list cache keys.</summary>
     public const string CATEGORIES_LIST_PREFIX = PREFIX + ":categories:list";
 
-    /// <summary>Prefix for all reviews list cache keys.</summary>
+    /// <summary>Used with RemoveByPrefix to invalidate cached review lists.</summary>
     public const string REVIEWS_LIST_PREFIX = PREFIX + ":reviews:list";
 
-    /// <summary>Prefix for individual review cache keys.</summary>
-    public const string REVIEW_ITEM_PREFIX = PREFIX + ":reviews:item";
+    /// <summary>Used to cache single review entries for targeted invalidation.</summary>
+    private const string REVIEW_ITEM_PREFIX = PREFIX + ":reviews:item";
 
     public static string ReviewsListAssetPrefix(Guid assetId) => $"{REVIEWS_LIST_PREFIX}:{assetId}";
 

@@ -29,6 +29,7 @@ public static class ErrorCodes
     public const string ERR_ASSET_NOT_PURCHASED = "ERR_ASSET_NOT_PURCHASED";
     public const string ERR_REVIEW_NOT_FOUND = "ERR_REVIEW_NOT_FOUND";
     public const string ERR_CANNOT_REVIEW_OWN_ASSET = "ERR_CANNOT_REVIEW_OWN_ASSET";
+    public const string ERR_REVIEW_CREATE_FAILED = "ERR_REVIEW_CREATE_FAILED";
 
     public const string ERR_FILE_REQUIRED = "ERR_FILE_REQUIRED";
     public const string ERR_NOT_FOUND = "ERR_NOT_FOUND";

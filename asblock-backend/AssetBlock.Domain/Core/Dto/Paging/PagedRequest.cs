@@ -12,6 +12,6 @@ public abstract record PagedRequest
 
     public int Page { get; init; } = DEFAULT_PAGE;
     public int PageSize { get; init; } = DEFAULT_PAGE_SIZE;
-    public string? SortBy { get; set; }
-    public SortDirection SortDirection { get; set; } = SortDirection.ASC;
+    public string? SortBy { get; init; }
+    public SortDirection SortDirection { get; init; } = SortDirection.ASC;
 }

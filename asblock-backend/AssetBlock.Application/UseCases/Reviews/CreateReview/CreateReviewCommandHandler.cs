@@ -34,7 +34,7 @@ internal sealed class CreateReviewCommandHandler(
             return ResultError.Error(ErrorCodes.ERR_ASSET_NOT_PURCHASED);
         }
 
-        var daysSincePurchase = (DateTimeOffset.UtcNow - purchase.CreatedAt).TotalDays;
+        var daysSincePurchase = (DateTimeOffset.UtcNow - purchase.PurchasedAt).TotalDays;
         if (daysSincePurchase > BusinessConstants.MAX_REVIEW_DAYS_AFTER_PURCHASE)
         {
             logger.LogWarning("CreateReview failed: user {UserId} purchase expired for review (Asset {AssetId})", request.UserId, request.AssetId);
@@ -58,7 +58,7 @@ internal sealed class CreateReviewCommandHandler(
         catch (Exception ex)
         {
             logger.LogError(ex, "Failed to create review for user {UserId} and asset {AssetId}", request.UserId, request.AssetId);
-            return ResultError.Error(ErrorCodes.ERR_BAD_REQUEST);
+            return ResultError.Error(ErrorCodes.ERR_REVIEW_CREATE_FAILED);
         }
     }
 }

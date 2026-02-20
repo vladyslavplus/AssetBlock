@@ -8,7 +8,7 @@ namespace AssetBlock.Domain.Core.Dto.Categories;
 public sealed record GetCategoriesRequest : PagedRequest
 {
     /// <summary>Optional search by name or slug.</summary>
-    public string? Search { get; set; }
+    public string? Search { get; init; }
 
     /// <summary>Allowed sort fields: Name, Slug, ID. Default: Name.</summary>
     public static readonly IReadOnlySet<string> AllowedSortBy = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
