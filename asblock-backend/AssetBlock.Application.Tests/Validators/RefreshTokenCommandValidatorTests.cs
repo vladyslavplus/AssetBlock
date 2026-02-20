@@ -20,6 +20,16 @@ public class RefreshTokenCommandValidatorTests
     }
 
     [Fact]
+    public async Task Validate_WhenRefreshTokenIsExactlyMaxLength_ShouldPass()
+    {
+        var token = new string('x', 2000);
+        var command = new RefreshTokenCommand(token);
+        var result = await _validator.ValidateAsync(command);
+
+        result.IsValid.Should().BeTrue();
+    }
+
+    [Fact]
     public async Task Validate_WhenRefreshTokenIsTooLong_ShouldFail()
     {
         var token = new string('x', 2001);

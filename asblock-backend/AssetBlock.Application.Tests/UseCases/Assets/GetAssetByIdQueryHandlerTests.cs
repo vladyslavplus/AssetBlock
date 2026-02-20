@@ -71,6 +71,8 @@ public class GetAssetByIdQueryHandlerTests
         result.Value.CategoryId.Should().Be(categoryId);
         result.Value.CategoryName.Should().Be("Audio");
         result.Value.AuthorId.Should().Be(authorId);
+        result.Value.Description.Should().Be("A great pack");
         result.Value.CreatedAt.Should().Be(now);
+        result.Value.UpdatedAt.Should().BeNull();
     }
 }
