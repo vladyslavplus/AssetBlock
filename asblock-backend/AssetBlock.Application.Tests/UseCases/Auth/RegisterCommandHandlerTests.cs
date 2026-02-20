@@ -34,8 +34,8 @@ public class RegisterCommandHandlerTests
     [Fact]
     public async Task Handle_WhenEmailExists_ShouldReturnError()
     {
-        var command = new RegisterCommand("exist@example.com", "password123");
-        var existingUser = new User { Id = Guid.NewGuid(), Email = "exist@example.com", PasswordHash = "hash", Role = AppRoles.USER };
+        var command = new RegisterCommand("existuser", "exist@example.com", "password123");
+        var existingUser = new User { Id = Guid.NewGuid(), Username = "existuser", Email = "exist@example.com", PasswordHash = "hash", Role = AppRoles.USER };
 
         _userStoreMock.GetByEmail(command.Email, Arg.Any<CancellationToken>()).Returns(existingUser);
 
@@ -48,11 +48,11 @@ public class RegisterCommandHandlerTests
     [Fact]
     public async Task Handle_WhenDbThrowsDuplicateEmailException_ShouldReturnError()
     {
-        var command = new RegisterCommand("new@example.com", "password123");
+        var command = new RegisterCommand("newuser", "new@example.com", "password123");
 
         _userStoreMock.GetByEmail(command.Email, Arg.Any<CancellationToken>()).Returns((User?)null);
         _passwordHasherMock.Hash(command.Password).Returns("hashed");
-        _userStoreMock.Create(command.Email, "hashed", Arg.Any<CancellationToken>())
+        _userStoreMock.Create("newuser", command.Email, "hashed", Arg.Any<CancellationToken>())
             .ThrowsAsync(new DuplicateEmailException());
 
         var result = await _handler.Handle(command, CancellationToken.None);
@@ -64,13 +64,13 @@ public class RegisterCommandHandlerTests
     [Fact]
     public async Task Handle_WhenStoreRefreshTokenFails_ShouldRollbackUserAndThrow()
     {
-        var command = new RegisterCommand("new@example.com", "password123");
-        var user = new User { Id = Guid.NewGuid(), Email = "new@example.com", PasswordHash = "hashed", Role = AppRoles.USER };
+        var command = new RegisterCommand("newuser", "new@example.com", "password123");
+        var user = new User { Id = Guid.NewGuid(), Username = "newuser", Email = "new@example.com", PasswordHash = "hashed", Role = AppRoles.USER };
         var tokenResponse = new TokensResponse("acc", "ref", DateTimeOffset.UtcNow.AddMinutes(15), DateTimeOffset.UtcNow.AddDays(7));
 
         _userStoreMock.GetByEmail(command.Email, Arg.Any<CancellationToken>()).Returns((User?)null);
-        _userStoreMock.Create(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>()).Returns(user);
-        _jwtTokenServiceMock.GenerateTokenPair(user.Id, user.Email, user.Role).Returns(tokenResponse);
+        _userStoreMock.Create("newuser", Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>()).Returns(user);
+        _jwtTokenServiceMock.GenerateTokenPair(user.Id, user.Username, user.Email, user.Role).Returns(tokenResponse);
 
         _jwtTokenServiceMock.StoreRefreshToken(user.Id, "ref", tokenResponse.RefreshExpiresAt, Arg.Any<CancellationToken>())
             .ThrowsAsync(new Exception("Redis unavailable"));
@@ -84,14 +84,14 @@ public class RegisterCommandHandlerTests
     [Fact]
     public async Task Handle_WhenSuccessful_ShouldReturnTokens()
     {
-        var command = new RegisterCommand("new@example.com", "password123");
-        var user = new User { Id = Guid.NewGuid(), Email = "new@example.com", PasswordHash = "hashed", Role = AppRoles.USER };
+        var command = new RegisterCommand("newuser", "new@example.com", "password123");
+        var user = new User { Id = Guid.NewGuid(), Username = "newuser", Email = "new@example.com", PasswordHash = "hashed", Role = AppRoles.USER };
         var tokenResponse = new TokensResponse("acc", "ref", DateTimeOffset.UtcNow.AddMinutes(15), DateTimeOffset.UtcNow.AddDays(7));
 
         _userStoreMock.GetByEmail(command.Email, Arg.Any<CancellationToken>()).Returns((User?)null);
         _passwordHasherMock.Hash(command.Password).Returns("hashed");
-        _userStoreMock.Create(command.Email, "hashed", Arg.Any<CancellationToken>()).Returns(user);
-        _jwtTokenServiceMock.GenerateTokenPair(user.Id, user.Email, user.Role).Returns(tokenResponse);
+        _userStoreMock.Create("newuser", command.Email, "hashed", Arg.Any<CancellationToken>()).Returns(user);
+        _jwtTokenServiceMock.GenerateTokenPair(user.Id, user.Username, user.Email, user.Role).Returns(tokenResponse);
 
         var result = await _handler.Handle(command, CancellationToken.None);
 

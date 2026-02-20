@@ -22,6 +22,11 @@ internal sealed class CreateCheckoutSessionCommandHandler(
             return ResultError.Error<CreateCheckoutSessionResponse>(ErrorCodes.ERR_ASSET_NOT_FOUND);
         }
 
+        if (asset.AuthorId == request.UserId)
+        {
+            return ResultError.Error<CreateCheckoutSessionResponse>(ErrorCodes.ERR_CANNOT_PURCHASE_OWN_ASSET);
+        }
+
         try
         {
             var sessionUrl = await paymentService.CreateCheckoutSession(

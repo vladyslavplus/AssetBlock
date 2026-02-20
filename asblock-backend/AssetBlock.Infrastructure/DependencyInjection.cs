@@ -3,6 +3,7 @@ using AssetBlock.Domain.Core.Primitives.AppSettingsOptions;
 using AssetBlock.Infrastructure.HostedServices;
 using AssetBlock.Infrastructure.Options;
 using AssetBlock.Infrastructure.Persistence;
+using AssetBlock.Infrastructure.Persistence.Stores;
 using AssetBlock.Infrastructure.Services;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
@@ -36,6 +37,7 @@ public static class DependencyInjection
         services.AddScoped<ICategoryStore, CategoryStore>();
         services.AddScoped<IAssetStore, AssetStore>();
         services.AddScoped<IPurchaseStore, PurchaseStore>();
+        services.AddScoped<IReviewStore, ReviewStore>();
         services.AddScoped<IPaymentService, StripePaymentService>();
         services.AddScoped<IDownloadService, DownloadService>();
         services.AddScoped<IAssetStorageService, MinioAssetStorageService>();

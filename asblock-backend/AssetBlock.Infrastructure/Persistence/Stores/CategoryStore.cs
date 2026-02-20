@@ -7,7 +7,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Npgsql;
 
-namespace AssetBlock.Infrastructure.Persistence;
+namespace AssetBlock.Infrastructure.Persistence.Stores;
 
 internal sealed class CategoryStore(
     ApplicationDbContext dbContext,

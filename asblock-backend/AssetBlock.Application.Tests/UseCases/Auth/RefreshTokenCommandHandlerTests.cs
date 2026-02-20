@@ -24,7 +24,7 @@ public class RefreshTokenCommandHandlerTests
     {
         var command = new RefreshTokenCommand("invalid-token");
         _jwtTokenServiceMock.ValidateRefreshToken(command.RefreshToken, Arg.Any<CancellationToken>())
-            .Returns(((Guid, string, string, Guid)?)null);
+            .Returns(((Guid, string, string, string, Guid)?)null);
 
         var result = await _handler.Handle(command, CancellationToken.None);
 
@@ -38,14 +38,15 @@ public class RefreshTokenCommandHandlerTests
         var command = new RefreshTokenCommand("old-valid-token");
         var userId = Guid.NewGuid();
         var tokenId = Guid.NewGuid();
-        var email = "test@example.com";
-        var role = AppRoles.USER;
+        const string email = "test@example.com";
+        const string username = "testuser";
+        const string role = AppRoles.USER;
 
         var tokenResponse = new TokensResponse("new-acc", "new-ref", DateTimeOffset.UtcNow.AddMinutes(15), DateTimeOffset.UtcNow.AddDays(7));
 
         _jwtTokenServiceMock.ValidateRefreshToken(command.RefreshToken, Arg.Any<CancellationToken>())
-            .Returns((userId, email, role, tokenId));
-        _jwtTokenServiceMock.GenerateTokenPair(userId, email, role).Returns(tokenResponse);
+            .Returns((userId, username, email, role, tokenId));
+        _jwtTokenServiceMock.GenerateTokenPair(userId, username, email, role).Returns(tokenResponse);
 
         var result = await _handler.Handle(command, CancellationToken.None);
 

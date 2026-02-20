@@ -1,5 +1,6 @@
 using AssetBlock.Domain.Core.Dto.Assets;
 using AssetBlock.Domain.Core.Dto.Categories;
+using AssetBlock.Domain.Core.Dto.Reviews;
 
 namespace AssetBlock.Domain.Core.Constants;
 
@@ -16,6 +17,14 @@ public static class CacheKeys
     /// <summary>Prefix for all categories list cache keys.</summary>
     public const string CATEGORIES_LIST_PREFIX = PREFIX + ":categories:list";
 
+    /// <summary>Used with RemoveByPrefix to invalidate cached review lists.</summary>
+    public const string REVIEWS_LIST_PREFIX = PREFIX + ":reviews:list";
+
+    /// <summary>Used to cache single review entries for targeted invalidation.</summary>
+    private const string REVIEW_ITEM_PREFIX = PREFIX + ":reviews:item";
+
+    public static string ReviewsListAssetPrefix(Guid assetId) => $"{REVIEWS_LIST_PREFIX}:{assetId}";
+
     public static string AssetsList(GetAssetsRequest request)
     {
         var search = NormalizeSearch(request.Search);
@@ -30,6 +39,15 @@ public static class CacheKeys
         var sortBy = string.IsNullOrWhiteSpace(request.SortBy) ? "none" : request.SortBy.Trim();
         return $"{CATEGORIES_LIST_PREFIX}:{request.Page}:{request.PageSize}:{search}:{sortBy}:{request.SortDirection}";
     }
+
+    public static string ReviewsList(Guid assetId, GetReviewsRequest request)
+    {
+        var search = NormalizeSearch(request.Search);
+        var sortBy = string.IsNullOrWhiteSpace(request.SortBy) ? "none" : request.SortBy.Trim();
+        return $"{ReviewsListAssetPrefix(assetId)}:{request.Page}:{request.PageSize}:{search}:{sortBy}:{request.SortDirection}";
+    }
+
+    public static string ReviewItem(Guid reviewId) => $"{REVIEW_ITEM_PREFIX}:{reviewId}";
 
     private static string NormalizeSearch(string? value)
     {

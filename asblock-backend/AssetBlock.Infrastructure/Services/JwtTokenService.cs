@@ -19,7 +19,7 @@ internal sealed class JwtTokenService(
     IOptions<JwtOptions> options,
     ILogger<JwtTokenService> logger) : IJwtTokenService
 {
-    public TokensResponse GenerateTokenPair(Guid userId, string email, string role)
+    public TokensResponse GenerateTokenPair(Guid userId, string username, string email, string role)
     {
         var jwtOptions = options.Value;
         var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtOptions.Key));
@@ -30,6 +30,7 @@ internal sealed class JwtTokenService(
         var claims = new List<Claim>
         {
             new(ClaimTypes.NameIdentifier, userId.ToString()),
+            new(ClaimTypes.Name, username),
             new(JwtClaimTypes.SUB, userId.ToString()),
             new(JwtClaimTypes.EMAIL, email),
             new(JwtClaimTypes.JTI, Guid.NewGuid().ToString()),
@@ -69,14 +70,14 @@ internal sealed class JwtTokenService(
         logger.LogDebug("Stored refresh token for user {UserId}", userId);
     }
 
-    public async Task<(Guid UserId, string Email, string Role, Guid TokenId)?> ValidateRefreshToken(string refreshToken, CancellationToken cancellationToken = default)
+    public async Task<(Guid UserId, string Username, string Email, string Role, Guid TokenId)?> ValidateRefreshToken(string refreshToken, CancellationToken cancellationToken = default)
     {
         var hash = ComputeSha256Hash(refreshToken);
         var now = DateTimeOffset.UtcNow;
         var entity = await dbContext.RefreshTokens
             .AsNoTracking()
             .Where(rt => rt.TokenHash == hash && rt.RevokedAt == null && rt.ExpiresAt > now)
-            .Select(rt => new { rt.Id, rt.UserId, rt.User.Email, rt.User.Role })
+            .Select(rt => new { rt.Id, rt.UserId, rt.User.Username, rt.User.Email, rt.User.Role })
             .FirstOrDefaultAsync(cancellationToken);
 
         if (entity is null)
@@ -85,7 +86,7 @@ internal sealed class JwtTokenService(
             return null;
         }
 
-        return (entity.UserId, entity.Email, entity.Role, entity.Id);
+        return (entity.UserId, entity.Username, entity.Email, entity.Role, entity.Id);
     }
 
     public async Task RevokeRefreshToken(Guid tokenId, CancellationToken cancellationToken = default)

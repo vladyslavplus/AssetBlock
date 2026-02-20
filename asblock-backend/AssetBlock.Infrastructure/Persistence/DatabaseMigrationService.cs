@@ -16,6 +16,7 @@ internal sealed class DatabaseMigrationService(
     IOptions<DatabaseOptions> options,
     ILogger<DatabaseMigrationService> logger) : IHostedService
 {
+    private const string DEV_ADMIN_USERNAME = "admin";
     private const string DEV_ADMIN_EMAIL = "admin@admin.com";
     private const string DEV_ADMIN_PASSWORD = "test1234";
 
@@ -118,6 +119,7 @@ internal sealed class DatabaseMigrationService(
         var admin = new User
         {
             Id = Guid.NewGuid(),
+            Username = DEV_ADMIN_USERNAME,
             Email = DEV_ADMIN_EMAIL,
             PasswordHash = passwordHasher.Hash(DEV_ADMIN_PASSWORD),
             Role = AppRoles.ADMIN,
