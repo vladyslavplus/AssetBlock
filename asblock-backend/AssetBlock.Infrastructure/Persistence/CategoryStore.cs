@@ -96,6 +96,10 @@ internal sealed class CategoryStore(
             dbContext.Categories.Update(category);
             await dbContext.SaveChangesAsync(cancellationToken);
         }
+        catch (DbUpdateException ex) when (ex.InnerException is PostgresException { SqlState: PostgresErrorCodes.UniqueViolation })
+        {
+            throw new DuplicateSlugException();
+        }
         catch (Exception ex)
         {
             logger.LogError(ex, "Failed to update category {Id}", category.Id);
