@@ -13,7 +13,7 @@ internal sealed class UpdateCategoryCommandValidator : AbstractValidator<UpdateC
 
         RuleFor(c => c.Slug)
             .NotEmpty().WithMessage("Slug cannot be empty when provided.")
-            .Matches("^[a-z0-9-]+$").WithMessage("Slug must contain only lowercase letters, numbers, and hyphens.")
+            .Matches("^[a-z0-9]+(-[a-z0-9]+)*$").WithMessage("Slug must start and end with alphanumeric characters, with single hyphens between segments.")
             .MaximumLength(255).WithMessage("Slug must not exceed 255 characters.")
             .When(c => c.Slug is not null);
 
