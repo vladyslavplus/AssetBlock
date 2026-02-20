@@ -9,4 +9,5 @@ public static class JwtClaimTypes
     public const string SUB = "sub";
     public const string JTI = "jti";
     public const string EMAIL = "email";
+    public const string ROLE = "role";
 }

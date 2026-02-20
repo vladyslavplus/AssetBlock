@@ -10,6 +10,7 @@ using AssetBlock.WebApi.Models;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 
 namespace AssetBlock.WebApi.Controllers;
 
@@ -48,9 +49,11 @@ public sealed class AssetsController(ISender sender, IDownloadService downloadSe
     /// </summary>
     [HttpGet(ApiRoutes.Assets.DOWNLOAD)]
     [Authorize]
+    [EnableRateLimiting(RateLimitingConstants.Policies.ASSETS_DOWNLOAD)]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status429TooManyRequests)]
     public async Task<IActionResult> Download(Guid id, CancellationToken cancellationToken)
     {
         var userId = GetUserId();
@@ -68,6 +71,10 @@ public sealed class AssetsController(ISender sender, IDownloadService downloadSe
         {
             return StatusCode(403, new { errors = new[] { new { identifier = ErrorCodes.ERR_PURCHASE_ACCESS_DENIED, message = ErrorCodesToErrorMessages.GetMessage(ErrorCodes.ERR_PURCHASE_ACCESS_DENIED) } } });
         }
+        if (streamResult.Status == AssetDownloadStatus.RateLimited)
+        {
+            return StatusCode(429, new { errors = new[] { new { identifier = ErrorCodes.ERR_DOWNLOAD_LIMIT_EXCEEDED, message = ErrorCodesToErrorMessages.GetMessage(ErrorCodes.ERR_DOWNLOAD_LIMIT_EXCEEDED) } } });
+        }
 
         return File(streamResult.Content!, "application/octet-stream", streamResult.FileName!);
     }
@@ -77,6 +84,7 @@ public sealed class AssetsController(ISender sender, IDownloadService downloadSe
     /// </summary>
     [HttpPost(ApiRoutes.Assets.UPLOAD)]
     [Authorize]
+    [EnableRateLimiting(RateLimitingConstants.Policies.ASSETS_UPLOAD)]
     [Consumes("multipart/form-data")]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
@@ -100,7 +108,7 @@ public sealed class AssetsController(ISender sender, IDownloadService downloadSe
         }
 
         logger.LogInformation("Upload started for user {UserId}, file {FileName}", userId, file.FileName);
-        var request = new UploadAssetRequest(form.Title, form.Description, form.Price, form.CategoryId);
+        var request = new UploadAssetRequest(form.Title, form.Description, form.Price, form.CategoryId, form.DownloadLimitPerHour);
         await using var stream = file.OpenReadStream();
         var command = new UploadAssetCommand(userId.Value, request, stream, file.FileName);
         var result = await Sender.Send(command, cancellationToken);

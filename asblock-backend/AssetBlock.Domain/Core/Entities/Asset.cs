@@ -15,6 +15,9 @@ public class Asset : BaseEntity
     /// <summary>Original file name (e.g. package.zip).</summary>
     public required string FileName { get; set; }
 
+    /// <summary>Optional max downloads per hour per user. Null = unlimited.</summary>
+    public int? DownloadLimitPerHour { get; set; }
+
     public User Author { get; set; } = null!;
     public Category Category { get; set; } = null!;
     public ICollection<Purchase> Purchases { get; set; } = new List<Purchase>();

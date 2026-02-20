@@ -4,6 +4,7 @@ using AssetBlock.Domain.Core.Constants;
 using AssetBlock.Domain.Core.Primitives.AppSettingsOptions;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using Polly.Registry;
 using Stripe;
 using Stripe.Checkout;
 
@@ -13,6 +14,7 @@ internal sealed class StripePaymentService(
     IOptions<StripeOptions> options,
     IAssetStore assetStore,
     IPurchaseStore purchaseStore,
+    ResiliencePipelineProvider<string> resilience,
     ILogger<StripePaymentService> logger) : IPaymentService
 {
     private readonly StripeClient _stripeClient = new(options.Value.SecretKey);
@@ -60,7 +62,10 @@ internal sealed class StripePaymentService(
             ]
         };
 
-        var session = await sessionService.CreateAsync(sessionOptions, cancellationToken: cancellationToken);
+        var pipeline = resilience.GetPipeline(ResilienceConstants.Pipelines.STRIPE);
+        var session = await pipeline.ExecuteAsync(
+            async ct => await sessionService.CreateAsync(sessionOptions, cancellationToken: ct),
+            cancellationToken);
         return session.Url ?? throw new InvalidOperationException("Stripe did not return a session URL.");
     }
 

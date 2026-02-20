@@ -9,6 +9,7 @@ namespace AssetBlock.Infrastructure.Services;
 internal sealed class MemoryCacheService : ICacheService
 {
     private readonly ConcurrentDictionary<string, (string Value, DateTime? ExpiresAt)> _store = new();
+    private readonly ConcurrentDictionary<string, (long Count, DateTime ExpiresAt)> _counters = new();
 
     public Task<string?> GetString(string key, CancellationToken cancellationToken = default)
     {
@@ -37,4 +38,16 @@ internal sealed class MemoryCacheService : ICacheService
         }
         return Task.CompletedTask;
     }
+
+    public Task<long> Increment(string key, TimeSpan expiry, CancellationToken cancellationToken = default)
+    {
+        var now = DateTime.UtcNow;
+        var result = _counters.AddOrUpdate(
+            key,
+            _ => (1L, now.Add(expiry)),
+            (_, old) => old.ExpiresAt <= now ? (1L, now.Add(expiry)) : (old.Count + 1, old.ExpiresAt));
+
+        return Task.FromResult(result.Count);
+    }
 }
+

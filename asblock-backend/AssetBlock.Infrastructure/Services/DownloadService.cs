@@ -1,5 +1,6 @@
 using AssetBlock.Domain.Abstractions.Services;
 using AssetBlock.Domain.Core.Primitives.Api;
+using System.Globalization;
 
 namespace AssetBlock.Infrastructure.Services;
 
@@ -7,8 +8,13 @@ internal sealed class DownloadService(
     IAssetStore assetStore,
     IPurchaseStore purchaseStore,
     IAssetStorageService assetStorageService,
-    IEncryptionService encryptionService) : IDownloadService
+    IEncryptionService encryptionService,
+    ICacheService cacheService) : IDownloadService
 {
+    private const string DOWNLOAD_COUNTER_PREFIX = "dl";
+    private const string DOWNLOAD_WINDOW_KEY_FORMAT = "yyyyMMddHH";
+    private static readonly TimeSpan _downloadWindow = TimeSpan.FromHours(1);
+
     public async Task<AssetDownloadResult> GetAssetStream(Guid assetId, Guid userId,
         CancellationToken cancellationToken = default)
     {
@@ -23,6 +29,12 @@ internal sealed class DownloadService(
         if (!isAuthor && !hasPurchase)
         {
             return new AssetDownloadResult(AssetDownloadStatus.Forbidden, null, null);
+        }
+
+        if (asset.DownloadLimitPerHour.HasValue &&
+            await IsRateLimited(assetId, userId, asset.DownloadLimitPerHour.Value, cancellationToken))
+        {
+            return new AssetDownloadResult(AssetDownloadStatus.RateLimited, null, null);
         }
 
         await using var encryptedStream = await assetStorageService.Get(asset.StorageKey, cancellationToken);
@@ -52,5 +64,19 @@ internal sealed class DownloadService(
 
             throw;
         }
+    }
+
+    private async Task<bool> IsRateLimited(Guid assetId, Guid userId, int limit, CancellationToken cancellationToken)
+    {
+        var now = DateTimeOffset.UtcNow;
+        var windowKey = now.ToString(DOWNLOAD_WINDOW_KEY_FORMAT, CultureInfo.InvariantCulture);
+        var expiresIn = _downloadWindow
+            - TimeSpan.FromMinutes(now.Minute)
+            - TimeSpan.FromSeconds(now.Second)
+            - TimeSpan.FromMilliseconds(now.Millisecond);
+        var counterKey = $"{DOWNLOAD_COUNTER_PREFIX}:{assetId}:{userId}:{windowKey}";
+        var count = await cacheService.Increment(counterKey, expiresIn, cancellationToken);
+
+        return count > limit;
     }
 }

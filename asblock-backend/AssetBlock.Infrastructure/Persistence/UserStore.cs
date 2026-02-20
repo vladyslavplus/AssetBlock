@@ -1,4 +1,5 @@
 using AssetBlock.Domain.Abstractions.Services;
+using AssetBlock.Domain.Core.Constants;
 using AssetBlock.Domain.Core.Entities;
 using AssetBlock.Domain.Core.Exceptions;
 using Microsoft.EntityFrameworkCore;
@@ -24,7 +25,8 @@ internal sealed class UserStore(ApplicationDbContext dbContext) : IUserStore
             Id = Guid.NewGuid(),
             Email = email.Trim().ToLowerInvariant(),
             PasswordHash = passwordHash,
-            CreatedAt = now
+            CreatedAt = now,
+            Role = AppRoles.USER
         };
         dbContext.Users.Add(user);
         try

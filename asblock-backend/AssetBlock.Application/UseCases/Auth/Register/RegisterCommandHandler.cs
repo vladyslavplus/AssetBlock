@@ -39,7 +39,7 @@ internal sealed class RegisterCommandHandler(
 
         try
         {
-            var tokens = jwtTokenService.GenerateTokenPair(user.Id, user.Email);
+            var tokens = jwtTokenService.GenerateTokenPair(user.Id, user.Email, user.Role);
             await jwtTokenService.StoreRefreshToken(user.Id, tokens.RefreshToken, tokens.RefreshExpiresAt, cancellationToken);
             logger.LogInformation("Register succeeded: UserId={UserId}", user.Id);
             return Result.Success(tokens);

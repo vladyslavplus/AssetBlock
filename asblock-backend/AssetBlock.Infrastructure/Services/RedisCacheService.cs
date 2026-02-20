@@ -85,4 +85,28 @@ internal sealed class RedisCacheService(
             logger.LogWarning(ex, "Redis RemoveByPrefix failed for prefix {Prefix}", prefix);
         }
     }
+
+    public async Task<long> Increment(string key, TimeSpan expiry, CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            var count = await _db.StringIncrementAsync(key).WaitAsync(cancellationToken);
+            var ttl = await _db.KeyTimeToLiveAsync(key).WaitAsync(cancellationToken);
+            if (count == 1 || ttl is null)
+            {
+                await _db.KeyExpireAsync(key, expiry).WaitAsync(cancellationToken);
+            }
+
+            return count;
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Redis IncrementAsync failed for key {Key}", key);
+            throw;
+        }
+    }
 }

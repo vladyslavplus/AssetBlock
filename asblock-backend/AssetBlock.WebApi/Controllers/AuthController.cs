@@ -1,11 +1,13 @@
 using AssetBlock.Application.UseCases.Auth.Login;
 using AssetBlock.Application.UseCases.Auth.RefreshToken;
 using AssetBlock.Application.UseCases.Auth.Register;
+using AssetBlock.Domain.Core.Constants;
 using AssetBlock.Domain.Core.Dto.Auth;
 using AssetBlock.WebApi.Constants;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 
 namespace AssetBlock.WebApi.Controllers;
 
@@ -16,6 +18,7 @@ public sealed class AuthController(ISender sender) : ApiControllerBase(sender)
     /// </summary>
     [HttpPost(ApiRoutes.Auth.LOGIN)]
     [AllowAnonymous]
+    [EnableRateLimiting(RateLimitingConstants.Policies.AUTH_LOGIN)]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> Login([FromBody] LoginRequest request, CancellationToken cancellationToken)
@@ -44,6 +47,7 @@ public sealed class AuthController(ISender sender) : ApiControllerBase(sender)
     /// </summary>
     [HttpPost(ApiRoutes.Auth.REGISTER)]
     [AllowAnonymous]
+    [EnableRateLimiting(RateLimitingConstants.Policies.AUTH_REGISTER)]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> Register([FromBody] RegisterRequest request, CancellationToken cancellationToken)

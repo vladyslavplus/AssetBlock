@@ -4,11 +4,13 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Minio;
 using Minio.DataModel.Args;
+using Polly.Registry;
 
 namespace AssetBlock.Infrastructure.Services;
 
 internal sealed class MinioAssetStorageService(
     IOptions<MinioOptions> options,
+    ResiliencePipelineProvider<string> resilience,
     ILogger<MinioAssetStorageService> logger) : IAssetStorageService
 {
     public async Task EnsureBucket(CancellationToken cancellationToken = default)
@@ -64,13 +66,16 @@ internal sealed class MinioAssetStorageService(
             content.Position = 0;
         }
         var objectSize = content.CanSeek ? content.Length : -1;
-        await client.PutObjectAsync(
-            new PutObjectArgs()
-                .WithBucket(opts.Bucket)
-                .WithObject(key)
-                .WithStreamData(content)
-                .WithObjectSize(objectSize),
-            cancellationToken).ConfigureAwait(false);
+        var pipeline = resilience.GetPipeline(ResilienceConstants.Pipelines.MINIO);
+        await pipeline.ExecuteAsync(async ct =>
+            await client.PutObjectAsync(
+                new PutObjectArgs()
+                    .WithBucket(opts.Bucket)
+                    .WithObject(key)
+                    .WithStreamData(content)
+                    .WithObjectSize(objectSize),
+                ct).ConfigureAwait(false),
+            cancellationToken);
 
         logger.LogDebug("Uploaded object {Key} to bucket {Bucket}", key, opts.Bucket);
     }
@@ -85,12 +90,15 @@ internal sealed class MinioAssetStorageService(
             .Build();
 
         var ms = new MemoryStream();
-        await client.GetObjectAsync(
-            new GetObjectArgs()
-                .WithBucket(opts.Bucket)
-                .WithObject(key)
-                .WithCallbackStream(stream => stream.CopyTo(ms)),
-            cancellationToken).ConfigureAwait(false);
+        var pipeline = resilience.GetPipeline(ResilienceConstants.Pipelines.MINIO);
+        await pipeline.ExecuteAsync(async ct =>
+            await client.GetObjectAsync(
+                new GetObjectArgs()
+                    .WithBucket(opts.Bucket)
+                    .WithObject(key)
+                    .WithCallbackStream(async (stream, token) => await stream.CopyToAsync(ms, token).ConfigureAwait(false)),
+                ct).ConfigureAwait(false),
+            cancellationToken);
         ms.Position = 0;
         return ms;
     }

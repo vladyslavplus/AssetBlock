@@ -13,6 +13,9 @@ public sealed class UploadAssetFormWithFile
     public decimal Price { get; set; }
     public Guid CategoryId { get; set; }
 
+    /// <summary>Optional max downloads per user per hour. Null = unlimited.</summary>
+    public int? DownloadLimitPerHour { get; set; }
+
     /// <summary>Asset file (any extension allowed). Form field name: "file".</summary>
     [FromForm(Name = "file")]
     [Required]

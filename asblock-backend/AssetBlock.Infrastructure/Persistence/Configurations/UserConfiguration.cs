@@ -1,3 +1,4 @@
+using AssetBlock.Domain.Core.Constants;
 using AssetBlock.Domain.Core.Entities;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
@@ -15,6 +16,7 @@ internal sealed class UserConfiguration : IEntityTypeConfiguration<User>
         builder.Property(u => u.PasswordHash).IsRequired().HasMaxLength(256);
         builder.Property(u => u.CreatedAt).IsRequired();
         builder.Property(u => u.UpdatedAt);
+        builder.Property(u => u.Role).IsRequired().HasMaxLength(50).HasDefaultValue(AppRoles.USER);
 
         builder.HasIndex(u => u.Email).IsUnique();
     }

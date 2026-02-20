@@ -7,5 +7,6 @@ public enum AssetDownloadStatus
 {
     Success,
     NotFound,
-    Forbidden
+    Forbidden,
+    RateLimited
 }

@@ -1,4 +1,5 @@
 using System.Text;
+using AssetBlock.Domain.Core.Constants;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
 
@@ -15,6 +16,7 @@ internal static class JwtAuthenticationExtensions
         services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
             .AddJwtBearer(options =>
             {
+                options.MapInboundClaims = false; // keep "role" as "role", not mapped to long SOAP URI
                 options.TokenValidationParameters = new TokenValidationParameters
                 {
                     ValidateIssuer = true,
@@ -24,7 +26,8 @@ internal static class JwtAuthenticationExtensions
                     ValidIssuer = issuer,
                     ValidAudience = audience,
                     IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(key)),
-                    ClockSkew = TimeSpan.FromMinutes(1)
+                    ClockSkew = TimeSpan.FromMinutes(1),
+                    RoleClaimType = JwtClaimTypes.ROLE
                 };
 
                 options.Events = new JwtBearerEvents
