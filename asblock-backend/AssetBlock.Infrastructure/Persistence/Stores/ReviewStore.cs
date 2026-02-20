@@ -42,9 +42,17 @@ internal sealed class ReviewStore(ApplicationDbContext dbContext, ILogger<Review
         if (review is not null)
         {
             dbContext.Reviews.Remove(review);
-            await dbContext.SaveChangesAsync(cancellationToken);
-            logger.LogInformation("Successfully deleted review {ReviewId}", id);
-            return true;
+            try
+            {
+                await dbContext.SaveChangesAsync(cancellationToken);
+                logger.LogInformation("Successfully deleted review {ReviewId}", id);
+                return true;
+            }
+            catch (Exception ex)
+            {
+                logger.LogError(ex, "Database operation failed while deleting review {ReviewId}", id);
+                throw;
+            }
         }
         logger.LogWarning("Attempted to delete non-existent review {ReviewId}", id);
         return false;
@@ -74,7 +82,11 @@ internal sealed class ReviewStore(ApplicationDbContext dbContext, ILogger<Review
 
         if (!string.IsNullOrWhiteSpace(request.Search))
         {
-            var term = $"%{request.Search.Trim()}%";
+            var escapedSearch = request.Search.Trim()
+                .Replace("\\", "\\\\")
+                .Replace("%", "\\%")
+                .Replace("_", "\\_");
+            var term = $"%{escapedSearch}%";
             query = query.Where(r => r.Comment != null && EF.Functions.ILike(r.Comment, term));
         }
 
