@@ -9,6 +9,7 @@ internal static class ResilienceConstants
     {
         public const string STRIPE = "stripe";
         public const string MINIO = "minio";
+        public const string ELASTICSEARCH = "elasticsearch";
     }
 
     public static class Stripe
@@ -27,5 +28,12 @@ internal static class ResilienceConstants
         public const int MAX_RETRIES = 2;
         public const int RETRY_DELAY_MS = 300;
         public const int TIMEOUT_SECONDS = 60;
+    }
+
+    public static class Elasticsearch
+    {
+        public const int MAX_RETRIES = 3;
+        public const int RETRY_DELAY_MS = 500;
+        public const int TIMEOUT_SECONDS = 30;
     }
 }

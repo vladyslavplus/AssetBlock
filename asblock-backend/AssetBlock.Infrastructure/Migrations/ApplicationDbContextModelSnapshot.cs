@@ -75,6 +75,21 @@ namespace AssetBlock.Infrastructure.Migrations
                     b.ToTable("assets", (string)null);
                 });
 
+            modelBuilder.Entity("AssetBlock.Domain.Core.Entities.AssetTag", b =>
+                {
+                    b.Property<Guid>("AssetId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("TagId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("AssetId", "TagId");
+
+                    b.HasIndex("TagId");
+
+                    b.ToTable("asset_tags", (string)null);
+                });
+
             modelBuilder.Entity("AssetBlock.Domain.Core.Entities.Category", b =>
                 {
                     b.Property<Guid>("Id")
@@ -215,6 +230,31 @@ namespace AssetBlock.Infrastructure.Migrations
                     b.ToTable("reviews", (string)null);
                 });
 
+            modelBuilder.Entity("AssetBlock.Domain.Core.Entities.Tag", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<DateTimeOffset?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Name")
+                        .IsUnique();
+
+                    b.ToTable("tags", (string)null);
+                });
+
             modelBuilder.Entity("AssetBlock.Domain.Core.Entities.User", b =>
                 {
                     b.Property<Guid>("Id")
@@ -279,6 +319,25 @@ namespace AssetBlock.Infrastructure.Migrations
                     b.Navigation("Category");
                 });
 
+            modelBuilder.Entity("AssetBlock.Domain.Core.Entities.AssetTag", b =>
+                {
+                    b.HasOne("AssetBlock.Domain.Core.Entities.Asset", "Asset")
+                        .WithMany("AssetTags")
+                        .HasForeignKey("AssetId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("AssetBlock.Domain.Core.Entities.Tag", "Tag")
+                        .WithMany("AssetTags")
+                        .HasForeignKey("TagId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Asset");
+
+                    b.Navigation("Tag");
+                });
+
             modelBuilder.Entity("AssetBlock.Domain.Core.Entities.Purchase", b =>
                 {
                     b.HasOne("AssetBlock.Domain.Core.Entities.Asset", "Asset")
@@ -330,6 +389,8 @@ namespace AssetBlock.Infrastructure.Migrations
 
             modelBuilder.Entity("AssetBlock.Domain.Core.Entities.Asset", b =>
                 {
+                    b.Navigation("AssetTags");
+
                     b.Navigation("Purchases");
 
                     b.Navigation("Reviews");
@@ -338,6 +399,11 @@ namespace AssetBlock.Infrastructure.Migrations
             modelBuilder.Entity("AssetBlock.Domain.Core.Entities.Category", b =>
                 {
                     b.Navigation("Assets");
+                });
+
+            modelBuilder.Entity("AssetBlock.Domain.Core.Entities.Tag", b =>
+                {
+                    b.Navigation("AssetTags");
                 });
 
             modelBuilder.Entity("AssetBlock.Domain.Core.Entities.User", b =>

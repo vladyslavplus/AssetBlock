@@ -52,7 +52,25 @@ services:
       timeout: 3s
       retries: 5
 
+  elasticsearch:
+    image: elasticsearch:8.12.1
+    container_name: assetblock-elasticsearch
+    environment:
+      - discovery.type=single-node
+      - xpack.security.enabled=false
+      - ES_JAVA_OPTS=-Xms512m -Xmx512m
+    ports:
+      - "${ES_PORT:-9200}:9200"
+    volumes:
+      - elasticsearch_data:/usr/share/elasticsearch/data
+    healthcheck:
+      test: ["CMD-SHELL", "curl -s http://localhost:9200 >/dev/null || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
 volumes:
   # postgres_data:
   minio_data:
   redis_data:
+  elasticsearch_data:

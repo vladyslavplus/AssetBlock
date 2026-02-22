@@ -12,16 +12,16 @@ namespace AssetBlock.Application.Tests.UseCases.Assets;
 
 public class GetAssetsQueryHandlerTests
 {
-    private readonly IAssetStore _assetStoreMock;
+    private readonly IAssetSearchService _searchServiceMock;
     private readonly ICacheService _cacheMock;
     private readonly GetAssetsQueryHandler _handler;
 
     public GetAssetsQueryHandlerTests()
     {
-        _assetStoreMock = Substitute.For<IAssetStore>();
+        _searchServiceMock = Substitute.For<IAssetSearchService>();
         _cacheMock = Substitute.For<ICacheService>();
         _handler = new GetAssetsQueryHandler(
-            _assetStoreMock,
+            _searchServiceMock,
             _cacheMock,
             NullLogger<GetAssetsQueryHandler>.Instance);
     }
@@ -45,7 +45,7 @@ public class GetAssetsQueryHandlerTests
         result.Value.Items[0].Title.Should().Be("Cached Asset");
 
         // Store should NOT be called
-        await _assetStoreMock.DidNotReceiveWithAnyArgs().GetPaged(null!, CancellationToken.None);
+        await _searchServiceMock.DidNotReceiveWithAnyArgs().SearchAssets(null!, CancellationToken.None);
     }
 
     [Fact]
@@ -57,17 +57,18 @@ public class GetAssetsQueryHandlerTests
         var categoryId = Guid.NewGuid();
         var authorId = Guid.NewGuid();
         var category = new Category { Id = categoryId, Name = "3D Models", Slug = "3d-models" };
-        var storedAssets = new List<Asset>
+        var storedAssets = new List<AssetDocument>
         {
             new() {
                 Id = Guid.NewGuid(), AuthorId = authorId, CategoryId = categoryId,
-                Title = "Low-Poly Tree", Price = 4.99m, StorageKey = "s/k", FileName = "tree.fbx",
-                CreatedAt = DateTimeOffset.UtcNow, Category = category
+                Title = "Low-Poly Tree", Price = 4.99m, StorageKey = "s/k",
+                CreatedAt = DateTimeOffset.UtcNow, CategoryName = category.Name,
+                AuthorUsername = "testuser", Tags = [], AverageRating = 0
             }
         };
 
-        var pagedResult = new PagedResult<Asset>(storedAssets, 1, 1, 10);
-        _assetStoreMock.GetPaged(Arg.Any<GetAssetsRequest>(), Arg.Any<CancellationToken>()).Returns(pagedResult);
+        var pagedResult = new PagedResult<AssetDocument>(storedAssets, 1, 1, 10);
+        _searchServiceMock.SearchAssets(Arg.Any<GetAssetsRequest>(), Arg.Any<CancellationToken>()).Returns(pagedResult);
 
         var request = new GetAssetsRequest { Page = 1, PageSize = 10 };
         var query = new GetAssetsQuery(request);
@@ -92,8 +93,8 @@ public class GetAssetsQueryHandlerTests
         // Arrange
         _cacheMock.GetString(Arg.Any<string>(), Arg.Any<CancellationToken>()).Returns("this is NOT valid JSON {{{{");
 
-        var emptyPaged = new PagedResult<Asset>([], 0, 1, 10);
-        _assetStoreMock.GetPaged(Arg.Any<GetAssetsRequest>(), Arg.Any<CancellationToken>()).Returns(emptyPaged);
+        var emptyPaged = new PagedResult<AssetDocument>([], 0, 1, 10);
+        _searchServiceMock.SearchAssets(Arg.Any<GetAssetsRequest>(), Arg.Any<CancellationToken>()).Returns(emptyPaged);
 
         var request = new GetAssetsRequest { Page = 1, PageSize = 10 };
         var query = new GetAssetsQuery(request);
@@ -103,7 +104,7 @@ public class GetAssetsQueryHandlerTests
 
         // Assert: a corrupt cache should trigger a fallback to store
         result.IsSuccess.Should().BeTrue();
-        await _assetStoreMock.Received(1).GetPaged(Arg.Any<GetAssetsRequest>(), Arg.Any<CancellationToken>());
+        await _searchServiceMock.Received(1).SearchAssets(Arg.Any<GetAssetsRequest>(), Arg.Any<CancellationToken>());
         // Cache should have been cleared first
         await _cacheMock.Received(1).RemoveByPrefix(CacheKeys.ASSETS_LIST_PREFIX, Arg.Any<CancellationToken>());
     }
@@ -113,8 +114,8 @@ public class GetAssetsQueryHandlerTests
     {
         // Arrange
         _cacheMock.GetString(Arg.Any<string>(), Arg.Any<CancellationToken>()).Returns((string?)null);
-        var emptyPaged = new PagedResult<Asset>([], 0, 1, 10);
-        _assetStoreMock.GetPaged(Arg.Any<GetAssetsRequest>(), Arg.Any<CancellationToken>()).Returns(emptyPaged);
+        var emptyPaged = new PagedResult<AssetDocument>([], 0, 1, 10);
+        _searchServiceMock.SearchAssets(Arg.Any<GetAssetsRequest>(), Arg.Any<CancellationToken>()).Returns(emptyPaged);
 
         var request = new GetAssetsRequest { Page = 1, PageSize = 10 };
         var query = new GetAssetsQuery(request);

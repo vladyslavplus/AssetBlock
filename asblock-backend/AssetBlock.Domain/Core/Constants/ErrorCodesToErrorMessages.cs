@@ -13,6 +13,10 @@ public static class ErrorCodesToErrorMessages
         { ErrorCodes.ERR_AUTH_USER_NOT_FOUND, "User not found." },
         { ErrorCodes.ERR_AUTH_EMAIL_ALREADY_EXISTS, "An account with this email already exists." },
         { ErrorCodes.ERR_CATEGORY_NOT_FOUND, "Category not found." },
+        { ErrorCodes.ERR_TAG_NOT_FOUND, "Tag not found." },
+        { ErrorCodes.ERR_TAG_ALREADY_EXISTS, "A tag with this name already exists." },
+        { ErrorCodes.ERR_ASSET_TAG_ALREADY_EXISTS, "This tag is already on the asset." },
+        { ErrorCodes.ERR_ASSET_TAG_NOT_FOUND, "This tag is not on the asset." },
         { ErrorCodes.ERR_ASSET_NOT_FOUND, "Asset not found." },
         { ErrorCodes.ERR_ASSET_UPLOAD_FAILED, "Failed to upload asset." },
         { ErrorCodes.ERR_PURCHASE_NOT_FOUND, "Purchase not found." },
@@ -31,7 +35,8 @@ public static class ErrorCodesToErrorMessages
         { ErrorCodes.ERR_REVIEW_CREATE_FAILED, "Failed to create review." },
         { ErrorCodes.ERR_NOT_FOUND, "Resource not found." },
         { ErrorCodes.ERR_FORBIDDEN, "Forbidden." },
-        { ErrorCodes.ERR_BAD_REQUEST, "An error occurred." }
+        { ErrorCodes.ERR_BAD_REQUEST, "An error occurred." },
+        { ErrorCodes.ERR_CONFLICT, "Resource conflict." }
     };
 
     public static string GetMessage(string code) =>

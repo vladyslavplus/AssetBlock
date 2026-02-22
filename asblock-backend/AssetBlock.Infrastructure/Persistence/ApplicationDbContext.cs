@@ -11,6 +11,8 @@ public sealed class ApplicationDbContext(DbContextOptions<ApplicationDbContext> 
     public DbSet<Purchase> Purchases => Set<Purchase>();
     public DbSet<RefreshToken> RefreshTokens => Set<RefreshToken>();
     public DbSet<Review> Reviews => Set<Review>();
+    public DbSet<Tag> Tags => Set<Tag>();
+    public DbSet<AssetTag> AssetTags => Set<AssetTag>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

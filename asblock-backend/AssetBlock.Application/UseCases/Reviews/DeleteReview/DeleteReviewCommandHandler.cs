@@ -1,5 +1,4 @@
 using Ardalis.Result;
-using AssetBlock.Application.Common;
 using AssetBlock.Domain.Abstractions.Services;
 using AssetBlock.Domain.Core.Constants;
 using MediatR;
@@ -19,13 +18,13 @@ internal sealed class DeleteReviewCommandHandler(
             var review = await reviewStore.GetById(request.Id, cancellationToken);
             if (review is null)
             {
-                return ResultError.Error(ErrorCodes.ERR_REVIEW_NOT_FOUND);
+                return Result.NotFound(ErrorCodes.ERR_REVIEW_NOT_FOUND);
             }
 
             var deleted = await reviewStore.Delete(request.Id, cancellationToken);
             if (!deleted)
             {
-                return ResultError.Error(ErrorCodes.ERR_REVIEW_NOT_FOUND);
+                return Result.NotFound(ErrorCodes.ERR_REVIEW_NOT_FOUND);
             }
 
             await cache.RemoveByPrefix(CacheKeys.ReviewsListAssetPrefix(review.AssetId), cancellationToken);
@@ -37,7 +36,7 @@ internal sealed class DeleteReviewCommandHandler(
         catch (Exception ex)
         {
             logger.LogError(ex, "Failed to delete review {ReviewId}", request.Id);
-            return ResultError.Error(ErrorCodes.ERR_BAD_REQUEST);
+            return Result.Error(ErrorCodes.ERR_BAD_REQUEST);
         }
     }
 }

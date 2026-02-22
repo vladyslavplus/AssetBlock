@@ -22,4 +22,5 @@ public class Asset : BaseEntity
     public Category Category { get; set; } = null!;
     public ICollection<Purchase> Purchases { get; set; } = new List<Purchase>();
     public ICollection<Review> Reviews { get; set; } = new List<Review>();
+    public ICollection<AssetTag> AssetTags { get; set; } = new List<AssetTag>();
 }

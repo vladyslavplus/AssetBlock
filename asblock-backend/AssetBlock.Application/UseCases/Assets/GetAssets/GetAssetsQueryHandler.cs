@@ -9,7 +9,7 @@ using Microsoft.Extensions.Logging;
 namespace AssetBlock.Application.UseCases.Assets.GetAssets;
 
 internal sealed class GetAssetsQueryHandler(
-    IAssetStore assetStore,
+    IAssetSearchService searchService,
     ICacheService cache,
     ILogger<GetAssetsQueryHandler> logger)
     : IRequestHandler<GetAssetsQuery, Result<Domain.Core.Dto.Paging.PagedResult<AssetListItem>>>
@@ -19,7 +19,8 @@ internal sealed class GetAssetsQueryHandler(
 
     public async Task<Result<Domain.Core.Dto.Paging.PagedResult<AssetListItem>>> Handle(GetAssetsQuery request, CancellationToken cancellationToken)
     {
-        var key = CacheKeys.AssetsList(request.Request);
+        var normalizedRequest = request.Request with { Tags = NormalizeTags(request.Request.Tags) };
+        var key = CacheKeys.AssetsList(normalizedRequest);
         var cached = await cache.GetString(key, cancellationToken);
         if (cached is not null)
         {
@@ -39,7 +40,7 @@ internal sealed class GetAssetsQueryHandler(
             }
         }
 
-        var paged = await assetStore.GetPaged(request.Request, cancellationToken);
+        var paged = await searchService.SearchAssets(normalizedRequest, cancellationToken);
         var items = paged.Items
             .Select(a => new AssetListItem(
                 a.Id,
@@ -47,13 +48,31 @@ internal sealed class GetAssetsQueryHandler(
                 a.Description,
                 a.Price,
                 a.CategoryId,
-                a.Category.Name,
+                a.CategoryName,
                 a.AuthorId,
-                a.CreatedAt))
+                a.AuthorUsername,
+                a.CreatedAt,
+                a.Tags,
+                a.AverageRating))
             .ToList();
         var result = new Domain.Core.Dto.Paging.PagedResult<AssetListItem>(items, paged.TotalCount, paged.Page, paged.PageSize);
 
         await cache.SetString(key, JsonSerializer.Serialize(result, _jsonOptions), _cacheExpiration, cancellationToken);
         return Result.Success(result);
+    }
+
+    private static List<string>? NormalizeTags(IReadOnlyList<string>? tags)
+    {
+        if (tags is null || tags.Count == 0)
+        {
+            return null;
+        }
+        var list = tags
+            .SelectMany(t => t.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+            .Select(t => t.Trim().ToLowerInvariant())
+            .Where(t => t.Length > 0)
+            .Distinct()
+            .ToList();
+        return list.Count > 0 ? list : null;
     }
 }

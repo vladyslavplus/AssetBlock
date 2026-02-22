@@ -8,4 +8,7 @@ public sealed record AssetListItem(
     Guid CategoryId,
     string? CategoryName,
     Guid AuthorId,
-    DateTimeOffset CreatedAt);
+    string AuthorUsername,
+    DateTimeOffset CreatedAt,
+    IReadOnlyList<string> Tags,
+    double AverageRating);
