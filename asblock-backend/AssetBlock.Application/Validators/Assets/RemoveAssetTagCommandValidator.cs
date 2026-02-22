@@ -3,7 +3,7 @@ using FluentValidation;
 
 namespace AssetBlock.Application.Validators.Assets;
 
-public sealed class RemoveAssetTagCommandValidator : AbstractValidator<RemoveAssetTagCommand>
+internal sealed class RemoveAssetTagCommandValidator : AbstractValidator<RemoveAssetTagCommand>
 {
     public RemoveAssetTagCommandValidator()
     {

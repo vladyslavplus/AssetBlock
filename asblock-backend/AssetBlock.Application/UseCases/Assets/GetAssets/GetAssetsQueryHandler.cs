@@ -61,11 +61,11 @@ internal sealed class GetAssetsQueryHandler(
         return Result.Success(result);
     }
 
-    private static List<string>? NormalizeTags(List<string>? tags)
+    private static List<string>? NormalizeTags(IReadOnlyList<string>? tags)
     {
-        if (tags is not { Count: > 0 })
+        if (tags is null || tags.Count == 0)
         {
-            return tags;
+            return null;
         }
         var list = tags
             .SelectMany(t => t.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))

@@ -2,7 +2,9 @@ using AssetBlock.Domain.Abstractions.Services;
 using AssetBlock.Domain.Core.Dto.Paging;
 using AssetBlock.Domain.Core.Dto.Tags;
 using AssetBlock.Domain.Core.Entities;
+using AssetBlock.Domain.Core.Exceptions;
 using Microsoft.EntityFrameworkCore;
+using Npgsql;
 
 namespace AssetBlock.Infrastructure.Persistence.Stores;
 
@@ -15,7 +17,7 @@ internal sealed class TagStore(ApplicationDbContext dbContext) : ITagStore
         if (!string.IsNullOrWhiteSpace(request.Search))
         {
             var term = request.Search.Trim().ToLowerInvariant();
-            query = query.Where(t => t.Name.Contains(term));
+            query = query.Where(t => EF.Functions.ILike(t.Name, $"%{term}%"));
         }
 
         var totalCount = await query.CountAsync(cancellationToken);
@@ -69,9 +71,16 @@ internal sealed class TagStore(ApplicationDbContext dbContext) : ITagStore
 
     public async Task<Tag> Update(Tag tag, CancellationToken cancellationToken = default)
     {
-        dbContext.Tags.Update(tag);
-        await dbContext.SaveChangesAsync(cancellationToken);
-        return tag;
+        try
+        {
+            dbContext.Tags.Update(tag);
+            await dbContext.SaveChangesAsync(cancellationToken);
+            return tag;
+        }
+        catch (DbUpdateException ex) when (ex.InnerException is PostgresException { SqlState: PostgresErrorCodes.UniqueViolation })
+        {
+            throw new DuplicateTagNameException();
+        }
     }
 
     public async Task Delete(Tag tag, CancellationToken cancellationToken = default)

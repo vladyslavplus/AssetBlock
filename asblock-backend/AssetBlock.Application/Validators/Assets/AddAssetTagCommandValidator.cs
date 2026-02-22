@@ -3,7 +3,7 @@ using FluentValidation;
 
 namespace AssetBlock.Application.Validators.Assets;
 
-public sealed class AddAssetTagCommandValidator : AbstractValidator<AddAssetTagCommand>
+internal sealed class AddAssetTagCommandValidator : AbstractValidator<AddAssetTagCommand>
 {
     public AddAssetTagCommandValidator()
     {

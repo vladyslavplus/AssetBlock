@@ -42,6 +42,7 @@ public class AddAssetTagCommandHandlerTests
 
         // Assert
         result.IsSuccess.Should().BeFalse();
+        result.Status.Should().Be(Ardalis.Result.ResultStatus.NotFound);
         result.Errors.Should().Contain(ErrorCodes.ERR_ASSET_NOT_FOUND);
     }
 
@@ -58,6 +59,7 @@ public class AddAssetTagCommandHandlerTests
 
         // Assert
         result.IsSuccess.Should().BeFalse();
+        result.Status.Should().Be(Ardalis.Result.ResultStatus.Forbidden);
         result.Errors.Should().Contain(ErrorCodes.ERR_FORBIDDEN);
     }
 

@@ -39,4 +39,5 @@ public static class ErrorCodes
     public const string ERR_NOT_FOUND = "ERR_NOT_FOUND";
     public const string ERR_FORBIDDEN = "ERR_FORBIDDEN";
     public const string ERR_BAD_REQUEST = "ERR_BAD_REQUEST";
+    public const string ERR_CONFLICT = "ERR_CONFLICT";
 }

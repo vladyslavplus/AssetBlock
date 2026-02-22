@@ -3,7 +3,7 @@ using FluentValidation;
 
 namespace AssetBlock.Application.Validators.Tags;
 
-public sealed class UpdateTagCommandValidator : AbstractValidator<UpdateTagCommand>
+internal sealed class UpdateTagCommandValidator : AbstractValidator<UpdateTagCommand>
 {
     public UpdateTagCommandValidator()
     {

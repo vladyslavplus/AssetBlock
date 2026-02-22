@@ -28,18 +28,18 @@ internal sealed class DeleteAssetCommandHandler(
 
         try
         {
-            await assetStore.Delete(asset.Id, cancellationToken);
-            await searchService.DeleteAsset(asset.Id, cancellationToken);
             await storageService.Delete(asset.StorageKey, cancellationToken);
-            
+            await searchService.DeleteAsset(asset.Id, cancellationToken);
+            await assetStore.Delete(asset.Id, cancellationToken);
+
             await cache.RemoveByPrefix(CacheKeys.ASSETS_LIST_PREFIX, cancellationToken);
-            
+
             logger.LogInformation("Deleted asset: {AssetId}", request.Id);
             return Result.Success();
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, "Failed to delete asset: {AssetId}", request.Id);
+            logger.LogError(ex, "Failed to delete asset: {AssetId}. Operation may be partially complete.", request.Id);
             return Result.Error(ErrorCodes.ERR_BAD_REQUEST);
         }
     }

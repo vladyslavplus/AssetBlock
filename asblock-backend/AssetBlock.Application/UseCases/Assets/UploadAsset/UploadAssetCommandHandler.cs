@@ -28,6 +28,19 @@ internal sealed class UploadAssetCommandHandler(
             return ResultError.Error<Guid>(ErrorCodes.ERR_CATEGORY_NOT_FOUND);
         }
 
+        List<Tag>? existingTags = null;
+        if (request.Request.Tags is { Count: > 0 })
+        {
+            var inputTags = request.Request.Tags.Select(t => t.Trim().ToLowerInvariant()).Distinct().ToList();
+            existingTags = await tagStore.GetTagsByNames(inputTags, cancellationToken);
+            if (existingTags.Count != inputTags.Count)
+            {
+                logger.LogWarning("Upload failed: one or more tags were not found in the database. Requested: {RequestedTags}, Found: {FoundTags}",
+                    string.Join(", ", inputTags), string.Join(", ", existingTags.Select(t => t.Name)));
+                return ResultError.Error<Guid>(ErrorCodes.ERR_TAG_NOT_FOUND);
+            }
+        }
+
         var assetId = Guid.NewGuid();
         var extension = Path.GetExtension(request.FileName);
         if (string.IsNullOrWhiteSpace(extension))
@@ -75,18 +88,8 @@ internal sealed class UploadAssetCommandHandler(
         };
         try
         {
-            if (request.Request.Tags is { Count: > 0 })
+            if (existingTags is { Count: > 0 })
             {
-                var inputTags = request.Request.Tags.Select(t => t.Trim().ToLowerInvariant()).Distinct().ToList();
-                var existingTags = await tagStore.GetTagsByNames(inputTags, cancellationToken);
-                
-                if (existingTags.Count != inputTags.Count)
-                {
-                    logger.LogWarning("Upload failed: one or more tags were not found in the database. Requested: {RequestedTags}, Found: {FoundTags}", 
-                        string.Join(", ", inputTags), string.Join(", ", existingTags.Select(t => t.Name)));
-                    return ResultError.Error<Guid>(ErrorCodes.ERR_TAG_NOT_FOUND);
-                }
-
                 await assetStore.AddWithTags(asset, existingTags, cancellationToken);
             }
             else

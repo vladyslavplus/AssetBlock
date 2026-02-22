@@ -3,6 +3,7 @@ using AssetBlock.Application.Common;
 using AssetBlock.Domain.Abstractions.Services;
 using AssetBlock.Domain.Core.Constants;
 using AssetBlock.Domain.Core.Dto.Tags;
+using AssetBlock.Domain.Core.Exceptions;
 using MediatR;
 using Microsoft.Extensions.Logging;
 
@@ -33,8 +34,18 @@ internal sealed class UpdateTagCommandHandler(
             return ResultError.Error<TagDto>(ErrorCodes.ERR_TAG_ALREADY_EXISTS);
         }
 
-        tag.Name = normalizedName;
-        await tagStore.Update(tag, cancellationToken);
+        try
+        {
+            tag.Name = normalizedName;
+            tag.UpdatedAt = DateTimeOffset.UtcNow;
+            await tagStore.Update(tag, cancellationToken);
+        }
+        catch (DuplicateTagNameException)
+        {
+            logger.LogWarning("Update tag failed: name already exists {TagName}", normalizedName);
+            return ResultError.Error<TagDto>(ErrorCodes.ERR_TAG_ALREADY_EXISTS);
+        }
+
         logger.LogInformation("Updated tag {TagId} to name: {TagName}", tag.Id, normalizedName);
         await cache.RemoveByPrefix(CacheKeys.TAGS_LIST_PREFIX, cancellationToken);
         await cache.RemoveByPrefix(CacheKeys.ASSETS_LIST_PREFIX, cancellationToken);

@@ -1,3 +1,4 @@
+using System.Globalization;
 using AssetBlock.Domain.Core.Dto.Assets;
 using AssetBlock.Domain.Core.Dto.Categories;
 using AssetBlock.Domain.Core.Dto.Reviews;
@@ -34,9 +35,17 @@ public static class CacheKeys
         var search = NormalizeSearch(request.Search);
         var categoryId = request.CategoryId.HasValue ? request.CategoryId.Value.ToString() : "none";
         var sortBy = string.IsNullOrWhiteSpace(request.SortBy) ? "none" : request.SortBy.Trim();
-        var minPrice = request.MinPrice.HasValue ? request.MinPrice.Value.ToString("F2") : "none";
-        var maxPrice = request.MaxPrice.HasValue ? request.MaxPrice.Value.ToString("F2") : "none";
-        var tags = request.Tags is { Count: > 0 } ? string.Join(",", request.Tags.Select(t => t.ToLowerInvariant()).OrderBy(t => t)) : "none";
+        var minPrice = request.MinPrice.HasValue ? request.MinPrice.Value.ToString("F2", CultureInfo.InvariantCulture) : "none";
+        var maxPrice = request.MaxPrice.HasValue ? request.MaxPrice.Value.ToString("F2", CultureInfo.InvariantCulture) : "none";
+        var tags = request.Tags is { Count: > 0 }
+            ? string.Join(",",
+                request.Tags
+                    .SelectMany(t => t.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+                    .Select(t => t.Trim().ToLowerInvariant())
+                    .Where(t => t.Length > 0)
+                    .Distinct()
+                    .OrderBy(t => t))
+            : "none";
         return $"{ASSETS_LIST_PREFIX}:{request.Page}:{request.PageSize}:{search}:{categoryId}:{minPrice}:{maxPrice}:{tags}:{sortBy}:{request.SortDirection}";
     }
 

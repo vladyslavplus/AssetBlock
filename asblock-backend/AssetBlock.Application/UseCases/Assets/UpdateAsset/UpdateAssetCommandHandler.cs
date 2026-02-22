@@ -16,28 +16,28 @@ internal sealed class UpdateAssetCommandHandler(
 {
     public async Task<Result> Handle(UpdateAssetCommand request, CancellationToken cancellationToken)
     {
-        var asset = await assetStore.GetById(request.AssetId, cancellationToken);
-        if (asset is null)
-        {
-            return Result.NotFound(ErrorCodes.ERR_ASSET_NOT_FOUND);
-        }
-
-        if (asset.AuthorId != request.UserId)
-        {
-            return Result.Forbidden(ErrorCodes.ERR_FORBIDDEN);
-        }
-
-        if (request.CategoryId.HasValue)
-        {
-            var category = await categoryStore.GetById(request.CategoryId.Value, cancellationToken);
-            if (category is null)
-            {
-                return Result.NotFound(ErrorCodes.ERR_CATEGORY_NOT_FOUND);
-            }
-        }
-
         try
         {
+            var asset = await assetStore.GetById(request.AssetId, cancellationToken);
+            if (asset is null)
+            {
+                return Result.NotFound(ErrorCodes.ERR_ASSET_NOT_FOUND);
+            }
+
+            if (asset.AuthorId != request.UserId)
+            {
+                return Result.Forbidden(ErrorCodes.ERR_FORBIDDEN);
+            }
+
+            if (request.CategoryId.HasValue)
+            {
+                var category = await categoryStore.GetById(request.CategoryId.Value, cancellationToken);
+                if (category is null)
+                {
+                    return Result.NotFound(ErrorCodes.ERR_CATEGORY_NOT_FOUND);
+                }
+            }
+
             var updated = await assetStore.Update(
                 request.AssetId,
                 request.Title,
@@ -60,7 +60,7 @@ internal sealed class UpdateAssetCommandHandler(
         catch (Exception ex)
         {
             logger.LogError(ex, "Failed to update asset: {AssetId}", request.AssetId);
-            return Result.Error(ErrorCodes.ERR_BAD_REQUEST);
+            return Result.Invalid(new List<ValidationError> { new(ErrorCodes.ERR_BAD_REQUEST, ErrorCodesToErrorMessages.GetMessage(ErrorCodes.ERR_BAD_REQUEST)) });
         }
     }
 }

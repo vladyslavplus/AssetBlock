@@ -3,7 +3,7 @@ using FluentValidation;
 
 namespace AssetBlock.Application.Validators.Assets;
 
-public sealed class DeleteAssetCommandValidator : AbstractValidator<DeleteAssetCommand>
+internal sealed class DeleteAssetCommandValidator : AbstractValidator<DeleteAssetCommand>
 {
     public DeleteAssetCommandValidator()
     {

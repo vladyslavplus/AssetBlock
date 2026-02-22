@@ -35,7 +35,8 @@ public static class ErrorCodesToErrorMessages
         { ErrorCodes.ERR_REVIEW_CREATE_FAILED, "Failed to create review." },
         { ErrorCodes.ERR_NOT_FOUND, "Resource not found." },
         { ErrorCodes.ERR_FORBIDDEN, "Forbidden." },
-        { ErrorCodes.ERR_BAD_REQUEST, "An error occurred." }
+        { ErrorCodes.ERR_BAD_REQUEST, "An error occurred." },
+        { ErrorCodes.ERR_CONFLICT, "Resource conflict." }
     };
 
     public static string GetMessage(string code) =>

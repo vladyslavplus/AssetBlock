@@ -91,11 +91,14 @@ internal sealed class AssetStore(ApplicationDbContext dbContext) : IAssetStore
 
     public async Task AddTag(Guid assetId, Guid tagId, CancellationToken cancellationToken = default)
     {
-        var exists = await dbContext.Set<AssetTag>().AnyAsync(at => at.AssetId == assetId && at.TagId == tagId, cancellationToken);
-        if (!exists)
+        try
         {
             dbContext.Set<AssetTag>().Add(new AssetTag { AssetId = assetId, TagId = tagId });
             await dbContext.SaveChangesAsync(cancellationToken);
+        }
+        catch (DbUpdateException ex) when (ex.InnerException is Npgsql.PostgresException { SqlState: Npgsql.PostgresErrorCodes.UniqueViolation })
+        {
+            // Unique constraint - tag already on asset, no-op
         }
     }
 
@@ -137,6 +140,7 @@ internal sealed class AssetStore(ApplicationDbContext dbContext) : IAssetStore
             asset.CategoryId = categoryId.Value;
         }
 
+        asset.UpdatedAt = DateTimeOffset.UtcNow;
         await dbContext.SaveChangesAsync(cancellationToken);
         return true;
     }
