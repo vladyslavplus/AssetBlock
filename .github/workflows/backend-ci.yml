@@ -5,6 +5,10 @@ on:
   push:
     branches: [main]
 
+permissions:
+  contents: read
+  actions: write
+
 concurrency:
   group: backend-ci-${{ github.ref }}
   cancel-in-progress: true
@@ -27,7 +31,7 @@ jobs:
       - uses: actions/cache@v4
         with:
           path: ~/.nuget/packages
-          key: nuget-${{ hashFiles('asblock-backend/**/*.csproj') }}
+          key: nuget-${{ hashFiles('asblock-backend/**/*.csproj', 'asblock-backend/Directory.Packages.props', 'asblock-backend/NuGet.config', 'asblock-backend/**/packages.lock.json', 'asblock-backend/global.json') }}
           restore-keys: nuget-
 
       - name: Restore
