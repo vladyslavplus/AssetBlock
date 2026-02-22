@@ -3,6 +3,7 @@ using AssetBlock.Domain.Abstractions.Services;
 using AssetBlock.Domain.Core.Constants;
 using Ardalis.Result;
 using AssetBlock.Domain.Core.Entities;
+using AssetBlock.Application.UseCases.Assets.Events;
 using MediatR;
 using Microsoft.Extensions.Logging;
 
@@ -11,9 +12,11 @@ namespace AssetBlock.Application.UseCases.Assets.UploadAsset;
 internal sealed class UploadAssetCommandHandler(
     ICategoryStore categoryStore,
     IAssetStore assetStore,
+    ITagStore tagStore,
     IAssetStorageService assetStorageService,
     IEncryptionService encryptionService,
     ICacheService cache,
+    IPublisher publisher,
     ILogger<UploadAssetCommandHandler> logger) : IRequestHandler<UploadAssetCommand, Result<Guid>>
 {
     public async Task<Result<Guid>> Handle(UploadAssetCommand request, CancellationToken cancellationToken)
@@ -72,7 +75,24 @@ internal sealed class UploadAssetCommandHandler(
         };
         try
         {
-            await assetStore.Add(asset, cancellationToken);
+            if (request.Request.Tags is { Count: > 0 })
+            {
+                var inputTags = request.Request.Tags.Select(t => t.Trim().ToLowerInvariant()).Distinct().ToList();
+                var existingTags = await tagStore.GetTagsByNames(inputTags, cancellationToken);
+                
+                if (existingTags.Count != inputTags.Count)
+                {
+                    logger.LogWarning("Upload failed: one or more tags were not found in the database. Requested: {RequestedTags}, Found: {FoundTags}", 
+                        string.Join(", ", inputTags), string.Join(", ", existingTags.Select(t => t.Name)));
+                    return ResultError.Error<Guid>(ErrorCodes.ERR_TAG_NOT_FOUND);
+                }
+
+                await assetStore.AddWithTags(asset, existingTags, cancellationToken);
+            }
+            else
+            {
+                await assetStore.Add(asset, cancellationToken);
+            }
         }
         catch (Exception ex)
         {
@@ -84,6 +104,7 @@ internal sealed class UploadAssetCommandHandler(
         }
 
         await cache.RemoveByPrefix(CacheKeys.ASSETS_LIST_PREFIX, cancellationToken);
+        await publisher.Publish(new AssetCreatedEvent(assetId), cancellationToken);
         logger.LogInformation("Asset uploaded successfully {AssetId} by {AuthorId}", assetId, request.AuthorId);
         return Result.Success(assetId);
     }

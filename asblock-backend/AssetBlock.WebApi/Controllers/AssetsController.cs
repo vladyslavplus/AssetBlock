@@ -1,5 +1,9 @@
+using AssetBlock.Application.UseCases.Assets.AddAssetTag;
+using AssetBlock.Application.UseCases.Assets.DeleteAsset;
 using AssetBlock.Application.UseCases.Assets.GetAssetById;
 using AssetBlock.Application.UseCases.Assets.GetAssets;
+using AssetBlock.Application.UseCases.Assets.RemoveAssetTag;
+using AssetBlock.Application.UseCases.Assets.UpdateAsset;
 using AssetBlock.Application.UseCases.Assets.UploadAsset;
 using AssetBlock.Domain.Abstractions.Services;
 using AssetBlock.Domain.Core.Constants;
@@ -108,7 +112,10 @@ public sealed class AssetsController(ISender sender, IDownloadService downloadSe
         }
 
         logger.LogInformation("Upload started for user {UserId}, file {FileName}", userId, file.FileName);
-        var request = new UploadAssetRequest(form.Title, form.Description, form.Price, form.CategoryId, form.DownloadLimitPerHour);
+        var request = new UploadAssetRequest(form.Title, form.Description, form.Price, form.CategoryId, form.DownloadLimitPerHour)
+        {
+            Tags = form.Tags
+        };
         await using var stream = file.OpenReadStream();
         var command = new UploadAssetCommand(userId.Value, request, stream, file.FileName);
         var result = await Sender.Send(command, cancellationToken);
@@ -121,5 +128,100 @@ public sealed class AssetsController(ISender sender, IDownloadService downloadSe
 
         logger.LogWarning("Upload failed for user {UserId}: {Status} {Errors}", userId, result.Status, string.Join("; ", result.Errors));
         return MapResultToActionResult(result);
+    }
+
+    /// <summary>
+    /// Partial update of an asset (title, description, price, categoryId). Requires Bearer token. Only the author can update.
+    /// </summary>
+    [HttpPatch(ApiRoutes.Assets.ID)]
+    [Authorize]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> Update(Guid id, [FromBody] UpdateAssetRequest request, CancellationToken cancellationToken)
+    {
+        var userId = GetUserId();
+        if (userId is null)
+        {
+            return Unauthorized();
+        }
+
+        var command = new UpdateAssetCommand(id, userId.Value, request.Title, request.Description, request.Price, request.CategoryId);
+        var result = await Sender.Send(command, cancellationToken);
+
+        return result.IsSuccess ? Ok() : MapResultToActionResult(result);
+    }
+
+    /// <summary>
+    /// Delete an asset. Requires Bearer token. Only the author can delete it.
+    /// </summary>
+    [HttpDelete(ApiRoutes.Assets.ID)]
+    [Authorize]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> Delete(Guid id, CancellationToken cancellationToken)
+    {
+        var userId = GetUserId();
+        if (userId is null)
+        {
+            return Unauthorized();
+        }
+
+        var command = new DeleteAssetCommand(id, userId.Value);
+        var result = await Sender.Send(command, cancellationToken);
+
+        return result.IsSuccess ? Ok() : MapResultToActionResult(result);
+    }
+
+    /// <summary>
+    /// Adds a tag to an asset. Requires Bearer token. Only the author can manage tags.
+    /// </summary>
+    [HttpPost(ApiRoutes.Assets.TAGS)]
+    [Authorize]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> AddTag(Guid id, [FromBody] AddAssetTagRequest request, CancellationToken cancellationToken)
+    {
+        var userId = GetUserId();
+        if (userId is null)
+        {
+            return Unauthorized();
+        }
+
+        var command = new AddAssetTagCommand(id, userId.Value, request.Name);
+        var result = await Sender.Send(command, cancellationToken);
+
+        return result.IsSuccess ? Ok(result.Value) : MapResultToActionResult(result);
+    }
+
+    /// <summary>
+    /// Removes a tag from an asset. Requires Bearer token. Only the author can manage tags.
+    /// </summary>
+    [HttpDelete(ApiRoutes.Assets.TAGS_ID)]
+    [Authorize]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> RemoveTag(Guid id, Guid tagId, CancellationToken cancellationToken)
+    {
+        var userId = GetUserId();
+        if (userId is null)
+        {
+            return Unauthorized();
+        }
+
+        var command = new RemoveAssetTagCommand(id, userId.Value, tagId);
+        var result = await Sender.Send(command, cancellationToken);
+
+        return result.IsSuccess ? Ok() : MapResultToActionResult(result);
     }
 }

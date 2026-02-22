@@ -9,6 +9,9 @@ public sealed record GetAssetsRequest : PagedRequest
 {
     public string? Search { get; init; }
     public Guid? CategoryId { get; init; }
+    public List<string>? Tags { get; init; }
+    public decimal? MinPrice { get; init; }
+    public decimal? MaxPrice { get; init; }
 
     public static readonly IReadOnlySet<string> AllowedSortBy = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
     {

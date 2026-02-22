@@ -15,11 +15,32 @@ internal sealed class AssetStore(ApplicationDbContext dbContext) : IAssetStore
         return asset;
     }
 
+    public async Task<Asset> AddWithTags(Asset asset, List<Tag> tags, CancellationToken cancellationToken = default)
+    {
+        if (tags.Count > 0)
+        {
+            foreach (var tag in tags)
+            {
+                asset.AssetTags.Add(new AssetTag
+                {
+                    AssetId = asset.Id,
+                    TagId = tag.Id
+                });
+            }
+        }
+
+        dbContext.Assets.Add(asset);
+        await dbContext.SaveChangesAsync(cancellationToken);
+        return asset;
+    }
+
     public Task<Asset?> GetById(Guid id, CancellationToken cancellationToken = default)
     {
         return dbContext.Assets
             .AsNoTracking()
             .Include(a => a.Category)
+            .Include(a => a.Author)
+            .Include(a => a.AssetTags).ThenInclude(at => at.Tag)
             .FirstOrDefaultAsync(a => a.Id == id, cancellationToken);
     }
 
@@ -61,5 +82,62 @@ internal sealed class AssetStore(ApplicationDbContext dbContext) : IAssetStore
             .ToListAsync(cancellationToken);
 
         return new PagedResult<Asset>(items, totalCount, page, pageSize);
+    }
+
+    public async Task Delete(Guid id, CancellationToken cancellationToken = default)
+    {
+        await dbContext.Assets.Where(a => a.Id == id).ExecuteDeleteAsync(cancellationToken);
+    }
+
+    public async Task AddTag(Guid assetId, Guid tagId, CancellationToken cancellationToken = default)
+    {
+        var exists = await dbContext.Set<AssetTag>().AnyAsync(at => at.AssetId == assetId && at.TagId == tagId, cancellationToken);
+        if (!exists)
+        {
+            dbContext.Set<AssetTag>().Add(new AssetTag { AssetId = assetId, TagId = tagId });
+            await dbContext.SaveChangesAsync(cancellationToken);
+        }
+    }
+
+    public Task<bool> HasAssetTag(Guid assetId, Guid tagId, CancellationToken cancellationToken = default)
+    {
+        return dbContext.Set<AssetTag>().AnyAsync(at => at.AssetId == assetId && at.TagId == tagId, cancellationToken);
+    }
+
+    public async Task<bool> RemoveTag(Guid assetId, Guid tagId, CancellationToken cancellationToken = default)
+    {
+        var deleted = await dbContext.Set<AssetTag>()
+            .Where(at => at.AssetId == assetId && at.TagId == tagId)
+            .ExecuteDeleteAsync(cancellationToken);
+        return deleted > 0;
+    }
+
+    public async Task<bool> Update(Guid id, string? title, string? description, decimal? price, Guid? categoryId, CancellationToken cancellationToken = default)
+    {
+        var asset = await dbContext.Assets.FirstOrDefaultAsync(a => a.Id == id, cancellationToken);
+        if (asset is null)
+        {
+            return false;
+        }
+
+        if (title is not null)
+        {
+            asset.Title = title;
+        }
+        if (description is not null)
+        {
+            asset.Description = description;
+        }
+        if (price.HasValue)
+        {
+            asset.Price = price.Value;
+        }
+        if (categoryId.HasValue)
+        {
+            asset.CategoryId = categoryId.Value;
+        }
+
+        await dbContext.SaveChangesAsync(cancellationToken);
+        return true;
     }
 }

@@ -26,7 +26,7 @@ public class DeleteCategoryCommandHandlerTests
     }
 
     [Fact]
-    public async Task Handle_WhenCategoryNotFound_ShouldReturnError()
+    public async Task Handle_WhenCategoryNotFound_ShouldReturnNotFound()
     {
         // Arrange
         var command = new DeleteCategoryCommand(Guid.NewGuid());
@@ -37,7 +37,9 @@ public class DeleteCategoryCommandHandlerTests
 
         // Assert
         result.IsSuccess.Should().BeFalse();
-        result.ValidationErrors.Should().Contain(e => e.Identifier == ErrorCodes.ERR_CATEGORY_NOT_FOUND);
+        result.Status.Should().Be(Ardalis.Result.ResultStatus.NotFound);
+        result.Errors.Should().Contain(ErrorCodes.ERR_CATEGORY_NOT_FOUND);
+        await _cacheMock.DidNotReceive().RemoveByPrefix(Arg.Any<string>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -52,7 +54,7 @@ public class DeleteCategoryCommandHandlerTests
 
         // Assert
         result.IsSuccess.Should().BeFalse();
-        result.ValidationErrors.Should().Contain(e => e.Identifier == ErrorCodes.ERR_BAD_REQUEST);
+        result.Errors.Should().Contain(ErrorCodes.ERR_BAD_REQUEST);
     }
 
     [Fact]

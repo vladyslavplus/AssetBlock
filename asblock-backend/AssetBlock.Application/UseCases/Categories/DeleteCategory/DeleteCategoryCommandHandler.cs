@@ -1,5 +1,4 @@
 using Ardalis.Result;
-using AssetBlock.Application.Common;
 using AssetBlock.Domain.Abstractions.Services;
 using AssetBlock.Domain.Core.Constants;
 using MediatR;
@@ -21,13 +20,13 @@ internal sealed class DeleteCategoryCommandHandler(
             var deleted = await categoryStore.Delete(request.Id, cancellationToken);
             if (!deleted)
             {
-                return ResultError.Error(ErrorCodes.ERR_CATEGORY_NOT_FOUND);
+                return Result.NotFound(ErrorCodes.ERR_CATEGORY_NOT_FOUND);
             }
         }
         catch (CategoryInUseException)
         {
             logger.LogWarning("Cannot delete category {CategoryId}: in use by assets", request.Id);
-            return ResultError.Error(ErrorCodes.ERR_BAD_REQUEST);
+            return Result.Error(ErrorCodes.ERR_BAD_REQUEST);
         }
 
         await cache.RemoveByPrefix(CacheKeys.CATEGORIES_LIST_PREFIX, cancellationToken);

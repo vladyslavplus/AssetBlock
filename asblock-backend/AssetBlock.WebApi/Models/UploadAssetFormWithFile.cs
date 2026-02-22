@@ -16,6 +16,9 @@ public sealed class UploadAssetFormWithFile
     /// <summary>Optional max downloads per user per hour. Null = unlimited.</summary>
     public int? DownloadLimitPerHour { get; set; }
 
+    /// <summary>Optional list of tag names to assign to the asset.</summary>
+    public List<string>? Tags { get; set; }
+
     /// <summary>Asset file (any extension allowed). Form field name: "file".</summary>
     [FromForm(Name = "file")]
     [Required]

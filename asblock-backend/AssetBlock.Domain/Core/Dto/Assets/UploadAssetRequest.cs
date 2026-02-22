@@ -5,4 +5,5 @@ public sealed record UploadAssetRequest(
     string? Description,
     decimal Price,
     Guid CategoryId,
-    int? DownloadLimitPerHour = null);
+    int? DownloadLimitPerHour = null,
+    List<string>? Tags = null);

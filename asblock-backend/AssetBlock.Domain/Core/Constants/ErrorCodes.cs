@@ -12,6 +12,10 @@ public static class ErrorCodes
     public const string ERR_AUTH_EMAIL_ALREADY_EXISTS = "ERR_AUTH_EMAIL_ALREADY_EXISTS";
 
     public const string ERR_CATEGORY_NOT_FOUND = "ERR_CATEGORY_NOT_FOUND";
+    public const string ERR_TAG_NOT_FOUND = "ERR_TAG_NOT_FOUND";
+    public const string ERR_TAG_ALREADY_EXISTS = "ERR_TAG_ALREADY_EXISTS";
+    public const string ERR_ASSET_TAG_ALREADY_EXISTS = "ERR_ASSET_TAG_ALREADY_EXISTS";
+    public const string ERR_ASSET_TAG_NOT_FOUND = "ERR_ASSET_TAG_NOT_FOUND";
     public const string ERR_ASSET_NOT_FOUND = "ERR_ASSET_NOT_FOUND";
     public const string ERR_ASSET_UPLOAD_FAILED = "ERR_ASSET_UPLOAD_FAILED";
 

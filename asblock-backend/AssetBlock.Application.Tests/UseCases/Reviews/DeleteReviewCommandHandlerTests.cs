@@ -27,7 +27,7 @@ public class DeleteReviewCommandHandlerTests
     }
 
     [Fact]
-    public async Task Handle_WhenReviewNotFound_ShouldReturnError()
+    public async Task Handle_WhenReviewNotFound_ShouldReturnNotFound()
     {
         // Arrange
         var command = new DeleteReviewCommand(Guid.NewGuid());
@@ -38,11 +38,13 @@ public class DeleteReviewCommandHandlerTests
 
         // Assert
         result.IsSuccess.Should().BeFalse();
-        result.ValidationErrors.Should().Contain(e => e.Identifier == ErrorCodes.ERR_REVIEW_NOT_FOUND);
+        result.Status.Should().Be(Ardalis.Result.ResultStatus.NotFound);
+        result.Errors.Should().Contain(ErrorCodes.ERR_REVIEW_NOT_FOUND);
+        await _reviewStoreMock.DidNotReceive().Delete(Arg.Any<Guid>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]
-    public async Task Handle_WhenNotDeleted_ShouldReturnError()
+    public async Task Handle_WhenNotDeleted_ShouldReturnNotFound()
     {
         // Arrange
         var command = new DeleteReviewCommand(Guid.NewGuid());
@@ -55,7 +57,8 @@ public class DeleteReviewCommandHandlerTests
 
         // Assert
         result.IsSuccess.Should().BeFalse();
-        result.ValidationErrors.Should().Contain(e => e.Identifier == ErrorCodes.ERR_REVIEW_NOT_FOUND);
+        result.Status.Should().Be(Ardalis.Result.ResultStatus.NotFound);
+        result.Errors.Should().Contain(ErrorCodes.ERR_REVIEW_NOT_FOUND);
     }
 
     [Fact]
@@ -90,6 +93,6 @@ public class DeleteReviewCommandHandlerTests
 
         // Assert
         result.IsSuccess.Should().BeFalse();
-        result.ValidationErrors.Should().Contain(e => e.Identifier == ErrorCodes.ERR_BAD_REQUEST);
+        result.Errors.Should().Contain(ErrorCodes.ERR_BAD_REQUEST);
     }
 }

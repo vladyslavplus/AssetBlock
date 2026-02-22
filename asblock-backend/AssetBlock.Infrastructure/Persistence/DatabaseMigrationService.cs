@@ -22,10 +22,23 @@ internal sealed class DatabaseMigrationService(
 
     private static readonly (string Name, string Slug, string? Description)[] _defaultCategories =
     [
-        ("Algorithms", "algorithms", null),
-        ("Shaders", "shaders", null),
-        ("UI Components", "ui-components", null),
-        ("ML Models", "ml-models", null)
+        ("Algorithms", "algorithms", "Data structures and algorithms implementations"),
+        ("Shaders", "shaders", "Graphics computing shaders and materials"),
+        ("UI Components", "ui-components", "Reusable UI elements and controls"),
+        ("ML Models", "ml-models", "Pre-trained machine learning models"),
+        ("Templates", "templates", "Ready-to-use project templates and boilerplate code"),
+        ("Plugins", "plugins", "Extensions and plugins for various platforms"),
+        ("Scripts", "scripts", "Automation and utility scripts"),
+        ("Audio", "audio", "Sound effects and music tracks for projects")
+    ];
+
+    private static readonly string[] _defaultTags =
+    [
+        "react", "vue", "angular", "csharp", "dotnet", "python", "javascript", 
+        "typescript", "opengl", "vulkan", "webgl", "unity", "unreal-engine", 
+        "tensorflow", "pytorch", "css", "html", "tailwind", "docker", "kubernetes",
+        "aws", "azure", "gcp", "frontend", "backend", "fullstack", "database",
+        "sql", "nosql", "game-dev", "ai", "machine-learning"
     ];
 
     public async Task StartAsync(CancellationToken cancellationToken)
@@ -60,6 +73,7 @@ internal sealed class DatabaseMigrationService(
             }
 
             await SeedCategoriesIfEmpty(context, cancellationToken);
+            await SeedTagsIfEmpty(context, cancellationToken);
 
             if (environment.IsDevelopment())
             {
@@ -102,6 +116,33 @@ internal sealed class DatabaseMigrationService(
         catch (DbUpdateException ex) when (ex.InnerException is Npgsql.PostgresException { SqlState: Npgsql.PostgresErrorCodes.UniqueViolation })
         {
             logger.LogInformation("Categories already seeded by another instance");
+        }
+    }
+
+    private async Task SeedTagsIfEmpty(ApplicationDbContext context, CancellationToken cancellationToken)
+    {
+        if (await context.Tags.AnyAsync(cancellationToken))
+        {
+            return;
+        }
+
+        foreach (var name in _defaultTags)
+        {
+            context.Tags.Add(new Tag
+            {
+                Id = Guid.NewGuid(),
+                Name = name
+            });
+        }
+
+        try
+        {
+            await context.SaveChangesAsync(cancellationToken);
+            logger.LogInformation("Seeded {Count} tags", _defaultTags.Length);
+        }
+        catch (DbUpdateException ex) when (ex.InnerException is Npgsql.PostgresException { SqlState: Npgsql.PostgresErrorCodes.UniqueViolation })
+        {
+            logger.LogInformation("Tags already seeded by another instance");
         }
     }
 

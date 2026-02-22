@@ -5,6 +5,7 @@ using AssetBlock.Infrastructure.Options;
 using AssetBlock.Infrastructure.Persistence;
 using AssetBlock.Infrastructure.Persistence.Stores;
 using AssetBlock.Infrastructure.Services;
+using Elastic.Clients.Elasticsearch;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -38,6 +39,7 @@ public static class DependencyInjection
         services.AddScoped<IAssetStore, AssetStore>();
         services.AddScoped<IPurchaseStore, PurchaseStore>();
         services.AddScoped<IReviewStore, ReviewStore>();
+        services.AddScoped<ITagStore, TagStore>();
         services.AddScoped<IPaymentService, StripePaymentService>();
         services.AddScoped<IDownloadService, DownloadService>();
         services.AddScoped<IAssetStorageService, MinioAssetStorageService>();
@@ -61,6 +63,13 @@ public static class DependencyInjection
             services.AddMemoryCache();
             services.AddSingleton<ICacheService, MemoryCacheService>();
         }
+
+        // Search (Elasticsearch)
+        var esUrl = configuration.GetValue<string>("Elasticsearch:Url") ?? "http://localhost:9200";
+        var settings = new ElasticsearchClientSettings(new Uri(esUrl))
+            .DefaultIndex("assets");
+        services.AddSingleton(new ElasticsearchClient(settings));
+        services.AddScoped<IAssetSearchService, Search.ElasticSearchService>();
 
         // Polly v8 resilience pipelines for external services
         services.AddResiliencePipeline(ResilienceConstants.Pipelines.STRIPE, builder =>
