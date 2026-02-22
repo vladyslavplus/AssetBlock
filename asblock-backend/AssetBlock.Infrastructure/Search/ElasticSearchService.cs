@@ -31,17 +31,26 @@ internal sealed class ElasticSearchService(
 
     public async Task IndexAsset(AssetDocument document, CancellationToken cancellationToken = default)
     {
-        var pipeline = resilience.GetPipeline(ResilienceConstants.Pipelines.ELASTICSEARCH);
-        await pipeline.ExecuteAsync(async ct =>
+        try
         {
-            var response = await client.IndexAsync(document, idx => idx.Index(_indexName), ct);
-            if (!response.IsSuccess())
+            var pipeline = resilience.GetPipeline(ResilienceConstants.Pipelines.ELASTICSEARCH);
+            await pipeline.ExecuteAsync(async ct =>
             {
-                logger.LogError("Failed to index asset {AssetId} in Elasticsearch: {DebugInformation}", document.Id,
-                    response.DebugInformation);
-                throw new InvalidOperationException($"Elasticsearch index failed: {response.DebugInformation}");
-            }
-        }, cancellationToken);
+                var response = await client.IndexAsync(document, idx => idx.Index(_indexName), ct);
+                if (!response.IsSuccess())
+                {
+                    logger.LogError("Failed to index asset {AssetId} in Elasticsearch: {DebugInformation}", document.Id,
+                        response.DebugInformation);
+                    throw new InvalidOperationException($"Elasticsearch index failed: {response.DebugInformation}");
+                }
+            }, cancellationToken);
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Elasticsearch IndexAsset failed for AssetId {AssetId}, Index {IndexName}",
+                document.Id, _indexName);
+            throw;
+        }
     }
 
     public async Task<PagedResult<AssetDocument>> SearchAssets(GetAssetsRequest request,
@@ -125,57 +134,75 @@ internal sealed class ElasticSearchService(
             _ => FIELD_CREATED_AT
         };
 
-        var searchResponse = await client.SearchAsync<AssetDocument>(s => s
-                .Indices(_indexName)
-                .IgnoreUnavailable()
-                .From((request.Page - 1) * request.PageSize)
-                .Size(request.PageSize)
-                .Query(q => q.Bool(b => b.Must(mustQueries.ToArray())))
-                .Sort(srt => srt.Field(sortField!, new FieldSort { Order = sortOrder })),
-            cancellationToken);
-
-        if (!searchResponse.IsSuccess())
+        try
         {
-            logger.LogError("Failed to search assets in Elasticsearch: {DebugInformation}",
-                searchResponse.DebugInformation);
-            return new PagedResult<AssetDocument>(new List<AssetDocument>(), 0, request.Page, request.PageSize);
-        }
+            var searchResponse = await client.SearchAsync<AssetDocument>(s => s
+                    .Indices(_indexName)
+                    .IgnoreUnavailable()
+                    .From((request.Page - 1) * request.PageSize)
+                    .Size(request.PageSize)
+                    .Query(q => q.Bool(b => b.Must(mustQueries.ToArray())))
+                    .Sort(srt => srt.Field(sortField!, new FieldSort { Order = sortOrder })),
+                cancellationToken);
 
-        var countResponse = await client.CountAsync<AssetDocument>(c => c
-                .Indices(_indexName)
-                .IgnoreUnavailable()
-                .Query(q => q.Bool(b => b.Must(mustQueries.ToArray()))),
-            cancellationToken);
+            if (!searchResponse.IsSuccess())
+            {
+                logger.LogError("Failed to search assets in Elasticsearch: {DebugInformation}",
+                    searchResponse.DebugInformation);
+                return new PagedResult<AssetDocument>(new List<AssetDocument>(), 0, request.Page, request.PageSize);
+            }
 
-        if (!countResponse.IsSuccess())
-        {
-            logger.LogError("Failed to count assets in Elasticsearch: {DebugInformation}",
-                countResponse.DebugInformation);
+            var countResponse = await client.CountAsync<AssetDocument>(c => c
+                    .Indices(_indexName)
+                    .IgnoreUnavailable()
+                    .Query(q => q.Bool(b => b.Must(mustQueries.ToArray()))),
+                cancellationToken);
+
+            if (!countResponse.IsSuccess())
+            {
+                logger.LogError("Failed to count assets in Elasticsearch: {DebugInformation}",
+                    countResponse.DebugInformation);
+
+                return new PagedResult<AssetDocument>(
+                    searchResponse.Documents.ToList(),
+                    searchResponse.Documents.Count,
+                    request.Page,
+                    request.PageSize);
+            }
 
             return new PagedResult<AssetDocument>(
                 searchResponse.Documents.ToList(),
-                searchResponse.Documents.Count,
+                (int)countResponse.Count,
                 request.Page,
                 request.PageSize);
         }
-
-        return new PagedResult<AssetDocument>(
-            searchResponse.Documents.ToList(),
-            (int)countResponse.Count,
-            request.Page,
-            request.PageSize);
+        catch (Exception ex)
+        {
+            logger.LogError(ex,
+                "Elasticsearch SearchAssets failed: Index {IndexName}, Page {Page}, PageSize {PageSize}, Search {Search}, CategoryId {CategoryId}",
+                _indexName, request.Page, request.PageSize, request.Search ?? "(null)", request.CategoryId?.ToString() ?? "(null)");
+            return new PagedResult<AssetDocument>(new List<AssetDocument>(), 0, request.Page, request.PageSize);
+        }
     }
 
     public async Task DeleteAsset(Guid id, CancellationToken cancellationToken = default)
     {
-        var response =
-            await client.DeleteAsync<AssetDocument>(id.ToString(), d => d.Index(_indexName), cancellationToken);
-
-        if (!response.IsSuccess() &&
-            response.ElasticsearchServerError?.Status != (int)System.Net.HttpStatusCode.NotFound)
+        try
         {
-            logger.LogError("Failed to delete asset {AssetId} from Elasticsearch: {DebugInformation}", id,
-                response.DebugInformation);
+            var response =
+                await client.DeleteAsync<AssetDocument>(id.ToString(), d => d.Index(_indexName), cancellationToken);
+
+            if (!response.IsSuccess() &&
+                response.ElasticsearchServerError?.Status != (int)System.Net.HttpStatusCode.NotFound)
+            {
+                logger.LogError("Failed to delete asset {AssetId} from Elasticsearch: {DebugInformation}", id,
+                    response.DebugInformation);
+            }
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Elasticsearch DeleteAsset failed for AssetId {AssetId}, Index {IndexName}", id, _indexName);
+            throw;
         }
     }
 }

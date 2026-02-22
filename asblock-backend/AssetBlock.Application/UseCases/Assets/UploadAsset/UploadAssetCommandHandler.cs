@@ -35,7 +35,8 @@ internal sealed class UploadAssetCommandHandler(
             existingTags = await tagStore.GetTagsByNames(inputTags, cancellationToken);
             if (existingTags.Count != inputTags.Count)
             {
-                logger.LogWarning("Upload failed: one or more tags were not found in the database. Requested: {RequestedTags}, Found: {FoundTags}",
+                logger.LogWarning(
+                    "Upload failed: one or more tags were not found in the database. Requested: {RequestedTags}, Found: {FoundTags}",
                     string.Join(", ", inputTags), string.Join(", ", existingTags.Select(t => t.Name)));
                 return ResultError.Error<Guid>(ErrorCodes.ERR_TAG_NOT_FOUND);
             }
@@ -107,7 +108,16 @@ internal sealed class UploadAssetCommandHandler(
         }
 
         await cache.RemoveByPrefix(CacheKeys.ASSETS_LIST_PREFIX, cancellationToken);
-        await publisher.Publish(new AssetCreatedEvent(assetId), cancellationToken);
+
+        try
+        {
+            await publisher.Publish(new AssetCreatedEvent(assetId), cancellationToken);
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Failed to publish AssetCreatedEvent for {AssetId}", assetId);
+        }
+
         logger.LogInformation("Asset uploaded successfully {AssetId} by {AuthorId}", assetId, request.AuthorId);
         return Result.Success(assetId);
     }
