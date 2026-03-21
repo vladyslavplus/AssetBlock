@@ -23,6 +23,11 @@ public static class ErrorCodes
     public const string ERR_PURCHASE_ACCESS_DENIED = "ERR_PURCHASE_ACCESS_DENIED";
     public const string ERR_PAYMENT_FAILED = "ERR_PAYMENT_FAILED";
     public const string ERR_STRIPE_URLS_NOT_CONFIGURED = "ERR_STRIPE_URLS_NOT_CONFIGURED";
+
+    // User / profile
+    public const string ERR_USER_NOT_FOUND = "ERR_USER_NOT_FOUND";
+    public const string ERR_USERNAME_ALREADY_EXISTS = "ERR_USERNAME_ALREADY_EXISTS";
+    public const string ERR_SOCIAL_PLATFORM_NOT_FOUND = "ERR_SOCIAL_PLATFORM_NOT_FOUND";
     public const string ERR_DOWNLOAD_LIMIT_EXCEEDED = "ERR_DOWNLOAD_LIMIT_EXCEEDED";
     public const string ERR_CANNOT_PURCHASE_OWN_ASSET = "ERR_CANNOT_PURCHASE_OWN_ASSET";
 

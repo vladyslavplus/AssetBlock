@@ -6,6 +6,7 @@ alwaysApply: true
 # Error Handling & Observability
 
 - .NET: Wrap async operations in try-catch, use Ardalis.Result for domain errors, log structured with Serilog (enrich with request ID, user context), never swallow exceptions.
+- MediatR handlers: rely on FluentValidation for invalid input; avoid `ArgumentNullException.ThrowIfNull` on fields already validated by a validator.
 - Next.js: Use try-catch in Server Actions/API routes, return meaningful errors via NextResponse.json, use Tanstack Query error boundaries + notistack for toasts.
 - Always add fallback UI (Suspense + loading/error states), log to console/Sentry if in prod mindset.
 - For background (Hangfire/SignalR): Add retry policies (Polly), log failures with context.

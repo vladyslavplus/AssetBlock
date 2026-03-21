@@ -1,3 +1,4 @@
+using AssetBlock.WebApi.Conventions;
 using AssetBlock.WebApi.Extensions;
 using AssetBlock.Application;
 using AssetBlock.Infrastructure;
@@ -8,7 +9,8 @@ builder.Host.UseSerilogConfiguration();
 
 builder.Services.AddApplication();
 builder.Services.AddInfrastructure(builder.Configuration);
-builder.Services.AddControllers();
+builder.Services.Configure<RouteOptions>(options => options.LowercaseUrls = true);
+builder.Services.AddControllers(options => options.Conventions.Add(new LowercaseControllerRouteConvention()));
 builder.Services.AddSignalR();
 builder.Services.AddOpenApi();
 builder.Services.AddSwaggerConfiguration();
