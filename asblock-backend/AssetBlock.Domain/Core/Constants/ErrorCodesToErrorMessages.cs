@@ -25,6 +25,7 @@ public static class ErrorCodesToErrorMessages
         { ErrorCodes.ERR_STRIPE_URLS_NOT_CONFIGURED, "Payment redirect URLs are not configured. Contact support." },
         { ErrorCodes.ERR_DOWNLOAD_LIMIT_EXCEEDED, "Download limit for this asset has been reached. Please try again later." },
         { ErrorCodes.ERR_CANNOT_PURCHASE_OWN_ASSET, "You cannot purchase your own asset." },
+        { ErrorCodes.ERR_ASSET_ALREADY_PURCHASED, "You have already purchased this asset." },
         { ErrorCodes.ERR_CATEGORY_SLUG_EXISTS, "A category with this slug already exists." },
         { ErrorCodes.ERR_FILE_REQUIRED, "File is required." },
         { ErrorCodes.ERR_REVIEW_ALREADY_EXISTS, "You have already reviewed this asset." },
@@ -39,7 +40,8 @@ public static class ErrorCodesToErrorMessages
         { ErrorCodes.ERR_NOT_FOUND, "Resource not found." },
         { ErrorCodes.ERR_FORBIDDEN, "Forbidden." },
         { ErrorCodes.ERR_BAD_REQUEST, "An error occurred." },
-        { ErrorCodes.ERR_CONFLICT, "Resource conflict." }
+        { ErrorCodes.ERR_CONFLICT, "Resource conflict." },
+        { ErrorCodes.ERR_NOTIFICATION_NOT_FOUND, "Notification not found." }
     };
 
     public static string GetMessage(string code) =>

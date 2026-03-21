@@ -1,6 +1,7 @@
 using Ardalis.Result;
 using AssetBlock.Application.UseCases.Payments.HandleStripeWebhook;
 using AssetBlock.Domain.Abstractions.Services;
+using AssetBlock.Domain.Core.Entities;
 using FluentAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
 using NSubstitute;
@@ -11,13 +12,19 @@ namespace AssetBlock.Application.Tests.UseCases.Payments;
 public class HandleStripeWebhookCommandHandlerTests
 {
     private readonly IPaymentService _paymentServiceMock;
+    private readonly IAssetStore _assetStoreMock;
+    private readonly IRealtimeNotificationPublisher _notificationsMock;
     private readonly HandleStripeWebhookCommandHandler _handler;
 
     public HandleStripeWebhookCommandHandlerTests()
     {
         _paymentServiceMock = Substitute.For<IPaymentService>();
+        _assetStoreMock = Substitute.For<IAssetStore>();
+        _notificationsMock = Substitute.For<IRealtimeNotificationPublisher>();
         _handler = new HandleStripeWebhookCommandHandler(
             _paymentServiceMock,
+            _assetStoreMock,
+            _notificationsMock,
             NullLogger<HandleStripeWebhookCommandHandler>.Instance);
     }
 
@@ -56,6 +63,79 @@ public class HandleStripeWebhookCommandHandlerTests
         result.Value.Should().NotBeNull();
         result.Value!.UserId.Should().Be(userId);
         result.Value.AssetId.Should().Be(assetId);
+    }
+
+    [Fact]
+    public async Task Handle_WhenCheckoutCompletedAndAssetFound_ShouldNotifyBuyerAndAuthor()
+    {
+        // Arrange
+        var buyerId = Guid.NewGuid();
+        var authorId = Guid.NewGuid();
+        var assetId = Guid.NewGuid();
+        var command = new HandleStripeWebhookCommand("payload", "sig");
+        _paymentServiceMock.HandleCheckoutCompleted(command.Payload, command.Signature, Arg.Any<CancellationToken>())
+            .Returns(((Guid, Guid)?)(buyerId, assetId));
+        var asset = new Asset
+        {
+            Id = assetId,
+            AuthorId = authorId,
+            CategoryId = Guid.NewGuid(),
+            Title = "Pack",
+            StorageKey = "k",
+            FileName = "f.zip"
+        };
+        _assetStoreMock.GetById(assetId, Arg.Any<CancellationToken>()).Returns(asset);
+
+        // Act
+        var result = await _handler.Handle(command, CancellationToken.None);
+
+        // Assert
+        result.IsSuccess.Should().BeTrue();
+        await _notificationsMock.Received(1).NotifyPurchaseCompleted(buyerId, assetId, "Pack", Arg.Any<CancellationToken>());
+        await _notificationsMock.Received(1).NotifyDownloadReady(buyerId, assetId, "Pack", Arg.Any<CancellationToken>());
+        await _notificationsMock.Received(1).NotifyAssetSold(authorId, assetId, "Pack", buyerId, Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Handle_WhenBuyerIsAuthor_ShouldNotSendAssetSold()
+    {
+        var userId = Guid.NewGuid();
+        var assetId = Guid.NewGuid();
+        var command = new HandleStripeWebhookCommand("payload", "sig");
+        _paymentServiceMock.HandleCheckoutCompleted(command.Payload, command.Signature, Arg.Any<CancellationToken>())
+            .Returns(((Guid, Guid)?)(userId, assetId));
+        var asset = new Asset
+        {
+            Id = assetId,
+            AuthorId = userId,
+            CategoryId = Guid.NewGuid(),
+            Title = "Own",
+            StorageKey = "k",
+            FileName = "f.zip"
+        };
+        _assetStoreMock.GetById(assetId, Arg.Any<CancellationToken>()).Returns(asset);
+
+        var result = await _handler.Handle(command, CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        await _notificationsMock.Received(1).NotifyPurchaseCompleted(userId, assetId, "Own", Arg.Any<CancellationToken>());
+        await _notificationsMock.DidNotReceive().NotifyAssetSold(Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<Guid>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Handle_WhenCheckoutCompletedButAssetMissing_ShouldNotNotify()
+    {
+        var userId = Guid.NewGuid();
+        var assetId = Guid.NewGuid();
+        var command = new HandleStripeWebhookCommand("payload", "sig");
+        _paymentServiceMock.HandleCheckoutCompleted(command.Payload, command.Signature, Arg.Any<CancellationToken>())
+            .Returns(((Guid, Guid)?)(userId, assetId));
+        _assetStoreMock.GetById(assetId, Arg.Any<CancellationToken>()).Returns((Asset?)null);
+
+        var result = await _handler.Handle(command, CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        await _notificationsMock.DidNotReceive().NotifyPurchaseCompleted(Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]

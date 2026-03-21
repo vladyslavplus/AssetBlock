@@ -30,6 +30,7 @@ public static class ErrorCodes
     public const string ERR_SOCIAL_PLATFORM_NOT_FOUND = "ERR_SOCIAL_PLATFORM_NOT_FOUND";
     public const string ERR_DOWNLOAD_LIMIT_EXCEEDED = "ERR_DOWNLOAD_LIMIT_EXCEEDED";
     public const string ERR_CANNOT_PURCHASE_OWN_ASSET = "ERR_CANNOT_PURCHASE_OWN_ASSET";
+    public const string ERR_ASSET_ALREADY_PURCHASED = "ERR_ASSET_ALREADY_PURCHASED";
 
     public const string ERR_CATEGORY_SLUG_EXISTS = "ERR_CATEGORY_SLUG_EXISTS";
 
@@ -45,4 +46,6 @@ public static class ErrorCodes
     public const string ERR_FORBIDDEN = "ERR_FORBIDDEN";
     public const string ERR_BAD_REQUEST = "ERR_BAD_REQUEST";
     public const string ERR_CONFLICT = "ERR_CONFLICT";
+
+    public const string ERR_NOTIFICATION_NOT_FOUND = "ERR_NOTIFICATION_NOT_FOUND";
 }

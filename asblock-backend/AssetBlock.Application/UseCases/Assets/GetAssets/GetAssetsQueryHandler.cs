@@ -30,7 +30,7 @@ internal sealed class GetAssetsQueryHandler(
                 if (cachedResult is not null)
                 {
                     logger.LogDebug("Asset list cache hit for key {Key}", key);
-                    return Result.Success(cachedResult);
+                    return Result.Success(NormalizeDescriptions(cachedResult));
                 }
             }
             catch (JsonException ex)
@@ -45,7 +45,7 @@ internal sealed class GetAssetsQueryHandler(
             .Select(a => new AssetListItem(
                 a.Id,
                 a.Title,
-                a.Description,
+                string.IsNullOrWhiteSpace(a.Description) ? null : a.Description,
                 a.Price,
                 a.CategoryId,
                 a.CategoryName,
@@ -56,9 +56,20 @@ internal sealed class GetAssetsQueryHandler(
                 a.AverageRating))
             .ToList();
         var result = new Domain.Core.Dto.Paging.PagedResult<AssetListItem>(items, paged.TotalCount, paged.Page, paged.PageSize);
+        var normalized = NormalizeDescriptions(result);
 
-        await cache.SetString(key, JsonSerializer.Serialize(result, _jsonOptions), _cacheExpiration, cancellationToken);
-        return Result.Success(result);
+        await cache.SetString(key, JsonSerializer.Serialize(normalized, _jsonOptions), _cacheExpiration, cancellationToken);
+        return Result.Success(normalized);
+    }
+
+    /// <summary>Aligns list API with DB/detail: whitespace-only or empty string becomes null (incl. legacy cache/ES docs).</summary>
+    private static Domain.Core.Dto.Paging.PagedResult<AssetListItem> NormalizeDescriptions(
+        Domain.Core.Dto.Paging.PagedResult<AssetListItem> paged)
+    {
+        var items = paged.Items
+            .Select(i => i with { Description = string.IsNullOrWhiteSpace(i.Description) ? null : i.Description })
+            .ToList();
+        return new Domain.Core.Dto.Paging.PagedResult<AssetListItem>(items, paged.TotalCount, paged.Page, paged.PageSize);
     }
 
     private static List<string>? NormalizeTags(IReadOnlyList<string>? tags)

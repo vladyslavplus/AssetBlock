@@ -7,6 +7,8 @@ namespace AssetBlock.Application.UseCases.Payments.HandleStripeWebhook;
 
 internal sealed class HandleStripeWebhookCommandHandler(
     IPaymentService paymentService,
+    IAssetStore assetStore,
+    IRealtimeNotificationPublisher realtimeNotifications,
     ILogger<HandleStripeWebhookCommandHandler> logger)
     : IRequestHandler<HandleStripeWebhookCommand, Result<PurchaseCompletedPayload?>>
 {
@@ -22,6 +24,21 @@ internal sealed class HandleStripeWebhookCommandHandler(
             }
 
             (Guid userId, Guid assetId) = result.Value;
+            var asset = await assetStore.GetById(assetId, cancellationToken);
+            if (asset is not null)
+            {
+                await realtimeNotifications.NotifyPurchaseCompleted(userId, asset.Id, asset.Title, cancellationToken);
+                await realtimeNotifications.NotifyDownloadReady(userId, asset.Id, asset.Title, cancellationToken);
+                if (asset.AuthorId != userId)
+                {
+                    await realtimeNotifications.NotifyAssetSold(asset.AuthorId, asset.Id, asset.Title, userId, cancellationToken);
+                }
+            }
+            else
+            {
+                logger.LogWarning("Checkout completed for asset {AssetId} but asset not found; skipping real-time notifications.", assetId);
+            }
+
             return Result.Success<PurchaseCompletedPayload?>(new PurchaseCompletedPayload(userId, assetId));
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)

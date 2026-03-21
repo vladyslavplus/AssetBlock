@@ -52,10 +52,7 @@ internal sealed class StripePaymentService(
                     {
                         Currency = StripeConstants.CURRENCY_USD,
                         UnitAmount = (long)Math.Round(asset.Price * 100, MidpointRounding.AwayFromZero),
-                        ProductData = new SessionLineItemPriceDataProductDataOptions
-                        {
-                            Name = asset.Title, Description = asset.Description ?? string.Empty
-                        }
+                        ProductData = BuildProductData(asset)
                     },
                     Quantity = 1
                 }
@@ -67,6 +64,21 @@ internal sealed class StripePaymentService(
             async ct => await sessionService.CreateAsync(sessionOptions, cancellationToken: ct),
             cancellationToken);
         return session.Url ?? throw new InvalidOperationException("Stripe did not return a session URL.");
+    }
+
+    /// <summary>Stripe rejects empty product_data.description; omit the property when absent.</summary>
+    private static SessionLineItemPriceDataProductDataOptions BuildProductData(Asset asset)
+    {
+        var productData = new SessionLineItemPriceDataProductDataOptions
+        {
+            Name = asset.Title
+        };
+        if (!string.IsNullOrWhiteSpace(asset.Description))
+        {
+            productData.Description = asset.Description;
+        }
+
+        return productData;
     }
 
     public async Task<(Guid UserId, Guid AssetId)?> HandleCheckoutCompleted(string payload, string signature, CancellationToken cancellationToken = default)

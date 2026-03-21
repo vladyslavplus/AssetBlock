@@ -13,16 +13,21 @@ public class CreateCheckoutSessionCommandHandlerTests
 {
     private readonly IPaymentService _paymentServiceMock;
     private readonly IAssetStore _assetStoreMock;
+    private readonly IPurchaseStore _purchaseStoreMock;
     private readonly CreateCheckoutSessionCommandHandler _handler;
 
     public CreateCheckoutSessionCommandHandlerTests()
     {
         _paymentServiceMock = Substitute.For<IPaymentService>();
         _assetStoreMock = Substitute.For<IAssetStore>();
+        _purchaseStoreMock = Substitute.For<IPurchaseStore>();
+        _purchaseStoreMock.GetPurchase(Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<CancellationToken>())
+            .Returns((Purchase?)null);
 
         _handler = new CreateCheckoutSessionCommandHandler(
             _paymentServiceMock,
             _assetStoreMock,
+            _purchaseStoreMock,
             NullLogger<CreateCheckoutSessionCommandHandler>.Instance);
     }
 
@@ -61,6 +66,41 @@ public class CreateCheckoutSessionCommandHandlerTests
         // Assert
         result.IsSuccess.Should().BeFalse();
         result.ValidationErrors.Should().Contain(e => e.Identifier == ErrorCodes.ERR_CANNOT_PURCHASE_OWN_ASSET);
+    }
+
+    [Fact]
+    public async Task Handle_WhenAlreadyPurchased_ShouldReturnAlreadyPurchasedError()
+    {
+        var userId = Guid.NewGuid();
+        var command = new CreateCheckoutSessionCommand(Guid.NewGuid(), userId, "https://ok", "https://cancel");
+        var asset = new Asset
+        {
+            Id = command.AssetId,
+            AuthorId = Guid.NewGuid(),
+            CategoryId = Guid.NewGuid(),
+            Title = "Asset",
+            Price = 9.99m,
+            StorageKey = "k",
+            FileName = "f.zip",
+            CreatedAt = DateTimeOffset.UtcNow
+        };
+        _assetStoreMock.GetById(command.AssetId, Arg.Any<CancellationToken>()).Returns(asset);
+        var purchase = new Purchase
+        {
+            Id = Guid.NewGuid(),
+            UserId = userId,
+            AssetId = command.AssetId,
+            StripePaymentId = "cs_test_1",
+            PurchasedAt = DateTimeOffset.UtcNow
+        };
+        _purchaseStoreMock.GetPurchase(userId, command.AssetId, Arg.Any<CancellationToken>()).Returns(purchase);
+
+        var result = await _handler.Handle(command, CancellationToken.None);
+
+        result.IsSuccess.Should().BeFalse();
+        result.ValidationErrors.Should().Contain(e => e.Identifier == ErrorCodes.ERR_ASSET_ALREADY_PURCHASED);
+        await _paymentServiceMock.DidNotReceiveWithAnyArgs().CreateCheckoutSession(
+            Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]
