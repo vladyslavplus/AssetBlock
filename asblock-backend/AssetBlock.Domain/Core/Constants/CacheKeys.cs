@@ -13,6 +13,8 @@ public static class CacheKeys
 {
     private const string PREFIX = "assetblock";
 
+    public const string SOCIAL_PLATFORMS = PREFIX + ":social_platforms:list";
+
     /// <summary>Prefix for all assets list cache keys. Use with RemoveByPrefix to invalidate list cache.</summary>
     public const string ASSETS_LIST_PREFIX = PREFIX + ":assets:list";
 

@@ -46,4 +46,12 @@ public static class ApiRoutes
         public const string BASE = "";
         public const string ID = "{id:guid}";
     }
+
+    public static class Users
+    {
+        public const string SOCIAL_PLATFORMS = "social-platforms";
+        public const string PROFILE = "{username}";
+        public const string ME = "me";
+        public const string ME_SOCIALS = "me/socials";
+    }
 }

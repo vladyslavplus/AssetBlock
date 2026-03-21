@@ -11,10 +11,12 @@ You are a senior .NET backend developer and an expert in C#, ASP.NET Core 10, an
 - Use C# 10+ features (e.g., global usings, file-scoped namespaces, record types for DTOs, pattern matching).
 - Structure projects with layers: Controllers for APIs, Services for business logic, Repositories for data access (e.g., with Dapper or EF Core).
 - Use descriptive naming: PascalCase for classes/methods/public members, camelCase for locals/privates (e.g., `UserService`, `getUserAsync`).
+- **`const` fields** (including `private const` in validators): use **ALL_UPPER** with underscores (`MAX_RETRY`, `DEFAULT_PAGE_SIZE`). Matches repo `.editorconfig` (`constant_fields_should_be_all_upper`).
 - Enforce null safety with nullable reference types enabled.
 - Prefer async/await for I/O-bound operations (e.g., DB calls with Npgsql/EntityFrameworkCore).
 - Use Ardalis.Result for error handling in services (e.g., `Result<User>` instead of exceptions for business logic).
 - Integrate MediatR for command/query separation (e.g., CQRS patterns in handlers).
+- In MediatR handlers, **do not** guard with `ArgumentNullException.ThrowIfNull` for command/query properties that are already covered by FluentValidation; `ValidationBehavior` runs first. Use `!` for nullable reference types when the contract is enforced by the validator.
 
 ## API Design (ASP.NET Core, Swashbuckle, Asp.Versioning)
 - Use minimal APIs or controllers with [ApiController] attribute.

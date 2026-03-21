@@ -9,6 +9,17 @@ internal static class SwaggerServiceExtensions
         services.AddEndpointsApiExplorer();
         services.AddSwaggerGen(options =>
         {
+            options.TagActionsBy(api =>
+            {
+                var name = api.ActionDescriptor.RouteValues.TryGetValue("controller", out var c) ? c : null;
+                if (string.IsNullOrEmpty(name))
+                {
+                    return new[] { "API" };
+                }
+
+                return new[] { CapitalizeFirstLetter(name) };
+            });
+
             options.SwaggerDoc("v1", new OpenApiInfo
             {
                 Title = "AssetBlock API",
@@ -33,5 +44,20 @@ internal static class SwaggerServiceExtensions
         });
 
         return services;
+    }
+
+    private static string CapitalizeFirstLetter(string value)
+    {
+        if (string.IsNullOrEmpty(value))
+        {
+            return value;
+        }
+
+        if (value.Length == 1)
+        {
+            return value.ToUpperInvariant();
+        }
+
+        return char.ToUpperInvariant(value[0]) + value.Substring(1);
     }
 }
