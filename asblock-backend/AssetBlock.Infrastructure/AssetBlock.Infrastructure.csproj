@@ -13,7 +13,7 @@
   <ItemGroup>
     <PackageReference Include="Ardalis.Result" Version="10.1.0" />
     <PackageReference Include="BCrypt.Net-Next" Version="4.1.0" />
-    <PackageReference Include="Elastic.Clients.Elasticsearch" Version="8.17.1" />
+    <PackageReference Include="Elastic.Clients.Elasticsearch" Version="9.3.3" />
     <PackageReference Include="Microsoft.EntityFrameworkCore.Relational" Version="10.0.3" />
     <PackageReference Include="Microsoft.Extensions.Caching.Memory" Version="10.0.3" />
     <PackageReference Include="Microsoft.Extensions.Caching.StackExchangeRedis" Version="10.0.3" />
