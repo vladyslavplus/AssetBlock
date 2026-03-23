@@ -41,6 +41,7 @@ public static class DependencyInjection
         services.AddScoped<IPurchaseStore, PurchaseStore>();
         services.AddScoped<IReviewStore, ReviewStore>();
         services.AddScoped<ISocialPlatformStore, SocialPlatformStore>();
+        services.AddScoped<INotificationStore, NotificationStore>();
         services.AddScoped<ITagStore, TagStore>();
         services.AddScoped<IPaymentService, StripePaymentService>();
         services.AddScoped<IDownloadService, DownloadService>();

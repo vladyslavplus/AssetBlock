@@ -53,5 +53,13 @@ public static class ApiRoutes
         public const string PROFILE = "{username}";
         public const string ME = "me";
         public const string ME_SOCIALS = "me/socials";
+        public const string ME_NOTIFICATIONS = "me/notifications";
+        public const string ME_NOTIFICATION_READ = "me/notifications/{id:guid}/read";
+    }
+
+    public static class Hubs
+    {
+        // Keep absolute PathString format; used by MapHub and JWT OnMessageReceived StartsWithSegments check.
+        public const string NOTIFICATIONS = "/hubs/notifications";
     }
 }

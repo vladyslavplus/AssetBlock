@@ -1,0 +1,12 @@
+---
+description: Enum member naming (ALL_UPPER_SNAKE) for AssetBlock Domain enums.
+globs: "**/AssetBlock.Domain/**/*.cs"
+alwaysApply: false
+---
+
+# Enum members (Domain)
+
+- Enum **type** names: PascalCase (`NotificationKind`).
+- Enum **members**: `ALL_UPPER_SNAKE_CASE` (e.g. `PURCHASE_COMPLETED`, `REVIEW_RECEIVED`), same spirit as `ErrorCodes`.
+- Do not use PascalCase enum members (`PurchaseCompleted`) in new code.
+- Wire-up to SignalR event names, route templates, or third-party strings via explicit mapping in WebApi/Infrastructure, not by renaming enum members to match.

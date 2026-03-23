@@ -4,12 +4,13 @@ using Microsoft.AspNetCore.SignalR;
 namespace AssetBlock.WebApi.Hubs;
 
 /// <summary>
-/// Notifications for payment completion and download ready.
-/// Clients subscribe by user id (authenticated).
+/// User-scoped real-time notifications; the authenticated user id claim must match SignalR Clients.User routing.
 /// </summary>
 [Authorize]
 public sealed class NotificationsHub : Hub
 {
     public const string PURCHASE_COMPLETED = "PurchaseCompleted";
     public const string DOWNLOAD_READY = "DownloadReady";
+    public const string ASSET_SOLD = "AssetSold";
+    public const string REVIEW_RECEIVED = "ReviewReceived";
 }

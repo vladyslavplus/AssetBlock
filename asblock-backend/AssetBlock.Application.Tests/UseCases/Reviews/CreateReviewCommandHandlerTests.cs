@@ -15,6 +15,7 @@ public class CreateReviewCommandHandlerTests
     private readonly IPurchaseStore _purchaseStoreMock;
     private readonly IAssetStore _assetStoreMock;
     private readonly ICacheService _cacheMock;
+    private readonly IRealtimeNotificationPublisher _notificationsMock;
     private readonly CreateReviewCommandHandler _handler;
 
     public CreateReviewCommandHandlerTests()
@@ -23,12 +24,14 @@ public class CreateReviewCommandHandlerTests
         _purchaseStoreMock = Substitute.For<IPurchaseStore>();
         _assetStoreMock = Substitute.For<IAssetStore>();
         _cacheMock = Substitute.For<ICacheService>();
+        _notificationsMock = Substitute.For<IRealtimeNotificationPublisher>();
 
         _handler = new CreateReviewCommandHandler(
             _reviewStoreMock,
             _purchaseStoreMock,
             _assetStoreMock,
             _cacheMock,
+            _notificationsMock,
             NullLogger<CreateReviewCommandHandler>.Instance);
     }
 
@@ -138,6 +141,13 @@ public class CreateReviewCommandHandlerTests
         result.IsSuccess.Should().BeTrue();
         await _reviewStoreMock.Received(1).Create(command.AssetId, command.UserId, command.Rating, command.Comment, Arg.Any<CancellationToken>());
         await _cacheMock.Received().RemoveByPrefix(Arg.Is<string>(s => s.StartsWith(CacheKeys.REVIEWS_LIST_PREFIX)), Arg.Any<CancellationToken>());
+        await _notificationsMock.Received(1).NotifyReviewReceived(
+            asset.AuthorId,
+            command.AssetId,
+            "A",
+            command.UserId,
+            command.Rating,
+            Arg.Any<CancellationToken>());
     }
 
     [Fact]
