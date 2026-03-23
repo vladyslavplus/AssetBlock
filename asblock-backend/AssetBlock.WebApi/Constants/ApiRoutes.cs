@@ -59,6 +59,7 @@ public static class ApiRoutes
 
     public static class Hubs
     {
+        // Keep absolute PathString format; used by MapHub and JWT OnMessageReceived StartsWithSegments check.
         public const string NOTIFICATIONS = "/hubs/notifications";
     }
 }

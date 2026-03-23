@@ -41,14 +41,14 @@ internal sealed class HandleStripeWebhookCommandHandler(
 
             return Result.Success<PurchaseCompletedPayload?>(new PurchaseCompletedPayload(userId, assetId));
         }
-        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        catch (OperationCanceledException)
         {
             throw;
         }
         catch (Exception ex)
         {
             logger.LogError(ex, "Stripe webhook processing failed.");
-            return Result.Error("Webhook processing failed.");
+            return Result.Error("Stripe webhook processing failed.");
         }
     }
 }

@@ -41,6 +41,7 @@ public sealed class PaymentsController(ISender sender) : ApiControllerBase(sende
     [AllowAnonymous]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status500InternalServerError)]
     public async Task<IActionResult> Webhook(CancellationToken cancellationToken)
     {
         Request.EnableBuffering();
@@ -49,8 +50,7 @@ public sealed class PaymentsController(ISender sender) : ApiControllerBase(sende
         var payload = await reader.ReadToEndAsync(cancellationToken);
 
         var command = new HandleStripeWebhookCommand(payload, signature);
-        await Sender.Send(command, cancellationToken);
-
-        return Ok();
+        var result = await Sender.Send(command, cancellationToken);
+        return result.IsSuccess ? Ok() : MapResultToActionResult(result);
     }
 }

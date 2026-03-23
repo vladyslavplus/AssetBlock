@@ -1,4 +1,5 @@
 using AssetBlock.Application.Common.Validators;
+using AssetBlock.Domain.Core.Constants;
 using AssetBlock.Domain.Core.Dto.Notifications;
 using FluentValidation;
 
@@ -16,6 +17,26 @@ internal sealed class GetNotificationsQueryValidator : AbstractValidator<GetNoti
                 RuleFor(q => q.Request.SortBy)
                     .Must(sortBy => string.IsNullOrEmpty(sortBy) || GetNotificationsRequest.AllowedSortBy.Contains(sortBy))
                     .WithMessage($"SortBy must be one of: {string.Join(", ", GetNotificationsRequest.AllowedSortBy)}.");
+                RuleFor(q => q.Request)
+                    .Must(IsCompatibleUnreadSort)
+                    .WithMessage(ErrorCodesToErrorMessages.GetMessage(ErrorCodes.ERR_NOTIFICATIONS_UNREAD_READ_AT_SORT))
+                    .When(q => q.Request.UnreadOnly == true);
             });
+    }
+
+    private static bool IsCompatibleUnreadSort(GetNotificationsRequest request)
+    {
+        if (string.IsNullOrWhiteSpace(request.SortBy))
+        {
+            return true;
+        }
+
+        var trimmed = request.SortBy.Trim();
+        if (!GetNotificationsRequest.AllowedSortBy.Contains(trimmed))
+        {
+            return true;
+        }
+
+        return !string.Equals(trimmed, "ReadAt", StringComparison.OrdinalIgnoreCase);
     }
 }

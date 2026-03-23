@@ -48,4 +48,6 @@ public static class ErrorCodes
     public const string ERR_CONFLICT = "ERR_CONFLICT";
 
     public const string ERR_NOTIFICATION_NOT_FOUND = "ERR_NOTIFICATION_NOT_FOUND";
+    public const string ERR_NOTIFICATIONS_LIST_FAILED = "ERR_NOTIFICATIONS_LIST_FAILED";
+    public const string ERR_NOTIFICATIONS_UNREAD_READ_AT_SORT = "ERR_NOTIFICATIONS_UNREAD_READ_AT_SORT";
 }

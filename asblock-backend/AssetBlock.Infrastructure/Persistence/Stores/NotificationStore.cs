@@ -11,15 +11,20 @@ internal sealed class NotificationStore(ApplicationDbContext dbContext, ILogger<
 {
     public async Task<UserNotification> Add(UserNotification notification, CancellationToken cancellationToken = default)
     {
-        dbContext.UserNotifications.Add(notification);
         try
         {
+            dbContext.UserNotifications.Add(notification);
             await dbContext.SaveChangesAsync(cancellationToken);
             logger.LogDebug("Persisted notification {NotificationId} for user {UserId}", notification.Id, notification.RecipientUserId);
             return notification;
         }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
         catch (Exception ex)
         {
+            dbContext.Entry(notification).State = EntityState.Detached;
             logger.LogError(ex, "Failed to persist notification for user {UserId}", notification.RecipientUserId);
             throw;
         }
@@ -45,15 +50,17 @@ internal sealed class NotificationStore(ApplicationDbContext dbContext, ILogger<
         query = sortKey switch
         {
             "CREATEDAT" => isDesc ? query.OrderByDescending(n => n.CreatedAt) : query.OrderBy(n => n.CreatedAt),
-            _ => isDesc ? query.OrderByDescending(n => n.CreatedAt) : query.OrderBy(n => n.CreatedAt)
+            "READAT" => isDesc ? query.OrderByDescending(n => n.ReadAt) : query.OrderBy(n => n.ReadAt),
+            _ => throw new ArgumentOutOfRangeException(nameof(request.SortBy), sortBy, $"Unexpected sort key after validation: {sortBy}.")
         };
 
+        var page = Math.Max(1, request.Page);
         var items = await query
-            .Skip((request.Page - 1) * request.PageSize)
+            .Skip((page - 1) * request.PageSize)
             .Take(request.PageSize)
             .ToListAsync(cancellationToken);
 
-        return new PagedResult<UserNotification>(items, total, request.Page, request.PageSize);
+        return new PagedResult<UserNotification>(items, total, page, request.PageSize);
     }
 
     public async Task<bool> MarkRead(Guid recipientUserId, Guid notificationId, CancellationToken cancellationToken = default)

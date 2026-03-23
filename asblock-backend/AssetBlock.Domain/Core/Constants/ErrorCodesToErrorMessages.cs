@@ -41,7 +41,9 @@ public static class ErrorCodesToErrorMessages
         { ErrorCodes.ERR_FORBIDDEN, "Forbidden." },
         { ErrorCodes.ERR_BAD_REQUEST, "An error occurred." },
         { ErrorCodes.ERR_CONFLICT, "Resource conflict." },
-        { ErrorCodes.ERR_NOTIFICATION_NOT_FOUND, "Notification not found." }
+        { ErrorCodes.ERR_NOTIFICATION_NOT_FOUND, "Notification not found." },
+        { ErrorCodes.ERR_NOTIFICATIONS_LIST_FAILED, "Failed to load notifications." },
+        { ErrorCodes.ERR_NOTIFICATIONS_UNREAD_READ_AT_SORT, "When UnreadOnly is true, SortBy cannot be ReadAt. Unread notifications have no ReadAt; use CreatedAt or omit SortBy." }
     };
 
     public static string GetMessage(string code) =>

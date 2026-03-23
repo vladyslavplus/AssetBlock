@@ -1,5 +1,7 @@
 using Ardalis.Result;
+using AssetBlock.Application.Common;
 using AssetBlock.Domain.Abstractions.Services;
+using AssetBlock.Domain.Core.Constants;
 using AssetBlock.Domain.Core.Dto.Notifications;
 using MediatR;
 using Microsoft.Extensions.Logging;
@@ -13,18 +15,30 @@ internal sealed class GetNotificationsQueryHandler(
 {
     public async Task<Result<Domain.Core.Dto.Paging.PagedResult<NotificationListItemDto>>> Handle(GetNotificationsQuery request, CancellationToken cancellationToken)
     {
-        var paged = await notificationStore.GetPaged(request.UserId, request.Request, cancellationToken);
-        var items = paged.Items
-            .Select(n => new NotificationListItemDto(
-                n.Id,
-                n.Kind.ToString(),
-                n.MetadataJson,
-                n.CreatedAt,
-                n.ReadAt))
-            .ToList();
+        try
+        {
+            var paged = await notificationStore.GetPaged(request.UserId, request.Request, cancellationToken);
+            var items = paged.Items
+                .Select(n => new NotificationListItemDto(
+                    n.Id,
+                    n.Kind.ToString(),
+                    n.MetadataJson,
+                    n.CreatedAt,
+                    n.ReadAt))
+                .ToList();
 
-        var result = new Domain.Core.Dto.Paging.PagedResult<NotificationListItemDto>(items, paged.TotalCount, paged.Page, paged.PageSize);
-        logger.LogDebug("Listed {Count} notifications for user {UserId} (page {Page})", items.Count, request.UserId, request.Request.Page);
-        return Result.Success(result);
+            var result = new Domain.Core.Dto.Paging.PagedResult<NotificationListItemDto>(items, paged.TotalCount, paged.Page, paged.PageSize);
+            logger.LogDebug("Listed {Count} notifications for user {UserId} (page {Page})", items.Count, request.UserId, request.Request.Page);
+            return Result.Success(result);
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Failed to list notifications for user {UserId} (page {Page})", request.UserId, request.Request.Page);
+            return ResultError.Error<Domain.Core.Dto.Paging.PagedResult<NotificationListItemDto>>(ErrorCodes.ERR_NOTIFICATIONS_LIST_FAILED);
+        }
     }
 }

@@ -1,4 +1,3 @@
-using Ardalis.Result;
 using AssetBlock.Application.UseCases.Payments.HandleStripeWebhook;
 using AssetBlock.Domain.Abstractions.Services;
 using AssetBlock.Domain.Core.Entities;
@@ -119,6 +118,7 @@ public class HandleStripeWebhookCommandHandlerTests
 
         result.IsSuccess.Should().BeTrue();
         await _notificationsMock.Received(1).NotifyPurchaseCompleted(userId, assetId, "Own", Arg.Any<CancellationToken>());
+        await _notificationsMock.Received(1).NotifyDownloadReady(userId, assetId, "Own", Arg.Any<CancellationToken>());
         await _notificationsMock.DidNotReceive().NotifyAssetSold(Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<Guid>(), Arg.Any<CancellationToken>());
     }
 
@@ -136,23 +136,22 @@ public class HandleStripeWebhookCommandHandlerTests
 
         result.IsSuccess.Should().BeTrue();
         await _notificationsMock.DidNotReceive().NotifyPurchaseCompleted(Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<CancellationToken>());
+        await _notificationsMock.DidNotReceive().NotifyDownloadReady(Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<CancellationToken>());
+        await _notificationsMock.DidNotReceive().NotifyAssetSold(Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<Guid>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]
-    public async Task Handle_WhenPaymentServiceThrows_ShouldReturnErrorResult()
+    public async Task Handle_WhenPaymentServiceThrows_ShouldPropagateException()
     {
         // Arrange — simulates Stripe signature mismatch or network failure
         var command = new HandleStripeWebhookCommand("bad-payload", "bad-sig");
         _paymentServiceMock.HandleCheckoutCompleted(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
             .ThrowsAsync(new InvalidOperationException("Stripe signature validation failed"));
 
-        // Act
-        var result = await _handler.Handle(command, CancellationToken.None);
-
-        // Assert
-        result.IsSuccess.Should().BeFalse();
-        result.Status.Should().Be(ResultStatus.Error);
-        result.Errors.Should().NotBeEmpty();
+        // Act & Assert — bubbles so WebApi can return 5xx and Stripe may retry transient failures
+        var act = () => _handler.Handle(command, CancellationToken.None);
+        await act.Should().ThrowAsync<InvalidOperationException>()
+            .WithMessage("Stripe signature validation failed");
     }
 
     [Fact]
