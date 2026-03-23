@@ -48,7 +48,7 @@ internal sealed class HandleStripeWebhookCommandHandler(
         catch (Exception ex)
         {
             logger.LogError(ex, "Stripe webhook processing failed.");
-            return Result.Error("Stripe webhook processing failed.");
+            throw;
         }
     }
 }
