@@ -1,7 +1,11 @@
 using AssetBlock.Application.UseCases.Users.GetProfile;
+using AssetBlock.Application.UseCases.Users.ListNotifications;
 using AssetBlock.Application.UseCases.Users.ListSocialPlatforms;
+using AssetBlock.Application.UseCases.Users.MarkNotificationRead;
 using AssetBlock.Application.UseCases.Users.UpdateProfile;
 using AssetBlock.Application.UseCases.Users.UpdateSocialLinks;
+using AssetBlock.Domain.Core.Dto.Notifications;
+using AssetBlock.Domain.Core.Dto.Paging;
 using AssetBlock.Domain.Core.Dto.Users;
 using AssetBlock.WebApi.Constants;
 using MediatR;
@@ -24,6 +28,46 @@ public sealed class UsersController(ISender sender) : ApiControllerBase(sender)
     public async Task<IActionResult> ListSocialPlatforms(CancellationToken cancellationToken)
     {
         var result = await Sender.Send(new ListSocialPlatformsQuery(), cancellationToken);
+        return MapResultToActionResult(result);
+    }
+
+    /// <summary>
+    /// List notifications for the current user (newest first by default).
+    /// </summary>
+    [HttpGet(ApiRoutes.Users.ME_NOTIFICATIONS)]
+    [Authorize]
+    [ProducesResponseType(typeof(PagedResult<NotificationListItemDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> ListMyNotifications([FromQuery] GetNotificationsRequest request, CancellationToken cancellationToken)
+    {
+        var userId = GetUserId();
+        if (userId is null)
+        {
+            return Unauthorized();
+        }
+
+        var result = await Sender.Send(new GetNotificationsQuery(userId.Value, request), cancellationToken);
+        return MapResultToActionResult(result);
+    }
+
+    /// <summary>
+    /// Mark a notification as read.
+    /// </summary>
+    [HttpPatch(ApiRoutes.Users.ME_NOTIFICATION_READ)]
+    [Authorize]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> MarkMyNotificationRead(Guid id, CancellationToken cancellationToken)
+    {
+        var userId = GetUserId();
+        if (userId is null)
+        {
+            return Unauthorized();
+        }
+
+        var result = await Sender.Send(new MarkNotificationReadCommand(userId.Value, id), cancellationToken);
         return MapResultToActionResult(result);
     }
 

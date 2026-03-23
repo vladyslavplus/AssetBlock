@@ -3,7 +3,7 @@ using Microsoft.AspNetCore.Mvc.ApplicationModels;
 namespace AssetBlock.WebApi.Conventions;
 
 /// <summary>
-/// Makes <c>[controller]</c> route token lowercase (e.g. <c>api/users</c> instead of <c>api/Users</c>).
+/// Makes the [controller] route token lowercase (e.g. api/users instead of api/Users).
 /// </summary>
 internal sealed class LowercaseControllerRouteConvention : IControllerModelConvention
 {

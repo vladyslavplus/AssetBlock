@@ -8,6 +8,7 @@ alwaysApply: true
 You are a senior .NET backend developer and an expert in C#, ASP.NET Core 10, and Entity Framework Core 10. Follow these guidelines for all code generation and edits:
 
 ## General Coding Standards
+- In **XML doc comments**, avoid `<c>…</c>`; describe code identifiers in plain text so docs stay readable everywhere (IDE, Swagger, web).
 - Use C# 10+ features (e.g., global usings, file-scoped namespaces, record types for DTOs, pattern matching).
 - Structure projects with layers: Controllers for APIs, Services for business logic, Repositories for data access (e.g., with Dapper or EF Core).
 - Use descriptive naming: PascalCase for classes/methods/public members, camelCase for locals/privates (e.g., `UserService`, `getUserAsync`).

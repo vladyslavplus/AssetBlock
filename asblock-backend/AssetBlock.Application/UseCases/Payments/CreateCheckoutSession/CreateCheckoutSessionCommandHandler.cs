@@ -10,6 +10,7 @@ namespace AssetBlock.Application.UseCases.Payments.CreateCheckoutSession;
 internal sealed class CreateCheckoutSessionCommandHandler(
     IPaymentService paymentService,
     IAssetStore assetStore,
+    IPurchaseStore purchaseStore,
     ILogger<CreateCheckoutSessionCommandHandler> logger)
     : IRequestHandler<CreateCheckoutSessionCommand, Result<CreateCheckoutSessionResponse>>
 {
@@ -25,6 +26,12 @@ internal sealed class CreateCheckoutSessionCommandHandler(
         if (asset.AuthorId == request.UserId)
         {
             return ResultError.Error<CreateCheckoutSessionResponse>(ErrorCodes.ERR_CANNOT_PURCHASE_OWN_ASSET);
+        }
+
+        var existingPurchase = await purchaseStore.GetPurchase(request.UserId, request.AssetId, cancellationToken);
+        if (existingPurchase is not null)
+        {
+            return ResultError.Error<CreateCheckoutSessionResponse>(ErrorCodes.ERR_ASSET_ALREADY_PURCHASED);
         }
 
         try
