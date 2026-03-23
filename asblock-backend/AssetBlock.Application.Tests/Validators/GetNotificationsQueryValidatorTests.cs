@@ -60,6 +60,19 @@ public class GetNotificationsQueryValidatorTests
     }
 
     [Fact]
+    public async Task Validate_WhenUnreadOnlyAndInvalidSortBy_ShouldFailSortRule()
+    {
+        var query = new GetNotificationsQuery(
+            Guid.NewGuid(),
+            new GetNotificationsRequest { UnreadOnly = true, SortBy = "NotASort" });
+
+        var result = await _validator.ValidateAsync(query);
+
+        result.IsValid.Should().BeFalse();
+        result.Errors.Should().Contain(e => e.PropertyName == "Request.SortBy");
+    }
+
+    [Fact]
     public async Task Validate_WhenReadAtSortAndUnreadOnlyFalse_ShouldPass()
     {
         var query = new GetNotificationsQuery(

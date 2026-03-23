@@ -96,4 +96,18 @@ public class GetCategoriesQueryHandlerTests
         await _categoryStoreMock.Received(1).GetPaged(Arg.Any<GetCategoriesRequest>(), Arg.Any<CancellationToken>());
         await _cacheMock.Received(1).RemoveByPrefix(CacheKeys.CATEGORIES_LIST_PREFIX, Arg.Any<CancellationToken>());
     }
+
+    [Fact]
+    public async Task Handle_WhenCacheContainsNullJson_ShouldFetchFromStore()
+    {
+        _cacheMock.GetString(Arg.Any<string>(), Arg.Any<CancellationToken>()).Returns("null");
+        var emptyPaged = new PagedResult<Category>([], 0, 1, 10);
+        _categoryStoreMock.GetPaged(Arg.Any<GetCategoriesRequest>(), Arg.Any<CancellationToken>()).Returns(emptyPaged);
+
+        var query = new GetCategoriesQuery(new GetCategoriesRequest { Page = 1, PageSize = 10 });
+        var result = await _handler.Handle(query, CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        await _categoryStoreMock.Received(1).GetPaged(Arg.Any<GetCategoriesRequest>(), Arg.Any<CancellationToken>());
+    }
 }

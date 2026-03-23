@@ -5,6 +5,7 @@ using AssetBlock.Domain.Core.Entities;
 using FluentAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
 using NSubstitute;
+using NSubstitute.ExceptionExtensions;
 
 namespace AssetBlock.Application.Tests.UseCases.Assets;
 
@@ -80,5 +81,21 @@ public class DeleteAssetCommandHandlerTests
         await _searchServiceMock.Received(1).DeleteAsset(command.Id);
         await _storageServiceMock.Received(1).Delete("key");
         await _cacheMock.Received(1).RemoveByPrefix(CacheKeys.ASSETS_LIST_PREFIX);
+    }
+
+    [Fact]
+    public async Task Handle_WhenStorageDeleteThrows_ShouldReturnError()
+    {
+        var authorId = Guid.NewGuid();
+        var command = new DeleteAssetCommand(Guid.NewGuid(), authorId);
+        var asset = new Asset { Id = command.Id, AuthorId = authorId, StorageKey = "key", CategoryId = Guid.NewGuid(), Title = "t", FileName = "f" };
+        _assetStoreMock.GetById(command.Id).Returns(asset);
+        _storageServiceMock.Delete(asset.StorageKey, Arg.Any<CancellationToken>())
+            .ThrowsAsync(new IOException("storage"));
+
+        var result = await _handler.Handle(command, CancellationToken.None);
+
+        result.IsSuccess.Should().BeFalse();
+        result.Status.Should().Be(Ardalis.Result.ResultStatus.Error);
     }
 }

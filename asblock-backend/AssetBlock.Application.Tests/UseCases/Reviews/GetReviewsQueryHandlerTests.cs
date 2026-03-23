@@ -95,4 +95,40 @@ public class GetReviewsQueryHandlerTests
             Arg.Any<TimeSpan?>(), 
             Arg.Any<CancellationToken>());
     }
+
+    [Fact]
+    public async Task Handle_WhenCacheContainsNullJson_ShouldFetchFromStore()
+    {
+        var assetId = Guid.NewGuid();
+        var request = new GetReviewsRequest { Page = 1, PageSize = 10 };
+        var query = new GetReviewsQuery(assetId, request);
+        var key = CacheKeys.ReviewsList(assetId, request);
+
+        _cacheMock.GetString(key, Arg.Any<CancellationToken>()).Returns("null");
+        _reviewStoreMock.GetPaged(assetId, request, Arg.Any<CancellationToken>())
+            .Returns(new PagedResult<Review>([], 0, 1, 10));
+
+        var result = await _handler.Handle(query, CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        await _reviewStoreMock.Received(1).GetPaged(assetId, request, Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Handle_WhenCacheCorrupt_ShouldInvalidateAndFetch()
+    {
+        var assetId = Guid.NewGuid();
+        var request = new GetReviewsRequest { Page = 1, PageSize = 10 };
+        var query = new GetReviewsQuery(assetId, request);
+        var key = CacheKeys.ReviewsList(assetId, request);
+
+        _cacheMock.GetString(key, Arg.Any<CancellationToken>()).Returns("{bad");
+        _reviewStoreMock.GetPaged(assetId, request, Arg.Any<CancellationToken>())
+            .Returns(new PagedResult<Review>([], 0, 1, 10));
+
+        var result = await _handler.Handle(query, CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        await _cacheMock.Received(1).RemoveByPrefix(CacheKeys.ReviewsListAssetPrefix(assetId), Arg.Any<CancellationToken>());
+    }
 }

@@ -125,4 +125,29 @@ public class GetReviewByIdQueryHandlerTests
         result.IsSuccess.Should().BeTrue();
         await _cacheMock.Received(1).RemoveByPrefix(key, Arg.Any<CancellationToken>());
     }
+
+    [Fact]
+    public async Task Handle_WhenCacheContainsNullJson_ShouldFetchFromStore()
+    {
+        var query = new GetReviewByIdQuery(Guid.NewGuid());
+        var key = CacheKeys.ReviewItem(query.Id);
+
+        _cacheMock.GetString(key, Arg.Any<CancellationToken>()).Returns("null");
+        var review = new Review
+        {
+            Id = query.Id,
+            AssetId = Guid.NewGuid(),
+            UserId = Guid.NewGuid(),
+            Rating = 3,
+            Comment = "Ok",
+            CreatedAt = DateTimeOffset.UtcNow,
+            User = new User { Id = Guid.NewGuid(), Username = "u", Email = "a@a.com", PasswordHash = "h", Role = AppRoles.USER }
+        };
+        _reviewStoreMock.GetById(query.Id, Arg.Any<CancellationToken>()).Returns(review);
+
+        var result = await _handler.Handle(query, CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.Username.Should().Be("u");
+    }
 }

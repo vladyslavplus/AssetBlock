@@ -82,6 +82,27 @@ public class RegisterCommandHandlerTests
     }
 
     [Fact]
+    public async Task Handle_WhenRollbackDeleteFails_ShouldThrowOriginalAndLogDeleteFailure()
+    {
+        var command = new RegisterCommand("newuser", "new@example.com", "password123");
+        var user = new User { Id = Guid.NewGuid(), Username = "newuser", Email = "new@example.com", PasswordHash = "hashed", Role = AppRoles.USER };
+        var tokenResponse = new TokensResponse("acc", "ref", DateTimeOffset.UtcNow.AddMinutes(15), DateTimeOffset.UtcNow.AddDays(7));
+
+        _userStoreMock.GetByEmail(command.Email, Arg.Any<CancellationToken>()).Returns((User?)null);
+        _passwordHasherMock.Hash(command.Password).Returns("hashed");
+        _userStoreMock.Create("newuser", Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>()).Returns(user);
+        _jwtTokenServiceMock.GenerateTokenPair(user.Id, user.Username, user.Email, user.Role).Returns(tokenResponse);
+        _jwtTokenServiceMock.StoreRefreshToken(user.Id, "ref", tokenResponse.RefreshExpiresAt, Arg.Any<CancellationToken>())
+            .ThrowsAsync(new Exception("Redis unavailable"));
+        _userStoreMock.Delete(user.Id, Arg.Any<CancellationToken>())
+            .ThrowsAsync(new Exception("delete failed"));
+
+        var act = async () => await _handler.Handle(command, CancellationToken.None);
+
+        await act.Should().ThrowAsync<Exception>().WithMessage("Redis unavailable");
+    }
+
+    [Fact]
     public async Task Handle_WhenSuccessful_ShouldReturnTokens()
     {
         var command = new RegisterCommand("newuser", "new@example.com", "password123");
