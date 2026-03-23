@@ -28,7 +28,7 @@ internal sealed class AssetIndexEventHandler(
         {
             Id = asset.Id,
             Title = asset.Title,
-            Description = asset.Description ?? "",
+            Description = asset.Description,
             Price = asset.Price,
             CategoryId = asset.CategoryId,
             CategoryName = asset.Category.Name,

@@ -1,5 +1,6 @@
 using System.Text;
 using AssetBlock.Domain.Core.Constants;
+using AssetBlock.WebApi.Constants;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
 
@@ -32,6 +33,18 @@ internal static class JwtAuthenticationExtensions
 
                 options.Events = new JwtBearerEvents
                 {
+                    OnMessageReceived = ctx =>
+                    {
+                        // WebSockets cannot set Authorization; SignalR clients pass access_token in the query string.
+                        var accessToken = ctx.Request.Query["access_token"];
+                        if (!string.IsNullOrEmpty(accessToken) &&
+                            ctx.Request.Path.StartsWithSegments(ApiRoutes.Hubs.NOTIFICATIONS))
+                        {
+                            ctx.Token = accessToken;
+                        }
+
+                        return Task.CompletedTask;
+                    },
                     OnAuthenticationFailed = ctx =>
                     {
                         var logger = ctx.HttpContext.RequestServices.GetRequiredService<ILogger<JwtBearerEvents>>();

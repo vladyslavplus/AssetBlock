@@ -3,16 +3,14 @@ using AssetBlock.Application.UseCases.Payments.HandleStripeWebhook;
 using AssetBlock.Domain.Core.Constants;
 using AssetBlock.Domain.Core.Dto.Payments;
 using AssetBlock.WebApi.Constants;
-using AssetBlock.WebApi.Hubs;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
-using Microsoft.AspNetCore.SignalR;
 
 namespace AssetBlock.WebApi.Controllers;
 
-public sealed class PaymentsController(ISender sender, IHubContext<NotificationsHub> hubContext) : ApiControllerBase(sender)
+public sealed class PaymentsController(ISender sender) : ApiControllerBase(sender)
 {
     /// <summary>
     /// Create a Stripe Checkout session for an asset. Returns redirect URL.
@@ -43,6 +41,7 @@ public sealed class PaymentsController(ISender sender, IHubContext<Notifications
     [AllowAnonymous]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status500InternalServerError)]
     public async Task<IActionResult> Webhook(CancellationToken cancellationToken)
     {
         Request.EnableBuffering();
@@ -52,16 +51,6 @@ public sealed class PaymentsController(ISender sender, IHubContext<Notifications
 
         var command = new HandleStripeWebhookCommand(payload, signature);
         var result = await Sender.Send(command, cancellationToken);
-
-        if (!result.IsSuccess || result.Value is null)
-        {
-            return Ok();
-        }
-
-        var completed = result.Value;
-        await hubContext.Clients.User(completed.UserId.ToString())
-            .SendAsync(NotificationsHub.PURCHASE_COMPLETED, completed.AssetId, cancellationToken);
-
-        return Ok();
+        return result.IsSuccess ? Ok() : MapResultToActionResult(result);
     }
 }

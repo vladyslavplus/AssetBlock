@@ -37,6 +37,8 @@ description: >-
 ## Constants (do not scatter magic strings)
 
 - **`private const` fields** in validators and other classes: **ALL_UPPER** with underscores (e.g. `MAX_LINKS`, `MAX_URL_LENGTH`). This matches `.editorconfig` rule `constant_fields_should_be_all_upper` (IDE naming). Do not use PascalCase like `MaxLinks` for `const` fields.
+- **Private fields** (including `private static readonly`): **`_camelCase`** (e.g. `_jsonOptions`). Matches `.editorconfig` rule `private_fields_should_be_cames_case`. Not PascalCase.
+- **Enum members** (e.g. `NotificationKind`): **ALL_UPPER_SNAKE_CASE** (`PURCHASE_COMPLETED`, `ASSET_SOLD`), aligned with `ErrorCodes` style. The enum *type* name stays PascalCase. Map to external strings (SignalR names, legacy clients) in WebApi/Infrastructure when needed.
 - **HTTP route segments**: `AssetBlock.WebApi.Constants.ApiRoutes` (nested static classes per area).
 - **API error identifiers**: `ErrorCodes` + `ErrorCodesToErrorMessages`.
 - **Cache keys**: `CacheKeys` in Domain; use helpers for parameterized keys (e.g. list invalidation prefixes).
@@ -96,6 +98,7 @@ description: >-
 
 - File-scoped namespaces; primary constructors for handlers/services where already used.
 - English identifiers and comments only; **no non-ASCII characters in source** (no Cyrillic/emojis in code, strings committed as product literals, or comments).
+- **XML documentation** (`/// <summary>` etc.): **do not use `<c>…</c>`** (renders poorly in some UIs). Use plain prose for code-like fragments (e.g. "Stripe product_data.description", "SignalR PurchaseCompleted", "ReadAt property").
 - Keep comments short; explain non-obvious **why**, not restating the code.
 - Dependencies: register in `Infrastructure.DependencyInjection` or `Application.DependencyInjection` as appropriate; stores are usually **scoped**.
 

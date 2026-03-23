@@ -13,6 +13,7 @@ public sealed class ApplicationDbContext(DbContextOptions<ApplicationDbContext> 
     public DbSet<Review> Reviews => Set<Review>();
     public DbSet<Tag> Tags => Set<Tag>();
     public DbSet<AssetTag> AssetTags => Set<AssetTag>();
+    public DbSet<UserNotification> UserNotifications => Set<UserNotification>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

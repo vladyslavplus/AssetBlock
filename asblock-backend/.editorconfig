@@ -102,6 +102,12 @@ dotnet_naming_rule.interface_name_should_be_pascal_case.severity  = warning
 dotnet_naming_rule.interface_name_should_be_pascal_case.symbols   = interface_name
 dotnet_naming_rule.interface_name_should_be_pascal_case.style     = i_pascal_case_style
 
+# Enum members: ALL_UPPER_SNAKE (same style as ERR_* constants)
+dotnet_naming_symbols.enum_members.applicable_kinds               = enum_member
+dotnet_naming_rule.enum_members_should_be_all_upper.severity      = warning
+dotnet_naming_rule.enum_members_should_be_all_upper.symbols       = enum_members
+dotnet_naming_rule.enum_members_should_be_all_upper.style         = all_upper_case_style
+
 ###############################
 # C# Coding Conventions       #
 ###############################

@@ -12,6 +12,7 @@ internal sealed class CreateReviewCommandHandler(
     IPurchaseStore purchaseStore,
     IAssetStore assetStore,
     ICacheService cache,
+    IRealtimeNotificationPublisher realtimeNotifications,
     ILogger<CreateReviewCommandHandler> logger) : IRequestHandler<CreateReviewCommand, Result>
 {
     public async Task<Result> Handle(CreateReviewCommand request, CancellationToken cancellationToken)
@@ -52,6 +53,13 @@ internal sealed class CreateReviewCommandHandler(
         {
             await reviewStore.Create(request.AssetId, request.UserId, request.Rating, request.Comment, cancellationToken);
             await cache.RemoveByPrefix(CacheKeys.ReviewsListAssetPrefix(request.AssetId), cancellationToken);
+            await realtimeNotifications.NotifyReviewReceived(
+                asset.AuthorId,
+                asset.Id,
+                asset.Title,
+                request.UserId,
+                request.Rating,
+                cancellationToken);
             logger.LogInformation("CreateReview succeeded: user {UserId} reviewed asset {AssetId}", request.UserId, request.AssetId);
             return Result.Success();
         }
