@@ -77,4 +77,28 @@ public class UpdateUserProfileCommandHandlerTests
         result.Value.Bio.Should().Be("bio");
         result.Value.IsPublicProfile.Should().BeTrue();
     }
+
+    [Fact]
+    public async Task Handle_WhenAvatarAndBioAreWhitespace_ShouldClearToNull()
+    {
+        var id = Guid.NewGuid();
+        var user = new User
+        {
+            Id = id,
+            Username = "u",
+            Email = "e@e.com",
+            PasswordHash = "h",
+            Role = AppRoles.USER,
+            AvatarUrl = "https://old",
+            Bio = "old"
+        };
+        _userStore.GetByIdForUpdate(id, Arg.Any<CancellationToken>()).Returns(user);
+        _userStore.Update(Arg.Any<User>(), Arg.Any<CancellationToken>()).Returns(callInfo => callInfo.Arg<User>());
+
+        var result = await _handler.Handle(new UpdateUserProfileCommand(id, null, "   ", "  \t ", null), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.AvatarUrl.Should().BeNull();
+        result.Value.Bio.Should().BeNull();
+    }
 }

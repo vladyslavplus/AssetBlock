@@ -1,5 +1,6 @@
 using AssetBlock.Application.UseCases.Tags.GetTags;
 using AssetBlock.Domain.Abstractions.Services;
+using AssetBlock.Domain.Core.Constants;
 using AssetBlock.Domain.Core.Dto.Paging;
 using AssetBlock.Domain.Core.Dto.Tags;
 using AssetBlock.Domain.Core.Entities;
@@ -75,5 +76,35 @@ public class GetTagsQueryHandlerTests
         result.Value.TotalCount.Should().Be(1);
 
         await _cacheMock.Received(1).SetString(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<TimeSpan>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Handle_WhenCacheContainsNullJson_ShouldFetchFromStore()
+    {
+        var request = new GetTagsRequest { Page = 1, PageSize = 10 };
+        var query = new GetTagsQuery(request);
+        _cacheMock.GetString(Arg.Any<string>(), Arg.Any<CancellationToken>()).Returns("null");
+        _tagStoreMock.SearchTags(Arg.Any<GetTagsRequest>(), Arg.Any<CancellationToken>())
+            .Returns(new PagedResult<Tag>([], 0, 1, 10));
+
+        var result = await _handler.Handle(query, CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        await _tagStoreMock.Received(1).SearchTags(Arg.Any<GetTagsRequest>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Handle_WhenCacheCorrupt_ShouldInvalidateAndFetch()
+    {
+        var request = new GetTagsRequest { Page = 1, PageSize = 10 };
+        var query = new GetTagsQuery(request);
+        _cacheMock.GetString(Arg.Any<string>(), Arg.Any<CancellationToken>()).Returns("{");
+        _tagStoreMock.SearchTags(Arg.Any<GetTagsRequest>(), Arg.Any<CancellationToken>())
+            .Returns(new PagedResult<Tag>([], 0, 1, 10));
+
+        var result = await _handler.Handle(query, CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        await _cacheMock.Received(1).RemoveByPrefix(CacheKeys.TAGS_LIST_PREFIX, Arg.Any<CancellationToken>());
     }
 }

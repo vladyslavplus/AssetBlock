@@ -6,6 +6,7 @@ using FluentAssertions;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using NSubstitute;
+using NSubstitute.ExceptionExtensions;
 
 namespace AssetBlock.Application.Tests.UseCases.Categories;
 
@@ -56,5 +57,17 @@ public class GetCategoryByIdQueryHandlerTests
         result.Value.Name.Should().Be("Found");
         result.Value.Slug.Should().Be("found-slug");
         result.Value.Description.Should().Be("Desc");
+    }
+
+    [Fact]
+    public async Task Handle_WhenStoreThrows_ShouldPropagate()
+    {
+        var query = new GetCategoryByIdQuery(Guid.NewGuid());
+        _categoryStoreMock.GetById(query.Id, Arg.Any<CancellationToken>())
+            .ThrowsAsync(new InvalidOperationException("db"));
+
+        var act = () => _handler.Handle(query, CancellationToken.None);
+
+        await act.Should().ThrowAsync<InvalidOperationException>();
     }
 }

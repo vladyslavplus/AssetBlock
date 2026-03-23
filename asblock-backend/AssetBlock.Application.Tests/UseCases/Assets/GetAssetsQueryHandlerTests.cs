@@ -128,4 +128,58 @@ public class GetAssetsQueryHandlerTests
         result.Value.Items.Should().BeEmpty();
         result.Value.TotalCount.Should().Be(0);
     }
+
+    [Fact]
+    public async Task Handle_WhenCacheContainsNullJson_ShouldFetchFromStore()
+    {
+        _cacheMock.GetString(Arg.Any<string>(), Arg.Any<CancellationToken>()).Returns("null");
+        var emptyPaged = new PagedResult<AssetDocument>([], 0, 1, 10);
+        _searchServiceMock.SearchAssets(Arg.Any<GetAssetsRequest>(), Arg.Any<CancellationToken>()).Returns(emptyPaged);
+
+        var query = new GetAssetsQuery(new GetAssetsRequest { Page = 1, PageSize = 10 });
+        var result = await _handler.Handle(query, CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        await _searchServiceMock.Received(1).SearchAssets(Arg.Any<GetAssetsRequest>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Handle_ShouldNormalizeTagListAndWhitespaceDescriptions()
+    {
+        _cacheMock.GetString(Arg.Any<string>(), Arg.Any<CancellationToken>()).Returns((string?)null);
+        var categoryId = Guid.NewGuid();
+        var authorId = Guid.NewGuid();
+        var docs = new List<AssetDocument>
+        {
+            new()
+            {
+                Id = Guid.NewGuid(),
+                AuthorId = authorId,
+                CategoryId = categoryId,
+                Title = "A",
+                Description = "   ",
+                Price = 1,
+                StorageKey = "k",
+                CreatedAt = DateTimeOffset.UtcNow,
+                CategoryName = "Cat",
+                AuthorUsername = "u",
+                Tags = ["x"],
+                AverageRating = 0
+            }
+        };
+        _searchServiceMock.SearchAssets(Arg.Any<GetAssetsRequest>(), Arg.Any<CancellationToken>())
+            .Returns(new PagedResult<AssetDocument>(docs, 1, 1, 10));
+
+        var query = new GetAssetsQuery(new GetAssetsRequest
+        {
+            Page = 1,
+            PageSize = 10,
+            Tags = ["alpha, Beta ", "alpha"]
+        });
+
+        var result = await _handler.Handle(query, CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.Items[0].Description.Should().BeNull();
+    }
 }

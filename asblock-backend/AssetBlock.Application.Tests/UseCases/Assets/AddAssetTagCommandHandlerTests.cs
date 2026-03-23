@@ -6,6 +6,7 @@ using FluentAssertions;
 using MediatR;
 using Microsoft.Extensions.Logging.Abstractions;
 using NSubstitute;
+using NSubstitute.ExceptionExtensions;
 
 namespace AssetBlock.Application.Tests.UseCases.Assets;
 
@@ -136,5 +137,24 @@ public class AddAssetTagCommandHandlerTests
 
         await _tagStoreMock.DidNotReceive().Add(Arg.Any<Tag>());
         await _assetStoreMock.Received(1).AddTag(command.AssetId, tag.Id);
+    }
+
+    [Fact]
+    public async Task Handle_WhenAddTagThrows_ShouldReturnError()
+    {
+        var authorId = Guid.NewGuid();
+        var command = new AddAssetTagCommand(Guid.NewGuid(), authorId, "existing");
+        var asset = new Asset { Id = command.AssetId, AuthorId = authorId, CategoryId = Guid.NewGuid(), Title = "t", StorageKey = "k", FileName = "f", AssetTags = [] };
+        var tag = new Tag { Id = Guid.NewGuid(), Name = "existing" };
+
+        _assetStoreMock.GetById(command.AssetId).Returns(asset);
+        _tagStoreMock.GetByName("existing").Returns(tag);
+        _assetStoreMock.AddTag(command.AssetId, tag.Id, Arg.Any<CancellationToken>())
+            .ThrowsAsync(new InvalidOperationException("db"));
+
+        var result = await _handler.Handle(command, CancellationToken.None);
+
+        result.IsSuccess.Should().BeFalse();
+        result.Status.Should().Be(Ardalis.Result.ResultStatus.Error);
     }
 }

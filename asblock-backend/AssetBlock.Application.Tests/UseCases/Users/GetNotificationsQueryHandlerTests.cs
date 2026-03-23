@@ -53,6 +53,21 @@ public class GetNotificationsQueryHandlerTests
     }
 
     [Fact]
+    public async Task Handle_WhenCanceled_ShouldPropagateOperationCanceled()
+    {
+        using var cts = new CancellationTokenSource();
+        await cts.CancelAsync();
+        var userId = Guid.NewGuid();
+        var request = new GetNotificationsRequest { Page = 1, PageSize = 10 };
+        _storeMock.GetPaged(userId, request, Arg.Any<CancellationToken>())
+            .ThrowsAsync(new OperationCanceledException());
+
+        var act = () => _handler.Handle(new GetNotificationsQuery(userId, request), cts.Token);
+
+        await act.Should().ThrowAsync<OperationCanceledException>();
+    }
+
+    [Fact]
     public async Task Handle_WhenStoreThrows_ShouldReturnListFailedError()
     {
         var userId = Guid.NewGuid();
