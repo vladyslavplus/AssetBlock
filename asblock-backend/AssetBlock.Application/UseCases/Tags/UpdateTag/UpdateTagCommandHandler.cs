@@ -19,7 +19,7 @@ internal sealed class UpdateTagCommandHandler(
         var tag = await tagStore.GetById(request.Id, cancellationToken);
         if (tag is null)
         {
-            return ResultError.Error<TagDto>(ErrorCodes.ERR_TAG_NOT_FOUND);
+            return Result.NotFound(ErrorCodes.ERR_TAG_NOT_FOUND);
         }
 
         var normalizedName = request.Name.Trim().ToLowerInvariant();

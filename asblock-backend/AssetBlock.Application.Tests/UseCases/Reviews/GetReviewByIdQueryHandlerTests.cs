@@ -1,4 +1,5 @@
 using System.Text.Json;
+using Ardalis.Result;
 using AssetBlock.Application.UseCases.Reviews.GetReviewById;
 using AssetBlock.Domain.Abstractions.Services;
 using AssetBlock.Domain.Core.Constants;
@@ -52,7 +53,7 @@ public class GetReviewByIdQueryHandlerTests
     }
 
     [Fact]
-    public async Task Handle_WhenNotCachedAndNotFound_ShouldReturnError()
+    public async Task Handle_WhenNotCachedAndNotFound_ShouldReturnNotFound()
     {
         // Arrange
         var query = new GetReviewByIdQuery(Guid.NewGuid());
@@ -64,9 +65,8 @@ public class GetReviewByIdQueryHandlerTests
         // Act
         var result = await _handler.Handle(query, CancellationToken.None);
 
-        // Assert
-        result.IsSuccess.Should().BeFalse();
-        result.ValidationErrors.Should().Contain(e => e.Identifier == ErrorCodes.ERR_REVIEW_NOT_FOUND);
+        result.Status.Should().Be(ResultStatus.NotFound);
+        result.Errors.Should().Contain(ErrorCodes.ERR_REVIEW_NOT_FOUND);
     }
 
     [Fact]

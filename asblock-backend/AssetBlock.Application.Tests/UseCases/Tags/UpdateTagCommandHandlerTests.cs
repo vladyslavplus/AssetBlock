@@ -1,3 +1,4 @@
+using Ardalis.Result;
 using AssetBlock.Application.UseCases.Tags.UpdateTag;
 using AssetBlock.Domain.Abstractions.Services;
 using AssetBlock.Domain.Core.Constants;
@@ -46,7 +47,7 @@ public class UpdateTagCommandHandlerTests
     }
 
     [Fact]
-    public async Task Handle_WhenNotFound_ShouldReturnError()
+    public async Task Handle_WhenNotFound_ShouldReturnNotFound()
     {
         // Arrange
         var tagId = Guid.NewGuid();
@@ -57,9 +58,8 @@ public class UpdateTagCommandHandlerTests
         // Act
         var result = await _handler.Handle(command, CancellationToken.None);
 
-        // Assert: Tag doesn't exist, return error
-        result.IsSuccess.Should().BeFalse();
-        result.ValidationErrors.Should().Contain(e => e.Identifier == ErrorCodes.ERR_TAG_NOT_FOUND);
+        result.Status.Should().Be(ResultStatus.NotFound);
+        result.Errors.Should().Contain(ErrorCodes.ERR_TAG_NOT_FOUND);
     }
 
     [Fact]
