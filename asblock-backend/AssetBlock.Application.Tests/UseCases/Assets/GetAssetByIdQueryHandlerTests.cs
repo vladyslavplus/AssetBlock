@@ -1,3 +1,4 @@
+using Ardalis.Result;
 using AssetBlock.Application.UseCases.Assets.GetAssetById;
 using AssetBlock.Domain.Abstractions.Services;
 using AssetBlock.Domain.Core.Constants;
@@ -19,7 +20,7 @@ public class GetAssetByIdQueryHandlerTests
     }
 
     [Fact]
-    public async Task Handle_WhenAssetNotFound_ShouldReturnError()
+    public async Task Handle_WhenAssetNotFound_ShouldReturnNotFound()
     {
         // Arrange
         var query = new GetAssetByIdQuery(Guid.NewGuid());
@@ -28,9 +29,8 @@ public class GetAssetByIdQueryHandlerTests
         // Act
         var result = await _handler.Handle(query, CancellationToken.None);
 
-        // Assert
-        result.IsSuccess.Should().BeFalse();
-        result.ValidationErrors.Should().Contain(e => e.Identifier == ErrorCodes.ERR_ASSET_NOT_FOUND);
+        result.Status.Should().Be(ResultStatus.NotFound);
+        result.Errors.Should().Contain(ErrorCodes.ERR_ASSET_NOT_FOUND);
     }
 
     [Fact]

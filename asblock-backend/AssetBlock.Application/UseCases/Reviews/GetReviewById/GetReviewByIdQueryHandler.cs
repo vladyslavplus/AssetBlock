@@ -1,6 +1,5 @@
 using System.Text.Json;
 using Ardalis.Result;
-using AssetBlock.Application.Common;
 using AssetBlock.Domain.Abstractions.Services;
 using AssetBlock.Domain.Core.Constants;
 using AssetBlock.Domain.Core.Dto.Reviews;
@@ -47,7 +46,7 @@ internal sealed class GetReviewByIdQueryHandler(
         var review = await reviewStore.GetById(request.Id, cancellationToken);
         if (review is null)
         {
-            return ResultError.Error<ReviewDetailItem>(ErrorCodes.ERR_REVIEW_NOT_FOUND);
+            return Result.NotFound(ErrorCodes.ERR_REVIEW_NOT_FOUND);
         }
 
         var item = new ReviewDetailItem(

@@ -19,7 +19,14 @@ builder.Services.AddScoped<IRealtimeNotificationPublisher, RealtimeNotificationP
 builder.Services.AddOpenApi();
 builder.Services.AddSwaggerConfiguration();
 builder.Services.AddJwtAuthentication(builder.Configuration);
-builder.Services.AddApiRateLimiting();
+if (builder.Environment.IsEnvironment("IntegrationTesting"))
+{
+    builder.Services.AddIntegrationTestingRateLimiting();
+}
+else
+{
+    builder.Services.AddApiRateLimiting();
+}
 
 var app = builder.Build();
 
@@ -32,10 +39,15 @@ if (app.Environment.IsDevelopment())
     app.UseSwaggerUi();
 }
 
-app.UseHttpsRedirection();
+if (!app.Environment.IsEnvironment("IntegrationTesting"))
+{
+    app.UseHttpsRedirection();
+}
 app.UseRateLimiter();
 app.UseAuthentication();
 app.UseAuthorization();
 app.MapControllers();
 app.MapHub<AssetBlock.WebApi.Hubs.NotificationsHub>(ApiRoutes.Hubs.NOTIFICATIONS);
 app.Run();
+
+public partial class Program;

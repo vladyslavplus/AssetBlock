@@ -1,7 +1,6 @@
-using AssetBlock.Application.Common;
+using Ardalis.Result;
 using AssetBlock.Domain.Abstractions.Services;
 using AssetBlock.Domain.Core.Constants;
-using Ardalis.Result;
 using AssetBlock.Domain.Core.Dto.Assets;
 using MediatR;
 
@@ -15,7 +14,7 @@ internal sealed class GetAssetByIdQueryHandler(IAssetStore assetStore)
         var asset = await assetStore.GetById(request.Id, cancellationToken);
         if (asset is null)
         {
-            return ResultError.Error<AssetDetailItem>(ErrorCodes.ERR_ASSET_NOT_FOUND);
+            return Result.NotFound(ErrorCodes.ERR_ASSET_NOT_FOUND);
         }
         var item = new AssetDetailItem(
             asset.Id,
