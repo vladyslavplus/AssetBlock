@@ -26,6 +26,7 @@
     </ItemGroup>
 
     <ItemGroup>
+      <PackageReference Include="Microsoft.EntityFrameworkCore" Version="10.0.5" />
       <ProjectReference Include="..\AssetBlock.Application\AssetBlock.Application.csproj" />
       <ProjectReference Include="..\AssetBlock.Domain\AssetBlock.Domain.csproj" />
       <ProjectReference Include="..\AssetBlock.Infrastructure\AssetBlock.Infrastructure.csproj" />
