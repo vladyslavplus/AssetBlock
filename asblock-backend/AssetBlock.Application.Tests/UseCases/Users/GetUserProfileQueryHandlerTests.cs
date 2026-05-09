@@ -85,6 +85,7 @@ public class GetUserProfileQueryHandlerTests
 
         result.IsSuccess.Should().BeTrue();
         result.Value.Username.Should().Be("a");
+        result.Value.Email.Should().Be("a@a.com");
         result.Value.SocialLinks.Should().HaveCount(1);
     }
 
@@ -107,5 +108,29 @@ public class GetUserProfileQueryHandlerTests
 
         result.IsSuccess.Should().BeTrue();
         result.Value.Username.Should().Be("meuser");
+        result.Value.Email.Should().Be("m@a.com");
+    }
+
+    [Fact]
+    public async Task Handle_WhenPublicAndNotOwner_ShouldOmitEmail()
+    {
+        var ownerId = Guid.NewGuid();
+        var viewerId = Guid.NewGuid();
+        var user = new User
+        {
+            Id = ownerId,
+            Username = "publicuser",
+            Email = "secret@a.com",
+            PasswordHash = "h",
+            Role = AppRoles.USER,
+            IsPublicProfile = true,
+            SocialLinks = []
+        };
+        _userStore.GetByUsernameWithLinks("publicuser", Arg.Any<CancellationToken>()).Returns(user);
+
+        var result = await _handler.Handle(new GetUserProfileQuery("publicuser", viewerId), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.Email.Should().BeNull();
     }
 }

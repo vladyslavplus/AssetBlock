@@ -44,6 +44,40 @@
   --chart-5: #f472b6;
 }
 
+/* Reserve space for the vertical scrollbar so Radix scroll-lock (overflow:hidden on body) does not shift layout */
+html {
+  scrollbar-gutter: stable;
+}
+
+body {
+  scrollbar-gutter: stable;
+}
+
+/* Firefox scrollbar styling */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #3d3655 transparent;
+}
+
+/* Chromium/Safari (WebKit) scrollbar styling */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #3d3655;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #4a4360;
+}
+
 @theme inline {
   --font-sans: var(--font-geist), 'Geist Fallback', sans-serif;
   --font-mono: var(--font-jetbrains-mono), var(--font-geist-mono), monospace;
@@ -136,4 +170,22 @@
       transform: translateY(0);
     }
   }
+}
+
+/*
+ * Hide native <input type="number"> spinners (catalog uses custom +/- only).
+ * Unlayered on purpose: rules inside @layer utilities lose to unlayered Tailwind,
+ * so Chromium/Edge kept showing the default stepper.
+ */
+input[type="number"].no-native-number-spinner {
+  -moz-appearance: textfield;
+  appearance: textfield;
+}
+
+input[type="number"].no-native-number-spinner::-webkit-outer-spin-button,
+input[type="number"].no-native-number-spinner::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  appearance: none;
+  margin: 0;
+  display: none;
 }

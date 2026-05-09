@@ -95,6 +95,7 @@ public sealed class UsersControllerTests : ControllerTestBase
             {
                 Id = Guid.NewGuid(),
                 Username = "u",
+                Email = null,
                 AvatarUrl = null,
                 Bio = null,
                 IsPublicProfile = true,
@@ -171,6 +172,7 @@ public sealed class UsersControllerTests : ControllerTestBase
             {
                 Id = Guid.NewGuid(),
                 Username = "u",
+                Email = null,
                 AvatarUrl = null,
                 Bio = null,
                 IsPublicProfile = true,

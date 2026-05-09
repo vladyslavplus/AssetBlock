@@ -1,4 +1,6 @@
+using AssetBlock.Application.UseCases.Users.ChangePassword;
 using AssetBlock.Application.UseCases.Users.GetProfile;
+using AssetBlock.Application.UseCases.Users.ListMyPurchases;
 using AssetBlock.Application.UseCases.Users.ListNotifications;
 using AssetBlock.Application.UseCases.Users.ListSocialPlatforms;
 using AssetBlock.Application.UseCases.Users.MarkNotificationRead;
@@ -28,6 +30,26 @@ public sealed class UsersController(ISender sender) : ApiControllerBase(sender)
     public async Task<IActionResult> ListSocialPlatforms(CancellationToken cancellationToken)
     {
         var result = await Sender.Send(new ListSocialPlatformsQuery(), cancellationToken);
+        return MapResultToActionResult(result);
+    }
+
+    /// <summary>
+    /// List purchased assets for the current user (library). Newest purchase first by default.
+    /// </summary>
+    [HttpGet(ApiRoutes.Users.ME_PURCHASES)]
+    [Authorize]
+    [ProducesResponseType(typeof(PagedResult<PurchaseLibraryItemDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> ListMyPurchases([FromQuery] ListMyPurchasesRequest request, CancellationToken cancellationToken)
+    {
+        var userId = GetUserId();
+        if (userId is null)
+        {
+            return Unauthorized();
+        }
+
+        var result = await Sender.Send(new GetMyPurchasesQuery(userId.Value, request), cancellationToken);
         return MapResultToActionResult(result);
     }
 
@@ -115,6 +137,28 @@ public sealed class UsersController(ISender sender) : ApiControllerBase(sender)
             request.AvatarUrl,
             request.Bio,
             request.IsPublicProfile);
+        var result = await Sender.Send(command, cancellationToken);
+        return MapResultToActionResult(result);
+    }
+
+    /// <summary>
+    /// Change password for the authenticated user.
+    /// </summary>
+    [HttpPost(ApiRoutes.Users.ME_PASSWORD)]
+    [Authorize]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> ChangePassword([FromBody] ChangePasswordRequest request, CancellationToken cancellationToken)
+    {
+        var userId = GetUserId();
+        if (userId is null)
+        {
+            return Unauthorized();
+        }
+
+        var command = new ChangePasswordCommand(userId.Value, request.CurrentPassword, request.NewPassword);
         var result = await Sender.Send(command, cancellationToken);
         return MapResultToActionResult(result);
     }

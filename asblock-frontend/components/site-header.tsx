@@ -1,20 +1,40 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useState, useEffect } from "react";
-import { Menu, X, Package2 } from "lucide-react";
+import { ChevronDown, Menu, X, Package2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
+import { useAuth } from "@/components/auth/auth-context";
 
 export function SiteHeader() {
+  const router = useRouter();
+  const { user, status, logout } = useAuth();
   const [scrolled, setScrolled] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
+
+  const authed = status === "authenticated" && user !== null;
+  const authPending = status === "loading";
 
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 8);
     window.addEventListener("scroll", onScroll, { passive: true });
     return () => window.removeEventListener("scroll", onScroll);
   }, []);
+
+  async function handleSignOut() {
+    setMenuOpen(false);
+    await logout();
+    router.refresh();
+  }
 
   return (
     <header
@@ -42,19 +62,25 @@ export function SiteHeader() {
 
           <nav className="hidden md:flex items-center gap-8" aria-label="Main navigation">
             <Link
-              href="#"
+              href="/assets"
               className="text-sm text-muted-foreground hover:text-foreground transition-colors"
             >
               Browse assets
             </Link>
             <Link
-              href="#"
+              href="/library"
+              className="text-sm text-muted-foreground hover:text-foreground transition-colors"
+            >
+              Library
+            </Link>
+            <Link
+              href="/sell"
               className="text-sm text-muted-foreground hover:text-foreground transition-colors"
             >
               Sell
             </Link>
             <Link
-              href="#"
+              href="/docs"
               className="text-sm text-muted-foreground hover:text-foreground transition-colors"
             >
               Docs
@@ -62,19 +88,56 @@ export function SiteHeader() {
           </nav>
 
           <div className="hidden md:flex items-center gap-3">
-            <Button
-              variant="outline"
-              size="sm"
-              className="border-border text-foreground bg-transparent hover:bg-secondary/50 hover:border-foreground/40 hover:text-foreground transition-smooth"
-            >
-              Sign in
-            </Button>
-            <Button
-              size="sm"
-              className="bg-primary text-primary-foreground hover:bg-[#6D28D9] shadow-[0_0_16px_rgba(124,58,237,0.25)] hover:shadow-[0_0_20px_rgba(124,58,237,0.35)] transition-smooth"
-            >
-              Get started
-            </Button>
+            {authPending ? (
+              <div
+                className="h-8 w-28 rounded-md bg-muted/25 animate-pulse"
+                aria-hidden
+              />
+            ) : authed ? (
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    type="button"
+                    className="border-border text-foreground bg-transparent hover:bg-secondary/50 hover:border-foreground/40 hover:text-foreground transition-smooth gap-1"
+                  >
+                    Account
+                    <ChevronDown className="size-3.5 opacity-70" aria-hidden />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="min-w-[10rem]">
+                  <DropdownMenuItem asChild>
+                    <Link href="/account">Account</Link>
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem
+                    variant="destructive"
+                    onSelect={() => void handleSignOut()}
+                  >
+                    Sign out
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            ) : (
+              <>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  asChild
+                  className="border-border text-foreground bg-transparent hover:bg-secondary/50 hover:border-foreground/40 hover:text-foreground transition-smooth"
+                >
+                  <Link href="/login">Sign in</Link>
+                </Button>
+                <Button
+                  size="sm"
+                  asChild
+                  className="bg-primary text-primary-foreground hover:bg-[#6D28D9] shadow-[0_0_16px_rgba(124,58,237,0.25)] hover:shadow-[0_0_20px_rgba(124,58,237,0.35)] transition-smooth"
+                >
+                  <Link href="/register">Get started</Link>
+                </Button>
+              </>
+            )}
           </div>
 
           <button
@@ -91,13 +154,64 @@ export function SiteHeader() {
       {menuOpen && (
         <div className="md:hidden border-t border-border bg-[#07060B]/95 backdrop-blur-md px-4 py-4 flex flex-col gap-4">
           <nav className="flex flex-col gap-3" aria-label="Mobile navigation">
-            <Link href="#" className="text-sm text-muted-foreground hover:text-foreground transition-colors py-1">Browse assets</Link>
-            <Link href="#" className="text-sm text-muted-foreground hover:text-foreground transition-colors py-1">Sell</Link>
-            <Link href="#" className="text-sm text-muted-foreground hover:text-foreground transition-colors py-1">Docs</Link>
+            <Link
+              href="/assets"
+              className="text-sm text-muted-foreground hover:text-foreground transition-colors py-1"
+              onClick={() => setMenuOpen(false)}
+            >
+              Browse assets
+            </Link>
+            <Link
+              href="/library"
+              className="text-sm text-muted-foreground hover:text-foreground transition-colors py-1"
+              onClick={() => setMenuOpen(false)}
+            >
+              Library
+            </Link>
+            <Link
+              href="/sell"
+              className="text-sm text-muted-foreground hover:text-foreground transition-colors py-1"
+              onClick={() => setMenuOpen(false)}
+            >
+              Sell
+            </Link>
+            <Link
+              href="/docs"
+              className="text-sm text-muted-foreground hover:text-foreground transition-colors py-1"
+              onClick={() => setMenuOpen(false)}
+            >
+              Docs
+            </Link>
           </nav>
           <div className="flex flex-col gap-2 pt-2 border-t border-border">
-            <Button variant="outline" className="w-full border-border text-foreground bg-transparent hover:bg-secondary/50 hover:border-foreground/40 transition-smooth">Sign in</Button>
-            <Button className="w-full bg-primary text-primary-foreground hover:bg-[#6D28D9] transition-smooth">Get started</Button>
+            {authPending ? (
+              <div className="h-9 w-full rounded-md bg-muted/25 animate-pulse" aria-hidden />
+            ) : authed ? (
+              <div className="flex flex-col gap-2">
+                <Button variant="outline" asChild className="w-full border-border text-foreground bg-transparent hover:bg-secondary/50 hover:border-foreground/40 transition-smooth">
+                  <Link href="/account" onClick={() => setMenuOpen(false)}>
+                    Account
+                  </Link>
+                </Button>
+                <Button
+                  variant="outline"
+                  type="button"
+                  className="w-full border-border text-foreground bg-transparent hover:bg-secondary/50 hover:border-foreground/40 transition-smooth"
+                  onClick={() => void handleSignOut()}
+                >
+                  Sign out
+                </Button>
+              </div>
+            ) : (
+              <>
+                <Button variant="outline" asChild className="w-full border-border text-foreground bg-transparent hover:bg-secondary/50 hover:border-foreground/40 transition-smooth">
+                  <Link href="/login" onClick={() => setMenuOpen(false)}>Sign in</Link>
+                </Button>
+                <Button asChild className="w-full bg-primary text-primary-foreground hover:bg-[#6D28D9] transition-smooth">
+                  <Link href="/register" onClick={() => setMenuOpen(false)}>Get started</Link>
+                </Button>
+              </>
+            )}
           </div>
         </div>
       )}

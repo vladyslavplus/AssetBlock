@@ -5,13 +5,13 @@ import { Separator } from "@/components/ui/separator";
 const FOOTER_LINKS = {
   Product: [
     { label: "Browse assets", href: "/assets" },
-    { label: "Sell on AssetBlock", href: "#" },
+    { label: "Sell on AssetBlock", href: "/sell" },
     { label: "Pricing", href: "#" },
     { label: "Changelog", href: "#" },
   ],
   Developers: [
-    { label: "Documentation", href: "#" },
-    { label: "API reference", href: "#" },
+    { label: "Documentation", href: "/docs" },
+    { label: "API reference", href: "/docs#api" },
     { label: "Status", href: "#" },
   ],
   Legal: [

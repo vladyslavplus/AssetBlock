@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
@@ -84,6 +85,7 @@ public sealed class AssetsControllerIntegrationTests(IntegrationTestFixture fixt
         detail.Title.Should().Be("Integration seeded asset");
         detail.Price.Should().Be(9.99m);
         detail.CategoryName.Should().NotBeNullOrWhiteSpace();
+        detail.AuthorUsername.Should().NotBeNullOrWhiteSpace();
     }
 
     private sealed record AssetDetailResponse(
@@ -94,6 +96,9 @@ public sealed class AssetsControllerIntegrationTests(IntegrationTestFixture fixt
         Guid CategoryId,
         string? CategoryName,
         Guid AuthorId,
+        string AuthorUsername,
         DateTimeOffset CreatedAt,
-        DateTimeOffset? UpdatedAt);
+        DateTimeOffset? UpdatedAt,
+        IReadOnlyList<string> Tags,
+        double AverageRating);
 }

@@ -1,10 +1,12 @@
 "use client";
 
-import { useRef, useState, useCallback } from "react";
+import { useRef, useState, useCallback, useEffect } from "react";
 import Link from "next/link";
 import { ChevronLeft, ChevronRight, ArrowRight } from "lucide-react";
 import type { AssetListItem } from "@/lib/asset-types";
-import { FEATURED_ASSETS_MOCK } from "@/lib/asset-types";
+import { fetchFeaturedAssets } from "@/lib/assets-api";
+import { formatUsdWhole } from "@/lib/format-currency";
+import { Button } from "@/components/ui/button";
 
 function StarRating({ value }: { value: number }) {
   const rounded = Math.round(value * 2) / 2;
@@ -52,7 +54,7 @@ function AssetCard({ asset }: { asset: AssetListItem }) {
           </h3>
         </div>
         <span className="text-lg font-semibold text-foreground shrink-0 font-mono">
-          ${asset.price}
+          {formatUsdWhole(asset.price)}
         </span>
       </div>
 
@@ -91,11 +93,12 @@ function AssetCard({ asset }: { asset: AssetListItem }) {
           </span>
           <StarRating value={asset.averageRating} />
         </div>
-        <button
-          className="w-full px-3 py-2 rounded-lg border border-border text-foreground bg-transparent hover:bg-secondary/50 hover:border-foreground/40 hover:text-foreground transition-smooth text-xs font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-card"
+        <Link
+          href={`/assets/${asset.id}`}
+          className="w-full px-3 py-2 rounded-lg border border-border text-foreground bg-transparent hover:bg-secondary/50 hover:border-foreground/40 hover:text-foreground transition-smooth text-xs font-medium text-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-card"
         >
           View details
-        </button>
+        </Link>
       </div>
     </article>
   );
@@ -104,26 +107,90 @@ function AssetCard({ asset }: { asset: AssetListItem }) {
 export function FeaturedAssetsSection() {
   const scrollRef = useRef<HTMLDivElement>(null);
   const [canScrollLeft, setCanScrollLeft] = useState(false);
-  const [canScrollRight, setCanScrollRight] = useState(true);
+  const [canScrollRight, setCanScrollRight] = useState(false);
+  const [assets, setAssets] = useState<AssetListItem[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(false);
+  const [reloadToken, setReloadToken] = useState(0);
 
   const SCROLL_AMOUNT = 340;
 
   const updateScrollState = useCallback(() => {
     const el = scrollRef.current;
-    if (!el) return;
+    if (!el) {
+      setCanScrollLeft(false);
+      setCanScrollRight(false);
+      return;
+    }
+    const maxScroll = el.scrollWidth - el.clientWidth;
+    if (maxScroll <= 1) {
+      setCanScrollLeft(false);
+      setCanScrollRight(false);
+      return;
+    }
     setCanScrollLeft(el.scrollLeft > 4);
-    setCanScrollRight(el.scrollLeft < el.scrollWidth - el.clientWidth - 4);
+    setCanScrollRight(el.scrollLeft < maxScroll - 4);
   }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetchFeaturedAssets({ limit: 8 })
+      .then((items) => {
+        if (!cancelled) {
+          setAssets(items);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setLoadError(true);
+          setAssets([]);
+        }
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setLoading(false);
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [reloadToken]);
+
+  // Defer scroll metrics until after layout (avoids sync setState in layout effect).
+  useEffect(() => {
+    if (loading || assets.length === 0) {
+      return;
+    }
+    const id = window.requestAnimationFrame(() => updateScrollState());
+    return () => window.cancelAnimationFrame(id);
+  }, [assets, loading, updateScrollState]);
+
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el) {
+      return;
+    }
+    const ro = new ResizeObserver(() => {
+      updateScrollState();
+    });
+    ro.observe(el);
+    window.addEventListener("resize", updateScrollState);
+    return () => {
+      ro.disconnect();
+      window.removeEventListener("resize", updateScrollState);
+    };
+  }, [assets, loading, updateScrollState]);
 
   const scrollLeft = () => {
     scrollRef.current?.scrollBy({ left: -SCROLL_AMOUNT, behavior: "smooth" });
-    setTimeout(updateScrollState, 350);
   };
 
   const scrollRight = () => {
     scrollRef.current?.scrollBy({ left: SCROLL_AMOUNT, behavior: "smooth" });
-    setTimeout(updateScrollState, 350);
   };
+
+  const showCarousel = !loading && !loadError && assets.length > 0;
+  const showEmpty = !loading && !loadError && assets.length === 0;
 
   return (
     <section className="py-20 sm:py-28" aria-labelledby="featured-heading">
@@ -141,63 +208,113 @@ export function FeaturedAssetsSection() {
             </p>
           </div>
 
-          <div className="mt-6 flex flex-col items-center gap-3 sm:mt-0 sm:absolute sm:right-0 sm:top-0 sm:items-end">
-            <div className="flex items-center gap-2 shrink-0">
-              <button
-                onClick={scrollLeft}
-                disabled={!canScrollLeft}
-                aria-label="Scroll left"
-                className={`w-9 h-9 rounded-lg border flex items-center justify-center transition-smooth focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background
-                ${
-                  canScrollLeft
-                    ? "border-border text-foreground hover:bg-secondary/50 hover:border-foreground/40 active:bg-muted cursor-pointer"
-                    : "border-border/30 text-muted-foreground/30 cursor-default"
-                }`}
+          {showCarousel && (
+            <div className="mt-6 flex flex-col items-center gap-3 sm:mt-0 sm:absolute sm:right-0 sm:top-0 sm:items-end">
+              <div className="flex items-center gap-2 shrink-0">
+                <button
+                  type="button"
+                  onClick={scrollLeft}
+                  disabled={!canScrollLeft}
+                  aria-label="Scroll left"
+                  className={`w-9 h-9 rounded-lg border flex items-center justify-center transition-smooth focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background ${
+                    canScrollLeft
+                      ? "border-border text-foreground hover:bg-secondary/50 hover:border-foreground/40 active:bg-muted cursor-pointer"
+                      : "border-border/30 text-muted-foreground/30 cursor-not-allowed"
+                  }`}
+                >
+                  <ChevronLeft className="w-4 h-4" />
+                </button>
+                <button
+                  type="button"
+                  onClick={scrollRight}
+                  disabled={!canScrollRight}
+                  aria-label="Scroll right"
+                  className={`w-9 h-9 rounded-lg border flex items-center justify-center transition-smooth focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background ${
+                    canScrollRight
+                      ? "border-border text-foreground hover:bg-secondary/50 hover:border-foreground/40 active:bg-muted cursor-pointer"
+                      : "border-border/30 text-muted-foreground/30 cursor-not-allowed"
+                  }`}
+                >
+                  <ChevronRight className="w-4 h-4" />
+                </button>
+              </div>
+              <Link
+                href="/assets"
+                className="inline-flex items-center gap-1.5 text-sm font-medium text-foreground hover:text-accent transition-smooth group shrink-0"
               >
-                <ChevronLeft className="w-4 h-4" />
-              </button>
-              <button
-                onClick={scrollRight}
-                disabled={!canScrollRight}
-                aria-label="Scroll right"
-                className={`w-9 h-9 rounded-lg border flex items-center justify-center transition-smooth focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background
-                ${
-                  canScrollRight
-                    ? "border-border text-foreground hover:bg-secondary/50 hover:border-foreground/40 active:bg-muted cursor-pointer"
-                    : "border-border/30 text-muted-foreground/30 cursor-default"
-                }`}
-              >
-                <ChevronRight className="w-4 h-4" />
-              </button>
+                Browse all
+                <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
+              </Link>
             </div>
-            <Link
-              href="/assets"
-              className="inline-flex items-center gap-1.5 text-sm font-medium text-foreground hover:text-accent transition-smooth group shrink-0"
-            >
-              Browse all
-              <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
-            </Link>
-          </div>
+          )}
         </div>
 
-        <div
-          ref={scrollRef}
-          onScroll={updateScrollState}
-          className="flex gap-4 items-stretch overflow-x-auto scrollbar-hide pb-2 -mx-4 px-4 sm:-mx-6 sm:px-6 lg:mx-0 lg:px-0"
-          style={{ scrollbarWidth: "none" }}
-          role="list"
-          aria-label="Featured assets carousel"
-        >
-          {FEATURED_ASSETS_MOCK.map((asset) => (
-            <div key={asset.id} role="listitem" className="flex h-full">
-              <AssetCard asset={asset} />
+        {loading && (
+          <div className="flex flex-col items-center justify-center py-16 gap-3 text-muted-foreground text-sm">
+            <div className="h-8 w-8 border-2 border-primary border-t-transparent rounded-full animate-spin" aria-hidden />
+            <p>Loading featured assets…</p>
+          </div>
+        )}
+
+        {loadError && (
+          <div className="rounded-xl border border-border bg-card-elevated/50 px-6 py-12 text-center">
+            <p className="text-foreground font-medium mb-1">Couldn&apos;t load featured assets</p>
+            <p className="text-sm text-muted-foreground mb-4">
+              Check that the API is running and <span className="font-mono">NEXT_PUBLIC_API_BASE_URL</span> is set.
+            </p>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                setLoadError(false);
+                setLoading(true);
+                setAssets([]);
+                setReloadToken((t) => t + 1);
+              }}
+            >
+              Try again
+            </Button>
+          </div>
+        )}
+
+        {showEmpty && (
+          <div className="rounded-xl border border-dashed border-border bg-card-elevated/30 px-6 py-14 text-center">
+            <p className="text-foreground font-medium mb-2">No assets in the catalog yet</p>
+            <p className="text-sm text-muted-foreground mb-6 max-w-md mx-auto">
+              Once sellers publish products, they&apos;ll show up here automatically.
+            </p>
+            <div className="flex flex-wrap justify-center gap-3">
+              <Button asChild className="bg-primary text-primary-foreground hover:bg-[#6D28D9]">
+                <Link href="/sell">Start selling</Link>
+              </Button>
+              <Button variant="outline" asChild className="border-border bg-transparent">
+                <Link href="/assets">Browse catalog</Link>
+              </Button>
             </div>
-          ))}
-        </div>
+          </div>
+        )}
+
+        {showCarousel && (
+          <div
+            ref={scrollRef}
+            onScroll={updateScrollState}
+            className="flex gap-4 items-stretch overflow-x-auto scrollbar-hide pb-2 -mx-4 px-4 sm:-mx-6 sm:px-6 lg:mx-0 lg:px-0"
+            style={{ scrollbarWidth: "none" }}
+            role="list"
+            aria-label="Featured assets carousel"
+          >
+            {assets.map((asset) => (
+              <div key={asset.id} role="listitem" className="flex h-full">
+                <AssetCard asset={asset} />
+              </div>
+            ))}
+          </div>
+        )}
 
         <div className="mt-8 flex justify-center">
           <Link
-            href="#"
+            href="/sell"
             className="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-smooth group"
           >
             <span>Want to start selling?</span>

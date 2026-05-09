@@ -14,7 +14,7 @@ internal sealed class GetUserProfileQueryHandler(IUserStore userStore) : IReques
         if (string.IsNullOrWhiteSpace(request.Username))
         {
             var self = await userStore.GetByIdWithLinks(request.CurrentUserId!.Value, cancellationToken);
-            return self is null ? Result.NotFound(ErrorCodes.ERR_USER_NOT_FOUND) : Result.Success(MapToProfileDto(self));
+            return self is null ? Result.NotFound(ErrorCodes.ERR_USER_NOT_FOUND) : Result.Success(MapToProfileDto(self, includeEmail: true));
         }
 
         var user = await userStore.GetByUsernameWithLinks(request.Username.Trim(), cancellationToken);
@@ -29,10 +29,10 @@ internal sealed class GetUserProfileQueryHandler(IUserStore userStore) : IReques
             return Result.NotFound(ErrorCodes.ERR_USER_NOT_FOUND);
         }
 
-        return Result.Success(MapToProfileDto(user));
+        return Result.Success(MapToProfileDto(user, includeEmail: isOwner));
     }
 
-    private static UserProfileDto MapToProfileDto(User user)
+    private static UserProfileDto MapToProfileDto(User user, bool includeEmail)
     {
         var links = user.SocialLinks
             .OrderBy(sl => sl.Platform.Name)
@@ -49,6 +49,7 @@ internal sealed class GetUserProfileQueryHandler(IUserStore userStore) : IReques
         {
             Id = user.Id,
             Username = user.Username,
+            Email = includeEmail ? user.Email : null,
             AvatarUrl = user.AvatarUrl,
             Bio = user.Bio,
             IsPublicProfile = user.IsPublicProfile,

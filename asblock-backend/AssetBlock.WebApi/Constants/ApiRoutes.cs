@@ -30,6 +30,7 @@ public static class ApiRoutes
 
     public static class Payments
     {
+        public const string CAPABILITIES = "capabilities";
         public const string CHECKOUT = "checkout";
         public const string WEBHOOK = "webhook";
     }
@@ -52,9 +53,11 @@ public static class ApiRoutes
         public const string SOCIAL_PLATFORMS = "social-platforms";
         public const string PROFILE = "{username}";
         public const string ME = "me";
+        public const string ME_PASSWORD = "me/password";
         public const string ME_SOCIALS = "me/socials";
         public const string ME_NOTIFICATIONS = "me/notifications";
         public const string ME_NOTIFICATION_READ = "me/notifications/{id:guid}/read";
+        public const string ME_PURCHASES = "me/purchases";
     }
 
     public static class Hubs

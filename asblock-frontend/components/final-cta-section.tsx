@@ -1,3 +1,5 @@
+import Link from "next/link";
+
 export function FinalCtaSection() {
   return (
     <section
@@ -36,16 +38,18 @@ export function FinalCtaSection() {
           </div>
 
           <div className="relative flex flex-wrap items-center justify-center gap-3">
-            <button
+            <Link
+              href="/register"
               className="px-6 py-3 rounded-lg bg-primary text-primary-foreground font-medium shadow-[0_0_28px_rgba(124,58,237,0.35)] hover:shadow-[0_0_36px_rgba(124,58,237,0.45)] hover:bg-[#6D28D9] transition-smooth focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-background"
             >
               Create an account
-            </button>
-            <button
+            </Link>
+            <Link
+              href="/assets"
               className="px-6 py-3 rounded-lg border border-border text-foreground bg-transparent hover:bg-secondary/50 hover:border-foreground/40 hover:text-foreground font-medium transition-smooth focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-background"
             >
               Browse catalog
-            </button>
+            </Link>
           </div>
         </div>
       </div>

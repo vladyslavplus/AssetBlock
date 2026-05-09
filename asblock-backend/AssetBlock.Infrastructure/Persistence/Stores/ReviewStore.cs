@@ -10,6 +10,21 @@ namespace AssetBlock.Infrastructure.Persistence.Stores;
 
 internal sealed class ReviewStore(ApplicationDbContext dbContext, ILogger<ReviewStore> logger) : IReviewStore
 {
+    public async Task<double> GetAverageRatingForAsset(Guid assetId, CancellationToken cancellationToken = default)
+    {
+        var ratings = await dbContext.Reviews
+            .AsNoTracking()
+            .Where(r => r.AssetId == assetId)
+            .Select(r => r.Rating)
+            .ToListAsync(cancellationToken);
+        if (ratings.Count == 0)
+        {
+            return 0;
+        }
+
+        return ratings.Average(r => (double)r);
+    }
+
     public async Task<Review> Create(Guid assetId, Guid userId, int rating, string? comment, CancellationToken cancellationToken = default)
     {
         var review = new Review

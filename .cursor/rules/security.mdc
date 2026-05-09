@@ -1,18 +1,16 @@
 ---
-description: Enforce security best practices in all code suggestions.
-globs: **/*.cs, **/*.tsx, **/*.ts
+description: Enforce security best practices in repo-aligned ways.
+globs: asblock-backend/**/*.cs, asblock-frontend/**/*.ts, asblock-frontend/**/*.tsx
 alwaysApply: true
-priority: 90  # High priority to override others if conflict
+priority: 90
 ---
-# Security Rules - Always Apply
+# Security Rules
 
-Before suggesting or generating ANY code:
-- Perform a mandatory <SECURITY_REVIEW> step in your thinking: identify potential vulnerabilities (XSS, CSRF, SQL injection, JWT misuse, insecure deserialization, exposed secrets, weak crypto).
-- For .NET: Use parameterized queries (EF Core/Dapper), validate with FluentValidation + Ardalis.Result, never trust user input, use NSec.Cryptography properly for keys, avoid System.Drawing.Common in web contexts if possible.
-- For Next.js: Validate EVERY form/input with Zod + react-hook-form resolver, sanitize outputs, use secure cookie handling (cookies-next with httpOnly, secure, sameSite), CSP headers, never eval/innerHTML.
-- Solana/web3: Never expose private keys, use wallet-adapter securely, validate transactions with retries via Polly/Promise.race.
-- Sumsub/Resend/OTP: Handle secrets via env vars only, never log sensitive data.
-- Always prefer secure defaults: HTTPS, JWT validation with Microsoft.AspNetCore.Authentication.JwtBearer, no inline scripts/styles.
+- Perform a mandatory <SECURITY_REVIEW> step in your thinking: identify XSS, CSRF, SQL injection, JWT misuse, insecure deserialization, exposed secrets, and weak crypto.
+- For .NET: use parameterized queries (EF Core/Dapper), validate input with FluentValidation plus Ardalis.Result, never trust user input, and keep secrets only in env/config sources.
+- For Next.js: validate payloads with the existing Zod schemas, sanitize outputs, and use the repo's server-side auth cookie helpers with `httpOnly`, `secure`, and `sameSite` flags.
+- Keep auth tokens in server-managed cookies; do not move them into localStorage, sessionStorage, or other client-readable storage.
+- Never expose private keys or secrets in logs, client code, or responses.
+- Prefer secure defaults: HTTPS in real environments, JWT validation on protected backend routes, and no unsafe HTML/script patterns.
 
-If a suggestion introduces risk, flag it with a comment block: ```// SECURITY WARNING: ... Mitigation: ...```
-Never bypass validation or use unsafe patterns even if "quicker".
+If a suggestion introduces risk, flag it with a short `SECURITY WARNING` comment and include the mitigation.
