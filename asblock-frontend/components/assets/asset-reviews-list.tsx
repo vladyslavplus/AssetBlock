@@ -1,19 +1,15 @@
 "use client";
 
+import Link from "next/link";
 import { Star, CheckCircle2 } from "lucide-react";
-import type { AssetReview } from "@/lib/catalog-utils";
+import type { AssetReview } from "@/lib/catalog/catalog-utils";
+import { formatShortMonthDate } from "@/lib/format-date";
 
 interface AssetReviewsListProps {
   reviews: AssetReview[];
 }
 
 export function AssetReviewsList({ reviews }: AssetReviewsListProps) {
-  const dateFormatter = new Intl.DateTimeFormat("en-US", {
-    year: "numeric",
-    month: "short",
-    day: "numeric",
-  });
-
   return (
     <div className="flex flex-col gap-4">
       <h2 className="text-lg font-semibold text-foreground">
@@ -33,12 +29,14 @@ export function AssetReviewsList({ reviews }: AssetReviewsListProps) {
             key={review.id}
             className="rounded-lg border border-border bg-card-elevated p-4 flex flex-col gap-2"
           >
-            {/* Header: name, stars, verified */}
             <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
               <div className="flex items-center gap-2">
-                <span className="text-sm font-medium text-foreground">
+                <Link
+                  href={`/users/${encodeURIComponent(review.authorUsername)}`}
+                  className="text-sm font-medium text-foreground hover:text-accent transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-card rounded-sm"
+                >
                   @{review.authorUsername}
-                </span>
+                </Link>
                 {review.verifiedPurchase && (
                   <div className="flex items-center gap-1 text-xs text-accent">
                     <CheckCircle2 className="w-3.5 h-3.5" />
@@ -47,7 +45,6 @@ export function AssetReviewsList({ reviews }: AssetReviewsListProps) {
                 )}
               </div>
               <div className="flex items-center gap-2">
-                {/* Stars */}
                 <div className="flex gap-0.5">
                   {Array(review.rating)
                     .fill(null)
@@ -67,12 +64,11 @@ export function AssetReviewsList({ reviews }: AssetReviewsListProps) {
                     ))}
                 </div>
                 <span className="text-xs text-muted-foreground">
-                  {dateFormatter.format(new Date(review.createdAt))}
+                  {formatShortMonthDate(review.createdAt)}
                 </span>
               </div>
             </div>
 
-            {/* Review body */}
             <p className="text-sm text-foreground leading-relaxed">
               {review.body}
             </p>

@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import { Suspense } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
+import { AuthFormSkeleton } from "@/components/skeletons/auth-form-skeleton";
 import { SignInForm } from "./sign-in-form";
 import { RegisterForm } from "./register-form";
 
@@ -29,7 +30,6 @@ export function AuthCard() {
               </CardDescription>
             </div>
 
-            {/* Segmented control with tightened spacing */}
             <div className="flex gap-0 p-1 rounded-lg border border-border bg-secondary/30 mt-1">
               <Link
                 href="/login"
@@ -61,14 +61,13 @@ export function AuthCard() {
 
         <CardContent className="pt-4 pb-3 px-5">
           {isSignIn ? (
-            <Suspense fallback={<div className="text-xs text-muted-foreground py-6">Loading…</div>}>
+            <Suspense fallback={<AuthFormSkeleton />}>
               <SignInForm />
             </Suspense>
           ) : (
             <RegisterForm />
           )}
 
-          {/* Centered helper text */}
           <div className="mt-3 text-xs text-center">
             {isSignIn ? (
               <>
@@ -94,7 +93,6 @@ export function AuthCard() {
           </div>
         </CardContent>
 
-        {/* Footer with trust line and back link */}
         <div className="px-5 py-3 border-t border-border/30 space-y-2">
           <p className="text-xs text-muted-foreground text-center">
             Secure checkout on the marketplace is handled separately

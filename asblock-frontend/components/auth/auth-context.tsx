@@ -1,21 +1,18 @@
 "use client";
 
-import {
-  createContext,
-  useCallback,
-  useContext,
-  useEffect,
-  useMemo,
-  useState,
-  type ReactNode,
-} from "react";
-import type { SessionResponse, SessionUser } from "@/lib/auth-types";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { createContext, useCallback, useContext, useMemo, type ReactNode } from "react";
+import type { SessionUser } from "@/lib/auth/auth-types";
+import { authKeys, fetchSessionUser } from "@/lib/auth/auth-query";
+import { isAdminRole } from "@/lib/auth/roles";
 
 type AuthStatus = "loading" | "anonymous" | "authenticated";
 
 interface AuthContextValue {
   user: SessionUser | null;
   status: AuthStatus;
+  /** True when session user has backend Admin role (own profile only). */
+  isAdmin: boolean;
   /** Re-fetch session from BFF (e.g. after login/register). */
   refresh: () => Promise<void>;
   logout: () => Promise<void>;
@@ -23,64 +20,41 @@ interface AuthContextValue {
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 
-async function fetchSession(): Promise<SessionUser | null> {
-  const res = await fetch("/api/auth/session", { cache: "no-store" });
-  if (!res.ok) {
-    return null;
-  }
-  const body = (await res.json()) as SessionResponse;
-  return body.user ?? null;
-}
-
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<SessionUser | null>(null);
-  const [status, setStatus] = useState<AuthStatus>("loading");
+  const queryClient = useQueryClient();
+
+  const sessionQuery = useQuery({
+    queryKey: authKeys.session(),
+    queryFn: fetchSessionUser,
+    staleTime: 30 * 1000,
+    gcTime: 30 * 60 * 1000,
+    retry: 1,
+    refetchOnWindowFocus: true,
+  });
+
+  const user = sessionQuery.data ?? null;
+  const status: AuthStatus = sessionQuery.isPending ? "loading" : user ? "authenticated" : "anonymous";
+  const isAdmin = isAdminRole(user?.role);
 
   const refresh = useCallback(async () => {
-    setStatus("loading");
-    try {
-      const next = await fetchSession();
-      setUser(next);
-      setStatus(next ? "authenticated" : "anonymous");
-    } catch {
-      setUser(null);
-      setStatus("anonymous");
-    }
-  }, []);
-
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        const next = await fetchSession();
-        if (cancelled) return;
-        setUser(next);
-        setStatus(next ? "authenticated" : "anonymous");
-      } catch {
-        if (cancelled) return;
-        setUser(null);
-        setStatus("anonymous");
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+    await queryClient.invalidateQueries({ queryKey: authKeys.session() });
+    await queryClient.refetchQueries({ queryKey: authKeys.session() });
+  }, [queryClient]);
 
   const logout = useCallback(async () => {
     await fetch("/api/auth/logout", { method: "POST" });
-    setUser(null);
-    setStatus("anonymous");
-  }, []);
+    queryClient.clear();
+  }, [queryClient]);
 
   const value = useMemo(
     () => ({
       user,
       status,
+      isAdmin,
       refresh,
       logout,
     }),
-    [user, status, refresh, logout],
+    [user, status, isAdmin, refresh, logout],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

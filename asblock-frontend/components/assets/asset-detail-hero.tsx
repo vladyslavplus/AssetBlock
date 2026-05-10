@@ -1,18 +1,14 @@
+import Link from "next/link";
 import { Star } from "lucide-react";
-import type { AssetListItem } from "@/lib/asset-types";
+import type { AssetListItem } from "@/lib/catalog/asset-types";
 import { formatUsdWhole } from "@/lib/format-currency";
+import { formatLongDate } from "@/lib/format-date";
 
 interface AssetDetailHeroProps {
   asset: AssetListItem;
 }
 
 export function AssetDetailHero({ asset }: AssetDetailHeroProps) {
-  const dateFormatter = new Intl.DateTimeFormat("en-US", {
-    year: "numeric",
-    month: "long",
-    day: "numeric",
-  });
-
   const hasRating = asset.averageRating > 0;
   const rating = hasRating ? Math.round(asset.averageRating * 2) / 2 : 0;
   const fullStars = Math.floor(rating);
@@ -20,10 +16,9 @@ export function AssetDetailHero({ asset }: AssetDetailHeroProps) {
   const emptyStars = 5 - fullStars - (hasHalfStar ? 1 : 0);
 
   return (
-    <div className="flex flex-col gap-4">
-      {/* Title and price row */}
-      <div className="flex flex-col gap-3">
-        <h1 className="text-3xl font-semibold text-foreground text-balance">
+    <div className="flex min-w-0 flex-col gap-4">
+      <div className="flex min-w-0 flex-col gap-3">
+        <h1 className="break-words text-balance text-3xl font-semibold text-foreground">
           {asset.title}
         </h1>
         <div className="flex items-baseline gap-4">
@@ -38,7 +33,6 @@ export function AssetDetailHero({ asset }: AssetDetailHeroProps) {
         </div>
       </div>
 
-      {/* Rating and author */}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between pb-4 border-b border-border">
         <div className="flex items-center gap-3">
           {hasRating ? (
@@ -76,13 +70,17 @@ export function AssetDetailHero({ asset }: AssetDetailHeroProps) {
         </div>
 
         <div className="text-sm text-muted-foreground">
-          <span className="text-accent">@{asset.authorUsername}</span>
+          <Link
+            href={`/users/${encodeURIComponent(asset.authorUsername)}`}
+            className="text-accent hover:underline underline-offset-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-background rounded-sm"
+          >
+            @{asset.authorUsername}
+          </Link>
           {" • "}
-          Listed {dateFormatter.format(new Date(asset.createdAt))}
+          Listed {formatLongDate(asset.createdAt)}
         </div>
       </div>
 
-      {/* Tags */}
       {asset.tags.length > 0 && (
         <div className="flex flex-wrap gap-2">
           {asset.tags.map((tag) => (

@@ -8,11 +8,12 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { ChevronDown, Filter } from "lucide-react";
+import { Skeleton } from "@/components/ui/skeleton";
 import {
   CATALOG_SORT_OPTIONS,
   getCatalogSortLabel,
   type CatalogFilters,
-} from "@/lib/catalog-filters";
+} from "@/lib/catalog/catalog-filters";
 
 interface CatalogToolbarProps {
   filters: CatalogFilters;
@@ -22,6 +23,7 @@ interface CatalogToolbarProps {
   onFilterClick?: () => void;
   isDesktop?: boolean;
   disabled?: boolean;
+  isCountsLoading?: boolean;
 }
 
 export function CatalogToolbar({
@@ -32,12 +34,21 @@ export function CatalogToolbar({
   onFilterClick,
   isDesktop = false,
   disabled = false,
+  isCountsLoading = false,
 }: CatalogToolbarProps) {
   return (
     <div className="flex items-center justify-between gap-3 flex-wrap">
-      <p className="text-xs text-muted-foreground">
-        Showing {displayCount} of {totalCount} assets
-      </p>
+      {isCountsLoading ? (
+        <Skeleton
+          className="h-3.5 w-44 max-w-[70vw] rounded-sm bg-muted-foreground/20 animate-pulse"
+          aria-busy="true"
+          aria-label="Loading result count"
+        />
+      ) : (
+        <p className="text-xs text-muted-foreground">
+          Showing {displayCount} of {totalCount} assets
+        </p>
+      )}
 
       <div className="flex items-center gap-2">
         {!isDesktop && (

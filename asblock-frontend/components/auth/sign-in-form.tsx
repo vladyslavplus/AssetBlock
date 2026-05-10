@@ -1,5 +1,6 @@
 "use client";
 
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useForm } from "react-hook-form";
@@ -9,9 +10,9 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { useAuth } from "@/components/auth/auth-context";
+import { AuthRequestError, postAuthLogin } from "@/lib/auth/auth-api";
 import { loginFormSchema, type LoginFormValues } from "@/lib/auth/schemas";
-import { getMessageFromApiErrorBody } from "@/lib/api-errors";
+import { syncQueryCacheAfterAuth } from "@/lib/query/query-sync-after-auth";
 
 interface SignInFormProps {
   formError?: string;
@@ -20,7 +21,7 @@ interface SignInFormProps {
 export function SignInForm({ formError }: SignInFormProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { refresh } = useAuth();
+  const queryClient = useQueryClient();
   const [showPassword, setShowPassword] = useState(false);
   const [submitError, setSubmitError] = useState<string>("");
 
@@ -29,33 +30,31 @@ export function SignInForm({ formError }: SignInFormProps) {
   const {
     register,
     handleSubmit,
-    formState: { errors, isSubmitting },
+    formState: { errors },
   } = useForm<LoginFormValues>({
     resolver: zodResolver(loginFormSchema),
     defaultValues: { email: "", password: "" },
   });
 
-  const onSubmit = handleSubmit(async (values) => {
-    setSubmitError("");
-    const res = await fetch("/api/auth/login", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(values),
-    });
-
-    const body: unknown = await res.json().catch(() => null);
-
-    if (!res.ok) {
-      const msg = getMessageFromApiErrorBody(body) ?? `Sign in failed (${res.status})`;
-      setSubmitError(msg);
-      return;
-    }
-
-    await refresh();
-    const next = returnUrl.startsWith("/") ? returnUrl : "/assets";
-    router.push(next);
-    router.refresh();
+  const loginMutation = useMutation({
+    mutationFn: postAuthLogin,
+    onMutate: () => setSubmitError(""),
+    onSuccess: async () => {
+      await syncQueryCacheAfterAuth(queryClient);
+      const next = returnUrl.startsWith("/") ? returnUrl : "/assets";
+      router.push(next);
+      router.refresh();
+    },
+    onError: (err: unknown) => {
+      if (err instanceof AuthRequestError) {
+        setSubmitError(err.message);
+        return;
+      }
+      setSubmitError("Network error. Try again.");
+    },
   });
+
+  const onSubmit = handleSubmit((values) => loginMutation.mutate(values));
 
   return (
     <form onSubmit={onSubmit} className="flex flex-col gap-3">
@@ -113,9 +112,9 @@ export function SignInForm({ formError }: SignInFormProps) {
       <Button
         type="submit"
         className="w-full mt-1 bg-primary text-primary-foreground hover:bg-[#6D28D9]"
-        disabled={isSubmitting}
+        disabled={loginMutation.isPending}
       >
-        {isSubmitting ? "Signing in…" : "Sign in"}
+        {loginMutation.isPending ? "Signing in…" : "Sign in"}
       </Button>
     </form>
   );

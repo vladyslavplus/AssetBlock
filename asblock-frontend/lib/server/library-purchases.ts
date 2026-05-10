@@ -1,5 +1,5 @@
-import { getMessageFromApiErrorBody } from "@/lib/api-errors";
-import type { PagedPurchaseLibraryDto } from "@/lib/purchase-types";
+import { getApiErrorMessage } from "@/lib/http/api-errors";
+import type { PagedPurchaseLibraryDto } from "@/lib/library/purchase-types";
 import type { AuthCookieStore } from "@/lib/server/auth-cookies";
 import { fetchBackendAuthorized } from "@/lib/server/backend-authorized";
 
@@ -13,9 +13,12 @@ export async function fetchMyPurchasesFromBackend(cookieStore: AuthCookieStore):
     pageSize: "100",
     sortDirection: "DESC",
   });
-  const res = await fetchBackendAuthorized(cookieStore, `/api/users/me/purchases?${qs.toString()}`, {
-    method: "GET",
-  });
+  const res = await fetchBackendAuthorized(
+    cookieStore,
+    `/api/users/me/purchases?${qs.toString()}`,
+    { method: "GET" },
+    { persistRefreshedTokens: false },
+  );
 
   const text = await res.text();
 
@@ -28,17 +31,23 @@ export async function fetchMyPurchasesFromBackend(cookieStore: AuthCookieStore):
         parsed = text;
       }
     }
-    const message =
-      getMessageFromApiErrorBody(parsed) ??
-      (typeof parsed === "string" && parsed.length > 0 ? parsed : `Could not load library (${res.status}).`);
+    const message = getApiErrorMessage(
+      parsed,
+      typeof parsed === "string" && parsed.length > 0 ? parsed : `Could not load library (${res.status}).`,
+    );
     return { ok: false, status: res.status, message };
   }
 
   const data = JSON.parse(text) as PagedPurchaseLibraryDto;
+  const rawItems = Array.isArray(data.items) ? data.items : [];
+  const items = rawItems.map((row) => ({
+    ...row,
+    hasUserReviewed: Boolean(row.hasUserReviewed),
+  }));
   return {
     ok: true,
     data: {
-      items: Array.isArray(data.items) ? data.items : [],
+      items,
       totalCount: Number(data.totalCount) || 0,
       page: Number(data.page) || 1,
       pageSize: Number(data.pageSize) || 0,

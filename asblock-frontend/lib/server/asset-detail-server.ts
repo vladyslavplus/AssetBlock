@@ -1,8 +1,8 @@
 import { cache } from "react";
-import { getServerApiBaseUrl } from "@/lib/api-config";
-import type { AssetDetailItemApi, PagedResultDto, ReviewListItemApi } from "@/lib/assets-api";
-import { mapReviewApiToUi } from "@/lib/assets-api";
-import type { AssetReview } from "@/lib/catalog-utils";
+import { getServerApiBaseUrl } from "@/lib/http/api-config";
+import type { AssetDetailItemApi, PagedResultDto, ReviewListItemApi } from "@/lib/catalog/assets-api";
+import { mapReviewApiToUi } from "@/lib/catalog/assets-api";
+import type { AssetReview } from "@/lib/catalog/catalog-utils";
 
 async function readJson<T>(res: Response): Promise<T | undefined> {
   const text = await res.text();

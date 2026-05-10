@@ -1,9 +1,12 @@
+using Ardalis.Result;
+using AssetBlock.Application.UseCases.Assets.GetAssets;
 using AssetBlock.Application.UseCases.Users.GetProfile;
 using AssetBlock.Application.UseCases.Users.ListNotifications;
 using AssetBlock.Application.UseCases.Users.ListSocialPlatforms;
 using AssetBlock.Application.UseCases.Users.MarkNotificationRead;
 using AssetBlock.Application.UseCases.Users.UpdateProfile;
 using AssetBlock.Application.UseCases.Users.UpdateSocialLinks;
+using AssetBlock.Domain.Core.Dto.Assets;
 using AssetBlock.Domain.Core.Dto.Notifications;
 using AssetBlock.Domain.Core.Dto.Users;
 using AssetBlock.WebApi.Controllers;
@@ -55,6 +58,29 @@ public sealed class UsersControllerTests : ControllerTestBase
     }
 
     [Fact]
+    public async Task ListMyAssets_WhenNoUser_ShouldReturnUnauthorized()
+    {
+        var controller = new UsersController(Sender);
+        SetupAnonymous(controller);
+        var result = await controller.ListMyAssets(new GetAssetsRequest(), CancellationToken.None);
+
+        result.Should().BeOfType<UnauthorizedResult>();
+    }
+
+    [Fact]
+    public async Task ListMyAssets_WhenAuthenticated_ShouldReturnOk()
+    {
+        Sender.Send(Arg.Any<GetAssetsQuery>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(Result.Success(new DomainPaging.PagedResult<AssetListItem>([], 0, 1, 10))));
+
+        var controller = new UsersController(Sender);
+        SetupUser(_userId, controller);
+        var action = await controller.ListMyAssets(new GetAssetsRequest(), CancellationToken.None);
+
+        action.Should().BeOfType<OkObjectResult>();
+    }
+
+    [Fact]
     public async Task MarkMyNotificationRead_WhenNoUser_ShouldReturnUnauthorized()
     {
         var controller = new UsersController(Sender);
@@ -100,7 +126,8 @@ public sealed class UsersControllerTests : ControllerTestBase
                 Bio = null,
                 IsPublicProfile = true,
                 CreatedAt = DateTimeOffset.UtcNow,
-                SocialLinks = []
+                SocialLinks = [],
+                Role = null
             })));
 
         var controller = new UsersController(Sender);
@@ -177,7 +204,8 @@ public sealed class UsersControllerTests : ControllerTestBase
                 Bio = null,
                 IsPublicProfile = true,
                 CreatedAt = DateTimeOffset.UtcNow,
-                SocialLinks = []
+                SocialLinks = [],
+                Role = null
             })));
 
         var controller = new UsersController(Sender);

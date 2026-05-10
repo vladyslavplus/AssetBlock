@@ -1,4 +1,4 @@
-import { getServerApiBaseUrl } from "@/lib/api-config";
+import { getServerApiBaseUrl } from "@/lib/http/api-config";
 import { transportErrorBody } from "@/lib/server/transport-error-body";
 
 type AuthAction = "login" | "register" | "refresh";

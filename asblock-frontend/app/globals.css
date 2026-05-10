@@ -44,13 +44,24 @@
   --chart-5: #f472b6;
 }
 
-/* Reserve space for the vertical scrollbar so Radix scroll-lock (overflow:hidden on body) does not shift layout */
+/*
+ * Radix Dialog locks scroll via react-remove-scroll-bar: it measures the scrollbar and applies
+ * matching margin/padding on body[data-scroll-locked]. Do not combine with scrollbar-gutter: stable
+ * or CSS that zeroes that compensation — on Chromium/Windows that caused horizontal layout shift when
+ * the scrollbar disappeared. Let the library handle width compensation.
+ */
 html {
   scrollbar-gutter: stable;
 }
 
-body {
-  scrollbar-gutter: stable;
+html body[data-scroll-locked] {
+  --removed-body-scroll-bar-size: 0 !important;
+  margin-right: 0 !important;
+  margin-left: 0 !important;
+  margin-top: 0 !important;
+  padding-right: 0 !important;
+  padding-left: 0 !important;
+  padding-top: 0 !important;
 }
 
 /* Firefox scrollbar styling */
@@ -86,6 +97,7 @@ body {
   --color-foreground: var(--foreground);
   --color-card: var(--card);
   --color-card-foreground: var(--card-foreground);
+  --color-card-elevated: var(--card-elevated);
   --color-popover: var(--popover);
   --color-popover-foreground: var(--popover-foreground);
   --color-primary: var(--primary);

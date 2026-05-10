@@ -1,10 +1,13 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+/* eslint-disable react-hooks/refs -- react-hook-form: field refs from register() and handleSubmit() are valid usage */
+
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { ArrowLeft } from "lucide-react";
-import { useForm } from "react-hook-form";
+import { useForm, useWatch } from "react-hook-form";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
@@ -13,28 +16,26 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
-import type { AccountProfile, UpdateUserProfileResponseDto } from "@/lib/account-types";
+import type { AccountProfile } from "@/lib/account/account-types";
 import {
   accountProfileFormSchema,
   type AccountProfileFormValues,
   changePasswordFormSchema,
   type ChangePasswordFormValues,
-} from "@/lib/account-schemas";
-
-function readApiErrorMessage(payload: unknown, fallback: string): string {
-  if (!payload || typeof payload !== "object") return fallback;
-  const o = payload as Record<string, unknown>;
-  if (typeof o.error === "string" && o.error.length > 0) return o.error;
-  const errors = o.errors;
-  if (Array.isArray(errors) && errors.length > 0) {
-    const first = errors[0];
-    if (first && typeof first === "object" && "message" in first) {
-      const m = (first as { message: unknown }).message;
-      if (typeof m === "string" && m.length > 0) return m;
-    }
-  }
-  return fallback;
-}
+} from "@/lib/account/account-schemas";
+import {
+  AccountRequestError,
+  patchAccountProfile,
+  postChangeAccountPassword,
+  putAccountSocials,
+} from "@/lib/account/account-api";
+import { accountKeys, fetchAccountProfile, fetchAccountSocialPlatforms } from "@/lib/account/account-query";
+import { applyApiFieldErrorsToForm, getApiErrorMessage, parseApiErrorBody } from "@/lib/http/api-errors";
+import { buildSocialUrlsFromProfile } from "@/lib/account/social-links-account";
+import {
+  AccountProfileCardSkeleton,
+  SocialLinksFieldsSkeleton,
+} from "@/components/skeletons/account-settings-skeleton";
 
 type AccountSection = "profile" | "password";
 
@@ -46,13 +47,37 @@ const PASSWORD_FORM_EMPTY: ChangePasswordFormValues = {
 
 export function AccountSettingsForm() {
   const router = useRouter();
-  const [loadState, setLoadState] = useState<"idle" | "loading" | "error">("idle");
-  const [loadError, setLoadError] = useState<string | null>(null);
-  const [profile, setProfile] = useState<AccountProfile | null>(null);
+  const queryClient = useQueryClient();
+  const profileQuery = useQuery({
+    queryKey: accountKeys.me(),
+    queryFn: fetchAccountProfile,
+    retry: false,
+  });
+
+  const profile = profileQuery.data ?? null;
+
+  const socialPlatformsQuery = useQuery({
+    queryKey: accountKeys.socialPlatforms(),
+    queryFn: fetchAccountSocialPlatforms,
+    enabled: Boolean(profile?.id),
+  });
+
+  const socialPlatforms = useMemo(
+    () => socialPlatformsQuery.data ?? [],
+    [socialPlatformsQuery.data],
+  );
+  const socialPlatformsLoading = socialPlatformsQuery.isPending;
+  const socialPlatformsError = socialPlatformsQuery.isError
+    ? socialPlatformsQuery.error instanceof Error
+      ? socialPlatformsQuery.error.message
+      : "Could not load social platforms."
+    : null;
+
   const [section, setSection] = useState<AccountSection>("profile");
-  const [savingProfile, setSavingProfile] = useState(false);
-  const [changingPassword, setChangingPassword] = useState(false);
   const lastSavedRef = useRef<AccountProfileFormValues | null>(null);
+  const profileHydratedRef = useRef<string | null>(null);
+
+  const [socialUrls, setSocialUrls] = useState<Record<string, string>>({});
 
   const profileForm = useForm<AccountProfileFormValues>({
     resolver: zodResolver(accountProfileFormSchema),
@@ -62,6 +87,7 @@ export function AccountSettingsForm() {
       avatarUrl: "",
       isPublicProfile: true,
     },
+    shouldUnregister: false,
   });
 
   const passwordForm = useForm<ChangePasswordFormValues>({
@@ -71,100 +97,253 @@ export function AccountSettingsForm() {
       newPassword: "",
       confirmPassword: "",
     },
+    shouldUnregister: false,
   });
 
-  const fetchProfile = useCallback(async () => {
-    setLoadState("loading");
-    setLoadError(null);
-    try {
-      const res = await fetch("/api/account/me", { credentials: "include" });
-      if (res.status === 401) {
-        router.push(`/login?returnUrl=${encodeURIComponent("/account")}`);
-        return;
-      }
-      const json: unknown = await res.json().catch(() => null);
-      if (!res.ok) {
-        setLoadState("error");
-        setLoadError(readApiErrorMessage(json, "Could not load profile."));
-        return;
-      }
-      const data = json as AccountProfile;
-      setProfile(data);
+  const regUsername = profileForm.register("username");
+  const regBio = profileForm.register("bio");
+  const regAvatarUrl = profileForm.register("avatarUrl");
+  const regPwdCurrent = passwordForm.register("currentPassword");
+  const regPwdNew = passwordForm.register("newPassword");
+  const regPwdConfirm = passwordForm.register("confirmPassword");
+
+  const watchedUsername = useWatch({ control: profileForm.control, name: "username", defaultValue: "" });
+  const watchedBio = useWatch({ control: profileForm.control, name: "bio", defaultValue: "" });
+  const watchedAvatarUrl = useWatch({ control: profileForm.control, name: "avatarUrl", defaultValue: "" });
+  const watchedIsPublicProfile = useWatch({
+    control: profileForm.control,
+    name: "isPublicProfile",
+    defaultValue: true,
+  });
+
+  const watchedPwdCurrent = useWatch({
+    control: passwordForm.control,
+    name: "currentPassword",
+    defaultValue: "",
+  });
+  const watchedPwdNew = useWatch({
+    control: passwordForm.control,
+    name: "newPassword",
+    defaultValue: "",
+  });
+  const watchedPwdConfirm = useWatch({
+    control: passwordForm.control,
+    name: "confirmPassword",
+    defaultValue: "",
+  });
+
+  useEffect(() => {
+    if (profileQuery.isError && profileQuery.error instanceof Error && profileQuery.error.message === "UNAUTHORIZED") {
+      router.push(`/login?returnUrl=${encodeURIComponent("/account")}`);
+    }
+  }, [profileQuery.isError, profileQuery.error, router]);
+
+  useEffect(() => {
+    if (!profile) {
+      profileHydratedRef.current = null;
+      setSocialUrls({});
+      return;
+    }
+    if (profileHydratedRef.current !== profile.id) {
+      profileHydratedRef.current = profile.id;
       const values: AccountProfileFormValues = {
-        username: data.username,
-        bio: data.bio ?? "",
-        avatarUrl: data.avatarUrl ?? "",
-        isPublicProfile: data.isPublicProfile,
+        username: profile.username,
+        bio: profile.bio ?? "",
+        avatarUrl: profile.avatarUrl ?? "",
+        isPublicProfile: profile.isPublicProfile,
       };
       lastSavedRef.current = values;
       profileForm.reset(values);
-      setLoadState("idle");
-    } catch {
-      setLoadState("error");
-      setLoadError("Network error. Try again.");
+      setSocialUrls({});
     }
-  }, [profileForm, router]);
+  }, [profile, profileForm]);
 
   useEffect(() => {
-    void fetchProfile();
-  }, [fetchProfile]);
+    if (!profile || socialPlatforms.length === 0) {
+      return;
+    }
+    setSocialUrls(buildSocialUrlsFromProfile(socialPlatforms, profile.socialLinks));
+  }, [profile, socialPlatforms]);
+
+  const socialBaseline = useMemo(() => {
+    if (!profile || socialPlatforms.length === 0) {
+      return {} as Record<string, string>;
+    }
+    return buildSocialUrlsFromProfile(socialPlatforms, profile.socialLinks);
+  }, [profile, socialPlatforms]);
+
+  const isSocialDirty = useMemo(() => {
+    const keys = new Set([...Object.keys(socialUrls), ...Object.keys(socialBaseline)]);
+    for (const k of keys) {
+      if ((socialUrls[k] ?? "").trim() !== (socialBaseline[k] ?? "").trim()) {
+        return true;
+      }
+    }
+    return false;
+  }, [socialUrls, socialBaseline]);
+
+  const canPersistSocialLinks =
+    socialPlatforms.length > 0 && !socialPlatformsLoading && !socialPlatformsError;
+
+  /** Build PUT body; on invalid input shows toast and returns null. */
+  const patchProfileMutation = useMutation({
+    mutationFn: patchAccountProfile,
+  });
+
+  const putSocialsMutation = useMutation({
+    mutationFn: putAccountSocials,
+  });
+
+  const changePasswordMutation = useMutation({
+    mutationFn: postChangeAccountPassword,
+    onSuccess: () => {
+      passwordForm.reset(PASSWORD_FORM_EMPTY);
+      toast.success("Password updated.");
+      setSection("profile");
+    },
+    onError: (err: unknown) => {
+      if (err instanceof AccountRequestError) {
+        if (err.status === 401) {
+          router.push(`/login?returnUrl=${encodeURIComponent("/account")}`);
+          return;
+        }
+        const parsed = parseApiErrorBody(err.body);
+        if (parsed?.fieldErrors && Object.keys(parsed.fieldErrors).length > 0) {
+          applyApiFieldErrorsToForm(passwordForm.setError, parsed.fieldErrors);
+        }
+        toast.error(getApiErrorMessage(err.body, "Could not change password."));
+        return;
+      }
+      toast.error("Network error. Try again.");
+    },
+  });
+
+  const savingProfile = patchProfileMutation.isPending || putSocialsMutation.isPending;
+
+  const tryBuildSocialLinksPayload = useCallback((): Array<{ platformId: string; url: string }> | null => {
+    const links: Array<{ platformId: string; url: string }> = [];
+    for (const p of socialPlatforms) {
+      const raw = (socialUrls[p.id] ?? "").trim();
+      if (!raw) continue;
+      if (raw.length > 500) {
+        toast.error(`${p.name}: URL must be at most 500 characters.`);
+        return null;
+      }
+      try {
+        const u = new URL(raw);
+        if (u.protocol !== "http:" && u.protocol !== "https:") {
+          toast.error(`${p.name}: Use an http or https URL.`);
+          return null;
+        }
+      } catch {
+        toast.error(`${p.name}: Enter a valid URL or leave empty.`);
+        return null;
+      }
+      links.push({ platformId: p.id, url: raw });
+    }
+    const ids = new Set(links.map((l) => l.platformId));
+    if (ids.size !== links.length) {
+      toast.error("Each platform can only appear once.");
+      return null;
+    }
+    return links;
+  }, [socialPlatforms, socialUrls]);
 
   const onSaveProfile = profileForm.handleSubmit(async (values) => {
-    setSavingProfile(true);
+    const dirtyProfile = profileForm.formState.isDirty;
+    const dirtySocial = isSocialDirty;
+    if (!dirtyProfile && !dirtySocial) {
+      return;
+    }
+    if (dirtySocial && !canPersistSocialLinks) {
+      toast.error("Social platforms are not ready. Fix loading errors or try again.");
+      return;
+    }
+
     try {
-      const res = await fetch("/api/account/me", {
-        method: "PATCH",
-        credentials: "include",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          username: values.username.trim(),
-          bio: values.bio.trim() || null,
-          avatarUrl: values.avatarUrl.trim() || null,
-          isPublicProfile: values.isPublicProfile,
-        }),
-      });
-      const json: unknown = await res.json().catch(() => null);
-      if (res.status === 401) {
-        router.push(`/login?returnUrl=${encodeURIComponent("/account")}`);
-        return;
-      }
-      if (!res.ok) {
-        toast.error(readApiErrorMessage(json, "Could not save profile."));
-        return;
-      }
-      const data = json as UpdateUserProfileResponseDto;
-      setProfile((prev) =>
-        prev
-          ? {
-              ...prev,
-              username: data.username,
-              avatarUrl: data.avatarUrl,
-              bio: data.bio,
-              isPublicProfile: data.isPublicProfile,
+      if (dirtyProfile) {
+        try {
+          const data = await patchProfileMutation.mutateAsync(values);
+          queryClient.setQueryData<AccountProfile>(accountKeys.me(), (prev) =>
+            prev
+              ? {
+                  ...prev,
+                  username: data.username,
+                  avatarUrl: data.avatarUrl,
+                  bio: data.bio,
+                  isPublicProfile: data.isPublicProfile,
+                }
+              : prev,
+          );
+          const next: AccountProfileFormValues = {
+            username: data.username,
+            bio: data.bio ?? "",
+            avatarUrl: data.avatarUrl ?? "",
+            isPublicProfile: data.isPublicProfile,
+          };
+          lastSavedRef.current = next;
+          profileForm.reset(next);
+        } catch (err) {
+          if (err instanceof AccountRequestError) {
+            if (err.status === 401) {
+              router.push(`/login?returnUrl=${encodeURIComponent("/account")}`);
+              return;
             }
-          : prev,
-      );
-      const next: AccountProfileFormValues = {
-        username: data.username,
-        bio: data.bio ?? "",
-        avatarUrl: data.avatarUrl ?? "",
-        isPublicProfile: data.isPublicProfile,
-      };
-      lastSavedRef.current = next;
-      profileForm.reset(next);
-      toast.success("Profile saved.");
+            const parsed = parseApiErrorBody(err.body);
+            if (parsed?.fieldErrors && Object.keys(parsed.fieldErrors).length > 0) {
+              applyApiFieldErrorsToForm(profileForm.setError, parsed.fieldErrors);
+            }
+            toast.error(getApiErrorMessage(err.body, "Could not save profile."));
+            return;
+          }
+          toast.error("Network error. Try again.");
+          return;
+        }
+      }
+
+      if (dirtySocial) {
+        const links = tryBuildSocialLinksPayload();
+        if (links === null) {
+          return;
+        }
+        try {
+          const updated = await putSocialsMutation.mutateAsync(links);
+          queryClient.setQueryData<AccountProfile>(accountKeys.me(), (prev) =>
+            prev ? { ...prev, socialLinks: updated } : prev,
+          );
+          setSocialUrls(buildSocialUrlsFromProfile(socialPlatforms, updated));
+        } catch (err) {
+          if (err instanceof AccountRequestError) {
+            if (err.status === 401) {
+              router.push(`/login?returnUrl=${encodeURIComponent("/account")}`);
+              return;
+            }
+            toast.error(getApiErrorMessage(err.body, "Could not save social links."));
+            return;
+          }
+          toast.error("Network error. Try again.");
+          return;
+        }
+      }
+
+      toast.success("Changes saved.");
       router.refresh();
     } catch {
       toast.error("Network error. Try again.");
-    } finally {
-      setSavingProfile(false);
     }
   });
 
   const onCancelProfile = () => {
     const snap = lastSavedRef.current;
     if (snap) profileForm.reset(snap);
+    if (profile && socialPlatforms.length > 0) {
+      setSocialUrls(buildSocialUrlsFromProfile(socialPlatforms, profile.socialLinks));
+    }
   };
+
+  const hasProfileOrSocialChanges = profileForm.formState.isDirty || isSocialDirty;
+  const saveBlockedBySocial =
+    isSocialDirty && !canPersistSocialLinks;
 
   const openPasswordSection = () => {
     passwordForm.reset(PASSWORD_FORM_EMPTY);
@@ -176,52 +355,13 @@ export function AccountSettingsForm() {
     setSection("profile");
   };
 
-  const onChangePassword = passwordForm.handleSubmit(async (values) => {
-    setChangingPassword(true);
-    try {
-      const res = await fetch("/api/account/password", {
-        method: "POST",
-        credentials: "include",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          currentPassword: values.currentPassword,
-          newPassword: values.newPassword,
-        }),
-      });
-      const json: unknown = await res.json().catch(() => null);
-      if (res.status === 401) {
-        router.push(`/login?returnUrl=${encodeURIComponent("/account")}`);
-        return;
-      }
-      if (!res.ok) {
-        toast.error(readApiErrorMessage(json, "Could not change password."));
-        return;
-      }
-      passwordForm.reset(PASSWORD_FORM_EMPTY);
-      toast.success("Password updated.");
-      setSection("profile");
-    } catch {
-      toast.error("Network error. Try again.");
-    } finally {
-      setChangingPassword(false);
-    }
-  });
+  const onChangePassword = passwordForm.handleSubmit((values) => changePasswordMutation.mutate(values));
 
-  if (loadState === "loading" && !profile) {
-    return (
-      <Card className="border-border bg-card-elevated">
-        <CardHeader>
-          <CardTitle className="text-xl">Account</CardTitle>
-          <CardDescription>Loading your profile…</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <p className="text-muted-foreground text-sm">Please wait.</p>
-        </CardContent>
-      </Card>
-    );
+  if (profileQuery.isPending && !profile) {
+    return <AccountProfileCardSkeleton />;
   }
 
-  if (loadState === "error" && !profile) {
+  if (profileQuery.isError && !profile) {
     return (
       <Card className="border-border bg-card-elevated">
         <CardHeader>
@@ -229,8 +369,10 @@ export function AccountSettingsForm() {
           <CardDescription>We could not load your profile.</CardDescription>
         </CardHeader>
         <CardContent>
-          <p className="text-destructive text-sm">{loadError}</p>
-          <Button type="button" variant="outline" className="mt-4" onClick={() => void fetchProfile()}>
+          <p className="text-destructive text-sm">
+            {profileQuery.error instanceof Error ? profileQuery.error.message : "Network error. Try again."}
+          </p>
+          <Button type="button" variant="outline" className="mt-4" onClick={() => void profileQuery.refetch()}>
             Retry
           </Button>
         </CardContent>
@@ -284,12 +426,26 @@ export function AccountSettingsForm() {
           <form className="space-y-4" onSubmit={onSaveProfile} noValidate>
             <div className="space-y-2">
               <Label htmlFor="account-email">Email</Label>
-              <Input id="account-email" value={profile?.email ?? ""} readOnly disabled className="bg-muted/50" />
+              <Input
+                id="account-email"
+                value={profile?.email == null ? "" : String(profile.email)}
+                readOnly
+                disabled
+                className="bg-muted/50"
+              />
             </div>
 
             <div className="space-y-2">
               <Label htmlFor="account-username">Username</Label>
-              <Input id="account-username" autoComplete="username" {...profileForm.register("username")} />
+              <Input
+                id="account-username"
+                autoComplete="username"
+                name={regUsername.name}
+                ref={regUsername.ref}
+                onBlur={regUsername.onBlur}
+                onChange={regUsername.onChange}
+                value={watchedUsername ?? ""}
+              />
               {profileForm.formState.errors.username && (
                 <p className="text-destructive text-sm">{profileForm.formState.errors.username.message}</p>
               )}
@@ -297,7 +453,15 @@ export function AccountSettingsForm() {
 
             <div className="space-y-2">
               <Label htmlFor="account-bio">Bio</Label>
-              <Textarea id="account-bio" rows={4} {...profileForm.register("bio")} />
+              <Textarea
+                id="account-bio"
+                className="bg-input border-border"
+                name={regBio.name}
+                ref={regBio.ref}
+                onBlur={regBio.onBlur}
+                onChange={regBio.onChange}
+                value={watchedBio ?? ""}
+              />
               {profileForm.formState.errors.bio && (
                 <p className="text-destructive text-sm">{profileForm.formState.errors.bio.message}</p>
               )}
@@ -305,7 +469,16 @@ export function AccountSettingsForm() {
 
             <div className="space-y-2">
               <Label htmlFor="account-avatar">Avatar URL</Label>
-              <Input id="account-avatar" type="url" placeholder="https://…" {...profileForm.register("avatarUrl")} />
+              <Input
+                id="account-avatar"
+                type="url"
+                placeholder="https://…"
+                name={regAvatarUrl.name}
+                ref={regAvatarUrl.ref}
+                onBlur={regAvatarUrl.onBlur}
+                onChange={regAvatarUrl.onChange}
+                value={watchedAvatarUrl ?? ""}
+              />
               {profileForm.formState.errors.avatarUrl && (
                 <p className="text-destructive text-sm">{profileForm.formState.errors.avatarUrl.message}</p>
               )}
@@ -317,16 +490,66 @@ export function AccountSettingsForm() {
                 <p className="text-muted-foreground text-xs">Allow others to view your profile page.</p>
               </div>
               <Switch
-                checked={profileForm.watch("isPublicProfile")}
+                checked={watchedIsPublicProfile ?? true}
                 onCheckedChange={(v) => profileForm.setValue("isPublicProfile", v, { shouldDirty: true })}
               />
             </div>
 
+            <div className="space-y-4 border-t border-border/60 pt-6">
+              <div>
+                <p className="text-sm font-medium text-foreground">Social links</p>
+                <p className="text-muted-foreground text-xs mt-0.5">
+                  Shown on your public profile. Leave blank to remove a link. Must be full{" "}
+                  <span className="font-mono">http://</span> or <span className="font-mono">https://</span> URLs.
+                </p>
+              </div>
+              {socialPlatformsLoading && <SocialLinksFieldsSkeleton rows={4} />}
+              {socialPlatformsError && (
+                <p className="text-destructive text-sm" role="alert">
+                  {socialPlatformsError}
+                </p>
+              )}
+              {!socialPlatformsLoading && !socialPlatformsError && socialPlatforms.length === 0 && profile && (
+                <p className="text-sm text-muted-foreground">No social platforms are available.</p>
+              )}
+              <div className="space-y-3">
+                {[...socialPlatforms]
+                  .sort((a, b) => a.name.localeCompare(b.name))
+                  .map((p) => (
+                    <div key={p.id} className="space-y-1.5">
+                      <Label htmlFor={`social-${p.id}`} className="text-xs font-medium">
+                        {p.name}
+                      </Label>
+                      <Input
+                        id={`social-${p.id}`}
+                        type="url"
+                        placeholder="https://…"
+                        autoComplete="off"
+                        value={socialUrls[p.id] ?? ""}
+                        onChange={(e) =>
+                          setSocialUrls((prev) => ({ ...prev, [p.id]: e.target.value }))
+                        }
+                        disabled={socialPlatformsLoading || savingProfile}
+                        className="bg-input border-border"
+                      />
+                    </div>
+                  ))}
+              </div>
+            </div>
+
             <div className="flex flex-wrap gap-2">
-              <Button type="submit" disabled={savingProfile || !profileForm.formState.isDirty}>
+              <Button
+                type="submit"
+                disabled={savingProfile || !hasProfileOrSocialChanges || saveBlockedBySocial}
+              >
                 {savingProfile ? "Saving…" : "Save changes"}
               </Button>
-              <Button type="button" variant="outline" onClick={onCancelProfile} disabled={!profileForm.formState.isDirty}>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={onCancelProfile}
+                disabled={!hasProfileOrSocialChanges}
+              >
                 Cancel
               </Button>
             </div>
@@ -339,7 +562,11 @@ export function AccountSettingsForm() {
                 id="current-password"
                 type="password"
                 autoComplete="current-password"
-                {...passwordForm.register("currentPassword")}
+                name={regPwdCurrent.name}
+                ref={regPwdCurrent.ref}
+                onBlur={regPwdCurrent.onBlur}
+                onChange={regPwdCurrent.onChange}
+                value={watchedPwdCurrent ?? ""}
               />
               {passwordForm.formState.errors.currentPassword && (
                 <p className="text-destructive text-sm">{passwordForm.formState.errors.currentPassword.message}</p>
@@ -351,7 +578,11 @@ export function AccountSettingsForm() {
                 id="new-password"
                 type="password"
                 autoComplete="new-password"
-                {...passwordForm.register("newPassword")}
+                name={regPwdNew.name}
+                ref={regPwdNew.ref}
+                onBlur={regPwdNew.onBlur}
+                onChange={regPwdNew.onChange}
+                value={watchedPwdNew ?? ""}
               />
               {passwordForm.formState.errors.newPassword && (
                 <p className="text-destructive text-sm">{passwordForm.formState.errors.newPassword.message}</p>
@@ -363,14 +594,18 @@ export function AccountSettingsForm() {
                 id="confirm-password"
                 type="password"
                 autoComplete="new-password"
-                {...passwordForm.register("confirmPassword")}
+                name={regPwdConfirm.name}
+                ref={regPwdConfirm.ref}
+                onBlur={regPwdConfirm.onBlur}
+                onChange={regPwdConfirm.onChange}
+                value={watchedPwdConfirm ?? ""}
               />
               {passwordForm.formState.errors.confirmPassword && (
                 <p className="text-destructive text-sm">{passwordForm.formState.errors.confirmPassword.message}</p>
               )}
             </div>
-            <Button type="submit" disabled={changingPassword}>
-              {changingPassword ? "Updating…" : "Update password"}
+            <Button type="submit" disabled={changePasswordMutation.isPending}>
+              {changePasswordMutation.isPending ? "Updating…" : "Update password"}
             </Button>
           </form>
         )}

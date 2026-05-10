@@ -87,6 +87,7 @@ public class GetUserProfileQueryHandlerTests
         result.Value.Username.Should().Be("a");
         result.Value.Email.Should().Be("a@a.com");
         result.Value.SocialLinks.Should().HaveCount(1);
+        result.Value.Role.Should().Be(AppRoles.USER);
     }
 
     [Fact]
@@ -109,6 +110,7 @@ public class GetUserProfileQueryHandlerTests
         result.IsSuccess.Should().BeTrue();
         result.Value.Username.Should().Be("meuser");
         result.Value.Email.Should().Be("m@a.com");
+        result.Value.Role.Should().Be(AppRoles.USER);
     }
 
     [Fact]
@@ -132,5 +134,27 @@ public class GetUserProfileQueryHandlerTests
 
         result.IsSuccess.Should().BeTrue();
         result.Value.Email.Should().BeNull();
+        result.Value.Role.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task Handle_WhenMePath_AsAdmin_ShouldIncludeAdminRole()
+    {
+        var id = Guid.NewGuid();
+        var user = new User
+        {
+            Id = id,
+            Username = "adminme",
+            Email = "a@a.com",
+            PasswordHash = "h",
+            Role = AppRoles.ADMIN,
+            SocialLinks = []
+        };
+        _userStore.GetByIdWithLinks(id, Arg.Any<CancellationToken>()).Returns(user);
+
+        var result = await _handler.Handle(new GetUserProfileQuery(null, id), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.Role.Should().Be(AppRoles.ADMIN);
     }
 }

@@ -245,7 +245,7 @@ internal sealed class DatabaseMigrationService(
         try
         {
             await context.SaveChangesAsync(cancellationToken);
-            logger.LogInformation("Dev admin seeded → email: {Email}, password: {Password}", DEV_ADMIN_EMAIL, DEV_ADMIN_PASSWORD);
+            logger.LogInformation("Dev admin seeded -> email: {Email}, password: {Password}", DEV_ADMIN_EMAIL, DEV_ADMIN_PASSWORD);
         }
         catch (DbUpdateException ex) when (ex.InnerException is Npgsql.PostgresException { SqlState: Npgsql.PostgresErrorCodes.UniqueViolation })
         {
@@ -347,6 +347,15 @@ internal sealed class DatabaseMigrationService(
         logger.LogInformation("Seeded {Count} demo assets in database (titles prefixed with [TEST]).", DEMO_ASSET_COUNT);
 
         var reviewers = await EnsureDemoReviewers(context, passwordHasher, now, cancellationToken);
+        // Include dev admin so seeded catalog gets purchases/reviews from that account too (not only demo-buyer-*).
+        var adminForReviews = await context.Users.FirstOrDefaultAsync(
+            u => u.Username == DEV_ADMIN_USERNAME,
+            cancellationToken);
+        if (adminForReviews is not null)
+        {
+            reviewers = [..reviewers, adminForReviews];
+        }
+
         await SeedDemoPurchasesAndReviews(context, insertedIds, reviewers, now, cancellationToken);
 
         foreach (var id in insertedIds)
@@ -403,7 +412,7 @@ internal sealed class DatabaseMigrationService(
             {
                 await context.SaveChangesAsync(cancellationToken);
                 logger.LogInformation(
-                    "Demo reviewer seeded → username: {Username}, password: {Password}",
+                    "Demo reviewer seeded -> username: {Username}, password: {Password}",
                     username,
                     DEMO_REVIEWER_PASSWORD);
             }
@@ -420,7 +429,8 @@ internal sealed class DatabaseMigrationService(
     }
 
     /// <summary>
-    /// Three purchases + reviews per demo asset, from distinct buyers (matches app rule: one review per user per asset).
+    /// Three purchases and reviews per demo asset, from distinct buyers (matches app rule: one review per user per asset).
+    /// Buyers rotate through demo reviewer accounts plus dev admin when present.
     /// </summary>
     private async Task SeedDemoPurchasesAndReviews(
         ApplicationDbContext context,

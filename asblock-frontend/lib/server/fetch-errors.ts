@@ -1,4 +1,4 @@
-import { getServerApiBaseUrl } from "@/lib/api-config";
+import { getServerApiBaseUrl } from "@/lib/http/api-config";
 
 function getErrnoCode(value: unknown): string | undefined {
   if (value && typeof value === "object" && "code" in value) {

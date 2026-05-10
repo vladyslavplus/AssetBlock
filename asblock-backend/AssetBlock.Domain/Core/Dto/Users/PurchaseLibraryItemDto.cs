@@ -6,4 +6,5 @@ public sealed record PurchaseLibraryItemDto(
     string AssetTitle,
     decimal Price,
     DateTimeOffset PurchasedAt,
-    string AuthorUsername);
+    string AuthorUsername,
+    bool HasUserReviewed);

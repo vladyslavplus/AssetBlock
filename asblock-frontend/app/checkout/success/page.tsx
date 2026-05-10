@@ -3,6 +3,8 @@ import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { SiteHeader } from "@/components/site-header";
 import { SiteFooter } from "@/components/site-footer";
+import { InvalidateLibraryAfterCheckout } from "@/components/checkout/invalidate-library-after-checkout";
+import { PostCheckoutReviewBanner } from "@/components/reviews/post-checkout-review-banner";
 
 export const metadata = {
   title: "Payment successful - AssetBlock",
@@ -15,6 +17,7 @@ export default function CheckoutSuccessPage() {
       <SiteHeader />
 
       <main className="flex-1 px-4 sm:px-6 lg:px-8 pt-20 pb-16">
+        <InvalidateLibraryAfterCheckout />
         <div className="max-w-lg mx-auto">
           <div className="bg-card-elevated border border-border rounded-xl p-6 sm:p-8 space-y-6">
             <div className="flex justify-center">
@@ -28,6 +31,8 @@ export default function CheckoutSuccessPage() {
             <p className="text-sm text-muted-foreground text-center leading-relaxed">
               Thank you for your purchase. Your payment has been processed and access to your digital assets will be available in your library shortly.
             </p>
+
+            <PostCheckoutReviewBanner />
 
             <div className="flex flex-col gap-3 pt-2">
               <Button

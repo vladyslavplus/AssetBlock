@@ -14,10 +14,11 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/components/auth/auth-context";
+import { NotificationBell } from "@/components/notifications/notification-bell";
 
 export function SiteHeader() {
   const router = useRouter();
-  const { user, status, logout } = useAuth();
+  const { user, status, logout, isAdmin } = useAuth();
   const [scrolled, setScrolled] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
 
@@ -87,40 +88,50 @@ export function SiteHeader() {
             </Link>
           </nav>
 
-          <div className="hidden md:flex items-center gap-3">
+          <div className="flex items-center gap-2 md:gap-3">
             {authPending ? (
               <div
-                className="h-8 w-28 rounded-md bg-muted/25 animate-pulse"
+                className="h-8 w-28 rounded-md bg-muted/25 animate-pulse hidden md:block"
                 aria-hidden
               />
             ) : authed ? (
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    type="button"
-                    className="border-border text-foreground bg-transparent hover:bg-secondary/50 hover:border-foreground/40 hover:text-foreground transition-smooth gap-1"
-                  >
-                    Account
-                    <ChevronDown className="size-3.5 opacity-70" aria-hidden />
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end" className="min-w-[10rem]">
-                  <DropdownMenuItem asChild>
-                    <Link href="/account">Account</Link>
-                  </DropdownMenuItem>
-                  <DropdownMenuSeparator />
-                  <DropdownMenuItem
-                    variant="destructive"
-                    onSelect={() => void handleSignOut()}
-                  >
-                    Sign out
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
-            ) : (
               <>
+                <NotificationBell />
+                <div className="hidden md:block">
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        type="button"
+                        className="border-border text-foreground bg-transparent hover:bg-secondary/50 hover:border-foreground/40 hover:text-foreground transition-smooth gap-1"
+                      >
+                        Account
+                        <ChevronDown className="size-3.5 opacity-70" aria-hidden />
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end" className="min-w-[10rem]">
+                      <DropdownMenuItem asChild>
+                        <Link href="/account">Account</Link>
+                      </DropdownMenuItem>
+                      {isAdmin ? (
+                        <DropdownMenuItem asChild>
+                          <Link href="/admin">Admin panel</Link>
+                        </DropdownMenuItem>
+                      ) : null}
+                      <DropdownMenuSeparator />
+                      <DropdownMenuItem
+                        variant="destructive"
+                        onSelect={() => void handleSignOut()}
+                      >
+                        Sign out
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                </div>
+              </>
+            ) : (
+              <div className="hidden md:flex items-center gap-3">
                 <Button
                   variant="outline"
                   size="sm"
@@ -136,18 +147,18 @@ export function SiteHeader() {
                 >
                   <Link href="/register">Get started</Link>
                 </Button>
-              </>
+              </div>
             )}
+            <button
+              className="md:hidden p-2 text-muted-foreground hover:text-foreground transition-colors"
+              type="button"
+              onClick={() => setMenuOpen((v) => !v)}
+              aria-label={menuOpen ? "Close menu" : "Open menu"}
+              aria-expanded={menuOpen}
+            >
+              {menuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
+            </button>
           </div>
-
-          <button
-            className="md:hidden p-2 text-muted-foreground hover:text-foreground transition-colors"
-            onClick={() => setMenuOpen((v) => !v)}
-            aria-label={menuOpen ? "Close menu" : "Open menu"}
-            aria-expanded={menuOpen}
-          >
-            {menuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
-          </button>
         </div>
       </div>
 
@@ -188,6 +199,17 @@ export function SiteHeader() {
               <div className="h-9 w-full rounded-md bg-muted/25 animate-pulse" aria-hidden />
             ) : authed ? (
               <div className="flex flex-col gap-2">
+                {isAdmin ? (
+                  <Button
+                    variant="outline"
+                    asChild
+                    className="w-full border-border text-foreground bg-transparent hover:bg-secondary/50 hover:border-foreground/40 transition-smooth"
+                  >
+                    <Link href="/admin" onClick={() => setMenuOpen(false)}>
+                      Admin panel
+                    </Link>
+                  </Button>
+                ) : null}
                 <Button variant="outline" asChild className="w-full border-border text-foreground bg-transparent hover:bg-secondary/50 hover:border-foreground/40 transition-smooth">
                   <Link href="/account" onClick={() => setMenuOpen(false)}>
                     Account

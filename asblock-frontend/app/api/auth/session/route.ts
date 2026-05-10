@@ -1,7 +1,7 @@
 import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
 import { AUTH_COOKIE_ACCESS } from "@/lib/auth/constants";
-import { getServerApiBaseUrl } from "@/lib/api-config";
+import { getServerApiBaseUrl } from "@/lib/http/api-config";
 import { clearAuthCookies } from "@/lib/server/auth-cookies";
 import { tryRefreshFromCookies } from "@/lib/server/refresh-session";
 

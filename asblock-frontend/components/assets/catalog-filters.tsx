@@ -10,13 +10,15 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Skeleton } from "@/components/ui/skeleton";
 import { ChevronDown, Minus, Plus } from "lucide-react";
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useCallback } from "react";
 import {
   CATALOG_SORT_OPTIONS,
   getCatalogSortLabel,
   type CatalogFilters,
-} from "@/lib/catalog-filters";
+} from "@/lib/catalog/catalog-filters";
+import { usePointerStepRepeat } from "@/hooks/use-pointer-step-repeat";
 
 interface CatalogFiltersProps {
   filters: CatalogFilters;
@@ -24,6 +26,7 @@ interface CatalogFiltersProps {
   onReset: () => void;
   categories: Array<{ id: string; name: string }>;
   tags: string[];
+  facetsLoading?: boolean;
   isLoading?: boolean;
 }
 
@@ -34,91 +37,11 @@ function clampPricePair(
   max: number | null,
 ): { min: number | null; max: number | null } {
   let m = min;
-  const x = max;
+  const x = max === 0 ? null : max;
   if (m !== null && x !== null && m > x) {
     m = Math.max(0, x - 1);
   }
   return { min: m, max: x };
-}
-
-/** Delay before repeating after pointer down (ms). */
-const PRICE_HOLD_DELAY_MS = 420;
-/** Repeat intervals get shorter as hold duration grows (ms). */
-const PRICE_REPEAT_DELAYS_MS = [95, 70, 48, 30, 20] as const;
-const PRICE_REPEAT_THRESHOLDS_MS = [0, 900, 2000, 3500, 5500] as const;
-
-function pickRepeatDelay(elapsedMs: number): number {
-  for (let i = PRICE_REPEAT_THRESHOLDS_MS.length - 1; i >= 0; i--) {
-    if (elapsedMs >= PRICE_REPEAT_THRESHOLDS_MS[i]) {
-      return PRICE_REPEAT_DELAYS_MS[Math.min(i, PRICE_REPEAT_DELAYS_MS.length - 1)];
-    }
-  }
-  return PRICE_REPEAT_DELAYS_MS[0];
-}
-
-function usePriceStepHold(adjustPrice: (field: "min" | "max", delta: number) => void) {
-  const adjustRef = useRef(adjustPrice);
-  useEffect(() => {
-    adjustRef.current = adjustPrice;
-  }, [adjustPrice]);
-  const holdTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const repeatTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const repeatStartRef = useRef<number>(0);
-
-  const clearTimers = useCallback(() => {
-    if (holdTimerRef.current !== null) {
-      clearTimeout(holdTimerRef.current);
-      holdTimerRef.current = null;
-    }
-    if (repeatTimerRef.current !== null) {
-      clearTimeout(repeatTimerRef.current);
-      repeatTimerRef.current = null;
-    }
-  }, []);
-
-  useEffect(() => () => clearTimers(), [clearTimers]);
-
-  const onStepPointerDown = useCallback(
-    (
-      field: "min" | "max",
-      delta: number,
-      disabled: boolean,
-      e: React.PointerEvent<HTMLButtonElement>,
-    ) => {
-      if (disabled || e.button !== 0) return;
-      e.preventDefault();
-      e.currentTarget.setPointerCapture(e.pointerId);
-      clearTimers();
-      adjustRef.current(field, delta);
-      repeatStartRef.current = Date.now();
-      holdTimerRef.current = setTimeout(() => {
-        holdTimerRef.current = null;
-        const scheduleTick = () => {
-          adjustRef.current(field, delta);
-          const elapsed = Date.now() - repeatStartRef.current;
-          repeatTimerRef.current = setTimeout(scheduleTick, pickRepeatDelay(elapsed));
-        };
-        scheduleTick();
-      }, PRICE_HOLD_DELAY_MS);
-    },
-    [clearTimers],
-  );
-
-  const onStepPointerEnd = useCallback(
-    (e: React.PointerEvent<HTMLButtonElement>) => {
-      try {
-        if (e.currentTarget.hasPointerCapture(e.pointerId)) {
-          e.currentTarget.releasePointerCapture(e.pointerId);
-        }
-      } catch {
-        /* releasePointerCapture can throw if capture already cleared */
-      }
-      clearTimers();
-    },
-    [clearTimers],
-  );
-
-  return { onStepPointerDown, onStepPointerEnd, clearStepTimers: clearTimers };
 }
 
 export function CatalogFiltersUI({
@@ -127,11 +50,18 @@ export function CatalogFiltersUI({
   onReset,
   categories,
   tags,
+  facetsLoading = false,
   isLoading = false,
 }: CatalogFiltersProps) {
   const [searchInput, setSearchInput] = useState(filters.search);
   const [draftMin, setDraftMin] = useState<number | null>(filters.minPrice);
   const [draftMax, setDraftMax] = useState<number | null>(filters.maxPrice);
+
+  useEffect(() => {
+    queueMicrotask(() => {
+      setSearchInput(filters.search);
+    });
+  }, [filters.search]);
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -143,11 +73,9 @@ export function CatalogFiltersUI({
   }, [searchInput, filters.search, onFilterChange]);
 
   useEffect(() => {
-    const min = filters.minPrice;
-    const max = filters.maxPrice;
     queueMicrotask(() => {
-      setDraftMin(min);
-      setDraftMax(max);
+      setDraftMin(filters.minPrice);
+      setDraftMax(filters.maxPrice);
     });
   }, [filters.minPrice, filters.maxPrice]);
 
@@ -199,7 +127,18 @@ export function CatalogFiltersUI({
     [draftMin, draftMax, applyDraftPrices],
   );
 
-  const { onStepPointerDown, onStepPointerEnd } = usePriceStepHold(adjustPrice);
+  const minMinusHold = usePointerStepRepeat(
+    useCallback(() => adjustPrice("min", -1), [adjustPrice]),
+  );
+  const minPlusHold = usePointerStepRepeat(
+    useCallback(() => adjustPrice("min", 1), [adjustPrice]),
+  );
+  const maxMinusHold = usePointerStepRepeat(
+    useCallback(() => adjustPrice("max", -1), [adjustPrice]),
+  );
+  const maxPlusHold = usePointerStepRepeat(
+    useCallback(() => adjustPrice("max", 1), [adjustPrice]),
+  );
 
   const categoryLabel = filters.categoryId
     ? categories.find((c) => c.id === filters.categoryId)?.name ?? "Category"
@@ -225,57 +164,80 @@ export function CatalogFiltersUI({
         <Label htmlFor="category-menu-trigger" className="text-xs font-medium">
           Category
         </Label>
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button
-              id="category-menu-trigger"
-              type="button"
-              variant="outline"
-              className="bg-input border-border text-xs h-8 w-full justify-between font-normal px-3"
-            >
-              <span className="truncate">{categoryLabel}</span>
-              <ChevronDown className="size-4 opacity-50 shrink-0" aria-hidden />
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent
-            align="start"
-            className="w-[var(--radix-dropdown-menu-trigger-width)] max-h-64 overflow-y-auto z-[100]"
-          >
-            <DropdownMenuItem onSelect={() => onFilterChange({ categoryId: "", page: 1 })}>
-              All categories
-            </DropdownMenuItem>
-            {categories.map((cat) => (
-              <DropdownMenuItem
-                key={cat.id}
-                onSelect={() => onFilterChange({ categoryId: cat.id, page: 1 })}
+        {facetsLoading ? (
+          <Skeleton
+            className="h-8 w-full rounded-md bg-muted-foreground/20 animate-pulse"
+            aria-busy="true"
+            aria-label="Loading categories"
+          />
+        ) : (
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                id="category-menu-trigger"
+                type="button"
+                variant="outline"
+                className="bg-input border-border text-xs h-8 w-full justify-between font-normal px-3"
               >
-                {cat.name}
+                <span className="truncate">{categoryLabel}</span>
+                <ChevronDown className="size-4 opacity-50 shrink-0" aria-hidden />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent
+              align="start"
+              className="w-[var(--radix-dropdown-menu-trigger-width)] max-h-64 overflow-y-auto z-[100]"
+            >
+              <DropdownMenuItem onSelect={() => onFilterChange({ categoryId: "", page: 1 })}>
+                All categories
               </DropdownMenuItem>
-            ))}
-          </DropdownMenuContent>
-        </DropdownMenu>
+              {categories.map((cat) => (
+                <DropdownMenuItem
+                  key={cat.id}
+                  onSelect={() => onFilterChange({ categoryId: cat.id, page: 1 })}
+                >
+                  {cat.name}
+                </DropdownMenuItem>
+              ))}
+            </DropdownMenuContent>
+          </DropdownMenu>
+        )}
       </div>
 
       <div className="flex flex-col gap-2">
         <Label className="text-xs font-medium">Tags</Label>
-        <div className="space-y-1.5 max-h-48 overflow-y-auto scrollbar-themed">
-          {tags.map((tag) => (
-            <div key={tag} className="flex items-center gap-2">
-              <Checkbox
-                id={`tag-${tag}`}
-                checked={filters.tags.includes(tag)}
-                onCheckedChange={() => handleTagToggle(tag)}
-                className="border-border bg-input"
-              />
-              <Label
-                htmlFor={`tag-${tag}`}
-                className="text-xs cursor-pointer font-normal"
-              >
-                {tag}
-              </Label>
-            </div>
-          ))}
-        </div>
+        {facetsLoading ? (
+          <div
+            className="space-y-1.5 max-h-48 overflow-hidden"
+            aria-busy="true"
+            aria-label="Loading tags"
+          >
+            {Array.from({ length: 7 }, (_, i) => (
+              <div key={i} className="flex items-center gap-2">
+                <Skeleton className="size-4 shrink-0 rounded-sm bg-muted-foreground/20 animate-pulse" />
+                <Skeleton className="h-3 flex-1 max-w-[85%] rounded-sm bg-muted-foreground/20 animate-pulse" />
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="space-y-1.5 max-h-48 overflow-y-auto scrollbar-themed">
+            {tags.map((tag) => (
+              <div key={tag} className="flex items-center gap-2">
+                <Checkbox
+                  id={`tag-${tag}`}
+                  checked={filters.tags.includes(tag)}
+                  onCheckedChange={() => handleTagToggle(tag)}
+                  className="border-border bg-input"
+                />
+                <Label
+                  htmlFor={`tag-${tag}`}
+                  className="text-xs cursor-pointer font-normal"
+                >
+                  {tag}
+                </Label>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
 
       <div className="flex flex-col gap-2">
@@ -308,16 +270,11 @@ export function CatalogFiltersUI({
                   <button
                     type="button"
                     onPointerDown={(e) =>
-                      onStepPointerDown(
-                        "min",
-                        -1,
-                        !draftMin || draftMin <= 0,
-                        e,
-                      )
+                      minMinusHold.onPointerDown(!draftMin || draftMin <= 0, e)
                     }
-                    onPointerUp={onStepPointerEnd}
-                    onPointerCancel={onStepPointerEnd}
-                    onLostPointerCapture={onStepPointerEnd}
+                    onPointerUp={minMinusHold.onPointerEnd}
+                    onPointerCancel={minMinusHold.onPointerEnd}
+                    onLostPointerCapture={minMinusHold.onPointerEnd}
                     onKeyDown={(e) => {
                       if (e.key !== "Enter" && e.key !== " ") return;
                       e.preventDefault();
@@ -332,10 +289,10 @@ export function CatalogFiltersUI({
                   </button>
                   <button
                     type="button"
-                    onPointerDown={(e) => onStepPointerDown("min", 1, false, e)}
-                    onPointerUp={onStepPointerEnd}
-                    onPointerCancel={onStepPointerEnd}
-                    onLostPointerCapture={onStepPointerEnd}
+                    onPointerDown={(e) => minPlusHold.onPointerDown(false, e)}
+                    onPointerUp={minPlusHold.onPointerEnd}
+                    onPointerCancel={minPlusHold.onPointerEnd}
+                    onLostPointerCapture={minPlusHold.onPointerEnd}
                     onKeyDown={(e) => {
                       if (e.key !== "Enter" && e.key !== " ") return;
                       e.preventDefault();
@@ -378,23 +335,18 @@ export function CatalogFiltersUI({
                   <button
                     type="button"
                     onPointerDown={(e) =>
-                      onStepPointerDown(
-                        "max",
-                        -1,
-                        !filters.maxPrice || filters.maxPrice <= 0,
-                        e,
-                      )
+                      maxMinusHold.onPointerDown(!draftMax || draftMax <= 0, e)
                     }
-                    onPointerUp={onStepPointerEnd}
-                    onPointerCancel={onStepPointerEnd}
-                    onLostPointerCapture={onStepPointerEnd}
+                    onPointerUp={maxMinusHold.onPointerEnd}
+                    onPointerCancel={maxMinusHold.onPointerEnd}
+                    onLostPointerCapture={maxMinusHold.onPointerEnd}
                     onKeyDown={(e) => {
                       if (e.key !== "Enter" && e.key !== " ") return;
                       e.preventDefault();
-                      if (!filters.maxPrice || filters.maxPrice <= 0) return;
+                      if (!draftMax || draftMax <= 0) return;
                       adjustPrice("max", -1);
                     }}
-                    disabled={!filters.maxPrice || filters.maxPrice <= 0}
+                    disabled={!draftMax || draftMax <= 0}
                     className="select-none rounded p-1 text-muted-foreground transition-colors hover:bg-secondary/80 hover:text-foreground disabled:cursor-default disabled:text-muted-foreground/30"
                     aria-label="Decrease max price"
                   >
@@ -402,10 +354,10 @@ export function CatalogFiltersUI({
                   </button>
                   <button
                     type="button"
-                    onPointerDown={(e) => onStepPointerDown("max", 1, false, e)}
-                    onPointerUp={onStepPointerEnd}
-                    onPointerCancel={onStepPointerEnd}
-                    onLostPointerCapture={onStepPointerEnd}
+                    onPointerDown={(e) => maxPlusHold.onPointerDown(false, e)}
+                    onPointerUp={maxPlusHold.onPointerEnd}
+                    onPointerCancel={maxPlusHold.onPointerEnd}
+                    onLostPointerCapture={maxPlusHold.onPointerEnd}
                     onKeyDown={(e) => {
                       if (e.key !== "Enter" && e.key !== " ") return;
                       e.preventDefault();
@@ -461,7 +413,7 @@ export function CatalogFiltersUI({
           onClick={onReset}
           variant="outline"
           size="sm"
-          disabled={isLoading}
+          disabled={isLoading || facetsLoading}
           className="flex-1 border-border text-foreground bg-transparent hover:bg-secondary/50 hover:border-foreground/40 hover:text-foreground text-xs h-8"
         >
           Reset

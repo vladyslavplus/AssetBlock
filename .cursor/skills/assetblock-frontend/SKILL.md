@@ -40,6 +40,14 @@ description: >-
 - Follow the existing stack: **shadcn/ui**, **Radix**, **Tailwind CSS**, **lucide-react**, and **sonner**.
 - Reuse existing UI primitives from `components/ui/` before adding one-off markup.
 - Match the established typography, spacing, and token usage in nearby files.
+- **Do not** hoist Tailwind class strings into module-level constants for styling (e.g. `const cardStyle = "…"`). Prefer inline `className` / `cn(...)` or a tiny wrapper component if you need reuse.
+
+## Server / cached client state (TanStack Query)
+
+- Use **@tanstack/react-query** for data that comes from `app/api` or the backend: lists, details, counts, and anything you want to **cache**, **dedupe**, and **invalidate** after mutations or realtime events.
+- App shell: `QueryProvider` wraps `AuthProvider` (`app/layout.tsx`) so `logout` can call `queryClient.clear()` and drop cached user-specific data.
+- Central **query keys** live next to fetchers: `lib/notifications-query.ts` (`notificationsKeys`), `lib/catalog-query.ts` (`catalogKeys`), `lib/asset-detail-query.ts` (`assetKeys`), `lib/account-query.ts` (`accountKeys`), `lib/library-query.ts` (`libraryKeys`), `lib/seller-query.ts` (`sellerKeys`).
+- Prefer **`invalidateQueries({ queryKey: [...] })`** after writes or SignalR-style pushes; use **`setQueryData`** for small optimistic patches (e.g. mark read, account profile PATCH) when a full refetch is unnecessary.
 
 ## Error handling
 

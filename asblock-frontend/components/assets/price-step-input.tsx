@@ -77,7 +77,7 @@ export function PriceStepInput({
         value={value ?? ''}
         onChange={(e) => handleInputChange(e.target.value)}
         className={cn(
-          'no-native-number-spin flex h-8 w-full rounded-md border border-border bg-input px-2 py-1 pr-[4.25rem] text-xs text-foreground',
+          'no-native-number-spinner flex h-8 w-full rounded-md border border-border bg-input px-2 py-1 pr-[4.25rem] text-xs text-foreground',
           'placeholder:text-muted-foreground/50 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none',
         )}
       />

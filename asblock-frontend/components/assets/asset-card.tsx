@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { Star } from "lucide-react";
-import type { AssetListItem } from "@/lib/asset-types";
+import type { AssetListItem } from "@/lib/catalog/asset-types";
 import { formatUsdWhole } from "@/lib/format-currency";
 
 interface AssetCardProps {
@@ -18,7 +18,6 @@ export function AssetCard({ asset }: AssetCardProps) {
       className="flex-none w-full rounded-xl border border-border p-4 flex flex-col gap-3 group transition-smooth hover:border-primary/50 hover:bg-card-elevated hover:shadow-[0_8px_24px_rgba(124,58,237,0.15)] focus-within:ring-2 focus-within:ring-primary focus-within:ring-offset-2 focus-within:ring-offset-background"
       style={{ background: "#11101A" }}
     >
-      {/* Header row - fixed size */}
       <div className="flex items-start justify-between gap-2 h-12">
         <div className="flex flex-col gap-1.5 min-w-0">
           {asset.categoryName && (
@@ -26,7 +25,7 @@ export function AssetCard({ asset }: AssetCardProps) {
               {asset.categoryName}
             </span>
           )}
-          <h3 className="font-semibold text-foreground text-sm leading-snug line-clamp-2 text-balance">
+          <h3 className="line-clamp-2 break-words text-balance text-sm font-semibold leading-snug text-foreground">
             {asset.title}
           </h3>
         </div>
@@ -35,15 +34,13 @@ export function AssetCard({ asset }: AssetCardProps) {
         </span>
       </div>
 
-      {/* Description - flexible */}
       {asset.description && (
-        <p className="text-xs text-muted-foreground leading-relaxed line-clamp-2 flex-1">
+        <p className="line-clamp-2 min-w-0 flex-1 break-words text-xs leading-relaxed text-muted-foreground [overflow-wrap:anywhere]">
           {asset.description}
         </p>
       )}
       {!asset.description && <div className="flex-1" />}
 
-      {/* Tags - fixed size */}
       {asset.tags.length > 0 && (
         <div className="flex flex-wrap gap-1.5 h-7">
           {visibleTags.map((tag) => (
@@ -62,12 +59,14 @@ export function AssetCard({ asset }: AssetCardProps) {
         </div>
       )}
 
-      {/* Footer - fixed size */}
       <div className="border-t border-border pt-3 flex flex-col gap-3">
         <div className="flex items-center justify-between">
-          <span className="text-xs text-muted-foreground">
+          <Link
+            href={`/users/${encodeURIComponent(asset.authorUsername)}`}
+            className="text-xs text-muted-foreground hover:text-accent transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-card rounded-sm"
+          >
             <span className="text-accent">@{asset.authorUsername}</span>
-          </span>
+          </Link>
           <div className="flex items-center gap-1">
             <div className="flex gap-0.5">
               {[...Array(5)].map((_, i) => (

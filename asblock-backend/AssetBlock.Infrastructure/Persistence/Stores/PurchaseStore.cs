@@ -68,7 +68,8 @@ internal sealed class PurchaseStore(ApplicationDbContext dbContext) : IPurchaseS
                 p.Asset.Title,
                 p.Asset.Price,
                 p.PurchasedAt,
-                p.Asset.Author.Username))
+                p.Asset.Author.Username,
+                p.Asset.Reviews.Any(r => r.UserId == userId)))
             .ToListAsync(cancellationToken);
 
         return new PagedResult<PurchaseLibraryItemDto>(items, total, page, pageSize);

@@ -19,4 +19,7 @@ public record UserProfileDto
     public required bool IsPublicProfile { get; init; }
     public required DateTimeOffset CreatedAt { get; init; }
     public required List<UserSocialLinkDto> SocialLinks { get; init; }
+
+    /// <summary>Application role (e.g. Admin, User). Only when the caller views their own profile; otherwise null.</summary>
+    public string? Role { get; init; }
 }

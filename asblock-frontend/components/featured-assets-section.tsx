@@ -1,11 +1,13 @@
 "use client";
 
-import { useRef, useState, useCallback, useEffect } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { useRef, useState, useCallback, useEffect, useMemo } from "react";
 import Link from "next/link";
 import { ChevronLeft, ChevronRight, ArrowRight } from "lucide-react";
-import type { AssetListItem } from "@/lib/asset-types";
-import { fetchFeaturedAssets } from "@/lib/assets-api";
+import type { AssetListItem } from "@/lib/catalog/asset-types";
+import { catalogKeys, fetchFeaturedAssets } from "@/lib/catalog/catalog-query";
 import { formatUsdWhole } from "@/lib/format-currency";
+import { FeaturedAssetCarouselSkeleton } from "@/components/assets/asset-card-skeleton";
 import { Button } from "@/components/ui/button";
 
 function StarRating({ value }: { value: number }) {
@@ -39,7 +41,7 @@ function AssetCard({ asset }: { asset: AssetListItem }) {
 
   return (
     <article
-      className="flex-none w-72 sm:w-80 h-full min-h-[19rem] rounded-xl border border-border p-5 flex flex-col gap-4 group transition-smooth hover:border-primary/50 hover:bg-card-elevated hover:shadow-[0_8px_24px_rgba(124,58,237,0.15)] focus-within:ring-2 focus-within:ring-primary focus-within:ring-offset-2 focus-within:ring-offset-background"
+      className="flex min-h-[19rem] h-full w-72 flex-none flex-col gap-4 rounded-xl border border-border p-5 group transition-smooth hover:border-primary/50 hover:bg-card-elevated hover:shadow-[0_8px_24px_rgba(124,58,237,0.15)] focus-within:ring-2 focus-within:ring-primary focus-within:ring-offset-2 focus-within:ring-offset-background sm:w-80 min-w-0"
       style={{ background: "#11101A" }}
     >
       <div className="flex items-start justify-between gap-2 h-12">
@@ -49,7 +51,7 @@ function AssetCard({ asset }: { asset: AssetListItem }) {
               {asset.categoryName}
             </span>
           )}
-          <h3 className="font-semibold text-foreground text-sm leading-snug line-clamp-2 text-balance">
+          <h3 className="line-clamp-2 break-words text-balance text-sm font-semibold leading-snug text-foreground">
             {asset.title}
           </h3>
         </div>
@@ -58,9 +60,11 @@ function AssetCard({ asset }: { asset: AssetListItem }) {
         </span>
       </div>
 
-      <div className="flex-1 min-h-[2.5rem] flex flex-col">
+      <div className="flex min-h-[2.5rem] min-w-0 flex-1 flex-col">
         {asset.description ? (
-          <p className="text-xs text-muted-foreground leading-relaxed line-clamp-2">{asset.description}</p>
+          <p className="line-clamp-2 min-w-0 break-words text-xs leading-relaxed text-muted-foreground [overflow-wrap:anywhere]">
+            {asset.description}
+          </p>
         ) : (
           <span className="text-xs text-muted-foreground/40" aria-hidden="true">
             &nbsp;
@@ -88,9 +92,12 @@ function AssetCard({ asset }: { asset: AssetListItem }) {
 
       <div className="border-t border-border pt-3 flex flex-col gap-3 mt-auto">
         <div className="flex items-center justify-between">
-          <span className="text-xs text-muted-foreground">
+          <Link
+            href={`/users/${encodeURIComponent(asset.authorUsername)}`}
+            className="text-xs text-muted-foreground hover:text-accent transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-card rounded-sm"
+          >
             <span className="text-accent">@{asset.authorUsername}</span>
-          </span>
+          </Link>
           <StarRating value={asset.averageRating} />
         </div>
         <Link
@@ -104,14 +111,21 @@ function AssetCard({ asset }: { asset: AssetListItem }) {
   );
 }
 
+const FEATURED_LIMIT = 8;
+
 export function FeaturedAssetsSection() {
   const scrollRef = useRef<HTMLDivElement>(null);
   const [canScrollLeft, setCanScrollLeft] = useState(false);
   const [canScrollRight, setCanScrollRight] = useState(false);
-  const [assets, setAssets] = useState<AssetListItem[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [loadError, setLoadError] = useState(false);
-  const [reloadToken, setReloadToken] = useState(0);
+
+  const featuredQuery = useQuery({
+    queryKey: catalogKeys.featured(FEATURED_LIMIT),
+    queryFn: () => fetchFeaturedAssets({ limit: FEATURED_LIMIT }),
+  });
+
+  const assets = useMemo(() => featuredQuery.data ?? [], [featuredQuery.data]);
+  const loading = featuredQuery.isPending;
+  const loadError = featuredQuery.isError;
 
   const SCROLL_AMOUNT = 340;
 
@@ -131,30 +145,6 @@ export function FeaturedAssetsSection() {
     setCanScrollLeft(el.scrollLeft > 4);
     setCanScrollRight(el.scrollLeft < maxScroll - 4);
   }, []);
-
-  useEffect(() => {
-    let cancelled = false;
-    fetchFeaturedAssets({ limit: 8 })
-      .then((items) => {
-        if (!cancelled) {
-          setAssets(items);
-        }
-      })
-      .catch(() => {
-        if (!cancelled) {
-          setLoadError(true);
-          setAssets([]);
-        }
-      })
-      .finally(() => {
-        if (!cancelled) {
-          setLoading(false);
-        }
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [reloadToken]);
 
   // Defer scroll metrics until after layout (avoids sync setState in layout effect).
   useEffect(() => {
@@ -250,9 +240,8 @@ export function FeaturedAssetsSection() {
         </div>
 
         {loading && (
-          <div className="flex flex-col items-center justify-center py-16 gap-3 text-muted-foreground text-sm">
-            <div className="h-8 w-8 border-2 border-primary border-t-transparent rounded-full animate-spin" aria-hidden />
-            <p>Loading featured assets…</p>
+          <div className="py-4">
+            <FeaturedAssetCarouselSkeleton count={4} />
           </div>
         )}
 
@@ -262,17 +251,7 @@ export function FeaturedAssetsSection() {
             <p className="text-sm text-muted-foreground mb-4">
               Check that the API is running and <span className="font-mono">NEXT_PUBLIC_API_BASE_URL</span> is set.
             </p>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={() => {
-                setLoadError(false);
-                setLoading(true);
-                setAssets([]);
-                setReloadToken((t) => t + 1);
-              }}
-            >
+            <Button type="button" variant="outline" size="sm" onClick={() => void featuredQuery.refetch()}>
               Try again
             </Button>
           </div>

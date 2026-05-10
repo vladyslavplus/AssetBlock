@@ -1,9 +1,11 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { useCallback, useState } from "react";
 import { SiteHeader } from "@/components/site-header";
 import { SiteFooter } from "@/components/site-footer";
 import { AssetCard } from "@/components/assets/asset-card";
+import { AssetCardGridSkeleton } from "@/components/assets/asset-card-skeleton";
 import { CatalogFiltersUI } from "@/components/assets/catalog-filters";
 import { CatalogToolbar } from "@/components/assets/catalog-toolbar";
 import { Button } from "@/components/ui/button";
@@ -20,73 +22,38 @@ import {
   DEFAULT_CATALOG_FILTERS,
   sortDirectionForSortBy,
   type CatalogFilters,
-} from "@/lib/catalog-filters";
-import {
-  fetchAssetsPage,
-  fetchCategoryOptions,
-  fetchTagNamesForFilters,
-  type FetchAssetsPageResult,
-} from "@/lib/assets-api";
+} from "@/lib/catalog/catalog-filters";
+import { catalogKeys, fetchCatalogFacets, fetchCatalogPage } from "@/lib/catalog/catalog-query";
 
 export default function AssetsPage() {
   const [filters, setFilters] = useState<CatalogFilters>(DEFAULT_CATALOG_FILTERS);
   const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false);
 
-  const [categories, setCategories] = useState<Array<{ id: string; name: string }>>([]);
-  const [tags, setTags] = useState<string[]>([]);
-  const [facetsError, setFacetsError] = useState<string | null>(null);
+  const facetsQuery = useQuery({
+    queryKey: catalogKeys.facets(),
+    queryFn: fetchCatalogFacets,
+    staleTime: 5 * 60 * 1000,
+  });
 
-  const [pageData, setPageData] = useState<FetchAssetsPageResult | null>(null);
-  const [listLoading, setListLoading] = useState(true);
-  const [listError, setListError] = useState<string | null>(null);
+  const listQuery = useQuery({
+    queryKey: catalogKeys.list(filters),
+    queryFn: () => fetchCatalogPage(filters),
+  });
 
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        const [cats, tagList] = await Promise.all([fetchCategoryOptions(), fetchTagNamesForFilters()]);
-        if (!cancelled) {
-          setCategories(cats);
-          setTags(tagList);
-          setFacetsError(null);
-        }
-      } catch {
-        if (!cancelled) {
-          setFacetsError("Could not load categories or tags. Check that the API is running.");
-        }
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+  const categories = facetsQuery.data?.categories ?? [];
+  const tags = facetsQuery.data?.tags ?? [];
+  const facetsLoading = facetsQuery.isPending;
+  const facetsError = facetsQuery.isError
+    ? "Could not load categories or tags. Check that the API is running."
+    : null;
 
-  useEffect(() => {
-    const ac = new AbortController();
-    let cancelled = false;
-
-    (async () => {
-      setListLoading(true);
-      setListError(null);
-      try {
-        const result = await fetchAssetsPage(filters, { signal: ac.signal });
-        if (!cancelled) setPageData(result);
-      } catch (e: unknown) {
-        if (e instanceof DOMException && e.name === "AbortError") return;
-        if (!cancelled) {
-          setListError(e instanceof Error ? e.message : "Could not load the catalog.");
-          setPageData(null);
-        }
-      } finally {
-        if (!cancelled) setListLoading(false);
-      }
-    })();
-
-    return () => {
-      cancelled = true;
-      ac.abort();
-    };
-  }, [filters]);
+  const pageData = listQuery.data;
+  const listLoading = listQuery.isPending;
+  const listError = listQuery.isError
+    ? listQuery.error instanceof Error
+      ? listQuery.error.message
+      : "Could not load the catalog."
+    : null;
 
   const handleFilterChange = useCallback((updates: Partial<CatalogFilters>) => {
     setFilters((prev) => {
@@ -105,12 +72,10 @@ export default function AssetsPage() {
       if (shouldResetPage) next.page = 1;
       return next;
     });
-    setMobileFiltersOpen(false);
   }, []);
 
   const handleResetFilters = useCallback(() => {
     setFilters(DEFAULT_CATALOG_FILTERS);
-    setMobileFiltersOpen(false);
   }, []);
 
   const items = pageData?.items ?? [];
@@ -159,6 +124,7 @@ export default function AssetsPage() {
                   onReset={handleResetFilters}
                   categories={categories}
                   tags={tags}
+                  facetsLoading={facetsLoading}
                   isLoading={listLoading}
                 />
               </div>
@@ -172,6 +138,7 @@ export default function AssetsPage() {
                 onFilterChange={handleFilterChange}
                 isDesktop={true}
                 disabled={listLoading}
+                isCountsLoading={listLoading && items.length === 0}
               />
 
               {hasActiveFilters && (
@@ -237,9 +204,7 @@ export default function AssetsPage() {
               )}
 
               {listLoading && items.length === 0 ? (
-                <div className="rounded-lg border border-border/50 p-12 text-center text-sm text-muted-foreground">
-                  Loading…
-                </div>
+                <AssetCardGridSkeleton variant="catalog-desktop" />
               ) : items.length > 0 ? (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                   {items.map((asset) => (
@@ -300,6 +265,7 @@ export default function AssetsPage() {
               onFilterClick={() => setMobileFiltersOpen(true)}
               isDesktop={false}
               disabled={listLoading}
+              isCountsLoading={listLoading && items.length === 0}
             />
 
             {hasActiveFilters && (
@@ -341,7 +307,10 @@ export default function AssetsPage() {
             )}
 
             <Sheet open={mobileFiltersOpen} onOpenChange={setMobileFiltersOpen}>
-              <SheetContent side="left" className="w-[280px] bg-card-elevated border-border p-4">
+              <SheetContent
+                side="left"
+                className="w-[280px] bg-card-elevated border-border p-4"
+              >
                 <SheetHeader>
                   <SheetTitle className="text-base">Filters</SheetTitle>
                   <SheetDescription className="text-xs">Narrow down your search</SheetDescription>
@@ -353,6 +322,7 @@ export default function AssetsPage() {
                     onReset={handleResetFilters}
                     categories={categories}
                     tags={tags}
+                    facetsLoading={facetsLoading}
                     isLoading={listLoading}
                   />
                 </div>
@@ -360,9 +330,7 @@ export default function AssetsPage() {
             </Sheet>
 
             {listLoading && items.length === 0 ? (
-              <div className="rounded-lg border border-border/50 p-12 text-center text-sm text-muted-foreground">
-                Loading…
-              </div>
+              <AssetCardGridSkeleton variant="catalog-mobile" />
             ) : items.length > 0 ? (
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 {items.map((asset) => (

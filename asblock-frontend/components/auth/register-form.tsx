@@ -1,5 +1,6 @@
 "use client";
 
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { useForm } from "react-hook-form";
@@ -9,9 +10,9 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { useAuth } from "@/components/auth/auth-context";
+import { AuthRequestError, postAuthRegister } from "@/lib/auth/auth-api";
 import { registerFormSchema, type RegisterFormValues } from "@/lib/auth/schemas";
-import { getMessageFromApiErrorBody } from "@/lib/api-errors";
+import { syncQueryCacheAfterAuth } from "@/lib/query/query-sync-after-auth";
 
 interface RegisterFormProps {
   formError?: string;
@@ -19,7 +20,7 @@ interface RegisterFormProps {
 
 export function RegisterForm({ formError }: RegisterFormProps) {
   const router = useRouter();
-  const { refresh } = useAuth();
+  const queryClient = useQueryClient();
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
   const [submitError, setSubmitError] = useState<string>("");
@@ -27,7 +28,7 @@ export function RegisterForm({ formError }: RegisterFormProps) {
   const {
     register,
     handleSubmit,
-    formState: { errors, isSubmitting },
+    formState: { errors },
   } = useForm<RegisterFormValues>({
     resolver: zodResolver(registerFormSchema),
     defaultValues: {
@@ -38,26 +39,24 @@ export function RegisterForm({ formError }: RegisterFormProps) {
     },
   });
 
-  const onSubmit = handleSubmit(async (values) => {
-    setSubmitError("");
-    const res = await fetch("/api/auth/register", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(values),
-    });
-
-    const body: unknown = await res.json().catch(() => null);
-
-    if (!res.ok) {
-      const msg = getMessageFromApiErrorBody(body) ?? `Registration failed (${res.status})`;
-      setSubmitError(msg);
-      return;
-    }
-
-    await refresh();
-    router.push("/assets");
-    router.refresh();
+  const registerMutation = useMutation({
+    mutationFn: postAuthRegister,
+    onMutate: () => setSubmitError(""),
+    onSuccess: async () => {
+      await syncQueryCacheAfterAuth(queryClient);
+      router.push("/assets");
+      router.refresh();
+    },
+    onError: (err: unknown) => {
+      if (err instanceof AuthRequestError) {
+        setSubmitError(err.message);
+        return;
+      }
+      setSubmitError("Network error. Try again.");
+    },
   });
+
+  const onSubmit = handleSubmit((values) => registerMutation.mutate(values));
 
   return (
     <form onSubmit={onSubmit} className="flex flex-col gap-3">
@@ -160,10 +159,10 @@ export function RegisterForm({ formError }: RegisterFormProps) {
 
       <Button
         type="submit"
-        disabled={isSubmitting}
+        disabled={registerMutation.isPending}
         className="bg-primary text-primary-foreground hover:bg-[#6D28D9] transition-smooth font-medium w-full h-8 text-sm"
       >
-        {isSubmitting ? "Creating account…" : "Create account"}
+        {registerMutation.isPending ? "Creating account…" : "Create account"}
       </Button>
     </form>
   );

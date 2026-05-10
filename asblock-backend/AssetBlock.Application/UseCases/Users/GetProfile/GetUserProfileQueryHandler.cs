@@ -54,7 +54,8 @@ internal sealed class GetUserProfileQueryHandler(IUserStore userStore) : IReques
             Bio = user.Bio,
             IsPublicProfile = user.IsPublicProfile,
             CreatedAt = user.CreatedAt,
-            SocialLinks = links
+            SocialLinks = links,
+            Role = includeEmail ? user.Role : null
         };
     }
 }
