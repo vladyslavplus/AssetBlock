@@ -1,4 +1,5 @@
 import { Upload, CreditCard, Download } from "lucide-react";
+import { siteShellClass } from "@/lib/site-layout";
 
 const STEPS = [
   {
@@ -30,7 +31,7 @@ export function HowItWorksSection() {
       className="py-20 sm:py-28 border-t border-border"
       aria-labelledby="how-it-works-heading"
     >
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div className={siteShellClass("site")}>
         <div className="text-center mb-14">
           <h2
             id="how-it-works-heading"

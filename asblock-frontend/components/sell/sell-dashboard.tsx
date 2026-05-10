@@ -1,5 +1,7 @@
 "use client";
 
+import { SiteMain } from "@/components/layout/site-main";
+import { SitePageContainer } from "@/components/layout/site-page-container";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { SellOverview } from "@/components/sell/sell-overview";
 import { SellMyListings } from "@/components/sell/sell-my-listings";
@@ -7,8 +9,8 @@ import { AssetUploadForm } from "@/components/sell/asset-upload-form";
 
 export function SellDashboard() {
   return (
-    <main className="flex-1 pt-20 pb-16">
-      <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
+    <SiteMain>
+      <SitePageContainer variant="document" padding="document">
         <p className="text-xs font-mono text-accent tracking-widest uppercase mb-3">For creators</p>
         <h1 className="text-3xl sm:text-4xl font-semibold text-balance mb-8">Sell on AssetBlock</h1>
 
@@ -37,7 +39,7 @@ export function SellDashboard() {
             <AssetUploadForm />
           </TabsContent>
         </Tabs>
-      </div>
-    </main>
+      </SitePageContainer>
+    </SiteMain>
   );
 }

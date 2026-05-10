@@ -13,6 +13,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
+import { siteShellClass } from "@/lib/site-layout";
 import { useAuth } from "@/components/auth/auth-context";
 import { NotificationBell } from "@/components/notifications/notification-bell";
 
@@ -47,7 +48,7 @@ export function SiteHeader() {
           : "border-transparent bg-[#07060B]/0 backdrop-blur-none",
       )}
     >
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div className={siteShellClass("site")}>
         <div className="flex items-center justify-between h-16">
           <Link
             href="/"

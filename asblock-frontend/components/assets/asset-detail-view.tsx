@@ -3,6 +3,8 @@
 import { useQuery } from "@tanstack/react-query";
 import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
+import { SiteMain } from "@/components/layout/site-main";
+import { SitePageContainer } from "@/components/layout/site-page-container";
 import { AssetDetailHero } from "@/components/assets/asset-detail-hero";
 import { AssetPurchaseCard } from "@/components/assets/asset-purchase-card";
 import { AssetReviewsList } from "@/components/assets/asset-reviews-list";
@@ -40,8 +42,8 @@ export function AssetDetailView({
   const reviews = reviewsQuery.data ?? [];
 
   return (
-    <main className="flex-1 px-4 sm:px-6 lg:px-8 pt-20 pb-16">
-      <div className="max-w-6xl mx-auto">
+    <SiteMain>
+      <SitePageContainer variant="wide" padding="none">
         <Link
           href="/assets"
           className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors mb-6"
@@ -81,7 +83,7 @@ export function AssetDetailView({
             </div>
           </div>
         </div>
-      </div>
-    </main>
+      </SitePageContainer>
+    </SiteMain>
   );
 }

@@ -1,6 +1,8 @@
 import { CheckCircle2 } from "lucide-react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
+import { SiteMain } from "@/components/layout/site-main";
+import { SitePageContainer } from "@/components/layout/site-page-container";
 import { SiteHeader } from "@/components/site-header";
 import { SiteFooter } from "@/components/site-footer";
 import { InvalidateLibraryAfterCheckout } from "@/components/checkout/invalidate-library-after-checkout";
@@ -16,9 +18,9 @@ export default function CheckoutSuccessPage() {
     <div className="min-h-screen flex flex-col bg-background text-foreground">
       <SiteHeader />
 
-      <main className="flex-1 px-4 sm:px-6 lg:px-8 pt-20 pb-16">
+      <SiteMain>
         <InvalidateLibraryAfterCheckout />
-        <div className="max-w-lg mx-auto">
+        <SitePageContainer variant="receipt" padding="none">
           <div className="bg-card-elevated border border-border rounded-xl p-6 sm:p-8 space-y-6">
             <div className="flex justify-center">
               <CheckCircle2 className="w-12 h-12 text-primary" />
@@ -54,8 +56,8 @@ export default function CheckoutSuccessPage() {
               You can close this tab if you opened checkout in a new window.
             </p>
           </div>
-        </div>
-      </main>
+        </SitePageContainer>
+      </SiteMain>
 
       <SiteFooter />
     </div>

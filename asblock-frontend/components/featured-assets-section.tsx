@@ -9,6 +9,7 @@ import { catalogKeys, fetchFeaturedAssets } from "@/lib/catalog/catalog-query";
 import { formatUsdWhole } from "@/lib/format-currency";
 import { FeaturedAssetCarouselSkeleton } from "@/components/assets/asset-card-skeleton";
 import { Button } from "@/components/ui/button";
+import { siteShellClass } from "@/lib/site-layout";
 
 function StarRating({ value }: { value: number }) {
   const rounded = Math.round(value * 2) / 2;
@@ -184,7 +185,7 @@ export function FeaturedAssetsSection() {
 
   return (
     <section className="py-20 sm:py-28" aria-labelledby="featured-heading">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div className={siteShellClass("site")}>
         <div className="relative mb-8">
           <div className="text-center max-w-2xl mx-auto px-2 sm:px-16 md:px-20 lg:px-28">
             <h2

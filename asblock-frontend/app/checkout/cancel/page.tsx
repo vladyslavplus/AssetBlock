@@ -1,6 +1,8 @@
 import { XCircle } from "lucide-react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
+import { SiteMain } from "@/components/layout/site-main";
+import { SitePageContainer } from "@/components/layout/site-page-container";
 import { SiteHeader } from "@/components/site-header";
 import { SiteFooter } from "@/components/site-footer";
 
@@ -14,8 +16,8 @@ export default function CheckoutCancelPage() {
     <div className="min-h-screen flex flex-col bg-background text-foreground">
       <SiteHeader />
 
-      <main className="flex-1 px-4 sm:px-6 lg:px-8 pt-20 pb-16">
-        <div className="max-w-lg mx-auto">
+      <SiteMain>
+        <SitePageContainer variant="receipt" padding="none">
           <div className="bg-card-elevated border border-border rounded-xl p-6 sm:p-8 space-y-6">
             <div className="flex justify-center">
               <XCircle className="w-12 h-12 text-destructive" />
@@ -45,8 +47,8 @@ export default function CheckoutCancelPage() {
               </Button>
             </div>
           </div>
-        </div>
-      </main>
+        </SitePageContainer>
+      </SiteMain>
 
       <SiteFooter />
     </div>

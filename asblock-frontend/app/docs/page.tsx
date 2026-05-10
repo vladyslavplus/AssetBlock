@@ -1,4 +1,6 @@
 import Link from "next/link";
+import { SiteMain } from "@/components/layout/site-main";
+import { SitePageContainer } from "@/components/layout/site-page-container";
 import { SiteHeader } from "@/components/site-header";
 import { SiteFooter } from "@/components/site-footer";
 
@@ -6,8 +8,8 @@ export default function DocsPage() {
   return (
     <div className="min-h-screen flex flex-col bg-background text-foreground">
       <SiteHeader />
-      <main className="flex-1 pt-20 pb-16">
-        <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
+      <SiteMain>
+        <SitePageContainer variant="document" padding="document">
           <h1 className="text-3xl sm:text-4xl font-semibold text-balance mb-4">
             Documentation
           </h1>
@@ -49,8 +51,8 @@ export default function DocsPage() {
               ).
             </p>
           </section>
-        </div>
-      </main>
+        </SitePageContainer>
+      </SiteMain>
       <SiteFooter />
     </div>
   );

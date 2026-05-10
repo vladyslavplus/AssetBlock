@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { siteShellClass } from "@/lib/site-layout";
 
 export function FinalCtaSection() {
   return (
@@ -6,7 +7,7 @@ export function FinalCtaSection() {
       className="py-20 sm:py-28"
       aria-labelledby="final-cta-heading"
     >
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div className={siteShellClass("site")}>
         <div
           className="relative overflow-hidden rounded-2xl border border-border p-10 sm:p-16 text-center flex flex-col items-center gap-6"
           style={{ background: "#0F0E1C" }}

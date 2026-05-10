@@ -24,7 +24,6 @@ import {
   DropdownMenuContent,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import { getApiErrorMessage } from "@/lib/http/api-errors";
 import type { NotificationListItem, PagedNotificationsDto } from "@/lib/notifications/notification-types";
 import { subscribeNotificationHub } from "@/lib/notifications/notification-hub";
@@ -39,11 +38,6 @@ import {
   postMarkAllNotificationsRead,
 } from "@/lib/notifications/notifications-query";
 import { cn } from "@/lib/utils";
-
-/** Max list viewport when there are 4+ items (scroll inside). */
-const ROW_EST_PX = 92;
-
-const EMPTY_STATE_MIN_PX = 120;
 
 function updateInboxItemReadAt(
   old: InfiniteData<PagedNotificationsDto, number> | undefined,
@@ -183,17 +177,13 @@ export function NotificationBell() {
 
   const listPending = inboxQuery.isPending;
   const listError = inboxQuery.isError;
-  const isEmptyState = inboxQuery.isSuccess && items.length === 0;
-  const listNeedsScrollCap =
-    (listPending && items.length === 0) ||
-    (inboxQuery.isSuccess &&
-      (Boolean(inboxQuery.hasNextPage) || items.length > NOTIFICATIONS_PAGE_SIZE));
   const skeletonRows =
     listPending && items.length === 0 ? NOTIFICATIONS_PAGE_SIZE : Math.min(items.length, NOTIFICATIONS_PAGE_SIZE);
 
   const showLoadMore = Boolean(inboxQuery.hasNextPage) && !listPending;
   const canReadAll = unreadCount > 0 && !readAllMutation.isPending;
   const listBusy = refreshMutation.isPending;
+  const listBodyScrollable = items.length > 0 || (listPending && items.length === 0);
 
   return (
     <DropdownMenu open={open} onOpenChange={setOpen}>
@@ -215,9 +205,9 @@ export function NotificationBell() {
         </DropdownMenuTrigger>
         <DropdownMenuContent
           align="end"
-          className="w-[min(100vw-2rem,22rem)] p-0 border-border bg-card text-card-foreground flex flex-col"
+          className="w-[min(100vw-2rem,22rem)] p-0 border-border bg-card text-card-foreground flex max-h-[min(var(--radix-dropdown-menu-content-available-height),calc(100vh-2rem))] flex-col overflow-hidden"
         >
-          <div className="px-3 py-2 border-b border-border flex items-center justify-between gap-2">
+          <div className="shrink-0 px-3 py-2 border-b border-border flex items-center justify-between gap-2">
             <span className="text-sm font-semibold text-foreground shrink-0">Notifications</span>
             <div className="flex items-center gap-0.5 shrink-0">
               <Button
@@ -244,80 +234,74 @@ export function NotificationBell() {
             </div>
           </div>
 
-          <ScrollArea
-            className="w-full overflow-hidden"
-            style={
-              isEmptyState
-                ? { maxHeight: EMPTY_STATE_MIN_PX }
-                : listNeedsScrollCap
-                  ? { maxHeight: NOTIFICATIONS_PAGE_SIZE * ROW_EST_PX }
-                  : undefined
-            }
+          <div
+            className={cn(
+              "min-w-0 overflow-y-auto overscroll-contain scrollbar-themed",
+              listBodyScrollable && "min-h-0 flex-1",
+            )}
           >
-            <div className="min-h-0">
-              {listPending && items.length === 0 ? (
-                <NotificationListSkeleton rows={skeletonRows} />
-              ) : listError && items.length === 0 ? (
-                <p className="px-3 py-4 text-xs text-destructive">
-                  Could not load notifications. Try Refresh or check your connection.
+            {listPending && items.length === 0 ? (
+              <NotificationListSkeleton rows={skeletonRows} />
+            ) : listError && items.length === 0 ? (
+              <p className="px-3 py-4 text-xs text-destructive">
+                Could not load notifications. Try Refresh or check your connection.
+              </p>
+            ) : items.length === 0 ? (
+              <div className="flex flex-col items-center justify-center gap-2 px-4 py-8 text-center">
+                <BellOff className="size-8 text-muted-foreground/50" aria-hidden />
+                <p className="text-sm font-medium text-foreground">No notifications yet</p>
+                <p className="text-xs text-muted-foreground leading-relaxed max-w-[18rem]">
+                  Purchases, downloads, sales, and reviews will show up here. We will notify you in real time when
+                  something new arrives.
                 </p>
-              ) : items.length === 0 ? (
-                <div className="flex flex-col items-center justify-center gap-2 px-4 py-8 text-center">
-                  <BellOff className="size-8 text-muted-foreground/50" aria-hidden />
-                  <p className="text-sm font-medium text-foreground">No notifications yet</p>
-                  <p className="text-xs text-muted-foreground leading-relaxed max-w-[18rem]">
-                    Purchases, downloads, sales, and reviews will show up here. We will notify you in real time when
-                    something new arrives.
-                  </p>
-                </div>
-              ) : (
-                <ul className="divide-y divide-border">
-                  {items.map((n) => {
-                    const title = getNotificationTitle(n.kind);
-                    const body = getNotificationBody(n.kind, n.metadataJson);
-                    const assetId = getNotificationAssetId(n.metadataJson);
-                    const unread = !n.readAt;
-                    return (
-                      <li key={n.id}>
-                        <button
-                          type="button"
-                          className={cn(
-                            "w-full text-left px-3 py-2.5 hover:bg-secondary/50 transition-colors",
-                            unread && "bg-primary/5",
-                          )}
-                          onClick={() => void toggleRead(n)}
-                          title={unread ? "Mark as read" : "Mark as unread"}
-                        >
-                          <div className="flex items-start justify-between gap-2">
-                            <span className={cn("text-xs font-medium text-foreground", unread && "font-semibold")}>
-                              {title}
-                            </span>
-                            <span className="text-[10px] text-muted-foreground shrink-0 tabular-nums">
-                              {formatDistanceToNow(new Date(n.createdAt), { addSuffix: true })}
-                            </span>
-                          </div>
-                          {body ? <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2">{body}</p> : null}
-                          {assetId ? (
-                            <Link
-                              href={`/assets/${assetId}`}
-                              className="text-xs text-accent mt-1 inline-block hover:underline"
-                              onClick={(e) => e.stopPropagation()}
-                            >
-                              View asset
-                            </Link>
-                          ) : null}
-                        </button>
-                      </li>
-                    );
-                  })}
-                  {inboxQuery.isFetchingNextPage ? <NotificationListSkeletonRow /> : null}
-                </ul>
-              )}
-            </div>
-          </ScrollArea>
+              </div>
+            ) : (
+              <ul className="divide-y divide-border">
+                {items.map((n) => {
+                  const title = getNotificationTitle(n.kind);
+                  const body = getNotificationBody(n.kind, n.metadataJson);
+                  const assetId = getNotificationAssetId(n.metadataJson);
+                  const unread = !n.readAt;
+                  return (
+                    <li key={n.id}>
+                      <button
+                        type="button"
+                        className={cn(
+                          "w-full text-left px-3 py-2.5 hover:bg-secondary/50 transition-colors",
+                          unread && "bg-primary/5",
+                        )}
+                        onClick={() => void toggleRead(n)}
+                        title={unread ? "Mark as read" : "Mark as unread"}
+                      >
+                        <div className="flex items-start justify-between gap-2">
+                          <span className={cn("text-xs font-medium text-foreground", unread && "font-semibold")}>
+                            {title}
+                          </span>
+                          <span className="text-[10px] text-muted-foreground shrink-0 tabular-nums">
+                            {formatDistanceToNow(new Date(n.createdAt), { addSuffix: true })}
+                          </span>
+                        </div>
+                        {body ? <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2">{body}</p> : null}
+                        {assetId ? (
+                          <Link
+                            href={`/assets/${assetId}`}
+                            className="text-xs text-accent mt-1 inline-block hover:underline"
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            View asset
+                          </Link>
+                        ) : null}
+                      </button>
+                    </li>
+                  );
+                })}
+                {inboxQuery.isFetchingNextPage ? <NotificationListSkeletonRow /> : null}
+              </ul>
+            )}
+          </div>
 
           {showLoadMore ? (
-            <div className="px-3 py-2 border-t border-border flex flex-col items-center gap-1.5">
+            <div className="shrink-0 px-3 py-2 border-t border-border flex flex-col items-center gap-1.5">
               <button
                 type="button"
                 className="text-xs font-medium text-accent hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary rounded-sm"

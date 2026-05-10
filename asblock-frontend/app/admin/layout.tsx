@@ -1,4 +1,6 @@
 import { redirect } from "next/navigation";
+import { SiteMain } from "@/components/layout/site-main";
+import { SitePageContainer } from "@/components/layout/site-page-container";
 import { SiteFooter } from "@/components/site-footer";
 import { SiteHeader } from "@/components/site-header";
 import { isAdminRole } from "@/lib/auth/roles";
@@ -13,8 +15,8 @@ export default async function AdminLayout({ children }: { children: React.ReactN
   return (
     <div className="min-h-screen flex flex-col bg-background text-foreground">
       <SiteHeader />
-      <main className="flex-1 pt-20">
-        <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <SiteMain>
+        <SitePageContainer variant="admin">
           <div className="mb-8">
             <h1 className="text-2xl font-semibold text-foreground">Admin</h1>
             <p className="mt-1 text-sm text-muted-foreground">
@@ -23,8 +25,8 @@ export default async function AdminLayout({ children }: { children: React.ReactN
             </p>
           </div>
           {children}
-        </div>
-      </main>
+        </SitePageContainer>
+      </SiteMain>
       <SiteFooter />
     </div>
   );

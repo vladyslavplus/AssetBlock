@@ -2,6 +2,8 @@ import type { Metadata } from "next";
 import Image from "next/image";
 import { notFound } from "next/navigation";
 import { Calendar, ExternalLink } from "lucide-react";
+import { SiteMain } from "@/components/layout/site-main";
+import { SitePageContainer } from "@/components/layout/site-page-container";
 import { SiteHeader } from "@/components/site-header";
 import { SiteFooter } from "@/components/site-footer";
 import { Button } from "@/components/ui/button";
@@ -47,8 +49,8 @@ export default async function PublicUserProfilePage({ params, searchParams }: Pa
     <div className="min-h-screen flex flex-col bg-background text-foreground">
       <SiteHeader />
 
-      <main className="flex-1 pt-20 pb-16">
-        <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <SiteMain>
+        <SitePageContainer variant="wide">
           <div className="rounded-xl border border-border bg-card-elevated p-6 sm:p-8 mb-10">
             <div className="flex flex-col gap-6 sm:flex-row sm:items-start">
               <div className="shrink-0">
@@ -123,8 +125,8 @@ export default async function PublicUserProfilePage({ params, searchParams }: Pa
           </div>
 
           <AuthorCatalogSection authorId={profile.id} username={profile.username} initialCatalog={catalog} />
-        </div>
-      </main>
+      </SitePageContainer>
+      </SiteMain>
 
       <SiteFooter />
     </div>

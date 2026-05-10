@@ -2,6 +2,8 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
+import { SiteMain } from "@/components/layout/site-main";
+import { SitePageContainer } from "@/components/layout/site-page-container";
 import { SiteHeader } from "@/components/site-header";
 import { SiteFooter } from "@/components/site-footer";
 import { AssetEditPageClient } from "@/components/sell/asset-edit-page-client";
@@ -34,8 +36,8 @@ export default async function SellAssetEditPage({ params }: PageProps) {
     <div className="min-h-screen flex flex-col bg-background text-foreground">
       <SiteHeader />
 
-      <main className="flex-1 pt-20 pb-16">
-        <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
+      <SiteMain>
+        <SitePageContainer variant="document" padding="document">
           <Link
             href="/sell"
             className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors mb-6"
@@ -48,8 +50,8 @@ export default async function SellAssetEditPage({ params }: PageProps) {
           <h1 className="text-3xl sm:text-4xl font-semibold text-balance mb-8">Edit listing</h1>
 
           <AssetEditPageClient initialAsset={raw} />
-        </div>
-      </main>
+        </SitePageContainer>
+      </SiteMain>
 
       <SiteFooter />
     </div>

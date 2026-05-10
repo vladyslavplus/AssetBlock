@@ -2,6 +2,8 @@
 
 import { useQuery } from "@tanstack/react-query";
 import { useCallback, useState } from "react";
+import { SiteMain } from "@/components/layout/site-main";
+import { SitePageContainer } from "@/components/layout/site-page-container";
 import { SiteHeader } from "@/components/site-header";
 import { SiteFooter } from "@/components/site-footer";
 import { AssetCard } from "@/components/assets/asset-card";
@@ -93,8 +95,8 @@ export default function AssetsPage() {
     <div className="min-h-screen flex flex-col bg-background text-foreground">
       <SiteHeader />
 
-      <main className="flex-1 pt-20">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <SiteMain>
+        <SitePageContainer variant="site">
           <div className="mb-8">
             <h1 className="text-3xl font-semibold text-balance">Browse assets</h1>
             <p className="mt-2 text-muted-foreground text-sm">
@@ -380,8 +382,8 @@ export default function AssetsPage() {
               </div>
             )}
           </div>
-        </div>
-      </main>
+      </SitePageContainer>
+      </SiteMain>
 
       <SiteFooter />
     </div>
