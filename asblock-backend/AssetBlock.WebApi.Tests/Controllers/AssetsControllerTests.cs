@@ -57,8 +57,11 @@ public sealed class AssetsControllerTests : ControllerTestBase
                 Guid.NewGuid(),
                 "c",
                 Guid.NewGuid(),
+                "seller",
                 DateTimeOffset.UtcNow,
-                null))));
+                null,
+                Array.Empty<string>(),
+                0))));
 
         var controller = CreateController();
         var result = await controller.GetById(Guid.NewGuid(), CancellationToken.None);

@@ -1,0 +1,12 @@
+---
+description: AssetBlock repository context and architecture defaults.
+globs: asblock-backend/**, asblock-frontend/**
+alwaysApply: true
+priority: 90
+---
+# AssetBlock Context
+
+- Treat this repository as a .NET backend plus React/Next.js frontend codebase.
+- Prefer Clean Architecture boundaries and keep business logic out of controllers/components when possible.
+- Follow the existing repository-specific rules and skills first when they already cover the case.
+- When a change touches both backend and frontend, keep the contract explicit and the edit set narrow.

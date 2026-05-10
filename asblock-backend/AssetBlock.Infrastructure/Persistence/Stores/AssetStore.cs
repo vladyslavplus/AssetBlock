@@ -58,6 +58,11 @@ internal sealed class AssetStore(ApplicationDbContext dbContext) : IAssetStore
             query = query.Where(a => a.CategoryId == categoryId);
         }
 
+        if (request.AuthorId is { } authorId)
+        {
+            query = query.Where(a => a.AuthorId == authorId);
+        }
+
         var totalCount = await query.CountAsync(cancellationToken);
 
         var sortBy = string.IsNullOrWhiteSpace(request.SortBy) || !GetAssetsRequest.AllowedSortBy.Contains(request.SortBy)

@@ -14,6 +14,7 @@ builder.Services.AddApplication();
 builder.Services.AddInfrastructure(builder.Configuration);
 builder.Services.Configure<RouteOptions>(options => options.LowercaseUrls = true);
 builder.Services.AddControllers(options => options.Conventions.Add(new LowercaseControllerRouteConvention()));
+builder.Services.AddAssetBlockCors(builder.Configuration, builder.Environment);
 builder.Services.AddSignalR();
 builder.Services.AddScoped<IRealtimeNotificationPublisher, RealtimeNotificationPublisher>();
 builder.Services.AddOpenApi();
@@ -39,10 +40,12 @@ if (app.Environment.IsDevelopment())
     app.UseSwaggerUi();
 }
 
-if (!app.Environment.IsEnvironment("IntegrationTesting"))
+if (!app.Environment.IsEnvironment("IntegrationTesting") && !app.Environment.IsDevelopment())
 {
     app.UseHttpsRedirection();
 }
+
+app.UseAssetBlockCors();
 app.UseRateLimiter();
 app.UseAuthentication();
 app.UseAuthorization();

@@ -12,4 +12,10 @@ public interface INotificationStore
 
     /// <summary>Returns false if the row does not exist or belongs to another user.</summary>
     Task<bool> MarkRead(Guid recipientUserId, Guid notificationId, CancellationToken cancellationToken = default);
+
+    /// <summary>Returns false if the row does not exist or belongs to another user.</summary>
+    Task<bool> MarkUnread(Guid recipientUserId, Guid notificationId, CancellationToken cancellationToken = default);
+
+    /// <summary>Sets ReadAt on all unread notifications for the recipient; returns rows updated.</summary>
+    Task<int> MarkAllRead(Guid recipientUserId, CancellationToken cancellationToken = default);
 }

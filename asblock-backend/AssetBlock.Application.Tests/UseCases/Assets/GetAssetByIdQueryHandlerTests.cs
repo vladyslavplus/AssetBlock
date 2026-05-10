@@ -11,12 +11,15 @@ namespace AssetBlock.Application.Tests.UseCases.Assets;
 public class GetAssetByIdQueryHandlerTests
 {
     private readonly IAssetStore _assetStoreMock;
+    private readonly IReviewStore _reviewStoreMock;
     private readonly GetAssetByIdQueryHandler _handler;
 
     public GetAssetByIdQueryHandlerTests()
     {
         _assetStoreMock = Substitute.For<IAssetStore>();
-        _handler = new GetAssetByIdQueryHandler(_assetStoreMock);
+        _reviewStoreMock = Substitute.For<IReviewStore>();
+        _reviewStoreMock.GetAverageRatingForAsset(Arg.Any<Guid>(), Arg.Any<CancellationToken>()).Returns(0.0);
+        _handler = new GetAssetByIdQueryHandler(_assetStoreMock, _reviewStoreMock);
     }
 
     [Fact]
@@ -43,6 +46,14 @@ public class GetAssetByIdQueryHandlerTests
         var now = DateTimeOffset.UtcNow;
 
         var category = new Category { Id = categoryId, Name = "Audio", Slug = "audio" };
+        var author = new User
+        {
+            Id = authorId,
+            Username = "beatmaker",
+            Email = "author@test.local",
+            PasswordHash = "hash",
+            Role = AppRoles.USER
+        };
         var asset = new Asset
         {
             Id = assetId,
@@ -54,7 +65,8 @@ public class GetAssetByIdQueryHandlerTests
             StorageKey = "assets/auth/beat.zip",
             FileName = "beat.zip",
             CreatedAt = now,
-            Category = category
+            Category = category,
+            Author = author
         };
 
         var query = new GetAssetByIdQuery(assetId);
@@ -71,8 +83,11 @@ public class GetAssetByIdQueryHandlerTests
         result.Value.CategoryId.Should().Be(categoryId);
         result.Value.CategoryName.Should().Be("Audio");
         result.Value.AuthorId.Should().Be(authorId);
+        result.Value.AuthorUsername.Should().Be("beatmaker");
         result.Value.Description.Should().Be("A great pack");
         result.Value.CreatedAt.Should().Be(now);
         result.Value.UpdatedAt.Should().BeNull();
+        result.Value.Tags.Should().BeEmpty();
+        result.Value.AverageRating.Should().Be(0);
     }
 }

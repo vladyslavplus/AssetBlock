@@ -6,7 +6,7 @@ namespace AssetBlock.Application.Validators.Assets;
 internal sealed class UpdateAssetCommandValidator : AbstractValidator<UpdateAssetCommand>
 {
     private const int TITLE_MAX_LENGTH = 500;
-    private const int DESCRIPTION_MAX_LENGTH = 2000;
+    private const int DESCRIPTION_MAX_LENGTH = 5000;
 
     public UpdateAssetCommandValidator()
     {
@@ -20,7 +20,7 @@ internal sealed class UpdateAssetCommandValidator : AbstractValidator<UpdateAsse
             .When(c => c.Title is not null);
 
         RuleFor(c => c.Description)
-            .MaximumLength(DESCRIPTION_MAX_LENGTH).WithMessage("Description must not exceed 2000 characters.")
+            .MaximumLength(DESCRIPTION_MAX_LENGTH).WithMessage("Description must not exceed 5000 characters.")
             .When(c => c.Description is not null);
 
         RuleFor(c => c.Price)

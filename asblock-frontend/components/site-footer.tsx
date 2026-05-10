@@ -1,17 +1,12 @@
 import Link from "next/link";
 import { Github, Twitter, Package2 } from "lucide-react";
+import { SiteFooterProductColumn } from "@/components/site-footer-product-column";
 import { Separator } from "@/components/ui/separator";
 
 const FOOTER_LINKS = {
-  Product: [
-    { label: "Browse assets", href: "/assets" },
-    { label: "Sell on AssetBlock", href: "#" },
-    { label: "Pricing", href: "#" },
-    { label: "Changelog", href: "#" },
-  ],
   Developers: [
-    { label: "Documentation", href: "#" },
-    { label: "API reference", href: "#" },
+    { label: "Documentation", href: "/docs" },
+    { label: "API reference", href: "/docs#api" },
     { label: "Status", href: "#" },
   ],
   Legal: [
@@ -55,6 +50,8 @@ export function SiteFooter() {
               </Link>
             </div>
           </div>
+
+          <SiteFooterProductColumn />
 
           {Object.entries(FOOTER_LINKS).map(([group, links]) => (
             <div key={group} className="flex flex-col gap-3">

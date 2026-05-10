@@ -145,7 +145,7 @@ export function HeroSection() {
                 asChild
                 className="border-border text-foreground bg-transparent hover:bg-secondary/50 hover:border-foreground/40 hover:text-foreground transition-smooth"
               >
-                <Link href="#">Become a seller</Link>
+                <Link href="/sell">Become a seller</Link>
               </Button>
             </div>
 

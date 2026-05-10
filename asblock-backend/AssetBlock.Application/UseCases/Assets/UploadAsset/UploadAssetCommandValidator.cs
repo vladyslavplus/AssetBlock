@@ -22,6 +22,10 @@ internal sealed class UploadAssetCommandValidator : AbstractValidator<UploadAsse
                 RuleFor(c => c.Request.DownloadLimitPerHour)
                     .GreaterThan(0).When(c => c.Request.DownloadLimitPerHour.HasValue)
                     .WithMessage("DownloadLimitPerHour must be greater than zero when specified.");
+                RuleFor(c => c.Request.Description)
+                    .MaximumLength(5000)
+                    .WithMessage("Description must not exceed 5000 characters.")
+                    .When(c => !string.IsNullOrEmpty(c.Request.Description));
             });
         RuleFor(c => c.FileName)
             .NotEmpty().WithMessage("FileName is required.")

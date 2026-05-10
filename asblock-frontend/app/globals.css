@@ -44,6 +44,51 @@
   --chart-5: #f472b6;
 }
 
+/*
+ * Radix Dialog locks scroll via react-remove-scroll-bar: it measures the scrollbar and applies
+ * matching margin/padding on body[data-scroll-locked]. Do not combine with scrollbar-gutter: stable
+ * or CSS that zeroes that compensation — on Chromium/Windows that caused horizontal layout shift when
+ * the scrollbar disappeared. Let the library handle width compensation.
+ */
+html {
+  scrollbar-gutter: stable;
+}
+
+html body[data-scroll-locked] {
+  --removed-body-scroll-bar-size: 0 !important;
+  margin-right: 0 !important;
+  margin-left: 0 !important;
+  margin-top: 0 !important;
+  padding-right: 0 !important;
+  padding-left: 0 !important;
+  padding-top: 0 !important;
+}
+
+/* Firefox scrollbar styling */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #3d3655 transparent;
+}
+
+/* Chromium/Safari (WebKit) scrollbar styling */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #3d3655;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #4a4360;
+}
+
 @theme inline {
   --font-sans: var(--font-geist), 'Geist Fallback', sans-serif;
   --font-mono: var(--font-jetbrains-mono), var(--font-geist-mono), monospace;
@@ -52,6 +97,7 @@
   --color-foreground: var(--foreground);
   --color-card: var(--card);
   --color-card-foreground: var(--card-foreground);
+  --color-card-elevated: var(--card-elevated);
   --color-popover: var(--popover);
   --color-popover-foreground: var(--popover-foreground);
   --color-primary: var(--primary);
@@ -136,4 +182,22 @@
       transform: translateY(0);
     }
   }
+}
+
+/*
+ * Hide native <input type="number"> spinners (catalog uses custom +/- only).
+ * Unlayered on purpose: rules inside @layer utilities lose to unlayered Tailwind,
+ * so Chromium/Edge kept showing the default stepper.
+ */
+input[type="number"].no-native-number-spinner {
+  -moz-appearance: textfield;
+  appearance: textfield;
+}
+
+input[type="number"].no-native-number-spinner::-webkit-outer-spin-button,
+input[type="number"].no-native-number-spinner::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  appearance: none;
+  margin: 0;
+  display: none;
 }

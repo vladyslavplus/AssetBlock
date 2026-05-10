@@ -1,0 +1,17 @@
+---
+description: AssetBlock frontend defaults for Next.js App Router, BFF auth, and UI conventions.
+globs: asblock-frontend/**/*.ts, asblock-frontend/**/*.tsx
+alwaysApply: true
+priority: 90
+---
+# AssetBlock Frontend Defaults
+
+- Treat the frontend as a Next.js App Router application with a BFF-style auth layer.
+- Prefer Route Handlers under `app/api` and server helpers under `lib/server` for auth/session flows.
+- Reuse shared helpers like `apiFetch`, `api-config`, auth cookie helpers, and existing schema/type modules before adding new fetch wrappers.
+- Use Zod for payload validation and `react-hook-form` with `zodResolver` for forms.
+- Follow the existing UI stack: shadcn/ui, Radix primitives, Tailwind, and `sonner`.
+- **Tailwind / `className`:** do not extract styling into module-level string constants (for example `const x = "rounded-sm bg-…"`). Keep utility classes inline on `className` / inside `cn(...)` so behavior stays obvious and editor tooling stays local; dedupe via small presentational components or `cn` merges, not shared string vars for appearance.
+- **TanStack Query:** use for BFF/API reads that benefit from caching and invalidation (`QueryProvider` in layout). Colocate query keys in `lib/*-query.ts` style modules; invalidate after mutations or hub events.
+- Keep auth tokens in server-managed httpOnly cookies; do not move them into localStorage or client-readable storage.
+- Match existing page/component patterns and avoid introducing new state/data libraries unless the repo already adopts them.
