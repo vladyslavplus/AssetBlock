@@ -5,11 +5,13 @@ using AssetBlock.Application.UseCases.Payments.CreateCheckoutSession;
 using AssetBlock.Application.UseCases.Payments.HandleStripeWebhook;
 using AssetBlock.Domain.Core.Constants;
 using AssetBlock.Domain.Core.Dto.Payments;
+using AssetBlock.Domain.Core.Primitives.AppSettingsOptions;
 using AssetBlock.WebApi.Controllers;
 using AssetBlock.WebApi.Tests.Common;
 using FluentAssertions;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Options;
 using NSubstitute;
 
 namespace AssetBlock.WebApi.Tests.Controllers;
@@ -17,6 +19,22 @@ namespace AssetBlock.WebApi.Tests.Controllers;
 public sealed class PaymentsControllerTests : ControllerTestBase
 {
     private readonly Guid _userId = Guid.NewGuid();
+
+    [Fact]
+    public void GetCapabilities_WhenStripeKeysMissing_ShouldReturnOkWithFalse()
+    {
+        var controller = new PaymentsController(Sender);
+        var opts = Options.Create(
+            new StripeOptions
+            {
+                SecretKey = "",
+                WebhookSecret = "",
+                DefaultSuccessUrl = "",
+                DefaultCancelUrl = ""
+            });
+        var result = controller.GetCapabilities(opts);
+        result.Should().BeOfType<OkObjectResult>();
+    }
 
     [Fact]
     public async Task CreateCheckout_WhenNoUser_ShouldReturnUnauthorized()

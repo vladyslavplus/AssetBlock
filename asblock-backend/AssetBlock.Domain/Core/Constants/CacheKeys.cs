@@ -34,6 +34,7 @@ public static class CacheKeys
 
     public static string AssetsList(GetAssetsRequest request)
     {
+        var authorId = request.AuthorId.HasValue ? request.AuthorId.Value.ToString() : "none";
         var search = NormalizeSearch(request.Search);
         var categoryId = request.CategoryId.HasValue ? request.CategoryId.Value.ToString() : "none";
         var sortBy = string.IsNullOrWhiteSpace(request.SortBy) ? "none" : request.SortBy.Trim();
@@ -48,7 +49,7 @@ public static class CacheKeys
                     .Distinct()
                     .OrderBy(t => t))
             : "none";
-        return $"{ASSETS_LIST_PREFIX}:{request.Page}:{request.PageSize}:{search}:{categoryId}:{minPrice}:{maxPrice}:{tags}:{sortBy}:{request.SortDirection}";
+        return $"{ASSETS_LIST_PREFIX}:{request.Page}:{request.PageSize}:{authorId}:{search}:{categoryId}:{minPrice}:{maxPrice}:{tags}:{sortBy}:{request.SortDirection}";
     }
 
     public static string CategoriesList(GetCategoriesRequest request)

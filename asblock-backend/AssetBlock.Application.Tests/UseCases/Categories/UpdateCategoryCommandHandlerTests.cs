@@ -1,3 +1,4 @@
+using Ardalis.Result;
 using AssetBlock.Application.UseCases.Categories.UpdateCategory;
 using AssetBlock.Domain.Abstractions.Services;
 using AssetBlock.Domain.Core.Constants;
@@ -27,7 +28,7 @@ public class UpdateCategoryCommandHandlerTests
     }
 
     [Fact]
-    public async Task Handle_WhenCategoryNotFound_ShouldReturnError()
+    public async Task Handle_WhenCategoryNotFound_ShouldReturnNotFound()
     {
         // Arrange
         var command = new UpdateCategoryCommand(Guid.NewGuid(), "New Name", null, null);
@@ -36,9 +37,8 @@ public class UpdateCategoryCommandHandlerTests
         // Act
         var result = await _handler.Handle(command, CancellationToken.None);
 
-        // Assert
-        result.IsSuccess.Should().BeFalse();
-        result.ValidationErrors.Should().Contain(e => e.Identifier == ErrorCodes.ERR_CATEGORY_NOT_FOUND);
+        result.Status.Should().Be(ResultStatus.NotFound);
+        result.Errors.Should().Contain(ErrorCodes.ERR_CATEGORY_NOT_FOUND);
     }
 
     [Fact]

@@ -8,6 +8,7 @@ namespace AssetBlock.Application.UseCases.Assets.DeleteAsset;
 
 internal sealed class DeleteAssetCommandHandler(
     IAssetStore assetStore,
+    IPurchaseStore purchaseStore,
     IAssetSearchService searchService,
     IAssetStorageService storageService,
     ICacheService cache,
@@ -26,15 +27,33 @@ internal sealed class DeleteAssetCommandHandler(
             return Result.Forbidden(ErrorCodes.ERR_FORBIDDEN);
         }
 
+        if (asset.DeletedAt.HasValue)
+        {
+            await cache.RemoveByPrefix(CacheKeys.ASSETS_LIST_PREFIX, cancellationToken);
+            logger.LogInformation("Delete idempotent: asset already delisted {AssetId}", request.Id);
+            return Result.Success();
+        }
+
+        var hasPurchases = await purchaseStore.HasPurchasesForAsset(request.Id, cancellationToken);
+
         try
         {
-            await storageService.Delete(asset.StorageKey, cancellationToken);
+            // Remove from catalog index first so list/search stay consistent.
             await searchService.DeleteAsset(asset.Id, cancellationToken);
-            await assetStore.Delete(asset.Id, cancellationToken);
+
+            if (hasPurchases)
+            {
+                await assetStore.SoftDelete(asset.Id, DateTimeOffset.UtcNow, cancellationToken);
+                logger.LogInformation("Soft-deleted (delisted) asset {AssetId}: purchases exist; storage object retained.", request.Id);
+            }
+            else
+            {
+                await storageService.Delete(asset.StorageKey, cancellationToken);
+                await assetStore.Delete(asset.Id, cancellationToken);
+                logger.LogInformation("Hard-deleted asset {AssetId}", request.Id);
+            }
 
             await cache.RemoveByPrefix(CacheKeys.ASSETS_LIST_PREFIX, cancellationToken);
-
-            logger.LogInformation("Deleted asset: {AssetId}", request.Id);
             return Result.Success();
         }
         catch (Exception ex)

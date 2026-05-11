@@ -1,0 +1,65 @@
+<svg width="128" height="128" viewBox="0 0 128 128" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <rect width="128" height="128" rx="28" fill="#0B0912"/>
+  <g transform="translate(64 64)">
+    <path
+      d="M0 -38L33 -19V19L0 38L-33 19V-19L0 -38Z"
+      fill="#140F22"
+      stroke="#8B5CF6"
+      stroke-width="5.5"
+      stroke-linejoin="round"
+    />
+    <path
+      d="M0 -38L33 -19L0 0L-33 -19L0 -38Z"
+      fill="#2A174B"
+      fill-opacity="0.92"
+      stroke="#8B5CF6"
+      stroke-width="5"
+      stroke-linejoin="round"
+    />
+    <path
+      d="M-33 -19L0 0V38L-33 19V-19Z"
+      fill="#1C1133"
+      fill-opacity="0.96"
+      stroke="#8B5CF6"
+      stroke-width="5"
+      stroke-linejoin="round"
+    />
+    <path
+      d="M33 -19L0 0V38L33 19V-19Z"
+      fill="#120C22"
+      fill-opacity="0.98"
+      stroke="#8B5CF6"
+      stroke-width="5"
+      stroke-linejoin="round"
+    />
+    <path
+      d="M0 -38V0M0 0V38M-33 -19L0 0L33 -19"
+      stroke="#A78BFA"
+      stroke-width="4.5"
+      stroke-linecap="round"
+      stroke-linejoin="round"
+    />
+    <path
+      d="M-18 -11L0 -1L18 -11"
+      stroke="#C4B5FD"
+      stroke-width="4"
+      stroke-linecap="round"
+      stroke-linejoin="round"
+      opacity="0.95"
+    />
+    <path
+      d="M-17 10L-6 16L-17 22"
+      stroke="#8B5CF6"
+      stroke-width="4"
+      stroke-linecap="round"
+      stroke-linejoin="round"
+    />
+    <path
+      d="M17 10L6 16L17 22"
+      stroke="#8B5CF6"
+      stroke-width="4"
+      stroke-linecap="round"
+      stroke-linejoin="round"
+    />
+  </g>
+</svg>

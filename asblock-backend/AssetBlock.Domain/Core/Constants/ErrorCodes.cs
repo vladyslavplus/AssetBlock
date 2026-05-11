@@ -10,6 +10,7 @@ public static class ErrorCodes
     public const string ERR_AUTH_TOKEN_INVALID = "ERR_AUTH_TOKEN_INVALID";
     public const string ERR_AUTH_USER_NOT_FOUND = "ERR_AUTH_USER_NOT_FOUND";
     public const string ERR_AUTH_EMAIL_ALREADY_EXISTS = "ERR_AUTH_EMAIL_ALREADY_EXISTS";
+    public const string ERR_AUTH_CURRENT_PASSWORD_INVALID = "ERR_AUTH_CURRENT_PASSWORD_INVALID";
 
     public const string ERR_CATEGORY_NOT_FOUND = "ERR_CATEGORY_NOT_FOUND";
     public const string ERR_TAG_NOT_FOUND = "ERR_TAG_NOT_FOUND";
@@ -50,4 +51,6 @@ public static class ErrorCodes
     public const string ERR_NOTIFICATION_NOT_FOUND = "ERR_NOTIFICATION_NOT_FOUND";
     public const string ERR_NOTIFICATIONS_LIST_FAILED = "ERR_NOTIFICATIONS_LIST_FAILED";
     public const string ERR_NOTIFICATIONS_UNREAD_READ_AT_SORT = "ERR_NOTIFICATIONS_UNREAD_READ_AT_SORT";
+
+    public const string ERR_PURCHASES_LIST_FAILED = "ERR_PURCHASES_LIST_FAILED";
 }

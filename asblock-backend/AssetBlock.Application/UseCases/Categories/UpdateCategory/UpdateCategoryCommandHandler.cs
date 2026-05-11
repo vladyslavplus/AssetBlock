@@ -22,7 +22,7 @@ internal sealed class UpdateCategoryCommandHandler(
             var category = await categoryStore.GetById(request.Id, cancellationToken);
             if (category is null)
             {
-                return ResultError.Error(ErrorCodes.ERR_CATEGORY_NOT_FOUND);
+                return Result.NotFound(ErrorCodes.ERR_CATEGORY_NOT_FOUND);
             }
 
             if (request.Slug is not null && request.Slug != category.Slug)

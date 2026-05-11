@@ -18,6 +18,9 @@ public class Asset : BaseEntity
     /// <summary>Optional max downloads per hour per user. Null = unlimited.</summary>
     public int? DownloadLimitPerHour { get; set; }
 
+    /// <summary>When set, the listing is removed from the catalog but the row remains for purchasers (FK).</summary>
+    public DateTimeOffset? DeletedAt { get; set; }
+
     public User Author { get; set; } = null!;
     public Category Category { get; set; } = null!;
     public ICollection<Purchase> Purchases { get; set; } = new List<Purchase>();
