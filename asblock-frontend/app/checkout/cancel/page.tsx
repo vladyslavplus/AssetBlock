@@ -1,0 +1,56 @@
+import { XCircle } from "lucide-react";
+import Link from "next/link";
+import { Button } from "@/components/ui/button";
+import { SiteMain } from "@/components/layout/site-main";
+import { SitePageContainer } from "@/components/layout/site-page-container";
+import { SiteHeader } from "@/components/site-header";
+import { SiteFooter } from "@/components/site-footer";
+
+export const metadata = {
+  title: "Checkout canceled - AssetBlock",
+  description: "Your checkout was canceled. No charges were made.",
+};
+
+export default function CheckoutCancelPage() {
+  return (
+    <div className="min-h-screen flex flex-col bg-background text-foreground">
+      <SiteHeader />
+
+      <SiteMain>
+        <SitePageContainer variant="receipt" padding="none">
+          <div className="bg-card-elevated border border-border rounded-xl p-6 sm:p-8 space-y-6">
+            <div className="flex justify-center">
+              <XCircle className="w-12 h-12 text-destructive" />
+            </div>
+
+            <h1 className="text-2xl font-bold text-center text-foreground">
+              Checkout canceled
+            </h1>
+
+            <p className="text-sm text-muted-foreground text-center leading-relaxed">
+              No charges have been made. You can return to the asset page and try again whenever you&apos;re ready.
+            </p>
+
+            <div className="flex flex-col gap-3 pt-2">
+              <Button
+                asChild
+                className="bg-primary text-primary-foreground hover:bg-[#6D28D9] transition-smooth font-medium w-full h-9"
+              >
+                <Link href="/assets">Back to catalog</Link>
+              </Button>
+              <Button
+                asChild
+                variant="outline"
+                className="border-border text-foreground bg-transparent hover:bg-secondary/50 hover:border-foreground/40 hover:text-foreground transition-smooth font-medium w-full h-9"
+              >
+                <Link href="/">Return home</Link>
+              </Button>
+            </div>
+          </div>
+        </SitePageContainer>
+      </SiteMain>
+
+      <SiteFooter />
+    </div>
+  );
+}

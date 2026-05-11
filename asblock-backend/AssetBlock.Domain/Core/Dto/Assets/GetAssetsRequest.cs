@@ -7,6 +7,7 @@ namespace AssetBlock.Domain.Core.Dto.Assets;
 /// </summary>
 public sealed record GetAssetsRequest : PagedRequest
 {
+    public Guid? AuthorId { get; init; }
     public string? Search { get; init; }
     public Guid? CategoryId { get; init; }
     public IReadOnlyList<string>? Tags { get; init; }

@@ -121,4 +121,4 @@ description: >-
 
 ## Related project rules
 
-- See `.cursor/rules/*.mdc` in this repo (`dotnet-best-practices`, `security`, `errors`, `core-workflow`, etc.) for additional constraints.
+- See `.cursor/rules/*.mdc` in this repo (`dotnet-best-practices`, `frontend-stack`, `security`, `errors`, `core-workflow`, etc.) for additional constraints.

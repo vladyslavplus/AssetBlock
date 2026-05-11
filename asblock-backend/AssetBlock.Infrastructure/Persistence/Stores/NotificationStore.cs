@@ -89,4 +89,60 @@ internal sealed class NotificationStore(ApplicationDbContext dbContext, ILogger<
             throw;
         }
     }
+
+    public async Task<bool> MarkUnread(Guid recipientUserId, Guid notificationId, CancellationToken cancellationToken = default)
+    {
+        var row = await dbContext.UserNotifications
+            .FirstOrDefaultAsync(n => n.Id == notificationId && n.RecipientUserId == recipientUserId, cancellationToken);
+        if (row is null)
+        {
+            return false;
+        }
+
+        if (row.ReadAt is null)
+        {
+            return true;
+        }
+
+        row.ReadAt = null;
+        try
+        {
+            await dbContext.SaveChangesAsync(cancellationToken);
+            return true;
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Failed to mark notification {NotificationId} unread", notificationId);
+            throw;
+        }
+    }
+
+    public async Task<int> MarkAllRead(Guid recipientUserId, CancellationToken cancellationToken = default)
+    {
+        var rows = await dbContext.UserNotifications
+            .Where(n => n.RecipientUserId == recipientUserId && n.ReadAt == null)
+            .ToListAsync(cancellationToken);
+        if (rows.Count == 0)
+        {
+            return 0;
+        }
+
+        var now = DateTimeOffset.UtcNow;
+        foreach (var row in rows)
+        {
+            row.ReadAt = now;
+        }
+
+        try
+        {
+            await dbContext.SaveChangesAsync(cancellationToken);
+            logger.LogDebug("Marked {Count} notifications read for user {UserId}", rows.Count, recipientUserId);
+            return rows.Count;
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Failed to mark all notifications read for user {UserId}", recipientUserId);
+            throw;
+        }
+    }
 }

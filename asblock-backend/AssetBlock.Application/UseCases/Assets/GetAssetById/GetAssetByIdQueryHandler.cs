@@ -6,7 +6,7 @@ using MediatR;
 
 namespace AssetBlock.Application.UseCases.Assets.GetAssetById;
 
-internal sealed class GetAssetByIdQueryHandler(IAssetStore assetStore)
+internal sealed class GetAssetByIdQueryHandler(IAssetStore assetStore, IReviewStore reviewStore)
     : IRequestHandler<GetAssetByIdQuery, Result<AssetDetailItem>>
 {
     public async Task<Result<AssetDetailItem>> Handle(GetAssetByIdQuery request, CancellationToken cancellationToken)
@@ -16,6 +16,19 @@ internal sealed class GetAssetByIdQueryHandler(IAssetStore assetStore)
         {
             return Result.NotFound(ErrorCodes.ERR_ASSET_NOT_FOUND);
         }
+
+        if (asset.DeletedAt.HasValue)
+        {
+            return Result.NotFound(ErrorCodes.ERR_ASSET_NOT_FOUND);
+        }
+
+        var tags = asset.AssetTags
+            .Select(at => at.Tag.Name)
+            .OrderBy(n => n, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+        var averageRating = await reviewStore.GetAverageRatingForAsset(asset.Id, cancellationToken);
+        var authorUsername = asset.Author.Username;
+
         var item = new AssetDetailItem(
             asset.Id,
             asset.Title,
@@ -24,8 +37,11 @@ internal sealed class GetAssetByIdQueryHandler(IAssetStore assetStore)
             asset.CategoryId,
             asset.Category.Name,
             asset.AuthorId,
+            authorUsername,
             asset.CreatedAt,
-            asset.UpdatedAt);
+            asset.UpdatedAt,
+            tags,
+            averageRating);
         return Result.Success(item);
     }
 }

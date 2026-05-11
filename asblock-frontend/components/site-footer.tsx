@@ -1,17 +1,14 @@
 import Link from "next/link";
-import { Github, Twitter, Package2 } from "lucide-react";
+import { siteShellClass } from "@/lib/site-layout";
+import { Github, Twitter } from "lucide-react";
+import { BrandLogo } from "@/components/brand-logo";
+import { SiteFooterProductColumn } from "@/components/site-footer-product-column";
 import { Separator } from "@/components/ui/separator";
 
 const FOOTER_LINKS = {
-  Product: [
-    { label: "Browse assets", href: "/assets" },
-    { label: "Sell on AssetBlock", href: "#" },
-    { label: "Pricing", href: "#" },
-    { label: "Changelog", href: "#" },
-  ],
   Developers: [
-    { label: "Documentation", href: "#" },
-    { label: "API reference", href: "#" },
+    { label: "Documentation", href: "/docs" },
+    { label: "API reference", href: "/docs#api" },
     { label: "Status", href: "#" },
   ],
   Legal: [
@@ -26,15 +23,10 @@ export function SiteFooter() {
 
   return (
     <footer className="border-t border-border" aria-label="Site footer">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12 sm:py-16">
+      <div className={siteShellClass("site", "py-12 sm:py-16")}>
         <div className="grid grid-cols-2 sm:grid-cols-5 gap-8">
           <div className="col-span-2 flex flex-col gap-4">
-            <div className="flex items-center gap-2">
-              <div className="flex items-center justify-center w-7 h-7 rounded-md bg-primary/20 border border-primary/30">
-                <Package2 className="w-3.5 h-3.5 text-primary" />
-              </div>
-              <span className="font-semibold text-sm text-foreground">AssetBlock</span>
-            </div>
+            <BrandLogo className="w-fit" />
             <p className="text-xs text-muted-foreground leading-relaxed max-w-[200px]">
               The developer-first marketplace for intellectual property assets.
             </p>
@@ -55,6 +47,8 @@ export function SiteFooter() {
               </Link>
             </div>
           </div>
+
+          <SiteFooterProductColumn />
 
           {Object.entries(FOOTER_LINKS).map(([group, links]) => (
             <div key={group} className="flex flex-col gap-3">

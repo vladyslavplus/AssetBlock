@@ -1,4 +1,5 @@
 import { Zap, GitFork, ShieldCheck, Layers, DollarSign, Users } from "lucide-react";
+import { siteShellClass } from "@/lib/site-layout";
 
 const FEATURES = [
   {
@@ -42,7 +43,7 @@ const FEATURES = [
 export function FeaturesSection() {
   return (
     <section className="py-20 sm:py-28" aria-labelledby="features-heading">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div className={siteShellClass("site")}>
         <div className="text-center mb-14">
           <h2
             id="features-heading"

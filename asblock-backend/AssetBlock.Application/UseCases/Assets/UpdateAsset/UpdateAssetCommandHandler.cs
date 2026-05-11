@@ -29,6 +29,11 @@ internal sealed class UpdateAssetCommandHandler(
                 return Result.Forbidden(ErrorCodes.ERR_FORBIDDEN);
             }
 
+            if (asset.DeletedAt.HasValue)
+            {
+                return Result.NotFound(ErrorCodes.ERR_ASSET_NOT_FOUND);
+            }
+
             if (request.CategoryId.HasValue)
             {
                 var category = await categoryStore.GetById(request.CategoryId.Value, cancellationToken);

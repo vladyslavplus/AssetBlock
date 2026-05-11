@@ -46,7 +46,7 @@ public sealed class ReviewsControllerIntegrationTests(IntegrationTestFixture fix
     {
         var client = fixture.Factory.CreateClient();
         var missingId = Guid.Parse("e5f6a7b8-c9d0-1234-ef01-23456789abcd");
-        var response = await client.GetAsync(new Uri($"/api/reviews/reviews/{missingId}", UriKind.Relative));
+        var response = await client.GetAsync(new Uri($"/api/reviews/{missingId}", UriKind.Relative));
 
         response.StatusCode.Should().Be(HttpStatusCode.NotFound);
         var json = await response.Content.ReadAsStringAsync();
@@ -71,7 +71,7 @@ public sealed class ReviewsControllerIntegrationTests(IntegrationTestFixture fix
     public async Task DeleteReview_WithoutAuth_ShouldReturn401()
     {
         var client = fixture.Factory.CreateClient();
-        var response = await client.DeleteAsync(new Uri($"/api/reviews/reviews/{Guid.NewGuid()}", UriKind.Relative));
+        var response = await client.DeleteAsync(new Uri($"/api/reviews/{Guid.NewGuid()}", UriKind.Relative));
 
         response.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
     }
@@ -80,7 +80,7 @@ public sealed class ReviewsControllerIntegrationTests(IntegrationTestFixture fix
     public async Task DeleteReview_AsNonAdmin_ShouldReturn403()
     {
         (HttpClient client, _) = await IntegrationTestAuth.RegisterAndAuthenticateAsync(fixture.Factory);
-        var response = await client.DeleteAsync(new Uri($"/api/reviews/reviews/{Guid.NewGuid()}", UriKind.Relative));
+        var response = await client.DeleteAsync(new Uri($"/api/reviews/{Guid.NewGuid()}", UriKind.Relative));
 
         response.StatusCode.Should().Be(HttpStatusCode.Forbidden);
     }

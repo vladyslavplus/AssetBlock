@@ -1,12 +1,13 @@
 ---
-description: Robust error handling and logging everywhere.
-globs: **/*.cs, **/*.tsx
+description: Robust repo-aligned error handling and observability defaults.
+globs: asblock-backend/**/*.cs, asblock-frontend/**/*.ts, asblock-frontend/**/*.tsx
 alwaysApply: true
 ---
 # Error Handling & Observability
 
-- .NET: Wrap async operations in try-catch, use Ardalis.Result for domain errors, log structured with Serilog (enrich with request ID, user context), never swallow exceptions.
-- MediatR handlers: rely on FluentValidation for invalid input; avoid `ArgumentNullException.ThrowIfNull` on fields already validated by a validator.
-- Next.js: Use try-catch in Server Actions/API routes, return meaningful errors via NextResponse.json, use Tanstack Query error boundaries + notistack for toasts.
-- Always add fallback UI (Suspense + loading/error states), log to console/Sentry if in prod mindset.
-- For background (Hangfire/SignalR): Add retry policies (Polly), log failures with context.
+- .NET: wrap external or persistence-sensitive operations in try-catch where failure handling is meaningful, use Ardalis.Result for domain errors, log structured data with Serilog, and never swallow unexpected exceptions silently.
+- MediatR handlers: rely on FluentValidation for invalid input and avoid `ArgumentNullException.ThrowIfNull` for members already validated upstream.
+- Next.js: use try-catch in route handlers and server helpers, return meaningful `NextResponse.json(...)` errors, and preserve fail-soft behavior where auth/session endpoints should degrade to anonymous state.
+- Frontend UI: follow existing feedback patterns first; use inline form errors and `sonner` toasts where the surrounding feature already does.
+- Add fallback UI, empty states, or safe null handling where fetches can fail.
+- For background work (Hangfire, SignalR, external integrations), add retry policies and log failures with enough context to debug.

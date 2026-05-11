@@ -27,6 +27,11 @@ internal sealed class RemoveAssetTagCommandHandler(
             return Result.Forbidden(ErrorCodes.ERR_FORBIDDEN);
         }
 
+        if (asset.DeletedAt.HasValue)
+        {
+            return Result.NotFound(ErrorCodes.ERR_ASSET_NOT_FOUND);
+        }
+
         var tag = await tagStore.GetById(request.TagId, cancellationToken);
         if (tag is null)
         {

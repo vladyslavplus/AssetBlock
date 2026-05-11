@@ -50,5 +50,17 @@ public sealed class NotificationStoreTests
         after.Items.Should().BeEmpty();
 
         (await sut.MarkRead(userId, Guid.NewGuid())).Should().BeFalse();
+
+        (await sut.MarkUnread(userId, n.Id)).Should().BeTrue();
+        (await sut.MarkUnread(userId, n.Id)).Should().BeTrue();
+        var unreadAgain = await sut.GetPaged(userId, new GetNotificationsRequest { UnreadOnly = true });
+        unreadAgain.Items.Should().Contain(x => x.Id == n.Id);
+
+        (await sut.MarkAllRead(userId)).Should().Be(1);
+        (await sut.MarkAllRead(userId)).Should().Be(0);
+        var noneUnread = await sut.GetPaged(userId, new GetNotificationsRequest { UnreadOnly = true });
+        noneUnread.Items.Should().BeEmpty();
+
+        (await sut.MarkUnread(userId, Guid.NewGuid())).Should().BeFalse();
     }
 }

@@ -2,6 +2,7 @@ using System.Net;
 using System.Net.Http.Json;
 using System.Text;
 using System.Text.Json;
+using AssetBlock.Domain.Core.Constants;
 using AssetBlock.Domain.Core.Dto.Users;
 using AssetBlock.WebApi.IntegrationTests.Support;
 using FluentAssertions;
@@ -41,6 +42,7 @@ public sealed class UsersControllerIntegrationTests(IntegrationTestFixture fixtu
         var profile = await response.Content.ReadFromJsonAsync<UserProfileDto>(IntegrationTestAuth.JsonOptions);
         profile.Should().NotBeNull();
         profile.Username.Should().NotBeNullOrWhiteSpace();
+        profile!.Role.Should().Be(AppRoles.USER);
     }
 
     [Fact]
@@ -80,6 +82,31 @@ public sealed class UsersControllerIntegrationTests(IntegrationTestFixture fixtu
             new StringContent(string.Empty, Encoding.UTF8, "application/json"));
 
         response.StatusCode.Should().Be(HttpStatusCode.NotFound);
+    }
+
+    [Fact]
+    public async Task MarkNotificationUnread_WithAuth_WhenMissing_ShouldReturn404()
+    {
+        (HttpClient client, _) = await IntegrationTestAuth.RegisterAndAuthenticateAsync(fixture.Factory);
+        var missingId = Guid.Parse("a1b2c3d4-e5f6-7890-abcd-ef1234567890");
+        var response = await client.PatchAsync(
+            new Uri($"/api/users/me/notifications/{missingId}/unread", UriKind.Relative),
+            new StringContent(string.Empty, Encoding.UTF8, "application/json"));
+
+        response.StatusCode.Should().Be(HttpStatusCode.NotFound);
+    }
+
+    [Fact]
+    public async Task MarkAllNotificationsRead_WithAuth_ShouldReturnOkWithCount()
+    {
+        (HttpClient client, _) = await IntegrationTestAuth.RegisterAndAuthenticateAsync(fixture.Factory);
+        var response = await client.PostAsync(
+            new Uri("/api/users/me/notifications/read-all", UriKind.Relative),
+            new StringContent(string.Empty, Encoding.UTF8, "application/json"));
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        var body = await response.Content.ReadAsStringAsync();
+        body.Should().Contain("updatedCount");
     }
 
     [Fact]

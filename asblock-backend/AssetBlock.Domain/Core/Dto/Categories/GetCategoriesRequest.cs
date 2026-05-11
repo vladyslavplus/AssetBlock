@@ -7,7 +7,7 @@ namespace AssetBlock.Domain.Core.Dto.Categories;
 /// </summary>
 public sealed record GetCategoriesRequest : PagedRequest
 {
-    /// <summary>Optional search by name or slug.</summary>
+    /// <summary>Optional search by name, slug, or description (case-insensitive substring).</summary>
     public string? Search { get; init; }
 
     /// <summary>Allowed sort fields: Name, Slug, ID. Default: Name.</summary>
