@@ -46,7 +46,9 @@ internal sealed class AssetStore(ApplicationDbContext dbContext) : IAssetStore
 
     public async Task<PagedResult<Asset>> GetPaged(GetAssetsRequest request, CancellationToken cancellationToken = default)
     {
-        IQueryable<Asset> query = dbContext.Assets.AsNoTracking().Include(a => a.Category);
+        IQueryable<Asset> query = dbContext.Assets.AsNoTracking()
+            .Where(a => a.DeletedAt == null)
+            .Include(a => a.Category);
 
         if (!string.IsNullOrWhiteSpace(request.Search))
         {
@@ -89,6 +91,17 @@ internal sealed class AssetStore(ApplicationDbContext dbContext) : IAssetStore
         return new PagedResult<Asset>(items, totalCount, page, pageSize);
     }
 
+    public async Task SoftDelete(Guid id, DateTimeOffset deletedAt, CancellationToken cancellationToken = default)
+    {
+        await dbContext.Assets
+            .Where(a => a.Id == id && a.DeletedAt == null)
+            .ExecuteUpdateAsync(
+                setters => setters
+                    .SetProperty(a => a.DeletedAt, deletedAt)
+                    .SetProperty(a => a.UpdatedAt, deletedAt),
+                cancellationToken);
+    }
+
     public async Task Delete(Guid id, CancellationToken cancellationToken = default)
     {
         await dbContext.Assets.Where(a => a.Id == id).ExecuteDeleteAsync(cancellationToken);
@@ -122,7 +135,7 @@ internal sealed class AssetStore(ApplicationDbContext dbContext) : IAssetStore
 
     public async Task<bool> Update(Guid id, string? title, string? description, decimal? price, Guid? categoryId, CancellationToken cancellationToken = default)
     {
-        var asset = await dbContext.Assets.FirstOrDefaultAsync(a => a.Id == id, cancellationToken);
+        var asset = await dbContext.Assets.FirstOrDefaultAsync(a => a.Id == id && a.DeletedAt == null, cancellationToken);
         if (asset is null)
         {
             return false;

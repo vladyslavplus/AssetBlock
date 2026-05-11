@@ -15,6 +15,11 @@ internal sealed class PurchaseStore(ApplicationDbContext dbContext) : IPurchaseS
         return purchase;
     }
 
+    public Task<bool> HasPurchasesForAsset(Guid assetId, CancellationToken cancellationToken = default)
+    {
+        return dbContext.Purchases.AsNoTracking().AnyAsync(p => p.AssetId == assetId, cancellationToken);
+    }
+
     public Task<bool> Exists(Guid userId, Guid assetId, CancellationToken cancellationToken = default)
     {
         return dbContext.Purchases

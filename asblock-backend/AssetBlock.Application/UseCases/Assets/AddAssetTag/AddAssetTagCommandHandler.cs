@@ -28,6 +28,11 @@ internal sealed class AddAssetTagCommandHandler(
             return Result.Forbidden(ErrorCodes.ERR_FORBIDDEN);
         }
 
+        if (asset.DeletedAt.HasValue)
+        {
+            return Result.NotFound(ErrorCodes.ERR_ASSET_NOT_FOUND);
+        }
+
         var normalizedName = request.TagName.Trim().ToLowerInvariant();
         var tag = await tagStore.GetByName(normalizedName, cancellationToken);
         if (tag is null)

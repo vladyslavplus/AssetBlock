@@ -11,8 +11,8 @@ export const defaultMetadata: Metadata = {
     'Discover and sell developer intellectual property: packages, templates, tools, and digital assets. Secure payments, encrypted delivery, and a marketplace built for builders.',
   applicationName: siteName,
   icons: {
-    icon: [{ url: '/icon-dark-32x32.png' }, { url: '/icon.svg', type: 'image/svg+xml' }],
-    apple: '/apple-icon.png',
+    icon: [{ url: '/brand-mark.svg', type: 'image/svg+xml' }],
+    apple: [{ url: '/brand-mark.svg', type: 'image/svg+xml' }],
   },
   openGraph: {
     type: 'website',

@@ -47,6 +47,31 @@ public class CreateCheckoutSessionCommandHandlerTests
     }
 
     [Fact]
+    public async Task Handle_WhenDelisted_ShouldReturnAssetNotFound()
+    {
+        var userId = Guid.NewGuid();
+        var command = new CreateCheckoutSessionCommand(Guid.NewGuid(), userId, "https://ok", "https://cancel");
+        var asset = new Asset
+        {
+            Id = command.AssetId,
+            AuthorId = Guid.NewGuid(),
+            CategoryId = Guid.NewGuid(),
+            Title = "Delisted",
+            Price = 1m,
+            StorageKey = "k",
+            FileName = "f",
+            CreatedAt = DateTimeOffset.UtcNow,
+            DeletedAt = DateTimeOffset.UtcNow,
+        };
+        _assetStoreMock.GetById(command.AssetId, Arg.Any<CancellationToken>()).Returns(asset);
+
+        var result = await _handler.Handle(command, CancellationToken.None);
+
+        result.IsSuccess.Should().BeFalse();
+        result.ValidationErrors.Should().Contain(e => e.Identifier == ErrorCodes.ERR_ASSET_NOT_FOUND);
+    }
+
+    [Fact]
     public async Task Handle_WhenUserIsAuthor_ShouldReturnCannotPurchaseOwnAssetError()
     {
         // Arrange

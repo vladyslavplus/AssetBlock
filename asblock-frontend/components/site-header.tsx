@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState, useEffect } from "react";
-import { ChevronDown, Menu, X, Package2 } from "lucide-react";
+import { ChevronDown, Menu, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -16,6 +16,7 @@ import { cn } from "@/lib/utils";
 import { siteShellClass } from "@/lib/site-layout";
 import { useAuth } from "@/components/auth/auth-context";
 import { NotificationBell } from "@/components/notifications/notification-bell";
+import { BrandLogo } from "@/components/brand-logo";
 
 export function SiteHeader() {
   const router = useRouter();
@@ -54,12 +55,7 @@ export function SiteHeader() {
             href="/"
             className="flex items-center gap-2 text-foreground hover:text-foreground/90 transition-colors"
           >
-            <div className="flex items-center justify-center w-8 h-8 rounded-md bg-primary/20 border border-primary/30">
-              <Package2 className="w-4 h-4 text-primary" />
-            </div>
-            <span className="font-semibold text-base tracking-tight">
-              AssetBlock
-            </span>
+            <BrandLogo compact />
           </Link>
 
           <nav className="hidden md:flex items-center gap-8" aria-label="Main navigation">

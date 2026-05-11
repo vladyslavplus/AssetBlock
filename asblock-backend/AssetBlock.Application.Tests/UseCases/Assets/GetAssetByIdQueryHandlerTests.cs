@@ -37,6 +37,28 @@ public class GetAssetByIdQueryHandlerTests
     }
 
     [Fact]
+    public async Task Handle_WhenDelisted_ShouldReturnNotFound()
+    {
+        var assetId = Guid.NewGuid();
+        var asset = new Asset
+        {
+            Id = assetId,
+            AuthorId = Guid.NewGuid(),
+            CategoryId = Guid.NewGuid(),
+            Title = "Gone",
+            StorageKey = "k",
+            FileName = "f",
+            DeletedAt = DateTimeOffset.UtcNow,
+        };
+        _assetStoreMock.GetById(assetId, Arg.Any<CancellationToken>()).Returns(asset);
+
+        var result = await _handler.Handle(new GetAssetByIdQuery(assetId), CancellationToken.None);
+
+        result.Status.Should().Be(ResultStatus.NotFound);
+        result.Errors.Should().Contain(ErrorCodes.ERR_ASSET_NOT_FOUND);
+    }
+
+    [Fact]
     public async Task Handle_WhenAssetFound_ShouldReturnMappedDetailItem()
     {
         // Arrange

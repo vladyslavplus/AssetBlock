@@ -19,6 +19,12 @@ internal sealed class AssetIndexEventHandler(
             return;
         }
 
+        if (asset.DeletedAt.HasValue)
+        {
+            logger.LogDebug("AssetIndexEventHandler: skip index for delisted asset {AssetId}", notification.AssetId);
+            return;
+        }
+
         var tags = asset.AssetTags
             .Select(at => at.Tag.Name.Trim().ToLowerInvariant())
             .Where(n => n.Length > 0)

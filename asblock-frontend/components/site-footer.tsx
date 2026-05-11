@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { siteShellClass } from "@/lib/site-layout";
-import { Github, Twitter, Package2 } from "lucide-react";
+import { Github, Twitter } from "lucide-react";
+import { BrandLogo } from "@/components/brand-logo";
 import { SiteFooterProductColumn } from "@/components/site-footer-product-column";
 import { Separator } from "@/components/ui/separator";
 
@@ -25,12 +26,7 @@ export function SiteFooter() {
       <div className={siteShellClass("site", "py-12 sm:py-16")}>
         <div className="grid grid-cols-2 sm:grid-cols-5 gap-8">
           <div className="col-span-2 flex flex-col gap-4">
-            <div className="flex items-center gap-2">
-              <div className="flex items-center justify-center w-7 h-7 rounded-md bg-primary/20 border border-primary/30">
-                <Package2 className="w-3.5 h-3.5 text-primary" />
-              </div>
-              <span className="font-semibold text-sm text-foreground">AssetBlock</span>
-            </div>
+            <BrandLogo className="w-fit" />
             <p className="text-xs text-muted-foreground leading-relaxed max-w-[200px]">
               The developer-first marketplace for intellectual property assets.
             </p>

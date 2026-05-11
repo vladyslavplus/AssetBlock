@@ -136,4 +136,60 @@ public sealed class PurchaseStoreTests
         page.Items.Single(i => i.AssetId == assetReviewedId).HasUserReviewed.Should().BeTrue();
         page.Items.Single(i => i.AssetId == assetBareId).HasUserReviewed.Should().BeFalse();
     }
+
+    [Fact]
+    public async Task HasPurchasesForAsset_reflects_rows()
+    {
+        await using var db = InMemoryDbContextFactory.Create();
+        var catId = Guid.NewGuid();
+        db.Categories.Add(new Category { Id = catId, Name = "C", Slug = "c", CreatedAt = DateTimeOffset.UtcNow });
+        var authorId = Guid.NewGuid();
+        var buyerId = Guid.NewGuid();
+        db.Users.Add(new User
+        {
+            Id = authorId,
+            Username = "auth",
+            Email = "a@a.com",
+            PasswordHash = "h",
+            Role = AppRoles.USER,
+            CreatedAt = DateTimeOffset.UtcNow,
+        });
+        db.Users.Add(new User
+        {
+            Id = buyerId,
+            Username = "buy",
+            Email = "b@b.com",
+            PasswordHash = "h",
+            Role = AppRoles.USER,
+            CreatedAt = DateTimeOffset.UtcNow,
+        });
+        var assetId = Guid.NewGuid();
+        db.Assets.Add(new Asset
+        {
+            Id = assetId,
+            AuthorId = authorId,
+            CategoryId = catId,
+            Title = "A",
+            StorageKey = "k",
+            FileName = "f",
+            CreatedAt = DateTimeOffset.UtcNow,
+        });
+        await db.SaveChangesAsync();
+
+        var sut = new PurchaseStore(db);
+        (await sut.HasPurchasesForAsset(assetId)).Should().BeFalse();
+
+        db.Purchases.Add(new Purchase
+        {
+            Id = Guid.NewGuid(),
+            UserId = buyerId,
+            AssetId = assetId,
+            StripePaymentId = "pi_x",
+            PurchasedAt = DateTimeOffset.UtcNow,
+        });
+        await db.SaveChangesAsync();
+
+        (await sut.HasPurchasesForAsset(assetId)).Should().BeTrue();
+        (await sut.HasPurchasesForAsset(Guid.NewGuid())).Should().BeFalse();
+    }
 }
