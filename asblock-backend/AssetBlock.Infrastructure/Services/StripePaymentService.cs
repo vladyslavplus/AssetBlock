@@ -32,6 +32,10 @@ internal sealed class StripePaymentService(
 
         var asset = await assetStore.GetById(assetId, cancellationToken)
             ?? throw new InvalidOperationException($"Asset {assetId} not found.");
+        if (asset.DeletedAt.HasValue)
+        {
+            throw new InvalidOperationException($"Asset {assetId} is no longer available for purchase.");
+        }
 
         var sessionService = new SessionService(_stripeClient);
         var sessionOptions = new SessionCreateOptions

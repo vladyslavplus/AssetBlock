@@ -109,4 +109,20 @@ public class UploadAssetCommandValidatorTests
         var result = await _validator.ValidateAsync(ValidCommand());
         result.IsValid.Should().BeTrue();
     }
+
+    [Fact]
+    public async Task Validate_WhenDescriptionExceeds5000Chars_ShouldFail()
+    {
+        var longDesc = new string('x', 5001);
+        var command = new UploadAssetCommand(
+            Guid.NewGuid(),
+            new UploadAssetRequest("Title", longDesc, 5m, Guid.NewGuid()),
+            new MemoryStream([1]),
+            "file.zip");
+
+        var result = await _validator.ValidateAsync(command);
+
+        result.IsValid.Should().BeFalse();
+        result.Errors.Should().Contain(e => e.PropertyName.Contains("Description"));
+    }
 }

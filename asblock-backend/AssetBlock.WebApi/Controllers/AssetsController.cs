@@ -24,7 +24,7 @@ namespace AssetBlock.WebApi.Controllers;
 public sealed class AssetsController(ISender sender, IDownloadService downloadService, ILogger<AssetsController> logger) : ApiControllerBase(sender)
 {
     /// <summary>
-    /// List assets with paging, search, and filters.
+    /// List assets with paging, search, and filters. Optional <c>authorId</c> scopes the catalog to one seller (public storefront).
     /// </summary>
     [HttpGet(ApiRoutes.Assets.LIST)]
     [AllowAnonymous]

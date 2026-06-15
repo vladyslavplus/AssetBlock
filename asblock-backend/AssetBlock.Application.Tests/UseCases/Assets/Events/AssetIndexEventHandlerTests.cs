@@ -32,6 +32,27 @@ public class AssetIndexEventHandlerTests
     }
 
     [Fact]
+    public async Task Handle_WhenDelisted_ShouldNotIndex()
+    {
+        var assetId = Guid.NewGuid();
+        var asset = new Asset
+        {
+            Id = assetId,
+            AuthorId = Guid.NewGuid(),
+            CategoryId = Guid.NewGuid(),
+            Title = "X",
+            StorageKey = "k",
+            FileName = "f",
+            DeletedAt = DateTimeOffset.UtcNow,
+        };
+        _assetStore.GetById(assetId, Arg.Any<CancellationToken>()).Returns(asset);
+
+        await _handler.Handle(new AssetCreatedEvent(assetId), CancellationToken.None);
+
+        await _search.DidNotReceive().IndexAsset(Arg.Any<AssetDocument>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
     public async Task Handle_WhenAssetFound_ShouldIndexWithTagsAndMetadata()
     {
         var assetId = Guid.NewGuid();

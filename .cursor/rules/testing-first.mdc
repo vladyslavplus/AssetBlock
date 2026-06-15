@@ -1,9 +1,12 @@
 ---
-description: Encourage TDD / test suggestions
+description: Encourage repo-aligned test planning and coverage.
+globs: asblock-backend/**/*.cs, asblock-frontend/**/*.ts, asblock-frontend/**/*.tsx
+alwaysApply: true
 ---
 # Testing Mindset
 
 Before implementing:
-- Suggest 3–5 key test cases (happy path, edge, failure).
+- Suggest 3-5 key test cases covering happy path, edge cases, and failure cases.
 - Write failing tests first when feasible.
-- After code: add integration/unit test snippets if missing.
+- After code, prefer repo-native tests over ad hoc snippets.
+- For backend, follow the existing xUnit + NSubstitute + FluentAssertions stack.

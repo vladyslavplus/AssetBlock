@@ -20,6 +20,7 @@ internal sealed class ElasticSearchService(
     private readonly string _indexName = options.Value.DefaultIndex;
     private const string FUZZINESS_AUTO = "AUTO";
     private const string FIELD_TAGS_KEYWORD = "tags.keyword";
+    private const string FIELD_AUTHOR_ID_KEYWORD = "authorId.keyword";
     private const string FIELD_CATEGORY_ID_KEYWORD = "categoryId.keyword";
     private const string FIELD_PRICE = "price";
     private const string FIELD_CREATED_AT = "createdAt";
@@ -77,6 +78,12 @@ internal sealed class ElasticSearchService(
                     s => s.MatchPhrasePrefix(m => m
                         .Field(FIELD_DESCRIPTION!)
                         .Query(searchText)))));
+        }
+
+        if (request.AuthorId.HasValue)
+        {
+            mustQueries.Add(q =>
+                q.Term(t => t.Field(FIELD_AUTHOR_ID_KEYWORD!).Value(request.AuthorId.Value.ToString())));
         }
 
         if (request.CategoryId.HasValue)
