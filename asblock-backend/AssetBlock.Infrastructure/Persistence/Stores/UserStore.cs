@@ -9,6 +9,9 @@ namespace AssetBlock.Infrastructure.Persistence.Stores;
 
 internal sealed class UserStore(ApplicationDbContext dbContext) : IUserStore
 {
+    private const string CONSTRAINT_USERS_EMAIL = "IX_users_Email";
+    private const string CONSTRAINT_USERS_USERNAME = "IX_users_Username";
+
     public Task<User?> GetByEmail(string email, CancellationToken cancellationToken = default)
     {
         var normalized = email.Trim().ToLowerInvariant();
@@ -56,10 +59,14 @@ internal sealed class UserStore(ApplicationDbContext dbContext) : IUserStore
         {
             await dbContext.SaveChangesAsync(cancellationToken);
         }
-        catch (DbUpdateException ex) when (ex.InnerException is PostgresException { SqlState: PostgresErrorCodes.UniqueViolation })
+        catch (DbUpdateException ex) when (
+            ex.InnerException is PostgresException { SqlState: PostgresErrorCodes.UniqueViolation } postgresEx)
         {
-            throw new DuplicateEmailException();
+            dbContext.Entry(user).State = EntityState.Detached;
+            ThrowForUserUniqueViolation(postgresEx);
+            throw;
         }
+
         return user;
     }
 
@@ -77,7 +84,22 @@ internal sealed class UserStore(ApplicationDbContext dbContext) : IUserStore
             await dbContext.SaveChangesAsync(cancellationToken);
             return user;
         }
-        catch (DbUpdateException ex) when (ex.InnerException is PostgresException { SqlState: PostgresErrorCodes.UniqueViolation })
+        catch (DbUpdateException ex) when (
+            ex.InnerException is PostgresException { SqlState: PostgresErrorCodes.UniqueViolation } postgresEx)
+        {
+            ThrowForUserUniqueViolation(postgresEx);
+            throw;
+        }
+    }
+
+    private static void ThrowForUserUniqueViolation(PostgresException postgresEx)
+    {
+        if (postgresEx.ConstraintName == CONSTRAINT_USERS_EMAIL)
+        {
+            throw new DuplicateEmailException();
+        }
+
+        if (postgresEx.ConstraintName == CONSTRAINT_USERS_USERNAME)
         {
             throw new DuplicateUsernameException();
         }

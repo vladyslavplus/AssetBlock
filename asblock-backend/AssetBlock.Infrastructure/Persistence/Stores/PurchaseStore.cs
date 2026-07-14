@@ -57,7 +57,9 @@ internal sealed class PurchaseStore(ApplicationDbContext dbContext) : IPurchaseS
 
         query = sortKey switch
         {
-            "PURCHASEDAT" => isDesc ? query.OrderByDescending(p => p.PurchasedAt) : query.OrderBy(p => p.PurchasedAt),
+            "PURCHASEDAT" => isDesc
+                ? query.OrderByDescending(p => p.PurchasedAt).ThenBy(p => p.Id)
+                : query.OrderBy(p => p.PurchasedAt).ThenBy(p => p.Id),
             _ => throw new ArgumentOutOfRangeException(nameof(request.SortBy), sortBy, $"Unexpected sort key after validation: {sortBy}.")
         };
 

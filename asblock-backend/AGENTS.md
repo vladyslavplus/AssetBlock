@@ -82,5 +82,5 @@
 - Mirror application structure in tests. Name tests `Handle_When<Condition>_Should<Expected>` or `Validate_When<Condition>_Should<Expected>`.
 - Cover happy paths plus validation, not-found, authorization, conflict, external failure, cancellation, and idempotency when relevant. Assert store/cache/event interactions with `Received` and `DidNotReceive`.
 - Test handlers and validators first; add WebApi/integration tests when HTTP pipeline, auth, configuration, persistence, or DI behavior changes.
-- Run the narrowest affected test project first. For cross-cutting backend changes, run `dotnet test asblock-backend.sln`; run `dotnet build asblock-backend.sln` when the full solution has restored assets.
+- Run the narrowest affected test project first. For cross-cutting backend changes, run `dotnet test asblock-backend.slnx`; run `dotnet build asblock-backend.slnx` when the full solution has restored assets.
 - If verification cannot run, state precisely what was not verified and why.

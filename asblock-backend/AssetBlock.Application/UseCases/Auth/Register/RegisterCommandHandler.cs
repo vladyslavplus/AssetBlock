@@ -36,6 +36,11 @@ internal sealed class RegisterCommandHandler(
             logger.LogWarning("Register failed: duplicate email (concurrent)");
             return ResultError.Error<TokensResponse>(ErrorCodes.ERR_AUTH_EMAIL_ALREADY_EXISTS);
         }
+        catch (DuplicateUsernameException)
+        {
+            logger.LogWarning("Register failed: duplicate username (concurrent)");
+            return Result.Conflict(ErrorCodes.ERR_USERNAME_ALREADY_EXISTS);
+        }
 
         try
         {

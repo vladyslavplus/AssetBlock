@@ -75,10 +75,16 @@ internal sealed class AssetStore(ApplicationDbContext dbContext) : IAssetStore
 
         query = sortKey switch
         {
-            "TITLE" => isDesc ? query.OrderByDescending(a => a.Title) : query.OrderBy(a => a.Title),
-            "PRICE" => isDesc ? query.OrderByDescending(a => a.Price) : query.OrderBy(a => a.Price),
+            "TITLE" => isDesc
+                ? query.OrderByDescending(a => a.Title).ThenBy(a => a.Id)
+                : query.OrderBy(a => a.Title).ThenBy(a => a.Id),
+            "PRICE" => isDesc
+                ? query.OrderByDescending(a => a.Price).ThenBy(a => a.Id)
+                : query.OrderBy(a => a.Price).ThenBy(a => a.Id),
             "ID" => isDesc ? query.OrderByDescending(a => a.Id) : query.OrderBy(a => a.Id),
-            _ => isDesc ? query.OrderByDescending(a => a.CreatedAt) : query.OrderBy(a => a.CreatedAt)
+            _ => isDesc
+                ? query.OrderByDescending(a => a.CreatedAt).ThenBy(a => a.Id)
+                : query.OrderBy(a => a.CreatedAt).ThenBy(a => a.Id)
         };
 
         var page = Math.Max(PagedRequest.DEFAULT_PAGE, request.Page);
@@ -109,14 +115,22 @@ internal sealed class AssetStore(ApplicationDbContext dbContext) : IAssetStore
 
     public async Task AddTag(Guid assetId, Guid tagId, CancellationToken cancellationToken = default)
     {
+        const string assetTagPrimaryKey = "PK_asset_tags";
+        var assetTag = new AssetTag { AssetId = assetId, TagId = tagId };
         try
         {
-            dbContext.Set<AssetTag>().Add(new AssetTag { AssetId = assetId, TagId = tagId });
+            dbContext.Set<AssetTag>().Add(assetTag);
             await dbContext.SaveChangesAsync(cancellationToken);
         }
-        catch (DbUpdateException ex) when (ex.InnerException is Npgsql.PostgresException { SqlState: Npgsql.PostgresErrorCodes.UniqueViolation })
+        catch (DbUpdateException ex) when (
+            ex.InnerException is Npgsql.PostgresException
+            {
+                SqlState: Npgsql.PostgresErrorCodes.UniqueViolation,
+                ConstraintName: assetTagPrimaryKey
+            })
         {
-            // Unique constraint - tag already on asset, no-op
+            // Tag already linked to asset — detach so the scoped context stays usable.
+            dbContext.Entry(assetTag).State = EntityState.Detached;
         }
     }
 

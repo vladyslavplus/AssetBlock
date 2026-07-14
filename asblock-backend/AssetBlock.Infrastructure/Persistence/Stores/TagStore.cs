@@ -10,6 +10,8 @@ namespace AssetBlock.Infrastructure.Persistence.Stores;
 
 internal sealed class TagStore(ApplicationDbContext dbContext) : ITagStore
 {
+    private const string CONSTRAINT_TAGS_NAME = "IX_tags_Name";
+
     public async Task<PagedResult<Tag>> SearchTags(GetTagsRequest request, CancellationToken cancellationToken = default)
     {
         var query = dbContext.Tags.AsNoTracking().AsQueryable();
@@ -31,7 +33,9 @@ internal sealed class TagStore(ApplicationDbContext dbContext) : ITagStore
         query = sortBy switch
         {
             "id" => isDesc ? query.OrderByDescending(t => t.Id) : query.OrderBy(t => t.Id),
-            _ => isDesc ? query.OrderByDescending(t => t.Name) : query.OrderBy(t => t.Name)
+            _ => isDesc
+                ? query.OrderByDescending(t => t.Name).ThenBy(t => t.Id)
+                : query.OrderBy(t => t.Name).ThenBy(t => t.Id)
         };
 
         var page = Math.Max(PagedRequest.DEFAULT_PAGE, request.Page);
@@ -65,8 +69,21 @@ internal sealed class TagStore(ApplicationDbContext dbContext) : ITagStore
     public async Task<Tag> Add(Tag tag, CancellationToken cancellationToken = default)
     {
         dbContext.Tags.Add(tag);
-        await dbContext.SaveChangesAsync(cancellationToken);
-        return tag;
+        try
+        {
+            await dbContext.SaveChangesAsync(cancellationToken);
+            return tag;
+        }
+        catch (DbUpdateException ex) when (
+            ex.InnerException is PostgresException
+            {
+                SqlState: PostgresErrorCodes.UniqueViolation,
+                ConstraintName: CONSTRAINT_TAGS_NAME
+            })
+        {
+            dbContext.Entry(tag).State = EntityState.Detached;
+            throw new DuplicateTagNameException();
+        }
     }
 
     public async Task<Tag> Update(Tag tag, CancellationToken cancellationToken = default)
@@ -77,7 +94,12 @@ internal sealed class TagStore(ApplicationDbContext dbContext) : ITagStore
             await dbContext.SaveChangesAsync(cancellationToken);
             return tag;
         }
-        catch (DbUpdateException ex) when (ex.InnerException is PostgresException { SqlState: PostgresErrorCodes.UniqueViolation })
+        catch (DbUpdateException ex) when (
+            ex.InnerException is PostgresException
+            {
+                SqlState: PostgresErrorCodes.UniqueViolation,
+                ConstraintName: CONSTRAINT_TAGS_NAME
+            })
         {
             throw new DuplicateTagNameException();
         }

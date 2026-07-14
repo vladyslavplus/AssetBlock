@@ -2,9 +2,11 @@ using AssetBlock.Application.UseCases.Tags.CreateTag;
 using AssetBlock.Domain.Abstractions.Services;
 using AssetBlock.Domain.Core.Constants;
 using AssetBlock.Domain.Core.Entities;
+using AssetBlock.Domain.Core.Exceptions;
 using FluentAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
 using NSubstitute;
+using NSubstitute.ExceptionExtensions;
 
 namespace AssetBlock.Application.Tests.UseCases.Tags;
 
@@ -54,5 +56,20 @@ public class CreateTagCommandHandlerTests
         // Assert: Return validation error
         result.IsSuccess.Should().BeFalse();
         result.ValidationErrors.Should().Contain(e => e.Identifier == ErrorCodes.ERR_TAG_ALREADY_EXISTS);
+    }
+
+    [Fact]
+    public async Task Handle_WhenAddThrowsDuplicateTagNameException_ShouldReturnError()
+    {
+        var command = new CreateTagCommand("race-tag");
+        _tagStoreMock.GetByName("race-tag", Arg.Any<CancellationToken>()).Returns((Tag?)null);
+        _tagStoreMock.Add(Arg.Any<Tag>(), Arg.Any<CancellationToken>())
+            .ThrowsAsync(new DuplicateTagNameException());
+
+        var result = await _handler.Handle(command, CancellationToken.None);
+
+        result.IsSuccess.Should().BeFalse();
+        result.ValidationErrors.Should().Contain(e => e.Identifier == ErrorCodes.ERR_TAG_ALREADY_EXISTS);
+        await _cacheMock.DidNotReceive().RemoveByPrefix(Arg.Any<string>(), Arg.Any<CancellationToken>());
     }
 }

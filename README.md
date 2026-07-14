@@ -9,7 +9,7 @@ This repository is a non-commercial / academic project.
 ```
 asblock/
 ├── asblock-backend/           # ASP.NET Core Web API + application/domain/infrastructure
-│   ├── asblock-backend.sln
+│   ├── asblock-backend.slnx
 │   ├── docker-compose.yml     # Local dependencies (e.g. PostgreSQL, Redis, Elasticsearch, MinIO)
 │   └── README.md
 └── asblock-frontend/          # Next.js web application (App Router)
@@ -26,7 +26,7 @@ asblock/
 ```bash
 dotnet restore
 dotnet build
-dotnet test asblock-backend.sln
+dotnet test asblock-backend.slnx
 dotnet ef database update --project AssetBlock.Infrastructure --startup-project AssetBlock.WebApi
 dotnet run --project AssetBlock.WebApi
 ```

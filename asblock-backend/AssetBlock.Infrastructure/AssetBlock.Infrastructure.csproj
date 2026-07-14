@@ -9,6 +9,7 @@
   <ItemGroup>
     <InternalsVisibleTo Include="AssetBlock.Application.Tests" />
     <InternalsVisibleTo Include="AssetBlock.Infrastructure.Tests" />
+    <InternalsVisibleTo Include="AssetBlock.Infrastructure.IntegrationTests" />
   </ItemGroup>
 
   <ItemGroup>

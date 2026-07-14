@@ -79,8 +79,23 @@ After changing `Encryption:KeyBase64`, previously encrypted MinIO objects cannot
 ```bash
 dotnet restore
 dotnet build
-dotnet test asblock-backend.sln
+dotnet test asblock-backend.slnx
 dotnet run --project AssetBlock.WebApi
 ```
 
-Bring up dependencies with `docker-compose.yml` in this folder when needed.
+### Tests
+
+| Project | Purpose | Needs Docker |
+|---------|---------|--------------|
+| `AssetBlock.*.Tests` (unit) | Isolated logic: validators, crypto, cache, password hashing, handler mocks | No |
+| `AssetBlock.Infrastructure.IntegrationTests` | EF Core stores, mappings, and migrations against real PostgreSQL via Testcontainers | Yes |
+| `AssetBlock.WebApi.IntegrationTests` | HTTP pipeline, controllers, auth, routing, model binding | Yes |
+
+Infrastructure and Web API integration tests use Testcontainers; a running **Docker daemon** is required. Do not start PostgreSQL manually for these projects.
+
+```bash
+dotnet test AssetBlock.Infrastructure.IntegrationTests/AssetBlock.Infrastructure.IntegrationTests.csproj
+dotnet test AssetBlock.WebApi.IntegrationTests/AssetBlock.WebApi.IntegrationTests.csproj
+```
+
+Bring up local app dependencies with `docker-compose.yml` in this folder when running the API outside tests.

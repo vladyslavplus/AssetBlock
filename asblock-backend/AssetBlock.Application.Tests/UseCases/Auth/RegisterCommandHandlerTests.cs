@@ -1,3 +1,4 @@
+using Ardalis.Result;
 using AssetBlock.Application.UseCases.Auth.Register;
 using AssetBlock.Domain.Abstractions.Services;
 using AssetBlock.Domain.Core.Constants;
@@ -59,6 +60,23 @@ public class RegisterCommandHandlerTests
 
         result.IsSuccess.Should().BeFalse();
         result.ValidationErrors.Should().Contain(e => e.Identifier == ErrorCodes.ERR_AUTH_EMAIL_ALREADY_EXISTS);
+    }
+
+    [Fact]
+    public async Task Handle_WhenDbThrowsDuplicateUsernameException_ShouldReturnConflict()
+    {
+        var command = new RegisterCommand("taken", "new@example.com", "password123");
+
+        _userStoreMock.GetByEmail(command.Email, Arg.Any<CancellationToken>()).Returns((User?)null);
+        _passwordHasherMock.Hash(command.Password).Returns("hashed");
+        _userStoreMock.Create("taken", command.Email, "hashed", Arg.Any<CancellationToken>())
+            .ThrowsAsync(new DuplicateUsernameException());
+
+        var result = await _handler.Handle(command, CancellationToken.None);
+
+        result.IsSuccess.Should().BeFalse();
+        result.Status.Should().Be(ResultStatus.Conflict);
+        result.Errors.Should().Contain(ErrorCodes.ERR_USERNAME_ALREADY_EXISTS);
     }
 
     [Fact]

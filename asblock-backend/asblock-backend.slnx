@@ -1,0 +1,15 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="AssetBlock.Application/AssetBlock.Application.csproj" />
+    <Project Path="AssetBlock.Domain/AssetBlock.Domain.csproj" />
+    <Project Path="AssetBlock.Infrastructure/AssetBlock.Infrastructure.csproj" />
+    <Project Path="AssetBlock.WebApi/AssetBlock.WebApi.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="AssetBlock.Application.Tests/AssetBlock.Application.Tests.csproj" />
+    <Project Path="AssetBlock.Infrastructure.IntegrationTests/AssetBlock.Infrastructure.IntegrationTests.csproj" />
+    <Project Path="AssetBlock.Infrastructure.Tests/AssetBlock.Infrastructure.Tests.csproj" />
+    <Project Path="AssetBlock.WebApi.IntegrationTests/AssetBlock.WebApi.IntegrationTests.csproj" />
+    <Project Path="AssetBlock.WebApi.Tests/AssetBlock.WebApi.Tests.csproj" />
+  </Folder>
+</Solution>
