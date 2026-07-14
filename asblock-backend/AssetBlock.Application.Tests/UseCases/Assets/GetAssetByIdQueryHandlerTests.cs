@@ -1,3 +1,4 @@
+using Ardalis.Result;
 using AssetBlock.Application.UseCases.Assets.GetAssetById;
 using AssetBlock.Domain.Abstractions.Services;
 using AssetBlock.Domain.Core.Constants;
@@ -10,16 +11,19 @@ namespace AssetBlock.Application.Tests.UseCases.Assets;
 public class GetAssetByIdQueryHandlerTests
 {
     private readonly IAssetStore _assetStoreMock;
+    private readonly IReviewStore _reviewStoreMock;
     private readonly GetAssetByIdQueryHandler _handler;
 
     public GetAssetByIdQueryHandlerTests()
     {
         _assetStoreMock = Substitute.For<IAssetStore>();
-        _handler = new GetAssetByIdQueryHandler(_assetStoreMock);
+        _reviewStoreMock = Substitute.For<IReviewStore>();
+        _reviewStoreMock.GetAverageRatingForAsset(Arg.Any<Guid>(), Arg.Any<CancellationToken>()).Returns(0.0);
+        _handler = new GetAssetByIdQueryHandler(_assetStoreMock, _reviewStoreMock);
     }
 
     [Fact]
-    public async Task Handle_WhenAssetNotFound_ShouldReturnError()
+    public async Task Handle_WhenAssetNotFound_ShouldReturnNotFound()
     {
         // Arrange
         var query = new GetAssetByIdQuery(Guid.NewGuid());
@@ -28,9 +32,30 @@ public class GetAssetByIdQueryHandlerTests
         // Act
         var result = await _handler.Handle(query, CancellationToken.None);
 
-        // Assert
-        result.IsSuccess.Should().BeFalse();
-        result.ValidationErrors.Should().Contain(e => e.Identifier == ErrorCodes.ERR_ASSET_NOT_FOUND);
+        result.Status.Should().Be(ResultStatus.NotFound);
+        result.Errors.Should().Contain(ErrorCodes.ERR_ASSET_NOT_FOUND);
+    }
+
+    [Fact]
+    public async Task Handle_WhenDelisted_ShouldReturnNotFound()
+    {
+        var assetId = Guid.NewGuid();
+        var asset = new Asset
+        {
+            Id = assetId,
+            AuthorId = Guid.NewGuid(),
+            CategoryId = Guid.NewGuid(),
+            Title = "Gone",
+            StorageKey = "k",
+            FileName = "f",
+            DeletedAt = DateTimeOffset.UtcNow,
+        };
+        _assetStoreMock.GetById(assetId, Arg.Any<CancellationToken>()).Returns(asset);
+
+        var result = await _handler.Handle(new GetAssetByIdQuery(assetId), CancellationToken.None);
+
+        result.Status.Should().Be(ResultStatus.NotFound);
+        result.Errors.Should().Contain(ErrorCodes.ERR_ASSET_NOT_FOUND);
     }
 
     [Fact]
@@ -43,6 +68,14 @@ public class GetAssetByIdQueryHandlerTests
         var now = DateTimeOffset.UtcNow;
 
         var category = new Category { Id = categoryId, Name = "Audio", Slug = "audio" };
+        var author = new User
+        {
+            Id = authorId,
+            Username = "beatmaker",
+            Email = "author@test.local",
+            PasswordHash = "hash",
+            Role = AppRoles.USER
+        };
         var asset = new Asset
         {
             Id = assetId,
@@ -54,7 +87,8 @@ public class GetAssetByIdQueryHandlerTests
             StorageKey = "assets/auth/beat.zip",
             FileName = "beat.zip",
             CreatedAt = now,
-            Category = category
+            Category = category,
+            Author = author
         };
 
         var query = new GetAssetByIdQuery(assetId);
@@ -71,8 +105,11 @@ public class GetAssetByIdQueryHandlerTests
         result.Value.CategoryId.Should().Be(categoryId);
         result.Value.CategoryName.Should().Be("Audio");
         result.Value.AuthorId.Should().Be(authorId);
+        result.Value.AuthorUsername.Should().Be("beatmaker");
         result.Value.Description.Should().Be("A great pack");
         result.Value.CreatedAt.Should().Be(now);
         result.Value.UpdatedAt.Should().BeNull();
+        result.Value.Tags.Should().BeEmpty();
+        result.Value.AverageRating.Should().Be(0);
     }
 }

@@ -14,12 +14,20 @@ builder.Services.AddApplication();
 builder.Services.AddInfrastructure(builder.Configuration);
 builder.Services.Configure<RouteOptions>(options => options.LowercaseUrls = true);
 builder.Services.AddControllers(options => options.Conventions.Add(new LowercaseControllerRouteConvention()));
+builder.Services.AddAssetBlockCors(builder.Configuration, builder.Environment);
 builder.Services.AddSignalR();
 builder.Services.AddScoped<IRealtimeNotificationPublisher, RealtimeNotificationPublisher>();
 builder.Services.AddOpenApi();
 builder.Services.AddSwaggerConfiguration();
 builder.Services.AddJwtAuthentication(builder.Configuration);
-builder.Services.AddApiRateLimiting();
+if (builder.Environment.IsEnvironment("IntegrationTesting"))
+{
+    builder.Services.AddIntegrationTestingRateLimiting();
+}
+else
+{
+    builder.Services.AddApiRateLimiting();
+}
 
 var app = builder.Build();
 
@@ -32,10 +40,17 @@ if (app.Environment.IsDevelopment())
     app.UseSwaggerUi();
 }
 
-app.UseHttpsRedirection();
+if (!app.Environment.IsEnvironment("IntegrationTesting") && !app.Environment.IsDevelopment())
+{
+    app.UseHttpsRedirection();
+}
+
+app.UseAssetBlockCors();
 app.UseRateLimiter();
 app.UseAuthentication();
 app.UseAuthorization();
 app.MapControllers();
 app.MapHub<AssetBlock.WebApi.Hubs.NotificationsHub>(ApiRoutes.Hubs.NOTIFICATIONS);
 app.Run();
+
+public partial class Program;

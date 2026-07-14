@@ -12,6 +12,7 @@ public static class ErrorCodesToErrorMessages
         { ErrorCodes.ERR_AUTH_TOKEN_INVALID, "Invalid token." },
         { ErrorCodes.ERR_AUTH_USER_NOT_FOUND, "User not found." },
         { ErrorCodes.ERR_AUTH_EMAIL_ALREADY_EXISTS, "An account with this email already exists." },
+        { ErrorCodes.ERR_AUTH_CURRENT_PASSWORD_INVALID, "Current password is incorrect." },
         { ErrorCodes.ERR_CATEGORY_NOT_FOUND, "Category not found." },
         { ErrorCodes.ERR_TAG_NOT_FOUND, "Tag not found." },
         { ErrorCodes.ERR_TAG_ALREADY_EXISTS, "A tag with this name already exists." },
@@ -43,7 +44,8 @@ public static class ErrorCodesToErrorMessages
         { ErrorCodes.ERR_CONFLICT, "Resource conflict." },
         { ErrorCodes.ERR_NOTIFICATION_NOT_FOUND, "Notification not found." },
         { ErrorCodes.ERR_NOTIFICATIONS_LIST_FAILED, "Failed to load notifications." },
-        { ErrorCodes.ERR_NOTIFICATIONS_UNREAD_READ_AT_SORT, "When UnreadOnly is true, SortBy cannot be ReadAt. Unread notifications have no ReadAt; use CreatedAt or omit SortBy." }
+        { ErrorCodes.ERR_NOTIFICATIONS_UNREAD_READ_AT_SORT, "When UnreadOnly is true, SortBy cannot be ReadAt. Unread notifications have no ReadAt; use CreatedAt or omit SortBy." },
+        { ErrorCodes.ERR_PURCHASES_LIST_FAILED, "Failed to load your purchases." }
     };
 
     public static string GetMessage(string code) =>

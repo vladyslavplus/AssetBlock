@@ -27,7 +27,10 @@ internal sealed class CategoryStore(
         if (!string.IsNullOrWhiteSpace(request.Search))
         {
             var term = request.Search.Trim().ToLower();
-            query = query.Where(c => c.Name.ToLower().Contains(term) || c.Slug.ToLower().Contains(term));
+            query = query.Where(c =>
+                c.Name.ToLower().Contains(term) ||
+                c.Slug.ToLower().Contains(term) ||
+                (c.Description != null && c.Description.ToLower().Contains(term)));
         }
 
         var totalCount = await query.CountAsync(cancellationToken);

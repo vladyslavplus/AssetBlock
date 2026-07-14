@@ -1,3 +1,4 @@
+using Ardalis.Result;
 using AssetBlock.Application.UseCases.Categories.GetCategoryById;
 using AssetBlock.Domain.Abstractions.Services;
 using AssetBlock.Domain.Core.Constants;
@@ -24,7 +25,7 @@ public class GetCategoryByIdQueryHandlerTests
     }
 
     [Fact]
-    public async Task Handle_WhenCategoryNotFound_ShouldReturnError()
+    public async Task Handle_WhenCategoryNotFound_ShouldReturnNotFound()
     {
         // Arrange
         var query = new GetCategoryByIdQuery(Guid.NewGuid());
@@ -33,9 +34,8 @@ public class GetCategoryByIdQueryHandlerTests
         // Act
         var result = await _handler.Handle(query, CancellationToken.None);
 
-        // Assert
-        result.IsSuccess.Should().BeFalse();
-        result.ValidationErrors.Should().Contain(e => e.Identifier == ErrorCodes.ERR_CATEGORY_NOT_FOUND);
+        result.Status.Should().Be(ResultStatus.NotFound);
+        result.Errors.Should().Contain(ErrorCodes.ERR_CATEGORY_NOT_FOUND);
     }
 
     [Fact]

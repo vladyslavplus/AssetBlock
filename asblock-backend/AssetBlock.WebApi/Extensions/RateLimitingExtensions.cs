@@ -13,17 +13,38 @@ internal static class RateLimitingExtensions
         ?? httpContext.Connection.RemoteIpAddress?.ToString()
         ?? UNKNOWN_PARTITION_KEY;
 
-    public static IServiceCollection AddApiRateLimiting(this IServiceCollection services)
+    extension(IServiceCollection services)
     {
-        services.AddRateLimiter(opts =>
+        public void AddApiRateLimiting()
         {
-            opts.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+            services.AddRateLimiter(opts =>
+            {
+                opts.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
 
-            AddAuthPolicies(opts);
-            AddSlidingWindowPolicies(opts);
-        });
+                AddAuthPolicies(opts);
+                AddSlidingWindowPolicies(opts);
+            });
+        }
 
-        return services;
+        public void AddIntegrationTestingRateLimiting()
+        {
+            services.AddRateLimiter(opts =>
+            {
+                opts.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+
+                AddNoOpPolicy(RateLimitingConstants.Policies.AUTH_REGISTER);
+                AddNoOpPolicy(RateLimitingConstants.Policies.AUTH_LOGIN);
+                AddNoOpPolicy(RateLimitingConstants.Policies.ASSETS_UPLOAD);
+                AddNoOpPolicy(RateLimitingConstants.Policies.ASSETS_DOWNLOAD);
+                AddNoOpPolicy(RateLimitingConstants.Policies.PAYMENTS_CHECKOUT);
+                return;
+
+                void AddNoOpPolicy(string policyName)
+                {
+                    opts.AddPolicy(policyName, _ => RateLimitPartition.GetNoLimiter(policyName));
+                }
+            });
+        }
     }
 
     private static void AddAuthPolicies(RateLimiterOptions opts)
