@@ -80,7 +80,7 @@ public class DeleteReviewCommandHandlerTests
     }
 
     [Fact]
-    public async Task Handle_WhenExceptionThrown_ShouldReturnBadRequest()
+    public async Task Handle_WhenExceptionThrown_ShouldReturnInternalError()
     {
         // Arrange
         var command = new DeleteReviewCommand(Guid.NewGuid());
@@ -93,6 +93,7 @@ public class DeleteReviewCommandHandlerTests
 
         // Assert
         result.IsSuccess.Should().BeFalse();
-        result.Errors.Should().Contain(ErrorCodes.ERR_BAD_REQUEST);
+        result.Status.Should().Be(Ardalis.Result.ResultStatus.Error);
+        result.Errors.Should().Contain(ErrorCodes.ERR_INTERNAL);
     }
 }

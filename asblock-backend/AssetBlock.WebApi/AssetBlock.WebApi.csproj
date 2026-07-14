@@ -32,4 +32,9 @@
       <ProjectReference Include="..\AssetBlock.Infrastructure\AssetBlock.Infrastructure.csproj" />
     </ItemGroup>
 
+    <ItemGroup>
+      <InternalsVisibleTo Include="AssetBlock.WebApi.Tests" />
+      <InternalsVisibleTo Include="AssetBlock.WebApi.IntegrationTests" />
+    </ItemGroup>
+
 </Project>

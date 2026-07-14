@@ -25,7 +25,7 @@ internal sealed class UploadAssetCommandHandler(
         if (category is null)
         {
             logger.LogDebug("Upload failed: category not found {CategoryId}", request.Request.CategoryId);
-            return ResultError.Error<Guid>(ErrorCodes.ERR_CATEGORY_NOT_FOUND);
+            return Result.NotFound(ErrorCodes.ERR_CATEGORY_NOT_FOUND);
         }
 
         List<Tag>? existingTags = null;
@@ -38,7 +38,7 @@ internal sealed class UploadAssetCommandHandler(
                 logger.LogWarning(
                     "Upload failed: one or more tags were not found in the database. Requested: {RequestedTags}, Found: {FoundTags}",
                     string.Join(", ", inputTags), string.Join(", ", existingTags.Select(t => t.Name)));
-                return ResultError.Error<Guid>(ErrorCodes.ERR_TAG_NOT_FOUND);
+                return Result.NotFound(ErrorCodes.ERR_TAG_NOT_FOUND);
             }
         }
 

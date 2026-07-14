@@ -1,4 +1,5 @@
 using System.Security.Claims;
+using FluentAssertions;
 using MediatR;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
@@ -20,14 +21,9 @@ public abstract class ControllerTestBase
         var identity = new ClaimsIdentity(claims, "TestAuthType");
         var principal = new ClaimsPrincipal(identity);
 
-        var httpContext = new DefaultHttpContext
-        {
-            User = principal
-        };
-
         controller.ControllerContext = new ControllerContext
         {
-            HttpContext = httpContext
+            HttpContext = CreateHttpContext(principal)
         };
     }
 
@@ -35,10 +31,20 @@ public abstract class ControllerTestBase
     {
         controller.ControllerContext = new ControllerContext
         {
-            HttpContext = new DefaultHttpContext
-            {
-                User = new ClaimsPrincipal(new ClaimsIdentity())
-            }
+            HttpContext = CreateHttpContext(new ClaimsPrincipal(new ClaimsIdentity()))
         };
     }
+
+    protected static async Task AssertStatusCodeAsync(ControllerBase controller, IActionResult action, int expectedStatus)
+    {
+        await action.ExecuteResultAsync(controller.ControllerContext);
+        controller.HttpContext.Response.StatusCode.Should().Be(expectedStatus);
+    }
+
+    private static DefaultHttpContext CreateHttpContext(ClaimsPrincipal user) =>
+        new()
+        {
+            User = user,
+            Response = { Body = new MemoryStream() }
+        };
 }

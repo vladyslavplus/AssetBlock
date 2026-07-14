@@ -1,3 +1,4 @@
+using Ardalis.Result;
 using AssetBlock.Application.UseCases.Tags.CreateTag;
 using AssetBlock.Domain.Abstractions.Services;
 using AssetBlock.Domain.Core.Constants;
@@ -53,9 +54,10 @@ public class CreateTagCommandHandlerTests
         // Act
         var result = await _handler.Handle(command, CancellationToken.None);
 
-        // Assert: Return validation error
+        // Assert: Return conflict (tag already exists)
         result.IsSuccess.Should().BeFalse();
-        result.ValidationErrors.Should().Contain(e => e.Identifier == ErrorCodes.ERR_TAG_ALREADY_EXISTS);
+        result.Status.Should().Be(ResultStatus.Conflict);
+        result.Errors.Should().Contain(ErrorCodes.ERR_TAG_ALREADY_EXISTS);
     }
 
     [Fact]
@@ -69,7 +71,8 @@ public class CreateTagCommandHandlerTests
         var result = await _handler.Handle(command, CancellationToken.None);
 
         result.IsSuccess.Should().BeFalse();
-        result.ValidationErrors.Should().Contain(e => e.Identifier == ErrorCodes.ERR_TAG_ALREADY_EXISTS);
+        result.Status.Should().Be(ResultStatus.Conflict);
+        result.Errors.Should().Contain(ErrorCodes.ERR_TAG_ALREADY_EXISTS);
         await _cacheMock.DidNotReceive().RemoveByPrefix(Arg.Any<string>(), Arg.Any<CancellationToken>());
     }
 }

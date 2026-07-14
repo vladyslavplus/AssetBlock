@@ -36,7 +36,7 @@ internal sealed class DeleteReviewCommandHandler(
         catch (Exception ex)
         {
             logger.LogError(ex, "Failed to delete review {ReviewId}", request.Id);
-            return Result.Error(ErrorCodes.ERR_BAD_REQUEST);
+            return Result.Error(ErrorCodes.ERR_INTERNAL);
         }
     }
 }

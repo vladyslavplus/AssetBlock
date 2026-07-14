@@ -1,5 +1,4 @@
 using Ardalis.Result;
-using AssetBlock.Application.Common;
 using AssetBlock.Domain.Abstractions.Services;
 using AssetBlock.Domain.Core.Constants;
 using AssetBlock.Domain.Core.Dto.Tags;
@@ -31,7 +30,7 @@ internal sealed class UpdateTagCommandHandler(
         var existing = await tagStore.GetByName(normalizedName, cancellationToken);
         if (existing is not null)
         {
-            return ResultError.Error<TagDto>(ErrorCodes.ERR_TAG_ALREADY_EXISTS);
+            return Result.Conflict(ErrorCodes.ERR_TAG_ALREADY_EXISTS);
         }
 
         try
@@ -43,7 +42,7 @@ internal sealed class UpdateTagCommandHandler(
         catch (DuplicateTagNameException)
         {
             logger.LogWarning("Update tag failed: name already exists {TagName}", normalizedName);
-            return ResultError.Error<TagDto>(ErrorCodes.ERR_TAG_ALREADY_EXISTS);
+            return Result.Conflict(ErrorCodes.ERR_TAG_ALREADY_EXISTS);
         }
 
         logger.LogInformation("Updated tag {TagId} to name: {TagName}", tag.Id, normalizedName);

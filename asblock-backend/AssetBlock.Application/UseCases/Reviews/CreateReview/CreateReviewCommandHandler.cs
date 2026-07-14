@@ -20,12 +20,12 @@ internal sealed class CreateReviewCommandHandler(
         var asset = await assetStore.GetById(request.AssetId, cancellationToken);
         if (asset is null)
         {
-            return ResultError.Error(ErrorCodes.ERR_ASSET_NOT_FOUND);
+            return Result.NotFound(ErrorCodes.ERR_ASSET_NOT_FOUND);
         }
 
         if (asset.AuthorId == request.UserId)
         {
-            return ResultError.Error(ErrorCodes.ERR_CANNOT_REVIEW_OWN_ASSET);
+            return Result.Forbidden(ErrorCodes.ERR_CANNOT_REVIEW_OWN_ASSET);
         }
 
         var purchase = await purchaseStore.GetPurchase(request.UserId, request.AssetId, cancellationToken);
@@ -46,7 +46,7 @@ internal sealed class CreateReviewCommandHandler(
         if (exists)
         {
             logger.LogWarning("CreateReview failed: user {UserId} already reviewed asset {AssetId}", request.UserId, request.AssetId);
-            return ResultError.Error(ErrorCodes.ERR_REVIEW_ALREADY_EXISTS);
+            return Result.Conflict(ErrorCodes.ERR_REVIEW_ALREADY_EXISTS);
         }
 
         try

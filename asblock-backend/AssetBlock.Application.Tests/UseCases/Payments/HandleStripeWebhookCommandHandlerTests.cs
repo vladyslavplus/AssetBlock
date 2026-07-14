@@ -1,6 +1,8 @@
 using AssetBlock.Application.UseCases.Payments.HandleStripeWebhook;
 using AssetBlock.Domain.Abstractions.Services;
+using AssetBlock.Domain.Core.Constants;
 using AssetBlock.Domain.Core.Entities;
+using AssetBlock.Domain.Core.Exceptions;
 using FluentAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
 using NSubstitute;
@@ -141,17 +143,29 @@ public class HandleStripeWebhookCommandHandlerTests
     }
 
     [Fact]
-    public async Task Handle_WhenPaymentServiceThrows_ShouldPropagateException()
+    public async Task Handle_WhenInvalidSignature_ShouldReturnInvalid()
     {
-        // Arrange — simulates Stripe signature mismatch or network failure
         var command = new HandleStripeWebhookCommand("bad-payload", "bad-sig");
         _paymentServiceMock.HandleCheckoutCompleted(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
-            .ThrowsAsync(new InvalidOperationException("Stripe signature validation failed"));
+            .ThrowsAsync(new StripeWebhookInvalidSignatureException());
 
-        // Act & Assert — bubbles so WebApi can return 5xx and Stripe may retry transient failures
+        var result = await _handler.Handle(command, CancellationToken.None);
+
+        result.IsSuccess.Should().BeFalse();
+        result.Status.Should().Be(Ardalis.Result.ResultStatus.Invalid);
+        result.ValidationErrors.Should().Contain(e => e.Identifier == ErrorCodes.ERR_STRIPE_WEBHOOK_INVALID);
+    }
+
+    [Fact]
+    public async Task Handle_WhenPaymentServiceThrows_ShouldPropagateException()
+    {
+        var command = new HandleStripeWebhookCommand("payload", "sig");
+        _paymentServiceMock.HandleCheckoutCompleted(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .ThrowsAsync(new InvalidOperationException("Stripe API down"));
+
         var act = () => _handler.Handle(command, CancellationToken.None);
         await act.Should().ThrowAsync<InvalidOperationException>()
-            .WithMessage("Stripe signature validation failed");
+            .WithMessage("Stripe API down");
     }
 
     [Fact]

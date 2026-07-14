@@ -1,5 +1,6 @@
 using AssetBlock.Domain.Abstractions.Services;
 using AssetBlock.Domain.Core.Entities;
+using AssetBlock.Domain.Core.Exceptions;
 using AssetBlock.Domain.Core.Primitives.AppSettingsOptions;
 using AssetBlock.Infrastructure.Services;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -32,7 +33,7 @@ public sealed class StripePaymentServiceTests
             NullLogger<StripePaymentService>.Instance);
 
         var act = async () =>
-            await sut.CreateCheckoutSession(Guid.NewGuid(), Guid.NewGuid(), null, null);
+            await sut.CreateCheckoutSession(Guid.NewGuid(), Guid.NewGuid());
 
         await act.Should().ThrowAsync<InvalidOperationException>();
     }
@@ -73,25 +74,25 @@ public sealed class StripePaymentServiceTests
             NullLogger<StripePaymentService>.Instance);
 
         var act = async () =>
-            await sut.CreateCheckoutSession(Guid.NewGuid(), Guid.NewGuid(), null, null);
+            await sut.CreateCheckoutSession(Guid.NewGuid(), Guid.NewGuid());
 
         await act.Should().ThrowAsync<Exception>();
     }
 
     [Fact]
-    public async Task HandleCheckoutCompleted_returnsNull_whenWebhookSecretMissing()
+    public async Task HandleCheckoutCompleted_throws_whenWebhookSecretMissing()
     {
         var sut = CreateSut(webhookSecret: "");
-        var r = await sut.HandleCheckoutCompleted("{}", "sig");
-        r.Should().BeNull();
+        var act = async () => await sut.HandleCheckoutCompleted("{}", "sig");
+        await act.Should().ThrowAsync<InvalidOperationException>();
     }
 
     [Fact]
-    public async Task HandleCheckoutCompleted_returnsNull_whenPayloadInvalid()
+    public async Task HandleCheckoutCompleted_throwsInvalidSignature_whenPayloadInvalid()
     {
         var sut = CreateSut(webhookSecret: "stripe_test_webhook_secret_not_real");
-        var r = await sut.HandleCheckoutCompleted("not-json", "bad_sig");
-        r.Should().BeNull();
+        var act = async () => await sut.HandleCheckoutCompleted("not-json", "bad_sig");
+        await act.Should().ThrowAsync<StripeWebhookInvalidSignatureException>();
     }
 
     private static StripePaymentService CreateSut(string webhookSecret)

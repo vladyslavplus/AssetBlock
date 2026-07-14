@@ -33,7 +33,7 @@ public class RegisterCommandHandlerTests
     }
 
     [Fact]
-    public async Task Handle_WhenEmailExists_ShouldReturnError()
+    public async Task Handle_WhenEmailExists_ShouldReturnConflict()
     {
         var command = new RegisterCommand("existuser", "exist@example.com", "password123");
         var existingUser = new User { Id = Guid.NewGuid(), Username = "existuser", Email = "exist@example.com", PasswordHash = "hash", Role = AppRoles.USER };
@@ -43,11 +43,12 @@ public class RegisterCommandHandlerTests
         var result = await _handler.Handle(command, CancellationToken.None);
 
         result.IsSuccess.Should().BeFalse();
-        result.ValidationErrors.Should().Contain(e => e.Identifier == ErrorCodes.ERR_AUTH_EMAIL_ALREADY_EXISTS);
+        result.Status.Should().Be(ResultStatus.Conflict);
+        result.Errors.Should().Contain(ErrorCodes.ERR_AUTH_EMAIL_ALREADY_EXISTS);
     }
 
     [Fact]
-    public async Task Handle_WhenDbThrowsDuplicateEmailException_ShouldReturnError()
+    public async Task Handle_WhenDbThrowsDuplicateEmailException_ShouldReturnConflict()
     {
         var command = new RegisterCommand("newuser", "new@example.com", "password123");
 
@@ -59,7 +60,8 @@ public class RegisterCommandHandlerTests
         var result = await _handler.Handle(command, CancellationToken.None);
 
         result.IsSuccess.Should().BeFalse();
-        result.ValidationErrors.Should().Contain(e => e.Identifier == ErrorCodes.ERR_AUTH_EMAIL_ALREADY_EXISTS);
+        result.Status.Should().Be(ResultStatus.Conflict);
+        result.Errors.Should().Contain(ErrorCodes.ERR_AUTH_EMAIL_ALREADY_EXISTS);
     }
 
     [Fact]

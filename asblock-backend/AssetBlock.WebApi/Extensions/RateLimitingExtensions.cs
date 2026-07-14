@@ -1,4 +1,5 @@
 using AssetBlock.Domain.Core.Constants;
+using AssetBlock.WebApi.ProblemDetails;
 using Microsoft.AspNetCore.RateLimiting;
 using System.Threading.RateLimiting;
 
@@ -13,6 +14,18 @@ internal static class RateLimitingExtensions
         ?? httpContext.Connection.RemoteIpAddress?.ToString()
         ?? UNKNOWN_PARTITION_KEY;
 
+    private static void ConfigureRejectedHandler(RateLimiterOptions opts)
+    {
+        opts.OnRejected = async (context, cancellationToken) =>
+        {
+            var problem = AssetBlockProblemDetails.Create(
+                context.HttpContext,
+                StatusCodes.Status429TooManyRequests,
+                ErrorCodes.ERR_RATE_LIMITED);
+            await AssetBlockProblemDetails.WriteAsync(context.HttpContext, problem);
+        };
+    }
+
     extension(IServiceCollection services)
     {
         public void AddApiRateLimiting()
@@ -20,7 +33,7 @@ internal static class RateLimitingExtensions
             services.AddRateLimiter(opts =>
             {
                 opts.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
-
+                ConfigureRejectedHandler(opts);
                 AddAuthPolicies(opts);
                 AddSlidingWindowPolicies(opts);
             });
@@ -31,6 +44,7 @@ internal static class RateLimitingExtensions
             services.AddRateLimiter(opts =>
             {
                 opts.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+                ConfigureRejectedHandler(opts);
 
                 AddNoOpPolicy(RateLimitingConstants.Policies.AUTH_REGISTER);
                 AddNoOpPolicy(RateLimitingConstants.Policies.AUTH_LOGIN);

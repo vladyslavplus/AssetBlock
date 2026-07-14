@@ -1,3 +1,4 @@
+using Ardalis.Result;
 using AssetBlock.Application.UseCases.Assets.UploadAsset;
 using AssetBlock.Domain.Abstractions.Services;
 using AssetBlock.Domain.Core.Constants;
@@ -43,7 +44,7 @@ public class UploadAssetCommandHandlerTests
     }
 
     [Fact]
-    public async Task Handle_WhenCategoryNotFound_ShouldReturnError()
+    public async Task Handle_WhenCategoryNotFound_ShouldReturnNotFound()
     {
         // Arrange
         var request = new UploadAssetRequest("Title", "Desc", 100m, Guid.NewGuid());
@@ -56,7 +57,8 @@ public class UploadAssetCommandHandlerTests
 
         // Assert
         result.IsSuccess.Should().BeFalse();
-        result.ValidationErrors.Should().Contain(e => e.Identifier == ErrorCodes.ERR_CATEGORY_NOT_FOUND);
+        result.Status.Should().Be(ResultStatus.NotFound);
+        result.Errors.Should().Contain(ErrorCodes.ERR_CATEGORY_NOT_FOUND);
     }
 
     [Fact]
@@ -203,7 +205,8 @@ public class UploadAssetCommandHandlerTests
 
         // Assert
         result.IsSuccess.Should().BeFalse();
-        result.ValidationErrors.Should().Contain(e => e.Identifier == ErrorCodes.ERR_TAG_NOT_FOUND);
+        result.Status.Should().Be(ResultStatus.NotFound);
+        result.Errors.Should().Contain(ErrorCodes.ERR_TAG_NOT_FOUND);
         await _assetStoreMock.DidNotReceiveWithAnyArgs().AddWithTags(Arg.Any<Asset>(), Arg.Any<List<Tag>>(), Arg.Any<CancellationToken>());
     }
 }

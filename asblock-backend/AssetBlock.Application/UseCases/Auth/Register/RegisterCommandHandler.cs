@@ -1,4 +1,3 @@
-using AssetBlock.Application.Common;
 using AssetBlock.Domain.Abstractions.Services;
 using AssetBlock.Domain.Core.Constants;
 using Ardalis.Result;
@@ -22,7 +21,7 @@ internal sealed class RegisterCommandHandler(
         if (existing is not null)
         {
             logger.LogWarning("Register failed: email already exists");
-            return ResultError.Error<TokensResponse>(ErrorCodes.ERR_AUTH_EMAIL_ALREADY_EXISTS);
+            return Result.Conflict(ErrorCodes.ERR_AUTH_EMAIL_ALREADY_EXISTS);
         }
 
         var hash = passwordHasher.Hash(request.Password);
@@ -34,7 +33,7 @@ internal sealed class RegisterCommandHandler(
         catch (DuplicateEmailException)
         {
             logger.LogWarning("Register failed: duplicate email (concurrent)");
-            return ResultError.Error<TokensResponse>(ErrorCodes.ERR_AUTH_EMAIL_ALREADY_EXISTS);
+            return Result.Conflict(ErrorCodes.ERR_AUTH_EMAIL_ALREADY_EXISTS);
         }
         catch (DuplicateUsernameException)
         {

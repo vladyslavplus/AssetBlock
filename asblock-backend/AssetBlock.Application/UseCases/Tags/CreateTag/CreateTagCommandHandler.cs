@@ -1,5 +1,4 @@
 using Ardalis.Result;
-using AssetBlock.Application.Common;
 using AssetBlock.Domain.Abstractions.Services;
 using AssetBlock.Domain.Core.Constants;
 using AssetBlock.Domain.Core.Dto.Tags;
@@ -22,7 +21,7 @@ internal sealed class CreateTagCommandHandler(
         var existing = await tagStore.GetByName(normalizedName, cancellationToken);
         if (existing is not null)
         {
-            return ResultError.Error<TagDto>(ErrorCodes.ERR_TAG_ALREADY_EXISTS);
+            return Result.Conflict(ErrorCodes.ERR_TAG_ALREADY_EXISTS);
         }
 
         var tag = new Tag
@@ -38,7 +37,7 @@ internal sealed class CreateTagCommandHandler(
         catch (DuplicateTagNameException)
         {
             logger.LogWarning("Create tag failed: duplicate name (concurrent) {TagName}", normalizedName);
-            return ResultError.Error<TagDto>(ErrorCodes.ERR_TAG_ALREADY_EXISTS);
+            return Result.Conflict(ErrorCodes.ERR_TAG_ALREADY_EXISTS);
         }
 
         logger.LogInformation("Added new tag: {TagName}", normalizedName);

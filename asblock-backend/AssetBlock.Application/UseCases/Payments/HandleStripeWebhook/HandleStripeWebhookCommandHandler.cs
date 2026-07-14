@@ -1,4 +1,7 @@
+using AssetBlock.Application.Common;
 using AssetBlock.Domain.Abstractions.Services;
+using AssetBlock.Domain.Core.Constants;
+using AssetBlock.Domain.Core.Exceptions;
 using Ardalis.Result;
 using MediatR;
 using Microsoft.Extensions.Logging;
@@ -40,6 +43,10 @@ internal sealed class HandleStripeWebhookCommandHandler(
             }
 
             return Result.Success<PurchaseCompletedPayload?>(new PurchaseCompletedPayload(userId, assetId));
+        }
+        catch (StripeWebhookInvalidSignatureException)
+        {
+            return ResultError.Error<PurchaseCompletedPayload?>(ErrorCodes.ERR_STRIPE_WEBHOOK_INVALID);
         }
         catch (OperationCanceledException)
         {

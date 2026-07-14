@@ -1,6 +1,7 @@
 using AssetBlock.Domain.Abstractions.Services;
 using AssetBlock.Domain.Core.Entities;
 using AssetBlock.Domain.Core.Constants;
+using AssetBlock.Domain.Core.Exceptions;
 using AssetBlock.Domain.Core.Primitives.AppSettingsOptions;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -19,11 +20,11 @@ internal sealed class StripePaymentService(
 {
     private readonly StripeClient _stripeClient = new(options.Value.SecretKey);
 
-    public async Task<string> CreateCheckoutSession(Guid assetId, Guid userId, string? successUrl, string? cancelUrl, CancellationToken cancellationToken = default)
+    public async Task<string> CreateCheckoutSession(Guid assetId, Guid userId, CancellationToken cancellationToken = default)
     {
         var opts = options.Value;
-        var resolvedSuccessUrl = string.IsNullOrWhiteSpace(successUrl) ? opts.DefaultSuccessUrl : successUrl;
-        var resolvedCancelUrl = string.IsNullOrWhiteSpace(cancelUrl) ? opts.DefaultCancelUrl : cancelUrl;
+        var resolvedSuccessUrl = opts.DefaultSuccessUrl;
+        var resolvedCancelUrl = opts.DefaultCancelUrl;
 
         if (string.IsNullOrWhiteSpace(resolvedSuccessUrl) || string.IsNullOrWhiteSpace(resolvedCancelUrl))
         {
@@ -90,7 +91,7 @@ internal sealed class StripePaymentService(
         var webhookSecret = options.Value.WebhookSecret;
         if (string.IsNullOrEmpty(webhookSecret))
         {
-            return null;
+            throw new InvalidOperationException("Stripe webhook secret is not configured.");
         }
 
         Event stripeEvent;
@@ -101,7 +102,7 @@ internal sealed class StripePaymentService(
         catch (Exception ex)
         {
             logger.LogWarning(ex, "Stripe webhook signature validation failed");
-            return null;
+            throw new StripeWebhookInvalidSignatureException();
         }
 
         if (stripeEvent.Type != StripeConstants.Events.CHECKOUT_SESSION_COMPLETED)

@@ -76,7 +76,7 @@ public sealed class AssetsControllerTests : ControllerTestBase
         SetupAnonymous(controller);
         var result = await controller.Download(Guid.NewGuid(), CancellationToken.None);
 
-        result.Should().BeOfType<UnauthorizedResult>();
+        await AssertStatusCodeAsync(controller, result, StatusCodes.Status401Unauthorized);
     }
 
     [Fact]
@@ -89,7 +89,7 @@ public sealed class AssetsControllerTests : ControllerTestBase
         SetupUser(_userId, controller);
         var result = await controller.Download(Guid.NewGuid(), CancellationToken.None);
 
-        result.Should().BeOfType<NotFoundObjectResult>();
+        await AssertStatusCodeAsync(controller, result, StatusCodes.Status404NotFound);
     }
 
     [Fact]
@@ -102,8 +102,7 @@ public sealed class AssetsControllerTests : ControllerTestBase
         SetupUser(_userId, controller);
         var result = await controller.Download(Guid.NewGuid(), CancellationToken.None);
 
-        var obj = result.Should().BeOfType<ObjectResult>().Which;
-        obj.StatusCode.Should().Be(403);
+        await AssertStatusCodeAsync(controller, result, StatusCodes.Status403Forbidden);
     }
 
     [Fact]
@@ -116,8 +115,7 @@ public sealed class AssetsControllerTests : ControllerTestBase
         SetupUser(_userId, controller);
         var result = await controller.Download(Guid.NewGuid(), CancellationToken.None);
 
-        var obj = result.Should().BeOfType<ObjectResult>().Which;
-        obj.StatusCode.Should().Be(429);
+        await AssertStatusCodeAsync(controller, result, StatusCodes.Status429TooManyRequests);
     }
 
     [Fact]
@@ -147,7 +145,7 @@ public sealed class AssetsControllerTests : ControllerTestBase
         };
         var result = await controller.Upload(form, CancellationToken.None);
 
-        result.Should().BeOfType<UnauthorizedResult>();
+        await AssertStatusCodeAsync(controller, result, StatusCodes.Status401Unauthorized);
     }
 
     [Fact]
@@ -163,7 +161,7 @@ public sealed class AssetsControllerTests : ControllerTestBase
         };
         var result = await controller.Upload(form, CancellationToken.None);
 
-        result.Should().BeOfType<BadRequestObjectResult>();
+        await AssertStatusCodeAsync(controller, result, StatusCodes.Status400BadRequest);
     }
 
     [Fact]
@@ -203,7 +201,7 @@ public sealed class AssetsControllerTests : ControllerTestBase
         };
         var result = await controller.Upload(form, CancellationToken.None);
 
-        result.Should().BeOfType<NotFoundObjectResult>();
+        await AssertStatusCodeAsync(controller, result, StatusCodes.Status404NotFound);
     }
 
     [Fact]
@@ -213,7 +211,7 @@ public sealed class AssetsControllerTests : ControllerTestBase
         SetupAnonymous(controller);
         var result = await controller.Update(Guid.NewGuid(), new UpdateAssetRequest(), CancellationToken.None);
 
-        result.Should().BeOfType<UnauthorizedResult>();
+        await AssertStatusCodeAsync(controller, result, StatusCodes.Status401Unauthorized);
     }
 
     [Fact]
@@ -239,7 +237,7 @@ public sealed class AssetsControllerTests : ControllerTestBase
         SetupUser(_userId, controller);
         var result = await controller.Update(Guid.NewGuid(), new UpdateAssetRequest(), CancellationToken.None);
 
-        result.Should().BeOfType<NotFoundObjectResult>();
+        await AssertStatusCodeAsync(controller, result, StatusCodes.Status404NotFound);
     }
 
     [Fact]
@@ -280,8 +278,7 @@ public sealed class AssetsControllerTests : ControllerTestBase
         SetupUser(_userId, controller);
         var result = await controller.AddTag(Guid.NewGuid(), new AddAssetTagRequest("t"), CancellationToken.None);
 
-        var obj = result.Should().BeOfType<ObjectResult>().Which;
-        obj.StatusCode.Should().Be(409);
+        await AssertStatusCodeAsync(controller, result, StatusCodes.Status409Conflict);
     }
 
     [Fact]

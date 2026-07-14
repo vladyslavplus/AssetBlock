@@ -63,21 +63,21 @@ public sealed class AssetsController(ISender sender, IDownloadService downloadSe
         var userId = GetUserId();
         if (userId is null)
         {
-            return Unauthorized();
+            return UnauthorizedProblem();
         }
 
         var streamResult = await downloadService.GetAssetStream(id, userId.Value, cancellationToken);
         if (streamResult.Status == AssetDownloadStatus.NotFound)
         {
-            return NotFound(new { errors = new[] { new { identifier = ErrorCodes.ERR_ASSET_NOT_FOUND, message = ErrorCodesToErrorMessages.GetMessage(ErrorCodes.ERR_ASSET_NOT_FOUND) } } });
+            return ProblemFromCode(StatusCodes.Status404NotFound, ErrorCodes.ERR_ASSET_NOT_FOUND);
         }
         if (streamResult.Status == AssetDownloadStatus.Forbidden)
         {
-            return StatusCode(403, new { errors = new[] { new { identifier = ErrorCodes.ERR_PURCHASE_ACCESS_DENIED, message = ErrorCodesToErrorMessages.GetMessage(ErrorCodes.ERR_PURCHASE_ACCESS_DENIED) } } });
+            return ProblemFromCode(StatusCodes.Status403Forbidden, ErrorCodes.ERR_PURCHASE_ACCESS_DENIED);
         }
         if (streamResult.Status == AssetDownloadStatus.RateLimited)
         {
-            return StatusCode(429, new { errors = new[] { new { identifier = ErrorCodes.ERR_DOWNLOAD_LIMIT_EXCEEDED, message = ErrorCodesToErrorMessages.GetMessage(ErrorCodes.ERR_DOWNLOAD_LIMIT_EXCEEDED) } } });
+            return ProblemFromCode(StatusCodes.Status429TooManyRequests, ErrorCodes.ERR_DOWNLOAD_LIMIT_EXCEEDED);
         }
 
         return File(streamResult.Content!, "application/octet-stream", streamResult.FileName!);
@@ -101,14 +101,14 @@ public sealed class AssetsController(ISender sender, IDownloadService downloadSe
         if (userId is null)
         {
             logger.LogWarning("Upload rejected: no authenticated user (missing or invalid Bearer token)");
-            return Unauthorized();
+            return UnauthorizedProblem();
         }
 
         var file = form.File;
         if (file.Length == 0)
         {
             logger.LogWarning("Upload rejected: no file for user {UserId}", userId);
-            return BadRequest(new { errors = new[] { new { identifier = ErrorCodes.ERR_FILE_REQUIRED, message = ErrorCodesToErrorMessages.GetMessage(ErrorCodes.ERR_FILE_REQUIRED) } } });
+            return ProblemFromCode(StatusCodes.Status400BadRequest, ErrorCodes.ERR_FILE_REQUIRED);
         }
 
         logger.LogInformation("Upload started for user {UserId}, file {FileName}", userId, file.FileName);
@@ -145,7 +145,7 @@ public sealed class AssetsController(ISender sender, IDownloadService downloadSe
         var userId = GetUserId();
         if (userId is null)
         {
-            return Unauthorized();
+            return UnauthorizedProblem();
         }
 
         var command = new UpdateAssetCommand(id, userId.Value, request.Title, request.Description, request.Price, request.CategoryId);
@@ -168,7 +168,7 @@ public sealed class AssetsController(ISender sender, IDownloadService downloadSe
         var userId = GetUserId();
         if (userId is null)
         {
-            return Unauthorized();
+            return UnauthorizedProblem();
         }
 
         var command = new DeleteAssetCommand(id, userId.Value);
@@ -193,7 +193,7 @@ public sealed class AssetsController(ISender sender, IDownloadService downloadSe
         var userId = GetUserId();
         if (userId is null)
         {
-            return Unauthorized();
+            return UnauthorizedProblem();
         }
 
         var command = new AddAssetTagCommand(id, userId.Value, request.Name);
@@ -217,7 +217,7 @@ public sealed class AssetsController(ISender sender, IDownloadService downloadSe
         var userId = GetUserId();
         if (userId is null)
         {
-            return Unauthorized();
+            return UnauthorizedProblem();
         }
 
         var command = new RemoveAssetTagCommand(id, userId.Value, tagId);

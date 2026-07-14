@@ -4,8 +4,10 @@ using AssetBlock.Domain.Core.Constants;
 namespace AssetBlock.Application.Common;
 
 /// <summary>
-/// Builds Result.Invalid from a single error code (message from ErrorCodesToErrorMessages).
-/// Use: ResultError.Error&lt;T&gt;(ErrorCodes.ERR_XXX)
+/// Builds <see cref="Ardalis.Result.Result.Invalid"/> (HTTP 400) from a single error code.
+/// Use only for validation-style business failures (bad credentials, business-rule violations,
+/// upload/payment failures, etc.). For resource-not-found use <c>Result.NotFound</c>,
+/// for duplicate/already-exists use <c>Result.Conflict</c>, and for access-denied use <c>Result.Forbidden</c>.
 /// </summary>
 public static class ResultError
 {

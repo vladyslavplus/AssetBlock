@@ -1,8 +1,9 @@
 using Ardalis.Result;
+using AssetBlock.Application.Common;
 using AssetBlock.Domain.Abstractions.Services;
 using AssetBlock.Domain.Core.Constants;
-using MediatR;
 using AssetBlock.Domain.Core.Exceptions;
+using MediatR;
 using Microsoft.Extensions.Logging;
 
 namespace AssetBlock.Application.UseCases.Categories.DeleteCategory;
@@ -26,7 +27,7 @@ internal sealed class DeleteCategoryCommandHandler(
         catch (CategoryInUseException)
         {
             logger.LogWarning("Cannot delete category {CategoryId}: in use by assets", request.Id);
-            return Result.Error(ErrorCodes.ERR_BAD_REQUEST);
+            return ResultError.Error(ErrorCodes.ERR_BAD_REQUEST);
         }
 
         await cache.RemoveByPrefix(CacheKeys.CATEGORIES_LIST_PREFIX, cancellationToken);

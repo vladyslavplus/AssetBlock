@@ -1,3 +1,3 @@
 ﻿namespace AssetBlock.Domain.Core.Dto.Payments;
 
-public sealed record CreateCheckoutRequest(Guid AssetId, string? SuccessUrl = null, string? CancelUrl = null);
+public sealed record CreateCheckoutRequest(Guid AssetId);

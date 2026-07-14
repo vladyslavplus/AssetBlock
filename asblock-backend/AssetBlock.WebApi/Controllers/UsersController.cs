@@ -50,7 +50,7 @@ public sealed class UsersController(ISender sender) : ApiControllerBase(sender)
         var userId = GetUserId();
         if (userId is null)
         {
-            return Unauthorized();
+            return UnauthorizedProblem();
         }
 
         var result = await Sender.Send(new GetMyPurchasesQuery(userId.Value, request), cancellationToken);
@@ -70,7 +70,7 @@ public sealed class UsersController(ISender sender) : ApiControllerBase(sender)
         var userId = GetUserId();
         if (userId is null)
         {
-            return Unauthorized();
+            return UnauthorizedProblem();
         }
 
         var scoped = request with { AuthorId = userId.Value };
@@ -91,7 +91,7 @@ public sealed class UsersController(ISender sender) : ApiControllerBase(sender)
         var userId = GetUserId();
         if (userId is null)
         {
-            return Unauthorized();
+            return UnauthorizedProblem();
         }
 
         var result = await Sender.Send(new GetNotificationsQuery(userId.Value, request), cancellationToken);
@@ -110,7 +110,7 @@ public sealed class UsersController(ISender sender) : ApiControllerBase(sender)
         var userId = GetUserId();
         if (userId is null)
         {
-            return Unauthorized();
+            return UnauthorizedProblem();
         }
 
         var result = await Sender.Send(new MarkAllNotificationsReadCommand(userId.Value), cancellationToken);
@@ -130,7 +130,7 @@ public sealed class UsersController(ISender sender) : ApiControllerBase(sender)
         var userId = GetUserId();
         if (userId is null)
         {
-            return Unauthorized();
+            return UnauthorizedProblem();
         }
 
         var result = await Sender.Send(new MarkNotificationReadCommand(userId.Value, id), cancellationToken);
@@ -150,7 +150,7 @@ public sealed class UsersController(ISender sender) : ApiControllerBase(sender)
         var userId = GetUserId();
         if (userId is null)
         {
-            return Unauthorized();
+            return UnauthorizedProblem();
         }
 
         var result = await Sender.Send(new MarkNotificationUnreadCommand(userId.Value, id), cancellationToken);
@@ -170,7 +170,7 @@ public sealed class UsersController(ISender sender) : ApiControllerBase(sender)
         var userId = GetUserId();
         if (userId is null)
         {
-            return Unauthorized();
+            return UnauthorizedProblem();
         }
 
         var result = await Sender.Send(new GetUserProfileQuery(null, userId), cancellationToken);
@@ -192,7 +192,7 @@ public sealed class UsersController(ISender sender) : ApiControllerBase(sender)
         var userId = GetUserId();
         if (userId is null)
         {
-            return Unauthorized();
+            return UnauthorizedProblem();
         }
 
         var command = new UpdateUserProfileCommand(
@@ -219,7 +219,7 @@ public sealed class UsersController(ISender sender) : ApiControllerBase(sender)
         var userId = GetUserId();
         if (userId is null)
         {
-            return Unauthorized();
+            return UnauthorizedProblem();
         }
 
         var command = new ChangePasswordCommand(userId.Value, request.CurrentPassword, request.NewPassword);
@@ -241,7 +241,7 @@ public sealed class UsersController(ISender sender) : ApiControllerBase(sender)
         var userId = GetUserId();
         if (userId is null)
         {
-            return Unauthorized();
+            return UnauthorizedProblem();
         }
 
         var command = new UpdateUserSocialLinksCommand(userId.Value, request.Links);

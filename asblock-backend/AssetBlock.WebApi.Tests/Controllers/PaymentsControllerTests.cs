@@ -21,7 +21,7 @@ public sealed class PaymentsControllerTests : ControllerTestBase
     private readonly Guid _userId = Guid.NewGuid();
 
     [Fact]
-    public void GetCapabilities_WhenStripeKeysMissing_ShouldReturnOkWithFalse()
+    public void GetCapabilities_WhenStripeKeysMissing_ShouldReturnCheckoutConfiguredFalse()
     {
         var controller = new PaymentsController(Sender);
         var opts = Options.Create(
@@ -33,7 +33,42 @@ public sealed class PaymentsControllerTests : ControllerTestBase
                 DefaultCancelUrl = ""
             });
         var result = controller.GetCapabilities(opts);
-        result.Should().BeOfType<OkObjectResult>();
+        var body = result.Should().BeOfType<OkObjectResult>().Which.Value;
+        body.Should().BeEquivalentTo(new { checkoutConfigured = false });
+    }
+
+    [Fact]
+    public void GetCapabilities_WhenAllPlaceholders_ShouldReturnCheckoutConfiguredFalse()
+    {
+        var controller = new PaymentsController(Sender);
+        var opts = Options.Create(
+            new StripeOptions
+            {
+                SecretKey = "<stripe-secret-key>",
+                WebhookSecret = "<stripe-webhook-secret>",
+                DefaultSuccessUrl = "<default-success-url>",
+                DefaultCancelUrl = "<default-cancel-url>"
+            });
+        var result = controller.GetCapabilities(opts);
+        var body = result.Should().BeOfType<OkObjectResult>().Which.Value;
+        body.Should().BeEquivalentTo(new { checkoutConfigured = false });
+    }
+
+    [Fact]
+    public void GetCapabilities_WhenFullyConfigured_ShouldReturnCheckoutConfiguredTrue()
+    {
+        var controller = new PaymentsController(Sender);
+        var opts = Options.Create(
+            new StripeOptions
+            {
+                SecretKey = "stripe_test_secret_key_not_real",
+                WebhookSecret = "stripe_test_webhook_secret_not_real",
+                DefaultSuccessUrl = "http://localhost/success",
+                DefaultCancelUrl = "http://localhost/cancel"
+            });
+        var result = controller.GetCapabilities(opts);
+        var body = result.Should().BeOfType<OkObjectResult>().Which.Value;
+        body.Should().BeEquivalentTo(new { checkoutConfigured = true });
     }
 
     [Fact]
@@ -43,7 +78,7 @@ public sealed class PaymentsControllerTests : ControllerTestBase
         SetupAnonymous(controller);
         var result = await controller.CreateCheckout(new CreateCheckoutRequest(Guid.NewGuid()), CancellationToken.None);
 
-        result.Should().BeOfType<UnauthorizedResult>();
+        await AssertStatusCodeAsync(controller, result, StatusCodes.Status401Unauthorized);
     }
 
     [Fact]
@@ -87,15 +122,16 @@ public sealed class PaymentsControllerTests : ControllerTestBase
 
         var controller = new PaymentsController(Sender);
         var bytes = Encoding.UTF8.GetBytes("{}");
-        controller.ControllerContext = new ControllerContext
+        var httpContext = new DefaultHttpContext
         {
-            HttpContext = new DefaultHttpContext()
+            Response = { Body = new MemoryStream() }
         };
-        controller.HttpContext.Request.Body = new MemoryStream(bytes);
-        controller.HttpContext.Request.Headers["Stripe-Signature"] = "sig";
+        httpContext.Request.Body = new MemoryStream(bytes);
+        httpContext.Request.Headers["Stripe-Signature"] = "sig";
+        controller.ControllerContext = new ControllerContext { HttpContext = httpContext };
 
         var result = await controller.Webhook(CancellationToken.None);
 
-        result.Should().BeOfType<BadRequestObjectResult>();
+        await AssertStatusCodeAsync(controller, result, StatusCodes.Status400BadRequest);
     }
 }

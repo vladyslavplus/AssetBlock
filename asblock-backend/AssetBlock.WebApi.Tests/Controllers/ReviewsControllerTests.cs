@@ -8,6 +8,7 @@ using AssetBlock.Domain.Core.Dto.Reviews;
 using AssetBlock.WebApi.Controllers;
 using AssetBlock.WebApi.Tests.Common;
 using FluentAssertions;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using NSubstitute;
 using NoValueResult = Ardalis.Result.Result;
@@ -41,7 +42,7 @@ public sealed class ReviewsControllerTests : ControllerTestBase
         SetupUser(_userId, controller);
         var result = await controller.CreateReview(Guid.NewGuid(), new CreateReviewRequest(5, null), CancellationToken.None);
 
-        result.Should().BeOfType<NotFoundObjectResult>();
+        await AssertStatusCodeAsync(controller, result, StatusCodes.Status404NotFound);
     }
 
     [Fact]

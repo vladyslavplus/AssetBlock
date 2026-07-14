@@ -1,5 +1,4 @@
 using Ardalis.Result;
-using AssetBlock.Application.Common;
 using AssetBlock.Domain.Abstractions.Services;
 using AssetBlock.Domain.Core.Constants;
 using AssetBlock.Domain.Core.Dto.Categories;
@@ -20,7 +19,7 @@ internal sealed class CreateCategoryCommandHandler(
         var slugExists = await categoryStore.SlugExists(request.Slug, null, cancellationToken);
         if (slugExists)
         {
-            return ResultError.Error<CreateCategoryResponse>(ErrorCodes.ERR_CATEGORY_SLUG_EXISTS);
+            return Result.Conflict(ErrorCodes.ERR_CATEGORY_SLUG_EXISTS);
         }
 
         try
@@ -32,7 +31,7 @@ internal sealed class CreateCategoryCommandHandler(
         catch (DuplicateSlugException)
         {
             logger.LogWarning("Category slug already exists {Slug}", request.Slug);
-            return ResultError.Error<CreateCategoryResponse>(ErrorCodes.ERR_CATEGORY_SLUG_EXISTS);
+            return Result.Conflict(ErrorCodes.ERR_CATEGORY_SLUG_EXISTS);
         }
     }
 }

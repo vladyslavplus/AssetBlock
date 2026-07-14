@@ -1,6 +1,6 @@
 import type { FieldValues, Path, UseFormSetError } from "react-hook-form";
 
-/** Error entry returned by AssetBlock WebApi MapResultToActionResult for many failure statuses. */
+/** Error entry returned by legacy AssetBlock `{ errors: [{ identifier, message }] }` bodies. */
 export interface ApiErrorItem {
   identifier?: string;
   message?: string;
@@ -11,6 +11,7 @@ export interface ApiErrorsArrayBody {
 }
 
 const GENERIC_VALIDATION_DETAIL = "One or more validation errors occurred.";
+const TYPE_PREFIX = "urn:assetblock:error:";
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -32,6 +33,10 @@ export interface ParsedApiError {
   summary: string;
   /** First message per field for react-hook-form `setError` (camelCase keys). */
   fieldErrors: Record<string, string>;
+  /** Stable AssetBlock error code when present (`ERR_*` or extensions.code). */
+  code?: string;
+  /** Correlation id from ProblemDetails extensions. */
+  traceId?: string;
 }
 
 function collectFromValidationDictionary(
@@ -76,8 +81,31 @@ function collectFromErrorsArray(errors: unknown[], allMessages: string[]): void 
   }
 }
 
+function readStringProp(o: Record<string, unknown>, key: string): string | undefined {
+  const v = o[key];
+  return typeof v === "string" && v.trim() ? v.trim() : undefined;
+}
+
+function readCodeAndTraceId(o: Record<string, unknown>): { code?: string; traceId?: string } {
+  const extensions = isPlainObject(o.extensions) ? o.extensions : undefined;
+  const code =
+    readStringProp(o, "code") ??
+    (extensions ? readStringProp(extensions, "code") : undefined) ??
+    extractCodeFromType(readStringProp(o, "type"));
+  const traceId =
+    readStringProp(o, "traceId") ??
+    (extensions ? readStringProp(extensions, "traceId") : undefined);
+  return { code, traceId };
+}
+
+function extractCodeFromType(type: string | undefined): string | undefined {
+  if (!type?.startsWith(TYPE_PREFIX)) return undefined;
+  const code = type.slice(TYPE_PREFIX.length).trim();
+  return code.length > 0 ? code : undefined;
+}
+
 /**
- * Parses AssetBlock / ASP.NET ProblemDetails + validation dictionary + legacy `{ errors: [...] }` bodies.
+ * Parses AssetBlock RFC 7807 ProblemDetails + validation dictionary + legacy `{ errors: [...] }` bodies.
  */
 export function parseApiErrorBody(body: unknown): ParsedApiError | undefined {
   if (!isPlainObject(body)) {
@@ -87,6 +115,7 @@ export function parseApiErrorBody(body: unknown): ParsedApiError | undefined {
   const o = body;
   const fieldErrors: Record<string, string> = {};
   const allMessages: string[] = [];
+  const { code, traceId } = readCodeAndTraceId(o);
 
   const errorsVal = o.errors;
 
@@ -119,6 +148,10 @@ export function parseApiErrorBody(body: unknown): ParsedApiError | undefined {
     }
   }
 
+  if (!summary && code) {
+    summary = code;
+  }
+
   if (!summary) {
     return undefined;
   }
@@ -126,6 +159,8 @@ export function parseApiErrorBody(body: unknown): ParsedApiError | undefined {
   return {
     summary,
     fieldErrors,
+    ...(code ? { code } : {}),
+    ...(traceId ? { traceId } : {}),
   };
 }
 

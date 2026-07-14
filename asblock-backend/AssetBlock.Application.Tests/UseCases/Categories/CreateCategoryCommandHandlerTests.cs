@@ -1,3 +1,4 @@
+using Ardalis.Result;
 using AssetBlock.Application.UseCases.Categories.CreateCategory;
 using AssetBlock.Domain.Abstractions.Services;
 using AssetBlock.Domain.Core.Constants;
@@ -38,13 +39,14 @@ public class CreateCategoryCommandHandlerTests
 
         // Assert
         result.IsSuccess.Should().BeFalse();
-        result.ValidationErrors.Should().Contain(e => e.Identifier == ErrorCodes.ERR_CATEGORY_SLUG_EXISTS);
+        result.Status.Should().Be(ResultStatus.Conflict);
+        result.Errors.Should().Contain(ErrorCodes.ERR_CATEGORY_SLUG_EXISTS);
 
         await _categoryStoreMock.DidNotReceiveWithAnyArgs().Create(null!, null, null!);
     }
 
     [Fact]
-    public async Task Handle_WhenDatabaseThrowsDuplicateSlugException_ShouldReturnError()
+    public async Task Handle_WhenDatabaseThrowsDuplicateSlugException_ShouldReturnConflict()
     {
         // Arrange
         var command = new CreateCategoryCommand("Test", "Desc", "test-slug");
@@ -57,7 +59,8 @@ public class CreateCategoryCommandHandlerTests
 
         // Assert
         result.IsSuccess.Should().BeFalse();
-        result.ValidationErrors.Should().Contain(e => e.Identifier == ErrorCodes.ERR_CATEGORY_SLUG_EXISTS);
+        result.Status.Should().Be(ResultStatus.Conflict);
+        result.Errors.Should().Contain(ErrorCodes.ERR_CATEGORY_SLUG_EXISTS);
     }
 
     [Fact]

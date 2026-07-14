@@ -54,7 +54,8 @@ public class DeleteCategoryCommandHandlerTests
 
         // Assert
         result.IsSuccess.Should().BeFalse();
-        result.Errors.Should().Contain(ErrorCodes.ERR_BAD_REQUEST);
+        result.Status.Should().Be(Ardalis.Result.ResultStatus.Invalid);
+        result.ValidationErrors.Should().Contain(e => e.Identifier == ErrorCodes.ERR_BAD_REQUEST);
     }
 
     [Fact]

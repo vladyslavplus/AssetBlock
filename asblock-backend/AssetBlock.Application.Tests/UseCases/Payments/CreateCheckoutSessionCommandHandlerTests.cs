@@ -1,3 +1,4 @@
+using Ardalis.Result;
 using AssetBlock.Application.UseCases.Payments.CreateCheckoutSession;
 using AssetBlock.Domain.Abstractions.Services;
 using AssetBlock.Domain.Core.Constants;
@@ -32,25 +33,23 @@ public class CreateCheckoutSessionCommandHandlerTests
     }
 
     [Fact]
-    public async Task Handle_WhenAssetNotFound_ShouldReturnError()
+    public async Task Handle_WhenAssetNotFound_ShouldReturnNotFound()
     {
-        // Arrange
-        var command = new CreateCheckoutSessionCommand(Guid.NewGuid(), Guid.NewGuid(), "https://ok", "https://cancel");
+        var command = new CreateCheckoutSessionCommand(Guid.NewGuid(), Guid.NewGuid());
         _assetStoreMock.GetById(command.AssetId, Arg.Any<CancellationToken>()).Returns((Asset?)null);
 
-        // Act
         var result = await _handler.Handle(command, CancellationToken.None);
 
-        // Assert
         result.IsSuccess.Should().BeFalse();
-        result.ValidationErrors.Should().Contain(e => e.Identifier == ErrorCodes.ERR_ASSET_NOT_FOUND);
+        result.Status.Should().Be(ResultStatus.NotFound);
+        result.Errors.Should().Contain(ErrorCodes.ERR_ASSET_NOT_FOUND);
     }
 
     [Fact]
     public async Task Handle_WhenDelisted_ShouldReturnAssetNotFound()
     {
         var userId = Guid.NewGuid();
-        var command = new CreateCheckoutSessionCommand(Guid.NewGuid(), userId, "https://ok", "https://cancel");
+        var command = new CreateCheckoutSessionCommand(Guid.NewGuid(), userId);
         var asset = new Asset
         {
             Id = command.AssetId,
@@ -68,15 +67,15 @@ public class CreateCheckoutSessionCommandHandlerTests
         var result = await _handler.Handle(command, CancellationToken.None);
 
         result.IsSuccess.Should().BeFalse();
-        result.ValidationErrors.Should().Contain(e => e.Identifier == ErrorCodes.ERR_ASSET_NOT_FOUND);
+        result.Status.Should().Be(ResultStatus.NotFound);
+        result.Errors.Should().Contain(ErrorCodes.ERR_ASSET_NOT_FOUND);
     }
 
     [Fact]
     public async Task Handle_WhenUserIsAuthor_ShouldReturnCannotPurchaseOwnAssetError()
     {
-        // Arrange
         var userId = Guid.NewGuid();
-        var command = new CreateCheckoutSessionCommand(Guid.NewGuid(), userId, "https://ok", "https://cancel");
+        var command = new CreateCheckoutSessionCommand(Guid.NewGuid(), userId);
         var asset = new Asset
         {
             Id = command.AssetId, AuthorId = userId, CategoryId = Guid.NewGuid(),
@@ -85,19 +84,18 @@ public class CreateCheckoutSessionCommandHandlerTests
         };
         _assetStoreMock.GetById(command.AssetId, Arg.Any<CancellationToken>()).Returns(asset);
 
-        // Act
         var result = await _handler.Handle(command, CancellationToken.None);
 
-        // Assert
         result.IsSuccess.Should().BeFalse();
-        result.ValidationErrors.Should().Contain(e => e.Identifier == ErrorCodes.ERR_CANNOT_PURCHASE_OWN_ASSET);
+        result.Status.Should().Be(ResultStatus.Forbidden);
+        result.Errors.Should().Contain(ErrorCodes.ERR_CANNOT_PURCHASE_OWN_ASSET);
     }
 
     [Fact]
     public async Task Handle_WhenAlreadyPurchased_ShouldReturnAlreadyPurchasedError()
     {
         var userId = Guid.NewGuid();
-        var command = new CreateCheckoutSessionCommand(Guid.NewGuid(), userId, "https://ok", "https://cancel");
+        var command = new CreateCheckoutSessionCommand(Guid.NewGuid(), userId);
         var asset = new Asset
         {
             Id = command.AssetId,
@@ -123,16 +121,16 @@ public class CreateCheckoutSessionCommandHandlerTests
         var result = await _handler.Handle(command, CancellationToken.None);
 
         result.IsSuccess.Should().BeFalse();
-        result.ValidationErrors.Should().Contain(e => e.Identifier == ErrorCodes.ERR_ASSET_ALREADY_PURCHASED);
+        result.Status.Should().Be(ResultStatus.Conflict);
+        result.Errors.Should().Contain(ErrorCodes.ERR_ASSET_ALREADY_PURCHASED);
         await _paymentServiceMock.DidNotReceiveWithAnyArgs().CreateCheckoutSession(
-            Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>());
+            Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]
     public async Task Handle_WhenPaymentServiceThrows_ShouldReturnPaymentError()
     {
-        // Arrange
-        var command = new CreateCheckoutSessionCommand(Guid.NewGuid(), Guid.NewGuid(), "https://ok", "https://cancel");
+        var command = new CreateCheckoutSessionCommand(Guid.NewGuid(), Guid.NewGuid());
         var asset = new Asset
         {
             Id = command.AssetId, AuthorId = Guid.NewGuid(), CategoryId = Guid.NewGuid(),
@@ -142,13 +140,11 @@ public class CreateCheckoutSessionCommandHandlerTests
 
         _assetStoreMock.GetById(command.AssetId, Arg.Any<CancellationToken>()).Returns(asset);
         _paymentServiceMock.CreateCheckoutSession(
-                Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
+                Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<CancellationToken>())
             .ThrowsAsync(new Exception("Stripe unavailable"));
 
-        // Act
         var result = await _handler.Handle(command, CancellationToken.None);
 
-        // Assert
         result.IsSuccess.Should().BeFalse();
         result.ValidationErrors.Should().Contain(e => e.Identifier == ErrorCodes.ERR_PAYMENT_FAILED);
     }
@@ -156,9 +152,8 @@ public class CreateCheckoutSessionCommandHandlerTests
     [Fact]
     public async Task Handle_WhenSuccessful_ShouldReturnCheckoutUrl()
     {
-        // Arrange
         const string sessionUrl = "https://checkout.stripe.com/pay/session_123";
-        var command = new CreateCheckoutSessionCommand(Guid.NewGuid(), Guid.NewGuid(), "https://ok", "https://cancel");
+        var command = new CreateCheckoutSessionCommand(Guid.NewGuid(), Guid.NewGuid());
         var asset = new Asset
         {
             Id = command.AssetId, AuthorId = Guid.NewGuid(), CategoryId = Guid.NewGuid(),
@@ -168,13 +163,11 @@ public class CreateCheckoutSessionCommandHandlerTests
 
         _assetStoreMock.GetById(command.AssetId, Arg.Any<CancellationToken>()).Returns(asset);
         _paymentServiceMock.CreateCheckoutSession(
-                command.AssetId, command.UserId, command.SuccessUrl, command.CancelUrl, Arg.Any<CancellationToken>())
+                command.AssetId, command.UserId, Arg.Any<CancellationToken>())
             .Returns(sessionUrl);
 
-        // Act
         var result = await _handler.Handle(command, CancellationToken.None);
 
-        // Assert
         result.IsSuccess.Should().BeTrue();
         result.Value.CheckoutUrl.Should().Be(sessionUrl);
     }

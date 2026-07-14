@@ -59,7 +59,7 @@ internal sealed class DeleteAssetCommandHandler(
         catch (Exception ex)
         {
             logger.LogError(ex, "Failed to delete asset: {AssetId}. Operation may be partially complete.", request.Id);
-            return Result.Error(ErrorCodes.ERR_BAD_REQUEST);
+            return Result.Error(ErrorCodes.ERR_INTERNAL);
         }
     }
 }

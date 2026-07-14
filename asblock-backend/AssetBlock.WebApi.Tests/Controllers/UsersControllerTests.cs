@@ -12,6 +12,7 @@ using AssetBlock.Domain.Core.Dto.Users;
 using AssetBlock.WebApi.Controllers;
 using AssetBlock.WebApi.Tests.Common;
 using FluentAssertions;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using NSubstitute;
 using NoValueResult = Ardalis.Result.Result;
@@ -41,7 +42,7 @@ public sealed class UsersControllerTests : ControllerTestBase
         SetupAnonymous(controller);
         var result = await controller.ListMyNotifications(new GetNotificationsRequest(), CancellationToken.None);
 
-        result.Should().BeOfType<UnauthorizedResult>();
+        await AssertStatusCodeAsync(controller, result, StatusCodes.Status401Unauthorized);
     }
 
     [Fact]
@@ -64,7 +65,7 @@ public sealed class UsersControllerTests : ControllerTestBase
         SetupAnonymous(controller);
         var result = await controller.ListMyAssets(new GetAssetsRequest(), CancellationToken.None);
 
-        result.Should().BeOfType<UnauthorizedResult>();
+        await AssertStatusCodeAsync(controller, result, StatusCodes.Status401Unauthorized);
     }
 
     [Fact]
@@ -87,7 +88,7 @@ public sealed class UsersControllerTests : ControllerTestBase
         SetupAnonymous(controller);
         var result = await controller.MarkMyNotificationRead(Guid.NewGuid(), CancellationToken.None);
 
-        result.Should().BeOfType<UnauthorizedResult>();
+        await AssertStatusCodeAsync(controller, result, StatusCodes.Status401Unauthorized);
     }
 
     [Fact]
@@ -110,7 +111,7 @@ public sealed class UsersControllerTests : ControllerTestBase
         SetupAnonymous(controller);
         var result = await controller.GetMe(CancellationToken.None);
 
-        result.Should().BeOfType<UnauthorizedResult>();
+        await AssertStatusCodeAsync(controller, result, StatusCodes.Status401Unauthorized);
     }
 
     [Fact]
@@ -144,7 +145,7 @@ public sealed class UsersControllerTests : ControllerTestBase
         SetupAnonymous(controller);
         var result = await controller.UpdateMe(new UpdateUserProfileRequest(), CancellationToken.None);
 
-        result.Should().BeOfType<UnauthorizedResult>();
+        await AssertStatusCodeAsync(controller, result, StatusCodes.Status401Unauthorized);
     }
 
     [Fact]
@@ -171,7 +172,7 @@ public sealed class UsersControllerTests : ControllerTestBase
             Links = [new SocialLinkInput { PlatformId = pid, Url = "https://x.com" }]
         }, CancellationToken.None);
 
-        result.Should().BeOfType<UnauthorizedResult>();
+        await AssertStatusCodeAsync(controller, result, StatusCodes.Status401Unauthorized);
     }
 
     [Fact]

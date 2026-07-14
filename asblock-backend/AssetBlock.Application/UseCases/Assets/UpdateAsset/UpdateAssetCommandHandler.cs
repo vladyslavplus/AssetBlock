@@ -65,7 +65,7 @@ internal sealed class UpdateAssetCommandHandler(
         catch (Exception ex)
         {
             logger.LogError(ex, "Failed to update asset: {AssetId}", request.AssetId);
-            return Result.Error(ErrorCodes.ERR_BAD_REQUEST);
+            return Result.Error(ErrorCodes.ERR_INTERNAL);
         }
     }
 }

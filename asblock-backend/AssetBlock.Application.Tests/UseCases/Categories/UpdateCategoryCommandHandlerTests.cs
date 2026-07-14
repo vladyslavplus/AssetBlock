@@ -42,7 +42,7 @@ public class UpdateCategoryCommandHandlerTests
     }
 
     [Fact]
-    public async Task Handle_WhenSlugExistsForAnotherCategory_ShouldReturnError()
+    public async Task Handle_WhenSlugExistsForAnotherCategory_ShouldReturnConflict()
     {
         // Arrange
         var command = new UpdateCategoryCommand(Guid.NewGuid(), null, null, "existing-slug");
@@ -56,11 +56,12 @@ public class UpdateCategoryCommandHandlerTests
 
         // Assert
         result.IsSuccess.Should().BeFalse();
-        result.ValidationErrors.Should().Contain(e => e.Identifier == ErrorCodes.ERR_CATEGORY_SLUG_EXISTS);
+        result.Status.Should().Be(ResultStatus.Conflict);
+        result.Errors.Should().Contain(ErrorCodes.ERR_CATEGORY_SLUG_EXISTS);
     }
 
     [Fact]
-    public async Task Handle_WhenDatabaseThrowsDuplicateSlug_ShouldReturnError()
+    public async Task Handle_WhenDatabaseThrowsDuplicateSlug_ShouldReturnConflict()
     {
          // Arrange
         var command = new UpdateCategoryCommand(Guid.NewGuid(), null, null, "new-slug");
@@ -75,7 +76,8 @@ public class UpdateCategoryCommandHandlerTests
 
         // Assert
         result.IsSuccess.Should().BeFalse();
-        result.ValidationErrors.Should().Contain(e => e.Identifier == ErrorCodes.ERR_CATEGORY_SLUG_EXISTS);
+        result.Status.Should().Be(ResultStatus.Conflict);
+        result.Errors.Should().Contain(ErrorCodes.ERR_CATEGORY_SLUG_EXISTS);
     }
 
     [Fact]

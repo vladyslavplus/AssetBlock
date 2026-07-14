@@ -1,10 +1,8 @@
 using Ardalis.Result;
-using AssetBlock.Application.Common;
 using AssetBlock.Domain.Abstractions.Services;
 using AssetBlock.Domain.Core.Constants;
 using MediatR;
 using AssetBlock.Domain.Core.Exceptions;
-
 using Microsoft.Extensions.Logging;
 
 namespace AssetBlock.Application.UseCases.Categories.UpdateCategory;
@@ -30,7 +28,7 @@ internal sealed class UpdateCategoryCommandHandler(
                 var slugExists = await categoryStore.SlugExists(request.Slug, request.Id, cancellationToken);
                 if (slugExists)
                 {
-                    return ResultError.Error(ErrorCodes.ERR_CATEGORY_SLUG_EXISTS);
+                    return Result.Conflict(ErrorCodes.ERR_CATEGORY_SLUG_EXISTS);
                 }
             }
 
@@ -59,7 +57,7 @@ internal sealed class UpdateCategoryCommandHandler(
         catch (DuplicateSlugException)
         {
             logger.LogWarning("Category slug already exists {Slug}", request.Slug);
-            return ResultError.Error(ErrorCodes.ERR_CATEGORY_SLUG_EXISTS);
+            return Result.Conflict(ErrorCodes.ERR_CATEGORY_SLUG_EXISTS);
         }
         catch (Exception ex)
         {

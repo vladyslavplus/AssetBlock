@@ -2,6 +2,7 @@ using System.Text;
 using AssetBlock.Domain.Core.Constants;
 using AssetBlock.Domain.Core.Primitives.AppSettingsOptions;
 using AssetBlock.WebApi.Constants;
+using AssetBlock.WebApi.ProblemDetails;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
 
@@ -62,8 +63,9 @@ internal static class JwtAuthenticationExtensions
                         logger.LogDebug("JWT validated for subject {Subject}", sub);
                         return Task.CompletedTask;
                     },
-                    OnChallenge = ctx =>
+                    OnChallenge = async ctx =>
                     {
+                        ctx.HandleResponse();
                         var logger = ctx.HttpContext.RequestServices.GetRequiredService<ILogger<JwtBearerEvents>>();
                         var hasAuth = ctx.Request.Headers.Authorization.Count > 0;
                         logger.LogInformation(
@@ -71,7 +73,20 @@ internal static class JwtAuthenticationExtensions
                             ctx.Request.Path,
                             hasAuth,
                             ctx.AuthenticateFailure?.Message ?? (hasAuth ? "invalid or expired token" : "missing Bearer token"));
-                        return Task.CompletedTask;
+
+                        var problem = AssetBlockProblemDetails.Create(
+                            ctx.HttpContext,
+                            StatusCodes.Status401Unauthorized,
+                            ErrorCodes.ERR_AUTH_TOKEN_INVALID);
+                        await AssetBlockProblemDetails.WriteAsync(ctx.HttpContext, problem);
+                    },
+                    OnForbidden = async ctx =>
+                    {
+                        var problem = AssetBlockProblemDetails.Create(
+                            ctx.HttpContext,
+                            StatusCodes.Status403Forbidden,
+                            ErrorCodes.ERR_FORBIDDEN);
+                        await AssetBlockProblemDetails.WriteAsync(ctx.HttpContext, problem);
                     }
                 };
             });

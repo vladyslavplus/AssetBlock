@@ -59,7 +59,7 @@ internal sealed class RemoveAssetTagCommandHandler(
         catch (Exception ex)
         {
             logger.LogError(ex, "Failed to remove tag from asset: {AssetId}", request.AssetId);
-            return Result.Error(ErrorCodes.ERR_BAD_REQUEST);
+            return Result.Error(ErrorCodes.ERR_INTERNAL);
         }
     }
 }

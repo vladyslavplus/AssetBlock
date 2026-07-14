@@ -1,3 +1,4 @@
+using Ardalis.Result;
 using AssetBlock.Application.UseCases.Reviews.CreateReview;
 using AssetBlock.Domain.Abstractions.Services;
 using AssetBlock.Domain.Core.Constants;
@@ -47,7 +48,8 @@ public class CreateReviewCommandHandlerTests
 
         // Assert
         result.IsSuccess.Should().BeFalse();
-        result.ValidationErrors.Should().Contain(e => e.Identifier == ErrorCodes.ERR_ASSET_NOT_FOUND);
+        result.Status.Should().Be(ResultStatus.NotFound);
+        result.Errors.Should().Contain(ErrorCodes.ERR_ASSET_NOT_FOUND);
     }
 
     [Fact]
@@ -65,7 +67,8 @@ public class CreateReviewCommandHandlerTests
 
         // Assert
         result.IsSuccess.Should().BeFalse();
-        result.ValidationErrors.Should().Contain(e => e.Identifier == ErrorCodes.ERR_CANNOT_REVIEW_OWN_ASSET);
+        result.Status.Should().Be(ResultStatus.Forbidden);
+        result.Errors.Should().Contain(ErrorCodes.ERR_CANNOT_REVIEW_OWN_ASSET);
     }
 
     [Fact]
@@ -120,7 +123,8 @@ public class CreateReviewCommandHandlerTests
 
         // Assert
         result.IsSuccess.Should().BeFalse();
-        result.ValidationErrors.Should().Contain(e => e.Identifier == ErrorCodes.ERR_REVIEW_ALREADY_EXISTS);
+        result.Status.Should().Be(ResultStatus.Conflict);
+        result.Errors.Should().Contain(ErrorCodes.ERR_REVIEW_ALREADY_EXISTS);
     }
 
     [Fact]

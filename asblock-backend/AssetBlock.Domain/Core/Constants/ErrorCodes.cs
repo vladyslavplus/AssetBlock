@@ -24,6 +24,7 @@ public static class ErrorCodes
     public const string ERR_PURCHASE_ACCESS_DENIED = "ERR_PURCHASE_ACCESS_DENIED";
     public const string ERR_PAYMENT_FAILED = "ERR_PAYMENT_FAILED";
     public const string ERR_STRIPE_URLS_NOT_CONFIGURED = "ERR_STRIPE_URLS_NOT_CONFIGURED";
+    public const string ERR_STRIPE_WEBHOOK_INVALID = "ERR_STRIPE_WEBHOOK_INVALID";
 
     // User / profile
     public const string ERR_USER_NOT_FOUND = "ERR_USER_NOT_FOUND";
@@ -47,6 +48,10 @@ public static class ErrorCodes
     public const string ERR_FORBIDDEN = "ERR_FORBIDDEN";
     public const string ERR_BAD_REQUEST = "ERR_BAD_REQUEST";
     public const string ERR_CONFLICT = "ERR_CONFLICT";
+    public const string ERR_INTERNAL = "ERR_INTERNAL";
+    public const string ERR_VALIDATION_FAILED = "ERR_VALIDATION_FAILED";
+    public const string ERR_RATE_LIMITED = "ERR_RATE_LIMITED";
+    public const string ERR_SEARCH_UNAVAILABLE = "ERR_SEARCH_UNAVAILABLE";
 
     public const string ERR_NOTIFICATION_NOT_FOUND = "ERR_NOTIFICATION_NOT_FOUND";
     public const string ERR_NOTIFICATIONS_LIST_FAILED = "ERR_NOTIFICATIONS_LIST_FAILED";

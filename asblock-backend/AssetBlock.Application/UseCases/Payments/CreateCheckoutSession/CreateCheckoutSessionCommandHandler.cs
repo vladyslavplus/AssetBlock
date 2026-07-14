@@ -20,23 +20,23 @@ internal sealed class CreateCheckoutSessionCommandHandler(
         var asset = await assetStore.GetById(request.AssetId, cancellationToken);
         if (asset is null)
         {
-            return ResultError.Error<CreateCheckoutSessionResponse>(ErrorCodes.ERR_ASSET_NOT_FOUND);
+            return Result.NotFound(ErrorCodes.ERR_ASSET_NOT_FOUND);
         }
 
         if (asset.DeletedAt.HasValue)
         {
-            return ResultError.Error<CreateCheckoutSessionResponse>(ErrorCodes.ERR_ASSET_NOT_FOUND);
+            return Result.NotFound(ErrorCodes.ERR_ASSET_NOT_FOUND);
         }
 
         if (asset.AuthorId == request.UserId)
         {
-            return ResultError.Error<CreateCheckoutSessionResponse>(ErrorCodes.ERR_CANNOT_PURCHASE_OWN_ASSET);
+            return Result.Forbidden(ErrorCodes.ERR_CANNOT_PURCHASE_OWN_ASSET);
         }
 
         var existingPurchase = await purchaseStore.GetPurchase(request.UserId, request.AssetId, cancellationToken);
         if (existingPurchase is not null)
         {
-            return ResultError.Error<CreateCheckoutSessionResponse>(ErrorCodes.ERR_ASSET_ALREADY_PURCHASED);
+            return Result.Conflict(ErrorCodes.ERR_ASSET_ALREADY_PURCHASED);
         }
 
         try
@@ -44,8 +44,6 @@ internal sealed class CreateCheckoutSessionCommandHandler(
             var sessionUrl = await paymentService.CreateCheckoutSession(
                 request.AssetId,
                 request.UserId,
-                request.SuccessUrl,
-                request.CancelUrl,
                 cancellationToken);
             return Result.Success(new CreateCheckoutSessionResponse(sessionUrl));
         }

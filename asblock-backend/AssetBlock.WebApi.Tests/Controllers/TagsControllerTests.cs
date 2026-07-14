@@ -9,6 +9,7 @@ using AssetBlock.Domain.Core.Dto.Tags;
 using AssetBlock.WebApi.Controllers;
 using AssetBlock.WebApi.Tests.Common;
 using FluentAssertions;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using NSubstitute;
 using NoValueResult = Ardalis.Result.Result;
@@ -62,10 +63,10 @@ public sealed class TagsControllerTests : ControllerTestBase
             .Returns(Task.FromResult(Result<TagDto>.Conflict(ErrorCodes.ERR_TAG_ALREADY_EXISTS)));
 
         var controller = new TagsController(Sender);
+        SetupAnonymous(controller);
         var result = await controller.Create(new CreateTagCommand("x"), CancellationToken.None);
 
-        var obj = result.Should().BeOfType<ObjectResult>().Which;
-        obj.StatusCode.Should().Be(409);
+        await AssertStatusCodeAsync(controller, result, StatusCodes.Status409Conflict);
     }
 
     [Fact]
@@ -100,8 +101,9 @@ public sealed class TagsControllerTests : ControllerTestBase
             .Returns(Task.FromResult(NoValueResult.NotFound(ErrorCodes.ERR_TAG_NOT_FOUND)));
 
         var controller = new TagsController(Sender);
+        SetupAnonymous(controller);
         var result = await controller.Delete(Guid.NewGuid(), CancellationToken.None);
 
-        result.Should().BeOfType<NotFoundObjectResult>();
+        await AssertStatusCodeAsync(controller, result, StatusCodes.Status404NotFound);
     }
 }

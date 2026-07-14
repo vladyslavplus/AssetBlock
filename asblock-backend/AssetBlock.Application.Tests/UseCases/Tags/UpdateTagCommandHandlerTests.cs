@@ -78,6 +78,7 @@ public class UpdateTagCommandHandlerTests
 
         // Assert: New name conflicts with existing tag
         result.IsSuccess.Should().BeFalse();
-        result.ValidationErrors.Should().Contain(e => e.Identifier == ErrorCodes.ERR_TAG_ALREADY_EXISTS);
+        result.Status.Should().Be(ResultStatus.Conflict);
+        result.Errors.Should().Contain(ErrorCodes.ERR_TAG_ALREADY_EXISTS);
     }
 }

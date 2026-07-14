@@ -11,29 +11,29 @@ internal sealed class StripeOptionsValidator : IValidateOptions<StripeOptions>
 {
     public ValidateOptionsResult Validate(string? name, StripeOptions options)
     {
-        var secretSet = !OptionsValidation.IsMissingOrPlaceholder(options.SecretKey);
-        var webhookSet = !OptionsValidation.IsMissingOrPlaceholder(options.WebhookSecret);
-        var successSet = !OptionsValidation.IsMissingOrPlaceholder(options.DefaultSuccessUrl);
-        var cancelSet = !OptionsValidation.IsMissingOrPlaceholder(options.DefaultCancelUrl);
+        if (!StripeCheckout.IsAnyFieldConfigured(options))
+        {
+            return ValidateOptionsResult.Success;
+        }
 
-        if (!secretSet && !webhookSet && !successSet && !cancelSet)
+        if (StripeCheckout.IsConfigured(options))
         {
             return ValidateOptionsResult.Success;
         }
 
         var failures = new List<string>();
 
-        if (!secretSet)
+        if (OptionsValidation.IsMissingOrPlaceholder(options.SecretKey))
         {
             failures.Add("Stripe:SecretKey is required when any Stripe setting is configured.");
         }
 
-        if (!webhookSet)
+        if (OptionsValidation.IsMissingOrPlaceholder(options.WebhookSecret))
         {
             failures.Add("Stripe:WebhookSecret is required when any Stripe setting is configured.");
         }
 
-        if (!successSet)
+        if (OptionsValidation.IsMissingOrPlaceholder(options.DefaultSuccessUrl))
         {
             failures.Add("Stripe:DefaultSuccessUrl is required when any Stripe setting is configured.");
         }
@@ -42,7 +42,7 @@ internal sealed class StripeOptionsValidator : IValidateOptions<StripeOptions>
             failures.Add("Stripe:DefaultSuccessUrl must be an absolute http or https URI.");
         }
 
-        if (!cancelSet)
+        if (OptionsValidation.IsMissingOrPlaceholder(options.DefaultCancelUrl))
         {
             failures.Add("Stripe:DefaultCancelUrl is required when any Stripe setting is configured.");
         }
@@ -51,8 +51,6 @@ internal sealed class StripeOptionsValidator : IValidateOptions<StripeOptions>
             failures.Add("Stripe:DefaultCancelUrl must be an absolute http or https URI.");
         }
 
-        return failures.Count > 0
-            ? ValidateOptionsResult.Fail(failures)
-            : ValidateOptionsResult.Success;
+        return ValidateOptionsResult.Fail(failures);
     }
 }
