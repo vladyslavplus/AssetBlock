@@ -97,6 +97,46 @@ public sealed class RealtimeNotificationPublisher(
         await SendToUser(recipientId, hubMethod, payload, cancellationToken);
     }
 
+    public async Task DeliverPersistedNotification(
+        Guid sourceOutboxMessageId,
+        Guid recipientUserId,
+        NotificationKind kind,
+        string hubMethod,
+        string metadataJson,
+        CancellationToken cancellationToken = default)
+    {
+        var existing = await notificationStore.GetBySourceOutboxMessageId(sourceOutboxMessageId, cancellationToken);
+        if (existing is null && metadataJson.Length <= NotificationConstraints.MAX_METADATA_JSON_LENGTH)
+        {
+            var row = new UserNotification
+            {
+                Id = Guid.NewGuid(),
+                RecipientUserId = recipientUserId,
+                Kind = kind,
+                MetadataJson = metadataJson,
+                SourceOutboxMessageId = sourceOutboxMessageId,
+                CreatedAt = DateTimeOffset.UtcNow
+            };
+            try
+            {
+                await notificationStore.Add(row, cancellationToken);
+            }
+            catch (Exception ex)
+            {
+                // Concurrent duplicate outbox delivery: another worker may have inserted first.
+                logger.LogWarning(ex, "Outbox notification persist raced for {OutboxId}", sourceOutboxMessageId);
+                existing = await notificationStore.GetBySourceOutboxMessageId(sourceOutboxMessageId, cancellationToken);
+                if (existing is null)
+                {
+                    throw;
+                }
+            }
+        }
+
+        using var doc = JsonDocument.Parse(string.IsNullOrWhiteSpace(metadataJson) ? "{}" : metadataJson);
+        await SendToUser(recipientUserId, hubMethod, doc.RootElement.Clone(), cancellationToken);
+    }
+
     private async Task SendToUser<T>(Guid userId, string method, T payload, CancellationToken cancellationToken)
     {
         try

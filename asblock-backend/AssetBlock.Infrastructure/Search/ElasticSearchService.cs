@@ -2,6 +2,7 @@ using AssetBlock.Domain.Abstractions.Services;
 using AssetBlock.Domain.Core.Primitives.AppSettingsOptions;
 using AssetBlock.Domain.Core.Dto.Assets;
 using AssetBlock.Domain.Core.Dto.Paging;
+using AssetBlock.Domain.Core.Exceptions;
 using Elastic.Clients.Elasticsearch;
 using Elastic.Clients.Elasticsearch.QueryDsl;
 using Microsoft.Extensions.Logging;
@@ -156,7 +157,7 @@ internal sealed class ElasticSearchService(
             {
                 logger.LogError("Failed to search assets in Elasticsearch: {DebugInformation}",
                     searchResponse.DebugInformation);
-                return new PagedResult<AssetDocument>(new List<AssetDocument>(), 0, request.Page, request.PageSize);
+                throw new SearchUnavailableException("Elasticsearch search response was not successful.");
             }
 
             var countResponse = await client.CountAsync<AssetDocument>(c => c
@@ -169,12 +170,7 @@ internal sealed class ElasticSearchService(
             {
                 logger.LogError("Failed to count assets in Elasticsearch: {DebugInformation}",
                     countResponse.DebugInformation);
-
-                return new PagedResult<AssetDocument>(
-                    searchResponse.Documents.ToList(),
-                    searchResponse.Documents.Count,
-                    request.Page,
-                    request.PageSize);
+                throw new SearchUnavailableException("Elasticsearch count response was not successful.");
             }
 
             return new PagedResult<AssetDocument>(
@@ -183,12 +179,20 @@ internal sealed class ElasticSearchService(
                 request.Page,
                 request.PageSize);
         }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (SearchUnavailableException)
+        {
+            throw;
+        }
         catch (Exception ex)
         {
             logger.LogError(ex,
                 "Elasticsearch SearchAssets failed: Index {IndexName}, Page {Page}, PageSize {PageSize}, Search {Search}, CategoryId {CategoryId}",
                 _indexName, request.Page, request.PageSize, request.Search ?? "(null)", request.CategoryId?.ToString() ?? "(null)");
-            return new PagedResult<AssetDocument>(new List<AssetDocument>(), 0, request.Page, request.PageSize);
+            throw new SearchUnavailableException("Elasticsearch search failed.", ex);
         }
     }
 
@@ -199,17 +203,31 @@ internal sealed class ElasticSearchService(
             var response =
                 await client.DeleteAsync<AssetDocument>(id.ToString(), d => d.Index(_indexName), cancellationToken);
 
-            if (!response.IsSuccess() &&
-                response.ElasticsearchServerError?.Status != (int)System.Net.HttpStatusCode.NotFound)
+            if (response.IsSuccess())
             {
-                logger.LogError("Failed to delete asset {AssetId} from Elasticsearch: {DebugInformation}", id,
-                    response.DebugInformation);
+                return;
             }
+
+            if (response.ElasticsearchServerError?.Status == (int)System.Net.HttpStatusCode.NotFound)
+            {
+                return;
+            }
+
+            logger.LogError(
+                "Failed to delete asset {AssetId} from Elasticsearch: {DebugInformation}",
+                id,
+                response.DebugInformation);
+            throw new SearchUnavailableException(
+                $"Elasticsearch delete failed for asset {id}.");
+        }
+        catch (SearchUnavailableException)
+        {
+            throw;
         }
         catch (Exception ex)
         {
             logger.LogError(ex, "Elasticsearch DeleteAsset failed for AssetId {AssetId}, Index {IndexName}", id, _indexName);
-            throw;
+            throw new SearchUnavailableException($"Elasticsearch delete failed for asset {id}.", ex);
         }
     }
 }

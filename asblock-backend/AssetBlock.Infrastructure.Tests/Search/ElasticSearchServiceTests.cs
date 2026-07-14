@@ -1,5 +1,6 @@
 using AssetBlock.Domain.Core.Dto.Assets;
 using AssetBlock.Domain.Core.Dto.Paging;
+using AssetBlock.Domain.Core.Exceptions;
 using AssetBlock.Domain.Core.Primitives.AppSettingsOptions;
 using AssetBlock.Infrastructure.Search;
 using Elastic.Clients.Elasticsearch;
@@ -13,7 +14,7 @@ namespace AssetBlock.Infrastructure.Tests.Search;
 public sealed class ElasticSearchServiceTests
 {
     [Fact]
-    public async Task SearchAssets_returnsEmpty_whenClusterUnreachable()
+    public async Task SearchAssets_throwsSearchUnavailable_whenClusterUnreachable()
     {
         var settings = new ElasticsearchClientSettings(new Uri("http://127.0.0.1:59231"))
             .DefaultIndex("assets")
@@ -21,12 +22,12 @@ public sealed class ElasticSearchServiceTests
         var client = new ElasticsearchClient(settings);
         var sut = CreateSut(client);
 
-        var r = await sut.SearchAssets(new GetAssetsRequest { Page = 1, PageSize = 10 });
-        r.Items.Should().BeEmpty();
+        var act = async () => await sut.SearchAssets(new GetAssetsRequest { Page = 1, PageSize = 10 });
+        await act.Should().ThrowAsync<SearchUnavailableException>();
     }
 
     [Fact]
-    public async Task SearchAssets_buildsFiltersAndSort_beforeCallingCluster()
+    public async Task SearchAssets_buildsFiltersAndSort_thenThrowsWhenClusterUnreachable()
     {
         var settings = new ElasticsearchClientSettings(new Uri("http://127.0.0.1:59234"))
             .DefaultIndex("assets")
@@ -35,7 +36,7 @@ public sealed class ElasticSearchServiceTests
         var sut = CreateSut(client);
 
         var cat = Guid.NewGuid();
-        await sut.SearchAssets(new GetAssetsRequest
+        var act = async () => await sut.SearchAssets(new GetAssetsRequest
         {
             Page = 2,
             PageSize = 5,
@@ -48,29 +49,31 @@ public sealed class ElasticSearchServiceTests
             SortDirection = SortDirection.ASC
         });
 
-        await sut.SearchAssets(new GetAssetsRequest
+        await act.Should().ThrowAsync<SearchUnavailableException>();
+
+        await FluentActions.Invoking(() => sut.SearchAssets(new GetAssetsRequest
         {
             Page = 1,
             PageSize = 10,
             SortBy = "Price",
             SortDirection = SortDirection.DESC
-        });
+        })).Should().ThrowAsync<SearchUnavailableException>();
 
-        await sut.SearchAssets(new GetAssetsRequest
+        await FluentActions.Invoking(() => sut.SearchAssets(new GetAssetsRequest
         {
             Page = 1,
             PageSize = 10,
             SortBy = "Id",
             SortDirection = SortDirection.ASC
-        });
+        })).Should().ThrowAsync<SearchUnavailableException>();
 
-        await sut.SearchAssets(new GetAssetsRequest
+        await FluentActions.Invoking(() => sut.SearchAssets(new GetAssetsRequest
         {
             Page = 1,
             PageSize = 10,
             SortBy = "Invalid",
             SortDirection = SortDirection.DESC
-        });
+        })).Should().ThrowAsync<SearchUnavailableException>();
     }
 
     [Fact]
@@ -94,7 +97,7 @@ public sealed class ElasticSearchServiceTests
     }
 
     [Fact]
-    public async Task DeleteAsset_canComplete_withoutThrow_whenResponseUnsuccessful()
+    public async Task DeleteAsset_throwsSearchUnavailable_whenClusterUnreachable()
     {
         var settings = new ElasticsearchClientSettings(new Uri("http://127.0.0.1:59233"))
             .DefaultIndex("assets")
@@ -102,7 +105,8 @@ public sealed class ElasticSearchServiceTests
         var client = new ElasticsearchClient(settings);
         var sut = CreateSut(client);
 
-        await sut.DeleteAsset(Guid.NewGuid());
+        var act = async () => await sut.DeleteAsset(Guid.NewGuid());
+        await act.Should().ThrowAsync<SearchUnavailableException>();
     }
 
     private static ElasticSearchService CreateSut(ElasticsearchClient client)

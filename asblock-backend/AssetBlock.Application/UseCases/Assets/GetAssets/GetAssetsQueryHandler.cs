@@ -4,6 +4,7 @@ using Ardalis.Result;
 using MediatR;
 using AssetBlock.Domain.Core.Constants;
 using AssetBlock.Domain.Core.Dto.Assets;
+using AssetBlock.Domain.Core.Exceptions;
 using Microsoft.Extensions.Logging;
 
 namespace AssetBlock.Application.UseCases.Assets.GetAssets;
@@ -40,7 +41,17 @@ internal sealed class GetAssetsQueryHandler(
             }
         }
 
-        var paged = await searchService.SearchAssets(normalizedRequest, cancellationToken);
+        Domain.Core.Dto.Paging.PagedResult<AssetDocument> paged;
+        try
+        {
+            paged = await searchService.SearchAssets(normalizedRequest, cancellationToken);
+        }
+        catch (SearchUnavailableException ex)
+        {
+            logger.LogError(ex, "Catalog search unavailable");
+            return Result.Error(ErrorCodes.ERR_SEARCH_UNAVAILABLE);
+        }
+
         var items = paged.Items
             .Select(a => new AssetListItem(
                 a.Id,

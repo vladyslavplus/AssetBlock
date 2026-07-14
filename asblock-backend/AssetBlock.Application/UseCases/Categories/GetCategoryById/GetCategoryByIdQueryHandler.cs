@@ -19,6 +19,10 @@ internal sealed class GetCategoryByIdQueryHandler(
             var category = await categoryStore.GetById(request.Id, cancellationToken);
             return category is null ? Result.NotFound(ErrorCodes.ERR_CATEGORY_NOT_FOUND) : Result.Success(new CategoryResponse(category.Id, category.Name, category.Slug, category.Description));
         }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
         catch (Exception ex)
         {
             logger.LogError(ex, "Failed to get category {CategoryId}", request.Id);

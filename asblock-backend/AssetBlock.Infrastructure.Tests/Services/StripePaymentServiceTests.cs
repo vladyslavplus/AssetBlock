@@ -28,7 +28,6 @@ public sealed class StripePaymentServiceTests
         var sut = new StripePaymentService(
             opts,
             Substitute.For<IAssetStore>(),
-            Substitute.For<IPurchaseStore>(),
             resilience,
             NullLogger<StripePaymentService>.Instance);
 
@@ -69,7 +68,6 @@ public sealed class StripePaymentServiceTests
         var sut = new StripePaymentService(
             opts,
             assetStore,
-            Substitute.For<IPurchaseStore>(),
             resilience,
             NullLogger<StripePaymentService>.Instance);
 
@@ -80,18 +78,18 @@ public sealed class StripePaymentServiceTests
     }
 
     [Fact]
-    public async Task HandleCheckoutCompleted_throws_whenWebhookSecretMissing()
+    public async Task VerifyCheckoutCompleted_throws_whenWebhookSecretMissing()
     {
         var sut = CreateSut(webhookSecret: "");
-        var act = async () => await sut.HandleCheckoutCompleted("{}", "sig");
+        var act = async () => await sut.VerifyCheckoutCompleted("{}", "sig");
         await act.Should().ThrowAsync<InvalidOperationException>();
     }
 
     [Fact]
-    public async Task HandleCheckoutCompleted_throwsInvalidSignature_whenPayloadInvalid()
+    public async Task VerifyCheckoutCompleted_throwsInvalidSignature_whenPayloadInvalid()
     {
         var sut = CreateSut(webhookSecret: "stripe_test_webhook_secret_not_real");
-        var act = async () => await sut.HandleCheckoutCompleted("not-json", "bad_sig");
+        var act = async () => await sut.VerifyCheckoutCompleted("not-json", "bad_sig");
         await act.Should().ThrowAsync<StripeWebhookInvalidSignatureException>();
     }
 
@@ -109,7 +107,6 @@ public sealed class StripePaymentServiceTests
         return new StripePaymentService(
             opts,
             Substitute.For<IAssetStore>(),
-            Substitute.For<IPurchaseStore>(),
             resilience,
             NullLogger<StripePaymentService>.Instance);
     }

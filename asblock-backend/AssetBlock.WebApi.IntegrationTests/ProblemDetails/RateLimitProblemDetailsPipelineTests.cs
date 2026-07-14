@@ -32,7 +32,7 @@ public sealed class RateLimitProblemDetailsPipelineTests
                     context.HttpContext,
                     StatusCodes.Status429TooManyRequests,
                     ErrorCodes.ERR_RATE_LIMITED);
-                await AssetBlockProblemDetails.WriteAsync(context.HttpContext, problem);
+                await AssetBlockProblemDetails.Write(context.HttpContext, problem);
             };
             opts.AddFixedWindowLimiter("one", options =>
             {

@@ -1,7 +1,11 @@
+using System.Text.Json;
 using Ardalis.Result;
 using AssetBlock.Application.Common;
 using AssetBlock.Domain.Abstractions.Services;
 using AssetBlock.Domain.Core.Constants;
+using AssetBlock.Domain.Core.Dto.Notifications;
+using AssetBlock.Domain.Core.Dto.Outbox;
+using AssetBlock.Domain.Core.Enums;
 using MediatR;
 using Microsoft.Extensions.Logging;
 
@@ -11,10 +15,13 @@ internal sealed class CreateReviewCommandHandler(
     IReviewStore reviewStore,
     IPurchaseStore purchaseStore,
     IAssetStore assetStore,
+    IUnitOfWork unitOfWork,
+    IOutboxStore outboxStore,
     ICacheService cache,
-    IRealtimeNotificationPublisher realtimeNotifications,
     ILogger<CreateReviewCommandHandler> logger) : IRequestHandler<CreateReviewCommand, Result>
 {
+    private static readonly JsonSerializerOptions _json = new() { PropertyNamingPolicy = JsonNamingPolicy.CamelCase };
+
     public async Task<Result> Handle(CreateReviewCommand request, CancellationToken cancellationToken)
     {
         var asset = await assetStore.GetById(request.AssetId, cancellationToken);
@@ -51,17 +58,43 @@ internal sealed class CreateReviewCommandHandler(
 
         try
         {
-            await reviewStore.Create(request.AssetId, request.UserId, request.Rating, request.Comment, cancellationToken);
-            await cache.RemoveByPrefix(CacheKeys.ReviewsListAssetPrefix(request.AssetId), cancellationToken);
-            await realtimeNotifications.NotifyReviewReceived(
-                asset.AuthorId,
-                asset.Id,
-                asset.Title,
-                request.UserId,
-                request.Rating,
-                cancellationToken);
+            await unitOfWork.ExecuteInTransaction(async ct =>
+            {
+                await reviewStore.Create(request.AssetId, request.UserId, request.Rating, request.Comment, ct);
+
+                var metadata = JsonSerializer.Serialize(
+                    new ReviewReceivedMessage(asset.Id, asset.Title, request.UserId, request.Rating),
+                    _json);
+
+                await outboxStore.Enqueue(
+                    OutboxMessageTypes.NOTIFICATION_DISPATCH,
+                    new NotificationDispatchPayload(
+                        asset.AuthorId,
+                        NotificationKind.REVIEW_RECEIVED,
+                        NotificationHubMethods.REVIEW_RECEIVED,
+                        metadata),
+                    ct);
+            }, cancellationToken);
+
+            try
+            {
+                await cache.RemoveByPrefix(CacheKeys.ReviewsListAssetPrefix(request.AssetId), cancellationToken);
+            }
+            catch (OperationCanceledException)
+            {
+                throw;
+            }
+            catch (Exception ex)
+            {
+                logger.LogWarning(ex, "Cache invalidation failed after create review for asset {AssetId}", request.AssetId);
+            }
+
             logger.LogInformation("CreateReview succeeded: user {UserId} reviewed asset {AssetId}", request.UserId, request.AssetId);
             return Result.Success();
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
         }
         catch (Exception ex)
         {

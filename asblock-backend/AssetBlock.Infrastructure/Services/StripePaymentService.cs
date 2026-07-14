@@ -14,7 +14,6 @@ namespace AssetBlock.Infrastructure.Services;
 internal sealed class StripePaymentService(
     IOptions<StripeOptions> options,
     IAssetStore assetStore,
-    IPurchaseStore purchaseStore,
     ResiliencePipelineProvider<string> resilience,
     ILogger<StripePaymentService> logger) : IPaymentService
 {
@@ -86,7 +85,7 @@ internal sealed class StripePaymentService(
         return productData;
     }
 
-    public async Task<(Guid UserId, Guid AssetId)?> HandleCheckoutCompleted(string payload, string signature, CancellationToken cancellationToken = default)
+    public Task<StripeCheckoutCompleted?> VerifyCheckoutCompleted(string payload, string signature, CancellationToken cancellationToken = default)
     {
         var webhookSecret = options.Value.WebhookSecret;
         if (string.IsNullOrEmpty(webhookSecret))
@@ -107,18 +106,18 @@ internal sealed class StripePaymentService(
 
         if (stripeEvent.Type != StripeConstants.Events.CHECKOUT_SESSION_COMPLETED)
         {
-            return null;
+            return Task.FromResult<StripeCheckoutCompleted?>(null);
         }
 
         var session = stripeEvent.Data.Object as Session;
         if (session?.Metadata is null || session.Metadata.Count == 0)
         {
-            return null;
+            return Task.FromResult<StripeCheckoutCompleted?>(null);
         }
 
         if (session.PaymentStatus != StripeConstants.PAYMENT_STATUS_PAID)
         {
-            return null;
+            return Task.FromResult<StripeCheckoutCompleted?>(null);
         }
 
         if (!session.Metadata.TryGetValue(StripeConstants.MetadataKeys.USER_ID, out var userIdStr) ||
@@ -126,24 +125,9 @@ internal sealed class StripePaymentService(
             !Guid.TryParse(userIdStr, out var userId) ||
             !Guid.TryParse(assetIdStr, out var assetId))
         {
-            return null;
+            return Task.FromResult<StripeCheckoutCompleted?>(null);
         }
 
-        var existing = await purchaseStore.GetByStripePaymentId(session.Id, cancellationToken);
-        if (existing is not null)
-        {
-            return (userId, assetId);
-        }
-
-        var purchase = new Purchase
-        {
-            Id = Guid.NewGuid(),
-            UserId = userId,
-            AssetId = assetId,
-            StripePaymentId = session.Id,
-            PurchasedAt = DateTimeOffset.UtcNow
-        };
-        await purchaseStore.Add(purchase, cancellationToken);
-        return (userId, assetId);
+        return Task.FromResult<StripeCheckoutCompleted?>(new StripeCheckoutCompleted(userId, assetId, session.Id));
     }
 }

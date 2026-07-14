@@ -22,7 +22,7 @@ internal static class ExceptionHandlerExtensions
                         .GroupBy(e => e.PropertyName)
                         .ToDictionary(g => g.Key, g => g.Select(e => e.ErrorMessage).ToArray());
                     var problem = AssetBlockProblemDetails.CreateValidation(context, errors);
-                    await AssetBlockProblemDetails.WriteAsync(context, problem);
+                    await AssetBlockProblemDetails.Write(context, problem);
                     return;
                 }
 
@@ -30,7 +30,7 @@ internal static class ExceptionHandlerExtensions
                     context,
                     StatusCodes.Status500InternalServerError,
                     ErrorCodes.ERR_INTERNAL);
-                await AssetBlockProblemDetails.WriteAsync(context, internalProblem);
+                await AssetBlockProblemDetails.Write(context, internalProblem);
             });
         });
         return app;

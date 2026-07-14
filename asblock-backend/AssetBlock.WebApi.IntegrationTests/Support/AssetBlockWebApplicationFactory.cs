@@ -1,5 +1,9 @@
+using AssetBlock.Domain.Abstractions.Services;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.AspNetCore.TestHost;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 
 namespace AssetBlock.WebApi.IntegrationTests.Support;
 
@@ -38,5 +42,11 @@ public sealed class AssetBlockWebApplicationFactory(string connectionString) : W
         builder.UseSetting("Stripe:DefaultCancelUrl", "http://localhost/cancel");
         builder.UseSetting("Elasticsearch:Url", "http://127.0.0.1:9200");
         builder.UseSetting("Elasticsearch:DefaultIndex", "assets-integration");
+
+        builder.ConfigureTestServices(services =>
+        {
+            services.RemoveAll<IAssetSearchService>();
+            services.AddSingleton<IAssetSearchService, EmptyAssetSearchService>();
+        });
     }
 }

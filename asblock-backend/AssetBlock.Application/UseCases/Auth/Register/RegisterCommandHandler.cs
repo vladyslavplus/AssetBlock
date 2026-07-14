@@ -48,12 +48,20 @@ internal sealed class RegisterCommandHandler(
             logger.LogInformation("Register succeeded: UserId={UserId}", user.Id);
             return Result.Success(tokens);
         }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
         catch (Exception ex)
         {
             logger.LogWarning(ex, "StoreRefreshToken failed after user create; rolling back user {UserId}", user.Id);
             try
             {
                 await userStore.Delete(user.Id, cancellationToken);
+            }
+            catch (OperationCanceledException)
+            {
+                throw;
             }
             catch (Exception deleteEx)
             {

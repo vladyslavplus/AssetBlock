@@ -14,69 +14,127 @@ public class HandleStripeWebhookCommandHandlerTests
 {
     private readonly IPaymentService _paymentServiceMock;
     private readonly IAssetStore _assetStoreMock;
-    private readonly IRealtimeNotificationPublisher _notificationsMock;
+    private readonly IPurchaseStore _purchaseStoreMock;
+    private readonly IUnitOfWork _unitOfWorkMock;
+    private readonly IOutboxStore _outboxStoreMock;
     private readonly HandleStripeWebhookCommandHandler _handler;
 
     public HandleStripeWebhookCommandHandlerTests()
     {
         _paymentServiceMock = Substitute.For<IPaymentService>();
         _assetStoreMock = Substitute.For<IAssetStore>();
-        _notificationsMock = Substitute.For<IRealtimeNotificationPublisher>();
+        _purchaseStoreMock = Substitute.For<IPurchaseStore>();
+        _unitOfWorkMock = Substitute.For<IUnitOfWork>();
+        _outboxStoreMock = Substitute.For<IOutboxStore>();
+
+        _unitOfWorkMock.ExecuteInTransaction(Arg.Any<Func<CancellationToken, Task>>(), Arg.Any<CancellationToken>())
+            .Returns(ci => ci.Arg<Func<CancellationToken, Task>>()(CancellationToken.None));
+
         _handler = new HandleStripeWebhookCommandHandler(
             _paymentServiceMock,
             _assetStoreMock,
-            _notificationsMock,
+            _purchaseStoreMock,
+            _unitOfWorkMock,
+            _outboxStoreMock,
             NullLogger<HandleStripeWebhookCommandHandler>.Instance);
     }
 
     [Fact]
     public async Task Handle_WhenPaymentServiceReturnsNull_ShouldReturnSuccessWithNullPayload()
     {
-        // Arrange — event is not a checkout.completed (e.g., another event type)
         var command = new HandleStripeWebhookCommand("payload", "sig");
-        _paymentServiceMock.HandleCheckoutCompleted(command.Payload, command.Signature, Arg.Any<CancellationToken>())
-            .Returns((( Guid, Guid)?)null);
+        _paymentServiceMock.VerifyCheckoutCompleted(command.Payload, command.Signature, Arg.Any<CancellationToken>())
+            .Returns((StripeCheckoutCompleted?)null);
 
-        // Act
         var result = await _handler.Handle(command, CancellationToken.None);
 
-        // Assert
         result.IsSuccess.Should().BeTrue();
         result.Value.Should().BeNull();
+        await _purchaseStoreMock.DidNotReceiveWithAnyArgs().Add(Arg.Any<Purchase>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]
-    public async Task Handle_WhenCheckoutCompleted_ShouldReturnCorrectPurchasePayload()
+    public async Task Handle_WhenCheckoutCompleted_ShouldCreatePurchaseAndReturnPayload()
     {
-        // Arrange
         var userId = Guid.NewGuid();
         var assetId = Guid.NewGuid();
+        var sessionId = "cs_test_session";
         var command = new HandleStripeWebhookCommand("payload", "sig");
 
-        _paymentServiceMock.HandleCheckoutCompleted(command.Payload, command.Signature, Arg.Any<CancellationToken>())
-            .Returns(((Guid, Guid)?)(userId, assetId));
+        _paymentServiceMock.VerifyCheckoutCompleted(command.Payload, command.Signature, Arg.Any<CancellationToken>())
+            .Returns(new StripeCheckoutCompleted(userId, assetId, sessionId));
+        _purchaseStoreMock.GetByStripePaymentId(sessionId, Arg.Any<CancellationToken>()).Returns((Purchase?)null);
+        _assetStoreMock.GetById(assetId, Arg.Any<CancellationToken>()).Returns(new Asset
+        {
+            Id = assetId,
+            AuthorId = Guid.NewGuid(),
+            CategoryId = Guid.NewGuid(),
+            Title = "Pack",
+            StorageKey = "k",
+            FileName = "f.zip"
+        });
 
-        // Act
         var result = await _handler.Handle(command, CancellationToken.None);
 
-        // Assert
         result.IsSuccess.Should().BeTrue();
         result.Value.Should().NotBeNull();
         result.Value!.UserId.Should().Be(userId);
         result.Value.AssetId.Should().Be(assetId);
+
+        await _purchaseStoreMock.Received(1).Add(
+            Arg.Is<Purchase>(p =>
+                p.UserId == userId &&
+                p.AssetId == assetId &&
+                p.StripePaymentId == sessionId),
+            Arg.Any<CancellationToken>());
+        await _outboxStoreMock.Received().Enqueue(
+            OutboxMessageTypes.PURCHASE_COMPLETED,
+            Arg.Any<object>(),
+            Arg.Any<CancellationToken>());
     }
 
     [Fact]
-    public async Task Handle_WhenCheckoutCompletedAndAssetFound_ShouldNotifyBuyerAndAuthor()
+    public async Task Handle_WhenExistingPurchaseBySession_ShouldReturnPayloadWithoutCreating()
     {
-        // Arrange
+        var userId = Guid.NewGuid();
+        var assetId = Guid.NewGuid();
+        var sessionId = "cs_existing";
+        var command = new HandleStripeWebhookCommand("payload", "sig");
+
+        _paymentServiceMock.VerifyCheckoutCompleted(command.Payload, command.Signature, Arg.Any<CancellationToken>())
+            .Returns(new StripeCheckoutCompleted(userId, assetId, sessionId));
+        _purchaseStoreMock.GetByStripePaymentId(sessionId, Arg.Any<CancellationToken>()).Returns(new Purchase
+        {
+            Id = Guid.NewGuid(),
+            UserId = userId,
+            AssetId = assetId,
+            StripePaymentId = sessionId,
+            PurchasedAt = DateTimeOffset.UtcNow
+        });
+
+        var result = await _handler.Handle(command, CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.Should().NotBeNull();
+        result.Value!.UserId.Should().Be(userId);
+        result.Value.AssetId.Should().Be(assetId);
+        await _purchaseStoreMock.DidNotReceiveWithAnyArgs().Add(Arg.Any<Purchase>(), Arg.Any<CancellationToken>());
+        await _unitOfWorkMock.DidNotReceiveWithAnyArgs()
+            .ExecuteInTransaction(Arg.Any<Func<CancellationToken, Task>>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Handle_WhenCheckoutCompletedAndAssetFound_ShouldEnqueueNotificationsForBuyerAndAuthor()
+    {
         var buyerId = Guid.NewGuid();
         var authorId = Guid.NewGuid();
         var assetId = Guid.NewGuid();
+        var sessionId = "cs_notify";
         var command = new HandleStripeWebhookCommand("payload", "sig");
-        _paymentServiceMock.HandleCheckoutCompleted(command.Payload, command.Signature, Arg.Any<CancellationToken>())
-            .Returns(((Guid, Guid)?)(buyerId, assetId));
-        var asset = new Asset
+        _paymentServiceMock.VerifyCheckoutCompleted(command.Payload, command.Signature, Arg.Any<CancellationToken>())
+            .Returns(new StripeCheckoutCompleted(buyerId, assetId, sessionId));
+        _purchaseStoreMock.GetByStripePaymentId(sessionId, Arg.Any<CancellationToken>()).Returns((Purchase?)null);
+        _assetStoreMock.GetById(assetId, Arg.Any<CancellationToken>()).Returns(new Asset
         {
             Id = assetId,
             AuthorId = authorId,
@@ -84,28 +142,33 @@ public class HandleStripeWebhookCommandHandlerTests
             Title = "Pack",
             StorageKey = "k",
             FileName = "f.zip"
-        };
-        _assetStoreMock.GetById(assetId, Arg.Any<CancellationToken>()).Returns(asset);
+        });
 
-        // Act
         var result = await _handler.Handle(command, CancellationToken.None);
 
-        // Assert
         result.IsSuccess.Should().BeTrue();
-        await _notificationsMock.Received(1).NotifyPurchaseCompleted(buyerId, assetId, "Pack", Arg.Any<CancellationToken>());
-        await _notificationsMock.Received(1).NotifyDownloadReady(buyerId, assetId, "Pack", Arg.Any<CancellationToken>());
-        await _notificationsMock.Received(1).NotifyAssetSold(authorId, assetId, "Pack", buyerId, Arg.Any<CancellationToken>());
+        await _outboxStoreMock.Received(1).Enqueue(
+            OutboxMessageTypes.PURCHASE_COMPLETED,
+            Arg.Any<object>(),
+            Arg.Any<CancellationToken>());
+        // purchase completed + download ready for buyer + asset sold for author
+        await _outboxStoreMock.Received(3).Enqueue(
+            OutboxMessageTypes.NOTIFICATION_DISPATCH,
+            Arg.Any<object>(),
+            Arg.Any<CancellationToken>());
     }
 
     [Fact]
-    public async Task Handle_WhenBuyerIsAuthor_ShouldNotSendAssetSold()
+    public async Task Handle_WhenBuyerIsAuthor_ShouldNotEnqueueAssetSold()
     {
         var userId = Guid.NewGuid();
         var assetId = Guid.NewGuid();
+        var sessionId = "cs_self";
         var command = new HandleStripeWebhookCommand("payload", "sig");
-        _paymentServiceMock.HandleCheckoutCompleted(command.Payload, command.Signature, Arg.Any<CancellationToken>())
-            .Returns(((Guid, Guid)?)(userId, assetId));
-        var asset = new Asset
+        _paymentServiceMock.VerifyCheckoutCompleted(command.Payload, command.Signature, Arg.Any<CancellationToken>())
+            .Returns(new StripeCheckoutCompleted(userId, assetId, sessionId));
+        _purchaseStoreMock.GetByStripePaymentId(sessionId, Arg.Any<CancellationToken>()).Returns((Purchase?)null);
+        _assetStoreMock.GetById(assetId, Arg.Any<CancellationToken>()).Returns(new Asset
         {
             Id = assetId,
             AuthorId = userId,
@@ -113,40 +176,73 @@ public class HandleStripeWebhookCommandHandlerTests
             Title = "Own",
             StorageKey = "k",
             FileName = "f.zip"
-        };
-        _assetStoreMock.GetById(assetId, Arg.Any<CancellationToken>()).Returns(asset);
+        });
 
         var result = await _handler.Handle(command, CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
-        await _notificationsMock.Received(1).NotifyPurchaseCompleted(userId, assetId, "Own", Arg.Any<CancellationToken>());
-        await _notificationsMock.Received(1).NotifyDownloadReady(userId, assetId, "Own", Arg.Any<CancellationToken>());
-        await _notificationsMock.DidNotReceive().NotifyAssetSold(Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<Guid>(), Arg.Any<CancellationToken>());
+        // purchase completed + download ready only (no asset sold)
+        await _outboxStoreMock.Received(2).Enqueue(
+            OutboxMessageTypes.NOTIFICATION_DISPATCH,
+            Arg.Any<object>(),
+            Arg.Any<CancellationToken>());
     }
 
     [Fact]
-    public async Task Handle_WhenCheckoutCompletedButAssetMissing_ShouldNotNotify()
+    public async Task Handle_WhenCheckoutCompletedButAssetMissing_ShouldNotCreatePurchase()
     {
         var userId = Guid.NewGuid();
         var assetId = Guid.NewGuid();
+        var sessionId = "cs_missing";
         var command = new HandleStripeWebhookCommand("payload", "sig");
-        _paymentServiceMock.HandleCheckoutCompleted(command.Payload, command.Signature, Arg.Any<CancellationToken>())
-            .Returns(((Guid, Guid)?)(userId, assetId));
+        _paymentServiceMock.VerifyCheckoutCompleted(command.Payload, command.Signature, Arg.Any<CancellationToken>())
+            .Returns(new StripeCheckoutCompleted(userId, assetId, sessionId));
+        _purchaseStoreMock.GetByStripePaymentId(sessionId, Arg.Any<CancellationToken>()).Returns((Purchase?)null);
         _assetStoreMock.GetById(assetId, Arg.Any<CancellationToken>()).Returns((Asset?)null);
 
         var result = await _handler.Handle(command, CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
-        await _notificationsMock.DidNotReceive().NotifyPurchaseCompleted(Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<CancellationToken>());
-        await _notificationsMock.DidNotReceive().NotifyDownloadReady(Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<CancellationToken>());
-        await _notificationsMock.DidNotReceive().NotifyAssetSold(Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<Guid>(), Arg.Any<CancellationToken>());
+        result.Value.Should().BeNull();
+        await _purchaseStoreMock.DidNotReceiveWithAnyArgs().Add(Arg.Any<Purchase>(), Arg.Any<CancellationToken>());
+        await _outboxStoreMock.DidNotReceiveWithAnyArgs().Enqueue(Arg.Any<string>(), Arg.Any<object>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Handle_WhenDuplicatePurchase_ShouldReturnSuccessPayload()
+    {
+        var userId = Guid.NewGuid();
+        var assetId = Guid.NewGuid();
+        var sessionId = "cs_dup";
+        var command = new HandleStripeWebhookCommand("payload", "sig");
+        _paymentServiceMock.VerifyCheckoutCompleted(command.Payload, command.Signature, Arg.Any<CancellationToken>())
+            .Returns(new StripeCheckoutCompleted(userId, assetId, sessionId));
+        _purchaseStoreMock.GetByStripePaymentId(sessionId, Arg.Any<CancellationToken>()).Returns((Purchase?)null);
+        _assetStoreMock.GetById(assetId, Arg.Any<CancellationToken>()).Returns(new Asset
+        {
+            Id = assetId,
+            AuthorId = Guid.NewGuid(),
+            CategoryId = Guid.NewGuid(),
+            Title = "Pack",
+            StorageKey = "k",
+            FileName = "f.zip"
+        });
+        _purchaseStoreMock.Add(Arg.Any<Purchase>(), Arg.Any<CancellationToken>())
+            .ThrowsAsync(new DuplicatePurchaseException());
+
+        var result = await _handler.Handle(command, CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.Should().NotBeNull();
+        result.Value!.UserId.Should().Be(userId);
+        result.Value.AssetId.Should().Be(assetId);
     }
 
     [Fact]
     public async Task Handle_WhenInvalidSignature_ShouldReturnInvalid()
     {
         var command = new HandleStripeWebhookCommand("bad-payload", "bad-sig");
-        _paymentServiceMock.HandleCheckoutCompleted(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
+        _paymentServiceMock.VerifyCheckoutCompleted(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
             .ThrowsAsync(new StripeWebhookInvalidSignatureException());
 
         var result = await _handler.Handle(command, CancellationToken.None);
@@ -160,7 +256,7 @@ public class HandleStripeWebhookCommandHandlerTests
     public async Task Handle_WhenPaymentServiceThrows_ShouldPropagateException()
     {
         var command = new HandleStripeWebhookCommand("payload", "sig");
-        _paymentServiceMock.HandleCheckoutCompleted(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
+        _paymentServiceMock.VerifyCheckoutCompleted(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
             .ThrowsAsync(new InvalidOperationException("Stripe API down"));
 
         var act = () => _handler.Handle(command, CancellationToken.None);
@@ -171,15 +267,13 @@ public class HandleStripeWebhookCommandHandlerTests
     [Fact]
     public async Task Handle_WhenCancelled_ShouldPropagateCancellation()
     {
-        // Arrange
         using var cts = new CancellationTokenSource();
         var command = new HandleStripeWebhookCommand("payload", "sig");
-        _paymentServiceMock.HandleCheckoutCompleted(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
+        _paymentServiceMock.VerifyCheckoutCompleted(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
             .ThrowsAsync(new OperationCanceledException());
 
         await cts.CancelAsync();
 
-        // Act & Assert
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
             _handler.Handle(command, cts.Token));
     }

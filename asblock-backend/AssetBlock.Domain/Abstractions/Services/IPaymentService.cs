@@ -1,7 +1,13 @@
 namespace AssetBlock.Domain.Abstractions.Services;
 
+/// <summary>Verified Stripe checkout.session.completed data (no DB writes).</summary>
+public sealed record StripeCheckoutCompleted(
+    Guid UserId,
+    Guid AssetId,
+    string StripeSessionId);
+
 /// <summary>
-/// Creates checkout sessions and handles payment completion (e.g., Stripe).
+/// Creates checkout sessions and verifies payment webhooks (e.g., Stripe).
 /// </summary>
 public interface IPaymentService
 {
@@ -9,9 +15,9 @@ public interface IPaymentService
     Task<string> CreateCheckoutSession(Guid assetId, Guid userId, CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Handles webhook payload (e.g., Stripe checkout.session.completed).
-    /// Returns (UserId, AssetId) if payment succeeded and purchase was recorded; null for ignored/idempotent events.
+    /// Verifies webhook signature and extracts paid checkout session metadata.
+    /// Returns null for ignored events. Does not create purchases.
     /// Throws <see cref="AssetBlock.Domain.Core.Exceptions.StripeWebhookInvalidSignatureException"/> on signature failure.
     /// </summary>
-    Task<(Guid UserId, Guid AssetId)?> HandleCheckoutCompleted(string payload, string signature, CancellationToken cancellationToken = default);
+    Task<StripeCheckoutCompleted?> VerifyCheckoutCompleted(string payload, string signature, CancellationToken cancellationToken = default);
 }

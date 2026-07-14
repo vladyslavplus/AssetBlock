@@ -1,3 +1,5 @@
+using AssetBlock.Domain.Core.Enums;
+
 namespace AssetBlock.Domain.Abstractions.Services;
 
 /// <summary>
@@ -13,4 +15,15 @@ public interface IRealtimeNotificationPublisher
     Task NotifyAssetSold(Guid authorUserId, Guid assetId, string assetTitle, Guid buyerUserId, CancellationToken cancellationToken = default);
 
     Task NotifyReviewReceived(Guid authorUserId, Guid assetId, string assetTitle, Guid reviewerUserId, int rating, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Idempotently persists a notification keyed by outbox message id, then attempts SignalR delivery.
+    /// </summary>
+    Task DeliverPersistedNotification(
+        Guid sourceOutboxMessageId,
+        Guid recipientUserId,
+        NotificationKind kind,
+        string hubMethod,
+        string metadataJson,
+        CancellationToken cancellationToken = default);
 }

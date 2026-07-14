@@ -1,7 +1,7 @@
 using Ardalis.Result;
-using AssetBlock.Application.UseCases.Assets.Events;
 using AssetBlock.Domain.Abstractions.Services;
 using AssetBlock.Domain.Core.Constants;
+using AssetBlock.Domain.Core.Dto.Outbox;
 using MediatR;
 using Microsoft.Extensions.Logging;
 
@@ -10,7 +10,8 @@ namespace AssetBlock.Application.UseCases.Assets.RemoveAssetTag;
 internal sealed class RemoveAssetTagCommandHandler(
     IAssetStore assetStore,
     ITagStore tagStore,
-    IPublisher publisher,
+    IUnitOfWork unitOfWork,
+    IOutboxStore outboxStore,
     ICacheService cache,
     ILogger<RemoveAssetTagCommandHandler> logger) : IRequestHandler<RemoveAssetTagCommand, Result>
 {
@@ -47,14 +48,34 @@ internal sealed class RemoveAssetTagCommandHandler(
 
         try
         {
-            await assetStore.RemoveTag(asset.Id, tag.Id, cancellationToken);
+            await unitOfWork.ExecuteInTransaction(async ct =>
+            {
+                await assetStore.RemoveTag(asset.Id, tag.Id, ct);
+                await outboxStore.Enqueue(
+                    OutboxMessageTypes.ASSET_INDEX_UPSERT,
+                    new AssetIndexUpsertPayload(asset.Id),
+                    ct);
+            }, cancellationToken);
 
-            await publisher.Publish(new AssetCreatedEvent(asset.Id), cancellationToken);
-
-            await cache.RemoveByPrefix(CacheKeys.ASSETS_LIST_PREFIX, cancellationToken);
+            try
+            {
+                await cache.RemoveByPrefix(CacheKeys.ASSETS_LIST_PREFIX, cancellationToken);
+            }
+            catch (OperationCanceledException)
+            {
+                throw;
+            }
+            catch (Exception ex)
+            {
+                logger.LogWarning(ex, "Cache invalidation failed after remove tag {AssetId}", request.AssetId);
+            }
 
             logger.LogInformation("Removed tag {TagId} from asset: {AssetId}", tag.Id, asset.Id);
             return Result.Success();
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
         }
         catch (Exception ex)
         {

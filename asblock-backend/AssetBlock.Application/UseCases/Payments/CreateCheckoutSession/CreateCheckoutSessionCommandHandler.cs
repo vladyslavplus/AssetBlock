@@ -47,6 +47,10 @@ internal sealed class CreateCheckoutSessionCommandHandler(
                 cancellationToken);
             return Result.Success(new CreateCheckoutSessionResponse(sessionUrl));
         }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
         catch (Exception ex)
         {
             logger.LogError(ex, "Failed to create checkout session for asset {AssetId}", request.AssetId);

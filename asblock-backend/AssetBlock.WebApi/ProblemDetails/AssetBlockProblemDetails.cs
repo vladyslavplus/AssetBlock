@@ -57,11 +57,15 @@ internal static class AssetBlockProblemDetails
         };
     }
 
-    public static async Task WriteAsync(HttpContext httpContext, Microsoft.AspNetCore.Mvc.ProblemDetails problem)
+    public static async Task Write(HttpContext httpContext, Microsoft.AspNetCore.Mvc.ProblemDetails problem)
     {
         httpContext.Response.StatusCode = problem.Status ?? StatusCodes.Status500InternalServerError;
         httpContext.Response.ContentType = CONTENT_TYPE;
-        await httpContext.Response.WriteAsJsonAsync(problem, options: null, contentType: CONTENT_TYPE);
+        // Cast to object so System.Text.Json uses the runtime type (ValidationProblemDetails.Errors).
+        await httpContext.Response.WriteAsJsonAsync(
+            (object)problem,
+            options: null,
+            contentType: CONTENT_TYPE);
     }
 
     private static string TitleForStatus(int status) => status switch

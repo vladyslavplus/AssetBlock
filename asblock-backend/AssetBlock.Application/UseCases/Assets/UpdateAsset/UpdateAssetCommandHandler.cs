@@ -1,7 +1,7 @@
 using Ardalis.Result;
-using AssetBlock.Application.UseCases.Assets.Events;
 using AssetBlock.Domain.Abstractions.Services;
 using AssetBlock.Domain.Core.Constants;
+using AssetBlock.Domain.Core.Dto.Outbox;
 using MediatR;
 using Microsoft.Extensions.Logging;
 
@@ -10,7 +10,8 @@ namespace AssetBlock.Application.UseCases.Assets.UpdateAsset;
 internal sealed class UpdateAssetCommandHandler(
     IAssetStore assetStore,
     ICategoryStore categoryStore,
-    IPublisher publisher,
+    IUnitOfWork unitOfWork,
+    IOutboxStore outboxStore,
     ICacheService cache,
     ILogger<UpdateAssetCommandHandler> logger) : IRequestHandler<UpdateAssetCommand, Result>
 {
@@ -43,24 +44,46 @@ internal sealed class UpdateAssetCommandHandler(
                 }
             }
 
-            var updated = await assetStore.Update(
-                request.AssetId,
-                request.Title,
-                request.Description,
-                request.Price,
-                request.CategoryId,
-                cancellationToken);
-
-            if (!updated)
+            await unitOfWork.ExecuteInTransaction(async ct =>
             {
-                return Result.NotFound(ErrorCodes.ERR_ASSET_NOT_FOUND);
-            }
+                var updated = await assetStore.Update(
+                    request.AssetId,
+                    request.Title,
+                    request.Description,
+                    request.Price,
+                    request.CategoryId,
+                    ct);
 
-            await publisher.Publish(new AssetCreatedEvent(request.AssetId), cancellationToken);
-            await cache.RemoveByPrefix(CacheKeys.ASSETS_LIST_PREFIX, cancellationToken);
+                if (!updated)
+                {
+                    throw new InvalidOperationException("Asset update returned false after load.");
+                }
+
+                await outboxStore.Enqueue(
+                    OutboxMessageTypes.ASSET_INDEX_UPSERT,
+                    new AssetIndexUpsertPayload(request.AssetId),
+                    ct);
+            }, cancellationToken);
+
+            try
+            {
+                await cache.RemoveByPrefix(CacheKeys.ASSETS_LIST_PREFIX, cancellationToken);
+            }
+            catch (OperationCanceledException)
+            {
+                throw;
+            }
+            catch (Exception ex)
+            {
+                logger.LogWarning(ex, "Cache invalidation failed after asset update {AssetId}", request.AssetId);
+            }
 
             logger.LogInformation("Updated asset: {AssetId}", request.AssetId);
             return Result.Success();
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
         }
         catch (Exception ex)
         {

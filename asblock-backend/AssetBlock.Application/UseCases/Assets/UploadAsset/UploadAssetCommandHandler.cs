@@ -3,7 +3,7 @@ using AssetBlock.Domain.Abstractions.Services;
 using AssetBlock.Domain.Core.Constants;
 using Ardalis.Result;
 using AssetBlock.Domain.Core.Entities;
-using AssetBlock.Application.UseCases.Assets.Events;
+using AssetBlock.Domain.Core.Dto.Outbox;
 using MediatR;
 using Microsoft.Extensions.Logging;
 
@@ -15,8 +15,9 @@ internal sealed class UploadAssetCommandHandler(
     ITagStore tagStore,
     IAssetStorageService assetStorageService,
     IEncryptionService encryptionService,
+    IUnitOfWork unitOfWork,
+    IOutboxStore outboxStore,
     ICacheService cache,
-    IPublisher publisher,
     ILogger<UploadAssetCommandHandler> logger) : IRequestHandler<UploadAssetCommand, Result<Guid>>
 {
     public async Task<Result<Guid>> Handle(UploadAssetCommand request, CancellationToken cancellationToken)
@@ -56,6 +57,10 @@ internal sealed class UploadAssetCommandHandler(
         {
             await encryptionService.Encrypt(request.FileContent, cipherStream, cancellationToken);
         }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
         catch (Exception ex)
         {
             logger.LogError(ex, "Encryption failed for asset {AssetId}", assetId);
@@ -66,6 +71,10 @@ internal sealed class UploadAssetCommandHandler(
         try
         {
             await assetStorageService.Upload(storageKey, cipherStream, cancellationToken);
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
         }
         catch (Exception ex)
         {
@@ -89,33 +98,57 @@ internal sealed class UploadAssetCommandHandler(
         };
         try
         {
-            if (existingTags is { Count: > 0 })
+            await unitOfWork.ExecuteInTransaction(async ct =>
             {
-                await assetStore.AddWithTags(asset, existingTags, cancellationToken);
-            }
-            else
-            {
-                await assetStore.Add(asset, cancellationToken);
-            }
+                if (existingTags is { Count: > 0 })
+                {
+                    await assetStore.AddWithTags(asset, existingTags, ct);
+                }
+                else
+                {
+                    await assetStore.Add(asset, ct);
+                }
+
+                await outboxStore.Enqueue(
+                    OutboxMessageTypes.ASSET_INDEX_UPSERT,
+                    new AssetIndexUpsertPayload(assetId),
+                    ct);
+            }, cancellationToken);
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
         }
         catch (Exception ex)
         {
             logger.LogWarning(ex, "DB add failed for asset {AssetId}; removing orphan from storage", assetId);
-            try { await assetStorageService.Delete(storageKey, cancellationToken); }
-            catch (Exception delEx) { logger.LogWarning(delEx, "Storage delete failed for {Key}", storageKey); }
+            try
+            {
+                await assetStorageService.Delete(storageKey, cancellationToken);
+            }
+            catch (OperationCanceledException)
+            {
+                throw;
+            }
+            catch (Exception delEx)
+            {
+                logger.LogWarning(delEx, "Storage delete failed for {Key}", storageKey);
+            }
 
             throw;
         }
 
-        await cache.RemoveByPrefix(CacheKeys.ASSETS_LIST_PREFIX, cancellationToken);
-
         try
         {
-            await publisher.Publish(new AssetCreatedEvent(assetId), cancellationToken);
+            await cache.RemoveByPrefix(CacheKeys.ASSETS_LIST_PREFIX, cancellationToken);
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, "Failed to publish AssetCreatedEvent for {AssetId}", assetId);
+            logger.LogWarning(ex, "Cache invalidation failed after upload {AssetId}", assetId);
         }
 
         logger.LogInformation("Asset uploaded successfully {AssetId} by {AuthorId}", assetId, request.AuthorId);

@@ -33,6 +33,10 @@ internal sealed class DeleteReviewCommandHandler(
             logger.LogInformation("DeleteReview succeeded: deleted review {ReviewId}", request.Id);
             return Result.Success();
         }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
         catch (Exception ex)
         {
             logger.LogError(ex, "Failed to delete review {ReviewId}", request.Id);

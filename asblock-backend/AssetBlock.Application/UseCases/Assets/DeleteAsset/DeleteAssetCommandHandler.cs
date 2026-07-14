@@ -1,6 +1,7 @@
 using Ardalis.Result;
 using AssetBlock.Domain.Abstractions.Services;
 using AssetBlock.Domain.Core.Constants;
+using AssetBlock.Domain.Core.Dto.Outbox;
 using MediatR;
 using Microsoft.Extensions.Logging;
 
@@ -9,8 +10,8 @@ namespace AssetBlock.Application.UseCases.Assets.DeleteAsset;
 internal sealed class DeleteAssetCommandHandler(
     IAssetStore assetStore,
     IPurchaseStore purchaseStore,
-    IAssetSearchService searchService,
-    IAssetStorageService storageService,
+    IUnitOfWork unitOfWork,
+    IOutboxStore outboxStore,
     ICacheService cache,
     ILogger<DeleteAssetCommandHandler> logger) : IRequestHandler<DeleteAssetCommand, Result>
 {
@@ -29,36 +30,76 @@ internal sealed class DeleteAssetCommandHandler(
 
         if (asset.DeletedAt.HasValue)
         {
-            await cache.RemoveByPrefix(CacheKeys.ASSETS_LIST_PREFIX, cancellationToken);
+            try
+            {
+                await cache.RemoveByPrefix(CacheKeys.ASSETS_LIST_PREFIX, cancellationToken);
+            }
+            catch (OperationCanceledException)
+            {
+                throw;
+            }
+            catch (Exception ex)
+            {
+                logger.LogWarning(ex, "Cache invalidation failed for already-deleted asset {AssetId}", request.Id);
+            }
+
             logger.LogInformation("Delete idempotent: asset already delisted {AssetId}", request.Id);
             return Result.Success();
         }
 
         var hasPurchases = await purchaseStore.HasPurchasesForAsset(request.Id, cancellationToken);
+        var storageKey = asset.StorageKey;
 
         try
         {
-            // Remove from catalog index first so list/search stay consistent.
-            await searchService.DeleteAsset(asset.Id, cancellationToken);
-
-            if (hasPurchases)
+            await unitOfWork.ExecuteInTransaction(async ct =>
             {
-                await assetStore.SoftDelete(asset.Id, DateTimeOffset.UtcNow, cancellationToken);
-                logger.LogInformation("Soft-deleted (delisted) asset {AssetId}: purchases exist; storage object retained.", request.Id);
-            }
-            else
+                if (hasPurchases)
+                {
+                    await assetStore.SoftDelete(asset.Id, DateTimeOffset.UtcNow, ct);
+                }
+                else
+                {
+                    await assetStore.Delete(asset.Id, ct);
+                    await outboxStore.Enqueue(
+                        OutboxMessageTypes.ASSET_BLOB_DELETE,
+                        new AssetBlobDeletePayload(asset.Id, storageKey),
+                        ct);
+                }
+
+                await outboxStore.Enqueue(
+                    OutboxMessageTypes.ASSET_INDEX_DELETE,
+                    new AssetIndexDeletePayload(asset.Id),
+                    ct);
+            }, cancellationToken);
+
+            try
             {
-                await storageService.Delete(asset.StorageKey, cancellationToken);
-                await assetStore.Delete(asset.Id, cancellationToken);
-                logger.LogInformation("Hard-deleted asset {AssetId}", request.Id);
+                await cache.RemoveByPrefix(CacheKeys.ASSETS_LIST_PREFIX, cancellationToken);
+            }
+            catch (OperationCanceledException)
+            {
+                throw;
+            }
+            catch (Exception ex)
+            {
+                logger.LogWarning(ex, "Cache invalidation failed after delete {AssetId}", request.Id);
             }
 
-            await cache.RemoveByPrefix(CacheKeys.ASSETS_LIST_PREFIX, cancellationToken);
+            logger.LogInformation(
+                hasPurchases
+                    ? "Soft-deleted (delisted) asset {AssetId}: purchases exist; blob retained."
+                    : "Hard-deleted asset {AssetId}; blob delete enqueued.",
+                request.Id);
             return Result.Success();
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, "Failed to delete asset: {AssetId}. Operation may be partially complete.", request.Id);
+            logger.LogError(ex, "Failed to delete asset: {AssetId}.", request.Id);
             return Result.Error(ErrorCodes.ERR_INTERNAL);
         }
     }

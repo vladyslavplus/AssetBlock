@@ -59,6 +59,10 @@ internal sealed class UpdateCategoryCommandHandler(
             logger.LogWarning("Category slug already exists {Slug}", request.Slug);
             return Result.Conflict(ErrorCodes.ERR_CATEGORY_SLUG_EXISTS);
         }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
         catch (Exception ex)
         {
             logger.LogError(ex, "Failed to update category {CategoryId}", request.Id);

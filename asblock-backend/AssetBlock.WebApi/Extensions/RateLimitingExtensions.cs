@@ -16,13 +16,13 @@ internal static class RateLimitingExtensions
 
     private static void ConfigureRejectedHandler(RateLimiterOptions opts)
     {
-        opts.OnRejected = async (context, cancellationToken) =>
+        opts.OnRejected = async (context, _) =>
         {
             var problem = AssetBlockProblemDetails.Create(
                 context.HttpContext,
                 StatusCodes.Status429TooManyRequests,
                 ErrorCodes.ERR_RATE_LIMITED);
-            await AssetBlockProblemDetails.WriteAsync(context.HttpContext, problem);
+            await AssetBlockProblemDetails.Write(context.HttpContext, problem);
         };
     }
 

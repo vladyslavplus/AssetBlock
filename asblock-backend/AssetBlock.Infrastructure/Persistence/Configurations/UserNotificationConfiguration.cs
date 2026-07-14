@@ -23,8 +23,12 @@ internal sealed class UserNotificationConfiguration : IEntityTypeConfiguration<U
             .IsRequired()
             .HasMaxLength(NotificationConstraints.MAX_METADATA_JSON_LENGTH);
         builder.Property(n => n.ReadAt);
+        builder.Property(n => n.SourceOutboxMessageId);
 
         builder.HasIndex(n => new { n.RecipientUserId, n.CreatedAt });
+        builder.HasIndex(n => n.SourceOutboxMessageId)
+            .IsUnique()
+            .HasFilter("\"SourceOutboxMessageId\" IS NOT NULL");
 
         builder.HasOne(n => n.Recipient)
             .WithMany()

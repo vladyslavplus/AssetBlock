@@ -2,7 +2,9 @@ using AssetBlock.Domain.Abstractions.Services;
 using AssetBlock.Domain.Core.Dto.Paging;
 using AssetBlock.Domain.Core.Dto.Users;
 using AssetBlock.Domain.Core.Entities;
+using AssetBlock.Domain.Core.Exceptions;
 using Microsoft.EntityFrameworkCore;
+using Npgsql;
 
 namespace AssetBlock.Infrastructure.Persistence.Stores;
 
@@ -10,9 +12,18 @@ internal sealed class PurchaseStore(ApplicationDbContext dbContext) : IPurchaseS
 {
     public async Task<Purchase> Add(Purchase purchase, CancellationToken cancellationToken = default)
     {
-        dbContext.Purchases.Add(purchase);
-        await dbContext.SaveChangesAsync(cancellationToken);
-        return purchase;
+        try
+        {
+            dbContext.Purchases.Add(purchase);
+            await dbContext.SaveChangesAsync(cancellationToken);
+            return purchase;
+        }
+        catch (DbUpdateException ex) when (
+            ex.InnerException is PostgresException { SqlState: PostgresErrorCodes.UniqueViolation })
+        {
+            dbContext.Entry(purchase).State = EntityState.Detached;
+            throw new DuplicatePurchaseException();
+        }
     }
 
     public Task<bool> HasPurchasesForAsset(Guid assetId, CancellationToken cancellationToken = default)

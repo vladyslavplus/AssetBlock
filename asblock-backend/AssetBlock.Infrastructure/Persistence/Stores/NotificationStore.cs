@@ -30,6 +30,13 @@ internal sealed class NotificationStore(ApplicationDbContext dbContext, ILogger<
         }
     }
 
+    public async Task<UserNotification?> GetBySourceOutboxMessageId(Guid sourceOutboxMessageId, CancellationToken cancellationToken = default)
+    {
+        return await dbContext.UserNotifications
+            .AsNoTracking()
+            .FirstOrDefaultAsync(n => n.SourceOutboxMessageId == sourceOutboxMessageId, cancellationToken);
+    }
+
     public async Task<PagedResult<UserNotification>> GetPaged(Guid recipientUserId, GetNotificationsRequest request, CancellationToken cancellationToken = default)
     {
         var query = dbContext.UserNotifications.AsNoTracking().Where(n => n.RecipientUserId == recipientUserId);

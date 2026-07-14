@@ -9,6 +9,6 @@ internal sealed class AssetBlockProblemDetailsResult(Microsoft.AspNetCore.Mvc.Pr
 {
     public async Task ExecuteResultAsync(ActionContext context)
     {
-        await AssetBlockProblemDetails.WriteAsync(context.HttpContext, problem);
+        await AssetBlockProblemDetails.Write(context.HttpContext, problem);
     }
 }

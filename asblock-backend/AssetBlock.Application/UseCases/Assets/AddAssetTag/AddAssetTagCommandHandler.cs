@@ -1,7 +1,7 @@
 using Ardalis.Result;
-using AssetBlock.Application.UseCases.Assets.Events;
 using AssetBlock.Domain.Abstractions.Services;
 using AssetBlock.Domain.Core.Constants;
+using AssetBlock.Domain.Core.Dto.Outbox;
 using AssetBlock.Domain.Core.Dto.Tags;
 using MediatR;
 using Microsoft.Extensions.Logging;
@@ -11,7 +11,8 @@ namespace AssetBlock.Application.UseCases.Assets.AddAssetTag;
 internal sealed class AddAssetTagCommandHandler(
     IAssetStore assetStore,
     ITagStore tagStore,
-    IPublisher publisher,
+    IUnitOfWork unitOfWork,
+    IOutboxStore outboxStore,
     ICacheService cache,
     ILogger<AddAssetTagCommandHandler> logger) : IRequestHandler<AddAssetTagCommand, Result<TagDto>>
 {
@@ -49,15 +50,35 @@ internal sealed class AddAssetTagCommandHandler(
 
         try
         {
-            await assetStore.AddTag(asset.Id, tag.Id, cancellationToken);
+            await unitOfWork.ExecuteInTransaction(async ct =>
+            {
+                await assetStore.AddTag(asset.Id, tag.Id, ct);
+                await outboxStore.Enqueue(
+                    OutboxMessageTypes.ASSET_INDEX_UPSERT,
+                    new AssetIndexUpsertPayload(asset.Id),
+                    ct);
+            }, cancellationToken);
 
-            await publisher.Publish(new AssetCreatedEvent(asset.Id), cancellationToken);
-
-            await cache.RemoveByPrefix(CacheKeys.ASSETS_LIST_PREFIX, cancellationToken);
-            await cache.RemoveByPrefix(CacheKeys.TAGS_LIST_PREFIX, cancellationToken);
+            try
+            {
+                await cache.RemoveByPrefix(CacheKeys.ASSETS_LIST_PREFIX, cancellationToken);
+                await cache.RemoveByPrefix(CacheKeys.TAGS_LIST_PREFIX, cancellationToken);
+            }
+            catch (OperationCanceledException)
+            {
+                throw;
+            }
+            catch (Exception ex)
+            {
+                logger.LogWarning(ex, "Cache invalidation failed after add tag {AssetId}", request.AssetId);
+            }
 
             logger.LogInformation("Added tag {TagName} to asset: {AssetId}", normalizedName, asset.Id);
             return Result.Success(new TagDto(tag.Id, tag.Name));
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
         }
         catch (Exception ex)
         {

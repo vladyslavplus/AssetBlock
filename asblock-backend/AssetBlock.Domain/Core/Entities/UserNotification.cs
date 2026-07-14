@@ -13,5 +13,8 @@ public class UserNotification : BaseEntity
 
     public DateTimeOffset? ReadAt { get; set; }
 
+    /// <summary>Outbox message that produced this row; used for idempotent dispatch.</summary>
+    public Guid? SourceOutboxMessageId { get; set; }
+
     public User Recipient { get; set; } = null!;
 }

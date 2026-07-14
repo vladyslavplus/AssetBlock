@@ -83,7 +83,7 @@ internal static class TestData
             UserId = userId,
             AssetId = assetId,
             PurchasedAt = purchasedAt ?? DateTimeOffset.UtcNow,
-            StripePaymentId = stripePaymentId,
+            StripePaymentId = stripePaymentId ?? $"test-stripe-{Guid.NewGuid():N}",
             CreatedAt = DateTimeOffset.UtcNow
         };
     }

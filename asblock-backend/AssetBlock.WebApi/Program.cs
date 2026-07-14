@@ -5,6 +5,8 @@ using AssetBlock.WebApi.Constants;
 using AssetBlock.Domain.Abstractions.Services;
 using AssetBlock.Application;
 using AssetBlock.Infrastructure;
+using AssetBlock.Infrastructure.Outbox;
+using AssetBlock.WebApi.Outbox;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -34,6 +36,7 @@ builder.Services.AddControllers(options => options.Conventions.Add(new Lowercase
 builder.Services.AddAssetBlockCors(builder.Configuration, builder.Environment);
 builder.Services.AddSignalR();
 builder.Services.AddScoped<IRealtimeNotificationPublisher, RealtimeNotificationPublisher>();
+builder.Services.AddScoped<IOutboxMessageHandler, NotificationDispatchOutboxHandler>();
 builder.Services.AddOpenApi();
 builder.Services.AddSwaggerConfiguration();
 builder.Services.AddJwtAuthentication(builder.Configuration);

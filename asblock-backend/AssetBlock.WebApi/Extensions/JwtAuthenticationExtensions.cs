@@ -78,7 +78,7 @@ internal static class JwtAuthenticationExtensions
                             ctx.HttpContext,
                             StatusCodes.Status401Unauthorized,
                             ErrorCodes.ERR_AUTH_TOKEN_INVALID);
-                        await AssetBlockProblemDetails.WriteAsync(ctx.HttpContext, problem);
+                        await AssetBlockProblemDetails.Write(ctx.HttpContext, problem);
                     },
                     OnForbidden = async ctx =>
                     {
@@ -86,7 +86,7 @@ internal static class JwtAuthenticationExtensions
                             ctx.HttpContext,
                             StatusCodes.Status403Forbidden,
                             ErrorCodes.ERR_FORBIDDEN);
-                        await AssetBlockProblemDetails.WriteAsync(ctx.HttpContext, problem);
+                        await AssetBlockProblemDetails.Write(ctx.HttpContext, problem);
                     }
                 };
             });
