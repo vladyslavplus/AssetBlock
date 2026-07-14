@@ -14,7 +14,7 @@ public sealed class MinioAssetStorageServiceTests
     {
         var opts = Microsoft.Extensions.Options.Options.Create(new MinioOptions
         {
-            Endpoint = "127.0.0.1:59997",
+            Endpoint = "http://127.0.0.1:59997",
             Bucket = "b",
             AccessKey = "k",
             SecretKey = "s",
@@ -32,7 +32,7 @@ public sealed class MinioAssetStorageServiceTests
     {
         var opts = Microsoft.Extensions.Options.Options.Create(new MinioOptions
         {
-            Endpoint = "127.0.0.1:59996",
+            Endpoint = "http://127.0.0.1:59996",
             Bucket = "b",
             AccessKey = "k",
             SecretKey = "s",
@@ -50,7 +50,7 @@ public sealed class MinioAssetStorageServiceTests
     {
         var opts = Microsoft.Extensions.Options.Options.Create(new MinioOptions
         {
-            Endpoint = "127.0.0.1:59995",
+            Endpoint = "http://127.0.0.1:59995",
             Bucket = "b",
             AccessKey = "k",
             SecretKey = "s",
@@ -69,7 +69,7 @@ public sealed class MinioAssetStorageServiceTests
     {
         var opts = Microsoft.Extensions.Options.Options.Create(new MinioOptions
         {
-            Endpoint = "127.0.0.1:59994",
+            Endpoint = "http://127.0.0.1:59994",
             Bucket = "b",
             AccessKey = "k",
             SecretKey = "s",

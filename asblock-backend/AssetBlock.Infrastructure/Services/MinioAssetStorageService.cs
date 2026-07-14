@@ -16,11 +16,7 @@ internal sealed class MinioAssetStorageService(
     public async Task EnsureBucket(CancellationToken cancellationToken = default)
     {
         var opts = options.Value;
-        var client = new MinioClient()
-            .WithEndpoint(opts.Endpoint)
-            .WithCredentials(opts.AccessKey, opts.SecretKey)
-            .WithSSL(opts.UseSsl)
-            .Build();
+        var client = CreateClient(opts);
 
         try
         {
@@ -44,11 +40,7 @@ internal sealed class MinioAssetStorageService(
     public async Task Upload(string key, Stream content, CancellationToken cancellationToken = default)
     {
         var opts = options.Value;
-        var client = new MinioClient()
-            .WithEndpoint(opts.Endpoint)
-            .WithCredentials(opts.AccessKey, opts.SecretKey)
-            .WithSSL(opts.UseSsl)
-            .Build();
+        var client = CreateClient(opts);
 
         try
         {
@@ -83,11 +75,7 @@ internal sealed class MinioAssetStorageService(
     public async Task<Stream> Get(string key, CancellationToken cancellationToken = default)
     {
         var opts = options.Value;
-        var client = new MinioClient()
-            .WithEndpoint(opts.Endpoint)
-            .WithCredentials(opts.AccessKey, opts.SecretKey)
-            .WithSSL(opts.UseSsl)
-            .Build();
+        var client = CreateClient(opts);
 
         var ms = new MemoryStream();
         var pipeline = resilience.GetPipeline(ResilienceConstants.Pipelines.MINIO);
@@ -106,11 +94,7 @@ internal sealed class MinioAssetStorageService(
     public async Task Delete(string key, CancellationToken cancellationToken = default)
     {
         var opts = options.Value;
-        var client = new MinioClient()
-            .WithEndpoint(opts.Endpoint)
-            .WithCredentials(opts.AccessKey, opts.SecretKey)
-            .WithSSL(opts.UseSsl)
-            .Build();
+        var client = CreateClient(opts);
 
         try
         {
@@ -123,5 +107,25 @@ internal sealed class MinioAssetStorageService(
         {
             logger.LogWarning(ex, "MinIO delete failed for key {Key}", key);
         }
+    }
+
+    private static IMinioClient CreateClient(MinioOptions opts)
+    {
+        var builder = new MinioClient();
+        if (Uri.TryCreate(opts.Endpoint, UriKind.Absolute, out var uri)
+            && (uri.Scheme == Uri.UriSchemeHttp || uri.Scheme == Uri.UriSchemeHttps))
+        {
+            return builder
+                .WithEndpoint(uri.Host, uri.Port)
+                .WithCredentials(opts.AccessKey, opts.SecretKey)
+                .WithSSL(opts.UseSsl)
+                .Build();
+        }
+
+        return builder
+            .WithEndpoint(opts.Endpoint)
+            .WithCredentials(opts.AccessKey, opts.SecretKey)
+            .WithSSL(opts.UseSsl)
+            .Build();
     }
 }

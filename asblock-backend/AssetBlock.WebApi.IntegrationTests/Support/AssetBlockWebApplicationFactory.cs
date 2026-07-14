@@ -7,7 +7,8 @@ namespace AssetBlock.WebApi.IntegrationTests.Support;
 public sealed class AssetBlockWebApplicationFactory(string connectionString) : WebApplicationFactory<Program>
 {
     private const string TEST_JWT_KEY = "integration_test_jwt_signing_key_min_32_chars!";
-    private const string TEST_ENCRYPTION_KEY_BASE64 = "PmiGOty5JJwlj49vGlWd1MVqjgWZ1n6gAcitWzWRX/A=";
+    // Synthetic 32 zero bytes (Base64) — not a production key.
+    private const string TEST_ENCRYPTION_KEY_BASE64 = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=";
 
     private readonly string _connectionString = connectionString ?? throw new ArgumentNullException(nameof(connectionString));
 
@@ -25,14 +26,14 @@ public sealed class AssetBlockWebApplicationFactory(string connectionString) : W
         builder.UseSetting("Jwt:Audience", "AssetBlock.Integration.Api");
         builder.UseSetting("Jwt:AccessTokenMinutes", "60");
         builder.UseSetting("Jwt:RefreshTokenDays", "7");
-        builder.UseSetting("Minio:Endpoint", "127.0.0.1:9000");
+        builder.UseSetting("Minio:Endpoint", "http://127.0.0.1:9000");
         builder.UseSetting("Minio:Bucket", "assets");
         builder.UseSetting("Minio:AccessKey", "minioadmin");
         builder.UseSetting("Minio:SecretKey", "minioadmin");
         builder.UseSetting("Minio:UseSsl", "false");
         builder.UseSetting("Encryption:KeyBase64", TEST_ENCRYPTION_KEY_BASE64);
-        builder.UseSetting("Stripe:SecretKey", "sk_test_integration_placeholder");
-        builder.UseSetting("Stripe:WebhookSecret", "whsec_integration_placeholder");
+        builder.UseSetting("Stripe:SecretKey", "stripe_integration_secret_key_not_real");
+        builder.UseSetting("Stripe:WebhookSecret", "stripe_integration_webhook_secret_not_real");
         builder.UseSetting("Stripe:DefaultSuccessUrl", "http://localhost/success");
         builder.UseSetting("Stripe:DefaultCancelUrl", "http://localhost/cancel");
         builder.UseSetting("Elasticsearch:Url", "http://127.0.0.1:9200");

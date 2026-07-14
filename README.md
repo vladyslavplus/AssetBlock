@@ -31,7 +31,7 @@ dotnet ef database update --project AssetBlock.Infrastructure --startup-project 
 dotnet run --project AssetBlock.WebApi
 ```
 
-Bring up dependencies with Docker Compose when needed (`docker-compose.yml` in the backend folder). Configure connection strings, Stripe keys, and other secrets via `appsettings` / user secrets / environment variables as appropriate for your environment.
+Bring up dependencies with Docker Compose when needed (`docker-compose.yml` in the backend folder). Configure API secrets with **.NET User Secrets** (see `asblock-backend/README.md`). Tracked `appsettings*.json` and `.env.example` files must not contain real secrets.
 
 ## Frontend (`asblock-frontend`)
 

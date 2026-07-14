@@ -1,0 +1,7 @@
+# Gitleaks configuration for AssetBlock.
+# Prefer fixing fixtures over broad allowlists. Only exact synthetic values may be listed.
+
+title = "AssetBlock gitleaks"
+
+[extend]
+useDefault = true

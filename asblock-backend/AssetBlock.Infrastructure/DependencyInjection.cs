@@ -23,13 +23,35 @@ public static class DependencyInjection
         var connectionString = configuration.GetConnectionString("DefaultConnection")
             ?? throw new InvalidOperationException("Connection string 'DefaultConnection' not found.");
 
-        services.Configure<DatabaseOptions>(configuration.GetSection(DatabaseOptions.SECTION_NAME));
+        services.AddOptions<DatabaseOptions>()
+            .Bind(configuration.GetSection(DatabaseOptions.SECTION_NAME))
+            .ValidateOnStart();
         services.AddSingleton<IValidateOptions<DatabaseOptions>, DatabaseOptionsValidator>();
-        services.Configure<JwtOptions>(configuration.GetSection(JwtOptions.SECTION_NAME));
-        services.Configure<MinioOptions>(configuration.GetSection(MinioOptions.SECTION_NAME));
-        services.Configure<EncryptionOptions>(configuration.GetSection(EncryptionOptions.SECTION_NAME));
-        services.Configure<StripeOptions>(configuration.GetSection(StripeOptions.SECTION_NAME));
-        services.Configure<ElasticsearchOptions>(configuration.GetSection(ElasticsearchOptions.SECTION_NAME));
+
+        services.AddOptions<JwtOptions>()
+            .Bind(configuration.GetSection(JwtOptions.SECTION_NAME))
+            .ValidateOnStart();
+        services.AddSingleton<IValidateOptions<JwtOptions>, JwtOptionsValidator>();
+
+        services.AddOptions<MinioOptions>()
+            .Bind(configuration.GetSection(MinioOptions.SECTION_NAME))
+            .ValidateOnStart();
+        services.AddSingleton<IValidateOptions<MinioOptions>, MinioOptionsValidator>();
+
+        services.AddOptions<EncryptionOptions>()
+            .Bind(configuration.GetSection(EncryptionOptions.SECTION_NAME))
+            .ValidateOnStart();
+        services.AddSingleton<IValidateOptions<EncryptionOptions>, EncryptionOptionsValidator>();
+
+        services.AddOptions<StripeOptions>()
+            .Bind(configuration.GetSection(StripeOptions.SECTION_NAME))
+            .ValidateOnStart();
+        services.AddSingleton<IValidateOptions<StripeOptions>, StripeOptionsValidator>();
+
+        services.AddOptions<ElasticsearchOptions>()
+            .Bind(configuration.GetSection(ElasticsearchOptions.SECTION_NAME))
+            .ValidateOnStart();
+        services.AddSingleton<IValidateOptions<ElasticsearchOptions>, ElasticsearchOptionsValidator>();
         services.AddDbContext<ApplicationDbContext>(options =>
             options.UseNpgsql(connectionString));
         services.AddHostedService<DatabaseMigrationService>();

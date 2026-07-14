@@ -4,6 +4,7 @@ public sealed class MinioOptions
 {
     public const string SECTION_NAME = "Minio";
 
+    /// <summary>MinIO API endpoint as host:port (e.g. localhost:9000) or absolute http(s) URI without path/query.</summary>
     public string Endpoint { get; set; } = "localhost:9000";
     public string Bucket { get; set; } = "assets";
     public string AccessKey { get; set; } = string.Empty;

@@ -16,7 +16,7 @@ public sealed class StripePaymentServiceTests
     {
         var opts = Microsoft.Extensions.Options.Options.Create(new StripeOptions
         {
-            SecretKey = "sk_test_123456789012345678901234567890",
+            SecretKey = "stripe_test_secret_key_not_real",
             DefaultSuccessUrl = "",
             DefaultCancelUrl = ""
         });
@@ -42,7 +42,7 @@ public sealed class StripePaymentServiceTests
     {
         var opts = Microsoft.Extensions.Options.Options.Create(new StripeOptions
         {
-            SecretKey = "sk_test_123456789012345678901234567890",
+            SecretKey = "stripe_test_secret_key_not_real",
             DefaultSuccessUrl = "https://example.com/success",
             DefaultCancelUrl = "https://example.com/cancel"
         });
@@ -89,7 +89,7 @@ public sealed class StripePaymentServiceTests
     [Fact]
     public async Task HandleCheckoutCompleted_returnsNull_whenPayloadInvalid()
     {
-        var sut = CreateSut(webhookSecret: "whsec_test_secret");
+        var sut = CreateSut(webhookSecret: "stripe_test_webhook_secret_not_real");
         var r = await sut.HandleCheckoutCompleted("not-json", "bad_sig");
         r.Should().BeNull();
     }
@@ -98,7 +98,7 @@ public sealed class StripePaymentServiceTests
     {
         var opts = Microsoft.Extensions.Options.Options.Create(new StripeOptions
         {
-            SecretKey = "sk_test_123456789012345678901234567890",
+            SecretKey = "stripe_test_secret_key_not_real",
             WebhookSecret = webhookSecret
         });
         var resilience = Substitute.For<ResiliencePipelineProvider<string>>();
