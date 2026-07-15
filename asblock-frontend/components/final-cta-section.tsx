@@ -1,22 +1,18 @@
-import Link from "next/link";
-import { siteShellClass } from "@/lib/site-layout";
+import Link from 'next/link'
+import { siteShellClass } from '@/lib/site-layout'
 
 export function FinalCtaSection() {
   return (
-    <section
-      className="py-20 sm:py-28"
-      aria-labelledby="final-cta-heading"
-    >
-      <div className={siteShellClass("site")}>
+    <section className="py-20 sm:py-28" aria-labelledby="final-cta-heading">
+      <div className={siteShellClass('site')}>
         <div
           className="relative overflow-hidden rounded-2xl border border-border p-10 sm:p-16 text-center flex flex-col items-center gap-6"
-          style={{ background: "#0F0E1C" }}
+          style={{ background: '#0F0E1C' }}
         >
           <div
             className="pointer-events-none absolute inset-0 opacity-[0.12]"
             style={{
-              background:
-                "radial-gradient(ellipse at 50% 120%, #7C3AED 0%, transparent 65%)",
+              background: 'radial-gradient(ellipse at 50% 120%, #7C3AED 0%, transparent 65%)',
             }}
             aria-hidden="true"
           />
@@ -28,13 +24,13 @@ export function FinalCtaSection() {
             <h2
               id="final-cta-heading"
               className="text-3xl sm:text-4xl lg:text-5xl font-semibold text-foreground text-balance max-w-2xl"
-              style={{ fontFamily: "var(--font-space-grotesk)" }}
+              style={{ fontFamily: 'var(--font-space-grotesk)' }}
             >
               Your code is worth more than a GitHub star
             </h2>
             <p className="text-muted-foreground text-base sm:text-lg max-w-lg leading-relaxed">
-              Join thousands of developers monetizing their IP. List your first
-              asset free, no subscription required.
+              Join thousands of developers monetizing their IP. List your first asset free, no
+              subscription required.
             </p>
           </div>
 
@@ -55,5 +51,5 @@ export function FinalCtaSection() {
         </div>
       </div>
     </section>
-  );
+  )
 }

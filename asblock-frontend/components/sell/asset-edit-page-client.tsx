@@ -1,20 +1,20 @@
-"use client";
+'use client'
 
-import Link from "next/link";
-import { Button } from "@/components/ui/button";
-import { useAuth } from "@/components/auth/auth-context";
-import { SessionBlockSkeleton } from "@/components/skeletons/session-block-skeleton";
-import type { AssetDetailItemApi } from "@/lib/catalog/assets-api";
-import { AssetEditForm } from "./asset-edit-form";
+import Link from 'next/link'
+import { Button } from '@/components/ui/button'
+import { useAuth } from '@/components/auth/auth-context'
+import { SessionBlockSkeleton } from '@/components/skeletons/session-block-skeleton'
+import type { AssetDetailItemApi } from '@/lib/catalog/assets-api'
+import { AssetEditForm } from './asset-edit-form'
 
 export function AssetEditPageClient({ initialAsset }: { initialAsset: AssetDetailItemApi }) {
-  const { user, status } = useAuth();
+  const { user, status } = useAuth()
 
-  if (status === "loading") {
-    return <SessionBlockSkeleton className="py-12" lines={3} />;
+  if (status === 'loading') {
+    return <SessionBlockSkeleton className="py-12" lines={3} />
   }
 
-  if (status === "anonymous" || !user) {
+  if (status === 'anonymous' || !user) {
     return (
       <div className="rounded-lg border border-border bg-card-elevated/50 px-4 py-8 text-center space-y-3 max-w-lg">
         <p className="text-sm text-muted-foreground">Sign in to edit your listings.</p>
@@ -22,7 +22,7 @@ export function AssetEditPageClient({ initialAsset }: { initialAsset: AssetDetai
           <Link href={`/login?returnUrl=/sell/assets/${initialAsset.id}/edit`}>Sign in</Link>
         </Button>
       </div>
-    );
+    )
   }
 
   if (user.id.toLowerCase() !== initialAsset.authorId.toLowerCase()) {
@@ -33,8 +33,8 @@ export function AssetEditPageClient({ initialAsset }: { initialAsset: AssetDetai
           <Link href={`/assets/${initialAsset.id}`}>View listing</Link>
         </Button>
       </div>
-    );
+    )
   }
 
-  return <AssetEditForm initialAsset={initialAsset} />;
+  return <AssetEditForm initialAsset={initialAsset} />
 }

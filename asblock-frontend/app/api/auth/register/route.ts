@@ -1,52 +1,52 @@
-import { cookies } from "next/headers";
-import { NextResponse } from "next/server";
-import type { ZodError } from "zod";
-import { registerFormSchema } from "@/lib/auth/schemas";
-import { tokensResponseSchema } from "@/lib/auth/tokens-schema";
-import { postAuthJson } from "@/lib/server/auth-backend";
-import { setAuthCookies } from "@/lib/server/auth-cookies";
-
-function zodToErrorBody(error: ZodError) {
-  return {
-    errors: error.issues.map((i) => ({
-      identifier: i.path.length ? i.path.join(".") : "request",
-      message: i.message,
-    })),
-  };
-}
+import { cookies } from 'next/headers'
+import { NextResponse } from 'next/server'
+import { registerFormSchema } from '@/lib/auth/schemas'
+import { tokensResponseSchema } from '@/lib/auth/tokens-schema'
+import { postAuthJson } from '@/lib/server/auth-backend'
+import { setAuthCookies } from '@/lib/server/auth-cookies'
+import {
+  assertSameOrigin,
+  invalidJsonResponse,
+  problemResponse,
+  zodValidationProblemResponse,
+} from '@/lib/server/bff-http'
 
 export async function POST(request: Request) {
-  let json: unknown;
+  const originError = assertSameOrigin(request)
+  if (originError) return originError
+
+  let json: unknown
   try {
-    json = await request.json();
+    json = await request.json()
   } catch {
-    return NextResponse.json(
-      { errors: [{ identifier: "body", message: "Invalid JSON body" }] },
-      { status: 400 },
-    );
+    return invalidJsonResponse()
   }
 
-  const parsed = registerFormSchema.safeParse(json);
+  const parsed = registerFormSchema.safeParse(json)
   if (!parsed.success) {
-    return NextResponse.json(zodToErrorBody(parsed.error), { status: 400 });
+    return zodValidationProblemResponse(parsed.error)
   }
 
-  const { username, email, password } = parsed.data;
-  const { ok, status, data } = await postAuthJson("register", { username, email, password });
+  const { username, email, password } = parsed.data
+  const { ok, status, data } = await postAuthJson('register', { username, email, password })
 
   if (!ok) {
-    return NextResponse.json(data, { status });
+    return new Response(JSON.stringify(data), {
+      status,
+      headers: { 'Content-Type': 'application/problem+json' },
+    })
   }
 
-  const tokens = tokensResponseSchema.safeParse(data);
+  const tokens = tokensResponseSchema.safeParse(data)
   if (!tokens.success) {
-    return NextResponse.json(
-      { errors: [{ identifier: "server", message: "Unexpected register response shape" }] },
-      { status: 502 },
-    );
+    return problemResponse(
+      502,
+      'ERR_BAD_GATEWAY',
+      'The authentication service returned an unexpected response.',
+    )
   }
 
-  const store = await cookies();
-  setAuthCookies(store, tokens.data);
-  return NextResponse.json({ ok: true });
+  const store = await cookies()
+  setAuthCookies(store, tokens.data)
+  return NextResponse.json({ ok: true })
 }

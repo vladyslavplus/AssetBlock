@@ -1,7 +1,7 @@
 export interface PaymentsCapabilities {
-  checkoutConfigured: boolean;
+  checkoutConfigured: boolean
 }
 
 export interface CreateCheckoutResponse {
-  checkoutUrl: string;
+  checkoutUrl: string
 }

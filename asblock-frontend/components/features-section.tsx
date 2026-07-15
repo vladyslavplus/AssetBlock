@@ -1,49 +1,49 @@
-import { Zap, GitFork, ShieldCheck, Layers, DollarSign, Users } from "lucide-react";
-import { siteShellClass } from "@/lib/site-layout";
+import { Zap, GitFork, ShieldCheck, Layers, DollarSign, Users } from 'lucide-react'
+import { siteShellClass } from '@/lib/site-layout'
 
 const FEATURES = [
   {
     icon: Layers,
-    title: "Rich asset types",
+    title: 'Rich asset types',
     description:
-      "From code packages and CLI tools to UI kits and database schemas — any digital artifact, properly categorized.",
+      'From code packages and CLI tools to UI kits and database schemas — any digital artifact, properly categorized.',
   },
   {
     icon: ShieldCheck,
-    title: "Verified licensing",
+    title: 'Verified licensing',
     description:
-      "Every purchase includes a clear, developer-friendly license. Know exactly what you can build and ship.",
+      'Every purchase includes a clear, developer-friendly license. Know exactly what you can build and ship.',
   },
   {
     icon: Zap,
-    title: "Instant downloads",
+    title: 'Instant downloads',
     description:
-      "Assets are delivered over encrypted channels the moment payment clears. No delays, no manual fulfillment.",
+      'Assets are delivered over encrypted channels the moment payment clears. No delays, no manual fulfillment.',
   },
   {
     icon: DollarSign,
-    title: "Fair revenue split",
+    title: 'Fair revenue split',
     description:
-      "Sellers keep the majority. Transparent fee structure, no hidden charges, and payouts processed weekly.",
+      'Sellers keep the majority. Transparent fee structure, no hidden charges, and payouts processed weekly.',
   },
   {
     icon: GitFork,
-    title: "Version management",
+    title: 'Version management',
     description:
-      "Upload new versions of your assets and buyers get notified. Full changelog history keeps everyone in sync.",
+      'Upload new versions of your assets and buyers get notified. Full changelog history keeps everyone in sync.',
   },
   {
     icon: Users,
-    title: "Community ratings",
+    title: 'Community ratings',
     description:
-      "Verified-purchase reviews and star ratings help buyers make confident decisions without guesswork.",
+      'Verified-purchase reviews and star ratings help buyers make confident decisions without guesswork.',
   },
-];
+]
 
 export function FeaturesSection() {
   return (
     <section className="py-20 sm:py-28" aria-labelledby="features-heading">
-      <div className={siteShellClass("site")}>
+      <div className={siteShellClass('site')}>
         <div className="text-center mb-14">
           <h2
             id="features-heading"
@@ -58,25 +58,30 @@ export function FeaturesSection() {
 
         <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
           {FEATURES.map((feature) => {
-            const Icon = feature.icon;
+            const Icon = feature.icon
             return (
               <div
                 key={feature.title}
                 className="group rounded-xl border border-border p-6 flex flex-col gap-3 transition-smooth hover:border-primary/50 hover:bg-card hover:shadow-[0_8px_24px_rgba(124,58,237,0.15)] hover:translate-y-[-4px] focus-within:ring-2 focus-within:ring-primary focus-within:ring-offset-2 focus-within:ring-offset-background"
-                style={{ background: "#11101A" }}
+                style={{ background: '#11101A' }}
                 role="region"
                 aria-label={feature.title}
               >
                 <div className="w-9 h-9 rounded-lg flex items-center justify-center border border-border bg-secondary transition-smooth group-hover:border-primary/60 group-hover:bg-primary/10">
-                  <Icon className="w-4.5 h-4.5 text-muted-foreground group-hover:text-accent transition-smooth" size={18} />
+                  <Icon
+                    className="w-4.5 h-4.5 text-muted-foreground group-hover:text-accent transition-smooth"
+                    size={18}
+                  />
                 </div>
                 <h3 className="font-semibold text-foreground text-sm">{feature.title}</h3>
-                <p className="text-sm text-muted-foreground leading-relaxed">{feature.description}</p>
+                <p className="text-sm text-muted-foreground leading-relaxed">
+                  {feature.description}
+                </p>
               </div>
-            );
+            )
           })}
         </div>
       </div>
     </section>
-  );
+  )
 }

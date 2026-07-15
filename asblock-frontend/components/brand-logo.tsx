@@ -1,23 +1,25 @@
-import { cn } from "@/lib/utils";
+import { cn } from '@/lib/utils'
 
 interface BrandLogoProps {
-  className?: string;
-  compact?: boolean;
+  className?: string
+  compact?: boolean
 }
 
 export function BrandLogo({ className, compact = false }: BrandLogoProps) {
   return (
-    <span className={cn("inline-flex items-center", compact ? "gap-2" : "gap-2.5", className)}>
+    <span className={cn('inline-flex items-center', compact ? 'gap-2' : 'gap-2.5', className)}>
       <span
         className={cn(
-          "relative inline-flex items-center justify-center rounded-md border border-primary/30 bg-primary/12 shadow-[0_0_24px_rgba(139,92,246,0.16)]",
-          compact ? "h-8 w-8" : "h-9 w-9",
+          'relative inline-flex items-center justify-center rounded-md border border-primary/30 bg-primary/12 shadow-[0_0_24px_rgba(139,92,246,0.16)]',
+          compact ? 'h-8 w-8' : 'h-9 w-9',
         )}
         aria-hidden="true"
       >
         <svg
           viewBox="0 0 40 40"
-          className={compact ? "h-5 w-5 translate-y-[0.5px]" : "h-[1.35rem] w-[1.35rem] translate-y-[0.5px]"}
+          className={
+            compact ? 'h-5 w-5 translate-y-[0.5px]' : 'h-[1.35rem] w-[1.35rem] translate-y-[0.5px]'
+          }
           fill="none"
           xmlns="http://www.w3.org/2000/svg"
         >
@@ -81,13 +83,13 @@ export function BrandLogo({ className, compact = false }: BrandLogoProps) {
       </span>
       <span
         className={cn(
-          "font-semibold tracking-tight text-foreground",
-          compact ? "text-base" : "text-[1.05rem]",
+          'font-semibold tracking-tight text-foreground',
+          compact ? 'text-base' : 'text-[1.05rem]',
         )}
-        style={{ fontFamily: "var(--font-space-grotesk)" }}
+        style={{ fontFamily: 'var(--font-space-grotesk)' }}
       >
         AssetBlock
       </span>
     </span>
-  );
+  )
 }

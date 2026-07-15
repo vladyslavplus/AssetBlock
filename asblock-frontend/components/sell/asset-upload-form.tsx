@@ -1,44 +1,48 @@
-"use client";
+'use client'
 
-import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useRouter } from "next/navigation";
-import { Controller, useForm, useWatch } from "react-hook-form";
-import { zodResolver } from "@hookform/resolvers/zod";
-import { AlertCircle, Loader2 } from "lucide-react";
-import { toast } from "sonner";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Skeleton } from "@/components/ui/skeleton";
-import { Textarea } from "@/components/ui/textarea";
-import { Alert, AlertDescription } from "@/components/ui/alert";
-import { useAuth } from "@/components/auth/auth-context";
-import Link from "next/link";
-import { applyApiFieldErrorsToForm } from "@/lib/http/api-errors";
-import { assetUploadFormSchema, type AssetUploadFormValues } from "@/lib/seller/seller-schemas";
-import { uploadSellerAsset } from "@/lib/seller/seller-api";
-import { catalogKeys, fetchCatalogFacets } from "@/lib/catalog/catalog-query";
-import { sellerKeys } from "@/lib/seller/seller-query";
-import { SellerPriceStepInput } from "@/components/sell/seller-price-step-input";
-import { SessionBlockSkeleton } from "@/components/skeletons/session-block-skeleton";
+import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { useRouter } from 'next/navigation'
+import { Controller, useForm, useWatch } from 'react-hook-form'
+import { zodResolver } from '@hookform/resolvers/zod'
+import { AlertCircle, Loader2 } from 'lucide-react'
+import { toast } from 'sonner'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import { Skeleton } from '@/components/ui/skeleton'
+import { Textarea } from '@/components/ui/textarea'
+import { Alert, AlertDescription } from '@/components/ui/alert'
+import { useAuth } from '@/components/auth/auth-context'
+import Link from 'next/link'
+import { applyApiFieldErrorsToForm } from '@/lib/http/api-errors'
+import {
+  ASSET_UPLOAD_ALLOWED_EXTENSIONS,
+  assetUploadFormSchema,
+  type AssetUploadFormValues,
+} from '@/lib/seller/seller-schemas'
+import { uploadSellerAsset } from '@/lib/seller/seller-api'
+import { catalogKeys, fetchCatalogFacets } from '@/lib/catalog/catalog-query'
+import { sellerKeys } from '@/lib/seller/seller-query'
+import { SellerPriceStepInput } from '@/components/sell/seller-price-step-input'
+import { SessionBlockSkeleton } from '@/components/skeletons/session-block-skeleton'
 
 export function AssetUploadForm() {
-  const router = useRouter();
-  const queryClient = useQueryClient();
-  const { status } = useAuth();
-  const authed = status === "authenticated";
-  const pending = status === "loading";
+  const router = useRouter()
+  const queryClient = useQueryClient()
+  const { status } = useAuth()
+  const authed = status === 'authenticated'
+  const pending = status === 'loading'
 
   const facetsQuery = useQuery({
     queryKey: catalogKeys.facets(),
     queryFn: fetchCatalogFacets,
     staleTime: 5 * 60 * 1000,
     enabled: authed,
-  });
+  })
 
-  const categories = facetsQuery.data?.categories ?? [];
-  const categoriesLoading = authed && facetsQuery.isPending;
-  const categoriesError = facetsQuery.isError ? "Could not load categories." : null;
+  const categories = facetsQuery.data?.categories ?? []
+  const categoriesLoading = authed && facetsQuery.isPending
+  const categoriesError = facetsQuery.isError ? 'Could not load categories.' : null
 
   const {
     register,
@@ -51,56 +55,56 @@ export function AssetUploadForm() {
   } = useForm<AssetUploadFormValues>({
     resolver: zodResolver(assetUploadFormSchema),
     defaultValues: {
-      title: "",
-      description: "",
+      title: '',
+      description: '',
       price: undefined,
-      categoryId: "",
-      tags: "",
+      categoryId: '',
+      tags: '',
     },
-  });
+  })
 
-  const selectedFile = useWatch({ control, name: "file" });
+  const selectedFile = useWatch({ control, name: 'file' })
   const fileDisplayName =
     selectedFile instanceof File && selectedFile.name.length > 0
       ? selectedFile.name
-      : "No file chosen";
+      : 'No file chosen'
 
   const onSubmit = handleSubmit(async (values) => {
-    const fd = new FormData();
-    fd.set("title", values.title.trim());
-    const desc = values.description?.trim();
-    if (desc) fd.set("description", desc);
-    fd.set("price", String(values.price));
-    fd.set("categoryId", values.categoryId);
-    fd.set("file", values.file);
+    const fd = new FormData()
+    fd.set('title', values.title.trim())
+    const desc = values.description?.trim()
+    if (desc) fd.set('description', desc)
+    fd.set('price', String(values.price))
+    fd.set('categoryId', values.categoryId)
+    fd.set('file', values.file)
 
-    const tagParts = (values.tags ?? "")
+    const tagParts = (values.tags ?? '')
       .split(/[,;\n]+/)
       .map((t) => t.trim())
-      .filter(Boolean);
+      .filter(Boolean)
     for (const t of tagParts) {
-      fd.append("tags", t);
+      fd.append('tags', t)
     }
 
-    const result = await uploadSellerAsset(fd);
+    const result = await uploadSellerAsset(fd)
     if (!result.ok) {
       if (result.fieldErrors) {
-        applyApiFieldErrorsToForm(setError, result.fieldErrors);
+        applyApiFieldErrorsToForm(setError, result.fieldErrors)
       }
-      toast.error(result.message);
-      return;
+      toast.error(result.message)
+      return
     }
 
-    toast.success("Asset published.");
-    reset();
-    void queryClient.invalidateQueries({ queryKey: sellerKeys.all });
-    void queryClient.invalidateQueries({ queryKey: catalogKeys.all });
-    router.push(`/assets/${result.assetId}`);
-    router.refresh();
-  });
+    toast.success('Asset published.')
+    reset()
+    void queryClient.invalidateQueries({ queryKey: sellerKeys.all })
+    void queryClient.invalidateQueries({ queryKey: catalogKeys.all })
+    router.push(`/assets/${result.assetId}`)
+    router.refresh()
+  })
 
   if (pending) {
-    return <SessionBlockSkeleton lines={3} />;
+    return <SessionBlockSkeleton lines={3} />
   }
 
   if (!authed) {
@@ -111,7 +115,7 @@ export function AssetUploadForm() {
           <Link href="/login?returnUrl=/sell">Sign in</Link>
         </Button>
       </div>
-    );
+    )
   }
 
   return (
@@ -133,11 +137,9 @@ export function AssetUploadForm() {
           id="upload-title"
           className="bg-input border-border"
           placeholder="e.g. SaaS dashboard boilerplate"
-          {...register("title")}
+          {...register('title')}
         />
-        {errors.title && (
-          <p className="text-xs text-destructive">{errors.title.message}</p>
-        )}
+        {errors.title && <p className="text-xs text-destructive">{errors.title.message}</p>}
       </div>
 
       <div className="space-y-1.5">
@@ -148,7 +150,7 @@ export function AssetUploadForm() {
           id="upload-description"
           className="bg-input border-border h-44 sm:h-40 md:h-36"
           placeholder="What buyers get, stack, license notes…"
-          {...register("description")}
+          {...register('description')}
         />
         {errors.description && (
           <p className="text-xs text-destructive">{errors.description.message}</p>
@@ -173,9 +175,7 @@ export function AssetUploadForm() {
               />
             )}
           />
-          {errors.price && (
-            <p className="text-xs text-destructive">{errors.price.message}</p>
-          )}
+          {errors.price && <p className="text-xs text-destructive">{errors.price.message}</p>}
         </div>
 
         <div className="space-y-1.5">
@@ -193,7 +193,7 @@ export function AssetUploadForm() {
               id="upload-category"
               className="border-input bg-input h-9 w-full rounded-md border px-3 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]"
               defaultValue=""
-              {...register("categoryId")}
+              {...register('categoryId')}
             >
               <option value="" disabled>
                 Select category
@@ -219,7 +219,7 @@ export function AssetUploadForm() {
           id="upload-tags"
           className="bg-input border-border"
           placeholder="react, typescript, dashboard"
-          {...register("tags")}
+          {...register('tags')}
         />
         <p className="text-[11px] text-muted-foreground">Comma-separated.</p>
       </div>
@@ -236,14 +236,15 @@ export function AssetUploadForm() {
               id="upload-file"
               ref={ref}
               type="file"
+              accept={ASSET_UPLOAD_ALLOWED_EXTENSIONS.join(',')}
               name={name}
               onBlur={onBlur}
               className="sr-only"
               onChange={(e) => {
-                const picked = e.target.files?.[0];
-                onChange(picked);
-                e.target.value = "";
-                void trigger("file");
+                const picked = e.target.files?.[0]
+                onChange(picked)
+                e.target.value = ''
+                void trigger('file')
               }}
             />
           )}
@@ -253,7 +254,7 @@ export function AssetUploadForm() {
             type="button"
             variant="secondary"
             className="h-8 shrink-0 px-3 text-xs"
-            onClick={() => document.getElementById("upload-file")?.click()}
+            onClick={() => document.getElementById('upload-file')?.click()}
           >
             Choose file
           </Button>
@@ -264,18 +265,16 @@ export function AssetUploadForm() {
             {fileDisplayName}
           </span>
         </div>
-        {errors.file && (
-          <p className="text-xs text-destructive">{errors.file.message as string}</p>
-        )}
-        <p className="text-[11px] text-muted-foreground">Max 100 MB. Any extension (zip, etc.).</p>
+        {errors.file && <p className="text-xs text-destructive">{errors.file.message as string}</p>}
+        <p className="text-[11px] text-muted-foreground">
+          Max 250 MiB. Supported archives: zip, 7z, rar, tar, tar.gz, tgz.
+        </p>
       </div>
 
       <Button
         type="submit"
         disabled={
-          isSubmitting ||
-          categoriesLoading ||
-          Boolean(categoriesError && categories.length === 0)
+          isSubmitting || categoriesLoading || Boolean(categoriesError && categories.length === 0)
         }
         className="bg-primary text-primary-foreground hover:bg-[#6D28D9] w-full sm:w-auto"
       >
@@ -285,9 +284,9 @@ export function AssetUploadForm() {
             Uploading…
           </>
         ) : (
-          "Publish asset"
+          'Publish asset'
         )}
       </Button>
     </form>
-  );
+  )
 }

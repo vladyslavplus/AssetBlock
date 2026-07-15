@@ -1,6 +1,6 @@
-"use client";
+'use client'
 
-import { Skeleton } from "@/components/ui/skeleton";
+import { Skeleton } from '@/components/ui/skeleton'
 
 export function SellListingRowSkeleton() {
   return (
@@ -18,7 +18,7 @@ export function SellListingRowSkeleton() {
         <Skeleton className="h-8 w-20 rounded-md bg-muted-foreground/20 animate-pulse" />
       </div>
     </li>
-  );
+  )
 }
 
 export function SellListingListSkeleton({ rows = 4 }: { rows?: number }) {
@@ -28,5 +28,5 @@ export function SellListingListSkeleton({ rows = 4 }: { rows?: number }) {
         <SellListingRowSkeleton key={i} />
       ))}
     </ul>
-  );
+  )
 }

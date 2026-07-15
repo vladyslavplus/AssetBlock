@@ -1,15 +1,15 @@
-import { XCircle } from "lucide-react";
-import Link from "next/link";
-import { Button } from "@/components/ui/button";
-import { SiteMain } from "@/components/layout/site-main";
-import { SitePageContainer } from "@/components/layout/site-page-container";
-import { SiteHeader } from "@/components/site-header";
-import { SiteFooter } from "@/components/site-footer";
+import { XCircle } from 'lucide-react'
+import Link from 'next/link'
+import { Button } from '@/components/ui/button'
+import { SiteMain } from '@/components/layout/site-main'
+import { SitePageContainer } from '@/components/layout/site-page-container'
+import { SiteHeader } from '@/components/site-header'
+import { SiteFooter } from '@/components/site-footer'
 
 export const metadata = {
-  title: "Checkout canceled - AssetBlock",
-  description: "Your checkout was canceled. No charges were made.",
-};
+  title: 'Checkout canceled - AssetBlock',
+  description: 'Your checkout was canceled. No charges were made.',
+}
 
 export default function CheckoutCancelPage() {
   return (
@@ -23,12 +23,11 @@ export default function CheckoutCancelPage() {
               <XCircle className="w-12 h-12 text-destructive" />
             </div>
 
-            <h1 className="text-2xl font-bold text-center text-foreground">
-              Checkout canceled
-            </h1>
+            <h1 className="text-2xl font-bold text-center text-foreground">Checkout canceled</h1>
 
             <p className="text-sm text-muted-foreground text-center leading-relaxed">
-              No charges have been made. You can return to the asset page and try again whenever you&apos;re ready.
+              No charges have been made. You can return to the asset page and try again whenever
+              you&apos;re ready.
             </p>
 
             <div className="flex flex-col gap-3 pt-2">
@@ -52,5 +51,5 @@ export default function CheckoutCancelPage() {
 
       <SiteFooter />
     </div>
-  );
+  )
 }

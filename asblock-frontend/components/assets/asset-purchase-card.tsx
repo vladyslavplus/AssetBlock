@@ -1,23 +1,23 @@
-"use client";
+'use client'
 
-import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { useMutation } from "@tanstack/react-query";
-import { Button } from "@/components/ui/button";
-import { useAuth } from "@/components/auth/auth-context";
-import { formatUsdWhole } from "@/lib/format-currency";
-import { CheckoutRequestError, postCreateCheckoutSession } from "@/lib/payments/checkout-api";
-import { PENDING_REVIEW_ASSET_ID_KEY } from "@/lib/reviews/review-constants";
-import { Download, Lock, Loader2, Zap } from "lucide-react";
-import { toast } from "sonner";
+import Link from 'next/link'
+import { useRouter } from 'next/navigation'
+import { useMutation } from '@tanstack/react-query'
+import { Button } from '@/components/ui/button'
+import { useAuth } from '@/components/auth/auth-context'
+import { formatUsdWhole } from '@/lib/format-currency'
+import { CheckoutRequestError, postCreateCheckoutSession } from '@/lib/payments/checkout-api'
+import { PENDING_REVIEW_ASSET_ID_KEY } from '@/lib/reviews/review-constants'
+import { Download, Lock, Loader2, Zap } from 'lucide-react'
+import { toast } from 'sonner'
 
 interface AssetPurchaseCardProps {
-  assetId: string;
-  authorId: string;
-  title: string;
-  price: number;
-  checkoutConfigured: boolean;
-  returnPath: string;
+  assetId: string
+  authorId: string
+  title: string
+  price: number
+  checkoutConfigured: boolean
+  returnPath: string
 }
 
 export function AssetPurchaseCard({
@@ -28,44 +28,44 @@ export function AssetPurchaseCard({
   checkoutConfigured,
   returnPath,
 }: AssetPurchaseCardProps) {
-  const router = useRouter();
-  const { user, status } = useAuth();
+  const router = useRouter()
+  const { user, status } = useAuth()
 
-  const isOwner = Boolean(user && user.id === authorId);
-  const loginHref = `/login?returnUrl=${encodeURIComponent(returnPath)}`;
+  const isOwner = Boolean(user && user.id === authorId)
+  const loginHref = `/login?returnUrl=${encodeURIComponent(returnPath)}`
 
   const checkoutMutation = useMutation({
     mutationFn: () => postCreateCheckoutSession(assetId),
     onSuccess: (data) => {
       try {
-        sessionStorage.setItem(PENDING_REVIEW_ASSET_ID_KEY, assetId);
+        sessionStorage.setItem(PENDING_REVIEW_ASSET_ID_KEY, assetId)
       } catch {
         // Private mode / storage blocked — success page prompt may be unavailable; library still works.
       }
-      window.location.assign(data.checkoutUrl);
+      window.location.assign(data.checkoutUrl)
     },
     onError: (err: unknown) => {
       if (err instanceof CheckoutRequestError) {
         if (err.status === 401) {
-          toast.error("Session expired. Sign in again.");
-          router.push(loginHref);
-          return;
+          toast.error('Session expired. Sign in again.')
+          router.push(loginHref)
+          return
         }
-        toast.error(err.message);
-        return;
+        toast.error(err.message)
+        return
       }
-      toast.error("Could not start checkout. Try again.");
+      toast.error('Could not start checkout. Try again.')
     },
-  });
+  })
 
   const onBuyClick = () => {
-    if (status === "loading" || checkoutMutation.isPending) return;
-    if (status === "anonymous" || !user) {
-      router.push(loginHref);
-      return;
+    if (status === 'loading' || checkoutMutation.isPending) return
+    if (status === 'anonymous' || !user) {
+      router.push(loginHref)
+      return
     }
-    checkoutMutation.mutate();
-  };
+    checkoutMutation.mutate()
+  }
 
   return (
     <div className="flex min-w-0 flex-col gap-4 rounded-lg border border-border bg-card-elevated p-5">
@@ -80,7 +80,7 @@ export function AssetPurchaseCard({
         <p className="text-sm text-muted-foreground rounded-md border border-border/60 bg-secondary/30 px-3 py-2">
           This is your listing. Buyers will use checkout here once it is published.
         </p>
-      ) : status === "anonymous" ? (
+      ) : status === 'anonymous' ? (
         <Button
           type="button"
           asChild
@@ -95,24 +95,25 @@ export function AssetPurchaseCard({
       ) : (
         <Button
           type="button"
-          disabled={status === "loading" || checkoutMutation.isPending}
+          disabled={status === 'loading' || checkoutMutation.isPending}
           className="bg-primary text-primary-foreground hover:bg-[#6D28D9] transition-smooth font-medium w-full h-10"
           onClick={onBuyClick}
         >
-          {checkoutMutation.isPending || status === "loading" ? (
+          {checkoutMutation.isPending || status === 'loading' ? (
             <>
               <Loader2 className="mr-2 size-4 animate-spin" aria-hidden />
               Redirecting…
             </>
           ) : (
-            "Buy now"
+            'Buy now'
           )}
         </Button>
       )}
 
-      {!checkoutConfigured && !isOwner && status !== "anonymous" && (
+      {!checkoutConfigured && !isOwner && status !== 'anonymous' && (
         <p className="text-xs text-muted-foreground">
-          Payments are not configured on the server. Set Stripe keys and default redirect URLs in the API.
+          Payments are not configured on the server. Set Stripe keys and default redirect URLs in
+          the API.
         </p>
       )}
 
@@ -131,5 +132,5 @@ export function AssetPurchaseCard({
         </div>
       </div>
     </div>
-  );
+  )
 }

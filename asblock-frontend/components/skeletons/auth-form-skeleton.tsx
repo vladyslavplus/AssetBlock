@@ -1,6 +1,6 @@
-"use client";
+'use client'
 
-import { Skeleton } from "@/components/ui/skeleton";
+import { Skeleton } from '@/components/ui/skeleton'
 
 export function AuthFormSkeleton() {
   return (
@@ -15,5 +15,5 @@ export function AuthFormSkeleton() {
       </div>
       <Skeleton className="h-9 w-full rounded-md bg-primary/25 animate-pulse" />
     </div>
-  );
+  )
 }

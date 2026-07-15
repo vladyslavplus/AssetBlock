@@ -1,17 +1,17 @@
-import { CheckCircle2 } from "lucide-react";
-import Link from "next/link";
-import { Button } from "@/components/ui/button";
-import { SiteMain } from "@/components/layout/site-main";
-import { SitePageContainer } from "@/components/layout/site-page-container";
-import { SiteHeader } from "@/components/site-header";
-import { SiteFooter } from "@/components/site-footer";
-import { InvalidateLibraryAfterCheckout } from "@/components/checkout/invalidate-library-after-checkout";
-import { PostCheckoutReviewBanner } from "@/components/reviews/post-checkout-review-banner";
+import { CheckCircle2 } from 'lucide-react'
+import Link from 'next/link'
+import { Button } from '@/components/ui/button'
+import { SiteMain } from '@/components/layout/site-main'
+import { SitePageContainer } from '@/components/layout/site-page-container'
+import { SiteHeader } from '@/components/site-header'
+import { SiteFooter } from '@/components/site-footer'
+import { InvalidateLibraryAfterCheckout } from '@/components/checkout/invalidate-library-after-checkout'
+import { PostCheckoutReviewBanner } from '@/components/reviews/post-checkout-review-banner'
 
 export const metadata = {
-  title: "Payment successful - AssetBlock",
-  description: "Your payment has been processed successfully.",
-};
+  title: 'Payment successful - AssetBlock',
+  description: 'Your payment has been processed successfully.',
+}
 
 export default function CheckoutSuccessPage() {
   return (
@@ -26,12 +26,11 @@ export default function CheckoutSuccessPage() {
               <CheckCircle2 className="w-12 h-12 text-primary" />
             </div>
 
-            <h1 className="text-2xl font-bold text-center text-foreground">
-              Payment successful
-            </h1>
+            <h1 className="text-2xl font-bold text-center text-foreground">Payment successful</h1>
 
             <p className="text-sm text-muted-foreground text-center leading-relaxed">
-              Thank you for your purchase. Your payment has been processed and access to your digital assets will be available in your library shortly.
+              Thank you for your purchase. Your payment has been processed and access to your
+              digital assets will be available in your library shortly.
             </p>
 
             <PostCheckoutReviewBanner />
@@ -61,5 +60,5 @@ export default function CheckoutSuccessPage() {
 
       <SiteFooter />
     </div>
-  );
+  )
 }

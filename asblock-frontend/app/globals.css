@@ -5,37 +5,37 @@
 
 :root {
   /* AssetBlock — Obsidian Violet dark-only theme */
-  --background: #07060B;
-  --foreground: #ECEAF7;
-  --card: #11101A;
-  --card-foreground: #ECEAF7;
+  --background: #07060b;
+  --foreground: #eceaf7;
+  --card: #11101a;
+  --card-foreground: #eceaf7;
   --card-elevated: #141322;
   --popover: #141322;
-  --popover-foreground: #ECEAF7;
-  --primary: #7C3AED;
-  --primary-hover: #6D28D9;
-  --primary-foreground: #FFFFFF;
-  --secondary: #1A192A;
-  --secondary-foreground: #ECEAF7;
-  --muted: #1A192A;
-  --muted-foreground: #9A96B0;
-  --accent: #22D3EE;
-  --accent-foreground: #07060B;
-  --destructive: #FB7185;
-  --destructive-foreground: #07060B;
+  --popover-foreground: #eceaf7;
+  --primary: #7c3aed;
+  --primary-hover: #6d28d9;
+  --primary-foreground: #ffffff;
+  --secondary: #1a192a;
+  --secondary-foreground: #eceaf7;
+  --muted: #1a192a;
+  --muted-foreground: #9a96b0;
+  --accent: #22d3ee;
+  --accent-foreground: #07060b;
+  --destructive: #fb7185;
+  --destructive-foreground: #07060b;
   --border: #232136;
-  --input: #1A192A;
-  --ring: #7C3AED;
+  --input: #1a192a;
+  --ring: #7c3aed;
   --radius: 0.625rem;
   /* sidebar (unused but keep tokens) */
-  --sidebar: #11101A;
-  --sidebar-foreground: #ECEAF7;
-  --sidebar-primary: #7C3AED;
-  --sidebar-primary-foreground: #FFFFFF;
-  --sidebar-accent: #1A192A;
-  --sidebar-accent-foreground: #ECEAF7;
+  --sidebar: #11101a;
+  --sidebar-foreground: #eceaf7;
+  --sidebar-primary: #7c3aed;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: #1a192a;
+  --sidebar-accent-foreground: #eceaf7;
   --sidebar-border: #232136;
-  --sidebar-ring: #7C3AED;
+  --sidebar-ring: #7c3aed;
   /* charts (shadcn/ui chart.tsx) */
   --chart-1: #7c3aed;
   --chart-2: #22d3ee;
@@ -189,13 +189,13 @@ html body[data-scroll-locked] {
  * Unlayered on purpose: rules inside @layer utilities lose to unlayered Tailwind,
  * so Chromium/Edge kept showing the default stepper.
  */
-input[type="number"].no-native-number-spinner {
+input[type='number'].no-native-number-spinner {
   -moz-appearance: textfield;
   appearance: textfield;
 }
 
-input[type="number"].no-native-number-spinner::-webkit-outer-spin-button,
-input[type="number"].no-native-number-spinner::-webkit-inner-spin-button {
+input[type='number'].no-native-number-spinner::-webkit-outer-spin-button,
+input[type='number'].no-native-number-spinner::-webkit-inner-spin-button {
   -webkit-appearance: none;
   appearance: none;
   margin: 0;

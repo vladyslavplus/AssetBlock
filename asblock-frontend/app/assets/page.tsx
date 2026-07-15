@@ -1,68 +1,68 @@
-"use client";
+'use client'
 
-import { useQuery } from "@tanstack/react-query";
-import { useCallback, useState } from "react";
-import { SiteMain } from "@/components/layout/site-main";
-import { SitePageContainer } from "@/components/layout/site-page-container";
-import { SiteHeader } from "@/components/site-header";
-import { SiteFooter } from "@/components/site-footer";
-import { AssetCard } from "@/components/assets/asset-card";
-import { AssetCardGridSkeleton } from "@/components/assets/asset-card-skeleton";
-import { CatalogFiltersUI } from "@/components/assets/catalog-filters";
-import { CatalogToolbar } from "@/components/assets/catalog-toolbar";
-import { Button } from "@/components/ui/button";
+import { useQuery } from '@tanstack/react-query'
+import { useCallback, useState } from 'react'
+import { SiteMain } from '@/components/layout/site-main'
+import { SitePageContainer } from '@/components/layout/site-page-container'
+import { SiteHeader } from '@/components/site-header'
+import { SiteFooter } from '@/components/site-footer'
+import { AssetCard } from '@/components/assets/asset-card'
+import { AssetCardGridSkeleton } from '@/components/assets/asset-card-skeleton'
+import { CatalogFiltersUI } from '@/components/assets/catalog-filters'
+import { CatalogToolbar } from '@/components/assets/catalog-toolbar'
+import { Button } from '@/components/ui/button'
 import {
   Sheet,
   SheetContent,
   SheetDescription,
   SheetHeader,
   SheetTitle,
-} from "@/components/ui/sheet";
-import { AlertCircle, ChevronLeft, ChevronRight } from "lucide-react";
+} from '@/components/ui/sheet'
+import { AlertCircle, ChevronLeft, ChevronRight } from 'lucide-react'
 import {
   CATALOG_ASSETS_PAGE_SIZE,
   DEFAULT_CATALOG_FILTERS,
   sortDirectionForSortBy,
   type CatalogFilters,
-} from "@/lib/catalog/catalog-filters";
-import { catalogKeys, fetchCatalogFacets, fetchCatalogPage } from "@/lib/catalog/catalog-query";
+} from '@/lib/catalog/catalog-filters'
+import { catalogKeys, fetchCatalogFacets, fetchCatalogPage } from '@/lib/catalog/catalog-query'
 
 export default function AssetsPage() {
-  const [filters, setFilters] = useState<CatalogFilters>(DEFAULT_CATALOG_FILTERS);
-  const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false);
+  const [filters, setFilters] = useState<CatalogFilters>(DEFAULT_CATALOG_FILTERS)
+  const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false)
 
   const facetsQuery = useQuery({
     queryKey: catalogKeys.facets(),
     queryFn: fetchCatalogFacets,
     staleTime: 5 * 60 * 1000,
-  });
+  })
 
   const listQuery = useQuery({
     queryKey: catalogKeys.list(filters),
     queryFn: () => fetchCatalogPage(filters),
-  });
+  })
 
-  const categories = facetsQuery.data?.categories ?? [];
-  const tags = facetsQuery.data?.tags ?? [];
-  const facetsLoading = facetsQuery.isPending;
+  const categories = facetsQuery.data?.categories ?? []
+  const tags = facetsQuery.data?.tags ?? []
+  const facetsLoading = facetsQuery.isPending
   const facetsError = facetsQuery.isError
-    ? "Could not load categories or tags. Check that the API is running."
-    : null;
+    ? 'Could not load categories or tags. Check that the API is running.'
+    : null
 
-  const pageData = listQuery.data;
-  const listLoading = listQuery.isPending;
+  const pageData = listQuery.data
+  const listLoading = listQuery.isPending
   const listError = listQuery.isError
     ? listQuery.error instanceof Error
       ? listQuery.error.message
-      : "Could not load the catalog."
-    : null;
+      : 'Could not load the catalog.'
+    : null
 
   const handleFilterChange = useCallback((updates: Partial<CatalogFilters>) => {
     setFilters((prev) => {
-      const next: CatalogFilters = { ...prev, ...updates };
-      next.pageSize = CATALOG_ASSETS_PAGE_SIZE;
+      const next: CatalogFilters = { ...prev, ...updates }
+      next.pageSize = CATALOG_ASSETS_PAGE_SIZE
       if (updates.sortBy !== undefined) {
-        next.sortDirection = sortDirectionForSortBy(updates.sortBy);
+        next.sortDirection = sortDirectionForSortBy(updates.sortBy)
       }
       const shouldResetPage =
         updates.page === undefined &&
@@ -70,26 +70,26 @@ export default function AssetsPage() {
           updates.categoryId !== undefined ||
           updates.tags !== undefined ||
           updates.minPrice !== undefined ||
-          updates.maxPrice !== undefined);
-      if (shouldResetPage) next.page = 1;
-      return next;
-    });
-  }, []);
+          updates.maxPrice !== undefined)
+      if (shouldResetPage) next.page = 1
+      return next
+    })
+  }, [])
 
   const handleResetFilters = useCallback(() => {
-    setFilters(DEFAULT_CATALOG_FILTERS);
-  }, []);
+    setFilters(DEFAULT_CATALOG_FILTERS)
+  }, [])
 
-  const items = pageData?.items ?? [];
-  const totalCount = pageData?.totalCount ?? 0;
-  const totalPages = pageData?.totalPages ?? 0;
+  const items = pageData?.items ?? []
+  const totalCount = pageData?.totalCount ?? 0
+  const totalPages = pageData?.totalPages ?? 0
 
   const hasActiveFilters =
     Boolean(filters.search?.trim()) ||
     Boolean(filters.categoryId) ||
     filters.tags.length > 0 ||
     filters.minPrice !== null ||
-    filters.maxPrice !== null;
+    filters.maxPrice !== null
 
   return (
     <div className="min-h-screen flex flex-col bg-background text-foreground">
@@ -152,7 +152,7 @@ export default function AssetsPage() {
                       </span>
                       <button
                         type="button"
-                        onClick={() => handleFilterChange({ categoryId: "" })}
+                        onClick={() => handleFilterChange({ categoryId: '' })}
                         className="text-primary hover:text-primary/80"
                       >
                         ×
@@ -217,7 +217,9 @@ export default function AssetsPage() {
                 <div className="rounded-lg border border-border/50 p-12 text-center">
                   <AlertCircle className="w-12 h-12 text-muted-foreground/30 mx-auto mb-4" />
                   <h3 className="font-semibold text-foreground mb-2">No assets found</h3>
-                  <p className="text-sm text-muted-foreground mb-4">Try adjusting your filters or search term.</p>
+                  <p className="text-sm text-muted-foreground mb-4">
+                    Try adjusting your filters or search term.
+                  </p>
                   <Button
                     type="button"
                     onClick={handleResetFilters}
@@ -245,7 +247,9 @@ export default function AssetsPage() {
                   </span>
                   <Button
                     type="button"
-                    onClick={() => handleFilterChange({ page: Math.min(totalPages, filters.page + 1) })}
+                    onClick={() =>
+                      handleFilterChange({ page: Math.min(totalPages, filters.page + 1) })
+                    }
                     disabled={filters.page === totalPages || listLoading}
                     variant="outline"
                     size="sm"
@@ -279,7 +283,7 @@ export default function AssetsPage() {
                     </span>
                     <button
                       type="button"
-                      onClick={() => handleFilterChange({ categoryId: "" })}
+                      onClick={() => handleFilterChange({ categoryId: '' })}
                       className="text-primary hover:text-primary/80"
                     >
                       ×
@@ -309,10 +313,7 @@ export default function AssetsPage() {
             )}
 
             <Sheet open={mobileFiltersOpen} onOpenChange={setMobileFiltersOpen}>
-              <SheetContent
-                side="left"
-                className="w-[280px] bg-card-elevated border-border p-4"
-              >
+              <SheetContent side="left" className="w-[280px] bg-card-elevated border-border p-4">
                 <SheetHeader>
                   <SheetTitle className="text-base">Filters</SheetTitle>
                   <SheetDescription className="text-xs">Narrow down your search</SheetDescription>
@@ -343,7 +344,9 @@ export default function AssetsPage() {
               <div className="rounded-lg border border-border/50 p-12 text-center">
                 <AlertCircle className="w-12 h-12 text-muted-foreground/30 mx-auto mb-4" />
                 <h3 className="font-semibold text-foreground mb-2">No assets found</h3>
-                <p className="text-sm text-muted-foreground mb-4">Try adjusting your filters or search term.</p>
+                <p className="text-sm text-muted-foreground mb-4">
+                  Try adjusting your filters or search term.
+                </p>
                 <Button
                   type="button"
                   onClick={handleResetFilters}
@@ -371,7 +374,9 @@ export default function AssetsPage() {
                 </span>
                 <Button
                   type="button"
-                  onClick={() => handleFilterChange({ page: Math.min(totalPages, filters.page + 1) })}
+                  onClick={() =>
+                    handleFilterChange({ page: Math.min(totalPages, filters.page + 1) })
+                  }
                   disabled={filters.page === totalPages || listLoading}
                   variant="outline"
                   size="sm"
@@ -382,10 +387,10 @@ export default function AssetsPage() {
               </div>
             )}
           </div>
-      </SitePageContainer>
+        </SitePageContainer>
       </SiteMain>
 
       <SiteFooter />
     </div>
-  );
+  )
 }

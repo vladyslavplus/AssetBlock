@@ -1,7 +1,7 @@
-"use client";
+'use client'
 
-import { Card, CardContent, CardHeader } from "@/components/ui/card";
-import { Skeleton } from "@/components/ui/skeleton";
+import { Card, CardContent, CardHeader } from '@/components/ui/card'
+import { Skeleton } from '@/components/ui/skeleton'
 
 export function AccountProfileCardSkeleton() {
   return (
@@ -21,7 +21,7 @@ export function AccountProfileCardSkeleton() {
         <Skeleton className="h-10 w-28 rounded-md bg-muted-foreground/20 animate-pulse" />
       </CardContent>
     </Card>
-  );
+  )
 }
 
 export function SocialLinksFieldsSkeleton({ rows = 4 }: { rows?: number }) {
@@ -34,5 +34,5 @@ export function SocialLinksFieldsSkeleton({ rows = 4 }: { rows?: number }) {
         </div>
       ))}
     </div>
-  );
+  )
 }

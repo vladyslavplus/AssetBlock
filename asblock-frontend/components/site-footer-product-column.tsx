@@ -1,21 +1,21 @@
-"use client";
+'use client'
 
-import Link from "next/link";
-import { useAuth } from "@/components/auth/auth-context";
-import { isAdminRole } from "@/lib/auth/roles";
+import Link from 'next/link'
+import { useAuth } from '@/components/auth/auth-context'
+import { isAdminRole } from '@/lib/auth/roles'
 
 const PRODUCT_LINKS = [
-  { label: "Browse assets", href: "/assets" },
-  { label: "Sell on AssetBlock", href: "/sell" },
-  { label: "Pricing", href: "#" },
-  { label: "Changelog", href: "#" },
-] as const;
+  { label: 'Browse assets', href: '/assets' },
+  { label: 'Sell on AssetBlock', href: '/sell' },
+  { label: 'Pricing', href: '#' },
+  { label: 'Changelog', href: '#' },
+] as const
 
-const linkClassName = "text-xs text-muted-foreground hover:text-foreground transition-colors";
+const linkClassName = 'text-xs text-muted-foreground hover:text-foreground transition-colors'
 
 export function SiteFooterProductColumn() {
-  const { user, status } = useAuth();
-  const showAdmin = status === "authenticated" && isAdminRole(user?.role);
+  const { user, status } = useAuth()
+  const showAdmin = status === 'authenticated' && isAdminRole(user?.role)
 
   return (
     <div className="flex flex-col gap-3">
@@ -37,5 +37,5 @@ export function SiteFooterProductColumn() {
         ) : null}
       </ul>
     </div>
-  );
+  )
 }

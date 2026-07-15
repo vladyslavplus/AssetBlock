@@ -1,9 +1,9 @@
-"use client";
+'use client'
 
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { AdminCategoriesSection } from "@/components/admin/admin-categories-section";
-import { AdminReviewsSection } from "@/components/admin/admin-reviews-section";
-import { AdminTagsSection } from "@/components/admin/admin-tags-section";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { AdminCategoriesSection } from '@/components/admin/admin-categories-section'
+import { AdminReviewsSection } from '@/components/admin/admin-reviews-section'
+import { AdminTagsSection } from '@/components/admin/admin-tags-section'
 
 export function AdminPanelClient() {
   return (
@@ -29,5 +29,5 @@ export function AdminPanelClient() {
         <AdminReviewsSection />
       </TabsContent>
     </Tabs>
-  );
+  )
 }

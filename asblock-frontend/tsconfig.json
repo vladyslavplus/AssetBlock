@@ -1,12 +1,7 @@
 {
   "compilerOptions": {
-    "baseUrl": ".",
-    "lib": [
-      "dom",
-      "dom.iterable",
-      "esnext"
-    ],
-    "allowJs": true,
+    "lib": ["dom", "dom.iterable", "esnext"],
+    "allowJs": false,
     "target": "ES6",
     "skipLibCheck": true,
     "strict": true,
@@ -24,9 +19,7 @@
       }
     ],
     "paths": {
-      "@/*": [
-        "./*"
-      ]
+      "@/*": ["./*"]
     }
   },
   "include": [
@@ -36,7 +29,5 @@
     ".next/types/**/*.ts",
     ".next/dev/types/**/*.ts"
   ],
-  "exclude": [
-    "node_modules"
-  ]
+  "exclude": ["node_modules"]
 }

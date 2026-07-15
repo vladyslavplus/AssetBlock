@@ -1,34 +1,31 @@
-import { cookies } from "next/headers";
-import { NextResponse } from "next/server";
-import { fetchBackendAuthorized } from "@/lib/server/backend-authorized";
+import { cookies } from 'next/headers'
+import { fetchBackendAuthorized } from '@/lib/server/backend-authorized'
+import {
+  assertSameOrigin,
+  forwardBackendResponse,
+  invalidJsonResponse,
+} from '@/lib/server/bff-http'
 
 export async function GET() {
-  const store = await cookies();
-  const res = await fetchBackendAuthorized(store, "/api/users/me", { method: "GET" });
-  const text = await res.text();
-  const contentType = res.headers.get("Content-Type") ?? "application/json";
-  return new NextResponse(text, {
-    status: res.status,
-    headers: { "Content-Type": contentType },
-  });
+  const store = await cookies()
+  const res = await fetchBackendAuthorized(store, '/api/users/me', { method: 'GET' })
+  return forwardBackendResponse(res)
 }
 
 export async function PATCH(request: Request) {
-  const store = await cookies();
-  let body: string;
+  const originError = assertSameOrigin(request)
+  if (originError) return originError
+
+  const store = await cookies()
+  let body: string
   try {
-    body = await request.text();
+    body = await request.text()
   } catch {
-    return NextResponse.json({ errors: [{ identifier: "body", message: "Invalid body" }] }, { status: 400 });
+    return invalidJsonResponse()
   }
-  const res = await fetchBackendAuthorized(store, "/api/users/me", {
-    method: "PATCH",
+  const res = await fetchBackendAuthorized(store, '/api/users/me', {
+    method: 'PATCH',
     body,
-  });
-  const text = await res.text();
-  const contentType = res.headers.get("Content-Type") ?? "application/json";
-  return new NextResponse(text, {
-    status: res.status,
-    headers: { "Content-Type": contentType },
-  });
+  })
+  return forwardBackendResponse(res)
 }

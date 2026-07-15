@@ -1,49 +1,52 @@
-import type { Metadata } from "next";
-import Image from "next/image";
-import { notFound } from "next/navigation";
-import { Calendar, ExternalLink } from "lucide-react";
-import { SiteMain } from "@/components/layout/site-main";
-import { SitePageContainer } from "@/components/layout/site-page-container";
-import { SiteHeader } from "@/components/site-header";
-import { SiteFooter } from "@/components/site-footer";
-import { Button } from "@/components/ui/button";
-import { AuthorCatalogSection } from "@/components/users/author-catalog-section";
-import { formatLongMonthYear } from "@/lib/format-date";
-import { fetchAuthorAssetsPage, fetchPublicProfileByUsername } from "@/lib/server/user-profile-server";
+import type { Metadata } from 'next'
+import Image from 'next/image'
+import { notFound } from 'next/navigation'
+import { Calendar, ExternalLink } from 'lucide-react'
+import { SiteMain } from '@/components/layout/site-main'
+import { SitePageContainer } from '@/components/layout/site-page-container'
+import { SiteHeader } from '@/components/site-header'
+import { SiteFooter } from '@/components/site-footer'
+import { Button } from '@/components/ui/button'
+import { AuthorCatalogSection } from '@/components/users/author-catalog-section'
+import { formatLongMonthYear } from '@/lib/format-date'
+import {
+  fetchAuthorAssetsPage,
+  fetchPublicProfileByUsername,
+} from '@/lib/server/user-profile-server'
 
 interface PageProps {
-  params: Promise<{ username: string }>;
-  searchParams: Promise<{ page?: string }>;
+  params: Promise<{ username: string }>
+  searchParams: Promise<{ page?: string }>
 }
 
 export async function generateMetadata({ params }: PageProps): Promise<Metadata> {
-  const { username } = await params;
-  const profile = await fetchPublicProfileByUsername(username);
+  const { username } = await params
+  const profile = await fetchPublicProfileByUsername(username)
   if (!profile) {
-    return { title: "Profile not found · AssetBlock" };
+    return { title: 'Profile not found · AssetBlock' }
   }
-  const bio = profile.bio?.trim();
+  const bio = profile.bio?.trim()
   return {
     title: `@${profile.username} · AssetBlock`,
     description:
       bio && bio.length > 0
         ? bio.slice(0, 160)
         : `Digital assets and listings by @${profile.username} on AssetBlock.`,
-  };
+  }
 }
 
 export default async function PublicUserProfilePage({ params, searchParams }: PageProps) {
-  const { username } = await params;
-  const sp = await searchParams;
-  const pageRaw = sp.page;
-  const page = Math.max(1, Number.parseInt(pageRaw ?? "1", 10) || 1);
+  const { username } = await params
+  const sp = await searchParams
+  const pageRaw = sp.page
+  const page = Math.max(1, Number.parseInt(pageRaw ?? '1', 10) || 1)
 
-  const profile = await fetchPublicProfileByUsername(username);
+  const profile = await fetchPublicProfileByUsername(username)
   if (!profile) {
-    notFound();
+    notFound()
   }
 
-  const catalog = await fetchAuthorAssetsPage(profile.id, page);
+  const catalog = await fetchAuthorAssetsPage(profile.id, page)
 
   return (
     <div className="min-h-screen flex flex-col bg-background text-foreground">
@@ -124,11 +127,15 @@ export default async function PublicUserProfilePage({ params, searchParams }: Pa
             </div>
           </div>
 
-          <AuthorCatalogSection authorId={profile.id} username={profile.username} initialCatalog={catalog} />
-      </SitePageContainer>
+          <AuthorCatalogSection
+            authorId={profile.id}
+            username={profile.username}
+            initialCatalog={catalog}
+          />
+        </SitePageContainer>
       </SiteMain>
 
       <SiteFooter />
     </div>
-  );
+  )
 }

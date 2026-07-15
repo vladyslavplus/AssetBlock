@@ -1,11 +1,11 @@
-"use client";
+'use client'
 
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { ExternalLink, Loader2, Package, Pencil, Trash2 } from "lucide-react";
-import { toast } from "sonner";
-import { Button } from "@/components/ui/button";
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import Link from 'next/link'
+import { useRouter } from 'next/navigation'
+import { ExternalLink, Loader2, Package, Pencil, Trash2 } from 'lucide-react'
+import { toast } from 'sonner'
+import { Button } from '@/components/ui/button'
 import {
   AlertDialog,
   AlertDialogCancel,
@@ -14,65 +14,65 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
-import { useAuth } from "@/components/auth/auth-context";
-import { SessionBlockSkeleton } from "@/components/skeletons/session-block-skeleton";
-import { SellListingListSkeleton } from "@/components/sell/sell-listing-row-skeleton";
-import { deleteSellerAsset } from "@/lib/seller/seller-api";
-import { formatUsdWhole } from "@/lib/format-currency";
-import type { AssetListItemApi } from "@/lib/catalog/assets-api";
-import { catalogKeys } from "@/lib/catalog/catalog-query";
-import { fetchSellerListingsQuery, sellerKeys } from "@/lib/seller/seller-query";
-import { useState } from "react";
+} from '@/components/ui/alert-dialog'
+import { useAuth } from '@/components/auth/auth-context'
+import { SessionBlockSkeleton } from '@/components/skeletons/session-block-skeleton'
+import { SellListingListSkeleton } from '@/components/sell/sell-listing-row-skeleton'
+import { deleteSellerAsset } from '@/lib/seller/seller-api'
+import { formatUsdWhole } from '@/lib/format-currency'
+import type { AssetListItemApi } from '@/lib/catalog/assets-api'
+import { catalogKeys } from '@/lib/catalog/catalog-query'
+import { fetchSellerListingsQuery, sellerKeys } from '@/lib/seller/seller-query'
+import { useState } from 'react'
 
 export function SellMyListings() {
-  const router = useRouter();
-  const queryClient = useQueryClient();
-  const { status } = useAuth();
-  const authed = status === "authenticated";
-  const pending = status === "loading";
+  const router = useRouter()
+  const queryClient = useQueryClient()
+  const { status } = useAuth()
+  const authed = status === 'authenticated'
+  const pending = status === 'loading'
 
   const listingsQuery = useQuery({
     queryKey: sellerKeys.listings(),
     queryFn: fetchSellerListingsQuery,
     enabled: authed,
-  });
+  })
 
   const deleteMutation = useMutation({
     mutationFn: deleteSellerAsset,
     onSuccess: (result) => {
       if (!result.ok) {
-        toast.error(result.message);
-        return;
+        toast.error(result.message)
+        return
       }
-      toast.success("Asset removed.");
-      setDeleteTarget(null);
-      void queryClient.invalidateQueries({ queryKey: sellerKeys.all });
-      void queryClient.invalidateQueries({ queryKey: catalogKeys.all });
-      router.refresh();
+      toast.success('Asset removed.')
+      setDeleteTarget(null)
+      void queryClient.invalidateQueries({ queryKey: sellerKeys.all })
+      void queryClient.invalidateQueries({ queryKey: catalogKeys.all })
+      router.refresh()
     },
-  });
+  })
 
-  const [deleteTarget, setDeleteTarget] = useState<{ id: string; title: string } | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<{ id: string; title: string } | null>(null)
 
-  const items: AssetListItemApi[] = listingsQuery.data?.items ?? [];
-  const loading = authed && listingsQuery.isPending;
+  const items: AssetListItemApi[] = listingsQuery.data?.items ?? []
+  const loading = authed && listingsQuery.isPending
   const error =
     listingsQuery.error instanceof Error
-      ? listingsQuery.error.message === "SIGN_IN_REQUIRED"
-        ? "Please sign in to view your listings."
+      ? listingsQuery.error.message === 'SIGN_IN_REQUIRED'
+        ? 'Please sign in to view your listings.'
         : listingsQuery.error.message
       : listingsQuery.isError
-        ? "Could not load listings."
-        : null;
+        ? 'Could not load listings.'
+        : null
 
   async function confirmDeleteListing() {
-    if (!deleteTarget) return;
-    deleteMutation.mutate(deleteTarget.id);
+    if (!deleteTarget) return
+    deleteMutation.mutate(deleteTarget.id)
   }
 
   if (pending) {
-    return <SessionBlockSkeleton />;
+    return <SessionBlockSkeleton />
   }
 
   if (!authed) {
@@ -83,7 +83,7 @@ export function SellMyListings() {
           <Link href="/login?returnUrl=/sell">Sign in</Link>
         </Button>
       </div>
-    );
+    )
   }
 
   if (loading) {
@@ -91,7 +91,7 @@ export function SellMyListings() {
       <div className="py-4">
         <SellListingListSkeleton rows={5} />
       </div>
-    );
+    )
   }
 
   if (error) {
@@ -99,7 +99,7 @@ export function SellMyListings() {
       <p className="text-sm text-destructive py-4" role="alert">
         {error}
       </p>
-    );
+    )
   }
 
   if (items.length === 0) {
@@ -108,16 +108,17 @@ export function SellMyListings() {
         <Package className="h-10 w-10 text-muted-foreground/50 mx-auto mb-3" aria-hidden />
         <p className="font-medium text-foreground mb-1">No listings yet</p>
         <p className="text-sm text-muted-foreground mb-4">
-          Upload your first asset using the <span className="text-foreground">Upload asset</span> tab.
+          Upload your first asset using the <span className="text-foreground">Upload asset</span>{' '}
+          tab.
         </p>
         <Button asChild variant="outline" className="border-border">
           <Link href="/assets">Browse the catalog for inspiration</Link>
         </Button>
       </div>
-    );
+    )
   }
 
-  const deletingId = deleteMutation.isPending ? deleteTarget?.id ?? null : null;
+  const deletingId = deleteMutation.isPending ? (deleteTarget?.id ?? null) : null
 
   return (
     <>
@@ -131,7 +132,9 @@ export function SellMyListings() {
               <p className="font-medium text-foreground line-clamp-2">{a.title}</p>
               <p className="text-xs text-muted-foreground mt-0.5 font-mono tabular-nums">
                 {formatUsdWhole(Number(a.price))}
-                {a.categoryName ? <span className="text-muted-foreground/80"> · {a.categoryName}</span> : null}
+                {a.categoryName ? (
+                  <span className="text-muted-foreground/80"> · {a.categoryName}</span>
+                ) : null}
               </p>
             </div>
             <div className="flex flex-wrap gap-2 shrink-0">
@@ -167,15 +170,20 @@ export function SellMyListings() {
         ))}
       </ul>
 
-      <AlertDialog open={deleteTarget !== null} onOpenChange={(open) => !open && setDeleteTarget(null)}>
+      <AlertDialog
+        open={deleteTarget !== null}
+        onOpenChange={(open) => !open && setDeleteTarget(null)}
+      >
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Delete this listing?</AlertDialogTitle>
             <AlertDialogDescription>
               <span className="block">
-                This permanently removes{" "}
-                <span className="font-medium text-foreground">&quot;{deleteTarget?.title}&quot;</span> from the
-                marketplace. This cannot be undone here.
+                This permanently removes{' '}
+                <span className="font-medium text-foreground">
+                  &quot;{deleteTarget?.title}&quot;
+                </span>{' '}
+                from the marketplace. This cannot be undone here.
               </span>
             </AlertDialogDescription>
           </AlertDialogHeader>
@@ -193,12 +201,12 @@ export function SellMyListings() {
                   Deleting…
                 </>
               ) : (
-                "Delete permanently"
+                'Delete permanently'
               )}
             </Button>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
     </>
-  );
+  )
 }

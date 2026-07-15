@@ -1,23 +1,27 @@
-"use client";
+'use client'
 
-import { useQuery } from "@tanstack/react-query";
-import Link from "next/link";
-import { ArrowLeft } from "lucide-react";
-import { SiteMain } from "@/components/layout/site-main";
-import { SitePageContainer } from "@/components/layout/site-page-container";
-import { AssetDetailHero } from "@/components/assets/asset-detail-hero";
-import { AssetPurchaseCard } from "@/components/assets/asset-purchase-card";
-import { AssetReviewsList } from "@/components/assets/asset-reviews-list";
-import type { AssetDetailItemApi } from "@/lib/catalog/assets-api";
-import { mapDetailApiToListItemForHero } from "@/lib/catalog/assets-api";
-import { assetKeys, fetchAssetDetailPublic, fetchAssetReviewsPublic } from "@/lib/catalog/asset-detail-query";
-import type { AssetReview } from "@/lib/catalog/catalog-utils";
+import { useQuery } from '@tanstack/react-query'
+import Link from 'next/link'
+import { ArrowLeft } from 'lucide-react'
+import { SiteMain } from '@/components/layout/site-main'
+import { SitePageContainer } from '@/components/layout/site-page-container'
+import { AssetDetailHero } from '@/components/assets/asset-detail-hero'
+import { AssetPurchaseCard } from '@/components/assets/asset-purchase-card'
+import { AssetReviewsList } from '@/components/assets/asset-reviews-list'
+import type { AssetDetailItemApi } from '@/lib/catalog/assets-api'
+import { mapDetailApiToListItemForHero } from '@/lib/catalog/assets-api'
+import {
+  assetKeys,
+  fetchAssetDetailPublic,
+  fetchAssetReviewsPublic,
+} from '@/lib/catalog/asset-detail-query'
+import type { AssetReview } from '@/lib/catalog/catalog-utils'
 
 interface AssetDetailViewProps {
-  assetId: string;
-  initialDetail: AssetDetailItemApi;
-  initialReviews: AssetReview[];
-  checkoutConfigured: boolean;
+  assetId: string
+  initialDetail: AssetDetailItemApi
+  initialReviews: AssetReview[]
+  checkoutConfigured: boolean
 }
 
 export function AssetDetailView({
@@ -30,16 +34,16 @@ export function AssetDetailView({
     queryKey: assetKeys.detail(assetId),
     queryFn: () => fetchAssetDetailPublic(assetId),
     initialData: initialDetail,
-  });
+  })
 
   const reviewsQuery = useQuery({
     queryKey: assetKeys.reviews(assetId),
     queryFn: () => fetchAssetReviewsPublic(assetId),
     initialData: initialReviews,
-  });
+  })
 
-  const asset = mapDetailApiToListItemForHero(detailQuery.data);
-  const reviews = reviewsQuery.data ?? [];
+  const asset = mapDetailApiToListItemForHero(detailQuery.data)
+  const reviews = reviewsQuery.data ?? []
 
   return (
     <SiteMain>
@@ -85,5 +89,5 @@ export function AssetDetailView({
         </div>
       </SitePageContainer>
     </SiteMain>
-  );
+  )
 }

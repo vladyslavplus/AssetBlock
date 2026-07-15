@@ -45,15 +45,19 @@ const strictRules = {
   'import/no-useless-path-segments': ['error', { noUselessIndex: true }],
   'import/no-anonymous-default-export': [
     'warn',
-    { allowArray: true, allowArrowFunction: false, allowAnonymousClass: false, allowAnonymousFunction: false, allowLiteral: true, allowObject: true },
+    {
+      allowArray: true,
+      allowArrowFunction: false,
+      allowAnonymousClass: false,
+      allowAnonymousFunction: false,
+      allowLiteral: true,
+      allowObject: true,
+    },
   ],
 
   // --- React ---
   'react/jsx-no-useless-fragment': ['warn', { allowExpressions: true }],
-  'react/jsx-curly-brace-presence': [
-    'warn',
-    { props: 'never', children: 'never' },
-  ],
+  'react/jsx-curly-brace-presence': ['warn', { props: 'never', children: 'never' }],
   'react/self-closing-comp': 'error',
 }
 

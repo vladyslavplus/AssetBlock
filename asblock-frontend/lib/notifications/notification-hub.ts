@@ -1,62 +1,63 @@
-import * as signalR from "@microsoft/signalr";
+import * as signalR from '@microsoft/signalr'
 
-import { formatHubToastMessage } from "@/lib/notifications/notification-ui";
-import { getNotificationsHubUrl } from "@/lib/notifications/notifications-hub-url";
-import { toast } from "sonner";
+import { formatHubToastMessage } from '@/lib/notifications/notification-ui'
+import { getNotificationsHubUrl } from '@/lib/notifications/notifications-hub-url'
+import { toast } from 'sonner'
 
-const HUB_METHODS = ["PurchaseCompleted", "DownloadReady", "AssetSold", "ReviewReceived"] as const;
+const HUB_METHODS = ['PurchaseCompleted', 'DownloadReady', 'AssetSold', 'ReviewReceived'] as const
 
 /** When the last subscriber leaves, delay stop so React Strict Mode / HMR remounts do not abort negotiate. */
-const STOP_DEBOUNCE_MS = 500;
+const STOP_DEBOUNCE_MS = 500
 
 /** Only dev lifecycle / intentional stop — do not hide other "failed to start" errors. */
-const NEGOTIATION_ABORT_MESSAGE = /stopped during negotiation|connection was stopped during negotiation/i;
+const NEGOTIATION_ABORT_MESSAGE =
+  /stopped during negotiation|connection was stopped during negotiation/i
 
 function createHubLogger(): signalR.ILogger {
   return {
     log(logLevel, message) {
       if (NEGOTIATION_ABORT_MESSAGE.test(message)) {
-        return;
+        return
       }
       if (logLevel <= signalR.LogLevel.Debug) {
-        return;
+        return
       }
-      if (logLevel === signalR.LogLevel.Information && process.env.NODE_ENV === "development") {
-        return;
+      if (logLevel === signalR.LogLevel.Information && process.env.NODE_ENV === 'development') {
+        return
       }
-      const prefix = "[SignalR]";
+      const prefix = '[SignalR]'
       if (logLevel === signalR.LogLevel.Warning) {
-        console.warn(prefix, message);
-        return;
+        console.warn(prefix, message)
+        return
       }
       if (logLevel >= signalR.LogLevel.Error) {
-        console.error(prefix, message);
+        console.error(prefix, message)
       }
     },
-  };
+  }
 }
 
-type InvalidateFn = () => void;
+type InvalidateFn = () => void
 
-const invalidateHandlers = new Set<InvalidateFn>();
+const invalidateHandlers = new Set<InvalidateFn>()
 
-let hubConnection: signalR.HubConnection | null = null;
-let startPromise: Promise<void> | null = null;
-let disconnectRequested = false;
-let pendingStopTimer: ReturnType<typeof setTimeout> | null = null;
+let hubConnection: signalR.HubConnection | null = null
+let startPromise: Promise<void> | null = null
+let disconnectRequested = false
+let pendingStopTimer: ReturnType<typeof setTimeout> | null = null
 
 function cancelPendingStop(): void {
   if (pendingStopTimer != null) {
-    clearTimeout(pendingStopTimer);
-    pendingStopTimer = null;
+    clearTimeout(pendingStopTimer)
+    pendingStopTimer = null
   }
 }
 
 function dispatchHubEvent(method: string, payload: unknown): void {
-  toast.info(formatHubToastMessage(method, payload));
+  toast.info(formatHubToastMessage(method, payload))
   for (const fn of invalidateHandlers) {
     try {
-      fn();
+      fn()
     } catch {
       /* subscriber must not break hub */
     }
@@ -64,19 +65,22 @@ function dispatchHubEvent(method: string, payload: unknown): void {
 }
 
 function buildConnection(): signalR.HubConnection {
-  const hubUrl = getNotificationsHubUrl();
+  const hubUrl = getNotificationsHubUrl()
   const conn = new signalR.HubConnectionBuilder()
     .withUrl(hubUrl, {
       accessTokenFactory: async () => {
-        const res = await fetch("/api/auth/signalr-access", { credentials: "include", cache: "no-store" });
+        const res = await fetch('/api/auth/signalr-access', {
+          credentials: 'include',
+          cache: 'no-store',
+        })
         if (!res.ok) {
-          throw new Error("SignalR token unavailable");
+          throw new Error('SignalR token unavailable')
         }
-        const data = (await res.json()) as { accessToken?: string };
+        const data = (await res.json()) as { accessToken?: string }
         if (!data.accessToken) {
-          throw new Error("SignalR token missing");
+          throw new Error('SignalR token missing')
         }
-        return data.accessToken;
+        return data.accessToken
       },
       transport:
         signalR.HttpTransportType.WebSockets |
@@ -85,80 +89,86 @@ function buildConnection(): signalR.HubConnection {
     })
     .withAutomaticReconnect()
     .configureLogging(createHubLogger())
-    .build();
+    .build()
 
   for (const m of HUB_METHODS) {
-    conn.on(m, (payload: unknown) => dispatchHubEvent(m, payload));
+    conn.on(m, (payload: unknown) => dispatchHubEvent(m, payload))
   }
 
-  return conn;
+  return conn
 }
 
 function ensureConnection(): void {
-  cancelPendingStop();
+  cancelPendingStop()
   if (hubConnection != null) {
-    const state = hubConnection.state;
-    if (state === signalR.HubConnectionState.Connected || state === signalR.HubConnectionState.Connecting) {
-      return;
+    const state = hubConnection.state
+    if (
+      state === signalR.HubConnectionState.Connected ||
+      state === signalR.HubConnectionState.Connecting
+    ) {
+      return
     }
-    if (state === signalR.HubConnectionState.Reconnecting || state === signalR.HubConnectionState.Disconnecting) {
-      return;
+    if (
+      state === signalR.HubConnectionState.Reconnecting ||
+      state === signalR.HubConnectionState.Disconnecting
+    ) {
+      return
     }
   }
 
   if (hubConnection == null) {
-    hubConnection = buildConnection();
+    hubConnection = buildConnection()
   }
 
-  disconnectRequested = false;
+  disconnectRequested = false
   if (startPromise != null) {
-    return;
+    return
   }
 
-  const conn = hubConnection;
+  const conn = hubConnection
   startPromise = (async () => {
     try {
-      await conn.start();
+      await conn.start()
     } catch (err) {
       if (disconnectRequested || hubConnection !== conn) {
-        return;
+        return
       }
       if (err instanceof Error && NEGOTIATION_ABORT_MESSAGE.test(err.message)) {
-        return;
+        return
       }
     } finally {
-      startPromise = null;
+      startPromise = null
     }
-  })();
+  })()
 }
 
 async function tearDownConnection(): Promise<void> {
-  cancelPendingStop();
-  const conn = hubConnection;
-  hubConnection = null;
-  startPromise = null;
+  cancelPendingStop()
+  const conn = hubConnection
+  hubConnection = null
+  startPromise = null
   if (conn == null) {
-    return;
+    return
   }
-  disconnectRequested = true;
+  disconnectRequested = true
   try {
-    await conn.stop();
+    await conn.stop()
   } catch {
     /* stop during negotiate etc. */
   }
 }
 
 function scheduleStopIfIdle(): void {
-  cancelPendingStop();
+  cancelPendingStop()
   if (invalidateHandlers.size > 0) {
-    return;
+    return
   }
   pendingStopTimer = setTimeout(() => {
-    pendingStopTimer = null;
+    pendingStopTimer = null
     if (invalidateHandlers.size === 0) {
-      void tearDownConnection();
+      void tearDownConnection()
     }
-  }, STOP_DEBOUNCE_MS);
+  }, STOP_DEBOUNCE_MS)
 }
 
 /**
@@ -166,13 +176,13 @@ function scheduleStopIfIdle(): void {
  * disconnect so dev remounts do not spam negotiate errors.
  */
 export function subscribeNotificationHub(onInvalidate: InvalidateFn): () => void {
-  invalidateHandlers.add(onInvalidate);
-  ensureConnection();
+  invalidateHandlers.add(onInvalidate)
+  ensureConnection()
 
   return () => {
-    invalidateHandlers.delete(onInvalidate);
+    invalidateHandlers.delete(onInvalidate)
     if (invalidateHandlers.size === 0) {
-      scheduleStopIfIdle();
+      scheduleStopIfIdle()
     }
-  };
+  }
 }

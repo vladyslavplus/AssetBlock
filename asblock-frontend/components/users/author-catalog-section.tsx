@@ -1,27 +1,27 @@
-"use client";
+'use client'
 
-import { useQuery } from "@tanstack/react-query";
-import Link from "next/link";
-import { AssetCard } from "@/components/assets/asset-card";
-import { Button } from "@/components/ui/button";
-import type { AuthorCatalogPageResult } from "@/lib/server/user-profile-server";
-import { fetchAuthorCatalogClient, userProfileKeys } from "@/lib/profile/user-profile-query";
+import { useQuery } from '@tanstack/react-query'
+import Link from 'next/link'
+import { AssetCard } from '@/components/assets/asset-card'
+import { Button } from '@/components/ui/button'
+import type { AuthorCatalogPageResult } from '@/lib/server/user-profile-server'
+import { fetchAuthorCatalogClient, userProfileKeys } from '@/lib/profile/user-profile-query'
 
 function ProfilePagination({
   username,
   page,
   totalPages,
 }: {
-  username: string;
-  page: number;
-  totalPages: number;
+  username: string
+  page: number
+  totalPages: number
 }) {
   if (totalPages <= 1) {
-    return null;
+    return null
   }
-  const basePath = `/users/${encodeURIComponent(username)}`;
-  const prevHref = page <= 2 ? basePath : `${basePath}?page=${page - 1}`;
-  const nextHref = `${basePath}?page=${page + 1}`;
+  const basePath = `/users/${encodeURIComponent(username)}`
+  const prevHref = page <= 2 ? basePath : `${basePath}?page=${page - 1}`
+  const nextHref = `${basePath}?page=${page + 1}`
 
   return (
     <div className="flex flex-wrap items-center justify-center gap-3 pt-10">
@@ -47,26 +47,30 @@ function ProfilePagination({
         </Button>
       )}
     </div>
-  );
+  )
 }
 
 interface AuthorCatalogSectionProps {
-  authorId: string;
-  username: string;
-  initialCatalog: AuthorCatalogPageResult;
+  authorId: string
+  username: string
+  initialCatalog: AuthorCatalogPageResult
 }
 
-export function AuthorCatalogSection({ authorId, username, initialCatalog }: AuthorCatalogSectionProps) {
-  const page = initialCatalog.page;
+export function AuthorCatalogSection({
+  authorId,
+  username,
+  initialCatalog,
+}: AuthorCatalogSectionProps) {
+  const page = initialCatalog.page
 
   const catalogQuery = useQuery({
     queryKey: userProfileKeys.authorCatalog(authorId, page),
     queryFn: () => fetchAuthorCatalogClient(authorId, page),
     initialData: initialCatalog,
     staleTime: 2 * 60 * 1000,
-  });
+  })
 
-  const catalog = catalogQuery.data;
+  const catalog = catalogQuery.data
 
   return (
     <section aria-labelledby="author-assets-heading">
@@ -76,8 +80,8 @@ export function AuthorCatalogSection({ authorId, username, initialCatalog }: Aut
         </h2>
         <p className="text-sm text-muted-foreground tabular-nums">
           {catalog.totalCount === 0
-            ? "No published assets"
-            : `${catalog.totalCount} ${catalog.totalCount === 1 ? "asset" : "assets"}`}
+            ? 'No published assets'
+            : `${catalog.totalCount} ${catalog.totalCount === 1 ? 'asset' : 'assets'}`}
         </p>
       </div>
 
@@ -97,9 +101,13 @@ export function AuthorCatalogSection({ authorId, username, initialCatalog }: Aut
               <AssetCard key={asset.id} asset={asset} />
             ))}
           </div>
-          <ProfilePagination username={username} page={catalog.page} totalPages={catalog.totalPages} />
+          <ProfilePagination
+            username={username}
+            page={catalog.page}
+            totalPages={catalog.totalPages}
+          />
         </>
       )}
     </section>
-  );
+  )
 }

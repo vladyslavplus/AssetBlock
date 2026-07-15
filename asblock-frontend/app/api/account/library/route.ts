@@ -1,24 +1,19 @@
-import { cookies } from "next/headers";
-import { NextResponse } from "next/server";
-import { fetchBackendAuthorized } from "@/lib/server/backend-authorized";
+import { cookies } from 'next/headers'
+import { fetchBackendAuthorized } from '@/lib/server/backend-authorized'
+import { forwardBackendResponse } from '@/lib/server/bff-http'
 
 export async function GET() {
-  const store = await cookies();
+  const store = await cookies()
   const qs = new URLSearchParams({
-    page: "1",
-    pageSize: "100",
-    sortDirection: "DESC",
-  });
+    page: '1',
+    pageSize: '100',
+    sortDirection: 'DESC',
+  })
   const res = await fetchBackendAuthorized(
     store,
     `/api/users/me/purchases?${qs.toString()}`,
-    { method: "GET" },
+    { method: 'GET' },
     { persistRefreshedTokens: false },
-  );
-  const text = await res.text();
-  const contentType = res.headers.get("Content-Type") ?? "application/json";
-  return new NextResponse(text.length > 0 ? text : null, {
-    status: res.status,
-    headers: { "Content-Type": contentType },
-  });
+  )
+  return forwardBackendResponse(res)
 }

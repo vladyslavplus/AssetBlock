@@ -1,9 +1,9 @@
-import { LibraryGridSkeleton } from "@/components/library/library-purchase-card-skeleton";
-import { SiteMain } from "@/components/layout/site-main";
-import { SitePageContainer } from "@/components/layout/site-page-container";
-import { SiteFooter } from "@/components/site-footer";
-import { SiteHeader } from "@/components/site-header";
-import { Skeleton } from "@/components/ui/skeleton";
+import { LibraryGridSkeleton } from '@/components/library/library-purchase-card-skeleton'
+import { SiteMain } from '@/components/layout/site-main'
+import { SitePageContainer } from '@/components/layout/site-page-container'
+import { SiteFooter } from '@/components/site-footer'
+import { SiteHeader } from '@/components/site-header'
+import { Skeleton } from '@/components/ui/skeleton'
 
 export default function LibraryLoading() {
   return (
@@ -20,5 +20,5 @@ export default function LibraryLoading() {
       </SiteMain>
       <SiteFooter />
     </div>
-  );
+  )
 }

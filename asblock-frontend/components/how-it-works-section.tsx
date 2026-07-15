@@ -1,29 +1,29 @@
-import { Upload, CreditCard, Download } from "lucide-react";
-import { siteShellClass } from "@/lib/site-layout";
+import { Upload, CreditCard, Download } from 'lucide-react'
+import { siteShellClass } from '@/lib/site-layout'
 
 const STEPS = [
   {
-    number: "01",
+    number: '01',
     icon: Upload,
-    title: "Upload your asset",
+    title: 'Upload your asset',
     description:
-      "Package your code, templates, or tools. Add metadata, versioning, tags, and set your price. Takes minutes.",
+      'Package your code, templates, or tools. Add metadata, versioning, tags, and set your price. Takes minutes.',
   },
   {
-    number: "02",
+    number: '02',
     icon: CreditCard,
-    title: "Buyer completes checkout",
+    title: 'Buyer completes checkout',
     description:
-      "Customers browse, pick what they need, and purchase through our secure checkout. You get notified instantly.",
+      'Customers browse, pick what they need, and purchase through our secure checkout. You get notified instantly.',
   },
   {
-    number: "03",
+    number: '03',
     icon: Download,
-    title: "Encrypted download delivered",
+    title: 'Encrypted download delivered',
     description:
-      "Files are delivered to the buyer over an encrypted channel immediately after payment clears. Zero manual steps.",
+      'Files are delivered to the buyer over an encrypted channel immediately after payment clears. Zero manual steps.',
   },
-];
+]
 
 export function HowItWorksSection() {
   return (
@@ -31,7 +31,7 @@ export function HowItWorksSection() {
       className="py-20 sm:py-28 border-t border-border"
       aria-labelledby="how-it-works-heading"
     >
-      <div className={siteShellClass("site")}>
+      <div className={siteShellClass('site')}>
         <div className="text-center mb-14">
           <h2
             id="how-it-works-heading"
@@ -51,12 +51,12 @@ export function HowItWorksSection() {
           />
 
           {STEPS.map((step) => {
-            const Icon = step.icon;
+            const Icon = step.icon
             return (
               <div
                 key={step.number}
                 className="relative rounded-xl border border-border p-6 flex flex-col gap-4 transition-smooth hover:border-primary/50 hover:bg-card-elevated hover:shadow-[0_8px_24px_rgba(124,58,237,0.15)]"
-                style={{ background: "#11101A" }}
+                style={{ background: '#11101A' }}
               >
                 <div className="flex items-center gap-3">
                   <div className="w-10 h-10 rounded-lg flex items-center justify-center border border-border bg-secondary transition-smooth group-hover:border-primary/60 group-hover:bg-primary/10 shrink-0">
@@ -69,10 +69,10 @@ export function HowItWorksSection() {
                 <h3 className="font-semibold text-foreground text-sm">{step.title}</h3>
                 <p className="text-sm text-muted-foreground leading-relaxed">{step.description}</p>
               </div>
-            );
+            )
           })}
         </div>
       </div>
     </section>
-  );
+  )
 }

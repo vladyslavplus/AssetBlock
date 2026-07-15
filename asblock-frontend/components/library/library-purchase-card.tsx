@@ -1,26 +1,26 @@
-"use client";
+'use client'
 
-import { useState } from "react";
-import Link from "next/link";
-import { CheckCircle2, Download, ExternalLink, Star } from "lucide-react";
+import { useState } from 'react'
+import Link from 'next/link'
+import { CheckCircle2, Download, ExternalLink, Star } from 'lucide-react'
 
-import { LeaveReviewDialog } from "@/components/reviews/leave-review-dialog";
-import { Button } from "@/components/ui/button";
-import { formatUsdWhole } from "@/lib/format-currency";
-import { formatLongDate } from "@/lib/format-date";
-import type { PurchaseLibraryItem } from "@/lib/library/purchase-types";
-import { isWithinReviewWindowAfterPurchase } from "@/lib/reviews/review-constants";
+import { LeaveReviewDialog } from '@/components/reviews/leave-review-dialog'
+import { Button } from '@/components/ui/button'
+import { formatUsdWhole } from '@/lib/format-currency'
+import { formatLongDate } from '@/lib/format-date'
+import type { PurchaseLibraryItem } from '@/lib/library/purchase-types'
+import { isWithinReviewWindowAfterPurchase } from '@/lib/reviews/review-constants'
 
 interface LibraryPurchaseCardProps {
-  purchase: PurchaseLibraryItem;
+  purchase: PurchaseLibraryItem
 }
 
 export function LibraryPurchaseCard({ purchase }: LibraryPurchaseCardProps) {
-  const [dialogOpen, setDialogOpen] = useState(false);
-  const [reviewSubmitted, setReviewSubmitted] = useState(false);
+  const [dialogOpen, setDialogOpen] = useState(false)
+  const [reviewSubmitted, setReviewSubmitted] = useState(false)
 
-  const withinReviewWindow = isWithinReviewWindowAfterPurchase(purchase.purchasedAt);
-  const alreadyReviewed = purchase.hasUserReviewed || reviewSubmitted;
+  const withinReviewWindow = isWithinReviewWindowAfterPurchase(purchase.purchasedAt)
+  const alreadyReviewed = purchase.hasUserReviewed || reviewSubmitted
 
   return (
     <div className="bg-card-elevated border border-border rounded-xl p-4 space-y-3">
@@ -28,7 +28,7 @@ export function LibraryPurchaseCard({ purchase }: LibraryPurchaseCardProps) {
 
       <div className="flex items-center gap-2">
         <span className="text-xs text-muted-foreground">
-          by{" "}
+          by{' '}
           <Link
             href={`/users/${encodeURIComponent(purchase.authorUsername)}`}
             className="font-mono text-muted-foreground/80 hover:text-accent transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 rounded-sm"
@@ -39,7 +39,9 @@ export function LibraryPurchaseCard({ purchase }: LibraryPurchaseCardProps) {
       </div>
 
       <div className="flex items-center justify-between text-xs text-muted-foreground">
-        <span className="font-semibold text-foreground">{formatUsdWhole(Number(purchase.price))}</span>
+        <span className="font-semibold text-foreground">
+          {formatUsdWhole(Number(purchase.price))}
+        </span>
         <span>{formatLongDate(purchase.purchasedAt)}</span>
       </div>
 
@@ -103,5 +105,5 @@ export function LibraryPurchaseCard({ purchase }: LibraryPurchaseCardProps) {
         onSubmitted={() => setReviewSubmitted(true)}
       />
     </div>
-  );
+  )
 }

@@ -1,22 +1,22 @@
-"use client";
+'use client'
 
-import Link from "next/link";
-import { Star } from "lucide-react";
-import type { AssetListItem } from "@/lib/catalog/asset-types";
-import { formatUsdWhole } from "@/lib/format-currency";
+import Link from 'next/link'
+import { Star } from 'lucide-react'
+import type { AssetListItem } from '@/lib/catalog/asset-types'
+import { formatUsdWhole } from '@/lib/format-currency'
 
 interface AssetCardProps {
-  asset: AssetListItem;
+  asset: AssetListItem
 }
 
 export function AssetCard({ asset }: AssetCardProps) {
-  const visibleTags = asset.tags.slice(0, 3);
-  const overflowCount = Math.max(0, asset.tags.length - 3);
+  const visibleTags = asset.tags.slice(0, 3)
+  const overflowCount = Math.max(0, asset.tags.length - 3)
 
   return (
     <article
       className="flex-none w-full rounded-xl border border-border p-4 flex flex-col gap-3 group transition-smooth hover:border-primary/50 hover:bg-card-elevated hover:shadow-[0_8px_24px_rgba(124,58,237,0.15)] focus-within:ring-2 focus-within:ring-primary focus-within:ring-offset-2 focus-within:ring-offset-background"
-      style={{ background: "#11101A" }}
+      style={{ background: '#11101A' }}
     >
       <div className="flex items-start justify-between gap-2 h-12">
         <div className="flex flex-col gap-1.5 min-w-0">
@@ -74,8 +74,8 @@ export function AssetCard({ asset }: AssetCardProps) {
                   key={i}
                   className={`w-3 h-3 ${
                     i < Math.round(asset.averageRating)
-                      ? "fill-yellow-400 text-yellow-400"
-                      : "text-muted-foreground/20"
+                      ? 'fill-yellow-400 text-yellow-400'
+                      : 'text-muted-foreground/20'
                   }`}
                 />
               ))}
@@ -93,5 +93,5 @@ export function AssetCard({ asset }: AssetCardProps) {
         </Link>
       </div>
     </article>
-  );
+  )
 }

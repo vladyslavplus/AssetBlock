@@ -1,25 +1,25 @@
-"use client";
+'use client'
 
-import Link from "next/link";
-import { Star, CheckCircle2 } from "lucide-react";
-import type { AssetReview } from "@/lib/catalog/catalog-utils";
-import { formatShortMonthDate } from "@/lib/format-date";
+import Link from 'next/link'
+import { Star, CheckCircle2 } from 'lucide-react'
+import type { AssetReview } from '@/lib/catalog/catalog-utils'
+import { formatShortMonthDate } from '@/lib/format-date'
 
 interface AssetReviewsListProps {
-  reviews: AssetReview[];
+  reviews: AssetReview[]
 }
 
 export function AssetReviewsList({ reviews }: AssetReviewsListProps) {
   return (
     <div className="flex flex-col gap-4">
-      <h2 className="text-lg font-semibold text-foreground">
-        Reviews ({reviews.length})
-      </h2>
+      <h2 className="text-lg font-semibold text-foreground">Reviews ({reviews.length})</h2>
 
       {reviews.length === 0 && (
         <div className="py-8 text-center">
           <p className="text-sm font-medium text-muted-foreground">No reviews yet.</p>
-          <p className="text-xs text-muted-foreground/60 mt-1">Be the first to review after purchase.</p>
+          <p className="text-xs text-muted-foreground/60 mt-1">
+            Be the first to review after purchase.
+          </p>
         </div>
       )}
 
@@ -49,18 +49,12 @@ export function AssetReviewsList({ reviews }: AssetReviewsListProps) {
                   {Array(review.rating)
                     .fill(null)
                     .map((_, i) => (
-                      <Star
-                        key={`full-${i}`}
-                        className="w-3.5 h-3.5 fill-accent text-accent"
-                      />
+                      <Star key={`full-${i}`} className="w-3.5 h-3.5 fill-accent text-accent" />
                     ))}
                   {Array(5 - review.rating)
                     .fill(null)
                     .map((_, i) => (
-                      <Star
-                        key={`empty-${i}`}
-                        className="w-3.5 h-3.5 text-muted-foreground/30"
-                      />
+                      <Star key={`empty-${i}`} className="w-3.5 h-3.5 text-muted-foreground/30" />
                     ))}
                 </div>
                 <span className="text-xs text-muted-foreground">
@@ -69,12 +63,10 @@ export function AssetReviewsList({ reviews }: AssetReviewsListProps) {
               </div>
             </div>
 
-            <p className="text-sm text-foreground leading-relaxed">
-              {review.body}
-            </p>
+            <p className="text-sm text-foreground leading-relaxed">{review.body}</p>
           </article>
         ))}
       </div>
     </div>
-  );
+  )
 }

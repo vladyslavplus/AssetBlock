@@ -1,37 +1,37 @@
 export interface LoginBody {
-  email: string;
-  password: string;
+  email: string
+  password: string
 }
 
 export interface RegisterBody {
-  username: string;
-  email: string;
-  password: string;
+  username: string
+  email: string
+  password: string
 }
 
 export interface TokensResponse {
-  accessToken: string;
-  refreshToken: string;
-  accessExpiresAt: string; // ISO
-  refreshExpiresAt: string; // ISO
+  accessToken: string
+  refreshToken: string
+  accessExpiresAt: string // ISO
+  refreshExpiresAt: string // ISO
 }
 
 export interface SessionUser {
-  id: string;
-  username: string;
-  role?: string | null;
-  avatarUrl: string | null;
-  bio: string | null;
-  isPublicProfile: boolean;
-  createdAt: string;
+  id: string
+  username: string
+  role?: string | null
+  avatarUrl: string | null
+  bio: string | null
+  isPublicProfile: boolean
+  createdAt: string
   socialLinks: Array<{
-    id: string;
-    platformName: string;
-    iconName: string;
-    url: string;
-  }>;
+    id: string
+    platformName: string
+    iconName: string
+    url: string
+  }>
 }
 
 export interface SessionResponse {
-  user: SessionUser | null;
+  user: SessionUser | null
 }

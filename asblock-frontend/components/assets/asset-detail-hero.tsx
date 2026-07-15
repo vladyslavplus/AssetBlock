@@ -1,19 +1,19 @@
-import Link from "next/link";
-import { Star } from "lucide-react";
-import type { AssetListItem } from "@/lib/catalog/asset-types";
-import { formatUsdWhole } from "@/lib/format-currency";
-import { formatLongDate } from "@/lib/format-date";
+import Link from 'next/link'
+import { Star } from 'lucide-react'
+import type { AssetListItem } from '@/lib/catalog/asset-types'
+import { formatUsdWhole } from '@/lib/format-currency'
+import { formatLongDate } from '@/lib/format-date'
 
 interface AssetDetailHeroProps {
-  asset: AssetListItem;
+  asset: AssetListItem
 }
 
 export function AssetDetailHero({ asset }: AssetDetailHeroProps) {
-  const hasRating = asset.averageRating > 0;
-  const rating = hasRating ? Math.round(asset.averageRating * 2) / 2 : 0;
-  const fullStars = Math.floor(rating);
-  const hasHalfStar = hasRating && rating % 1 !== 0;
-  const emptyStars = 5 - fullStars - (hasHalfStar ? 1 : 0);
+  const hasRating = asset.averageRating > 0
+  const rating = hasRating ? Math.round(asset.averageRating * 2) / 2 : 0
+  const fullStars = Math.floor(rating)
+  const hasHalfStar = hasRating && rating % 1 !== 0
+  const emptyStars = 5 - fullStars - (hasHalfStar ? 1 : 0)
 
   return (
     <div className="flex min-w-0 flex-col gap-4">
@@ -41,10 +41,7 @@ export function AssetDetailHero({ asset }: AssetDetailHeroProps) {
                 {Array(fullStars)
                   .fill(null)
                   .map((_, i) => (
-                    <Star
-                      key={`full-${i}`}
-                      className="w-4 h-4 fill-accent text-accent"
-                    />
+                    <Star key={`full-${i}`} className="w-4 h-4 fill-accent text-accent" />
                   ))}
                 {hasHalfStar && (
                   <Star
@@ -56,10 +53,7 @@ export function AssetDetailHero({ asset }: AssetDetailHeroProps) {
                 {Array(emptyStars)
                   .fill(null)
                   .map((_, i) => (
-                    <Star
-                      key={`empty-${i}`}
-                      className="w-4 h-4 text-muted-foreground/30"
-                    />
+                    <Star key={`empty-${i}`} className="w-4 h-4 text-muted-foreground/30" />
                   ))}
               </div>
               <span className="text-sm text-muted-foreground">{rating.toFixed(1)} out of 5</span>
@@ -76,7 +70,7 @@ export function AssetDetailHero({ asset }: AssetDetailHeroProps) {
           >
             @{asset.authorUsername}
           </Link>
-          {" • "}
+          {' • '}
           Listed {formatLongDate(asset.createdAt)}
         </div>
       </div>
@@ -94,5 +88,5 @@ export function AssetDetailHero({ asset }: AssetDetailHeroProps) {
         </div>
       )}
     </div>
-  );
+  )
 }

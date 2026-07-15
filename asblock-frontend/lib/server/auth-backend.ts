@@ -1,7 +1,8 @@
-import { getServerApiBaseUrl } from "@/lib/http/api-config";
-import { transportErrorBody } from "@/lib/server/transport-error-body";
+import { getServerApiBaseUrl } from '@/lib/http/api-config'
+import { readApiResponseBody } from '@/lib/http/api-errors'
+import { transportErrorBody } from '@/lib/server/transport-error-body'
 
-type AuthAction = "login" | "register" | "refresh";
+type AuthAction = 'login' | 'register' | 'refresh'
 
 /**
  * POST JSON to `/api/auth/{action}` on the AssetBlock Web API from the Next.js server.
@@ -11,18 +12,18 @@ export async function postAuthJson(
   action: AuthAction,
   body: unknown,
 ): Promise<{ ok: boolean; status: number; data: unknown }> {
-  const base = getServerApiBaseUrl();
-  let res: Response;
+  const base = getServerApiBaseUrl()
+  let res: Response
   try {
     res = await fetch(`${base}/api/auth/${action}`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
-      cache: "no-store",
-    });
+      cache: 'no-store',
+    })
   } catch (e) {
-    return { ok: false, status: 502, data: transportErrorBody(e) };
+    return { ok: false, status: 502, data: transportErrorBody(e) }
   }
-  const data: unknown = await res.json().catch(() => ({}));
-  return { ok: res.ok, status: res.status, data };
+  const data = await readApiResponseBody(res)
+  return { ok: res.ok, status: res.status, data }
 }

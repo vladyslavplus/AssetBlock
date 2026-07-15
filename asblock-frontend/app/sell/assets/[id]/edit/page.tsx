@@ -1,35 +1,35 @@
-import type { Metadata } from "next";
-import Link from "next/link";
-import { notFound } from "next/navigation";
-import { ArrowLeft } from "lucide-react";
-import { SiteMain } from "@/components/layout/site-main";
-import { SitePageContainer } from "@/components/layout/site-page-container";
-import { SiteHeader } from "@/components/site-header";
-import { SiteFooter } from "@/components/site-footer";
-import { AssetEditPageClient } from "@/components/sell/asset-edit-page-client";
-import { getAssetDetailCached } from "@/lib/server/asset-detail-server";
+import type { Metadata } from 'next'
+import Link from 'next/link'
+import { notFound } from 'next/navigation'
+import { ArrowLeft } from 'lucide-react'
+import { SiteMain } from '@/components/layout/site-main'
+import { SitePageContainer } from '@/components/layout/site-page-container'
+import { SiteHeader } from '@/components/site-header'
+import { SiteFooter } from '@/components/site-footer'
+import { AssetEditPageClient } from '@/components/sell/asset-edit-page-client'
+import { getAssetDetailCached } from '@/lib/server/asset-detail-server'
 
 interface PageProps {
-  params: Promise<{ id: string }>;
+  params: Promise<{ id: string }>
 }
 
 export async function generateMetadata({ params }: PageProps): Promise<Metadata> {
-  const { id } = await params;
-  const raw = await getAssetDetailCached(id);
+  const { id } = await params
+  const raw = await getAssetDetailCached(id)
   if (!raw) {
-    return { title: "Edit asset · AssetBlock" };
+    return { title: 'Edit asset · AssetBlock' }
   }
   return {
     title: `Edit · ${raw.title} · AssetBlock`,
-    description: "Update your marketplace listing.",
-  };
+    description: 'Update your marketplace listing.',
+  }
 }
 
 export default async function SellAssetEditPage({ params }: PageProps) {
-  const { id } = await params;
-  const raw = await getAssetDetailCached(id);
+  const { id } = await params
+  const raw = await getAssetDetailCached(id)
   if (!raw) {
-    notFound();
+    notFound()
   }
 
   return (
@@ -55,5 +55,5 @@ export default async function SellAssetEditPage({ params }: PageProps) {
 
       <SiteFooter />
     </div>
-  );
+  )
 }

@@ -1,6 +1,6 @@
-import { getPublicApiBaseUrl } from "@/lib/http/api-config";
+import { getPublicApiBaseUrl } from '@/lib/http/api-config'
 
 export function getNotificationsHubUrl(): string {
-  const base = getPublicApiBaseUrl();
-  return `${base}/hubs/notifications`;
+  const base = getPublicApiBaseUrl()
+  return `${base}/hubs/notifications`
 }

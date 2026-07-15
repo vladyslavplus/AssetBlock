@@ -1,12 +1,12 @@
-import Link from "next/link";
-import { Button } from "@/components/ui/button";
-import { ArrowRight, Store, Upload, ShieldCheck } from "lucide-react";
+import Link from 'next/link'
+import { Button } from '@/components/ui/button'
+import { ArrowRight, Store, Upload, ShieldCheck } from 'lucide-react'
 
 export function SellOverview() {
   return (
     <div className="space-y-8">
       <p className="text-muted-foreground leading-relaxed">
-        List templates, starter kits, CLI tools, and other digital products. Use the{" "}
+        List templates, starter kits, CLI tools, and other digital products. Use the{' '}
         <strong className="text-foreground font-medium">My listings</strong> tab to see what you
         have published, and <strong className="text-foreground font-medium">Upload asset</strong> to
         add a new product with a file package.
@@ -57,5 +57,5 @@ export function SellOverview() {
         </Button>
       </div>
     </div>
-  );
+  )
 }

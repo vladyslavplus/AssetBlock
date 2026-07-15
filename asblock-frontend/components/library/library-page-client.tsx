@@ -1,36 +1,40 @@
-"use client";
+'use client'
 
-import { useQuery } from "@tanstack/react-query";
-import Link from "next/link";
-import { SiteMain } from "@/components/layout/site-main";
-import { SitePageContainer } from "@/components/layout/site-page-container";
-import { SiteHeader } from "@/components/site-header";
-import { SiteFooter } from "@/components/site-footer";
-import { Button } from "@/components/ui/button";
-import { LibraryGridSkeleton } from "@/components/library/library-purchase-card-skeleton";
-import { LibraryPurchaseCard } from "@/components/library/library-purchase-card";
-import { SessionBlockSkeleton } from "@/components/skeletons/session-block-skeleton";
-import { useAuth } from "@/components/auth/auth-context";
-import { fetchLibraryPurchasesOrThrow, libraryKeys, LibraryFetchError } from "@/lib/library/library-query";
+import { useQuery } from '@tanstack/react-query'
+import Link from 'next/link'
+import { SiteMain } from '@/components/layout/site-main'
+import { SitePageContainer } from '@/components/layout/site-page-container'
+import { SiteHeader } from '@/components/site-header'
+import { SiteFooter } from '@/components/site-footer'
+import { Button } from '@/components/ui/button'
+import { LibraryGridSkeleton } from '@/components/library/library-purchase-card-skeleton'
+import { LibraryPurchaseCard } from '@/components/library/library-purchase-card'
+import { SessionBlockSkeleton } from '@/components/skeletons/session-block-skeleton'
+import { useAuth } from '@/components/auth/auth-context'
+import {
+  fetchLibraryPurchasesOrThrow,
+  libraryKeys,
+  LibraryFetchError,
+} from '@/lib/library/library-query'
 
 export function LibraryPageClient() {
-  const { status } = useAuth();
-  const authed = status === "authenticated";
+  const { status } = useAuth()
+  const authed = status === 'authenticated'
 
   const purchasesQuery = useQuery({
     queryKey: libraryKeys.purchases(),
     queryFn: fetchLibraryPurchasesOrThrow,
     enabled: authed,
-  });
+  })
 
-  const purchases = purchasesQuery.data?.items ?? [];
-  const loading = authed && purchasesQuery.isPending;
+  const purchases = purchasesQuery.data?.items ?? []
+  const loading = authed && purchasesQuery.isPending
   const loadError =
     purchasesQuery.error instanceof LibraryFetchError
       ? { status: purchasesQuery.error.status, message: purchasesQuery.error.message }
       : purchasesQuery.isError
-        ? { status: 0, message: purchasesQuery.error?.message ?? "Could not load library." }
-        : null;
+        ? { status: 0, message: purchasesQuery.error?.message ?? 'Could not load library.' }
+        : null
 
   return (
     <div className="min-h-screen flex flex-col bg-background text-foreground">
@@ -43,7 +47,7 @@ export function LibraryPageClient() {
             <p className="text-sm text-muted-foreground">Your purchased digital assets</p>
           </div>
 
-          {!authed && status !== "loading" && (
+          {!authed && status !== 'loading' && (
             <div className="rounded-lg border border-border bg-card-elevated/50 px-4 py-8 text-center space-y-3">
               <p className="text-sm text-muted-foreground">Sign in to view your library.</p>
               <Button asChild className="bg-primary text-primary-foreground hover:bg-[#6D28D9]">
@@ -52,7 +56,7 @@ export function LibraryPageClient() {
             </div>
           )}
 
-          {status === "loading" && <SessionBlockSkeleton />}
+          {status === 'loading' && <SessionBlockSkeleton />}
 
           {authed && loading && <LibraryGridSkeleton />}
 
@@ -64,11 +68,22 @@ export function LibraryPageClient() {
               <p className="font-medium">Could not load your library</p>
               <p className="mt-1 text-destructive/90">{loadError.message}</p>
               {loadError.status === 401 && (
-                <Button asChild variant="outline" size="sm" className="mt-3 border-destructive/50 text-destructive">
+                <Button
+                  asChild
+                  variant="outline"
+                  size="sm"
+                  className="mt-3 border-destructive/50 text-destructive"
+                >
                   <Link href="/login?returnUrl=/library">Sign in again</Link>
                 </Button>
               )}
-              <Button type="button" variant="outline" size="sm" className="mt-3" onClick={() => void purchasesQuery.refetch()}>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="mt-3"
+                onClick={() => void purchasesQuery.refetch()}
+              >
                 Retry
               </Button>
             </div>
@@ -101,5 +116,5 @@ export function LibraryPageClient() {
 
       <SiteFooter />
     </div>
-  );
+  )
 }

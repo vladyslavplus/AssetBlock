@@ -1,12 +1,12 @@
-import type { Metadata } from "next";
-import { SiteHeader } from "@/components/site-header";
-import { SiteFooter } from "@/components/site-footer";
-import { SellDashboard } from "@/components/sell/sell-dashboard";
+import type { Metadata } from 'next'
+import { SiteHeader } from '@/components/site-header'
+import { SiteFooter } from '@/components/site-footer'
+import { SellDashboard } from '@/components/sell/sell-dashboard'
 
 export const metadata: Metadata = {
-  title: "Sell · AssetBlock",
-  description: "List and upload digital assets on the AssetBlock marketplace.",
-};
+  title: 'Sell · AssetBlock',
+  description: 'List and upload digital assets on the AssetBlock marketplace.',
+}
 
 export default function SellPage() {
   return (
@@ -15,5 +15,5 @@ export default function SellPage() {
       <SellDashboard />
       <SiteFooter />
     </div>
-  );
+  )
 }

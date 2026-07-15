@@ -1,11 +1,11 @@
-"use client";
+'use client'
 
-import { SiteMain } from "@/components/layout/site-main";
-import { SitePageContainer } from "@/components/layout/site-page-container";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { SellOverview } from "@/components/sell/sell-overview";
-import { SellMyListings } from "@/components/sell/sell-my-listings";
-import { AssetUploadForm } from "@/components/sell/asset-upload-form";
+import { SiteMain } from '@/components/layout/site-main'
+import { SitePageContainer } from '@/components/layout/site-page-container'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { SellOverview } from '@/components/sell/sell-overview'
+import { SellMyListings } from '@/components/sell/sell-my-listings'
+import { AssetUploadForm } from '@/components/sell/asset-upload-form'
 
 export function SellDashboard() {
   return (
@@ -41,5 +41,5 @@ export function SellDashboard() {
         </Tabs>
       </SitePageContainer>
     </SiteMain>
-  );
+  )
 }

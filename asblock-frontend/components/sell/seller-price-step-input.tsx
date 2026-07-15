@@ -1,18 +1,18 @@
-"use client";
+'use client'
 
-import { useCallback } from "react";
-import { Minus, Plus } from "lucide-react";
-import { cn } from "@/lib/utils";
-import { usePointerStepRepeat } from "@/hooks/use-pointer-step-repeat";
+import { useCallback } from 'react'
+import { Minus, Plus } from 'lucide-react'
+import { cn } from '@/lib/utils'
+import { usePointerStepRepeat } from '@/hooks/use-pointer-step-repeat'
 
-const MIN_USD = 0.01;
+const MIN_USD = 0.01
 
 export interface SellerPriceStepInputProps {
-  id?: string;
-  "aria-label"?: string;
-  value: number | undefined;
-  onChange: (value: number | undefined) => void;
-  onBlur: () => void;
+  id?: string
+  'aria-label'?: string
+  value: number | undefined
+  onChange: (value: number | undefined) => void
+  onBlur: () => void
 }
 
 /**
@@ -21,7 +21,7 @@ export interface SellerPriceStepInputProps {
  */
 export function SellerPriceStepInput({
   id,
-  "aria-label": ariaLabel,
+  'aria-label': ariaLabel,
   value,
   onChange,
   onBlur,
@@ -29,44 +29,44 @@ export function SellerPriceStepInput({
   const step = useCallback(
     (delta: number) => {
       if (value === undefined && delta > 0) {
-        onChange(1);
-        return;
+        onChange(1)
+        return
       }
       if (value === undefined && delta < 0) {
-        return;
+        return
       }
-      const base = value ?? 0;
-      const next = Math.round((base + delta) * 100) / 100;
+      const base = value ?? 0
+      const next = Math.round((base + delta) * 100) / 100
       if (next < MIN_USD) {
-        onChange(undefined);
-        return;
+        onChange(undefined)
+        return
       }
-      onChange(next);
+      onChange(next)
     },
     [value, onChange],
-  );
+  )
 
-  const repeatMinus = usePointerStepRepeat(useCallback(() => step(-1), [step]));
-  const repeatPlus = usePointerStepRepeat(useCallback(() => step(1), [step]));
+  const repeatMinus = usePointerStepRepeat(useCallback(() => step(-1), [step]))
+  const repeatPlus = usePointerStepRepeat(useCallback(() => step(1), [step]))
 
   const handleInputChange = (raw: string) => {
-    if (raw === "") {
-      onChange(undefined);
-      return;
+    if (raw === '') {
+      onChange(undefined)
+      return
     }
-    const n = Number.parseFloat(raw);
+    const n = Number.parseFloat(raw)
     if (Number.isNaN(n) || n < 0) {
-      return;
+      return
     }
     if (n === 0) {
-      onChange(undefined);
-      return;
+      onChange(undefined)
+      return
     }
-    const clamped = Math.max(MIN_USD, Math.round(n * 100) / 100);
-    onChange(clamped);
-  };
+    const clamped = Math.max(MIN_USD, Math.round(n * 100) / 100)
+    onChange(clamped)
+  }
 
-  const atFloor = value === undefined || value <= MIN_USD;
+  const atFloor = value === undefined || value <= MIN_USD
 
   return (
     <div className="relative min-w-0 flex-1">
@@ -78,18 +78,18 @@ export function SellerPriceStepInput({
         min={MIN_USD}
         step={0.01}
         placeholder="9.99"
-        value={value ?? ""}
+        value={value ?? ''}
         onChange={(e) => handleInputChange(e.target.value)}
         onBlur={onBlur}
         className={cn(
-          "no-native-number-spinner flex h-9 w-full rounded-md border border-border bg-input px-3 py-1 pr-[4.25rem] font-mono text-sm tabular-nums text-foreground",
-          "placeholder:text-muted-foreground/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+          'no-native-number-spinner flex h-9 w-full rounded-md border border-border bg-input px-3 py-1 pr-[4.25rem] font-mono text-sm tabular-nums text-foreground',
+          'placeholder:text-muted-foreground/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
         )}
       />
       <div
         className="absolute right-1 top-1/2 flex -translate-y-1/2 items-center gap-px rounded border border-border/80 bg-secondary/80 p-0.5"
         role="group"
-        aria-label={ariaLabel ? `${ariaLabel} step` : "Price step"}
+        aria-label={ariaLabel ? `${ariaLabel} step` : 'Price step'}
       >
         <button
           type="button"
@@ -99,10 +99,10 @@ export function SellerPriceStepInput({
           onPointerCancel={repeatMinus.onPointerEnd}
           onLostPointerCapture={repeatMinus.onPointerEnd}
           onKeyDown={(e) => {
-            if (e.key !== "Enter" && e.key !== " ") return;
-            e.preventDefault();
-            if (atFloor) return;
-            step(-1);
+            if (e.key !== 'Enter' && e.key !== ' ') return
+            e.preventDefault()
+            if (atFloor) return
+            step(-1)
           }}
           disabled={atFloor}
           aria-label="Decrease price by 1 USD"
@@ -117,9 +117,9 @@ export function SellerPriceStepInput({
           onPointerCancel={repeatPlus.onPointerEnd}
           onLostPointerCapture={repeatPlus.onPointerEnd}
           onKeyDown={(e) => {
-            if (e.key !== "Enter" && e.key !== " ") return;
-            e.preventDefault();
-            step(1);
+            if (e.key !== 'Enter' && e.key !== ' ') return
+            e.preventDefault()
+            step(1)
           }}
           aria-label="Increase price by 1 USD"
         >
@@ -127,5 +127,5 @@ export function SellerPriceStepInput({
         </button>
       </div>
     </div>
-  );
+  )
 }

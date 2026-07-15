@@ -1,49 +1,49 @@
-"use client";
+'use client'
 
-import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useRouter } from "next/navigation";
-import Link from "next/link";
-import { Controller, useForm } from "react-hook-form";
-import { zodResolver } from "@hookform/resolvers/zod";
-import { Loader2, AlertCircle } from "lucide-react";
-import { toast } from "sonner";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
-import { Alert, AlertDescription } from "@/components/ui/alert";
-import type { AssetDetailItemApi } from "@/lib/catalog/assets-api";
-import { applyApiFieldErrorsToForm } from "@/lib/http/api-errors";
-import { assetEditFormSchema, type AssetEditFormValues } from "@/lib/seller/seller-schemas";
-import { fetchTagNameToIdMap, patchSellerAsset, syncSellerAssetTags } from "@/lib/seller/seller-api";
-import { assetKeys } from "@/lib/catalog/asset-detail-query";
-import { catalogKeys, fetchCatalogFacets } from "@/lib/catalog/catalog-query";
-import { sellerKeys } from "@/lib/seller/seller-query";
-import { SellerPriceStepInput } from "@/components/sell/seller-price-step-input";
+import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { useRouter } from 'next/navigation'
+import Link from 'next/link'
+import { Controller, useForm } from 'react-hook-form'
+import { zodResolver } from '@hookform/resolvers/zod'
+import { Loader2, AlertCircle } from 'lucide-react'
+import { toast } from 'sonner'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import { Textarea } from '@/components/ui/textarea'
+import { Alert, AlertDescription } from '@/components/ui/alert'
+import type { AssetDetailItemApi } from '@/lib/catalog/assets-api'
+import { applyApiFieldErrorsToForm } from '@/lib/http/api-errors'
+import { assetEditFormSchema, type AssetEditFormValues } from '@/lib/seller/seller-schemas'
+import { fetchTagNameToIdMap, patchSellerAsset, syncSellerAssetTags } from '@/lib/seller/seller-api'
+import { assetKeys } from '@/lib/catalog/asset-detail-query'
+import { catalogKeys, fetchCatalogFacets } from '@/lib/catalog/catalog-query'
+import { sellerKeys } from '@/lib/seller/seller-query'
+import { SellerPriceStepInput } from '@/components/sell/seller-price-step-input'
 
 interface AssetEditFormProps {
-  initialAsset: AssetDetailItemApi;
+  initialAsset: AssetDetailItemApi
 }
 
 export function AssetEditForm({ initialAsset }: AssetEditFormProps) {
-  const router = useRouter();
-  const queryClient = useQueryClient();
-  const assetId = initialAsset.id;
+  const router = useRouter()
+  const queryClient = useQueryClient()
+  const assetId = initialAsset.id
 
   const facetsQuery = useQuery({
     queryKey: catalogKeys.facets(),
     queryFn: fetchCatalogFacets,
     staleTime: 5 * 60 * 1000,
-  });
+  })
 
-  const categories = facetsQuery.data?.categories ?? [];
-  const categoriesError = facetsQuery.isError ? "Could not load categories." : null;
+  const categories = facetsQuery.data?.categories ?? []
+  const categoriesError = facetsQuery.isError ? 'Could not load categories.' : null
 
-  const initialTagsCsv = (initialAsset.tags ?? []).join(", ");
+  const initialTagsCsv = (initialAsset.tags ?? []).join(', ')
 
   const initialTagKeys = (initialAsset.tags ?? [])
     .map((t) => t.trim().toLowerCase())
-    .filter(Boolean);
+    .filter(Boolean)
 
   const {
     register,
@@ -55,50 +55,50 @@ export function AssetEditForm({ initialAsset }: AssetEditFormProps) {
     resolver: zodResolver(assetEditFormSchema),
     defaultValues: {
       title: initialAsset.title,
-      description: initialAsset.description ?? "",
+      description: initialAsset.description ?? '',
       price: Number(initialAsset.price),
       categoryId: initialAsset.categoryId,
       tags: initialTagsCsv,
     },
-  });
+  })
 
   const onSubmit = handleSubmit(async (values) => {
-    const desc = values.description?.trim() ?? "";
+    const desc = values.description?.trim() ?? ''
     const patch = await patchSellerAsset(assetId, {
       title: values.title.trim(),
-      description: desc.length > 0 ? desc : "",
+      description: desc.length > 0 ? desc : '',
       price: values.price,
       categoryId: values.categoryId,
-    });
+    })
     if (!patch.ok) {
       if (patch.fieldErrors) {
-        applyApiFieldErrorsToForm(setError, patch.fieldErrors);
+        applyApiFieldErrorsToForm(setError, patch.fieldErrors)
       }
-      toast.error(patch.message);
-      return;
+      toast.error(patch.message)
+      return
     }
 
-    let lookup: Map<string, string>;
+    let lookup: Map<string, string>
     try {
-      lookup = await fetchTagNameToIdMap();
+      lookup = await fetchTagNameToIdMap()
     } catch {
-      toast.error("Could not load the tags catalog. Tags were not updated.");
-      return;
+      toast.error('Could not load the tags catalog. Tags were not updated.')
+      return
     }
 
-    const tagSync = await syncSellerAssetTags(assetId, initialTagKeys, values.tags, lookup);
+    const tagSync = await syncSellerAssetTags(assetId, initialTagKeys, values.tags, lookup)
     if (!tagSync.ok) {
-      toast.error(tagSync.message);
-      return;
+      toast.error(tagSync.message)
+      return
     }
 
-    toast.success("Asset updated.");
-    void queryClient.invalidateQueries({ queryKey: sellerKeys.all });
-    void queryClient.invalidateQueries({ queryKey: catalogKeys.all });
-    void queryClient.invalidateQueries({ queryKey: assetKeys.detail(assetId) });
-    router.push(`/assets/${assetId}`);
-    router.refresh();
-  });
+    toast.success('Asset updated.')
+    void queryClient.invalidateQueries({ queryKey: sellerKeys.all })
+    void queryClient.invalidateQueries({ queryKey: catalogKeys.all })
+    void queryClient.invalidateQueries({ queryKey: assetKeys.detail(assetId) })
+    router.push(`/assets/${assetId}`)
+    router.refresh()
+  })
 
   return (
     <div className="space-y-6 max-w-lg">
@@ -106,10 +106,11 @@ export function AssetEditForm({ initialAsset }: AssetEditFormProps) {
         <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
         <AlertDescription className="text-muted-foreground text-xs leading-relaxed text-pretty">
           <span className="block min-w-0">
-            The downloadable package for this listing cannot be replaced. To ship a different file, publish a{" "}
+            The downloadable package for this listing cannot be replaced. To ship a different file,
+            publish a{' '}
             <Link href="/sell" className="text-foreground underline underline-offset-2">
               new asset
-            </Link>{" "}
+            </Link>{' '}
             from the Upload tab — you cannot swap the file on this listing.
           </span>
         </AlertDescription>
@@ -129,14 +130,8 @@ export function AssetEditForm({ initialAsset }: AssetEditFormProps) {
           <Label htmlFor="edit-title" className="text-xs font-medium">
             Title
           </Label>
-          <Input
-            id="edit-title"
-            className="bg-input border-border"
-            {...register("title")}
-          />
-          {errors.title && (
-            <p className="text-xs text-destructive">{errors.title.message}</p>
-          )}
+          <Input id="edit-title" className="bg-input border-border" {...register('title')} />
+          {errors.title && <p className="text-xs text-destructive">{errors.title.message}</p>}
         </div>
 
         <div className="space-y-1.5">
@@ -146,7 +141,7 @@ export function AssetEditForm({ initialAsset }: AssetEditFormProps) {
           <Textarea
             id="edit-description"
             className="bg-input border-border h-44 sm:h-40 md:h-36"
-            {...register("description")}
+            {...register('description')}
           />
           {errors.description && (
             <p className="text-xs text-destructive">{errors.description.message}</p>
@@ -171,9 +166,7 @@ export function AssetEditForm({ initialAsset }: AssetEditFormProps) {
                 />
               )}
             />
-            {errors.price && (
-              <p className="text-xs text-destructive">{errors.price.message}</p>
-            )}
+            {errors.price && <p className="text-xs text-destructive">{errors.price.message}</p>}
           </div>
 
           <div className="space-y-1.5">
@@ -183,11 +176,11 @@ export function AssetEditForm({ initialAsset }: AssetEditFormProps) {
             <select
               id="edit-category"
               className="border-input bg-input h-9 w-full rounded-md border px-3 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]"
-              {...register("categoryId")}
+              {...register('categoryId')}
             >
               {categories.length === 0 ? (
                 <option value={initialAsset.categoryId}>
-                  {initialAsset.categoryName ?? "Current category"}
+                  {initialAsset.categoryName ?? 'Current category'}
                 </option>
               ) : (
                 categories.map((c) => (
@@ -211,10 +204,11 @@ export function AssetEditForm({ initialAsset }: AssetEditFormProps) {
             id="edit-tags"
             className="bg-input border-border"
             placeholder="react, typescript, dashboard"
-            {...register("tags")}
+            {...register('tags')}
           />
           <p className="text-[11px] text-muted-foreground">
-            Comma-separated. Only tags that exist in the catalog can be added (same as when uploading).
+            Comma-separated. Only tags that exist in the catalog can be added (same as when
+            uploading).
           </p>
         </div>
 
@@ -230,14 +224,19 @@ export function AssetEditForm({ initialAsset }: AssetEditFormProps) {
                 Saving…
               </>
             ) : (
-              "Save changes"
+              'Save changes'
             )}
           </Button>
-          <Button type="button" variant="outline" className="border-border w-full sm:w-auto" asChild>
+          <Button
+            type="button"
+            variant="outline"
+            className="border-border w-full sm:w-auto"
+            asChild
+          >
             <Link href={`/assets/${assetId}`}>Cancel</Link>
           </Button>
         </div>
       </form>
     </div>
-  );
+  )
 }

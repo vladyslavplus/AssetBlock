@@ -1,29 +1,29 @@
-"use client";
+'use client'
 
-import { Button } from "@/components/ui/button";
+import { Button } from '@/components/ui/button'
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import { ChevronDown, Filter } from "lucide-react";
-import { Skeleton } from "@/components/ui/skeleton";
+} from '@/components/ui/dropdown-menu'
+import { ChevronDown, Filter } from 'lucide-react'
+import { Skeleton } from '@/components/ui/skeleton'
 import {
   CATALOG_SORT_OPTIONS,
   getCatalogSortLabel,
   type CatalogFilters,
-} from "@/lib/catalog/catalog-filters";
+} from '@/lib/catalog/catalog-filters'
 
 interface CatalogToolbarProps {
-  filters: CatalogFilters;
-  totalCount: number;
-  displayCount: number;
-  onFilterChange: (updates: Partial<CatalogFilters>) => void;
-  onFilterClick?: () => void;
-  isDesktop?: boolean;
-  disabled?: boolean;
-  isCountsLoading?: boolean;
+  filters: CatalogFilters
+  totalCount: number
+  displayCount: number
+  onFilterChange: (updates: Partial<CatalogFilters>) => void
+  onFilterClick?: () => void
+  isDesktop?: boolean
+  disabled?: boolean
+  isCountsLoading?: boolean
 }
 
 export function CatalogToolbar({
@@ -89,5 +89,5 @@ export function CatalogToolbar({
         </DropdownMenu>
       </div>
     </div>
-  );
+  )
 }

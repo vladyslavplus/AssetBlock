@@ -1,29 +1,29 @@
-import Link from "next/link";
-import { siteShellClass } from "@/lib/site-layout";
-import { Github, Twitter } from "lucide-react";
-import { BrandLogo } from "@/components/brand-logo";
-import { SiteFooterProductColumn } from "@/components/site-footer-product-column";
-import { Separator } from "@/components/ui/separator";
+import Link from 'next/link'
+import { siteShellClass } from '@/lib/site-layout'
+import { Github, Twitter } from 'lucide-react'
+import { BrandLogo } from '@/components/brand-logo'
+import { SiteFooterProductColumn } from '@/components/site-footer-product-column'
+import { Separator } from '@/components/ui/separator'
 
 const FOOTER_LINKS = {
   Developers: [
-    { label: "Documentation", href: "/docs" },
-    { label: "API reference", href: "/docs#api" },
-    { label: "Status", href: "#" },
+    { label: 'Documentation', href: '/docs' },
+    { label: 'API reference', href: '/docs#api' },
+    { label: 'Status', href: '#' },
   ],
   Legal: [
-    { label: "Privacy policy", href: "#" },
-    { label: "Terms of service", href: "#" },
-    { label: "Licenses", href: "#" },
+    { label: 'Privacy policy', href: '#' },
+    { label: 'Terms of service', href: '#' },
+    { label: 'Licenses', href: '#' },
   ],
-};
+}
 
 export function SiteFooter() {
-  const year = new Date().getFullYear();
+  const year = new Date().getFullYear()
 
   return (
     <footer className="border-t border-border" aria-label="Site footer">
-      <div className={siteShellClass("site", "py-12 sm:py-16")}>
+      <div className={siteShellClass('site', 'py-12 sm:py-16')}>
         <div className="grid grid-cols-2 sm:grid-cols-5 gap-8">
           <div className="col-span-2 flex flex-col gap-4">
             <BrandLogo className="w-fit" />
@@ -78,12 +78,11 @@ export function SiteFooter() {
             &copy; {year} AssetBlock. All rights reserved.
           </p>
           <p className="text-[11px] text-muted-foreground/60 max-w-sm text-right leading-relaxed">
-            Marketplace content is user-generated. AssetBlock does not warrant
-            the accuracy, completeness, or fitness of any listed asset for any
-            particular purpose.
+            Marketplace content is user-generated. AssetBlock does not warrant the accuracy,
+            completeness, or fitness of any listed asset for any particular purpose.
           </p>
         </div>
       </div>
     </footer>
-  );
+  )
 }

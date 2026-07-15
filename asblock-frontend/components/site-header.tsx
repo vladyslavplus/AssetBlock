@@ -1,55 +1,55 @@
-"use client";
+'use client'
 
-import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { useState, useEffect } from "react";
-import { ChevronDown, Menu, X } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import Link from 'next/link'
+import { useRouter } from 'next/navigation'
+import { useState, useEffect } from 'react'
+import { ChevronDown, Menu, X } from 'lucide-react'
+import { Button } from '@/components/ui/button'
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import { cn } from "@/lib/utils";
-import { siteShellClass } from "@/lib/site-layout";
-import { useAuth } from "@/components/auth/auth-context";
-import { NotificationBell } from "@/components/notifications/notification-bell";
-import { BrandLogo } from "@/components/brand-logo";
+} from '@/components/ui/dropdown-menu'
+import { cn } from '@/lib/utils'
+import { siteShellClass } from '@/lib/site-layout'
+import { useAuth } from '@/components/auth/auth-context'
+import { NotificationBell } from '@/components/notifications/notification-bell'
+import { BrandLogo } from '@/components/brand-logo'
 
 export function SiteHeader() {
-  const router = useRouter();
-  const { user, status, logout, isAdmin } = useAuth();
-  const [scrolled, setScrolled] = useState(false);
-  const [menuOpen, setMenuOpen] = useState(false);
+  const router = useRouter()
+  const { user, status, logout, isAdmin } = useAuth()
+  const [scrolled, setScrolled] = useState(false)
+  const [menuOpen, setMenuOpen] = useState(false)
 
-  const authed = status === "authenticated" && user !== null;
-  const authPending = status === "loading";
+  const authed = status === 'authenticated' && user !== null
+  const authPending = status === 'loading'
 
   useEffect(() => {
-    const onScroll = () => setScrolled(window.scrollY > 8);
-    window.addEventListener("scroll", onScroll, { passive: true });
-    return () => window.removeEventListener("scroll", onScroll);
-  }, []);
+    const onScroll = () => setScrolled(window.scrollY > 8)
+    window.addEventListener('scroll', onScroll, { passive: true })
+    return () => window.removeEventListener('scroll', onScroll)
+  }, [])
 
   async function handleSignOut() {
-    setMenuOpen(false);
-    await logout();
-    router.refresh();
+    setMenuOpen(false)
+    await logout()
+    router.refresh()
   }
 
   return (
     <header
       className={cn(
-        "fixed top-0 left-0 right-0 z-50",
-        "border-b border-solid transition-[background-color,border-color,backdrop-filter] duration-300 ease-out",
+        'fixed top-0 left-0 right-0 z-50',
+        'border-b border-solid transition-[background-color,border-color,backdrop-filter] duration-300 ease-out',
         scrolled
-          ? "border-border bg-[#07060B]/80 backdrop-blur-md"
-          : "border-transparent bg-[#07060B]/0 backdrop-blur-none",
+          ? 'border-border bg-[#07060B]/80 backdrop-blur-md'
+          : 'border-transparent bg-[#07060B]/0 backdrop-blur-none',
       )}
     >
-      <div className={siteShellClass("site")}>
+      <div className={siteShellClass('site')}>
         <div className="flex items-center justify-between h-16">
           <Link
             href="/"
@@ -117,10 +117,7 @@ export function SiteHeader() {
                         </DropdownMenuItem>
                       ) : null}
                       <DropdownMenuSeparator />
-                      <DropdownMenuItem
-                        variant="destructive"
-                        onSelect={() => void handleSignOut()}
-                      >
+                      <DropdownMenuItem variant="destructive" onSelect={() => void handleSignOut()}>
                         Sign out
                       </DropdownMenuItem>
                     </DropdownMenuContent>
@@ -150,7 +147,7 @@ export function SiteHeader() {
               className="md:hidden p-2 text-muted-foreground hover:text-foreground transition-colors"
               type="button"
               onClick={() => setMenuOpen((v) => !v)}
-              aria-label={menuOpen ? "Close menu" : "Open menu"}
+              aria-label={menuOpen ? 'Close menu' : 'Open menu'}
               aria-expanded={menuOpen}
             >
               {menuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
@@ -207,7 +204,11 @@ export function SiteHeader() {
                     </Link>
                   </Button>
                 ) : null}
-                <Button variant="outline" asChild className="w-full border-border text-foreground bg-transparent hover:bg-secondary/50 hover:border-foreground/40 transition-smooth">
+                <Button
+                  variant="outline"
+                  asChild
+                  className="w-full border-border text-foreground bg-transparent hover:bg-secondary/50 hover:border-foreground/40 transition-smooth"
+                >
                   <Link href="/account" onClick={() => setMenuOpen(false)}>
                     Account
                   </Link>
@@ -223,11 +224,22 @@ export function SiteHeader() {
               </div>
             ) : (
               <>
-                <Button variant="outline" asChild className="w-full border-border text-foreground bg-transparent hover:bg-secondary/50 hover:border-foreground/40 transition-smooth">
-                  <Link href="/login" onClick={() => setMenuOpen(false)}>Sign in</Link>
+                <Button
+                  variant="outline"
+                  asChild
+                  className="w-full border-border text-foreground bg-transparent hover:bg-secondary/50 hover:border-foreground/40 transition-smooth"
+                >
+                  <Link href="/login" onClick={() => setMenuOpen(false)}>
+                    Sign in
+                  </Link>
                 </Button>
-                <Button asChild className="w-full bg-primary text-primary-foreground hover:bg-[#6D28D9] transition-smooth">
-                  <Link href="/register" onClick={() => setMenuOpen(false)}>Get started</Link>
+                <Button
+                  asChild
+                  className="w-full bg-primary text-primary-foreground hover:bg-[#6D28D9] transition-smooth"
+                >
+                  <Link href="/register" onClick={() => setMenuOpen(false)}>
+                    Get started
+                  </Link>
                 </Button>
               </>
             )}
@@ -235,5 +247,5 @@ export function SiteHeader() {
         </div>
       )}
     </header>
-  );
+  )
 }

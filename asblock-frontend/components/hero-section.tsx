@@ -1,66 +1,66 @@
-"use client";
+'use client'
 
-import Link from "next/link";
-import { useEffect, useRef } from "react";
-import { Button } from "@/components/ui/button";
-import { ShieldCheck, Lock, Code2 } from "lucide-react";
-import { HeroInteractiveBackground } from "@/components/hero-interactive-background";
-import type { HeroPointerState } from "@/components/hero-interaction";
-import { useHeroInteraction } from "@/components/hero-interaction";
-import { HeroTypewriterTitle } from "@/components/hero-typewriter-title";
-import { cn } from "@/lib/utils";
-import { siteShellClass } from "@/lib/site-layout";
+import Link from 'next/link'
+import { useEffect, useRef } from 'react'
+import { Button } from '@/components/ui/button'
+import { ShieldCheck, Lock, Code2 } from 'lucide-react'
+import { HeroInteractiveBackground } from '@/components/hero-interactive-background'
+import type { HeroPointerState } from '@/components/hero-interaction'
+import { useHeroInteraction } from '@/components/hero-interaction'
+import { HeroTypewriterTitle } from '@/components/hero-typewriter-title'
+import { cn } from '@/lib/utils'
+import { siteShellClass } from '@/lib/site-layout'
 
 export function HeroSection() {
-  const sectionRef = useRef<HTMLElement>(null);
-  const { pointerRef, prefersReducedMotion } = useHeroInteraction(sectionRef);
-  const burstEventsRef = useRef<Array<{ x: number; y: number }>>([]);
+  const sectionRef = useRef<HTMLElement>(null)
+  const { pointerRef, prefersReducedMotion } = useHeroInteraction(sectionRef)
+  const burstEventsRef = useRef<Array<{ x: number; y: number }>>([])
 
   useEffect(() => {
-    const section = sectionRef.current;
+    const section = sectionRef.current
     if (!section) {
-      return;
+      return
     }
 
     const handlePointerDown = (event: PointerEvent) => {
       if (event.button !== 0) {
-        return;
+        return
       }
 
-      const target = event.target as HTMLElement | null;
+      const target = event.target as HTMLElement | null
       if (
         target?.closest(
           [
-            "a",
-            "button",
-            "input",
-            "textarea",
-            "select",
-            "label",
+            'a',
+            'button',
+            'input',
+            'textarea',
+            'select',
+            'label',
             "[role='button']",
-            "[data-no-particle-burst]",
-          ].join(","),
+            '[data-no-particle-burst]',
+          ].join(','),
         )
       ) {
-        return;
+        return
       }
 
-      const rect = section.getBoundingClientRect();
-      const x = event.clientX - rect.left;
-      const y = event.clientY - (rect.top - 64);
+      const rect = section.getBoundingClientRect()
+      const x = event.clientX - rect.left
+      const y = event.clientY - (rect.top - 64)
 
       if (x < 0 || x > rect.width || y < 0 || y > rect.height + 64) {
-        return;
+        return
       }
 
-      burstEventsRef.current.push({ x, y });
-    };
+      burstEventsRef.current.push({ x, y })
+    }
 
-    section.addEventListener("pointerdown", handlePointerDown);
+    section.addEventListener('pointerdown', handlePointerDown)
     return () => {
-      section.removeEventListener("pointerdown", handlePointerDown);
-    };
-  }, []);
+      section.removeEventListener('pointerdown', handlePointerDown)
+    }
+  }, [])
 
   return (
     <section ref={sectionRef} className="relative overflow-hidden pt-32 pb-20 sm:pt-40 sm:pb-28">
@@ -69,7 +69,7 @@ export function HeroSection() {
         prefersReducedMotion={prefersReducedMotion}
         burstEventsRef={burstEventsRef}
       />
-      <div className={cn("relative", siteShellClass("site"))}>
+      <div className={cn('relative', siteShellClass('site'))}>
         <div className="grid lg:grid-cols-2 gap-12 items-center">
           <div className="flex flex-col gap-6 animate-fade-in" data-no-particle-burst="true">
             <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full border border-accent/30 bg-accent/5 w-fit">
@@ -81,13 +81,12 @@ export function HeroSection() {
             <HeroTypewriterTitle
               prefersReducedMotion={prefersReducedMotion}
               className="text-4xl sm:text-5xl lg:text-6xl font-semibold leading-[1.1] text-balance text-foreground"
-              style={{ fontFamily: "var(--font-space-grotesk)" }}
+              style={{ fontFamily: 'var(--font-space-grotesk)' }}
             />
 
             <p className="text-base sm:text-lg text-muted-foreground leading-relaxed max-w-lg">
-              Buy and sell code packages, templates, tools, and digital goods.
-              Every transaction secured with encrypted delivery and
-              developer-first licensing.
+              Buy and sell code packages, templates, tools, and digital goods. Every transaction
+              secured with encrypted delivery and developer-first licensing.
             </p>
 
             <div className="flex flex-wrap gap-3 pt-2">
@@ -134,124 +133,127 @@ export function HeroSection() {
         </div>
       </div>
     </section>
-  );
+  )
 }
 
 interface HeroIllustrationProps {
-  pointerRef: React.RefObject<HeroPointerState>;
-  prefersReducedMotion: boolean;
+  pointerRef: React.RefObject<HeroPointerState>
+  prefersReducedMotion: boolean
 }
 
 function HeroIllustration({ pointerRef, prefersReducedMotion }: HeroIllustrationProps) {
-  const shellRef = useRef<HTMLDivElement>(null);
-  const zoneRef = useRef<HTMLDivElement>(null);
-  const rearCardRef = useRef<HTMLDivElement>(null);
-  const midCardRef = useRef<HTMLDivElement>(null);
-  const frontCardRef = useRef<HTMLDivElement>(null);
-  const badgeRef = useRef<HTMLDivElement>(null);
+  const shellRef = useRef<HTMLDivElement>(null)
+  const zoneRef = useRef<HTMLDivElement>(null)
+  const rearCardRef = useRef<HTMLDivElement>(null)
+  const midCardRef = useRef<HTMLDivElement>(null)
+  const frontCardRef = useRef<HTMLDivElement>(null)
+  const badgeRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     if (prefersReducedMotion) {
-      return;
+      return
     }
 
-    const shell = shellRef.current;
-    const zone = zoneRef.current;
-    const rearCard = rearCardRef.current;
-    const midCard = midCardRef.current;
-    const frontCard = frontCardRef.current;
-    const badge = badgeRef.current;
+    const shell = shellRef.current
+    const zone = zoneRef.current
+    const rearCard = rearCardRef.current
+    const midCard = midCardRef.current
+    const frontCard = frontCardRef.current
+    const badge = badgeRef.current
     if (!shell || !zone || !rearCard || !midCard || !frontCard || !badge) {
-      return;
+      return
     }
 
-    let rafId = 0;
-    let shellX = 0;
-    let shellY = 0;
-    let rearX = 0;
-    let rearY = 0;
-    let midX = 0;
-    let midY = 0;
-    let frontX = 0;
-    let frontY = 0;
-    let frontRotate = 0;
-    let badgeX = 0;
-    let badgeY = 0;
-    let badgeRotate = 0;
+    let rafId = 0
+    let shellX = 0
+    let shellY = 0
+    let rearX = 0
+    let rearY = 0
+    let midX = 0
+    let midY = 0
+    let frontX = 0
+    let frontY = 0
+    let frontRotate = 0
+    let badgeX = 0
+    let badgeY = 0
+    let badgeRotate = 0
 
     const animate = () => {
-      const pointer = pointerRef.current;
-      const zoneRect = zone.getBoundingClientRect();
-      const extendedLeft = zoneRect.left - 84;
-      const extendedRight = zoneRect.right + 84;
-      const extendedTop = zoneRect.top - 72;
-      const extendedBottom = zoneRect.bottom + 72;
+      const pointer = pointerRef.current
+      const zoneRect = zone.getBoundingClientRect()
+      const extendedLeft = zoneRect.left - 84
+      const extendedRight = zoneRect.right + 84
+      const extendedTop = zoneRect.top - 72
+      const extendedBottom = zoneRect.bottom + 72
       const insideZone =
         pointer.inside &&
         pointer.clientX >= extendedLeft &&
         pointer.clientX <= extendedRight &&
         pointer.clientY >= extendedTop &&
-        pointer.clientY <= extendedBottom;
+        pointer.clientY <= extendedBottom
 
       if (insideZone && zoneRect.width > 0 && zoneRect.height > 0) {
-        const normX = ((pointer.clientX - zoneRect.left) / zoneRect.width - 0.5) * 2;
-        const normY = ((pointer.clientY - zoneRect.top) / zoneRect.height - 0.5) * 2;
+        const normX = ((pointer.clientX - zoneRect.left) / zoneRect.width - 0.5) * 2
+        const normY = ((pointer.clientY - zoneRect.top) / zoneRect.height - 0.5) * 2
 
-        const targetShellX = normX * 4;
-        const targetShellY = normY * 3;
-        const targetRearX = normX * 3;
-        const targetRearY = normY * 2;
-        const targetMidX = normX * 6;
-        const targetMidY = normY * 4;
-        const targetFrontX = normX * 9;
-        const targetFrontY = normY * 6;
-        const targetFrontRotate = normX * 0.8;
-        const targetBadgeX = normX * 10;
-        const targetBadgeY = normY * 7;
-        const targetBadgeRotate = normX * -0.55;
+        const targetShellX = normX * 4
+        const targetShellY = normY * 3
+        const targetRearX = normX * 3
+        const targetRearY = normY * 2
+        const targetMidX = normX * 6
+        const targetMidY = normY * 4
+        const targetFrontX = normX * 9
+        const targetFrontY = normY * 6
+        const targetFrontRotate = normX * 0.8
+        const targetBadgeX = normX * 10
+        const targetBadgeY = normY * 7
+        const targetBadgeRotate = normX * -0.55
 
-        shellX += (targetShellX - shellX) * 0.12;
-        shellY += (targetShellY - shellY) * 0.12;
-        rearX += (targetRearX - rearX) * 0.12;
-        rearY += (targetRearY - rearY) * 0.12;
-        midX += (targetMidX - midX) * 0.12;
-        midY += (targetMidY - midY) * 0.12;
-        frontX += (targetFrontX - frontX) * 0.12;
-        frontY += (targetFrontY - frontY) * 0.12;
-        frontRotate += (targetFrontRotate - frontRotate) * 0.12;
-        badgeX += (targetBadgeX - badgeX) * 0.12;
-        badgeY += (targetBadgeY - badgeY) * 0.12;
-        badgeRotate += (targetBadgeRotate - badgeRotate) * 0.12;
+        shellX += (targetShellX - shellX) * 0.12
+        shellY += (targetShellY - shellY) * 0.12
+        rearX += (targetRearX - rearX) * 0.12
+        rearY += (targetRearY - rearY) * 0.12
+        midX += (targetMidX - midX) * 0.12
+        midY += (targetMidY - midY) * 0.12
+        frontX += (targetFrontX - frontX) * 0.12
+        frontY += (targetFrontY - frontY) * 0.12
+        frontRotate += (targetFrontRotate - frontRotate) * 0.12
+        badgeX += (targetBadgeX - badgeX) * 0.12
+        badgeY += (targetBadgeY - badgeY) * 0.12
+        badgeRotate += (targetBadgeRotate - badgeRotate) * 0.12
       }
 
-      shell.style.transform = `translate3d(${shellX}px, ${shellY}px, 0)`;
-      rearCard.style.transform = `translate3d(${rearX}px, ${rearY}px, 0) rotate(3.4deg)`;
-      midCard.style.transform = `translate3d(${midX}px, ${midY}px, 0) rotate(-1.3deg)`;
-      frontCard.style.transform = `translate3d(${frontX}px, ${frontY}px, 0) rotate(${frontRotate}deg)`;
-      badge.style.transform = `translate3d(${badgeX}px, ${badgeY}px, 0) rotate(${badgeRotate}deg)`;
+      shell.style.transform = `translate3d(${shellX}px, ${shellY}px, 0)`
+      rearCard.style.transform = `translate3d(${rearX}px, ${rearY}px, 0) rotate(3.4deg)`
+      midCard.style.transform = `translate3d(${midX}px, ${midY}px, 0) rotate(-1.3deg)`
+      frontCard.style.transform = `translate3d(${frontX}px, ${frontY}px, 0) rotate(${frontRotate}deg)`
+      badge.style.transform = `translate3d(${badgeX}px, ${badgeY}px, 0) rotate(${badgeRotate}deg)`
 
-      rafId = window.requestAnimationFrame(animate);
-    };
+      rafId = window.requestAnimationFrame(animate)
+    }
 
-    rafId = window.requestAnimationFrame(animate);
+    rafId = window.requestAnimationFrame(animate)
 
     return () => {
-      window.cancelAnimationFrame(rafId);
-    };
-  }, [pointerRef, prefersReducedMotion]);
+      window.cancelAnimationFrame(rafId)
+    }
+  }, [pointerRef, prefersReducedMotion])
 
   return (
-    <div ref={shellRef} className="relative flex items-center justify-center h-[440px] will-change-transform">
+    <div
+      ref={shellRef}
+      className="relative flex items-center justify-center h-[440px] will-change-transform"
+    >
       <div ref={zoneRef} className="absolute right-0 top-2 h-[24.5rem] w-[34rem]" />
       <div
         ref={rearCardRef}
         className="absolute right-0 top-8 w-72 h-48 rounded-xl border border-border bg-card-elevated rotate-3 opacity-60"
-        style={{ background: "#141322" }}
+        style={{ background: '#141322' }}
       />
       <div
         ref={midCardRef}
         className="absolute right-6 top-4 w-72 h-48 rounded-xl border border-border -rotate-1 opacity-80"
-        style={{ background: "#11101A" }}
+        style={{ background: '#11101A' }}
       >
         <div className="p-4 flex flex-col gap-2">
           <div className="flex gap-1.5">
@@ -271,7 +273,7 @@ function HeroIllustration({ pointerRef, prefersReducedMotion }: HeroIllustration
       <div
         ref={frontCardRef}
         className="relative z-10 w-80 rounded-xl border border-border shadow-2xl shadow-primary/10"
-        style={{ background: "#11101A" }}
+        style={{ background: '#11101A' }}
       >
         <div className="p-5 flex flex-col gap-4">
           <div className="flex items-center justify-between">
@@ -279,16 +281,14 @@ function HeroIllustration({ pointerRef, prefersReducedMotion }: HeroIllustration
             <span className="text-xs font-mono text-muted-foreground">v2.4.1</span>
           </div>
           <div>
-            <h3 className="font-semibold text-foreground text-base">
-              SaaS Starter Kit
-            </h3>
+            <h3 className="font-semibold text-foreground text-base">SaaS Starter Kit</h3>
             <p className="text-xs text-muted-foreground mt-1">
               Full-stack template with billing, teams, and feature flags.
             </p>
           </div>
           <div className="flex items-center justify-between">
             <div className="flex gap-1">
-              {["nextjs", "stripe", "auth"].map((tag) => (
+              {['nextjs', 'stripe', 'auth'].map((tag) => (
                 <span
                   key={tag}
                   className="px-2 py-0.5 rounded text-[10px] font-mono bg-secondary text-muted-foreground border border-border"
@@ -323,5 +323,5 @@ function HeroIllustration({ pointerRef, prefersReducedMotion }: HeroIllustration
         </div>
       </div>
     </div>
-  );
+  )
 }

@@ -1,27 +1,25 @@
-"use client";
+'use client'
 
-import { Skeleton } from "@/components/ui/skeleton";
-import { cn } from "@/lib/utils";
+import { Skeleton } from '@/components/ui/skeleton'
+import { cn } from '@/lib/utils'
 
-export type AssetCardSkeletonVariant = "catalog" | "featured";
+export type AssetCardSkeletonVariant = 'catalog' | 'featured'
 
 interface AssetCardSkeletonProps {
-  variant?: AssetCardSkeletonVariant;
-  className?: string;
+  variant?: AssetCardSkeletonVariant
+  className?: string
 }
 
-export function AssetCardSkeleton({ variant = "catalog", className }: AssetCardSkeletonProps) {
-  const isFeatured = variant === "featured";
+export function AssetCardSkeleton({ variant = 'catalog', className }: AssetCardSkeletonProps) {
+  const isFeatured = variant === 'featured'
   return (
     <div
       className={cn(
-        "flex-none rounded-xl border border-border flex flex-col gap-3",
-        isFeatured
-          ? "min-h-[19rem] h-full w-72 p-5 sm:w-80"
-          : "w-full p-4",
+        'flex-none rounded-xl border border-border flex flex-col gap-3',
+        isFeatured ? 'min-h-[19rem] h-full w-72 p-5 sm:w-80' : 'w-full p-4',
         className,
       )}
-      style={{ background: "#11101A" }}
+      style={{ background: '#11101A' }}
       aria-hidden
     >
       <div className="flex items-start justify-between gap-2 h-12">
@@ -48,39 +46,35 @@ export function AssetCardSkeleton({ variant = "catalog", className }: AssetCardS
         <Skeleton className="h-9 w-full rounded-lg bg-muted-foreground/20 animate-pulse" />
       </div>
     </div>
-  );
+  )
 }
 
 interface AssetCardGridSkeletonProps {
-  count?: number;
+  count?: number
   /** Desktop catalog: 3 cols on lg */
-  variant?: "catalog-desktop" | "catalog-mobile";
-  className?: string;
+  variant?: 'catalog-desktop' | 'catalog-mobile'
+  className?: string
 }
 
 export function AssetCardGridSkeleton({
   count,
-  variant = "catalog-desktop",
+  variant = 'catalog-desktop',
   className,
 }: AssetCardGridSkeletonProps) {
-  const defaultCount = variant === "catalog-mobile" ? 4 : 6;
-  const n = count ?? defaultCount;
+  const defaultCount = variant === 'catalog-mobile' ? 4 : 6
+  const n = count ?? defaultCount
   const grid =
-    variant === "catalog-mobile"
-      ? "grid grid-cols-1 sm:grid-cols-2 gap-4"
-      : "grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4";
+    variant === 'catalog-mobile'
+      ? 'grid grid-cols-1 sm:grid-cols-2 gap-4'
+      : 'grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4'
 
   return (
-    <div
-      className={cn(grid, className)}
-      aria-busy="true"
-      aria-label="Loading assets"
-    >
+    <div className={cn(grid, className)} aria-busy="true" aria-label="Loading assets">
       {Array.from({ length: n }, (_, i) => (
         <AssetCardSkeleton key={i} variant="catalog" />
       ))}
     </div>
-  );
+  )
 }
 
 export function FeaturedAssetCarouselSkeleton({ count = 4 }: { count?: number }) {
@@ -94,5 +88,5 @@ export function FeaturedAssetCarouselSkeleton({ count = 4 }: { count?: number })
         <AssetCardSkeleton key={i} variant="featured" />
       ))}
     </div>
-  );
+  )
 }
