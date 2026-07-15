@@ -1,7 +1,6 @@
 using Ardalis.Result;
 using AssetBlock.Domain.Abstractions.Services;
 using AssetBlock.Domain.Core.Constants;
-using AssetBlock.Domain.Core.Dto.Outbox;
 using AssetBlock.Domain.Core.Dto.Tags;
 using MediatR;
 using Microsoft.Extensions.Logging;
@@ -11,8 +10,6 @@ namespace AssetBlock.Application.UseCases.Assets.AddAssetTag;
 internal sealed class AddAssetTagCommandHandler(
     IAssetStore assetStore,
     ITagStore tagStore,
-    IUnitOfWork unitOfWork,
-    IOutboxStore outboxStore,
     ICacheService cache,
     ILogger<AddAssetTagCommandHandler> logger) : IRequestHandler<AddAssetTagCommand, Result<TagDto>>
 {
@@ -50,14 +47,7 @@ internal sealed class AddAssetTagCommandHandler(
 
         try
         {
-            await unitOfWork.ExecuteInTransaction(async ct =>
-            {
-                await assetStore.AddTag(asset.Id, tag.Id, ct);
-                await outboxStore.Enqueue(
-                    OutboxMessageTypes.ASSET_INDEX_UPSERT,
-                    new AssetIndexUpsertPayload(asset.Id),
-                    ct);
-            }, cancellationToken);
+            await assetStore.AddTag(asset.Id, tag.Id, cancellationToken);
 
             try
             {

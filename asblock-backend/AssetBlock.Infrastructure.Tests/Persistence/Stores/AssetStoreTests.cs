@@ -53,8 +53,10 @@ public sealed class AssetStoreTests
         loaded!.Title.Should().Be("Title");
         loaded.Category.Should().NotBeNull();
 
-        var paged = await sut.GetPaged(new GetAssetsRequest { Search = "title", SortBy = "Price", SortDirection = SortDirection.ASC });
+        var paged = await sut.GetPaged(new GetAssetsRequest { SortBy = "Price", SortDirection = SortDirection.ASC });
         paged.Items.Should().Contain(a => a.Id == asset.Id);
+        paged.Items.Single(a => a.Id == asset.Id).AuthorUsername.Should().Be("a");
+        paged.Items.Single(a => a.Id == asset.Id).CategoryName.Should().Be("C");
 
         (await sut.Update(asset.Id, "New", null, 20m, null)).Should().BeTrue();
 

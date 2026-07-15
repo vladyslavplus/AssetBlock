@@ -1,6 +1,5 @@
 using AssetBlock.Domain.Core.Primitives.AppSettingsOptions;
 using AssetBlock.Infrastructure.Persistence;
-using Elastic.Clients.Elasticsearch;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
 using Microsoft.Extensions.Options;
 using Minio;
@@ -58,30 +57,6 @@ internal sealed class MinioHealthCheck(
         catch (Exception ex)
         {
             return HealthCheckResult.Unhealthy("MinIO readiness check failed.", ex);
-        }
-    }
-}
-
-internal sealed class ElasticsearchHealthCheck(ElasticsearchClient client) : IHealthCheck
-{
-    public async Task<HealthCheckResult> CheckHealthAsync(
-        HealthCheckContext context,
-        CancellationToken cancellationToken = default)
-    {
-        try
-        {
-            var response = await client.PingAsync(cancellationToken);
-            return response.IsValidResponse
-                ? HealthCheckResult.Healthy()
-                : HealthCheckResult.Unhealthy("Elasticsearch returned an unsuccessful response.");
-        }
-        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
-        {
-            throw;
-        }
-        catch (Exception ex)
-        {
-            return HealthCheckResult.Unhealthy("Elasticsearch readiness check failed.", ex);
         }
     }
 }

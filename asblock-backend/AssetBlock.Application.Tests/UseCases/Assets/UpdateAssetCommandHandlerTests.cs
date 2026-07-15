@@ -12,7 +12,6 @@ public class UpdateAssetCommandHandlerTests
 {
     private readonly IAssetStore _assetStoreMock;
     private readonly ICategoryStore _categoryStoreMock;
-    private readonly IOutboxStore _outboxStoreMock;
     private readonly ICacheService _cacheMock;
     private readonly UpdateAssetCommandHandler _handler;
 
@@ -20,18 +19,11 @@ public class UpdateAssetCommandHandlerTests
     {
         _assetStoreMock = Substitute.For<IAssetStore>();
         _categoryStoreMock = Substitute.For<ICategoryStore>();
-        var unitOfWorkMock = Substitute.For<IUnitOfWork>();
-        _outboxStoreMock = Substitute.For<IOutboxStore>();
         _cacheMock = Substitute.For<ICacheService>();
-
-        unitOfWorkMock.ExecuteInTransaction(Arg.Any<Func<CancellationToken, Task>>(), Arg.Any<CancellationToken>())
-            .Returns(ci => ci.Arg<Func<CancellationToken, Task>>()(CancellationToken.None));
 
         _handler = new UpdateAssetCommandHandler(
             _assetStoreMock,
             _categoryStoreMock,
-            unitOfWorkMock,
-            _outboxStoreMock,
             _cacheMock,
             NullLogger<UpdateAssetCommandHandler>.Instance);
     }
@@ -82,7 +74,7 @@ public class UpdateAssetCommandHandlerTests
     }
 
     [Fact]
-    public async Task Handle_WithPartialUpdate_ShouldUpdateEnqueueIndexAndClearCache()
+    public async Task Handle_WithPartialUpdate_ShouldUpdateAndClearCache()
     {
         var authorId = Guid.NewGuid();
         var command = new UpdateAssetCommand(Guid.NewGuid(), authorId, "Updated Title", null, null, null);
@@ -95,15 +87,11 @@ public class UpdateAssetCommandHandlerTests
 
         result.IsSuccess.Should().BeTrue();
         await _assetStoreMock.Received(1).Update(command.AssetId, "Updated Title", null, null, null, Arg.Any<CancellationToken>());
-        await _outboxStoreMock.Received(1).Enqueue(
-            OutboxMessageTypes.ASSET_INDEX_UPSERT,
-            Arg.Any<object>(),
-            Arg.Any<CancellationToken>());
         await _cacheMock.Received(1).RemoveByPrefix(CacheKeys.ASSETS_LIST_PREFIX, Arg.Any<CancellationToken>());
     }
 
     [Fact]
-    public async Task Handle_WhenUpdateReturnsFalse_ShouldReturnError()
+    public async Task Handle_WhenUpdateReturnsFalse_ShouldReturnNotFound()
     {
         var authorId = Guid.NewGuid();
         var command = new UpdateAssetCommand(Guid.NewGuid(), authorId, "Title", null, null, null);
@@ -115,6 +103,6 @@ public class UpdateAssetCommandHandlerTests
         var result = await _handler.Handle(command, CancellationToken.None);
 
         result.IsSuccess.Should().BeFalse();
-        result.Errors.Should().Contain(ErrorCodes.ERR_INTERNAL);
+        result.Errors.Should().Contain(ErrorCodes.ERR_ASSET_NOT_FOUND);
     }
 }

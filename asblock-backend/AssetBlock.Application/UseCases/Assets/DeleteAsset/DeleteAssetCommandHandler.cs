@@ -52,26 +52,21 @@ internal sealed class DeleteAssetCommandHandler(
 
         try
         {
-            await unitOfWork.ExecuteInTransaction(async ct =>
+            if (hasPurchases)
             {
-                if (hasPurchases)
-                {
-                    await assetStore.SoftDelete(asset.Id, DateTimeOffset.UtcNow, ct);
-                }
-                else
+                await assetStore.SoftDelete(asset.Id, DateTimeOffset.UtcNow, cancellationToken);
+            }
+            else
+            {
+                await unitOfWork.ExecuteInTransaction(async ct =>
                 {
                     await assetStore.Delete(asset.Id, ct);
                     await outboxStore.Enqueue(
                         OutboxMessageTypes.ASSET_BLOB_DELETE,
                         new AssetBlobDeletePayload(asset.Id, storageKey),
                         ct);
-                }
-
-                await outboxStore.Enqueue(
-                    OutboxMessageTypes.ASSET_INDEX_DELETE,
-                    new AssetIndexDeletePayload(asset.Id),
-                    ct);
-            }, cancellationToken);
+                }, cancellationToken);
+            }
 
             try
             {

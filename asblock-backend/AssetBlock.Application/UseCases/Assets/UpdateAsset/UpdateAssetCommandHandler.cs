@@ -1,7 +1,6 @@
 using Ardalis.Result;
 using AssetBlock.Domain.Abstractions.Services;
 using AssetBlock.Domain.Core.Constants;
-using AssetBlock.Domain.Core.Dto.Outbox;
 using MediatR;
 using Microsoft.Extensions.Logging;
 
@@ -10,8 +9,6 @@ namespace AssetBlock.Application.UseCases.Assets.UpdateAsset;
 internal sealed class UpdateAssetCommandHandler(
     IAssetStore assetStore,
     ICategoryStore categoryStore,
-    IUnitOfWork unitOfWork,
-    IOutboxStore outboxStore,
     ICacheService cache,
     ILogger<UpdateAssetCommandHandler> logger) : IRequestHandler<UpdateAssetCommand, Result>
 {
@@ -44,26 +41,18 @@ internal sealed class UpdateAssetCommandHandler(
                 }
             }
 
-            await unitOfWork.ExecuteInTransaction(async ct =>
+            var updated = await assetStore.Update(
+                request.AssetId,
+                request.Title,
+                request.Description,
+                request.Price,
+                request.CategoryId,
+                cancellationToken);
+
+            if (!updated)
             {
-                var updated = await assetStore.Update(
-                    request.AssetId,
-                    request.Title,
-                    request.Description,
-                    request.Price,
-                    request.CategoryId,
-                    ct);
-
-                if (!updated)
-                {
-                    throw new InvalidOperationException("Asset update returned false after load.");
-                }
-
-                await outboxStore.Enqueue(
-                    OutboxMessageTypes.ASSET_INDEX_UPSERT,
-                    new AssetIndexUpsertPayload(request.AssetId),
-                    ct);
-            }, cancellationToken);
+                return Result.NotFound(ErrorCodes.ERR_ASSET_NOT_FOUND);
+            }
 
             try
             {

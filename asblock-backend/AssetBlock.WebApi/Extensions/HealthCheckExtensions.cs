@@ -25,11 +25,6 @@ public static class HealthCheckExtensions
                 "minio",
                 failureStatus: HealthStatus.Unhealthy,
                 tags: [READY_TAG],
-                timeout: _dependencyTimeout)
-            .AddCheck<ElasticsearchHealthCheck>(
-                "elasticsearch",
-                failureStatus: HealthStatus.Unhealthy,
-                tags: [READY_TAG],
                 timeout: _dependencyTimeout);
 
         if (IsConfigured(configuration.GetConnectionString("Redis")))

@@ -2,7 +2,6 @@ using System.IO.Pipelines;
 using AssetBlock.Application.Common;
 using AssetBlock.Domain.Abstractions.Services;
 using AssetBlock.Domain.Core.Constants;
-using AssetBlock.Domain.Core.Dto.Outbox;
 using AssetBlock.Domain.Core.Entities;
 using AssetBlock.Domain.Core.Exceptions;
 using AssetBlock.Domain.Core.Primitives.AppSettingsOptions;
@@ -21,8 +20,6 @@ internal sealed class UploadAssetCommandHandler(
     IEncryptionService encryptionService,
     IAssetArchiveInspector archiveInspector,
     IOptions<FileUploadOptions> fileUploadOptions,
-    IUnitOfWork unitOfWork,
-    IOutboxStore outboxStore,
     ICacheService cache,
     ILogger<UploadAssetCommandHandler> logger) : IRequestHandler<UploadAssetCommand, Result<Guid>>
 {
@@ -126,22 +123,14 @@ internal sealed class UploadAssetCommandHandler(
         };
         try
         {
-            await unitOfWork.ExecuteInTransaction(async ct =>
+            if (existingTags is { Count: > 0 })
             {
-                if (existingTags is { Count: > 0 })
-                {
-                    await assetStore.AddWithTags(asset, existingTags, ct);
-                }
-                else
-                {
-                    await assetStore.Add(asset, ct);
-                }
-
-                await outboxStore.Enqueue(
-                    OutboxMessageTypes.ASSET_INDEX_UPSERT,
-                    new AssetIndexUpsertPayload(assetId),
-                    ct);
-            }, cancellationToken);
+                await assetStore.AddWithTags(asset, existingTags, cancellationToken);
+            }
+            else
+            {
+                await assetStore.Add(asset, cancellationToken);
+            }
         }
         catch (OperationCanceledException)
         {

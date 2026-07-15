@@ -57,7 +57,6 @@ openssl rand -base64 32
 | `Minio:AccessKey` / `Minio:SecretKey` | Yes | No code fallbacks |
 | `Minio:UseSsl` | Yes | `false` for local HTTP MinIO |
 | `Encryption:KeyBase64` | Yes | Base64 of exactly 32 bytes |
-| `Elasticsearch:Url` / `Elasticsearch:DefaultIndex` | Yes | Absolute URL + index name |
 | `Stripe:*` | No | If **any** Stripe field is set, all of `SecretKey`, `WebhookSecret`, `DefaultSuccessUrl`, `DefaultCancelUrl` are required |
 
 ### 3. Docker / Next.js `.env`
@@ -105,6 +104,6 @@ Bring up local app dependencies with `docker-compose.yml` in this folder when ru
 ### Health checks
 
 - `GET /health/live` reports process liveness only and does not probe external dependencies.
-- `GET /health/ready` probes PostgreSQL, the configured MinIO bucket, Elasticsearch, and Redis when a Redis connection string is configured.
+- `GET /health/ready` probes PostgreSQL, the configured MinIO bucket, and Redis when a Redis connection string is configured.
 
 Both endpoints return a small JSON report. Readiness returns HTTP 503 while any required dependency is unavailable.

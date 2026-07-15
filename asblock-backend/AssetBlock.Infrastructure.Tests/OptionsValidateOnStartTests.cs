@@ -1,6 +1,5 @@
 using System.Text;
 using System.Text.Json;
-using AssetBlock.Infrastructure;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -40,8 +39,7 @@ public sealed class OptionsValidateOnStartTests
                 WebhookSecret = "<stripe-webhook-secret>",
                 DefaultSuccessUrl = "<default-success-url>",
                 DefaultCancelUrl = "<default-cancel-url>"
-            },
-            Elasticsearch = new { Url = "<elasticsearch-url>", DefaultIndex = "<default-index>" }
+            }
         });
 
         using var host = Host.CreateDefaultBuilder()
@@ -68,7 +66,7 @@ public sealed class OptionsValidateOnStartTests
         }
 
         caught.Should().NotBeNull("host start must fail on invalid options");
-        Flatten(caught!)
+        Flatten(caught)
             .OfType<OptionsValidationException>()
             .Should()
             .NotBeEmpty("ValidateOnStart must surface OptionsValidationException before the host is usable");

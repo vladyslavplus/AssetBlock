@@ -13,7 +13,7 @@
 
 - **Domain:** entities, DTOs, options, constants, error codes/messages, cache keys, domain exceptions, and interfaces. It must not depend on Infrastructure or WebApi.
 - **Application:** MediatR commands/queries, handlers, FluentValidation validators, pipeline behaviors, `ResultError`, and business orchestration. Keep each use case in its own folder.
-- **Infrastructure:** `ApplicationDbContext`, EF configurations, `I*Store` implementations, JWT, password hashing, MinIO, encryption, cache, Stripe, search integrations, Polly, hosted services, and DI registrations.
+- **Infrastructure:** `ApplicationDbContext`, EF configurations, `I*Store` implementations, JWT, password hashing, MinIO, encryption, cache, Stripe, Polly, hosted services, and DI registrations.
 - **WebApi:** controllers, request binding, auth/authorization, routing, middleware, OpenAPI, rate limits, exception-to-HTTP mapping, and startup. Controllers must not contain business rules or direct persistence logic.
 - Register implementations in the layer that owns them: application mechanics in `AddApplication`, integrations/stores/hosted services in `AddInfrastructure`, transport concerns in WebApi.
 
@@ -48,12 +48,12 @@
 
 ## Files, external services, cache, and performance
 
-- Treat upload/download, encryption, MinIO, Stripe, Redis, SignalR, and catalog-search integrations as failure-prone I/O boundaries. Use the existing Polly and logging patterns where meaningful.
+- Treat upload/download, encryption, MinIO, Stripe, Redis, SignalR, and catalog query paths as failure-prone I/O boundaries. Use the existing Polly and logging patterns where meaningful.
 - Preserve AES-GCM chunk integrity rules: fresh nonce per chunk, authenticated data ordering, and end-of-stream validation. Never expose plaintext blobs or encryption keys.
 - When changing file handling, avoid buffering an entire payload in memory or persisting plaintext to disk unless the requirement explicitly accepts that trade-off. Preserve cancellation and clean up partial/orphaned objects safely.
 - Build MinIO object keys server-side; do not trust client filenames as paths. Keep download authorization before content delivery.
 - Cache only safely reusable data. Use `CacheKeys`, explicit TTLs, and invalidation after committed writes. Cache failures may degrade only when stale/missed data is acceptable.
-- Keep search data derived from PostgreSQL state. Do not silently return an empty catalog when a search dependency failure must be visible.
+- Keep catalog search derived from PostgreSQL state (FTS + pg_trgm). Do not silently return an empty catalog when a database failure must be visible.
 - Use `IHttpClientFactory` for new HTTP integrations. Reuse existing configured clients/pipelines before adding a package or retry mechanism.
 
 ## Security and observability

@@ -64,8 +64,8 @@ public sealed class OutboxStorePostgresTests(PostgresFixture fixture)
             asset.Title = "mutated-in-tx";
             await db.SaveChangesAsync(ct);
             await outbox.Enqueue(
-                OutboxMessageTypes.ASSET_INDEX_UPSERT,
-                new AssetIndexUpsertPayload(assetId),
+                OutboxMessageTypes.ASSET_BLOB_DELETE,
+                new AssetBlobDeletePayload(assetId, "assets/rollback-test.bin"),
                 ct);
             throw new InvalidOperationException("force rollback");
         });
@@ -118,8 +118,8 @@ public sealed class OutboxStorePostgresTests(PostgresFixture fixture)
         await using var db = await fixture.CreateCleanDbContext();
         var store = CreateStore(db);
         await store.Enqueue(
-            OutboxMessageTypes.ASSET_INDEX_UPSERT,
-            new AssetIndexUpsertPayload(Guid.NewGuid()),
+            OutboxMessageTypes.ASSET_BLOB_DELETE,
+            new AssetBlobDeletePayload(Guid.NewGuid(), "assets/retry-test.bin"),
             CancellationToken.None);
 
         var first = await store.ClaimPendingBatch(1, TimeSpan.FromMinutes(5));
@@ -128,7 +128,7 @@ public sealed class OutboxStorePostgresTests(PostgresFixture fixture)
         (await store.MarkFailed(
             claimed.Id,
             claimed.LockToken!.Value,
-            "search unavailable",
+            "transient failure",
             DateTimeOffset.UtcNow.AddMilliseconds(-1))).Should().BeTrue();
 
         var retry = await store.ClaimPendingBatch(1, TimeSpan.FromMinutes(5));
@@ -161,14 +161,21 @@ public sealed class OutboxStorePostgresTests(PostgresFixture fixture)
             (User author, Category category) = await TestData.SeedAuthorAndCategory(db);
             var buyer = TestData.CreateUser("legacy-buyer", "legacy-buyer@example.test");
             db.Users.Add(buyer);
-            var asset = TestData.CreateAsset(author.Id, category.Id, title: "Legacy Asset");
-            db.Assets.Add(asset);
             await db.SaveChangesAsync();
+
+            // Insert via SQL: current EF model includes generated search_vector, but this
+            // database is still on a pre-FTS migration until MigrateAsync below.
+            var assetId = Guid.NewGuid();
+            var now = DateTimeOffset.UtcNow;
+            await db.Database.ExecuteSqlInterpolatedAsync($"""
+                INSERT INTO assets ("Id", "AuthorId", "CategoryId", "Title", "Description", "Price", "StorageKey", "FileName", "CreatedAt")
+                VALUES ({assetId}, {author.Id}, {category.Id}, {"Legacy Asset"}, {null}, {9.99m}, {"assets/legacy.bin"}, {"package.zip"}, {now});
+                """);
 
             purchaseId = Guid.NewGuid();
             await db.Database.ExecuteSqlInterpolatedAsync($"""
                 INSERT INTO purchases ("Id", "UserId", "AssetId", "StripePaymentId", "PurchasedAt", "CreatedAt")
-                VALUES ({purchaseId}, {buyer.Id}, {asset.Id}, NULL, {DateTimeOffset.UtcNow}, {DateTimeOffset.UtcNow});
+                VALUES ({purchaseId}, {buyer.Id}, {assetId}, NULL, {DateTimeOffset.UtcNow}, {DateTimeOffset.UtcNow});
                 """);
         }
 

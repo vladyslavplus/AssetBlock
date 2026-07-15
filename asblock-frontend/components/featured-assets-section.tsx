@@ -145,7 +145,9 @@ export function FeaturedAssetsSection() {
 
   const featuredQuery = useQuery({
     queryKey: catalogKeys.featured(FEATURED_LIMIT),
-    queryFn: ({ signal }) => fetchFeaturedAssets({ limit: FEATURED_LIMIT, signal }),
+    // Do not forward TanStack Query's cancellation signal to browser fetch. On navigation,
+    // Next dev reports the expected abort as an unhandled rejection even though the query owns it.
+    queryFn: () => fetchFeaturedAssets({ limit: FEATURED_LIMIT }),
   })
 
   const assets = featuredQuery.data ?? EMPTY_ASSETS

@@ -30,7 +30,6 @@ public sealed class DependencyInjectionTests
                 DefaultSuccessUrl = "http://localhost:3000/payment/success",
                 DefaultCancelUrl = "http://localhost:3000/payment/cancel"
             },
-            Elasticsearch = new { Url = "http://localhost:9200", DefaultIndex = "assets" },
             FileUpload = new { MaxFileBytes = 262144000L, AllowedExtensions = new[] { ".zip", ".7z", ".rar", ".tar", ".tar.gz", ".tgz" } }
         });
         var config = new ConfigurationBuilder()
@@ -57,7 +56,6 @@ public sealed class DependencyInjectionTests
         sp.GetRequiredService<IAssetStorageService>().Should().NotBeNull();
         sp.GetRequiredService<IEncryptionService>().Should().NotBeNull();
         sp.GetRequiredService<IPasswordHasher>().Should().NotBeNull();
-        sp.GetRequiredService<IAssetSearchService>().Should().NotBeNull();
         sp.GetRequiredService<ICacheService>().Should().NotBeNull();
         sp.GetRequiredService<ApplicationDbContext>();
     }
@@ -78,7 +76,6 @@ public sealed class DependencyInjectionTests
                 DefaultSuccessUrl = "http://localhost:3000/payment/success",
                 DefaultCancelUrl = "http://localhost:3000/payment/cancel"
             },
-            Elasticsearch = new { Url = "http://localhost:9200", DefaultIndex = "assets" },
             FileUpload = new { MaxFileBytes = 262144000L, AllowedExtensions = new[] { ".zip", ".7z", ".rar", ".tar", ".tar.gz", ".tgz" } }
         });
         var config = new ConfigurationBuilder()

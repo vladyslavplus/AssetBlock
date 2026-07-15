@@ -1,7 +1,6 @@
 using Ardalis.Result;
 using AssetBlock.Domain.Abstractions.Services;
 using AssetBlock.Domain.Core.Constants;
-using AssetBlock.Domain.Core.Dto.Outbox;
 using MediatR;
 using Microsoft.Extensions.Logging;
 
@@ -10,8 +9,6 @@ namespace AssetBlock.Application.UseCases.Assets.RemoveAssetTag;
 internal sealed class RemoveAssetTagCommandHandler(
     IAssetStore assetStore,
     ITagStore tagStore,
-    IUnitOfWork unitOfWork,
-    IOutboxStore outboxStore,
     ICacheService cache,
     ILogger<RemoveAssetTagCommandHandler> logger) : IRequestHandler<RemoveAssetTagCommand, Result>
 {
@@ -48,14 +45,7 @@ internal sealed class RemoveAssetTagCommandHandler(
 
         try
         {
-            await unitOfWork.ExecuteInTransaction(async ct =>
-            {
-                await assetStore.RemoveTag(asset.Id, tag.Id, ct);
-                await outboxStore.Enqueue(
-                    OutboxMessageTypes.ASSET_INDEX_UPSERT,
-                    new AssetIndexUpsertPayload(asset.Id),
-                    ct);
-            }, cancellationToken);
+            await assetStore.RemoveTag(asset.Id, tag.Id, cancellationToken);
 
             try
             {

@@ -6,6 +6,9 @@ namespace AssetBlock.Infrastructure.Persistence.Configurations;
 
 internal sealed class AssetConfiguration : IEntityTypeConfiguration<Asset>
 {
+    /// <summary>EF shadow property / PostgreSQL column for generated FTS vector.</summary>
+    internal const string SEARCH_VECTOR_PROPERTY = "SearchVector";
+
     public void Configure(EntityTypeBuilder<Asset> builder)
     {
         builder.ToTable("assets");

@@ -2,12 +2,18 @@ using AssetBlock.Domain.Abstractions.Services;
 using AssetBlock.Domain.Core.Dto.Assets;
 using AssetBlock.Domain.Core.Dto.Paging;
 using AssetBlock.Domain.Core.Entities;
+using AssetBlock.Infrastructure.Persistence.Configurations;
 using Microsoft.EntityFrameworkCore;
+using NpgsqlTypes;
 
 namespace AssetBlock.Infrastructure.Persistence.Stores;
 
 internal sealed class AssetStore(ApplicationDbContext dbContext) : IAssetStore
 {
+    private const float TRIGRAM_SIMILARITY_THRESHOLD = 0.30f;
+    private const int MIN_TRIGRAM_QUERY_LENGTH = 3;
+    private const string LIKE_ESCAPE = "\\";
+
     public async Task<Asset> Add(Asset asset, CancellationToken cancellationToken = default)
     {
         dbContext.Assets.Add(asset);
@@ -51,17 +57,37 @@ internal sealed class AssetStore(ApplicationDbContext dbContext) : IAssetStore
             .AnyAsync(a => a.StorageKey == storageKey, cancellationToken);
     }
 
-    public async Task<PagedResult<Asset>> GetPaged(GetAssetsRequest request, CancellationToken cancellationToken = default)
+    public async Task<PagedResult<AssetListItem>> GetPaged(GetAssetsRequest request, CancellationToken cancellationToken = default)
     {
         IQueryable<Asset> query = dbContext.Assets.AsNoTracking()
-            .Where(a => a.DeletedAt == null)
-            .Include(a => a.Category);
+            .Where(a => a.DeletedAt == null);
 
         if (!string.IsNullOrWhiteSpace(request.Search))
         {
-            var term = request.Search.Trim().ToLower();
-            query = query.Where(a => a.Title.ToLower().Contains(term) || (a.Description != null && a.Description.ToLower().Contains(term)));
+            var searchText = request.Search.Trim();
+            var likePattern = $"%{EscapeLikePattern(searchText)}%";
+
+            if (searchText.Length >= MIN_TRIGRAM_QUERY_LENGTH)
+            {
+                query = query.Where(a =>
+                    EF.Property<NpgsqlTsVector>(a, AssetConfiguration.SEARCH_VECTOR_PROPERTY)
+                        .Matches(EF.Functions.WebSearchToTsQuery("simple", searchText))
+                    || EF.Functions.ILike(a.Title, likePattern, LIKE_ESCAPE)
+                    || (a.Description != null && EF.Functions.ILike(a.Description, likePattern, LIKE_ESCAPE))
+                    || PostgresDbFunctions.TrigramsSimilarity(a.Title, searchText) >= TRIGRAM_SIMILARITY_THRESHOLD
+                    || (a.Description != null
+                        && PostgresDbFunctions.TrigramsSimilarity(a.Description, searchText) >= TRIGRAM_SIMILARITY_THRESHOLD));
+            }
+            else
+            {
+                query = query.Where(a =>
+                    EF.Property<NpgsqlTsVector>(a, AssetConfiguration.SEARCH_VECTOR_PROPERTY)
+                        .Matches(EF.Functions.WebSearchToTsQuery("simple", searchText))
+                    || EF.Functions.ILike(a.Title, likePattern, LIKE_ESCAPE)
+                    || (a.Description != null && EF.Functions.ILike(a.Description, likePattern, LIKE_ESCAPE)));
+            }
         }
+
         if (request.CategoryId is { } categoryId)
         {
             query = query.Where(a => a.CategoryId == categoryId);
@@ -70,6 +96,25 @@ internal sealed class AssetStore(ApplicationDbContext dbContext) : IAssetStore
         if (request.AuthorId is { } authorId)
         {
             query = query.Where(a => a.AuthorId == authorId);
+        }
+
+        if (request.MinPrice is { } minPrice)
+        {
+            query = query.Where(a => a.Price >= minPrice);
+        }
+
+        if (request.MaxPrice is { } maxPrice)
+        {
+            query = query.Where(a => a.Price <= maxPrice);
+        }
+
+        if (request.Tags is { Count: > 0 })
+        {
+            foreach (var tag in request.Tags)
+            {
+                var tagName = tag;
+                query = query.Where(a => a.AssetTags.Any(at => at.Tag.Name == tagName));
+            }
         }
 
         var totalCount = await query.CountAsync(cancellationToken);
@@ -96,12 +141,28 @@ internal sealed class AssetStore(ApplicationDbContext dbContext) : IAssetStore
 
         var page = Math.Max(PagedRequest.DEFAULT_PAGE, request.Page);
         var pageSize = Math.Clamp(request.PageSize, PagedRequest.MIN_PAGE_SIZE, PagedRequest.MAX_PAGE_SIZE);
+
         var items = await query
             .Skip((page - 1) * pageSize)
             .Take(pageSize)
+            .Select(a => new AssetListItem(
+                a.Id,
+                a.Title,
+                a.Description,
+                a.Price,
+                a.CategoryId,
+                a.Category.Name,
+                a.AuthorId,
+                a.Author.Username,
+                a.CreatedAt,
+                a.AssetTags
+                    .Select(at => at.Tag.Name)
+                    .OrderBy(n => n)
+                    .ToList(),
+                a.Reviews.Average(r => (double?)r.Rating) ?? 0d))
             .ToListAsync(cancellationToken);
 
-        return new PagedResult<Asset>(items, totalCount, page, pageSize);
+        return new PagedResult<AssetListItem>(items, totalCount, page, pageSize);
     }
 
     public async Task SoftDelete(Guid id, DateTimeOffset deletedAt, CancellationToken cancellationToken = default)
@@ -182,5 +243,13 @@ internal sealed class AssetStore(ApplicationDbContext dbContext) : IAssetStore
         asset.UpdatedAt = DateTimeOffset.UtcNow;
         await dbContext.SaveChangesAsync(cancellationToken);
         return true;
+    }
+
+    private static string EscapeLikePattern(string value)
+    {
+        return value
+            .Replace("\\", @"\\", StringComparison.Ordinal)
+            .Replace("%", "\\%", StringComparison.Ordinal)
+            .Replace("_", "\\_", StringComparison.Ordinal);
     }
 }

@@ -64,7 +64,7 @@ public class DeleteAssetCommandHandlerTests
     }
 
     [Fact]
-    public async Task Handle_WhenSuccess_ShouldHardDeleteEnqueueOutboxAndClearCache()
+    public async Task Handle_WhenSuccess_ShouldHardDeleteEnqueueBlobOutboxAndClearCache()
     {
         var authorId = Guid.NewGuid();
         var command = new DeleteAssetCommand(Guid.NewGuid(), authorId);
@@ -81,15 +81,11 @@ public class DeleteAssetCommandHandlerTests
             OutboxMessageTypes.ASSET_BLOB_DELETE,
             Arg.Any<object>(),
             Arg.Any<CancellationToken>());
-        await _outboxStoreMock.Received(1).Enqueue(
-            OutboxMessageTypes.ASSET_INDEX_DELETE,
-            Arg.Any<object>(),
-            Arg.Any<CancellationToken>());
         await _cacheMock.Received(1).RemoveByPrefix(CacheKeys.ASSETS_LIST_PREFIX);
     }
 
     [Fact]
-    public async Task Handle_WhenPurchasesExist_ShouldSoftDeleteAndEnqueueIndexDeleteOnly()
+    public async Task Handle_WhenPurchasesExist_ShouldSoftDeleteWithoutOutbox()
     {
         var authorId = Guid.NewGuid();
         var command = new DeleteAssetCommand(Guid.NewGuid(), authorId);
@@ -102,14 +98,7 @@ public class DeleteAssetCommandHandlerTests
         result.IsSuccess.Should().BeTrue();
         await _assetStoreMock.Received(1).SoftDelete(command.Id, Arg.Any<DateTimeOffset>(), Arg.Any<CancellationToken>());
         await _assetStoreMock.DidNotReceive().Delete(Arg.Any<Guid>(), Arg.Any<CancellationToken>());
-        await _outboxStoreMock.DidNotReceive().Enqueue(
-            OutboxMessageTypes.ASSET_BLOB_DELETE,
-            Arg.Any<object>(),
-            Arg.Any<CancellationToken>());
-        await _outboxStoreMock.Received(1).Enqueue(
-            OutboxMessageTypes.ASSET_INDEX_DELETE,
-            Arg.Any<object>(),
-            Arg.Any<CancellationToken>());
+        await _outboxStoreMock.DidNotReceiveWithAnyArgs().Enqueue(Arg.Any<string>(), Arg.Any<object>(), Arg.Any<CancellationToken>());
         await _cacheMock.Received(1).RemoveByPrefix(CacheKeys.ASSETS_LIST_PREFIX);
     }
 

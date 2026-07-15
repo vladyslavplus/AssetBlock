@@ -21,5 +21,8 @@ public sealed class AssetTagConfiguration : IEntityTypeConfiguration<AssetTag>
             .WithMany(x => x.AssetTags)
             .HasForeignKey(x => x.TagId)
             .OnDelete(DeleteBehavior.Cascade);
+
+        builder.HasIndex(x => new { x.TagId, x.AssetId })
+            .HasDatabaseName("IX_asset_tags_TagId_AssetId");
     }
 }

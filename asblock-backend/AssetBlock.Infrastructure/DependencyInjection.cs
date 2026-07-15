@@ -6,7 +6,6 @@ using AssetBlock.Infrastructure.Outbox;
 using AssetBlock.Infrastructure.Persistence;
 using AssetBlock.Infrastructure.Persistence.Stores;
 using AssetBlock.Infrastructure.Services;
-using Elastic.Clients.Elasticsearch;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -50,11 +49,6 @@ public static class DependencyInjection
             .ValidateOnStart();
         services.AddSingleton<IValidateOptions<StripeOptions>, StripeOptionsValidator>();
 
-        services.AddOptions<ElasticsearchOptions>()
-            .Bind(configuration.GetSection(ElasticsearchOptions.SECTION_NAME))
-            .ValidateOnStart();
-        services.AddSingleton<IValidateOptions<ElasticsearchOptions>, ElasticsearchOptionsValidator>();
-
         services.AddOptions<FileUploadOptions>()
             .Bind(configuration.GetSection(FileUploadOptions.SECTION_NAME))
             .ValidateOnStart();
@@ -68,8 +62,6 @@ public static class DependencyInjection
         services.AddHostedService<StorageOrphanCleanupWorker>();
         services.AddScoped<IUnitOfWork, EfUnitOfWork>();
         services.AddScoped<IOutboxStore, OutboxStore>();
-        services.AddScoped<IOutboxMessageHandler, AssetIndexUpsertOutboxHandler>();
-        services.AddScoped<IOutboxMessageHandler, AssetIndexDeleteOutboxHandler>();
         services.AddScoped<IOutboxMessageHandler, AssetBlobDeleteOutboxHandler>();
         services.AddScoped<IOutboxMessageHandler, PurchaseCompletedOutboxHandler>();
         services.AddScoped<IJwtTokenService, JwtTokenService>();
@@ -126,16 +118,6 @@ public static class DependencyInjection
             services.AddSingleton<ICacheService, MemoryCacheService>();
         }
 
-        // Search (Elasticsearch)
-        services.AddSingleton(sp =>
-        {
-            var opts = sp.GetRequiredService<IOptions<ElasticsearchOptions>>().Value;
-            var settings = new ElasticsearchClientSettings(new Uri(opts.Url))
-                .DefaultIndex(opts.DefaultIndex);
-            return new ElasticsearchClient(settings);
-        });
-        services.AddScoped<IAssetSearchService, Search.ElasticSearchService>();
-
         // Polly v8 resilience pipelines for external services
         services.AddResiliencePipeline(ResilienceConstants.Pipelines.STRIPE, builder =>
         {
@@ -174,18 +156,6 @@ public static class DependencyInjection
         services.AddResiliencePipeline(ResilienceConstants.Pipelines.MINIO_STREAMING, builder =>
         {
             builder.AddTimeout(TimeSpan.FromSeconds(ResilienceConstants.Minio.TIMEOUT_SECONDS));
-        });
-
-        services.AddResiliencePipeline(ResilienceConstants.Pipelines.ELASTICSEARCH, builder =>
-        {
-            builder.AddRetry(new RetryStrategyOptions
-            {
-                MaxRetryAttempts = ResilienceConstants.Elasticsearch.MAX_RETRIES,
-                Delay = TimeSpan.FromMilliseconds(ResilienceConstants.Elasticsearch.RETRY_DELAY_MS),
-                BackoffType = DelayBackoffType.Exponential,
-                UseJitter = true
-            });
-            builder.AddTimeout(TimeSpan.FromSeconds(ResilienceConstants.Elasticsearch.TIMEOUT_SECONDS));
         });
 
         return services;

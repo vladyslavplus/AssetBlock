@@ -17,13 +17,12 @@ public sealed class PlaceholderAppSettingsOptionsTests
         var jwt = config.GetSection(JwtOptions.SECTION_NAME).Get<JwtOptions>()!;
         var encryption = config.GetSection(EncryptionOptions.SECTION_NAME).Get<EncryptionOptions>()!;
         var minio = config.GetSection(MinioOptions.SECTION_NAME).Get<MinioOptions>()!;
-        var elasticsearch = config.GetSection(ElasticsearchOptions.SECTION_NAME).Get<ElasticsearchOptions>()!;
         var stripe = config.GetSection(StripeOptions.SECTION_NAME).Get<StripeOptions>()!;
 
         new JwtOptionsValidator().Validate(null, jwt).Failed.Should().BeTrue();
         new EncryptionOptionsValidator().Validate(null, encryption).Failed.Should().BeTrue();
         new MinioOptionsValidator().Validate(null, minio).Failed.Should().BeTrue();
-        new ElasticsearchOptionsValidator().Validate(null, elasticsearch).Failed.Should().BeTrue();
+        config.GetSection("Elasticsearch").Exists().Should().BeFalse();
         new StripeOptionsValidator().Validate(null, stripe).Succeeded.Should().BeTrue(
             "Stripe placeholders must be treated as unset so Stripe stays optional.");
     }

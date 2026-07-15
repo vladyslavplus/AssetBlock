@@ -12,7 +12,6 @@ public class RemoveAssetTagCommandHandlerTests
 {
     private readonly IAssetStore _assetStoreMock;
     private readonly ITagStore _tagStoreMock;
-    private readonly IOutboxStore _outboxStoreMock;
     private readonly ICacheService _cacheMock;
     private readonly RemoveAssetTagCommandHandler _handler;
 
@@ -20,18 +19,11 @@ public class RemoveAssetTagCommandHandlerTests
     {
         _assetStoreMock = Substitute.For<IAssetStore>();
         _tagStoreMock = Substitute.For<ITagStore>();
-        var unitOfWorkMock = Substitute.For<IUnitOfWork>();
-        _outboxStoreMock = Substitute.For<IOutboxStore>();
         _cacheMock = Substitute.For<ICacheService>();
-
-        unitOfWorkMock.ExecuteInTransaction(Arg.Any<Func<CancellationToken, Task>>(), Arg.Any<CancellationToken>())
-            .Returns(ci => ci.Arg<Func<CancellationToken, Task>>()(CancellationToken.None));
 
         _handler = new RemoveAssetTagCommandHandler(
             _assetStoreMock,
             _tagStoreMock,
-            unitOfWorkMock,
-            _outboxStoreMock,
             _cacheMock,
             NullLogger<RemoveAssetTagCommandHandler>.Instance);
     }
@@ -97,7 +89,7 @@ public class RemoveAssetTagCommandHandlerTests
     }
 
     [Fact]
-    public async Task Handle_WhenSuccess_ShouldRemoveEnqueueIndexAndClearCache()
+    public async Task Handle_WhenSuccess_ShouldRemoveAndClearCache()
     {
         var authorId = Guid.NewGuid();
         var command = new RemoveAssetTagCommand(Guid.NewGuid(), authorId, Guid.NewGuid());
@@ -114,10 +106,6 @@ public class RemoveAssetTagCommandHandlerTests
         result.IsSuccess.Should().BeTrue();
 
         await _assetStoreMock.Received(1).RemoveTag(command.AssetId, command.TagId);
-        await _outboxStoreMock.Received(1).Enqueue(
-            OutboxMessageTypes.ASSET_INDEX_UPSERT,
-            Arg.Any<object>(),
-            Arg.Any<CancellationToken>());
         await _cacheMock.Received(1).RemoveByPrefix(CacheKeys.ASSETS_LIST_PREFIX);
     }
 }

@@ -33,13 +33,15 @@ export default function AssetsPage() {
 
   const facetsQuery = useQuery({
     queryKey: catalogKeys.facets(),
-    queryFn: fetchCatalogFacets,
+    // Keep short public catalog reads alive across route transitions. Forwarding React Query's
+    // cancellation signal to browser fetch causes Next dev to report an unhandled AbortError.
+    queryFn: () => fetchCatalogFacets(),
     staleTime: 5 * 60 * 1000,
   })
 
   const listQuery = useQuery({
     queryKey: catalogKeys.list(filters),
-    queryFn: ({ signal }) => fetchCatalogPage(filters, signal),
+    queryFn: () => fetchCatalogPage(filters),
     placeholderData: keepPreviousData,
   })
 

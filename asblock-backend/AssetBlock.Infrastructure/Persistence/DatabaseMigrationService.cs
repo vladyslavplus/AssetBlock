@@ -1,6 +1,5 @@
 using AssetBlock.Domain.Abstractions.Services;
 using AssetBlock.Domain.Core.Constants;
-using AssetBlock.Domain.Core.Dto.Assets;
 using AssetBlock.Domain.Core.Entities;
 using AssetBlock.Domain.Core.Primitives.AppSettingsOptions;
 using Microsoft.EntityFrameworkCore;
@@ -136,22 +135,10 @@ internal sealed class DatabaseMigrationService(
 
                 if (dbOptions.SeedDemoAssets)
                 {
-                    var assetStore = scope.ServiceProvider.GetService<IAssetStore>();
-                    var searchService = scope.ServiceProvider.GetService<IAssetSearchService>();
-                    if (assetStore is null || searchService is null)
-                    {
-                        logger.LogWarning(
-                            "Database:SeedDemoAssets is true but IAssetStore or IAssetSearchService is not registered; skipping demo catalog seed.");
-                    }
-                    else
-                    {
-                        await SeedDemoCatalogAssetsIfEmpty(
-                            context,
-                            passwordHasher,
-                            assetStore,
-                            searchService,
-                            cancellationToken);
-                    }
+                    await SeedDemoCatalogAssetsIfEmpty(
+                        context,
+                        passwordHasher,
+                        cancellationToken);
                 }
             }
         }
@@ -254,14 +241,12 @@ internal sealed class DatabaseMigrationService(
     }
 
     /// <summary>
-    /// Inserts placeholder assets (PostgreSQL) and indexes them in Elasticsearch.
+    /// Inserts placeholder assets into PostgreSQL.
     /// Runs only when the Assets table is empty. Safe to run on every startup — no duplicates.
     /// </summary>
     private async Task SeedDemoCatalogAssetsIfEmpty(
         ApplicationDbContext context,
         IPasswordHasher passwordHasher,
-        IAssetStore assetStore,
-        IAssetSearchService searchService,
         CancellationToken cancellationToken)
     {
         if (await context.Assets.AnyAsync(cancellationToken))
@@ -357,27 +342,6 @@ internal sealed class DatabaseMigrationService(
         }
 
         await SeedDemoPurchasesAndReviews(context, insertedIds, reviewers, now, cancellationToken);
-
-        foreach (var id in insertedIds)
-        {
-            var loaded = await assetStore.GetById(id, cancellationToken);
-            if (loaded is null)
-            {
-                logger.LogWarning("Demo asset {AssetId} not found after insert; skipping Elasticsearch index.", id);
-                continue;
-            }
-
-            var averageRating = await GetAverageRatingForAssetAsync(context, id, cancellationToken);
-            var document = ToAssetDocument(loaded, averageRating);
-            try
-            {
-                await searchService.IndexAsset(document, cancellationToken);
-            }
-            catch (Exception ex)
-            {
-                logger.LogError(ex, "Failed to index demo asset {AssetId} in Elasticsearch.", id);
-            }
-        }
     }
 
     /// <summary>Creates demo buyer accounts used for seeded purchases and reviews (idempotent per username).</summary>
@@ -490,43 +454,6 @@ internal sealed class DatabaseMigrationService(
         }
 
         return 4 + (assetIndex + reviewSlot) % 2;
-    }
-
-    private static async Task<double> GetAverageRatingForAssetAsync(
-        ApplicationDbContext context,
-        Guid assetId,
-        CancellationToken cancellationToken)
-    {
-        var ratings = await context.Reviews.AsNoTracking()
-            .Where(r => r.AssetId == assetId)
-            .Select(r => r.Rating)
-            .ToListAsync(cancellationToken);
-        return ratings.Count == 0 ? 0d : ratings.Average(r => (double)r);
-    }
-
-    private static AssetDocument ToAssetDocument(Asset asset, double averageRating)
-    {
-        var tags = asset.AssetTags
-            .Select(at => at.Tag.Name.Trim().ToLowerInvariant())
-            .Where(n => n.Length > 0)
-            .ToList();
-
-        return new AssetDocument
-        {
-            Id = asset.Id,
-            Title = asset.Title,
-            Description = asset.Description,
-            Price = asset.Price,
-            CategoryId = asset.CategoryId,
-            CategoryName = asset.Category.Name,
-            CategorySlug = asset.Category.Slug,
-            AuthorId = asset.AuthorId,
-            AuthorUsername = asset.Author.Username,
-            StorageKey = asset.StorageKey,
-            Tags = tags,
-            CreatedAt = asset.CreatedAt,
-            AverageRating = averageRating,
-        };
     }
 
     public Task StopAsync(CancellationToken cancellationToken) => Task.CompletedTask;

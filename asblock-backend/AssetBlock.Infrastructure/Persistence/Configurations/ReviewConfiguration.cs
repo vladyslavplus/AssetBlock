@@ -27,6 +27,9 @@ internal sealed class ReviewConfiguration : IEntityTypeConfiguration<Review>
             .HasForeignKey(r => r.UserId)
             .OnDelete(DeleteBehavior.Cascade);
 
+        builder.HasIndex(r => r.AssetId)
+            .HasDatabaseName("IX_reviews_AssetId");
+
         builder.HasIndex(r => new { r.UserId, r.AssetId }).IsUnique();
     }
 }

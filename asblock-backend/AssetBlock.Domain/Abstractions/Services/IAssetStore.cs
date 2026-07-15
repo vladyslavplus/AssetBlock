@@ -10,7 +10,7 @@ public interface IAssetStore
     Task<Asset> AddWithTags(Asset asset, List<Tag> tags, CancellationToken cancellationToken = default);
     Task<Asset?> GetById(Guid id, CancellationToken cancellationToken = default);
     Task<bool> ExistsByStorageKey(string storageKey, CancellationToken cancellationToken = default);
-    Task<PagedResult<Asset>> GetPaged(GetAssetsRequest request, CancellationToken cancellationToken = default);
+    Task<PagedResult<AssetListItem>> GetPaged(GetAssetsRequest request, CancellationToken cancellationToken = default);
     Task SoftDelete(Guid id, DateTimeOffset deletedAt, CancellationToken cancellationToken = default);
     Task Delete(Guid id, CancellationToken cancellationToken = default);
     Task AddTag(Guid assetId, Guid tagId, CancellationToken cancellationToken = default);

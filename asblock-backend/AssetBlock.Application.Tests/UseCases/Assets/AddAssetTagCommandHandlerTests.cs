@@ -13,25 +13,17 @@ public class AddAssetTagCommandHandlerTests
 {
     private readonly IAssetStore _assetStoreMock;
     private readonly ITagStore _tagStoreMock;
-    private readonly IOutboxStore _outboxStoreMock;
     private readonly AddAssetTagCommandHandler _handler;
 
     public AddAssetTagCommandHandlerTests()
     {
         _assetStoreMock = Substitute.For<IAssetStore>();
         _tagStoreMock = Substitute.For<ITagStore>();
-        var unitOfWorkMock = Substitute.For<IUnitOfWork>();
-        _outboxStoreMock = Substitute.For<IOutboxStore>();
         var cacheMock = Substitute.For<ICacheService>();
-
-        unitOfWorkMock.ExecuteInTransaction(Arg.Any<Func<CancellationToken, Task>>(), Arg.Any<CancellationToken>())
-            .Returns(ci => ci.Arg<Func<CancellationToken, Task>>()(CancellationToken.None));
 
         _handler = new AddAssetTagCommandHandler(
             _assetStoreMock,
             _tagStoreMock,
-            unitOfWorkMock,
-            _outboxStoreMock,
             cacheMock,
             NullLogger<AddAssetTagCommandHandler>.Instance);
     }
@@ -111,7 +103,7 @@ public class AddAssetTagCommandHandlerTests
     }
 
     [Fact]
-    public async Task Handle_WhenTagExists_ShouldAddTagLinkAndEnqueueIndex()
+    public async Task Handle_WhenTagExists_ShouldAddTagLink()
     {
         var authorId = Guid.NewGuid();
         var command = new AddAssetTagCommand(Guid.NewGuid(), authorId, "existing");
@@ -127,10 +119,6 @@ public class AddAssetTagCommandHandlerTests
 
         await _tagStoreMock.DidNotReceive().Add(Arg.Any<Tag>());
         await _assetStoreMock.Received(1).AddTag(command.AssetId, tag.Id);
-        await _outboxStoreMock.Received(1).Enqueue(
-            OutboxMessageTypes.ASSET_INDEX_UPSERT,
-            Arg.Any<object>(),
-            Arg.Any<CancellationToken>());
     }
 
     [Fact]

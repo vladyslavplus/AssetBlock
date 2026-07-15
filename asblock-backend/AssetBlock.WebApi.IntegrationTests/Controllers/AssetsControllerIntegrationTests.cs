@@ -87,6 +87,42 @@ public sealed class AssetsControllerIntegrationTests(IntegrationTestFixture fixt
         detail.AuthorUsername.Should().NotBeNullOrWhiteSpace();
     }
 
+    [Fact]
+    public async Task List_WhenAssetSeeded_ShouldReturnItemFromPostgres()
+    {
+        var scopeFactory = fixture.Factory.Services.GetRequiredService<IServiceScopeFactory>();
+        var assetId = await AssetCatalogSeed.EnsureSampleAssetAsync(scopeFactory);
+
+        var client = fixture.Factory.CreateClient();
+        var response = await client.GetAsync(new Uri("/api/assets?page=1&pageSize=10&search=Integration", UriKind.Relative));
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        var list = await response.Content.ReadFromJsonAsync<AssetListResponse>();
+        list.Should().NotBeNull();
+        list.TotalCount.Should().BeGreaterThanOrEqualTo(1);
+        list.Items.Should().Contain(i => i.Id == assetId && i.Title == "Integration seeded asset");
+    }
+
+    private sealed record AssetListResponse(
+        IReadOnlyList<AssetListItemResponse> Items,
+        int TotalCount,
+        int Page,
+        int PageSize,
+        int TotalPages);
+
+    private sealed record AssetListItemResponse(
+        Guid Id,
+        string Title,
+        string? Description,
+        decimal Price,
+        Guid CategoryId,
+        string? CategoryName,
+        Guid AuthorId,
+        string AuthorUsername,
+        DateTimeOffset CreatedAt,
+        IReadOnlyList<string> Tags,
+        double AverageRating);
+
     private sealed record AssetDetailResponse(
         Guid Id,
         string Title,

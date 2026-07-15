@@ -4,13 +4,12 @@ using Ardalis.Result;
 using MediatR;
 using AssetBlock.Domain.Core.Constants;
 using AssetBlock.Domain.Core.Dto.Assets;
-using AssetBlock.Domain.Core.Exceptions;
 using Microsoft.Extensions.Logging;
 
 namespace AssetBlock.Application.UseCases.Assets.GetAssets;
 
 internal sealed class GetAssetsQueryHandler(
-    IAssetSearchService searchService,
+    IAssetStore assetStore,
     ICacheService cache,
     ILogger<GetAssetsQueryHandler> logger)
     : IRequestHandler<GetAssetsQuery, Result<Domain.Core.Dto.Paging.PagedResult<AssetListItem>>>
@@ -41,39 +40,14 @@ internal sealed class GetAssetsQueryHandler(
             }
         }
 
-        Domain.Core.Dto.Paging.PagedResult<AssetDocument> paged;
-        try
-        {
-            paged = await searchService.SearchAssets(normalizedRequest, cancellationToken);
-        }
-        catch (SearchUnavailableException ex)
-        {
-            logger.LogError(ex, "Catalog search unavailable");
-            return Result.Error(ErrorCodes.ERR_SEARCH_UNAVAILABLE);
-        }
-
-        var items = paged.Items
-            .Select(a => new AssetListItem(
-                a.Id,
-                a.Title,
-                string.IsNullOrWhiteSpace(a.Description) ? null : a.Description,
-                a.Price,
-                a.CategoryId,
-                a.CategoryName,
-                a.AuthorId,
-                a.AuthorUsername,
-                a.CreatedAt,
-                a.Tags,
-                a.AverageRating))
-            .ToList();
-        var result = new Domain.Core.Dto.Paging.PagedResult<AssetListItem>(items, paged.TotalCount, paged.Page, paged.PageSize);
-        var normalized = NormalizeDescriptions(result);
+        var paged = await assetStore.GetPaged(normalizedRequest, cancellationToken);
+        var normalized = NormalizeDescriptions(paged);
 
         await cache.SetString(key, JsonSerializer.Serialize(normalized, _jsonOptions), _cacheExpiration, cancellationToken);
         return Result.Success(normalized);
     }
 
-    /// <summary>Aligns list API with DB/detail: whitespace-only or empty string becomes null (incl. legacy cache/ES docs).</summary>
+    /// <summary>Aligns list API with DB/detail: whitespace-only or empty string becomes null (incl. legacy cache payloads).</summary>
     private static Domain.Core.Dto.Paging.PagedResult<AssetListItem> NormalizeDescriptions(
         Domain.Core.Dto.Paging.PagedResult<AssetListItem> paged)
     {

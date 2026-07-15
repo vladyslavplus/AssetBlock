@@ -21,7 +21,6 @@ public class UploadAssetCommandHandlerTests
     private readonly IAssetStorageService _assetStorageServiceMock;
     private readonly IEncryptionService _encryptionServiceMock;
     private readonly IAssetArchiveInspector _archiveInspectorMock;
-    private readonly IOutboxStore _outboxStoreMock;
     private readonly ICacheService _cacheMock;
     private readonly UploadAssetCommandHandler _handler;
 
@@ -33,12 +32,7 @@ public class UploadAssetCommandHandlerTests
         _assetStorageServiceMock = Substitute.For<IAssetStorageService>();
         _encryptionServiceMock = Substitute.For<IEncryptionService>();
         _archiveInspectorMock = Substitute.For<IAssetArchiveInspector>();
-        var unitOfWorkMock = Substitute.For<IUnitOfWork>();
-        _outboxStoreMock = Substitute.For<IOutboxStore>();
         _cacheMock = Substitute.For<ICacheService>();
-
-        unitOfWorkMock.ExecuteInTransaction(Arg.Any<Func<CancellationToken, Task>>(), Arg.Any<CancellationToken>())
-            .Returns(ci => ci.Arg<Func<CancellationToken, Task>>()(CancellationToken.None));
 
         _encryptionServiceMock.ComputeCiphertextLength(Arg.Any<long>()).Returns(4L);
         _archiveInspectorMock.Inspect(Arg.Any<Stream>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
@@ -52,8 +46,6 @@ public class UploadAssetCommandHandlerTests
             _encryptionServiceMock,
             _archiveInspectorMock,
             Microsoft.Extensions.Options.Options.Create(new FileUploadOptions()),
-            unitOfWorkMock,
-            _outboxStoreMock,
             _cacheMock,
             NullLogger<UploadAssetCommandHandler>.Instance);
     }
@@ -243,7 +235,7 @@ public class UploadAssetCommandHandlerTests
     }
 
     [Fact]
-    public async Task Handle_WhenSuccessful_ShouldReturnAssetIdClearCacheAndEnqueueIndex()
+    public async Task Handle_WhenSuccessful_ShouldReturnAssetIdClearCache()
     {
         var request = new UploadAssetRequest("Title", "Desc", 100m, Guid.NewGuid(), 10);
         var command = CreateCommand(request, fileName: "path/to/MyArchive.TAR.GZ");
@@ -264,10 +256,6 @@ public class UploadAssetCommandHandlerTests
             a.StorageKey.EndsWith(".tar.gz")
         ), Arg.Any<CancellationToken>());
 
-        await _outboxStoreMock.Received(1).Enqueue(
-            OutboxMessageTypes.ASSET_INDEX_UPSERT,
-            Arg.Any<object>(),
-            Arg.Any<CancellationToken>());
         await _cacheMock.Received(1).RemoveByPrefix(CacheKeys.ASSETS_LIST_PREFIX, Arg.Any<CancellationToken>());
     }
 
@@ -298,10 +286,6 @@ public class UploadAssetCommandHandlerTests
             list.Count == 2 && list.Contains("tag1") && list.Contains("tag2")), Arg.Any<CancellationToken>());
 
         await _assetStoreMock.Received(1).AddWithTags(Arg.Any<Asset>(), existingTags, Arg.Any<CancellationToken>());
-        await _outboxStoreMock.Received(1).Enqueue(
-            OutboxMessageTypes.ASSET_INDEX_UPSERT,
-            Arg.Any<object>(),
-            Arg.Any<CancellationToken>());
     }
 
     [Fact]

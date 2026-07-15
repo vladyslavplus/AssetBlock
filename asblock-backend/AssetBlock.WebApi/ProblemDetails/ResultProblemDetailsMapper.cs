@@ -90,13 +90,6 @@ internal static class ResultProblemDetailsMapper
     private static Microsoft.AspNetCore.Mvc.ProblemDetails MapError(HttpContext httpContext, IList<string> errorList)
     {
         var code = FirstCode(errorList, ErrorCodes.ERR_INTERNAL);
-        if (code == ErrorCodes.ERR_SEARCH_UNAVAILABLE)
-        {
-            return AssetBlockProblemDetails.Create(
-                httpContext,
-                StatusCodes.Status503ServiceUnavailable,
-                code);
-        }
 
         return AssetBlockProblemDetails.Create(
             httpContext,

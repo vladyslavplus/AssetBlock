@@ -122,11 +122,11 @@ public sealed class ApiControllerBaseMappingTests : ControllerTestBase
     }
 
     [Fact]
-    public async Task Map_Generic_WhenSearchUnavailable_ShouldReturn503Problem()
+    public async Task Map_Generic_WhenServiceUnavailable_ShouldReturn503Problem()
     {
         var c = CreateController();
-        var action = c.Map(Result<TokensResponse>.Error(ErrorCodes.ERR_SEARCH_UNAVAILABLE));
-        await AssertProblem(c, action, StatusCodes.Status503ServiceUnavailable, ErrorCodes.ERR_SEARCH_UNAVAILABLE);
+        var action = c.Map(Result<TokensResponse>.Unavailable(ErrorCodes.ERR_SERVICE_UNAVAILABLE));
+        await AssertProblem(c, action, StatusCodes.Status503ServiceUnavailable, ErrorCodes.ERR_SERVICE_UNAVAILABLE);
     }
 
     [Fact]

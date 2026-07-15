@@ -10,14 +10,14 @@ This repository is a non-commercial / academic project.
 asblock/
 ├── asblock-backend/           # ASP.NET Core Web API + application/domain/infrastructure
 │   ├── asblock-backend.slnx
-│   ├── docker-compose.yml     # Local dependencies (e.g. PostgreSQL, Redis, Elasticsearch, MinIO)
+│   ├── docker-compose.yml     # Local dependencies (e.g. PostgreSQL, Redis, MinIO)
 │   └── README.md
 └── asblock-frontend/          # Next.js web application (App Router)
 ```
 
 ## Backend (`asblock-backend`)
 
-**Stack:** .NET 10, ASP.NET Core Web API, **Clean Architecture** (Domain / Application / Infrastructure / WebApi), CQRS-style use cases with **MediatR**, **FluentValidation**, **Ardalis.Result**, Entity Framework Core with PostgreSQL, optional **Redis** caching, **Elasticsearch** for catalog search indexing, **MinIO** (S3-compatible) for encrypted asset storage, **Stripe** Checkout and webhooks, **SignalR** for real-time notifications, **Serilog** for structured logging.
+**Stack:** .NET 10, ASP.NET Core Web API, **Clean Architecture** (Domain / Application / Infrastructure / WebApi), CQRS-style use cases with **MediatR**, **FluentValidation**, **Ardalis.Result**, Entity Framework Core with PostgreSQL (catalog FTS via `tsvector` + `pg_trgm`), optional **Redis** caching, **MinIO** (S3-compatible) for encrypted asset storage, **Stripe** Checkout and webhooks, **SignalR** for real-time notifications, **Serilog** for structured logging.
 
 **High-level capabilities:** JWT-based auth (access + refresh), role-based access (including admin), asset lifecycle (upload, update, tags, download for purchasers or author), soft delete when purchases exist (delist from catalog while keeping DB row and blob for buyers), hard delete when there are no purchases, categories and tags (admin writes), reviews, user profiles and social links, notifications, Stripe-backed purchases and library.
 
@@ -54,7 +54,7 @@ Point the frontend at your running Web API using environment variables (see `asb
 
 - **Interactive API:** Swagger UI when the Web API is running in Development.
 - **Liveness:** `GET /health/live` checks that the API process can serve requests.
-- **Readiness:** `GET /health/ready` checks PostgreSQL, MinIO, Elasticsearch, and Redis when Redis is configured.
+- **Readiness:** `GET /health/ready` checks PostgreSQL, MinIO, and Redis when Redis is configured.
 
 ## Contributing / quality
 
