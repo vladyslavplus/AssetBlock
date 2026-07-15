@@ -15,55 +15,46 @@ internal sealed class DownloadService(
     private const string DOWNLOAD_WINDOW_KEY_FORMAT = "yyyyMMddHH";
     private static readonly TimeSpan _downloadWindow = TimeSpan.FromHours(1);
 
-    public async Task<AssetDownloadResult> GetAssetStream(Guid assetId, Guid userId,
+    public async Task<DownloadAuthorization> AuthorizeDownload(Guid assetId, Guid userId,
         CancellationToken cancellationToken = default)
     {
         var asset = await assetStore.GetById(assetId, cancellationToken);
         if (asset is null)
         {
-            return new AssetDownloadResult(AssetDownloadStatus.NotFound, null, null);
+            return new DownloadAuthorization(AssetDownloadStatus.NOT_FOUND);
         }
 
         var isAuthor = asset.AuthorId == userId;
-        var hasPurchase = await purchaseStore.Exists(userId, assetId, cancellationToken);
-        if (!isAuthor && !hasPurchase)
+        if (!isAuthor)
         {
-            return new AssetDownloadResult(AssetDownloadStatus.Forbidden, null, null);
+            var hasPurchase = await purchaseStore.Exists(userId, assetId, cancellationToken);
+            if (!hasPurchase)
+            {
+                return new DownloadAuthorization(AssetDownloadStatus.FORBIDDEN);
+            }
         }
 
         if (asset.DownloadLimitPerHour.HasValue &&
             await IsRateLimited(assetId, userId, asset.DownloadLimitPerHour.Value, cancellationToken))
         {
-            return new AssetDownloadResult(AssetDownloadStatus.RateLimited, null, null);
+            return new DownloadAuthorization(AssetDownloadStatus.RATE_LIMITED);
         }
 
-        await using var encryptedStream = await assetStorageService.Get(asset.StorageKey, cancellationToken);
-        var tempPath = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N") + ".tmp");
-        try
-        {
-            await using (var fileStream = new FileStream(tempPath, FileMode.Create, FileAccess.Write, FileShare.None,
-                             4096, FileOptions.Asynchronous))
-            {
-                await encryptionService.Decrypt(encryptedStream, fileStream, cancellationToken);
-            }
+        return new DownloadAuthorization(
+            AssetDownloadStatus.SUCCESS,
+            new DownloadPermit(asset.StorageKey, asset.FileName));
+    }
 
-            var content = new FileStream(tempPath, FileMode.Open, FileAccess.Read, FileShare.Read, 4096,
-                FileOptions.Asynchronous | FileOptions.DeleteOnClose);
-            return new AssetDownloadResult(AssetDownloadStatus.Success, content, asset.FileName);
-        }
-        catch
-        {
-            if (File.Exists(tempPath))
-            {
-                try { File.Delete(tempPath); }
-                catch
-                {
-                    /* ignore */
-                }
-            }
+    public async Task CopyDecrypted(string storageKey, Stream destination, CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(storageKey);
+        ArgumentNullException.ThrowIfNull(destination);
 
-            throw;
-        }
+        await assetStorageService.OpenRead(
+            storageKey,
+            async (encryptedStream, ct) =>
+                await encryptionService.Decrypt(encryptedStream, destination, ct).ConfigureAwait(false),
+            cancellationToken).ConfigureAwait(false);
     }
 
     private async Task<bool> IsRateLimited(Guid assetId, Guid userId, int limit, CancellationToken cancellationToken)

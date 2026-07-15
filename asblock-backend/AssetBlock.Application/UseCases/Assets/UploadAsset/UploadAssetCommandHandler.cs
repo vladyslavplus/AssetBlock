@@ -1,11 +1,15 @@
+using System.IO.Pipelines;
 using AssetBlock.Application.Common;
 using AssetBlock.Domain.Abstractions.Services;
 using AssetBlock.Domain.Core.Constants;
-using Ardalis.Result;
-using AssetBlock.Domain.Core.Entities;
 using AssetBlock.Domain.Core.Dto.Outbox;
+using AssetBlock.Domain.Core.Entities;
+using AssetBlock.Domain.Core.Exceptions;
+using AssetBlock.Domain.Core.Primitives.AppSettingsOptions;
+using Ardalis.Result;
 using MediatR;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 
 namespace AssetBlock.Application.UseCases.Assets.UploadAsset;
 
@@ -15,6 +19,8 @@ internal sealed class UploadAssetCommandHandler(
     ITagStore tagStore,
     IAssetStorageService assetStorageService,
     IEncryptionService encryptionService,
+    IAssetArchiveInspector archiveInspector,
+    IOptions<FileUploadOptions> fileUploadOptions,
     IUnitOfWork unitOfWork,
     IOutboxStore outboxStore,
     ICacheService cache,
@@ -22,6 +28,29 @@ internal sealed class UploadAssetCommandHandler(
 {
     public async Task<Result<Guid>> Handle(UploadAssetCommand request, CancellationToken cancellationToken)
     {
+        var uploadOpts = fileUploadOptions.Value;
+
+        if (request.FileLength <= 0)
+        {
+            return ResultError.Error<Guid>(ErrorCodes.ERR_FILE_REQUIRED);
+        }
+
+        if (request.FileLength > uploadOpts.MaxFileBytes)
+        {
+            return ResultError.Error<Guid>(ErrorCodes.ERR_FILE_TOO_LARGE);
+        }
+
+        var displayFileName = Path.GetFileName(request.FileName);
+        if (string.IsNullOrWhiteSpace(displayFileName))
+        {
+            return ResultError.Error<Guid>(ErrorCodes.ERR_FILE_EXTENSION_NOT_ALLOWED);
+        }
+
+        if (!uploadOpts.TryMatchAllowedExtension(displayFileName, out var matchedExtension))
+        {
+            return ResultError.Error<Guid>(ErrorCodes.ERR_FILE_EXTENSION_NOT_ALLOWED);
+        }
+
         var category = await categoryStore.GetById(request.Request.CategoryId, cancellationToken);
         if (category is null)
         {
@@ -43,19 +72,33 @@ internal sealed class UploadAssetCommandHandler(
             }
         }
 
+        try
+        {
+            if (request.FileContent.CanSeek)
+            {
+                request.FileContent.Position = 0;
+            }
+
+            await archiveInspector.Inspect(request.FileContent, displayFileName, cancellationToken);
+
+            if (request.FileContent.CanSeek)
+            {
+                request.FileContent.Position = 0;
+            }
+        }
+        catch (ArchiveRejectedException ex)
+        {
+            logger.LogWarning(ex, "Archive rejected for upload by {AuthorId}", request.AuthorId);
+            return ResultError.Error<Guid>(ErrorCodes.ERR_ARCHIVE_REJECTED);
+        }
+
         var assetId = Guid.NewGuid();
-        var extension = Path.GetExtension(request.FileName);
-        if (string.IsNullOrWhiteSpace(extension))
-        {
-            extension = ".bin";
-        }
+        var storageKey = $"assets/{request.AuthorId}/{assetId}{matchedExtension}";
+        var ciphertextLength = encryptionService.ComputeCiphertextLength(request.FileLength);
 
-        var storageKey = $"assets/{request.AuthorId}/{assetId}{extension}";
-
-        using var cipherStream = new MemoryStream();
         try
         {
-            await encryptionService.Encrypt(request.FileContent, cipherStream, cancellationToken);
+            await EncryptAndUpload(request.FileContent, storageKey, ciphertextLength, cancellationToken);
         }
         catch (OperationCanceledException)
         {
@@ -63,22 +106,7 @@ internal sealed class UploadAssetCommandHandler(
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, "Encryption failed for asset {AssetId}", assetId);
-            return ResultError.Error<Guid>(ErrorCodes.ERR_ASSET_UPLOAD_FAILED);
-        }
-
-        cipherStream.Position = 0;
-        try
-        {
-            await assetStorageService.Upload(storageKey, cipherStream, cancellationToken);
-        }
-        catch (OperationCanceledException)
-        {
-            throw;
-        }
-        catch (Exception ex)
-        {
-            logger.LogError(ex, "Storage upload failed for asset {AssetId}", assetId);
+            logger.LogError(ex, "Encrypt/upload failed for asset {AssetId}", assetId);
             return ResultError.Error<Guid>(ErrorCodes.ERR_ASSET_UPLOAD_FAILED);
         }
 
@@ -92,7 +120,7 @@ internal sealed class UploadAssetCommandHandler(
             Description = request.Request.Description,
             Price = request.Request.Price,
             StorageKey = storageKey,
-            FileName = request.FileName,
+            FileName = displayFileName,
             DownloadLimitPerHour = request.Request.DownloadLimitPerHour,
             CreatedAt = now
         };
@@ -153,5 +181,59 @@ internal sealed class UploadAssetCommandHandler(
 
         logger.LogInformation("Asset uploaded successfully {AssetId} by {AuthorId}", assetId, request.AuthorId);
         return Result.Success(assetId);
+    }
+
+    private async Task EncryptAndUpload(
+        Stream plain,
+        string storageKey,
+        long ciphertextLength,
+        CancellationToken cancellationToken)
+    {
+        var pipe = new Pipe();
+        Exception? encryptError = null;
+        Exception? uploadError = null;
+
+        var encryptTask = Task.Run(async () =>
+        {
+            try
+            {
+                await using var writerStream = pipe.Writer.AsStream(leaveOpen: true);
+                await encryptionService.Encrypt(plain, writerStream, cancellationToken).ConfigureAwait(false);
+                await pipe.Writer.CompleteAsync().ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                encryptError = ex;
+                await pipe.Writer.CompleteAsync(ex).ConfigureAwait(false);
+            }
+        }, CancellationToken.None);
+
+        var uploadTask = Task.Run(async () =>
+        {
+            try
+            {
+                await using var readerStream = pipe.Reader.AsStream(leaveOpen: true);
+                await assetStorageService.Upload(storageKey, readerStream, ciphertextLength, cancellationToken)
+                    .ConfigureAwait(false);
+                await pipe.Reader.CompleteAsync().ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                uploadError = ex;
+                await pipe.Reader.CompleteAsync(ex).ConfigureAwait(false);
+            }
+        }, CancellationToken.None);
+
+        await Task.WhenAll(encryptTask, uploadTask).ConfigureAwait(false);
+
+        if (encryptError is not null)
+        {
+            throw encryptError;
+        }
+
+        if (uploadError is not null)
+        {
+            throw uploadError;
+        }
     }
 }

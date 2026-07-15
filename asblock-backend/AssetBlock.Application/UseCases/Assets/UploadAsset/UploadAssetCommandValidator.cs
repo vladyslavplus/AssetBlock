@@ -32,5 +32,7 @@ internal sealed class UploadAssetCommandValidator : AbstractValidator<UploadAsse
             .MaximumLength(512).WithMessage("FileName must not exceed 512 characters.");
         RuleFor(c => c.FileContent)
             .NotNull().WithMessage("File content is required.");
+        RuleFor(c => c.FileLength)
+            .GreaterThan(0).WithMessage("FileLength must be greater than zero.");
     }
 }

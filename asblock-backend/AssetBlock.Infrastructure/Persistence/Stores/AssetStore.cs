@@ -44,6 +44,13 @@ internal sealed class AssetStore(ApplicationDbContext dbContext) : IAssetStore
             .FirstOrDefaultAsync(a => a.Id == id, cancellationToken);
     }
 
+    public Task<bool> ExistsByStorageKey(string storageKey, CancellationToken cancellationToken = default)
+    {
+        return dbContext.Assets
+            .AsNoTracking()
+            .AnyAsync(a => a.StorageKey == storageKey, cancellationToken);
+    }
+
     public async Task<PagedResult<Asset>> GetPaged(GetAssetsRequest request, CancellationToken cancellationToken = default)
     {
         IQueryable<Asset> query = dbContext.Assets.AsNoTracking()

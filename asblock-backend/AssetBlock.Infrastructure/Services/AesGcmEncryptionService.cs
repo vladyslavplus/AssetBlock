@@ -28,11 +28,22 @@ internal sealed class AesGcmEncryptionService(IOptions<EncryptionOptions> option
     {
         var key = GetKey();
         var buffer = new byte[CHUNK_SIZE];
-        int bytesRead;
         long chunkIndex = 0;
 
-        while ((bytesRead = await plain.ReadAsync(buffer, cancellationToken)) > 0)
+        while (true)
         {
+            // Stream.ReadAsync may return a short read before EOF. Filling a chunk keeps the
+            // actual wire size consistent with ComputeCiphertextLength.
+            var bytesRead = await plain.ReadAtLeastAsync(
+                buffer.AsMemory(),
+                buffer.Length,
+                throwOnEndOfStream: false,
+                cancellationToken: cancellationToken);
+            if (bytesRead == 0)
+            {
+                break;
+            }
+
             var nonce = RandomNumberGenerator.GetBytes(NONCE_SIZE);
             var tag = new byte[TAG_SIZE];
             var cipherBytes = new byte[bytesRead];
@@ -93,6 +104,32 @@ internal sealed class AesGcmEncryptionService(IOptions<EncryptionOptions> option
             await plain.WriteAsync(plainBytes, cancellationToken);
             chunkIndex++;
         }
+    }
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// Per data chunk of plaintext size S: 4 (length) + 12 (nonce) + 16 (tag) + S (ciphertext).
+    /// Full chunks use S = 1 MiB; a final partial chunk uses the remainder. Always +4 for EOS.
+    /// </remarks>
+    public long ComputeCiphertextLength(long plaintextLength)
+    {
+        if (plaintextLength < 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(plaintextLength));
+        }
+
+        const int overheadPerChunk = CHUNK_LENGTH_FIELD + NONCE_SIZE + TAG_SIZE;
+        var fullChunks = plaintextLength / CHUNK_SIZE;
+        var remainder = plaintextLength % CHUNK_SIZE;
+
+        long length = fullChunks * (overheadPerChunk + CHUNK_SIZE);
+        if (remainder > 0)
+        {
+            length += overheadPerChunk + remainder;
+        }
+
+        length += CHUNK_LENGTH_FIELD; // EOS marker
+        return length;
     }
 
     private byte[] GetKey()

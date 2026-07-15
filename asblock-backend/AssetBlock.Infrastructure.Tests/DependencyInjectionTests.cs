@@ -30,7 +30,8 @@ public sealed class DependencyInjectionTests
                 DefaultSuccessUrl = "http://localhost:3000/payment/success",
                 DefaultCancelUrl = "http://localhost:3000/payment/cancel"
             },
-            Elasticsearch = new { Url = "http://localhost:9200", DefaultIndex = "assets" }
+            Elasticsearch = new { Url = "http://localhost:9200", DefaultIndex = "assets" },
+            FileUpload = new { MaxFileBytes = 262144000L, AllowedExtensions = new[] { ".zip", ".7z", ".rar", ".tar", ".tar.gz", ".tgz" } }
         });
         var config = new ConfigurationBuilder()
             .AddJsonStream(new MemoryStream(Encoding.UTF8.GetBytes(json)))
@@ -77,7 +78,8 @@ public sealed class DependencyInjectionTests
                 DefaultSuccessUrl = "http://localhost:3000/payment/success",
                 DefaultCancelUrl = "http://localhost:3000/payment/cancel"
             },
-            Elasticsearch = new { Url = "http://localhost:9200", DefaultIndex = "assets" }
+            Elasticsearch = new { Url = "http://localhost:9200", DefaultIndex = "assets" },
+            FileUpload = new { MaxFileBytes = 262144000L, AllowedExtensions = new[] { ".zip", ".7z", ".rar", ".tar", ".tar.gz", ".tgz" } }
         });
         var config = new ConfigurationBuilder()
             .AddJsonStream(new MemoryStream(Encoding.UTF8.GetBytes(json)))

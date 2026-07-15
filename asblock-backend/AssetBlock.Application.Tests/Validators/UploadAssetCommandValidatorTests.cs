@@ -16,11 +16,13 @@ public class UploadAssetCommandValidatorTests
         string title = "My Asset",
         decimal price = 5m,
         string fileName = "file.zip",
-        int? downloadLimitPerHour = null) =>
+        int? downloadLimitPerHour = null,
+        long fileLength = 1) =>
         new(Guid.NewGuid(),
             new UploadAssetRequest(title, null, price, Guid.NewGuid(), downloadLimitPerHour),
             new MemoryStream([1]),
-            fileName);
+            fileName,
+            fileLength);
 
     [Fact]
     public async Task Validate_WhenAuthorIdIsEmpty_ShouldFail()
@@ -29,7 +31,8 @@ public class UploadAssetCommandValidatorTests
             Guid.Empty,
             new UploadAssetRequest("Title", null, 5m, Guid.NewGuid()),
             new MemoryStream([1]),
-            "file.zip");
+            "file.zip",
+            1);
 
         var result = await _validator.ValidateAsync(command);
 
@@ -118,7 +121,8 @@ public class UploadAssetCommandValidatorTests
             Guid.NewGuid(),
             new UploadAssetRequest("Title", longDesc, 5m, Guid.NewGuid()),
             new MemoryStream([1]),
-            "file.zip");
+            "file.zip",
+            1);
 
         var result = await _validator.ValidateAsync(command);
 

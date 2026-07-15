@@ -8,7 +8,8 @@ internal static class ResilienceConstants
     public static class Pipelines
     {
         public const string STRIPE = "stripe";
-        public const string MINIO = "minio";
+        public const string MINIO_REPLAYABLE = "minio-replayable";
+        public const string MINIO_STREAMING = "minio-streaming";
         public const string ELASTICSEARCH = "elasticsearch";
     }
 

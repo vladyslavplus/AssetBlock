@@ -9,19 +9,26 @@ using AssetBlock.Domain.Abstractions.Services;
 using AssetBlock.Domain.Core.Constants;
 using AssetBlock.Domain.Core.Dto.Assets;
 using AssetBlock.Domain.Core.Primitives.Api;
+using AssetBlock.Domain.Core.Primitives.AppSettingsOptions;
 using AssetBlock.WebApi.Constants;
 using AssetBlock.WebApi.Models;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
+using Microsoft.Extensions.Options;
+using Microsoft.Net.Http.Headers;
 
 namespace AssetBlock.WebApi.Controllers;
 
 /// <summary>
 /// Marketplace catalog (list/view), vendor upload, and download for purchasers.
 /// </summary>
-public sealed class AssetsController(ISender sender, IDownloadService downloadService, ILogger<AssetsController> logger) : ApiControllerBase(sender)
+public sealed class AssetsController(
+    ISender sender,
+    IDownloadService downloadService,
+    IOptions<FileUploadOptions> fileUploadOptions,
+    ILogger<AssetsController> logger) : ApiControllerBase(sender)
 {
     /// <summary>
     /// List assets with paging, search, and filters. Optional <c>authorId</c> scopes the catalog to one seller (public storefront).
@@ -49,7 +56,8 @@ public sealed class AssetsController(ISender sender, IDownloadService downloadSe
     }
 
     /// <summary>
-    /// Download asset file (decrypted). Requires authentication and prior purchase.
+    /// Download asset file (decrypted). Requires authentication and prior purchase (or author).
+    /// Range requests are not supported for chunked AES-GCM payloads.
     /// </summary>
     [HttpGet(ApiRoutes.Assets.DOWNLOAD)]
     [Authorize]
@@ -57,6 +65,7 @@ public sealed class AssetsController(ISender sender, IDownloadService downloadSe
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status416RangeNotSatisfiable)]
     [ProducesResponseType(StatusCodes.Status429TooManyRequests)]
     public async Task<IActionResult> Download(Guid id, CancellationToken cancellationToken)
     {
@@ -66,25 +75,43 @@ public sealed class AssetsController(ISender sender, IDownloadService downloadSe
             return UnauthorizedProblem();
         }
 
-        var streamResult = await downloadService.GetAssetStream(id, userId.Value, cancellationToken);
-        if (streamResult.Status == AssetDownloadStatus.NotFound)
+        if (Request.Headers.ContainsKey(HeaderNames.Range))
+        {
+            Response.Headers.AcceptRanges = "none";
+            return StatusCode(StatusCodes.Status416RangeNotSatisfiable);
+        }
+
+        var auth = await downloadService.AuthorizeDownload(id, userId.Value, cancellationToken);
+        if (auth.Status == AssetDownloadStatus.NOT_FOUND)
         {
             return ProblemFromCode(StatusCodes.Status404NotFound, ErrorCodes.ERR_ASSET_NOT_FOUND);
         }
-        if (streamResult.Status == AssetDownloadStatus.Forbidden)
+
+        if (auth.Status == AssetDownloadStatus.FORBIDDEN)
         {
             return ProblemFromCode(StatusCodes.Status403Forbidden, ErrorCodes.ERR_PURCHASE_ACCESS_DENIED);
         }
-        if (streamResult.Status == AssetDownloadStatus.RateLimited)
+
+        if (auth.Status == AssetDownloadStatus.RATE_LIMITED)
         {
             return ProblemFromCode(StatusCodes.Status429TooManyRequests, ErrorCodes.ERR_DOWNLOAD_LIMIT_EXCEEDED);
         }
 
-        return File(streamResult.Content!, "application/octet-stream", streamResult.FileName!);
+        var permit = auth.Permit!;
+        Response.ContentType = "application/octet-stream";
+        Response.Headers.AcceptRanges = "none";
+        Response.Headers.ContentDisposition = new ContentDispositionHeaderValue("attachment")
+        {
+            FileName = permit.FileName
+        }.ToString();
+
+        await downloadService.CopyDecrypted(permit.StorageKey, Response.Body, cancellationToken);
+        return new EmptyResult();
     }
 
     /// <summary>
-    /// Upload a new asset. Requires Bearer token. Multipart/form-data with title, description, price, categoryId and file (any extension). Form field name: "file".
+    /// Upload a new asset archive. Requires Bearer token. Multipart/form-data; form field name: "file".
+    /// Allowed extensions: .zip, .7z, .rar, .tar, .tar.gz, .tgz. Max size 250 MiB.
     /// </summary>
     [HttpPost(ApiRoutes.Assets.UPLOAD)]
     [Authorize]
@@ -111,13 +138,20 @@ public sealed class AssetsController(ISender sender, IDownloadService downloadSe
             return ProblemFromCode(StatusCodes.Status400BadRequest, ErrorCodes.ERR_FILE_REQUIRED);
         }
 
+        var maxBytes = fileUploadOptions.Value.MaxFileBytes;
+        if (file.Length > maxBytes)
+        {
+            logger.LogWarning("Upload rejected: file too large ({Length}) for user {UserId}", file.Length, userId);
+            return ProblemFromCode(StatusCodes.Status400BadRequest, ErrorCodes.ERR_FILE_TOO_LARGE);
+        }
+
         logger.LogInformation("Upload started for user {UserId}, file {FileName}", userId, file.FileName);
         var request = new UploadAssetRequest(form.Title, form.Description, form.Price, form.CategoryId, form.DownloadLimitPerHour)
         {
             Tags = form.Tags
         };
         await using var stream = file.OpenReadStream();
-        var command = new UploadAssetCommand(userId.Value, request, stream, file.FileName);
+        var command = new UploadAssetCommand(userId.Value, request, stream, file.FileName, file.Length);
         var result = await Sender.Send(command, cancellationToken);
 
         if (result.IsSuccess)

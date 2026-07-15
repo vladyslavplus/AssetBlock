@@ -8,4 +8,5 @@ public sealed record UploadAssetCommand(
     Guid AuthorId,
     UploadAssetRequest Request,
     Stream FileContent,
-    string FileName) : IRequest<Result<Guid>>;
+    string FileName,
+    long FileLength) : IRequest<Result<Guid>>;

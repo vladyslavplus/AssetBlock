@@ -11,6 +11,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
+using Minio;
 using Polly;
 using Polly.Retry;
 using StackExchange.Redis;
@@ -53,11 +54,18 @@ public static class DependencyInjection
             .Bind(configuration.GetSection(ElasticsearchOptions.SECTION_NAME))
             .ValidateOnStart();
         services.AddSingleton<IValidateOptions<ElasticsearchOptions>, ElasticsearchOptionsValidator>();
+
+        services.AddOptions<FileUploadOptions>()
+            .Bind(configuration.GetSection(FileUploadOptions.SECTION_NAME))
+            .ValidateOnStart();
+        services.AddSingleton<IValidateOptions<FileUploadOptions>, FileUploadOptionsValidator>();
+
         services.AddDbContext<ApplicationDbContext>(options =>
             options.UseNpgsql(connectionString));
         services.AddHostedService<DatabaseMigrationService>();
         services.AddHostedService<MinioBucketEnsureHostedService>();
         services.AddHostedService<OutboxDispatcher>();
+        services.AddHostedService<StorageOrphanCleanupWorker>();
         services.AddScoped<IUnitOfWork, EfUnitOfWork>();
         services.AddScoped<IOutboxStore, OutboxStore>();
         services.AddScoped<IOutboxMessageHandler, AssetIndexUpsertOutboxHandler>();
@@ -75,7 +83,28 @@ public static class DependencyInjection
         services.AddScoped<ITagStore, TagStore>();
         services.AddScoped<IPaymentService, StripePaymentService>();
         services.AddScoped<IDownloadService, DownloadService>();
+        services.AddSingleton<IMinioClient>(sp =>
+        {
+            var opts = sp.GetRequiredService<IOptions<MinioOptions>>().Value;
+            var builder = new MinioClient();
+            if (Uri.TryCreate(opts.Endpoint, UriKind.Absolute, out var uri)
+                && (uri.Scheme == Uri.UriSchemeHttp || uri.Scheme == Uri.UriSchemeHttps))
+            {
+                return builder
+                    .WithEndpoint(uri.Host, uri.Port)
+                    .WithCredentials(opts.AccessKey, opts.SecretKey)
+                    .WithSSL(opts.UseSsl)
+                    .Build();
+            }
+
+            return builder
+                .WithEndpoint(opts.Endpoint)
+                .WithCredentials(opts.AccessKey, opts.SecretKey)
+                .WithSSL(opts.UseSsl)
+                .Build();
+        });
         services.AddScoped<IAssetStorageService, MinioAssetStorageService>();
+        services.AddSingleton<IAssetArchiveInspector, SharpCompressAssetArchiveInspector>();
         services.AddSingleton<IEncryptionService, AesGcmEncryptionService>();
         services.AddSingleton<IPasswordHasher, PasswordHasher>();
 
@@ -127,7 +156,8 @@ public static class DependencyInjection
             builder.AddTimeout(TimeSpan.FromSeconds(ResilienceConstants.Stripe.TIMEOUT_SECONDS));
         });
 
-        services.AddResiliencePipeline(ResilienceConstants.Pipelines.MINIO, builder =>
+        // Delete/list operations can safely be replayed after a transient failure.
+        services.AddResiliencePipeline(ResilienceConstants.Pipelines.MINIO_REPLAYABLE, builder =>
         {
             builder.AddRetry(new RetryStrategyOptions
             {
@@ -136,6 +166,13 @@ public static class DependencyInjection
                 BackoffType = DelayBackoffType.Exponential,
                 UseJitter = true
             });
+            builder.AddTimeout(TimeSpan.FromSeconds(ResilienceConstants.Minio.TIMEOUT_SECONDS));
+        });
+
+        // Upload and download bodies are one-shot streams. Retrying them would send a partial
+        // upload or append a second plaintext sequence to an already-started HTTP response.
+        services.AddResiliencePipeline(ResilienceConstants.Pipelines.MINIO_STREAMING, builder =>
+        {
             builder.AddTimeout(TimeSpan.FromSeconds(ResilienceConstants.Minio.TIMEOUT_SECONDS));
         });
 

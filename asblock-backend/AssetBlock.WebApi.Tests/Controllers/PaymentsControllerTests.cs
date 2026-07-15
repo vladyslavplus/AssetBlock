@@ -121,13 +121,14 @@ public sealed class PaymentsControllerTests : ControllerTestBase
             .Returns(Task.FromResult(ResultError.Error<PurchaseCompletedPayload?>(ErrorCodes.ERR_PAYMENT_FAILED)));
 
         var controller = new PaymentsController(Sender);
-        var bytes = Encoding.UTF8.GetBytes("{}");
+        var bytes = "{}"u8.ToArray();
         var httpContext = new DefaultHttpContext
         {
-            Response = { Body = new MemoryStream() }
+            Response = { Body = new MemoryStream() }, Request = { Body = new MemoryStream(bytes), Headers =
+            {
+                ["Stripe-Signature"] = "sig"
+            } }
         };
-        httpContext.Request.Body = new MemoryStream(bytes);
-        httpContext.Request.Headers["Stripe-Signature"] = "sig";
         controller.ControllerContext = new ControllerContext { HttpContext = httpContext };
 
         var result = await controller.Webhook(CancellationToken.None);

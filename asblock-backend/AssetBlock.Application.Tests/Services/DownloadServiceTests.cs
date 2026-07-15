@@ -40,133 +40,144 @@ public class DownloadServiceTests
     }
 
     [Fact]
-    public async Task GetAssetStream_WhenAssetNotFound_ShouldReturnNotFound()
+    public async Task AuthorizeDownload_WhenAssetNotFound_ShouldReturnNotFound()
     {
         _assetStoreMock.GetById(_assetId, Arg.Any<CancellationToken>()).Returns((Asset?)null);
 
-        var result = await _service.GetAssetStream(_assetId, _userId);
+        var result = await _service.AuthorizeDownload(_assetId, _userId);
 
-        result.Status.Should().Be(AssetDownloadStatus.NotFound);
-        result.Content.Should().BeNull();
+        result.Status.Should().Be(AssetDownloadStatus.NOT_FOUND);
+        result.Permit.Should().BeNull();
     }
 
     [Fact]
-    public async Task GetAssetStream_WhenUserHasNoPurchaseAndIsNotAuthor_ShouldReturnForbidden()
+    public async Task AuthorizeDownload_WhenUserHasNoPurchaseAndIsNotAuthor_ShouldReturnForbidden()
     {
         var asset = MakeAsset(authorId: _authorId, downloadLimit: null);
         _assetStoreMock.GetById(_assetId, Arg.Any<CancellationToken>()).Returns(asset);
         _purchaseStoreMock.Exists(_userId, _assetId, Arg.Any<CancellationToken>()).Returns(false);
 
-        var result = await _service.GetAssetStream(_assetId, _userId);
+        var result = await _service.AuthorizeDownload(_assetId, _userId);
 
-        result.Status.Should().Be(AssetDownloadStatus.Forbidden);
+        result.Status.Should().Be(AssetDownloadStatus.FORBIDDEN);
     }
 
     [Fact]
-    public async Task GetAssetStream_WhenUserIsAuthor_ShouldNotCheckPurchase_AndProceed()
+    public async Task AuthorizeDownload_WhenUserIsAuthor_ShouldNotCheckPurchase_AndSucceed()
     {
         var asset = MakeAsset(authorId: _userId, downloadLimit: null);
         _assetStoreMock.GetById(_assetId, Arg.Any<CancellationToken>()).Returns(asset);
-        // No purchase setup — author should bypass the purchase check
-        SetupSuccessfulDecrypt();
 
-        var result = await _service.GetAssetStream(_assetId, _userId);
+        var result = await _service.AuthorizeDownload(_assetId, _userId);
 
-        result.Status.Should().Be(AssetDownloadStatus.Success);
+        result.Status.Should().Be(AssetDownloadStatus.SUCCESS);
+        result.Permit.Should().NotBeNull();
+        result.Permit!.StorageKey.Should().Be(asset.StorageKey);
+        result.Permit.FileName.Should().Be(asset.FileName);
+        await _purchaseStoreMock.DidNotReceiveWithAnyArgs().Exists(Guid.Empty, Guid.Empty, CancellationToken.None);
     }
 
     [Fact]
-    public async Task GetAssetStream_WhenUserHasPurchase_ShouldProceed()
+    public async Task AuthorizeDownload_WhenUserHasPurchase_ShouldSucceed()
     {
         var asset = MakeAsset(authorId: _authorId, downloadLimit: null);
         _assetStoreMock.GetById(_assetId, Arg.Any<CancellationToken>()).Returns(asset);
         _purchaseStoreMock.Exists(_userId, _assetId, Arg.Any<CancellationToken>()).Returns(true);
-        SetupSuccessfulDecrypt();
 
-        var result = await _service.GetAssetStream(_assetId, _userId);
+        var result = await _service.AuthorizeDownload(_assetId, _userId);
 
-        result.Status.Should().Be(AssetDownloadStatus.Success);
+        result.Status.Should().Be(AssetDownloadStatus.SUCCESS);
+        result.Permit.Should().NotBeNull();
     }
 
     [Fact]
-    public async Task GetAssetStream_WhenUnderRateLimit_ShouldProceed()
+    public async Task AuthorizeDownload_WhenUnderRateLimit_ShouldSucceed()
     {
         const int limit = 5;
         var asset = MakeAsset(authorId: _authorId, downloadLimit: limit);
         _assetStoreMock.GetById(_assetId, Arg.Any<CancellationToken>()).Returns(asset);
         _purchaseStoreMock.Exists(_userId, _assetId, Arg.Any<CancellationToken>()).Returns(true);
-        // Simulate counter returning 4 (below limit of 5) → not rate limited
         _cacheMock.Increment(Arg.Any<string>(), Arg.Any<TimeSpan>(), Arg.Any<CancellationToken>()).Returns(4L);
-        SetupSuccessfulDecrypt();
 
-        var result = await _service.GetAssetStream(_assetId, _userId);
+        var result = await _service.AuthorizeDownload(_assetId, _userId);
 
-        result.Status.Should().Be(AssetDownloadStatus.Success);
+        result.Status.Should().Be(AssetDownloadStatus.SUCCESS);
     }
 
     [Fact]
-    public async Task GetAssetStream_WhenAtExactRateLimit_ShouldProceed()
+    public async Task AuthorizeDownload_WhenAtExactRateLimit_ShouldSucceed()
     {
         const int limit = 5;
         var asset = MakeAsset(authorId: _authorId, downloadLimit: limit);
         _assetStoreMock.GetById(_assetId, Arg.Any<CancellationToken>()).Returns(asset);
         _purchaseStoreMock.Exists(_userId, _assetId, Arg.Any<CancellationToken>()).Returns(true);
-        // Count == limit → still allowed (blocked only when count > limit)
         _cacheMock.Increment(Arg.Any<string>(), Arg.Any<TimeSpan>(), Arg.Any<CancellationToken>()).Returns(limit);
-        SetupSuccessfulDecrypt();
 
-        var result = await _service.GetAssetStream(_assetId, _userId);
+        var result = await _service.AuthorizeDownload(_assetId, _userId);
 
-        result.Status.Should().Be(AssetDownloadStatus.Success);
+        result.Status.Should().Be(AssetDownloadStatus.SUCCESS);
     }
 
     [Fact]
-    public async Task GetAssetStream_WhenRateLimitExceeded_ShouldReturnRateLimited()
+    public async Task AuthorizeDownload_WhenRateLimitExceeded_ShouldReturnRateLimited()
     {
         const int limit = 5;
         var asset = MakeAsset(authorId: _authorId, downloadLimit: limit);
         _assetStoreMock.GetById(_assetId, Arg.Any<CancellationToken>()).Returns(asset);
         _purchaseStoreMock.Exists(_userId, _assetId, Arg.Any<CancellationToken>()).Returns(true);
-        // Count == limit + 1 → blocked
         _cacheMock.Increment(Arg.Any<string>(), Arg.Any<TimeSpan>(), Arg.Any<CancellationToken>()).Returns(limit + 1L);
 
-        var result = await _service.GetAssetStream(_assetId, _userId);
+        var result = await _service.AuthorizeDownload(_assetId, _userId);
 
-        result.Status.Should().Be(AssetDownloadStatus.RateLimited);
+        result.Status.Should().Be(AssetDownloadStatus.RATE_LIMITED);
     }
 
     [Fact]
-    public async Task GetAssetStream_WhenNoDownloadLimit_ShouldNeverCallCacheIncrement()
+    public async Task AuthorizeDownload_WhenNoDownloadLimit_ShouldNeverCallCacheIncrement()
     {
-        // Asset has no download limit → rate limiting is skipped entirely
         var asset = MakeAsset(authorId: _authorId, downloadLimit: null);
         _assetStoreMock.GetById(_assetId, Arg.Any<CancellationToken>()).Returns(asset);
         _purchaseStoreMock.Exists(_userId, _assetId, Arg.Any<CancellationToken>()).Returns(true);
-        SetupSuccessfulDecrypt();
 
-        var result = await _service.GetAssetStream(_assetId, _userId);
+        var result = await _service.AuthorizeDownload(_assetId, _userId);
 
-        result.Status.Should().Be(AssetDownloadStatus.Success);
+        result.Status.Should().Be(AssetDownloadStatus.SUCCESS);
         await _cacheMock.DidNotReceiveWithAnyArgs()
             .Increment(null!, TimeSpan.Zero, CancellationToken.None);
     }
 
     [Fact]
-    public async Task GetAssetStream_RateLimitKey_MustIncludeAssetIdAndUserId()
+    public async Task AuthorizeDownload_RateLimitKey_MustIncludeAssetIdAndUserId()
     {
-        // Ensures the rate limit cache key is partitioned per (asset, user) — not globally
         var asset = MakeAsset(authorId: _authorId, downloadLimit: 10);
         _assetStoreMock.GetById(_assetId, Arg.Any<CancellationToken>()).Returns(asset);
         _purchaseStoreMock.Exists(_userId, _assetId, Arg.Any<CancellationToken>()).Returns(true);
         _cacheMock.Increment(Arg.Any<string>(), Arg.Any<TimeSpan>(), Arg.Any<CancellationToken>()).Returns(1L);
-        SetupSuccessfulDecrypt();
 
-        await _service.GetAssetStream(_assetId, _userId);
+        await _service.AuthorizeDownload(_assetId, _userId);
 
         await _cacheMock.Received(1).Increment(
             Arg.Is<string>(key => key.Contains(_assetId.ToString()) && key.Contains(_userId.ToString())),
             Arg.Any<TimeSpan>(),
             Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task CopyDecrypted_ShouldOpenReadAndDecryptToDestination()
+    {
+        _assetStorageServiceMock
+            .OpenRead(Arg.Any<string>(), Arg.Any<Func<Stream, CancellationToken, Task>>(), Arg.Any<CancellationToken>())
+            .Returns(ci =>
+            {
+                var consumer = ci.Arg<Func<Stream, CancellationToken, Task>>();
+                return consumer(new MemoryStream([1, 2, 3]), CancellationToken.None);
+            });
+
+        await using var destination = new MemoryStream();
+        await _service.CopyDecrypted("assets/k", destination);
+
+        await _encryptionServiceMock.Received(1)
+            .Decrypt(Arg.Any<Stream>(), destination, Arg.Any<CancellationToken>());
     }
 
     private static Asset MakeAsset(Guid authorId, int? downloadLimit) => new Asset
@@ -181,15 +192,4 @@ public class DownloadServiceTests
         DownloadLimitPerHour = downloadLimit,
         CreatedAt = DateTimeOffset.UtcNow
     };
-
-    private void SetupSuccessfulDecrypt()
-    {
-        // Return a valid readable stream from storage and write decrypted content to output
-        _assetStorageServiceMock.Get(Arg.Any<string>(), Arg.Any<CancellationToken>())
-            .Returns(new MemoryStream([1, 2, 3]));
-
-        _encryptionServiceMock
-            .Decrypt(Arg.Any<Stream>(), Arg.Any<Stream>(), Arg.Any<CancellationToken>())
-            .Returns(Task.CompletedTask);
-    }
 }

@@ -44,6 +44,9 @@ public static class ErrorCodes
     public const string ERR_REVIEW_CREATE_FAILED = "ERR_REVIEW_CREATE_FAILED";
 
     public const string ERR_FILE_REQUIRED = "ERR_FILE_REQUIRED";
+    public const string ERR_FILE_TOO_LARGE = "ERR_FILE_TOO_LARGE";
+    public const string ERR_FILE_EXTENSION_NOT_ALLOWED = "ERR_FILE_EXTENSION_NOT_ALLOWED";
+    public const string ERR_ARCHIVE_REJECTED = "ERR_ARCHIVE_REJECTED";
     public const string ERR_NOT_FOUND = "ERR_NOT_FOUND";
     public const string ERR_FORBIDDEN = "ERR_FORBIDDEN";
     public const string ERR_BAD_REQUEST = "ERR_BAD_REQUEST";

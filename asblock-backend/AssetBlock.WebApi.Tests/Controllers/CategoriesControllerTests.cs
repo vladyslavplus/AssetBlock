@@ -1,4 +1,3 @@
-using Ardalis.Result;
 using AssetBlock.Application.UseCases.Categories.CreateCategory;
 using AssetBlock.Application.UseCases.Categories.DeleteCategory;
 using AssetBlock.Application.UseCases.Categories.GetCategories;

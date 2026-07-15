@@ -3,9 +3,10 @@ using AssetBlock.Domain.Core.Primitives.Api;
 namespace AssetBlock.Domain.Abstractions.Services;
 
 /// <summary>
-/// Provides a decrypted asset stream for download when the user has access (author or purchaser).
+/// Authorizes asset downloads and streams decrypted content to a destination.
 /// </summary>
 public interface IDownloadService
 {
-    Task<AssetDownloadResult> GetAssetStream(Guid assetId, Guid userId, CancellationToken cancellationToken = default);
+    Task<DownloadAuthorization> AuthorizeDownload(Guid assetId, Guid userId, CancellationToken cancellationToken = default);
+    Task CopyDecrypted(string storageKey, Stream destination, CancellationToken cancellationToken = default);
 }

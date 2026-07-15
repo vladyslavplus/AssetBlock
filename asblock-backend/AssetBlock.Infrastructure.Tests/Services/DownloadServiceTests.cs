@@ -12,7 +12,7 @@ namespace AssetBlock.Infrastructure.Tests.Services;
 public sealed class DownloadServiceTests
 {
     [Fact]
-    public async Task GetAssetStream_whenAssetMissing_returnsNotFound()
+    public async Task AuthorizeDownload_whenAssetMissing_returnsNotFound()
     {
         var assetStore = Substitute.For<IAssetStore>();
         assetStore.GetById(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
@@ -25,12 +25,12 @@ public sealed class DownloadServiceTests
             CreateEncryption(),
             new MemoryCacheService());
 
-        var r = await sut.GetAssetStream(Guid.NewGuid(), Guid.NewGuid());
-        r.Status.Should().Be(AssetDownloadStatus.NotFound);
+        var r = await sut.AuthorizeDownload(Guid.NewGuid(), Guid.NewGuid());
+        r.Status.Should().Be(AssetDownloadStatus.NOT_FOUND);
     }
 
     [Fact]
-    public async Task GetAssetStream_whenNotAuthorAndNoPurchase_returnsForbidden()
+    public async Task AuthorizeDownload_whenNotAuthorAndNoPurchase_returnsForbidden()
     {
         var asset = CreateAsset(Guid.NewGuid(), Guid.NewGuid());
         var assetStore = Substitute.For<IAssetStore>();
@@ -47,12 +47,12 @@ public sealed class DownloadServiceTests
             CreateEncryption(),
             new MemoryCacheService());
 
-        var r = await sut.GetAssetStream(asset.Id, Guid.NewGuid());
-        r.Status.Should().Be(AssetDownloadStatus.Forbidden);
+        var r = await sut.AuthorizeDownload(asset.Id, Guid.NewGuid());
+        r.Status.Should().Be(AssetDownloadStatus.FORBIDDEN);
     }
 
     [Fact]
-    public async Task GetAssetStream_whenAuthor_decryptsContent()
+    public async Task CopyDecrypted_whenAuthor_decryptsContent()
     {
         var userId = Guid.NewGuid();
         var asset = CreateAsset(userId, Guid.NewGuid());
@@ -63,54 +63,44 @@ public sealed class DownloadServiceTests
         var cipherBytes = cipherMs.ToArray();
 
         var storage = Substitute.For<IAssetStorageService>();
-        storage.Get(asset.StorageKey, Arg.Any<CancellationToken>())
-            .Returns(_ => Task.FromResult<Stream>(new MemoryStream(cipherBytes)));
-
-        var assetStore = Substitute.For<IAssetStore>();
-        assetStore.GetById(asset.Id, Arg.Any<CancellationToken>()).Returns(Task.FromResult<Asset?>(asset));
+        storage.OpenRead(asset.StorageKey, Arg.Any<Func<Stream, CancellationToken, Task>>(), Arg.Any<CancellationToken>())
+            .Returns(ci =>
+            {
+                var consumer = ci.Arg<Func<Stream, CancellationToken, Task>>();
+                return consumer(new MemoryStream(cipherBytes), CancellationToken.None);
+            });
 
         var sut = new DownloadService(
-            assetStore,
+            Substitute.For<IAssetStore>(),
             Substitute.For<IPurchaseStore>(),
             storage,
             encryption,
             new MemoryCacheService());
 
-        var r = await sut.GetAssetStream(asset.Id, userId);
-        r.Status.Should().Be(AssetDownloadStatus.Success);
-        r.Content.Should().NotBeNull();
-        using var reader = new StreamReader(r.Content!, leaveOpen: false);
-        (await reader.ReadToEndAsync()).Should().Be("payload");
+        await using var destination = new MemoryStream();
+        await sut.CopyDecrypted(asset.StorageKey, destination);
+        Encoding.UTF8.GetString(destination.ToArray()).Should().Be("payload");
     }
 
     [Fact]
-    public async Task GetAssetStream_rateLimited_afterTooManyDownloads()
+    public async Task AuthorizeDownload_rateLimited_afterTooManyDownloads()
     {
         var userId = Guid.NewGuid();
         var asset = CreateAsset(userId, Guid.NewGuid());
         asset.DownloadLimitPerHour = 1;
 
-        var encryption = CreateEncryption();
-        await using var plain = new MemoryStream(Encoding.UTF8.GetBytes("x"));
-        await using var cipherMs = new MemoryStream();
-        await encryption.Encrypt(plain, cipherMs);
-
-        var storage = Substitute.For<IAssetStorageService>();
-        storage.Get(asset.StorageKey, Arg.Any<CancellationToken>())
-            .Returns(_ => Task.FromResult<Stream>(new MemoryStream(cipherMs.ToArray())));
-
         var assetStore = Substitute.For<IAssetStore>();
         assetStore.GetById(asset.Id, Arg.Any<CancellationToken>()).Returns(Task.FromResult<Asset?>(asset));
 
         var sut = new DownloadService(
             assetStore,
             Substitute.For<IPurchaseStore>(),
-            storage,
-            encryption,
+            Substitute.For<IAssetStorageService>(),
+            CreateEncryption(),
             new MemoryCacheService());
 
-        (await sut.GetAssetStream(asset.Id, userId)).Status.Should().Be(AssetDownloadStatus.Success);
-        (await sut.GetAssetStream(asset.Id, userId)).Status.Should().Be(AssetDownloadStatus.RateLimited);
+        (await sut.AuthorizeDownload(asset.Id, userId)).Status.Should().Be(AssetDownloadStatus.SUCCESS);
+        (await sut.AuthorizeDownload(asset.Id, userId)).Status.Should().Be(AssetDownloadStatus.RATE_LIMITED);
     }
 
     private static Asset CreateAsset(Guid authorId, Guid categoryId) =>

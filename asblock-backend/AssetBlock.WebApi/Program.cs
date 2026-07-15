@@ -14,6 +14,7 @@ builder.Host.UseSerilogConfiguration();
 
 builder.Services.AddApplication();
 builder.Services.AddInfrastructure(builder.Configuration);
+builder.Services.AddFileUploadLimits(builder.Configuration);
 builder.Services.Configure<RouteOptions>(options => options.LowercaseUrls = true);
 builder.Services.AddControllers(options => options.Conventions.Add(new LowercaseControllerRouteConvention()))
     .ConfigureApiBehaviorOptions(options =>

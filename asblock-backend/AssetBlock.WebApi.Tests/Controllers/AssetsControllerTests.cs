@@ -1,4 +1,4 @@
-using Ardalis.Result;
+﻿using Ardalis.Result;
 using AssetBlock.Application.UseCases.Assets.AddAssetTag;
 using AssetBlock.Application.UseCases.Assets.DeleteAsset;
 using AssetBlock.Application.UseCases.Assets.GetAssetById;
@@ -11,6 +11,7 @@ using AssetBlock.Domain.Core.Constants;
 using AssetBlock.Domain.Core.Dto.Assets;
 using AssetBlock.Domain.Core.Dto.Tags;
 using AssetBlock.Domain.Core.Primitives.Api;
+using AssetBlock.Domain.Core.Primitives.AppSettingsOptions;
 using AssetBlock.WebApi.Controllers;
 using AssetBlock.WebApi.Models;
 using AssetBlock.WebApi.Tests.Common;
@@ -18,6 +19,7 @@ using FluentAssertions;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Options;
 using NSubstitute;
 using NoValueResult = Ardalis.Result.Result;
 
@@ -27,10 +29,11 @@ public sealed class AssetsControllerTests : ControllerTestBase
 {
     private readonly Guid _userId = Guid.NewGuid();
     private readonly IDownloadService _downloadService = Substitute.For<IDownloadService>();
+    private readonly IOptions<FileUploadOptions> _fileUploadOptions = Options.Create(new FileUploadOptions());
 
     private AssetsController CreateController()
     {
-        return new AssetsController(Sender, _downloadService, NullLogger<AssetsController>.Instance);
+        return new AssetsController(Sender, _downloadService, _fileUploadOptions, NullLogger<AssetsController>.Instance);
     }
 
     [Fact]
@@ -82,8 +85,8 @@ public sealed class AssetsControllerTests : ControllerTestBase
     [Fact]
     public async Task Download_WhenNotFound_ShouldReturn404()
     {
-        _downloadService.GetAssetStream(Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<CancellationToken>())
-            .Returns(new AssetDownloadResult(AssetDownloadStatus.NotFound, null, null));
+        _downloadService.AuthorizeDownload(Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<CancellationToken>())
+            .Returns(new DownloadAuthorization(AssetDownloadStatus.NOT_FOUND));
 
         var controller = CreateController();
         SetupUser(_userId, controller);
@@ -95,8 +98,8 @@ public sealed class AssetsControllerTests : ControllerTestBase
     [Fact]
     public async Task Download_WhenForbidden_ShouldReturn403()
     {
-        _downloadService.GetAssetStream(Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<CancellationToken>())
-            .Returns(new AssetDownloadResult(AssetDownloadStatus.Forbidden, null, null));
+        _downloadService.AuthorizeDownload(Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<CancellationToken>())
+            .Returns(new DownloadAuthorization(AssetDownloadStatus.FORBIDDEN));
 
         var controller = CreateController();
         SetupUser(_userId, controller);
@@ -108,8 +111,8 @@ public sealed class AssetsControllerTests : ControllerTestBase
     [Fact]
     public async Task Download_WhenRateLimited_ShouldReturn429()
     {
-        _downloadService.GetAssetStream(Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<CancellationToken>())
-            .Returns(new AssetDownloadResult(AssetDownloadStatus.RateLimited, null, null));
+        _downloadService.AuthorizeDownload(Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<CancellationToken>())
+            .Returns(new DownloadAuthorization(AssetDownloadStatus.RATE_LIMITED));
 
         var controller = CreateController();
         SetupUser(_userId, controller);
@@ -119,17 +122,40 @@ public sealed class AssetsControllerTests : ControllerTestBase
     }
 
     [Fact]
-    public async Task Download_WhenSuccess_ShouldReturnFile()
+    public async Task Download_WhenSuccess_ShouldStreamBodyAndReturnEmpty()
     {
-        await using var stream = new MemoryStream([1, 2, 3]);
-        _downloadService.GetAssetStream(Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<CancellationToken>())
-            .Returns(new AssetDownloadResult(AssetDownloadStatus.Success, stream, "a.bin"));
+        _downloadService.AuthorizeDownload(Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<CancellationToken>())
+            .Returns(new DownloadAuthorization(
+                AssetDownloadStatus.SUCCESS,
+                new DownloadPermit("assets/k", "a.zip")));
+        _downloadService.CopyDecrypted(Arg.Any<string>(), Arg.Any<Stream>(), Arg.Any<CancellationToken>())
+            .Returns(ci =>
+            {
+                var dest = ci.ArgAt<Stream>(1);
+                return dest.WriteAsync(new byte[] { 1, 2, 3 }).AsTask();
+            });
 
         var controller = CreateController();
         SetupUser(_userId, controller);
         var result = await controller.Download(Guid.NewGuid(), CancellationToken.None);
 
-        result.Should().BeOfType<FileStreamResult>();
+        result.Should().BeOfType<EmptyResult>();
+        await _downloadService.Received(1).CopyDecrypted("assets/k", Arg.Any<Stream>(), Arg.Any<CancellationToken>());
+        controller.Response.Headers.AcceptRanges.ToString().Should().Be("none");
+    }
+
+    [Fact]
+    public async Task Download_WhenRangeHeader_ShouldReturn416()
+    {
+        var controller = CreateController();
+        SetupUser(_userId, controller);
+        controller.Request.Headers.Range = "bytes=0-1";
+
+        var result = await controller.Download(Guid.NewGuid(), CancellationToken.None);
+
+        var status = result.Should().BeOfType<StatusCodeResult>().Which;
+        status.StatusCode.Should().Be(StatusCodes.Status416RangeNotSatisfiable);
+        await _downloadService.DidNotReceiveWithAnyArgs().AuthorizeDownload(Guid.Empty, Guid.Empty, CancellationToken.None);
     }
 
     [Fact]
@@ -139,7 +165,7 @@ public sealed class AssetsControllerTests : ControllerTestBase
         SetupAnonymous(controller);
         var form = new UploadAssetFormWithFile
         {
-            File = new FormFile(new MemoryStream([1]), 0, 1, "file", "f.bin"),
+            File = new FormFile(new MemoryStream([1]), 0, 1, "file", "f.zip"),
             Title = "t",
             CategoryId = Guid.NewGuid()
         };
@@ -155,7 +181,24 @@ public sealed class AssetsControllerTests : ControllerTestBase
         SetupUser(_userId, controller);
         var form = new UploadAssetFormWithFile
         {
-            File = new FormFile(new MemoryStream(), 0, 0, "file", "f.bin"),
+            File = new FormFile(new MemoryStream(), 0, 0, "file", "f.zip"),
+            Title = "t",
+            CategoryId = Guid.NewGuid()
+        };
+        var result = await controller.Upload(form, CancellationToken.None);
+
+        await AssertStatusCodeAsync(controller, result, StatusCodes.Status400BadRequest);
+    }
+
+    [Fact]
+    public async Task Upload_WhenFileTooLarge_ShouldReturnBadRequest()
+    {
+        var controller = CreateController();
+        SetupUser(_userId, controller);
+        var length = _fileUploadOptions.Value.MaxFileBytes + 1;
+        var form = new UploadAssetFormWithFile
+        {
+            File = new FormFile(new MemoryStream([1]), 0, length, "file", "f.zip"),
             Title = "t",
             CategoryId = Guid.NewGuid()
         };
@@ -175,7 +218,7 @@ public sealed class AssetsControllerTests : ControllerTestBase
         SetupUser(_userId, controller);
         var form = new UploadAssetFormWithFile
         {
-            File = new FormFile(new MemoryStream([1]), 0, 1, "file", "f.bin"),
+            File = new FormFile(new MemoryStream([1]), 0, 1, "file", "f.zip"),
             Title = "t",
             CategoryId = Guid.NewGuid()
         };
@@ -195,7 +238,7 @@ public sealed class AssetsControllerTests : ControllerTestBase
         SetupUser(_userId, controller);
         var form = new UploadAssetFormWithFile
         {
-            File = new FormFile(new MemoryStream([1]), 0, 1, "file", "f.bin"),
+            File = new FormFile(new MemoryStream([1]), 0, 1, "file", "f.zip"),
             Title = "t",
             CategoryId = Guid.NewGuid()
         };
