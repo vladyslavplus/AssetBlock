@@ -83,6 +83,28 @@ public sealed class DownloadServiceTests
     }
 
     [Fact]
+    public async Task CopyDecrypted_whenStorageReadIsCancelled_propagatesCancellation()
+    {
+        var storage = Substitute.For<IAssetStorageService>();
+        storage.OpenRead(
+                Arg.Any<string>(),
+                Arg.Any<Func<Stream, CancellationToken, Task>>(),
+                Arg.Any<CancellationToken>())
+            .Returns(_ => throw new OperationCanceledException());
+        var sut = new DownloadService(
+            Substitute.For<IAssetStore>(),
+            Substitute.For<IPurchaseStore>(),
+            storage,
+            CreateEncryption(),
+            new MemoryCacheService());
+        await using var destination = new MemoryStream();
+
+        var act = () => sut.CopyDecrypted("key", destination, new CancellationToken(canceled: true));
+
+        await act.Should().ThrowAsync<OperationCanceledException>();
+    }
+
+    [Fact]
     public async Task AuthorizeDownload_rateLimited_afterTooManyDownloads()
     {
         var userId = Guid.NewGuid();

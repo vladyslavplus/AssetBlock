@@ -42,7 +42,7 @@ internal sealed class OutboxDispatcher(
         }
     }
 
-    private async Task DispatchBatch(CancellationToken cancellationToken)
+    internal async Task DispatchBatch(CancellationToken cancellationToken)
     {
         await using var scope = scopeFactory.CreateAsyncScope();
         var outbox = scope.ServiceProvider.GetRequiredService<IOutboxStore>();
@@ -56,7 +56,7 @@ internal sealed class OutboxDispatcher(
 
         foreach (var message in batch)
         {
-            if (message.LockToken is not Guid lockToken)
+            if (message.LockToken is not { } lockToken)
             {
                 logger.LogError("Claimed outbox {OutboxId} missing LockToken; skipping mark", message.Id);
                 continue;

@@ -40,6 +40,36 @@ public sealed class AesGcmEncryptionServiceTests
         outPlain.ToArray().Should().Equal(data);
     }
 
+    [Fact]
+    public async Task EncryptDecrypt_roundtrip_non_seekable_plain_stream()
+    {
+        var sut = CreateService();
+        var data = RandomNumberGenerator.GetBytes(1024 * 1024 + 100);
+        await using var plain = new NonSeekableReadStream(data);
+        await using var cipher = new MemoryStream();
+
+        await sut.Encrypt(plain, cipher);
+
+        cipher.Position = 0;
+        await using var decrypted = new MemoryStream();
+        await sut.Decrypt(cipher, decrypted);
+        decrypted.ToArray().Should().Equal(data);
+    }
+
+    [Fact]
+    public async Task Encrypt_when_cancelled_propagates_cancellation()
+    {
+        var sut = CreateService();
+        await using var plain = new MemoryStream(new byte[1024]);
+        await using var cipher = new MemoryStream();
+        using var cancellation = new CancellationTokenSource();
+        await cancellation.CancelAsync();
+
+        var act = () => sut.Encrypt(plain, cipher, cancellation.Token);
+
+        await act.Should().ThrowAsync<OperationCanceledException>();
+    }
+
     [Theory]
     [InlineData(0)]
     [InlineData(1)]
@@ -120,6 +150,49 @@ public sealed class AesGcmEncryptionServiceTests
         {
             var boundedBuffer = buffer[..Math.Min(buffer.Length, maxReadBytes)];
             return base.ReadAsync(boundedBuffer, cancellationToken);
+        }
+    }
+
+    private sealed class NonSeekableReadStream(byte[] data) : Stream
+    {
+        private readonly MemoryStream _inner = new(data, writable: false);
+
+        public override bool CanRead => true;
+        public override bool CanSeek => false;
+        public override bool CanWrite => false;
+        public override long Length => throw new NotSupportedException();
+        public override long Position
+        {
+            get => throw new NotSupportedException();
+            set => throw new NotSupportedException();
+        }
+
+        public override int Read(byte[] buffer, int offset, int count) => _inner.Read(buffer, offset, count);
+
+        public override ValueTask<int> ReadAsync(
+            Memory<byte> buffer,
+            CancellationToken cancellationToken = default) =>
+            _inner.ReadAsync(buffer, cancellationToken);
+
+        public override void Flush() => throw new NotSupportedException();
+        public override long Seek(long offset, SeekOrigin origin) => throw new NotSupportedException();
+        public override void SetLength(long value) => throw new NotSupportedException();
+        public override void Write(byte[] buffer, int offset, int count) => throw new NotSupportedException();
+
+        protected override void Dispose(bool disposing)
+        {
+            if (disposing)
+            {
+                _inner.Dispose();
+            }
+
+            base.Dispose(disposing);
+        }
+
+        public override async ValueTask DisposeAsync()
+        {
+            await _inner.DisposeAsync();
+            await base.DisposeAsync();
         }
     }
 }

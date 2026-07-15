@@ -54,6 +54,7 @@ public static class ErrorCodes
     public const string ERR_INTERNAL = "ERR_INTERNAL";
     public const string ERR_VALIDATION_FAILED = "ERR_VALIDATION_FAILED";
     public const string ERR_RATE_LIMITED = "ERR_RATE_LIMITED";
+    public const string ERR_SERVICE_UNAVAILABLE = "ERR_SERVICE_UNAVAILABLE";
     public const string ERR_SEARCH_UNAVAILABLE = "ERR_SEARCH_UNAVAILABLE";
 
     public const string ERR_NOTIFICATION_NOT_FOUND = "ERR_NOTIFICATION_NOT_FOUND";

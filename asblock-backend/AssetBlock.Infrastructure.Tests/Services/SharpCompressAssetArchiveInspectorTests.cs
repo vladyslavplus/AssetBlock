@@ -34,6 +34,17 @@ public sealed class SharpCompressAssetArchiveInspectorTests
     }
 
     [Fact]
+    public async Task Inspect_WhenStreamIsNonSeekable_ShouldRejectWithExplicitContract()
+    {
+        await using var archive = new NonSeekableStream([1, 2, 3]);
+
+        var act = () => _sut.Inspect(archive, "archive.zip");
+
+        await act.Should().ThrowAsync<ArchiveRejectedException>()
+            .WithMessage("*seekable*");
+    }
+
+    [Fact]
     public async Task Inspect_WhenTooManyEntries_ShouldReject()
     {
         await using var ms = new MemoryStream();
@@ -105,5 +116,10 @@ public sealed class SharpCompressAssetArchiveInspectorTests
 
         ms.Position = 0;
         return ms;
+    }
+
+    private sealed class NonSeekableStream(byte[] bytes) : MemoryStream(bytes, writable: false)
+    {
+        public override bool CanSeek => false;
     }
 }

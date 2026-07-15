@@ -77,13 +77,15 @@ After changing `Encryption:KeyBase64`, previously encrypted MinIO objects cannot
 ## Typical commands
 
 ```bash
-dotnet restore
-dotnet build
+dotnet restore asblock-backend.slnx
+dotnet build asblock-backend.slnx
 dotnet test asblock-backend.slnx
 dotnet run --project AssetBlock.WebApi
 ```
 
 ### Tests
+
+The solution contains five test projects: three focused unit-test projects and two PostgreSQL/Testcontainers integration-test projects.
 
 | Project | Purpose | Needs Docker |
 |---------|---------|--------------|
@@ -99,3 +101,10 @@ dotnet test AssetBlock.WebApi.IntegrationTests/AssetBlock.WebApi.IntegrationTest
 ```
 
 Bring up local app dependencies with `docker-compose.yml` in this folder when running the API outside tests.
+
+### Health checks
+
+- `GET /health/live` reports process liveness only and does not probe external dependencies.
+- `GET /health/ready` probes PostgreSQL, the configured MinIO bucket, Elasticsearch, and Redis when a Redis connection string is configured.
+
+Both endpoints return a small JSON report. Readiness returns HTTP 503 while any required dependency is unavailable.

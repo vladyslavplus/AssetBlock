@@ -62,6 +62,26 @@ public sealed class ApiControllerBaseMappingTests : ControllerTestBase
     }
 
     [Fact]
+    public void Map_Generic_WhenCreated_ShouldReturn201WithValue()
+    {
+        var c = CreateController();
+        var action = c.Map(Result.Created(_sampleTokens));
+
+        var created = action.Should().BeOfType<ObjectResult>().Subject;
+        created.StatusCode.Should().Be(StatusCodes.Status201Created);
+        created.Value.Should().Be(_sampleTokens);
+    }
+
+    [Fact]
+    public void Map_Generic_WhenNoContent_ShouldReturn204()
+    {
+        var c = CreateController();
+        var action = c.Map(Result<TokensResponse>.NoContent());
+
+        action.Should().BeOfType<NoContentResult>();
+    }
+
+    [Fact]
     public async Task Map_Generic_WhenInvalid_ShouldReturnBadRequestProblem()
     {
         var c = CreateController();
@@ -118,6 +138,15 @@ public sealed class ApiControllerBaseMappingTests : ControllerTestBase
     }
 
     [Fact]
+    public void Map_NonGeneric_WhenNoContent_ShouldReturn204()
+    {
+        var c = CreateController();
+        var action = c.Map(Result.NoContent());
+
+        action.Should().BeOfType<NoContentResult>();
+    }
+
+    [Fact]
     public async Task Map_NonGeneric_WhenInvalid_ShouldReturnBadRequestProblem()
     {
         var c = CreateController();
@@ -140,6 +169,24 @@ public sealed class ApiControllerBaseMappingTests : ControllerTestBase
         var c = CreateController();
         var action = c.Map(Result.Error(ErrorCodes.ERR_INTERNAL));
         await AssertProblem(c, action, StatusCodes.Status500InternalServerError, ErrorCodes.ERR_INTERNAL);
+    }
+
+    [Fact]
+    public async Task Map_NonGeneric_WhenCriticalError_ShouldReturn500Problem()
+    {
+        var c = CreateController();
+        var action = c.Map(Result.CriticalError(ErrorCodes.ERR_INTERNAL));
+
+        await AssertProblem(c, action, StatusCodes.Status500InternalServerError, ErrorCodes.ERR_INTERNAL);
+    }
+
+    [Fact]
+    public async Task Map_NonGeneric_WhenUnavailable_ShouldReturn503Problem()
+    {
+        var c = CreateController();
+        var action = c.Map(Result.Unavailable(ErrorCodes.ERR_SERVICE_UNAVAILABLE));
+
+        await AssertProblem(c, action, StatusCodes.Status503ServiceUnavailable, ErrorCodes.ERR_SERVICE_UNAVAILABLE);
     }
 
     [Fact]

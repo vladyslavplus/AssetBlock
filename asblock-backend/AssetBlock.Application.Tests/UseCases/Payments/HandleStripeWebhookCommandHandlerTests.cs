@@ -239,6 +239,49 @@ public class HandleStripeWebhookCommandHandlerTests
     }
 
     [Fact]
+    public async Task Handle_WhenSameWebhookDeliveredTwice_ShouldCreatePurchaseAndOutboxOnlyOnce()
+    {
+        var buyerId = Guid.NewGuid();
+        var authorId = Guid.NewGuid();
+        var assetId = Guid.NewGuid();
+        const string sessionId = "cs_same_webhook";
+        var command = new HandleStripeWebhookCommand("payload", "sig");
+        Purchase? persisted = null;
+        _paymentServiceMock.VerifyCheckoutCompleted(command.Payload, command.Signature, Arg.Any<CancellationToken>())
+            .Returns(new StripeCheckoutCompleted(buyerId, assetId, sessionId));
+        _purchaseStoreMock.GetByStripePaymentId(sessionId, Arg.Any<CancellationToken>())
+            .Returns(_ => persisted);
+        _purchaseStoreMock.Add(Arg.Any<Purchase>(), Arg.Any<CancellationToken>())
+            .Returns(callInfo =>
+            {
+                persisted = callInfo.Arg<Purchase>();
+                return Task.FromResult(persisted!);
+            });
+        _assetStoreMock.GetById(assetId, Arg.Any<CancellationToken>()).Returns(new Asset
+        {
+            Id = assetId,
+            AuthorId = authorId,
+            CategoryId = Guid.NewGuid(),
+            Title = "Idempotent Pack",
+            StorageKey = "key",
+            FileName = "pack.zip"
+        });
+
+        var first = await _handler.Handle(command, CancellationToken.None);
+        var second = await _handler.Handle(command, CancellationToken.None);
+
+        first.IsSuccess.Should().BeTrue();
+        second.IsSuccess.Should().BeTrue();
+        await _purchaseStoreMock.Received(1).Add(
+            Arg.Is<Purchase>(purchase => purchase.StripePaymentId == sessionId),
+            Arg.Any<CancellationToken>());
+        await _outboxStoreMock.Received(4).Enqueue(
+            Arg.Any<string>(),
+            Arg.Any<object>(),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
     public async Task Handle_WhenInvalidSignature_ShouldReturnInvalid()
     {
         var command = new HandleStripeWebhookCommand("bad-payload", "bad-sig");

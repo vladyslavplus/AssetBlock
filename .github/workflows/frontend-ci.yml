@@ -1,0 +1,43 @@
+name: Frontend CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: frontend-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    name: Check & Build
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 11.13.0
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: "22.x"
+          cache: pnpm
+          cache-dependency-path: asblock-frontend/pnpm-lock.yaml
+
+      - name: Install dependencies
+        working-directory: asblock-frontend
+        run: pnpm install --frozen-lockfile
+
+      - name: Check
+        working-directory: asblock-frontend
+        run: pnpm run check
+
+      - name: Build
+        working-directory: asblock-frontend
+        run: pnpm run build

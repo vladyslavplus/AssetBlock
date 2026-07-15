@@ -11,9 +11,14 @@ internal static class ResultProblemDetailsMapper
 {
     public static IActionResult Map(HttpContext httpContext, Result result)
     {
-        if (result.IsSuccess)
+        switch (result.Status)
         {
-            return new OkResult();
+            case ResultStatus.Ok:
+                return new OkResult();
+            case ResultStatus.Created:
+                return new StatusCodeResult(StatusCodes.Status201Created);
+            case ResultStatus.NoContent:
+                return new NoContentResult();
         }
 
         return AssetBlockProblemDetails.ToActionResult(
@@ -22,9 +27,16 @@ internal static class ResultProblemDetailsMapper
 
     public static IActionResult Map<T>(HttpContext httpContext, Result<T> result)
     {
-        if (result.IsSuccess)
+        switch (result.Status)
         {
-            return new OkObjectResult(result.Value);
+            case ResultStatus.Ok:
+                return new OkObjectResult(result.Value);
+            case ResultStatus.Created:
+                return string.IsNullOrWhiteSpace(result.Location)
+                    ? new ObjectResult(result.Value) { StatusCode = StatusCodes.Status201Created }
+                    : new CreatedResult(result.Location, result.Value);
+            case ResultStatus.NoContent:
+                return new NoContentResult();
         }
 
         return AssetBlockProblemDetails.ToActionResult(
@@ -60,6 +72,14 @@ internal static class ResultProblemDetailsMapper
                 StatusCodes.Status401Unauthorized,
                 FirstCode(errorList, ErrorCodes.ERR_AUTH_TOKEN_INVALID)),
             ResultStatus.Error => MapError(httpContext, errorList),
+            ResultStatus.CriticalError => AssetBlockProblemDetails.Create(
+                httpContext,
+                StatusCodes.Status500InternalServerError,
+                FirstCode(errorList, ErrorCodes.ERR_INTERNAL)),
+            ResultStatus.Unavailable => AssetBlockProblemDetails.Create(
+                httpContext,
+                StatusCodes.Status503ServiceUnavailable,
+                FirstCode(errorList, ErrorCodes.ERR_SERVICE_UNAVAILABLE)),
             _ => AssetBlockProblemDetails.Create(
                 httpContext,
                 StatusCodes.Status500InternalServerError,

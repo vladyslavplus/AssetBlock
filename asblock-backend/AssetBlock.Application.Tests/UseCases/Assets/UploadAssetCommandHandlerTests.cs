@@ -74,6 +74,20 @@ public class UploadAssetCommandHandlerTests
     }
 
     [Fact]
+    public async Task Handle_WhenFileIsExactlyAtConfiguredLimit_ShouldAcceptUpload()
+    {
+        var request = new UploadAssetRequest("Title", "Desc", 100m, Guid.NewGuid());
+        var command = CreateCommand(request, length: 250L * 1024 * 1024);
+        _categoryStoreMock.GetById(request.CategoryId, Arg.Any<CancellationToken>())
+            .Returns(new Category { Id = request.CategoryId, Name = "Cat", Slug = "cat" });
+
+        var result = await _handler.Handle(command, CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        _encryptionServiceMock.Received(1).ComputeCiphertextLength(250L * 1024 * 1024);
+    }
+
+    [Fact]
     public async Task Handle_WhenExtensionNotAllowed_ShouldReturnError()
     {
         var request = new UploadAssetRequest("Title", "Desc", 100m, Guid.NewGuid());
@@ -148,6 +162,67 @@ public class UploadAssetCommandHandlerTests
 
         result.IsSuccess.Should().BeFalse();
         result.ValidationErrors.Should().Contain(e => e.Identifier == ErrorCodes.ERR_ASSET_UPLOAD_FAILED);
+    }
+
+    [Fact]
+    public async Task Handle_WhenStreamingUploadSucceeds_ShouldPipeCiphertextWithoutSeekableBuffer()
+    {
+        var request = new UploadAssetRequest("Title", "Desc", 100m, Guid.NewGuid());
+        var command = CreateCommand(request);
+        var ciphertext = "ciphertext"u8.ToArray();
+        byte[]? uploaded = null;
+        bool? uploadStreamCanSeek = null;
+        _categoryStoreMock.GetById(request.CategoryId, Arg.Any<CancellationToken>())
+            .Returns(new Category { Id = request.CategoryId, Name = "Cat", Slug = "cat" });
+        _encryptionServiceMock.Encrypt(
+                Arg.Any<Stream>(),
+                Arg.Any<Stream>(),
+                Arg.Any<CancellationToken>())
+            .Returns(async callInfo =>
+            {
+                var output = callInfo.ArgAt<Stream>(1);
+                await output.WriteAsync(ciphertext);
+            });
+        _assetStorageServiceMock.Upload(
+                Arg.Any<string>(),
+                Arg.Any<Stream>(),
+                Arg.Any<long>(),
+                Arg.Any<CancellationToken>())
+            .Returns(async callInfo =>
+            {
+                var input = callInfo.ArgAt<Stream>(1);
+                uploadStreamCanSeek = input.CanSeek;
+                await using var destination = new MemoryStream();
+                await input.CopyToAsync(destination);
+                uploaded = destination.ToArray();
+            });
+
+        var result = await _handler.Handle(command, CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        uploadStreamCanSeek.Should().BeFalse();
+        uploaded.Should().Equal(ciphertext);
+    }
+
+    [Fact]
+    public async Task Handle_WhenStreamingIsCancelled_ShouldPropagateCancellation()
+    {
+        var request = new UploadAssetRequest("Title", "Desc", 100m, Guid.NewGuid());
+        var command = CreateCommand(request);
+        _categoryStoreMock.GetById(request.CategoryId, Arg.Any<CancellationToken>())
+            .Returns(new Category { Id = request.CategoryId, Name = "Cat", Slug = "cat" });
+        _encryptionServiceMock.Encrypt(
+                Arg.Any<Stream>(),
+                Arg.Any<Stream>(),
+                Arg.Any<CancellationToken>())
+            .ThrowsAsync(new OperationCanceledException());
+
+        var act = () => _handler.Handle(command, new CancellationToken(canceled: true));
+
+        await act.Should().ThrowAsync<OperationCanceledException>();
+        await _assetStoreMock.DidNotReceiveWithAnyArgs().Add(
+            Arg.Any<Asset>(),
+            Arg.Any<CancellationToken>());
     }
 
     [Fact]

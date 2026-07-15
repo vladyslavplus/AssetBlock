@@ -113,6 +113,34 @@ public sealed class OutboxStorePostgresTests(PostgresFixture fixture)
     }
 
     [Fact]
+    public async Task MarkFailed_WhenRetryIsDue_ShouldMakeSameMessageClaimableAgain()
+    {
+        await using var db = await fixture.CreateCleanDbContext();
+        var store = CreateStore(db);
+        await store.Enqueue(
+            OutboxMessageTypes.ASSET_INDEX_UPSERT,
+            new AssetIndexUpsertPayload(Guid.NewGuid()),
+            CancellationToken.None);
+
+        var first = await store.ClaimPendingBatch(1, TimeSpan.FromMinutes(5));
+        first.Should().ContainSingle();
+        var claimed = first[0];
+        (await store.MarkFailed(
+            claimed.Id,
+            claimed.LockToken!.Value,
+            "search unavailable",
+            DateTimeOffset.UtcNow.AddMilliseconds(-1))).Should().BeTrue();
+
+        var retry = await store.ClaimPendingBatch(1, TimeSpan.FromMinutes(5));
+
+        retry.Should().ContainSingle();
+        retry[0].Id.Should().Be(claimed.Id);
+        retry[0].AttemptCount.Should().Be(claimed.AttemptCount + 1);
+        retry[0].LockToken.Should().NotBe(claimed.LockToken!.Value);
+        retry[0].ProcessedAt.Should().BeNull();
+    }
+
+    [Fact]
     public async Task Migrate_WhenLegacyNullStripePaymentId_ShouldBackfillAndSucceed()
     {
         NpgsqlConnection.ClearAllPools();

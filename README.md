@@ -24,8 +24,8 @@ asblock/
 **Typical commands** (from `asblock-backend/`):
 
 ```bash
-dotnet restore
-dotnet build
+dotnet restore asblock-backend.slnx
+dotnet build asblock-backend.slnx
 dotnet test asblock-backend.slnx
 dotnet ef database update --project AssetBlock.Infrastructure --startup-project AssetBlock.WebApi
 dotnet run --project AssetBlock.WebApi
@@ -44,8 +44,8 @@ Bring up dependencies with Docker Compose when needed (`docker-compose.yml` in t
 ```bash
 pnpm install
 pnpm dev
+pnpm run check
 pnpm run build
-pnpm run lint
 ```
 
 Point the frontend at your running Web API using environment variables (see `asblock-frontend/.env.example`): **`NEXT_PUBLIC_API_BASE_URL`** for browser-side requests, and **`ASSETBLOCK_API_BASE_URL`** (or the public URL as fallback) for server-side Route Handlers.
@@ -53,7 +53,9 @@ Point the frontend at your running Web API using environment variables (see `asb
 ## Documentation
 
 - **Interactive API:** Swagger UI when the Web API is running in Development.
+- **Liveness:** `GET /health/live` checks that the API process can serve requests.
+- **Readiness:** `GET /health/ready` checks PostgreSQL, MinIO, Elasticsearch, and Redis when Redis is configured.
 
 ## Contributing / quality
 
-Run backend tests and frontend lint (and build) before submitting changes. Keep secrets out of source control.
+GitHub Actions run all backend projects, frontend `check`/production build, and Gitleaks. Keep secrets out of source control.
