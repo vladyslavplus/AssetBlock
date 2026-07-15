@@ -1,7 +1,7 @@
 'use client'
 
 import { useQuery } from '@tanstack/react-query'
-import { useRef, useState, useCallback, useEffect, useMemo } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
 import { ChevronLeft, ChevronRight, ArrowRight } from 'lucide-react'
 import type { AssetListItem } from '@/lib/catalog/asset-types'
@@ -10,6 +10,8 @@ import { formatUsdWhole } from '@/lib/format-currency'
 import { FeaturedAssetCarouselSkeleton } from '@/components/assets/asset-card-skeleton'
 import { Button } from '@/components/ui/button'
 import { siteShellClass } from '@/lib/site-layout'
+
+const EMPTY_ASSETS: AssetListItem[] = []
 
 function StarRating({ value }: { value: number }) {
   const rounded = Math.round(value * 2) / 2
@@ -34,6 +36,28 @@ function StarRating({ value }: { value: number }) {
       <span className="text-xs text-muted-foreground font-mono">{value.toFixed(1)}</span>
     </div>
   )
+}
+
+function updateScrollAvailability(
+  element: HTMLDivElement | null,
+  setCanScrollLeft: (value: boolean) => void,
+  setCanScrollRight: (value: boolean) => void,
+) {
+  if (!element) {
+    setCanScrollLeft(false)
+    setCanScrollRight(false)
+    return
+  }
+
+  const maxScroll = element.scrollWidth - element.clientWidth
+  if (maxScroll <= 1) {
+    setCanScrollLeft(false)
+    setCanScrollRight(false)
+    return
+  }
+
+  setCanScrollLeft(element.scrollLeft > 4)
+  setCanScrollRight(element.scrollLeft < maxScroll - 4)
 }
 
 function AssetCard({ asset }: { asset: AssetListItem }) {
@@ -121,56 +145,41 @@ export function FeaturedAssetsSection() {
 
   const featuredQuery = useQuery({
     queryKey: catalogKeys.featured(FEATURED_LIMIT),
-    queryFn: () => fetchFeaturedAssets({ limit: FEATURED_LIMIT }),
+    queryFn: ({ signal }) => fetchFeaturedAssets({ limit: FEATURED_LIMIT, signal }),
   })
 
-  const assets = useMemo(() => featuredQuery.data ?? [], [featuredQuery.data])
+  const assets = featuredQuery.data ?? EMPTY_ASSETS
   const loading = featuredQuery.isPending
   const loadError = featuredQuery.isError
 
   const SCROLL_AMOUNT = 340
-
-  const updateScrollState = useCallback(() => {
-    const el = scrollRef.current
-    if (!el) {
-      setCanScrollLeft(false)
-      setCanScrollRight(false)
-      return
-    }
-    const maxScroll = el.scrollWidth - el.clientWidth
-    if (maxScroll <= 1) {
-      setCanScrollLeft(false)
-      setCanScrollRight(false)
-      return
-    }
-    setCanScrollLeft(el.scrollLeft > 4)
-    setCanScrollRight(el.scrollLeft < maxScroll - 4)
-  }, [])
 
   // Defer scroll metrics until after layout (avoids sync setState in layout effect).
   useEffect(() => {
     if (loading || assets.length === 0) {
       return
     }
-    const id = window.requestAnimationFrame(() => updateScrollState())
+    const id = window.requestAnimationFrame(() =>
+      updateScrollAvailability(scrollRef.current, setCanScrollLeft, setCanScrollRight),
+    )
     return () => window.cancelAnimationFrame(id)
-  }, [assets, loading, updateScrollState])
+  }, [assets, loading])
 
   useEffect(() => {
     const el = scrollRef.current
     if (!el) {
       return
     }
-    const ro = new ResizeObserver(() => {
-      updateScrollState()
-    })
+    const update = () =>
+      updateScrollAvailability(scrollRef.current, setCanScrollLeft, setCanScrollRight)
+    const ro = new ResizeObserver(update)
     ro.observe(el)
-    window.addEventListener('resize', updateScrollState)
+    window.addEventListener('resize', update)
     return () => {
       ro.disconnect()
-      window.removeEventListener('resize', updateScrollState)
+      window.removeEventListener('resize', update)
     }
-  }, [assets, loading, updateScrollState])
+  }, [assets, loading])
 
   const scrollLeft = () => {
     scrollRef.current?.scrollBy({ left: -SCROLL_AMOUNT, behavior: 'smooth' })
@@ -284,7 +293,9 @@ export function FeaturedAssetsSection() {
         {showCarousel && (
           <div
             ref={scrollRef}
-            onScroll={updateScrollState}
+            onScroll={() =>
+              updateScrollAvailability(scrollRef.current, setCanScrollLeft, setCanScrollRight)
+            }
             className="flex gap-4 items-stretch overflow-x-auto scrollbar-hide pb-2 -mx-4 px-4 sm:-mx-6 sm:px-6 lg:mx-0 lg:px-0"
             style={{ scrollbarWidth: 'none' }}
             role="list"

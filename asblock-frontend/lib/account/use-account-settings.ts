@@ -1,11 +1,9 @@
 'use client'
 
-/* eslint-disable react-hooks/refs -- react-hook-form field refs and handleSubmit are valid here */
-
 import { zodResolver } from '@hookform/resolvers/zod'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useRouter } from 'next/navigation'
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useRef, useState, type SyntheticEvent } from 'react'
 import { useForm, useWatch } from 'react-hook-form'
 import { toast } from 'sonner'
 
@@ -42,6 +40,13 @@ const PASSWORD_FORM_EMPTY: ChangePasswordFormValues = {
   confirmPassword: '',
 }
 
+const EMPTY_SOCIAL_PLATFORMS: Awaited<ReturnType<typeof fetchAccountSocialPlatforms>> = []
+
+interface SocialDraft {
+  profileId: string | null
+  values: Record<string, string>
+}
+
 export function useAccountSettings() {
   const router = useRouter()
   const queryClient = useQueryClient()
@@ -57,10 +62,7 @@ export function useAccountSettings() {
     queryFn: fetchAccountSocialPlatforms,
     enabled: Boolean(profile?.id),
   })
-  const socialPlatforms = useMemo(
-    () => socialPlatformsQuery.data ?? [],
-    [socialPlatformsQuery.data],
-  )
+  const socialPlatforms = socialPlatformsQuery.data ?? EMPTY_SOCIAL_PLATFORMS
   const socialPlatformsLoading = socialPlatformsQuery.isPending
   const socialPlatformsError = socialPlatformsQuery.isError
     ? socialPlatformsQuery.error instanceof Error
@@ -71,7 +73,7 @@ export function useAccountSettings() {
   const [section, setSection] = useState<AccountSection>('profile')
   const lastSavedRef = useRef<AccountProfileFormValues | null>(null)
   const profileHydratedRef = useRef<string | null>(null)
-  const [socialUrls, setSocialUrls] = useState<Record<string, string>>({})
+  const [socialDraft, setSocialDraft] = useState<SocialDraft>({ profileId: null, values: {} })
 
   const profileForm = useForm<AccountProfileFormValues>({
     resolver: zodResolver(accountProfileFormSchema),
@@ -136,7 +138,6 @@ export function useAccountSettings() {
   useEffect(() => {
     if (!profile) {
       profileHydratedRef.current = null
-      setSocialUrls({})
       return
     }
     if (profileHydratedRef.current !== profile.id) {
@@ -149,29 +150,30 @@ export function useAccountSettings() {
       }
       lastSavedRef.current = values
       profileForm.reset(values)
-      setSocialUrls({})
     }
   }, [profile, profileForm])
 
-  useEffect(() => {
-    if (profile && socialPlatforms.length > 0) {
-      setSocialUrls(buildSocialUrlsFromProfile(socialPlatforms, profile.socialLinks))
-    }
-  }, [profile, socialPlatforms])
-
-  const socialBaseline = useMemo(
-    () =>
-      profile && socialPlatforms.length > 0
-        ? buildSocialUrlsFromProfile(socialPlatforms, profile.socialLinks)
-        : {},
-    [profile, socialPlatforms],
-  )
-  const isSocialDirty = useMemo(() => {
+  const socialBaseline =
+    profile && socialPlatforms.length > 0
+      ? buildSocialUrlsFromProfile(socialPlatforms, profile.socialLinks)
+      : {}
+  const socialOverrides = socialDraft.profileId === profile?.id ? socialDraft.values : {}
+  const socialUrls = { ...socialBaseline, ...socialOverrides }
+  const setSocialUrl = (platformId: string, url: string) => {
+    setSocialDraft((previous) => ({
+      profileId: profile?.id ?? null,
+      values: {
+        ...(previous.profileId === profile?.id ? previous.values : {}),
+        [platformId]: url,
+      },
+    }))
+  }
+  const isSocialDirty = (() => {
     const keys = new Set([...Object.keys(socialUrls), ...Object.keys(socialBaseline)])
     return [...keys].some(
       (key) => (socialUrls[key] ?? '').trim() !== (socialBaseline[key] ?? '').trim(),
     )
-  }, [socialUrls, socialBaseline])
+  })()
   const canPersistSocialLinks =
     socialPlatforms.length > 0 && !socialPlatformsLoading && !socialPlatformsError
 
@@ -202,7 +204,7 @@ export function useAccountSettings() {
   })
   const savingProfile = patchProfileMutation.isPending || putSocialsMutation.isPending
 
-  const tryBuildSocialLinksPayload = useCallback(() => {
+  const tryBuildSocialLinksPayload = () => {
     const links: Array<{ platformId: string; url: string }> = []
     for (const platform of socialPlatforms) {
       const url = (socialUrls[platform.id] ?? '').trim()
@@ -228,9 +230,9 @@ export function useAccountSettings() {
       return null
     }
     return links
-  }, [socialPlatforms, socialUrls])
+  }
 
-  const onSaveProfile = profileForm.handleSubmit(async (values) => {
+  const saveProfile = async (values: AccountProfileFormValues) => {
     const dirtyProfile = profileForm.formState.isDirty
     const dirtySocial = isSocialDirty
     if (!dirtyProfile && !dirtySocial) return
@@ -288,7 +290,7 @@ export function useAccountSettings() {
           queryClient.setQueryData<AccountProfile>(accountKeys.me(), (previous) =>
             previous ? { ...previous, socialLinks: updated } : previous,
           )
-          setSocialUrls(buildSocialUrlsFromProfile(socialPlatforms, updated))
+          setSocialDraft({ profileId: profile?.id ?? null, values: {} })
         } catch (error) {
           if (error instanceof AccountRequestError) {
             if (error.status === 401) {
@@ -308,13 +310,15 @@ export function useAccountSettings() {
     } catch {
       toast.error('Network error. Try again.')
     }
-  })
+  }
+
+  const onSaveProfile = (event: SyntheticEvent<HTMLFormElement, SubmitEvent>) => {
+    void profileForm.handleSubmit(saveProfile)(event)
+  }
 
   const onCancelProfile = () => {
     if (lastSavedRef.current) profileForm.reset(lastSavedRef.current)
-    if (profile && socialPlatforms.length > 0) {
-      setSocialUrls(buildSocialUrlsFromProfile(socialPlatforms, profile.socialLinks))
-    }
+    setSocialDraft({ profileId: profile?.id ?? null, values: {} })
   }
   const openPasswordSection = () => {
     passwordForm.reset(PASSWORD_FORM_EMPTY)
@@ -336,7 +340,7 @@ export function useAccountSettings() {
     socialPlatformsLoading,
     socialPlatformsError,
     socialUrls,
-    setSocialUrls,
+    setSocialUrl,
     profileForm,
     passwordForm,
     profileFields,

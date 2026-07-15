@@ -209,6 +209,7 @@ export function mapReviewApiToUi(row: ReviewListItemApi): AssetReview {
 
 export interface FetchFeaturedAssetsOptions {
   limit?: number
+  signal?: AbortSignal
 }
 
 /**
@@ -229,6 +230,7 @@ export async function fetchFeaturedAssets(
   const data = await apiFetch<PagedResultDto<AssetListItemApi>>({
     path: `api/assets?${params.toString()}`,
     method: 'GET',
+    signal: options.signal,
   })
 
   return (data.items ?? []).map(mapApiAssetToListItem)

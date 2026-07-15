@@ -1,7 +1,7 @@
 'use client'
 
-import { useQuery } from '@tanstack/react-query'
-import { useCallback, useState } from 'react'
+import { keepPreviousData, useQuery } from '@tanstack/react-query'
+import { useState } from 'react'
 import { SiteMain } from '@/components/layout/site-main'
 import { SitePageContainer } from '@/components/layout/site-page-container'
 import { SiteHeader } from '@/components/site-header'
@@ -39,7 +39,8 @@ export default function AssetsPage() {
 
   const listQuery = useQuery({
     queryKey: catalogKeys.list(filters),
-    queryFn: () => fetchCatalogPage(filters),
+    queryFn: ({ signal }) => fetchCatalogPage(filters, signal),
+    placeholderData: keepPreviousData,
   })
 
   const categories = facetsQuery.data?.categories ?? []
@@ -57,7 +58,7 @@ export default function AssetsPage() {
       : 'Could not load the catalog.'
     : null
 
-  const handleFilterChange = useCallback((updates: Partial<CatalogFilters>) => {
+  const handleFilterChange = (updates: Partial<CatalogFilters>) => {
     setFilters((prev) => {
       const next: CatalogFilters = { ...prev, ...updates }
       next.pageSize = CATALOG_ASSETS_PAGE_SIZE
@@ -74,11 +75,11 @@ export default function AssetsPage() {
       if (shouldResetPage) next.page = 1
       return next
     })
-  }, [])
+  }
 
-  const handleResetFilters = useCallback(() => {
+  const handleResetFilters = () => {
     setFilters(DEFAULT_CATALOG_FILTERS)
-  }, [])
+  }
 
   const items = pageData?.items ?? []
   const totalCount = pageData?.totalCount ?? 0

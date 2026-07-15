@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useRef } from 'react'
+import { useEffect, useRef } from 'react'
 
 /** Delay before repeating after pointer down (ms). */
 const HOLD_DELAY_MS = 420
@@ -31,7 +31,7 @@ export function usePointerStepRepeat(onRepeat: () => void) {
   const repeatTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const repeatStartRef = useRef(0)
 
-  const clearTimers = useCallback(() => {
+  const clearTimers = () => {
     if (holdTimerRef.current !== null) {
       clearTimeout(holdTimerRef.current)
       holdTimerRef.current = null
@@ -40,44 +40,48 @@ export function usePointerStepRepeat(onRepeat: () => void) {
       clearTimeout(repeatTimerRef.current)
       repeatTimerRef.current = null
     }
-  }, [])
+  }
 
-  useEffect(() => () => clearTimers(), [clearTimers])
-
-  const onPointerDown = useCallback(
-    (disabled: boolean, e: React.PointerEvent<HTMLButtonElement>) => {
-      if (disabled || e.button !== 0) return
-      e.preventDefault()
-      e.currentTarget.setPointerCapture(e.pointerId)
-      clearTimers()
-      onRepeatRef.current()
-      repeatStartRef.current = Date.now()
-      holdTimerRef.current = setTimeout(() => {
-        holdTimerRef.current = null
-        const scheduleTick = () => {
-          onRepeatRef.current()
-          const elapsed = Date.now() - repeatStartRef.current
-          repeatTimerRef.current = setTimeout(scheduleTick, pickRepeatDelay(elapsed))
-        }
-        scheduleTick()
-      }, HOLD_DELAY_MS)
-    },
-    [clearTimers],
-  )
-
-  const onPointerEnd = useCallback(
-    (e: React.PointerEvent<HTMLButtonElement>) => {
-      try {
-        if (e.currentTarget.hasPointerCapture(e.pointerId)) {
-          e.currentTarget.releasePointerCapture(e.pointerId)
-        }
-      } catch {
-        /* releasePointerCapture can throw if capture already cleared */
+  useEffect(
+    () => () => {
+      if (holdTimerRef.current !== null) {
+        clearTimeout(holdTimerRef.current)
       }
-      clearTimers()
+      if (repeatTimerRef.current !== null) {
+        clearTimeout(repeatTimerRef.current)
+      }
     },
-    [clearTimers],
+    [],
   )
+
+  const onPointerDown = (disabled: boolean, e: React.PointerEvent<HTMLButtonElement>) => {
+    if (disabled || e.button !== 0) return
+    e.preventDefault()
+    e.currentTarget.setPointerCapture(e.pointerId)
+    clearTimers()
+    onRepeatRef.current()
+    repeatStartRef.current = Date.now()
+    holdTimerRef.current = setTimeout(() => {
+      holdTimerRef.current = null
+      const scheduleTick = () => {
+        onRepeatRef.current()
+        const elapsed = Date.now() - repeatStartRef.current
+        repeatTimerRef.current = setTimeout(scheduleTick, pickRepeatDelay(elapsed))
+      }
+      scheduleTick()
+    }, HOLD_DELAY_MS)
+  }
+
+  const onPointerEnd = (e: React.PointerEvent<HTMLButtonElement>) => {
+    try {
+      if (e.currentTarget.hasPointerCapture(e.pointerId)) {
+        e.currentTarget.releasePointerCapture(e.pointerId)
+      }
+    } catch {
+      /* releasePointerCapture can throw if capture already cleared */
+    }
+    clearTimers()
+  }
 
   return { onPointerDown, onPointerEnd }
 }

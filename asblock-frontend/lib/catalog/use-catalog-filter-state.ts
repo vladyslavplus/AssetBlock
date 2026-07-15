@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useState } from 'react'
+import { useEffect, useEffectEvent, useState } from 'react'
 
 import { usePointerStepRepeat } from '@/hooks/use-pointer-step-repeat'
 import type { CatalogFilters } from '@/lib/catalog/catalog-filters'
@@ -28,6 +28,7 @@ export function useCatalogFilterState({ filters, onFilterChange }: UseCatalogFil
   const [searchInput, setSearchInput] = useState(filters.search)
   const [draftMin, setDraftMin] = useState<number | null>(filters.minPrice)
   const [draftMax, setDraftMax] = useState<number | null>(filters.maxPrice)
+  const emitFilterChange = useEffectEvent(onFilterChange)
 
   useEffect(() => {
     queueMicrotask(() => setSearchInput(filters.search))
@@ -36,11 +37,11 @@ export function useCatalogFilterState({ filters, onFilterChange }: UseCatalogFil
   useEffect(() => {
     const timer = window.setTimeout(() => {
       if (searchInput !== filters.search) {
-        onFilterChange({ search: searchInput, page: 1 })
+        emitFilterChange({ search: searchInput, page: 1 })
       }
     }, FILTER_INPUT_DEBOUNCE_MS)
     return () => window.clearTimeout(timer)
-  }, [searchInput, filters.search, onFilterChange])
+  }, [searchInput, filters.search])
 
   useEffect(() => {
     queueMicrotask(() => {
@@ -57,37 +58,30 @@ export function useCatalogFilterState({ filters, onFilterChange }: UseCatalogFil
         setDraftMax(clamped.max)
       }
       if (clamped.min !== filters.minPrice || clamped.max !== filters.maxPrice) {
-        onFilterChange({ minPrice: clamped.min, maxPrice: clamped.max, page: 1 })
+        emitFilterChange({ minPrice: clamped.min, maxPrice: clamped.max, page: 1 })
       }
     }, FILTER_INPUT_DEBOUNCE_MS)
     return () => window.clearTimeout(timer)
-  }, [draftMin, draftMax, filters.minPrice, filters.maxPrice, onFilterChange])
+  }, [draftMin, draftMax, filters.minPrice, filters.maxPrice])
 
-  const applyDraftPrices = useCallback((min: number | null, max: number | null) => {
+  const applyDraftPrices = (min: number | null, max: number | null) => {
     const clamped = clampPricePair(min, max)
     setDraftMin(clamped.min)
     setDraftMax(clamped.max)
-  }, [])
+  }
 
-  const adjustPrice = useCallback(
-    (field: 'min' | 'max', delta: number) => {
-      if (field === 'min') {
-        applyDraftPrices(Math.max(0, (draftMin ?? 0) + delta), draftMax)
-      } else {
-        applyDraftPrices(draftMin, Math.max(0, (draftMax ?? 0) + delta))
-      }
-    },
-    [draftMin, draftMax, applyDraftPrices],
-  )
+  const adjustPrice = (field: 'min' | 'max', delta: number) => {
+    if (field === 'min') {
+      applyDraftPrices(Math.max(0, (draftMin ?? 0) + delta), draftMax)
+    } else {
+      applyDraftPrices(draftMin, Math.max(0, (draftMax ?? 0) + delta))
+    }
+  }
 
-  const minMinusHold = usePointerStepRepeat(
-    useCallback(() => adjustPrice('min', -1), [adjustPrice]),
-  )
-  const minPlusHold = usePointerStepRepeat(useCallback(() => adjustPrice('min', 1), [adjustPrice]))
-  const maxMinusHold = usePointerStepRepeat(
-    useCallback(() => adjustPrice('max', -1), [adjustPrice]),
-  )
-  const maxPlusHold = usePointerStepRepeat(useCallback(() => adjustPrice('max', 1), [adjustPrice]))
+  const minMinusHold = usePointerStepRepeat(() => adjustPrice('min', -1))
+  const minPlusHold = usePointerStepRepeat(() => adjustPrice('min', 1))
+  const maxMinusHold = usePointerStepRepeat(() => adjustPrice('max', -1))
+  const maxPlusHold = usePointerStepRepeat(() => adjustPrice('max', 1))
 
   return {
     searchInput,

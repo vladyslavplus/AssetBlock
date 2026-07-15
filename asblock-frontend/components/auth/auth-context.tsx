@@ -1,7 +1,7 @@
 'use client'
 
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { createContext, useCallback, useContext, useMemo, type ReactNode } from 'react'
+import { createContext, useContext, type ReactNode } from 'react'
 import type { SessionUser } from '@/lib/auth/auth-types'
 import { authKeys, fetchSessionUser } from '@/lib/auth/auth-query'
 import { isAdminRole } from '@/lib/auth/roles'
@@ -40,26 +40,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       : 'anonymous'
   const isAdmin = isAdminRole(user?.role)
 
-  const refresh = useCallback(async () => {
+  const refresh = async () => {
     await queryClient.invalidateQueries({ queryKey: authKeys.session() })
     await queryClient.refetchQueries({ queryKey: authKeys.session() })
-  }, [queryClient])
+  }
 
-  const logout = useCallback(async () => {
+  const logout = async () => {
     await fetch('/api/auth/logout', { method: 'POST' })
     queryClient.clear()
-  }, [queryClient])
+  }
 
-  const value = useMemo(
-    () => ({
-      user,
-      status,
-      isAdmin,
-      refresh,
-      logout,
-    }),
-    [user, status, isAdmin, refresh, logout],
-  )
+  const value = { user, status, isAdmin, refresh, logout }
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
 }

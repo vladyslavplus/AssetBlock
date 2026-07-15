@@ -1,6 +1,5 @@
 'use client'
 
-import { useCallback } from 'react'
 import { Minus, Plus } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { usePointerStepRepeat } from '@/hooks/use-pointer-step-repeat'
@@ -26,28 +25,25 @@ export function SellerPriceStepInput({
   onChange,
   onBlur,
 }: SellerPriceStepInputProps) {
-  const step = useCallback(
-    (delta: number) => {
-      if (value === undefined && delta > 0) {
-        onChange(1)
-        return
-      }
-      if (value === undefined && delta < 0) {
-        return
-      }
-      const base = value ?? 0
-      const next = Math.round((base + delta) * 100) / 100
-      if (next < MIN_USD) {
-        onChange(undefined)
-        return
-      }
-      onChange(next)
-    },
-    [value, onChange],
-  )
+  const step = (delta: number) => {
+    if (value === undefined && delta > 0) {
+      onChange(1)
+      return
+    }
+    if (value === undefined && delta < 0) {
+      return
+    }
+    const base = value ?? 0
+    const next = Math.round((base + delta) * 100) / 100
+    if (next < MIN_USD) {
+      onChange(undefined)
+      return
+    }
+    onChange(next)
+  }
 
-  const repeatMinus = usePointerStepRepeat(useCallback(() => step(-1), [step]))
-  const repeatPlus = usePointerStepRepeat(useCallback(() => step(1), [step]))
+  const repeatMinus = usePointerStepRepeat(() => step(-1))
+  const repeatPlus = usePointerStepRepeat(() => step(1))
 
   const handleInputChange = (raw: string) => {
     if (raw === '') {

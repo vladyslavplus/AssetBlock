@@ -10,7 +10,7 @@ import {
 import { formatDistanceToNow } from 'date-fns'
 import { Bell, BellOff, Loader2, RotateCw } from 'lucide-react'
 import Link from 'next/link'
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { toast } from 'sonner'
 
 import { useAuth } from '@/components/auth/auth-context'
@@ -106,10 +106,7 @@ export function NotificationBell() {
     enabled: status === 'authenticated' && open,
   })
 
-  const items = useMemo(
-    () => inboxQuery.data?.pages.flatMap((p) => p.items ?? []) ?? [],
-    [inboxQuery.data],
-  )
+  const items = inboxQuery.data?.pages.flatMap((page) => page.items ?? []) ?? []
 
   const unreadCount = unreadQuery.data ?? 0
 

@@ -19,7 +19,7 @@ export function AccountProfileForm({ controller }: AccountProfileFormProps) {
     socialPlatformsLoading,
     socialPlatformsError,
     socialUrls,
-    setSocialUrls,
+    setSocialUrl,
     profileForm,
     profileFields,
     profileValues,
@@ -135,12 +135,7 @@ export function AccountProfileForm({ controller }: AccountProfileFormProps) {
                   placeholder="https://…"
                   autoComplete="off"
                   value={socialUrls[platform.id] ?? ''}
-                  onChange={(event) =>
-                    setSocialUrls((previous) => ({
-                      ...previous,
-                      [platform.id]: event.target.value,
-                    }))
-                  }
+                  onChange={(event) => setSocialUrl(platform.id, event.target.value)}
                   disabled={socialPlatformsLoading || savingProfile}
                   className="bg-input border-border"
                 />
