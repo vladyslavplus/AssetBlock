@@ -73,6 +73,9 @@ public static class DependencyInjection
         services.AddScoped<ISocialPlatformStore, SocialPlatformStore>();
         services.AddScoped<INotificationStore, NotificationStore>();
         services.AddScoped<ITagStore, TagStore>();
+        services.AddScoped<IAuditStore, AuditStore>();
+        services.AddScoped<IAuditWriter, AuditWriter>();
+        services.AddScoped<IAuditContextAccessor, NullAuditContextAccessor>();
         services.AddScoped<IPaymentService, StripePaymentService>();
         services.AddScoped<IDownloadService, DownloadService>();
         services.AddSingleton<IMinioClient>(sp =>

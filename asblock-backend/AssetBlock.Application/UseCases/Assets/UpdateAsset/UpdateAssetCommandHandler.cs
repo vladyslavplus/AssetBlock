@@ -1,6 +1,8 @@
 using Ardalis.Result;
 using AssetBlock.Domain.Abstractions.Services;
 using AssetBlock.Domain.Core.Constants;
+using AssetBlock.Domain.Core.Dto.Audit;
+using AssetBlock.Domain.Core.Enums;
 using MediatR;
 using Microsoft.Extensions.Logging;
 
@@ -9,6 +11,8 @@ namespace AssetBlock.Application.UseCases.Assets.UpdateAsset;
 internal sealed class UpdateAssetCommandHandler(
     IAssetStore assetStore,
     ICategoryStore categoryStore,
+    IUnitOfWork unitOfWork,
+    IAuditWriter auditWriter,
     ICacheService cache,
     ILogger<UpdateAssetCommandHandler> logger) : IRequestHandler<UpdateAssetCommand, Result>
 {
@@ -24,6 +28,11 @@ internal sealed class UpdateAssetCommandHandler(
 
             if (asset.AuthorId != request.UserId)
             {
+                await auditWriter.WriteBestEffort(new AuditEvent(
+                    AuditActions.ASSET_UPDATE,
+                    AuditOutcome.DENIED,
+                    AuditResourceTypes.ASSET,
+                    request.AssetId.ToString()), cancellationToken);
                 return Result.Forbidden(ErrorCodes.ERR_FORBIDDEN);
             }
 
@@ -41,13 +50,48 @@ internal sealed class UpdateAssetCommandHandler(
                 }
             }
 
-            var updated = await assetStore.Update(
-                request.AssetId,
-                request.Title,
-                request.Description,
-                request.Price,
-                request.CategoryId,
-                cancellationToken);
+            var changedFields = new List<string>();
+            if (request.Title is not null)
+            {
+                changedFields.Add("title");
+            }
+
+            if (request.Description is not null)
+            {
+                changedFields.Add("description");
+            }
+
+            if (request.Price.HasValue)
+            {
+                changedFields.Add("price");
+            }
+
+            if (request.CategoryId.HasValue)
+            {
+                changedFields.Add("categoryId");
+            }
+
+            bool updated = false;
+            await unitOfWork.ExecuteInTransaction(async ct =>
+            {
+                updated = await assetStore.Update(
+                    request.AssetId,
+                    request.Title,
+                    request.Description,
+                    request.Price,
+                    request.CategoryId,
+                    ct);
+
+                if (updated)
+                {
+                    await auditWriter.Write(new AuditEvent(
+                        AuditActions.ASSET_UPDATE,
+                        AuditOutcome.SUCCESS,
+                        AuditResourceTypes.ASSET,
+                        request.AssetId.ToString(),
+                        new Dictionary<string, object?> { ["changedFields"] = changedFields }), ct);
+                }
+            }, cancellationToken);
 
             if (!updated)
             {

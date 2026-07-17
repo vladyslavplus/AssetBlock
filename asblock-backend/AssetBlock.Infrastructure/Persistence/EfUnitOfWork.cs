@@ -1,5 +1,4 @@
 using AssetBlock.Domain.Abstractions.Services;
-using Microsoft.EntityFrameworkCore;
 
 namespace AssetBlock.Infrastructure.Persistence;
 

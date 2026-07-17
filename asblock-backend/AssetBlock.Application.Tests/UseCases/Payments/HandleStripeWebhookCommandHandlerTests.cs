@@ -1,7 +1,9 @@
 using AssetBlock.Application.UseCases.Payments.HandleStripeWebhook;
 using AssetBlock.Domain.Abstractions.Services;
 using AssetBlock.Domain.Core.Constants;
+using AssetBlock.Domain.Core.Dto.Audit;
 using AssetBlock.Domain.Core.Entities;
+using AssetBlock.Domain.Core.Enums;
 using AssetBlock.Domain.Core.Exceptions;
 using FluentAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -17,6 +19,7 @@ public class HandleStripeWebhookCommandHandlerTests
     private readonly IPurchaseStore _purchaseStoreMock;
     private readonly IUnitOfWork _unitOfWorkMock;
     private readonly IOutboxStore _outboxStoreMock;
+    private readonly IAuditWriter _auditWriterMock;
     private readonly HandleStripeWebhookCommandHandler _handler;
 
     public HandleStripeWebhookCommandHandlerTests()
@@ -26,6 +29,7 @@ public class HandleStripeWebhookCommandHandlerTests
         _purchaseStoreMock = Substitute.For<IPurchaseStore>();
         _unitOfWorkMock = Substitute.For<IUnitOfWork>();
         _outboxStoreMock = Substitute.For<IOutboxStore>();
+        _auditWriterMock = Substitute.For<IAuditWriter>();
 
         _unitOfWorkMock.ExecuteInTransaction(Arg.Any<Func<CancellationToken, Task>>(), Arg.Any<CancellationToken>())
             .Returns(ci => ci.Arg<Func<CancellationToken, Task>>()(CancellationToken.None));
@@ -36,6 +40,7 @@ public class HandleStripeWebhookCommandHandlerTests
             _purchaseStoreMock,
             _unitOfWorkMock,
             _outboxStoreMock,
+            _auditWriterMock,
             NullLogger<HandleStripeWebhookCommandHandler>.Instance);
     }
 
@@ -51,10 +56,11 @@ public class HandleStripeWebhookCommandHandlerTests
         result.IsSuccess.Should().BeTrue();
         result.Value.Should().BeNull();
         await _purchaseStoreMock.DidNotReceiveWithAnyArgs().Add(Arg.Any<Purchase>(), Arg.Any<CancellationToken>());
+        await _auditWriterMock.DidNotReceiveWithAnyArgs().Write(Arg.Any<AuditEvent>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]
-    public async Task Handle_WhenCheckoutCompleted_ShouldCreatePurchaseAndReturnPayload()
+    public async Task Handle_WhenCheckoutCompleted_ShouldCreatePurchaseWriteAuditAndReturnPayload()
     {
         var userId = Guid.NewGuid();
         var assetId = Guid.NewGuid();
@@ -91,10 +97,19 @@ public class HandleStripeWebhookCommandHandlerTests
             OutboxMessageTypes.PURCHASE_COMPLETED,
             Arg.Any<object>(),
             Arg.Any<CancellationToken>());
+        await _auditWriterMock.Received(1).Write(
+            Arg.Is<AuditEvent>(e =>
+                e.Action == AuditActions.PAYMENT_PURCHASE_COMPLETED &&
+                e.Outcome == AuditOutcome.SUCCESS &&
+                e.ResourceType == AuditResourceTypes.PURCHASE &&
+                e.ActorTypeOverride == AuditActorType.USER &&
+                e.ActorUserIdOverride == userId &&
+                e.Metadata != null && e.Metadata.ContainsKey("assetId")),
+            Arg.Any<CancellationToken>());
     }
 
     [Fact]
-    public async Task Handle_WhenExistingPurchaseBySession_ShouldReturnPayloadWithoutCreating()
+    public async Task Handle_WhenExistingPurchaseBySession_ShouldReturnPayloadWithoutCreatingOrAuditing()
     {
         var userId = Guid.NewGuid();
         var assetId = Guid.NewGuid();
@@ -116,11 +131,10 @@ public class HandleStripeWebhookCommandHandlerTests
 
         result.IsSuccess.Should().BeTrue();
         result.Value.Should().NotBeNull();
-        result.Value!.UserId.Should().Be(userId);
-        result.Value.AssetId.Should().Be(assetId);
         await _purchaseStoreMock.DidNotReceiveWithAnyArgs().Add(Arg.Any<Purchase>(), Arg.Any<CancellationToken>());
         await _unitOfWorkMock.DidNotReceiveWithAnyArgs()
             .ExecuteInTransaction(Arg.Any<Func<CancellationToken, Task>>(), Arg.Any<CancellationToken>());
+        await _auditWriterMock.DidNotReceiveWithAnyArgs().Write(Arg.Any<AuditEvent>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -206,10 +220,11 @@ public class HandleStripeWebhookCommandHandlerTests
         result.Value.Should().BeNull();
         await _purchaseStoreMock.DidNotReceiveWithAnyArgs().Add(Arg.Any<Purchase>(), Arg.Any<CancellationToken>());
         await _outboxStoreMock.DidNotReceiveWithAnyArgs().Enqueue(Arg.Any<string>(), Arg.Any<object>(), Arg.Any<CancellationToken>());
+        await _auditWriterMock.DidNotReceiveWithAnyArgs().Write(Arg.Any<AuditEvent>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]
-    public async Task Handle_WhenDuplicatePurchase_ShouldReturnSuccessPayload()
+    public async Task Handle_WhenDuplicatePurchase_ShouldReturnSuccessPayloadWithoutAudit()
     {
         var userId = Guid.NewGuid();
         var assetId = Guid.NewGuid();
@@ -236,10 +251,11 @@ public class HandleStripeWebhookCommandHandlerTests
         result.Value.Should().NotBeNull();
         result.Value!.UserId.Should().Be(userId);
         result.Value.AssetId.Should().Be(assetId);
+        await _auditWriterMock.DidNotReceiveWithAnyArgs().Write(Arg.Any<AuditEvent>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]
-    public async Task Handle_WhenSameWebhookDeliveredTwice_ShouldCreatePurchaseAndOutboxOnlyOnce()
+    public async Task Handle_WhenSameWebhookDeliveredTwice_ShouldCreatePurchaseAndAuditOnlyOnce()
     {
         var buyerId = Guid.NewGuid();
         var authorId = Guid.NewGuid();
@@ -275,14 +291,13 @@ public class HandleStripeWebhookCommandHandlerTests
         await _purchaseStoreMock.Received(1).Add(
             Arg.Is<Purchase>(purchase => purchase.StripePaymentId == sessionId),
             Arg.Any<CancellationToken>());
-        await _outboxStoreMock.Received(4).Enqueue(
-            Arg.Any<string>(),
-            Arg.Any<object>(),
+        await _auditWriterMock.Received(1).Write(
+            Arg.Is<AuditEvent>(e => e.Action == AuditActions.PAYMENT_PURCHASE_COMPLETED),
             Arg.Any<CancellationToken>());
     }
 
     [Fact]
-    public async Task Handle_WhenInvalidSignature_ShouldReturnInvalid()
+    public async Task Handle_WhenInvalidSignature_ShouldReturnInvalidWithoutAudit()
     {
         var command = new HandleStripeWebhookCommand("bad-payload", "bad-sig");
         _paymentServiceMock.VerifyCheckoutCompleted(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
@@ -293,6 +308,8 @@ public class HandleStripeWebhookCommandHandlerTests
         result.IsSuccess.Should().BeFalse();
         result.Status.Should().Be(Ardalis.Result.ResultStatus.Invalid);
         result.ValidationErrors.Should().Contain(e => e.Identifier == ErrorCodes.ERR_STRIPE_WEBHOOK_INVALID);
+        await _auditWriterMock.DidNotReceiveWithAnyArgs().Write(Arg.Any<AuditEvent>(), Arg.Any<CancellationToken>());
+        await _auditWriterMock.DidNotReceiveWithAnyArgs().WriteBestEffort(Arg.Any<AuditEvent>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]

@@ -1,6 +1,8 @@
 using Ardalis.Result;
 using AssetBlock.Domain.Abstractions.Services;
 using AssetBlock.Domain.Core.Constants;
+using AssetBlock.Domain.Core.Dto.Audit;
+using AssetBlock.Domain.Core.Enums;
 using MediatR;
 using Microsoft.Extensions.Logging;
 
@@ -8,6 +10,8 @@ namespace AssetBlock.Application.UseCases.Reviews.DeleteReview;
 
 internal sealed class DeleteReviewCommandHandler(
     IReviewStore reviewStore,
+    IUnitOfWork unitOfWork,
+    IAuditWriter auditWriter,
     ICacheService cache,
     ILogger<DeleteReviewCommandHandler> logger) : IRequestHandler<DeleteReviewCommand, Result>
 {
@@ -21,7 +25,20 @@ internal sealed class DeleteReviewCommandHandler(
                 return Result.NotFound(ErrorCodes.ERR_REVIEW_NOT_FOUND);
             }
 
-            var deleted = await reviewStore.Delete(request.Id, cancellationToken);
+            bool deleted = false;
+            await unitOfWork.ExecuteInTransaction(async ct =>
+            {
+                deleted = await reviewStore.Delete(request.Id, ct);
+                if (deleted)
+                {
+                    await auditWriter.Write(new AuditEvent(
+                        AuditActions.REVIEW_DELETE,
+                        AuditOutcome.SUCCESS,
+                        AuditResourceTypes.REVIEW,
+                        request.Id.ToString()), ct);
+                }
+            }, cancellationToken);
+
             if (!deleted)
             {
                 return Result.NotFound(ErrorCodes.ERR_REVIEW_NOT_FOUND);

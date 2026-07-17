@@ -9,6 +9,7 @@ public static class RateLimitingConstants
     {
         public const string AUTH_REGISTER = "auth-register";
         public const string AUTH_LOGIN = "auth-login";
+        public const string AUTH_REFRESH = "auth-refresh";
         public const string ASSETS_UPLOAD = "assets-upload";
         public const string ASSETS_DOWNLOAD = "assets-download";
         public const string PAYMENTS_CHECKOUT = "payments-checkout";
@@ -23,6 +24,9 @@ public static class RateLimitingConstants
 
         public const int AUTH_LOGIN_LIMIT = 10;
         public const int AUTH_LOGIN_PERIOD_SECONDS = 60;
+
+        public const int AUTH_REFRESH_LIMIT = 30;
+        public const int AUTH_REFRESH_PERIOD_SECONDS = 60;
 
         public const int ASSETS_UPLOAD_LIMIT = 10;
         public const int ASSETS_UPLOAD_PERIOD_SECONDS = 3600;

@@ -1,8 +1,10 @@
 using AssetBlock.Application.UseCases.Users.UpdateSocialLinks;
 using AssetBlock.Domain.Abstractions.Services;
 using AssetBlock.Domain.Core.Constants;
+using AssetBlock.Domain.Core.Dto.Audit;
 using AssetBlock.Domain.Core.Dto.Users;
 using AssetBlock.Domain.Core.Entities;
+using AssetBlock.Domain.Core.Enums;
 using FluentAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
 using NSubstitute;
@@ -13,11 +15,24 @@ public class UpdateUserSocialLinksCommandHandlerTests
 {
     private readonly IUserStore _userStore = Substitute.For<IUserStore>();
     private readonly ISocialPlatformStore _platformStore = Substitute.For<ISocialPlatformStore>();
+    private readonly IUnitOfWork _unitOfWorkMock;
+    private readonly IAuditWriter _auditWriterMock;
     private readonly UpdateUserSocialLinksCommandHandler _handler;
 
     public UpdateUserSocialLinksCommandHandlerTests()
     {
-        _handler = new UpdateUserSocialLinksCommandHandler(_userStore, _platformStore, NullLogger<UpdateUserSocialLinksCommandHandler>.Instance);
+        _unitOfWorkMock = Substitute.For<IUnitOfWork>();
+        _auditWriterMock = Substitute.For<IAuditWriter>();
+
+        _unitOfWorkMock.ExecuteInTransaction(Arg.Any<Func<CancellationToken, Task>>(), Arg.Any<CancellationToken>())
+            .Returns(ci => ci.Arg<Func<CancellationToken, Task>>()(CancellationToken.None));
+
+        _handler = new UpdateUserSocialLinksCommandHandler(
+            _userStore,
+            _platformStore,
+            _unitOfWorkMock,
+            _auditWriterMock,
+            NullLogger<UpdateUserSocialLinksCommandHandler>.Instance);
     }
 
     [Fact]
@@ -40,7 +55,7 @@ public class UpdateUserSocialLinksCommandHandlerTests
     }
 
     [Fact]
-    public async Task Handle_WhenReplaceSucceeds_ShouldReturnLinks()
+    public async Task Handle_WhenReplaceSucceeds_ShouldReturnLinksAndWriteAudit()
     {
         var userId = Guid.NewGuid();
         var platformId = Guid.NewGuid();
@@ -78,5 +93,12 @@ public class UpdateUserSocialLinksCommandHandlerTests
         result.IsSuccess.Should().BeTrue();
         result.Value.Should().HaveCount(1);
         result.Value[0].Url.Should().Be("https://github.com/u");
+        await _unitOfWorkMock.Received(1).ExecuteInTransaction(Arg.Any<Func<CancellationToken, Task>>(), Arg.Any<CancellationToken>());
+        await _auditWriterMock.Received(1).Write(
+            Arg.Is<AuditEvent>(e =>
+                e.Action == AuditActions.USER_SOCIAL_LINKS_UPDATE &&
+                e.Outcome == AuditOutcome.SUCCESS &&
+                e.ResourceId == userId.ToString()),
+            Arg.Any<CancellationToken>());
     }
 }

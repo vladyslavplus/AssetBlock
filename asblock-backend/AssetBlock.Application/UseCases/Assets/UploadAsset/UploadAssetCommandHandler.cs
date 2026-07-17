@@ -2,7 +2,9 @@ using System.IO.Pipelines;
 using AssetBlock.Application.Common;
 using AssetBlock.Domain.Abstractions.Services;
 using AssetBlock.Domain.Core.Constants;
+using AssetBlock.Domain.Core.Dto.Audit;
 using AssetBlock.Domain.Core.Entities;
+using AssetBlock.Domain.Core.Enums;
 using AssetBlock.Domain.Core.Exceptions;
 using AssetBlock.Domain.Core.Primitives.AppSettingsOptions;
 using Ardalis.Result;
@@ -20,6 +22,8 @@ internal sealed class UploadAssetCommandHandler(
     IEncryptionService encryptionService,
     IAssetArchiveInspector archiveInspector,
     IOptions<FileUploadOptions> fileUploadOptions,
+    IUnitOfWork unitOfWork,
+    IAuditWriter auditWriter,
     ICacheService cache,
     ILogger<UploadAssetCommandHandler> logger) : IRequestHandler<UploadAssetCommand, Result<Guid>>
 {
@@ -121,16 +125,31 @@ internal sealed class UploadAssetCommandHandler(
             DownloadLimitPerHour = request.Request.DownloadLimitPerHour,
             CreatedAt = now
         };
+
         try
         {
-            if (existingTags is { Count: > 0 })
+            await unitOfWork.ExecuteInTransaction(async ct =>
             {
-                await assetStore.AddWithTags(asset, existingTags, cancellationToken);
-            }
-            else
-            {
-                await assetStore.Add(asset, cancellationToken);
-            }
+                if (existingTags is { Count: > 0 })
+                {
+                    await assetStore.AddWithTags(asset, existingTags, ct);
+                }
+                else
+                {
+                    await assetStore.Add(asset, ct);
+                }
+
+                await auditWriter.Write(new AuditEvent(
+                    AuditActions.ASSET_CREATE,
+                    AuditOutcome.SUCCESS,
+                    AuditResourceTypes.ASSET,
+                    assetId.ToString(),
+                    new Dictionary<string, object?>
+                    {
+                        ["categoryId"] = request.Request.CategoryId.ToString(),
+                        ["tagCount"] = existingTags?.Count ?? 0
+                    }), ct);
+            }, cancellationToken);
         }
         catch (OperationCanceledException)
         {

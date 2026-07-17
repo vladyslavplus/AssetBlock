@@ -21,10 +21,9 @@ internal static class AssetBlockProblemDetails
             Title = title ?? TitleForStatus(status),
             Status = status,
             Detail = detail ?? ErrorCodesToErrorMessages.GetMessage(code),
-            Instance = httpContext.Request.Path.HasValue ? httpContext.Request.Path.Value : null
+            Instance = httpContext.Request.Path.HasValue ? httpContext.Request.Path.Value : null,
+            Extensions = { ["code"] = code, ["traceId"] = httpContext.TraceIdentifier }
         };
-        problem.Extensions["code"] = code;
-        problem.Extensions["traceId"] = httpContext.TraceIdentifier;
         return problem;
     }
 

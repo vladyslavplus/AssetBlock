@@ -2,8 +2,10 @@ using Ardalis.Result;
 using AssetBlock.Application.UseCases.Assets.UploadAsset;
 using AssetBlock.Domain.Abstractions.Services;
 using AssetBlock.Domain.Core.Constants;
+using AssetBlock.Domain.Core.Dto.Audit;
 using AssetBlock.Domain.Core.Dto.Assets;
 using AssetBlock.Domain.Core.Entities;
+using AssetBlock.Domain.Core.Enums;
 using AssetBlock.Domain.Core.Exceptions;
 using AssetBlock.Domain.Core.Primitives.AppSettingsOptions;
 using FluentAssertions;
@@ -21,6 +23,7 @@ public class UploadAssetCommandHandlerTests
     private readonly IAssetStorageService _assetStorageServiceMock;
     private readonly IEncryptionService _encryptionServiceMock;
     private readonly IAssetArchiveInspector _archiveInspectorMock;
+    private readonly IAuditWriter _auditWriterMock;
     private readonly ICacheService _cacheMock;
     private readonly UploadAssetCommandHandler _handler;
 
@@ -32,11 +35,15 @@ public class UploadAssetCommandHandlerTests
         _assetStorageServiceMock = Substitute.For<IAssetStorageService>();
         _encryptionServiceMock = Substitute.For<IEncryptionService>();
         _archiveInspectorMock = Substitute.For<IAssetArchiveInspector>();
+        var unitOfWorkMock = Substitute.For<IUnitOfWork>();
+        _auditWriterMock = Substitute.For<IAuditWriter>();
         _cacheMock = Substitute.For<ICacheService>();
 
         _encryptionServiceMock.ComputeCiphertextLength(Arg.Any<long>()).Returns(4L);
         _archiveInspectorMock.Inspect(Arg.Any<Stream>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
             .Returns(Task.CompletedTask);
+        unitOfWorkMock.ExecuteInTransaction(Arg.Any<Func<CancellationToken, Task>>(), Arg.Any<CancellationToken>())
+            .Returns(ci => ci.Arg<Func<CancellationToken, Task>>()(CancellationToken.None));
 
         _handler = new UploadAssetCommandHandler(
             _categoryStoreMock,
@@ -46,6 +53,8 @@ public class UploadAssetCommandHandlerTests
             _encryptionServiceMock,
             _archiveInspectorMock,
             Microsoft.Extensions.Options.Options.Create(new FileUploadOptions()),
+            unitOfWorkMock,
+            _auditWriterMock,
             _cacheMock,
             NullLogger<UploadAssetCommandHandler>.Instance);
     }
@@ -255,6 +264,16 @@ public class UploadAssetCommandHandlerTests
             a.FileName == "MyArchive.TAR.GZ" &&
             a.StorageKey.EndsWith(".tar.gz")
         ), Arg.Any<CancellationToken>());
+
+        await _auditWriterMock.Received(1).Write(
+            Arg.Is<AuditEvent>(e =>
+                e.Action == AuditActions.ASSET_CREATE
+                && e.Outcome == AuditOutcome.SUCCESS
+                && e.ResourceId == result.Value.ToString()
+                && e.Metadata != null
+                && e.Metadata.ContainsKey("categoryId")
+                && e.Metadata.ContainsKey("tagCount")),
+            Arg.Any<CancellationToken>());
 
         await _cacheMock.Received(1).RemoveByPrefix(CacheKeys.ASSETS_LIST_PREFIX, Arg.Any<CancellationToken>());
     }

@@ -1,6 +1,8 @@
 using Ardalis.Result;
 using AssetBlock.Domain.Abstractions.Services;
 using AssetBlock.Domain.Core.Constants;
+using AssetBlock.Domain.Core.Dto.Audit;
+using AssetBlock.Domain.Core.Enums;
 using MediatR;
 using AssetBlock.Domain.Core.Exceptions;
 using Microsoft.Extensions.Logging;
@@ -9,6 +11,8 @@ namespace AssetBlock.Application.UseCases.Categories.UpdateCategory;
 
 internal sealed class UpdateCategoryCommandHandler(
     ICategoryStore categoryStore,
+    IUnitOfWork unitOfWork,
+    IAuditWriter auditWriter,
     ICacheService cache,
     ILogger<UpdateCategoryCommandHandler> logger)
     : IRequestHandler<UpdateCategoryCommand, Result>
@@ -32,26 +36,39 @@ internal sealed class UpdateCategoryCommandHandler(
                 }
             }
 
+            var changedFields = new List<string>();
             if (request.Name is not null)
             {
                 category.Name = request.Name;
+                changedFields.Add("name");
             }
 
             if (request.Description is not null)
             {
                 category.Description = request.Description;
+                changedFields.Add("description");
             }
 
             if (request.Slug is not null)
             {
                 category.Slug = request.Slug;
+                changedFields.Add("slug");
             }
 
             category.UpdatedAt = DateTimeOffset.UtcNow;
 
-            await categoryStore.Update(category, cancellationToken);
-            await cache.RemoveByPrefix(CacheKeys.CATEGORIES_LIST_PREFIX, cancellationToken);
+            await unitOfWork.ExecuteInTransaction(async ct =>
+            {
+                await categoryStore.Update(category, ct);
+                await auditWriter.Write(new AuditEvent(
+                    AuditActions.CATEGORY_UPDATE,
+                    AuditOutcome.SUCCESS,
+                    AuditResourceTypes.CATEGORY,
+                    request.Id.ToString(),
+                    new Dictionary<string, object?> { ["changedFields"] = changedFields }), ct);
+            }, cancellationToken);
 
+            await cache.RemoveByPrefix(CacheKeys.CATEGORIES_LIST_PREFIX, cancellationToken);
             return Result.Success();
         }
         catch (DuplicateSlugException)

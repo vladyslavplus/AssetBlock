@@ -1,7 +1,9 @@
 using Ardalis.Result;
 using AssetBlock.Domain.Abstractions.Services;
 using AssetBlock.Domain.Core.Constants;
+using AssetBlock.Domain.Core.Dto.Audit;
 using AssetBlock.Domain.Core.Dto.Tags;
+using AssetBlock.Domain.Core.Enums;
 using MediatR;
 using Microsoft.Extensions.Logging;
 
@@ -10,6 +12,8 @@ namespace AssetBlock.Application.UseCases.Assets.AddAssetTag;
 internal sealed class AddAssetTagCommandHandler(
     IAssetStore assetStore,
     ITagStore tagStore,
+    IUnitOfWork unitOfWork,
+    IAuditWriter auditWriter,
     ICacheService cache,
     ILogger<AddAssetTagCommandHandler> logger) : IRequestHandler<AddAssetTagCommand, Result<TagDto>>
 {
@@ -23,6 +27,11 @@ internal sealed class AddAssetTagCommandHandler(
 
         if (asset.AuthorId != request.UserId)
         {
+            await auditWriter.WriteBestEffort(new AuditEvent(
+                AuditActions.ASSET_TAG_ADD,
+                AuditOutcome.DENIED,
+                AuditResourceTypes.ASSET,
+                request.AssetId.ToString()), cancellationToken);
             return Result.Forbidden(ErrorCodes.ERR_FORBIDDEN);
         }
 
@@ -47,7 +56,16 @@ internal sealed class AddAssetTagCommandHandler(
 
         try
         {
-            await assetStore.AddTag(asset.Id, tag.Id, cancellationToken);
+            await unitOfWork.ExecuteInTransaction(async ct =>
+            {
+                await assetStore.AddTag(asset.Id, tag.Id, ct);
+                await auditWriter.Write(new AuditEvent(
+                    AuditActions.ASSET_TAG_ADD,
+                    AuditOutcome.SUCCESS,
+                    AuditResourceTypes.ASSET,
+                    asset.Id.ToString(),
+                    new Dictionary<string, object?> { ["tagId"] = tag.Id.ToString() }), ct);
+            }, cancellationToken);
 
             try
             {

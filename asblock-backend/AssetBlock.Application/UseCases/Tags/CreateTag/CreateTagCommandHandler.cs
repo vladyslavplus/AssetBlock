@@ -1,8 +1,10 @@
 using Ardalis.Result;
 using AssetBlock.Domain.Abstractions.Services;
 using AssetBlock.Domain.Core.Constants;
+using AssetBlock.Domain.Core.Dto.Audit;
 using AssetBlock.Domain.Core.Dto.Tags;
 using AssetBlock.Domain.Core.Entities;
+using AssetBlock.Domain.Core.Enums;
 using AssetBlock.Domain.Core.Exceptions;
 using MediatR;
 using Microsoft.Extensions.Logging;
@@ -11,6 +13,8 @@ namespace AssetBlock.Application.UseCases.Tags.CreateTag;
 
 internal sealed class CreateTagCommandHandler(
     ITagStore tagStore,
+    IUnitOfWork unitOfWork,
+    IAuditWriter auditWriter,
     ICacheService cache,
     ILogger<CreateTagCommandHandler> logger) : IRequestHandler<CreateTagCommand, Result<TagDto>>
 {
@@ -32,7 +36,15 @@ internal sealed class CreateTagCommandHandler(
 
         try
         {
-            await tagStore.Add(tag, cancellationToken);
+            await unitOfWork.ExecuteInTransaction(async ct =>
+            {
+                await tagStore.Add(tag, ct);
+                await auditWriter.Write(new AuditEvent(
+                    AuditActions.TAG_CREATE,
+                    AuditOutcome.SUCCESS,
+                    AuditResourceTypes.TAG,
+                    tag.Id.ToString()), ct);
+            }, cancellationToken);
         }
         catch (DuplicateTagNameException)
         {

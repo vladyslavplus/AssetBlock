@@ -17,6 +17,7 @@ public sealed class ApplicationDbContext(DbContextOptions<ApplicationDbContext> 
     public DbSet<AssetTag> AssetTags => Set<AssetTag>();
     public DbSet<UserNotification> UserNotifications => Set<UserNotification>();
     public DbSet<OutboxMessage> OutboxMessages => Set<OutboxMessage>();
+    public DbSet<AuditLog> AuditLogs => Set<AuditLog>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -37,6 +38,7 @@ public sealed class ApplicationDbContext(DbContextOptions<ApplicationDbContext> 
             .HasName("similarity");
 
         ConfigurePostgresAssetSearch(modelBuilder);
+        ConfigurePostgresAudit(modelBuilder);
     }
 
     private static void ConfigurePostgresAssetSearch(ModelBuilder modelBuilder)
@@ -74,5 +76,13 @@ public sealed class ApplicationDbContext(DbContextOptions<ApplicationDbContext> 
         asset.HasIndex(a => new { a.AuthorId, a.CreatedAt, a.Id })
             .HasFilter("\"DeletedAt\" IS NULL")
             .HasDatabaseName("IX_assets_catalog_AuthorId_CreatedAt_Id");
+    }
+
+    private static void ConfigurePostgresAudit(ModelBuilder modelBuilder)
+    {
+        modelBuilder.Entity<AuditLog>()
+            .ToTable("audit_logs", table => table.HasCheckConstraint(
+                "CK_audit_logs_MetadataJson_Object",
+                "\"MetadataJson\" IS NULL OR jsonb_typeof(\"MetadataJson\") = 'object'"));
     }
 }

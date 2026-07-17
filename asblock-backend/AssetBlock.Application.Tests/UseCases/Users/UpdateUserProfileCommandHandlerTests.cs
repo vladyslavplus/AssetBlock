@@ -1,6 +1,8 @@
 using AssetBlock.Application.UseCases.Users.UpdateProfile;
 using AssetBlock.Domain.Abstractions.Services;
 using AssetBlock.Domain.Core.Constants;
+using AssetBlock.Domain.Core.Dto.Audit;
+using AssetBlock.Domain.Core.Enums;
 using AssetBlock.Domain.Core.Entities;
 using AssetBlock.Domain.Core.Exceptions;
 using FluentAssertions;
@@ -12,11 +14,23 @@ namespace AssetBlock.Application.Tests.UseCases.Users;
 public class UpdateUserProfileCommandHandlerTests
 {
     private readonly IUserStore _userStore = Substitute.For<IUserStore>();
+    private readonly IUnitOfWork _unitOfWorkMock;
+    private readonly IAuditWriter _auditWriterMock;
     private readonly UpdateUserProfileCommandHandler _handler;
 
     public UpdateUserProfileCommandHandlerTests()
     {
-        _handler = new UpdateUserProfileCommandHandler(_userStore, NullLogger<UpdateUserProfileCommandHandler>.Instance);
+        _unitOfWorkMock = Substitute.For<IUnitOfWork>();
+        _auditWriterMock = Substitute.For<IAuditWriter>();
+
+        _unitOfWorkMock.ExecuteInTransaction(Arg.Any<Func<CancellationToken, Task>>(), Arg.Any<CancellationToken>())
+            .Returns(ci => ci.Arg<Func<CancellationToken, Task>>()(CancellationToken.None));
+
+        _handler = new UpdateUserProfileCommandHandler(
+            _userStore,
+            _unitOfWorkMock,
+            _auditWriterMock,
+            NullLogger<UpdateUserProfileCommandHandler>.Instance);
     }
 
     [Fact]
@@ -56,7 +70,7 @@ public class UpdateUserProfileCommandHandlerTests
     }
 
     [Fact]
-    public async Task Handle_WhenOk_ShouldReturnUpdatedDto()
+    public async Task Handle_WhenOk_ShouldReturnUpdatedDtoAndWriteAuditInsideTransaction()
     {
         var id = Guid.NewGuid();
         var user = new User
@@ -76,6 +90,15 @@ public class UpdateUserProfileCommandHandlerTests
         result.Value.Username.Should().Be("newname");
         result.Value.Bio.Should().Be("bio");
         result.Value.IsPublicProfile.Should().BeTrue();
+
+        await _unitOfWorkMock.Received(1).ExecuteInTransaction(Arg.Any<Func<CancellationToken, Task>>(), Arg.Any<CancellationToken>());
+        await _auditWriterMock.Received(1).Write(
+            Arg.Is<AuditEvent>(e =>
+                e.Action == AuditActions.USER_PROFILE_UPDATE &&
+                e.Outcome == AuditOutcome.SUCCESS &&
+                e.ResourceType == AuditResourceTypes.USER &&
+                e.ResourceId == id.ToString()),
+            Arg.Any<CancellationToken>());
     }
 
     [Fact]

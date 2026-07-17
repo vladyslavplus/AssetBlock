@@ -14,6 +14,8 @@ builder.Host.UseSerilogConfiguration();
 
 builder.Services.AddApplication();
 builder.Services.AddInfrastructure(builder.Configuration);
+builder.Services.AddHttpContextAccessor();
+builder.Services.AddScoped<IAuditContextAccessor, HttpAuditContextAccessor>();
 builder.Services.AddFileUploadLimits(builder.Configuration);
 builder.Services.AddAssetBlockHealthChecks(builder.Configuration);
 builder.Services.Configure<RouteOptions>(options => options.LowercaseUrls = true);

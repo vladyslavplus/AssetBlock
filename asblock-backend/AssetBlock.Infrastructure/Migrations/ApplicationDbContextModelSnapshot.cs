@@ -127,6 +127,91 @@ namespace AssetBlock.Infrastructure.Migrations
                     b.ToTable("asset_tags", (string)null);
                 });
 
+            modelBuilder.Entity("AssetBlock.Domain.Core.Entities.AuditLog", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
+
+                    b.Property<string>("Action")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("ActorType")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<Guid?>("ActorUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("IpAddress")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("MetadataJson")
+                        .HasColumnType("jsonb");
+
+                    b.Property<DateTimeOffset>("OccurredAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Outcome")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<string>("ResourceId")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.Property<string>("ResourceType")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("TraceId")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.Property<string>("UserAgent")
+                        .HasMaxLength(512)
+                        .HasColumnType("character varying(512)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("OccurredAt", "Id")
+                        .IsDescending()
+                        .HasDatabaseName("IX_audit_logs_OccurredAt_Id");
+
+                    b.HasIndex("Action", "OccurredAt", "Id")
+                        .IsDescending(false, true, true)
+                        .HasDatabaseName("IX_audit_logs_Action_OccurredAt_Id");
+
+                    b.HasIndex("ActorUserId", "OccurredAt", "Id")
+                        .IsDescending(false, true, true)
+                        .HasDatabaseName("IX_audit_logs_ActorUserId_OccurredAt_Id");
+
+                    b.HasIndex("Outcome", "OccurredAt", "Id")
+                        .IsDescending(false, true, true)
+                        .HasDatabaseName("IX_audit_logs_Outcome_OccurredAt_Id");
+
+                    b.HasIndex("ResourceType", "ResourceId", "OccurredAt", "Id")
+                        .IsDescending(false, false, true, true)
+                        .HasDatabaseName("IX_audit_logs_ResourceType_ResourceId_OccurredAt_Id");
+
+                    b.ToTable("audit_logs", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_audit_logs_ActorType", "\"ActorType\" IN ('USER', 'SYSTEM', 'ANONYMOUS')");
+
+                            t.HasCheckConstraint("CK_audit_logs_MetadataJson_Object", "\"MetadataJson\" IS NULL OR jsonb_typeof(\"MetadataJson\") = 'object'");
+
+                            t.HasCheckConstraint("CK_audit_logs_Outcome", "\"Outcome\" IN ('SUCCESS', 'FAILURE', 'DENIED')");
+                        });
+                });
+
             modelBuilder.Entity("AssetBlock.Domain.Core.Entities.Category", b =>
                 {
                     b.Property<Guid>("Id")

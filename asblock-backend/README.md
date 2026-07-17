@@ -101,6 +101,20 @@ dotnet test AssetBlock.WebApi.IntegrationTests/AssetBlock.WebApi.IntegrationTest
 
 Bring up local app dependencies with `docker-compose.yml` in this folder when running the API outside tests.
 
+### Audit log
+
+Append-only `audit_logs` records security-sensitive and business-critical mutations (auth, account, assets, admin catalog writes, reviews, completed purchases). It is **not** a replacement for:
+
+- **Serilog** — technical HTTP/request diagnostics;
+- **transactional outbox** — reliable side-effect delivery after commit;
+- **seller analytics** — product metrics (separate model later).
+
+Success DB mutations write the audit row in the same `IUnitOfWork` transaction as business changes. Failure/denied paths use best-effort writes so audit infrastructure outages do not change the original API result. Metadata is allowlisted only (no passwords, tokens, Stripe payloads, comments, or full entity snapshots). `ActorUserId` has no FK to `users`.
+
+**Admin read:** `GET /api/admin/audit-logs` (Admin role). Frontend admin tab proxies through BFF `GET /api/admin/audit-logs`. IP and User-Agent are operational personal data; there is no automatic retention cleanup yet.
+
+**Extension rule:** when adding a critical mutation, decide whether it needs an audit event, pick stable `AuditActions` / `AuditResourceTypes` values, and list allowlisted metadata fields explicitly in the handler.
+
 ### Health checks
 
 - `GET /health/live` reports process liveness only and does not probe external dependencies.

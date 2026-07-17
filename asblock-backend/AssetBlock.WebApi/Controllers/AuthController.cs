@@ -33,6 +33,7 @@ public sealed class AuthController(ISender sender) : ApiControllerBase(sender)
     /// </summary>
     [HttpPost(ApiRoutes.Auth.REFRESH)]
     [AllowAnonymous]
+    [EnableRateLimiting(RateLimitingConstants.Policies.AUTH_REFRESH)]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> Refresh([FromBody] RefreshTokenRequest request, CancellationToken cancellationToken)

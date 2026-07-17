@@ -1,7 +1,9 @@
 using AssetBlock.Application.UseCases.Assets.DeleteAsset;
 using AssetBlock.Domain.Abstractions.Services;
 using AssetBlock.Domain.Core.Constants;
+using AssetBlock.Domain.Core.Dto.Audit;
 using AssetBlock.Domain.Core.Entities;
+using AssetBlock.Domain.Core.Enums;
 using FluentAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
 using NSubstitute;
@@ -14,6 +16,7 @@ public class DeleteAssetCommandHandlerTests
     private readonly IAssetStore _assetStoreMock;
     private readonly IPurchaseStore _purchaseStoreMock;
     private readonly IOutboxStore _outboxStoreMock;
+    private readonly IAuditWriter _auditWriterMock;
     private readonly ICacheService _cacheMock;
     private readonly DeleteAssetCommandHandler _handler;
 
@@ -23,6 +26,7 @@ public class DeleteAssetCommandHandlerTests
         _purchaseStoreMock = Substitute.For<IPurchaseStore>();
         var unitOfWorkMock = Substitute.For<IUnitOfWork>();
         _outboxStoreMock = Substitute.For<IOutboxStore>();
+        _auditWriterMock = Substitute.For<IAuditWriter>();
         _cacheMock = Substitute.For<ICacheService>();
         _purchaseStoreMock.HasPurchasesForAsset(Arg.Any<Guid>(), Arg.Any<CancellationToken>()).Returns(false);
 
@@ -34,6 +38,7 @@ public class DeleteAssetCommandHandlerTests
             _purchaseStoreMock,
             unitOfWorkMock,
             _outboxStoreMock,
+            _auditWriterMock,
             _cacheMock,
             NullLogger<DeleteAssetCommandHandler>.Instance);
     }
@@ -51,7 +56,7 @@ public class DeleteAssetCommandHandlerTests
     }
 
     [Fact]
-    public async Task Handle_WhenUserIsNotAuthor_ShouldReturnForbidden()
+    public async Task Handle_WhenUserIsNotAuthor_ShouldReturnForbiddenAndWriteDeniedAudit()
     {
         var command = new DeleteAssetCommand(Guid.NewGuid(), Guid.NewGuid());
         var asset = new Asset { Id = command.Id, AuthorId = Guid.NewGuid(), CategoryId = Guid.NewGuid(), Title = "t", StorageKey = "k", FileName = "f" };
@@ -61,10 +66,17 @@ public class DeleteAssetCommandHandlerTests
 
         result.IsSuccess.Should().BeFalse();
         result.Errors.Should().Contain(ErrorCodes.ERR_FORBIDDEN);
+        await _auditWriterMock.Received(1).WriteBestEffort(
+            Arg.Is<AuditEvent>(e =>
+                e.Action == AuditActions.ASSET_DELETE &&
+                e.Outcome == AuditOutcome.DENIED &&
+                e.ResourceType == AuditResourceTypes.ASSET &&
+                e.ResourceId == command.Id.ToString()),
+            Arg.Any<CancellationToken>());
     }
 
     [Fact]
-    public async Task Handle_WhenSuccess_ShouldHardDeleteEnqueueBlobOutboxAndClearCache()
+    public async Task Handle_WhenSuccess_ShouldHardDeleteEnqueueBlobOutboxAuditAndClearCache()
     {
         var authorId = Guid.NewGuid();
         var command = new DeleteAssetCommand(Guid.NewGuid(), authorId);
@@ -81,11 +93,17 @@ public class DeleteAssetCommandHandlerTests
             OutboxMessageTypes.ASSET_BLOB_DELETE,
             Arg.Any<object>(),
             Arg.Any<CancellationToken>());
+        await _auditWriterMock.Received(1).Write(
+            Arg.Is<AuditEvent>(e =>
+                e.Action == AuditActions.ASSET_HARD_DELETE &&
+                e.Outcome == AuditOutcome.SUCCESS &&
+                e.ResourceId == asset.Id.ToString()),
+            Arg.Any<CancellationToken>());
         await _cacheMock.Received(1).RemoveByPrefix(CacheKeys.ASSETS_LIST_PREFIX);
     }
 
     [Fact]
-    public async Task Handle_WhenPurchasesExist_ShouldSoftDeleteWithoutOutbox()
+    public async Task Handle_WhenPurchasesExist_ShouldSoftDeleteWithAuditWithoutOutbox()
     {
         var authorId = Guid.NewGuid();
         var command = new DeleteAssetCommand(Guid.NewGuid(), authorId);
@@ -99,6 +117,11 @@ public class DeleteAssetCommandHandlerTests
         await _assetStoreMock.Received(1).SoftDelete(command.Id, Arg.Any<DateTimeOffset>(), Arg.Any<CancellationToken>());
         await _assetStoreMock.DidNotReceive().Delete(Arg.Any<Guid>(), Arg.Any<CancellationToken>());
         await _outboxStoreMock.DidNotReceiveWithAnyArgs().Enqueue(Arg.Any<string>(), Arg.Any<object>(), Arg.Any<CancellationToken>());
+        await _auditWriterMock.Received(1).Write(
+            Arg.Is<AuditEvent>(e =>
+                e.Action == AuditActions.ASSET_SOFT_DELETE &&
+                e.Outcome == AuditOutcome.SUCCESS),
+            Arg.Any<CancellationToken>());
         await _cacheMock.Received(1).RemoveByPrefix(CacheKeys.ASSETS_LIST_PREFIX);
     }
 
@@ -126,6 +149,7 @@ public class DeleteAssetCommandHandlerTests
         await _assetStoreMock.DidNotReceive().Delete(Arg.Any<Guid>(), Arg.Any<CancellationToken>());
         await _assetStoreMock.DidNotReceive().SoftDelete(Arg.Any<Guid>(), Arg.Any<DateTimeOffset>(), Arg.Any<CancellationToken>());
         await _outboxStoreMock.DidNotReceiveWithAnyArgs().Enqueue(Arg.Any<string>(), Arg.Any<object>(), Arg.Any<CancellationToken>());
+        await _auditWriterMock.DidNotReceiveWithAnyArgs().Write(Arg.Any<AuditEvent>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]

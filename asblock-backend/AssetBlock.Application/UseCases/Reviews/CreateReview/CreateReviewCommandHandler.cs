@@ -3,6 +3,7 @@ using Ardalis.Result;
 using AssetBlock.Application.Common;
 using AssetBlock.Domain.Abstractions.Services;
 using AssetBlock.Domain.Core.Constants;
+using AssetBlock.Domain.Core.Dto.Audit;
 using AssetBlock.Domain.Core.Dto.Notifications;
 using AssetBlock.Domain.Core.Dto.Outbox;
 using AssetBlock.Domain.Core.Enums;
@@ -17,6 +18,7 @@ internal sealed class CreateReviewCommandHandler(
     IAssetStore assetStore,
     IUnitOfWork unitOfWork,
     IOutboxStore outboxStore,
+    IAuditWriter auditWriter,
     ICacheService cache,
     ILogger<CreateReviewCommandHandler> logger) : IRequestHandler<CreateReviewCommand, Result>
 {
@@ -60,7 +62,12 @@ internal sealed class CreateReviewCommandHandler(
         {
             await unitOfWork.ExecuteInTransaction(async ct =>
             {
-                await reviewStore.Create(request.AssetId, request.UserId, request.Rating, request.Comment, ct);
+                var review = await reviewStore.Create(
+                    request.AssetId,
+                    request.UserId,
+                    request.Rating,
+                    request.Comment,
+                    ct);
 
                 var metadata = JsonSerializer.Serialize(
                     new ReviewReceivedMessage(asset.Id, asset.Title, request.UserId, request.Rating),
@@ -74,6 +81,17 @@ internal sealed class CreateReviewCommandHandler(
                         NotificationHubMethods.REVIEW_RECEIVED,
                         metadata),
                     ct);
+
+                await auditWriter.Write(new AuditEvent(
+                    AuditActions.REVIEW_CREATE,
+                    AuditOutcome.SUCCESS,
+                    AuditResourceTypes.REVIEW,
+                    review.Id.ToString(),
+                    new Dictionary<string, object?>
+                    {
+                        ["assetId"] = request.AssetId.ToString(),
+                        ["rating"] = request.Rating
+                    }), ct);
             }, cancellationToken);
 
             try

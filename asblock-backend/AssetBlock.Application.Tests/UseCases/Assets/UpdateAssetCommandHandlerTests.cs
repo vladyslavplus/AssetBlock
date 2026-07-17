@@ -1,7 +1,9 @@
 using AssetBlock.Application.UseCases.Assets.UpdateAsset;
 using AssetBlock.Domain.Abstractions.Services;
 using AssetBlock.Domain.Core.Constants;
+using AssetBlock.Domain.Core.Dto.Audit;
 using AssetBlock.Domain.Core.Entities;
+using AssetBlock.Domain.Core.Enums;
 using FluentAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
 using NSubstitute;
@@ -12,6 +14,7 @@ public class UpdateAssetCommandHandlerTests
 {
     private readonly IAssetStore _assetStoreMock;
     private readonly ICategoryStore _categoryStoreMock;
+    private readonly IAuditWriter _auditWriterMock;
     private readonly ICacheService _cacheMock;
     private readonly UpdateAssetCommandHandler _handler;
 
@@ -19,11 +22,18 @@ public class UpdateAssetCommandHandlerTests
     {
         _assetStoreMock = Substitute.For<IAssetStore>();
         _categoryStoreMock = Substitute.For<ICategoryStore>();
+        var unitOfWorkMock = Substitute.For<IUnitOfWork>();
+        _auditWriterMock = Substitute.For<IAuditWriter>();
         _cacheMock = Substitute.For<ICacheService>();
+
+        unitOfWorkMock.ExecuteInTransaction(Arg.Any<Func<CancellationToken, Task>>(), Arg.Any<CancellationToken>())
+            .Returns(ci => ci.Arg<Func<CancellationToken, Task>>()(CancellationToken.None));
 
         _handler = new UpdateAssetCommandHandler(
             _assetStoreMock,
             _categoryStoreMock,
+            unitOfWorkMock,
+            _auditWriterMock,
             _cacheMock,
             NullLogger<UpdateAssetCommandHandler>.Instance);
     }
@@ -52,6 +62,12 @@ public class UpdateAssetCommandHandlerTests
 
         result.IsSuccess.Should().BeFalse();
         result.Errors.Should().Contain(ErrorCodes.ERR_FORBIDDEN);
+        await _auditWriterMock.Received(1).WriteBestEffort(
+            Arg.Is<AuditEvent>(e =>
+                e.Action == AuditActions.ASSET_UPDATE
+                && e.Outcome == AuditOutcome.DENIED
+                && e.ResourceId == command.AssetId.ToString()),
+            Arg.Any<CancellationToken>());
         await _assetStoreMock.DidNotReceive().Update(Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<decimal?>(), Arg.Any<Guid?>(), Arg.Any<CancellationToken>());
     }
 
@@ -87,6 +103,13 @@ public class UpdateAssetCommandHandlerTests
 
         result.IsSuccess.Should().BeTrue();
         await _assetStoreMock.Received(1).Update(command.AssetId, "Updated Title", null, null, null, Arg.Any<CancellationToken>());
+        await _auditWriterMock.Received(1).Write(
+            Arg.Is<AuditEvent>(e =>
+                e.Action == AuditActions.ASSET_UPDATE
+                && e.Outcome == AuditOutcome.SUCCESS
+                && e.ResourceId == command.AssetId.ToString()
+                && e.Metadata != null),
+            Arg.Any<CancellationToken>());
         await _cacheMock.Received(1).RemoveByPrefix(CacheKeys.ASSETS_LIST_PREFIX, Arg.Any<CancellationToken>());
     }
 

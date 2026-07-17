@@ -63,6 +63,11 @@ public static class ApiRoutes
         public const string ME_ASSETS = "me/assets";
     }
 
+    public static class Admin
+    {
+        public const string AUDIT_LOGS = "api/admin/audit-logs";
+    }
+
     public static class Hubs
     {
         // Keep absolute PathString format; used by MapHub and JWT OnMessageReceived StartsWithSegments check.

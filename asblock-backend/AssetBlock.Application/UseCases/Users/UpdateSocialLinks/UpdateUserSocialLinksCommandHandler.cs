@@ -1,7 +1,9 @@
 using AssetBlock.Domain.Abstractions.Services;
 using AssetBlock.Domain.Core.Constants;
+using AssetBlock.Domain.Core.Dto.Audit;
 using AssetBlock.Domain.Core.Dto.Users;
 using AssetBlock.Domain.Core.Entities;
+using AssetBlock.Domain.Core.Enums;
 using Ardalis.Result;
 using MediatR;
 using Microsoft.Extensions.Logging;
@@ -11,6 +13,8 @@ namespace AssetBlock.Application.UseCases.Users.UpdateSocialLinks;
 internal sealed class UpdateUserSocialLinksCommandHandler(
     IUserStore userStore,
     ISocialPlatformStore socialPlatformStore,
+    IUnitOfWork unitOfWork,
+    IAuditWriter auditWriter,
     ILogger<UpdateUserSocialLinksCommandHandler> logger) : IRequestHandler<UpdateUserSocialLinksCommand, Result<List<UserSocialLinkDto>>>
 {
     public async Task<Result<List<UserSocialLinkDto>>> Handle(UpdateUserSocialLinksCommand request, CancellationToken cancellationToken)
@@ -30,7 +34,7 @@ internal sealed class UpdateUserSocialLinksCommandHandler(
             deduped.Add((link.PlatformId, link.Url));
         }
 
-        foreach (var (platformId, _) in deduped)
+        foreach ((Guid platformId, _) in deduped)
         {
             if (!platformIds.Contains(platformId))
             {
@@ -39,7 +43,21 @@ internal sealed class UpdateUserSocialLinksCommandHandler(
             }
         }
 
-        var ok = await userStore.ReplaceUserSocialLinks(request.UserId, deduped, cancellationToken);
+        bool ok = false;
+        await unitOfWork.ExecuteInTransaction(async ct =>
+        {
+            ok = await userStore.ReplaceUserSocialLinks(request.UserId, deduped, ct);
+            if (ok)
+            {
+                await auditWriter.Write(new AuditEvent(
+                    AuditActions.USER_SOCIAL_LINKS_UPDATE,
+                    AuditOutcome.SUCCESS,
+                    AuditResourceTypes.USER,
+                    request.UserId.ToString(),
+                    new Dictionary<string, object?> { ["changedFields"] = new[] { "socialLinks" } }), ct);
+            }
+        }, cancellationToken);
+
         if (!ok)
         {
             return Result.NotFound(ErrorCodes.ERR_USER_NOT_FOUND);

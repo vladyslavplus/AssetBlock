@@ -1,7 +1,9 @@
 using Ardalis.Result;
 using AssetBlock.Domain.Abstractions.Services;
 using AssetBlock.Domain.Core.Constants;
+using AssetBlock.Domain.Core.Dto.Audit;
 using AssetBlock.Domain.Core.Dto.Tags;
+using AssetBlock.Domain.Core.Enums;
 using AssetBlock.Domain.Core.Exceptions;
 using MediatR;
 using Microsoft.Extensions.Logging;
@@ -10,6 +12,8 @@ namespace AssetBlock.Application.UseCases.Tags.UpdateTag;
 
 internal sealed class UpdateTagCommandHandler(
     ITagStore tagStore,
+    IUnitOfWork unitOfWork,
+    IAuditWriter auditWriter,
     ICacheService cache,
     ILogger<UpdateTagCommandHandler> logger) : IRequestHandler<UpdateTagCommand, Result<TagDto>>
 {
@@ -37,7 +41,17 @@ internal sealed class UpdateTagCommandHandler(
         {
             tag.Name = normalizedName;
             tag.UpdatedAt = DateTimeOffset.UtcNow;
-            await tagStore.Update(tag, cancellationToken);
+
+            await unitOfWork.ExecuteInTransaction(async ct =>
+            {
+                await tagStore.Update(tag, ct);
+                await auditWriter.Write(new AuditEvent(
+                    AuditActions.TAG_UPDATE,
+                    AuditOutcome.SUCCESS,
+                    AuditResourceTypes.TAG,
+                    tag.Id.ToString(),
+                    new Dictionary<string, object?> { ["changedFields"] = new[] { "name" } }), ct);
+            }, cancellationToken);
         }
         catch (DuplicateTagNameException)
         {

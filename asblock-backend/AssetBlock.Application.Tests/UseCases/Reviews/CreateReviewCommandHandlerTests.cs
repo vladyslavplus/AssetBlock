@@ -2,6 +2,7 @@ using Ardalis.Result;
 using AssetBlock.Application.UseCases.Reviews.CreateReview;
 using AssetBlock.Domain.Abstractions.Services;
 using AssetBlock.Domain.Core.Constants;
+using AssetBlock.Domain.Core.Dto.Audit;
 using AssetBlock.Domain.Core.Dto.Outbox;
 using AssetBlock.Domain.Core.Entities;
 using AssetBlock.Domain.Core.Enums;
@@ -18,6 +19,7 @@ public class CreateReviewCommandHandlerTests
     private readonly IPurchaseStore _purchaseStoreMock;
     private readonly IAssetStore _assetStoreMock;
     private readonly IOutboxStore _outboxStoreMock;
+    private readonly IAuditWriter _auditWriterMock;
     private readonly ICacheService _cacheMock;
     private readonly CreateReviewCommandHandler _handler;
 
@@ -28,6 +30,7 @@ public class CreateReviewCommandHandlerTests
         _assetStoreMock = Substitute.For<IAssetStore>();
         var unitOfWorkMock = Substitute.For<IUnitOfWork>();
         _outboxStoreMock = Substitute.For<IOutboxStore>();
+        _auditWriterMock = Substitute.For<IAuditWriter>();
         _cacheMock = Substitute.For<ICacheService>();
 
         unitOfWorkMock.ExecuteInTransaction(Arg.Any<Func<CancellationToken, Task>>(), Arg.Any<CancellationToken>())
@@ -39,6 +42,7 @@ public class CreateReviewCommandHandlerTests
             _assetStoreMock,
             unitOfWorkMock,
             _outboxStoreMock,
+            _auditWriterMock,
             _cacheMock,
             NullLogger<CreateReviewCommandHandler>.Instance);
     }
@@ -128,6 +132,21 @@ public class CreateReviewCommandHandlerTests
         var purchase = new Purchase { Id = Guid.NewGuid(), UserId = command.UserId, AssetId = command.AssetId, StripePaymentId = "pay_1", PurchasedAt = DateTimeOffset.UtcNow.AddDays(-1) };
         _purchaseStoreMock.GetPurchase(command.UserId, command.AssetId, Arg.Any<CancellationToken>()).Returns(purchase);
         _reviewStoreMock.Exists(command.UserId, command.AssetId, Arg.Any<CancellationToken>()).Returns(false);
+        var review = new Review
+        {
+            Id = Guid.NewGuid(),
+            AssetId = command.AssetId,
+            UserId = command.UserId,
+            Rating = command.Rating,
+            Comment = command.Comment
+        };
+        _reviewStoreMock.Create(
+                command.AssetId,
+                command.UserId,
+                command.Rating,
+                command.Comment,
+                Arg.Any<CancellationToken>())
+            .Returns(review);
 
         var result = await _handler.Handle(command, CancellationToken.None);
 
@@ -139,6 +158,15 @@ public class CreateReviewCommandHandlerTests
                 p.RecipientUserId == asset.AuthorId
                 && p.Kind == NotificationKind.REVIEW_RECEIVED
                 && p.HubMethod == NotificationHubMethods.REVIEW_RECEIVED),
+            Arg.Any<CancellationToken>());
+        await _auditWriterMock.Received(1).Write(
+            Arg.Is<AuditEvent>(e =>
+                e.Action == AuditActions.REVIEW_CREATE
+                && e.Outcome == AuditOutcome.SUCCESS
+                && e.ResourceType == AuditResourceTypes.REVIEW
+                && e.ResourceId == review.Id.ToString()
+                && e.Metadata != null
+                && !e.Metadata.ContainsKey("comment")),
             Arg.Any<CancellationToken>());
         await _cacheMock.Received().RemoveByPrefix(Arg.Is<string>(s => s.StartsWith(CacheKeys.REVIEWS_LIST_PREFIX)), Arg.Any<CancellationToken>());
     }

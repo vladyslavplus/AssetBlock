@@ -2,11 +2,13 @@ using Ardalis.Result;
 using AssetBlock.Application.UseCases.Auth.Login;
 using AssetBlock.Application.UseCases.Auth.RefreshToken;
 using AssetBlock.Application.UseCases.Auth.Register;
+using AssetBlock.Domain.Core.Constants;
 using AssetBlock.Domain.Core.Dto.Auth;
 using AssetBlock.Domain.Core.Primitives.Api;
 using AssetBlock.WebApi.Controllers;
 using AssetBlock.WebApi.Tests.Common;
 using FluentAssertions;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.AspNetCore.Mvc;
 using NSubstitute;
 
@@ -38,6 +40,19 @@ public sealed class AuthControllerTests : ControllerTestBase
         var result = await controller.Refresh(new RefreshTokenRequest("rt"), CancellationToken.None);
 
         result.Should().BeOfType<OkObjectResult>();
+    }
+
+    [Fact]
+    public void Refresh_ShouldUseDedicatedRateLimitPolicy()
+    {
+        var method = typeof(AuthController).GetMethod(nameof(AuthController.Refresh));
+
+        var attribute = method!
+            .GetCustomAttributes(typeof(EnableRateLimitingAttribute), inherit: true)
+            .Cast<EnableRateLimitingAttribute>()
+            .Single();
+
+        attribute.PolicyName.Should().Be(RateLimitingConstants.Policies.AUTH_REFRESH);
     }
 
     [Fact]

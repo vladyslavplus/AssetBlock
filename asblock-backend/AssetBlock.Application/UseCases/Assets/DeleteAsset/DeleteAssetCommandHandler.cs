@@ -1,7 +1,9 @@
 using Ardalis.Result;
 using AssetBlock.Domain.Abstractions.Services;
 using AssetBlock.Domain.Core.Constants;
+using AssetBlock.Domain.Core.Dto.Audit;
 using AssetBlock.Domain.Core.Dto.Outbox;
+using AssetBlock.Domain.Core.Enums;
 using MediatR;
 using Microsoft.Extensions.Logging;
 
@@ -12,6 +14,7 @@ internal sealed class DeleteAssetCommandHandler(
     IPurchaseStore purchaseStore,
     IUnitOfWork unitOfWork,
     IOutboxStore outboxStore,
+    IAuditWriter auditWriter,
     ICacheService cache,
     ILogger<DeleteAssetCommandHandler> logger) : IRequestHandler<DeleteAssetCommand, Result>
 {
@@ -25,6 +28,11 @@ internal sealed class DeleteAssetCommandHandler(
 
         if (asset.AuthorId != request.UserId)
         {
+            await auditWriter.WriteBestEffort(new AuditEvent(
+                AuditActions.ASSET_DELETE,
+                AuditOutcome.DENIED,
+                AuditResourceTypes.ASSET,
+                request.Id.ToString()), cancellationToken);
             return Result.Forbidden(ErrorCodes.ERR_FORBIDDEN);
         }
 
@@ -54,7 +62,15 @@ internal sealed class DeleteAssetCommandHandler(
         {
             if (hasPurchases)
             {
-                await assetStore.SoftDelete(asset.Id, DateTimeOffset.UtcNow, cancellationToken);
+                await unitOfWork.ExecuteInTransaction(async ct =>
+                {
+                    await assetStore.SoftDelete(asset.Id, DateTimeOffset.UtcNow, ct);
+                    await auditWriter.Write(new AuditEvent(
+                        AuditActions.ASSET_SOFT_DELETE,
+                        AuditOutcome.SUCCESS,
+                        AuditResourceTypes.ASSET,
+                        asset.Id.ToString()), ct);
+                }, cancellationToken);
             }
             else
             {
@@ -65,6 +81,11 @@ internal sealed class DeleteAssetCommandHandler(
                         OutboxMessageTypes.ASSET_BLOB_DELETE,
                         new AssetBlobDeletePayload(asset.Id, storageKey),
                         ct);
+                    await auditWriter.Write(new AuditEvent(
+                        AuditActions.ASSET_HARD_DELETE,
+                        AuditOutcome.SUCCESS,
+                        AuditResourceTypes.ASSET,
+                        asset.Id.ToString()), ct);
                 }, cancellationToken);
             }
 

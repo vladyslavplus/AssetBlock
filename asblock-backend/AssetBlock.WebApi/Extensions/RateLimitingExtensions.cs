@@ -48,6 +48,7 @@ internal static class RateLimitingExtensions
 
                 AddNoOpPolicy(RateLimitingConstants.Policies.AUTH_REGISTER);
                 AddNoOpPolicy(RateLimitingConstants.Policies.AUTH_LOGIN);
+                AddNoOpPolicy(RateLimitingConstants.Policies.AUTH_REFRESH);
                 AddNoOpPolicy(RateLimitingConstants.Policies.ASSETS_UPLOAD);
                 AddNoOpPolicy(RateLimitingConstants.Policies.ASSETS_DOWNLOAD);
                 AddNoOpPolicy(RateLimitingConstants.Policies.PAYMENTS_CHECKOUT);
@@ -80,6 +81,16 @@ internal static class RateLimitingExtensions
                 {
                     Window = TimeSpan.FromSeconds(RateLimitingConstants.Windows.AUTH_LOGIN_PERIOD_SECONDS),
                     PermitLimit = RateLimitingConstants.Windows.AUTH_LOGIN_LIMIT,
+                    QueueProcessingOrder = QueueProcessingOrder.OldestFirst
+                }));
+
+        opts.AddPolicy(RateLimitingConstants.Policies.AUTH_REFRESH, httpContext =>
+            RateLimitPartition.GetFixedWindowLimiter(
+                partitionKey: httpContext.Connection.RemoteIpAddress?.ToString() ?? UNKNOWN_PARTITION_KEY,
+                factory: _ => new FixedWindowRateLimiterOptions
+                {
+                    Window = TimeSpan.FromSeconds(RateLimitingConstants.Windows.AUTH_REFRESH_PERIOD_SECONDS),
+                    PermitLimit = RateLimitingConstants.Windows.AUTH_REFRESH_LIMIT,
                     QueueProcessingOrder = QueueProcessingOrder.OldestFirst
                 }));
     }

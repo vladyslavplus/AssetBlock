@@ -2,6 +2,7 @@ using System.Text.Json;
 using AssetBlock.Application.Common;
 using AssetBlock.Domain.Abstractions.Services;
 using AssetBlock.Domain.Core.Constants;
+using AssetBlock.Domain.Core.Dto.Audit;
 using AssetBlock.Domain.Core.Dto.Notifications;
 using AssetBlock.Domain.Core.Dto.Outbox;
 using AssetBlock.Domain.Core.Entities;
@@ -19,6 +20,7 @@ internal sealed class HandleStripeWebhookCommandHandler(
     IPurchaseStore purchaseStore,
     IUnitOfWork unitOfWork,
     IOutboxStore outboxStore,
+    IAuditWriter auditWriter,
     ILogger<HandleStripeWebhookCommandHandler> logger)
     : IRequestHandler<HandleStripeWebhookCommand, Result<PurchaseCompletedPayload?>>
 {
@@ -94,6 +96,15 @@ internal sealed class HandleStripeWebhookCommandHandler(
                             new AssetSoldMessage(asset.Id, asset.Title, verified.UserId),
                             ct);
                     }
+
+                    await auditWriter.Write(new AuditEvent(
+                        AuditActions.PAYMENT_PURCHASE_COMPLETED,
+                        AuditOutcome.SUCCESS,
+                        AuditResourceTypes.PURCHASE,
+                        purchaseId.ToString(),
+                        new Dictionary<string, object?> { ["assetId"] = verified.AssetId.ToString() },
+                        ActorTypeOverride: AuditActorType.USER,
+                        ActorUserIdOverride: verified.UserId), ct);
                 }, cancellationToken);
             }
             catch (DuplicatePurchaseException)
