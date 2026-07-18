@@ -1,5 +1,10 @@
+using AssetBlock.Domain.Abstractions.Services;
+using AssetBlock.WebApi.IntegrationTests.Support.Fakes;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.AspNetCore.TestHost;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 
 namespace AssetBlock.WebApi.IntegrationTests.Support;
 
@@ -11,6 +16,8 @@ public sealed class AssetBlockWebApplicationFactory(string connectionString) : W
     private const string TEST_ENCRYPTION_KEY_BASE64 = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=";
 
     private readonly string _connectionString = connectionString ?? throw new ArgumentNullException(nameof(connectionString));
+
+    private RecordingEmailSender RecordingEmailSender { get; } = new();
 
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
@@ -36,5 +43,20 @@ public sealed class AssetBlockWebApplicationFactory(string connectionString) : W
         builder.UseSetting("Stripe:WebhookSecret", "stripe_integration_webhook_secret_not_real");
         builder.UseSetting("Stripe:DefaultSuccessUrl", "http://localhost/success");
         builder.UseSetting("Stripe:DefaultCancelUrl", "http://localhost/cancel");
+        builder.UseSetting("Email:Provider", "Smtp");
+        builder.UseSetting("Email:FromName", "AssetBlock");
+        builder.UseSetting("Email:FromAddress", "noreply@localhost");
+        builder.UseSetting("Email:PublicAppBaseUrl", "http://localhost:3000");
+        builder.UseSetting("Email:MessageIdDomain", "mail.integration.test");
+        builder.UseSetting("Email:Smtp:Host", "127.0.0.1");
+        builder.UseSetting("Email:Smtp:Port", "1025");
+        builder.UseSetting("Email:Smtp:Security", "NONE");
+        builder.UseSetting("Email:Smtp:TimeoutSeconds", "30");
+
+        builder.ConfigureTestServices(services =>
+        {
+            services.RemoveAll<IEmailSender>();
+            services.AddSingleton<IEmailSender>(RecordingEmailSender);
+        });
     }
 }

@@ -35,6 +35,37 @@ internal static class OptionsValidation
     }
 
     /// <summary>
+    /// True for absolute http(s) origin only: no user-info, query, fragment, or non-root path.
+    /// </summary>
+    public static bool IsHttpOrigin(string? value)
+    {
+        if (IsMissingOrPlaceholder(value))
+        {
+            return false;
+        }
+
+        if (!Uri.TryCreate(value, UriKind.Absolute, out var uri)
+            || (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps))
+        {
+            return false;
+        }
+
+        if (!string.IsNullOrEmpty(uri.UserInfo)
+            || !string.IsNullOrEmpty(uri.Query)
+            || !string.IsNullOrEmpty(uri.Fragment))
+        {
+            return false;
+        }
+
+        if (!string.IsNullOrEmpty(uri.AbsolutePath) && uri.AbsolutePath != "/")
+        {
+            return false;
+        }
+
+        return !string.IsNullOrWhiteSpace(uri.Host);
+    }
+
+    /// <summary>
     /// Validates MinIO endpoint as host:port or absolute http(s) URI.
     /// Absolute URIs must agree with UseSsl and must not include user-info, path, query, or fragment.
     /// </summary>

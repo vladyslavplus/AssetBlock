@@ -30,7 +30,16 @@ public sealed class DependencyInjectionTests
                 DefaultSuccessUrl = "http://localhost:3000/payment/success",
                 DefaultCancelUrl = "http://localhost:3000/payment/cancel"
             },
-            FileUpload = new { MaxFileBytes = 262144000L, AllowedExtensions = new[] { ".zip", ".7z", ".rar", ".tar", ".tar.gz", ".tgz" } }
+            FileUpload = new { MaxFileBytes = 262144000L, AllowedExtensions = new[] { ".zip", ".7z", ".rar", ".tar", ".tar.gz", ".tgz" } },
+            Email = new
+            {
+                Provider = "Smtp",
+                FromName = "AssetBlock",
+                FromAddress = "noreply@localhost",
+                PublicAppBaseUrl = "http://localhost:3000",
+                MessageIdDomain = "mail.localhost",
+                Smtp = new { Host = "localhost", Port = 1025, Security = "NONE", Username = "", Password = "", TimeoutSeconds = 30 }
+            }
         });
         var config = new ConfigurationBuilder()
             .AddJsonStream(new MemoryStream(Encoding.UTF8.GetBytes(json)))
@@ -57,6 +66,7 @@ public sealed class DependencyInjectionTests
         sp.GetRequiredService<IEncryptionService>().Should().NotBeNull();
         sp.GetRequiredService<IPasswordHasher>().Should().NotBeNull();
         sp.GetRequiredService<ICacheService>().Should().NotBeNull();
+        sp.GetRequiredService<IEmailSender>().Should().NotBeNull();
         sp.GetRequiredService<ApplicationDbContext>();
     }
 
@@ -76,7 +86,16 @@ public sealed class DependencyInjectionTests
                 DefaultSuccessUrl = "http://localhost:3000/payment/success",
                 DefaultCancelUrl = "http://localhost:3000/payment/cancel"
             },
-            FileUpload = new { MaxFileBytes = 262144000L, AllowedExtensions = new[] { ".zip", ".7z", ".rar", ".tar", ".tar.gz", ".tgz" } }
+            FileUpload = new { MaxFileBytes = 262144000L, AllowedExtensions = new[] { ".zip", ".7z", ".rar", ".tar", ".tar.gz", ".tgz" } },
+            Email = new
+            {
+                Provider = "Smtp",
+                FromName = "AssetBlock",
+                FromAddress = "noreply@localhost",
+                PublicAppBaseUrl = "http://localhost:3000",
+                MessageIdDomain = "mail.localhost",
+                Smtp = new { Host = "localhost", Port = 1025, Security = "NONE", Username = "", Password = "", TimeoutSeconds = 30 }
+            }
         });
         var config = new ConfigurationBuilder()
             .AddJsonStream(new MemoryStream(Encoding.UTF8.GetBytes(json)))

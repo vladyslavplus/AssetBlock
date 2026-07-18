@@ -1,0 +1,218 @@
+using System.Globalization;
+using System.Net.Mail;
+using System.Text;
+using System.Text.Encodings.Web;
+using AssetBlock.Domain.Core.Constants;
+using AssetBlock.Domain.Core.Dto.Email;
+using AssetBlock.Domain.Core.Enums;
+using AssetBlock.Domain.Core.Primitives.AppSettingsOptions;
+using Microsoft.Extensions.Options;
+
+namespace AssetBlock.Application.Services;
+
+/// <summary>Builds provider-neutral purchase transactional email payloads (no SMTP / DB / HTTP).</summary>
+public sealed class TransactionalEmailComposer(IOptions<EmailOptions> emailOptions)
+{
+    private const string LIBRARY_PATH = "/library";
+    private const string SELLER_LISTINGS_PATH = "/sell";
+
+    private readonly EmailOptions _options = emailOptions.Value;
+
+    public EmailDispatchPayload CreatePurchaseReceipt(
+        string recipientAddress,
+        Guid recipientUserId,
+        string assetTitle,
+        DateTimeOffset purchasedAt)
+    {
+        ValidateRecipient(recipientAddress);
+        var title = NormalizeTitle(assetTitle);
+        var when = FormatTimestamp(purchasedAt);
+        var libraryUrl = BuildFixedAppUrl(LIBRARY_PATH);
+
+        var subject = NormalizeSubject($"Purchase receipt: {title}");
+        var text = new StringBuilder()
+            .AppendLine("Thanks for your purchase on AssetBlock.")
+            .AppendLine()
+            .AppendLine($"Asset: {title}")
+            .AppendLine($"Purchased at (UTC): {when}")
+            .AppendLine()
+            .AppendLine($"Open your library: {libraryUrl}")
+            .ToString();
+
+        var safeTitle = HtmlEncoder.Default.Encode(title);
+        var safeWhen = HtmlEncoder.Default.Encode(when);
+        var safeLibraryUrl = HtmlEncoder.Default.Encode(libraryUrl);
+        var html = WrapHtmlLayout(
+            "Purchase receipt",
+            $"""
+            <p>Thanks for your purchase on AssetBlock.</p>
+            <p><strong>Asset:</strong> {safeTitle}</p>
+            <p><strong>Purchased at (UTC):</strong> {safeWhen}</p>
+            <p><a href="{safeLibraryUrl}">Open your library</a></p>
+            """);
+
+        EnsureBounded(subject, text, html);
+        return new EmailDispatchPayload(
+            recipientAddress.Trim(),
+            recipientUserId,
+            EmailTemplateKind.PURCHASE_RECEIPT,
+            subject,
+            text,
+            html);
+    }
+
+    public EmailDispatchPayload CreateAssetSold(
+        string recipientAddress,
+        Guid recipientUserId,
+        string assetTitle,
+        DateTimeOffset purchasedAt)
+    {
+        ValidateRecipient(recipientAddress);
+        var title = NormalizeTitle(assetTitle);
+        var when = FormatTimestamp(purchasedAt);
+        var sellUrl = BuildFixedAppUrl(SELLER_LISTINGS_PATH);
+
+        var subject = NormalizeSubject($"Asset sold: {title}");
+        var text = new StringBuilder()
+            .AppendLine("One of your assets was purchased on AssetBlock.")
+            .AppendLine()
+            .AppendLine($"Asset: {title}")
+            .AppendLine($"Sold at (UTC): {when}")
+            .AppendLine()
+            .AppendLine($"Open your listings: {sellUrl}")
+            .ToString();
+
+        var safeTitle = HtmlEncoder.Default.Encode(title);
+        var safeWhen = HtmlEncoder.Default.Encode(when);
+        var safeSellUrl = HtmlEncoder.Default.Encode(sellUrl);
+        var html = WrapHtmlLayout(
+            "Asset sold",
+            $"""
+            <p>One of your assets was purchased on AssetBlock.</p>
+            <p><strong>Asset:</strong> {safeTitle}</p>
+            <p><strong>Sold at (UTC):</strong> {safeWhen}</p>
+            <p><a href="{safeSellUrl}">Open your listings</a></p>
+            """);
+
+        EnsureBounded(subject, text, html);
+        return new EmailDispatchPayload(
+            recipientAddress.Trim(),
+            recipientUserId,
+            EmailTemplateKind.ASSET_SOLD,
+            subject,
+            text,
+            html);
+    }
+
+    private static void ValidateRecipient(string recipientAddress)
+    {
+        if (string.IsNullOrWhiteSpace(recipientAddress))
+        {
+            throw new ArgumentException("Recipient address is required.", nameof(recipientAddress));
+        }
+
+        try
+        {
+            _ = new MailAddress(recipientAddress.Trim());
+        }
+        catch (FormatException ex)
+        {
+            throw new ArgumentException("Recipient address is not a valid mailbox.", nameof(recipientAddress), ex);
+        }
+    }
+
+    private static string NormalizeTitle(string assetTitle)
+    {
+        if (string.IsNullOrWhiteSpace(assetTitle))
+        {
+            throw new ArgumentException("Asset title is required.", nameof(assetTitle));
+        }
+
+        return assetTitle.Trim();
+    }
+
+    private static string FormatTimestamp(DateTimeOffset purchasedAt)
+    {
+        if (purchasedAt == default)
+        {
+            throw new ArgumentException("Purchase timestamp is required.", nameof(purchasedAt));
+        }
+
+        return purchasedAt.UtcDateTime.ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture) + " UTC";
+    }
+
+    private string BuildFixedAppUrl(string absolutePath)
+    {
+        var configured = _options.PublicAppBaseUrl?.Trim() ?? string.Empty;
+        if (!Uri.TryCreate(configured, UriKind.Absolute, out var uri)
+            || (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps)
+            || !string.IsNullOrEmpty(uri.UserInfo)
+            || !string.IsNullOrEmpty(uri.Query)
+            || !string.IsNullOrEmpty(uri.Fragment)
+            || (!string.IsNullOrEmpty(uri.AbsolutePath) && uri.AbsolutePath != "/")
+            || string.IsNullOrWhiteSpace(uri.Host))
+        {
+            throw new InvalidOperationException(
+                "Email:PublicAppBaseUrl must be a configured absolute http(s) origin.");
+        }
+
+        return uri.GetLeftPart(UriPartial.Authority) + absolutePath;
+    }
+
+    private static string NormalizeSubject(string subject)
+    {
+        var normalized = subject
+            .Replace("\r", string.Empty, StringComparison.Ordinal)
+            .Replace("\n", string.Empty, StringComparison.Ordinal)
+            .Trim();
+
+        if (normalized.Length == 0)
+        {
+            throw new InvalidOperationException("Email subject must be non-empty after normalization.");
+        }
+
+        if (normalized.Length > EmailContentLimits.MAX_SUBJECT_LENGTH)
+        {
+            normalized = normalized[..EmailContentLimits.MAX_SUBJECT_LENGTH];
+        }
+
+        return normalized;
+    }
+
+    private static string WrapHtmlLayout(string heading, string bodyHtml)
+    {
+        var safeHeading = HtmlEncoder.Default.Encode(heading);
+        return $"""
+            <!DOCTYPE html>
+            <html lang="en">
+            <head><meta charset="utf-8"><title>{safeHeading}</title></head>
+            <body>
+            <h1>{safeHeading}</h1>
+            {bodyHtml}
+            <p style="color:#666;font-size:12px;">AssetBlock transactional notice</p>
+            </body>
+            </html>
+            """;
+    }
+
+    private static void EnsureBounded(string subject, string text, string html)
+    {
+        if (subject.Length > EmailContentLimits.MAX_SUBJECT_LENGTH)
+        {
+            throw new InvalidOperationException(
+                $"Email subject exceeds {EmailContentLimits.MAX_SUBJECT_LENGTH} characters.");
+        }
+
+        if (text.Length > EmailContentLimits.MAX_BODY_LENGTH)
+        {
+            throw new InvalidOperationException(
+                $"Email text body exceeds {EmailContentLimits.MAX_BODY_LENGTH} characters.");
+        }
+
+        if (html.Length > EmailContentLimits.MAX_BODY_LENGTH)
+        {
+            throw new InvalidOperationException(
+                $"Email HTML body exceeds {EmailContentLimits.MAX_BODY_LENGTH} characters.");
+        }
+    }
+}

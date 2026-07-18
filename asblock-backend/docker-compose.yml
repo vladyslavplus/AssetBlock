@@ -1,7 +1,7 @@
 # Local dev stack for AssetBlock backend.
 # Env vars: set in .env (copy from .env.example) or export; defaults used if unset.
 # Run: docker-compose up -d
-# API expects: Postgres (5432), MinIO (9000/9001), optional Redis (6379).
+# API expects: Postgres (5432), MinIO (9000/9001), optional Redis (6379), Mailpit (1025/8025) for local email.
 #
 # MinIO: "Host local has more than 0 drives" is expected for single-node dev and can be ignored.
 # Set MINIO_ROOT_USER and MINIO_ROOT_PASSWORD in .env (avoid default creds in shared envs).
@@ -51,6 +51,16 @@ services:
       interval: 5s
       timeout: 3s
       retries: 5
+
+  # Local SMTP catcher + inbox UI only. Never use Mailpit as a production email endpoint.
+  mailpit:
+    image: axllent/mailpit:v1.30.0
+    container_name: assetblock-mailpit
+    ports:
+      - "127.0.0.1:${MAILPIT_UI_PORT:-8025}:8025"
+      - "127.0.0.1:${MAILPIT_SMTP_PORT:-1025}:1025"
+    environment:
+      MP_MAX_MESSAGES: "1000"
 
 volumes:
   # postgres_data:

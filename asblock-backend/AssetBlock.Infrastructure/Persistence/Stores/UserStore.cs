@@ -1,5 +1,6 @@
 using AssetBlock.Domain.Abstractions.Services;
 using AssetBlock.Domain.Core.Constants;
+using AssetBlock.Domain.Core.Dto.Email;
 using AssetBlock.Domain.Core.Entities;
 using AssetBlock.Domain.Core.Exceptions;
 using Microsoft.EntityFrameworkCore;
@@ -26,6 +27,15 @@ internal sealed class UserStore(ApplicationDbContext dbContext) : IUserStore
             .AsNoTracking()
             .Include(u => u.SocialLinks).ThenInclude(sl => sl.Platform)
             .FirstOrDefaultAsync(u => u.Id == id, cancellationToken);
+    }
+
+    public Task<EmailRecipient?> GetEmailRecipientById(Guid id, CancellationToken cancellationToken = default)
+    {
+        return dbContext.Users
+            .AsNoTracking()
+            .Where(u => u.Id == id)
+            .Select(u => new EmailRecipient(u.Id, u.Email))
+            .FirstOrDefaultAsync(cancellationToken);
     }
 
     public Task<User?> GetByIdForUpdate(Guid id, CancellationToken cancellationToken = default)

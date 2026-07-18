@@ -1,8 +1,10 @@
 using System.Text.Json;
 using AssetBlock.Application.Common;
+using AssetBlock.Application.Services;
 using AssetBlock.Domain.Abstractions.Services;
 using AssetBlock.Domain.Core.Constants;
 using AssetBlock.Domain.Core.Dto.Audit;
+using AssetBlock.Domain.Core.Dto.Email;
 using AssetBlock.Domain.Core.Dto.Notifications;
 using AssetBlock.Domain.Core.Dto.Outbox;
 using AssetBlock.Domain.Core.Entities;
@@ -18,9 +20,11 @@ internal sealed class HandleStripeWebhookCommandHandler(
     IPaymentService paymentService,
     IAssetStore assetStore,
     IPurchaseStore purchaseStore,
+    IUserStore userStore,
     IUnitOfWork unitOfWork,
     IOutboxStore outboxStore,
     IAuditWriter auditWriter,
+    TransactionalEmailComposer emailComposer,
     ILogger<HandleStripeWebhookCommandHandler> logger)
     : IRequestHandler<HandleStripeWebhookCommand, Result<PurchaseCompletedPayload?>>
 {
@@ -50,7 +54,15 @@ internal sealed class HandleStripeWebhookCommandHandler(
                 return Result.Success<PurchaseCompletedPayload?>(null);
             }
 
+            var buyer = await userStore.GetEmailRecipientById(verified.UserId, cancellationToken);
+            EmailRecipient? author = null;
+            if (asset.AuthorId != verified.UserId)
+            {
+                author = await userStore.GetEmailRecipientById(asset.AuthorId, cancellationToken);
+            }
+
             var purchaseId = Guid.NewGuid();
+            var purchasedAt = DateTimeOffset.UtcNow;
             try
             {
                 await unitOfWork.ExecuteInTransaction(async ct =>
@@ -61,7 +73,7 @@ internal sealed class HandleStripeWebhookCommandHandler(
                         UserId = verified.UserId,
                         AssetId = verified.AssetId,
                         StripePaymentId = verified.StripeSessionId,
-                        PurchasedAt = DateTimeOffset.UtcNow
+                        PurchasedAt = purchasedAt
                     };
                     await purchaseStore.Add(purchase, ct);
 
@@ -97,6 +109,8 @@ internal sealed class HandleStripeWebhookCommandHandler(
                             ct);
                     }
 
+                    await EnqueuePurchaseEmails(buyer, author, asset, verified.UserId, purchasedAt, ct);
+
                     await auditWriter.Write(new AuditEvent(
                         AuditActions.PAYMENT_PURCHASE_COMPLETED,
                         AuditOutcome.SUCCESS,
@@ -130,6 +144,51 @@ internal sealed class HandleStripeWebhookCommandHandler(
             logger.LogError(ex, "Stripe webhook processing failed.");
             throw;
         }
+    }
+
+    private async Task EnqueuePurchaseEmails(
+        EmailRecipient? buyer,
+        EmailRecipient? author,
+        Asset asset,
+        Guid buyerUserId,
+        DateTimeOffset purchasedAt,
+        CancellationToken cancellationToken)
+    {
+        if (buyer is null)
+        {
+            logger.LogWarning(
+                "Skipping purchase receipt email: buyer user {UserId} was not found.",
+                buyerUserId);
+        }
+        else
+        {
+            var receipt = emailComposer.CreatePurchaseReceipt(
+                buyer.Email,
+                buyer.Id,
+                asset.Title,
+                purchasedAt);
+            await outboxStore.Enqueue(OutboxMessageTypes.EMAIL_DISPATCH, receipt, cancellationToken);
+        }
+
+        if (asset.AuthorId == buyerUserId)
+        {
+            return;
+        }
+
+        if (author is null)
+        {
+            logger.LogWarning(
+                "Skipping asset-sold email: author user {UserId} was not found.",
+                asset.AuthorId);
+            return;
+        }
+
+        var sold = emailComposer.CreateAssetSold(
+            author.Email,
+            author.Id,
+            asset.Title,
+            purchasedAt);
+        await outboxStore.Enqueue(OutboxMessageTypes.EMAIL_DISPATCH, sold, cancellationToken);
     }
 
     private Task EnqueueNotification<T>(

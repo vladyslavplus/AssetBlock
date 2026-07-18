@@ -58,6 +58,11 @@ openssl rand -base64 32
 | `Minio:UseSsl` | Yes | `false` for local HTTP MinIO |
 | `Encryption:KeyBase64` | Yes | Base64 of exactly 32 bytes |
 | `Stripe:*` | No | If **any** Stripe field is set, all of `SecretKey`, `WebhookSecret`, `DefaultSuccessUrl`, `DefaultCancelUrl` are required |
+| `Email:Provider` | Yes | Must be `Smtp` (case-insensitive) |
+| `Email:FromName` / `Email:FromAddress` | Yes | From mailbox for transactional mail |
+| `Email:PublicAppBaseUrl` | Yes | Absolute `http`/`https` SPA origin for fixed template links |
+| `Email:MessageIdDomain` | Yes | Domain used in deterministic RFC Message-Id values |
+| `Email:Smtp:Host` / `Port` / `Security` / `TimeoutSeconds` | Yes | Local Mailpit: `localhost` / `1025` / `NONE` / `30`; credentials both empty or both set |
 
 ### 3. Docker / Next.js `.env`
 
@@ -100,6 +105,40 @@ dotnet test AssetBlock.WebApi.IntegrationTests/AssetBlock.WebApi.IntegrationTest
 ```
 
 Bring up local app dependencies with `docker-compose.yml` in this folder when running the API outside tests.
+
+### Mailpit (local SMTP inbox)
+
+Mailpit is a **development SMTP catcher**, not an `IEmailSender` implementation and never a production email endpoint. The API sends through `SmtpEmailSender` (MailKit); point SMTP at Mailpit locally.
+
+```bash
+docker-compose up -d mailpit
+```
+
+- SMTP (host-run API): `localhost:1025`, `Security=NONE`, empty username/password
+- Inbox UI: `http://localhost:8025`
+- UI/SMTP ports bind to `127.0.0.1` only
+- Inbox resets with the container (no persistent volume in v1)
+
+Example User Secrets for local Mailpit:
+
+```bash
+dotnet user-secrets set "Email:Provider" "Smtp" --project AssetBlock.WebApi
+dotnet user-secrets set "Email:FromName" "AssetBlock" --project AssetBlock.WebApi
+dotnet user-secrets set "Email:FromAddress" "noreply@localhost" --project AssetBlock.WebApi
+dotnet user-secrets set "Email:PublicAppBaseUrl" "http://localhost:3000" --project AssetBlock.WebApi
+dotnet user-secrets set "Email:MessageIdDomain" "mail.localhost" --project AssetBlock.WebApi
+dotnet user-secrets set "Email:Smtp:Host" "localhost" --project AssetBlock.WebApi
+dotnet user-secrets set "Email:Smtp:Port" "1025" --project AssetBlock.WebApi
+dotnet user-secrets set "Email:Smtp:Security" "NONE" --project AssetBlock.WebApi
+dotnet user-secrets set "Email:Smtp:TimeoutSeconds" "30" --project AssetBlock.WebApi
+```
+
+### Email platform (v1)
+
+- Provider-neutral `IEmailSender` + SMTP transport; purchase receipt (buyer) and asset-sold (author) emails after committed Stripe purchase via transactional outbox (`EmailDispatch`).
+- Delivery is at-least-once: a crash between SMTP acceptance and outbox `MarkProcessed` can resend; content is safe to duplicate. Existing outbox lease/retry/backoff applies — no extra SMTP retry layer.
+- Logs may include outbox id, template kind, and recipient user id only (never recipient address, body, HTML, MIME, or credentials).
+- Not in v1: password reset, email verification, subscriptions/preferences, marketing, provider webhooks, frontend email UI.
 
 ### Audit log
 

@@ -39,6 +39,15 @@ public sealed class OptionsValidateOnStartTests
                 WebhookSecret = "<stripe-webhook-secret>",
                 DefaultSuccessUrl = "<default-success-url>",
                 DefaultCancelUrl = "<default-cancel-url>"
+            },
+            Email = new
+            {
+                Provider = "Smtp",
+                FromName = "<AssetBlock>",
+                FromAddress = "<noreply@example.com>",
+                PublicAppBaseUrl = "<public-app-base-url>",
+                MessageIdDomain = "<message-id-domain>",
+                Smtp = new { Host = "<smtp-host>", Port = 1025, Security = "NONE", Username = "", Password = "", TimeoutSeconds = 30 }
             }
         });
 

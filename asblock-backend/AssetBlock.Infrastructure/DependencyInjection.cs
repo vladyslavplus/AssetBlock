@@ -1,5 +1,6 @@
 using AssetBlock.Domain.Abstractions.Services;
 using AssetBlock.Domain.Core.Primitives.AppSettingsOptions;
+using AssetBlock.Infrastructure.Email;
 using AssetBlock.Infrastructure.HostedServices;
 using AssetBlock.Infrastructure.Options;
 using AssetBlock.Infrastructure.Outbox;
@@ -54,6 +55,11 @@ public static class DependencyInjection
             .ValidateOnStart();
         services.AddSingleton<IValidateOptions<FileUploadOptions>, FileUploadOptionsValidator>();
 
+        services.AddOptions<EmailOptions>()
+            .Bind(configuration.GetSection(EmailOptions.SECTION_NAME))
+            .ValidateOnStart();
+        services.AddSingleton<IValidateOptions<EmailOptions>, EmailOptionsValidator>();
+
         services.AddDbContext<ApplicationDbContext>(options =>
             options.UseNpgsql(connectionString));
         services.AddHostedService<DatabaseMigrationService>();
@@ -64,6 +70,8 @@ public static class DependencyInjection
         services.AddScoped<IOutboxStore, OutboxStore>();
         services.AddScoped<IOutboxMessageHandler, AssetBlobDeleteOutboxHandler>();
         services.AddScoped<IOutboxMessageHandler, PurchaseCompletedOutboxHandler>();
+        services.AddScoped<IOutboxMessageHandler, EmailDispatchOutboxHandler>();
+        services.AddScoped<IEmailSender, SmtpEmailSender>();
         services.AddScoped<IJwtTokenService, JwtTokenService>();
         services.AddScoped<IUserStore, UserStore>();
         services.AddScoped<ICategoryStore, CategoryStore>();

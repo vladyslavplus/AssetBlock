@@ -1,6 +1,8 @@
 using AssetBlock.Domain.Core.Constants;
+using AssetBlock.Domain.Core.Dto.Email;
 using AssetBlock.Domain.Core.Dto.Outbox;
 using AssetBlock.Domain.Core.Entities;
+using AssetBlock.Domain.Core.Enums;
 using AssetBlock.Infrastructure.IntegrationTests.Support;
 using AssetBlock.Infrastructure.Persistence;
 using AssetBlock.Infrastructure.Persistence.Stores;
@@ -76,6 +78,103 @@ public sealed class OutboxStorePostgresTests(PostgresFixture fixture)
         (await verify.OutboxMessages.CountAsync()).Should().Be(0);
         var reloaded = await verify.Assets.AsNoTracking().SingleAsync(a => a.Id == assetId);
         reloaded.Title.Should().Be(originalTitle);
+    }
+
+    [Fact]
+    public async Task ExecuteInTransaction_WhenEmailDispatchEnqueuedAndThrows_ShouldRollBackPurchaseAndEmailRow()
+    {
+        await using var db = await fixture.CreateCleanDbContext();
+        (User author, Category category) = await TestData.SeedAuthorAndCategory(db);
+        var buyer = TestData.CreateUser("buyer-email-tx", "buyer-email-tx@example.com");
+        db.Users.Add(buyer);
+        var asset = TestData.CreateAsset(author.Id, category.Id);
+        db.Assets.Add(asset);
+        await db.SaveChangesAsync();
+
+        var unitOfWork = new EfUnitOfWork(db);
+        var outbox = CreateStore(db);
+        var purchaseId = Guid.NewGuid();
+
+        var act = async () => await unitOfWork.ExecuteInTransaction(async ct =>
+        {
+            db.Purchases.Add(new Purchase
+            {
+                Id = purchaseId,
+                UserId = buyer.Id,
+                AssetId = asset.Id,
+                StripePaymentId = "cs_email_rollback",
+                PurchasedAt = DateTimeOffset.UtcNow
+            });
+            await db.SaveChangesAsync(ct);
+            await outbox.Enqueue(
+                OutboxMessageTypes.EMAIL_DISPATCH,
+                new EmailDispatchPayload(
+                    buyer.Email,
+                    buyer.Id,
+                    EmailTemplateKind.PURCHASE_RECEIPT,
+                    "Purchase receipt: Pack",
+                    "text body without secrets",
+                    "<p>html body without secrets</p>"),
+                ct);
+            throw new InvalidOperationException("force email rollback");
+        });
+
+        await act.Should().ThrowAsync<InvalidOperationException>();
+
+        await using var verify = fixture.CreateDbContext();
+        (await verify.Purchases.CountAsync(p => p.Id == purchaseId)).Should().Be(0);
+        (await verify.OutboxMessages.CountAsync(m => m.Type == OutboxMessageTypes.EMAIL_DISPATCH)).Should().Be(0);
+    }
+
+    [Fact]
+    public async Task ExecuteInTransaction_WhenEmailDispatchCommits_ShouldPersistSafePayloadWithoutSecrets()
+    {
+        await using var db = await fixture.CreateCleanDbContext();
+        (User author, Category category) = await TestData.SeedAuthorAndCategory(db);
+        var buyer = TestData.CreateUser("buyer-email-ok", "buyer-email-ok@example.com");
+        db.Users.Add(buyer);
+        var asset = TestData.CreateAsset(author.Id, category.Id);
+        db.Assets.Add(asset);
+        await db.SaveChangesAsync();
+
+        var unitOfWork = new EfUnitOfWork(db);
+        var outbox = CreateStore(db);
+        var purchaseId = Guid.NewGuid();
+        var payload = new EmailDispatchPayload(
+            buyer.Email,
+            buyer.Id,
+            EmailTemplateKind.PURCHASE_RECEIPT,
+            "Purchase receipt: Pack",
+            "Asset purchased. Open http://localhost:3000/library",
+            "<p>Asset purchased</p>");
+
+        await unitOfWork.ExecuteInTransaction(async ct =>
+        {
+            db.Purchases.Add(new Purchase
+            {
+                Id = purchaseId,
+                UserId = buyer.Id,
+                AssetId = asset.Id,
+                StripePaymentId = "cs_email_commit",
+                PurchasedAt = DateTimeOffset.UtcNow
+            });
+            await db.SaveChangesAsync(ct);
+            await outbox.Enqueue(OutboxMessageTypes.EMAIL_DISPATCH, payload, ct);
+        });
+
+        await using var verify = fixture.CreateDbContext();
+        (await verify.Purchases.CountAsync(p => p.Id == purchaseId)).Should().Be(1);
+        var row = await verify.OutboxMessages.AsNoTracking()
+            .SingleAsync(m => m.Type == OutboxMessageTypes.EMAIL_DISPATCH);
+        row.Payload.Should().Contain("\"templateKind\":\"PURCHASE_RECEIPT\"");
+        row.Payload.Should().NotContain("\"templateKind\":0");
+        row.Payload.Should().Contain("http://localhost:3000/library");
+        row.Payload.Should().Contain(buyer.Email);
+        row.Payload.Should().NotContain("sk_live");
+        row.Payload.Should().NotContain("whsec_");
+        row.Payload.Should().NotContain(asset.StorageKey);
+        row.Payload.Should().NotContain("Password");
+        row.Payload.Should().NotContain("cs_email_commit");
     }
 
     [Fact]

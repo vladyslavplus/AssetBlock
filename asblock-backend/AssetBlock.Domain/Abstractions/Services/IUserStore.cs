@@ -1,3 +1,4 @@
+using AssetBlock.Domain.Core.Dto.Email;
 using AssetBlock.Domain.Core.Entities;
 
 namespace AssetBlock.Domain.Abstractions.Services;
@@ -8,6 +9,8 @@ public interface IUserStore
     Task<User?> GetByIdWithLinks(Guid id, CancellationToken cancellationToken = default);
     Task<User?> GetByIdForUpdate(Guid id, CancellationToken cancellationToken = default);
     Task<User?> GetByUsernameWithLinks(string username, CancellationToken cancellationToken = default);
+    /// <summary>Reads Id/Email only for transactional email (AsNoTracking, no social links).</summary>
+    Task<EmailRecipient?> GetEmailRecipientById(Guid id, CancellationToken cancellationToken = default);
     Task<User> Create(string username, string email, string passwordHash, CancellationToken cancellationToken = default);
     Task<User> Update(User user, CancellationToken cancellationToken = default);
     Task<bool> ReplaceUserSocialLinks(Guid userId, IReadOnlyList<(Guid PlatformId, string Url)> links, CancellationToken cancellationToken = default);

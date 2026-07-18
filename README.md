@@ -10,7 +10,7 @@ This repository is a non-commercial / academic project.
 asblock/
 ├── asblock-backend/           # ASP.NET Core Web API + application/domain/infrastructure
 │   ├── asblock-backend.slnx
-│   ├── docker-compose.yml     # Local dependencies (e.g. PostgreSQL, Redis, MinIO)
+│   ├── docker-compose.yml     # Local dependencies (PostgreSQL, Redis, MinIO, Mailpit)
 │   └── README.md
 └── asblock-frontend/          # Next.js web application (App Router)
 ```
@@ -19,7 +19,7 @@ asblock/
 
 **Stack:** .NET 10, ASP.NET Core Web API, **Clean Architecture** (Domain / Application / Infrastructure / WebApi), CQRS-style use cases with **MediatR**, **FluentValidation**, **Ardalis.Result**, Entity Framework Core with PostgreSQL (catalog FTS via `tsvector` + `pg_trgm`), optional **Redis** caching, **MinIO** (S3-compatible) for encrypted asset storage, **Stripe** Checkout and webhooks, **SignalR** for real-time notifications, **Serilog** for structured logging.
 
-**High-level capabilities:** JWT-based auth (access + refresh), role-based access (including admin), asset lifecycle (upload, update, tags, download for purchasers or author), soft delete when purchases exist (delist from catalog while keeping DB row and blob for buyers), hard delete when there are no purchases, categories and tags (admin writes), reviews, user profiles and social links, notifications, Stripe-backed purchases and library. Append-only **audit log** records critical mutations and is available to administrators; it remains distinct from Serilog, the outbox, and analytics.
+**High-level capabilities:** JWT-based auth (access + refresh), role-based access (including admin), asset lifecycle (upload, update, tags, download for purchasers or author), soft delete when purchases exist (delist from catalog while keeping DB row and blob for buyers), hard delete when there are no purchases, categories and tags (admin writes), reviews, user profiles and social links, notifications, Stripe-backed purchases and library, transactional email via SMTP (purchase receipt / asset-sold) with Mailpit for local inbox capture. Append-only **audit log** records critical mutations and is available to administrators; it remains distinct from Serilog, the outbox, and analytics.
 
 **Typical commands** (from `asblock-backend/`):
 
@@ -31,7 +31,7 @@ dotnet ef database update --project AssetBlock.Infrastructure --startup-project 
 dotnet run --project AssetBlock.WebApi
 ```
 
-Bring up dependencies with Docker Compose when needed (`docker-compose.yml` in the backend folder). Configure API secrets with **.NET User Secrets** (see `asblock-backend/README.md`). Tracked `appsettings*.json` and `.env.example` files must not contain real secrets.
+Bring up dependencies with Docker Compose when needed (`docker-compose.yml` in the backend folder). Local **Mailpit** (`docker-compose up -d mailpit`) catches SMTP on `localhost:1025` and shows messages at `http://localhost:8025` — development only, not a production provider. Configure API secrets with **.NET User Secrets** (see `asblock-backend/README.md`). Tracked `appsettings*.json` and `.env.example` files must not contain real secrets.
 
 ## Frontend (`asblock-frontend`)
 

@@ -1,4 +1,5 @@
 using AssetBlock.Application.Common.Behaviors;
+using AssetBlock.Application.Services;
 using FluentValidation;
 using MediatR;
 using Microsoft.Extensions.DependencyInjection;
@@ -17,6 +18,7 @@ public static class DependencyInjection
             includeInternalTypes: true);
         services.AddTransient(typeof(IPipelineBehavior<,>), typeof(LoggingBehavior<,>));
         services.AddTransient(typeof(IPipelineBehavior<,>), typeof(ValidationBehavior<,>));
+        services.AddSingleton<TransactionalEmailComposer>();
         return services;
     }
 }
