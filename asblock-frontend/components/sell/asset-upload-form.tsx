@@ -18,6 +18,7 @@ import {
   isEmailVerified,
 } from '@/components/auth/email-verification-notice'
 import Link from 'next/link'
+import { AssetLicenseSelector } from '@/components/assets/asset-license-selector'
 import { applyApiFieldErrorsToForm } from '@/lib/http/api-errors'
 import {
   ASSET_UPLOAD_ALLOWED_EXTENSIONS,
@@ -64,6 +65,7 @@ export function AssetUploadForm() {
       description: '',
       price: undefined,
       categoryId: '',
+      licenseCode: 'PERSONAL',
       tags: '',
     },
   })
@@ -81,6 +83,7 @@ export function AssetUploadForm() {
     if (desc) fd.set('description', desc)
     fd.set('price', String(values.price))
     fd.set('categoryId', values.categoryId)
+    fd.set('licenseCode', values.licenseCode)
     fd.set('file', values.file)
 
     const tagParts = (values.tags ?? '')
@@ -232,6 +235,13 @@ export function AssetUploadForm() {
         />
         <p className="text-[11px] text-muted-foreground">Comma-separated.</p>
       </div>
+
+      <AssetLicenseSelector
+        control={control}
+        name="licenseCode"
+        errors={errors}
+        idPrefix="upload"
+      />
 
       <div className="space-y-1.5">
         <Label htmlFor="upload-file" className="text-xs font-medium">

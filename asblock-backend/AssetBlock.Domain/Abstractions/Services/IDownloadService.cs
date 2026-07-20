@@ -7,6 +7,10 @@ namespace AssetBlock.Domain.Abstractions.Services;
 /// </summary>
 public interface IDownloadService
 {
-    Task<DownloadAuthorization> AuthorizeDownload(Guid assetId, Guid userId, CancellationToken cancellationToken = default);
+    /// <summary>
+    /// Authorizes a download for the user. When <paramref name="versionId"/> is null the latest entitled version is resolved.
+    /// Authors may download any version; purchasers may download the purchased version and any higher version number.
+    /// </summary>
+    Task<DownloadAuthorization> AuthorizeDownload(Guid assetId, Guid userId, Guid? versionId = null, CancellationToken cancellationToken = default);
     Task CopyDecrypted(string storageKey, Stream destination, CancellationToken cancellationToken = default);
 }

@@ -64,7 +64,14 @@ public sealed class AssetsControllerTests : ControllerTestBase
                 DateTimeOffset.UtcNow,
                 null,
                 Array.Empty<string>(),
-                0))));
+                0,
+                CurrentVersionNumber: 1,
+                CurrentVersionId: Guid.NewGuid(),
+                CurrentVersionCreatedAt: DateTimeOffset.UtcNow,
+                CurrentFileName: "asset.zip",
+                CurrentContentLength: 1024,
+                CurrentContentSha256: new string('a', 64),
+                CurrentLicense: new AssetLicenseSummaryDto("PERSONAL", "Personal use", "1.0", "Terms text")))));
 
         var controller = CreateController();
         var result = await controller.GetById(Guid.NewGuid(), CancellationToken.None);
@@ -85,7 +92,7 @@ public sealed class AssetsControllerTests : ControllerTestBase
     [Fact]
     public async Task Download_WhenNotFound_ShouldReturn404()
     {
-        _downloadService.AuthorizeDownload(Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<CancellationToken>())
+        _downloadService.AuthorizeDownload(Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<Guid?>(), Arg.Any<CancellationToken>())
             .Returns(new DownloadAuthorization(AssetDownloadStatus.NOT_FOUND));
 
         var controller = CreateController();
@@ -98,7 +105,7 @@ public sealed class AssetsControllerTests : ControllerTestBase
     [Fact]
     public async Task Download_WhenForbidden_ShouldReturn403()
     {
-        _downloadService.AuthorizeDownload(Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<CancellationToken>())
+        _downloadService.AuthorizeDownload(Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<Guid?>(), Arg.Any<CancellationToken>())
             .Returns(new DownloadAuthorization(AssetDownloadStatus.FORBIDDEN));
 
         var controller = CreateController();
@@ -111,7 +118,7 @@ public sealed class AssetsControllerTests : ControllerTestBase
     [Fact]
     public async Task Download_WhenRateLimited_ShouldReturn429()
     {
-        _downloadService.AuthorizeDownload(Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<CancellationToken>())
+        _downloadService.AuthorizeDownload(Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<Guid?>(), Arg.Any<CancellationToken>())
             .Returns(new DownloadAuthorization(AssetDownloadStatus.RATE_LIMITED));
 
         var controller = CreateController();
@@ -124,7 +131,7 @@ public sealed class AssetsControllerTests : ControllerTestBase
     [Fact]
     public async Task Download_WhenSuccess_ShouldStreamBodyAndReturnEmpty()
     {
-        _downloadService.AuthorizeDownload(Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<CancellationToken>())
+        _downloadService.AuthorizeDownload(Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<Guid?>(), Arg.Any<CancellationToken>())
             .Returns(new DownloadAuthorization(
                 AssetDownloadStatus.SUCCESS,
                 new DownloadPermit("assets/k", "a.zip")));
@@ -155,7 +162,8 @@ public sealed class AssetsControllerTests : ControllerTestBase
 
         var status = result.Should().BeOfType<StatusCodeResult>().Which;
         status.StatusCode.Should().Be(StatusCodes.Status416RangeNotSatisfiable);
-        await _downloadService.DidNotReceiveWithAnyArgs().AuthorizeDownload(Guid.Empty, Guid.Empty, CancellationToken.None);
+        await _downloadService.DidNotReceiveWithAnyArgs()
+            .AuthorizeDownload(Guid.Empty, Guid.Empty, Arg.Any<Guid?>(), CancellationToken.None);
     }
 
     [Fact]

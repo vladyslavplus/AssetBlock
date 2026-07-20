@@ -110,9 +110,25 @@ public sealed class DownloadServiceTests
         var userId = Guid.NewGuid();
         var asset = CreateAsset(userId, Guid.NewGuid());
         asset.DownloadLimitPerHour = 1;
+        var versionId = Guid.NewGuid();
 
         var assetStore = Substitute.For<IAssetStore>();
         assetStore.GetById(asset.Id, Arg.Any<CancellationToken>()).Returns(Task.FromResult<Asset?>(asset));
+        assetStore.GetCurrentVersionSnapshot(asset.Id, Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<Domain.Core.Dto.Assets.AssetCurrentVersionSnapshot?>(
+                new Domain.Core.Dto.Assets.AssetCurrentVersionSnapshot(
+                    asset.Id,
+                    versionId,
+                    userId,
+                    asset.Title,
+                    null,
+                    asset.Price,
+                    null,
+                    1,
+                    asset.FileName,
+                    asset.StorageKey,
+                    1,
+                    new string('a', 64))));
 
         var sut = new DownloadService(
             assetStore,

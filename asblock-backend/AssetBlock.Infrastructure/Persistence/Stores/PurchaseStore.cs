@@ -87,7 +87,24 @@ internal sealed class PurchaseStore(ApplicationDbContext dbContext) : IPurchaseS
                 p.Asset.Price,
                 p.PurchasedAt,
                 p.Asset.Author.Username,
-                p.Asset.Reviews.Any(r => r.UserId == userId)))
+                p.Asset.Reviews.Any(r => r.UserId == userId),
+                p.AssetVersion.VersionNumber,
+                p.AssetVersionId,
+                p.Asset.Versions
+                    .Where(v => v.VersionNumber >= p.AssetVersion.VersionNumber)
+                    .OrderByDescending(v => v.VersionNumber)
+                    .Select(v => v.VersionNumber)
+                    .First(),
+                p.Asset.Versions
+                    .Where(v => v.VersionNumber >= p.AssetVersion.VersionNumber)
+                    .OrderByDescending(v => v.VersionNumber)
+                    .Select(v => v.Id)
+                    .First(),
+                p.Asset.Versions
+                    .Where(v => v.IsCurrent)
+                    .Any(v => v.VersionNumber > p.AssetVersion.VersionNumber),
+                p.PricePaid,
+                p.Currency))
             .ToListAsync(cancellationToken);
 
         return new PagedResult<PurchaseLibraryItemDto>(items, total, page, pageSize);

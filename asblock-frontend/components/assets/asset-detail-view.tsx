@@ -6,16 +6,23 @@ import { ArrowLeft } from 'lucide-react'
 import { SiteMain } from '@/components/layout/site-main'
 import { SitePageContainer } from '@/components/layout/site-page-container'
 import { AssetDetailHero } from '@/components/assets/asset-detail-hero'
+import { AssetLicenseCard } from '@/components/assets/asset-license-card'
 import { AssetPurchaseCard } from '@/components/assets/asset-purchase-card'
 import { AssetReviewsList } from '@/components/assets/asset-reviews-list'
+import { AssetVersionHistory } from '@/components/assets/asset-version-history'
+import { ContentHashDisplay } from '@/components/assets/content-hash-display'
 import type { AssetDetailItemApi } from '@/lib/catalog/assets-api'
 import { mapDetailApiToListItemForHero } from '@/lib/catalog/assets-api'
 import {
   assetKeys,
   fetchAssetDetailPublic,
   fetchAssetReviewsPublic,
+  fetchAssetVersionsPublic,
 } from '@/lib/catalog/asset-detail-query'
+import { formatBytes } from '@/lib/format-bytes'
+import { formatShortMonthDate } from '@/lib/format-date'
 import type { AssetReview } from '@/lib/catalog/catalog-utils'
+import { Badge } from '@/components/ui/badge'
 
 interface AssetDetailViewProps {
   assetId: string
@@ -42,8 +49,15 @@ export function AssetDetailView({
     initialData: initialReviews,
   })
 
-  const asset = mapDetailApiToListItemForHero(detailQuery.data)
+  const versionsQuery = useQuery({
+    queryKey: assetKeys.versions(assetId),
+    queryFn: () => fetchAssetVersionsPublic(assetId),
+  })
+
+  const detail = detailQuery.data
+  const asset = mapDetailApiToListItemForHero(detail)
   const reviews = reviewsQuery.data ?? []
+  const versions = versionsQuery.data ?? []
 
   return (
     <SiteMain>
@@ -69,6 +83,39 @@ export function AssetDetailView({
                   <span className="text-muted-foreground">No description provided yet.</span>
                 )}
               </p>
+            </div>
+
+            <div className="space-y-3">
+              <h2 className="text-lg font-semibold text-foreground">Current version</h2>
+              <div className="rounded-lg border border-border bg-card-elevated/30 px-4 py-3 space-y-2">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="text-sm font-semibold text-foreground">
+                    v{detail.currentVersionNumber}
+                  </span>
+                  <Badge variant="secondary" className="text-[10px]">
+                    {detail.currentLicense.displayName}
+                  </Badge>
+                  <span className="text-xs text-muted-foreground">
+                    {formatShortMonthDate(detail.currentVersionCreatedAt)}
+                  </span>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  {detail.currentFileName} · {formatBytes(detail.currentContentLength)}
+                </p>
+              </div>
+              <AssetLicenseCard license={detail.currentLicense} />
+              <ContentHashDisplay hash={detail.currentContentSha256} />
+            </div>
+
+            <div className="space-y-3">
+              <h2 className="text-lg font-semibold text-foreground">Version history</h2>
+              {versionsQuery.isPending ? (
+                <p className="text-sm text-muted-foreground">Loading version history…</p>
+              ) : versionsQuery.isError ? (
+                <p className="text-sm text-muted-foreground">Version history is unavailable.</p>
+              ) : (
+                <AssetVersionHistory versions={versions} />
+              )}
             </div>
 
             <AssetReviewsList reviews={reviews} />

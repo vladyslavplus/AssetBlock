@@ -19,7 +19,7 @@ public class UploadAssetCommandValidatorTests
         int? downloadLimitPerHour = null,
         long fileLength = 1) =>
         new(Guid.NewGuid(),
-            new UploadAssetRequest(title, null, price, Guid.NewGuid(), downloadLimitPerHour),
+            new UploadAssetRequest(title, null, price, Guid.NewGuid(), "PERSONAL", downloadLimitPerHour),
             new MemoryStream([1]),
             fileName,
             fileLength);
@@ -29,7 +29,7 @@ public class UploadAssetCommandValidatorTests
     {
         var command = new UploadAssetCommand(
             Guid.Empty,
-            new UploadAssetRequest("Title", null, 5m, Guid.NewGuid()),
+            new UploadAssetRequest("Title", null, 5m, Guid.NewGuid(), "PERSONAL"),
             new MemoryStream([1]),
             "file.zip",
             1);
@@ -119,7 +119,7 @@ public class UploadAssetCommandValidatorTests
         var longDesc = new string('x', 5001);
         var command = new UploadAssetCommand(
             Guid.NewGuid(),
-            new UploadAssetRequest("Title", longDesc, 5m, Guid.NewGuid()),
+            new UploadAssetRequest("Title", longDesc, 5m, Guid.NewGuid(), "PERSONAL"),
             new MemoryStream([1]),
             "file.zip",
             1);

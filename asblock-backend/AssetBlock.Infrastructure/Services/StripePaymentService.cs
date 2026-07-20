@@ -1,6 +1,6 @@
 using AssetBlock.Domain.Abstractions.Services;
-using AssetBlock.Domain.Core.Entities;
 using AssetBlock.Domain.Core.Constants;
+using AssetBlock.Domain.Core.Dto.Payments;
 using AssetBlock.Domain.Core.Exceptions;
 using AssetBlock.Domain.Core.Primitives.AppSettingsOptions;
 using Microsoft.Extensions.Logging;
@@ -13,13 +13,12 @@ namespace AssetBlock.Infrastructure.Services;
 
 internal sealed class StripePaymentService(
     IOptions<StripeOptions> options,
-    IAssetStore assetStore,
     ResiliencePipelineProvider<string> resilience,
     ILogger<StripePaymentService> logger) : IPaymentService
 {
     private readonly StripeClient _stripeClient = new(options.Value.SecretKey);
 
-    public async Task<string> CreateCheckoutSession(Guid assetId, Guid userId, CancellationToken cancellationToken = default)
+    public async Task<StripeCheckoutSession> CreateCheckoutSession(CheckoutLineItem item, Guid userId, CancellationToken cancellationToken = default)
     {
         var opts = options.Value;
         var resolvedSuccessUrl = opts.DefaultSuccessUrl;
@@ -28,13 +27,6 @@ internal sealed class StripePaymentService(
         if (string.IsNullOrWhiteSpace(resolvedSuccessUrl) || string.IsNullOrWhiteSpace(resolvedCancelUrl))
         {
             throw new InvalidOperationException("Stripe SuccessUrl and CancelUrl must be configured.");
-        }
-
-        var asset = await assetStore.GetById(assetId, cancellationToken)
-            ?? throw new InvalidOperationException($"Asset {assetId} not found.");
-        if (asset.DeletedAt.HasValue)
-        {
-            throw new InvalidOperationException($"Asset {assetId} is no longer available for purchase.");
         }
 
         var sessionService = new SessionService(_stripeClient);
@@ -46,7 +38,9 @@ internal sealed class StripePaymentService(
             Metadata = new Dictionary<string, string>
             {
                 { StripeConstants.MetadataKeys.USER_ID, userId.ToString() },
-                { StripeConstants.MetadataKeys.ASSET_ID, assetId.ToString() }
+                { StripeConstants.MetadataKeys.ASSET_ID, item.AssetId.ToString() },
+                { StripeConstants.MetadataKeys.ASSET_VERSION_ID, item.AssetVersionId.ToString() },
+                { StripeConstants.MetadataKeys.CHECKOUT_INTENT_ID, item.CheckoutIntentId.ToString() }
             },
             LineItems =
             [
@@ -54,9 +48,12 @@ internal sealed class StripePaymentService(
                 {
                     PriceData = new SessionLineItemPriceDataOptions
                     {
-                        Currency = StripeConstants.CURRENCY_USD,
-                        UnitAmount = (long)Math.Round(asset.Price * 100, MidpointRounding.AwayFromZero),
-                        ProductData = BuildProductData(asset)
+                        Currency = item.Currency,
+                        UnitAmount = (long)Math.Round(item.UnitAmount * 100, MidpointRounding.AwayFromZero),
+                        ProductData = new SessionLineItemPriceDataProductDataOptions
+                        {
+                            Name = item.Title
+                        }
                     },
                     Quantity = 1
                 }
@@ -67,22 +64,12 @@ internal sealed class StripePaymentService(
         var session = await pipeline.ExecuteAsync(
             async ct => await sessionService.CreateAsync(sessionOptions, cancellationToken: ct),
             cancellationToken);
-        return session.Url ?? throw new InvalidOperationException("Stripe did not return a session URL.");
-    }
-
-    /// <summary>Stripe rejects empty product_data.description; omit the property when absent.</summary>
-    private static SessionLineItemPriceDataProductDataOptions BuildProductData(Asset asset)
-    {
-        var productData = new SessionLineItemPriceDataProductDataOptions
+        if (string.IsNullOrWhiteSpace(session.Id) || string.IsNullOrWhiteSpace(session.Url))
         {
-            Name = asset.Title
-        };
-        if (!string.IsNullOrWhiteSpace(asset.Description))
-        {
-            productData.Description = asset.Description;
+            throw new InvalidOperationException("Stripe did not return a checkout session id and URL.");
         }
 
-        return productData;
+        return new StripeCheckoutSession(session.Id, session.Url);
     }
 
     public Task<StripeCheckoutCompleted?> VerifyCheckoutCompleted(string payload, string signature, CancellationToken cancellationToken = default)
@@ -122,12 +109,26 @@ internal sealed class StripePaymentService(
 
         if (!session.Metadata.TryGetValue(StripeConstants.MetadataKeys.USER_ID, out var userIdStr) ||
             !session.Metadata.TryGetValue(StripeConstants.MetadataKeys.ASSET_ID, out var assetIdStr) ||
+            !session.Metadata.TryGetValue(StripeConstants.MetadataKeys.ASSET_VERSION_ID, out var assetVersionIdStr) ||
+            !session.Metadata.TryGetValue(StripeConstants.MetadataKeys.CHECKOUT_INTENT_ID, out var checkoutIntentIdStr) ||
             !Guid.TryParse(userIdStr, out var userId) ||
-            !Guid.TryParse(assetIdStr, out var assetId))
+            !Guid.TryParse(assetIdStr, out var assetId) ||
+            !Guid.TryParse(assetVersionIdStr, out var assetVersionId) ||
+            !Guid.TryParse(checkoutIntentIdStr, out var checkoutIntentId))
         {
             return Task.FromResult<StripeCheckoutCompleted?>(null);
         }
 
-        return Task.FromResult<StripeCheckoutCompleted?>(new StripeCheckoutCompleted(userId, assetId, session.Id));
+        if (session.AmountTotal is not { } amountTotalInCents || amountTotalInCents <= 0
+            || !string.Equals(session.Currency, StripeConstants.CURRENCY_USD, StringComparison.OrdinalIgnoreCase))
+        {
+            throw new InvalidOperationException("Paid Stripe checkout session has an invalid amount or currency.");
+        }
+
+        var amountTotal = amountTotalInCents / 100m;
+        var currency = StripeConstants.CURRENCY_USD;
+
+        return Task.FromResult<StripeCheckoutCompleted?>(
+            new StripeCheckoutCompleted(checkoutIntentId, userId, assetId, assetVersionId, session.Id, amountTotal, currency));
     }
 }

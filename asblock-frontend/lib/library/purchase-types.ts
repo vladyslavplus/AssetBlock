@@ -6,6 +6,13 @@ export interface PurchaseLibraryItem {
   purchasedAt: string
   authorUsername: string
   hasUserReviewed: boolean
+  purchasedVersionNumber: number
+  purchasedVersionId: string
+  latestEntitledVersionNumber: number
+  latestEntitledVersionId: string
+  hasUpdate: boolean
+  pricePaid: number
+  currency: string
 }
 
 export interface PagedPurchaseLibraryDto {

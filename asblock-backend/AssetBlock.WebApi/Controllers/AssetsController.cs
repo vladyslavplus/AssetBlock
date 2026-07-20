@@ -2,6 +2,8 @@ using AssetBlock.Application.UseCases.Assets.AddAssetTag;
 using AssetBlock.Application.UseCases.Assets.DeleteAsset;
 using AssetBlock.Application.UseCases.Assets.GetAssetById;
 using AssetBlock.Application.UseCases.Assets.GetAssets;
+using AssetBlock.Application.UseCases.Assets.GetAssetVersions;
+using AssetBlock.Application.UseCases.Assets.PublishAssetVersion;
 using AssetBlock.Application.UseCases.Assets.RemoveAssetTag;
 using AssetBlock.Application.UseCases.Assets.UpdateAsset;
 using AssetBlock.Application.UseCases.Assets.UploadAsset;
@@ -81,7 +83,7 @@ public sealed class AssetsController(
             return StatusCode(StatusCodes.Status416RangeNotSatisfiable);
         }
 
-        var auth = await downloadService.AuthorizeDownload(id, userId.Value, cancellationToken);
+        var auth = await downloadService.AuthorizeDownload(id, userId.Value, null, cancellationToken);
         if (auth.Status == AssetDownloadStatus.NOT_FOUND)
         {
             return ProblemFromCode(StatusCodes.Status404NotFound, ErrorCodes.ERR_ASSET_NOT_FOUND);
@@ -148,7 +150,7 @@ public sealed class AssetsController(
         }
 
         logger.LogInformation("Upload started for user {UserId}, file {FileName}", userId, file.FileName);
-        var request = new UploadAssetRequest(form.Title, form.Description, form.Price, form.CategoryId, form.DownloadLimitPerHour)
+        var request = new UploadAssetRequest(form.Title, form.Description, form.Price, form.CategoryId, form.LicenseCode, form.DownloadLimitPerHour)
         {
             Tags = form.Tags
         };
@@ -212,6 +214,123 @@ public sealed class AssetsController(
         var result = await Sender.Send(command, cancellationToken);
 
         return result.IsSuccess ? Ok() : MapResultToActionResult(result);
+    }
+
+    /// <summary>
+    /// List published versions for an active asset (public). Soft-deleted history is available only to author/purchaser.
+    /// </summary>
+    [HttpGet(ApiRoutes.Assets.VERSIONS)]
+    [AllowAnonymous]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> ListVersions(Guid id, CancellationToken cancellationToken)
+    {
+        var result = await Sender.Send(new GetAssetVersionsQuery(id, GetUserId()), cancellationToken);
+        return MapResultToActionResult(result);
+    }
+
+    /// <summary>
+    /// Publish a new version of an asset. Requires a verified email address. Only the author can publish versions.
+    /// Multipart/form-data; form field name: "file".
+    /// </summary>
+    [HttpPost(ApiRoutes.Assets.VERSION_PUBLISH)]
+    [Authorize(Policy = AuthorizationPolicies.VERIFIED_EMAIL)]
+    [EnableRateLimiting(RateLimitingConstants.Policies.ASSETS_UPLOAD)]
+    [Consumes("multipart/form-data")]
+    [ProducesResponseType(StatusCodes.Status201Created)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> PublishVersion(
+        Guid id,
+        [FromForm] PublishAssetVersionFormWithFile form,
+        CancellationToken cancellationToken)
+    {
+        var userId = GetUserId();
+        if (userId is null)
+        {
+            return UnauthorizedProblem();
+        }
+
+        var file = form.File;
+        if (file.Length == 0)
+        {
+            return ProblemFromCode(StatusCodes.Status400BadRequest, ErrorCodes.ERR_FILE_REQUIRED);
+        }
+
+        var maxBytes = fileUploadOptions.Value.MaxFileBytes;
+        if (file.Length > maxBytes)
+        {
+            return ProblemFromCode(StatusCodes.Status400BadRequest, ErrorCodes.ERR_FILE_TOO_LARGE);
+        }
+
+        var request = new PublishAssetVersionRequest(form.LicenseCode, form.ReleaseNotes);
+        await using var stream = file.OpenReadStream();
+        var command = new PublishAssetVersionCommand(id, userId.Value, request, stream, file.FileName, file.Length);
+        var result = await Sender.Send(command, cancellationToken);
+
+        if (result.IsSuccess)
+        {
+            return CreatedAtAction(nameof(ListVersions), new { id }, new { id = result.Value });
+        }
+
+        return MapResultToActionResult(result);
+    }
+
+    /// <summary>
+    /// Download a specific version of an asset file (decrypted). Requires authentication and prior purchase (or author).
+    /// Range requests are not supported for chunked AES-GCM payloads.
+    /// </summary>
+    [HttpGet(ApiRoutes.Assets.VERSION_DOWNLOAD)]
+    [Authorize]
+    [EnableRateLimiting(RateLimitingConstants.Policies.ASSETS_DOWNLOAD)]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status416RangeNotSatisfiable)]
+    [ProducesResponseType(StatusCodes.Status429TooManyRequests)]
+    public async Task<IActionResult> DownloadVersion(Guid id, Guid versionId, CancellationToken cancellationToken)
+    {
+        var userId = GetUserId();
+        if (userId is null)
+        {
+            return UnauthorizedProblem();
+        }
+
+        if (Request.Headers.ContainsKey(HeaderNames.Range))
+        {
+            Response.Headers.AcceptRanges = "none";
+            return StatusCode(StatusCodes.Status416RangeNotSatisfiable);
+        }
+
+        var auth = await downloadService.AuthorizeDownload(id, userId.Value, versionId, cancellationToken);
+        if (auth.Status == AssetDownloadStatus.NOT_FOUND)
+        {
+            return ProblemFromCode(StatusCodes.Status404NotFound, ErrorCodes.ERR_ASSET_NOT_FOUND);
+        }
+
+        if (auth.Status == AssetDownloadStatus.FORBIDDEN)
+        {
+            return ProblemFromCode(StatusCodes.Status403Forbidden, ErrorCodes.ERR_PURCHASE_ACCESS_DENIED);
+        }
+
+        if (auth.Status == AssetDownloadStatus.RATE_LIMITED)
+        {
+            return ProblemFromCode(StatusCodes.Status429TooManyRequests, ErrorCodes.ERR_DOWNLOAD_LIMIT_EXCEEDED);
+        }
+
+        var permit = auth.Permit!;
+        Response.ContentType = "application/octet-stream";
+        Response.Headers.AcceptRanges = "none";
+        Response.Headers.ContentDisposition = new ContentDispositionHeaderValue("attachment")
+        {
+            FileName = permit.FileName
+        }.ToString();
+
+        await downloadService.CopyDecrypted(permit.StorageKey, Response.Body, cancellationToken);
+        return new EmptyResult();
     }
 
     /// <summary>

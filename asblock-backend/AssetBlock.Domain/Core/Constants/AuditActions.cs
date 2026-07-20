@@ -23,6 +23,7 @@ public static class AuditActions
     public const string ASSET_HARD_DELETE = "Asset.HardDelete";
     public const string ASSET_TAG_ADD = "Asset.TagAdd";
     public const string ASSET_TAG_REMOVE = "Asset.TagRemove";
+    public const string ASSET_VERSION_PUBLISH = "Asset.VersionPublish";
 
     public const string CATEGORY_CREATE = "Category.Create";
     public const string CATEGORY_UPDATE = "Category.Update";

@@ -97,7 +97,7 @@ public class CreateReviewCommandHandlerTests
         var asset = new Asset { Id = command.AssetId, AuthorId = Guid.NewGuid(), CategoryId = Guid.NewGuid(), Title = "A", StorageKey = "k", FileName = "f" };
         _assetStoreMock.GetById(command.AssetId, Arg.Any<CancellationToken>()).Returns(asset);
 
-        var purchase = new Purchase { Id = Guid.NewGuid(), UserId = command.UserId, AssetId = command.AssetId, StripePaymentId = "pay_1", PurchasedAt = DateTimeOffset.UtcNow.AddDays(-15) };
+        var purchase = new Purchase { Id = Guid.NewGuid(), UserId = command.UserId, AssetId = command.AssetId, AssetVersionId = Guid.NewGuid(), CheckoutIntentId = Guid.NewGuid(), PricePaid = 9.99m, Currency = "usd", StripePaymentId = "pay_1", PurchasedAt = DateTimeOffset.UtcNow.AddDays(-15) };
         _purchaseStoreMock.GetPurchase(command.UserId, command.AssetId, Arg.Any<CancellationToken>()).Returns(purchase);
 
         var result = await _handler.Handle(command, CancellationToken.None);
@@ -112,7 +112,7 @@ public class CreateReviewCommandHandlerTests
         var command = new CreateReviewCommand(Guid.NewGuid(), Guid.NewGuid(), 5, "Great");
         var asset = new Asset { Id = command.AssetId, AuthorId = Guid.NewGuid(), CategoryId = Guid.NewGuid(), Title = "A", StorageKey = "k", FileName = "f" };
         _assetStoreMock.GetById(command.AssetId, Arg.Any<CancellationToken>()).Returns(asset);
-        var purchase = new Purchase { Id = Guid.NewGuid(), UserId = command.UserId, AssetId = command.AssetId, StripePaymentId = "pay_1", PurchasedAt = DateTimeOffset.UtcNow.AddDays(-1) };
+        var purchase = new Purchase { Id = Guid.NewGuid(), UserId = command.UserId, AssetId = command.AssetId, AssetVersionId = Guid.NewGuid(), CheckoutIntentId = Guid.NewGuid(), PricePaid = 9.99m, Currency = "usd", StripePaymentId = "pay_1", PurchasedAt = DateTimeOffset.UtcNow.AddDays(-1) };
         _purchaseStoreMock.GetPurchase(command.UserId, command.AssetId, Arg.Any<CancellationToken>()).Returns(purchase);
         _reviewStoreMock.Exists(command.UserId, command.AssetId, Arg.Any<CancellationToken>()).Returns(true);
 
@@ -129,7 +129,7 @@ public class CreateReviewCommandHandlerTests
         var command = new CreateReviewCommand(Guid.NewGuid(), Guid.NewGuid(), 5, "Great");
         var asset = new Asset { Id = command.AssetId, AuthorId = Guid.NewGuid(), CategoryId = Guid.NewGuid(), Title = "A", StorageKey = "k", FileName = "f" };
         _assetStoreMock.GetById(command.AssetId, Arg.Any<CancellationToken>()).Returns(asset);
-        var purchase = new Purchase { Id = Guid.NewGuid(), UserId = command.UserId, AssetId = command.AssetId, StripePaymentId = "pay_1", PurchasedAt = DateTimeOffset.UtcNow.AddDays(-1) };
+        var purchase = new Purchase { Id = Guid.NewGuid(), UserId = command.UserId, AssetId = command.AssetId, AssetVersionId = Guid.NewGuid(), CheckoutIntentId = Guid.NewGuid(), PricePaid = 9.99m, Currency = "usd", StripePaymentId = "pay_1", PurchasedAt = DateTimeOffset.UtcNow.AddDays(-1) };
         _purchaseStoreMock.GetPurchase(command.UserId, command.AssetId, Arg.Any<CancellationToken>()).Returns(purchase);
         _reviewStoreMock.Exists(command.UserId, command.AssetId, Arg.Any<CancellationToken>()).Returns(false);
         var review = new Review
@@ -177,7 +177,7 @@ public class CreateReviewCommandHandlerTests
         var command = new CreateReviewCommand(Guid.NewGuid(), Guid.NewGuid(), 5, "Great");
         var asset = new Asset { Id = command.AssetId, AuthorId = Guid.NewGuid(), CategoryId = Guid.NewGuid(), Title = "A", StorageKey = "k", FileName = "f" };
         _assetStoreMock.GetById(command.AssetId, Arg.Any<CancellationToken>()).Returns(asset);
-        var purchase = new Purchase { Id = Guid.NewGuid(), UserId = command.UserId, AssetId = command.AssetId, StripePaymentId = "pay_1", PurchasedAt = DateTimeOffset.UtcNow.AddDays(-1) };
+        var purchase = new Purchase { Id = Guid.NewGuid(), UserId = command.UserId, AssetId = command.AssetId, AssetVersionId = Guid.NewGuid(), CheckoutIntentId = Guid.NewGuid(), PricePaid = 9.99m, Currency = "usd", StripePaymentId = "pay_1", PurchasedAt = DateTimeOffset.UtcNow.AddDays(-1) };
         _purchaseStoreMock.GetPurchase(command.UserId, command.AssetId, Arg.Any<CancellationToken>()).Returns(purchase);
         _reviewStoreMock.Exists(command.UserId, command.AssetId, Arg.Any<CancellationToken>()).Returns(false);
         _reviewStoreMock.Create(command.AssetId, command.UserId, command.Rating, command.Comment, Arg.Any<CancellationToken>()).ThrowsAsync(new Exception("DB Error"));

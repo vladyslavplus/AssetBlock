@@ -87,6 +87,7 @@ public static class DependencyInjection
         services.AddScoped<ICategoryStore, CategoryStore>();
         services.AddScoped<IAssetStore, AssetStore>();
         services.AddScoped<IPurchaseStore, PurchaseStore>();
+        services.AddScoped<ICheckoutIntentStore, CheckoutIntentStore>();
         services.AddScoped<IReviewStore, ReviewStore>();
         services.AddScoped<ISocialPlatformStore, SocialPlatformStore>();
         services.AddScoped<INotificationStore, NotificationStore>();

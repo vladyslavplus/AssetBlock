@@ -6,6 +6,7 @@ using AssetBlock.Domain.Core.Dto.Audit;
 using AssetBlock.Domain.Core.Entities;
 using AssetBlock.Domain.Core.Enums;
 using AssetBlock.Domain.Core.Exceptions;
+using AssetBlock.Domain.Core.Licenses;
 using AssetBlock.Domain.Core.Primitives.AppSettingsOptions;
 using Ardalis.Result;
 using MediatR;
@@ -52,6 +53,13 @@ internal sealed class UploadAssetCommandHandler(
             return ResultError.Error<Guid>(ErrorCodes.ERR_FILE_EXTENSION_NOT_ALLOWED);
         }
 
+        if (!AssetLicenseCatalog.TryParseCode(request.Request.LicenseCode, out var licenseCode))
+        {
+            return ResultError.Error<Guid>(ErrorCodes.ERR_LICENSE_CODE_INVALID);
+        }
+
+        var licenseTemplate = AssetLicenseCatalog.Get(licenseCode);
+
         var category = await categoryStore.GetById(request.Request.CategoryId, cancellationToken);
         if (category is null)
         {
@@ -94,12 +102,14 @@ internal sealed class UploadAssetCommandHandler(
         }
 
         var assetId = Guid.NewGuid();
-        var storageKey = $"assets/{request.AuthorId}/{assetId}{matchedExtension}";
+        var versionId = Guid.NewGuid();
+        var storageKey = $"assets/{request.AuthorId}/{assetId}/{versionId}{matchedExtension}";
         var ciphertextLength = encryptionService.ComputeCiphertextLength(request.FileLength);
 
+        string sha256Hex;
         try
         {
-            await EncryptAndUpload(request.FileContent, storageKey, ciphertextLength, cancellationToken);
+            sha256Hex = await EncryptAndUpload(request.FileContent, storageKey, ciphertextLength, cancellationToken);
         }
         catch (OperationCanceledException)
         {
@@ -126,18 +136,29 @@ internal sealed class UploadAssetCommandHandler(
             CreatedAt = now
         };
 
+        var version = new AssetVersion
+        {
+            Id = versionId,
+            AssetId = assetId,
+            VersionNumber = 1,
+            IsCurrent = true,
+            StorageKey = storageKey,
+            FileName = displayFileName,
+            ContentLength = request.FileLength,
+            ContentSha256 = sha256Hex,
+            ReleaseNotes = "Initial release",
+            LicenseCode = licenseCode,
+            LicenseTemplateVersion = licenseTemplate.TemplateVersion,
+            LicenseDisplayName = licenseTemplate.DisplayName,
+            LicenseTerms = licenseTemplate.TermsPlainText,
+            CreatedAt = now
+        };
+
         try
         {
             await unitOfWork.ExecuteInTransaction(async ct =>
             {
-                if (existingTags is { Count: > 0 })
-                {
-                    await assetStore.AddWithTags(asset, existingTags, ct);
-                }
-                else
-                {
-                    await assetStore.Add(asset, ct);
-                }
+                await assetStore.AddWithVersion(asset, version, existingTags, ct);
 
                 await auditWriter.Write(new AuditEvent(
                     AuditActions.ASSET_CREATE,
@@ -147,7 +168,9 @@ internal sealed class UploadAssetCommandHandler(
                     new Dictionary<string, object?>
                     {
                         ["categoryId"] = request.Request.CategoryId.ToString(),
-                        ["tagCount"] = existingTags?.Count ?? 0
+                        ["tagCount"] = existingTags?.Count ?? 0,
+                        ["versionId"] = versionId.ToString(),
+                        ["licenseCode"] = licenseCode.ToString()
                     }), ct);
             }, cancellationToken);
         }
@@ -191,12 +214,16 @@ internal sealed class UploadAssetCommandHandler(
         return Result.Success(assetId);
     }
 
-    private async Task EncryptAndUpload(
+    /// <summary>Encrypts and uploads the plain stream; returns the lowercase SHA-256 hex of the plaintext.</summary>
+    private async Task<string> EncryptAndUpload(
         Stream plain,
         string storageKey,
         long ciphertextLength,
         CancellationToken cancellationToken)
     {
+        // Wrap the plaintext stream so we observe its bytes for hashing.
+        await using var hashingStream = new PlaintextHashObservingStream(plain);
+
         var pipe = new Pipe();
         Exception? encryptError = null;
         Exception? uploadError = null;
@@ -206,7 +233,8 @@ internal sealed class UploadAssetCommandHandler(
             try
             {
                 await using var writerStream = pipe.Writer.AsStream(leaveOpen: true);
-                await encryptionService.Encrypt(plain, writerStream, cancellationToken).ConfigureAwait(false);
+                await encryptionService.Encrypt(hashingStream, writerStream, cancellationToken).ConfigureAwait(false);
+                hashingStream.FinalizeHash();
                 await pipe.Writer.CompleteAsync().ConfigureAwait(false);
             }
             catch (Exception ex)
@@ -243,5 +271,7 @@ internal sealed class UploadAssetCommandHandler(
         {
             throw uploadError;
         }
+
+        return hashingStream.HashHex;
     }
 }

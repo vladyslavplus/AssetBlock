@@ -1,18 +1,24 @@
+using AssetBlock.Domain.Core.Dto.Payments;
+
 namespace AssetBlock.Domain.Abstractions.Services;
 
 /// <summary>Verified Stripe checkout.session.completed data (no DB writes).</summary>
 public sealed record StripeCheckoutCompleted(
+    Guid CheckoutIntentId,
     Guid UserId,
     Guid AssetId,
-    string StripeSessionId);
+    Guid AssetVersionId,
+    string StripeSessionId,
+    decimal AmountTotal,
+    string Currency);
 
 /// <summary>
 /// Creates checkout sessions and verifies payment webhooks (e.g., Stripe).
 /// </summary>
 public interface IPaymentService
 {
-    /// <summary>Creates a checkout session for the asset; returns the session URL for redirect.</summary>
-    Task<string> CreateCheckoutSession(Guid assetId, Guid userId, CancellationToken cancellationToken = default);
+    /// <summary>Creates a checkout session for the given line item.</summary>
+    Task<StripeCheckoutSession> CreateCheckoutSession(CheckoutLineItem item, Guid userId, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Verifies webhook signature and extracts paid checkout session metadata.
@@ -21,3 +27,5 @@ public interface IPaymentService
     /// </summary>
     Task<StripeCheckoutCompleted?> VerifyCheckoutCompleted(string payload, string signature, CancellationToken cancellationToken = default);
 }
+
+public sealed record StripeCheckoutSession(string Id, string Url);

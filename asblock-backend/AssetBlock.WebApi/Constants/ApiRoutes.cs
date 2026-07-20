@@ -30,6 +30,9 @@ public static class ApiRoutes
         public const string DOWNLOAD = "{id:guid}/download";
         public const string TAGS = "{id:guid}/tags";
         public const string TAGS_ID = "{id:guid}/tags/{tagId:guid}";
+        public const string VERSIONS = "{id:guid}/versions";
+        public const string VERSION_PUBLISH = "{id:guid}/versions";
+        public const string VERSION_DOWNLOAD = "{id:guid}/versions/{versionId:guid}/download";
     }
 
     public static class Payments

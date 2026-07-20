@@ -7,4 +7,11 @@ public sealed record PurchaseLibraryItemDto(
     decimal Price,
     DateTimeOffset PurchasedAt,
     string AuthorUsername,
-    bool HasUserReviewed);
+    bool HasUserReviewed,
+    int PurchasedVersionNumber,
+    Guid PurchasedVersionId,
+    int LatestEntitledVersionNumber,
+    Guid LatestEntitledVersionId,
+    bool HasUpdate,
+    decimal PricePaid,
+    string Currency);

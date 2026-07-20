@@ -353,7 +353,10 @@ public sealed class AssetStorePostgresTests(PostgresFixture fixture)
         var asset = TestData.CreateAsset(author.Id, category.Id, title: "Rated Loop Pack", price: 7.5m);
         await store.AddWithTags(asset, [tagB, tagA]);
 
-        db.Purchases.Add(TestData.CreatePurchase(buyer.Id, asset.Id));
+        var version = TestData.CreateAssetVersion(asset.Id);
+        db.AssetVersions.Add(version);
+        await db.SaveChangesAsync();
+        TestData.AddCompletedPurchase(db, TestData.CreatePurchase(buyer.Id, asset.Id, version.Id), asset.Title);
         db.Reviews.Add(TestData.CreateReview(buyer.Id, asset.Id, rating: 4));
         await db.SaveChangesAsync();
 

@@ -1,4 +1,5 @@
 import { apiFetch } from '@/lib/http/api-client'
+import type { AssetLicenseSummaryApi } from '@/lib/assets/license-types'
 import type { AssetListItem } from '@/lib/catalog/asset-types'
 import type { AssetReview } from '@/lib/catalog/catalog-utils'
 import { CATALOG_ASSETS_PAGE_SIZE, type CatalogFilters } from '@/lib/catalog/catalog-filters'
@@ -167,6 +168,25 @@ export interface AssetDetailItemApi {
   updatedAt: string | null
   tags: string[]
   averageRating: number
+  currentVersionNumber: number
+  currentVersionId: string
+  currentVersionCreatedAt: string
+  currentFileName: string
+  currentContentLength: number
+  currentContentSha256: string
+  currentLicense: AssetLicenseSummaryApi
+}
+
+export interface AssetVersionSummaryApi {
+  id: string
+  versionNumber: number
+  isCurrent: boolean
+  fileName: string
+  contentLength: number
+  contentSha256: string
+  releaseNotes: string | null
+  createdAt: string
+  license: AssetLicenseSummaryApi
 }
 
 /** Shapes list item for components that still expect AssetListItem (detail lacks tags/rating/username). */

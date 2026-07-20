@@ -59,13 +59,16 @@ public class UploadAssetCommandHandlerTests
             NullLogger<UploadAssetCommandHandler>.Instance);
     }
 
+    private static UploadAssetRequest DefaultRequest(string title = "Title", string desc = "Desc", decimal price = 100m, string licenseCode = "PERSONAL") =>
+        new(title, desc, price, Guid.NewGuid(), licenseCode);
+
     private static UploadAssetCommand CreateCommand(UploadAssetRequest request, string fileName = "test.zip", long length = 1) =>
         new(Guid.NewGuid(), request, new MemoryStream([1]), fileName, length);
 
     [Fact]
     public async Task Handle_WhenFileTooLarge_ShouldReturnError()
     {
-        var request = new UploadAssetRequest("Title", "Desc", 100m, Guid.NewGuid());
+        var request = DefaultRequest();
         var command = CreateCommand(request, length: 250L * 1024 * 1024 + 1);
 
         var result = await _handler.Handle(command, CancellationToken.None);
@@ -77,7 +80,7 @@ public class UploadAssetCommandHandlerTests
     [Fact]
     public async Task Handle_WhenFileIsExactlyAtConfiguredLimit_ShouldAcceptUpload()
     {
-        var request = new UploadAssetRequest("Title", "Desc", 100m, Guid.NewGuid());
+        var request = DefaultRequest();
         var command = CreateCommand(request, length: 250L * 1024 * 1024);
         _categoryStoreMock.GetById(request.CategoryId, Arg.Any<CancellationToken>())
             .Returns(new Category { Id = request.CategoryId, Name = "Cat", Slug = "cat" });
@@ -91,7 +94,7 @@ public class UploadAssetCommandHandlerTests
     [Fact]
     public async Task Handle_WhenExtensionNotAllowed_ShouldReturnError()
     {
-        var request = new UploadAssetRequest("Title", "Desc", 100m, Guid.NewGuid());
+        var request = DefaultRequest();
         var command = CreateCommand(request, fileName: "test.png");
 
         var result = await _handler.Handle(command, CancellationToken.None);
@@ -103,7 +106,7 @@ public class UploadAssetCommandHandlerTests
     [Fact]
     public async Task Handle_WhenArchiveRejected_ShouldReturnError()
     {
-        var request = new UploadAssetRequest("Title", "Desc", 100m, Guid.NewGuid());
+        var request = DefaultRequest();
         var command = CreateCommand(request);
         var category = new Category { Id = request.CategoryId, Name = "Cat", Slug = "cat" };
         _categoryStoreMock.GetById(request.CategoryId, Arg.Any<CancellationToken>()).Returns(category);
@@ -119,7 +122,7 @@ public class UploadAssetCommandHandlerTests
     [Fact]
     public async Task Handle_WhenCategoryNotFound_ShouldReturnNotFound()
     {
-        var request = new UploadAssetRequest("Title", "Desc", 100m, Guid.NewGuid());
+        var request = DefaultRequest();
         var command = CreateCommand(request);
 
         _categoryStoreMock.GetById(request.CategoryId, Arg.Any<CancellationToken>()).Returns((Category?)null);
@@ -134,7 +137,7 @@ public class UploadAssetCommandHandlerTests
     [Fact]
     public async Task Handle_WhenEncryptionFails_ShouldReturnError()
     {
-        var request = new UploadAssetRequest("Title", "Desc", 100m, Guid.NewGuid());
+        var request = DefaultRequest();
         var command = CreateCommand(request);
         var category = new Category { Id = request.CategoryId, Name = "Cat", Slug = "cat" };
 
@@ -151,7 +154,7 @@ public class UploadAssetCommandHandlerTests
     [Fact]
     public async Task Handle_WhenStorageUploadFails_ShouldReturnError()
     {
-        var request = new UploadAssetRequest("Title", "Desc", 100m, Guid.NewGuid());
+        var request = DefaultRequest();
         var command = CreateCommand(request);
         var category = new Category { Id = request.CategoryId, Name = "Cat", Slug = "cat" };
 
@@ -168,7 +171,7 @@ public class UploadAssetCommandHandlerTests
     [Fact]
     public async Task Handle_WhenStreamingUploadSucceeds_ShouldPipeCiphertextWithoutSeekableBuffer()
     {
-        var request = new UploadAssetRequest("Title", "Desc", 100m, Guid.NewGuid());
+        var request = DefaultRequest();
         var command = CreateCommand(request);
         var ciphertext = "ciphertext"u8.ToArray();
         byte[]? uploaded = null;
@@ -208,7 +211,7 @@ public class UploadAssetCommandHandlerTests
     [Fact]
     public async Task Handle_WhenStreamingIsCancelled_ShouldPropagateCancellation()
     {
-        var request = new UploadAssetRequest("Title", "Desc", 100m, Guid.NewGuid());
+        var request = DefaultRequest();
         var command = CreateCommand(request);
         _categoryStoreMock.GetById(request.CategoryId, Arg.Any<CancellationToken>())
             .Returns(new Category { Id = request.CategoryId, Name = "Cat", Slug = "cat" });
@@ -221,20 +224,22 @@ public class UploadAssetCommandHandlerTests
         var act = () => _handler.Handle(command, new CancellationToken(canceled: true));
 
         await act.Should().ThrowAsync<OperationCanceledException>();
-        await _assetStoreMock.DidNotReceiveWithAnyArgs().Add(
+        await _assetStoreMock.DidNotReceiveWithAnyArgs().AddWithVersion(
             Arg.Any<Asset>(),
+            Arg.Any<AssetVersion>(),
+            Arg.Any<List<Tag>?>(),
             Arg.Any<CancellationToken>());
     }
 
     [Fact]
     public async Task Handle_WhenDbAddFails_ShouldAttemptToDeleteStorageAndThrow()
     {
-        var request = new UploadAssetRequest("Title", "Desc", 100m, Guid.NewGuid());
+        var request = DefaultRequest();
         var command = CreateCommand(request);
         var category = new Category { Id = request.CategoryId, Name = "Cat", Slug = "cat" };
 
         _categoryStoreMock.GetById(request.CategoryId, Arg.Any<CancellationToken>()).Returns(category);
-        _assetStoreMock.Add(Arg.Any<Asset>(), Arg.Any<CancellationToken>())
+        _assetStoreMock.AddWithVersion(Arg.Any<Asset>(), Arg.Any<AssetVersion>(), Arg.Any<List<Tag>?>(), Arg.Any<CancellationToken>())
             .ThrowsAsync(new Exception("DB Error"));
 
         Func<Task> act = async () => await _handler.Handle(command, CancellationToken.None);
@@ -246,7 +251,7 @@ public class UploadAssetCommandHandlerTests
     [Fact]
     public async Task Handle_WhenSuccessful_ShouldReturnAssetIdClearCache()
     {
-        var request = new UploadAssetRequest("Title", "Desc", 100m, Guid.NewGuid(), 10);
+        var request = new UploadAssetRequest("Title", "Desc", 100m, Guid.NewGuid(), "PERSONAL", 10);
         var command = CreateCommand(request, fileName: "path/to/MyArchive.TAR.GZ");
         var category = new Category { Id = request.CategoryId, Name = "Cat", Slug = "cat" };
 
@@ -257,13 +262,17 @@ public class UploadAssetCommandHandlerTests
         result.IsSuccess.Should().BeTrue();
         result.Value.Should().NotBeEmpty();
 
-        await _assetStoreMock.Received(1).Add(Arg.Is<Asset>(a =>
-            a.Id == result.Value &&
-            a.Title == "Title" &&
-            a.DownloadLimitPerHour == 10 &&
-            a.FileName == "MyArchive.TAR.GZ" &&
-            a.StorageKey.EndsWith(".tar.gz")
-        ), Arg.Any<CancellationToken>());
+        await _assetStoreMock.Received(1).AddWithVersion(
+            Arg.Is<Asset>(a =>
+                a.Id == result.Value &&
+                a.Title == "Title" &&
+                a.DownloadLimitPerHour == 10 &&
+                a.FileName == "MyArchive.TAR.GZ" &&
+                a.StorageKey.Contains(result.Value.ToString()) &&
+                a.StorageKey.EndsWith(".tar.gz")),
+            Arg.Any<AssetVersion>(),
+            Arg.Any<List<Tag>?>(),
+            Arg.Any<CancellationToken>());
 
         await _auditWriterMock.Received(1).Write(
             Arg.Is<AuditEvent>(e =>
@@ -279,9 +288,9 @@ public class UploadAssetCommandHandlerTests
     }
 
     [Fact]
-    public async Task Handle_WhenTagsPresent_ShouldVerifyTagsAndCallAddWithTags()
+    public async Task Handle_WhenTagsPresent_ShouldVerifyTagsAndCallAddWithVersion()
     {
-        var request = new UploadAssetRequest("Title", "Desc", 100m, Guid.NewGuid(), 10)
+        var request = new UploadAssetRequest("Title", "Desc", 100m, Guid.NewGuid(), "PERSONAL", 10)
         {
             Tags = ["tag1", "  TAG2 "]
         };
@@ -304,13 +313,14 @@ public class UploadAssetCommandHandlerTests
         await _tagStoreMock.Received(1).GetTagsByNames(Arg.Is<List<string>>(list =>
             list.Count == 2 && list.Contains("tag1") && list.Contains("tag2")), Arg.Any<CancellationToken>());
 
-        await _assetStoreMock.Received(1).AddWithTags(Arg.Any<Asset>(), existingTags, Arg.Any<CancellationToken>());
+        await _assetStoreMock.Received(1).AddWithVersion(Arg.Any<Asset>(), Arg.Any<AssetVersion>(),
+            Arg.Is<List<Tag>?>(tags => tags != null && tags.Count == 2), Arg.Any<CancellationToken>());
     }
 
     [Fact]
     public async Task Handle_WhenTagsMissing_ShouldReturnError()
     {
-        var request = new UploadAssetRequest("Title", "Desc", 100m, Guid.NewGuid(), 10)
+        var request = new UploadAssetRequest("Title", "Desc", 100m, Guid.NewGuid(), "PERSONAL", 10)
         {
             Tags = ["tag1", "nonexistent"]
         };
@@ -331,6 +341,6 @@ public class UploadAssetCommandHandlerTests
         result.IsSuccess.Should().BeFalse();
         result.Status.Should().Be(ResultStatus.NotFound);
         result.Errors.Should().Contain(ErrorCodes.ERR_TAG_NOT_FOUND);
-        await _assetStoreMock.DidNotReceiveWithAnyArgs().AddWithTags(Arg.Any<Asset>(), Arg.Any<List<Tag>>(), Arg.Any<CancellationToken>());
+        await _assetStoreMock.DidNotReceiveWithAnyArgs().AddWithVersion(Arg.Any<Asset>(), Arg.Any<AssetVersion>(), Arg.Any<List<Tag>?>(), Arg.Any<CancellationToken>());
     }
 }

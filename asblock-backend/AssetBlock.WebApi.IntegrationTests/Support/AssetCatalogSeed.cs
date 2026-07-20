@@ -1,5 +1,7 @@
 using AssetBlock.Domain.Core.Constants;
 using AssetBlock.Domain.Core.Entities;
+using AssetBlock.Domain.Core.Enums;
+using AssetBlock.Domain.Core.Licenses;
 using AssetBlock.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -31,6 +33,11 @@ internal static class AssetCatalogSeed
         };
 
         var assetId = Guid.NewGuid();
+        var versionId = Guid.NewGuid();
+        const string storageKey = "integration/seed/asset.bin";
+        const string fileName = "asset.bin";
+        var license = AssetLicenseCatalog.Get(AssetLicenseCode.PERSONAL);
+        var now = DateTimeOffset.UtcNow;
         var asset = new Asset
         {
             Id = assetId,
@@ -39,12 +46,31 @@ internal static class AssetCatalogSeed
             Title = "Integration seeded asset",
             Description = "Seeded for integration tests.",
             Price = 9.99m,
-            StorageKey = "integration/seed/asset.bin",
-            FileName = "asset.bin"
+            StorageKey = storageKey,
+            FileName = fileName,
+            CreatedAt = now
+        };
+        var version = new AssetVersion
+        {
+            Id = versionId,
+            AssetId = assetId,
+            VersionNumber = 1,
+            IsCurrent = true,
+            StorageKey = storageKey,
+            FileName = fileName,
+            ContentLength = 1,
+            ContentSha256 = new string('0', 64),
+            ReleaseNotes = "Initial release",
+            LicenseCode = license.Code,
+            LicenseTemplateVersion = license.TemplateVersion,
+            LicenseDisplayName = license.DisplayName,
+            LicenseTerms = license.TermsPlainText,
+            CreatedAt = now
         };
 
         db.Users.Add(user);
         db.Assets.Add(asset);
+        db.AssetVersions.Add(version);
         await db.SaveChangesAsync();
 
         return assetId;

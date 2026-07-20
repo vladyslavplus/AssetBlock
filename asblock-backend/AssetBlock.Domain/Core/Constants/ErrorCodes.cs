@@ -25,6 +25,8 @@ public static class ErrorCodes
     public const string ERR_ASSET_TAG_NOT_FOUND = "ERR_ASSET_TAG_NOT_FOUND";
     public const string ERR_ASSET_NOT_FOUND = "ERR_ASSET_NOT_FOUND";
     public const string ERR_ASSET_UPLOAD_FAILED = "ERR_ASSET_UPLOAD_FAILED";
+    public const string ERR_ASSET_VERSION_NOT_FOUND = "ERR_ASSET_VERSION_NOT_FOUND";
+    public const string ERR_LICENSE_CODE_INVALID = "ERR_LICENSE_CODE_INVALID";
 
     public const string ERR_PURCHASE_NOT_FOUND = "ERR_PURCHASE_NOT_FOUND";
     public const string ERR_PURCHASE_ACCESS_DENIED = "ERR_PURCHASE_ACCESS_DENIED";
@@ -39,6 +41,7 @@ public static class ErrorCodes
     public const string ERR_DOWNLOAD_LIMIT_EXCEEDED = "ERR_DOWNLOAD_LIMIT_EXCEEDED";
     public const string ERR_CANNOT_PURCHASE_OWN_ASSET = "ERR_CANNOT_PURCHASE_OWN_ASSET";
     public const string ERR_ASSET_ALREADY_PURCHASED = "ERR_ASSET_ALREADY_PURCHASED";
+    public const string ERR_CHECKOUT_ALREADY_PENDING = "ERR_CHECKOUT_ALREADY_PENDING";
 
     public const string ERR_CATEGORY_SLUG_EXISTS = "ERR_CATEGORY_SLUG_EXISTS";
 

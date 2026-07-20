@@ -11,6 +11,8 @@ public static class StripeConstants
     {
         public const string USER_ID = "userId";
         public const string ASSET_ID = "assetId";
+        public const string ASSET_VERSION_ID = "assetVersionId";
+        public const string CHECKOUT_INTENT_ID = "checkoutIntentId";
     }
 
     public static class Events

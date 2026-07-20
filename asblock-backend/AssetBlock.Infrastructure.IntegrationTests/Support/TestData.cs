@@ -1,5 +1,7 @@
 using AssetBlock.Domain.Core.Constants;
 using AssetBlock.Domain.Core.Entities;
+using AssetBlock.Domain.Core.Enums;
+using AssetBlock.Domain.Core.Licenses;
 using AssetBlock.Infrastructure.Persistence;
 
 namespace AssetBlock.Infrastructure.IntegrationTests.Support;
@@ -60,6 +62,35 @@ internal static class TestData
         };
     }
 
+    public static AssetVersion CreateAssetVersion(
+        Guid assetId,
+        string? storageKey = null,
+        string fileName = "package.zip",
+        int versionNumber = 1,
+        bool isCurrent = true,
+        Guid? id = null)
+    {
+        var license = AssetLicenseCatalog.Get(AssetLicenseCode.PERSONAL);
+        var key = storageKey ?? $"assets/{assetId:N}/v{versionNumber}.bin";
+        return new AssetVersion
+        {
+            Id = id ?? Guid.NewGuid(),
+            AssetId = assetId,
+            VersionNumber = versionNumber,
+            IsCurrent = isCurrent,
+            StorageKey = key,
+            FileName = fileName,
+            ContentLength = 1,
+            ContentSha256 = new string('0', 64),
+            ReleaseNotes = "Initial release",
+            LicenseCode = license.Code,
+            LicenseTemplateVersion = license.TemplateVersion,
+            LicenseDisplayName = license.DisplayName,
+            LicenseTerms = license.TermsPlainText,
+            CreatedAt = DateTimeOffset.UtcNow
+        };
+    }
+
     public static Tag CreateTag(string name = "csharp")
     {
         return new Tag
@@ -73,19 +104,51 @@ internal static class TestData
     public static Purchase CreatePurchase(
         Guid userId,
         Guid assetId,
+        Guid assetVersionId,
         DateTimeOffset? purchasedAt = null,
         string? stripePaymentId = null,
-        Guid? id = null)
+        Guid? id = null,
+        decimal pricePaid = 9.99m,
+        string currency = "usd")
     {
         return new Purchase
         {
             Id = id ?? Guid.NewGuid(),
             UserId = userId,
             AssetId = assetId,
+            AssetVersionId = assetVersionId,
+            CheckoutIntentId = Guid.NewGuid(),
+            PricePaid = pricePaid,
+            Currency = currency,
             PurchasedAt = purchasedAt ?? DateTimeOffset.UtcNow,
             StripePaymentId = stripePaymentId ?? $"test-stripe-{Guid.NewGuid():N}",
             CreatedAt = DateTimeOffset.UtcNow
         };
+    }
+
+    private static CheckoutIntent CreateCompletedCheckoutIntent(Purchase purchase, string assetTitle = "Test asset")
+    {
+        return new CheckoutIntent
+        {
+            Id = purchase.CheckoutIntentId,
+            UserId = purchase.UserId,
+            AssetId = purchase.AssetId,
+            AssetVersionId = purchase.AssetVersionId,
+            AssetTitle = assetTitle,
+            UnitAmount = purchase.PricePaid,
+            Currency = purchase.Currency,
+            StripeSessionId = purchase.StripePaymentId,
+            Status = CheckoutIntentStatus.COMPLETED,
+            CreatedAt = purchase.PurchasedAt,
+            ExpiresAt = purchase.PurchasedAt.AddHours(1),
+            CompletedAt = purchase.PurchasedAt
+        };
+    }
+
+    public static void AddCompletedPurchase(ApplicationDbContext db, Purchase purchase, string assetTitle = "Test asset")
+    {
+        db.CheckoutIntents.Add(CreateCompletedCheckoutIntent(purchase, assetTitle));
+        db.Purchases.Add(purchase);
     }
 
     public static Review CreateReview(

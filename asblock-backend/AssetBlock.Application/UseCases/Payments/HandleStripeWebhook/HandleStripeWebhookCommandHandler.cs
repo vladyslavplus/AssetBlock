@@ -20,6 +20,7 @@ internal sealed class HandleStripeWebhookCommandHandler(
     IPaymentService paymentService,
     IAssetStore assetStore,
     IPurchaseStore purchaseStore,
+    ICheckoutIntentStore checkoutIntentStore,
     IUserStore userStore,
     IUnitOfWork unitOfWork,
     IOutboxStore outboxStore,
@@ -47,11 +48,30 @@ internal sealed class HandleStripeWebhookCommandHandler(
                     new PurchaseCompletedPayload(existingBySession.UserId, existingBySession.AssetId));
             }
 
+            var checkoutIntent = await checkoutIntentStore.GetById(verified.CheckoutIntentId, cancellationToken);
+            if (checkoutIntent is null
+                || checkoutIntent.Status != CheckoutIntentStatus.PENDING
+                || checkoutIntent.UserId != verified.UserId
+                || checkoutIntent.AssetId != verified.AssetId
+                || checkoutIntent.AssetVersionId != verified.AssetVersionId
+                || checkoutIntent.UnitAmount != verified.AmountTotal
+                || !string.Equals(checkoutIntent.Currency, verified.Currency, StringComparison.Ordinal))
+            {
+                logger.LogError(
+                    "Paid Stripe checkout does not match a pending intent. Intent {CheckoutIntentId}, session {SessionId}",
+                    verified.CheckoutIntentId,
+                    verified.StripeSessionId);
+                throw new InvalidOperationException("Paid Stripe checkout does not match its pending checkout intent.");
+            }
+
             var asset = await assetStore.GetById(verified.AssetId, cancellationToken);
             if (asset is null)
             {
-                logger.LogWarning("Checkout completed for missing asset {AssetId}; ignoring.", verified.AssetId);
-                return Result.Success<PurchaseCompletedPayload?>(null);
+                logger.LogError(
+                    "Paid Stripe checkout references missing asset {AssetId}; session {SessionId}",
+                    verified.AssetId,
+                    verified.StripeSessionId);
+                throw new InvalidOperationException("Paid Stripe checkout references a missing asset.");
             }
 
             var buyer = await userStore.GetEmailRecipientById(verified.UserId, cancellationToken);
@@ -61,18 +81,45 @@ internal sealed class HandleStripeWebhookCommandHandler(
                 author = await userStore.GetEmailRecipientById(asset.AuthorId, cancellationToken);
             }
 
+            // Verify the version still exists; refuse to create a purchase without a pinned version.
+            var assetVersion = await assetStore.GetVersion(verified.AssetId, verified.AssetVersionId, cancellationToken);
+            if (assetVersion is null)
+            {
+                logger.LogError(
+                    "Paid Stripe checkout references missing AssetVersion {AssetVersionId} on asset {AssetId}; session {SessionId}",
+                    verified.AssetVersionId, verified.AssetId, verified.StripeSessionId);
+                throw new InvalidOperationException("Paid Stripe checkout references a missing asset version.");
+            }
+
             var purchaseId = Guid.NewGuid();
             var purchasedAt = DateTimeOffset.UtcNow;
             try
             {
                 await unitOfWork.ExecuteInTransaction(async ct =>
                 {
+                    var completed = await checkoutIntentStore.TryComplete(
+                        verified.CheckoutIntentId,
+                        verified.UserId,
+                        verified.AssetId,
+                        verified.AssetVersionId,
+                        verified.StripeSessionId,
+                        purchasedAt,
+                        ct);
+                    if (!completed)
+                    {
+                        throw new InvalidOperationException("Checkout intent could not be completed.");
+                    }
+
                     var purchase = new Purchase
                     {
                         Id = purchaseId,
                         UserId = verified.UserId,
                         AssetId = verified.AssetId,
+                        AssetVersionId = verified.AssetVersionId,
+                        CheckoutIntentId = verified.CheckoutIntentId,
                         StripePaymentId = verified.StripeSessionId,
+                        PricePaid = verified.AmountTotal,
+                        Currency = verified.Currency,
                         PurchasedAt = purchasedAt
                     };
                     await purchaseStore.Add(purchase, ct);
@@ -83,7 +130,7 @@ internal sealed class HandleStripeWebhookCommandHandler(
                             purchaseId,
                             verified.UserId,
                             verified.AssetId,
-                            asset.Title,
+                            checkoutIntent.AssetTitle,
                             asset.AuthorId),
                         ct);
 
@@ -91,13 +138,13 @@ internal sealed class HandleStripeWebhookCommandHandler(
                         verified.UserId,
                         NotificationKind.PURCHASE_COMPLETED,
                         NotificationHubMethods.PURCHASE_COMPLETED,
-                        new PurchaseCompletedMessage(asset.Id, asset.Title),
+                        new PurchaseCompletedMessage(asset.Id, checkoutIntent.AssetTitle),
                         ct);
                     await EnqueueNotification(
                         verified.UserId,
                         NotificationKind.DOWNLOAD_READY,
                         NotificationHubMethods.DOWNLOAD_READY,
-                        new DownloadReadyMessage(asset.Id, asset.Title),
+                        new DownloadReadyMessage(asset.Id, checkoutIntent.AssetTitle),
                         ct);
                     if (asset.AuthorId != verified.UserId)
                     {
@@ -105,18 +152,23 @@ internal sealed class HandleStripeWebhookCommandHandler(
                             asset.AuthorId,
                             NotificationKind.ASSET_SOLD,
                             NotificationHubMethods.ASSET_SOLD,
-                            new AssetSoldMessage(asset.Id, asset.Title, verified.UserId),
+                            new AssetSoldMessage(asset.Id, checkoutIntent.AssetTitle, verified.UserId),
                             ct);
                     }
 
-                    await EnqueuePurchaseEmails(buyer, author, asset, verified.UserId, purchasedAt, ct);
+                    await EnqueuePurchaseEmails(buyer, author, asset, checkoutIntent.AssetTitle, verified.UserId, purchasedAt, ct);
 
                     await auditWriter.Write(new AuditEvent(
                         AuditActions.PAYMENT_PURCHASE_COMPLETED,
                         AuditOutcome.SUCCESS,
                         AuditResourceTypes.PURCHASE,
                         purchaseId.ToString(),
-                        new Dictionary<string, object?> { ["assetId"] = verified.AssetId.ToString() },
+                        new Dictionary<string, object?>
+                        {
+                            ["assetId"] = verified.AssetId.ToString(),
+                            ["assetVersionId"] = verified.AssetVersionId.ToString(),
+                            ["checkoutIntentId"] = verified.CheckoutIntentId.ToString()
+                        },
                         ActorTypeOverride: AuditActorType.USER,
                         ActorUserIdOverride: verified.UserId), ct);
                 }, cancellationToken);
@@ -150,6 +202,7 @@ internal sealed class HandleStripeWebhookCommandHandler(
         EmailRecipient? buyer,
         EmailRecipient? author,
         Asset asset,
+        string assetTitle,
         Guid buyerUserId,
         DateTimeOffset purchasedAt,
         CancellationToken cancellationToken)
@@ -165,7 +218,7 @@ internal sealed class HandleStripeWebhookCommandHandler(
             var receipt = emailComposer.CreatePurchaseReceipt(
                 buyer.Email,
                 buyer.Id,
-                asset.Title,
+                assetTitle,
                 purchasedAt);
             await outboxStore.Enqueue(OutboxMessageTypes.EMAIL_DISPATCH, receipt, cancellationToken);
         }
@@ -186,7 +239,7 @@ internal sealed class HandleStripeWebhookCommandHandler(
         var sold = emailComposer.CreateAssetSold(
             author.Email,
             author.Id,
-            asset.Title,
+            assetTitle,
             purchasedAt);
         await outboxStore.Enqueue(OutboxMessageTypes.EMAIL_DISPATCH, sold, cancellationToken);
     }

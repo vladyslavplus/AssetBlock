@@ -127,6 +127,90 @@ namespace AssetBlock.Infrastructure.Migrations
                     b.ToTable("asset_tags", (string)null);
                 });
 
+            modelBuilder.Entity("AssetBlock.Domain.Core.Entities.AssetVersion", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("AssetId")
+                        .HasColumnType("uuid");
+
+                    b.Property<long>("ContentLength")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("ContentSha256")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("FileName")
+                        .IsRequired()
+                        .HasMaxLength(512)
+                        .HasColumnType("character varying(512)");
+
+                    b.Property<bool>("IsCurrent")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("LicenseCode")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("LicenseDisplayName")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.Property<string>("LicenseTemplateVersion")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<string>("LicenseTerms")
+                        .IsRequired()
+                        .HasMaxLength(16000)
+                        .HasColumnType("character varying(16000)");
+
+                    b.Property<string>("ReleaseNotes")
+                        .IsRequired()
+                        .HasMaxLength(4000)
+                        .HasColumnType("character varying(4000)");
+
+                    b.Property<string>("StorageKey")
+                        .IsRequired()
+                        .HasMaxLength(1024)
+                        .HasColumnType("character varying(1024)");
+
+                    b.Property<int>("VersionNumber")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AssetId")
+                        .IsUnique()
+                        .HasDatabaseName("UIX_asset_versions_asset_current")
+                        .HasFilter("\"IsCurrent\" = true");
+
+                    b.HasIndex("StorageKey")
+                        .IsUnique()
+                        .HasDatabaseName("UIX_asset_versions_storage_key");
+
+                    b.HasIndex("AssetId", "VersionNumber")
+                        .IsUnique()
+                        .HasDatabaseName("UIX_asset_versions_asset_number");
+
+                    b.ToTable("asset_versions", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_asset_versions_content_length_positive", "\"ContentLength\" > 0");
+
+                            t.HasCheckConstraint("CK_asset_versions_version_number_positive", "\"VersionNumber\" > 0");
+                        });
+                });
+
             modelBuilder.Entity("AssetBlock.Domain.Core.Entities.AuditLog", b =>
                 {
                     b.Property<long>("Id")
@@ -246,6 +330,80 @@ namespace AssetBlock.Infrastructure.Migrations
                     b.ToTable("categories", (string)null);
                 });
 
+            modelBuilder.Entity("AssetBlock.Domain.Core.Entities.CheckoutIntent", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("AssetId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("AssetTitle")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<Guid>("AssetVersionId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset?>("CompletedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Currency")
+                        .IsRequired()
+                        .HasMaxLength(3)
+                        .HasColumnType("character varying(3)");
+
+                    b.Property<DateTimeOffset>("ExpiresAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<string>("StripeSessionId")
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)");
+
+                    b.Property<decimal>("UnitAmount")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)");
+
+                    b.Property<DateTimeOffset?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AssetVersionId");
+
+                    b.HasIndex("StripeSessionId")
+                        .IsUnique()
+                        .HasDatabaseName("UIX_checkout_intents_stripe_session");
+
+                    b.HasIndex("UserId", "AssetId")
+                        .IsUnique()
+                        .HasDatabaseName("UIX_checkout_intents_user_asset_pending")
+                        .HasFilter("\"Status\" = 'PENDING'");
+
+                    b.HasIndex("AssetId", "Status", "ExpiresAt")
+                        .HasDatabaseName("IX_checkout_intents_asset_active");
+
+                    b.ToTable("checkout_intents", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_checkout_intents_expires_after_created", "\"ExpiresAt\" > \"CreatedAt\"");
+
+                            t.HasCheckConstraint("CK_checkout_intents_unit_amount_positive", "\"UnitAmount\" > 0");
+                        });
+                });
+
             modelBuilder.Entity("AssetBlock.Domain.Core.Entities.EmailAction", b =>
                 {
                     b.Property<Guid>("Id")
@@ -349,8 +507,23 @@ namespace AssetBlock.Infrastructure.Migrations
                     b.Property<Guid>("AssetId")
                         .HasColumnType("uuid");
 
+                    b.Property<Guid>("AssetVersionId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("CheckoutIntentId")
+                        .HasColumnType("uuid");
+
                     b.Property<DateTimeOffset>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Currency")
+                        .IsRequired()
+                        .HasMaxLength(8)
+                        .HasColumnType("character varying(8)");
+
+                    b.Property<decimal>("PricePaid")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)");
 
                     b.Property<DateTimeOffset>("PurchasedAt")
                         .HasColumnType("timestamp with time zone");
@@ -369,6 +542,11 @@ namespace AssetBlock.Infrastructure.Migrations
                     b.HasKey("Id");
 
                     b.HasIndex("AssetId");
+
+                    b.HasIndex("AssetVersionId");
+
+                    b.HasIndex("CheckoutIntentId")
+                        .IsUnique();
 
                     b.HasIndex("StripePaymentId")
                         .IsUnique();
@@ -734,6 +912,44 @@ namespace AssetBlock.Infrastructure.Migrations
                     b.Navigation("Tag");
                 });
 
+            modelBuilder.Entity("AssetBlock.Domain.Core.Entities.AssetVersion", b =>
+                {
+                    b.HasOne("AssetBlock.Domain.Core.Entities.Asset", "Asset")
+                        .WithMany("Versions")
+                        .HasForeignKey("AssetId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Asset");
+                });
+
+            modelBuilder.Entity("AssetBlock.Domain.Core.Entities.CheckoutIntent", b =>
+                {
+                    b.HasOne("AssetBlock.Domain.Core.Entities.Asset", "Asset")
+                        .WithMany()
+                        .HasForeignKey("AssetId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("AssetBlock.Domain.Core.Entities.AssetVersion", "AssetVersion")
+                        .WithMany()
+                        .HasForeignKey("AssetVersionId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("AssetBlock.Domain.Core.Entities.User", "User")
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Asset");
+
+                    b.Navigation("AssetVersion");
+
+                    b.Navigation("User");
+                });
+
             modelBuilder.Entity("AssetBlock.Domain.Core.Entities.EmailAction", b =>
                 {
                     b.HasOne("AssetBlock.Domain.Core.Entities.User", "User")
@@ -753,6 +969,18 @@ namespace AssetBlock.Infrastructure.Migrations
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
+                    b.HasOne("AssetBlock.Domain.Core.Entities.AssetVersion", "AssetVersion")
+                        .WithMany("Purchases")
+                        .HasForeignKey("AssetVersionId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("AssetBlock.Domain.Core.Entities.CheckoutIntent", "CheckoutIntent")
+                        .WithOne("Purchase")
+                        .HasForeignKey("AssetBlock.Domain.Core.Entities.Purchase", "CheckoutIntentId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
                     b.HasOne("AssetBlock.Domain.Core.Entities.User", "User")
                         .WithMany("Purchases")
                         .HasForeignKey("UserId")
@@ -760,6 +988,10 @@ namespace AssetBlock.Infrastructure.Migrations
                         .IsRequired();
 
                     b.Navigation("Asset");
+
+                    b.Navigation("AssetVersion");
+
+                    b.Navigation("CheckoutIntent");
 
                     b.Navigation("User");
                 });
@@ -831,11 +1063,23 @@ namespace AssetBlock.Infrastructure.Migrations
                     b.Navigation("Purchases");
 
                     b.Navigation("Reviews");
+
+                    b.Navigation("Versions");
+                });
+
+            modelBuilder.Entity("AssetBlock.Domain.Core.Entities.AssetVersion", b =>
+                {
+                    b.Navigation("Purchases");
                 });
 
             modelBuilder.Entity("AssetBlock.Domain.Core.Entities.Category", b =>
                 {
                     b.Navigation("Assets");
+                });
+
+            modelBuilder.Entity("AssetBlock.Domain.Core.Entities.CheckoutIntent", b =>
+                {
+                    b.Navigation("Purchase");
                 });
 
             modelBuilder.Entity("AssetBlock.Domain.Core.Entities.SocialPlatform", b =>

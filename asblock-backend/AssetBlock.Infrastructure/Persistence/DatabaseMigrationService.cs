@@ -1,7 +1,12 @@
 using AssetBlock.Domain.Abstractions.Services;
 using AssetBlock.Domain.Core.Constants;
 using AssetBlock.Domain.Core.Entities;
+using AssetBlock.Domain.Core.Enums;
+using AssetBlock.Domain.Core.Licenses;
 using AssetBlock.Domain.Core.Primitives.AppSettingsOptions;
+using System.IO.Compression;
+using System.Security.Cryptography;
+using System.Text;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -138,6 +143,8 @@ internal sealed class DatabaseMigrationService(
                     await SeedDemoCatalogAssetsIfEmpty(
                         context,
                         passwordHasher,
+                        scope.ServiceProvider.GetRequiredService<IAssetStorageService>(),
+                        scope.ServiceProvider.GetRequiredService<IEncryptionService>(),
                         cancellationToken);
                 }
             }
@@ -209,11 +216,16 @@ internal sealed class DatabaseMigrationService(
 
     private async Task SeedDevAdminIfNeeded(ApplicationDbContext context, IPasswordHasher passwordHasher, CancellationToken cancellationToken)
     {
-        var adminExists = await context.Users
-            .AnyAsync(u => u.Role == AppRoles.ADMIN, cancellationToken);
-
-        if (adminExists)
+        var existingAdmin = await context.Users
+            .FirstOrDefaultAsync(u => u.Role == AppRoles.ADMIN, cancellationToken);
+        if (existingAdmin is not null)
         {
+            if (existingAdmin.EmailVerifiedAt is null)
+            {
+                existingAdmin.EmailVerifiedAt = DateTimeOffset.UtcNow;
+                await context.SaveChangesAsync(cancellationToken);
+            }
+
             return;
         }
 
@@ -225,7 +237,8 @@ internal sealed class DatabaseMigrationService(
             Email = DEV_ADMIN_EMAIL,
             PasswordHash = passwordHasher.Hash(DEV_ADMIN_PASSWORD),
             Role = AppRoles.ADMIN,
-            CreatedAt = now
+            CreatedAt = now,
+            EmailVerifiedAt = now
         };
 
         context.Users.Add(admin);
@@ -247,6 +260,8 @@ internal sealed class DatabaseMigrationService(
     private async Task SeedDemoCatalogAssetsIfEmpty(
         ApplicationDbContext context,
         IPasswordHasher passwordHasher,
+        IAssetStorageService assetStorageService,
+        IEncryptionService encryptionService,
         CancellationToken cancellationToken)
     {
         if (await context.Assets.AnyAsync(cancellationToken))
@@ -282,6 +297,7 @@ internal sealed class DatabaseMigrationService(
                 PasswordHash = passwordHasher.Hash(DEMO_VENDOR_PASSWORD),
                 Role = AppRoles.USER,
                 CreatedAt = now,
+                EmailVerifiedAt = now,
                 IsPublicProfile = true,
             };
             context.Users.Add(author);
@@ -299,37 +315,97 @@ internal sealed class DatabaseMigrationService(
                 author = await context.Users.FirstAsync(u => u.Username == DEMO_VENDOR_USERNAME, cancellationToken);
             }
         }
-
-        var insertedIds = new List<Guid>(DEMO_ASSET_COUNT);
-        for (var i = 0; i < DEMO_ASSET_COUNT; i++)
+        else if (author.EmailVerifiedAt is null)
         {
-            var category = categories[i % categories.Count];
-            var (title, description, price) = _demoAssetBlueprints[i];
-            var assetId = Guid.NewGuid();
-            var asset = new Asset
-            {
-                Id = assetId,
-                AuthorId = author.Id,
-                CategoryId = category.Id,
-                Title = title,
-                Description = description,
-                Price = price,
-                StorageKey = $"dev/seed/placeholder/{assetId:N}.zip",
-                FileName = $"test-asset-{i + 1}.zip",
-                CreatedAt = now.AddMinutes(-i),
-            };
-            context.Assets.Add(asset);
-            insertedIds.Add(assetId);
-
-            // Two tags per asset, rotate through seeded tags
-            var t0 = tagRows[(i * 2) % tagRows.Count];
-            var t1 = tagRows[(i * 2 + 1) % tagRows.Count];
-            context.AssetTags.Add(new AssetTag { AssetId = assetId, TagId = t0.Id });
-            context.AssetTags.Add(new AssetTag { AssetId = assetId, TagId = t1.Id });
+            author.EmailVerifiedAt = now;
+            await context.SaveChangesAsync(cancellationToken);
         }
 
-        await context.SaveChangesAsync(cancellationToken);
-        logger.LogInformation("Seeded {Count} demo assets in database (titles prefixed with [TEST]).", DEMO_ASSET_COUNT);
+        var inserted = new List<(Guid AssetId, Guid VersionId, string Title, decimal Price)>(DEMO_ASSET_COUNT);
+        var uploadedStorageKeys = new List<string>(DEMO_ASSET_COUNT);
+        var personalLicense = AssetLicenseCatalog.Get(AssetLicenseCode.PERSONAL);
+        try
+        {
+            for (var i = 0; i < DEMO_ASSET_COUNT; i++)
+            {
+                var category = categories[i % categories.Count];
+                var (title, description, price) = _demoAssetBlueprints[i];
+                var assetId = Guid.NewGuid();
+                var versionId = Guid.NewGuid();
+                var storageKey = $"dev/seed/{assetId:N}/{versionId:N}.zip";
+                var fileName = $"test-asset-{i + 1}.zip";
+                var createdAt = now.AddMinutes(-i);
+                var archive = CreateDemoArchive(title);
+                var contentSha256 = await EncryptAndUploadDemoArchive(
+                    archive,
+                    storageKey,
+                    assetStorageService,
+                    encryptionService,
+                    cancellationToken);
+                uploadedStorageKeys.Add(storageKey);
+
+                context.Assets.Add(new Asset
+                {
+                    Id = assetId,
+                    AuthorId = author.Id,
+                    CategoryId = category.Id,
+                    Title = title,
+                    Description = description,
+                    Price = price,
+                    StorageKey = storageKey,
+                    FileName = fileName,
+                    CreatedAt = createdAt,
+                });
+                context.AssetVersions.Add(new AssetVersion
+                {
+                    Id = versionId,
+                    AssetId = assetId,
+                    VersionNumber = 1,
+                    IsCurrent = true,
+                    StorageKey = storageKey,
+                    FileName = fileName,
+                    ContentLength = archive.Length,
+                    ContentSha256 = contentSha256,
+                    ReleaseNotes = "Initial release",
+                    LicenseCode = personalLicense.Code,
+                    LicenseTemplateVersion = personalLicense.TemplateVersion,
+                    LicenseDisplayName = personalLicense.DisplayName,
+                    LicenseTerms = personalLicense.TermsPlainText,
+                    CreatedAt = createdAt,
+                });
+                inserted.Add((assetId, versionId, title, price));
+
+                // Two tags per asset, rotate through seeded tags.
+                var t0 = tagRows[(i * 2) % tagRows.Count];
+                var t1 = tagRows[(i * 2 + 1) % tagRows.Count];
+                context.AssetTags.Add(new AssetTag { AssetId = assetId, TagId = t0.Id });
+                context.AssetTags.Add(new AssetTag { AssetId = assetId, TagId = t1.Id });
+            }
+
+            await context.SaveChangesAsync(cancellationToken);
+        }
+        catch
+        {
+            foreach (var key in uploadedStorageKeys)
+            {
+                try
+                {
+                    await assetStorageService.Delete(key, cancellationToken);
+                }
+                catch (OperationCanceledException)
+                {
+                    throw;
+                }
+                catch (Exception ex)
+                {
+                    logger.LogWarning(ex, "Failed to remove demo seed blob {StorageKey}", key);
+                }
+            }
+
+            throw;
+        }
+
+        logger.LogInformation("Seeded {Count} demo assets with v1 versions (titles prefixed with [TEST]).", DEMO_ASSET_COUNT);
 
         var reviewers = await EnsureDemoReviewers(context, passwordHasher, now, cancellationToken);
         // Include dev admin so seeded catalog gets purchases/reviews from that account too (not only demo-buyer-*).
@@ -341,7 +417,7 @@ internal sealed class DatabaseMigrationService(
             reviewers = [..reviewers, adminForReviews];
         }
 
-        await SeedDemoPurchasesAndReviews(context, insertedIds, reviewers, now, cancellationToken);
+        await SeedDemoPurchasesAndReviews(context, inserted, reviewers, now, cancellationToken);
     }
 
     /// <summary>Creates demo buyer accounts used for seeded purchases and reviews (idempotent per username).</summary>
@@ -357,6 +433,12 @@ internal sealed class DatabaseMigrationService(
             var user = await context.Users.FirstOrDefaultAsync(u => u.Username == username, cancellationToken);
             if (user is not null)
             {
+                if (user.EmailVerifiedAt is null)
+                {
+                    user.EmailVerifiedAt = now;
+                    await context.SaveChangesAsync(cancellationToken);
+                }
+
                 reviewers.Add(user);
                 continue;
             }
@@ -369,6 +451,7 @@ internal sealed class DatabaseMigrationService(
                 PasswordHash = passwordHasher.Hash(DEMO_REVIEWER_PASSWORD),
                 Role = AppRoles.USER,
                 CreatedAt = now,
+                EmailVerifiedAt = now,
                 IsPublicProfile = true,
             };
             context.Users.Add(user);
@@ -392,13 +475,43 @@ internal sealed class DatabaseMigrationService(
         return reviewers;
     }
 
+    private static byte[] CreateDemoArchive(string title)
+    {
+        using var output = new MemoryStream();
+        using (var archive = new ZipArchive(output, ZipArchiveMode.Create, leaveOpen: true))
+        {
+            var entry = archive.CreateEntry("README.txt", CompressionLevel.SmallestSize);
+            using var writer = new StreamWriter(entry.Open(), Encoding.UTF8, leaveOpen: false);
+            writer.WriteLine("AssetBlock development seed archive.");
+            writer.WriteLine(title);
+        }
+
+        return output.ToArray();
+    }
+
+    private static async Task<string> EncryptAndUploadDemoArchive(
+        byte[] archive,
+        string storageKey,
+        IAssetStorageService assetStorageService,
+        IEncryptionService encryptionService,
+        CancellationToken cancellationToken)
+    {
+        var hash = Convert.ToHexString(SHA256.HashData(archive)).ToLowerInvariant();
+        await using var plain = new MemoryStream(archive, writable: false);
+        await using var cipher = new MemoryStream((int)encryptionService.ComputeCiphertextLength(archive.Length));
+        await encryptionService.Encrypt(plain, cipher, cancellationToken);
+        cipher.Position = 0;
+        await assetStorageService.Upload(storageKey, cipher, cipher.Length, cancellationToken);
+        return hash;
+    }
+
     /// <summary>
     /// Three purchases and reviews per demo asset, from distinct buyers (matches app rule: one review per user per asset).
     /// Buyers rotate through demo reviewer accounts plus dev admin when present.
     /// </summary>
     private async Task SeedDemoPurchasesAndReviews(
         ApplicationDbContext context,
-        IReadOnlyList<Guid> assetIds,
+        IReadOnlyList<(Guid AssetId, Guid VersionId, string Title, decimal Price)> assets,
         IReadOnlyList<User> reviewers,
         DateTimeOffset now,
         CancellationToken cancellationToken)
@@ -410,20 +523,42 @@ internal sealed class DatabaseMigrationService(
         }
 
         const int reviewsPerAsset = 3;
-        for (var i = 0; i < assetIds.Count; i++)
+        for (var i = 0; i < assets.Count; i++)
         {
-            var assetId = assetIds[i];
+            var (assetId, versionId, title, price) = assets[i];
             for (var j = 0; j < reviewsPerAsset; j++)
             {
                 var buyer = reviewers[(i + j) % reviewers.Count];
                 var purchaseId = Guid.NewGuid();
+                var purchasedAt = now.AddDays(-3).AddHours(-j * 2);
+                var stripePaymentId = $"seed-demo-{assetId:N}-slot{j}";
+                var checkoutIntentId = Guid.NewGuid();
+                context.CheckoutIntents.Add(new CheckoutIntent
+                {
+                    Id = checkoutIntentId,
+                    UserId = buyer.Id,
+                    AssetId = assetId,
+                    AssetVersionId = versionId,
+                    AssetTitle = title,
+                    UnitAmount = price,
+                    Currency = "usd",
+                    StripeSessionId = stripePaymentId,
+                    Status = CheckoutIntentStatus.COMPLETED,
+                    CreatedAt = purchasedAt,
+                    ExpiresAt = purchasedAt.AddHours(24),
+                    CompletedAt = purchasedAt
+                });
                 context.Purchases.Add(new Purchase
                 {
                     Id = purchaseId,
                     UserId = buyer.Id,
                     AssetId = assetId,
-                    PurchasedAt = now.AddDays(-3).AddHours(-j * 2),
-                    StripePaymentId = $"seed-demo-{assetId:N}-slot{j}",
+                    AssetVersionId = versionId,
+                    CheckoutIntentId = checkoutIntentId,
+                    PricePaid = price,
+                    Currency = "usd",
+                    PurchasedAt = purchasedAt,
+                    StripePaymentId = stripePaymentId,
                 });
 
                 context.Reviews.Add(new Review
@@ -442,7 +577,7 @@ internal sealed class DatabaseMigrationService(
         logger.LogInformation(
             "Seeded demo purchases and reviews ({ReviewsPerAsset} reviews × {AssetCount} assets).",
             reviewsPerAsset,
-            assetIds.Count);
+            assets.Count);
     }
 
     private static int DemoReviewRating(int assetIndex, int reviewSlot)

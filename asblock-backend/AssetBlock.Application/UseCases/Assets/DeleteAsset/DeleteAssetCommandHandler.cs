@@ -4,6 +4,7 @@ using AssetBlock.Domain.Core.Constants;
 using AssetBlock.Domain.Core.Dto.Audit;
 using AssetBlock.Domain.Core.Dto.Outbox;
 using AssetBlock.Domain.Core.Enums;
+using AssetBlock.Domain.Core.Exceptions;
 using MediatR;
 using Microsoft.Extensions.Logging;
 
@@ -12,6 +13,7 @@ namespace AssetBlock.Application.UseCases.Assets.DeleteAsset;
 internal sealed class DeleteAssetCommandHandler(
     IAssetStore assetStore,
     IPurchaseStore purchaseStore,
+    ICheckoutIntentStore checkoutIntentStore,
     IUnitOfWork unitOfWork,
     IOutboxStore outboxStore,
     IAuditWriter auditWriter,
@@ -36,57 +38,63 @@ internal sealed class DeleteAssetCommandHandler(
             return Result.Forbidden(ErrorCodes.ERR_FORBIDDEN);
         }
 
-        if (asset.DeletedAt.HasValue)
-        {
-            try
-            {
-                await cache.RemoveByPrefix(CacheKeys.ASSETS_LIST_PREFIX, cancellationToken);
-            }
-            catch (OperationCanceledException)
-            {
-                throw;
-            }
-            catch (Exception ex)
-            {
-                logger.LogWarning(ex, "Cache invalidation failed for already-deleted asset {AssetId}", request.Id);
-            }
-
-            logger.LogInformation("Delete idempotent: asset already delisted {AssetId}", request.Id);
-            return Result.Success();
-        }
-
-        var hasPurchases = await purchaseStore.HasPurchasesForAsset(request.Id, cancellationToken);
-        var storageKey = asset.StorageKey;
-
         try
         {
-            if (hasPurchases)
+            var alreadyDeleted = false;
+            var softDeleted = false;
+            await unitOfWork.ExecuteInTransaction(async ct =>
             {
-                await unitOfWork.ExecuteInTransaction(async ct =>
+                var lockedAsset = await assetStore.GetForUpdate(request.Id, ct)
+                    ?? throw new AssetNotFoundException();
+                if (lockedAsset.AuthorId != request.UserId)
                 {
-                    await assetStore.SoftDelete(asset.Id, DateTimeOffset.UtcNow, ct);
+                    throw new UnauthorizedAccessException();
+                }
+
+                if (lockedAsset.DeletedAt.HasValue)
+                {
+                    alreadyDeleted = true;
+                    return;
+                }
+
+                var now = DateTimeOffset.UtcNow;
+                var hasPurchases = await purchaseStore.HasPurchasesForAsset(request.Id, ct);
+                var hasActiveCheckout = await checkoutIntentStore.HasActiveForAsset(request.Id, now, ct);
+                softDeleted = hasPurchases || hasActiveCheckout;
+
+                if (softDeleted)
+                {
+                    await assetStore.SoftDelete(lockedAsset.Id, now, ct);
                     await auditWriter.Write(new AuditEvent(
                         AuditActions.ASSET_SOFT_DELETE,
                         AuditOutcome.SUCCESS,
                         AuditResourceTypes.ASSET,
-                        asset.Id.ToString()), ct);
-                }, cancellationToken);
-            }
-            else
-            {
-                await unitOfWork.ExecuteInTransaction(async ct =>
+                        lockedAsset.Id.ToString(),
+                        new Dictionary<string, object?> { ["activeCheckoutPending"] = hasActiveCheckout }), ct);
+                    return;
+                }
+
+                var allStorageKeys = await assetStore.GetAllStorageKeys(request.Id, ct);
+                await assetStore.Delete(lockedAsset.Id, ct);
+                foreach (var key in allStorageKeys)
                 {
-                    await assetStore.Delete(asset.Id, ct);
                     await outboxStore.Enqueue(
                         OutboxMessageTypes.ASSET_BLOB_DELETE,
-                        new AssetBlobDeletePayload(asset.Id, storageKey),
+                        new AssetBlobDeletePayload(lockedAsset.Id, key),
                         ct);
-                    await auditWriter.Write(new AuditEvent(
-                        AuditActions.ASSET_HARD_DELETE,
-                        AuditOutcome.SUCCESS,
-                        AuditResourceTypes.ASSET,
-                        asset.Id.ToString()), ct);
-                }, cancellationToken);
+                }
+
+                await auditWriter.Write(new AuditEvent(
+                    AuditActions.ASSET_HARD_DELETE,
+                    AuditOutcome.SUCCESS,
+                    AuditResourceTypes.ASSET,
+                    lockedAsset.Id.ToString()), ct);
+            }, cancellationToken);
+
+            if (alreadyDeleted)
+            {
+                logger.LogInformation("Delete idempotent: asset already delisted {AssetId}", request.Id);
+                return Result.Success();
             }
 
             try
@@ -103,11 +111,24 @@ internal sealed class DeleteAssetCommandHandler(
             }
 
             logger.LogInformation(
-                hasPurchases
-                    ? "Soft-deleted (delisted) asset {AssetId}: purchases exist; blob retained."
+                softDeleted
+                    ? "Soft-deleted (delisted) asset {AssetId}: purchase or checkout exists; blobs retained."
                     : "Hard-deleted asset {AssetId}; blob delete enqueued.",
                 request.Id);
             return Result.Success();
+        }
+        catch (AssetNotFoundException)
+        {
+            return Result.NotFound(ErrorCodes.ERR_ASSET_NOT_FOUND);
+        }
+        catch (UnauthorizedAccessException)
+        {
+            await auditWriter.WriteBestEffort(new AuditEvent(
+                AuditActions.ASSET_DELETE,
+                AuditOutcome.DENIED,
+                AuditResourceTypes.ASSET,
+                request.Id.ToString()), cancellationToken);
+            return Result.Forbidden(ErrorCodes.ERR_FORBIDDEN);
         }
         catch (OperationCanceledException)
         {

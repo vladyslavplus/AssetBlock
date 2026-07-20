@@ -2,6 +2,7 @@ using AssetBlock.Domain.Core.Constants;
 using AssetBlock.Domain.Core.Dto.Paging;
 using AssetBlock.Domain.Core.Dto.Users;
 using AssetBlock.Domain.Core.Entities;
+using AssetBlock.Domain.Core.Enums;
 using AssetBlock.Infrastructure.Persistence.Stores;
 using AssetBlock.Infrastructure.Tests.Infrastructure;
 
@@ -46,6 +47,8 @@ public sealed class PurchaseStoreTests
             FileName = "f",
             CreatedAt = DateTimeOffset.UtcNow
         });
+        var versionId = Guid.NewGuid();
+        db.AssetVersions.Add(CreateAssetVersion(assetId, versionId));
         await db.SaveChangesAsync();
 
         var sut = new PurchaseStore(db);
@@ -54,6 +57,10 @@ public sealed class PurchaseStoreTests
             Id = Guid.NewGuid(),
             UserId = buyerId,
             AssetId = assetId,
+            AssetVersionId = versionId,
+            CheckoutIntentId = Guid.NewGuid(),
+            PricePaid = 9.99m,
+            Currency = "usd",
             StripePaymentId = "pi_123",
             PurchasedAt = DateTimeOffset.UtcNow
         };
@@ -101,11 +108,20 @@ public sealed class PurchaseStoreTests
             });
         }
 
+        var reviewedVersionId = Guid.NewGuid();
+        var bareVersionId = Guid.NewGuid();
+        db.AssetVersions.Add(CreateAssetVersion(assetReviewedId, reviewedVersionId));
+        db.AssetVersions.Add(CreateAssetVersion(assetBareId, bareVersionId));
+
         db.Purchases.Add(new Purchase
         {
             Id = Guid.NewGuid(),
             UserId = buyerId,
             AssetId = assetReviewedId,
+            AssetVersionId = reviewedVersionId,
+            CheckoutIntentId = Guid.NewGuid(),
+            PricePaid = 9.99m,
+            Currency = "usd",
             StripePaymentId = "pi_r",
             PurchasedAt = DateTimeOffset.UtcNow
         });
@@ -114,6 +130,10 @@ public sealed class PurchaseStoreTests
             Id = Guid.NewGuid(),
             UserId = buyerId,
             AssetId = assetBareId,
+            AssetVersionId = bareVersionId,
+            CheckoutIntentId = Guid.NewGuid(),
+            PricePaid = 9.99m,
+            Currency = "usd",
             StripePaymentId = "pi_b",
             PurchasedAt = DateTimeOffset.UtcNow
         });
@@ -174,6 +194,8 @@ public sealed class PurchaseStoreTests
             FileName = "f",
             CreatedAt = DateTimeOffset.UtcNow,
         });
+        var versionId = Guid.NewGuid();
+        db.AssetVersions.Add(CreateAssetVersion(assetId, versionId));
         await db.SaveChangesAsync();
 
         var sut = new PurchaseStore(db);
@@ -184,6 +206,10 @@ public sealed class PurchaseStoreTests
             Id = Guid.NewGuid(),
             UserId = buyerId,
             AssetId = assetId,
+            AssetVersionId = versionId,
+            CheckoutIntentId = Guid.NewGuid(),
+            PricePaid = 9.99m,
+            Currency = "usd",
             StripePaymentId = "pi_x",
             PurchasedAt = DateTimeOffset.UtcNow,
         });
@@ -192,4 +218,22 @@ public sealed class PurchaseStoreTests
         (await sut.HasPurchasesForAsset(assetId)).Should().BeTrue();
         (await sut.HasPurchasesForAsset(Guid.NewGuid())).Should().BeFalse();
     }
+
+    private static AssetVersion CreateAssetVersion(Guid assetId, Guid versionId) => new()
+    {
+        Id = versionId,
+        AssetId = assetId,
+        VersionNumber = 1,
+        IsCurrent = true,
+        StorageKey = "k",
+        FileName = "f",
+        ContentLength = 1,
+        ContentSha256 = new string('0', 64),
+        ReleaseNotes = "Initial release",
+        LicenseCode = AssetLicenseCode.PERSONAL,
+        LicenseTemplateVersion = "1.0",
+        LicenseDisplayName = "Personal",
+        LicenseTerms = "terms",
+        CreatedAt = DateTimeOffset.UtcNow
+    };
 }

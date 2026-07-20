@@ -10,6 +10,7 @@ public sealed class ApplicationDbContext(DbContextOptions<ApplicationDbContext> 
     public DbSet<User> Users => Set<User>();
     public DbSet<Category> Categories => Set<Category>();
     public DbSet<Asset> Assets => Set<Asset>();
+    public DbSet<AssetVersion> AssetVersions => Set<AssetVersion>();
     public DbSet<Purchase> Purchases => Set<Purchase>();
     public DbSet<RefreshToken> RefreshTokens => Set<RefreshToken>();
     public DbSet<Review> Reviews => Set<Review>();
@@ -19,6 +20,7 @@ public sealed class ApplicationDbContext(DbContextOptions<ApplicationDbContext> 
     public DbSet<OutboxMessage> OutboxMessages => Set<OutboxMessage>();
     public DbSet<AuditLog> AuditLogs => Set<AuditLog>();
     public DbSet<EmailAction> EmailActions => Set<EmailAction>();
+    public DbSet<CheckoutIntent> CheckoutIntents => Set<CheckoutIntent>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

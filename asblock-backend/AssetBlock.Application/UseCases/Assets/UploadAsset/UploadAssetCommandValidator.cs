@@ -26,6 +26,9 @@ internal sealed class UploadAssetCommandValidator : AbstractValidator<UploadAsse
                     .MaximumLength(5000)
                     .WithMessage("Description must not exceed 5000 characters.")
                     .When(c => !string.IsNullOrEmpty(c.Request.Description));
+                RuleFor(c => c.Request.LicenseCode)
+                    .NotEmpty().WithMessage("LicenseCode is required.")
+                    .MaximumLength(64).WithMessage("LicenseCode must not exceed 64 characters.");
             });
         RuleFor(c => c.FileName)
             .NotEmpty().WithMessage("FileName is required.")

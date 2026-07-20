@@ -1,6 +1,11 @@
 import { apiFetch } from '@/lib/http/api-client'
 import { getApiErrorMessage, parseApiErrorBody } from '@/lib/http/api-errors'
-import type { AssetListItemApi, PagedResultDto, TagDtoApi } from '@/lib/catalog/assets-api'
+import type {
+  AssetListItemApi,
+  AssetVersionSummaryApi,
+  PagedResultDto,
+  TagDtoApi,
+} from '@/lib/catalog/assets-api'
 
 const TAG_PAGE_SIZE = 100
 
@@ -67,6 +72,62 @@ export async function uploadSellerAsset(formData: FormData): Promise<UploadAsset
     typeof (parsed as { id: unknown }).id === 'string'
   ) {
     return { ok: true, assetId: (parsed as { id: string }).id }
+  }
+  return { ok: false, message: 'Unexpected response from server.' }
+}
+
+export async function fetchSellerAssetVersions(
+  assetId: string,
+  signal?: AbortSignal,
+): Promise<AssetVersionSummaryApi[]> {
+  const res = await fetch(`/api/assets/${encodeURIComponent(assetId)}/versions`, {
+    credentials: 'include',
+    signal,
+  })
+  const text = await res.text()
+  const parsed = parseMaybeJson(text)
+  if (res.status === 401) {
+    throw new Error('SIGN_IN_REQUIRED')
+  }
+  if (!res.ok) {
+    const msg = getApiErrorMessage(parsed, `Could not load versions (${res.status})`)
+    throw new Error(msg)
+  }
+  return Array.isArray(parsed) ? (parsed as AssetVersionSummaryApi[]) : []
+}
+
+export type PublishVersionResult =
+  | { ok: true; versionId: string }
+  | { ok: false; message: string; fieldErrors?: Record<string, string> }
+
+export async function publishSellerAssetVersion(
+  assetId: string,
+  formData: FormData,
+): Promise<PublishVersionResult> {
+  const res = await fetch(`/api/seller/assets/${encodeURIComponent(assetId)}/versions`, {
+    method: 'POST',
+    body: formData,
+    credentials: 'include',
+  })
+  const text = await res.text()
+  const parsed = parseMaybeJson(text)
+  if (!res.ok) {
+    const p = parseApiErrorBody(parsed)
+    const fe = p?.fieldErrors
+    const keys = fe ? Object.keys(fe) : []
+    return {
+      ok: false,
+      message: p?.summary ?? `Publish failed (${res.status})`,
+      ...(keys.length > 0 && fe ? { fieldErrors: fe } : {}),
+    }
+  }
+  if (
+    typeof parsed === 'object' &&
+    parsed !== null &&
+    'id' in parsed &&
+    typeof (parsed as { id: unknown }).id === 'string'
+  ) {
+    return { ok: true, versionId: (parsed as { id: string }).id }
   }
   return { ok: false, message: 'Unexpected response from server.' }
 }

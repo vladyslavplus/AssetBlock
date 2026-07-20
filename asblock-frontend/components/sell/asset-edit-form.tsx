@@ -20,6 +20,7 @@ import { assetKeys } from '@/lib/catalog/asset-detail-query'
 import { catalogKeys, fetchCatalogFacets } from '@/lib/catalog/catalog-query'
 import { sellerKeys } from '@/lib/seller/seller-query'
 import { SellerPriceStepInput } from '@/components/sell/seller-price-step-input'
+import { SellerAssetVersionsSection } from '@/components/sell/seller-asset-versions-section'
 
 interface AssetEditFormProps {
   initialAsset: AssetDetailItemApi
@@ -102,20 +103,6 @@ export function AssetEditForm({ initialAsset }: AssetEditFormProps) {
 
   return (
     <div className="space-y-6 max-w-lg">
-      <Alert className="border-border bg-muted/30 py-2.5 items-start [&>[data-slot=alert-description]]:min-w-0">
-        <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
-        <AlertDescription className="text-muted-foreground text-xs leading-relaxed text-pretty">
-          <span className="block min-w-0">
-            The downloadable package for this listing cannot be replaced. To ship a different file,
-            publish a{' '}
-            <Link href="/sell" className="text-foreground underline underline-offset-2">
-              new asset
-            </Link>{' '}
-            from the Upload tab — you cannot swap the file on this listing.
-          </span>
-        </AlertDescription>
-      </Alert>
-
       {categoriesError && (
         <Alert className="border-amber-500/40 bg-amber-500/10 py-2">
           <AlertCircle className="h-4 w-4 text-amber-600 dark:text-amber-400" />
@@ -237,6 +224,8 @@ export function AssetEditForm({ initialAsset }: AssetEditFormProps) {
           </Button>
         </div>
       </form>
+
+      <SellerAssetVersionsSection assetId={assetId} />
     </div>
   )
 }

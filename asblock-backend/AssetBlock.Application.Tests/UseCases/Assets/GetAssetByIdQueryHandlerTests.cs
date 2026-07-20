@@ -2,7 +2,9 @@ using Ardalis.Result;
 using AssetBlock.Application.UseCases.Assets.GetAssetById;
 using AssetBlock.Domain.Abstractions.Services;
 using AssetBlock.Domain.Core.Constants;
+using AssetBlock.Domain.Core.Dto.Assets;
 using AssetBlock.Domain.Core.Entities;
+using AssetBlock.Domain.Core.Enums;
 using FluentAssertions;
 using NSubstitute;
 
@@ -11,15 +13,14 @@ namespace AssetBlock.Application.Tests.UseCases.Assets;
 public class GetAssetByIdQueryHandlerTests
 {
     private readonly IAssetStore _assetStoreMock;
-    private readonly IReviewStore _reviewStoreMock;
     private readonly GetAssetByIdQueryHandler _handler;
 
     public GetAssetByIdQueryHandlerTests()
     {
         _assetStoreMock = Substitute.For<IAssetStore>();
-        _reviewStoreMock = Substitute.For<IReviewStore>();
-        _reviewStoreMock.GetAverageRatingForAsset(Arg.Any<Guid>(), Arg.Any<CancellationToken>()).Returns(0.0);
-        _handler = new GetAssetByIdQueryHandler(_assetStoreMock, _reviewStoreMock);
+        var reviewStoreMock = Substitute.For<IReviewStore>();
+        reviewStoreMock.GetAverageRatingForAsset(Arg.Any<Guid>(), Arg.Any<CancellationToken>()).Returns(0.0);
+        _handler = new GetAssetByIdQueryHandler(_assetStoreMock, reviewStoreMock);
     }
 
     [Fact]
@@ -91,8 +92,33 @@ public class GetAssetByIdQueryHandlerTests
             Author = author
         };
 
+        var versionId = Guid.NewGuid();
+        var snapshot = new AssetCurrentVersionSnapshot(
+            AssetId: assetId,
+            AssetVersionId: versionId,
+            AuthorId: authorId,
+            Title: "Beat Pack vol. 1",
+            Description: "A great pack",
+            Price: 14.99m,
+            DeletedAt: null,
+            VersionNumber: 1,
+            FileName: "beat.zip",
+            StorageKey: "assets/auth/beat.zip",
+            ContentLength: 1024,
+            ContentSha256: new string('a', 64));
+        var version = new AssetVersion
+        {
+            Id = versionId, AssetId = assetId, VersionNumber = 1, IsCurrent = true,
+            StorageKey = "assets/auth/beat.zip", FileName = "beat.zip",
+            ContentLength = 1024, ContentSha256 = new string('a', 64),
+            LicenseCode = AssetLicenseCode.PERSONAL, LicenseTemplateVersion = "1.0",
+            LicenseDisplayName = "Personal use", LicenseTerms = "terms"
+        };
+
         var query = new GetAssetByIdQuery(assetId);
         _assetStoreMock.GetById(assetId, Arg.Any<CancellationToken>()).Returns(asset);
+        _assetStoreMock.GetCurrentVersionSnapshot(assetId, Arg.Any<CancellationToken>()).Returns(snapshot);
+        _assetStoreMock.GetVersion(assetId, versionId, Arg.Any<CancellationToken>()).Returns(version);
 
         // Act
         var result = await _handler.Handle(query, CancellationToken.None);
@@ -111,5 +137,7 @@ public class GetAssetByIdQueryHandlerTests
         result.Value.UpdatedAt.Should().BeNull();
         result.Value.Tags.Should().BeEmpty();
         result.Value.AverageRating.Should().Be(0);
+        result.Value.CurrentVersionNumber.Should().Be(1);
+        result.Value.CurrentLicense.Code.Should().Be("PERSONAL");
     }
 }
