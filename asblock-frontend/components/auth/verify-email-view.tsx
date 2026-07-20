@@ -24,10 +24,7 @@ export function VerifyEmailView() {
   const mutation = useMutation({
     mutationFn: postEmailVerificationConfirm,
     onSuccess: async () => {
-      await Promise.all([
-        queryClient.invalidateQueries({ queryKey: accountKeys.me() }),
-        refresh(),
-      ])
+      await Promise.all([queryClient.invalidateQueries({ queryKey: accountKeys.me() }), refresh()])
       setSuccess(true)
     },
     onError: (err: unknown) => {

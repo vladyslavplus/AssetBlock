@@ -17,15 +17,15 @@ interface EmailVerificationNoticeProps {
 }
 
 /** Persistent UX notice for authenticated unverified users. Not a security boundary. */
-export function EmailVerificationNotice({ className, compact = false }: EmailVerificationNoticeProps) {
+export function EmailVerificationNotice({
+  className,
+  compact = false,
+}: EmailVerificationNoticeProps) {
   if (compact) {
     return (
       <div
         role="status"
-        className={cn(
-          'border-b border-amber-500/30 bg-amber-500/10 text-amber-100/95',
-          className,
-        )}
+        className={cn('border-b border-amber-500/30 bg-amber-500/10 text-amber-100/95', className)}
       >
         <div className="mx-auto flex max-w-6xl items-center justify-between gap-3 px-4 py-2 text-xs sm:text-sm">
           <p className="flex min-w-0 items-center gap-2">

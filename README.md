@@ -59,3 +59,5 @@ Point the frontend at your running Web API using environment variables (see `asb
 ## Contributing / quality
 
 GitHub Actions run all backend projects, frontend `check`/production build, and Gitleaks. Keep secrets out of source control.
+
+**Frontend pre-commit (repo root):** after cloning, run `pnpm install` once at the monorepo root. Husky installs a git `pre-commit` hook that, whenever staged files include `asblock-frontend/`, runs `eslint --fix` and Prettier on those files (works whether you commit from the root or from a subdirectory). Backend-only commits skip the hook work.

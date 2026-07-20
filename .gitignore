@@ -1,3 +1,6 @@
 # Monorepo root — build/tooling leftovers (e.g. `dotnet ef` MSBuild targets)
 [Oo]bj/
 [Bb]in/
+
+# Root tooling (husky / lint-staged)
+node_modules/
