@@ -43,7 +43,7 @@ internal static class IntegrationTestAuth
     }
 
     /// <summary>
-    /// Registers a user, promotes them to Admin in the database, then re-authenticates so the JWT carries the Admin role.
+    /// Registers a user, promotes them to Admin in the database, marks email verified, then re-authenticates so the JWT carries the Admin role.
     /// </summary>
     public static async Task<(HttpClient Client, string Username)> RegisterAdminAndAuthenticateAsync(
         WebApplicationFactory<Program> factory)
@@ -55,6 +55,7 @@ internal static class IntegrationTestAuth
             var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
             var user = await db.Users.SingleAsync(u => u.Username == username);
             user.Role = AppRoles.ADMIN;
+            user.EmailVerifiedAt = DateTimeOffset.UtcNow;
             await db.SaveChangesAsync();
         }
 
@@ -67,6 +68,26 @@ internal static class IntegrationTestAuth
         var tokens = await loginResponse.Content.ReadFromJsonAsync<TokensResponseDto>(JsonOptions);
         client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", tokens!.AccessToken);
         return (client, username);
+    }
+
+    /// <summary>
+    /// Registers and authenticates a user, then sets EmailVerifiedAt so VERIFIED_EMAIL policy succeeds.
+    /// </summary>
+    public static async Task<(HttpClient Client, string Username)> RegisterVerifiedAndAuthenticateAsync(
+        WebApplicationFactory<Program> factory)
+    {
+        var (client, username) = await RegisterAndAuthenticateAsync(factory);
+        await MarkEmailVerifiedAsync(factory, username);
+        return (client, username);
+    }
+
+    public static async Task MarkEmailVerifiedAsync(WebApplicationFactory<Program> factory, string username)
+    {
+        await using var scope = factory.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+        var user = await db.Users.SingleAsync(u => u.Username == username);
+        user.EmailVerifiedAt = DateTimeOffset.UtcNow;
+        await db.SaveChangesAsync();
     }
 
     private static async Task<string> FindEmailAsync(WebApplicationFactory<Program> factory, string username)

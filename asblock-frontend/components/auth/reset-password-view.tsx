@@ -17,6 +17,7 @@ import { Separator } from '@/components/ui/separator'
 import { AuthRequestError, postPasswordResetConfirm } from '@/lib/auth/auth-api'
 import { readAndClearEmailActionToken } from '@/lib/auth/email-action-token'
 import { applyApiFieldErrorsToForm, parseApiErrorBody } from '@/lib/http/api-errors'
+import { useAuth } from '@/components/auth/auth-context'
 
 const schema = z
   .object({
@@ -44,6 +45,7 @@ function getClientResetToken(): string | null {
 
 export function ResetPasswordView() {
   const router = useRouter()
+  const { logout } = useAuth()
   // Match SSR on hydrate, then read #token= on the client without an effect.
   const isClient = useSyncExternalStore(
     emptySubscribe,
@@ -73,7 +75,10 @@ export function ResetPasswordView() {
       return postPasswordResetConfirm(token, newPassword)
     },
     onMutate: () => setSubmitError(''),
-    onSuccess: () => setSuccess(true),
+    onSuccess: () => {
+      setSuccess(true)
+      void logout().catch(() => undefined)
+    },
     onError: (err: unknown) => {
       if (err instanceof AuthRequestError) {
         const parsed = parseApiErrorBody(err.body)

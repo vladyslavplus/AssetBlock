@@ -12,17 +12,22 @@ import { Separator } from '@/components/ui/separator'
 import { AuthRequestError, postEmailChangeConfirm } from '@/lib/auth/auth-api'
 import { readAndClearEmailActionToken } from '@/lib/auth/email-action-token'
 import { accountKeys } from '@/lib/account/account-query'
+import { useAuth } from '@/components/auth/auth-context'
 
 export function ConfirmEmailChangeView() {
   const router = useRouter()
   const queryClient = useQueryClient()
+  const { refresh } = useAuth()
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState(false)
 
   const mutation = useMutation({
     mutationFn: postEmailChangeConfirm,
-    onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: accountKeys.me() })
+    onSuccess: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: accountKeys.me() }),
+        refresh(),
+      ])
       setSuccess(true)
     },
     onError: (err: unknown) => {

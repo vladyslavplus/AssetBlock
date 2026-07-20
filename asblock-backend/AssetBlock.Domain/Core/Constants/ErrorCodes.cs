@@ -15,6 +15,8 @@ public static class ErrorCodes
     public const string ERR_EMAIL_ACTION_COOLDOWN = "ERR_EMAIL_ACTION_COOLDOWN";
     public const string ERR_EMAIL_CHANGE_SAME_AS_CURRENT = "ERR_EMAIL_CHANGE_SAME_AS_CURRENT";
     public const string ERR_EMAIL_CHANGE_TARGET_TAKEN = "ERR_EMAIL_CHANGE_TARGET_TAKEN";
+    public const string ERR_EMAIL_NOT_VERIFIED = "ERR_EMAIL_NOT_VERIFIED";
+
 
     public const string ERR_CATEGORY_NOT_FOUND = "ERR_CATEGORY_NOT_FOUND";
     public const string ERR_TAG_NOT_FOUND = "ERR_TAG_NOT_FOUND";

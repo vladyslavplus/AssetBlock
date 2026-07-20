@@ -3,6 +3,10 @@
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import { useAuth } from '@/components/auth/auth-context'
+import {
+  EmailVerificationNotice,
+  isEmailVerified,
+} from '@/components/auth/email-verification-notice'
 import { SessionBlockSkeleton } from '@/components/skeletons/session-block-skeleton'
 import type { AssetDetailItemApi } from '@/lib/catalog/assets-api'
 import { AssetEditForm } from './asset-edit-form'
@@ -34,6 +38,10 @@ export function AssetEditPageClient({ initialAsset }: { initialAsset: AssetDetai
         </Button>
       </div>
     )
+  }
+
+  if (!isEmailVerified(user)) {
+    return <EmailVerificationNotice className="max-w-lg" />
   }
 
   return <AssetEditForm initialAsset={initialAsset} />

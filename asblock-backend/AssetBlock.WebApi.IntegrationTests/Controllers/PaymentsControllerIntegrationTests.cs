@@ -23,7 +23,7 @@ public sealed class PaymentsControllerIntegrationTests(IntegrationTestFixture fi
     [Fact]
     public async Task CreateCheckout_WithAuth_WhenAssetMissing_ShouldReturnNotFound()
     {
-        (HttpClient client, _) = await IntegrationTestAuth.RegisterAndAuthenticateAsync(fixture.Factory);
+        (HttpClient client, _) = await IntegrationTestAuth.RegisterVerifiedAndAuthenticateAsync(fixture.Factory);
         var response = await client.PostAsJsonAsync(
             new Uri("/api/payments/checkout", UriKind.Relative),
             new CreateCheckoutRequest(Guid.Parse("d4e5f6a7-b8c9-0123-def0-456789abcdef")));

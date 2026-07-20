@@ -17,6 +17,8 @@ public static class ErrorCodesToErrorMessages
         { ErrorCodes.ERR_EMAIL_ACTION_COOLDOWN, "Please wait before requesting another email." },
         { ErrorCodes.ERR_EMAIL_CHANGE_SAME_AS_CURRENT, "New email must be different from your current email." },
         { ErrorCodes.ERR_EMAIL_CHANGE_TARGET_TAKEN, "That email address is already in use." },
+        { ErrorCodes.ERR_EMAIL_NOT_VERIFIED, "Email verification is required to perform this action." },
+
         { ErrorCodes.ERR_CATEGORY_NOT_FOUND, "Category not found." },
         { ErrorCodes.ERR_TAG_NOT_FOUND, "Tag not found." },
         { ErrorCodes.ERR_TAG_ALREADY_EXISTS, "A tag with this name already exists." },

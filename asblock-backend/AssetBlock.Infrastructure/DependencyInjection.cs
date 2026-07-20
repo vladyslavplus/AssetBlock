@@ -82,6 +82,8 @@ public static class DependencyInjection
         services.AddScoped<IEmailActionStore, EmailActionStore>();
         services.AddScoped<IJwtTokenService, JwtTokenService>();
         services.AddScoped<IUserStore, UserStore>();
+        services.AddScoped<IUserVerificationStore, UserVerificationStore>();
+
         services.AddScoped<ICategoryStore, CategoryStore>();
         services.AddScoped<IAssetStore, AssetStore>();
         services.AddScoped<IPurchaseStore, PurchaseStore>();

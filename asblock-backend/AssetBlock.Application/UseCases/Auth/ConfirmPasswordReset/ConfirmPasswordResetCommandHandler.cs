@@ -75,6 +75,13 @@ internal sealed class ConfirmPasswordResetCommandHandler(
             if (consumed)
             {
                 user.PasswordHash = passwordHasher.Hash(request.NewPassword);
+                var emailVerifiedByPasswordReset = false;
+                if (user.EmailVerifiedAt is null)
+                {
+                    user.EmailVerifiedAt = DateTimeOffset.UtcNow;
+                    emailVerifiedByPasswordReset = true;
+                }
+
                 await userStore.Update(user, ct);
                 await jwtTokenService.RevokeAllRefreshTokens(user.Id, ct);
                 var notice = emailComposer.CreatePasswordChangedNotice(user.Email, user.Id);
@@ -84,6 +91,9 @@ internal sealed class ConfirmPasswordResetCommandHandler(
                     AuditOutcome.SUCCESS,
                     AuditResourceTypes.USER,
                     user.Id.ToString(),
+                    emailVerifiedByPasswordReset
+                        ? new Dictionary<string, object?> { ["emailVerifiedByPasswordReset"] = true }
+                        : null,
                     ActorTypeOverride: AuditActorType.USER,
                     ActorUserIdOverride: user.Id), ct);
             }

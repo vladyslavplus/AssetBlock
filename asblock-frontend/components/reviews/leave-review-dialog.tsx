@@ -18,6 +18,11 @@ import {
 } from '@/components/ui/dialog'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
+import { useAuth } from '@/components/auth/auth-context'
+import {
+  EmailVerificationNotice,
+  isEmailVerified,
+} from '@/components/auth/email-verification-notice'
 import { assetKeys } from '@/lib/catalog/asset-detail-query'
 import { libraryKeys } from '@/lib/library/library-query'
 import { ReviewRequestError, postAssetReview } from '@/lib/reviews/review-api'
@@ -39,6 +44,8 @@ export function LeaveReviewDialog({
   onSubmitted,
 }: LeaveReviewDialogProps) {
   const queryClient = useQueryClient()
+  const { user } = useAuth()
+  const verified = isEmailVerified(user)
   const { reset, control, setValue, register, handleSubmit, formState } =
     useForm<LeaveReviewFormValues>({
       resolver: zodResolver(leaveReviewFormSchema),
@@ -88,6 +95,8 @@ export function LeaveReviewDialog({
         </DialogHeader>
 
         <form className="space-y-4" onSubmit={onSubmit} noValidate>
+          {!verified ? <EmailVerificationNotice /> : null}
+
           <div className="space-y-2">
             <Label>Rating</Label>
             <div className="flex gap-1" role="group" aria-label="Star rating">
@@ -95,7 +104,8 @@ export function LeaveReviewDialog({
                 <button
                   key={n}
                   type="button"
-                  className="rounded-md p-1 text-muted-foreground hover:text-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                  disabled={!verified}
+                  className="rounded-md p-1 text-muted-foreground hover:text-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:pointer-events-none disabled:opacity-50"
                   onClick={() => setValue('rating', n, { shouldValidate: true, shouldDirty: true })}
                   aria-pressed={rating === n}
                   aria-label={`${n} star${n === 1 ? '' : 's'}`}
@@ -117,6 +127,7 @@ export function LeaveReviewDialog({
               id="review-comment"
               className="min-h-[100px] border-border bg-secondary text-foreground placeholder:text-muted-foreground dark:bg-secondary"
               placeholder="What did you think?"
+              disabled={!verified}
               {...register('comment')}
             />
             {formState.errors.comment && (
@@ -128,7 +139,7 @@ export function LeaveReviewDialog({
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
               Cancel
             </Button>
-            <Button type="submit" disabled={reviewMutation.isPending}>
+            <Button type="submit" disabled={!verified || reviewMutation.isPending}>
               {reviewMutation.isPending ? 'Submitting…' : 'Submit review'}
             </Button>
           </DialogFooter>

@@ -13,6 +13,10 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { Textarea } from '@/components/ui/textarea'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { useAuth } from '@/components/auth/auth-context'
+import {
+  EmailVerificationNotice,
+  isEmailVerified,
+} from '@/components/auth/email-verification-notice'
 import Link from 'next/link'
 import { applyApiFieldErrorsToForm } from '@/lib/http/api-errors'
 import {
@@ -29,9 +33,10 @@ import { SessionBlockSkeleton } from '@/components/skeletons/session-block-skele
 export function AssetUploadForm() {
   const router = useRouter()
   const queryClient = useQueryClient()
-  const { status } = useAuth()
+  const { status, user } = useAuth()
   const authed = status === 'authenticated'
   const pending = status === 'loading'
+  const verified = isEmailVerified(user)
 
   const facetsQuery = useQuery({
     queryKey: catalogKeys.facets(),
@@ -116,6 +121,10 @@ export function AssetUploadForm() {
         </Button>
       </div>
     )
+  }
+
+  if (!verified) {
+    return <EmailVerificationNotice />
   }
 
   return (

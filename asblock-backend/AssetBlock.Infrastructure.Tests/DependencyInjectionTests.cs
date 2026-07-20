@@ -60,6 +60,7 @@ public sealed class DependencyInjectionTests
 
         sp.GetRequiredService<IJwtTokenService>().Should().NotBeNull();
         sp.GetRequiredService<IUserStore>().Should().NotBeNull();
+        sp.GetRequiredService<IUserVerificationStore>().Should().NotBeNull();
         sp.GetRequiredService<ICategoryStore>().Should().NotBeNull();
         sp.GetRequiredService<IAssetStore>().Should().NotBeNull();
         sp.GetRequiredService<IPurchaseStore>().Should().NotBeNull();

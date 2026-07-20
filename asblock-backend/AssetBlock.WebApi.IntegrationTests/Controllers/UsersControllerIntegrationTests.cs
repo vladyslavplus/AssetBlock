@@ -42,13 +42,13 @@ public sealed class UsersControllerIntegrationTests(IntegrationTestFixture fixtu
         var profile = await response.Content.ReadFromJsonAsync<UserProfileDto>(IntegrationTestAuth.JsonOptions);
         profile.Should().NotBeNull();
         profile.Username.Should().NotBeNullOrWhiteSpace();
-        profile!.Role.Should().Be(AppRoles.USER);
+        profile.Role.Should().Be(AppRoles.USER);
     }
 
     [Fact]
     public async Task GetByUsername_WhenUserExists_ShouldReturnOk()
     {
-        var (authClient, username) = await IntegrationTestAuth.RegisterAndAuthenticateAsync(fixture.Factory);
+        (HttpClient authClient, var username) = await IntegrationTestAuth.RegisterAndAuthenticateAsync(fixture.Factory);
         _ = authClient;
 
         var anonymous = fixture.Factory.CreateClient();
@@ -112,7 +112,7 @@ public sealed class UsersControllerIntegrationTests(IntegrationTestFixture fixtu
     [Fact]
     public async Task UpdateMe_WithAuth_ShouldReturnOk()
     {
-        (HttpClient client, _) = await IntegrationTestAuth.RegisterAndAuthenticateAsync(fixture.Factory);
+        (HttpClient client, _) = await IntegrationTestAuth.RegisterVerifiedAndAuthenticateAsync(fixture.Factory);
         var response = await client.PatchAsJsonAsync(
             new Uri("/api/users/me", UriKind.Relative),
             new { bio = "Integration test bio." });
@@ -123,7 +123,7 @@ public sealed class UsersControllerIntegrationTests(IntegrationTestFixture fixtu
     [Fact]
     public async Task UpdateSocials_WithAuth_EmptyLinks_ShouldReturnOk()
     {
-        (HttpClient client, _) = await IntegrationTestAuth.RegisterAndAuthenticateAsync(fixture.Factory);
+        (HttpClient client, _) = await IntegrationTestAuth.RegisterVerifiedAndAuthenticateAsync(fixture.Factory);
         var response = await client.PutAsJsonAsync(
             new Uri("/api/users/me/socials", UriKind.Relative),
             new UpdateUserSocialLinksRequest { Links = [] });

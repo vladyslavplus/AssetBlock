@@ -8,5 +8,5 @@ export interface SiteMainProps {
 
 /** Fixed header offset + consistent bottom spacing for full-bleed app pages. */
 export function SiteMain({ children, className }: SiteMainProps) {
-  return <main className={cn('flex-1 pt-20 pb-16', className)}>{children}</main>
+  return <main className={cn('flex-1 pt-28 pb-16', className)}>{children}</main>
 }

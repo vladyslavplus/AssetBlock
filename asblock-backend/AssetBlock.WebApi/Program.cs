@@ -46,6 +46,7 @@ builder.Services.AddScoped<IOutboxMessageHandler, NotificationDispatchOutboxHand
 builder.Services.AddOpenApi();
 builder.Services.AddSwaggerConfiguration();
 builder.Services.AddJwtAuthentication(builder.Configuration);
+builder.Services.AddAssetBlockAuthorization();
 if (builder.Environment.IsEnvironment("IntegrationTesting"))
 {
     builder.Services.AddIntegrationTestingRateLimiting();

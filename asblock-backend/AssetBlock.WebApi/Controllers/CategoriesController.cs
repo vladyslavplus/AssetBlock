@@ -45,10 +45,11 @@ public sealed class CategoriesController(ISender sender) : ApiControllerBase(sen
     }
 
     /// <summary>
-    /// Create a new category. Requires Admin role.
+    /// Create a new category. Requires Admin role and a verified email address.
     /// </summary>
     [HttpPost(ApiRoutes.Categories.LIST)]
     [Authorize(Roles = AppRoles.ADMIN)]
+    [Authorize(Policy = AuthorizationPolicies.VERIFIED_EMAIL)]
     [ProducesResponseType(StatusCodes.Status201Created)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
@@ -61,10 +62,11 @@ public sealed class CategoriesController(ISender sender) : ApiControllerBase(sen
     }
 
     /// <summary>
-    /// Update an existing category. Requires Admin role.
+    /// Update an existing category. Requires Admin role and a verified email address.
     /// </summary>
     [HttpPut(ApiRoutes.Categories.BY_ID)]
     [Authorize(Roles = AppRoles.ADMIN)]
+    [Authorize(Policy = AuthorizationPolicies.VERIFIED_EMAIL)]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
@@ -78,10 +80,11 @@ public sealed class CategoriesController(ISender sender) : ApiControllerBase(sen
     }
 
     /// <summary>
-    /// Delete a category. Requires Admin role.
+    /// Delete a category. Requires Admin role and a verified email address.
     /// </summary>
     [HttpDelete(ApiRoutes.Categories.BY_ID)]
     [Authorize(Roles = AppRoles.ADMIN)]
+    [Authorize(Policy = AuthorizationPolicies.VERIFIED_EMAIL)]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]

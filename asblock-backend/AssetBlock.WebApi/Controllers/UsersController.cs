@@ -184,12 +184,14 @@ public sealed class UsersController(ISender sender) : ApiControllerBase(sender)
 
     /// <summary>
     /// Update the authenticated user's profile.
+    /// Requires an authenticated user with a verified email address.
     /// </summary>
     [HttpPatch(ApiRoutes.Users.ME)]
-    [Authorize]
+    [Authorize(Policy = AuthorizationPolicies.VERIFIED_EMAIL)]
     [ProducesResponseType(typeof(UpdateUserProfileResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     [ProducesResponseType(StatusCodes.Status409Conflict)]
     public async Task<IActionResult> UpdateMe([FromBody] UpdateUserProfileRequest request, CancellationToken cancellationToken)
@@ -283,12 +285,14 @@ public sealed class UsersController(ISender sender) : ApiControllerBase(sender)
 
     /// <summary>
     /// Replace the authenticated user's social links (full list).
+    /// Requires an authenticated user with a verified email address.
     /// </summary>
     [HttpPut(ApiRoutes.Users.ME_SOCIALS)]
-    [Authorize]
+    [Authorize(Policy = AuthorizationPolicies.VERIFIED_EMAIL)]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> UpdateSocials([FromBody] UpdateUserSocialLinksRequest request, CancellationToken cancellationToken)
     {

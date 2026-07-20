@@ -15,6 +15,10 @@ import {
 import { cn } from '@/lib/utils'
 import { siteShellClass } from '@/lib/site-layout'
 import { useAuth } from '@/components/auth/auth-context'
+import {
+  EmailVerificationNotice,
+  isEmailVerified,
+} from '@/components/auth/email-verification-notice'
 import { NotificationBell } from '@/components/notifications/notification-bell'
 import { BrandLogo } from '@/components/brand-logo'
 
@@ -26,6 +30,7 @@ export function SiteHeader() {
 
   const authed = status === 'authenticated' && user !== null
   const authPending = status === 'loading'
+  const showVerificationNotice = authed && !isEmailVerified(user)
 
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 8)
@@ -246,6 +251,7 @@ export function SiteHeader() {
           </div>
         </div>
       )}
+      {showVerificationNotice ? <EmailVerificationNotice compact /> : null}
     </header>
   )
 }

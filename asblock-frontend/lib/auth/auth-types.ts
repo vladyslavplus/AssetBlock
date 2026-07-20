@@ -20,6 +20,7 @@ export interface SessionUser {
   id: string
   username: string
   role?: string | null
+  emailVerifiedAt: string | null
   avatarUrl: string | null
   bio: string | null
   isPublicProfile: boolean

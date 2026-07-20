@@ -44,10 +44,11 @@ public class TagsController(ISender sender) : ApiControllerBase(sender)
     }
 
     /// <summary>
-    /// Creates a new tag. Requires Admin role.
+    /// Creates a new tag. Requires Admin role and a verified email address.
     /// </summary>
     [HttpPost(ApiRoutes.Tags.BASE)]
     [Authorize(Roles = AppRoles.ADMIN)]
+    [Authorize(Policy = AuthorizationPolicies.VERIFIED_EMAIL)]
     [ProducesResponseType(typeof(TagDto), StatusCodes.Status201Created)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
@@ -63,10 +64,11 @@ public class TagsController(ISender sender) : ApiControllerBase(sender)
     }
 
     /// <summary>
-    /// Updates an existing tag. Requires Admin role.
+    /// Updates an existing tag. Requires Admin role and a verified email address.
     /// </summary>
     [HttpPut(ApiRoutes.Tags.ID)]
     [Authorize(Roles = AppRoles.ADMIN)]
+    [Authorize(Policy = AuthorizationPolicies.VERIFIED_EMAIL)]
     [ProducesResponseType(typeof(TagDto), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
@@ -81,10 +83,11 @@ public class TagsController(ISender sender) : ApiControllerBase(sender)
     }
 
     /// <summary>
-    /// Deletes a tag. Requires Admin role.
+    /// Deletes a tag. Requires Admin role and a verified email address.
     /// </summary>
     [HttpDelete(ApiRoutes.Tags.ID)]
     [Authorize(Roles = AppRoles.ADMIN)]
+    [Authorize(Policy = AuthorizationPolicies.VERIFIED_EMAIL)]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]

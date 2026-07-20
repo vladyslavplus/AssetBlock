@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { useMutation } from '@tanstack/react-query'
 import { Button } from '@/components/ui/button'
 import { useAuth } from '@/components/auth/auth-context'
+import { isEmailVerified } from '@/components/auth/email-verification-notice'
 import { formatUsdWhole } from '@/lib/format-currency'
 import { CheckoutRequestError, postCreateCheckoutSession } from '@/lib/payments/checkout-api'
 import { PENDING_REVIEW_ASSET_ID_KEY } from '@/lib/reviews/review-constants'
@@ -32,6 +33,7 @@ export function AssetPurchaseCard({
   const { user, status } = useAuth()
 
   const isOwner = Boolean(user && user.id === authorId)
+  const verified = isEmailVerified(user)
   const loginHref = `/login?returnUrl=${encodeURIComponent(returnPath)}`
 
   const checkoutMutation = useMutation({
@@ -87,6 +89,14 @@ export function AssetPurchaseCard({
           className="bg-primary text-primary-foreground hover:bg-[#6D28D9] transition-smooth font-medium w-full h-10"
         >
           <Link href={loginHref}>Sign in to purchase</Link>
+        </Button>
+      ) : !verified ? (
+        <Button
+          type="button"
+          asChild
+          className="bg-primary text-primary-foreground hover:bg-[#6D28D9] transition-smooth font-medium w-full h-10"
+        >
+          <Link href="/account">Verify email to purchase</Link>
         </Button>
       ) : !checkoutConfigured ? (
         <Button type="button" disabled className="w-full h-10 font-medium">

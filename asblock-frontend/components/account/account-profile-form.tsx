@@ -2,6 +2,7 @@
 
 import { BadgeCheck, Clock, MailWarning } from 'lucide-react'
 
+import { EmailVerificationNotice } from '@/components/auth/email-verification-notice'
 import { SocialLinksFieldsSkeleton } from '@/components/skeletons/account-settings-skeleton'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -36,10 +37,13 @@ export function AccountProfileForm({ controller }: AccountProfileFormProps) {
   } = controller
 
   const isVerified = Boolean(profile?.emailVerifiedAt)
+  const profileLocked = !isVerified
   const hasPendingChange = Boolean(profile?.pendingEmail)
 
   return (
     <form className="space-y-4" onSubmit={onSaveProfile} noValidate>
+      {profileLocked ? <EmailVerificationNotice /> : null}
+
       <div className="space-y-2">
         <Label htmlFor="account-email">Email</Label>
         <Input
@@ -94,6 +98,7 @@ export function AccountProfileForm({ controller }: AccountProfileFormProps) {
         <Input
           id="account-username"
           autoComplete="username"
+          disabled={profileLocked}
           {...profileFields.username}
           value={profileValues.username ?? ''}
         />
@@ -109,6 +114,7 @@ export function AccountProfileForm({ controller }: AccountProfileFormProps) {
         <Textarea
           id="account-bio"
           className="bg-input border-border"
+          disabled={profileLocked}
           {...profileFields.bio}
           value={profileValues.bio ?? ''}
         />
@@ -123,6 +129,7 @@ export function AccountProfileForm({ controller }: AccountProfileFormProps) {
           id="account-avatar"
           type="url"
           placeholder="https://…"
+          disabled={profileLocked}
           {...profileFields.avatarUrl}
           value={profileValues.avatarUrl ?? ''}
         />
@@ -140,6 +147,7 @@ export function AccountProfileForm({ controller }: AccountProfileFormProps) {
         </div>
         <Switch
           checked={profileValues.isPublicProfile ?? true}
+          disabled={profileLocked}
           onCheckedChange={(value) =>
             profileForm.setValue('isPublicProfile', value, { shouldDirty: true })
           }
@@ -182,7 +190,7 @@ export function AccountProfileForm({ controller }: AccountProfileFormProps) {
                   autoComplete="off"
                   value={socialUrls[platform.id] ?? ''}
                   onChange={(event) => setSocialUrl(platform.id, event.target.value)}
-                  disabled={socialPlatformsLoading || savingProfile}
+                  disabled={profileLocked || socialPlatformsLoading || savingProfile}
                   className="bg-input border-border"
                 />
               </div>
@@ -193,7 +201,9 @@ export function AccountProfileForm({ controller }: AccountProfileFormProps) {
       <div className="flex flex-wrap gap-2">
         <Button
           type="submit"
-          disabled={savingProfile || !hasProfileOrSocialChanges || saveBlockedBySocial}
+          disabled={
+            profileLocked || savingProfile || !hasProfileOrSocialChanges || saveBlockedBySocial
+          }
         >
           {savingProfile ? 'Saving…' : 'Save changes'}
         </Button>
@@ -201,7 +211,7 @@ export function AccountProfileForm({ controller }: AccountProfileFormProps) {
           type="button"
           variant="outline"
           onClick={onCancelProfile}
-          disabled={!hasProfileOrSocialChanges}
+          disabled={profileLocked || !hasProfileOrSocialChanges}
         >
           Cancel
         </Button>

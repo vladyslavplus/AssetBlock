@@ -28,14 +28,16 @@ public sealed class PaymentsController(ISender sender) : ApiControllerBase(sende
 
     /// <summary>
     /// Create a Stripe Checkout session for an asset. Returns redirect URL.
+    /// Requires an authenticated user with a verified email address.
     /// Redirect URLs come only from server-side Stripe options.
     /// </summary>
     [HttpPost(ApiRoutes.Payments.CHECKOUT)]
-    [Authorize]
+    [Authorize(Policy = AuthorizationPolicies.VERIFIED_EMAIL)]
     [EnableRateLimiting(RateLimitingConstants.Policies.PAYMENTS_CHECKOUT)]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
     public async Task<IActionResult> CreateCheckout([FromBody] CreateCheckoutRequest request, CancellationToken cancellationToken)
     {
         var userId = GetUserId();

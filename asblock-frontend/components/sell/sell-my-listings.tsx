@@ -16,6 +16,10 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
 import { useAuth } from '@/components/auth/auth-context'
+import {
+  EmailVerificationNotice,
+  isEmailVerified,
+} from '@/components/auth/email-verification-notice'
 import { SessionBlockSkeleton } from '@/components/skeletons/session-block-skeleton'
 import { SellListingListSkeleton } from '@/components/sell/sell-listing-row-skeleton'
 import { deleteSellerAsset } from '@/lib/seller/seller-api'
@@ -28,9 +32,10 @@ import { useState } from 'react'
 export function SellMyListings() {
   const router = useRouter()
   const queryClient = useQueryClient()
-  const { status } = useAuth()
+  const { status, user } = useAuth()
   const authed = status === 'authenticated'
   const pending = status === 'loading'
+  const verified = isEmailVerified(user)
 
   const listingsQuery = useQuery({
     queryKey: sellerKeys.listings(),
@@ -122,6 +127,7 @@ export function SellMyListings() {
 
   return (
     <>
+      {!verified ? <EmailVerificationNotice className="mb-4" /> : null}
       <ul className="space-y-3">
         {items.map((a) => (
           <li
@@ -139,32 +145,40 @@ export function SellMyListings() {
             </div>
             <div className="flex flex-wrap gap-2 shrink-0">
               <Button asChild variant="outline" size="sm" className="border-border">
-                <Link href={`/sell/assets/${a.id}/edit`}>
-                  <Pencil className="h-3.5 w-3.5 mr-1.5" />
-                  Edit
-                </Link>
-              </Button>
-              <Button asChild variant="outline" size="sm" className="border-border">
                 <Link href={`/assets/${a.id}`}>
                   <ExternalLink className="h-3.5 w-3.5 mr-1.5" />
                   View
                 </Link>
               </Button>
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                className="border-destructive/40 text-destructive hover:bg-destructive/10 hover:text-destructive"
-                disabled={deleteMutation.isPending}
-                onClick={() => setDeleteTarget({ id: a.id, title: a.title })}
-              >
-                {deletingId === a.id ? (
-                  <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />
-                ) : (
-                  <Trash2 className="h-3.5 w-3.5 mr-1.5" aria-hidden />
-                )}
-                Delete
-              </Button>
+              {verified ? (
+                <>
+                  <Button asChild variant="outline" size="sm" className="border-border">
+                    <Link href={`/sell/assets/${a.id}/edit`}>
+                      <Pencil className="h-3.5 w-3.5 mr-1.5" />
+                      Edit
+                    </Link>
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="border-destructive/40 text-destructive hover:bg-destructive/10 hover:text-destructive"
+                    disabled={deleteMutation.isPending}
+                    onClick={() => setDeleteTarget({ id: a.id, title: a.title })}
+                  >
+                    {deletingId === a.id ? (
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />
+                    ) : (
+                      <Trash2 className="h-3.5 w-3.5 mr-1.5" aria-hidden />
+                    )}
+                    Delete
+                  </Button>
+                </>
+              ) : (
+                <Button asChild size="sm" variant="outline" className="border-amber-500/40">
+                  <Link href="/account">Verify to manage</Link>
+                </Button>
+              )}
             </div>
           </li>
         ))}

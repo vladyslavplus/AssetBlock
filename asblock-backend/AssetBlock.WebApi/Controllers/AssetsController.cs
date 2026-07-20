@@ -110,16 +110,18 @@ public sealed class AssetsController(
     }
 
     /// <summary>
-    /// Upload a new asset archive. Requires Bearer token. Multipart/form-data; form field name: "file".
+    /// Upload a new asset archive. Requires an authenticated user with a verified email address.
+    /// Multipart/form-data; form field name: "file".
     /// Allowed extensions: .zip, .7z, .rar, .tar, .tar.gz, .tgz. Max size 250 MiB.
     /// </summary>
     [HttpPost(ApiRoutes.Assets.UPLOAD)]
-    [Authorize]
+    [Authorize(Policy = AuthorizationPolicies.VERIFIED_EMAIL)]
     [EnableRateLimiting(RateLimitingConstants.Policies.ASSETS_UPLOAD)]
     [Consumes("multipart/form-data")]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
     public async Task<IActionResult> Upload(
         [FromForm] UploadAssetFormWithFile form,
         CancellationToken cancellationToken)
@@ -165,10 +167,11 @@ public sealed class AssetsController(
     }
 
     /// <summary>
-    /// Partial update of an asset (title, description, price, categoryId). Requires Bearer token. Only the author can update.
+    /// Partial update of an asset (title, description, price, categoryId).
+    /// Requires an authenticated user with a verified email address. Only the author can update.
     /// </summary>
     [HttpPatch(ApiRoutes.Assets.ID)]
-    [Authorize]
+    [Authorize(Policy = AuthorizationPolicies.VERIFIED_EMAIL)]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
@@ -189,10 +192,10 @@ public sealed class AssetsController(
     }
 
     /// <summary>
-    /// Delete an asset. Requires Bearer token. Only the author can delete it.
+    /// Delete an asset. Requires an authenticated user with a verified email address. Only the author can delete it.
     /// </summary>
     [HttpDelete(ApiRoutes.Assets.ID)]
-    [Authorize]
+    [Authorize(Policy = AuthorizationPolicies.VERIFIED_EMAIL)]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
@@ -212,10 +215,10 @@ public sealed class AssetsController(
     }
 
     /// <summary>
-    /// Adds a tag to an asset. Requires Bearer token. Only the author can manage tags.
+    /// Adds a tag to an asset. Requires an authenticated user with a verified email address. Only the author can manage tags.
     /// </summary>
     [HttpPost(ApiRoutes.Assets.TAGS)]
-    [Authorize]
+    [Authorize(Policy = AuthorizationPolicies.VERIFIED_EMAIL)]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
@@ -237,10 +240,10 @@ public sealed class AssetsController(
     }
 
     /// <summary>
-    /// Removes a tag from an asset. Requires Bearer token. Only the author can manage tags.
+    /// Removes a tag from an asset. Requires an authenticated user with a verified email address. Only the author can manage tags.
     /// </summary>
     [HttpDelete(ApiRoutes.Assets.TAGS_ID)]
-    [Authorize]
+    [Authorize(Policy = AuthorizationPolicies.VERIFIED_EMAIL)]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]

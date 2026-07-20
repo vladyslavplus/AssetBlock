@@ -15,12 +15,14 @@ public class ReviewsController(ISender sender) : ApiControllerBase(sender)
 {
     /// <summary>
     /// Creates a new review for the specified asset.
+    /// Requires an authenticated user with a verified email address.
     /// </summary>
     [HttpPost(ApiRoutes.Reviews.CREATE_FOR_ASSET)]
-    [Authorize]
+    [Authorize(Policy = AuthorizationPolicies.VERIFIED_EMAIL)]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
     public async Task<IActionResult> CreateReview(Guid assetId, [FromBody] CreateReviewRequest request, CancellationToken cancellationToken)
     {
         var userId = GetUserId()!.Value;
@@ -59,10 +61,11 @@ public class ReviewsController(ISender sender) : ApiControllerBase(sender)
     }
 
     /// <summary>
-    /// Deletes a specific review by its ID (Admin only).
+    /// Deletes a specific review by its ID (Admin with verified email).
     /// </summary>
     [HttpDelete(ApiRoutes.Reviews.BY_ID)]
     [Authorize(Roles = AppRoles.ADMIN)]
+    [Authorize(Policy = AuthorizationPolicies.VERIFIED_EMAIL)]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
