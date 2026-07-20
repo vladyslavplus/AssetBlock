@@ -93,3 +93,44 @@ export async function postChangeAccountPassword(values: ChangePasswordFormValues
     )
   }
 }
+
+export async function postResendEmailVerification(): Promise<void> {
+  const res = await fetch('/api/account/email-verification/resend', {
+    method: 'POST',
+    credentials: 'include',
+  })
+  const json: unknown = await res.json().catch(() => null)
+  if (res.status === 401) {
+    throw new AccountRequestError(401, 'UNAUTHORIZED', json)
+  }
+  if (!res.ok) {
+    throw new AccountRequestError(
+      res.status,
+      getApiErrorMessage(json, 'Could not resend verification email.'),
+      json,
+    )
+  }
+}
+
+export async function postRequestEmailChange(
+  newEmail: string,
+  currentPassword: string,
+): Promise<void> {
+  const res = await fetch('/api/account/email-change/request', {
+    method: 'POST',
+    credentials: 'include',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ newEmail, currentPassword }),
+  })
+  const json: unknown = await res.json().catch(() => null)
+  if (res.status === 401) {
+    throw new AccountRequestError(401, 'UNAUTHORIZED', json)
+  }
+  if (!res.ok) {
+    throw new AccountRequestError(
+      res.status,
+      getApiErrorMessage(json, 'Could not request email change.'),
+      json,
+    )
+  }
+}

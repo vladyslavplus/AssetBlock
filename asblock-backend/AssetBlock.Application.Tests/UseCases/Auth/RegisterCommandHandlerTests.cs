@@ -3,6 +3,7 @@ using AssetBlock.Application.UseCases.Auth.Register;
 using AssetBlock.Domain.Abstractions.Services;
 using AssetBlock.Domain.Core.Constants;
 using AssetBlock.Domain.Core.Dto.Audit;
+using AssetBlock.Domain.Core.Dto.Email;
 using AssetBlock.Domain.Core.Entities;
 using AssetBlock.Domain.Core.Enums;
 using AssetBlock.Domain.Core.Exceptions;
@@ -19,6 +20,8 @@ public class RegisterCommandHandlerTests
     private readonly IUserStore _userStoreMock;
     private readonly IPasswordHasher _passwordHasherMock;
     private readonly IJwtTokenService _jwtTokenServiceMock;
+    private readonly IEmailActionStore _emailActionStoreMock;
+    private readonly IOutboxStore _outboxStoreMock;
     private readonly IUnitOfWork _unitOfWorkMock;
     private readonly IAuditWriter _auditWriterMock;
     private readonly RegisterCommandHandler _handler;
@@ -28,6 +31,8 @@ public class RegisterCommandHandlerTests
         _userStoreMock = Substitute.For<IUserStore>();
         _passwordHasherMock = Substitute.For<IPasswordHasher>();
         _jwtTokenServiceMock = Substitute.For<IJwtTokenService>();
+        _emailActionStoreMock = Substitute.For<IEmailActionStore>();
+        _outboxStoreMock = Substitute.For<IOutboxStore>();
         _unitOfWorkMock = Substitute.For<IUnitOfWork>();
         _auditWriterMock = Substitute.For<IAuditWriter>();
 
@@ -38,6 +43,8 @@ public class RegisterCommandHandlerTests
             _userStoreMock,
             _passwordHasherMock,
             _jwtTokenServiceMock,
+            _emailActionStoreMock,
+            _outboxStoreMock,
             _unitOfWorkMock,
             _auditWriterMock,
             NullLogger<RegisterCommandHandler>.Instance);
@@ -105,11 +112,14 @@ public class RegisterCommandHandlerTests
         var command = new RegisterCommand("newuser", "new@example.com", "password123");
         var user = new User { Id = Guid.NewGuid(), Username = "newuser", Email = "new@example.com", PasswordHash = "hashed", Role = AppRoles.USER };
         var tokenResponse = new TokensResponse("acc", "ref", DateTimeOffset.UtcNow.AddMinutes(15), DateTimeOffset.UtcNow.AddDays(7));
+        var action = new EmailAction { Id = Guid.NewGuid(), UserId = user.Id, Purpose = EmailActionPurpose.EMAIL_VERIFICATION, TargetEmail = user.Email, Version = Guid.NewGuid(), CreatedAt = DateTimeOffset.UtcNow, ExpiresAt = DateTimeOffset.UtcNow.AddHours(24) };
 
         _userStoreMock.GetByEmail(command.Email, Arg.Any<CancellationToken>()).Returns((User?)null);
         _passwordHasherMock.Hash(command.Password).Returns("hashed");
         _userStoreMock.Create("newuser", command.Email, "hashed", Arg.Any<CancellationToken>()).Returns(user);
         _jwtTokenServiceMock.GenerateTokenPair(user.Id, user.Username, user.Email, user.Role).Returns(tokenResponse);
+        _emailActionStoreMock.IssueOrReplace(Arg.Any<Guid>(), Arg.Any<EmailActionPurpose>(), Arg.Any<string>(), Arg.Any<TimeSpan>(), Arg.Any<CancellationToken>())
+            .Returns(action);
 
         var result = await _handler.Handle(command, CancellationToken.None);
 
@@ -118,6 +128,20 @@ public class RegisterCommandHandlerTests
         result.Value.RefreshToken.Should().Be("ref");
 
         await _unitOfWorkMock.Received(1).ExecuteInTransaction(Arg.Any<Func<CancellationToken, Task>>(), Arg.Any<CancellationToken>());
+        await _emailActionStoreMock.Received(1).IssueOrReplace(
+            user.Id,
+            EmailActionPurpose.EMAIL_VERIFICATION,
+            user.Email,
+            Arg.Any<TimeSpan>(),
+            Arg.Any<CancellationToken>());
+        await _outboxStoreMock.Received(1).Enqueue(
+            OutboxMessageTypes.EMAIL_ACTION_DISPATCH,
+            Arg.Is<EmailActionDispatchPayload>(p =>
+                p.EmailActionId == action.Id &&
+                p.ActionVersion == action.Version &&
+                p.RecipientUserId == user.Id &&
+                p.TemplateKind == EmailTemplateKind.EMAIL_VERIFICATION),
+            Arg.Any<CancellationToken>());
         await _auditWriterMock.Received(1).Write(
             Arg.Is<AuditEvent>(e =>
                 e.Action == AuditActions.AUTH_REGISTER &&

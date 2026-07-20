@@ -10,6 +10,10 @@ public static class ApiRoutes
         public const string LOGIN = "login";
         public const string REFRESH = "refresh";
         public const string REGISTER = "register";
+        public const string PASSWORD_RESET_REQUEST = "password-reset/request";
+        public const string PASSWORD_RESET_CONFIRM = "password-reset/confirm";
+        public const string EMAIL_VERIFICATION_CONFIRM = "email-verification/confirm";
+        public const string EMAIL_CHANGE_CONFIRM = "email-change/confirm";
     }
 
     public static class Categories
@@ -54,6 +58,8 @@ public static class ApiRoutes
         public const string PROFILE = "{username}";
         public const string ME = "me";
         public const string ME_PASSWORD = "me/password";
+        public const string ME_EMAIL_VERIFICATION_RESEND = "me/email-verification/resend";
+        public const string ME_EMAIL_CHANGE_REQUEST = "me/email-change/request";
         public const string ME_SOCIALS = "me/socials";
         public const string ME_NOTIFICATIONS = "me/notifications";
         public const string ME_NOTIFICATIONS_READ_ALL = "me/notifications/read-all";

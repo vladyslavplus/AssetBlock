@@ -1,4 +1,5 @@
 using AssetBlock.Application.UseCases.Assets.GetAssets;
+using AssetBlock.Application.UseCases.Auth.ResendEmailVerification;
 using AssetBlock.Application.UseCases.Users.ChangePassword;
 using AssetBlock.Application.UseCases.Users.GetProfile;
 using AssetBlock.Application.UseCases.Users.ListMyPurchases;
@@ -7,8 +8,11 @@ using AssetBlock.Application.UseCases.Users.MarkAllNotificationsRead;
 using AssetBlock.Application.UseCases.Users.ListSocialPlatforms;
 using AssetBlock.Application.UseCases.Users.MarkNotificationRead;
 using AssetBlock.Application.UseCases.Users.MarkNotificationUnread;
+using AssetBlock.Application.UseCases.Users.RequestEmailChange;
 using AssetBlock.Application.UseCases.Users.UpdateProfile;
 using AssetBlock.Application.UseCases.Users.UpdateSocialLinks;
+using AssetBlock.Domain.Core.Constants;
+using AssetBlock.Domain.Core.Dto.Auth;
 using AssetBlock.Domain.Core.Dto.Notifications;
 using AssetBlock.Domain.Core.Dto.Paging;
 using AssetBlock.Domain.Core.Dto.Assets;
@@ -17,6 +21,7 @@ using AssetBlock.WebApi.Constants;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 
 namespace AssetBlock.WebApi.Controllers;
 
@@ -225,6 +230,55 @@ public sealed class UsersController(ISender sender) : ApiControllerBase(sender)
         var command = new ChangePasswordCommand(userId.Value, request.CurrentPassword, request.NewPassword);
         var result = await Sender.Send(command, cancellationToken);
         return MapResultToActionResult(result);
+    }
+
+    /// <summary>
+    /// Resend email verification for the authenticated user (cooldown-protected).
+    /// </summary>
+    [HttpPost(ApiRoutes.Users.ME_EMAIL_VERIFICATION_RESEND)]
+    [Authorize]
+    [EnableRateLimiting(RateLimitingConstants.Policies.USERS_EMAIL_VERIFICATION_RESEND)]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status429TooManyRequests)]
+    public async Task<IActionResult> ResendEmailVerification(CancellationToken cancellationToken)
+    {
+        var userId = GetUserId();
+        if (userId is null)
+        {
+            return UnauthorizedProblem();
+        }
+
+        var result = await Sender.Send(new ResendEmailVerificationCommand(userId.Value), cancellationToken);
+        return result.IsSuccess ? Ok() : MapResultToActionResult(result);
+    }
+
+    /// <summary>
+    /// Request a login-email change. Requires current password; confirmation goes to the new address.
+    /// </summary>
+    [HttpPost(ApiRoutes.Users.ME_EMAIL_CHANGE_REQUEST)]
+    [Authorize]
+    [EnableRateLimiting(RateLimitingConstants.Policies.USERS_EMAIL_CHANGE_REQUEST)]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
+    [ProducesResponseType(StatusCodes.Status429TooManyRequests)]
+    public async Task<IActionResult> RequestEmailChange(
+        [FromBody] RequestEmailChangeRequest request,
+        CancellationToken cancellationToken)
+    {
+        var userId = GetUserId();
+        if (userId is null)
+        {
+            return UnauthorizedProblem();
+        }
+
+        var result = await Sender.Send(
+            new RequestEmailChangeCommand(userId.Value, request.NewEmail, request.CurrentPassword),
+            cancellationToken);
+        return result.IsSuccess ? Ok() : MapResultToActionResult(result);
     }
 
     /// <summary>

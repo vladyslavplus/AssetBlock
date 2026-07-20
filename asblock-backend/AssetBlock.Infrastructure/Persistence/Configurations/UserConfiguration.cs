@@ -22,6 +22,7 @@ internal sealed class UserConfiguration : IEntityTypeConfiguration<User>
         builder.Property(u => u.AvatarUrl).HasMaxLength(500);
         builder.Property(u => u.Bio).HasMaxLength(1000);
         builder.Property(u => u.IsPublicProfile).IsRequired().HasDefaultValue(true);
+        builder.Property(u => u.EmailVerifiedAt);
 
         builder.HasIndex(u => u.Email).IsUnique();
         builder.HasIndex(u => u.Username).IsUnique();

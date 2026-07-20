@@ -49,6 +49,10 @@ internal static class RateLimitingExtensions
                 AddNoOpPolicy(RateLimitingConstants.Policies.AUTH_REGISTER);
                 AddNoOpPolicy(RateLimitingConstants.Policies.AUTH_LOGIN);
                 AddNoOpPolicy(RateLimitingConstants.Policies.AUTH_REFRESH);
+                AddNoOpPolicy(RateLimitingConstants.Policies.AUTH_PASSWORD_RESET_REQUEST);
+                AddNoOpPolicy(RateLimitingConstants.Policies.AUTH_EMAIL_ACTION_CONFIRM);
+                AddNoOpPolicy(RateLimitingConstants.Policies.USERS_EMAIL_VERIFICATION_RESEND);
+                AddNoOpPolicy(RateLimitingConstants.Policies.USERS_EMAIL_CHANGE_REQUEST);
                 AddNoOpPolicy(RateLimitingConstants.Policies.ASSETS_UPLOAD);
                 AddNoOpPolicy(RateLimitingConstants.Policies.ASSETS_DOWNLOAD);
                 AddNoOpPolicy(RateLimitingConstants.Policies.PAYMENTS_CHECKOUT);
@@ -93,10 +97,50 @@ internal static class RateLimitingExtensions
                     PermitLimit = RateLimitingConstants.Windows.AUTH_REFRESH_LIMIT,
                     QueueProcessingOrder = QueueProcessingOrder.OldestFirst
                 }));
+
+        opts.AddPolicy(RateLimitingConstants.Policies.AUTH_PASSWORD_RESET_REQUEST, httpContext =>
+            RateLimitPartition.GetFixedWindowLimiter(
+                partitionKey: httpContext.Connection.RemoteIpAddress?.ToString() ?? UNKNOWN_PARTITION_KEY,
+                factory: _ => new FixedWindowRateLimiterOptions
+                {
+                    Window = TimeSpan.FromSeconds(RateLimitingConstants.Windows.AUTH_PASSWORD_RESET_REQUEST_PERIOD_SECONDS),
+                    PermitLimit = RateLimitingConstants.Windows.AUTH_PASSWORD_RESET_REQUEST_LIMIT,
+                    QueueProcessingOrder = QueueProcessingOrder.OldestFirst
+                }));
+
+        opts.AddPolicy(RateLimitingConstants.Policies.AUTH_EMAIL_ACTION_CONFIRM, httpContext =>
+            RateLimitPartition.GetFixedWindowLimiter(
+                partitionKey: httpContext.Connection.RemoteIpAddress?.ToString() ?? UNKNOWN_PARTITION_KEY,
+                factory: _ => new FixedWindowRateLimiterOptions
+                {
+                    Window = TimeSpan.FromSeconds(RateLimitingConstants.Windows.AUTH_EMAIL_ACTION_CONFIRM_PERIOD_SECONDS),
+                    PermitLimit = RateLimitingConstants.Windows.AUTH_EMAIL_ACTION_CONFIRM_LIMIT,
+                    QueueProcessingOrder = QueueProcessingOrder.OldestFirst
+                }));
     }
 
     private static void AddSlidingWindowPolicies(RateLimiterOptions opts)
     {
+        opts.AddPolicy(RateLimitingConstants.Policies.USERS_EMAIL_VERIFICATION_RESEND, httpContext =>
+            RateLimitPartition.GetFixedWindowLimiter(
+                partitionKey: GetUserPartitionKey(httpContext),
+                factory: _ => new FixedWindowRateLimiterOptions
+                {
+                    Window = TimeSpan.FromSeconds(RateLimitingConstants.Windows.USERS_EMAIL_VERIFICATION_RESEND_PERIOD_SECONDS),
+                    PermitLimit = RateLimitingConstants.Windows.USERS_EMAIL_VERIFICATION_RESEND_LIMIT,
+                    QueueProcessingOrder = QueueProcessingOrder.OldestFirst
+                }));
+
+        opts.AddPolicy(RateLimitingConstants.Policies.USERS_EMAIL_CHANGE_REQUEST, httpContext =>
+            RateLimitPartition.GetFixedWindowLimiter(
+                partitionKey: GetUserPartitionKey(httpContext),
+                factory: _ => new FixedWindowRateLimiterOptions
+                {
+                    Window = TimeSpan.FromSeconds(RateLimitingConstants.Windows.USERS_EMAIL_CHANGE_REQUEST_PERIOD_SECONDS),
+                    PermitLimit = RateLimitingConstants.Windows.USERS_EMAIL_CHANGE_REQUEST_LIMIT,
+                    QueueProcessingOrder = QueueProcessingOrder.OldestFirst
+                }));
+
         opts.AddPolicy(RateLimitingConstants.Policies.ASSETS_UPLOAD, httpContext =>
             RateLimitPartition.GetSlidingWindowLimiter(
                 partitionKey: GetUserPartitionKey(httpContext),

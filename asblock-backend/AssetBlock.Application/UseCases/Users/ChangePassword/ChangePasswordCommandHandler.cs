@@ -12,6 +12,9 @@ namespace AssetBlock.Application.UseCases.Users.ChangePassword;
 internal sealed class ChangePasswordCommandHandler(
     IUserStore userStore,
     IPasswordHasher passwordHasher,
+    IJwtTokenService jwtTokenService,
+    IOutboxStore outboxStore,
+    ITransactionalEmailComposer emailComposer,
     IUnitOfWork unitOfWork,
     IAuditWriter auditWriter,
     ILogger<ChangePasswordCommandHandler> logger) : IRequestHandler<ChangePasswordCommand, Result>
@@ -36,18 +39,25 @@ internal sealed class ChangePasswordCommandHandler(
             return ResultError.Error(ErrorCodes.ERR_AUTH_CURRENT_PASSWORD_INVALID);
         }
 
-        user.PasswordHash = passwordHasher.Hash(request.NewPassword);
+        var newHash = passwordHasher.Hash(request.NewPassword);
+        var userEmail = user.Email;
+        var userId = user.Id;
+
+        user.PasswordHash = newHash;
         await unitOfWork.ExecuteInTransaction(async ct =>
         {
             await userStore.Update(user, ct);
+            await jwtTokenService.RevokeAllRefreshTokens(userId, ct);
+            var notice = emailComposer.CreatePasswordChangedNotice(userEmail, userId);
+            await outboxStore.Enqueue(OutboxMessageTypes.EMAIL_DISPATCH, notice, ct);
             await auditWriter.Write(new AuditEvent(
                 AuditActions.USER_PASSWORD_CHANGE,
                 AuditOutcome.SUCCESS,
                 AuditResourceTypes.USER,
-                request.UserId.ToString()), ct);
+                userId.ToString()), ct);
         }, cancellationToken);
 
-        logger.LogInformation("Password changed for user {UserId}", request.UserId);
+        logger.LogInformation("Password changed for user {UserId}", userId);
         return Result.Success();
     }
 }

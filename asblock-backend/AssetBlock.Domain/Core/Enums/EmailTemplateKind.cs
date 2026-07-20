@@ -7,5 +7,10 @@ namespace AssetBlock.Domain.Core.Enums;
 public enum EmailTemplateKind
 {
     PURCHASE_RECEIPT,
-    ASSET_SOLD
+    ASSET_SOLD,
+    EMAIL_VERIFICATION,
+    PASSWORD_RESET,
+    EMAIL_CHANGE_CONFIRMATION,
+    PASSWORD_CHANGED_NOTICE,
+    EMAIL_CHANGED_NOTICE
 }

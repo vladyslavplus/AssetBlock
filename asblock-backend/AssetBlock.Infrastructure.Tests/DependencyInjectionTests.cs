@@ -4,10 +4,12 @@ using System.Text.Json;
 using AssetBlock.Domain.Abstractions.Services;
 using AssetBlock.Domain.Core.Primitives.AppSettingsOptions;
 using AssetBlock.Infrastructure.Persistence;
+using Microsoft.AspNetCore.DataProtection;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using NSubstitute;
 
 namespace AssetBlock.Infrastructure.Tests;
 
@@ -17,6 +19,7 @@ public sealed class DependencyInjectionTests
     public void AddInfrastructure_resolves_core_services()
     {
         var key = Convert.ToBase64String(RandomNumberGenerator.GetBytes(32));
+        var tempKeysPath = Path.Combine(Path.GetTempPath(), "assetblock-dp-tests", Guid.NewGuid().ToString("N"));
         var json = JsonSerializer.Serialize(new
         {
             ConnectionStrings = new { DefaultConnection = "Host=127.0.0.1;Port=5432;Database=test;Username=u;Password=p" },
@@ -39,7 +42,8 @@ public sealed class DependencyInjectionTests
                 PublicAppBaseUrl = "http://localhost:3000",
                 MessageIdDomain = "mail.localhost",
                 Smtp = new { Host = "localhost", Port = 1025, Security = "NONE", Username = "", Password = "", TimeoutSeconds = 30 }
-            }
+            },
+            DataProtection = new { KeysPath = tempKeysPath }
         });
         var config = new ConfigurationBuilder()
             .AddJsonStream(new MemoryStream(Encoding.UTF8.GetBytes(json)))
@@ -47,6 +51,9 @@ public sealed class DependencyInjectionTests
 
         var services = new ServiceCollection();
         services.AddLogging(b => b.ClearProviders());
+        Directory.CreateDirectory(tempKeysPath);
+        services.AddDataProtection().PersistKeysToFileSystem(new DirectoryInfo(tempKeysPath));
+        services.AddSingleton(Substitute.For<ITransactionalEmailComposer>());
         services.AddInfrastructure(config);
 
         using var sp = services.BuildServiceProvider();
@@ -67,12 +74,15 @@ public sealed class DependencyInjectionTests
         sp.GetRequiredService<IPasswordHasher>().Should().NotBeNull();
         sp.GetRequiredService<ICacheService>().Should().NotBeNull();
         sp.GetRequiredService<IEmailSender>().Should().NotBeNull();
+        sp.GetRequiredService<IEmailActionStore>().Should().NotBeNull();
+        sp.GetRequiredService<IEmailActionLinkProtector>().Should().NotBeNull();
         sp.GetRequiredService<ApplicationDbContext>();
     }
 
     [Fact]
     public void AddInfrastructure_WhenEncryptionKeyInvalid_ShouldFailOptionsValidation()
     {
+        var tempKeysPath = Path.Combine(Path.GetTempPath(), "assetblock-dp-tests", Guid.NewGuid().ToString("N"));
         var json = JsonSerializer.Serialize(new
         {
             ConnectionStrings = new { DefaultConnection = "Host=127.0.0.1;Port=5432;Database=test;Username=u;Password=p" },
@@ -95,7 +105,8 @@ public sealed class DependencyInjectionTests
                 PublicAppBaseUrl = "http://localhost:3000",
                 MessageIdDomain = "mail.localhost",
                 Smtp = new { Host = "localhost", Port = 1025, Security = "NONE", Username = "", Password = "", TimeoutSeconds = 30 }
-            }
+            },
+            DataProtection = new { KeysPath = tempKeysPath }
         });
         var config = new ConfigurationBuilder()
             .AddJsonStream(new MemoryStream(Encoding.UTF8.GetBytes(json)))
@@ -103,6 +114,9 @@ public sealed class DependencyInjectionTests
 
         var services = new ServiceCollection();
         services.AddLogging(b => b.ClearProviders());
+        Directory.CreateDirectory(tempKeysPath);
+        services.AddDataProtection().PersistKeysToFileSystem(new DirectoryInfo(tempKeysPath));
+        services.AddSingleton(Substitute.For<ITransactionalEmailComposer>());
         services.AddInfrastructure(config);
 
         using var sp = services.BuildServiceProvider();

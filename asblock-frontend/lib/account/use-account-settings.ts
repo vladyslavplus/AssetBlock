@@ -6,11 +6,14 @@ import { useRouter } from 'next/navigation'
 import { useEffect, useRef, useState, type SyntheticEvent } from 'react'
 import { useForm, useWatch } from 'react-hook-form'
 import { toast } from 'sonner'
+import { z } from 'zod'
 
 import {
   AccountRequestError,
   patchAccountProfile,
   postChangeAccountPassword,
+  postRequestEmailChange,
+  postResendEmailVerification,
   putAccountSocials,
 } from '@/lib/account/account-api'
 import {
@@ -26,13 +29,22 @@ import {
 } from '@/lib/account/account-schemas'
 import { buildSocialUrlsFromProfile } from '@/lib/account/social-links-account'
 import type { AccountProfile } from '@/lib/account/account-types'
+import { postAuthLogout } from '@/lib/auth/auth-api'
 import {
   applyApiFieldErrorsToForm,
   getApiErrorMessage,
   parseApiErrorBody,
 } from '@/lib/http/api-errors'
 
-export type AccountSection = 'profile' | 'password'
+export type AccountSection = 'profile' | 'password' | 'email'
+
+const emailChangeFormSchema = z.object({
+  newEmail: z.string().min(1, 'Email is required').email('Enter a valid email address'),
+  currentPassword: z.string().min(1, 'Current password is required'),
+})
+export type EmailChangeFormValues = z.infer<typeof emailChangeFormSchema>
+
+const EMAIL_CHANGE_FORM_EMPTY: EmailChangeFormValues = { newEmail: '', currentPassword: '' }
 
 const PASSWORD_FORM_EMPTY: ChangePasswordFormValues = {
   currentPassword: '',
@@ -74,6 +86,7 @@ export function useAccountSettings() {
   const lastSavedRef = useRef<AccountProfileFormValues | null>(null)
   const profileHydratedRef = useRef<string | null>(null)
   const [socialDraft, setSocialDraft] = useState<SocialDraft>({ profileId: null, values: {} })
+  const [resendCooldown, setResendCooldown] = useState(false)
 
   const profileForm = useForm<AccountProfileFormValues>({
     resolver: zodResolver(accountProfileFormSchema),
@@ -83,6 +96,11 @@ export function useAccountSettings() {
   const passwordForm = useForm<ChangePasswordFormValues>({
     resolver: zodResolver(changePasswordFormSchema),
     defaultValues: PASSWORD_FORM_EMPTY,
+    shouldUnregister: false,
+  })
+  const emailChangeForm = useForm<EmailChangeFormValues>({
+    resolver: zodResolver(emailChangeFormSchema),
+    defaultValues: EMAIL_CHANGE_FORM_EMPTY,
     shouldUnregister: false,
   })
 
@@ -95,6 +113,10 @@ export function useAccountSettings() {
     currentPassword: passwordForm.register('currentPassword'),
     newPassword: passwordForm.register('newPassword'),
     confirmPassword: passwordForm.register('confirmPassword'),
+  }
+  const emailChangeFields = {
+    newEmail: emailChangeForm.register('newEmail'),
+    currentPassword: emailChangeForm.register('currentPassword'),
   }
 
   const profileValues = {
@@ -121,6 +143,14 @@ export function useAccountSettings() {
     confirmPassword: useWatch({
       control: passwordForm.control,
       name: 'confirmPassword',
+      defaultValue: '',
+    }),
+  }
+  const emailChangeValues = {
+    newEmail: useWatch({ control: emailChangeForm.control, name: 'newEmail', defaultValue: '' }),
+    currentPassword: useWatch({
+      control: emailChangeForm.control,
+      name: 'currentPassword',
       defaultValue: '',
     }),
   }
@@ -181,10 +211,10 @@ export function useAccountSettings() {
   const putSocialsMutation = useMutation({ mutationFn: putAccountSocials })
   const changePasswordMutation = useMutation({
     mutationFn: postChangeAccountPassword,
-    onSuccess: () => {
+    onSuccess: async () => {
       passwordForm.reset(PASSWORD_FORM_EMPTY)
-      toast.success('Password updated.')
-      setSection('profile')
+      await postAuthLogout()
+      router.push('/login?message=password-changed')
     },
     onError: (error: unknown) => {
       if (error instanceof AccountRequestError) {
@@ -197,6 +227,59 @@ export function useAccountSettings() {
           applyApiFieldErrorsToForm(passwordForm.setError, parsed.fieldErrors)
         }
         toast.error(getApiErrorMessage(error.body, 'Could not change password.'))
+        return
+      }
+      toast.error('Network error. Try again.')
+    },
+  })
+
+  const resendVerificationMutation = useMutation({
+    mutationFn: postResendEmailVerification,
+    onSuccess: () => {
+      toast.success('Verification email sent. Check your inbox.')
+      setResendCooldown(true)
+      setTimeout(() => setResendCooldown(false), 60_000)
+    },
+    onError: (error: unknown) => {
+      if (error instanceof AccountRequestError) {
+        if (error.status === 401) {
+          router.push(`/login?returnUrl=${encodeURIComponent('/account')}`)
+          return
+        }
+        const parsed = parseApiErrorBody(error.body)
+        if (parsed?.code === 'ERR_EMAIL_ACTION_COOLDOWN') {
+          toast.error('Please wait before requesting another verification email.')
+          setResendCooldown(true)
+          setTimeout(() => setResendCooldown(false), 60_000)
+          return
+        }
+        toast.error(getApiErrorMessage(error.body, 'Could not send verification email.'))
+        return
+      }
+      toast.error('Network error. Try again.')
+    },
+  })
+
+  const requestEmailChangeMutation = useMutation({
+    mutationFn: (values: EmailChangeFormValues) =>
+      postRequestEmailChange(values.newEmail, values.currentPassword),
+    onSuccess: () => {
+      emailChangeForm.reset(EMAIL_CHANGE_FORM_EMPTY)
+      void queryClient.invalidateQueries({ queryKey: accountKeys.me() })
+      toast.success('Email change requested. Check your new inbox for a confirmation link.')
+      setSection('profile')
+    },
+    onError: (error: unknown) => {
+      if (error instanceof AccountRequestError) {
+        if (error.status === 401) {
+          router.push(`/login?returnUrl=${encodeURIComponent('/account')}`)
+          return
+        }
+        const parsed = parseApiErrorBody(error.body)
+        if (parsed?.fieldErrors && Object.keys(parsed.fieldErrors).length > 0) {
+          applyApiFieldErrorsToForm(emailChangeForm.setError, parsed.fieldErrors)
+        }
+        toast.error(getApiErrorMessage(error.body, 'Could not request email change.'))
         return
       }
       toast.error('Network error. Try again.')
@@ -324,13 +407,22 @@ export function useAccountSettings() {
     passwordForm.reset(PASSWORD_FORM_EMPTY)
     setSection('password')
   }
+  const openEmailSection = () => {
+    emailChangeForm.reset(EMAIL_CHANGE_FORM_EMPTY)
+    setSection('email')
+  }
   const backToProfileSection = () => {
     passwordForm.reset(PASSWORD_FORM_EMPTY)
+    emailChangeForm.reset(EMAIL_CHANGE_FORM_EMPTY)
     setSection('profile')
   }
   const onChangePassword = passwordForm.handleSubmit((values) =>
     changePasswordMutation.mutate(values),
   )
+  const onRequestEmailChange = emailChangeForm.handleSubmit((values) =>
+    requestEmailChangeMutation.mutate(values),
+  )
+  const onResendVerification = () => resendVerificationMutation.mutate()
 
   return {
     section,
@@ -343,18 +435,27 @@ export function useAccountSettings() {
     setSocialUrl,
     profileForm,
     passwordForm,
+    emailChangeForm,
     profileFields,
     passwordFields,
+    emailChangeFields,
     profileValues,
     passwordValues,
+    emailChangeValues,
     savingProfile,
     hasProfileOrSocialChanges: profileForm.formState.isDirty || isSocialDirty,
     saveBlockedBySocial: isSocialDirty && !canPersistSocialLinks,
     changingPassword: changePasswordMutation.isPending,
+    requestingEmailChange: requestEmailChangeMutation.isPending,
+    resendingVerification: resendVerificationMutation.isPending,
+    resendCooldown,
     onSaveProfile,
     onCancelProfile,
     onChangePassword,
+    onRequestEmailChange,
+    onResendVerification,
     openPasswordSection,
+    openEmailSection,
     backToProfileSection,
   }
 }

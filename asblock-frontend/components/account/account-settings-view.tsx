@@ -2,6 +2,7 @@
 
 import { ArrowLeft } from 'lucide-react'
 
+import { AccountEmailForm } from '@/components/account/account-email-form'
 import { AccountPasswordForm } from '@/components/account/account-password-form'
 import { AccountProfileForm } from '@/components/account/account-profile-form'
 import { AccountProfileCardSkeleton } from '@/components/skeletons/account-settings-skeleton'
@@ -14,7 +15,14 @@ interface AccountSettingsViewProps {
 }
 
 export function AccountSettingsView({ controller }: AccountSettingsViewProps) {
-  const { profile, profileQuery, section, openPasswordSection, backToProfileSection } = controller
+  const {
+    profile,
+    profileQuery,
+    section,
+    openPasswordSection,
+    openEmailSection,
+    backToProfileSection,
+  } = controller
 
   if (profileQuery.isPending && !profile) {
     return <AccountProfileCardSkeleton />
@@ -53,23 +61,29 @@ export function AccountSettingsView({ controller }: AccountSettingsViewProps) {
           <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
             <div className="space-y-1.5">
               <CardTitle className="text-xl">Profile</CardTitle>
-              <CardDescription>
-                Update how you appear on AssetBlock. Email is read-only; contact support to change
-                it.
-              </CardDescription>
+              <CardDescription>Update how you appear on AssetBlock.</CardDescription>
             </div>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              className="shrink-0 self-start"
-              onClick={openPasswordSection}
-            >
-              Change password
-            </Button>
+            <div className="flex flex-wrap gap-2 shrink-0 self-start">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={openEmailSection}
+              >
+                Change email
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={openPasswordSection}
+              >
+                Change password
+              </Button>
+            </div>
           </div>
         </CardHeader>
-      ) : (
+      ) : section === 'password' ? (
         <CardHeader className="space-y-4 pb-2">
           <Button
             type="button"
@@ -86,13 +100,34 @@ export function AccountSettingsView({ controller }: AccountSettingsViewProps) {
             <CardDescription>Use a strong password you do not reuse elsewhere.</CardDescription>
           </div>
         </CardHeader>
+      ) : (
+        <CardHeader className="space-y-4 pb-2">
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="-ml-2 h-8 w-fit gap-1.5 px-2 text-muted-foreground hover:text-foreground"
+            onClick={backToProfileSection}
+          >
+            <ArrowLeft className="size-4 shrink-0" aria-hidden />
+            Back to profile
+          </Button>
+          <div className="space-y-1.5">
+            <CardTitle className="text-xl">Change email</CardTitle>
+            <CardDescription>
+              Request an email address change. A confirmation link will be sent to the new address.
+            </CardDescription>
+          </div>
+        </CardHeader>
       )}
 
       <CardContent>
         {section === 'profile' ? (
           <AccountProfileForm controller={controller} />
-        ) : (
+        ) : section === 'password' ? (
           <AccountPasswordForm controller={controller} />
+        ) : (
+          <AccountEmailForm controller={controller} />
         )}
       </CardContent>
     </Card>

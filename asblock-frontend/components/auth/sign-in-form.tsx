@@ -1,11 +1,13 @@
 'use client'
 
 import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { Eye, EyeOff, AlertCircle } from 'lucide-react'
+import Link from 'next/link'
+import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -13,6 +15,10 @@ import { Alert, AlertDescription } from '@/components/ui/alert'
 import { AuthRequestError, postAuthLogin } from '@/lib/auth/auth-api'
 import { loginFormSchema, type LoginFormValues } from '@/lib/auth/schemas'
 import { syncQueryCacheAfterAuth } from '@/lib/query/query-sync-after-auth'
+
+const MESSAGE_LABELS: Record<string, string> = {
+  'password-changed': 'Password changed. Please sign in again.',
+}
 
 interface SignInFormProps {
   formError?: string
@@ -26,6 +32,17 @@ export function SignInForm({ formError }: SignInFormProps) {
   const [submitError, setSubmitError] = useState<string>('')
 
   const returnUrl = searchParams.get('returnUrl')?.trim() || '/assets'
+
+  const messageToastShownRef = useRef(false)
+
+  useEffect(() => {
+    if (messageToastShownRef.current) return
+    const msg = searchParams.get('message')
+    if (msg && MESSAGE_LABELS[msg]) {
+      messageToastShownRef.current = true
+      toast.success(MESSAGE_LABELS[msg])
+    }
+  }, [searchParams])
 
   const {
     register,
@@ -82,9 +99,17 @@ export function SignInForm({ formError }: SignInFormProps) {
       </div>
 
       <div className="flex flex-col gap-1.5">
-        <Label htmlFor="password" className="text-xs font-medium">
-          Password
-        </Label>
+        <div className="flex items-center justify-between">
+          <Label htmlFor="password" className="text-xs font-medium">
+            Password
+          </Label>
+          <Link
+            href="/forgot-password"
+            className="text-xs text-muted-foreground hover:text-foreground transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary rounded-sm"
+          >
+            Forgot password?
+          </Link>
+        </div>
         <div className="relative">
           <Input
             id="password"

@@ -14,6 +14,8 @@ builder.Host.UseSerilogConfiguration();
 
 builder.Services.AddApplication();
 builder.Services.AddInfrastructure(builder.Configuration);
+builder.Services.AddAssetBlockDataProtection(builder.Configuration, builder.Environment);
+
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<IAuditContextAccessor, HttpAuditContextAccessor>();
 builder.Services.AddFileUploadLimits(builder.Configuration);

@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { Eye, EyeOff, AlertCircle } from 'lucide-react'
+import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -44,7 +45,8 @@ export function RegisterForm({ formError }: RegisterFormProps) {
     onMutate: () => setSubmitError(''),
     onSuccess: async () => {
       await syncQueryCacheAfterAuth(queryClient)
-      router.push('/assets')
+      toast.info('Account created! Check your inbox to verify your email address.')
+      router.push('/account')
       router.refresh()
     },
     onError: (err: unknown) => {

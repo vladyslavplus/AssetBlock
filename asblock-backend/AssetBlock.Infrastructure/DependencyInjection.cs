@@ -60,6 +60,11 @@ public static class DependencyInjection
             .ValidateOnStart();
         services.AddSingleton<IValidateOptions<EmailOptions>, EmailOptionsValidator>();
 
+        services.AddOptions<DataProtectionOptions>()
+            .Bind(configuration.GetSection(DataProtectionOptions.SECTION_NAME))
+            .ValidateOnStart();
+        services.AddSingleton<IValidateOptions<DataProtectionOptions>, DataProtectionOptionsValidator>();
+
         services.AddDbContext<ApplicationDbContext>(options =>
             options.UseNpgsql(connectionString));
         services.AddHostedService<DatabaseMigrationService>();
@@ -71,7 +76,10 @@ public static class DependencyInjection
         services.AddScoped<IOutboxMessageHandler, AssetBlobDeleteOutboxHandler>();
         services.AddScoped<IOutboxMessageHandler, PurchaseCompletedOutboxHandler>();
         services.AddScoped<IOutboxMessageHandler, EmailDispatchOutboxHandler>();
+        services.AddScoped<IOutboxMessageHandler, EmailActionDispatchOutboxHandler>();
         services.AddScoped<IEmailSender, SmtpEmailSender>();
+        services.AddSingleton<IEmailActionLinkProtector, EmailActionLinkProtector>();
+        services.AddScoped<IEmailActionStore, EmailActionStore>();
         services.AddScoped<IJwtTokenService, JwtTokenService>();
         services.AddScoped<IUserStore, UserStore>();
         services.AddScoped<ICategoryStore, CategoryStore>();

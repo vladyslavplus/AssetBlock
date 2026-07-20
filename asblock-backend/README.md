@@ -63,6 +63,10 @@ openssl rand -base64 32
 | `Email:PublicAppBaseUrl` | Yes | Absolute `http`/`https` SPA origin for fixed template links |
 | `Email:MessageIdDomain` | Yes | Domain used in deterministic RFC Message-Id values |
 | `Email:Smtp:Host` / `Port` / `Security` / `TimeoutSeconds` | Yes | Local Mailpit: `localhost` / `1025` / `NONE` / `30`; credentials both empty or both set |
+| `DataProtection:KeysPath` | Yes | Dedicated key-ring directory (leaf name `dataprotection-keys` or `assetblock-dataprotection-keys*`); must survive API restarts; never commit keys (gitignored). A marker file `.assetblock-dataprotection-keys` is created; refuse arbitrary existing folders. |
+| `DataProtection:ProtectionMode` | Cond. | `Dpapi` (Windows), `Certificate`, `Kms`, or `None` (non-Production only). Empty → Dpapi on Windows, None in Development/IntegrationTesting; **Production on non-Windows requires Certificate or Kms** (fail-fast; plaintext not allowed). |
+| `DataProtection:CertificatePath` / `CertificatePassword` / `CertificateThumbprint` | Cond. | Certificate mode: PFX path+password and/or store thumbprint from secret store only. |
+| `DataProtection:KmsKeyId` | Cond. | Required when `ProtectionMode=Kms` (deployment must wire vault/KMS protector; mode currently fails until wired). |
 
 ### 3. Docker / Next.js `.env`
 
@@ -119,7 +123,7 @@ docker-compose up -d mailpit
 - UI/SMTP ports bind to `127.0.0.1` only
 - Inbox resets with the container (no persistent volume in v1)
 
-Example User Secrets for local Mailpit:
+Example User Secrets for local Mailpit and Data Protection:
 
 ```bash
 dotnet user-secrets set "Email:Provider" "Smtp" --project AssetBlock.WebApi
@@ -131,14 +135,36 @@ dotnet user-secrets set "Email:Smtp:Host" "localhost" --project AssetBlock.WebAp
 dotnet user-secrets set "Email:Smtp:Port" "1025" --project AssetBlock.WebApi
 dotnet user-secrets set "Email:Smtp:Security" "NONE" --project AssetBlock.WebApi
 dotnet user-secrets set "Email:Smtp:TimeoutSeconds" "30" --project AssetBlock.WebApi
+dotnet user-secrets set "DataProtection:KeysPath" "dataprotection-keys" --project AssetBlock.WebApi
+dotnet user-secrets set "DataProtection:ProtectionMode" "Dpapi" --project AssetBlock.WebApi
 ```
 
-### Email platform (v1)
+Alternatively, set in `appsettings.Development.json` (already gitignored):
 
-- Provider-neutral `IEmailSender` + SMTP transport; purchase receipt (buyer) and asset-sold (author) emails after committed Stripe purchase via transactional outbox (`EmailDispatch`).
-- Delivery is at-least-once: a crash between SMTP acceptance and outbox `MarkProcessed` can resend; content is safe to duplicate. Existing outbox lease/retry/backoff applies — no extra SMTP retry layer.
-- Logs may include outbox id, template kind, and recipient user id only (never recipient address, body, HTML, MIME, or credentials).
-- Not in v1: password reset, email verification, subscriptions/preferences, marketing, provider webhooks, frontend email UI.
+```json
+{
+  "DataProtection": {
+    "KeysPath": "dataprotection-keys",
+    "ProtectionMode": "Dpapi"
+  }
+}
+```
+
+The `dataprotection-keys/` directory is gitignored (`**/dataprotection-keys/`). Never commit key ring files. Restrict filesystem ACL on that directory outside the process (deployment-owned); the API does not rewrite NTFS ACLs on arbitrary paths.
+
+**Linux / container Production:** set `ProtectionMode` to `Certificate` (PFX + password from secret store) or `Kms` after wiring a vault protector. Empty/`None` **fail-fast** in Production on non-Windows — plaintext key rings are not allowed.
+### Email lifecycle
+
+- Provider-neutral `IEmailSender` + SMTP transport; Mailpit catches all mail locally.
+- **Verification on register:** every new account receives an `EMAIL_VERIFICATION` action link via outbox (`EMAIL_ACTION_DISPATCH`). The link is time-limited (24 h) and generated at delivery time by `EmailActionLinkProtector` (ASP.NET Core Data Protection). No token or URL is stored in the outbox payload.
+- **Resend verification:** authenticated users can request a new link; enforces 60 s cooldown and returns `ERR_EMAIL_ACTION_COOLDOWN` if too soon.
+- **Password reset (no enumeration):** `POST /api/auth/password-reset/request` always returns 202 regardless of whether the email is registered; cooldown is silently respected. Reset link is valid for 30 min.
+- **Email change:** requires current password + desired new address. Issues an `EMAIL_CHANGE` action to the new mailbox (before `User.Email` is updated). Confirm endpoint swaps the address and revokes sessions.
+- **Transactional notices:** password change and email change send `EMAIL_DISPATCH` notices to the old address via `ITransactionalEmailComposer`.
+- **Outbox types:** user-facing action emails use `EMAIL_ACTION_DISPATCH`; notice emails (no link, no token) use `EMAIL_DISPATCH`.
+- **Security:** no token, URL, password, or email body in any outbox payload row. Action links use `#token=` fragments (not query strings) so browsers do not send the secret to servers/proxies/logs on navigation. `EmailActionLinkProtector` produces time-limited, tamper-evident tokens. Outbox `EMAIL_ACTION_DISPATCH` carries `ActionVersion` so stale retries after resend are skipped. Logs include outbox id, template kind, and recipient user id only.
+- **Delivery:** at-least-once; idempotent stale-action check before send; no extra SMTP retry layer beyond outbox lease/backoff.
+- **Mailpit:** development SMTP catcher only, not a production endpoint. Run with `docker-compose up -d mailpit`; inbox at `http://localhost:8025`.
 
 ### Audit log
 

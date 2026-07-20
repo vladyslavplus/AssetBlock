@@ -482,3 +482,7 @@ fabric.properties
 
 coveragereport/
 TestResults/
+
+# ASP.NET Core Data Protection key ring (local/dev; never commit)
+**/dataprotection-keys/
+.dataprotection-keys/

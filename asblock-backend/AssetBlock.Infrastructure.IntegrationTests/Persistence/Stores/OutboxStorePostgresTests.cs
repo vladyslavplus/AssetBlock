@@ -257,24 +257,35 @@ public sealed class OutboxStorePostgresTests(PostgresFixture fixture)
         Guid purchaseId;
         await using (var db = fixture.CreateDbContext())
         {
-            (User author, Category category) = await TestData.SeedAuthorAndCategory(db);
-            var buyer = TestData.CreateUser("legacy-buyer", "legacy-buyer@example.test");
-            db.Users.Add(buyer);
-            await db.SaveChangesAsync();
-
-            // Insert via SQL: current EF model includes generated search_vector, but this
-            // database is still on a pre-FTS migration until MigrateAsync below.
-            var assetId = Guid.NewGuid();
+            // Seed via SQL: current EF User model includes EmailVerifiedAt, but this
+            // database is still on a pre-email-lifecycle migration until MigrateAsync below.
+            var authorId = Guid.NewGuid();
+            var buyerId = Guid.NewGuid();
+            var categoryId = Guid.NewGuid();
             var now = DateTimeOffset.UtcNow;
             await db.Database.ExecuteSqlInterpolatedAsync($"""
+                INSERT INTO users ("Id", "Username", "Email", "PasswordHash", "Role", "CreatedAt")
+                VALUES ({authorId}, {"legacy-author"}, {"legacy-author@example.test"}, {"test-hash"}, {"User"}, {now});
+                """);
+            await db.Database.ExecuteSqlInterpolatedAsync($"""
+                INSERT INTO users ("Id", "Username", "Email", "PasswordHash", "Role", "CreatedAt")
+                VALUES ({buyerId}, {"legacy-buyer"}, {"legacy-buyer@example.test"}, {"test-hash"}, {"User"}, {now});
+                """);
+            await db.Database.ExecuteSqlInterpolatedAsync($"""
+                INSERT INTO categories ("Id", "Name", "Slug", "CreatedAt")
+                VALUES ({categoryId}, {"Legacy"}, {"legacy"}, {now});
+                """);
+
+            var assetId = Guid.NewGuid();
+            await db.Database.ExecuteSqlInterpolatedAsync($"""
                 INSERT INTO assets ("Id", "AuthorId", "CategoryId", "Title", "Description", "Price", "StorageKey", "FileName", "CreatedAt")
-                VALUES ({assetId}, {author.Id}, {category.Id}, {"Legacy Asset"}, {null}, {9.99m}, {"assets/legacy.bin"}, {"package.zip"}, {now});
+                VALUES ({assetId}, {authorId}, {categoryId}, {"Legacy Asset"}, {null}, {9.99m}, {"assets/legacy.bin"}, {"package.zip"}, {now});
                 """);
 
             purchaseId = Guid.NewGuid();
             await db.Database.ExecuteSqlInterpolatedAsync($"""
                 INSERT INTO purchases ("Id", "UserId", "AssetId", "StripePaymentId", "PurchasedAt", "CreatedAt")
-                VALUES ({purchaseId}, {buyer.Id}, {assetId}, NULL, {DateTimeOffset.UtcNow}, {DateTimeOffset.UtcNow});
+                VALUES ({purchaseId}, {buyerId}, {assetId}, NULL, {DateTimeOffset.UtcNow}, {DateTimeOffset.UtcNow});
                 """);
         }
 

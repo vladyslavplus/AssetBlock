@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Net.Mail;
 using System.Text;
 using System.Text.Encodings.Web;
+using AssetBlock.Domain.Abstractions.Services;
 using AssetBlock.Domain.Core.Constants;
 using AssetBlock.Domain.Core.Dto.Email;
 using AssetBlock.Domain.Core.Enums;
@@ -10,8 +11,8 @@ using Microsoft.Extensions.Options;
 
 namespace AssetBlock.Application.Services;
 
-/// <summary>Builds provider-neutral purchase transactional email payloads (no SMTP / DB / HTTP).</summary>
-public sealed class TransactionalEmailComposer(IOptions<EmailOptions> emailOptions)
+/// <summary>Builds provider-neutral transactional email payloads (no SMTP / DB / HTTP).</summary>
+public sealed class TransactionalEmailComposer(IOptions<EmailOptions> emailOptions) : ITransactionalEmailComposer
 {
     private const string LIBRARY_PATH = "/library";
     private const string SELLER_LISTINGS_PATH = "/sell";
@@ -102,6 +103,162 @@ public sealed class TransactionalEmailComposer(IOptions<EmailOptions> emailOptio
             subject,
             text,
             html);
+    }
+
+    public EmailDispatchPayload CreatePasswordChangedNotice(string recipientAddress, Guid recipientUserId)
+    {
+        ValidateRecipient(recipientAddress);
+        var subject = NormalizeSubject("Your AssetBlock password has been changed");
+        var text = new StringBuilder()
+            .AppendLine("Your AssetBlock account password was recently changed.")
+            .AppendLine()
+            .AppendLine("If you made this change, no action is needed.")
+            .AppendLine("If you did not change your password, please contact support immediately.")
+            .ToString();
+        var html = WrapHtmlLayout(
+            "Password changed",
+            """
+            <p>Your AssetBlock account password was recently changed.</p>
+            <p>If you made this change, no action is needed.</p>
+            <p>If you did not change your password, please contact support immediately.</p>
+            """);
+        EnsureBounded(subject, text, html);
+        return new EmailDispatchPayload(
+            recipientAddress.Trim(),
+            recipientUserId,
+            EmailTemplateKind.PASSWORD_CHANGED_NOTICE,
+            subject,
+            text,
+            html);
+    }
+
+    public EmailDispatchPayload CreateEmailChangedNotice(string recipientAddress, Guid recipientUserId)
+    {
+        ValidateRecipient(recipientAddress);
+        var subject = NormalizeSubject("Your AssetBlock email address has been changed");
+        var text = new StringBuilder()
+            .AppendLine("Your AssetBlock account email address was recently changed.")
+            .AppendLine()
+            .AppendLine("If you made this change, no action is needed.")
+            .AppendLine("If you did not make this change, please contact support immediately.")
+            .ToString();
+        var html = WrapHtmlLayout(
+            "Email address changed",
+            """
+            <p>Your AssetBlock account email address was recently changed.</p>
+            <p>If you made this change, no action is needed.</p>
+            <p>If you did not make this change, please contact support immediately.</p>
+            """);
+        EnsureBounded(subject, text, html);
+        return new EmailDispatchPayload(
+            recipientAddress.Trim(),
+            recipientUserId,
+            EmailTemplateKind.EMAIL_CHANGED_NOTICE,
+            subject,
+            text,
+            html);
+    }
+
+    public EmailMessage CreateEmailVerification(string recipientAddress, Guid recipientUserId, string actionUrl)
+    {
+        ValidateRecipient(recipientAddress);
+        ValidateActionUrl(actionUrl);
+        var safeUrl = HtmlEncoder.Default.Encode(actionUrl);
+        var subject = NormalizeSubject("Verify your AssetBlock email");
+        var text = new StringBuilder()
+            .AppendLine("Confirm your email address for AssetBlock.")
+            .AppendLine()
+            .AppendLine($"Open this link to verify: {actionUrl}")
+            .AppendLine()
+            .AppendLine("If you did not create an account, you can ignore this email.")
+            .ToString();
+        var html = WrapHtmlLayout(
+            "Verify your email",
+            $"""
+            <p>Confirm your email address for AssetBlock.</p>
+            <p><a href="{safeUrl}">Verify email</a></p>
+            <p>If you did not create an account, you can ignore this email.</p>
+            """);
+        EnsureBounded(subject, text, html);
+        return new EmailMessage(
+            recipientAddress.Trim(),
+            recipientUserId,
+            subject,
+            text,
+            html,
+            EmailTemplateKind.EMAIL_VERIFICATION,
+            MessageId: "pending");
+    }
+
+    public EmailMessage CreatePasswordReset(string recipientAddress, Guid recipientUserId, string actionUrl)
+    {
+        ValidateRecipient(recipientAddress);
+        ValidateActionUrl(actionUrl);
+        var safeUrl = HtmlEncoder.Default.Encode(actionUrl);
+        var subject = NormalizeSubject("Reset your AssetBlock password");
+        var text = new StringBuilder()
+            .AppendLine("We received a request to reset your AssetBlock password.")
+            .AppendLine()
+            .AppendLine($"Open this link to choose a new password: {actionUrl}")
+            .AppendLine()
+            .AppendLine("If you did not request a reset, you can ignore this email.")
+            .ToString();
+        var html = WrapHtmlLayout(
+            "Reset your password",
+            $"""
+            <p>We received a request to reset your AssetBlock password.</p>
+            <p><a href="{safeUrl}">Choose a new password</a></p>
+            <p>If you did not request a reset, you can ignore this email.</p>
+            """);
+        EnsureBounded(subject, text, html);
+        return new EmailMessage(
+            recipientAddress.Trim(),
+            recipientUserId,
+            subject,
+            text,
+            html,
+            EmailTemplateKind.PASSWORD_RESET,
+            MessageId: "pending");
+    }
+
+    public EmailMessage CreateEmailChangeConfirmation(string recipientAddress, Guid recipientUserId, string actionUrl)
+    {
+        ValidateRecipient(recipientAddress);
+        ValidateActionUrl(actionUrl);
+        var safeUrl = HtmlEncoder.Default.Encode(actionUrl);
+        var subject = NormalizeSubject("Confirm your new AssetBlock email");        var text = new StringBuilder()
+            .AppendLine("Confirm this email address for your AssetBlock account.")
+            .AppendLine()
+            .AppendLine($"Open this link to confirm: {actionUrl}")
+            .AppendLine()
+            .AppendLine("If you did not request an email change, you can ignore this email.")
+            .ToString();
+        var html = WrapHtmlLayout(
+            "Confirm your new email",
+            $"""
+            <p>Confirm this email address for your AssetBlock account.</p>
+            <p><a href="{safeUrl}">Confirm email change</a></p>
+            <p>If you did not request an email change, you can ignore this email.</p>
+            """);
+        EnsureBounded(subject, text, html);
+        return new EmailMessage(
+            recipientAddress.Trim(),
+            recipientUserId,
+            subject,
+            text,
+            html,
+            EmailTemplateKind.EMAIL_CHANGE_CONFIRMATION,
+            MessageId: "pending");
+    }
+
+    private static void ValidateActionUrl(string actionUrl)
+    {
+        if (string.IsNullOrWhiteSpace(actionUrl)
+            || !Uri.TryCreate(actionUrl, UriKind.Absolute, out var uri)
+            || (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps))
+        {
+            throw new ArgumentException("Action URL must be an absolute http(s) URL.", nameof(actionUrl));
+        }
     }
 
     private static void ValidateRecipient(string recipientAddress)

@@ -102,6 +102,15 @@ internal sealed class JwtTokenService(
         logger.LogDebug("Revoked refresh token {TokenId}", tokenId);
     }
 
+    public async Task RevokeAllRefreshTokens(Guid userId, CancellationToken cancellationToken = default)
+    {
+        var now = DateTimeOffset.UtcNow;
+        await dbContext.RefreshTokens
+            .Where(rt => rt.UserId == userId && rt.RevokedAt == null)
+            .ExecuteUpdateAsync(setters => setters.SetProperty(rt => rt.RevokedAt, now), cancellationToken);
+        logger.LogDebug("Revoked all active refresh tokens for user {UserId}", userId);
+    }
+
     private static string ComputeSha256Hash(string input)
     {
         var bytes = Encoding.UTF8.GetBytes(input);

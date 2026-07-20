@@ -6,6 +6,11 @@ public static class AuditActions
     public const string AUTH_REGISTER = "Auth.Register";
     public const string AUTH_LOGIN = "Auth.Login";
     public const string AUTH_REFRESH_TOKEN = "Auth.RefreshToken";
+    public const string AUTH_EMAIL_VERIFICATION = "Auth.EmailVerification";
+    public const string AUTH_PASSWORD_RESET_REQUEST = "Auth.PasswordResetRequest";
+    public const string AUTH_PASSWORD_RESET_CONFIRM = "Auth.PasswordResetConfirm";
+    public const string AUTH_EMAIL_CHANGE_REQUEST = "Auth.EmailChangeRequest";
+    public const string AUTH_EMAIL_CHANGE_CONFIRM = "Auth.EmailChangeConfirm";
 
     public const string USER_PASSWORD_CHANGE = "User.PasswordChange";
     public const string USER_PROFILE_UPDATE = "User.ProfileUpdate";

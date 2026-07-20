@@ -1,10 +1,13 @@
 using System.Text;
 using System.Text.Json;
+using AssetBlock.Domain.Abstractions.Services;
+using Microsoft.AspNetCore.DataProtection;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using NSubstitute;
 
 namespace AssetBlock.Infrastructure.Tests;
 
@@ -48,7 +51,8 @@ public sealed class OptionsValidateOnStartTests
                 PublicAppBaseUrl = "<public-app-base-url>",
                 MessageIdDomain = "<message-id-domain>",
                 Smtp = new { Host = "<smtp-host>", Port = 1025, Security = "NONE", Username = "", Password = "", TimeoutSeconds = 30 }
-            }
+            },
+            DataProtection = new { KeysPath = "<dataprotection-keys-path>" }
         });
 
         using var host = Host.CreateDefaultBuilder()
@@ -60,6 +64,9 @@ public sealed class OptionsValidateOnStartTests
             .ConfigureServices((ctx, services) =>
             {
                 services.AddLogging(b => b.ClearProviders());
+                // WebApi normally registers Data Protection + Application composer; Infrastructure alone needs stubs for ValidateOnBuild.
+                services.AddDataProtection();
+                services.AddSingleton(Substitute.For<ITransactionalEmailComposer>());
                 services.AddInfrastructure(ctx.Configuration);
             })
             .Build();

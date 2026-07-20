@@ -52,6 +52,10 @@ public sealed class AssetBlockWebApplicationFactory(string connectionString) : W
         builder.UseSetting("Email:Smtp:Port", "1025");
         builder.UseSetting("Email:Smtp:Security", "NONE");
         builder.UseSetting("Email:Smtp:TimeoutSeconds", "30");
+        builder.UseSetting(
+            "DataProtection:KeysPath",
+            Path.Combine(Path.GetTempPath(), $"assetblock-dataprotection-keys-{Guid.NewGuid():N}"));
+        builder.UseSetting("DataProtection:ProtectionMode", "None");
 
         builder.ConfigureTestServices(services =>
         {

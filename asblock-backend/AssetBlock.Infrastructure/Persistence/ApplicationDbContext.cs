@@ -18,6 +18,7 @@ public sealed class ApplicationDbContext(DbContextOptions<ApplicationDbContext> 
     public DbSet<UserNotification> UserNotifications => Set<UserNotification>();
     public DbSet<OutboxMessage> OutboxMessages => Set<OutboxMessage>();
     public DbSet<AuditLog> AuditLogs => Set<AuditLog>();
+    public DbSet<EmailAction> EmailActions => Set<EmailAction>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

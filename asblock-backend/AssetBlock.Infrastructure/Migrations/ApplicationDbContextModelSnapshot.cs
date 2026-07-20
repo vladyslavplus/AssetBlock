@@ -246,6 +246,55 @@ namespace AssetBlock.Infrastructure.Migrations
                     b.ToTable("categories", (string)null);
                 });
 
+            modelBuilder.Entity("AssetBlock.Domain.Core.Entities.EmailAction", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset?>("ConsumedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTimeOffset>("ExpiresAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTimeOffset?>("LastSentAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Purpose")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("TargetEmail")
+                        .IsRequired()
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("Version")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ExpiresAt")
+                        .HasDatabaseName("IX_email_actions_ExpiresAt");
+
+                    b.HasIndex("UserId", "Purpose")
+                        .IsUnique()
+                        .HasDatabaseName("IX_email_actions_UserId_Purpose");
+
+                    b.ToTable("email_actions", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_email_actions_ExpiresAt_After_CreatedAt", "\"ExpiresAt\" > \"CreatedAt\"");
+                        });
+                });
+
             modelBuilder.Entity("AssetBlock.Domain.Core.Entities.OutboxMessage", b =>
                 {
                     b.Property<Guid>("Id")
@@ -534,6 +583,9 @@ namespace AssetBlock.Infrastructure.Migrations
                         .HasMaxLength(256)
                         .HasColumnType("character varying(256)");
 
+                    b.Property<DateTimeOffset?>("EmailVerifiedAt")
+                        .HasColumnType("timestamp with time zone");
+
                     b.Property<bool>("IsPublicProfile")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("boolean")
@@ -682,6 +734,17 @@ namespace AssetBlock.Infrastructure.Migrations
                     b.Navigation("Tag");
                 });
 
+            modelBuilder.Entity("AssetBlock.Domain.Core.Entities.EmailAction", b =>
+                {
+                    b.HasOne("AssetBlock.Domain.Core.Entities.User", "User")
+                        .WithMany("EmailActions")
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("User");
+                });
+
             modelBuilder.Entity("AssetBlock.Domain.Core.Entities.Purchase", b =>
                 {
                     b.HasOne("AssetBlock.Domain.Core.Entities.Asset", "Asset")
@@ -788,6 +851,8 @@ namespace AssetBlock.Infrastructure.Migrations
             modelBuilder.Entity("AssetBlock.Domain.Core.Entities.User", b =>
                 {
                     b.Navigation("AuthoredAssets");
+
+                    b.Navigation("EmailActions");
 
                     b.Navigation("Purchases");
 

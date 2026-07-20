@@ -6,6 +6,7 @@ using AssetBlock.Domain.Core.Primitives.Api;
 using MediatR;
 using AssetBlock.Domain.Core.Exceptions;
 using AssetBlock.Domain.Core.Dto.Audit;
+using AssetBlock.Domain.Core.Dto.Email;
 using AssetBlock.Domain.Core.Enums;
 using Microsoft.Extensions.Logging;
 
@@ -15,6 +16,8 @@ internal sealed class RegisterCommandHandler(
     IUserStore userStore,
     IPasswordHasher passwordHasher,
     IJwtTokenService jwtTokenService,
+    IEmailActionStore emailActionStore,
+    IOutboxStore outboxStore,
     IUnitOfWork unitOfWork,
     IAuditWriter auditWriter,
     ILogger<RegisterCommandHandler> logger) : IRequestHandler<RegisterCommand, Result<TokensResponse>>
@@ -45,6 +48,18 @@ internal sealed class RegisterCommandHandler(
                 user = await userStore.Create(request.Username, request.Email, hash, ct);
                 tokens = jwtTokenService.GenerateTokenPair(user.Id, user.Username, user.Email, user.Role);
                 await jwtTokenService.StoreRefreshToken(user.Id, tokens.RefreshToken, tokens.RefreshExpiresAt, ct);
+
+                var action = await emailActionStore.IssueOrReplace(
+                    user.Id,
+                    EmailActionPurpose.EMAIL_VERIFICATION,
+                    user.Email,
+                    EmailActionConstants.VerificationExpiry,
+                    ct);
+                await outboxStore.Enqueue(
+                    OutboxMessageTypes.EMAIL_ACTION_DISPATCH,
+                    new EmailActionDispatchPayload(action.Id, action.Version, user.Id, EmailTemplateKind.EMAIL_VERIFICATION),
+                    ct);
+
                 await auditWriter.Write(new AuditEvent(
                     AuditActions.AUTH_REGISTER,
                     AuditOutcome.SUCCESS,
