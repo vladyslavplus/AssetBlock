@@ -32,7 +32,10 @@ export async function POST(request: Request) {
   const store = await cookies()
   const res = await fetchBackendAuthorized(store, '/api/users/me/email-change/request', {
     method: 'POST',
-    body: JSON.stringify({ newEmail: parsed.data.newEmail, currentPassword: parsed.data.currentPassword }),
+    body: JSON.stringify({
+      newEmail: parsed.data.newEmail,
+      currentPassword: parsed.data.currentPassword,
+    }),
   })
 
   return forwardBackendResponse(res)

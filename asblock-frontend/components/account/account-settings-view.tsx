@@ -64,20 +64,10 @@ export function AccountSettingsView({ controller }: AccountSettingsViewProps) {
               <CardDescription>Update how you appear on AssetBlock.</CardDescription>
             </div>
             <div className="flex flex-wrap gap-2 shrink-0 self-start">
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={openEmailSection}
-              >
+              <Button type="button" variant="outline" size="sm" onClick={openEmailSection}>
                 Change email
               </Button>
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={openPasswordSection}
-              >
+              <Button type="button" variant="outline" size="sm" onClick={openPasswordSection}>
                 Change password
               </Button>
             </div>

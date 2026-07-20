@@ -45,7 +45,11 @@ function getClientResetToken(): string | null {
 export function ResetPasswordView() {
   const router = useRouter()
   // Match SSR on hydrate, then read #token= on the client without an effect.
-  const isClient = useSyncExternalStore(emptySubscribe, () => true, () => false)
+  const isClient = useSyncExternalStore(
+    emptySubscribe,
+    () => true,
+    () => false,
+  )
   const token = isClient ? getClientResetToken() : null
   const tokenMissing = isClient && token === null
   const [submitError, setSubmitError] = useState('')

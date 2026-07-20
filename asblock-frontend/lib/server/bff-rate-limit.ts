@@ -9,7 +9,10 @@
  * New keys under pressure share a per-policy overflow bucket
  * (`__overflow:${limit}:${windowMs}`) instead of growing forever.
  */
-interface Bucket { count: number; resetAt: number }
+interface Bucket {
+  count: number
+  resetAt: number
+}
 
 const MAX_BUCKETS = 4096
 
@@ -62,12 +65,7 @@ function overflowKey(limit: number, windowMs: number): string {
   return `__overflow:${limit}:${windowMs}`
 }
 
-function getOrCreateBucket(
-  key: string,
-  now: number,
-  limit: number,
-  windowMs: number,
-): Bucket {
+function getOrCreateBucket(key: string, now: number, limit: number, windowMs: number): Bucket {
   pruneExpiredBuckets(now)
 
   const existing = buckets.get(key)
@@ -99,11 +97,7 @@ function getOrCreateBucket(
   return created
 }
 
-export function enforceBffRateLimit(
-  key: string,
-  limit: number,
-  windowMs: number,
-): Response | null {
+export function enforceBffRateLimit(key: string, limit: number, windowMs: number): Response | null {
   if (process.env.NODE_ENV === 'production' && !productionWarningLogged) {
     productionWarningLogged = true
     console.warn(
