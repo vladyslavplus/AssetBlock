@@ -4,7 +4,7 @@ import { useMutation } from '@tanstack/react-query'
 import { AlertCircle, CheckCircle2, Eye, EyeOff } from 'lucide-react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { useEffect, useRef, useState } from 'react'
+import { useState, useSyncExternalStore } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
@@ -30,10 +30,24 @@ const schema = z
 
 type FormValues = z.infer<typeof schema>
 
+const emptySubscribe = () => () => {}
+
+/** Survives Strict Mode remount; full page loads reset the module. */
+let cachedResetToken: string | null | undefined
+
+function getClientResetToken(): string | null {
+  if (cachedResetToken === undefined) {
+    cachedResetToken = readAndClearEmailActionToken()
+  }
+  return cachedResetToken
+}
+
 export function ResetPasswordView() {
   const router = useRouter()
-  const tokenRef = useRef<string | null>(null)
-  const [tokenMissing, setTokenMissing] = useState(false)
+  // Match SSR on hydrate, then read #token= on the client without an effect.
+  const isClient = useSyncExternalStore(emptySubscribe, () => true, () => false)
+  const token = isClient ? getClientResetToken() : null
+  const tokenMissing = isClient && token === null
   const [submitError, setSubmitError] = useState('')
   const [success, setSuccess] = useState(false)
   const [showNew, setShowNew] = useState(false)
@@ -49,18 +63,8 @@ export function ResetPasswordView() {
     defaultValues: { newPassword: '', confirmPassword: '' },
   })
 
-  useEffect(() => {
-    const token = readAndClearEmailActionToken()
-    if (token) {
-      tokenRef.current = token
-    } else {
-      setTokenMissing(true)
-    }
-  }, [])
-
   const mutation = useMutation({
     mutationFn: ({ newPassword }: FormValues) => {
-      const token = tokenRef.current
       if (!token) return Promise.reject(new Error('Token is missing'))
       return postPasswordResetConfirm(token, newPassword)
     },

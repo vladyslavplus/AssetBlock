@@ -4,7 +4,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { AlertCircle, CheckCircle2, Loader2 } from 'lucide-react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useEffectEvent, useState } from 'react'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -18,8 +18,6 @@ export function VerifyEmailView() {
   const queryClient = useQueryClient()
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState(false)
-  const confirmedRef = useRef(false)
-  const mutateRef = useRef<(token: string) => void>(() => {})
 
   const mutation = useMutation({
     mutationFn: postEmailVerificationConfirm,
@@ -36,19 +34,17 @@ export function VerifyEmailView() {
     },
   })
 
-  mutateRef.current = mutation.mutate
-
-  useEffect(() => {
-    if (confirmedRef.current) return
-    confirmedRef.current = true
-
+  const confirmFromHash = useEffectEvent(() => {
     const token = readAndClearEmailActionToken()
     if (!token) {
       setError('No verification token found in the link. Please use the link from your email.')
       return
     }
+    mutation.mutate(token)
+  })
 
-    mutateRef.current(token)
+  useEffect(() => {
+    confirmFromHash()
   }, [])
 
   return (

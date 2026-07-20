@@ -9,7 +9,7 @@
  * New keys under pressure share a per-policy overflow bucket
  * (`__overflow:${limit}:${windowMs}`) instead of growing forever.
  */
-type Bucket = { count: number; resetAt: number }
+interface Bucket { count: number; resetAt: number }
 
 const MAX_BUCKETS = 4096
 
