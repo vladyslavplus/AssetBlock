@@ -19,6 +19,7 @@ import { fetchTagNameToIdMap, patchSellerAsset, syncSellerAssetTags } from '@/li
 import { assetKeys } from '@/lib/catalog/asset-detail-query'
 import { catalogKeys, fetchCatalogFacets } from '@/lib/catalog/catalog-query'
 import { sellerKeys } from '@/lib/seller/seller-query'
+import { invalidateQueriesInBackground } from '@/lib/query/query-refresh'
 import { SellerPriceStepInput } from '@/components/sell/seller-price-step-input'
 import { SellerAssetVersionsSection } from '@/components/sell/seller-asset-versions-section'
 
@@ -94,9 +95,9 @@ export function AssetEditForm({ initialAsset }: AssetEditFormProps) {
     }
 
     toast.success('Asset updated.')
-    void queryClient.invalidateQueries({ queryKey: sellerKeys.all })
-    void queryClient.invalidateQueries({ queryKey: catalogKeys.all })
-    void queryClient.invalidateQueries({ queryKey: assetKeys.detail(assetId) })
+    invalidateQueriesInBackground(queryClient, { queryKey: sellerKeys.all })
+    invalidateQueriesInBackground(queryClient, { queryKey: catalogKeys.all })
+    invalidateQueriesInBackground(queryClient, { queryKey: assetKeys.detail(assetId) })
     router.push(`/assets/${assetId}`)
     router.refresh()
   })

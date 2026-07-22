@@ -27,6 +27,7 @@ import { formatUsdWhole } from '@/lib/format-currency'
 import type { AssetListItemApi } from '@/lib/catalog/assets-api'
 import { catalogKeys } from '@/lib/catalog/catalog-query'
 import { fetchSellerListingsQuery, sellerKeys } from '@/lib/seller/seller-query'
+import { invalidateQueriesInBackground } from '@/lib/query/query-refresh'
 import { useState } from 'react'
 
 export function SellMyListings() {
@@ -52,8 +53,8 @@ export function SellMyListings() {
       }
       toast.success('Asset removed.')
       setDeleteTarget(null)
-      void queryClient.invalidateQueries({ queryKey: sellerKeys.all })
-      void queryClient.invalidateQueries({ queryKey: catalogKeys.all })
+      invalidateQueriesInBackground(queryClient, { queryKey: sellerKeys.all })
+      invalidateQueriesInBackground(queryClient, { queryKey: catalogKeys.all })
       router.refresh()
     },
   })

@@ -25,6 +25,7 @@ import {
 } from '@/components/auth/email-verification-notice'
 import { assetKeys } from '@/lib/catalog/asset-detail-query'
 import { libraryKeys } from '@/lib/library/library-query'
+import { invalidateQueriesInBackground } from '@/lib/query/query-refresh'
 import { ReviewRequestError, postAssetReview } from '@/lib/reviews/review-api'
 import { leaveReviewFormSchema, type LeaveReviewFormValues } from '@/lib/reviews/review-schemas'
 
@@ -64,8 +65,8 @@ export function LeaveReviewDialog({
     mutationFn: (values: LeaveReviewFormValues) => postAssetReview(assetId, values),
     onSuccess: () => {
       toast.success('Thanks — your review was posted.')
-      void queryClient.invalidateQueries({ queryKey: assetKeys.reviews(assetId) })
-      void queryClient.invalidateQueries({ queryKey: libraryKeys.purchases() })
+      invalidateQueriesInBackground(queryClient, { queryKey: assetKeys.reviews(assetId) })
+      invalidateQueriesInBackground(queryClient, { queryKey: libraryKeys.purchases() })
       onOpenChange(false)
       onSubmitted?.()
     },

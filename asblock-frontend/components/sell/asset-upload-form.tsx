@@ -28,6 +28,7 @@ import {
 import { uploadSellerAsset } from '@/lib/seller/seller-api'
 import { catalogKeys, fetchCatalogFacets } from '@/lib/catalog/catalog-query'
 import { sellerKeys } from '@/lib/seller/seller-query'
+import { invalidateQueriesInBackground } from '@/lib/query/query-refresh'
 import { SellerPriceStepInput } from '@/components/sell/seller-price-step-input'
 import { SessionBlockSkeleton } from '@/components/skeletons/session-block-skeleton'
 
@@ -105,8 +106,8 @@ export function AssetUploadForm() {
 
     toast.success('Asset published.')
     reset()
-    void queryClient.invalidateQueries({ queryKey: sellerKeys.all })
-    void queryClient.invalidateQueries({ queryKey: catalogKeys.all })
+    invalidateQueriesInBackground(queryClient, { queryKey: sellerKeys.all })
+    invalidateQueriesInBackground(queryClient, { queryKey: catalogKeys.all })
     router.push(`/assets/${result.assetId}`)
     router.refresh()
   })

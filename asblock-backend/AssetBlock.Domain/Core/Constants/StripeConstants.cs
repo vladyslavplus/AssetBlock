@@ -7,6 +7,13 @@ public static class StripeConstants
 
     public const string PAYMENT_STATUS_PAID = "paid";
 
+    public static class CheckoutSessionStatuses
+    {
+        public const string OPEN = "open";
+        public const string COMPLETE = "complete";
+        public const string EXPIRED = "expired";
+    }
+
     public static class MetadataKeys
     {
         public const string USER_ID = "userId";

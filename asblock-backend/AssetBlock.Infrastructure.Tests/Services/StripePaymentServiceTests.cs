@@ -29,7 +29,14 @@ public sealed class StripePaymentServiceTests
             resilience,
             NullLogger<StripePaymentService>.Instance);
 
-        var lineItem = new CheckoutLineItem(Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), "Test Asset", 9.99m, "usd");
+        var lineItem = new CheckoutLineItem(
+            Guid.NewGuid(),
+            Guid.NewGuid(),
+            Guid.NewGuid(),
+            "Test Asset",
+            9.99m,
+            "usd",
+            DateTimeOffset.UtcNow.AddHours(1));
         var act = async () => await sut.CreateCheckoutSession(lineItem, Guid.NewGuid());
 
         await act.Should().ThrowAsync<InvalidOperationException>();
@@ -54,7 +61,14 @@ public sealed class StripePaymentServiceTests
             resilience,
             NullLogger<StripePaymentService>.Instance);
 
-        var lineItem = new CheckoutLineItem(Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), "Test Asset", 9.99m, "usd");
+        var lineItem = new CheckoutLineItem(
+            Guid.NewGuid(),
+            Guid.NewGuid(),
+            Guid.NewGuid(),
+            "Test Asset",
+            9.99m,
+            "usd",
+            DateTimeOffset.UtcNow.AddHours(1));
         var act = async () => await sut.CreateCheckoutSession(lineItem, Guid.NewGuid());
 
         await act.Should().ThrowAsync<Exception>();

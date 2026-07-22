@@ -30,15 +30,14 @@ internal sealed class CheckoutIntentStore(ApplicationDbContext dbContext) : IChe
         }
     }
 
-    public Task CancelExpiredPending(Guid userId, Guid assetId, DateTimeOffset now, CancellationToken cancellationToken = default)
+    public Task<CheckoutIntent?> GetPending(Guid userId, Guid assetId, CancellationToken cancellationToken = default)
     {
         return dbContext.CheckoutIntents
-            .Where(i => i.UserId == userId
-                        && i.AssetId == assetId
-                        && i.Status == CheckoutIntentStatus.PENDING
-                        && i.ExpiresAt <= now)
-            .ExecuteUpdateAsync(
-                setters => setters.SetProperty(i => i.Status, CheckoutIntentStatus.CANCELLED),
+            .AsNoTracking()
+            .FirstOrDefaultAsync(
+                i => i.UserId == userId
+                     && i.AssetId == assetId
+                     && i.Status == CheckoutIntentStatus.PENDING,
                 cancellationToken);
     }
 
@@ -54,6 +53,16 @@ internal sealed class CheckoutIntentStore(ApplicationDbContext dbContext) : IChe
         return dbContext.CheckoutIntents
             .AsNoTracking()
             .AnyAsync(i => i.AssetId == assetId && i.Status == CheckoutIntentStatus.PENDING && i.ExpiresAt > now, cancellationToken);
+    }
+
+    public async Task<bool> TryCancel(Guid id, CancellationToken cancellationToken = default)
+    {
+        var updated = await dbContext.CheckoutIntents
+            .Where(i => i.Id == id && i.Status == CheckoutIntentStatus.PENDING)
+            .ExecuteUpdateAsync(
+                setters => setters.SetProperty(i => i.Status, CheckoutIntentStatus.CANCELLED),
+                cancellationToken);
+        return updated == 1;
     }
 
     public async Task<bool> TrySetStripeSessionId(Guid id, string stripeSessionId, CancellationToken cancellationToken = default)

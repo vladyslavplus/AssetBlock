@@ -76,13 +76,9 @@ export async function uploadSellerAsset(formData: FormData): Promise<UploadAsset
   return { ok: false, message: 'Unexpected response from server.' }
 }
 
-export async function fetchSellerAssetVersions(
-  assetId: string,
-  signal?: AbortSignal,
-): Promise<AssetVersionSummaryApi[]> {
+export async function fetchSellerAssetVersions(assetId: string): Promise<AssetVersionSummaryApi[]> {
   const res = await fetch(`/api/assets/${encodeURIComponent(assetId)}/versions`, {
     credentials: 'include',
-    signal,
   })
   const text = await res.text()
   const parsed = parseMaybeJson(text)

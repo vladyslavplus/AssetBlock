@@ -7,4 +7,5 @@ public sealed record CheckoutLineItem(
     Guid AssetVersionId,
     string Title,
     decimal UnitAmount,
-    string Currency);
+    string Currency,
+    DateTimeOffset ExpiresAt);

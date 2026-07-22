@@ -33,6 +33,14 @@ dotnet user-secrets set "Stripe:DefaultSuccessUrl" "http://localhost:3000/paymen
 dotnet user-secrets set "Stripe:DefaultCancelUrl" "http://localhost:3000/payment/cancel" --project AssetBlock.WebApi
 ```
 
+For local webhook forwarding, start the API on its checked-in HTTP profile (`http://localhost:5088`), then run:
+
+```bash
+stripe listen --forward-to http://localhost:5088/api/payments/webhook
+```
+
+Set `Stripe:WebhookSecret` to the `whsec_...` printed by that active listener and restart the API. The Stripe CLI must be logged into the same test account as `Stripe:SecretKey`. A listener only forwards events it receives while running; use Stripe CLI event resend for an already completed local checkout. Never paste or commit either secret.
+
 Generate a local AES-256 key (32 bytes, Base64):
 
 ```bash

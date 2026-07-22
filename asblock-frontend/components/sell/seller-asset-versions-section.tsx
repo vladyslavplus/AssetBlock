@@ -14,7 +14,7 @@ interface SellerAssetVersionsSectionProps {
 export function SellerAssetVersionsSection({ assetId }: SellerAssetVersionsSectionProps) {
   const versionsQuery = useQuery({
     queryKey: sellerKeys.versions(assetId),
-    queryFn: ({ signal }) => fetchSellerAssetVersions(assetId, signal),
+    queryFn: () => fetchSellerAssetVersions(assetId),
   })
 
   const versions = versionsQuery.data ?? []
@@ -23,7 +23,7 @@ export function SellerAssetVersionsSection({ assetId }: SellerAssetVersionsSecti
 
   return (
     <div className="space-y-6 pt-6 border-t border-border">
-      <PublishVersionForm assetId={assetId} onPublished={() => void versionsQuery.refetch()} />
+      <PublishVersionForm assetId={assetId} />
 
       <div className="space-y-3">
         <h3 className="text-sm font-semibold text-foreground">Version history</h3>

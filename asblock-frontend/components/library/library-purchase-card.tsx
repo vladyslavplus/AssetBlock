@@ -30,7 +30,7 @@ export function LibraryPurchaseCard({ purchase }: LibraryPurchaseCardProps) {
 
   const versionsQuery = useQuery({
     queryKey: libraryKeys.assetVersions(purchase.assetId),
-    queryFn: ({ signal }) => fetchLibraryAssetVersions(purchase.assetId, signal),
+    queryFn: () => fetchLibraryAssetVersions(purchase.assetId),
     enabled: historyOpen,
   })
 

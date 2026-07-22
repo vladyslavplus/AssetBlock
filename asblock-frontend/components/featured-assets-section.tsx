@@ -10,6 +10,7 @@ import { formatUsdWhole } from '@/lib/format-currency'
 import { FeaturedAssetCarouselSkeleton } from '@/components/assets/asset-card-skeleton'
 import { Button } from '@/components/ui/button'
 import { siteShellClass } from '@/lib/site-layout'
+import { runQueryInBackground } from '@/lib/query/query-refresh'
 
 const EMPTY_ASSETS: AssetListItem[] = []
 
@@ -268,7 +269,7 @@ export function FeaturedAssetsSection() {
               type="button"
               variant="outline"
               size="sm"
-              onClick={() => void featuredQuery.refetch()}
+              onClick={() => runQueryInBackground(featuredQuery.refetch({ cancelRefetch: false }))}
             >
               Try again
             </Button>

@@ -80,11 +80,9 @@ export async function fetchLibraryPurchasesOrThrow(): Promise<PagedPurchaseLibra
 
 export async function fetchLibraryAssetVersions(
   assetId: string,
-  signal?: AbortSignal,
 ): Promise<AssetVersionSummaryApi[]> {
   const res = await fetch(`/api/assets/${encodeURIComponent(assetId)}/versions`, {
     credentials: 'include',
-    signal,
   })
   const text = await res.text()
   let parsed: unknown = text

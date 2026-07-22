@@ -9,6 +9,7 @@ import { AccountProfileCardSkeleton } from '@/components/skeletons/account-setti
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import type { AccountSettingsController } from '@/lib/account/use-account-settings'
+import { runQueryInBackground } from '@/lib/query/query-refresh'
 
 interface AccountSettingsViewProps {
   controller: AccountSettingsController
@@ -45,7 +46,7 @@ export function AccountSettingsView({ controller }: AccountSettingsViewProps) {
             type="button"
             variant="outline"
             className="mt-4"
-            onClick={() => void profileQuery.refetch()}
+            onClick={() => runQueryInBackground(profileQuery.refetch({ cancelRefetch: false }))}
           >
             Retry
           </Button>

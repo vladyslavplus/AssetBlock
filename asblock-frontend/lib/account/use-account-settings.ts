@@ -35,6 +35,7 @@ import {
   getApiErrorMessage,
   parseApiErrorBody,
 } from '@/lib/http/api-errors'
+import { invalidateQueriesInBackground } from '@/lib/query/query-refresh'
 
 export type AccountSection = 'profile' | 'password' | 'email'
 
@@ -265,7 +266,7 @@ export function useAccountSettings() {
       postRequestEmailChange(values.newEmail, values.currentPassword),
     onSuccess: () => {
       emailChangeForm.reset(EMAIL_CHANGE_FORM_EMPTY)
-      void queryClient.invalidateQueries({ queryKey: accountKeys.me() })
+      invalidateQueriesInBackground(queryClient, { queryKey: accountKeys.me() })
       toast.success('Email change requested. Check your new inbox for a confirmation link.')
       setSection('profile')
     },

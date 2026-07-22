@@ -24,7 +24,10 @@ export function ConfirmEmailChangeView() {
   const mutation = useMutation({
     mutationFn: postEmailChangeConfirm,
     onSuccess: async () => {
-      await Promise.all([queryClient.invalidateQueries({ queryKey: accountKeys.me() }), refresh()])
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: accountKeys.me() }, { cancelRefetch: false }),
+        refresh(),
+      ])
       setSuccess(true)
     },
     onError: (err: unknown) => {

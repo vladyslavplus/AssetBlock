@@ -41,7 +41,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const isAdmin = isAdminRole(user?.role)
 
   const refresh = async () => {
-    await queryClient.invalidateQueries({ queryKey: authKeys.session() })
+    await queryClient.invalidateQueries({ queryKey: authKeys.session() }, { cancelRefetch: false })
     await queryClient.refetchQueries({ queryKey: authKeys.session() })
   }
 

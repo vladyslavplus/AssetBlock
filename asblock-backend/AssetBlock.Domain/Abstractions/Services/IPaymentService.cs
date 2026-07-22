@@ -20,6 +20,9 @@ public interface IPaymentService
     /// <summary>Creates a checkout session for the given line item.</summary>
     Task<StripeCheckoutSession> CreateCheckoutSession(CheckoutLineItem item, Guid userId, CancellationToken cancellationToken = default);
 
+    /// <summary>Retrieves an existing checkout session so an interrupted checkout can be resumed safely.</summary>
+    Task<StripeCheckoutSessionSnapshot> GetCheckoutSession(string stripeSessionId, CancellationToken cancellationToken = default);
+
     /// <summary>
     /// Verifies webhook signature and extracts paid checkout session metadata.
     /// Returns null for ignored events. Does not create purchases.
@@ -29,3 +32,5 @@ public interface IPaymentService
 }
 
 public sealed record StripeCheckoutSession(string Id, string Url);
+
+public sealed record StripeCheckoutSessionSnapshot(string Id, string Status, string? Url);

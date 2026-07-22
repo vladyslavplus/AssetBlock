@@ -10,6 +10,7 @@ import { Button } from '@/components/ui/button'
 import { apiFetch } from '@/lib/http/api-client'
 import type { AssetDetailItemApi } from '@/lib/catalog/assets-api'
 import { libraryKeys } from '@/lib/library/library-query'
+import { invalidateQueriesInBackground } from '@/lib/query/query-refresh'
 import { PENDING_REVIEW_ASSET_ID_KEY } from '@/lib/reviews/review-constants'
 
 function readPendingReviewAssetId(): string | null {
@@ -33,7 +34,7 @@ export function PostCheckoutReviewBanner() {
   useEffect(() => {
     if (libraryInvalidatedRef.current) return
     libraryInvalidatedRef.current = true
-    void queryClient.invalidateQueries({ queryKey: libraryKeys.purchases() })
+    invalidateQueriesInBackground(queryClient, { queryKey: libraryKeys.purchases() })
   }, [queryClient])
 
   useEffect(() => {

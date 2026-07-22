@@ -13,6 +13,7 @@ import { applyApiFieldErrorsToForm } from '@/lib/http/api-errors'
 import { assetKeys } from '@/lib/catalog/asset-detail-query'
 import { catalogKeys } from '@/lib/catalog/catalog-query'
 import { libraryKeys } from '@/lib/library/library-query'
+import { invalidateQueriesInBackground } from '@/lib/query/query-refresh'
 import {
   ASSET_UPLOAD_ALLOWED_EXTENSIONS,
   publishVersionFormSchema,
@@ -23,10 +24,9 @@ import { sellerKeys } from '@/lib/seller/seller-query'
 
 interface PublishVersionFormProps {
   assetId: string
-  onPublished?: () => void
 }
 
-export function PublishVersionForm({ assetId, onPublished }: PublishVersionFormProps) {
+export function PublishVersionForm({ assetId }: PublishVersionFormProps) {
   const queryClient = useQueryClient()
 
   const {
@@ -68,13 +68,12 @@ export function PublishVersionForm({ assetId, onPublished }: PublishVersionFormP
 
     toast.success('New version published.')
     reset({ licenseCode: values.licenseCode, releaseNotes: '' })
-    void queryClient.invalidateQueries({ queryKey: sellerKeys.versions(assetId) })
-    void queryClient.invalidateQueries({ queryKey: sellerKeys.all })
-    void queryClient.invalidateQueries({ queryKey: assetKeys.detail(assetId) })
-    void queryClient.invalidateQueries({ queryKey: assetKeys.versions(assetId) })
-    void queryClient.invalidateQueries({ queryKey: catalogKeys.all })
-    void queryClient.invalidateQueries({ queryKey: libraryKeys.all })
-    onPublished?.()
+    invalidateQueriesInBackground(queryClient, { queryKey: sellerKeys.versions(assetId) })
+    invalidateQueriesInBackground(queryClient, { queryKey: sellerKeys.all })
+    invalidateQueriesInBackground(queryClient, { queryKey: assetKeys.detail(assetId) })
+    invalidateQueriesInBackground(queryClient, { queryKey: assetKeys.versions(assetId) })
+    invalidateQueriesInBackground(queryClient, { queryKey: catalogKeys.all })
+    invalidateQueriesInBackground(queryClient, { queryKey: libraryKeys.all })
   })
 
   return (

@@ -35,6 +35,7 @@ internal sealed class StripePaymentService(
             Mode = StripeConstants.MODE_PAYMENT,
             SuccessUrl = resolvedSuccessUrl,
             CancelUrl = resolvedCancelUrl,
+            ExpiresAt = item.ExpiresAt.UtcDateTime,
             Metadata = new Dictionary<string, string>
             {
                 { StripeConstants.MetadataKeys.USER_ID, userId.ToString() },
@@ -61,8 +62,12 @@ internal sealed class StripePaymentService(
         };
 
         var pipeline = resilience.GetPipeline(ResilienceConstants.Pipelines.STRIPE);
+        var requestOptions = new RequestOptions
+        {
+            IdempotencyKey = item.CheckoutIntentId.ToString("N")
+        };
         var session = await pipeline.ExecuteAsync(
-            async ct => await sessionService.CreateAsync(sessionOptions, cancellationToken: ct),
+            async ct => await sessionService.CreateAsync(sessionOptions, requestOptions, ct),
             cancellationToken);
         if (string.IsNullOrWhiteSpace(session.Id) || string.IsNullOrWhiteSpace(session.Url))
         {
@@ -70,6 +75,24 @@ internal sealed class StripePaymentService(
         }
 
         return new StripeCheckoutSession(session.Id, session.Url);
+    }
+
+    public async Task<StripeCheckoutSessionSnapshot> GetCheckoutSession(
+        string stripeSessionId,
+        CancellationToken cancellationToken = default)
+    {
+        var sessionService = new SessionService(_stripeClient);
+        var pipeline = resilience.GetPipeline(ResilienceConstants.Pipelines.STRIPE);
+        var session = await pipeline.ExecuteAsync(
+            async ct => await sessionService.GetAsync(stripeSessionId, cancellationToken: ct),
+            cancellationToken);
+
+        if (string.IsNullOrWhiteSpace(session.Id) || string.IsNullOrWhiteSpace(session.Status))
+        {
+            throw new InvalidOperationException("Stripe returned an invalid checkout session.");
+        }
+
+        return new StripeCheckoutSessionSnapshot(session.Id, session.Status, session.Url);
     }
 
     public Task<StripeCheckoutCompleted?> VerifyCheckoutCompleted(string payload, string signature, CancellationToken cancellationToken = default)
