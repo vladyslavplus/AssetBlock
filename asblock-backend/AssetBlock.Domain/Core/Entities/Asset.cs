@@ -10,11 +10,6 @@ public class Asset : BaseEntity
     public string? Description { get; set; }
     public decimal Price { get; set; }
 
-    /// <summary>Object key in MinIO (bucket + path).</summary>
-    public required string StorageKey { get; set; }
-    /// <summary>Original file name (e.g. package.zip).</summary>
-    public required string FileName { get; set; }
-
     /// <summary>Optional max downloads per hour per user. Null = unlimited.</summary>
     public int? DownloadLimitPerHour { get; set; }
 

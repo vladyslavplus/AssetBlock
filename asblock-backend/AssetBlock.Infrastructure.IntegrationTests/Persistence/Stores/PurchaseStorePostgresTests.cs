@@ -1,8 +1,12 @@
 using AssetBlock.Domain.Core.Dto.Paging;
 using AssetBlock.Domain.Core.Dto.Users;
 using AssetBlock.Domain.Core.Entities;
+using AssetBlock.Domain.Core.Enums;
+using AssetBlock.Domain.Core.Exceptions;
 using AssetBlock.Infrastructure.IntegrationTests.Support;
 using AssetBlock.Infrastructure.Persistence.Stores;
+using Microsoft.EntityFrameworkCore;
+using Npgsql;
 
 namespace AssetBlock.Infrastructure.IntegrationTests.Persistence.Stores;
 
@@ -132,5 +136,114 @@ public sealed class PurchaseStorePostgresTests(PostgresFixture fixture)
         });
 
         page.Items.Select(i => i.Id).Should().Equal(idLow, idHigh);
+    }
+
+    [Fact]
+    public async Task Add_WhenStripePaymentIdDuplicates_ShouldThrowDuplicatePurchaseException()
+    {
+        await using var db = await fixture.CreateCleanDbContext();
+        (User author, Category category) = await TestData.SeedAuthorAndCategory(db);
+        var buyerA = TestData.CreateUser("dup-stripe-a", "dup-stripe-a@example.test");
+        var buyerB = TestData.CreateUser("dup-stripe-b", "dup-stripe-b@example.test");
+        db.Users.AddRange(buyerA, buyerB);
+        var assetA = TestData.CreateAsset(author.Id, category.Id, title: "Stripe Dup A");
+        var assetB = TestData.CreateAsset(author.Id, category.Id, title: "Stripe Dup B");
+        db.Assets.AddRange(assetA, assetB);
+        var versionA = TestData.CreateAssetVersion(assetA.Id);
+        var versionB = TestData.CreateAssetVersion(assetB.Id);
+        db.AssetVersions.AddRange(versionA, versionB);
+        await db.SaveChangesAsync();
+
+        const string sharedSession = "cs_dup_stripe_payment";
+        var first = TestData.CreatePurchase(buyerA.Id, assetA.Id, versionA.Id, stripePaymentId: sharedSession);
+        TestData.AddCompletedPurchase(db, first, assetA.Title);
+        await db.SaveChangesAsync();
+
+        var duplicate = TestData.CreatePurchase(buyerB.Id, assetB.Id, versionB.Id, stripePaymentId: sharedSession);
+        // Intent must not reuse the same Stripe session (unique on checkout_intents); only the purchase row collides.
+        db.CheckoutIntents.Add(new CheckoutIntent
+        {
+            Id = duplicate.CheckoutIntentId,
+            UserId = duplicate.UserId,
+            AssetId = duplicate.AssetId,
+            AssetVersionId = duplicate.AssetVersionId,
+            AssetTitle = assetB.Title,
+            UnitAmount = duplicate.PricePaid,
+            Currency = duplicate.Currency,
+            StripeSessionId = null,
+            Status = CheckoutIntentStatus.COMPLETED,
+            CreatedAt = duplicate.PurchasedAt,
+            ExpiresAt = duplicate.PurchasedAt.AddHours(1),
+            CompletedAt = duplicate.PurchasedAt
+        });
+        await db.SaveChangesAsync();
+        db.ChangeTracker.Clear();
+
+        var store = new PurchaseStore(db);
+        var act = () => store.Add(duplicate);
+
+        await act.Should().ThrowAsync<DuplicatePurchaseException>();
+    }
+
+    [Fact]
+    public async Task Add_WhenCheckoutIntentIdDuplicates_ShouldThrowDuplicatePurchaseException()
+    {
+        await using var db = await fixture.CreateCleanDbContext();
+        (User author, Category category) = await TestData.SeedAuthorAndCategory(db);
+        var buyerA = TestData.CreateUser("dup-intent-a", "dup-intent-a@example.test");
+        var buyerB = TestData.CreateUser("dup-intent-b", "dup-intent-b@example.test");
+        db.Users.AddRange(buyerA, buyerB);
+        var assetA = TestData.CreateAsset(author.Id, category.Id, title: "Intent Dup A");
+        var assetB = TestData.CreateAsset(author.Id, category.Id, title: "Intent Dup B");
+        db.Assets.AddRange(assetA, assetB);
+        var versionA = TestData.CreateAssetVersion(assetA.Id);
+        var versionB = TestData.CreateAssetVersion(assetB.Id);
+        db.AssetVersions.AddRange(versionA, versionB);
+        await db.SaveChangesAsync();
+
+        var first = TestData.CreatePurchase(buyerA.Id, assetA.Id, versionA.Id, stripePaymentId: "cs_intent_first");
+        TestData.AddCompletedPurchase(db, first, assetA.Title);
+        await db.SaveChangesAsync();
+        var sharedIntentId = first.CheckoutIntentId;
+        db.ChangeTracker.Clear();
+
+        var duplicate = TestData.CreatePurchase(buyerB.Id, assetB.Id, versionB.Id, stripePaymentId: "cs_intent_second");
+        duplicate.CheckoutIntentId = sharedIntentId;
+
+        var store = new PurchaseStore(db);
+        var act = () => store.Add(duplicate);
+
+        await act.Should().ThrowAsync<DuplicatePurchaseException>();
+    }
+
+    [Fact]
+    public async Task Add_WhenUserIdAssetIdDuplicatesWithNewSession_ShouldThrowDbUpdateExceptionForUserAssetIndex()
+    {
+        await using var db = await fixture.CreateCleanDbContext();
+        (User author, Category category) = await TestData.SeedAuthorAndCategory(db);
+        var buyer = TestData.CreateUser("dup-user-asset", "dup-user-asset@example.test");
+        db.Users.Add(buyer);
+        var asset = TestData.CreateAsset(author.Id, category.Id, title: "User Asset Dup");
+        db.Assets.Add(asset);
+        var version = TestData.CreateAssetVersion(asset.Id);
+        db.AssetVersions.Add(version);
+        await db.SaveChangesAsync();
+
+        var first = TestData.CreatePurchase(buyer.Id, asset.Id, version.Id, stripePaymentId: "cs_user_asset_first");
+        TestData.AddCompletedPurchase(db, first, asset.Title);
+        await db.SaveChangesAsync();
+
+        var conflict = TestData.CreatePurchase(buyer.Id, asset.Id, version.Id, stripePaymentId: "cs_user_asset_second");
+        TestData.AddCompletedCheckoutIntent(db, conflict, asset.Title);
+        await db.SaveChangesAsync();
+        db.ChangeTracker.Clear();
+
+        var store = new PurchaseStore(db);
+        var act = () => store.Add(conflict);
+
+        var ex = await act.Should().ThrowAsync<DbUpdateException>();
+        var pg = ex.Which.InnerException.Should().BeOfType<PostgresException>().Subject;
+        pg.SqlState.Should().Be(PostgresErrorCodes.UniqueViolation);
+        pg.ConstraintName.Should().Be("IX_purchases_UserId_AssetId");
     }
 }

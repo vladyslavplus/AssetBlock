@@ -247,8 +247,13 @@ public class CreateCheckoutSessionCommandHandlerTests
             Price: price,
             DeletedAt: deletedAt,
             VersionNumber: 1,
+            VersionCreatedAt: DateTimeOffset.UtcNow,
             FileName: "asset.zip",
             StorageKey: "assets/key",
             ContentLength: 1024,
-            ContentSha256: new string('a', 64));
+            ContentSha256: new string('a', 64),
+            LicenseCode: "PERSONAL",
+            LicenseTemplateVersion: "1.0",
+            LicenseDisplayName: "Personal use",
+            LicenseTerms: "terms");
 }

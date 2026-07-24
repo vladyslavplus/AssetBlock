@@ -16,9 +16,10 @@ internal sealed class PublishAssetVersionCommandValidator : AbstractValidator<Pu
                     .NotEmpty().WithMessage("LicenseCode is required.")
                     .MaximumLength(64).WithMessage("LicenseCode must not exceed 64 characters.");
                 RuleFor(c => c.Request.ReleaseNotes)
-                    .NotEmpty().WithMessage("ReleaseNotes are required.")
-                    .MaximumLength(4000).WithMessage("ReleaseNotes must not exceed 4000 characters.")
-                    .Must(notes => !string.IsNullOrWhiteSpace(notes)).WithMessage("ReleaseNotes are required.");
+                    .Cascade(CascadeMode.Stop)
+                    .Must(notes => !string.IsNullOrWhiteSpace(notes)).WithMessage("ReleaseNotes are required.")
+                    .Must(notes => notes!.Trim().Length <= 4000)
+                    .WithMessage("ReleaseNotes must not exceed 4000 characters.");
             });
         RuleFor(c => c.FileName)
             .NotEmpty().WithMessage("FileName is required.")

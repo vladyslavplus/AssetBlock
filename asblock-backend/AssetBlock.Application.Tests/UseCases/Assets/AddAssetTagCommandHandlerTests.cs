@@ -57,7 +57,7 @@ public class AddAssetTagCommandHandlerTests
     public async Task Handle_WhenUserIsNotAuthor_ShouldReturnForbiddenAndWriteDeniedAudit()
     {
         var command = new AddAssetTagCommand(Guid.NewGuid(), Guid.NewGuid(), "test");
-        var asset = new Asset { Id = command.AssetId, AuthorId = Guid.NewGuid(), CategoryId = Guid.NewGuid(), Title = "t", StorageKey = "k", FileName = "f", AssetTags = [] };
+        var asset = new Asset { Id = command.AssetId, AuthorId = Guid.NewGuid(), CategoryId = Guid.NewGuid(), Title = "t", AssetTags = [] };
         _assetStoreMock.GetById(command.AssetId).Returns(asset);
 
         var result = await _handler.Handle(command, CancellationToken.None);
@@ -78,7 +78,7 @@ public class AddAssetTagCommandHandlerTests
     {
         var authorId = Guid.NewGuid();
         var command = new AddAssetTagCommand(Guid.NewGuid(), authorId, " New-Tag ");
-        var asset = new Asset { Id = command.AssetId, AuthorId = authorId, CategoryId = Guid.NewGuid(), Title = "t", StorageKey = "k", FileName = "f", AssetTags = [] };
+        var asset = new Asset { Id = command.AssetId, AuthorId = authorId, CategoryId = Guid.NewGuid(), Title = "t", AssetTags = [] };
 
         _assetStoreMock.GetById(command.AssetId).Returns(asset);
         _tagStoreMock.GetByName("new-tag").Returns((Tag?)null);
@@ -103,8 +103,6 @@ public class AddAssetTagCommandHandlerTests
             AuthorId = authorId,
             CategoryId = Guid.NewGuid(),
             Title = "t",
-            StorageKey = "k",
-            FileName = "f",
             AssetTags = [new AssetTag { AssetId = assetId, TagId = tag.Id }]
         };
         var command = new AddAssetTagCommand(assetId, authorId, "existing");
@@ -125,7 +123,7 @@ public class AddAssetTagCommandHandlerTests
     {
         var authorId = Guid.NewGuid();
         var command = new AddAssetTagCommand(Guid.NewGuid(), authorId, "existing");
-        var asset = new Asset { Id = command.AssetId, AuthorId = authorId, CategoryId = Guid.NewGuid(), Title = "t", StorageKey = "k", FileName = "f", AssetTags = [] };
+        var asset = new Asset { Id = command.AssetId, AuthorId = authorId, CategoryId = Guid.NewGuid(), Title = "t", AssetTags = [] };
         var tag = new Tag { Id = Guid.NewGuid(), Name = "existing" };
 
         _assetStoreMock.GetById(command.AssetId).Returns(asset);
@@ -150,7 +148,7 @@ public class AddAssetTagCommandHandlerTests
     {
         var authorId = Guid.NewGuid();
         var command = new AddAssetTagCommand(Guid.NewGuid(), authorId, "existing");
-        var asset = new Asset { Id = command.AssetId, AuthorId = authorId, CategoryId = Guid.NewGuid(), Title = "t", StorageKey = "k", FileName = "f", AssetTags = [] };
+        var asset = new Asset { Id = command.AssetId, AuthorId = authorId, CategoryId = Guid.NewGuid(), Title = "t", AssetTags = [] };
         var tag = new Tag { Id = Guid.NewGuid(), Name = "existing" };
 
         _assetStoreMock.GetById(command.AssetId).Returns(asset);

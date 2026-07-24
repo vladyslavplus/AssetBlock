@@ -2,6 +2,7 @@ using AssetBlock.Domain.Abstractions.Services;
 using AssetBlock.Domain.Core.Constants;
 using AssetBlock.Domain.Core.Dto.Payments;
 using AssetBlock.Domain.Core.Exceptions;
+using AssetBlock.Domain.Core.Payments;
 using AssetBlock.Domain.Core.Primitives.AppSettingsOptions;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -29,6 +30,11 @@ internal sealed class StripePaymentService(
             throw new InvalidOperationException("Stripe SuccessUrl and CancelUrl must be configured.");
         }
 
+        if (!IsoCurrency.TryNormalize(item.Currency, out var currency) || currency != item.Currency)
+        {
+            throw new InvalidOperationException("Checkout line item currency must be a lowercase ISO 4217 code.");
+        }
+
         var sessionService = new SessionService(_stripeClient);
         var sessionOptions = new SessionCreateOptions
         {
@@ -49,7 +55,7 @@ internal sealed class StripePaymentService(
                 {
                     PriceData = new SessionLineItemPriceDataOptions
                     {
-                        Currency = item.Currency,
+                        Currency = currency,
                         UnitAmount = (long)Math.Round(item.UnitAmount * 100, MidpointRounding.AwayFromZero),
                         ProductData = new SessionLineItemPriceDataProductDataOptions
                         {
@@ -143,13 +149,13 @@ internal sealed class StripePaymentService(
         }
 
         if (session.AmountTotal is not { } amountTotalInCents || amountTotalInCents <= 0
-            || !string.Equals(session.Currency, StripeConstants.CURRENCY_USD, StringComparison.OrdinalIgnoreCase))
+            || !IsoCurrency.TryNormalize(session.Currency, out var currency)
+            || currency != StripeConstants.CURRENCY_USD)
         {
             throw new InvalidOperationException("Paid Stripe checkout session has an invalid amount or currency.");
         }
 
         var amountTotal = amountTotalInCents / 100m;
-        var currency = StripeConstants.CURRENCY_USD;
 
         return Task.FromResult<StripeCheckoutCompleted?>(
             new StripeCheckoutCompleted(checkoutIntentId, userId, assetId, assetVersionId, session.Id, amountTotal, currency));

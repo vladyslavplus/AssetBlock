@@ -56,8 +56,6 @@ internal static class TestData
             Title = title,
             Description = description,
             Price = price,
-            StorageKey = $"assets/{Guid.NewGuid():N}.bin",
-            FileName = "package.zip",
             CreatedAt = createdAt ?? DateTimeOffset.UtcNow
         };
     }
@@ -145,9 +143,14 @@ internal static class TestData
         };
     }
 
-    public static void AddCompletedPurchase(ApplicationDbContext db, Purchase purchase, string assetTitle = "Test asset")
+    public static void AddCompletedCheckoutIntent(ApplicationDbContext db, Purchase purchase, string assetTitle = "Test asset")
     {
         db.CheckoutIntents.Add(CreateCompletedCheckoutIntent(purchase, assetTitle));
+    }
+
+    public static void AddCompletedPurchase(ApplicationDbContext db, Purchase purchase, string assetTitle = "Test asset")
+    {
+        AddCompletedCheckoutIntent(db, purchase, assetTitle);
         db.Purchases.Add(purchase);
     }
 

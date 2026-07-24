@@ -66,7 +66,7 @@ public class CreateReviewCommandHandlerTests
         var userId = Guid.NewGuid();
         var command = new CreateReviewCommand(Guid.NewGuid(), userId, 5, "Great");
 
-        var asset = new Asset { Id = command.AssetId, AuthorId = userId, CategoryId = Guid.NewGuid(), Title = "A", StorageKey = "k", FileName = "f" };
+        var asset = new Asset { Id = command.AssetId, AuthorId = userId, CategoryId = Guid.NewGuid(), Title = "A" };
         _assetStoreMock.GetById(command.AssetId, Arg.Any<CancellationToken>()).Returns(asset);
 
         var result = await _handler.Handle(command, CancellationToken.None);
@@ -80,7 +80,7 @@ public class CreateReviewCommandHandlerTests
     public async Task Handle_WhenNotPurchased_ShouldReturnError()
     {
         var command = new CreateReviewCommand(Guid.NewGuid(), Guid.NewGuid(), 5, "Great");
-        var asset = new Asset { Id = command.AssetId, AuthorId = Guid.NewGuid(), CategoryId = Guid.NewGuid(), Title = "A", StorageKey = "k", FileName = "f" };
+        var asset = new Asset { Id = command.AssetId, AuthorId = Guid.NewGuid(), CategoryId = Guid.NewGuid(), Title = "A" };
         _assetStoreMock.GetById(command.AssetId, Arg.Any<CancellationToken>()).Returns(asset);
         _purchaseStoreMock.GetPurchase(command.UserId, command.AssetId, Arg.Any<CancellationToken>()).Returns((Purchase?)null);
 
@@ -94,7 +94,7 @@ public class CreateReviewCommandHandlerTests
     public async Task Handle_WhenPurchaseExpired_ShouldReturnError()
     {
         var command = new CreateReviewCommand(Guid.NewGuid(), Guid.NewGuid(), 5, "Great");
-        var asset = new Asset { Id = command.AssetId, AuthorId = Guid.NewGuid(), CategoryId = Guid.NewGuid(), Title = "A", StorageKey = "k", FileName = "f" };
+        var asset = new Asset { Id = command.AssetId, AuthorId = Guid.NewGuid(), CategoryId = Guid.NewGuid(), Title = "A" };
         _assetStoreMock.GetById(command.AssetId, Arg.Any<CancellationToken>()).Returns(asset);
 
         var purchase = new Purchase { Id = Guid.NewGuid(), UserId = command.UserId, AssetId = command.AssetId, AssetVersionId = Guid.NewGuid(), CheckoutIntentId = Guid.NewGuid(), PricePaid = 9.99m, Currency = "usd", StripePaymentId = "pay_1", PurchasedAt = DateTimeOffset.UtcNow.AddDays(-15) };
@@ -110,7 +110,7 @@ public class CreateReviewCommandHandlerTests
     public async Task Handle_WhenReviewAlreadyExists_ShouldReturnError()
     {
         var command = new CreateReviewCommand(Guid.NewGuid(), Guid.NewGuid(), 5, "Great");
-        var asset = new Asset { Id = command.AssetId, AuthorId = Guid.NewGuid(), CategoryId = Guid.NewGuid(), Title = "A", StorageKey = "k", FileName = "f" };
+        var asset = new Asset { Id = command.AssetId, AuthorId = Guid.NewGuid(), CategoryId = Guid.NewGuid(), Title = "A" };
         _assetStoreMock.GetById(command.AssetId, Arg.Any<CancellationToken>()).Returns(asset);
         var purchase = new Purchase { Id = Guid.NewGuid(), UserId = command.UserId, AssetId = command.AssetId, AssetVersionId = Guid.NewGuid(), CheckoutIntentId = Guid.NewGuid(), PricePaid = 9.99m, Currency = "usd", StripePaymentId = "pay_1", PurchasedAt = DateTimeOffset.UtcNow.AddDays(-1) };
         _purchaseStoreMock.GetPurchase(command.UserId, command.AssetId, Arg.Any<CancellationToken>()).Returns(purchase);
@@ -127,7 +127,7 @@ public class CreateReviewCommandHandlerTests
     public async Task Handle_WhenValid_ShouldCreateReviewEnqueueNotificationAndRemoveCache()
     {
         var command = new CreateReviewCommand(Guid.NewGuid(), Guid.NewGuid(), 5, "Great");
-        var asset = new Asset { Id = command.AssetId, AuthorId = Guid.NewGuid(), CategoryId = Guid.NewGuid(), Title = "A", StorageKey = "k", FileName = "f" };
+        var asset = new Asset { Id = command.AssetId, AuthorId = Guid.NewGuid(), CategoryId = Guid.NewGuid(), Title = "A" };
         _assetStoreMock.GetById(command.AssetId, Arg.Any<CancellationToken>()).Returns(asset);
         var purchase = new Purchase { Id = Guid.NewGuid(), UserId = command.UserId, AssetId = command.AssetId, AssetVersionId = Guid.NewGuid(), CheckoutIntentId = Guid.NewGuid(), PricePaid = 9.99m, Currency = "usd", StripePaymentId = "pay_1", PurchasedAt = DateTimeOffset.UtcNow.AddDays(-1) };
         _purchaseStoreMock.GetPurchase(command.UserId, command.AssetId, Arg.Any<CancellationToken>()).Returns(purchase);
@@ -175,7 +175,7 @@ public class CreateReviewCommandHandlerTests
     public async Task Handle_WhenCreateThrows_ShouldReturnBadRequest()
     {
         var command = new CreateReviewCommand(Guid.NewGuid(), Guid.NewGuid(), 5, "Great");
-        var asset = new Asset { Id = command.AssetId, AuthorId = Guid.NewGuid(), CategoryId = Guid.NewGuid(), Title = "A", StorageKey = "k", FileName = "f" };
+        var asset = new Asset { Id = command.AssetId, AuthorId = Guid.NewGuid(), CategoryId = Guid.NewGuid(), Title = "A" };
         _assetStoreMock.GetById(command.AssetId, Arg.Any<CancellationToken>()).Returns(asset);
         var purchase = new Purchase { Id = Guid.NewGuid(), UserId = command.UserId, AssetId = command.AssetId, AssetVersionId = Guid.NewGuid(), CheckoutIntentId = Guid.NewGuid(), PricePaid = 9.99m, Currency = "usd", StripePaymentId = "pay_1", PurchasedAt = DateTimeOffset.UtcNow.AddDays(-1) };
         _purchaseStoreMock.GetPurchase(command.UserId, command.AssetId, Arg.Any<CancellationToken>()).Returns(purchase);

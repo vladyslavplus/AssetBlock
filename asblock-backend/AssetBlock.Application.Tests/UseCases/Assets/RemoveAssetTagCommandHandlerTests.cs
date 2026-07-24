@@ -54,7 +54,7 @@ public class RemoveAssetTagCommandHandlerTests
     public async Task Handle_WhenUserIsNotAuthor_ShouldReturnForbidden()
     {
         var command = new RemoveAssetTagCommand(Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid());
-        var asset = new Asset { Id = command.AssetId, AuthorId = Guid.NewGuid(), CategoryId = Guid.NewGuid(), Title = "t", StorageKey = "k", FileName = "f" };
+        var asset = new Asset { Id = command.AssetId, AuthorId = Guid.NewGuid(), CategoryId = Guid.NewGuid(), Title = "t" };
         _assetStoreMock.GetById(command.AssetId).Returns(asset);
 
         var result = await _handler.Handle(command, CancellationToken.None);
@@ -74,7 +74,7 @@ public class RemoveAssetTagCommandHandlerTests
     {
         var authorId = Guid.NewGuid();
         var command = new RemoveAssetTagCommand(Guid.NewGuid(), authorId, Guid.NewGuid());
-        var asset = new Asset { Id = command.AssetId, AuthorId = authorId, CategoryId = Guid.NewGuid(), Title = "t", StorageKey = "k", FileName = "f" };
+        var asset = new Asset { Id = command.AssetId, AuthorId = authorId, CategoryId = Guid.NewGuid(), Title = "t" };
 
         _assetStoreMock.GetById(command.AssetId).Returns(asset);
         _tagStoreMock.GetById(command.TagId).Returns((Tag?)null);
@@ -90,7 +90,7 @@ public class RemoveAssetTagCommandHandlerTests
     {
         var authorId = Guid.NewGuid();
         var command = new RemoveAssetTagCommand(Guid.NewGuid(), authorId, Guid.NewGuid());
-        var asset = new Asset { Id = command.AssetId, AuthorId = authorId, CategoryId = Guid.NewGuid(), Title = "t", StorageKey = "k", FileName = "f" };
+        var asset = new Asset { Id = command.AssetId, AuthorId = authorId, CategoryId = Guid.NewGuid(), Title = "t" };
         var tag = new Tag { Id = command.TagId, Name = "existing" };
 
         _assetStoreMock.GetById(command.AssetId).Returns(asset);
@@ -109,7 +109,7 @@ public class RemoveAssetTagCommandHandlerTests
     {
         var authorId = Guid.NewGuid();
         var command = new RemoveAssetTagCommand(Guid.NewGuid(), authorId, Guid.NewGuid());
-        var asset = new Asset { Id = command.AssetId, AuthorId = authorId, CategoryId = Guid.NewGuid(), Title = "t", StorageKey = "k", FileName = "f" };
+        var asset = new Asset { Id = command.AssetId, AuthorId = authorId, CategoryId = Guid.NewGuid(), Title = "t" };
         var tag = new Tag { Id = command.TagId, Name = "existing" };
 
         _assetStoreMock.GetById(command.AssetId).Returns(asset);

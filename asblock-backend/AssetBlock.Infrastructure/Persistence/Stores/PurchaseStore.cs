@@ -10,6 +10,9 @@ namespace AssetBlock.Infrastructure.Persistence.Stores;
 
 internal sealed class PurchaseStore(ApplicationDbContext dbContext) : IPurchaseStore
 {
+    private const string CONSTRAINT_STRIPE_PAYMENT_ID = "IX_purchases_StripePaymentId";
+    private const string CONSTRAINT_CHECKOUT_INTENT_ID = "IX_purchases_CheckoutIntentId";
+
     public async Task<Purchase> Add(Purchase purchase, CancellationToken cancellationToken = default)
     {
         try
@@ -19,7 +22,11 @@ internal sealed class PurchaseStore(ApplicationDbContext dbContext) : IPurchaseS
             return purchase;
         }
         catch (DbUpdateException ex) when (
-            ex.InnerException is PostgresException { SqlState: PostgresErrorCodes.UniqueViolation })
+            ex.InnerException is PostgresException
+            {
+                SqlState: PostgresErrorCodes.UniqueViolation,
+                ConstraintName: CONSTRAINT_STRIPE_PAYMENT_ID or CONSTRAINT_CHECKOUT_INTENT_ID
+            })
         {
             dbContext.Entry(purchase).State = EntityState.Detached;
             throw new DuplicatePurchaseException();

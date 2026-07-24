@@ -43,8 +43,6 @@ public sealed class PurchaseStoreTests
             AuthorId = userId,
             CategoryId = catId,
             Title = "A",
-            StorageKey = "k",
-            FileName = "f",
             CreatedAt = DateTimeOffset.UtcNow
         });
         var versionId = Guid.NewGuid();
@@ -102,8 +100,6 @@ public sealed class PurchaseStoreTests
                 AuthorId = authorId,
                 CategoryId = catId,
                 Title = aid == assetReviewedId ? "R" : "B",
-                StorageKey = "k",
-                FileName = "f",
                 CreatedAt = DateTimeOffset.UtcNow
             });
         }
@@ -190,8 +186,6 @@ public sealed class PurchaseStoreTests
             AuthorId = authorId,
             CategoryId = catId,
             Title = "A",
-            StorageKey = "k",
-            FileName = "f",
             CreatedAt = DateTimeOffset.UtcNow,
         });
         var versionId = Guid.NewGuid();

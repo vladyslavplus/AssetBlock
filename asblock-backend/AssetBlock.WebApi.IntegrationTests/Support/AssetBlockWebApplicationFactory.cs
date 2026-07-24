@@ -19,6 +19,9 @@ public sealed class AssetBlockWebApplicationFactory(string connectionString) : W
 
     private RecordingEmailSender RecordingEmailSender { get; } = new();
 
+    /// <summary>In-memory object store standing in for MinIO so upload/publish/download flows work without Docker.</summary>
+    public FakeAssetStorageService AssetStorage { get; } = new();
+
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
         builder.UseEnvironment("IntegrationTesting");
@@ -61,6 +64,9 @@ public sealed class AssetBlockWebApplicationFactory(string connectionString) : W
         {
             services.RemoveAll<IEmailSender>();
             services.AddSingleton<IEmailSender>(RecordingEmailSender);
+
+            services.RemoveAll<IAssetStorageService>();
+            services.AddSingleton<IAssetStorageService>(AssetStorage);
         });
     }
 }

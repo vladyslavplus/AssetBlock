@@ -54,8 +54,7 @@ public sealed class DownloadServiceTests
     [Fact]
     public async Task CopyDecrypted_whenAuthor_decryptsContent()
     {
-        var userId = Guid.NewGuid();
-        var asset = CreateAsset(userId, Guid.NewGuid());
+        const string storageKey = "sk";
         var encryption = CreateEncryption();
         await using var plain = new MemoryStream(Encoding.UTF8.GetBytes("payload"));
         await using var cipherMs = new MemoryStream();
@@ -63,7 +62,7 @@ public sealed class DownloadServiceTests
         var cipherBytes = cipherMs.ToArray();
 
         var storage = Substitute.For<IAssetStorageService>();
-        storage.OpenRead(asset.StorageKey, Arg.Any<Func<Stream, CancellationToken, Task>>(), Arg.Any<CancellationToken>())
+        storage.OpenRead(storageKey, Arg.Any<Func<Stream, CancellationToken, Task>>(), Arg.Any<CancellationToken>())
             .Returns(ci =>
             {
                 var consumer = ci.Arg<Func<Stream, CancellationToken, Task>>();
@@ -78,7 +77,7 @@ public sealed class DownloadServiceTests
             new MemoryCacheService());
 
         await using var destination = new MemoryStream();
-        await sut.CopyDecrypted(asset.StorageKey, destination);
+        await sut.CopyDecrypted(storageKey, destination);
         Encoding.UTF8.GetString(destination.ToArray()).Should().Be("payload");
     }
 
@@ -125,10 +124,15 @@ public sealed class DownloadServiceTests
                     asset.Price,
                     null,
                     1,
-                    asset.FileName,
-                    asset.StorageKey,
+                    DateTimeOffset.UtcNow,
+                    "f.bin",
+                    "sk",
                     1,
-                    new string('a', 64))));
+                    new string('a', 64),
+                    "PERSONAL",
+                    "1.0",
+                    "Personal",
+                    "terms")));
 
         var sut = new DownloadService(
             assetStore,
@@ -148,8 +152,6 @@ public sealed class DownloadServiceTests
             AuthorId = authorId,
             CategoryId = categoryId,
             Title = "t",
-            StorageKey = "sk",
-            FileName = "f.bin",
             CreatedAt = DateTimeOffset.UtcNow
         };
 

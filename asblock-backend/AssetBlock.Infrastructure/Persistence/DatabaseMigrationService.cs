@@ -352,8 +352,6 @@ internal sealed class DatabaseMigrationService(
                     Title = title,
                     Description = description,
                     Price = price,
-                    StorageKey = storageKey,
-                    FileName = fileName,
                     CreatedAt = createdAt,
                 });
                 context.AssetVersions.Add(new AssetVersion

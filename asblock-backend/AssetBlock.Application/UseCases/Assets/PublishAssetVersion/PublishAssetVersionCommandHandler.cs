@@ -119,7 +119,7 @@ internal sealed class PublishAssetVersionCommandHandler(
             FileName = displayFileName,
             ContentLength = request.FileLength,
             ContentSha256 = sha256Hex,
-            ReleaseNotes = request.Request.ReleaseNotes,
+            ReleaseNotes = request.Request.ReleaseNotes.Trim(),
             LicenseCode = licenseCode,
             LicenseTemplateVersion = licenseTemplate.TemplateVersion,
             LicenseDisplayName = licenseTemplate.DisplayName,

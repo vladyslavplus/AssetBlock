@@ -93,6 +93,7 @@ internal sealed class HandleStripeWebhookCommandHandler(
 
             var purchaseId = Guid.NewGuid();
             var purchasedAt = DateTimeOffset.UtcNow;
+            var lostCompletionRace = false;
             try
             {
                 await unitOfWork.ExecuteInTransaction(async ct =>
@@ -107,7 +108,10 @@ internal sealed class HandleStripeWebhookCommandHandler(
                         ct);
                     if (!completed)
                     {
-                        throw new InvalidOperationException("Checkout intent could not be completed.");
+                        // False may mean a concurrent winner or another state transition.
+                        // Verify an idempotent purchase after the transaction; otherwise fail.
+                        lostCompletionRace = true;
+                        return;
                     }
 
                     var purchase = new Purchase
@@ -177,6 +181,22 @@ internal sealed class HandleStripeWebhookCommandHandler(
             {
                 logger.LogInformation(
                     "Idempotent webhook: purchase already exists for session {SessionId}",
+                    verified.StripeSessionId);
+            }
+
+            if (lostCompletionRace)
+            {
+                var existingAfterRace = await purchaseStore.GetByStripePaymentId(
+                    verified.StripeSessionId,
+                    cancellationToken);
+                if (existingAfterRace is null)
+                {
+                    throw new InvalidOperationException(
+                        $"Checkout intent {verified.CheckoutIntentId} could not be completed for session {verified.StripeSessionId}.");
+                }
+
+                logger.LogInformation(
+                    "Idempotent webhook: concurrent delivery lost TryComplete race for session {SessionId}",
                     verified.StripeSessionId);
             }
 

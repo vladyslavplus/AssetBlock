@@ -96,11 +96,11 @@ public class HandleStripeWebhookCommandHandlerTests
         var authorId = Guid.NewGuid();
         var assetId = Guid.NewGuid();
         var versionId = Guid.NewGuid();
-        var sessionId = "cs_test_pinned";
+        const string sessionId = "cs_test_pinned";
         var command = new HandleStripeWebhookCommand("payload", "sig");
 
         _paymentServiceMock.VerifyCheckoutCompleted(command.Payload, command.Signature, Arg.Any<CancellationToken>())
-            .Returns(_ => Completed(userId, assetId, versionId, sessionId, 12.50m, "eur"));
+            .Returns(_ => Completed(userId, assetId, versionId, sessionId, 12.50m, "usd"));
         _assetStoreMock.GetVersion(assetId, versionId, Arg.Any<CancellationToken>()).Returns(CreateVersion(assetId, versionId));
         _purchaseStoreMock.GetByStripePaymentId(sessionId, Arg.Any<CancellationToken>()).Returns((Purchase?)null);
         _assetStoreMock.GetById(assetId, Arg.Any<CancellationToken>()).Returns(CreateAsset(assetId, authorId, "Pack"));
@@ -113,7 +113,7 @@ public class HandleStripeWebhookCommandHandlerTests
             Arg.Is<Purchase>(p =>
                 p.AssetVersionId == versionId &&
                 p.PricePaid == 12.50m &&
-                p.Currency == "eur"),
+                p.Currency == "usd"),
             Arg.Any<CancellationToken>());
     }
 
@@ -149,6 +149,7 @@ public class HandleStripeWebhookCommandHandlerTests
             {
                 Id = versionId, AssetId = assetId, VersionNumber = 1, IsCurrent = true,
                 StorageKey = "k", FileName = "f.zip", ContentLength = 1, ContentSha256 = new string('a', 64),
+                ReleaseNotes = "Initial release",
                 LicenseCode = AssetLicenseCode.PERSONAL, LicenseTemplateVersion = "1.0",
                 LicenseDisplayName = "Personal use", LicenseTerms = "terms"
             });
@@ -530,9 +531,7 @@ public class HandleStripeWebhookCommandHandlerTests
         Id = assetId,
         AuthorId = authorId,
         CategoryId = Guid.NewGuid(),
-        Title = title,
-        StorageKey = "k",
-        FileName = "f.zip"
+        Title = title
     };
 
     private static AssetVersion CreateVersion(Guid assetId, Guid versionId) => new()
@@ -545,6 +544,7 @@ public class HandleStripeWebhookCommandHandlerTests
         FileName = "f.zip",
         ContentLength = 100,
         ContentSha256 = new string('a', 64),
+        ReleaseNotes = "Initial release",
         LicenseCode = AssetLicenseCode.PERSONAL,
         LicenseTemplateVersion = "1.0",
         LicenseDisplayName = "Personal use",

@@ -25,7 +25,8 @@ public class AssetVersion : BaseEntity
     /// <summary>Lowercase 64-character hex SHA-256 of plaintext.</summary>
     public required string ContentSha256 { get; set; }
 
-    public string? ReleaseNotes { get; set; }
+    /// <summary>Required release notes snapshot for this version.</summary>
+    public required string ReleaseNotes { get; set; }
 
     public required AssetLicenseCode LicenseCode { get; set; }
     public required string LicenseTemplateVersion { get; set; }

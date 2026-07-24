@@ -4,7 +4,6 @@ using AssetBlock.Domain.Abstractions.Services;
 using AssetBlock.Domain.Core.Constants;
 using AssetBlock.Domain.Core.Dto.Assets;
 using AssetBlock.Domain.Core.Entities;
-using AssetBlock.Domain.Core.Enums;
 using FluentAssertions;
 using NSubstitute;
 
@@ -47,8 +46,6 @@ public class GetAssetByIdQueryHandlerTests
             AuthorId = Guid.NewGuid(),
             CategoryId = Guid.NewGuid(),
             Title = "Gone",
-            StorageKey = "k",
-            FileName = "f",
             DeletedAt = DateTimeOffset.UtcNow,
         };
         _assetStoreMock.GetById(assetId, Arg.Any<CancellationToken>()).Returns(asset);
@@ -85,8 +82,6 @@ public class GetAssetByIdQueryHandlerTests
             Title = "Beat Pack vol. 1",
             Description = "A great pack",
             Price = 14.99m,
-            StorageKey = "assets/auth/beat.zip",
-            FileName = "beat.zip",
             CreatedAt = now,
             Category = category,
             Author = author
@@ -102,23 +97,19 @@ public class GetAssetByIdQueryHandlerTests
             Price: 14.99m,
             DeletedAt: null,
             VersionNumber: 1,
+            VersionCreatedAt: now,
             FileName: "beat.zip",
             StorageKey: "assets/auth/beat.zip",
             ContentLength: 1024,
-            ContentSha256: new string('a', 64));
-        var version = new AssetVersion
-        {
-            Id = versionId, AssetId = assetId, VersionNumber = 1, IsCurrent = true,
-            StorageKey = "assets/auth/beat.zip", FileName = "beat.zip",
-            ContentLength = 1024, ContentSha256 = new string('a', 64),
-            LicenseCode = AssetLicenseCode.PERSONAL, LicenseTemplateVersion = "1.0",
-            LicenseDisplayName = "Personal use", LicenseTerms = "terms"
-        };
+            ContentSha256: new string('a', 64),
+            LicenseCode: "PERSONAL",
+            LicenseTemplateVersion: "1.0",
+            LicenseDisplayName: "Personal use",
+            LicenseTerms: "terms");
 
         var query = new GetAssetByIdQuery(assetId);
         _assetStoreMock.GetById(assetId, Arg.Any<CancellationToken>()).Returns(asset);
         _assetStoreMock.GetCurrentVersionSnapshot(assetId, Arg.Any<CancellationToken>()).Returns(snapshot);
-        _assetStoreMock.GetVersion(assetId, versionId, Arg.Any<CancellationToken>()).Returns(version);
 
         // Act
         var result = await _handler.Handle(query, CancellationToken.None);

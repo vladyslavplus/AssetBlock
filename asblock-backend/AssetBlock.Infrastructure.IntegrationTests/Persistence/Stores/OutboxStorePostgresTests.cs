@@ -185,7 +185,7 @@ public sealed class OutboxStorePostgresTests(PostgresFixture fixture)
         row.Payload.Should().Contain(buyer.Email);
         row.Payload.Should().NotContain("sk_live");
         row.Payload.Should().NotContain("whsec_");
-        row.Payload.Should().NotContain(asset.StorageKey);
+        row.Payload.Should().NotContain(version.StorageKey);
         row.Payload.Should().NotContain("Password");
         row.Payload.Should().NotContain("cs_email_commit");
     }

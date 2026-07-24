@@ -55,7 +55,7 @@ public class UpdateAssetCommandHandlerTests
     public async Task Handle_WhenUserIsNotAuthor_ShouldReturnForbidden()
     {
         var command = new UpdateAssetCommand(Guid.NewGuid(), Guid.NewGuid(), "New Title", null, null, null);
-        var asset = new Asset { Id = command.AssetId, AuthorId = Guid.NewGuid(), CategoryId = Guid.NewGuid(), Title = "t", StorageKey = "k", FileName = "f" };
+        var asset = new Asset { Id = command.AssetId, AuthorId = Guid.NewGuid(), CategoryId = Guid.NewGuid(), Title = "t" };
         _assetStoreMock.GetById(command.AssetId).Returns(asset);
 
         var result = await _handler.Handle(command, CancellationToken.None);
@@ -77,7 +77,7 @@ public class UpdateAssetCommandHandlerTests
         var authorId = Guid.NewGuid();
         var categoryId = Guid.NewGuid();
         var command = new UpdateAssetCommand(Guid.NewGuid(), authorId, null, null, null, categoryId);
-        var asset = new Asset { Id = command.AssetId, AuthorId = authorId, CategoryId = Guid.NewGuid(), Title = "t", StorageKey = "k", FileName = "f" };
+        var asset = new Asset { Id = command.AssetId, AuthorId = authorId, CategoryId = Guid.NewGuid(), Title = "t" };
 
         _assetStoreMock.GetById(command.AssetId).Returns(asset);
         _categoryStoreMock.GetById(categoryId).Returns((Category?)null);
@@ -94,7 +94,7 @@ public class UpdateAssetCommandHandlerTests
     {
         var authorId = Guid.NewGuid();
         var command = new UpdateAssetCommand(Guid.NewGuid(), authorId, "Updated Title", null, null, null);
-        var asset = new Asset { Id = command.AssetId, AuthorId = authorId, CategoryId = Guid.NewGuid(), Title = "t", StorageKey = "k", FileName = "f" };
+        var asset = new Asset { Id = command.AssetId, AuthorId = authorId, CategoryId = Guid.NewGuid(), Title = "t" };
 
         _assetStoreMock.GetById(command.AssetId).Returns(asset);
         _assetStoreMock.Update(command.AssetId, "Updated Title", null, null, null, Arg.Any<CancellationToken>()).Returns(true);
@@ -118,7 +118,7 @@ public class UpdateAssetCommandHandlerTests
     {
         var authorId = Guid.NewGuid();
         var command = new UpdateAssetCommand(Guid.NewGuid(), authorId, "Title", null, null, null);
-        var asset = new Asset { Id = command.AssetId, AuthorId = authorId, CategoryId = Guid.NewGuid(), Title = "t", StorageKey = "k", FileName = "f" };
+        var asset = new Asset { Id = command.AssetId, AuthorId = authorId, CategoryId = Guid.NewGuid(), Title = "t" };
 
         _assetStoreMock.GetById(command.AssetId).Returns(asset);
         _assetStoreMock.Update(Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<decimal?>(), Arg.Any<Guid?>(), Arg.Any<CancellationToken>()).Returns(false);

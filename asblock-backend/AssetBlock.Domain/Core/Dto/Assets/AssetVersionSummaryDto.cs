@@ -7,6 +7,6 @@ public sealed record AssetVersionSummaryDto(
     string FileName,
     long ContentLength,
     string ContentSha256,
-    string? ReleaseNotes,
+    string ReleaseNotes,
     DateTimeOffset CreatedAt,
     AssetLicenseSummaryDto License);

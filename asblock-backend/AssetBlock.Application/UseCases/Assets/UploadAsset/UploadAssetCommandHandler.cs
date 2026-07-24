@@ -130,8 +130,6 @@ internal sealed class UploadAssetCommandHandler(
             Title = request.Request.Title,
             Description = request.Request.Description,
             Price = request.Request.Price,
-            StorageKey = storageKey,
-            FileName = displayFileName,
             DownloadLimitPerHour = request.Request.DownloadLimitPerHour,
             CreatedAt = now
         };

@@ -70,8 +70,6 @@ public class PublishAssetVersionCommandHandlerTests
             AuthorId = _authorId,
             CategoryId = Guid.NewGuid(),
             Title = "Owned",
-            StorageKey = "seed",
-            FileName = "seed.zip",
             DeletedAt = deletedAt
         });
     }

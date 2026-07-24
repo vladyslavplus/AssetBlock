@@ -266,11 +266,11 @@ public class UploadAssetCommandHandlerTests
             Arg.Is<Asset>(a =>
                 a.Id == result.Value &&
                 a.Title == "Title" &&
-                a.DownloadLimitPerHour == 10 &&
-                a.FileName == "MyArchive.TAR.GZ" &&
-                a.StorageKey.Contains(result.Value.ToString()) &&
-                a.StorageKey.EndsWith(".tar.gz")),
-            Arg.Any<AssetVersion>(),
+                a.DownloadLimitPerHour == 10),
+            Arg.Is<AssetVersion>(v =>
+                v.FileName == "MyArchive.TAR.GZ" &&
+                v.StorageKey.Contains(result.Value.ToString()) &&
+                v.StorageKey.EndsWith(".tar.gz")),
             Arg.Any<List<Tag>?>(),
             Arg.Any<CancellationToken>());
 

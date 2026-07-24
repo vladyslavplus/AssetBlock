@@ -43,8 +43,6 @@ public sealed class AssetStoreTests
             Title = "Title",
             Description = "Desc",
             Price = 10,
-            StorageKey = "k",
-            FileName = "f.zip",
             CreatedAt = DateTimeOffset.UtcNow
         };
         await sut.Add(asset);
@@ -108,8 +106,6 @@ public sealed class AssetStoreTests
             AuthorId = authorId,
             CategoryId = catId,
             Title = "A",
-            StorageKey = "k",
-            FileName = "f",
             CreatedAt = DateTimeOffset.UtcNow
         };
 

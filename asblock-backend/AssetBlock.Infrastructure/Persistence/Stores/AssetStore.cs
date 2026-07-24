@@ -70,10 +70,14 @@ internal sealed class AssetStore(ApplicationDbContext dbContext) : IAssetStore
             .FirstOrDefaultAsync(a => a.Id == id, cancellationToken);
     }
 
-    public Task<Asset?> GetForUpdate(Guid id, CancellationToken cancellationToken = default)
+    public async Task<Asset?> GetForUpdate(Guid id, CancellationToken cancellationToken = default)
     {
-        return dbContext.Assets
-            .FromSqlRaw("SELECT * FROM assets WHERE \"Id\" = {0} FOR UPDATE", id)
+        // FOR UPDATE locks the row for the ambient transaction; AsNoTracking returns a fresh
+        // projection without detaching tracked entities (which would drop pending UoW changes).
+        // SoftDelete syncs DeletedAt on any local tracker instance after ExecuteUpdate.
+        return await dbContext.Assets
+            .FromSqlRaw("""SELECT * FROM assets WHERE "Id" = {0} FOR UPDATE""", id)
+            .AsNoTracking()
             .FirstOrDefaultAsync(cancellationToken);
     }
 
@@ -91,10 +95,15 @@ internal sealed class AssetStore(ApplicationDbContext dbContext) : IAssetStore
                 v.Asset.Price,
                 v.Asset.DeletedAt,
                 v.VersionNumber,
+                v.CreatedAt,
                 v.FileName,
                 v.StorageKey,
                 v.ContentLength,
-                v.ContentSha256))
+                v.ContentSha256,
+                v.LicenseCode.ToString(),
+                v.LicenseTemplateVersion,
+                v.LicenseDisplayName,
+                v.LicenseTerms))
             .FirstOrDefaultAsync(cancellationToken);
     }
 
@@ -172,11 +181,11 @@ internal sealed class AssetStore(ApplicationDbContext dbContext) : IAssetStore
     {
         // Row lock to prevent concurrent publishes on the same asset.
         var asset = await GetForUpdate(assetId, cancellationToken)
-            ?? throw new AssetBlock.Domain.Core.Exceptions.AssetNotFoundException();
+            ?? throw new Domain.Core.Exceptions.AssetNotFoundException();
 
         if (asset.DeletedAt.HasValue)
         {
-            throw new AssetBlock.Domain.Core.Exceptions.AssetNotFoundException();
+            throw new Domain.Core.Exceptions.AssetNotFoundException();
         }
 
         if (asset.AuthorId != authorId)
@@ -333,6 +342,13 @@ internal sealed class AssetStore(ApplicationDbContext dbContext) : IAssetStore
                     .SetProperty(a => a.DeletedAt, deletedAt)
                     .SetProperty(a => a.UpdatedAt, deletedAt),
                 cancellationToken);
+
+        var local = dbContext.Assets.Local.FirstOrDefault(a => a.Id == id);
+        if (local is not null)
+        {
+            local.DeletedAt = deletedAt;
+            local.UpdatedAt = deletedAt;
+        }
     }
 
     public async Task Delete(Guid id, CancellationToken cancellationToken = default)

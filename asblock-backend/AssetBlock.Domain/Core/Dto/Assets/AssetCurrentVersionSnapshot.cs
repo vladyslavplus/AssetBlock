@@ -1,6 +1,6 @@
 namespace AssetBlock.Domain.Core.Dto.Assets;
 
-/// <summary>Internal projection for checkout / download resolution.</summary>
+/// <summary>Internal projection for checkout / download / detail resolution.</summary>
 public sealed record AssetCurrentVersionSnapshot(
     Guid AssetId,
     Guid AssetVersionId,
@@ -10,7 +10,12 @@ public sealed record AssetCurrentVersionSnapshot(
     decimal Price,
     DateTimeOffset? DeletedAt,
     int VersionNumber,
+    DateTimeOffset VersionCreatedAt,
     string FileName,
     string StorageKey,
     long ContentLength,
-    string ContentSha256);
+    string ContentSha256,
+    string LicenseCode,
+    string LicenseTemplateVersion,
+    string LicenseDisplayName,
+    string LicenseTerms);

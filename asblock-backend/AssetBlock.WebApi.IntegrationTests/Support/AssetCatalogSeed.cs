@@ -46,8 +46,6 @@ internal static class AssetCatalogSeed
             Title = "Integration seeded asset",
             Description = "Seeded for integration tests.",
             Price = 9.99m,
-            StorageKey = storageKey,
-            FileName = fileName,
             CreatedAt = now
         };
         var version = new AssetVersion

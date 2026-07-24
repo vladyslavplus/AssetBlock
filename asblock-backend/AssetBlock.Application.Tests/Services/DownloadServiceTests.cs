@@ -68,16 +68,18 @@ public class DownloadServiceTests
     {
         var asset = MakeAsset(authorId: _userId, downloadLimit: null);
         var currentVersionId = Guid.NewGuid();
+        const string storageKey = "assets/test/file.bin";
+        const string fileName = "file.zip";
         _assetStoreMock.GetById(_assetId, Arg.Any<CancellationToken>()).Returns(asset);
         _assetStoreMock.GetCurrentVersionSnapshot(_assetId, Arg.Any<CancellationToken>())
-            .Returns(MakeSnapshot(currentVersionId, asset.StorageKey, asset.FileName));
+            .Returns(MakeSnapshot(currentVersionId, storageKey, fileName));
 
         var result = await _service.AuthorizeDownload(_assetId, _userId);
 
         result.Status.Should().Be(AssetDownloadStatus.SUCCESS);
         result.Permit.Should().NotBeNull();
-        result.Permit!.StorageKey.Should().Be(asset.StorageKey);
-        result.Permit.FileName.Should().Be(asset.FileName);
+        result.Permit!.StorageKey.Should().Be(storageKey);
+        result.Permit.FileName.Should().Be(fileName);
         await _purchaseStoreMock.DidNotReceiveWithAnyArgs().GetPurchase(Guid.Empty, Guid.Empty, CancellationToken.None);
     }
 
@@ -282,10 +284,15 @@ public class DownloadServiceTests
                 9.99m,
                 null,
                 2,
+                DateTimeOffset.UtcNow,
                 "v2.zip",
                 "assets/v2.bin",
                 10,
-                new string('b', 64)));
+                new string('b', 64),
+                "PERSONAL",
+                "1.0",
+                "Personal use",
+                "terms"));
 
         var result = await _service.AuthorizeDownload(_assetId, _userId);
 
@@ -313,8 +320,6 @@ public class DownloadServiceTests
         CategoryId = Guid.NewGuid(),
         Title = "Test Asset",
         Price = 9.99m,
-        StorageKey = "assets/test/file.bin",
-        FileName = "file.zip",
         DownloadLimitPerHour = downloadLimit,
         CreatedAt = DateTimeOffset.UtcNow
     };
@@ -363,10 +368,15 @@ public class DownloadServiceTests
             9.99m,
             null,
             versionNumber,
+            DateTimeOffset.UtcNow,
             fileName,
             storageKey,
             10,
-            new string('b', 64));
+            new string('b', 64),
+            "PERSONAL",
+            "1.0",
+            "Personal use",
+            "terms");
 
     private static AssetVersion MakeVersion(Guid id, int versionNumber, string storageKey, string fileName) => new()
     {
@@ -378,6 +388,7 @@ public class DownloadServiceTests
         FileName = fileName,
         ContentLength = 1,
         ContentSha256 = new string('a', 64),
+        ReleaseNotes = "Initial release",
         LicenseCode = Domain.Core.Enums.AssetLicenseCode.PERSONAL,
         LicenseTemplateVersion = "1.0",
         LicenseDisplayName = "Personal use",

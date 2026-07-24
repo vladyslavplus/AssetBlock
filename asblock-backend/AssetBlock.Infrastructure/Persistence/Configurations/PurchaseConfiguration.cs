@@ -17,7 +17,7 @@ internal sealed class PurchaseConfiguration : IEntityTypeConfiguration<Purchase>
         builder.Property(p => p.CheckoutIntentId).IsRequired();
         builder.Property(p => p.StripePaymentId).IsRequired().HasMaxLength(256);
         builder.Property(p => p.PricePaid).IsRequired().HasPrecision(18, 2);
-        builder.Property(p => p.Currency).IsRequired().HasMaxLength(8);
+        builder.Property(p => p.Currency).IsRequired().HasMaxLength(3);
         builder.Property(p => p.PurchasedAt).IsRequired();
 
         builder.HasIndex(p => p.StripePaymentId).IsUnique();
