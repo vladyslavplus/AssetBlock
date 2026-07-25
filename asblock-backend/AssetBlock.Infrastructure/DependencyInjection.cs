@@ -71,10 +71,11 @@ public static class DependencyInjection
         services.AddHostedService<MinioBucketEnsureHostedService>();
         services.AddHostedService<OutboxDispatcher>();
         services.AddHostedService<StorageOrphanCleanupWorker>();
+        services.AddHostedService<CheckoutReservationCleanupWorker>();
         services.AddScoped<IUnitOfWork, EfUnitOfWork>();
         services.AddScoped<IOutboxStore, OutboxStore>();
         services.AddScoped<IOutboxMessageHandler, AssetBlobDeleteOutboxHandler>();
-        services.AddScoped<IOutboxMessageHandler, PurchaseCompletedOutboxHandler>();
+        services.AddScoped<IOutboxMessageHandler, OrderCompletedOutboxHandler>();
         services.AddScoped<IOutboxMessageHandler, EmailDispatchOutboxHandler>();
         services.AddScoped<IOutboxMessageHandler, EmailActionDispatchOutboxHandler>();
         services.AddScoped<IEmailSender, SmtpEmailSender>();
@@ -88,6 +89,9 @@ public static class DependencyInjection
         services.AddScoped<IAssetStore, AssetStore>();
         services.AddScoped<IPurchaseStore, PurchaseStore>();
         services.AddScoped<ICheckoutIntentStore, CheckoutIntentStore>();
+        services.AddScoped<ICollectionStore, CollectionStore>();
+        services.AddScoped<IBundleStore, BundleStore>();
+        services.AddScoped<IOrderStore, OrderStore>();
         services.AddScoped<IReviewStore, ReviewStore>();
         services.AddScoped<ISocialPlatformStore, SocialPlatformStore>();
         services.AddScoped<INotificationStore, NotificationStore>();

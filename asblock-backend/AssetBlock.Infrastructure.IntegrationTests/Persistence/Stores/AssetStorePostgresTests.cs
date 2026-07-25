@@ -356,7 +356,7 @@ public sealed class AssetStorePostgresTests(PostgresFixture fixture)
         var version = TestData.CreateAssetVersion(asset.Id);
         db.AssetVersions.Add(version);
         await db.SaveChangesAsync();
-        TestData.AddCompletedPurchase(db, TestData.CreatePurchase(buyer.Id, asset.Id, version.Id), asset.Title);
+        TestData.AddCompletedPurchase(db, TestData.CreatePurchase(buyer.Id, asset.Id, version.Id), asset.Title, author.Id);
         db.Reviews.Add(TestData.CreateReview(buyer.Id, asset.Id, rating: 4));
         await db.SaveChangesAsync();
 

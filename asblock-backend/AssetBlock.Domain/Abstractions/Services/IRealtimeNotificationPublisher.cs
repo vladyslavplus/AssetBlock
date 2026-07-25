@@ -8,8 +8,6 @@ namespace AssetBlock.Domain.Abstractions.Services;
 /// </summary>
 public interface IRealtimeNotificationPublisher
 {
-    Task NotifyPurchaseCompleted(Guid userId, Guid assetId, string assetTitle, CancellationToken cancellationToken = default);
-
     Task NotifyDownloadReady(Guid userId, Guid assetId, string assetTitle, CancellationToken cancellationToken = default);
 
     Task NotifyAssetSold(Guid authorUserId, Guid assetId, string assetTitle, Guid buyerUserId, CancellationToken cancellationToken = default);

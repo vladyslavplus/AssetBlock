@@ -71,6 +71,18 @@ export function SiteHeader() {
               Browse assets
             </Link>
             <Link
+              href="/collections"
+              className="text-sm text-muted-foreground hover:text-foreground transition-colors"
+            >
+              Collections
+            </Link>
+            <Link
+              href="/bundles"
+              className="text-sm text-muted-foreground hover:text-foreground transition-colors"
+            >
+              Bundles
+            </Link>
+            <Link
               href="/library"
               className="text-sm text-muted-foreground hover:text-foreground transition-colors"
             >
@@ -170,6 +182,20 @@ export function SiteHeader() {
               onClick={() => setMenuOpen(false)}
             >
               Browse assets
+            </Link>
+            <Link
+              href="/collections"
+              className="text-sm text-muted-foreground hover:text-foreground transition-colors py-1"
+              onClick={() => setMenuOpen(false)}
+            >
+              Collections
+            </Link>
+            <Link
+              href="/bundles"
+              className="text-sm text-muted-foreground hover:text-foreground transition-colors py-1"
+              onClick={() => setMenuOpen(false)}
+            >
+              Bundles
             </Link>
             <Link
               href="/library"

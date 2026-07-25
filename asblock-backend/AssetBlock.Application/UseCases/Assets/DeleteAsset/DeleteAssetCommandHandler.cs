@@ -74,6 +74,8 @@ internal sealed class DeleteAssetCommandHandler(
                     return;
                 }
 
+                await checkoutIntentStore.DeleteTerminalUnpaidReferencingAsset(request.Id, ct);
+
                 var allStorageKeys = await assetStore.GetAllStorageKeys(request.Id, ct);
                 await assetStore.Delete(lockedAsset.Id, ct);
                 foreach (var key in allStorageKeys)

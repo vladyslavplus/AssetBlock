@@ -36,5 +36,19 @@ public static class AuditActions
     public const string REVIEW_CREATE = "Review.Create";
     public const string REVIEW_DELETE = "Review.Delete";
 
-    public const string PAYMENT_PURCHASE_COMPLETED = "Payment.PurchaseCompleted";
+    public const string COLLECTION_CREATE = "Collection.Create";
+    public const string COLLECTION_UPDATE = "Collection.Update";
+    public const string COLLECTION_ITEM_ADD = "Collection.ItemAdd";
+    public const string COLLECTION_ITEM_REMOVE = "Collection.ItemRemove";
+    public const string COLLECTION_REORDER = "Collection.Reorder";
+    public const string COLLECTION_PUBLISH = "Collection.Publish";
+    public const string COLLECTION_ARCHIVE = "Collection.Archive";
+    public const string COLLECTION_RESTORE = "Collection.Restore";
+
+    public const string BUNDLE_CREATE = "Bundle.Create";
+    public const string BUNDLE_REVISE = "Bundle.Revise";
+    public const string BUNDLE_ARCHIVE = "Bundle.Archive";
+    public const string BUNDLE_RESTORE = "Bundle.Restore";
+
+    public const string PAYMENT_ORDER_COMPLETED = "Payment.OrderCompleted";
 }

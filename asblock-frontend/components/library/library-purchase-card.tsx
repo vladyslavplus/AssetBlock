@@ -87,6 +87,31 @@ export function LibraryPurchaseCard({ purchase }: LibraryPurchaseCardProps) {
       </div>
 
       <div className="grid grid-cols-1 gap-1 text-xs text-muted-foreground">
+        {purchase.source === 'BUNDLE' && purchase.bundleTitle ? (
+          <p>
+            Purchased in bundle{' '}
+            {purchase.bundleId ? (
+              <Link
+                href={`/bundles/${purchase.bundleId}`}
+                className="font-medium text-foreground hover:text-accent transition-colors"
+              >
+                {purchase.bundleTitle}
+              </Link>
+            ) : (
+              <span className="font-medium text-foreground">{purchase.bundleTitle}</span>
+            )}
+          </p>
+        ) : (
+          <p>
+            Source: <span className="font-medium text-foreground">Direct purchase</span>
+          </p>
+        )}
+        {purchase.orderId ? (
+          <p>
+            Order{' '}
+            <span className="font-mono text-foreground/80">{purchase.orderId.slice(0, 8)}…</span>
+          </p>
+        ) : null}
         <p>
           Purchased version:{' '}
           <span className="font-medium text-foreground">v{purchase.purchasedVersionNumber}</span>

@@ -2,7 +2,9 @@ using AssetBlock.Domain.Abstractions.Services;
 using AssetBlock.Domain.Core.Dto.Paging;
 using AssetBlock.Domain.Core.Dto.Users;
 using AssetBlock.Domain.Core.Entities;
+using AssetBlock.Domain.Core.Enums;
 using AssetBlock.Domain.Core.Exceptions;
+using AssetBlock.Infrastructure.Persistence.Configurations;
 using Microsoft.EntityFrameworkCore;
 using Npgsql;
 
@@ -10,9 +12,6 @@ namespace AssetBlock.Infrastructure.Persistence.Stores;
 
 internal sealed class PurchaseStore(ApplicationDbContext dbContext) : IPurchaseStore
 {
-    private const string CONSTRAINT_STRIPE_PAYMENT_ID = "IX_purchases_StripePaymentId";
-    private const string CONSTRAINT_CHECKOUT_INTENT_ID = "IX_purchases_CheckoutIntentId";
-
     public async Task<Purchase> Add(Purchase purchase, CancellationToken cancellationToken = default)
     {
         try
@@ -25,11 +24,12 @@ internal sealed class PurchaseStore(ApplicationDbContext dbContext) : IPurchaseS
             ex.InnerException is PostgresException
             {
                 SqlState: PostgresErrorCodes.UniqueViolation,
-                ConstraintName: CONSTRAINT_STRIPE_PAYMENT_ID or CONSTRAINT_CHECKOUT_INTENT_ID
+                ConstraintName: PurchaseConfiguration.UNIQUE_USER_ASSET
+                    or PurchaseConfiguration.UNIQUE_ORDER_LINE
             })
         {
             dbContext.Entry(purchase).State = EntityState.Detached;
-            throw new DuplicatePurchaseException();
+            throw new DuplicateEntitlementException();
         }
     }
 
@@ -45,11 +45,33 @@ internal sealed class PurchaseStore(ApplicationDbContext dbContext) : IPurchaseS
             .AnyAsync(p => p.UserId == userId && p.AssetId == assetId, cancellationToken);
     }
 
-    public Task<Purchase?> GetByStripePaymentId(string stripePaymentId, CancellationToken cancellationToken = default)
+    public Task<bool> ExistsAny(Guid userId, IReadOnlyList<Guid> assetIds, CancellationToken cancellationToken = default)
     {
+        if (assetIds.Count == 0)
+        {
+            return Task.FromResult(false);
+        }
+
         return dbContext.Purchases
             .AsNoTracking()
-            .FirstOrDefaultAsync(p => p.StripePaymentId == stripePaymentId, cancellationToken);
+            .AnyAsync(p => p.UserId == userId && assetIds.Contains(p.AssetId), cancellationToken);
+    }
+
+    public async Task<IReadOnlyList<Guid>> GetOwnedAssetIds(
+        Guid userId,
+        IReadOnlyList<Guid> assetIds,
+        CancellationToken cancellationToken = default)
+    {
+        if (assetIds.Count == 0)
+        {
+            return [];
+        }
+
+        return await dbContext.Purchases
+            .AsNoTracking()
+            .Where(p => p.UserId == userId && assetIds.Contains(p.AssetId))
+            .Select(p => p.AssetId)
+            .ToListAsync(cancellationToken);
     }
 
     public Task<Purchase?> GetPurchase(Guid userId, Guid assetId, CancellationToken cancellationToken = default)
@@ -70,10 +92,9 @@ internal sealed class PurchaseStore(ApplicationDbContext dbContext) : IPurchaseS
         var sortBy = string.IsNullOrWhiteSpace(request.SortBy) || !ListMyPurchasesRequest.AllowedSortBy.Contains(request.SortBy)
             ? "PurchasedAt"
             : request.SortBy.Trim();
-        var sortKey = sortBy.ToUpperInvariant();
         var isDesc = request.SortDirection == SortDirection.DESC;
 
-        query = sortKey switch
+        query = sortBy.ToUpperInvariant() switch
         {
             "PURCHASEDAT" => isDesc
                 ? query.OrderByDescending(p => p.PurchasedAt).ThenBy(p => p.Id)
@@ -89,6 +110,7 @@ internal sealed class PurchaseStore(ApplicationDbContext dbContext) : IPurchaseS
             .Take(pageSize)
             .Select(p => new PurchaseLibraryItemDto(
                 p.Id,
+                p.OrderLine.OrderId,
                 p.AssetId,
                 p.Asset.Title,
                 p.Asset.Price,
@@ -110,8 +132,15 @@ internal sealed class PurchaseStore(ApplicationDbContext dbContext) : IPurchaseS
                 p.Asset.Versions
                     .Where(v => v.IsCurrent)
                     .Any(v => v.VersionNumber > p.AssetVersion.VersionNumber),
-                p.PricePaid,
-                p.Currency))
+                p.OrderLine.PricePaid,
+                p.OrderLine.Order.Currency,
+                p.OrderLine.Order.BundleId != null ? PurchaseSource.BUNDLE : PurchaseSource.ASSET,
+                p.OrderLine.Order.BundleId,
+                p.OrderLine.Order.BundleId != null
+                    ? p.OrderLine.Order.BundleRevision != null
+                        ? p.OrderLine.Order.BundleRevision.Title
+                        : p.OrderLine.Order.ProductTitle
+                    : null))
             .ToListAsync(cancellationToken);
 
         return new PagedResult<PurchaseLibraryItemDto>(items, total, page, pageSize);

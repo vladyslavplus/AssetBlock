@@ -2,6 +2,7 @@ using AssetBlock.Application.Services;
 using AssetBlock.Application.UseCases.Payments.HandleStripeWebhook;
 using AssetBlock.Domain.Abstractions.Services;
 using AssetBlock.Domain.Core.Constants;
+using AssetBlock.Domain.Core.Dto.Payments;
 using AssetBlock.Domain.Core.Entities;
 using AssetBlock.Domain.Core.Enums;
 using AssetBlock.Domain.Core.Primitives.AppSettingsOptions;
@@ -227,7 +228,7 @@ public sealed class AssetVersionStorePostgresTests(PostgresFixture fixture)
         var store = new AssetStore(db);
         var v1 = TestData.CreateAssetVersion(asset.Id, storageKey: "assets/history/v1.bin", versionNumber: 1);
         await store.AddWithVersion(asset, v1, null);
-        TestData.AddCompletedPurchase(db, TestData.CreatePurchase(buyer.Id, asset.Id, v1.Id), asset.Title);
+        TestData.AddCompletedPurchase(db, TestData.CreatePurchase(buyer.Id, asset.Id, v1.Id), asset.Title, author.Id);
         await db.SaveChangesAsync();
         await store.SoftDelete(asset.Id, DateTimeOffset.UtcNow);
 
@@ -278,19 +279,7 @@ public sealed class AssetVersionStorePostgresTests(PostgresFixture fixture)
 
         var intentId = Guid.NewGuid();
         const string sessionId = "cs_pin_v1_price_10";
-        seedDb.CheckoutIntents.Add(new CheckoutIntent
-        {
-            Id = intentId,
-            UserId = buyer.Id,
-            AssetId = asset.Id,
-            AssetVersionId = v1.Id,
-            AssetTitle = asset.Title,
-            UnitAmount = 10m,
-            Currency = "usd",
-            Status = CheckoutIntentStatus.PENDING,
-            CreatedAt = DateTimeOffset.UtcNow,
-            ExpiresAt = DateTimeOffset.UtcNow.AddHours(1)
-        });
+        SeedPendingAssetCheckout(seedDb, intentId, buyer.Id, author.Id, asset.Id, v1.Id, asset.Title, 10m);
         await seedDb.SaveChangesAsync();
 
         await seedStore.PublishNextVersion(
@@ -315,7 +304,7 @@ public sealed class AssetVersionStorePostgresTests(PostgresFixture fixture)
             listing.Price.Should().Be(20m);
         }
 
-        var verified = new StripeCheckoutCompleted(intentId, buyer.Id, asset.Id, v1.Id, sessionId, 10m, "usd");
+        var verified = new StripeCheckoutCompleted(intentId, buyer.Id, sessionId, 10m, "usd");
         var paymentService = Substitute.For<IPaymentService>();
         paymentService.VerifyCheckoutCompleted(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
             .Returns(verified);
@@ -328,13 +317,17 @@ public sealed class AssetVersionStorePostgresTests(PostgresFixture fixture)
         await using var verify = fixture.CreateDbContext();
         var purchase = await verify.Purchases.AsNoTracking().SingleAsync(p => p.AssetId == asset.Id);
         purchase.AssetVersionId.Should().Be(v1.Id);
-        purchase.PricePaid.Should().Be(10m);
-        purchase.Currency.Should().Be("usd");
+        var order = await verify.Orders.AsNoTracking().SingleAsync(o => o.StripeSessionId == sessionId);
+        order.AmountPaid.Should().Be(10m);
+        order.Currency.Should().Be("usd");
+        var line = await verify.OrderLines.AsNoTracking().SingleAsync(l => l.OrderId == order.Id);
+        line.PricePaid.Should().Be(10m);
+        line.AssetVersionId.Should().Be(v1.Id);
 
         var second = await handler.Handle(new HandleStripeWebhookCommand("payload", "sig"), CancellationToken.None);
         second.IsSuccess.Should().BeTrue();
         (await verify.Purchases.CountAsync(p => p.AssetId == asset.Id)).Should().Be(1);
-        (await verify.OutboxMessages.CountAsync(m => m.Type == OutboxMessageTypes.PURCHASE_COMPLETED))
+        (await verify.OutboxMessages.CountAsync(m => m.Type == OutboxMessageTypes.ORDER_COMPLETED))
             .Should().Be(1);
     }
 
@@ -352,22 +345,10 @@ public sealed class AssetVersionStorePostgresTests(PostgresFixture fixture)
 
         var intentId = Guid.NewGuid();
         const string sessionId = "cs_race_condition";
-        seedDb.CheckoutIntents.Add(new CheckoutIntent
-        {
-            Id = intentId,
-            UserId = buyer.Id,
-            AssetId = asset.Id,
-            AssetVersionId = version.Id,
-            AssetTitle = asset.Title,
-            UnitAmount = asset.Price,
-            Currency = "usd",
-            Status = CheckoutIntentStatus.PENDING,
-            CreatedAt = DateTimeOffset.UtcNow,
-            ExpiresAt = DateTimeOffset.UtcNow.AddHours(1)
-        });
+        SeedPendingAssetCheckout(seedDb, intentId, buyer.Id, author.Id, asset.Id, version.Id, asset.Title, asset.Price);
         await seedDb.SaveChangesAsync();
 
-        var verified = new StripeCheckoutCompleted(intentId, buyer.Id, asset.Id, version.Id, sessionId, asset.Price, "usd");
+        var verified = new StripeCheckoutCompleted(intentId, buyer.Id, sessionId, asset.Price, "usd");
         var paymentService = Substitute.For<IPaymentService>();
         paymentService.VerifyCheckoutCompleted(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
             .Returns(verified);
@@ -399,14 +380,57 @@ public sealed class AssetVersionStorePostgresTests(PostgresFixture fixture)
         tryCompleteResults.Should().BeEquivalentTo([true, false]);
 
         await using var verify = fixture.CreateDbContext();
-        var persistedPurchase = await verify.Purchases.AsNoTracking().SingleAsync(p => p.AssetId == asset.Id);
-        persistedPurchase.StripePaymentId.Should().Be(sessionId);
+        var order = await verify.Orders.AsNoTracking().SingleAsync(o => o.StripeSessionId == sessionId);
+        order.StripeSessionId.Should().Be(sessionId);
+        (await verify.Purchases.CountAsync(p => p.AssetId == asset.Id)).Should().Be(1);
         var refreshedIntent = await verify.CheckoutIntents.AsNoTracking().SingleAsync(i => i.Id == intentId);
         refreshedIntent.Status.Should().Be(CheckoutIntentStatus.COMPLETED);
-        (await verify.AuditLogs.CountAsync(a => a.ResourceId == persistedPurchase.Id.ToString())).Should().Be(1);
-        (await verify.OutboxMessages.CountAsync(m => m.Type == OutboxMessageTypes.PURCHASE_COMPLETED)).Should().Be(1);
-        (await verify.OutboxMessages.CountAsync(m => m.Type == OutboxMessageTypes.NOTIFICATION_DISPATCH)).Should().Be(3);
+        (await verify.AuditLogs.CountAsync(a => a.ResourceId == order.Id.ToString())).Should().Be(1);
+        (await verify.OutboxMessages.CountAsync(m => m.Type == OutboxMessageTypes.ORDER_COMPLETED)).Should().Be(1);
+        // Buyer ORDER_READY + seller ASSET_SOLD (one notification set per order).
+        (await verify.OutboxMessages.CountAsync(m => m.Type == OutboxMessageTypes.NOTIFICATION_DISPATCH)).Should().Be(2);
         (await verify.OutboxMessages.CountAsync(m => m.Type == OutboxMessageTypes.EMAIL_DISPATCH)).Should().Be(2);
+    }
+
+    private static void SeedPendingAssetCheckout(
+        ApplicationDbContext db,
+        Guid intentId,
+        Guid buyerId,
+        Guid sellerId,
+        Guid assetId,
+        Guid assetVersionId,
+        string title,
+        decimal amount)
+    {
+        db.CheckoutIntents.Add(new CheckoutIntent
+        {
+            Id = intentId,
+            UserId = buyerId,
+            AssetId = assetId,
+            ProductTitle = title,
+            AmountTotal = amount,
+            Currency = "usd",
+            Status = CheckoutIntentStatus.PENDING,
+            CreatedAt = DateTimeOffset.UtcNow,
+            ExpiresAt = DateTimeOffset.UtcNow.AddHours(1)
+        });
+        db.CheckoutIntentItems.Add(new CheckoutIntentItem
+        {
+            Id = Guid.NewGuid(),
+            CheckoutIntentId = intentId,
+            AssetId = assetId,
+            AssetVersionId = assetVersionId,
+            SellerId = sellerId,
+            Position = 1,
+            AssetTitleSnapshot = title,
+            VersionNumber = 1,
+            ListPrice = amount,
+            AllocatedPrice = amount,
+            LicenseCode = AssetLicenseCode.PERSONAL,
+            LicenseTemplateVersion = "1.0",
+            LicenseDisplayName = "Personal use",
+            LicenseTerms = "terms"
+        });
     }
 
     private static TransactionalEmailComposer CreateEmailComposer() =>
@@ -428,7 +452,8 @@ public sealed class AssetVersionStorePostgresTests(PostgresFixture fixture)
         new(
             paymentService,
             new AssetStore(db),
-            new PurchaseStore(db),
+            new BundleStore(db),
+            new OrderStore(db),
             checkoutIntentStore ?? new CheckoutIntentStore(db),
             new UserStore(db),
             new EfUnitOfWork(db),
@@ -438,7 +463,7 @@ public sealed class AssetVersionStorePostgresTests(PostgresFixture fixture)
             NullLogger<HandleStripeWebhookCommandHandler>.Instance);
 
     /// <summary>
-    /// Holds both webhook handlers at TryComplete until both arrive, so the test exercises the
+    /// Holds both webhook handlers at TryCompleteAndRelease until both arrive, so the test exercises the
     /// PostgreSQL conditional-update race instead of a sequential early-idempotent hit.
     /// </summary>
     private sealed class TryCompleteRaceGate(int participantCount)
@@ -462,44 +487,64 @@ public sealed class AssetVersionStorePostgresTests(PostgresFixture fixture)
         TryCompleteRaceGate gate,
         System.Collections.Concurrent.ConcurrentBag<bool> tryCompleteResults) : ICheckoutIntentStore
     {
-        public Task Create(CheckoutIntent intent, CancellationToken cancellationToken = default) =>
-            inner.Create(intent, cancellationToken);
+        public Task CreateWithItemsAndReservations(
+            CheckoutIntent intent,
+            IReadOnlyList<CheckoutIntentItem> items,
+            IReadOnlyList<CheckoutReservation> reservations,
+            CancellationToken cancellationToken = default) =>
+            inner.CreateWithItemsAndReservations(intent, items, reservations, cancellationToken);
 
-        public Task<CheckoutIntent?> GetPending(Guid userId, Guid assetId, CancellationToken cancellationToken = default) =>
-            inner.GetPending(userId, assetId, cancellationToken);
+        public Task<CheckoutIntent?> GetPendingForAsset(Guid userId, Guid assetId, CancellationToken cancellationToken = default) =>
+            inner.GetPendingForAsset(userId, assetId, cancellationToken);
 
-        public Task<CheckoutIntent?> GetById(Guid id, CancellationToken cancellationToken = default) =>
-            inner.GetById(id, cancellationToken);
+        public Task<CheckoutIntent?> GetPendingForBundle(Guid userId, Guid bundleId, CancellationToken cancellationToken = default) =>
+            inner.GetPendingForBundle(userId, bundleId, cancellationToken);
+
+        public Task<CheckoutIntent?> GetByIdWithItems(Guid id, CancellationToken cancellationToken = default) =>
+            inner.GetByIdWithItems(id, cancellationToken);
+
+        public Task ReleaseExpiredReservations(
+            Guid userId,
+            IReadOnlyList<Guid> assetIds,
+            DateTimeOffset now,
+            CancellationToken cancellationToken = default) =>
+            inner.ReleaseExpiredReservations(userId, assetIds, now, cancellationToken);
 
         public Task<bool> HasActiveForAsset(Guid assetId, DateTimeOffset now, CancellationToken cancellationToken = default) =>
             inner.HasActiveForAsset(assetId, now, cancellationToken);
 
-        public Task<bool> TryCancel(Guid id, CancellationToken cancellationToken = default) =>
-            inner.TryCancel(id, cancellationToken);
+        public Task<bool> TryCancelAndRelease(Guid id, CancellationToken cancellationToken = default) =>
+            inner.TryCancelAndRelease(id, cancellationToken);
 
         public Task<bool> TrySetStripeSessionId(Guid id, string stripeSessionId, CancellationToken cancellationToken = default) =>
             inner.TrySetStripeSessionId(id, stripeSessionId, cancellationToken);
 
-        public async Task<bool> TryComplete(
+        public async Task<bool> TryCompleteAndRelease(
             Guid id,
             Guid userId,
-            Guid assetId,
-            Guid assetVersionId,
             string stripeSessionId,
             DateTimeOffset now,
             CancellationToken cancellationToken = default)
         {
             await gate.EnterAsync(cancellationToken);
-            var completed = await inner.TryComplete(
-                id,
-                userId,
-                assetId,
-                assetVersionId,
-                stripeSessionId,
-                now,
-                cancellationToken);
+            var completed = await inner.TryCompleteAndRelease(id, userId, stripeSessionId, now, cancellationToken);
             tryCompleteResults.Add(completed);
             return completed;
         }
+
+        public Task<int> CleanupExpiredUnattachedPendingBatch(
+            DateTimeOffset now,
+            int batchSize,
+            CancellationToken cancellationToken = default) =>
+            inner.CleanupExpiredUnattachedPendingBatch(now, batchSize, cancellationToken);
+
+        public Task<IReadOnlyList<(Guid Id, string StripeSessionId)>> ListExpiredAttachedPendingBatch(
+            DateTimeOffset now,
+            int batchSize,
+            CancellationToken cancellationToken = default) =>
+            inner.ListExpiredAttachedPendingBatch(now, batchSize, cancellationToken);
+
+        public Task DeleteTerminalUnpaidReferencingAsset(Guid assetId, CancellationToken cancellationToken = default) =>
+            inner.DeleteTerminalUnpaidReferencingAsset(assetId, cancellationToken);
     }
 }

@@ -5,6 +5,8 @@ import { SitePageContainer } from '@/components/layout/site-page-container'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { SellOverview } from '@/components/sell/sell-overview'
 import { SellMyListings } from '@/components/sell/sell-my-listings'
+import { SellMyCollections } from '@/components/sell/sell-my-collections'
+import { SellMyBundles } from '@/components/sell/sell-my-bundles'
 import { AssetUploadForm } from '@/components/sell/asset-upload-form'
 
 export function SellDashboard() {
@@ -22,6 +24,12 @@ export function SellDashboard() {
             <TabsTrigger value="listings" className="text-xs sm:text-sm">
               My listings
             </TabsTrigger>
+            <TabsTrigger value="collections" className="text-xs sm:text-sm">
+              Collections
+            </TabsTrigger>
+            <TabsTrigger value="bundles" className="text-xs sm:text-sm">
+              Bundles
+            </TabsTrigger>
             <TabsTrigger value="upload" className="text-xs sm:text-sm">
               Upload asset
             </TabsTrigger>
@@ -33,6 +41,14 @@ export function SellDashboard() {
 
           <TabsContent value="listings" className="mt-0 outline-none">
             <SellMyListings />
+          </TabsContent>
+
+          <TabsContent value="collections" className="mt-0 outline-none">
+            <SellMyCollections />
+          </TabsContent>
+
+          <TabsContent value="bundles" className="mt-0 outline-none">
+            <SellMyBundles />
           </TabsContent>
 
           <TabsContent value="upload" className="mt-0 outline-none">

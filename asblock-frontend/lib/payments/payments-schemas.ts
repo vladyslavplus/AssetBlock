@@ -7,3 +7,25 @@ export const createCheckoutRequestSchema = z
   .strict()
 
 export type CreateCheckoutRequest = z.infer<typeof createCheckoutRequestSchema>
+
+export const createBundleCheckoutRequestSchema = z
+  .object({
+    bundleId: z.string().uuid('Bundle ID must be a valid UUID.'),
+  })
+  .strict()
+
+export type CreateBundleCheckoutRequest = z.infer<typeof createBundleCheckoutRequestSchema>
+
+export const createCheckoutResponseSchema = z.object({
+  checkoutUrl: z.string().url(),
+  checkoutIntentId: z.string().uuid(),
+})
+
+export const checkoutStatusResponseSchema = z.object({
+  status: z.enum(['pending', 'completed', 'cancelled']),
+  checkoutIntentId: z.string().uuid(),
+  orderId: z.string().uuid().nullable(),
+  productTitle: z.string(),
+  assetId: z.string().uuid().nullable(),
+  bundleId: z.string().uuid().nullable(),
+})

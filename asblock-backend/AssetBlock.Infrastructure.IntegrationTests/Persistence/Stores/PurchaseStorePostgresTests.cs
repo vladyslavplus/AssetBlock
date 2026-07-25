@@ -1,12 +1,9 @@
 using AssetBlock.Domain.Core.Dto.Paging;
 using AssetBlock.Domain.Core.Dto.Users;
 using AssetBlock.Domain.Core.Entities;
-using AssetBlock.Domain.Core.Enums;
 using AssetBlock.Domain.Core.Exceptions;
 using AssetBlock.Infrastructure.IntegrationTests.Support;
 using AssetBlock.Infrastructure.Persistence.Stores;
-using Microsoft.EntityFrameworkCore;
-using Npgsql;
 
 namespace AssetBlock.Infrastructure.IntegrationTests.Persistence.Stores;
 
@@ -32,8 +29,18 @@ public sealed class PurchaseStorePostgresTests(PostgresFixture fixture)
 
         var older = DateTimeOffset.UtcNow.AddDays(-2);
         var newer = DateTimeOffset.UtcNow.AddDays(-1);
-        TestData.AddCompletedPurchase(db, TestData.CreatePurchase(buyer.Id, reviewedAsset.Id, reviewedVersion.Id, purchasedAt: older), reviewedAsset.Title);
-        TestData.AddCompletedPurchase(db, TestData.CreatePurchase(buyer.Id, plainAsset.Id, plainVersion.Id, purchasedAt: newer), plainAsset.Title);
+        TestData.AddCompletedPurchase(
+            db,
+            TestData.CreatePurchase(buyer.Id, reviewedAsset.Id, reviewedVersion.Id, purchasedAt: older),
+            reviewedAsset.Title,
+            author.Id,
+            pricePaid: 12.50m);
+        TestData.AddCompletedPurchase(
+            db,
+            TestData.CreatePurchase(buyer.Id, plainAsset.Id, plainVersion.Id, purchasedAt: newer),
+            plainAsset.Title,
+            author.Id,
+            pricePaid: 3.00m);
         db.Reviews.Add(TestData.CreateReview(buyer.Id, reviewedAsset.Id, rating: 4));
         await db.SaveChangesAsync();
 
@@ -76,7 +83,11 @@ public sealed class PurchaseStorePostgresTests(PostgresFixture fixture)
             var version = TestData.CreateAssetVersion(asset.Id);
             db.AssetVersions.Add(version);
             await db.SaveChangesAsync();
-            TestData.AddCompletedPurchase(db, TestData.CreatePurchase(buyer.Id, asset.Id, version.Id, purchasedAt: baseTime.AddMinutes(i)), asset.Title);
+            TestData.AddCompletedPurchase(
+                db,
+                TestData.CreatePurchase(buyer.Id, asset.Id, version.Id, purchasedAt: baseTime.AddMinutes(i)),
+                asset.Title,
+                author.Id);
             await db.SaveChangesAsync();
         }
 
@@ -122,8 +133,16 @@ public sealed class PurchaseStorePostgresTests(PostgresFixture fixture)
         db.AssetVersions.AddRange(versionA, versionB);
         await db.SaveChangesAsync();
 
-        TestData.AddCompletedPurchase(db, TestData.CreatePurchase(buyer.Id, assetA.Id, versionA.Id, purchasedAt: sharedTime, id: idHigh), assetA.Title);
-        TestData.AddCompletedPurchase(db, TestData.CreatePurchase(buyer.Id, assetB.Id, versionB.Id, purchasedAt: sharedTime, id: idLow), assetB.Title);
+        TestData.AddCompletedPurchase(
+            db,
+            TestData.CreatePurchase(buyer.Id, assetA.Id, versionA.Id, purchasedAt: sharedTime, id: idHigh),
+            assetA.Title,
+            author.Id);
+        TestData.AddCompletedPurchase(
+            db,
+            TestData.CreatePurchase(buyer.Id, assetB.Id, versionB.Id, purchasedAt: sharedTime, id: idLow),
+            assetB.Title,
+            author.Id);
         await db.SaveChangesAsync();
 
         var store = new PurchaseStore(db);
@@ -139,85 +158,34 @@ public sealed class PurchaseStorePostgresTests(PostgresFixture fixture)
     }
 
     [Fact]
-    public async Task Add_WhenStripePaymentIdDuplicates_ShouldThrowDuplicatePurchaseException()
+    public async Task Add_WhenOrderLineIdDuplicates_ShouldThrowDuplicateEntitlementException()
     {
         await using var db = await fixture.CreateCleanDbContext();
         (User author, Category category) = await TestData.SeedAuthorAndCategory(db);
-        var buyerA = TestData.CreateUser("dup-stripe-a", "dup-stripe-a@example.test");
-        var buyerB = TestData.CreateUser("dup-stripe-b", "dup-stripe-b@example.test");
+        var buyerA = TestData.CreateUser("dup-line-a", "dup-line-a@example.test");
+        var buyerB = TestData.CreateUser("dup-line-b", "dup-line-b@example.test");
         db.Users.AddRange(buyerA, buyerB);
-        var assetA = TestData.CreateAsset(author.Id, category.Id, title: "Stripe Dup A");
-        var assetB = TestData.CreateAsset(author.Id, category.Id, title: "Stripe Dup B");
+        var assetA = TestData.CreateAsset(author.Id, category.Id, title: "Line Dup A");
+        var assetB = TestData.CreateAsset(author.Id, category.Id, title: "Line Dup B");
         db.Assets.AddRange(assetA, assetB);
         var versionA = TestData.CreateAssetVersion(assetA.Id);
         var versionB = TestData.CreateAssetVersion(assetB.Id);
         db.AssetVersions.AddRange(versionA, versionB);
         await db.SaveChangesAsync();
 
-        const string sharedSession = "cs_dup_stripe_payment";
-        var first = TestData.CreatePurchase(buyerA.Id, assetA.Id, versionA.Id, stripePaymentId: sharedSession);
-        TestData.AddCompletedPurchase(db, first, assetA.Title);
-        await db.SaveChangesAsync();
-
-        var duplicate = TestData.CreatePurchase(buyerB.Id, assetB.Id, versionB.Id, stripePaymentId: sharedSession);
-        // Intent must not reuse the same Stripe session (unique on checkout_intents); only the purchase row collides.
-        db.CheckoutIntents.Add(new CheckoutIntent
-        {
-            Id = duplicate.CheckoutIntentId,
-            UserId = duplicate.UserId,
-            AssetId = duplicate.AssetId,
-            AssetVersionId = duplicate.AssetVersionId,
-            AssetTitle = assetB.Title,
-            UnitAmount = duplicate.PricePaid,
-            Currency = duplicate.Currency,
-            StripeSessionId = null,
-            Status = CheckoutIntentStatus.COMPLETED,
-            CreatedAt = duplicate.PurchasedAt,
-            ExpiresAt = duplicate.PurchasedAt.AddHours(1),
-            CompletedAt = duplicate.PurchasedAt
-        });
+        var first = TestData.CreatePurchase(buyerA.Id, assetA.Id, versionA.Id);
+        TestData.AddCompletedPurchase(db, first, assetA.Title, author.Id);
         await db.SaveChangesAsync();
         db.ChangeTracker.Clear();
 
-        var store = new PurchaseStore(db);
-        var act = () => store.Add(duplicate);
+        var duplicate = TestData.CreatePurchase(buyerB.Id, assetB.Id, versionB.Id, orderLineId: first.OrderLineId);
+        var act = () => new PurchaseStore(db).Add(duplicate);
 
-        await act.Should().ThrowAsync<DuplicatePurchaseException>();
+        await act.Should().ThrowAsync<DuplicateEntitlementException>();
     }
 
     [Fact]
-    public async Task Add_WhenCheckoutIntentIdDuplicates_ShouldThrowDuplicatePurchaseException()
-    {
-        await using var db = await fixture.CreateCleanDbContext();
-        (User author, Category category) = await TestData.SeedAuthorAndCategory(db);
-        var buyerA = TestData.CreateUser("dup-intent-a", "dup-intent-a@example.test");
-        var buyerB = TestData.CreateUser("dup-intent-b", "dup-intent-b@example.test");
-        db.Users.AddRange(buyerA, buyerB);
-        var assetA = TestData.CreateAsset(author.Id, category.Id, title: "Intent Dup A");
-        var assetB = TestData.CreateAsset(author.Id, category.Id, title: "Intent Dup B");
-        db.Assets.AddRange(assetA, assetB);
-        var versionA = TestData.CreateAssetVersion(assetA.Id);
-        var versionB = TestData.CreateAssetVersion(assetB.Id);
-        db.AssetVersions.AddRange(versionA, versionB);
-        await db.SaveChangesAsync();
-
-        var first = TestData.CreatePurchase(buyerA.Id, assetA.Id, versionA.Id, stripePaymentId: "cs_intent_first");
-        TestData.AddCompletedPurchase(db, first, assetA.Title);
-        await db.SaveChangesAsync();
-        var sharedIntentId = first.CheckoutIntentId;
-        db.ChangeTracker.Clear();
-
-        var duplicate = TestData.CreatePurchase(buyerB.Id, assetB.Id, versionB.Id, stripePaymentId: "cs_intent_second");
-        duplicate.CheckoutIntentId = sharedIntentId;
-
-        var store = new PurchaseStore(db);
-        var act = () => store.Add(duplicate);
-
-        await act.Should().ThrowAsync<DuplicatePurchaseException>();
-    }
-
-    [Fact]
-    public async Task Add_WhenUserIdAssetIdDuplicatesWithNewSession_ShouldThrowDbUpdateExceptionForUserAssetIndex()
+    public async Task Add_WhenUserIdAssetIdDuplicatesWithNewOrderLine_ShouldThrowDuplicateEntitlementException()
     {
         await using var db = await fixture.CreateCleanDbContext();
         (User author, Category category) = await TestData.SeedAuthorAndCategory(db);
@@ -229,21 +197,23 @@ public sealed class PurchaseStorePostgresTests(PostgresFixture fixture)
         db.AssetVersions.Add(version);
         await db.SaveChangesAsync();
 
-        var first = TestData.CreatePurchase(buyer.Id, asset.Id, version.Id, stripePaymentId: "cs_user_asset_first");
-        TestData.AddCompletedPurchase(db, first, asset.Title);
+        var first = TestData.CreatePurchase(buyer.Id, asset.Id, version.Id);
+        TestData.AddCompletedPurchase(db, first, asset.Title, author.Id, stripeSessionId: "cs_user_asset_first");
         await db.SaveChangesAsync();
 
-        var conflict = TestData.CreatePurchase(buyer.Id, asset.Id, version.Id, stripePaymentId: "cs_user_asset_second");
-        TestData.AddCompletedCheckoutIntent(db, conflict, asset.Title);
+        var conflict = TestData.CreatePurchase(buyer.Id, asset.Id, version.Id);
+        TestData.AddCompletedCheckoutIntent(
+            db,
+            conflict,
+            asset.Title,
+            author.Id,
+            stripeSessionId: "cs_user_asset_second");
         await db.SaveChangesAsync();
         db.ChangeTracker.Clear();
 
         var store = new PurchaseStore(db);
         var act = () => store.Add(conflict);
 
-        var ex = await act.Should().ThrowAsync<DbUpdateException>();
-        var pg = ex.Which.InnerException.Should().BeOfType<PostgresException>().Subject;
-        pg.SqlState.Should().Be(PostgresErrorCodes.UniqueViolation);
-        pg.ConstraintName.Should().Be("IX_purchases_UserId_AssetId");
+        await act.Should().ThrowAsync<DuplicateEntitlementException>();
     }
 }

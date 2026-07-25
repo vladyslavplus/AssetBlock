@@ -86,7 +86,7 @@ internal static class AssetVersionsSeed
         return (assetId, versionIds);
     }
 
-    /// <summary>Records a completed purchase (with a satisfying CheckoutIntent) for <paramref name="userId"/>.</summary>
+    /// <summary>Records a completed purchase (with order + checkout intent) for <paramref name="userId"/>.</summary>
     public static async Task<Guid> SeedPurchaseAsync(
         IServiceScopeFactory scopeFactory,
         Guid userId,
@@ -97,8 +97,15 @@ internal static class AssetVersionsSeed
         using var scope = scopeFactory.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
 
+        var sellerId = await db.Assets.AsNoTracking()
+            .Where(a => a.Id == assetId)
+            .Select(a => a.AuthorId)
+            .SingleAsync();
+
         var now = DateTimeOffset.UtcNow;
         var checkoutIntentId = Guid.NewGuid();
+        var orderId = Guid.NewGuid();
+        var orderLineId = Guid.NewGuid();
         var purchaseId = Guid.NewGuid();
         var stripeSessionId = $"cs_test_{Guid.NewGuid():N}";
 
@@ -107,9 +114,8 @@ internal static class AssetVersionsSeed
             Id = checkoutIntentId,
             UserId = userId,
             AssetId = assetId,
-            AssetVersionId = assetVersionId,
-            AssetTitle = "Seeded purchase asset",
-            UnitAmount = pricePaid,
+            ProductTitle = "Seeded purchase asset",
+            AmountTotal = pricePaid,
             Currency = "usd",
             StripeSessionId = stripeSessionId,
             Status = CheckoutIntentStatus.COMPLETED,
@@ -117,17 +123,59 @@ internal static class AssetVersionsSeed
             ExpiresAt = now.AddHours(1),
             CompletedAt = now
         });
-
+        db.CheckoutIntentItems.Add(new CheckoutIntentItem
+        {
+            Id = Guid.NewGuid(),
+            CheckoutIntentId = checkoutIntentId,
+            AssetId = assetId,
+            AssetVersionId = assetVersionId,
+            SellerId = sellerId,
+            Position = 1,
+            AssetTitleSnapshot = "Seeded purchase asset",
+            VersionNumber = 1,
+            ListPrice = pricePaid,
+            AllocatedPrice = pricePaid,
+            LicenseCode = AssetLicenseCode.PERSONAL,
+            LicenseTemplateVersion = "1.0",
+            LicenseDisplayName = "Personal use",
+            LicenseTerms = "terms"
+        });
+        db.Orders.Add(new Order
+        {
+            Id = orderId,
+            UserId = userId,
+            CheckoutIntentId = checkoutIntentId,
+            AssetId = assetId,
+            ProductTitle = "Seeded purchase asset",
+            StripeSessionId = stripeSessionId,
+            AmountPaid = pricePaid,
+            Currency = "usd",
+            PurchasedAt = now
+        });
+        db.OrderLines.Add(new OrderLine
+        {
+            Id = orderLineId,
+            OrderId = orderId,
+            AssetId = assetId,
+            AssetVersionId = assetVersionId,
+            SellerId = sellerId,
+            Position = 1,
+            AssetTitleSnapshot = "Seeded purchase asset",
+            VersionNumber = 1,
+            ListPrice = pricePaid,
+            PricePaid = pricePaid,
+            LicenseCode = AssetLicenseCode.PERSONAL,
+            LicenseTemplateVersion = "1.0",
+            LicenseDisplayName = "Personal use",
+            LicenseTerms = "terms"
+        });
         db.Purchases.Add(new Purchase
         {
             Id = purchaseId,
             UserId = userId,
             AssetId = assetId,
             AssetVersionId = assetVersionId,
-            CheckoutIntentId = checkoutIntentId,
-            StripePaymentId = stripeSessionId,
-            PricePaid = pricePaid,
-            Currency = "usd",
+            OrderLineId = orderLineId,
             PurchasedAt = now
         });
 

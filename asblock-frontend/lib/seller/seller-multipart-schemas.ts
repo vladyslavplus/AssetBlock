@@ -1,5 +1,6 @@
 import { z } from 'zod'
 import { ASSET_LICENSE_CODES } from '@/lib/assets/license-types'
+import { marketplacePriceSchema } from '@/lib/marketplace/price-schema'
 import {
   ASSET_UPLOAD_ALLOWED_EXTENSIONS,
   ASSET_UPLOAD_MAX_BYTES,
@@ -12,7 +13,7 @@ export const licenseCodeFieldSchema = z.enum(ASSET_LICENSE_CODES)
 export const assetUploadMultipartSchema = z.object({
   title: z.string().trim().min(1, 'Title is required').max(500),
   description: z.string().max(5000, 'Description must be at most 5000 characters').optional(),
-  price: z.coerce.number().positive('Price must be greater than zero'),
+  price: marketplacePriceSchema,
   categoryId: z.string().uuid('Select a category'),
   licenseCode: licenseCodeFieldSchema,
   tags: z.array(z.string().trim().min(1)).optional(),

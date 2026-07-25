@@ -9,8 +9,8 @@ import { InvalidateLibraryAfterCheckout } from '@/components/checkout/invalidate
 import { PostCheckoutReviewBanner } from '@/components/reviews/post-checkout-review-banner'
 
 export const metadata = {
-  title: 'Payment successful - AssetBlock',
-  description: 'Your payment has been processed successfully.',
+  title: 'Checkout - AssetBlock',
+  description: 'Confirming your AssetBlock checkout.',
 }
 
 export default function CheckoutSuccessPage() {
@@ -26,11 +26,11 @@ export default function CheckoutSuccessPage() {
               <CheckCircle2 className="w-12 h-12 text-primary" />
             </div>
 
-            <h1 className="text-2xl font-bold text-center text-foreground">Payment successful</h1>
+            <h1 className="text-2xl font-bold text-center text-foreground">Checkout</h1>
 
             <p className="text-sm text-muted-foreground text-center leading-relaxed">
-              Thank you for your purchase. Your payment has been processed and access to your
-              digital assets will be available in your library shortly.
+              If you completed payment in Stripe, we are confirming it with the payment provider.
+              Your library unlocks after confirmation — not from this page alone.
             </p>
 
             <PostCheckoutReviewBanner />

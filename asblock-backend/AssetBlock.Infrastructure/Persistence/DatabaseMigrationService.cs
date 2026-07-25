@@ -416,6 +416,103 @@ internal sealed class DatabaseMigrationService(
         }
 
         await SeedDemoPurchasesAndReviews(context, inserted, reviewers, now, cancellationToken);
+        await SeedDemoCollectionsAndBundles(context, author.Id, inserted, now, cancellationToken);
+    }
+
+    /// <summary>
+    /// One published collection and one active bundle for the demo vendor (idempotent when tables empty).
+    /// </summary>
+    private async Task SeedDemoCollectionsAndBundles(
+        ApplicationDbContext context,
+        Guid sellerId,
+        IReadOnlyList<(Guid AssetId, Guid VersionId, string Title, decimal Price)> assets,
+        DateTimeOffset now,
+        CancellationToken cancellationToken)
+    {
+        if (assets.Count < 3)
+        {
+            logger.LogWarning("Demo collection/bundle seed skipped: need at least 3 assets.");
+            return;
+        }
+
+        if (!await context.Collections.AnyAsync(cancellationToken))
+        {
+            var collectionId = Guid.NewGuid();
+            context.Collections.Add(new Collection
+            {
+                Id = collectionId,
+                SellerId = sellerId,
+                Title = "[TEST] Starter pack highlights",
+                Description = "Editorial showcase of early demo assets. Not for sale as a set.",
+                Status = CollectionStatus.PUBLISHED,
+                PublishedAt = now.AddDays(-1),
+                CreatedAt = now.AddDays(-2),
+                UpdatedAt = now.AddDays(-1),
+            });
+
+            for (var i = 0; i < 3; i++)
+            {
+                context.CollectionItems.Add(new CollectionItem
+                {
+                    CollectionId = collectionId,
+                    AssetId = assets[i].AssetId,
+                    Position = i + 1,
+                    CreatedAt = now.AddDays(-2).AddMinutes(i),
+                });
+            }
+        }
+
+        if (!await context.Bundles.AnyAsync(cancellationToken))
+        {
+            var bundleId = Guid.NewGuid();
+            var revisionId = Guid.NewGuid();
+            var bundleAssets = assets.Take(3).ToList();
+            var listTotal = bundleAssets.Sum(a => a.Price);
+            // Fixed discount under list total; still covers at least $0.01 per item.
+            var bundlePrice = Math.Max(0.03m, Math.Round(listTotal * 0.85m, 2, MidpointRounding.AwayFromZero));
+            if (bundlePrice >= listTotal)
+            {
+                bundlePrice = Math.Max(0.03m, listTotal - 0.01m * bundleAssets.Count);
+            }
+
+            context.Bundles.Add(new Bundle
+            {
+                Id = bundleId,
+                SellerId = sellerId,
+                CreatedAt = now.AddDays(-1),
+                UpdatedAt = now.AddDays(-1),
+            });
+            context.BundleRevisions.Add(new BundleRevision
+            {
+                Id = revisionId,
+                BundleId = bundleId,
+                RevisionNumber = 1,
+                IsCurrent = true,
+                Title = "[TEST] Demo trio bundle",
+                Description = "Three demo assets at a single discounted price.",
+                Price = bundlePrice,
+                Currency = "usd",
+                ListPriceTotal = listTotal,
+                CreatedAt = now.AddDays(-1),
+            });
+
+            for (var i = 0; i < bundleAssets.Count; i++)
+            {
+                var asset = bundleAssets[i];
+                context.BundleRevisionItems.Add(new BundleRevisionItem
+                {
+                    Id = Guid.NewGuid(),
+                    BundleRevisionId = revisionId,
+                    AssetId = asset.AssetId,
+                    Position = i + 1,
+                    AssetTitleSnapshot = asset.Title,
+                    ListPriceSnapshot = asset.Price,
+                });
+            }
+        }
+
+        await context.SaveChangesAsync(cancellationToken);
+        logger.LogInformation("Seeded demo collection and bundle for vendor {SellerId}.", sellerId);
     }
 
     /// <summary>Creates demo buyer accounts used for seeded purchases and reviews (idempotent per username).</summary>
@@ -520,31 +617,88 @@ internal sealed class DatabaseMigrationService(
             return;
         }
 
+        var personalLicense = AssetLicenseCatalog.Get(AssetLicenseCode.PERSONAL);
+        var sellerByAsset = await context.Assets
+            .AsNoTracking()
+            .Where(a => assets.Select(x => x.AssetId).Contains(a.Id))
+            .ToDictionaryAsync(a => a.Id, a => a.AuthorId, cancellationToken);
+
         const int reviewsPerAsset = 3;
         for (var i = 0; i < assets.Count; i++)
         {
             var (assetId, versionId, title, price) = assets[i];
+            var sellerId = sellerByAsset[assetId];
             for (var j = 0; j < reviewsPerAsset; j++)
             {
                 var buyer = reviewers[(i + j) % reviewers.Count];
                 var purchaseId = Guid.NewGuid();
                 var purchasedAt = now.AddDays(-3).AddHours(-j * 2);
-                var stripePaymentId = $"seed-demo-{assetId:N}-slot{j}";
+                var stripeSessionId = $"seed-demo-{assetId:N}-slot{j}";
                 var checkoutIntentId = Guid.NewGuid();
+                var intentItemId = Guid.NewGuid();
+                var orderId = Guid.NewGuid();
+                var orderLineId = Guid.NewGuid();
+
                 context.CheckoutIntents.Add(new CheckoutIntent
                 {
                     Id = checkoutIntentId,
                     UserId = buyer.Id,
                     AssetId = assetId,
-                    AssetVersionId = versionId,
-                    AssetTitle = title,
-                    UnitAmount = price,
+                    ProductTitle = title,
+                    AmountTotal = price,
                     Currency = "usd",
-                    StripeSessionId = stripePaymentId,
+                    StripeSessionId = stripeSessionId,
                     Status = CheckoutIntentStatus.COMPLETED,
                     CreatedAt = purchasedAt,
                     ExpiresAt = purchasedAt.AddHours(24),
                     CompletedAt = purchasedAt
+                });
+                context.CheckoutIntentItems.Add(new CheckoutIntentItem
+                {
+                    Id = intentItemId,
+                    CheckoutIntentId = checkoutIntentId,
+                    AssetId = assetId,
+                    AssetVersionId = versionId,
+                    SellerId = sellerId,
+                    Position = 1,
+                    AssetTitleSnapshot = title,
+                    VersionNumber = 1,
+                    ListPrice = price,
+                    AllocatedPrice = price,
+                    LicenseCode = personalLicense.Code,
+                    LicenseTemplateVersion = personalLicense.TemplateVersion,
+                    LicenseDisplayName = personalLicense.DisplayName,
+                    LicenseTerms = personalLicense.TermsPlainText
+                });
+                context.Orders.Add(new Order
+                {
+                    Id = orderId,
+                    UserId = buyer.Id,
+                    CheckoutIntentId = checkoutIntentId,
+                    AssetId = assetId,
+                    ProductTitle = title,
+                    StripeSessionId = stripeSessionId,
+                    AmountPaid = price,
+                    Currency = "usd",
+                    PurchasedAt = purchasedAt,
+                    CreatedAt = purchasedAt
+                });
+                context.OrderLines.Add(new OrderLine
+                {
+                    Id = orderLineId,
+                    OrderId = orderId,
+                    AssetId = assetId,
+                    AssetVersionId = versionId,
+                    SellerId = sellerId,
+                    Position = 1,
+                    AssetTitleSnapshot = title,
+                    VersionNumber = 1,
+                    ListPrice = price,
+                    PricePaid = price,
+                    LicenseCode = personalLicense.Code,
+                    LicenseTemplateVersion = personalLicense.TemplateVersion,
+                    LicenseDisplayName = personalLicense.DisplayName,
+                    LicenseTerms = personalLicense.TermsPlainText
                 });
                 context.Purchases.Add(new Purchase
                 {
@@ -552,11 +706,8 @@ internal sealed class DatabaseMigrationService(
                     UserId = buyer.Id,
                     AssetId = assetId,
                     AssetVersionId = versionId,
-                    CheckoutIntentId = checkoutIntentId,
-                    PricePaid = price,
-                    Currency = "usd",
+                    OrderLineId = orderLineId,
                     PurchasedAt = purchasedAt,
-                    StripePaymentId = stripePaymentId,
                 });
 
                 context.Reviews.Add(new Review

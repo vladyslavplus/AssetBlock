@@ -7,21 +7,33 @@ namespace AssetBlock.Infrastructure.IntegrationTests.Persistence;
 public sealed class MigrationSmokePostgresTests(PostgresFixture fixture)
 {
     [Fact]
-    public async Task MigrateAsync_WhenFreshDatabase_ShouldApplyAllModelMigrationsWithoutPending()
+    public async Task MigrateAsync_WhenFreshDatabase_ShouldCreateCommerceAndCatalogTables()
     {
         await using var db = await fixture.CreateCleanDbContext();
 
-        var defined = db.Database.GetMigrations().ToList();
-        var applied = (await db.Database.GetAppliedMigrationsAsync()).ToList();
-        var pending = (await db.Database.GetPendingMigrationsAsync()).ToList();
+        var tables = await db.Database.SqlQueryRaw<string>(
+                """
+                SELECT table_name AS "Value"
+                FROM information_schema.tables
+                WHERE table_schema = 'public'
+                """)
+            .ToListAsync();
 
-        defined.Should().NotBeEmpty();
-        applied.Should().BeEquivalentTo(defined, options => options.WithStrictOrdering());
-        pending.Should().BeEmpty();
+        tables.Should().Contain([
+            "assets",
+            "purchases",
+            "orders",
+            "order_lines",
+            "checkout_intents",
+            "checkout_reservations",
+            "collections",
+            "collection_items",
+            "bundles",
+            "bundle_revisions",
+            "bundle_revision_items"
+        ]);
 
-        // Observable proof that the migrated schema is usable.
-        var assetCount = await db.Assets.CountAsync();
-        assetCount.Should().Be(0);
+        (await db.Assets.CountAsync()).Should().Be(0);
     }
 
     [Fact]
@@ -123,5 +135,17 @@ public sealed class MigrationSmokePostgresTests(PostgresFixture fixture)
         indexNames.Should().Contain("IX_audit_logs_Action_OccurredAt_Id");
         indexNames.Should().Contain("IX_audit_logs_Outcome_OccurredAt_Id");
         indexNames.Should().Contain("IX_audit_logs_ResourceType_ResourceId_OccurredAt_Id");
+    }
+
+    [Fact]
+    public async Task MigrateAsync_WhenFreshDatabase_ShouldHaveNoPendingMigrationsAndContainAddCollectionsBundlesAndOrders()
+    {
+        await using var db = await fixture.CreateCleanDbContext();
+
+        var pending = await db.Database.GetPendingMigrationsAsync();
+        pending.Should().BeEmpty();
+
+        var applied = await db.Database.GetAppliedMigrationsAsync();
+        applied.Should().Contain(m => m.Contains("AddCollectionsBundlesAndOrders", StringComparison.OrdinalIgnoreCase));
     }
 }

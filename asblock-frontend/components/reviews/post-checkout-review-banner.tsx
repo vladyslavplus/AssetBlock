@@ -1,89 +1,205 @@
 'use client'
 
-import { useQueryClient } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
-import { Star } from 'lucide-react'
+import { Loader2, Package, Star } from 'lucide-react'
 
 import { LeaveReviewDialog } from '@/components/reviews/leave-review-dialog'
 import { Button } from '@/components/ui/button'
-import { apiFetch } from '@/lib/http/api-client'
-import type { AssetDetailItemApi } from '@/lib/catalog/assets-api'
+import { fetchCheckoutStatus } from '@/lib/payments/checkout-api'
 import { libraryKeys } from '@/lib/library/library-query'
+import { notificationsKeys } from '@/lib/notifications/notifications-query'
 import { invalidateQueriesInBackground } from '@/lib/query/query-refresh'
-import { PENDING_REVIEW_ASSET_ID_KEY } from '@/lib/reviews/review-constants'
+import {
+  clearPendingCheckoutContext,
+  readPendingCheckoutContext,
+  type PendingCheckoutContext,
+} from '@/lib/reviews/review-constants'
 
-function readPendingReviewAssetId(): string | null {
-  try {
-    const id = sessionStorage.getItem(PENDING_REVIEW_ASSET_ID_KEY)?.trim()
-    return id && id.length > 0 ? id : null
-  } catch {
-    return null
-  }
-}
+const POLL_MS = 2000
+const POLL_TIMEOUT_MS = 2 * 60 * 1000
 
 export function PostCheckoutReviewBanner() {
   const queryClient = useQueryClient()
   const libraryInvalidatedRef = useRef(false)
-  /** Avoid SSR/client hydration mismatch: read sessionStorage only after mount. */
   const [storageReady, setStorageReady] = useState(false)
-  const [title, setTitle] = useState('Your purchase')
+  const [context, setContext] = useState<PendingCheckoutContext | null>(null)
   const [dismissed, setDismissed] = useState(false)
   const [dialogOpen, setDialogOpen] = useState(false)
+  const [pollDeadline, setPollDeadline] = useState(() => Date.now() + POLL_TIMEOUT_MS)
+  const [pollTimedOut, setPollTimedOut] = useState(false)
 
   useEffect(() => {
-    if (libraryInvalidatedRef.current) return
-    libraryInvalidatedRef.current = true
-    invalidateQueriesInBackground(queryClient, { queryKey: libraryKeys.purchases() })
-  }, [queryClient])
-
-  useEffect(() => {
-    const frame = requestAnimationFrame(() => setStorageReady(true))
+    const frame = requestAnimationFrame(() => {
+      setStorageReady(true)
+      setContext(readPendingCheckoutContext())
+    })
     return () => cancelAnimationFrame(frame)
   }, [])
 
-  const assetId = storageReady ? readPendingReviewAssetId() : null
+  const statusQuery = useQuery({
+    queryKey: ['checkout-status', context?.checkoutIntentId],
+    queryFn: () => {
+      if (!context?.checkoutIntentId) throw new Error('Missing checkout intent id')
+      return fetchCheckoutStatus(context.checkoutIntentId)
+    },
+    enabled: Boolean(context?.checkoutIntentId),
+    refetchInterval: (q) => (q.state.data?.status === 'pending' && !pollTimedOut ? POLL_MS : false),
+    retry: 1,
+  })
 
   useEffect(() => {
-    if (!assetId) return
-    let cancelled = false
-    void (async () => {
-      try {
-        const detail = await apiFetch<AssetDetailItemApi>({
-          path: `/api/assets/${encodeURIComponent(assetId)}`,
-        })
-        if (!cancelled && detail?.title?.trim()) {
-          setTitle(detail.title.trim())
-        }
-      } catch {
-        /* Title is optional; dialog still works. */
-      }
-    })()
-    return () => {
-      cancelled = true
-    }
-  }, [assetId])
+    if (statusQuery.data?.status !== 'pending' || pollTimedOut) return
+    const timeout = window.setTimeout(
+      () => setPollTimedOut(true),
+      Math.max(0, pollDeadline - Date.now()),
+    )
+    return () => window.clearTimeout(timeout)
+  }, [pollDeadline, pollTimedOut, statusQuery.data?.status])
 
-  const clearPending = () => {
-    try {
-      sessionStorage.removeItem(PENDING_REVIEW_ASSET_ID_KEY)
-    } catch {
-      /* ignore */
-    }
-  }
+  useEffect(() => {
+    if (statusQuery.data?.status !== 'completed' || libraryInvalidatedRef.current) return
+    libraryInvalidatedRef.current = true
+    invalidateQueriesInBackground(queryClient, { queryKey: libraryKeys.purchases() })
+    invalidateQueriesInBackground(queryClient, { queryKey: notificationsKeys.all })
+  }, [statusQuery.data?.status, queryClient])
 
   const handleDismiss = () => {
-    clearPending()
+    clearPendingCheckoutContext()
     setDismissed(true)
   }
 
   const handleReviewSubmitted = () => {
-    clearPending()
+    clearPendingCheckoutContext()
     setDismissed(true)
   }
 
-  if (dismissed || !assetId) {
+  const handleCheckAgain = () => {
+    setPollDeadline(Date.now() + POLL_TIMEOUT_MS)
+    setPollTimedOut(false)
+    void statusQuery.refetch()
+  }
+
+  if (dismissed || !storageReady || !context) {
     return null
+  }
+
+  if (statusQuery.data?.status === 'pending' && pollTimedOut) {
+    return (
+      <div
+        className="mb-6 rounded-lg border border-border bg-secondary/20 px-4 py-4 space-y-3"
+        role="region"
+        aria-label="Payment confirmation delayed"
+      >
+        <p className="text-sm font-medium text-foreground">Payment confirmation is taking longer</p>
+        <p className="text-xs text-muted-foreground leading-relaxed">
+          Automatic checks paused after two minutes. If you were charged, your library will update
+          when the payment webhook arrives.
+        </p>
+        <div className="flex flex-wrap gap-2">
+          <Button type="button" size="sm" variant="outline" onClick={handleCheckAgain}>
+            Check again
+          </Button>
+          <Button type="button" size="sm" variant="ghost" onClick={handleDismiss}>
+            Dismiss
+          </Button>
+        </div>
+      </div>
+    )
+  }
+
+  if (statusQuery.isLoading || statusQuery.data?.status === 'pending') {
+    return (
+      <div
+        className="mb-6 rounded-lg border border-border bg-secondary/20 px-4 py-4 space-y-2"
+        role="status"
+        aria-live="polite"
+      >
+        <div className="flex gap-2 items-start">
+          <Loader2 className="size-5 shrink-0 text-muted-foreground animate-spin" aria-hidden />
+          <div className="min-w-0 space-y-1">
+            <p className="text-sm font-medium text-foreground">Processing payment</p>
+            <p className="text-xs text-muted-foreground leading-relaxed">
+              Waiting for payment confirmation. This usually takes a few seconds.
+            </p>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  if (statusQuery.isError || statusQuery.data?.status === 'cancelled') {
+    return (
+      <div
+        className="mb-6 rounded-lg border border-border bg-secondary/20 px-4 py-4 space-y-3"
+        role="region"
+        aria-label="Checkout not completed"
+      >
+        <p className="text-sm font-medium text-foreground">Payment not completed</p>
+        <p className="text-xs text-muted-foreground leading-relaxed">
+          We could not confirm this checkout. If you were charged, your library will update shortly
+          after the webhook arrives — otherwise try checkout again.
+        </p>
+        <Button
+          type="button"
+          size="sm"
+          variant="outline"
+          className="border-border"
+          onClick={handleDismiss}
+        >
+          Dismiss
+        </Button>
+      </div>
+    )
+  }
+
+  const title = statusQuery.data?.productTitle?.trim() || 'Your purchase'
+
+  if (context.kind === 'bundle') {
+    return (
+      <div
+        className="mb-6 rounded-lg border border-border bg-secondary/20 px-4 py-4 space-y-3"
+        role="region"
+        aria-label="Bundle purchase complete"
+      >
+        <div className="flex gap-2">
+          <Package className="size-5 shrink-0 text-accent" aria-hidden />
+          <div className="min-w-0 space-y-1">
+            <p className="text-sm font-medium text-foreground">Bundle unlocked</p>
+            <p className="text-xs text-muted-foreground leading-relaxed">
+              <span className="font-medium text-foreground break-words">{title}</span> is in your
+              library. You can leave reviews on individual assets from{' '}
+              <Link href="/library" className="text-accent underline-offset-2 hover:underline">
+                My library
+              </Link>
+              .
+            </p>
+          </div>
+        </div>
+        <div className="flex flex-col sm:flex-row gap-2 sm:items-center">
+          <Button
+            type="button"
+            size="sm"
+            asChild
+            className="bg-primary text-primary-foreground hover:bg-[#6D28D9] font-medium"
+          >
+            <Link href="/library" onClick={handleDismiss}>
+              Open library
+            </Link>
+          </Button>
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            className="border-border"
+            onClick={handleDismiss}
+          >
+            Dismiss
+          </Button>
+        </div>
+      </div>
+    )
   }
 
   return (
@@ -132,7 +248,7 @@ export function PostCheckoutReviewBanner() {
       <LeaveReviewDialog
         open={dialogOpen}
         onOpenChange={setDialogOpen}
-        assetId={assetId}
+        assetId={context.assetId}
         assetTitle={title}
         onSubmitted={handleReviewSubmitted}
       />

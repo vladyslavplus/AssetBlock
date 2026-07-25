@@ -104,10 +104,8 @@ internal static class TestData
         Guid assetId,
         Guid assetVersionId,
         DateTimeOffset? purchasedAt = null,
-        string? stripePaymentId = null,
         Guid? id = null,
-        decimal pricePaid = 9.99m,
-        string currency = "usd")
+        Guid? orderLineId = null)
     {
         return new Purchase
         {
@@ -115,42 +113,106 @@ internal static class TestData
             UserId = userId,
             AssetId = assetId,
             AssetVersionId = assetVersionId,
-            CheckoutIntentId = Guid.NewGuid(),
-            PricePaid = pricePaid,
-            Currency = currency,
+            OrderLineId = orderLineId ?? Guid.NewGuid(),
             PurchasedAt = purchasedAt ?? DateTimeOffset.UtcNow,
-            StripePaymentId = stripePaymentId ?? $"test-stripe-{Guid.NewGuid():N}",
             CreatedAt = DateTimeOffset.UtcNow
         };
     }
 
-    private static CheckoutIntent CreateCompletedCheckoutIntent(Purchase purchase, string assetTitle = "Test asset")
+    /// <summary>
+    /// Seeds a completed single-asset checkout intent, order, and order line (no purchase).
+    /// </summary>
+    public static void AddCompletedCheckoutIntent(
+        ApplicationDbContext db,
+        Purchase purchase,
+        string assetTitle,
+        Guid sellerId,
+        decimal pricePaid = 9.99m,
+        string currency = "usd",
+        string? stripeSessionId = null)
     {
-        return new CheckoutIntent
+        var now = purchase.PurchasedAt;
+        var intentId = Guid.NewGuid();
+        var orderId = Guid.NewGuid();
+        var orderLineId = purchase.OrderLineId;
+        var sessionId = stripeSessionId ?? $"test-stripe-{Guid.NewGuid():N}";
+
+        db.CheckoutIntents.Add(new CheckoutIntent
         {
-            Id = purchase.CheckoutIntentId,
+            Id = intentId,
             UserId = purchase.UserId,
             AssetId = purchase.AssetId,
-            AssetVersionId = purchase.AssetVersionId,
-            AssetTitle = assetTitle,
-            UnitAmount = purchase.PricePaid,
-            Currency = purchase.Currency,
-            StripeSessionId = purchase.StripePaymentId,
+            ProductTitle = assetTitle,
+            AmountTotal = pricePaid,
+            Currency = currency,
+            StripeSessionId = sessionId,
             Status = CheckoutIntentStatus.COMPLETED,
-            CreatedAt = purchase.PurchasedAt,
-            ExpiresAt = purchase.PurchasedAt.AddHours(1),
-            CompletedAt = purchase.PurchasedAt
-        };
+            CreatedAt = now,
+            ExpiresAt = now.AddHours(1),
+            CompletedAt = now
+        });
+        db.CheckoutIntentItems.Add(new CheckoutIntentItem
+        {
+            Id = Guid.NewGuid(),
+            CheckoutIntentId = intentId,
+            AssetId = purchase.AssetId,
+            AssetVersionId = purchase.AssetVersionId,
+            SellerId = sellerId,
+            Position = 1,
+            AssetTitleSnapshot = assetTitle,
+            VersionNumber = 1,
+            ListPrice = pricePaid,
+            AllocatedPrice = pricePaid,
+            LicenseCode = AssetLicenseCode.PERSONAL,
+            LicenseTemplateVersion = "1.0",
+            LicenseDisplayName = "Personal use",
+            LicenseTerms = "terms"
+        });
+        db.Orders.Add(new Order
+        {
+            Id = orderId,
+            UserId = purchase.UserId,
+            CheckoutIntentId = intentId,
+            AssetId = purchase.AssetId,
+            ProductTitle = assetTitle,
+            StripeSessionId = sessionId,
+            AmountPaid = pricePaid,
+            Currency = currency,
+            PurchasedAt = now,
+            CreatedAt = now
+        });
+        db.OrderLines.Add(new OrderLine
+        {
+            Id = orderLineId,
+            OrderId = orderId,
+            AssetId = purchase.AssetId,
+            AssetVersionId = purchase.AssetVersionId,
+            SellerId = sellerId,
+            Position = 1,
+            AssetTitleSnapshot = assetTitle,
+            VersionNumber = 1,
+            ListPrice = pricePaid,
+            PricePaid = pricePaid,
+            LicenseCode = AssetLicenseCode.PERSONAL,
+            LicenseTemplateVersion = "1.0",
+            LicenseDisplayName = "Personal use",
+            LicenseTerms = "terms"
+        });
     }
 
-    public static void AddCompletedCheckoutIntent(ApplicationDbContext db, Purchase purchase, string assetTitle = "Test asset")
+    /// <summary>
+    /// Seeds a completed single-asset checkout intent, order, order line, and purchase for library / entitlement tests.
+    /// </summary>
+    public static void AddCompletedPurchase(
+        ApplicationDbContext db,
+        Purchase purchase,
+        string assetTitle,
+        Guid sellerId,
+        decimal pricePaid = 9.99m,
+        string currency = "usd",
+        string? stripeSessionId = null)
     {
-        db.CheckoutIntents.Add(CreateCompletedCheckoutIntent(purchase, assetTitle));
-    }
-
-    public static void AddCompletedPurchase(ApplicationDbContext db, Purchase purchase, string assetTitle = "Test asset")
-    {
-        AddCompletedCheckoutIntent(db, purchase, assetTitle);
+        AddCompletedCheckoutIntent(db, purchase, assetTitle, sellerId, pricePaid, currency, stripeSessionId);
         db.Purchases.Add(purchase);
     }
 
@@ -181,5 +243,52 @@ internal static class TestData
         db.Categories.Add(category);
         await db.SaveChangesAsync(cancellationToken);
         return (author, category);
+    }
+
+    public static Collection CreateCollection(
+        Guid sellerId,
+        string title = "Editorial Picks",
+        CollectionStatus status = CollectionStatus.DRAFT,
+        Guid? id = null)
+    {
+        var now = DateTimeOffset.UtcNow;
+        return new Collection
+        {
+            Id = id ?? Guid.NewGuid(),
+            SellerId = sellerId,
+            Title = title,
+            Description = "Seeded collection",
+            Status = status,
+            PublishedAt = status == CollectionStatus.PUBLISHED ? now : null,
+            CreatedAt = now
+        };
+    }
+
+    public static CollectionItem CreateCollectionItem(Guid collectionId, Guid assetId, int position) =>
+        new()
+        {
+            CollectionId = collectionId,
+            AssetId = assetId,
+            Position = position,
+            CreatedAt = DateTimeOffset.UtcNow
+        };
+
+    public static CheckoutReservation CreateReservation(
+        Guid checkoutIntentId,
+        Guid userId,
+        Guid assetId,
+        DateTimeOffset? expiresAt = null,
+        DateTimeOffset? createdAt = null)
+    {
+        var created = createdAt ?? DateTimeOffset.UtcNow;
+        return new CheckoutReservation
+        {
+            Id = Guid.NewGuid(),
+            CheckoutIntentId = checkoutIntentId,
+            UserId = userId,
+            AssetId = assetId,
+            CreatedAt = created,
+            ExpiresAt = expiresAt ?? created.AddHours(1)
+        };
     }
 }

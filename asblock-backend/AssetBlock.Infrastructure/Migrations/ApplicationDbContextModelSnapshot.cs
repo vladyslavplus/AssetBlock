@@ -286,6 +286,143 @@ namespace AssetBlock.Infrastructure.Migrations
                         });
                 });
 
+            modelBuilder.Entity("AssetBlock.Domain.Core.Entities.Bundle", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset?>("ArchivedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("SellerId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ArchivedAt", "CreatedAt", "Id")
+                        .HasDatabaseName("IX_bundles_archived_created");
+
+                    b.HasIndex("SellerId", "CreatedAt", "Id")
+                        .HasDatabaseName("IX_bundles_seller_created");
+
+                    b.ToTable("bundles", (string)null);
+                });
+
+            modelBuilder.Entity("AssetBlock.Domain.Core.Entities.BundleRevision", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("BundleId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Currency")
+                        .IsRequired()
+                        .HasMaxLength(3)
+                        .HasColumnType("character varying(3)");
+
+                    b.Property<string>("Description")
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)");
+
+                    b.Property<bool>("IsCurrent")
+                        .HasColumnType("boolean");
+
+                    b.Property<decimal>("ListPriceTotal")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)");
+
+                    b.Property<decimal>("Price")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)");
+
+                    b.Property<int>("RevisionNumber")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Title")
+                        .IsRequired()
+                        .HasMaxLength(160)
+                        .HasColumnType("character varying(160)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("BundleId")
+                        .IsUnique()
+                        .HasDatabaseName("UIX_bundle_revisions_bundle_current")
+                        .HasFilter("\"IsCurrent\" = true");
+
+                    b.HasIndex("BundleId", "RevisionNumber")
+                        .IsUnique()
+                        .HasDatabaseName("UIX_bundle_revisions_bundle_number");
+
+                    b.ToTable("bundle_revisions", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_bundle_revisions_list_price_total_positive", "\"ListPriceTotal\" > 0");
+
+                            t.HasCheckConstraint("CK_bundle_revisions_price_below_list_total", "\"Price\" < \"ListPriceTotal\"");
+
+                            t.HasCheckConstraint("CK_bundle_revisions_price_positive", "\"Price\" > 0");
+
+                            t.HasCheckConstraint("CK_bundle_revisions_revision_number_positive", "\"RevisionNumber\" > 0");
+                        });
+                });
+
+            modelBuilder.Entity("AssetBlock.Domain.Core.Entities.BundleRevisionItem", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("AssetId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("AssetTitleSnapshot")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<Guid>("BundleRevisionId")
+                        .HasColumnType("uuid");
+
+                    b.Property<decimal>("ListPriceSnapshot")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)");
+
+                    b.Property<int>("Position")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AssetId");
+
+                    b.HasIndex("BundleRevisionId", "AssetId")
+                        .IsUnique()
+                        .HasDatabaseName("UIX_bundle_revision_items_revision_asset")
+                        .HasFilter("\"AssetId\" IS NOT NULL");
+
+                    b.HasIndex("BundleRevisionId", "Position")
+                        .IsUnique()
+                        .HasDatabaseName("UIX_bundle_revision_items_revision_position");
+
+                    b.ToTable("bundle_revision_items", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_bundle_revision_items_list_price_positive", "\"ListPriceSnapshot\" > 0");
+
+                            t.HasCheckConstraint("CK_bundle_revision_items_position_positive", "\"Position\" > 0");
+                        });
+                });
+
             modelBuilder.Entity("AssetBlock.Domain.Core.Entities.Category", b =>
                 {
                     b.Property<Guid>("Id")
@@ -326,15 +463,17 @@ namespace AssetBlock.Infrastructure.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
-                    b.Property<Guid>("AssetId")
+                    b.Property<decimal>("AmountTotal")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)");
+
+                    b.Property<Guid?>("AssetId")
                         .HasColumnType("uuid");
 
-                    b.Property<string>("AssetTitle")
-                        .IsRequired()
-                        .HasMaxLength(500)
-                        .HasColumnType("character varying(500)");
+                    b.Property<Guid?>("BundleId")
+                        .HasColumnType("uuid");
 
-                    b.Property<Guid>("AssetVersionId")
+                    b.Property<Guid?>("BundleRevisionId")
                         .HasColumnType("uuid");
 
                     b.Property<DateTimeOffset?>("CompletedAt")
@@ -351,6 +490,11 @@ namespace AssetBlock.Infrastructure.Migrations
                     b.Property<DateTimeOffset>("ExpiresAt")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<string>("ProductTitle")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
                     b.Property<string>("Status")
                         .IsRequired()
                         .HasMaxLength(16)
@@ -360,10 +504,6 @@ namespace AssetBlock.Infrastructure.Migrations
                         .HasMaxLength(256)
                         .HasColumnType("character varying(256)");
 
-                    b.Property<decimal>("UnitAmount")
-                        .HasPrecision(18, 2)
-                        .HasColumnType("numeric(18,2)");
-
                     b.Property<DateTimeOffset?>("UpdatedAt")
                         .HasColumnType("timestamp with time zone");
 
@@ -372,7 +512,11 @@ namespace AssetBlock.Infrastructure.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("AssetVersionId");
+                    b.HasIndex("AssetId");
+
+                    b.HasIndex("BundleId");
+
+                    b.HasIndex("BundleRevisionId");
 
                     b.HasIndex("StripeSessionId")
                         .IsUnique()
@@ -381,16 +525,225 @@ namespace AssetBlock.Infrastructure.Migrations
                     b.HasIndex("UserId", "AssetId")
                         .IsUnique()
                         .HasDatabaseName("UIX_checkout_intents_user_asset_pending")
-                        .HasFilter("\"Status\" = 'PENDING'");
+                        .HasFilter("\"Status\" = 'PENDING' AND \"AssetId\" IS NOT NULL");
 
-                    b.HasIndex("AssetId", "Status", "ExpiresAt")
-                        .HasDatabaseName("IX_checkout_intents_asset_active");
+                    b.HasIndex("UserId", "BundleId")
+                        .IsUnique()
+                        .HasDatabaseName("UIX_checkout_intents_user_bundle_pending")
+                        .HasFilter("\"Status\" = 'PENDING' AND \"BundleId\" IS NOT NULL");
+
+                    b.HasIndex("Status", "ExpiresAt", "Id")
+                        .HasDatabaseName("IX_checkout_intents_status_expires");
 
                     b.ToTable("checkout_intents", null, t =>
                         {
-                            t.HasCheckConstraint("CK_checkout_intents_expires_after_created", "\"ExpiresAt\" > \"CreatedAt\"");
+                            t.HasCheckConstraint("CK_checkout_intents_amount_total_positive", "\"AmountTotal\" > 0");
 
-                            t.HasCheckConstraint("CK_checkout_intents_unit_amount_positive", "\"UnitAmount\" > 0");
+                            t.HasCheckConstraint("CK_checkout_intents_exactly_one_product", "(\"AssetId\" IS NOT NULL AND \"BundleId\" IS NULL AND \"BundleRevisionId\" IS NULL)\nOR (\"AssetId\" IS NULL AND \"BundleId\" IS NOT NULL AND \"BundleRevisionId\" IS NOT NULL)");
+
+                            t.HasCheckConstraint("CK_checkout_intents_expires_after_created", "\"ExpiresAt\" > \"CreatedAt\"");
+                        });
+                });
+
+            modelBuilder.Entity("AssetBlock.Domain.Core.Entities.CheckoutIntentItem", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<decimal>("AllocatedPrice")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)");
+
+                    b.Property<Guid>("AssetId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("AssetTitleSnapshot")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<Guid>("AssetVersionId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("CheckoutIntentId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("LicenseCode")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("LicenseDisplayName")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.Property<string>("LicenseTemplateVersion")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<string>("LicenseTerms")
+                        .IsRequired()
+                        .HasMaxLength(16000)
+                        .HasColumnType("character varying(16000)");
+
+                    b.Property<decimal>("ListPrice")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)");
+
+                    b.Property<int>("Position")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid>("SellerId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("VersionNumber")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AssetId")
+                        .HasDatabaseName("IX_checkout_intent_items_asset");
+
+                    b.HasIndex("AssetVersionId");
+
+                    b.HasIndex("SellerId");
+
+                    b.HasIndex("CheckoutIntentId", "AssetId")
+                        .IsUnique()
+                        .HasDatabaseName("UIX_checkout_intent_items_intent_asset");
+
+                    b.HasIndex("CheckoutIntentId", "Position")
+                        .IsUnique()
+                        .HasDatabaseName("UIX_checkout_intent_items_intent_position");
+
+                    b.ToTable("checkout_intent_items", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_checkout_intent_items_allocated_price_positive", "\"AllocatedPrice\" > 0");
+
+                            t.HasCheckConstraint("CK_checkout_intent_items_list_price_positive", "\"ListPrice\" > 0");
+
+                            t.HasCheckConstraint("CK_checkout_intent_items_position_positive", "\"Position\" > 0");
+
+                            t.HasCheckConstraint("CK_checkout_intent_items_version_positive", "\"VersionNumber\" > 0");
+                        });
+                });
+
+            modelBuilder.Entity("AssetBlock.Domain.Core.Entities.CheckoutReservation", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("AssetId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("CheckoutIntentId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTimeOffset>("ExpiresAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AssetId");
+
+                    b.HasIndex("CheckoutIntentId", "AssetId")
+                        .IsUnique()
+                        .HasDatabaseName("UIX_checkout_reservations_intent_asset");
+
+                    b.HasIndex("ExpiresAt", "Id")
+                        .HasDatabaseName("IX_checkout_reservations_expires");
+
+                    b.HasIndex("UserId", "AssetId")
+                        .IsUnique()
+                        .HasDatabaseName("UIX_checkout_reservations_user_asset");
+
+                    b.ToTable("checkout_reservations", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_checkout_reservations_expires_after_created", "\"ExpiresAt\" > \"CreatedAt\"");
+                        });
+                });
+
+            modelBuilder.Entity("AssetBlock.Domain.Core.Entities.Collection", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset?>("ArchivedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Description")
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)");
+
+                    b.Property<DateTimeOffset?>("PublishedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("SellerId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<string>("Title")
+                        .IsRequired()
+                        .HasMaxLength(160)
+                        .HasColumnType("character varying(160)");
+
+                    b.Property<DateTimeOffset?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Status", "PublishedAt", "Id")
+                        .HasDatabaseName("IX_collections_public_status_published");
+
+                    b.HasIndex("SellerId", "Status", "CreatedAt", "Id")
+                        .HasDatabaseName("IX_collections_seller_status_created");
+
+                    b.ToTable("collections", (string)null);
+                });
+
+            modelBuilder.Entity("AssetBlock.Domain.Core.Entities.CollectionItem", b =>
+                {
+                    b.Property<Guid>("CollectionId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("AssetId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("Position")
+                        .HasColumnType("integer");
+
+                    b.HasKey("CollectionId", "AssetId");
+
+                    b.HasIndex("AssetId");
+
+                    b.HasIndex("CollectionId", "Position")
+                        .IsUnique()
+                        .HasDatabaseName("UIX_collection_items_collection_position");
+
+                    b.ToTable("collection_items", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_collection_items_position_positive", "\"Position\" > 0");
                         });
                 });
 
@@ -440,6 +793,168 @@ namespace AssetBlock.Infrastructure.Migrations
                     b.ToTable("email_actions", null, t =>
                         {
                             t.HasCheckConstraint("CK_email_actions_ExpiresAt_After_CreatedAt", "\"ExpiresAt\" > \"CreatedAt\"");
+                        });
+                });
+
+            modelBuilder.Entity("AssetBlock.Domain.Core.Entities.Order", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<decimal>("AmountPaid")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)");
+
+                    b.Property<Guid?>("AssetId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("BundleId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("BundleRevisionId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("CheckoutIntentId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Currency")
+                        .IsRequired()
+                        .HasMaxLength(3)
+                        .HasColumnType("character varying(3)");
+
+                    b.Property<string>("ProductTitle")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<DateTimeOffset>("PurchasedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("StripeSessionId")
+                        .IsRequired()
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)");
+
+                    b.Property<DateTimeOffset?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AssetId");
+
+                    b.HasIndex("BundleId");
+
+                    b.HasIndex("BundleRevisionId");
+
+                    b.HasIndex("CheckoutIntentId")
+                        .IsUnique()
+                        .HasDatabaseName("UIX_orders_checkout_intent");
+
+                    b.HasIndex("StripeSessionId")
+                        .IsUnique()
+                        .HasDatabaseName("UIX_orders_stripe_session");
+
+                    b.HasIndex("UserId", "PurchasedAt", "Id")
+                        .HasDatabaseName("IX_orders_user_purchased");
+
+                    b.ToTable("orders", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_orders_amount_paid_positive", "\"AmountPaid\" > 0");
+
+                            t.HasCheckConstraint("CK_orders_exactly_one_product", "(\"AssetId\" IS NOT NULL AND \"BundleId\" IS NULL AND \"BundleRevisionId\" IS NULL)\r\nOR (\"AssetId\" IS NULL AND \"BundleId\" IS NOT NULL AND \"BundleRevisionId\" IS NOT NULL)");
+                        });
+                });
+
+            modelBuilder.Entity("AssetBlock.Domain.Core.Entities.OrderLine", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("AssetId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("AssetTitleSnapshot")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<Guid>("AssetVersionId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("LicenseCode")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("LicenseDisplayName")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.Property<string>("LicenseTemplateVersion")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<string>("LicenseTerms")
+                        .IsRequired()
+                        .HasMaxLength(16000)
+                        .HasColumnType("character varying(16000)");
+
+                    b.Property<decimal>("ListPrice")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)");
+
+                    b.Property<Guid>("OrderId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("Position")
+                        .HasColumnType("integer");
+
+                    b.Property<decimal>("PricePaid")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)");
+
+                    b.Property<Guid>("SellerId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("VersionNumber")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AssetId");
+
+                    b.HasIndex("AssetVersionId");
+
+                    b.HasIndex("OrderId", "AssetId")
+                        .IsUnique()
+                        .HasDatabaseName("UIX_order_lines_order_asset");
+
+                    b.HasIndex("OrderId", "Position")
+                        .IsUnique()
+                        .HasDatabaseName("UIX_order_lines_order_position");
+
+                    b.HasIndex("SellerId", "OrderId")
+                        .HasDatabaseName("IX_order_lines_seller_order");
+
+                    b.ToTable("order_lines", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_order_lines_list_price_positive", "\"ListPrice\" > 0");
+
+                            t.HasCheckConstraint("CK_order_lines_position_positive", "\"Position\" > 0");
+
+                            t.HasCheckConstraint("CK_order_lines_price_paid_positive", "\"PricePaid\" > 0");
+
+                            t.HasCheckConstraint("CK_order_lines_version_positive", "\"VersionNumber\" > 0");
                         });
                 });
 
@@ -500,28 +1015,14 @@ namespace AssetBlock.Infrastructure.Migrations
                     b.Property<Guid>("AssetVersionId")
                         .HasColumnType("uuid");
 
-                    b.Property<Guid>("CheckoutIntentId")
-                        .HasColumnType("uuid");
-
                     b.Property<DateTimeOffset>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
 
-                    b.Property<string>("Currency")
-                        .IsRequired()
-                        .HasMaxLength(3)
-                        .HasColumnType("character varying(3)");
-
-                    b.Property<decimal>("PricePaid")
-                        .HasPrecision(18, 2)
-                        .HasColumnType("numeric(18,2)");
+                    b.Property<Guid>("OrderLineId")
+                        .HasColumnType("uuid");
 
                     b.Property<DateTimeOffset>("PurchasedAt")
                         .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("StripePaymentId")
-                        .IsRequired()
-                        .HasMaxLength(256)
-                        .HasColumnType("character varying(256)");
 
                     b.Property<DateTimeOffset?>("UpdatedAt")
                         .HasColumnType("timestamp with time zone");
@@ -535,14 +1036,13 @@ namespace AssetBlock.Infrastructure.Migrations
 
                     b.HasIndex("AssetVersionId");
 
-                    b.HasIndex("CheckoutIntentId")
-                        .IsUnique();
-
-                    b.HasIndex("StripePaymentId")
-                        .IsUnique();
+                    b.HasIndex("OrderLineId")
+                        .IsUnique()
+                        .HasDatabaseName("UIX_purchases_order_line");
 
                     b.HasIndex("UserId", "AssetId")
-                        .IsUnique();
+                        .IsUnique()
+                        .HasDatabaseName("UIX_purchases_user_asset");
 
                     b.ToTable("purchases", (string)null);
                 });
@@ -913,7 +1413,79 @@ namespace AssetBlock.Infrastructure.Migrations
                     b.Navigation("Asset");
                 });
 
+            modelBuilder.Entity("AssetBlock.Domain.Core.Entities.Bundle", b =>
+                {
+                    b.HasOne("AssetBlock.Domain.Core.Entities.User", "Seller")
+                        .WithMany()
+                        .HasForeignKey("SellerId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Seller");
+                });
+
+            modelBuilder.Entity("AssetBlock.Domain.Core.Entities.BundleRevision", b =>
+                {
+                    b.HasOne("AssetBlock.Domain.Core.Entities.Bundle", "Bundle")
+                        .WithMany("Revisions")
+                        .HasForeignKey("BundleId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Bundle");
+                });
+
+            modelBuilder.Entity("AssetBlock.Domain.Core.Entities.BundleRevisionItem", b =>
+                {
+                    b.HasOne("AssetBlock.Domain.Core.Entities.Asset", "Asset")
+                        .WithMany()
+                        .HasForeignKey("AssetId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.HasOne("AssetBlock.Domain.Core.Entities.BundleRevision", "BundleRevision")
+                        .WithMany("Items")
+                        .HasForeignKey("BundleRevisionId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Asset");
+
+                    b.Navigation("BundleRevision");
+                });
+
             modelBuilder.Entity("AssetBlock.Domain.Core.Entities.CheckoutIntent", b =>
+                {
+                    b.HasOne("AssetBlock.Domain.Core.Entities.Asset", "Asset")
+                        .WithMany()
+                        .HasForeignKey("AssetId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("AssetBlock.Domain.Core.Entities.Bundle", "Bundle")
+                        .WithMany()
+                        .HasForeignKey("BundleId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("AssetBlock.Domain.Core.Entities.BundleRevision", "BundleRevision")
+                        .WithMany()
+                        .HasForeignKey("BundleRevisionId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("AssetBlock.Domain.Core.Entities.User", "User")
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Asset");
+
+                    b.Navigation("Bundle");
+
+                    b.Navigation("BundleRevision");
+
+                    b.Navigation("User");
+                });
+
+            modelBuilder.Entity("AssetBlock.Domain.Core.Entities.CheckoutIntentItem", b =>
                 {
                     b.HasOne("AssetBlock.Domain.Core.Entities.Asset", "Asset")
                         .WithMany()
@@ -927,6 +1499,41 @@ namespace AssetBlock.Infrastructure.Migrations
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
+                    b.HasOne("AssetBlock.Domain.Core.Entities.CheckoutIntent", "CheckoutIntent")
+                        .WithMany("Items")
+                        .HasForeignKey("CheckoutIntentId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("AssetBlock.Domain.Core.Entities.User", "Seller")
+                        .WithMany()
+                        .HasForeignKey("SellerId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Asset");
+
+                    b.Navigation("AssetVersion");
+
+                    b.Navigation("CheckoutIntent");
+
+                    b.Navigation("Seller");
+                });
+
+            modelBuilder.Entity("AssetBlock.Domain.Core.Entities.CheckoutReservation", b =>
+                {
+                    b.HasOne("AssetBlock.Domain.Core.Entities.Asset", "Asset")
+                        .WithMany()
+                        .HasForeignKey("AssetId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("AssetBlock.Domain.Core.Entities.CheckoutIntent", "CheckoutIntent")
+                        .WithMany("Reservations")
+                        .HasForeignKey("CheckoutIntentId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
                     b.HasOne("AssetBlock.Domain.Core.Entities.User", "User")
                         .WithMany()
                         .HasForeignKey("UserId")
@@ -935,9 +1542,39 @@ namespace AssetBlock.Infrastructure.Migrations
 
                     b.Navigation("Asset");
 
-                    b.Navigation("AssetVersion");
+                    b.Navigation("CheckoutIntent");
 
                     b.Navigation("User");
+                });
+
+            modelBuilder.Entity("AssetBlock.Domain.Core.Entities.Collection", b =>
+                {
+                    b.HasOne("AssetBlock.Domain.Core.Entities.User", "Seller")
+                        .WithMany()
+                        .HasForeignKey("SellerId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Seller");
+                });
+
+            modelBuilder.Entity("AssetBlock.Domain.Core.Entities.CollectionItem", b =>
+                {
+                    b.HasOne("AssetBlock.Domain.Core.Entities.Asset", "Asset")
+                        .WithMany()
+                        .HasForeignKey("AssetId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("AssetBlock.Domain.Core.Entities.Collection", "Collection")
+                        .WithMany("Items")
+                        .HasForeignKey("CollectionId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Asset");
+
+                    b.Navigation("Collection");
                 });
 
             modelBuilder.Entity("AssetBlock.Domain.Core.Entities.EmailAction", b =>
@@ -949,6 +1586,81 @@ namespace AssetBlock.Infrastructure.Migrations
                         .IsRequired();
 
                     b.Navigation("User");
+                });
+
+            modelBuilder.Entity("AssetBlock.Domain.Core.Entities.Order", b =>
+                {
+                    b.HasOne("AssetBlock.Domain.Core.Entities.Asset", "Asset")
+                        .WithMany()
+                        .HasForeignKey("AssetId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("AssetBlock.Domain.Core.Entities.Bundle", "Bundle")
+                        .WithMany()
+                        .HasForeignKey("BundleId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("AssetBlock.Domain.Core.Entities.BundleRevision", "BundleRevision")
+                        .WithMany()
+                        .HasForeignKey("BundleRevisionId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("AssetBlock.Domain.Core.Entities.CheckoutIntent", "CheckoutIntent")
+                        .WithOne("Order")
+                        .HasForeignKey("AssetBlock.Domain.Core.Entities.Order", "CheckoutIntentId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("AssetBlock.Domain.Core.Entities.User", "User")
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Asset");
+
+                    b.Navigation("Bundle");
+
+                    b.Navigation("BundleRevision");
+
+                    b.Navigation("CheckoutIntent");
+
+                    b.Navigation("User");
+                });
+
+            modelBuilder.Entity("AssetBlock.Domain.Core.Entities.OrderLine", b =>
+                {
+                    b.HasOne("AssetBlock.Domain.Core.Entities.Asset", "Asset")
+                        .WithMany()
+                        .HasForeignKey("AssetId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("AssetBlock.Domain.Core.Entities.AssetVersion", "AssetVersion")
+                        .WithMany()
+                        .HasForeignKey("AssetVersionId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("AssetBlock.Domain.Core.Entities.Order", "Order")
+                        .WithMany("Lines")
+                        .HasForeignKey("OrderId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("AssetBlock.Domain.Core.Entities.User", "Seller")
+                        .WithMany()
+                        .HasForeignKey("SellerId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Asset");
+
+                    b.Navigation("AssetVersion");
+
+                    b.Navigation("Order");
+
+                    b.Navigation("Seller");
                 });
 
             modelBuilder.Entity("AssetBlock.Domain.Core.Entities.Purchase", b =>
@@ -965,9 +1677,9 @@ namespace AssetBlock.Infrastructure.Migrations
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
-                    b.HasOne("AssetBlock.Domain.Core.Entities.CheckoutIntent", "CheckoutIntent")
+                    b.HasOne("AssetBlock.Domain.Core.Entities.OrderLine", "OrderLine")
                         .WithOne("Purchase")
-                        .HasForeignKey("AssetBlock.Domain.Core.Entities.Purchase", "CheckoutIntentId")
+                        .HasForeignKey("AssetBlock.Domain.Core.Entities.Purchase", "OrderLineId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
@@ -981,7 +1693,7 @@ namespace AssetBlock.Infrastructure.Migrations
 
                     b.Navigation("AssetVersion");
 
-                    b.Navigation("CheckoutIntent");
+                    b.Navigation("OrderLine");
 
                     b.Navigation("User");
                 });
@@ -1062,12 +1774,41 @@ namespace AssetBlock.Infrastructure.Migrations
                     b.Navigation("Purchases");
                 });
 
+            modelBuilder.Entity("AssetBlock.Domain.Core.Entities.Bundle", b =>
+                {
+                    b.Navigation("Revisions");
+                });
+
+            modelBuilder.Entity("AssetBlock.Domain.Core.Entities.BundleRevision", b =>
+                {
+                    b.Navigation("Items");
+                });
+
             modelBuilder.Entity("AssetBlock.Domain.Core.Entities.Category", b =>
                 {
                     b.Navigation("Assets");
                 });
 
             modelBuilder.Entity("AssetBlock.Domain.Core.Entities.CheckoutIntent", b =>
+                {
+                    b.Navigation("Items");
+
+                    b.Navigation("Order");
+
+                    b.Navigation("Reservations");
+                });
+
+            modelBuilder.Entity("AssetBlock.Domain.Core.Entities.Collection", b =>
+                {
+                    b.Navigation("Items");
+                });
+
+            modelBuilder.Entity("AssetBlock.Domain.Core.Entities.Order", b =>
+                {
+                    b.Navigation("Lines");
+                });
+
+            modelBuilder.Entity("AssetBlock.Domain.Core.Entities.OrderLine", b =>
                 {
                     b.Navigation("Purchase");
                 });

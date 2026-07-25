@@ -1,6 +1,10 @@
 import { getApiErrorMessage, parseApiErrorBody, readApiResponseBody } from '@/lib/http/api-errors'
-import { buildCheckoutJsonBody } from '@/lib/payments/payments-client'
-import type { CreateCheckoutResponse } from '@/lib/payments/payments-types'
+import { buildBundleCheckoutJsonBody, buildCheckoutJsonBody } from '@/lib/payments/payments-client'
+import {
+  checkoutStatusResponseSchema,
+  createCheckoutResponseSchema,
+} from '@/lib/payments/payments-schemas'
+import type { CheckoutStatusResponse, CreateCheckoutResponse } from '@/lib/payments/payments-types'
 
 export class CheckoutRequestError extends Error {
   readonly status: number
@@ -17,11 +21,11 @@ export class CheckoutRequestError extends Error {
   }
 }
 
-export async function postCreateCheckoutSession(assetId: string): Promise<CreateCheckoutResponse> {
-  const res = await fetch('/api/payments/checkout', {
+async function postCheckout(path: string, body: unknown): Promise<CreateCheckoutResponse> {
+  const res = await fetch(path, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(buildCheckoutJsonBody(assetId)),
+    body: JSON.stringify(body),
   })
   const raw = await readApiResponseBody(res)
 
@@ -30,10 +34,41 @@ export async function postCreateCheckoutSession(assetId: string): Promise<Create
     throw new CheckoutRequestError(res.status, getApiErrorMessage(raw, fallback), raw)
   }
 
-  const data = raw as CreateCheckoutResponse
-  const url = data?.checkoutUrl?.trim()
-  if (!url) {
-    throw new CheckoutRequestError(res.status, 'Checkout did not return a payment URL.')
+  const parsed = createCheckoutResponseSchema.safeParse(raw)
+  if (!parsed.success) {
+    throw new CheckoutRequestError(
+      res.status,
+      'Checkout did not return a payment URL and checkout intent id.',
+    )
   }
-  return { ...data, checkoutUrl: url }
+  return parsed.data
+}
+
+export async function postCreateCheckoutSession(assetId: string): Promise<CreateCheckoutResponse> {
+  return postCheckout('/api/payments/checkout', buildCheckoutJsonBody(assetId))
+}
+
+export async function postCreateBundleCheckoutSession(
+  bundleId: string,
+): Promise<CreateCheckoutResponse> {
+  return postCheckout('/api/payments/checkout/bundles', buildBundleCheckoutJsonBody(bundleId))
+}
+
+export async function fetchCheckoutStatus(
+  checkoutIntentId: string,
+): Promise<CheckoutStatusResponse> {
+  const res = await fetch(`/api/payments/checkout/${encodeURIComponent(checkoutIntentId)}/status`, {
+    credentials: 'include',
+    cache: 'no-store',
+  })
+  const raw = await readApiResponseBody(res)
+  if (!res.ok) {
+    const fallback = typeof raw === 'string' ? raw : `Checkout status failed (${res.status})`
+    throw new CheckoutRequestError(res.status, getApiErrorMessage(raw, fallback), raw)
+  }
+  const parsed = checkoutStatusResponseSchema.safeParse(raw)
+  if (!parsed.success) {
+    throw new CheckoutRequestError(res.status, 'Checkout returned an invalid status response.')
+  }
+  return parsed.data
 }

@@ -1,5 +1,6 @@
 import { z } from 'zod'
 import { ASSET_LICENSE_CODES } from '@/lib/assets/license-types'
+import { marketplacePriceSchema } from '@/lib/marketplace/price-schema'
 
 export const ASSET_UPLOAD_MAX_BYTES = 250 * 1024 * 1024
 export const ASSET_UPLOAD_ALLOWED_EXTENSIONS = ['.zip', '.7z', '.rar', '.tar', '.tar.gz', '.tgz']
@@ -17,7 +18,7 @@ export const assetUploadFormSchema = z.object({
     .string()
     .max(ASSET_DESCRIPTION_MAX, `Description must be at most ${ASSET_DESCRIPTION_MAX} characters`)
     .optional(),
-  price: z.coerce.number().positive('Price must be greater than zero'),
+  price: marketplacePriceSchema,
   categoryId: z.string().uuid('Select a category'),
   licenseCode: z.enum(ASSET_LICENSE_CODES, { required_error: 'Select a license' }),
   tags: z.string().optional(),
@@ -41,7 +42,7 @@ export const assetEditFormSchema = z.object({
     .string()
     .max(ASSET_DESCRIPTION_MAX, `Description must be at most ${ASSET_DESCRIPTION_MAX} characters`)
     .optional(),
-  price: z.coerce.number().positive('Price must be greater than zero'),
+  price: marketplacePriceSchema,
   categoryId: z.string().uuid('Select a category'),
   tags: z.string().optional(),
 })

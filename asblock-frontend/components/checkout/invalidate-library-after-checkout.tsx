@@ -4,6 +4,7 @@ import { useQueryClient } from '@tanstack/react-query'
 import { useEffect, useRef } from 'react'
 
 import { libraryKeys } from '@/lib/library/library-query'
+import { notificationsKeys } from '@/lib/notifications/notifications-query'
 import { invalidateQueriesInBackground } from '@/lib/query/query-refresh'
 
 /**
@@ -19,6 +20,7 @@ export function InvalidateLibraryAfterCheckout() {
     }
     ran.current = true
     invalidateQueriesInBackground(queryClient, { queryKey: libraryKeys.purchases() })
+    invalidateQueriesInBackground(queryClient, { queryKey: notificationsKeys.all })
   }, [queryClient])
 
   return null

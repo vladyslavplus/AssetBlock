@@ -31,7 +31,7 @@ import type {
 } from '@/lib/notifications/notification-types'
 import { subscribeNotificationHub } from '@/lib/notifications/notification-hub'
 import {
-  getNotificationAssetId,
+  getNotificationHref,
   getNotificationBody,
   getNotificationTitle,
 } from '@/lib/notifications/notification-ui'
@@ -281,7 +281,7 @@ export function NotificationBell() {
               {items.map((n) => {
                 const title = getNotificationTitle(n.kind)
                 const body = getNotificationBody(n.kind, n.metadataJson)
-                const assetId = getNotificationAssetId(n.metadataJson)
+                const href = getNotificationHref(n.kind, n.metadataJson)
                 const unread = !n.readAt
                 return (
                   <li key={n.id}>
@@ -310,15 +310,13 @@ export function NotificationBell() {
                       {body ? (
                         <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2">{body}</p>
                       ) : null}
-                      {assetId ? (
-                        <Link
-                          href={`/assets/${assetId}`}
-                          className="text-xs text-accent mt-1 inline-block hover:underline"
-                          onClick={(e) => e.stopPropagation()}
-                        >
-                          View asset
-                        </Link>
-                      ) : null}
+                      <Link
+                        href={href}
+                        className="text-xs text-accent mt-1 inline-block hover:underline"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        Open
+                      </Link>
                     </button>
                   </li>
                 )

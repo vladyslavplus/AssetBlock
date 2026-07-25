@@ -1,7 +1,10 @@
+using AssetBlock.Domain.Core.Enums;
+
 namespace AssetBlock.Domain.Core.Dto.Users;
 
 public sealed record PurchaseLibraryItemDto(
     Guid Id,
+    Guid OrderId,
     Guid AssetId,
     string AssetTitle,
     decimal Price,
@@ -14,4 +17,7 @@ public sealed record PurchaseLibraryItemDto(
     Guid LatestEntitledVersionId,
     bool HasUpdate,
     decimal PricePaid,
-    string Currency);
+    string Currency,
+    PurchaseSource Source,
+    Guid? BundleId,
+    string? BundleTitle);

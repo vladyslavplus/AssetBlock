@@ -1,4 +1,5 @@
 using Ardalis.Result;
+using AssetBlock.Application.UseCases.Payments.Checkout;
 using AssetBlock.Application.UseCases.Payments.CreateCheckoutSession;
 using AssetBlock.Domain.Abstractions.Services;
 using AssetBlock.Domain.Core.Constants;
@@ -30,23 +31,35 @@ public class CreateCheckoutSessionCommandHandlerTests
         var unitOfWorkMock = Substitute.For<IUnitOfWork>();
         _purchaseStoreMock.GetPurchase(Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<CancellationToken>())
             .Returns((Purchase?)null);
-        _checkoutIntentStoreMock.GetPending(Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<CancellationToken>())
+        _checkoutIntentStoreMock.GetPendingForAsset(Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<CancellationToken>())
             .Returns((CheckoutIntent?)null);
         _checkoutIntentStoreMock.TrySetStripeSessionId(
                 Arg.Any<Guid>(),
                 Arg.Any<string>(),
                 Arg.Any<CancellationToken>())
             .Returns(true);
+        _assetStoreMock.GetForUpdate(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
+            .Returns(ci => new Asset
+            {
+                Id = ci.Arg<Guid>(),
+                AuthorId = Guid.NewGuid(),
+                CategoryId = Guid.NewGuid(),
+                Title = "locked"
+            });
         unitOfWorkMock.ExecuteInTransaction(Arg.Any<Func<CancellationToken, Task>>(), Arg.Any<CancellationToken>())
             .Returns(call => call.Arg<Func<CancellationToken, Task>>()(CancellationToken.None));
 
-        _handler = new CreateCheckoutSessionCommandHandler(
+        var orchestrator = new CheckoutSessionOrchestrator(
             _paymentServiceMock,
+            _checkoutIntentStoreMock,
+            unitOfWorkMock,
+            NullLogger<CheckoutSessionOrchestrator>.Instance);
+
+        _handler = new CreateCheckoutSessionCommandHandler(
             _assetStoreMock,
             _purchaseStoreMock,
             _checkoutIntentStoreMock,
-            unitOfWorkMock,
-            NullLogger<CreateCheckoutSessionCommandHandler>.Instance);
+            orchestrator);
     }
 
     [Fact]
@@ -109,10 +122,7 @@ public class CreateCheckoutSessionCommandHandlerTests
             UserId = userId,
             AssetId = command.AssetId,
             AssetVersionId = Guid.NewGuid(),
-            CheckoutIntentId = Guid.NewGuid(),
-            PricePaid = 9.99m,
-            Currency = "usd",
-            StripePaymentId = "cs_test_1",
+            OrderLineId = Guid.NewGuid(),
             PurchasedAt = DateTimeOffset.UtcNow
         };
         _purchaseStoreMock.GetPurchase(userId, command.AssetId, Arg.Any<CancellationToken>()).Returns(purchase);
@@ -123,7 +133,7 @@ public class CreateCheckoutSessionCommandHandlerTests
         result.Status.Should().Be(ResultStatus.Conflict);
         result.Errors.Should().Contain(ErrorCodes.ERR_ASSET_ALREADY_PURCHASED);
         await _paymentServiceMock.DidNotReceiveWithAnyArgs().CreateCheckoutSession(
-            Arg.Any<CheckoutLineItem>(), Arg.Any<Guid>(), Arg.Any<CancellationToken>());
+            Arg.Any<CheckoutSessionDraft>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -134,7 +144,7 @@ public class CreateCheckoutSessionCommandHandlerTests
         _assetStoreMock.GetCurrentVersionSnapshot(command.AssetId, Arg.Any<CancellationToken>())
             .Returns(snapshot);
         _paymentServiceMock.CreateCheckoutSession(
-                Arg.Any<CheckoutLineItem>(), Arg.Any<Guid>(), Arg.Any<CancellationToken>())
+                Arg.Any<CheckoutSessionDraft>(), Arg.Any<CancellationToken>())
             .ThrowsAsync(new Exception("Stripe unavailable"));
 
         var result = await _handler.Handle(command, CancellationToken.None);
@@ -152,7 +162,7 @@ public class CreateCheckoutSessionCommandHandlerTests
         _assetStoreMock.GetCurrentVersionSnapshot(command.AssetId, Arg.Any<CancellationToken>())
             .Returns(snapshot);
         _paymentServiceMock.CreateCheckoutSession(
-                Arg.Any<CheckoutLineItem>(), command.UserId, Arg.Any<CancellationToken>())
+                Arg.Any<CheckoutSessionDraft>(), Arg.Any<CancellationToken>())
             .Returns(new StripeCheckoutSession("cs_test_123", sessionUrl));
 
         var result = await _handler.Handle(command, CancellationToken.None);
@@ -170,11 +180,10 @@ public class CreateCheckoutSessionCommandHandlerTests
         var pendingIntent = CreatePendingIntent(command.UserId, snapshot);
         _assetStoreMock.GetCurrentVersionSnapshot(command.AssetId, Arg.Any<CancellationToken>())
             .Returns(snapshot);
-        _checkoutIntentStoreMock.GetPending(command.UserId, command.AssetId, Arg.Any<CancellationToken>())
+        _checkoutIntentStoreMock.GetPendingForAsset(command.UserId, command.AssetId, Arg.Any<CancellationToken>())
             .Returns(pendingIntent);
         _paymentServiceMock.CreateCheckoutSession(
-                Arg.Is<CheckoutLineItem>(item => item.CheckoutIntentId == pendingIntent.Id),
-                command.UserId,
+                Arg.Is<CheckoutSessionDraft>(d => d.CheckoutIntentId == pendingIntent.Id),
                 Arg.Any<CancellationToken>())
             .Returns(new StripeCheckoutSession("cs_test_resumed", sessionUrl));
 
@@ -182,8 +191,10 @@ public class CreateCheckoutSessionCommandHandlerTests
 
         result.IsSuccess.Should().BeTrue();
         result.Value.CheckoutUrl.Should().Be(sessionUrl);
-        await _checkoutIntentStoreMock.DidNotReceiveWithAnyArgs().Create(
+        await _checkoutIntentStoreMock.DidNotReceiveWithAnyArgs().CreateWithItemsAndReservations(
             Arg.Any<CheckoutIntent>(),
+            Arg.Any<IReadOnlyList<CheckoutIntentItem>>(),
+            Arg.Any<IReadOnlyList<CheckoutReservation>>(),
             Arg.Any<CancellationToken>());
     }
 
@@ -197,7 +208,7 @@ public class CreateCheckoutSessionCommandHandlerTests
         pendingIntent.StripeSessionId = "cs_test_existing";
         _assetStoreMock.GetCurrentVersionSnapshot(command.AssetId, Arg.Any<CancellationToken>())
             .Returns(snapshot);
-        _checkoutIntentStoreMock.GetPending(command.UserId, command.AssetId, Arg.Any<CancellationToken>())
+        _checkoutIntentStoreMock.GetPendingForAsset(command.UserId, command.AssetId, Arg.Any<CancellationToken>())
             .Returns(pendingIntent);
         _paymentServiceMock.GetCheckoutSession("cs_test_existing", Arg.Any<CancellationToken>())
             .Returns(new StripeCheckoutSessionSnapshot(
@@ -210,26 +221,45 @@ public class CreateCheckoutSessionCommandHandlerTests
         result.IsSuccess.Should().BeTrue();
         result.Value.CheckoutUrl.Should().Be(sessionUrl);
         await _paymentServiceMock.DidNotReceiveWithAnyArgs().CreateCheckoutSession(
-            Arg.Any<CheckoutLineItem>(),
-            Arg.Any<Guid>(),
+            Arg.Any<CheckoutSessionDraft>(),
             Arg.Any<CancellationToken>());
     }
 
     private static CheckoutIntent CreatePendingIntent(Guid userId, AssetCurrentVersionSnapshot snapshot)
     {
         var now = DateTimeOffset.UtcNow;
+        var intentId = Guid.NewGuid();
         return new CheckoutIntent
         {
-            Id = Guid.NewGuid(),
+            Id = intentId,
             UserId = userId,
             AssetId = snapshot.AssetId,
-            AssetVersionId = snapshot.AssetVersionId,
-            AssetTitle = snapshot.Title,
-            UnitAmount = snapshot.Price,
+            ProductTitle = snapshot.Title,
+            AmountTotal = snapshot.Price,
             Currency = StripeConstants.CURRENCY_USD,
             Status = CheckoutIntentStatus.PENDING,
             CreatedAt = now,
-            ExpiresAt = now.AddHours(24)
+            ExpiresAt = now.AddHours(24),
+            Items =
+            [
+                new CheckoutIntentItem
+                {
+                    Id = Guid.NewGuid(),
+                    CheckoutIntentId = intentId,
+                    AssetId = snapshot.AssetId,
+                    AssetVersionId = snapshot.AssetVersionId,
+                    SellerId = snapshot.AuthorId,
+                    Position = 1,
+                    AssetTitleSnapshot = snapshot.Title,
+                    VersionNumber = snapshot.VersionNumber,
+                    ListPrice = snapshot.Price,
+                    AllocatedPrice = snapshot.Price,
+                    LicenseCode = AssetLicenseCode.PERSONAL,
+                    LicenseTemplateVersion = snapshot.LicenseTemplateVersion,
+                    LicenseDisplayName = snapshot.LicenseDisplayName,
+                    LicenseTerms = snapshot.LicenseTerms
+                }
+            ]
         };
     }
 

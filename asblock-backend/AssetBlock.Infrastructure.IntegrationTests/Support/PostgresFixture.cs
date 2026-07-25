@@ -26,9 +26,7 @@ public sealed class PostgresFixture : IAsyncLifetime
     }
 
     /// <summary>
-    /// Creates a context against a wiped schema with real EF migrations applied.
-    /// Uses DROP SCHEMA instead of EnsureDeleted to avoid "cannot drop the currently open database"
-    /// when pooled connections still reference the Testcontainers database.
+    /// Creates a context against a wiped schema with the full EF migration history applied.
     /// </summary>
     public async Task<ApplicationDbContext> CreateCleanDbContext(CancellationToken cancellationToken = default)
     {

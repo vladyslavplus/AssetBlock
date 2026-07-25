@@ -1,15 +1,16 @@
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
-import { ArrowRight, Store, Upload, ShieldCheck } from 'lucide-react'
+import { ArrowRight, Store, Upload, ShieldCheck, FolderOpen, Package } from 'lucide-react'
 
 export function SellOverview() {
   return (
     <div className="space-y-8">
       <p className="text-muted-foreground leading-relaxed">
-        List templates, starter kits, CLI tools, and other digital products. Use the{' '}
-        <strong className="text-foreground font-medium">My listings</strong> tab to see what you
-        have published, and <strong className="text-foreground font-medium">Upload asset</strong> to
-        add a new product with a file package.
+        List templates, starter kits, CLI tools, and other digital products. Use{' '}
+        <strong className="text-foreground font-medium">My listings</strong> for individual assets,{' '}
+        <strong className="text-foreground font-medium">Collections</strong> for editorial
+        groupings, and <strong className="text-foreground font-medium">Bundles</strong> for
+        discounted multi-asset offers.
       </p>
 
       <ul className="space-y-6">
@@ -19,6 +20,24 @@ export function SellOverview() {
             <p className="font-medium text-foreground">Reach buyers</p>
             <p className="text-sm text-muted-foreground mt-1">
               Your assets appear in catalog search alongside the rest of the marketplace.
+            </p>
+          </div>
+        </li>
+        <li className="flex gap-3">
+          <FolderOpen className="w-5 h-5 text-primary shrink-0 mt-0.5" aria-hidden />
+          <div>
+            <p className="font-medium text-foreground">Curate collections</p>
+            <p className="text-sm text-muted-foreground mt-1">
+              Publish editorial collections that showcase related assets — no separate price.
+            </p>
+          </div>
+        </li>
+        <li className="flex gap-3">
+          <Package className="w-5 h-5 text-primary shrink-0 mt-0.5" aria-hidden />
+          <div>
+            <p className="font-medium text-foreground">Sell bundles</p>
+            <p className="text-sm text-muted-foreground mt-1">
+              Offer 2–20 of your assets at one discounted price with a single checkout.
             </p>
           </div>
         </li>

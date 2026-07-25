@@ -4,7 +4,14 @@ namespace AssetBlock.Domain.Core.Dto.Outbox;
 
 public sealed record AssetBlobDeletePayload(Guid AssetId, string StorageKey);
 
-public sealed record PurchaseCompletedPayload(Guid PurchaseId, Guid UserId, Guid AssetId, string AssetTitle, Guid AuthorId);
+public sealed record OrderCompletedPayload(
+    Guid OrderId,
+    Guid UserId,
+    Guid? AssetId,
+    Guid? BundleId,
+    string ProductTitle,
+    int ItemCount,
+    Guid SellerId);
 
 public sealed record NotificationDispatchPayload(
     Guid RecipientUserId,

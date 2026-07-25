@@ -8,7 +8,7 @@ import { useAuth } from '@/components/auth/auth-context'
 import { isEmailVerified } from '@/components/auth/email-verification-notice'
 import { formatUsdWhole } from '@/lib/format-currency'
 import { CheckoutRequestError, postCreateCheckoutSession } from '@/lib/payments/checkout-api'
-import { PENDING_REVIEW_ASSET_ID_KEY } from '@/lib/reviews/review-constants'
+import { writePendingCheckoutContext } from '@/lib/reviews/review-constants'
 import { Download, Lock, Loader2, Zap } from 'lucide-react'
 import { toast } from 'sonner'
 
@@ -39,11 +39,11 @@ export function AssetPurchaseCard({
   const checkoutMutation = useMutation({
     mutationFn: () => postCreateCheckoutSession(assetId),
     onSuccess: (data) => {
-      try {
-        sessionStorage.setItem(PENDING_REVIEW_ASSET_ID_KEY, assetId)
-      } catch {
-        // Private mode / storage blocked — success page prompt may be unavailable; library still works.
-      }
+      writePendingCheckoutContext({
+        checkoutIntentId: data.checkoutIntentId,
+        kind: 'asset',
+        assetId,
+      })
       window.location.assign(data.checkoutUrl)
     },
     onError: (err: unknown) => {

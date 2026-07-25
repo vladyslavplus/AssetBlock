@@ -4,7 +4,7 @@ import { formatHubToastMessage } from '@/lib/notifications/notification-ui'
 import { getNotificationsHubUrl } from '@/lib/notifications/notifications-hub-url'
 import { toast } from 'sonner'
 
-const HUB_METHODS = ['PurchaseCompleted', 'DownloadReady', 'AssetSold', 'ReviewReceived'] as const
+const HUB_METHODS = ['OrderReady', 'DownloadReady', 'AssetSold', 'ReviewReceived'] as const
 
 /** When the last subscriber leaves, delay stop so React Strict Mode / HMR remounts do not abort negotiate. */
 const STOP_DEBOUNCE_MS = 500

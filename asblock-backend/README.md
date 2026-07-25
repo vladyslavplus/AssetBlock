@@ -41,6 +41,23 @@ stripe listen --forward-to http://localhost:5088/api/payments/webhook
 
 Set `Stripe:WebhookSecret` to the `whsec_...` printed by that active listener and restart the API. The Stripe CLI must be logged into the same test account as `Stripe:SecretKey`. A listener only forwards events it receives while running; use Stripe CLI event resend for an already completed local checkout. Never paste or commit either secret.
 
+### Collections vs Bundles
+
+- **Collection** is editorial only: one seller curates up to 50 of their own assets, with DRAFT / PUBLISHED / ARCHIVED lifecycle. Collections have no price, checkout, entitlement, or license. Public reads return only PUBLISHED collections that still have at least one active (non-soft-deleted) item.
+- **Bundle** is a paid same-seller product: 2–20 distinct active assets, one fixed USD price lower than the summed list-price snapshot, append-only immutable revisions. Multi-seller bundles and revenue splitting are out of scope. In v1 a buyer who already owns any bundle item cannot purchase that bundle (no partial pricing).
+
+### Generalized checkout and orders
+
+Direct asset and bundle payments share one commerce model:
+
+1. `POST /api/payments/checkout` with `{ assetId }` (backward compatible) or `POST /api/payments/checkout/bundles` with `{ bundleId }`.
+2. Server creates a durable `CheckoutIntent` + immutable `CheckoutIntentItem` rows + `CheckoutReservation` rows `(UserId, AssetId)` in a short DB transaction (no Stripe/network calls inside).
+3. Stripe Checkout Session is created after commit; metadata contains only `checkoutIntentId` and `userId`; idempotency key = checkout intent id.
+4. Browser success redirect never creates entitlements. Stripe webhook `checkout.session.completed` is the only payment-completion authority: it verifies signature/amount/currency/session, then atomically creates `Order` + `OrderLine`s + per-asset `Purchase` entitlements, one buyer receipt/order-ready notification, and one seller sale email/notification.
+5. Historical paid price/currency live on `Order` / `OrderLine`. `Purchase` remains the per-asset entitlement used by library, downloads, and reviews.
+
+Local webhook flow remains: API on `http://localhost:5088` + `stripe listen --forward-to http://localhost:5088/api/payments/webhook`.
+
 Generate a local AES-256 key (32 bytes, Base64):
 
 ```bash

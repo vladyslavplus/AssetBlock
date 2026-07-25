@@ -19,7 +19,9 @@ internal sealed class StripePaymentService(
 {
     private readonly StripeClient _stripeClient = new(options.Value.SecretKey);
 
-    public async Task<StripeCheckoutSession> CreateCheckoutSession(CheckoutLineItem item, Guid userId, CancellationToken cancellationToken = default)
+    public async Task<StripeCheckoutSession> CreateCheckoutSession(
+        CheckoutSessionDraft draft,
+        CancellationToken cancellationToken = default)
     {
         var opts = options.Value;
         var resolvedSuccessUrl = opts.DefaultSuccessUrl;
@@ -30,9 +32,45 @@ internal sealed class StripePaymentService(
             throw new InvalidOperationException("Stripe SuccessUrl and CancelUrl must be configured.");
         }
 
-        if (!IsoCurrency.TryNormalize(item.Currency, out var currency) || currency != item.Currency)
+        if (draft.Lines.Count == 0)
         {
-            throw new InvalidOperationException("Checkout line item currency must be a lowercase ISO 4217 code.");
+            throw new InvalidOperationException("Checkout session draft must contain at least one line.");
+        }
+
+        if (!IsoCurrency.TryNormalize(draft.Currency, out var currency) || currency != draft.Currency)
+        {
+            throw new InvalidOperationException("Checkout draft currency must be a lowercase ISO 4217 code.");
+        }
+
+        var lineItems = new List<SessionLineItemOptions>(draft.Lines.Count);
+        long totalCents = 0;
+        foreach (var line in draft.Lines)
+        {
+            if (!string.Equals(line.Currency, currency, StringComparison.Ordinal))
+            {
+                throw new InvalidOperationException("Checkout draft line currency must match header currency.");
+            }
+
+            var cents = BundlePriceAllocator.ToCents(line.Amount);
+            totalCents = checked(totalCents + cents);
+            lineItems.Add(new SessionLineItemOptions
+            {
+                PriceData = new SessionLineItemPriceDataOptions
+                {
+                    Currency = currency,
+                    UnitAmount = cents,
+                    ProductData = new SessionLineItemPriceDataProductDataOptions
+                    {
+                        Name = line.Title
+                    }
+                },
+                Quantity = 1
+            });
+        }
+
+        if (totalCents <= 0)
+        {
+            throw new InvalidOperationException("Checkout session total must be positive.");
         }
 
         var sessionService = new SessionService(_stripeClient);
@@ -41,36 +79,19 @@ internal sealed class StripePaymentService(
             Mode = StripeConstants.MODE_PAYMENT,
             SuccessUrl = resolvedSuccessUrl,
             CancelUrl = resolvedCancelUrl,
-            ExpiresAt = item.ExpiresAt.UtcDateTime,
+            ExpiresAt = draft.ExpiresAt.UtcDateTime,
             Metadata = new Dictionary<string, string>
             {
-                { StripeConstants.MetadataKeys.USER_ID, userId.ToString() },
-                { StripeConstants.MetadataKeys.ASSET_ID, item.AssetId.ToString() },
-                { StripeConstants.MetadataKeys.ASSET_VERSION_ID, item.AssetVersionId.ToString() },
-                { StripeConstants.MetadataKeys.CHECKOUT_INTENT_ID, item.CheckoutIntentId.ToString() }
+                { StripeConstants.MetadataKeys.USER_ID, draft.UserId.ToString() },
+                { StripeConstants.MetadataKeys.CHECKOUT_INTENT_ID, draft.CheckoutIntentId.ToString() }
             },
-            LineItems =
-            [
-                new SessionLineItemOptions
-                {
-                    PriceData = new SessionLineItemPriceDataOptions
-                    {
-                        Currency = currency,
-                        UnitAmount = (long)Math.Round(item.UnitAmount * 100, MidpointRounding.AwayFromZero),
-                        ProductData = new SessionLineItemPriceDataProductDataOptions
-                        {
-                            Name = item.Title
-                        }
-                    },
-                    Quantity = 1
-                }
-            ]
+            LineItems = lineItems
         };
 
         var pipeline = resilience.GetPipeline(ResilienceConstants.Pipelines.STRIPE);
         var requestOptions = new RequestOptions
         {
-            IdempotencyKey = item.CheckoutIntentId.ToString("N")
+            IdempotencyKey = draft.CheckoutIntentId.ToString("N")
         };
         var session = await pipeline.ExecuteAsync(
             async ct => await sessionService.CreateAsync(sessionOptions, requestOptions, ct),
@@ -98,10 +119,17 @@ internal sealed class StripePaymentService(
             throw new InvalidOperationException("Stripe returned an invalid checkout session.");
         }
 
-        return new StripeCheckoutSessionSnapshot(session.Id, session.Status, session.Url);
+        return new StripeCheckoutSessionSnapshot(
+            session.Id,
+            session.Status,
+            session.Url,
+            MapPaidCheckout(session));
     }
 
-    public Task<StripeCheckoutCompleted?> VerifyCheckoutCompleted(string payload, string signature, CancellationToken cancellationToken = default)
+    public Task<StripeCheckoutCompleted?> VerifyCheckoutCompleted(
+        string payload,
+        string signature,
+        CancellationToken cancellationToken = default)
     {
         var webhookSecret = options.Value.WebhookSecret;
         if (string.IsNullOrEmpty(webhookSecret))
@@ -126,26 +154,29 @@ internal sealed class StripePaymentService(
         }
 
         var session = stripeEvent.Data.Object as Session;
-        if (session?.Metadata is null || session.Metadata.Count == 0)
+        return Task.FromResult(session is null ? null : MapPaidCheckout(session));
+    }
+
+    private static StripeCheckoutCompleted? MapPaidCheckout(Session session)
+    {
+        if (session.Metadata is null
+            || session.Metadata.Count == 0
+            || string.IsNullOrWhiteSpace(session.Id))
         {
-            return Task.FromResult<StripeCheckoutCompleted?>(null);
+            return null;
         }
 
         if (session.PaymentStatus != StripeConstants.PAYMENT_STATUS_PAID)
         {
-            return Task.FromResult<StripeCheckoutCompleted?>(null);
+            return null;
         }
 
-        if (!session.Metadata.TryGetValue(StripeConstants.MetadataKeys.USER_ID, out var userIdStr) ||
-            !session.Metadata.TryGetValue(StripeConstants.MetadataKeys.ASSET_ID, out var assetIdStr) ||
-            !session.Metadata.TryGetValue(StripeConstants.MetadataKeys.ASSET_VERSION_ID, out var assetVersionIdStr) ||
-            !session.Metadata.TryGetValue(StripeConstants.MetadataKeys.CHECKOUT_INTENT_ID, out var checkoutIntentIdStr) ||
-            !Guid.TryParse(userIdStr, out var userId) ||
-            !Guid.TryParse(assetIdStr, out var assetId) ||
-            !Guid.TryParse(assetVersionIdStr, out var assetVersionId) ||
-            !Guid.TryParse(checkoutIntentIdStr, out var checkoutIntentId))
+        if (!session.Metadata.TryGetValue(StripeConstants.MetadataKeys.USER_ID, out var userIdStr)
+            || !session.Metadata.TryGetValue(StripeConstants.MetadataKeys.CHECKOUT_INTENT_ID, out var checkoutIntentIdStr)
+            || !Guid.TryParse(userIdStr, out var userId)
+            || !Guid.TryParse(checkoutIntentIdStr, out var checkoutIntentId))
         {
-            return Task.FromResult<StripeCheckoutCompleted?>(null);
+            return null;
         }
 
         if (session.AmountTotal is not { } amountTotalInCents || amountTotalInCents <= 0
@@ -155,9 +186,7 @@ internal sealed class StripePaymentService(
             throw new InvalidOperationException("Paid Stripe checkout session has an invalid amount or currency.");
         }
 
-        var amountTotal = amountTotalInCents / 100m;
-
-        return Task.FromResult<StripeCheckoutCompleted?>(
-            new StripeCheckoutCompleted(checkoutIntentId, userId, assetId, assetVersionId, session.Id, amountTotal, currency));
+        var amountTotal = BundlePriceAllocator.FromCents(amountTotalInCents);
+        return new StripeCheckoutCompleted(checkoutIntentId, userId, session.Id, amountTotal, currency);
     }
 }

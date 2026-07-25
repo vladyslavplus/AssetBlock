@@ -14,11 +14,13 @@ public static class StripeConstants
         public const string EXPIRED = "expired";
     }
 
+    /// <summary>
+    /// Stripe Checkout Session metadata. Only checkoutIntentId and userId are written going forward;
+    /// product/version/price data is loaded from the durable CheckoutIntent snapshot.
+    /// </summary>
     public static class MetadataKeys
     {
         public const string USER_ID = "userId";
-        public const string ASSET_ID = "assetId";
-        public const string ASSET_VERSION_ID = "assetVersionId";
         public const string CHECKOUT_INTENT_ID = "checkoutIntentId";
     }
 

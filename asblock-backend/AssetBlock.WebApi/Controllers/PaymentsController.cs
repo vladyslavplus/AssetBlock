@@ -1,4 +1,6 @@
+using AssetBlock.Application.UseCases.Payments.CreateBundleCheckoutSession;
 using AssetBlock.Application.UseCases.Payments.CreateCheckoutSession;
+using AssetBlock.Application.UseCases.Payments.GetCheckoutStatus;
 using AssetBlock.Application.UseCases.Payments.HandleStripeWebhook;
 using AssetBlock.Domain.Core.Constants;
 using AssetBlock.Domain.Core.Dto.Payments;
@@ -48,6 +50,52 @@ public sealed class PaymentsController(ISender sender) : ApiControllerBase(sende
 
         var command = new CreateCheckoutSessionCommand(request.AssetId, userId.Value);
         var result = await Sender.Send(command, cancellationToken);
+        return MapResultToActionResult(result);
+    }
+
+    /// <summary>
+    /// Create a Stripe Checkout session for a bundle. Returns redirect URL.
+    /// Requires an authenticated user with a verified email address.
+    /// </summary>
+    [HttpPost(ApiRoutes.Payments.CHECKOUT_BUNDLES)]
+    [Authorize(Policy = AuthorizationPolicies.VERIFIED_EMAIL)]
+    [EnableRateLimiting(RateLimitingConstants.Policies.PAYMENTS_CHECKOUT)]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    public async Task<IActionResult> CreateBundleCheckout(
+        [FromBody] CreateBundleCheckoutRequest request,
+        CancellationToken cancellationToken)
+    {
+        var userId = GetUserId();
+        if (userId is null)
+        {
+            return UnauthorizedProblem();
+        }
+
+        var command = new CreateBundleCheckoutSessionCommand(request.BundleId, userId.Value);
+        var result = await Sender.Send(command, cancellationToken);
+        return MapResultToActionResult(result);
+    }
+
+    /// <summary>
+    /// Poll checkout intent fulfillment status after Stripe redirect (order appears only after webhook).
+    /// </summary>
+    [HttpGet(ApiRoutes.Payments.CHECKOUT_STATUS)]
+    [Authorize]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> GetCheckoutStatus(Guid checkoutIntentId, CancellationToken cancellationToken)
+    {
+        var userId = GetUserId();
+        if (userId is null)
+        {
+            return UnauthorizedProblem();
+        }
+
+        var result = await Sender.Send(new GetCheckoutStatusQuery(checkoutIntentId, userId.Value), cancellationToken);
         return MapResultToActionResult(result);
     }
 

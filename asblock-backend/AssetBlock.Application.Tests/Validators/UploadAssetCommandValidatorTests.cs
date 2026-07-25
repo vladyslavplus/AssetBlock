@@ -1,5 +1,6 @@
 using AssetBlock.Application.UseCases.Assets.UploadAsset;
 using AssetBlock.Domain.Core.Dto.Assets;
+using AssetBlock.Domain.Core.Payments;
 using FluentAssertions;
 
 namespace AssetBlock.Application.Tests.Validators;
@@ -111,6 +112,14 @@ public class UploadAssetCommandValidatorTests
     {
         var result = await _validator.ValidateAsync(ValidCommand());
         result.IsValid.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task Validate_WhenPriceOverMaxAmount_ShouldFail()
+    {
+        var result = await _validator.ValidateAsync(ValidCommand(price: BundlePriceAllocator.MAX_AMOUNT + 0.01m));
+        result.IsValid.Should().BeFalse();
+        result.Errors.Should().Contain(e => e.PropertyName.Contains("Price"));
     }
 
     [Fact]

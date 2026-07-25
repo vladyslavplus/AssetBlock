@@ -1,6 +1,10 @@
 import { getApiErrorMessage } from '@/lib/http/api-errors'
 import type { AssetVersionSummaryApi } from '@/lib/catalog/assets-api'
-import type { PurchaseLibraryItem, PagedPurchaseLibraryDto } from '@/lib/library/purchase-types'
+import {
+  normalizePurchaseSource,
+  type PurchaseLibraryItem,
+  type PagedPurchaseLibraryDto,
+} from '@/lib/library/purchase-types'
 
 export const libraryKeys = {
   all: ['library'] as const,
@@ -50,6 +54,7 @@ export async function fetchLibraryPurchases(): Promise<LibraryPurchasesResult> {
   const rawItems = Array.isArray(data.items) ? data.items : []
   const items: PurchaseLibraryItem[] = rawItems.map((row) => ({
     ...row,
+    orderId: row.orderId ?? '',
     hasUserReviewed: Boolean(row.hasUserReviewed),
     purchasedVersionNumber: Number(row.purchasedVersionNumber),
     purchasedVersionId: row.purchasedVersionId,
@@ -57,7 +62,10 @@ export async function fetchLibraryPurchases(): Promise<LibraryPurchasesResult> {
     latestEntitledVersionId: row.latestEntitledVersionId,
     hasUpdate: Boolean(row.hasUpdate),
     pricePaid: Number(row.pricePaid),
-    currency: row.currency,
+    currency: row.currency ?? 'usd',
+    source: normalizePurchaseSource(row.source),
+    bundleId: row.bundleId ?? null,
+    bundleTitle: row.bundleTitle ?? null,
   }))
   return {
     ok: true,

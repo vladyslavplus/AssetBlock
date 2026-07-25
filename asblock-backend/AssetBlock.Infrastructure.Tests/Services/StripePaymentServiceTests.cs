@@ -29,15 +29,8 @@ public sealed class StripePaymentServiceTests
             resilience,
             NullLogger<StripePaymentService>.Instance);
 
-        var lineItem = new CheckoutLineItem(
-            Guid.NewGuid(),
-            Guid.NewGuid(),
-            Guid.NewGuid(),
-            "Test Asset",
-            9.99m,
-            "usd",
-            DateTimeOffset.UtcNow.AddHours(1));
-        var act = async () => await sut.CreateCheckoutSession(lineItem, Guid.NewGuid());
+        var draft = CreateDraft();
+        var act = async () => await sut.CreateCheckoutSession(draft);
 
         await act.Should().ThrowAsync<InvalidOperationException>();
     }
@@ -61,15 +54,8 @@ public sealed class StripePaymentServiceTests
             resilience,
             NullLogger<StripePaymentService>.Instance);
 
-        var lineItem = new CheckoutLineItem(
-            Guid.NewGuid(),
-            Guid.NewGuid(),
-            Guid.NewGuid(),
-            "Test Asset",
-            9.99m,
-            "usd",
-            DateTimeOffset.UtcNow.AddHours(1));
-        var act = async () => await sut.CreateCheckoutSession(lineItem, Guid.NewGuid());
+        var draft = CreateDraft();
+        var act = async () => await sut.CreateCheckoutSession(draft);
 
         await act.Should().ThrowAsync<Exception>();
     }
@@ -90,6 +76,14 @@ public sealed class StripePaymentServiceTests
         await act.Should().ThrowAsync<StripeWebhookInvalidSignatureException>();
     }
 
+    private static CheckoutSessionDraft CreateDraft() =>
+        new(
+            Guid.NewGuid(),
+            Guid.NewGuid(),
+            DateTimeOffset.UtcNow.AddHours(1),
+            "usd",
+            [new CheckoutSessionDraftLine("Test Asset", 9.99m, "usd")]);
+
     private static StripePaymentService CreateSut(string webhookSecret)
     {
         var opts = Microsoft.Extensions.Options.Options.Create(new StripeOptions
@@ -100,10 +94,6 @@ public sealed class StripePaymentServiceTests
         var resilience = Substitute.For<ResiliencePipelineProvider<string>>();
         resilience.GetPipeline(Arg.Any<string>())
             .Returns(_ => new ResiliencePipelineBuilder().Build());
-
-        return new StripePaymentService(
-            opts,
-            resilience,
-            NullLogger<StripePaymentService>.Instance);
+        return new StripePaymentService(opts, resilience, NullLogger<StripePaymentService>.Instance);
     }
 }

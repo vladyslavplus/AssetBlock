@@ -17,6 +17,24 @@ public interface ITransactionalEmailComposer
         string assetTitle,
         DateTimeOffset purchasedAt);
 
+    EmailDispatchPayload CreateOrderReceipt(
+        string recipientAddress,
+        Guid recipientUserId,
+        string productTitle,
+        decimal amountTotal,
+        string currency,
+        DateTimeOffset purchasedAt,
+        IReadOnlyList<string> itemTitles);
+
+    EmailDispatchPayload CreateOrderSold(
+        string recipientAddress,
+        Guid recipientUserId,
+        string productTitle,
+        decimal amountTotal,
+        string currency,
+        DateTimeOffset purchasedAt,
+        IReadOnlyList<string> itemTitles);
+
     EmailDispatchPayload CreatePasswordChangedNotice(string recipientAddress, Guid recipientUserId);
 
     EmailDispatchPayload CreateEmailChangedNotice(string recipientAddress, Guid recipientUserId);

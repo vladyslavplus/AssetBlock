@@ -339,18 +339,13 @@ public class DownloadServiceTests
     private static Purchase MakePurchase(
         Guid userId,
         Guid assetId,
-        Guid assetVersionId,
-        decimal pricePaid = 9.99m,
-        string currency = "usd") => new Purchase
+        Guid assetVersionId) => new()
     {
         Id = Guid.NewGuid(),
         UserId = userId,
         AssetId = assetId,
         AssetVersionId = assetVersionId,
-        CheckoutIntentId = Guid.NewGuid(),
-        PricePaid = pricePaid,
-        Currency = currency,
-        StripePaymentId = "cs_test",
+        OrderLineId = Guid.NewGuid(),
         PurchasedAt = DateTimeOffset.UtcNow
     };
 

@@ -67,6 +67,9 @@ public sealed class AssetBlockWebApplicationFactory(string connectionString) : W
 
             services.RemoveAll<IAssetStorageService>();
             services.AddSingleton<IAssetStorageService>(AssetStorage);
+
+            services.RemoveAll<IPaymentService>();
+            services.AddSingleton<IPaymentService, FakePaymentService>();
         });
     }
 }

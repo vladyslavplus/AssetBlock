@@ -11,16 +11,23 @@ internal sealed class CheckoutIntentConfiguration : IEntityTypeConfiguration<Che
     {
         builder.ToTable("checkout_intents", table =>
         {
-            table.HasCheckConstraint("CK_checkout_intents_unit_amount_positive", "\"UnitAmount\" > 0");
+            table.HasCheckConstraint("CK_checkout_intents_amount_total_positive", "\"AmountTotal\" > 0");
             table.HasCheckConstraint("CK_checkout_intents_expires_after_created", "\"ExpiresAt\" > \"CreatedAt\"");
+            table.HasCheckConstraint(
+                "CK_checkout_intents_exactly_one_product",
+                """
+                ("AssetId" IS NOT NULL AND "BundleId" IS NULL AND "BundleRevisionId" IS NULL)
+                OR ("AssetId" IS NULL AND "BundleId" IS NOT NULL AND "BundleRevisionId" IS NOT NULL)
+                """);
         });
 
         builder.HasKey(i => i.Id);
         builder.Property(i => i.UserId).IsRequired();
-        builder.Property(i => i.AssetId).IsRequired();
-        builder.Property(i => i.AssetVersionId).IsRequired();
-        builder.Property(i => i.AssetTitle).IsRequired().HasMaxLength(500);
-        builder.Property(i => i.UnitAmount).IsRequired().HasPrecision(18, 2);
+        builder.Property(i => i.AssetId);
+        builder.Property(i => i.BundleId);
+        builder.Property(i => i.BundleRevisionId);
+        builder.Property(i => i.ProductTitle).IsRequired().HasMaxLength(500);
+        builder.Property(i => i.AmountTotal).IsRequired().HasPrecision(18, 2);
         builder.Property(i => i.Currency).IsRequired().HasMaxLength(3);
         builder.Property(i => i.StripeSessionId).HasMaxLength(256);
         builder.Property(i => i.Status)
@@ -41,19 +48,30 @@ internal sealed class CheckoutIntentConfiguration : IEntityTypeConfiguration<Che
             .WithMany()
             .HasForeignKey(i => i.AssetId)
             .OnDelete(DeleteBehavior.Restrict);
-        builder.HasOne(i => i.AssetVersion)
+        builder.HasOne(i => i.Bundle)
             .WithMany()
-            .HasForeignKey(i => i.AssetVersionId)
+            .HasForeignKey(i => i.BundleId)
+            .OnDelete(DeleteBehavior.Restrict);
+        builder.HasOne(i => i.BundleRevision)
+            .WithMany()
+            .HasForeignKey(i => i.BundleRevisionId)
             .OnDelete(DeleteBehavior.Restrict);
 
         builder.HasIndex(i => i.StripeSessionId)
             .IsUnique()
             .HasDatabaseName("UIX_checkout_intents_stripe_session");
-        builder.HasIndex(i => new { i.AssetId, i.Status, i.ExpiresAt })
-            .HasDatabaseName("IX_checkout_intents_asset_active");
+
         builder.HasIndex(i => new { i.UserId, i.AssetId })
             .IsUnique()
-            .HasFilter("\"Status\" = 'PENDING'")
+            .HasFilter("\"Status\" = 'PENDING' AND \"AssetId\" IS NOT NULL")
             .HasDatabaseName("UIX_checkout_intents_user_asset_pending");
+
+        builder.HasIndex(i => new { i.UserId, i.BundleId })
+            .IsUnique()
+            .HasFilter("\"Status\" = 'PENDING' AND \"BundleId\" IS NOT NULL")
+            .HasDatabaseName("UIX_checkout_intents_user_bundle_pending");
+
+        builder.HasIndex(i => new { i.Status, i.ExpiresAt, i.Id })
+            .HasDatabaseName("IX_checkout_intents_status_expires");
     }
 }

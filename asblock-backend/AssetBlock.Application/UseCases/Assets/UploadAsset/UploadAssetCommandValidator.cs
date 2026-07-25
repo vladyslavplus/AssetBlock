@@ -1,3 +1,4 @@
+using AssetBlock.Application.Common.Validators;
 using FluentValidation;
 
 namespace AssetBlock.Application.UseCases.Assets.UploadAsset;
@@ -15,8 +16,7 @@ internal sealed class UploadAssetCommandValidator : AbstractValidator<UploadAsse
                 RuleFor(c => c.Request.Title)
                     .NotEmpty().WithMessage("Title is required.")
                     .MaximumLength(500).WithMessage("Title must not exceed 500 characters.");
-                RuleFor(c => c.Request.Price)
-                    .GreaterThan(0).WithMessage("Price must be greater than zero.");
+                RuleFor(c => c.Request.Price).MarketplacePrice();
                 RuleFor(c => c.Request.CategoryId)
                     .NotEmpty().WithMessage("CategoryId is required.");
                 RuleFor(c => c.Request.DownloadLimitPerHour)

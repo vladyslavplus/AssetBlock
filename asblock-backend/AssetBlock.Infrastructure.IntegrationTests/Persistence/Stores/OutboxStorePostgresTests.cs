@@ -24,7 +24,7 @@ public sealed class OutboxStorePostgresTests(PostgresFixture fixture)
         var seedStore = CreateStore(seedDb);
         for (var i = 0; i < 20; i++)
         {
-            await seedStore.Enqueue(OutboxMessageTypes.PURCHASE_COMPLETED, new { i }, CancellationToken.None);
+            await seedStore.Enqueue(OutboxMessageTypes.ORDER_COMPLETED, new { i }, CancellationToken.None);
         }
 
         await using var dbA = fixture.CreateDbContext();
@@ -103,13 +103,10 @@ public sealed class OutboxStorePostgresTests(PostgresFixture fixture)
                 UserId = buyer.Id,
                 AssetId = asset.Id,
                 AssetVersionId = version.Id,
-                CheckoutIntentId = Guid.NewGuid(),
-                PricePaid = 9.99m,
-                Currency = "usd",
-                StripePaymentId = "cs_email_rollback",
+                OrderLineId = Guid.NewGuid(),
                 PurchasedAt = DateTimeOffset.UtcNow
             };
-            TestData.AddCompletedPurchase(db, purchase, asset.Title);
+            TestData.AddCompletedPurchase(db, purchase, asset.Title, author.Id, stripeSessionId: "cs_email_rollback");
             await db.SaveChangesAsync(ct);
             await outbox.Enqueue(
                 OutboxMessageTypes.EMAIL_DISPATCH,
@@ -164,13 +161,10 @@ public sealed class OutboxStorePostgresTests(PostgresFixture fixture)
                 UserId = buyer.Id,
                 AssetId = asset.Id,
                 AssetVersionId = version.Id,
-                CheckoutIntentId = Guid.NewGuid(),
-                PricePaid = 9.99m,
-                Currency = "usd",
-                StripePaymentId = "cs_email_commit",
+                OrderLineId = Guid.NewGuid(),
                 PurchasedAt = DateTimeOffset.UtcNow
             };
-            TestData.AddCompletedPurchase(db, purchase, asset.Title);
+            TestData.AddCompletedPurchase(db, purchase, asset.Title, author.Id, stripeSessionId: "cs_email_commit");
             await db.SaveChangesAsync(ct);
             await outbox.Enqueue(OutboxMessageTypes.EMAIL_DISPATCH, payload, ct);
         });

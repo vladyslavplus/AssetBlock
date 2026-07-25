@@ -39,7 +39,42 @@ public static class ApiRoutes
     {
         public const string CAPABILITIES = "capabilities";
         public const string CHECKOUT = "checkout";
+        public const string CHECKOUT_BUNDLES = "checkout/bundles";
+        public const string CHECKOUT_STATUS = "checkout/{checkoutIntentId:guid}/status";
         public const string WEBHOOK = "webhook";
+    }
+
+    public static class Bundles
+    {
+        public const string LIST = "";
+        public const string BY_ID = "{id:guid}";
+    }
+
+    public static class SellerBundles
+    {
+        public const string BASE = "api/seller/bundles";
+        public const string LIST = "";
+        public const string BY_ID = "{id:guid}";
+        public const string ARCHIVE = "{id:guid}/archive";
+        public const string RESTORE = "{id:guid}/restore";
+    }
+
+    public static class Collections
+    {
+        public const string LIST = "";
+        public const string BY_ID = "{id:guid}";
+    }
+
+    public static class SellerCollections
+    {
+        public const string LIST = "";
+        public const string BY_ID = "{id:guid}";
+        public const string ITEMS = "{id:guid}/items";
+        public const string ITEM_BY_ASSET = "{id:guid}/items/{assetId:guid}";
+        public const string ITEMS_ORDER = "{id:guid}/items/order";
+        public const string PUBLISH = "{id:guid}/publish";
+        public const string ARCHIVE = "{id:guid}/archive";
+        public const string RESTORE = "{id:guid}/restore";
     }
 
     public static class Reviews

@@ -21,6 +21,15 @@ public sealed class ApplicationDbContext(DbContextOptions<ApplicationDbContext> 
     public DbSet<AuditLog> AuditLogs => Set<AuditLog>();
     public DbSet<EmailAction> EmailActions => Set<EmailAction>();
     public DbSet<CheckoutIntent> CheckoutIntents => Set<CheckoutIntent>();
+    public DbSet<CheckoutIntentItem> CheckoutIntentItems => Set<CheckoutIntentItem>();
+    public DbSet<CheckoutReservation> CheckoutReservations => Set<CheckoutReservation>();
+    public DbSet<Collection> Collections => Set<Collection>();
+    public DbSet<CollectionItem> CollectionItems => Set<CollectionItem>();
+    public DbSet<Bundle> Bundles => Set<Bundle>();
+    public DbSet<BundleRevision> BundleRevisions => Set<BundleRevision>();
+    public DbSet<BundleRevisionItem> BundleRevisionItems => Set<BundleRevisionItem>();
+    public DbSet<Order> Orders => Set<Order>();
+    public DbSet<OrderLine> OrderLines => Set<OrderLine>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

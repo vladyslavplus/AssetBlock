@@ -2,6 +2,8 @@ import type { QueryClient } from '@tanstack/react-query'
 
 import { accountKeys, fetchAccountProfile } from '@/lib/account/account-query'
 import { authKeys } from '@/lib/auth/auth-query'
+import { bundleKeys } from '@/lib/bundles/bundles-query'
+import { collectionKeys } from '@/lib/collections/collections-query'
 import { libraryKeys } from '@/lib/library/library-query'
 import { notificationsKeys } from '@/lib/notifications/notifications-query'
 import { sellerKeys } from '@/lib/seller/seller-query'
@@ -23,6 +25,8 @@ export async function syncQueryCacheAfterAuth(queryClient: QueryClient): Promise
 
   await Promise.all([
     queryClient.invalidateQueries({ queryKey: sellerKeys.all }, { cancelRefetch: false }),
+    queryClient.invalidateQueries({ queryKey: collectionKeys.all }, { cancelRefetch: false }),
+    queryClient.invalidateQueries({ queryKey: bundleKeys.all }, { cancelRefetch: false }),
     queryClient.invalidateQueries({ queryKey: libraryKeys.all }, { cancelRefetch: false }),
     queryClient.invalidateQueries({ queryKey: notificationsKeys.all }, { cancelRefetch: false }),
   ])
