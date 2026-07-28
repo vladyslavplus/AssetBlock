@@ -13,7 +13,7 @@ internal sealed class OrderConfiguration : IEntityTypeConfiguration<Order>
             table.HasCheckConstraint("CK_orders_amount_paid_positive", "\"AmountPaid\" > 0");
             table.HasCheckConstraint(
                 "CK_orders_currency_iso_lower",
-                "\"Currency\" ~ '^[a-z]{3}$'");
+                "length(\"Currency\") = 3 AND \"Currency\" = lower(\"Currency\")");
             table.HasCheckConstraint(
                 "CK_orders_currency_usd_v1",
                 "\"Currency\" = 'usd'");

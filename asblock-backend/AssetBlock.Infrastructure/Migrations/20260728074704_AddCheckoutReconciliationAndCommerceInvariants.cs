@@ -62,7 +62,7 @@ namespace AssetBlock.Infrastructure.Migrations
             migrationBuilder.AddCheckConstraint(
                 name: "CK_orders_currency_iso_lower",
                 table: "orders",
-                sql: "\"Currency\" ~ '^[a-z]{3}$'");
+                sql: "length(\"Currency\") = 3 AND \"Currency\" = lower(\"Currency\")");
 
             migrationBuilder.AddCheckConstraint(
                 name: "CK_orders_currency_usd_v1",
@@ -83,7 +83,7 @@ namespace AssetBlock.Infrastructure.Migrations
             migrationBuilder.AddCheckConstraint(
                 name: "CK_checkout_intents_currency_iso_lower",
                 table: "checkout_intents",
-                sql: "\"Currency\" ~ '^[a-z]{3}$'");
+                sql: "length(\"Currency\") = 3 AND \"Currency\" = lower(\"Currency\")");
 
             migrationBuilder.AddCheckConstraint(
                 name: "CK_checkout_intents_currency_usd_v1",
@@ -98,7 +98,7 @@ namespace AssetBlock.Infrastructure.Migrations
             migrationBuilder.AddCheckConstraint(
                 name: "CK_bundle_revisions_currency_iso_lower",
                 table: "bundle_revisions",
-                sql: "\"Currency\" ~ '^[a-z]{3}$'");
+                sql: "length(\"Currency\") = 3 AND \"Currency\" = lower(\"Currency\")");
 
             migrationBuilder.AddCheckConstraint(
                 name: "CK_bundle_revisions_currency_usd_v1",

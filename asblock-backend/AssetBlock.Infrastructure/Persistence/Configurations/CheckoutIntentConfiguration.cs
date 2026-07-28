@@ -15,7 +15,8 @@ internal sealed class CheckoutIntentConfiguration : IEntityTypeConfiguration<Che
             table.HasCheckConstraint("CK_checkout_intents_expires_after_created", "\"ExpiresAt\" > \"CreatedAt\"");
             table.HasCheckConstraint(
                 "CK_checkout_intents_currency_iso_lower",
-                "\"Currency\" ~ '^[a-z]{3}$'");
+                // Portable across PostgreSQL and SQLite unit-test EnsureCreated (no PG '~' regex).
+                "length(\"Currency\") = 3 AND \"Currency\" = lower(\"Currency\")");
             table.HasCheckConstraint(
                 "CK_checkout_intents_currency_usd_v1",
                 "\"Currency\" = 'usd'");

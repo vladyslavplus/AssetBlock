@@ -371,7 +371,7 @@ namespace AssetBlock.Infrastructure.Migrations
 
                     b.ToTable("bundle_revisions", null, t =>
                         {
-                            t.HasCheckConstraint("CK_bundle_revisions_currency_iso_lower", "\"Currency\" ~ '^[a-z]{3}$'");
+                            t.HasCheckConstraint("CK_bundle_revisions_currency_iso_lower", "length(\"Currency\") = 3 AND \"Currency\" = lower(\"Currency\")");
 
                             t.HasCheckConstraint("CK_bundle_revisions_currency_usd_v1", "\"Currency\" = 'usd'");
 
@@ -553,7 +553,7 @@ namespace AssetBlock.Infrastructure.Migrations
                         {
                             t.HasCheckConstraint("CK_checkout_intents_amount_total_positive", "\"AmountTotal\" > 0");
 
-                            t.HasCheckConstraint("CK_checkout_intents_currency_iso_lower", "\"Currency\" ~ '^[a-z]{3}$'");
+                            t.HasCheckConstraint("CK_checkout_intents_currency_iso_lower", "length(\"Currency\") = 3 AND \"Currency\" = lower(\"Currency\")");
 
                             t.HasCheckConstraint("CK_checkout_intents_currency_usd_v1", "\"Currency\" = 'usd'");
 
@@ -886,7 +886,7 @@ namespace AssetBlock.Infrastructure.Migrations
                         {
                             t.HasCheckConstraint("CK_orders_amount_paid_positive", "\"AmountPaid\" > 0");
 
-                            t.HasCheckConstraint("CK_orders_currency_iso_lower", "\"Currency\" ~ '^[a-z]{3}$'");
+                            t.HasCheckConstraint("CK_orders_currency_iso_lower", "length(\"Currency\") = 3 AND \"Currency\" = lower(\"Currency\")");
 
                             t.HasCheckConstraint("CK_orders_currency_usd_v1", "\"Currency\" = 'usd'");
 
