@@ -29,6 +29,12 @@ internal sealed class MemoryCacheService : ICacheService
         return Task.CompletedTask;
     }
 
+    public Task Remove(string key, CancellationToken cancellationToken = default)
+    {
+        _store.TryRemove(key, out _);
+        return Task.CompletedTask;
+    }
+
     public Task RemoveByPrefix(string prefix, CancellationToken cancellationToken = default)
     {
         var toRemove = _store.Keys.Where(k => k.StartsWith(prefix, StringComparison.Ordinal)).ToList();

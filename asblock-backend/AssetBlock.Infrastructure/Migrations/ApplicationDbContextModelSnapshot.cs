@@ -86,6 +86,9 @@ namespace AssetBlock.Infrastructure.Migrations
                     NpgsqlIndexBuilderExtensions.HasMethod(b.HasIndex("Title"), "GIN");
                     NpgsqlIndexBuilderExtensions.HasOperators(b.HasIndex("Title"), new[] { "gin_trgm_ops" });
 
+                    b.HasIndex("AuthorId", "Id")
+                        .HasDatabaseName("IX_assets_author_id");
+
                     b.HasIndex("CreatedAt", "Id")
                         .HasDatabaseName("IX_assets_catalog_CreatedAt_Id")
                         .HasFilter("\"DeletedAt\" IS NULL");
@@ -625,8 +628,6 @@ namespace AssetBlock.Infrastructure.Migrations
                     b.HasIndex("AssetId")
                         .HasDatabaseName("IX_checkout_intent_items_asset");
 
-                    b.HasIndex("SellerId");
-
                     b.HasIndex("AssetId", "AssetVersionId");
 
                     b.HasIndex("CheckoutIntentId", "AssetId")
@@ -636,6 +637,9 @@ namespace AssetBlock.Infrastructure.Migrations
                     b.HasIndex("CheckoutIntentId", "Position")
                         .IsUnique()
                         .HasDatabaseName("UIX_checkout_intent_items_intent_position");
+
+                    b.HasIndex("SellerId", "CheckoutIntentId")
+                        .HasDatabaseName("IX_checkout_intent_items_seller_intent");
 
                     b.ToTable("checkout_intent_items", null, t =>
                         {
@@ -867,8 +871,6 @@ namespace AssetBlock.Infrastructure.Migrations
 
                     b.HasIndex("AssetId");
 
-                    b.HasIndex("BundleId");
-
                     b.HasIndex("BundleRevisionId");
 
                     b.HasIndex("CheckoutIntentId")
@@ -878,6 +880,13 @@ namespace AssetBlock.Infrastructure.Migrations
                     b.HasIndex("StripeSessionId")
                         .IsUnique()
                         .HasDatabaseName("UIX_orders_stripe_session");
+
+                    b.HasIndex("PurchasedAt", "Id")
+                        .HasDatabaseName("IX_orders_purchased_id");
+
+                    b.HasIndex("BundleId", "PurchasedAt", "Id")
+                        .HasDatabaseName("IX_orders_bundle_purchased_id")
+                        .HasFilter("\"BundleId\" IS NOT NULL");
 
                     b.HasIndex("UserId", "PurchasedAt", "Id")
                         .HasDatabaseName("IX_orders_user_purchased");
@@ -965,6 +974,9 @@ namespace AssetBlock.Infrastructure.Migrations
 
                     b.HasIndex("SellerId", "OrderId")
                         .HasDatabaseName("IX_order_lines_seller_order");
+
+                    b.HasIndex("SellerId", "AssetId", "OrderId")
+                        .HasDatabaseName("IX_order_lines_seller_asset_order");
 
                     b.ToTable("order_lines", null, t =>
                         {
@@ -1130,6 +1142,9 @@ namespace AssetBlock.Infrastructure.Migrations
 
                     b.HasIndex("UserId", "AssetId")
                         .IsUnique();
+
+                    b.HasIndex("AssetId", "CreatedAt", "Id")
+                        .HasDatabaseName("IX_reviews_asset_created_id");
 
                     b.ToTable("reviews", (string)null);
                 });

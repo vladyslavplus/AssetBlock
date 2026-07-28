@@ -89,5 +89,8 @@ internal sealed class OrderLineConfiguration : IEntityTypeConfiguration<OrderLin
 
         builder.HasIndex(l => new { l.SellerId, l.OrderId })
             .HasDatabaseName("IX_order_lines_seller_order");
+
+        builder.HasIndex(l => new { l.SellerId, l.AssetId, l.OrderId })
+            .HasDatabaseName("IX_order_lines_seller_asset_order");
     }
 }

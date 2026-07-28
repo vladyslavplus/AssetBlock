@@ -89,5 +89,8 @@ internal sealed class CheckoutIntentItemConfiguration : IEntityTypeConfiguration
 
         builder.HasIndex(i => i.AssetId)
             .HasDatabaseName("IX_checkout_intent_items_asset");
+
+        builder.HasIndex(i => new { i.SellerId, i.CheckoutIntentId })
+            .HasDatabaseName("IX_checkout_intent_items_seller_intent");
     }
 }

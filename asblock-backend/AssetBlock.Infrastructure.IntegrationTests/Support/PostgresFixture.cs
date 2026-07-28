@@ -41,10 +41,21 @@ public sealed class PostgresFixture : IAsyncLifetime
         await _postgres.DisposeAsync();
     }
 
+    public ApplicationDbContext CreateDbContext(
+        Action<DbContextOptionsBuilder<ApplicationDbContext>>? configure = null)
+    {
+        var optionsBuilder = new DbContextOptionsBuilder<ApplicationDbContext>()
+            .UseNpgsql(ConnectionString);
+        configure?.Invoke(optionsBuilder);
+        return new ApplicationDbContext(optionsBuilder.Options);
+    }
+
     /// <summary>
     /// Creates a context against a wiped schema with the full EF migration history applied.
     /// </summary>
-    public async Task<ApplicationDbContext> CreateCleanDbContext(CancellationToken cancellationToken = default)
+    public async Task<ApplicationDbContext> CreateCleanDbContext(
+        Action<DbContextOptionsBuilder<ApplicationDbContext>>? configure = null,
+        CancellationToken cancellationToken = default)
     {
         NpgsqlConnection.ClearAllPools();
 
@@ -61,14 +72,6 @@ public sealed class PostgresFixture : IAsyncLifetime
         }
 
         NpgsqlConnection.ClearAllPools();
-        return CreateDbContext();
-    }
-
-    public ApplicationDbContext CreateDbContext()
-    {
-        var options = new DbContextOptionsBuilder<ApplicationDbContext>()
-            .UseNpgsql(ConnectionString)
-            .Options;
-        return new ApplicationDbContext(options);
+        return CreateDbContext(configure);
     }
 }

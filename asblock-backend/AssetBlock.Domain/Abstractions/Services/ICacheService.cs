@@ -7,6 +7,7 @@ public interface ICacheService
 {
     Task<string?> GetString(string key, CancellationToken cancellationToken = default);
     Task SetString(string key, string value, TimeSpan? expiration = null, CancellationToken cancellationToken = default);
+    Task Remove(string key, CancellationToken cancellationToken = default);
     Task RemoveByPrefix(string prefix, CancellationToken cancellationToken = default);
 
     /// <summary>Atomically increments a counter and sets expiry (only on first increment). Returns the new value.</summary>

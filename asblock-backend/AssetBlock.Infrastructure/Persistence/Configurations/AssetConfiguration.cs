@@ -34,5 +34,8 @@ internal sealed class AssetConfiguration : IEntityTypeConfiguration<Asset>
             .WithMany(c => c.Assets)
             .HasForeignKey(a => a.CategoryId)
             .OnDelete(DeleteBehavior.Restrict);
+
+        builder.HasIndex(a => new { a.AuthorId, a.Id })
+            .HasDatabaseName("IX_assets_author_id");
     }
 }

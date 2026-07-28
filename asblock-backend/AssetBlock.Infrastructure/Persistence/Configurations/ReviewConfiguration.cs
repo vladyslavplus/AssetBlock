@@ -31,5 +31,8 @@ internal sealed class ReviewConfiguration : IEntityTypeConfiguration<Review>
             .HasDatabaseName("IX_reviews_AssetId");
 
         builder.HasIndex(r => new { r.UserId, r.AssetId }).IsUnique();
+
+        builder.HasIndex(r => new { r.AssetId, r.CreatedAt, r.Id })
+            .HasDatabaseName("IX_reviews_asset_created_id");
     }
 }

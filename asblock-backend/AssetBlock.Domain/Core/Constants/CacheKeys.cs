@@ -1,4 +1,5 @@
 using System.Globalization;
+using AssetBlock.Domain.Core.Dto.Analytics;
 using AssetBlock.Domain.Core.Dto.Assets;
 using AssetBlock.Domain.Core.Dto.Categories;
 using AssetBlock.Domain.Core.Dto.Reviews;
@@ -74,6 +75,19 @@ public static class CacheKeys
     }
 
     public static string ReviewItem(Guid reviewId) => $"{REVIEW_ITEM_PREFIX}:{reviewId}";
+
+    private const string ANALYTICS_PREFIX = PREFIX + ":analytics:seller";
+
+    public static string SellerAnalyticsOverview(Guid sellerId, DateOnly from, DateOnly to) =>
+        $"{ANALYTICS_PREFIX}:{sellerId}:overview:{from:yyyy-MM-dd}:{to:yyyy-MM-dd}";
+
+    public static string SellerAnalyticsProducts(Guid sellerId, AnalyticsProductsRequest request) =>
+        $"{ANALYTICS_PREFIX}:{sellerId}:products:{request.From:yyyy-MM-dd}:{request.To:yyyy-MM-dd}" +
+        $":{request.ProductType}:{request.Sort}:{request.Direction}:{request.Page}:{request.PageSize}";
+
+    public static string SellerAnalyticsSales(Guid sellerId, AnalyticsSalesRequest request) =>
+        $"{ANALYTICS_PREFIX}:{sellerId}:sales:{request.From:yyyy-MM-dd}:{request.To:yyyy-MM-dd}" +
+        $":{request.ProductType}:{request.PageSize}:{request.Cursor ?? "start"}";
 
     private static string NormalizeSearch(string? value)
     {

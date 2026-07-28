@@ -107,6 +107,14 @@ public static class ApiRoutes
         public const string ME_ASSETS = "me/assets";
     }
 
+    public static class SellerAnalytics
+    {
+        public const string BASE = "api/seller/analytics";
+        public const string OVERVIEW = "overview";
+        public const string PRODUCTS = "products";
+        public const string SALES = "sales";
+    }
+
     public static class Admin
     {
         public const string AUDIT_LOGS = "api/admin/audit-logs";

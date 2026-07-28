@@ -73,5 +73,12 @@ internal sealed class OrderConfiguration : IEntityTypeConfiguration<Order>
 
         builder.HasIndex(o => new { o.UserId, o.PurchasedAt, o.Id })
             .HasDatabaseName("IX_orders_user_purchased");
+
+        builder.HasIndex(o => new { o.PurchasedAt, o.Id })
+            .HasDatabaseName("IX_orders_purchased_id");
+
+        builder.HasIndex(o => new { o.BundleId, o.PurchasedAt, o.Id })
+            .HasFilter("\"BundleId\" IS NOT NULL")
+            .HasDatabaseName("IX_orders_bundle_purchased_id");
     }
 }

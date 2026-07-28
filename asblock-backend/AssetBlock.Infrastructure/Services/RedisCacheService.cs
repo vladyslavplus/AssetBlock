@@ -51,6 +51,22 @@ internal sealed class RedisCacheService(
         }
     }
 
+    public async Task Remove(string key, CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            await _db.KeyDeleteAsync(key).WaitAsync(cancellationToken);
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Redis Remove failed for key {Key}", key);
+        }
+    }
+
     public async Task RemoveByPrefix(string prefix, CancellationToken cancellationToken = default)
     {
         try

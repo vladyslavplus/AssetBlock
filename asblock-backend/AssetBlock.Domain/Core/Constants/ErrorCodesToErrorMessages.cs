@@ -76,7 +76,10 @@ public static class ErrorCodesToErrorMessages
         { ErrorCodes.ERR_NOTIFICATION_NOT_FOUND, "Notification not found." },
         { ErrorCodes.ERR_NOTIFICATIONS_LIST_FAILED, "Failed to load notifications." },
         { ErrorCodes.ERR_NOTIFICATIONS_UNREAD_READ_AT_SORT, "When UnreadOnly is true, SortBy cannot be ReadAt. Unread notifications have no ReadAt; use CreatedAt or omit SortBy." },
-        { ErrorCodes.ERR_PURCHASES_LIST_FAILED, "Failed to load your purchases." }
+        { ErrorCodes.ERR_PURCHASES_LIST_FAILED, "Failed to load your purchases." },
+        { ErrorCodes.ERR_ANALYTICS_INVALID_RANGE, "The analytics date range is invalid." },
+        { ErrorCodes.ERR_ANALYTICS_INVALID_CURSOR, "The analytics pagination cursor is invalid." },
+        { ErrorCodes.ERR_ANALYTICS_INVALID_FILTER, "One or more analytics filters are invalid." }
     };
 
     public static string GetMessage(string code) =>

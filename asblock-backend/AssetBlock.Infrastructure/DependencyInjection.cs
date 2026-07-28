@@ -67,6 +67,9 @@ public static class DependencyInjection
 
         services.AddDbContext<ApplicationDbContext>(options =>
             options.UseNpgsql(connectionString));
+        services.AddDbContextFactory<ApplicationDbContext>(
+            options => options.UseNpgsql(connectionString),
+            ServiceLifetime.Scoped);
         services.AddHostedService<DatabaseMigrationService>();
         services.AddHostedService<MinioBucketEnsureHostedService>();
         services.AddHostedService<OutboxDispatcher>();
@@ -96,6 +99,7 @@ public static class DependencyInjection
         services.AddScoped<ISocialPlatformStore, SocialPlatformStore>();
         services.AddScoped<INotificationStore, NotificationStore>();
         services.AddScoped<ITagStore, TagStore>();
+        services.AddScoped<ISellerAnalyticsStore, SellerAnalyticsStore>();
         services.AddScoped<IAuditStore, AuditStore>();
         services.AddScoped<IAuditWriter, AuditWriter>();
         services.AddScoped<IAuditContextAccessor, NullAuditContextAccessor>();
