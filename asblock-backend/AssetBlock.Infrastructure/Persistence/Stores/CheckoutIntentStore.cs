@@ -231,8 +231,9 @@ internal sealed class CheckoutIntentStore(ApplicationDbContext dbContext) : IChe
         return ids.Count;
     }
 
-    public async Task<IReadOnlyList<(Guid Id, string StripeSessionId)>> ListExpiredAttachedPendingBatch(
+    public async Task<IReadOnlyList<(Guid Id, string StripeSessionId)>> ClaimAttachedPendingForStripeSyncBatch(
         DateTimeOffset now,
+        DateTimeOffset dueBefore,
         int batchSize,
         CancellationToken cancellationToken = default)
     {
@@ -241,21 +242,54 @@ internal sealed class CheckoutIntentStore(ApplicationDbContext dbContext) : IChe
             return [];
         }
 
+        await using var tx = await dbContext.Database.BeginTransactionAsync(cancellationToken);
+
+        // Claim lease = LastStripeReconciledAt := now so sibling workers SKIP LOCKED / miss due window.
         var rows = await dbContext.CheckoutIntents
+            .FromSqlInterpolated($"""
+                SELECT *
+                FROM checkout_intents
+                WHERE "Status" = 'PENDING'
+                  AND "StripeSessionId" IS NOT NULL
+                  AND COALESCE("LastStripeReconciledAt", "CreatedAt") <= {dueBefore}
+                ORDER BY COALESCE("LastStripeReconciledAt", "CreatedAt"), "Id"
+                FOR UPDATE SKIP LOCKED
+                LIMIT {batchSize}
+                """)
             .AsNoTracking()
-            .Where(i => i.Status == CheckoutIntentStatus.PENDING
-                        && i.ExpiresAt <= now
-                        && i.StripeSessionId != null)
-            .OrderBy(i => i.ExpiresAt)
-            .ThenBy(i => i.Id)
-            .Take(batchSize)
-            .Select(i => new { i.Id, i.StripeSessionId })
             .ToListAsync(cancellationToken);
+
+        if (rows.Count == 0)
+        {
+            await tx.CommitAsync(cancellationToken);
+            return [];
+        }
+
+        var ids = rows.Select(r => r.Id).ToList();
+        await dbContext.CheckoutIntents
+            .Where(i => ids.Contains(i.Id) && i.Status == CheckoutIntentStatus.PENDING)
+            .ExecuteUpdateAsync(
+                setters => setters.SetProperty(i => i.LastStripeReconciledAt, now),
+                cancellationToken);
+
+        await tx.CommitAsync(cancellationToken);
 
         return rows
             .Where(r => !string.IsNullOrWhiteSpace(r.StripeSessionId))
             .Select(r => (r.Id, r.StripeSessionId!))
             .ToList();
+    }
+
+    public async Task TouchLastStripeReconciledAt(
+        Guid id,
+        DateTimeOffset reconciledAt,
+        CancellationToken cancellationToken = default)
+    {
+        await dbContext.CheckoutIntents
+            .Where(i => i.Id == id && i.Status == CheckoutIntentStatus.PENDING)
+            .ExecuteUpdateAsync(
+                setters => setters.SetProperty(i => i.LastStripeReconciledAt, reconciledAt),
+                cancellationToken);
     }
 
     public async Task DeleteTerminalUnpaidReferencingAsset(Guid assetId, CancellationToken cancellationToken = default)

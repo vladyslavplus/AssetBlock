@@ -392,6 +392,75 @@ public sealed class AssetVersionStorePostgresTests(PostgresFixture fixture)
         (await verify.OutboxMessages.CountAsync(m => m.Type == OutboxMessageTypes.EMAIL_DISPATCH)).Should().Be(2);
     }
 
+    [Fact]
+    public async Task CompletePaidCheckout_WhenWebhookAndReconciliationRace_ShouldPersistExactlyOneOrder()
+    {
+        await using var seedDb = await fixture.CreateCleanDbContext();
+        (User author, Category category) = await TestData.SeedAuthorAndCategory(seedDb);
+        var buyer = TestData.CreateUser("recon-race-buyer", "recon-race-buyer@example.test");
+        seedDb.Users.Add(buyer);
+        var asset = TestData.CreateAsset(author.Id, category.Id, title: "Reconcile Race", price: 11m);
+        var seedStore = new AssetStore(seedDb);
+        var version = TestData.CreateAssetVersion(asset.Id, storageKey: "assets/recon-race/v1.bin", versionNumber: 1);
+        await seedStore.AddWithVersion(asset, version, null);
+
+        var intentId = Guid.NewGuid();
+        const string sessionId = "cs_webhook_recon_race";
+        SeedPendingAssetCheckout(seedDb, intentId, buyer.Id, author.Id, asset.Id, version.Id, asset.Title, asset.Price);
+        await seedDb.SaveChangesAsync();
+        await seedDb.CheckoutIntents
+            .Where(i => i.Id == intentId)
+            .ExecuteUpdateAsync(s => s.SetProperty(i => i.StripeSessionId, sessionId));
+
+        var verified = new StripeCheckoutCompleted(intentId, buyer.Id, sessionId, asset.Price, "usd");
+        var paymentService = Substitute.For<IPaymentService>();
+        paymentService.VerifyCheckoutCompleted(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(verified);
+        paymentService.GetCheckoutSession(sessionId, Arg.Any<CancellationToken>())
+            .Returns(new StripeCheckoutSessionSnapshot(
+                sessionId,
+                StripeConstants.CheckoutSessionStatuses.COMPLETE,
+                null,
+                verified));
+        var emailComposer = CreateEmailComposer();
+
+        var gate = new TryCompleteRaceGate(participantCount: 2);
+        var tryCompleteResults = new System.Collections.Concurrent.ConcurrentBag<bool>();
+
+        await using var dbWebhook = fixture.CreateDbContext();
+        await using var dbReconcile = fixture.CreateDbContext();
+        var gatedStoreWebhook = new GatedCheckoutIntentStore(
+            new CheckoutIntentStore(dbWebhook),
+            gate,
+            tryCompleteResults);
+        var gatedStoreReconcile = new GatedCheckoutIntentStore(
+            new CheckoutIntentStore(dbReconcile),
+            gate,
+            tryCompleteResults);
+        var webhookHandler = CreateWebhookHandler(dbWebhook, paymentService, emailComposer, gatedStoreWebhook);
+        var reconcileCompletion = CreateWebhookHandler(
+            dbReconcile,
+            paymentService,
+            emailComposer,
+            gatedStoreReconcile);
+
+        var webhookTask = webhookHandler.Handle(
+            new HandleStripeWebhookCommand("payload", "sig"),
+            CancellationToken.None);
+        var reconcileTask = reconcileCompletion.CompletePaidCheckout(verified, CancellationToken.None);
+        await Task.WhenAll(webhookTask, reconcileTask);
+
+        (await webhookTask).IsSuccess.Should().BeTrue();
+        tryCompleteResults.Should().BeEquivalentTo([true, false]);
+
+        await using var verify = fixture.CreateDbContext();
+        (await verify.Orders.CountAsync(o => o.StripeSessionId == sessionId)).Should().Be(1);
+        (await verify.Purchases.CountAsync(p => p.AssetId == asset.Id)).Should().Be(1);
+        (await verify.OutboxMessages.CountAsync(m => m.Type == OutboxMessageTypes.ORDER_COMPLETED)).Should().Be(1);
+        (await verify.OutboxMessages.CountAsync(m => m.Type == OutboxMessageTypes.NOTIFICATION_DISPATCH)).Should().Be(2);
+        (await verify.OutboxMessages.CountAsync(m => m.Type == OutboxMessageTypes.EMAIL_DISPATCH)).Should().Be(2);
+    }
+
     private static void SeedPendingAssetCheckout(
         ApplicationDbContext db,
         Guid intentId,
@@ -538,11 +607,18 @@ public sealed class AssetVersionStorePostgresTests(PostgresFixture fixture)
             CancellationToken cancellationToken = default) =>
             inner.CleanupExpiredUnattachedPendingBatch(now, batchSize, cancellationToken);
 
-        public Task<IReadOnlyList<(Guid Id, string StripeSessionId)>> ListExpiredAttachedPendingBatch(
+        public Task<IReadOnlyList<(Guid Id, string StripeSessionId)>> ClaimAttachedPendingForStripeSyncBatch(
             DateTimeOffset now,
+            DateTimeOffset dueBefore,
             int batchSize,
             CancellationToken cancellationToken = default) =>
-            inner.ListExpiredAttachedPendingBatch(now, batchSize, cancellationToken);
+            inner.ClaimAttachedPendingForStripeSyncBatch(now, dueBefore, batchSize, cancellationToken);
+
+        public Task TouchLastStripeReconciledAt(
+            Guid id,
+            DateTimeOffset reconciledAt,
+            CancellationToken cancellationToken = default) =>
+            inner.TouchLastStripeReconciledAt(id, reconciledAt, cancellationToken);
 
         public Task DeleteTerminalUnpaidReferencingAsset(Guid assetId, CancellationToken cancellationToken = default) =>
             inner.DeleteTerminalUnpaidReferencingAsset(assetId, cancellationToken);

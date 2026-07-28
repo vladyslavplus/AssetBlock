@@ -17,6 +17,12 @@ internal sealed class BundleRevisionConfiguration : IEntityTypeConfiguration<Bun
             table.HasCheckConstraint(
                 "CK_bundle_revisions_price_below_list_total",
                 "\"Price\" < \"ListPriceTotal\"");
+            table.HasCheckConstraint(
+                "CK_bundle_revisions_currency_iso_lower",
+                "\"Currency\" ~ '^[a-z]{3}$'");
+            table.HasCheckConstraint(
+                "CK_bundle_revisions_currency_usd_v1",
+                "\"Currency\" = 'usd'");
         });
 
         builder.HasKey(r => r.Id);

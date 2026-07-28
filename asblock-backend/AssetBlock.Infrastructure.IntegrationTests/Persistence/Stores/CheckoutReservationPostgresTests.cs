@@ -1,4 +1,3 @@
-using AssetBlock.Domain.Abstractions.Services;
 using AssetBlock.Domain.Core.Entities;
 using AssetBlock.Domain.Core.Enums;
 using AssetBlock.Domain.Core.Exceptions;
@@ -172,7 +171,93 @@ public sealed class CheckoutReservationPostgresTests(PostgresFixture fixture)
     }
 
     [Fact]
-    public async Task ListExpiredAttachedPendingBatch_WhenExpiredAndAttached_ShouldReturnIntent()
+    public async Task ClaimAttachedPendingForStripeSyncBatch_WhenYoungerThanDueBefore_ShouldNotReturn()
+    {
+        await using var db = await fixture.CreateCleanDbContext();
+        (User author, Category category) = await TestData.SeedAuthorAndCategory(db);
+        var buyer = TestData.CreateUser("young-buyer", "young-buyer@example.test");
+        db.Users.Add(buyer);
+        var asset = TestData.CreateAsset(author.Id, category.Id, title: "Young", price: 7m);
+        db.Assets.Add(asset);
+        await db.SaveChangesAsync();
+        var version = TestData.CreateAssetVersion(asset.Id);
+        db.AssetVersions.Add(version);
+        await db.SaveChangesAsync();
+
+        var store = new CheckoutIntentStore(db);
+        var now = DateTimeOffset.UtcNow;
+        var intent = BuildPendingIntent(
+            buyer.Id,
+            assetId: asset.Id,
+            bundleId: null,
+            bundleRevisionId: null,
+            productTitle: asset.Title,
+            amount: asset.Price,
+            createdAt: now.AddMinutes(-1),
+            expiresAt: now.AddHours(23));
+        await store.CreateWithItemsAndReservations(
+            intent,
+            [BuildItem(intent.Id, asset.Id, version.Id, author.Id, asset.Title, asset.Price, position: 1)],
+            [TestData.CreateReservation(intent.Id, buyer.Id, asset.Id, expiresAt: intent.ExpiresAt, createdAt: intent.CreatedAt)]);
+        await store.TrySetStripeSessionId(intent.Id, "cs_young_attached", CancellationToken.None);
+
+        var batch = await store.ClaimAttachedPendingForStripeSyncBatch(
+            now,
+            dueBefore: now.AddMinutes(-2),
+            batchSize: 10);
+
+        batch.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task ClaimAttachedPendingForStripeSyncBatch_WhenOlderThanDueBefore_ShouldClaimAndLease()
+    {
+        await using var db = await fixture.CreateCleanDbContext();
+        (User author, Category category) = await TestData.SeedAuthorAndCategory(db);
+        var buyer = TestData.CreateUser("due-buyer", "due-buyer@example.test");
+        db.Users.Add(buyer);
+        var asset = TestData.CreateAsset(author.Id, category.Id, title: "Due", price: 7m);
+        db.Assets.Add(asset);
+        await db.SaveChangesAsync();
+        var version = TestData.CreateAssetVersion(asset.Id);
+        db.AssetVersions.Add(version);
+        await db.SaveChangesAsync();
+
+        var store = new CheckoutIntentStore(db);
+        var now = DateTimeOffset.UtcNow;
+        var intent = BuildPendingIntent(
+            buyer.Id,
+            assetId: asset.Id,
+            bundleId: null,
+            bundleRevisionId: null,
+            productTitle: asset.Title,
+            amount: asset.Price,
+            createdAt: now.AddMinutes(-5),
+            expiresAt: now.AddHours(23));
+        await store.CreateWithItemsAndReservations(
+            intent,
+            [BuildItem(intent.Id, asset.Id, version.Id, author.Id, asset.Title, asset.Price, position: 1)],
+            [TestData.CreateReservation(intent.Id, buyer.Id, asset.Id, expiresAt: intent.ExpiresAt, createdAt: intent.CreatedAt)]);
+        await store.TrySetStripeSessionId(intent.Id, "cs_due_attached", CancellationToken.None);
+
+        var batch = await store.ClaimAttachedPendingForStripeSyncBatch(
+            now,
+            dueBefore: now.AddMinutes(-2),
+            batchSize: 10);
+
+        batch.Should().ContainSingle(item => item.Id == intent.Id && item.StripeSessionId == "cs_due_attached");
+        var row = await db.CheckoutIntents.AsNoTracking().SingleAsync(i => i.Id == intent.Id);
+        row.LastStripeReconciledAt.Should().BeCloseTo(now, TimeSpan.FromMilliseconds(1));
+
+        var second = await store.ClaimAttachedPendingForStripeSyncBatch(
+            now,
+            dueBefore: now.AddMinutes(-2),
+            batchSize: 10);
+        second.Should().BeEmpty("claim lease must hide the row from the next worker cycle");
+    }
+
+    [Fact]
+    public async Task ClaimAttachedPendingForStripeSyncBatch_WhenExpiredAndAttached_ShouldClaimIntent()
     {
         await using var db = await fixture.CreateCleanDbContext();
         (User author, Category category) = await TestData.SeedAuthorAndCategory(db);
@@ -203,9 +288,101 @@ public sealed class CheckoutReservationPostgresTests(PostgresFixture fixture)
             [TestData.CreateReservation(intent.Id, buyer.Id, asset.Id, expiresAt: expiredAt, createdAt: created)]);
         await store.TrySetStripeSessionId(intent.Id, "cs_list_expired_test", CancellationToken.None);
 
-        var batch = await store.ListExpiredAttachedPendingBatch(DateTimeOffset.UtcNow, batchSize: 10);
+        var batch = await store.ClaimAttachedPendingForStripeSyncBatch(
+            DateTimeOffset.UtcNow,
+            dueBefore: DateTimeOffset.UtcNow.AddMinutes(-2),
+            batchSize: 10);
 
         batch.Should().ContainSingle(item => item.Id == intent.Id && item.StripeSessionId == "cs_list_expired_test");
+    }
+
+    [Fact]
+    public async Task ClaimAttachedPendingForStripeSyncBatch_WhenTwoWorkersRace_ShouldPartitionWithoutOverlap()
+    {
+        await using var seedDb = await fixture.CreateCleanDbContext();
+        (User author, Category category) = await TestData.SeedAuthorAndCategory(seedDb);
+        var buyer = TestData.CreateUser("claim-race-buyer", "claim-race-buyer@example.test");
+        seedDb.Users.Add(buyer);
+        var asset = TestData.CreateAsset(author.Id, category.Id, title: "Claim Race", price: 9m);
+        seedDb.Assets.Add(asset);
+        await seedDb.SaveChangesAsync();
+        var version = TestData.CreateAssetVersion(asset.Id);
+        seedDb.AssetVersions.Add(version);
+        await seedDb.SaveChangesAsync();
+
+        var seedStore = new CheckoutIntentStore(seedDb);
+        var now = DateTimeOffset.UtcNow;
+        var intent = BuildPendingIntent(
+            buyer.Id,
+            assetId: asset.Id,
+            bundleId: null,
+            bundleRevisionId: null,
+            productTitle: asset.Title,
+            amount: asset.Price,
+            createdAt: now.AddMinutes(-10),
+            expiresAt: now.AddHours(20));
+        await seedStore.CreateWithItemsAndReservations(
+            intent,
+            [BuildItem(intent.Id, asset.Id, version.Id, author.Id, asset.Title, asset.Price, position: 1)],
+            [TestData.CreateReservation(intent.Id, buyer.Id, asset.Id, expiresAt: intent.ExpiresAt, createdAt: intent.CreatedAt)]);
+        await seedStore.TrySetStripeSessionId(intent.Id, "cs_claim_race", CancellationToken.None);
+
+        await using var dbA = fixture.CreateDbContext();
+        await using var dbB = fixture.CreateDbContext();
+        var storeA = new CheckoutIntentStore(dbA);
+        var storeB = new CheckoutIntentStore(dbB);
+        var dueBefore = now.AddMinutes(-2);
+
+        var results = await Task.WhenAll(
+            storeA.ClaimAttachedPendingForStripeSyncBatch(now, dueBefore, batchSize: 10),
+            storeB.ClaimAttachedPendingForStripeSyncBatch(now, dueBefore, batchSize: 10));
+
+        var claimed = results.SelectMany(r => r).ToList();
+        claimed.Should().ContainSingle(item => item.Id == intent.Id);
+        results.Count(r => r.Any(x => x.Id == intent.Id)).Should().Be(1);
+    }
+
+    [Fact]
+    public async Task TouchLastStripeReconciledAt_WhenPending_ShouldUpdateTimestampAndDeferNextSync()
+    {
+        await using var db = await fixture.CreateCleanDbContext();
+        (User author, Category category) = await TestData.SeedAuthorAndCategory(db);
+        var buyer = TestData.CreateUser("touch-buyer", "touch-buyer@example.test");
+        db.Users.Add(buyer);
+        var asset = TestData.CreateAsset(author.Id, category.Id, title: "Touch", price: 4m);
+        db.Assets.Add(asset);
+        await db.SaveChangesAsync();
+        var version = TestData.CreateAssetVersion(asset.Id);
+        db.AssetVersions.Add(version);
+        await db.SaveChangesAsync();
+
+        var store = new CheckoutIntentStore(db);
+        var now = DateTimeOffset.UtcNow;
+        var intent = BuildPendingIntent(
+            buyer.Id,
+            assetId: asset.Id,
+            bundleId: null,
+            bundleRevisionId: null,
+            productTitle: asset.Title,
+            amount: asset.Price,
+            createdAt: now.AddMinutes(-10),
+            expiresAt: now.AddHours(20));
+        await store.CreateWithItemsAndReservations(
+            intent,
+            [BuildItem(intent.Id, asset.Id, version.Id, author.Id, asset.Title, asset.Price, position: 1)],
+            [TestData.CreateReservation(intent.Id, buyer.Id, asset.Id, expiresAt: intent.ExpiresAt, createdAt: intent.CreatedAt)]);
+        await store.TrySetStripeSessionId(intent.Id, "cs_touch_test", CancellationToken.None);
+
+        await store.TouchLastStripeReconciledAt(intent.Id, now);
+
+        var row = await db.CheckoutIntents.AsNoTracking().SingleAsync(i => i.Id == intent.Id);
+        row.LastStripeReconciledAt.Should().BeCloseTo(now, TimeSpan.FromMilliseconds(1));
+
+        var deferred = await store.ClaimAttachedPendingForStripeSyncBatch(
+            now,
+            dueBefore: now.AddMinutes(-2),
+            batchSize: 10);
+        deferred.Should().BeEmpty();
     }
 
     [Fact]

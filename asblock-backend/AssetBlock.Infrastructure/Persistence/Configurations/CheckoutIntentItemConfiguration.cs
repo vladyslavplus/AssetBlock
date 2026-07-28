@@ -70,7 +70,8 @@ internal sealed class CheckoutIntentItemConfiguration : IEntityTypeConfiguration
 
         builder.HasOne(i => i.AssetVersion)
             .WithMany()
-            .HasForeignKey(i => i.AssetVersionId)
+            .HasForeignKey(i => new { i.AssetId, i.AssetVersionId })
+            .HasPrincipalKey(v => new { v.AssetId, v.Id })
             .OnDelete(DeleteBehavior.Restrict);
 
         builder.HasOne(i => i.Seller)

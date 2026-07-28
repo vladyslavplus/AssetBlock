@@ -138,7 +138,7 @@ public sealed class MigrationSmokePostgresTests(PostgresFixture fixture)
     }
 
     [Fact]
-    public async Task MigrateAsync_WhenFreshDatabase_ShouldHaveNoPendingMigrationsAndContainAddCollectionsBundlesAndOrders()
+    public async Task MigrateAsync_WhenFreshDatabase_ShouldHaveNoPendingMigrationsAndContainCommerceInvariantMigration()
     {
         await using var db = await fixture.CreateCleanDbContext();
 
@@ -147,5 +147,7 @@ public sealed class MigrationSmokePostgresTests(PostgresFixture fixture)
 
         var applied = await db.Database.GetAppliedMigrationsAsync();
         applied.Should().Contain(m => m.Contains("AddCollectionsBundlesAndOrders", StringComparison.OrdinalIgnoreCase));
+        applied.Should().Contain(m =>
+            m.Contains("AddCheckoutReconciliationAndCommerceInvariants", StringComparison.OrdinalIgnoreCase));
     }
 }

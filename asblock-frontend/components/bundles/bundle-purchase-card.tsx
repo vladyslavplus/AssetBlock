@@ -53,6 +53,9 @@ export function BundlePurchaseCard({
     enabled: status === 'authenticated',
   })
 
+  const isCheckingLibrary =
+    status === 'authenticated' &&
+    (libraryQuery.isPending || (libraryQuery.isFetching && !libraryQuery.data))
   const ownedAssetIds = new Set((libraryQuery.data?.items ?? []).map((p) => p.assetId))
   const ownedItems = items.filter((item) => item.assetId && ownedAssetIds.has(item.assetId))
   const hasOwnedItem = ownedItems.length > 0
@@ -82,7 +85,8 @@ export function BundlePurchaseCard({
   })
 
   const onBuyClick = () => {
-    if (status === 'loading' || checkoutMutation.isPending || hasOwnedItem) return
+    if (status === 'loading' || isCheckingLibrary || checkoutMutation.isPending || hasOwnedItem)
+      return
     if (status === 'anonymous' || !user) {
       router.push(loginHref)
       return
@@ -132,6 +136,11 @@ export function BundlePurchaseCard({
           className="bg-primary text-primary-foreground hover:bg-[#6D28D9] transition-smooth font-medium w-full h-10"
         >
           <Link href="/account">Verify email to purchase</Link>
+        </Button>
+      ) : isCheckingLibrary ? (
+        <Button type="button" disabled className="w-full h-10 font-medium">
+          <Loader2 className="mr-2 size-4 animate-spin" aria-hidden />
+          Checking your library…
         </Button>
       ) : hasOwnedItem ? (
         <div className="space-y-2">

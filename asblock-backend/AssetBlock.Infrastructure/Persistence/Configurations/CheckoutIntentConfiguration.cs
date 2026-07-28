@@ -14,6 +14,12 @@ internal sealed class CheckoutIntentConfiguration : IEntityTypeConfiguration<Che
             table.HasCheckConstraint("CK_checkout_intents_amount_total_positive", "\"AmountTotal\" > 0");
             table.HasCheckConstraint("CK_checkout_intents_expires_after_created", "\"ExpiresAt\" > \"CreatedAt\"");
             table.HasCheckConstraint(
+                "CK_checkout_intents_currency_iso_lower",
+                "\"Currency\" ~ '^[a-z]{3}$'");
+            table.HasCheckConstraint(
+                "CK_checkout_intents_currency_usd_v1",
+                "\"Currency\" = 'usd'");
+            table.HasCheckConstraint(
                 "CK_checkout_intents_exactly_one_product",
                 """
                 ("AssetId" IS NOT NULL AND "BundleId" IS NULL AND "BundleRevisionId" IS NULL)
@@ -38,6 +44,7 @@ internal sealed class CheckoutIntentConfiguration : IEntityTypeConfiguration<Che
                 raw => Enum.Parse<CheckoutIntentStatus>(raw));
         builder.Property(i => i.ExpiresAt).IsRequired();
         builder.Property(i => i.CompletedAt);
+        builder.Property(i => i.LastStripeReconciledAt);
         builder.Property(i => i.CreatedAt).IsRequired();
 
         builder.HasOne(i => i.User)
@@ -73,5 +80,9 @@ internal sealed class CheckoutIntentConfiguration : IEntityTypeConfiguration<Che
 
         builder.HasIndex(i => new { i.Status, i.ExpiresAt, i.Id })
             .HasDatabaseName("IX_checkout_intents_status_expires");
+
+        builder.HasIndex(i => new { i.Status, i.CreatedAt, i.Id })
+            .HasFilter("\"Status\" = 'PENDING' AND \"StripeSessionId\" IS NOT NULL")
+            .HasDatabaseName("IX_checkout_intents_pending_attached_reconcile");
     }
 }

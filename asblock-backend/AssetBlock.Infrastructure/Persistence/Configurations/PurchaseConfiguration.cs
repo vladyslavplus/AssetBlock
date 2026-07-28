@@ -32,7 +32,8 @@ internal sealed class PurchaseConfiguration : IEntityTypeConfiguration<Purchase>
 
         builder.HasOne(p => p.AssetVersion)
             .WithMany(v => v.Purchases)
-            .HasForeignKey(p => p.AssetVersionId)
+            .HasForeignKey(p => new { p.AssetId, p.AssetVersionId })
+            .HasPrincipalKey(v => new { v.AssetId, v.Id })
             .OnDelete(DeleteBehavior.Restrict);
 
         builder.HasOne(p => p.OrderLine)

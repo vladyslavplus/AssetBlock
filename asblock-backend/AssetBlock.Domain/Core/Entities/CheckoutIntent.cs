@@ -27,6 +27,12 @@ public class CheckoutIntent : BaseEntity
     public required DateTimeOffset ExpiresAt { get; set; }
     public DateTimeOffset? CompletedAt { get; set; }
 
+    /// <summary>
+    /// Last successful server-side Stripe session poll for attached pending intents.
+    /// Null means never reconciled; workers use CreatedAt as the backoff baseline.
+    /// </summary>
+    public DateTimeOffset? LastStripeReconciledAt { get; set; }
+
     public User User { get; set; } = null!;
     public Asset? Asset { get; set; }
     public Bundle? Bundle { get; set; }

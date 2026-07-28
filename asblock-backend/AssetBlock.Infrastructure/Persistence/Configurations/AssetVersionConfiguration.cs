@@ -57,6 +57,10 @@ internal sealed class AssetVersionConfiguration : IEntityTypeConfiguration<Asset
             .HasForeignKey(v => v.AssetId)
             .OnDelete(DeleteBehavior.Cascade);
 
+        // Enables composite FKs so child rows cannot reference a version of a different asset.
+        builder.HasAlternateKey(v => new { v.AssetId, v.Id })
+            .HasName("AK_asset_versions_AssetId_Id");
+
         // One current version per asset.
         builder.HasIndex(v => v.AssetId)
             .HasFilter("\"IsCurrent\" = true")

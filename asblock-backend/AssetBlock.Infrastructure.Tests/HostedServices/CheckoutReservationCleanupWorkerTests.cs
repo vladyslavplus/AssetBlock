@@ -44,7 +44,11 @@ public sealed class CheckoutReservationCleanupWorkerTests
 
         store.CleanupExpiredUnattachedPendingBatch(Arg.Any<DateTimeOffset>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
             .Returns(0);
-        store.ListExpiredAttachedPendingBatch(Arg.Any<DateTimeOffset>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
+        store.ClaimAttachedPendingForStripeSyncBatch(
+                Arg.Any<DateTimeOffset>(),
+                Arg.Any<DateTimeOffset>(),
+                Arg.Any<int>(),
+                Arg.Any<CancellationToken>())
             .Returns(new List<(Guid, string)> { (intentId, sessionId) });
         payment.GetCheckoutSession(sessionId, Arg.Any<CancellationToken>())
             .Returns(new StripeCheckoutSessionSnapshot(sessionId, StripeConstants.CheckoutSessionStatuses.EXPIRED, null));
@@ -57,6 +61,7 @@ public sealed class CheckoutReservationCleanupWorkerTests
         }
 
         await store.Received(1).TryCancelAndRelease(intentId, Arg.Any<CancellationToken>());
+        await store.DidNotReceive().TouchLastStripeReconciledAt(Arg.Any<Guid>(), Arg.Any<DateTimeOffset>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -69,7 +74,11 @@ public sealed class CheckoutReservationCleanupWorkerTests
 
         store.CleanupExpiredUnattachedPendingBatch(Arg.Any<DateTimeOffset>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
             .Returns(0);
-        store.ListExpiredAttachedPendingBatch(Arg.Any<DateTimeOffset>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
+        store.ClaimAttachedPendingForStripeSyncBatch(
+                Arg.Any<DateTimeOffset>(),
+                Arg.Any<DateTimeOffset>(),
+                Arg.Any<int>(),
+                Arg.Any<CancellationToken>())
             .Returns(new List<(Guid, string)> { (intentId, sessionId) });
         payment.GetCheckoutSession(sessionId, Arg.Any<CancellationToken>())
             .Returns(new StripeCheckoutSessionSnapshot(sessionId, StripeConstants.CheckoutSessionStatuses.OPEN, null));
@@ -81,22 +90,28 @@ public sealed class CheckoutReservationCleanupWorkerTests
         }
 
         await store.DidNotReceive().TryCancelAndRelease(intentId, Arg.Any<CancellationToken>());
+        // Lease already applied inside ClaimAttachedPendingForStripeSyncBatch.
+        await store.DidNotReceive().TouchLastStripeReconciledAt(Arg.Any<Guid>(), Arg.Any<DateTimeOffset>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]
-    public async Task RunCleanup_WhenAttachedIntentStripeReportsComplete_ShouldNotCancel()
+    public async Task RunCleanup_WhenAttachedPaidSessionWithoutWebhook_ShouldCompleteViaReconciliation()
     {
         var store = Substitute.For<ICheckoutIntentStore>();
         var payment = Substitute.For<IPaymentService>();
         var completion = Substitute.For<ICheckoutCompletionService>();
         var intentId = Guid.NewGuid();
         var userId = Guid.NewGuid();
-        const string sessionId = "cs_complete_test";
+        const string sessionId = "cs_complete_early_test";
         var completed = new StripeCheckoutCompleted(intentId, userId, sessionId, 10m, "usd");
 
         store.CleanupExpiredUnattachedPendingBatch(Arg.Any<DateTimeOffset>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
             .Returns(0);
-        store.ListExpiredAttachedPendingBatch(Arg.Any<DateTimeOffset>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
+        store.ClaimAttachedPendingForStripeSyncBatch(
+                Arg.Any<DateTimeOffset>(),
+                Arg.Any<DateTimeOffset>(),
+                Arg.Any<int>(),
+                Arg.Any<CancellationToken>())
             .Returns(new List<(Guid, string)> { (intentId, sessionId) });
         payment.GetCheckoutSession(sessionId, Arg.Any<CancellationToken>())
             .Returns(new StripeCheckoutSessionSnapshot(
@@ -115,17 +130,22 @@ public sealed class CheckoutReservationCleanupWorkerTests
 
         await store.DidNotReceive().TryCancelAndRelease(intentId, Arg.Any<CancellationToken>());
         await completion.Received(1).CompletePaidCheckout(completed, Arg.Any<CancellationToken>());
+        await store.DidNotReceive().TouchLastStripeReconciledAt(Arg.Any<Guid>(), Arg.Any<DateTimeOffset>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]
-    public async Task RunCleanup_WhenNoExpiredIntents_ShouldNotCallPaymentService()
+    public async Task RunCleanup_WhenNoDueAttachedIntents_ShouldNotCallPaymentService()
     {
         var store = Substitute.For<ICheckoutIntentStore>();
         var payment = Substitute.For<IPaymentService>();
 
         store.CleanupExpiredUnattachedPendingBatch(Arg.Any<DateTimeOffset>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
             .Returns(0);
-        store.ListExpiredAttachedPendingBatch(Arg.Any<DateTimeOffset>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
+        store.ClaimAttachedPendingForStripeSyncBatch(
+                Arg.Any<DateTimeOffset>(),
+                Arg.Any<DateTimeOffset>(),
+                Arg.Any<int>(),
+                Arg.Any<CancellationToken>())
             .Returns(new List<(Guid, string)>());
 
         var (sut, provider) = BuildWorker(store, payment);

@@ -8,13 +8,16 @@ namespace AssetBlock.Infrastructure.HostedServices;
 
 /// <summary>
 /// Reconciles attached checkout sessions with Stripe and cancels unattached expired intents locally.
+/// Attached paid sessions are polled on a short backoff (minutes), not only after local expiry.
 /// </summary>
 internal sealed class CheckoutReservationCleanupWorker(
     IServiceScopeFactory scopeFactory,
     IHostEnvironment environment,
     ILogger<CheckoutReservationCleanupWorker> logger) : BackgroundService
 {
-    private static readonly TimeSpan _interval = TimeSpan.FromMinutes(5);
+    private static readonly TimeSpan _interval = TimeSpan.FromMinutes(1);
+    /// <summary>Minimum age since create/last poll before another Stripe API check (1–5 min target).</summary>
+    private static readonly TimeSpan _reconcileAfter = TimeSpan.FromMinutes(2);
     private const int BATCH_SIZE = 100;
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -69,6 +72,7 @@ internal sealed class CheckoutReservationCleanupWorker(
         var paymentService = scope.ServiceProvider.GetRequiredService<IPaymentService>();
         var completionService = scope.ServiceProvider.GetRequiredService<ICheckoutCompletionService>();
         var now = DateTimeOffset.UtcNow;
+        var dueBefore = now - _reconcileAfter;
 
         var unattached = await checkoutIntentStore.CleanupExpiredUnattachedPendingBatch(
             now,
@@ -79,13 +83,15 @@ internal sealed class CheckoutReservationCleanupWorker(
             logger.LogInformation("Cancelled {Count} expired unattached pending checkout intents", unattached);
         }
 
-        var attached = await checkoutIntentStore.ListExpiredAttachedPendingBatch(
+        // Short TX claim (SKIP LOCKED + lease); Stripe / CompletePaidCheckout stay outside any DB TX.
+        var attached = await checkoutIntentStore.ClaimAttachedPendingForStripeSyncBatch(
             now,
+            dueBefore,
             BATCH_SIZE,
             cancellationToken);
         var cancelledAttached = 0;
         var reconciledCompleted = 0;
-        foreach (var (id, stripeSessionId) in attached)
+        foreach ((Guid id, var stripeSessionId) in attached)
         {
             try
             {
@@ -111,6 +117,8 @@ internal sealed class CheckoutReservationCleanupWorker(
                 {
                     cancelledAttached++;
                 }
+
+                // OPEN (or other non-terminal): reservation kept; claim already leased via LastStripeReconciledAt.
             }
             catch (OperationCanceledException)
             {
@@ -128,7 +136,7 @@ internal sealed class CheckoutReservationCleanupWorker(
         if (cancelledAttached > 0)
         {
             logger.LogInformation(
-                "Cancelled {Count} locally expired checkout intents after Stripe reported expired",
+                "Cancelled {Count} checkout intents after Stripe reported expired",
                 cancelledAttached);
         }
 

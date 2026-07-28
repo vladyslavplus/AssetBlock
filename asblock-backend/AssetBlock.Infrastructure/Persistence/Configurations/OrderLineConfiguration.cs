@@ -70,7 +70,8 @@ internal sealed class OrderLineConfiguration : IEntityTypeConfiguration<OrderLin
 
         builder.HasOne(l => l.AssetVersion)
             .WithMany()
-            .HasForeignKey(l => l.AssetVersionId)
+            .HasForeignKey(l => new { l.AssetId, l.AssetVersionId })
+            .HasPrincipalKey(v => new { v.AssetId, v.Id })
             .OnDelete(DeleteBehavior.Restrict);
 
         builder.HasOne(l => l.Seller)

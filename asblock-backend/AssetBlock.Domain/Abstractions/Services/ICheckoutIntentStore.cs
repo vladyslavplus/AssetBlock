@@ -55,11 +55,26 @@ public interface ICheckoutIntentStore
         CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Lists locally expired pending intents that have a Stripe session id (for out-of-TX Stripe sync).
+    /// Atomically claims a batch of attached pending intents due for Stripe reconciliation
+    /// (short TX + FOR UPDATE SKIP LOCKED). Sets <c>LastStripeReconciledAt</c> as a lease so
+    /// other workers skip the same rows until the next backoff window. Stripe I/O must run
+    /// after this method returns (outside the transaction).
+    /// Due when COALESCE(LastStripeReconciledAt, CreatedAt) &lt;= dueBefore.
     /// </summary>
-    Task<IReadOnlyList<(Guid Id, string StripeSessionId)>> ListExpiredAttachedPendingBatch(
+    Task<IReadOnlyList<(Guid Id, string StripeSessionId)>> ClaimAttachedPendingForStripeSyncBatch(
         DateTimeOffset now,
+        DateTimeOffset dueBefore,
         int batchSize,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Records a successful non-terminal Stripe poll so the next reconciliation waits for backoff.
+    /// Prefer <see cref="ClaimAttachedPendingForStripeSyncBatch"/> for worker cycles; this remains
+    /// for explicit backoff updates outside claim.
+    /// </summary>
+    Task TouchLastStripeReconciledAt(
+        Guid id,
+        DateTimeOffset reconciledAt,
         CancellationToken cancellationToken = default);
 
     /// <summary>

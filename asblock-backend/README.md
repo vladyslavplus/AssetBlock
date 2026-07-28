@@ -133,6 +133,15 @@ dotnet test AssetBlock.Infrastructure.IntegrationTests/AssetBlock.Infrastructure
 dotnet test AssetBlock.WebApi.IntegrationTests/AssetBlock.WebApi.IntegrationTests.csproj
 ```
 
+Ryuk (Testcontainers resource reaper) stays **enabled by default** so killed test processes still clean containers. If Docker Desktop wedges on Ryuk (`Created` but never `Started`), opt out for that shell only:
+
+```powershell
+$env:ASSETBLOCK_DISABLE_RYUK = "true"
+dotnet test AssetBlock.Infrastructure.IntegrationTests/AssetBlock.Infrastructure.IntegrationTests.csproj
+```
+
+Do not set this in CI unless Ryuk is proven broken there. Fixtures also apply a 2-minute start timeout so a wedged daemon fails fast instead of hanging forever.
+
 Bring up local app dependencies with `docker-compose.yml` in this folder when running the API outside tests.
 
 ### Mailpit (local SMTP inbox)
