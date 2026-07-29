@@ -10,29 +10,43 @@ namespace AssetBlock.WebApi.IntegrationTests.Support;
 
 internal static class AssetCatalogSeed
 {
+    public const string SampleTitle = "Integration seeded asset";
+    public const decimal SamplePrice = 9.99m;
+
+    /// <summary>Stable id so parallel/shared DB tests never pick another suite's asset.</summary>
+    public static readonly Guid SampleAssetId = Guid.Parse("a1111111-2222-4333-8444-555555555501");
+
     public static async Task<Guid> EnsureSampleAssetAsync(IServiceScopeFactory scopeFactory)
     {
         using var scope = scopeFactory.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
 
-        var existing = await db.Assets.AsNoTracking().Select(a => a.Id).FirstOrDefaultAsync();
-        if (existing != Guid.Empty)
+        var existing = await db.Assets.AsNoTracking()
+            .Where(a => a.Id == SampleAssetId || a.Title == SampleTitle)
+            .Select(a => new { a.Id, a.Title })
+            .FirstOrDefaultAsync();
+
+        if (existing is not null)
         {
-            return existing;
+            return existing.Id;
         }
 
         var category = await db.Categories.AsNoTracking().FirstAsync();
-        var userId = Guid.NewGuid();
-        var user = new User
-        {
-            Id = userId,
-            Username = "integration_asset_author",
-            Email = "integration.asset@test.local",
-            PasswordHash = "na",
-            Role = AppRoles.USER
-        };
 
-        var assetId = Guid.NewGuid();
+        var user = await db.Users.FirstOrDefaultAsync(u => u.Email == "integration.asset@test.local");
+        if (user is null)
+        {
+            user = new User
+            {
+                Id = Guid.NewGuid(),
+                Username = "integration_asset_author",
+                Email = "integration.asset@test.local",
+                PasswordHash = "na",
+                Role = AppRoles.USER
+            };
+            db.Users.Add(user);
+        }
+
         var versionId = Guid.NewGuid();
         const string storageKey = "integration/seed/asset.bin";
         const string fileName = "asset.bin";
@@ -40,18 +54,18 @@ internal static class AssetCatalogSeed
         var now = DateTimeOffset.UtcNow;
         var asset = new Asset
         {
-            Id = assetId,
-            AuthorId = userId,
+            Id = SampleAssetId,
+            AuthorId = user.Id,
             CategoryId = category.Id,
-            Title = "Integration seeded asset",
+            Title = SampleTitle,
             Description = "Seeded for integration tests.",
-            Price = 9.99m,
+            Price = SamplePrice,
             CreatedAt = now
         };
         var version = new AssetVersion
         {
             Id = versionId,
-            AssetId = assetId,
+            AssetId = SampleAssetId,
             VersionNumber = 1,
             IsCurrent = true,
             StorageKey = storageKey,
@@ -66,11 +80,10 @@ internal static class AssetCatalogSeed
             CreatedAt = now
         };
 
-        db.Users.Add(user);
         db.Assets.Add(asset);
         db.AssetVersions.Add(version);
         await db.SaveChangesAsync();
 
-        return assetId;
+        return SampleAssetId;
     }
 }
