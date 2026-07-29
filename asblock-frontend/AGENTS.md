@@ -16,6 +16,7 @@
 - Avoid large JSX/stateful components. Split a feature into schema/types, data hook, stateful container, and presentational subcomponents only when it reduces real complexity.
 - Use loading, error, empty, pending, and disabled states for async user flows. Do not present failed operations as success or hide unavailable data.
 - Preserve metadata, semantic HTML, keyboard navigation, accessible labels, focus management, and responsive behavior when editing pages/components.
+- React Compiler is enabled. Do **not** add manual `useMemo`, `useCallback`, or `React.memo` for routine render optimization — the compiler handles memoization. Keep `useState` / `useEffect` / `useRef` when they express real state or side effects (URL sync, one-shot guards, local UI state). Only introduce manual memo APIs if a measured case still requires them and you document why.
 
 ## Data flow and TanStack Query
 
@@ -51,7 +52,7 @@
 - Keep Tailwind utilities inline in `className` or `cn(...)`. Do not hoist class strings into module-level styling constants; use a small presentational component if reuse is meaningful.
 - Prefer CSS/Tailwind and simple React composition over unnecessary JavaScript-driven layout or animation. Respect `prefers-reduced-motion` where motion is added.
 - Avoid shipping heavy client code to routes that can stay server-rendered. Lazy-load genuinely heavy, below-the-fold, or browser-only visual features when it materially improves initial load.
-- Keep images, lists, filters, and animations performant: avoid rendering unbounded lists, expensive work during render, unstable keys, unnecessary state duplication, and recreating objects/functions that trigger avoidable child work.
+- Keep images, lists, filters, and animations performant: avoid rendering unbounded lists, expensive work during render, unstable keys, and unnecessary state duplication. Do not hand-wrap derived values or handlers in `useMemo`/`useCallback` — React Compiler memoizes those automatically.
 - Do not alter `images.unoptimized`, theme forcing, analytics, or global styling without an explicit product/deployment reason.
 
 ## TypeScript and style

@@ -1,6 +1,14 @@
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
-import { ArrowRight, Store, Upload, ShieldCheck, FolderOpen, Package } from 'lucide-react'
+import {
+  ArrowRight,
+  BarChart3,
+  Store,
+  Upload,
+  ShieldCheck,
+  FolderOpen,
+  Package,
+} from 'lucide-react'
 
 export function SellOverview() {
   return (
@@ -12,6 +20,23 @@ export function SellOverview() {
         groupings, and <strong className="text-foreground font-medium">Bundles</strong> for
         discounted multi-asset offers.
       </p>
+
+      <div className="rounded-lg border border-border/60 bg-card/40 px-4 py-4">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex items-start gap-3">
+            <BarChart3 className="mt-0.5 size-5 shrink-0 text-primary" aria-hidden />
+            <div>
+              <p className="font-medium text-foreground">Track sales in Analytics</p>
+              <p className="mt-1 text-sm text-muted-foreground">
+                View revenue, orders, product performance, and recent sales once checkout completes.
+              </p>
+            </div>
+          </div>
+          <Button asChild variant="outline" className="shrink-0 border-border bg-transparent">
+            <Link href="/sell?tab=analytics">Open analytics</Link>
+          </Button>
+        </div>
+      </div>
 
       <ul className="space-y-6">
         <li className="flex gap-3">
