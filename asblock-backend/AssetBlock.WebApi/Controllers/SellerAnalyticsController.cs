@@ -1,3 +1,7 @@
+using AssetBlock.Application.UseCases.SellerAnalytics.ExportSellerAnalyticsSales;
+using AssetBlock.Application.UseCases.SellerAnalytics.GetSellerAnalyticsAssetDetail;
+using AssetBlock.Application.UseCases.SellerAnalytics.GetSellerAnalyticsBundleDetail;
+using AssetBlock.Application.UseCases.SellerAnalytics.GetSellerAnalyticsCollections;
 using AssetBlock.Application.UseCases.SellerAnalytics.GetSellerAnalyticsOverview;
 using AssetBlock.Application.UseCases.SellerAnalytics.GetSellerAnalyticsProducts;
 using AssetBlock.Application.UseCases.SellerAnalytics.GetSellerAnalyticsSales;
@@ -5,9 +9,11 @@ using AssetBlock.Domain.Core.Constants;
 using AssetBlock.Domain.Core.Dto.Analytics;
 using AssetBlock.Domain.Core.Enums;
 using AssetBlock.WebApi.Constants;
+using AssetBlock.WebApi.Results;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 
 namespace AssetBlock.WebApi.Controllers;
 
@@ -82,6 +88,96 @@ public sealed class SellerAnalyticsController(ISender sender) : ApiControllerBas
     }
 
     /// <summary>
+    /// Asset drill-down analytics for a seller-owned product.
+    /// </summary>
+    [HttpGet(ApiRoutes.SellerAnalytics.PRODUCT_ASSET_BY_ID)]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> GetAssetDetail(
+        Guid id,
+        [FromQuery] DateOnly? from,
+        [FromQuery] DateOnly? to,
+        CancellationToken cancellationToken = default)
+    {
+        var userId = GetUserId();
+        if (userId is null)
+        {
+            return UnauthorizedProblem();
+        }
+
+        var (resolvedFrom, resolvedTo) = ResolveDateRange(from, to);
+        var result = await Sender.Send(
+            new GetSellerAnalyticsAssetDetailQuery(userId.Value, id, resolvedFrom, resolvedTo),
+            cancellationToken);
+
+        return MapResultToActionResult(result);
+    }
+
+    /// <summary>
+    /// Bundle drill-down analytics for a seller-owned product.
+    /// </summary>
+    [HttpGet(ApiRoutes.SellerAnalytics.PRODUCT_BUNDLE_BY_ID)]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> GetBundleDetail(
+        Guid id,
+        [FromQuery] DateOnly? from,
+        [FromQuery] DateOnly? to,
+        CancellationToken cancellationToken = default)
+    {
+        var userId = GetUserId();
+        if (userId is null)
+        {
+            return UnauthorizedProblem();
+        }
+
+        var (resolvedFrom, resolvedTo) = ResolveDateRange(from, to);
+        var result = await Sender.Send(
+            new GetSellerAnalyticsBundleDetailQuery(userId.Value, id, resolvedFrom, resolvedTo),
+            cancellationToken);
+
+        return MapResultToActionResult(result);
+    }
+
+    /// <summary>
+    /// Paginated collection performance for the seller.
+    /// </summary>
+    [HttpGet(ApiRoutes.SellerAnalytics.COLLECTIONS)]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    public async Task<IActionResult> GetCollections(
+        [FromQuery] DateOnly? from,
+        [FromQuery] DateOnly? to,
+        [FromQuery] AnalyticsCollectionSort sort = AnalyticsCollectionSort.VIEWS,
+        [FromQuery] AnalyticsSortDirection direction = AnalyticsSortDirection.DESC,
+        [FromQuery] int page = 1,
+        [FromQuery] int pageSize = AnalyticsConstants.DEFAULT_COLLECTIONS_PAGE_SIZE,
+        CancellationToken cancellationToken = default)
+    {
+        var userId = GetUserId();
+        if (userId is null)
+        {
+            return UnauthorizedProblem();
+        }
+
+        var (resolvedFrom, resolvedTo) = ResolveDateRange(from, to);
+        var request = new AnalyticsCollectionsRequest(resolvedFrom, resolvedTo, sort, direction, page, pageSize);
+        var result = await Sender.Send(
+            new GetSellerAnalyticsCollectionsQuery(userId.Value, request),
+            cancellationToken);
+
+        return MapResultToActionResult(result);
+    }
+
+    /// <summary>
     /// Keyset-paginated sales feed (newest first). No buyer or Stripe data exposed.
     /// </summary>
     [HttpGet(ApiRoutes.SellerAnalytics.SALES)]
@@ -111,6 +207,37 @@ public sealed class SellerAnalyticsController(ISender sender) : ApiControllerBas
             cancellationToken);
 
         return MapResultToActionResult(result);
+    }
+
+    /// <summary>
+    /// Streams a CSV export of seller sales for the requested period. No buyer or Stripe data exposed.
+    /// </summary>
+    [HttpGet(ApiRoutes.SellerAnalytics.SALES_EXPORT)]
+    [EnableRateLimiting(RateLimitingConstants.Policies.SELLER_ANALYTICS_SALES_EXPORT)]
+    [Produces("text/csv")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status429TooManyRequests)]
+    public IActionResult ExportSales(
+        [FromQuery] DateOnly from,
+        [FromQuery] DateOnly to,
+        [FromQuery] AnalyticsProductTypeFilter productType = AnalyticsProductTypeFilter.ALL,
+        CancellationToken cancellationToken = default)
+    {
+        var userId = GetUserId();
+        if (userId is null)
+        {
+            return UnauthorizedProblem();
+        }
+
+        return new SellerAnalyticsSalesCsvExportResult(
+            userId.Value,
+            from,
+            to,
+            productType,
+            Sender);
     }
 
     private static (DateOnly from, DateOnly to) ResolveDateRange(DateOnly? from, DateOnly? to)

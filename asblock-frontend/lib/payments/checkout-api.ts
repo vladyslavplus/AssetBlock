@@ -1,3 +1,4 @@
+import type { CheckoutAttributionBrowser } from '@/lib/analytics/telemetry-schemas'
 import { getApiErrorMessage, parseApiErrorBody, readApiResponseBody } from '@/lib/http/api-errors'
 import { buildBundleCheckoutJsonBody, buildCheckoutJsonBody } from '@/lib/payments/payments-client'
 import {
@@ -24,6 +25,7 @@ export class CheckoutRequestError extends Error {
 async function postCheckout(path: string, body: unknown): Promise<CreateCheckoutResponse> {
   const res = await fetch(path, {
     method: 'POST',
+    credentials: 'include',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
   })
@@ -44,14 +46,21 @@ async function postCheckout(path: string, body: unknown): Promise<CreateCheckout
   return parsed.data
 }
 
-export async function postCreateCheckoutSession(assetId: string): Promise<CreateCheckoutResponse> {
-  return postCheckout('/api/payments/checkout', buildCheckoutJsonBody(assetId))
+export async function postCreateCheckoutSession(
+  assetId: string,
+  attribution?: CheckoutAttributionBrowser,
+): Promise<CreateCheckoutResponse> {
+  return postCheckout('/api/payments/checkout', buildCheckoutJsonBody(assetId, attribution))
 }
 
 export async function postCreateBundleCheckoutSession(
   bundleId: string,
+  attribution?: CheckoutAttributionBrowser,
 ): Promise<CreateCheckoutResponse> {
-  return postCheckout('/api/payments/checkout/bundles', buildBundleCheckoutJsonBody(bundleId))
+  return postCheckout(
+    '/api/payments/checkout/bundles',
+    buildBundleCheckoutJsonBody(bundleId, attribution),
+  )
 }
 
 export async function fetchCheckoutStatus(

@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button'
 import { useAuth } from '@/components/auth/auth-context'
 import { isEmailVerified } from '@/components/auth/email-verification-notice'
 import { formatUsdWhole } from '@/lib/format-currency'
+import type { CheckoutAttributionInput } from '@/lib/analytics/telemetry-source'
 import { CheckoutRequestError, postCreateCheckoutSession } from '@/lib/payments/checkout-api'
 import { writePendingCheckoutContext } from '@/lib/reviews/review-constants'
 import { Download, Lock, Loader2, Zap } from 'lucide-react'
@@ -19,6 +20,7 @@ interface AssetPurchaseCardProps {
   price: number
   checkoutConfigured: boolean
   returnPath: string
+  checkoutAttribution?: CheckoutAttributionInput
 }
 
 export function AssetPurchaseCard({
@@ -28,6 +30,7 @@ export function AssetPurchaseCard({
   price,
   checkoutConfigured,
   returnPath,
+  checkoutAttribution,
 }: AssetPurchaseCardProps) {
   const router = useRouter()
   const { user, status } = useAuth()
@@ -37,7 +40,7 @@ export function AssetPurchaseCard({
   const loginHref = `/login?returnUrl=${encodeURIComponent(returnPath)}`
 
   const checkoutMutation = useMutation({
-    mutationFn: () => postCreateCheckoutSession(assetId),
+    mutationFn: () => postCreateCheckoutSession(assetId, checkoutAttribution),
     onSuccess: (data) => {
       writePendingCheckoutContext({
         checkoutIntentId: data.checkoutIntentId,

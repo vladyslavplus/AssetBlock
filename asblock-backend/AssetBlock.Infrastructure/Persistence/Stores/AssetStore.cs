@@ -420,6 +420,37 @@ internal sealed class AssetStore(ApplicationDbContext dbContext) : IAssetStore
         return true;
     }
 
+    public Task<Guid?> GetPublicAnalyticsSellerId(Guid assetId, CancellationToken cancellationToken = default)
+    {
+        return dbContext.Assets
+            .AsNoTracking()
+            .Where(a => a.Id == assetId && a.DeletedAt == null)
+            .Select(a => (Guid?)a.AuthorId)
+            .FirstOrDefaultAsync(cancellationToken);
+    }
+
+    public Task<Guid?> ResolveDownloadAnalyticsSellerId(
+        Guid assetId,
+        Guid assetVersionId,
+        Guid actorUserId,
+        CancellationToken cancellationToken = default)
+    {
+        return (
+            from asset in dbContext.Assets.AsNoTracking()
+            // Soft-deleted assets remain downloadable for entitled buyers; public view projections
+            // still exclude them via GetPublicAnalyticsSellerId.
+            where asset.Id == assetId && asset.AuthorId != actorUserId
+            from requestedVersion in dbContext.AssetVersions.AsNoTracking()
+                .Where(v => v.AssetId == assetId && v.Id == assetVersionId)
+            from purchase in dbContext.Purchases.AsNoTracking()
+                .Where(p => p.UserId == actorUserId && p.AssetId == assetId)
+            from purchasedVersion in dbContext.AssetVersions.AsNoTracking()
+                .Where(v => v.AssetId == assetId && v.Id == purchase.AssetVersionId)
+            where requestedVersion.VersionNumber >= purchasedVersion.VersionNumber
+            select (Guid?)asset.AuthorId
+        ).FirstOrDefaultAsync(cancellationToken);
+    }
+
     private static string EscapeLikePattern(string value)
     {
         return value

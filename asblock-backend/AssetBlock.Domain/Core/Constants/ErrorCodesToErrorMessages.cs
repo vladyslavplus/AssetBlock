@@ -79,7 +79,11 @@ public static class ErrorCodesToErrorMessages
         { ErrorCodes.ERR_PURCHASES_LIST_FAILED, "Failed to load your purchases." },
         { ErrorCodes.ERR_ANALYTICS_INVALID_RANGE, "The analytics date range is invalid." },
         { ErrorCodes.ERR_ANALYTICS_INVALID_CURSOR, "The analytics pagination cursor is invalid." },
-        { ErrorCodes.ERR_ANALYTICS_INVALID_FILTER, "One or more analytics filters are invalid." }
+        { ErrorCodes.ERR_ANALYTICS_INVALID_FILTER, "One or more analytics filters are invalid." },
+        { ErrorCodes.ERR_ANALYTICS_EXPORT_TOO_LARGE, "The sales export exceeds the maximum allowed row count." },
+        { ErrorCodes.ERR_ANALYTICS_EVENT_INVALID, "The analytics event payload is malformed." },
+        { ErrorCodes.ERR_ANALYTICS_ATTRIBUTION_INVALID, "The analytics attribution data is invalid." },
+        { ErrorCodes.ERR_ANALYTICS_BFF_SIGNATURE_INVALID, "Analytics request signature is invalid." }
     };
 
     public static string GetMessage(string code) =>

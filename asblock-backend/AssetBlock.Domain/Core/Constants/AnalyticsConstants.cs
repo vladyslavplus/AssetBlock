@@ -10,14 +10,23 @@ public static class AnalyticsConstants
     /// <summary>Cache TTL in seconds for overview and products queries.</summary>
     public const int OVERVIEW_CACHE_TTL_SECONDS = 120;
     public const int PRODUCTS_CACHE_TTL_SECONDS = 120;
+    public const int PRODUCT_DETAIL_CACHE_TTL_SECONDS = 120;
+    public const int COLLECTIONS_CACHE_TTL_SECONDS = 120;
     public const int SALES_CACHE_TTL_SECONDS = 30;
 
     public const int DEFAULT_PRODUCTS_PAGE_SIZE = 20;
+    public const int DEFAULT_COLLECTIONS_PAGE_SIZE = 20;
     public const int MAX_PRODUCTS_PAGE_SIZE = 100;
+    public const int MAX_COLLECTIONS_PAGE_SIZE = 100;
+    public const int MAX_COLLECTIONS_PAGE = 10_000;
+    public const int MAX_COLLECTIONS_OFFSET = 100_000;
+    public const int MAX_EXTERNAL_REFERRERS = 20;
+    public const int COLLECTION_TOP_CLICKED_ASSETS = 5;
     public const int MAX_PRODUCTS_PAGE = 10_000;
     public const int MAX_PRODUCTS_OFFSET = 100_000;
     public const int DEFAULT_SALES_PAGE_SIZE = 25;
     public const int MAX_SALES_PAGE_SIZE = 100;
+    public const int MAX_SALES_EXPORT_ROWS = 50_000;
 
     public const int MAX_CURSOR_LENGTH = 256;
 

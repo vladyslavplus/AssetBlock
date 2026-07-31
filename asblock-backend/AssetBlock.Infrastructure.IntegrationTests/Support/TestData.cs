@@ -260,7 +260,8 @@ internal static class TestData
             Description = "Seeded collection",
             Status = status,
             PublishedAt = status == CollectionStatus.PUBLISHED ? now : null,
-            CreatedAt = now
+            CreatedAt = now,
+            UpdatedAt = now
         };
     }
 

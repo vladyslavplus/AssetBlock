@@ -7,7 +7,7 @@ namespace AssetBlock.Application.UseCases.SellerAnalytics;
 /// <summary>
 /// Static helpers for analytics period calculations, granularity, zero-fill, and metrics computation.
 /// </summary>
-internal static class AnalyticsRange
+public static class AnalyticsRange
 {
     /// <summary>
     /// Returns the preceding equal-length calendar-day comparison period.
@@ -64,43 +64,64 @@ internal static class AnalyticsRange
     }
 
     /// <summary>
-    /// Aggregates per-day buckets into weekly or monthly buckets, then zero-fills all missing
-    /// buckets for the requested granularity in the [from, to) range.
+    /// Zero-fills commerce and engagement buckets for the requested granularity in the [from, to) range.
+    /// Engagement buckets must already match <paramref name="granularity"/> (day/week/month starts).
     /// </summary>
     public static IReadOnlyList<AnalyticsSeriesPoint> BuildSeries(
         IReadOnlyList<AnalyticsDayBucket> dayBuckets,
         DateOnly from,
         DateOnly to,
-        AnalyticsGranularity granularity)
+        AnalyticsGranularity granularity,
+        DateTimeOffset? engagementAvailableFrom,
+        IReadOnlyList<AnalyticsEngagementDayBucket>? engagementBuckets = null)
     {
         return granularity switch
         {
-            AnalyticsGranularity.DAY => BuildDaySeries(dayBuckets, from, to),
-            AnalyticsGranularity.WEEK => BuildWeekSeries(dayBuckets, from, to),
-            AnalyticsGranularity.MONTH => BuildMonthSeries(dayBuckets, from, to),
-            _ => BuildDaySeries(dayBuckets, from, to)
+            AnalyticsGranularity.DAY => BuildDaySeries(dayBuckets, from, to, engagementAvailableFrom, engagementBuckets),
+            AnalyticsGranularity.WEEK => BuildWeekSeries(dayBuckets, from, to, engagementAvailableFrom, engagementBuckets),
+            AnalyticsGranularity.MONTH => BuildMonthSeries(dayBuckets, from, to, engagementAvailableFrom, engagementBuckets),
+            _ => BuildDaySeries(dayBuckets, from, to, engagementAvailableFrom, engagementBuckets)
         };
     }
 
     private static IReadOnlyList<AnalyticsSeriesPoint> BuildDaySeries(
-        IReadOnlyList<AnalyticsDayBucket> dayBuckets, DateOnly from, DateOnly to)
+        IReadOnlyList<AnalyticsDayBucket> dayBuckets,
+        DateOnly from,
+        DateOnly to,
+        DateTimeOffset? engagementAvailableFrom,
+        IReadOnlyList<AnalyticsEngagementDayBucket>? engagementBuckets)
     {
         var byDate = dayBuckets.ToDictionary(b => b.Date);
+        var engagementByDate = engagementBuckets?.ToDictionary(b => b.Date);
         var result = new List<AnalyticsSeriesPoint>();
         for (var d = from; d < to; d = d.AddDays(1))
         {
-            result.Add(byDate.TryGetValue(d, out var b)
-                ? new AnalyticsSeriesPoint(ToUtcStart(d), ToCents(b.GrossRevenue), b.Orders, b.Units)
-                : new AnalyticsSeriesPoint(ToUtcStart(d), 0, 0, 0));
+            AnalyticsEngagementDayBucket? engagement = null;
+            if (engagementByDate?.TryGetValue(d, out var found) == true)
+            {
+                engagement = found;
+            }
+
+            if (byDate.TryGetValue(d, out var commerce))
+            {
+                result.Add(CreateSeriesPoint(d, d.AddDays(1), commerce, engagement, engagementAvailableFrom));
+            }
+            else
+            {
+                result.Add(CreateSeriesPoint(d, d.AddDays(1), null, engagement, engagementAvailableFrom));
+            }
         }
 
         return result;
     }
 
     private static IReadOnlyList<AnalyticsSeriesPoint> BuildWeekSeries(
-        IReadOnlyList<AnalyticsDayBucket> dayBuckets, DateOnly from, DateOnly to)
+        IReadOnlyList<AnalyticsDayBucket> dayBuckets,
+        DateOnly from,
+        DateOnly to,
+        DateTimeOffset? engagementAvailableFrom,
+        IReadOnlyList<AnalyticsEngagementDayBucket>? engagementBuckets)
     {
-        // Aggregate days into ISO weeks (week starts on Monday)
         var weekly = new Dictionary<DateOnly, (decimal Revenue, int Orders, int Units)>();
         foreach (var b in dayBuckets)
         {
@@ -117,14 +138,26 @@ internal static class AnalyticsRange
             }
         }
 
-        // Generate week buckets that overlap [from, to)
+        var engagementByWeek = engagementBuckets?.ToDictionary(b => b.Date);
         var result = new List<AnalyticsSeriesPoint>();
         var weekStart = GetMondayOfWeek(from);
         while (weekStart < to)
         {
-            result.Add(weekly.TryGetValue(weekStart, out var w)
-                ? new AnalyticsSeriesPoint(ToUtcStart(weekStart), ToCents(w.Revenue), w.Orders, w.Units)
-                : new AnalyticsSeriesPoint(ToUtcStart(weekStart), 0, 0, 0));
+            AnalyticsDayBucket? commerceBucket = weekly.TryGetValue(weekStart, out var commerce)
+                ? new AnalyticsDayBucket(weekStart, commerce.Revenue, commerce.Orders, commerce.Units)
+                : null;
+            AnalyticsEngagementDayBucket? engagement = null;
+            if (engagementByWeek?.TryGetValue(weekStart, out var found) == true)
+            {
+                engagement = found;
+            }
+
+            result.Add(CreateSeriesPoint(
+                weekStart,
+                weekStart.AddDays(7),
+                commerceBucket,
+                engagement,
+                engagementAvailableFrom));
 
             weekStart = weekStart.AddDays(7);
         }
@@ -133,7 +166,11 @@ internal static class AnalyticsRange
     }
 
     private static IReadOnlyList<AnalyticsSeriesPoint> BuildMonthSeries(
-        IReadOnlyList<AnalyticsDayBucket> dayBuckets, DateOnly from, DateOnly to)
+        IReadOnlyList<AnalyticsDayBucket> dayBuckets,
+        DateOnly from,
+        DateOnly to,
+        DateTimeOffset? engagementAvailableFrom,
+        IReadOnlyList<AnalyticsEngagementDayBucket>? engagementBuckets)
     {
         var monthly = new Dictionary<(int Year, int Month), (decimal Revenue, int Orders, int Units)>();
         foreach (var b in dayBuckets)
@@ -151,14 +188,27 @@ internal static class AnalyticsRange
             }
         }
 
+        var engagementByMonth = engagementBuckets?.ToDictionary(b => (b.Date.Year, b.Date.Month));
         var result = new List<AnalyticsSeriesPoint>();
         var monthStart = new DateOnly(from.Year, from.Month, 1);
         while (monthStart < to)
         {
             var key = (monthStart.Year, monthStart.Month);
-            result.Add(monthly.TryGetValue(key, out var m)
-                ? new AnalyticsSeriesPoint(ToUtcStart(monthStart), ToCents(m.Revenue), m.Orders, m.Units)
-                : new AnalyticsSeriesPoint(ToUtcStart(monthStart), 0, 0, 0));
+            monthly.TryGetValue(key, out var commerce);
+            AnalyticsEngagementDayBucket? engagement = null;
+            if (engagementByMonth?.TryGetValue(key, out var found) == true)
+            {
+                engagement = found;
+            }
+
+            result.Add(CreateSeriesPoint(
+                monthStart,
+                monthStart.AddMonths(1),
+                monthly.ContainsKey(key)
+                    ? new AnalyticsDayBucket(monthStart, commerce.Revenue, commerce.Orders, commerce.Units)
+                    : null,
+                engagement,
+                engagementAvailableFrom));
 
             monthStart = monthStart.AddMonths(1);
         }
@@ -166,11 +216,62 @@ internal static class AnalyticsRange
         return result;
     }
 
+    private static AnalyticsSeriesPoint CreateSeriesPoint(
+        DateOnly date,
+        DateOnly bucketEndExclusive,
+        AnalyticsDayBucket? commerce,
+        AnalyticsEngagementDayBucket? engagement,
+        DateTimeOffset? engagementAvailableFrom)
+    {
+        var checkoutStarts = engagement?.CheckoutStarts ?? 0;
+        var completedOrders = engagement?.CompletedOrders ?? 0;
+
+        long? productViews = null;
+        long? uniqueVisitors = null;
+        long? downloadRequests = null;
+
+        if (engagementAvailableFrom.HasValue)
+        {
+            var availableDate = DateOnly.FromDateTime(engagementAvailableFrom.Value.UtcDateTime);
+            // Null only when the whole bucket is strictly before availability; partial overlap → 0/values.
+            if (availableDate < bucketEndExclusive)
+            {
+                productViews = engagement?.ProductViews ?? 0;
+                uniqueVisitors = engagement?.UniqueVisitors ?? 0;
+                downloadRequests = engagement?.DownloadRequests ?? 0;
+            }
+        }
+
+        if (commerce is null)
+        {
+            return new AnalyticsSeriesPoint(
+                ToUtcStart(date),
+                0,
+                0,
+                0,
+                productViews,
+                uniqueVisitors,
+                checkoutStarts,
+                completedOrders,
+                downloadRequests);
+        }
+
+        return new AnalyticsSeriesPoint(
+            ToUtcStart(date),
+            ToCents(commerce.GrossRevenue),
+            commerce.Orders,
+            commerce.Units,
+            productViews,
+            uniqueVisitors,
+            checkoutStarts,
+            completedOrders,
+            downloadRequests);
+    }
+
     /// <summary>Returns the Monday (UTC) of the ISO week containing <paramref name="date"/>.</summary>
     private static DateOnly GetMondayOfWeek(DateOnly date)
     {
         var dow = (int)date.DayOfWeek;
-        // Sunday = 0; Monday = 1; ...; Saturday = 6
         var offset = dow == 0 ? 6 : dow - 1;
         return date.AddDays(-offset);
     }

@@ -10,4 +10,13 @@ public sealed record SellerAnalyticsOverviewSnapshot(
     IReadOnlyList<AnalyticsAssetProductRow> TopAssets,
     IReadOnlyList<AnalyticsBundleProductRow> TopBundles,
     SellerRatingsRaw CurrentRatings,
-    SellerRatingsRaw ComparisonRatings);
+    SellerRatingsRaw ComparisonRatings,
+    DateTimeOffset? EngagementAvailableFrom,
+    SellerEngagementRawFacts? CurrentEngagement,
+    SellerEngagementRawFacts? ComparisonEngagement,
+    IReadOnlyList<AnalyticsEngagementDayBucket>? EngagementDaySeries,
+    AnalyticsCommerceFunnelRaw? CommerceFunnel,
+    AnalyticsTrackedFunnelRaw? TrackedFunnel,
+    decimal? TrackedCheckoutCoverage,
+    IReadOnlyList<AnalyticsTrafficSourceRaw>? TrafficSources,
+    IReadOnlyList<AnalyticsExternalReferrerRaw>? ExternalReferrers);

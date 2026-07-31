@@ -48,7 +48,12 @@ public sealed class PaymentsController(ISender sender) : ApiControllerBase(sende
             return UnauthorizedProblem();
         }
 
-        var command = new CreateCheckoutSessionCommand(request.AssetId, userId.Value);
+        var command = new CreateCheckoutSessionCommand(
+            request.AssetId,
+            userId.Value,
+            request.Attribution,
+            request.AnalyticsVisitorId,
+            request.AnalyticsSessionId);
         var result = await Sender.Send(command, cancellationToken);
         return MapResultToActionResult(result);
     }
@@ -74,7 +79,12 @@ public sealed class PaymentsController(ISender sender) : ApiControllerBase(sende
             return UnauthorizedProblem();
         }
 
-        var command = new CreateBundleCheckoutSessionCommand(request.BundleId, userId.Value);
+        var command = new CreateBundleCheckoutSessionCommand(
+            request.BundleId,
+            userId.Value,
+            request.Attribution,
+            request.AnalyticsVisitorId,
+            request.AnalyticsSessionId);
         var result = await Sender.Send(command, cancellationToken);
         return MapResultToActionResult(result);
     }

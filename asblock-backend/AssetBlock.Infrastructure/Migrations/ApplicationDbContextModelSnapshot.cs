@@ -24,6 +24,104 @@ namespace AssetBlock.Infrastructure.Migrations
             NpgsqlModelBuilderExtensions.HasPostgresExtension(modelBuilder, "pg_trgm");
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
 
+            modelBuilder.Entity("AssetBlock.Domain.Core.Entities.AnalyticsEvent", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("ActorUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("AssetId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("AssetVersionId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("BundleId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("CollectionId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("DeviceClass")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<string>("EventType")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<DateTimeOffset>("OccurredAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("ReferrerHost")
+                        .HasMaxLength(253)
+                        .HasColumnType("character varying(253)");
+
+                    b.Property<Guid>("SellerId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("SessionId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Source")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<Guid>("VisitorId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("OccurredAt")
+                        .HasDatabaseName("IX_analytics_events_OccurredAt_brin");
+
+                    NpgsqlIndexBuilderExtensions.HasMethod(b.HasIndex("OccurredAt"), "brin");
+
+                    b.HasIndex("SellerId", "AssetId", "OccurredAt")
+                        .HasDatabaseName("IX_analytics_events_SellerId_AssetId_OccurredAt")
+                        .HasFilter("\"AssetId\" IS NOT NULL");
+
+                    b.HasIndex("SellerId", "BundleId", "OccurredAt")
+                        .HasDatabaseName("IX_analytics_events_SellerId_BundleId_OccurredAt")
+                        .HasFilter("\"BundleId\" IS NOT NULL");
+
+                    b.HasIndex("SellerId", "CollectionId", "OccurredAt")
+                        .HasDatabaseName("IX_analytics_events_SellerId_CollectionId_OccurredAt")
+                        .HasFilter("\"CollectionId\" IS NOT NULL");
+
+                    b.HasIndex("SellerId", "OccurredAt", "Id")
+                        .HasDatabaseName("IX_analytics_events_SellerId_OccurredAt_Id");
+
+                    b.HasIndex("SellerId", "SessionId", "OccurredAt")
+                        .HasDatabaseName("IX_analytics_events_SellerId_SessionId_OccurredAt");
+
+                    b.HasIndex("SellerId", "VisitorId", "OccurredAt")
+                        .HasDatabaseName("IX_analytics_events_SellerId_VisitorId_OccurredAt");
+
+                    b.HasIndex("SellerId", "EventType", "OccurredAt", "Id")
+                        .HasDatabaseName("IX_analytics_events_SellerId_EventType_OccurredAt_Id");
+
+                    b.ToTable("analytics_events", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_analytics_events_DeviceClass", "\"DeviceClass\" IN (\r\n    'MOBILE',\r\n    'TABLET',\r\n    'DESKTOP',\r\n    'UNKNOWN')");
+
+                            t.HasCheckConstraint("CK_analytics_events_EventType", "\"EventType\" IN (\r\n    'ASSET_VIEW',\r\n    'BUNDLE_VIEW',\r\n    'COLLECTION_VIEW',\r\n    'COLLECTION_ITEM_CLICK',\r\n    'DOWNLOAD_REQUESTED')");
+
+                            t.HasCheckConstraint("CK_analytics_events_ReferrerHost_length", "\"ReferrerHost\" IS NULL\r\nOR (length(\"ReferrerHost\") > 0 AND length(\"ReferrerHost\") <= 253)");
+
+                            t.HasCheckConstraint("CK_analytics_events_ReferrerHost_source", "\"ReferrerHost\" IS NULL OR \"Source\" = 'EXTERNAL'");
+
+                            t.HasCheckConstraint("CK_analytics_events_Source", "\"Source\" IN (\r\n    'CATALOG',\r\n    'SEARCH',\r\n    'SELLER_PROFILE',\r\n    'COLLECTION',\r\n    'BUNDLE_PAGE',\r\n    'DIRECT_INTERNAL',\r\n    'EXTERNAL',\r\n    'UNKNOWN')");
+
+                            t.HasCheckConstraint("CK_analytics_events_target_shape", "(\"EventType\" = 'ASSET_VIEW'\r\n    AND \"AssetId\" IS NOT NULL AND \"AssetVersionId\" IS NULL AND \"BundleId\" IS NULL AND \"CollectionId\" IS NULL)\r\nOR (\"EventType\" = 'BUNDLE_VIEW'\r\n    AND \"BundleId\" IS NOT NULL AND \"AssetId\" IS NULL AND \"AssetVersionId\" IS NULL AND \"CollectionId\" IS NULL)\r\nOR (\"EventType\" = 'COLLECTION_VIEW'\r\n    AND \"CollectionId\" IS NOT NULL AND \"AssetId\" IS NULL AND \"AssetVersionId\" IS NULL AND \"BundleId\" IS NULL)\r\nOR (\"EventType\" = 'COLLECTION_ITEM_CLICK'\r\n    AND \"CollectionId\" IS NOT NULL AND \"AssetId\" IS NOT NULL AND \"AssetVersionId\" IS NULL AND \"BundleId\" IS NULL)\r\nOR (\"EventType\" = 'DOWNLOAD_REQUESTED'\r\n    AND \"AssetId\" IS NOT NULL AND \"AssetVersionId\" IS NOT NULL AND \"BundleId\" IS NULL AND \"CollectionId\" IS NULL)");
+                        });
+                });
+
             modelBuilder.Entity("AssetBlock.Domain.Core.Entities.Asset", b =>
                 {
                     b.Property<Guid>("Id")
@@ -477,8 +575,25 @@ namespace AssetBlock.Infrastructure.Migrations
                         .HasPrecision(18, 2)
                         .HasColumnType("numeric(18,2)");
 
+                    b.Property<Guid?>("AnalyticsSessionId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("AnalyticsVisitorId")
+                        .HasColumnType("uuid");
+
                     b.Property<Guid?>("AssetId")
                         .HasColumnType("uuid");
+
+                    b.Property<Guid?>("AttributionCollectionId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("AttributionReferrerHost")
+                        .HasMaxLength(253)
+                        .HasColumnType("character varying(253)");
+
+                    b.Property<string>("AttributionSource")
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
 
                     b.Property<Guid?>("BundleId")
                         .HasColumnType("uuid");
@@ -554,7 +669,15 @@ namespace AssetBlock.Infrastructure.Migrations
 
                     b.ToTable("checkout_intents", null, t =>
                         {
+                            t.HasCheckConstraint("CK_checkout_intents_AttributionSource", "\"AttributionSource\" IS NULL OR \"AttributionSource\" IN (\r\n    'CATALOG',\r\n    'SEARCH',\r\n    'SELLER_PROFILE',\r\n    'COLLECTION',\r\n    'BUNDLE_PAGE',\r\n    'DIRECT_INTERNAL',\r\n    'EXTERNAL',\r\n    'UNKNOWN')");
+
                             t.HasCheckConstraint("CK_checkout_intents_amount_total_positive", "\"AmountTotal\" > 0");
+
+                            t.HasCheckConstraint("CK_checkout_intents_attribution_collection", "(\"AttributionSource\" = 'COLLECTION'\r\n    AND \"AttributionCollectionId\" IS NOT NULL\r\n    AND \"AssetId\" IS NOT NULL\r\n    AND \"BundleId\" IS NULL)\r\nOR (\"AttributionSource\" IS DISTINCT FROM 'COLLECTION'\r\n    AND \"AttributionCollectionId\" IS NULL)");
+
+                            t.HasCheckConstraint("CK_checkout_intents_attribution_null_consistency", "\"AttributionSource\" IS NOT NULL\r\nOR (\"AnalyticsVisitorId\" IS NULL\r\n    AND \"AnalyticsSessionId\" IS NULL\r\n    AND \"AttributionCollectionId\" IS NULL\r\n    AND \"AttributionReferrerHost\" IS NULL)");
+
+                            t.HasCheckConstraint("CK_checkout_intents_attribution_referrer_host", "\"AttributionReferrerHost\" IS NULL\r\nOR \"AttributionSource\" = 'EXTERNAL'");
 
                             t.HasCheckConstraint("CK_checkout_intents_currency_iso_lower", "length(\"Currency\") = 3 AND \"Currency\" = lower(\"Currency\")");
 
@@ -739,6 +862,37 @@ namespace AssetBlock.Infrastructure.Migrations
                         .HasDatabaseName("IX_collections_seller_status_created");
 
                     b.ToTable("collections", (string)null);
+                });
+
+            modelBuilder.Entity("AssetBlock.Domain.Core.Entities.CollectionAnalyticsDaily", b =>
+                {
+                    b.Property<Guid>("SellerId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateOnly>("DayUtc")
+                        .HasColumnType("date");
+
+                    b.Property<Guid>("CollectionId")
+                        .HasColumnType("uuid");
+
+                    b.Property<long>("ItemClicks")
+                        .HasColumnType("bigint");
+
+                    b.Property<long>("UniqueVisitors")
+                        .HasColumnType("bigint");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<long>("Views")
+                        .HasColumnType("bigint");
+
+                    b.HasKey("SellerId", "DayUtc", "CollectionId");
+
+                    b.ToTable("collection_analytics_daily", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_collection_analytics_daily_counters_non_negative", "\"Views\" >= 0 AND \"ItemClicks\" >= 0 AND \"UniqueVisitors\" >= 0");
+                        });
                 });
 
             modelBuilder.Entity("AssetBlock.Domain.Core.Entities.CollectionItem", b =>
@@ -1035,6 +1189,43 @@ namespace AssetBlock.Infrastructure.Migrations
                     b.ToTable("outbox_messages", (string)null);
                 });
 
+            modelBuilder.Entity("AssetBlock.Domain.Core.Entities.ProductAnalyticsDaily", b =>
+                {
+                    b.Property<Guid>("SellerId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateOnly>("DayUtc")
+                        .HasColumnType("date");
+
+                    b.Property<string>("ProductType")
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<Guid>("ProductId")
+                        .HasColumnType("uuid");
+
+                    b.Property<long>("DownloadRequests")
+                        .HasColumnType("bigint");
+
+                    b.Property<long>("UniqueVisitors")
+                        .HasColumnType("bigint");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<long>("Views")
+                        .HasColumnType("bigint");
+
+                    b.HasKey("SellerId", "DayUtc", "ProductType", "ProductId");
+
+                    b.ToTable("product_analytics_daily", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_product_analytics_daily_ProductType", "\"ProductType\" IN ('ASSET', 'BUNDLE')");
+
+                            t.HasCheckConstraint("CK_product_analytics_daily_counters_non_negative", "\"Views\" >= 0 AND \"DownloadRequests\" >= 0 AND \"UniqueVisitors\" >= 0");
+                        });
+                });
+
             modelBuilder.Entity("AssetBlock.Domain.Core.Entities.Purchase", b =>
                 {
                     b.Property<Guid>("Id")
@@ -1149,6 +1340,43 @@ namespace AssetBlock.Infrastructure.Migrations
                     b.ToTable("reviews", (string)null);
                 });
 
+            modelBuilder.Entity("AssetBlock.Domain.Core.Entities.SellerAnalyticsDaily", b =>
+                {
+                    b.Property<Guid>("SellerId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateOnly>("DayUtc")
+                        .HasColumnType("date");
+
+                    b.Property<long>("AssetViews")
+                        .HasColumnType("bigint");
+
+                    b.Property<long>("BundleViews")
+                        .HasColumnType("bigint");
+
+                    b.Property<long>("CollectionItemClicks")
+                        .HasColumnType("bigint");
+
+                    b.Property<long>("CollectionViews")
+                        .HasColumnType("bigint");
+
+                    b.Property<long>("DownloadRequests")
+                        .HasColumnType("bigint");
+
+                    b.Property<long>("UniqueVisitors")
+                        .HasColumnType("bigint");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("SellerId", "DayUtc");
+
+                    b.ToTable("seller_analytics_daily", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_seller_analytics_daily_counters_non_negative", "\"AssetViews\" >= 0 AND \"BundleViews\" >= 0 AND \"CollectionViews\" >= 0\r\nAND \"CollectionItemClicks\" >= 0 AND \"DownloadRequests\" >= 0 AND \"UniqueVisitors\" >= 0");
+                        });
+                });
+
             modelBuilder.Entity("AssetBlock.Domain.Core.Entities.SocialPlatform", b =>
                 {
                     b.Property<Guid>("Id")
@@ -1260,6 +1488,43 @@ namespace AssetBlock.Infrastructure.Migrations
                         .IsUnique();
 
                     b.ToTable("tags", (string)null);
+                });
+
+            modelBuilder.Entity("AssetBlock.Domain.Core.Entities.TrafficAnalyticsDaily", b =>
+                {
+                    b.Property<Guid>("SellerId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateOnly>("DayUtc")
+                        .HasColumnType("date");
+
+                    b.Property<string>("Source")
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<string>("ReferrerHostKey")
+                        .HasMaxLength(253)
+                        .HasColumnType("character varying(253)");
+
+                    b.Property<long>("ProductViews")
+                        .HasColumnType("bigint");
+
+                    b.Property<long>("UniqueVisitors")
+                        .HasColumnType("bigint");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("SellerId", "DayUtc", "Source", "ReferrerHostKey");
+
+                    b.ToTable("traffic_analytics_daily", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_traffic_analytics_daily_ReferrerHostKey_external_only", "\"ReferrerHostKey\" = '' OR \"Source\" = 'EXTERNAL'");
+
+                            t.HasCheckConstraint("CK_traffic_analytics_daily_Source", "\"Source\" IN (\r\n    'CATALOG',\r\n    'SEARCH',\r\n    'SELLER_PROFILE',\r\n    'COLLECTION',\r\n    'BUNDLE_PAGE',\r\n    'DIRECT_INTERNAL',\r\n    'EXTERNAL',\r\n    'UNKNOWN')");
+
+                            t.HasCheckConstraint("CK_traffic_analytics_daily_counters_non_negative", "\"ProductViews\" >= 0 AND \"UniqueVisitors\" >= 0");
+                        });
                 });
 
             modelBuilder.Entity("AssetBlock.Domain.Core.Entities.User", b =>

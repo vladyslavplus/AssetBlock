@@ -2,6 +2,7 @@
 
 import { useQuery } from '@tanstack/react-query'
 import Link from 'next/link'
+import { useSearchParams } from 'next/navigation'
 import { ArrowLeft } from 'lucide-react'
 import { SiteMain } from '@/components/layout/site-main'
 import { SitePageContainer } from '@/components/layout/site-page-container'
@@ -11,6 +12,12 @@ import { AssetPurchaseCard } from '@/components/assets/asset-purchase-card'
 import { AssetReviewsList } from '@/components/assets/asset-reviews-list'
 import { AssetVersionHistory } from '@/components/assets/asset-version-history'
 import { ContentHashDisplay } from '@/components/assets/content-hash-display'
+import { useAnalyticsPageView } from '@/hooks/use-analytics-page-view'
+import {
+  buildCheckoutAttributionFromPage,
+  buildPurchaseReturnPath,
+  resolveTrafficSourceFromLocation,
+} from '@/lib/analytics/telemetry-source'
 import type { AssetDetailItemApi } from '@/lib/catalog/assets-api'
 import { mapDetailApiToListItemForHero } from '@/lib/catalog/assets-api'
 import {
@@ -37,6 +44,16 @@ export function AssetDetailView({
   initialReviews,
   checkoutConfigured,
 }: AssetDetailViewProps) {
+  const searchParams = useSearchParams()
+  const trafficSource = resolveTrafficSourceFromLocation(searchParams)
+  const checkoutAttribution = buildCheckoutAttributionFromPage(searchParams)
+
+  useAnalyticsPageView(`asset-view:${assetId}`, {
+    eventType: 'ASSET_VIEW',
+    assetId,
+    source: trafficSource,
+  })
+
   const detailQuery = useQuery({
     queryKey: assetKeys.detail(assetId),
     queryFn: () => fetchAssetDetailPublic(assetId),
@@ -129,7 +146,8 @@ export function AssetDetailView({
                 title={asset.title}
                 price={asset.price}
                 checkoutConfigured={checkoutConfigured}
-                returnPath={`/assets/${assetId}`}
+                returnPath={buildPurchaseReturnPath(`/assets/${assetId}`, searchParams)}
+                checkoutAttribution={checkoutAttribution}
               />
             </div>
           </div>

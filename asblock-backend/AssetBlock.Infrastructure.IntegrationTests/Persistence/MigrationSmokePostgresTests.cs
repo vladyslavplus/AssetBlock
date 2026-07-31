@@ -149,5 +149,47 @@ public sealed class MigrationSmokePostgresTests(PostgresFixture fixture)
         applied.Should().Contain(m => m.Contains("AddCollectionsBundlesAndOrders", StringComparison.OrdinalIgnoreCase));
         applied.Should().Contain(m =>
             m.Contains("AddCheckoutReconciliationAndCommerceInvariants", StringComparison.OrdinalIgnoreCase));
+        applied.Should().Contain(m =>
+            m.Contains("AddSellerEngagementAnalytics", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public async Task MigrateAsync_WhenFreshDatabase_ShouldCreateEngagementAnalyticsTablesAndCheckoutAttributionChecks()
+    {
+        await using var db = await fixture.CreateCleanDbContext();
+
+        var tables = await db.Database.SqlQueryRaw<string>(
+                """
+                SELECT table_name AS "Value"
+                FROM information_schema.tables
+                WHERE table_schema = 'public'
+                  AND table_name IN (
+                    'analytics_events',
+                    'seller_analytics_daily',
+                    'product_analytics_daily',
+                    'collection_analytics_daily',
+                    'traffic_analytics_daily'
+                  )
+                """)
+            .ToListAsync();
+
+        tables.Should().HaveCount(5);
+
+        var checkoutChecks = await db.Database.SqlQueryRaw<string>(
+                """
+                SELECT conname AS "Value"
+                FROM pg_constraint
+                WHERE contype = 'c'
+                  AND conrelid = 'checkout_intents'::regclass
+                  AND conname IN (
+                    'CK_checkout_intents_attribution_collection',
+                    'CK_checkout_intents_attribution_null_consistency',
+                    'CK_checkout_intents_attribution_referrer_host',
+                    'CK_checkout_intents_AttributionSource'
+                  )
+                """)
+            .ToListAsync();
+
+        checkoutChecks.Should().HaveCount(4);
     }
 }

@@ -2,6 +2,7 @@ import 'server-only'
 
 import { isValidAnalyticsRange } from '@/lib/analytics/analytics-range-contract'
 import {
+  ANALYTICS_COLLECTION_SORTS,
   ANALYTICS_DEFAULT_PRODUCTS_PAGE_SIZE,
   ANALYTICS_MAX_CURSOR_LENGTH,
   ANALYTICS_MAX_PAGE_SIZE,
@@ -17,6 +18,7 @@ const DATE_ONLY = /^\d{4}-\d{2}-\d{2}$/
 
 const PRODUCT_TYPES = new Set<string>(ANALYTICS_PRODUCT_TYPE_FILTERS)
 const SORTS = new Set<string>(ANALYTICS_PRODUCT_SORTS)
+const COLLECTION_SORTS = new Set<string>(ANALYTICS_COLLECTION_SORTS)
 const DIRECTIONS = new Set<string>(ANALYTICS_SORT_DIRECTIONS)
 
 function isDateOnly(value: string): boolean {
@@ -226,4 +228,100 @@ export function analyticsSalesBackendQuery(url: URL): AnalyticsBffQueryResult {
   }
 
   return { ok: true, qs: buildQs(entries) }
+}
+
+function parseRequiredDateRange(url: URL): AnalyticsBffQueryResult {
+  const from = optionalDate(url, 'from')
+  if (!from.ok) return from
+  const to = optionalDate(url, 'to')
+  if (!to.ok) return to
+
+  if (!from.value || !to.value) {
+    return fail('from and to are required.', 'from')
+  }
+
+  const rangePair = validateRangePair(from.value, to.value)
+  if (!rangePair.ok) return rangePair
+
+  return {
+    ok: true,
+    qs: buildQs([
+      ['from', from.value],
+      ['to', to.value],
+    ]),
+  }
+}
+
+function appendOptionalProductType(
+  url: URL,
+  entries: Array<[string, string]>,
+): AnalyticsBffQueryResult {
+  const productType = url.searchParams.get('productType')
+  if (!productType) return { ok: true, qs: buildQs(entries) }
+
+  const normalized = productType.toUpperCase()
+  if (!PRODUCT_TYPES.has(normalized)) {
+    return fail('productType must be ALL, ASSET, or BUNDLE.', 'productType')
+  }
+  entries.push(['productType', normalized])
+  return { ok: true, qs: buildQs(entries) }
+}
+
+export function analyticsSalesExportBackendQuery(url: URL): AnalyticsBffQueryResult {
+  const range = parseRequiredDateRange(url)
+  if (!range.ok) return range
+
+  const entries: Array<[string, string]> = []
+  const from = url.searchParams.get('from')
+  const to = url.searchParams.get('to')
+  if (from) entries.push(['from', from])
+  if (to) entries.push(['to', to])
+
+  return appendOptionalProductType(url, entries)
+}
+
+export function analyticsCollectionsBackendQuery(url: URL): AnalyticsBffQueryResult {
+  const from = optionalDate(url, 'from')
+  if (!from.ok) return from
+  const to = optionalDate(url, 'to')
+  if (!to.ok) return to
+
+  const rangePair = validateRangePair(from.value, to.value)
+  if (!rangePair.ok) return rangePair
+
+  const entries: Array<[string, string]> = []
+  if (from.value) entries.push(['from', from.value])
+  if (to.value) entries.push(['to', to.value])
+
+  const sort = url.searchParams.get('sort')
+  if (sort) {
+    const normalized = sort.toUpperCase()
+    if (!COLLECTION_SORTS.has(normalized)) {
+      return fail('sort must be one of VIEWS, CLICKS, ATTRIBUTED_REVENUE, RECENT.', 'sort')
+    }
+    entries.push(['sort', normalized])
+  }
+
+  const direction = url.searchParams.get('direction')
+  if (direction) {
+    const normalized = direction.toUpperCase()
+    if (!DIRECTIONS.has(normalized)) {
+      return fail('direction must be ASC or DESC.', 'direction')
+    }
+    entries.push(['direction', normalized])
+  }
+
+  const page = url.searchParams.get('page')
+  const pageSize = url.searchParams.get('pageSize')
+  const pagination = validateProductsPagination(page, pageSize)
+  if (!pagination.ok) return pagination
+
+  if (page) entries.push(['page', page])
+  if (pageSize) entries.push(['pageSize', pageSize])
+
+  return { ok: true, qs: buildQs(entries) }
+}
+
+export function analyticsProductDetailBackendQuery(url: URL): AnalyticsBffQueryResult {
+  return analyticsOverviewBackendQuery(url)
 }

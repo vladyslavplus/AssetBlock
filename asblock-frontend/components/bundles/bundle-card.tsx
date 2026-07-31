@@ -1,14 +1,18 @@
 'use client'
 
 import Link from 'next/link'
+import { appendAnalyticsQuery } from '@/lib/analytics/telemetry-source'
+import type { AnalyticsSourceQuery } from '@/lib/analytics/telemetry-constants'
 import type { BundleListItem } from '@/lib/bundles/bundle-types'
 import { formatUsdWhole } from '@/lib/format-currency'
 
 interface BundleCardProps {
   bundle: BundleListItem
+  linkSource?: AnalyticsSourceQuery
 }
 
-export function BundleCard({ bundle }: BundleCardProps) {
+export function BundleCard({ bundle, linkSource = 'catalog' }: BundleCardProps) {
+  const bundleHref = appendAnalyticsQuery(`/bundles/${bundle.id}`, linkSource)
   const savings =
     bundle.savingsAmount > 0
       ? `Save ${formatUsdWhole(bundle.savingsAmount)} (${Math.round(bundle.savingsPercent)}%)`
@@ -64,7 +68,7 @@ export function BundleCard({ bundle }: BundleCardProps) {
       </div>
 
       <Link
-        href={`/bundles/${bundle.id}`}
+        href={bundleHref}
         className="text-xs font-medium text-primary hover:text-primary/80 transition-colors"
       >
         View bundle →

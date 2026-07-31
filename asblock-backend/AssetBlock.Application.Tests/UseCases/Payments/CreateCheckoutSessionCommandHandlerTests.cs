@@ -20,6 +20,7 @@ public class CreateCheckoutSessionCommandHandlerTests
     private readonly IAssetStore _assetStoreMock;
     private readonly IPurchaseStore _purchaseStoreMock;
     private readonly ICheckoutIntentStore _checkoutIntentStoreMock;
+    private readonly ICollectionStore _collectionStoreMock;
     private readonly CreateCheckoutSessionCommandHandler _handler;
 
     public CreateCheckoutSessionCommandHandlerTests()
@@ -28,6 +29,7 @@ public class CreateCheckoutSessionCommandHandlerTests
         _assetStoreMock = Substitute.For<IAssetStore>();
         _purchaseStoreMock = Substitute.For<IPurchaseStore>();
         _checkoutIntentStoreMock = Substitute.For<ICheckoutIntentStore>();
+        _collectionStoreMock = Substitute.For<ICollectionStore>();
         var unitOfWorkMock = Substitute.For<IUnitOfWork>();
         _purchaseStoreMock.GetPurchase(Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<CancellationToken>())
             .Returns((Purchase?)null);
@@ -59,7 +61,8 @@ public class CreateCheckoutSessionCommandHandlerTests
             _assetStoreMock,
             _purchaseStoreMock,
             _checkoutIntentStoreMock,
-            orchestrator);
+            orchestrator,
+            new CheckoutAttributionNormalizer(_collectionStoreMock, NullLogger<CheckoutAttributionNormalizer>.Instance));
     }
 
     [Fact]
@@ -223,6 +226,151 @@ public class CreateCheckoutSessionCommandHandlerTests
         await _paymentServiceMock.DidNotReceiveWithAnyArgs().CreateCheckoutSession(
             Arg.Any<CheckoutSessionDraft>(),
             Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Handle_WhenExternalAttribution_ShouldPersistNormalizedReferrerHost()
+    {
+        var visitorId = Guid.NewGuid();
+        var sessionId = Guid.NewGuid();
+        var command = new CreateCheckoutSessionCommand(
+            Guid.NewGuid(),
+            Guid.NewGuid(),
+            new CheckoutAttributionRequest(
+                AnalyticsTrafficSource.EXTERNAL,
+                CollectionId: null,
+                "https://Blog.Example.com:443/posts/1?utm_source=x"),
+            visitorId,
+            sessionId);
+        ArrangeNewCheckoutSession(command.AssetId);
+
+        var result = await _handler.Handle(command, CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        var intent = CapturedCreatedIntent();
+        intent.AttributionSource.Should().Be(AnalyticsTrafficSource.EXTERNAL);
+        intent.AttributionReferrerHost.Should().Be("blog.example.com");
+        intent.AttributionCollectionId.Should().BeNull();
+        intent.AnalyticsVisitorId.Should().Be(visitorId);
+        intent.AnalyticsSessionId.Should().Be(sessionId);
+    }
+
+    [Fact]
+    public async Task Handle_WhenCollectionAttributionIsVerified_ShouldPersistCollectionId()
+    {
+        var authorId = Guid.NewGuid();
+        var collectionId = Guid.NewGuid();
+        var command = new CreateCheckoutSessionCommand(
+            Guid.NewGuid(),
+            Guid.NewGuid(),
+            new CheckoutAttributionRequest(AnalyticsTrafficSource.COLLECTION, collectionId, ReferrerHost: null));
+        ArrangeNewCheckoutSession(command.AssetId, authorId);
+        _collectionStoreMock
+            .GetPublishedMemberSellerId(collectionId, command.AssetId, Arg.Any<CancellationToken>())
+            .Returns(authorId);
+
+        var result = await _handler.Handle(command, CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        var intent = CapturedCreatedIntent();
+        intent.AttributionSource.Should().Be(AnalyticsTrafficSource.COLLECTION);
+        intent.AttributionCollectionId.Should().Be(collectionId);
+        intent.AttributionReferrerHost.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task Handle_WhenCollectionAttributionBelongsToAnotherSeller_ShouldDropAttribution()
+    {
+        var collectionId = Guid.NewGuid();
+        var command = new CreateCheckoutSessionCommand(
+            Guid.NewGuid(),
+            Guid.NewGuid(),
+            new CheckoutAttributionRequest(AnalyticsTrafficSource.COLLECTION, collectionId, ReferrerHost: null));
+        ArrangeNewCheckoutSession(command.AssetId);
+        _collectionStoreMock
+            .GetPublishedMemberSellerId(collectionId, command.AssetId, Arg.Any<CancellationToken>())
+            .Returns(Guid.NewGuid());
+
+        var result = await _handler.Handle(command, CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        var intent = CapturedCreatedIntent();
+        intent.AttributionSource.Should().BeNull();
+        intent.AttributionCollectionId.Should().BeNull();
+        intent.AttributionReferrerHost.Should().BeNull();
+        intent.AnalyticsVisitorId.Should().BeNull();
+        intent.AnalyticsSessionId.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task Handle_WhenAttributionIsInvalidButVisitorIdsProvided_ShouldDropAllAttributionFields()
+    {
+        var collectionId = Guid.NewGuid();
+        var command = new CreateCheckoutSessionCommand(
+            Guid.NewGuid(),
+            Guid.NewGuid(),
+            new CheckoutAttributionRequest(AnalyticsTrafficSource.COLLECTION, collectionId, ReferrerHost: null),
+            AnalyticsVisitorId: Guid.NewGuid(),
+            AnalyticsSessionId: Guid.NewGuid());
+        ArrangeNewCheckoutSession(command.AssetId);
+        _collectionStoreMock
+            .GetPublishedMemberSellerId(collectionId, command.AssetId, Arg.Any<CancellationToken>())
+            .Returns(Guid.NewGuid());
+
+        var result = await _handler.Handle(command, CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        var intent = CapturedCreatedIntent();
+        intent.AttributionSource.Should().BeNull();
+        intent.AnalyticsVisitorId.Should().BeNull();
+        intent.AnalyticsSessionId.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task Handle_WhenResumingPendingIntent_ShouldNotReattributeCheckout()
+    {
+        var command = new CreateCheckoutSessionCommand(
+            Guid.NewGuid(),
+            Guid.NewGuid(),
+            new CheckoutAttributionRequest(AnalyticsTrafficSource.SEARCH, CollectionId: null, ReferrerHost: null));
+        var snapshot = CreateSnapshot(command.AssetId, Guid.NewGuid());
+        var pendingIntent = CreatePendingIntent(command.UserId, snapshot);
+        pendingIntent.AttributionSource = AnalyticsTrafficSource.CATALOG;
+        _assetStoreMock.GetCurrentVersionSnapshot(command.AssetId, Arg.Any<CancellationToken>())
+            .Returns(snapshot);
+        _checkoutIntentStoreMock.GetPendingForAsset(command.UserId, command.AssetId, Arg.Any<CancellationToken>())
+            .Returns(pendingIntent);
+        _paymentServiceMock.CreateCheckoutSession(
+                Arg.Any<CheckoutSessionDraft>(),
+                Arg.Any<CancellationToken>())
+            .Returns(new StripeCheckoutSession("cs_test_resumed", "https://checkout.stripe.com/pay/resumed"));
+
+        var result = await _handler.Handle(command, CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        pendingIntent.AttributionSource.Should().Be(AnalyticsTrafficSource.CATALOG);
+        await _checkoutIntentStoreMock.DidNotReceiveWithAnyArgs().CreateWithItemsAndReservations(
+            Arg.Any<CheckoutIntent>(),
+            Arg.Any<IReadOnlyList<CheckoutIntentItem>>(),
+            Arg.Any<IReadOnlyList<CheckoutReservation>>(),
+            Arg.Any<CancellationToken>());
+    }
+
+    private void ArrangeNewCheckoutSession(Guid assetId, Guid? authorId = null)
+    {
+        _assetStoreMock.GetCurrentVersionSnapshot(assetId, Arg.Any<CancellationToken>())
+            .Returns(CreateSnapshot(assetId, authorId ?? Guid.NewGuid()));
+        _paymentServiceMock.CreateCheckoutSession(
+                Arg.Any<CheckoutSessionDraft>(),
+                Arg.Any<CancellationToken>())
+            .Returns(new StripeCheckoutSession("cs_test_attribution", "https://checkout.stripe.com/pay/attribution"));
+    }
+
+    private CheckoutIntent CapturedCreatedIntent()
+    {
+        var call = _checkoutIntentStoreMock.ReceivedCalls()
+            .Single(c => c.GetMethodInfo().Name == nameof(ICheckoutIntentStore.CreateWithItemsAndReservations));
+        return (CheckoutIntent)call.GetArguments()[0]!;
     }
 
     private static CheckoutIntent CreatePendingIntent(Guid userId, AssetCurrentVersionSnapshot snapshot)

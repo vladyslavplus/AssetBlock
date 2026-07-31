@@ -17,6 +17,8 @@ public static class RateLimitingConstants
         public const string ASSETS_UPLOAD = "assets-upload";
         public const string ASSETS_DOWNLOAD = "assets-download";
         public const string PAYMENTS_CHECKOUT = "payments-checkout";
+        public const string ANALYTICS_EVENTS = "analytics-events";
+        public const string SELLER_ANALYTICS_SALES_EXPORT = "seller-analytics-sales-export";
     }
 
     public static class Windows
@@ -52,5 +54,11 @@ public static class RateLimitingConstants
 
         public const int PAYMENTS_CHECKOUT_LIMIT = 10;
         public const int PAYMENTS_CHECKOUT_PERIOD_SECONDS = 60;
+
+        public const int ANALYTICS_EVENTS_LIMIT = 120;
+        public const int ANALYTICS_EVENTS_PERIOD_SECONDS = 60;
+
+        public const int SELLER_ANALYTICS_SALES_EXPORT_LIMIT = 10;
+        public const int SELLER_ANALYTICS_SALES_EXPORT_PERIOD_SECONDS = 3600;
     }
 }

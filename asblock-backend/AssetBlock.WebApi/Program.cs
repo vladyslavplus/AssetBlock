@@ -47,6 +47,7 @@ builder.Services.AddOpenApi();
 builder.Services.AddSwaggerConfiguration();
 builder.Services.AddJwtAuthentication(builder.Configuration);
 builder.Services.AddAssetBlockAuthorization();
+builder.Services.AddAnalyticsBffSignatureValidation();
 if (builder.Environment.IsEnvironment("IntegrationTesting"))
 {
     builder.Services.AddIntegrationTestingRateLimiting();
@@ -74,6 +75,7 @@ if (!app.Environment.IsEnvironment("IntegrationTesting") && !app.Environment.IsD
 
 app.UseAssetBlockCors();
 app.UseAuthentication();
+app.UseAnalyticsBffSignatureValidation();
 app.UseRateLimiter();
 app.UseAuthorization();
 app.MapControllers();

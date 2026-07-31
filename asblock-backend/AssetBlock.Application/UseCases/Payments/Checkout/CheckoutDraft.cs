@@ -10,7 +10,8 @@ internal sealed record CheckoutDraft(
     string ProductTitle,
     decimal AmountTotal,
     string Currency,
-    IReadOnlyList<CheckoutDraftItem> Items);
+    IReadOnlyList<CheckoutDraftItem> Items,
+    CheckoutAttributionSnapshot? Attribution = null);
 
 internal sealed record CheckoutDraftItem(
     Guid AssetId,

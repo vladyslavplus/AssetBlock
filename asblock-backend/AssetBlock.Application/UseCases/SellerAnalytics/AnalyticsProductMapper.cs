@@ -101,4 +101,8 @@ internal static class AnalyticsProductMapper
 
         return (currentPriceCents, listPriceCents, discountPercent);
     }
+
+    internal static (long? CurrentPriceCents, long? ListPriceCents, decimal? DiscountPercent) MapBundlePricingPublic(
+        decimal? currentPrice,
+        decimal? listPrice) => MapBundlePricing(currentPrice, listPrice);
 }

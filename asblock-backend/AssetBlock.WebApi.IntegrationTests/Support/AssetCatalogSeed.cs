@@ -10,11 +10,11 @@ namespace AssetBlock.WebApi.IntegrationTests.Support;
 
 internal static class AssetCatalogSeed
 {
-    public const string SampleTitle = "Integration seeded asset";
-    public const decimal SamplePrice = 9.99m;
+    public const string SAMPLE_TITLE = "Integration seeded asset";
+    public const decimal SAMPLE_PRICE = 9.99m;
 
     /// <summary>Stable id so parallel/shared DB tests never pick another suite's asset.</summary>
-    public static readonly Guid SampleAssetId = Guid.Parse("a1111111-2222-4333-8444-555555555501");
+    private static readonly Guid _sampleAssetId = Guid.Parse("a1111111-2222-4333-8444-555555555501");
 
     public static async Task<Guid> EnsureSampleAssetAsync(IServiceScopeFactory scopeFactory)
     {
@@ -22,7 +22,7 @@ internal static class AssetCatalogSeed
         var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
 
         var existing = await db.Assets.AsNoTracking()
-            .Where(a => a.Id == SampleAssetId || a.Title == SampleTitle)
+            .Where(a => a.Id == _sampleAssetId || a.Title == SAMPLE_TITLE)
             .Select(a => new { a.Id, a.Title })
             .FirstOrDefaultAsync();
 
@@ -54,18 +54,18 @@ internal static class AssetCatalogSeed
         var now = DateTimeOffset.UtcNow;
         var asset = new Asset
         {
-            Id = SampleAssetId,
+            Id = _sampleAssetId,
             AuthorId = user.Id,
             CategoryId = category.Id,
-            Title = SampleTitle,
+            Title = SAMPLE_TITLE,
             Description = "Seeded for integration tests.",
-            Price = SamplePrice,
+            Price = SAMPLE_PRICE,
             CreatedAt = now
         };
         var version = new AssetVersion
         {
             Id = versionId,
-            AssetId = SampleAssetId,
+            AssetId = _sampleAssetId,
             VersionNumber = 1,
             IsCurrent = true,
             StorageKey = storageKey,
@@ -84,6 +84,6 @@ internal static class AssetCatalogSeed
         db.AssetVersions.Add(version);
         await db.SaveChangesAsync();
 
-        return SampleAssetId;
+        return _sampleAssetId;
     }
 }

@@ -1,6 +1,7 @@
 using AssetBlock.Domain.Core.Constants;
 using AssetBlock.WebApi.ProblemDetails;
 using Microsoft.AspNetCore.RateLimiting;
+using System.Security.Claims;
 using System.Threading.RateLimiting;
 
 namespace AssetBlock.WebApi.Extensions;
@@ -36,6 +37,8 @@ internal static class RateLimitingExtensions
                 ConfigureRejectedHandler(opts);
                 AddAuthPolicies(opts);
                 AddSlidingWindowPolicies(opts);
+                AddTelemetryPolicies(opts);
+                AddSellerAnalyticsPolicies(opts);
             });
         }
 
@@ -56,6 +59,8 @@ internal static class RateLimitingExtensions
                 AddNoOpPolicy(RateLimitingConstants.Policies.ASSETS_UPLOAD);
                 AddNoOpPolicy(RateLimitingConstants.Policies.ASSETS_DOWNLOAD);
                 AddNoOpPolicy(RateLimitingConstants.Policies.PAYMENTS_CHECKOUT);
+                AddNoOpPolicy(RateLimitingConstants.Policies.ANALYTICS_EVENTS);
+                AddNoOpPolicy(RateLimitingConstants.Policies.SELLER_ANALYTICS_SALES_EXPORT);
                 return;
 
                 void AddNoOpPolicy(string policyName)
@@ -173,5 +178,79 @@ internal static class RateLimitingExtensions
                     SegmentsPerWindow = RateLimitingConstants.Windows.SLIDING_WINDOW_SEGMENTS,
                     QueueProcessingOrder = QueueProcessingOrder.OldestFirst
                 }));
+    }
+
+    private static string GetAnalyticsEventsPartitionKey(HttpContext httpContext)
+    {
+        if (httpContext.Items.TryGetValue(
+                AnalyticsRateLimitContextKeys.VERIFIED_BFF_PARTITION,
+                out var partitionObj)
+            && partitionObj is string verifiedPartition
+            && !string.IsNullOrWhiteSpace(verifiedPartition))
+        {
+            return "bff:" + verifiedPartition;
+        }
+
+        if (httpContext.Connection.RemoteIpAddress is { } remoteIp)
+        {
+            return "direct:" + remoteIp;
+        }
+
+        var connectionId = httpContext.Connection.Id;
+        if (!string.IsNullOrWhiteSpace(connectionId))
+        {
+            return "direct:conn:" + connectionId;
+        }
+
+        // Middleware should short-circuit analytics POSTs without a stable identifier before
+        // the rate limiter. This fallback must never be a per-request TraceIdentifier.
+        return "direct:conn:missing";
+    }
+
+    private static void AddTelemetryPolicies(RateLimiterOptions opts)
+    {
+        // BFF forwards an opaque HMAC partition derived from verified client IP (see Next.js BFF).
+        // Direct/API callers fall back to RemoteIpAddress, then connection id — never a shared
+        // "unknown" bucket. ASP.NET in-memory limiter is per-instance, not distributed.
+        opts.AddPolicy(RateLimitingConstants.Policies.ANALYTICS_EVENTS, httpContext =>
+            RateLimitPartition.GetFixedWindowLimiter(
+                partitionKey: GetAnalyticsEventsPartitionKey(httpContext),
+                factory: _ => new FixedWindowRateLimiterOptions
+                {
+                    Window = TimeSpan.FromSeconds(RateLimitingConstants.Windows.ANALYTICS_EVENTS_PERIOD_SECONDS),
+                    PermitLimit = RateLimitingConstants.Windows.ANALYTICS_EVENTS_LIMIT,
+                    QueueLimit = 0,
+                    QueueProcessingOrder = QueueProcessingOrder.OldestFirst
+                }));
+    }
+
+    private static void AddSellerAnalyticsPolicies(RateLimiterOptions opts)
+    {
+        opts.AddPolicy(RateLimitingConstants.Policies.SELLER_ANALYTICS_SALES_EXPORT, httpContext =>
+        {
+            var userId = httpContext.User.FindFirstValue(ClaimTypes.NameIdentifier)
+                ?? httpContext.User.FindFirstValue(JwtClaimTypes.SUB);
+            if (string.IsNullOrEmpty(userId))
+            {
+                // Rate limiting runs before authorization. Do not share a throttle partition across
+                // anonymous callers; let [Authorize] return 401/403.
+                var connectionId = httpContext.Connection.Id;
+                return RateLimitPartition.GetNoLimiter(
+                    string.IsNullOrWhiteSpace(connectionId)
+                        ? "seller-analytics-export:anon:missing"
+                        : "seller-analytics-export:anon:" + connectionId);
+            }
+
+            return RateLimitPartition.GetFixedWindowLimiter(
+                userId,
+                _ => new FixedWindowRateLimiterOptions
+                {
+                    Window = TimeSpan.FromSeconds(
+                        RateLimitingConstants.Windows.SELLER_ANALYTICS_SALES_EXPORT_PERIOD_SECONDS),
+                    PermitLimit = RateLimitingConstants.Windows.SELLER_ANALYTICS_SALES_EXPORT_LIMIT,
+                    QueueLimit = 0,
+                    QueueProcessingOrder = QueueProcessingOrder.OldestFirst
+                });
+        });
     }
 }

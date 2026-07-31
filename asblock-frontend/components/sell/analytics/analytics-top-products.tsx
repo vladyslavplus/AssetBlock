@@ -8,7 +8,12 @@ import {
   formatRating,
   formatUtcShortDate,
 } from '@/lib/analytics/analytics-format'
-import type { AnalyticsProductItem } from '@/lib/analytics/analytics-types'
+import { buildAnalyticsProductDetailHref } from '@/lib/analytics/analytics-range'
+import type {
+  AnalyticsProductItem,
+  AnalyticsUrlState,
+  AnalyticsUtcRange,
+} from '@/lib/analytics/analytics-types'
 import { cn } from '@/lib/utils'
 
 interface AnalyticsTopProductsProps {
@@ -16,18 +21,33 @@ interface AnalyticsTopProductsProps {
   items: AnalyticsProductItem[]
   currency: string
   emptyLabel: string
+  state: AnalyticsUrlState
+  utcRange: AnalyticsUtcRange
   isUpdating?: boolean
 }
 
-function TopProductRow({ item, currency }: { item: AnalyticsProductItem; currency: string }) {
+function TopProductRow({
+  item,
+  currency,
+  state,
+  utcRange,
+}: {
+  item: AnalyticsProductItem
+  currency: string
+  state: AnalyticsUrlState
+  utcRange: AnalyticsUtcRange
+}) {
   const Icon = item.productKind === 'BUNDLE' ? Package : Sparkles
+  const href = buildAnalyticsProductDetailHref(item.productKind, item.productId, state, utcRange)
 
   return (
     <li className="flex items-start gap-3 rounded-md border border-border/50 px-3 py-3">
       <Icon className="mt-0.5 size-4 shrink-0 text-primary" aria-hidden />
       <div className="min-w-0 flex-1">
         <div className="flex flex-wrap items-center gap-2">
-          <p className="font-medium truncate">{item.title}</p>
+          <Link href={href} className="font-medium truncate hover:text-primary hover:underline">
+            {item.title}
+          </Link>
           <AnalyticsAvailabilityBadge availability={item.availability} />
         </div>
         <p className="mt-1 text-sm text-muted-foreground tabular-nums">
@@ -55,6 +75,8 @@ export function AnalyticsTopProducts({
   items,
   currency,
   emptyLabel,
+  state,
+  utcRange,
   isUpdating = false,
 }: AnalyticsTopProductsProps) {
   return (
@@ -77,7 +99,13 @@ export function AnalyticsTopProducts({
       ) : (
         <ul className="space-y-2">
           {items.map((item) => (
-            <TopProductRow key={item.productId} item={item} currency={currency} />
+            <TopProductRow
+              key={item.productId}
+              item={item}
+              currency={currency}
+              state={state}
+              utcRange={utcRange}
+            />
           ))}
         </ul>
       )}

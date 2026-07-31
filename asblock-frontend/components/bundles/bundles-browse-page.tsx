@@ -27,6 +27,7 @@ export function BundlesBrowsePage() {
   const items = listQuery.data?.items ?? []
   const totalPages = listQuery.data?.totalPages ?? 0
   const loading = listQuery.isPending
+  const bundleLinkSource = appliedSearch.trim() ? 'search' : 'catalog'
   const error = listQuery.isError
     ? listQuery.error instanceof Error
       ? listQuery.error.message
@@ -79,7 +80,7 @@ export function BundlesBrowsePage() {
           ) : items.length > 0 ? (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
               {items.map((b) => (
-                <BundleCard key={b.id} bundle={b} />
+                <BundleCard key={b.id} bundle={b} linkSource={bundleLinkSource} />
               ))}
             </div>
           ) : (

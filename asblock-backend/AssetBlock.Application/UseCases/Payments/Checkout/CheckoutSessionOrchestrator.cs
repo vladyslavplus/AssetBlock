@@ -23,6 +23,8 @@ internal sealed class CheckoutSessionOrchestrator(
     /// <summary>
     /// Resumes an open session when possible; otherwise prepares a draft under row locks inside a short
     /// transaction, persists intent/items/reservations, then creates Stripe after commit.
+    /// Attribution is captured only when an intent is created, so resuming a pending intent keeps the
+    /// original attribution and a later visit cannot re-attribute the sale.
     /// </summary>
     public async Task<Result<CreateCheckoutSessionResponse>> Execute(
         Func<CancellationToken, Task<Result<CheckoutDraft>>> prepareDraftInTransaction,
@@ -103,7 +105,12 @@ internal sealed class CheckoutSessionOrchestrator(
                     CreatedAt = DateTimeOffset.UtcNow,
                     ExpiresAt = expiresAt,
                     Items = items,
-                    Reservations = reservations
+                    Reservations = reservations,
+                    AnalyticsVisitorId = draft.Attribution?.VisitorId,
+                    AnalyticsSessionId = draft.Attribution?.SessionId,
+                    AttributionSource = draft.Attribution?.Source,
+                    AttributionCollectionId = draft.Attribution?.CollectionId,
+                    AttributionReferrerHost = draft.Attribution?.ReferrerHost
                 };
 
                 var assetIds = items.Select(i => i.AssetId).ToArray();

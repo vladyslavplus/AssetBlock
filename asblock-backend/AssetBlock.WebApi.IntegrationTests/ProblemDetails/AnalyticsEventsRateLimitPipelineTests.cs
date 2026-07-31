@@ -1,0 +1,160 @@
+using System.Net;
+using System.Text.Json;
+using AssetBlock.Domain.Core.Constants;
+using AssetBlock.WebApi.IntegrationTests.Support;
+using FluentAssertions;
+using Microsoft.AspNetCore.TestHost;
+
+namespace AssetBlock.WebApi.IntegrationTests.ProblemDetails;
+
+public sealed class AnalyticsEventsRateLimitPipelineTests
+{
+    [Fact]
+    public async Task DirectPartition_WhenSameRemoteIpExceedsLimit_ShouldReturn429AndOtherIpAccepted()
+    {
+        await using var app = await AnalyticsRateLimitTestHost.StartAsync();
+        var client = app.GetTestClient();
+        const string ipA = "203.0.113.1";
+        const string ipB = "203.0.113.2";
+
+        for (var i = 0; i < RateLimitingConstants.Windows.ANALYTICS_EVENTS_LIMIT; i++)
+        {
+            var ok = await AnalyticsRateLimitTestHost.PostProbeAsync(client, ipA);
+            ok.StatusCode.Should().Be(HttpStatusCode.Accepted, $"direct request {i + 1} for IP A");
+        }
+
+        var limited = await AnalyticsRateLimitTestHost.PostProbeAsync(client, ipA);
+        limited.StatusCode.Should().Be(HttpStatusCode.TooManyRequests);
+        await AssertRateLimitedProblemDetails(limited);
+
+        var otherIp = await AnalyticsRateLimitTestHost.PostProbeAsync(client, ipB);
+        otherIp.StatusCode.Should().Be(HttpStatusCode.Accepted);
+    }
+
+    [Fact]
+    public async Task BffPartition_WhenSameRemoteIpDifferentPartitions_ShouldRateLimitIndependently()
+    {
+        await using var app = await AnalyticsRateLimitTestHost.StartAsync();
+        var client = app.GetTestClient();
+        const string remoteIp = "203.0.113.50";
+        const string clientIpA = "198.51.100.1";
+        const string clientIpB = "198.51.100.2";
+        var headersA = AnalyticsRateLimitTestHost.CreateSignedHeaders(
+            clientIpA,
+            AnalyticsRateLimitTestHost.TEST_SIGNING_SECRET);
+        var headersB = AnalyticsRateLimitTestHost.CreateSignedHeaders(
+            clientIpB,
+            AnalyticsRateLimitTestHost.TEST_SIGNING_SECRET);
+
+        for (var i = 0; i < RateLimitingConstants.Windows.ANALYTICS_EVENTS_LIMIT; i++)
+        {
+            var ok = await AnalyticsRateLimitTestHost.PostProbeAsync(client, remoteIp, headersA);
+            ok.StatusCode.Should().Be(HttpStatusCode.Accepted, $"bff partition A request {i + 1}");
+        }
+
+        var limited = await AnalyticsRateLimitTestHost.PostProbeAsync(client, remoteIp, headersA);
+        limited.StatusCode.Should().Be(HttpStatusCode.TooManyRequests);
+        await AssertRateLimitedProblemDetails(limited);
+
+        var otherPartition = await AnalyticsRateLimitTestHost.PostProbeAsync(client, remoteIp, headersB);
+        otherPartition.StatusCode.Should().Be(HttpStatusCode.Accepted);
+    }
+
+    [Fact]
+    public async Task InvalidBffSignature_ShouldReturn403AndNotConsumeDirectPartition()
+    {
+        await using var app = await AnalyticsRateLimitTestHost.StartAsync();
+        var client = app.GetTestClient();
+        const string directIp = "203.0.113.99";
+        const string clientIp = "198.51.100.77";
+
+        for (var i = 0; i < RateLimitingConstants.Windows.ANALYTICS_EVENTS_LIMIT; i++)
+        {
+            var ok = await AnalyticsRateLimitTestHost.PostProbeAsync(client, directIp);
+            ok.StatusCode.Should().Be(HttpStatusCode.Accepted);
+        }
+
+        var saturatedDirect = await AnalyticsRateLimitTestHost.PostProbeAsync(client, directIp);
+        saturatedDirect.StatusCode.Should().Be(HttpStatusCode.TooManyRequests);
+
+        var invalidCases = new (string Description, IReadOnlyDictionary<string, string?> Headers)[]
+        {
+            ("partial partition", new Dictionary<string, string?>
+            {
+                [AnalyticsBffRateLimitHeaders.PARTITION] = new string('a', 64),
+            }),
+            ("bad signature", CreateHeadersWithBadSignature(clientIp)),
+            ("stale timestamp", AnalyticsRateLimitTestHost.CreateSignedHeaders(
+                clientIp,
+                AnalyticsRateLimitTestHost.TEST_SIGNING_SECRET,
+                DateTimeOffset.UtcNow.AddMinutes(-5).ToUnixTimeSeconds())),
+            ("malformed partition", new Dictionary<string, string?>
+            {
+                [AnalyticsBffRateLimitHeaders.PARTITION] = "not-valid-hex",
+                [AnalyticsBffRateLimitHeaders.TIMESTAMP] = DateTimeOffset.UtcNow.ToUnixTimeSeconds().ToString(),
+                [AnalyticsBffRateLimitHeaders.SIGNATURE] = new string('b', 64),
+            }),
+            ("wrong secret", AnalyticsRateLimitTestHost.CreateSignedHeaders(
+                clientIp,
+                "wrong_secret_at_least_32_characters_long!!")),
+        };
+
+        foreach (var (description, headers) in invalidCases)
+        {
+            var invalid = await AnalyticsRateLimitTestHost.PostProbeAsync(client, directIp, headers);
+            invalid.StatusCode.Should().Be(HttpStatusCode.Forbidden, description);
+            await AssertInvalidSignatureProblemDetails(invalid);
+        }
+
+        var validOtherPartition = await AnalyticsRateLimitTestHost.PostProbeAsync(
+            client,
+            directIp,
+            AnalyticsRateLimitTestHost.CreateSignedHeaders("198.51.100.88", AnalyticsRateLimitTestHost.TEST_SIGNING_SECRET));
+        validOtherPartition.StatusCode.Should().Be(HttpStatusCode.Accepted);
+    }
+
+    [Fact]
+    public async Task DirectWithoutHeaders_WorksAndForgedPartitionWithoutSignature_ShouldReturn403()
+    {
+        await using var app = await AnalyticsRateLimitTestHost.StartAsync();
+        var client = app.GetTestClient();
+
+        var direct = await AnalyticsRateLimitTestHost.PostProbeAsync(client, "203.0.113.10");
+        direct.StatusCode.Should().Be(HttpStatusCode.Accepted);
+
+        var forged = await AnalyticsRateLimitTestHost.PostProbeAsync(
+            client,
+            "203.0.113.10",
+            new Dictionary<string, string?>
+            {
+                [AnalyticsBffRateLimitHeaders.PARTITION] = new string('c', 64),
+            });
+        forged.StatusCode.Should().Be(HttpStatusCode.Forbidden);
+        await AssertInvalidSignatureProblemDetails(forged);
+    }
+
+    private static Dictionary<string, string?> CreateHeadersWithBadSignature(string clientIp)
+    {
+        var headers = AnalyticsRateLimitTestHost.CreateSignedHeaders(
+            clientIp,
+            AnalyticsRateLimitTestHost.TEST_SIGNING_SECRET);
+        headers[AnalyticsBffRateLimitHeaders.SIGNATURE] = new string('d', 64);
+        return headers;
+    }
+
+    private static async Task AssertRateLimitedProblemDetails(HttpResponseMessage response)
+    {
+        response.Content.Headers.ContentType!.MediaType.Should().Be("application/problem+json");
+        var json = await response.Content.ReadAsStringAsync();
+        using var doc = JsonDocument.Parse(json);
+        doc.RootElement.GetProperty("code").GetString().Should().Be(ErrorCodes.ERR_RATE_LIMITED);
+    }
+
+    private static async Task AssertInvalidSignatureProblemDetails(HttpResponseMessage response)
+    {
+        response.Content.Headers.ContentType!.MediaType.Should().Be("application/problem+json");
+        var json = await response.Content.ReadAsStringAsync();
+        using var doc = JsonDocument.Parse(json);
+        doc.RootElement.GetProperty("code").GetString().Should().Be(ErrorCodes.ERR_ANALYTICS_BFF_SIGNATURE_INVALID);
+    }
+}

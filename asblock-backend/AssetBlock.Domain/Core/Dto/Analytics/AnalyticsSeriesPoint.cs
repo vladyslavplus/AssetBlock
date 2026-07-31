@@ -8,4 +8,9 @@ public sealed record AnalyticsSeriesPoint(
     DateTimeOffset BucketStart,
     long GrossRevenueCents,
     int Orders,
-    int UnitsSold);
+    int UnitsSold,
+    long? ProductViews = null,
+    long? UniqueVisitors = null,
+    int? CheckoutStarts = null,
+    int? CompletedOrders = null,
+    long? DownloadRequests = null);

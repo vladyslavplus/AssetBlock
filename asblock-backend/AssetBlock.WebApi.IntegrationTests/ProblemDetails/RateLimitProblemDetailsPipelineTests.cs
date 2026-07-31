@@ -45,7 +45,7 @@ public sealed class RateLimitProblemDetailsPipelineTests
 
         await using var app = builder.Build();
         app.UseRateLimiter();
-        app.MapGet("/probe", () => Results.Ok()).RequireRateLimiting("one");
+        app.MapGet("/probe", () => Microsoft.AspNetCore.Http.Results.Ok()).RequireRateLimiting("one");
         await app.StartAsync();
 
         var client = app.GetTestClient();

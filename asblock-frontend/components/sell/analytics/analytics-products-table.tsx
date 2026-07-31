@@ -1,5 +1,6 @@
 'use client'
 
+import Link from 'next/link'
 import { ChevronLeft, ChevronRight } from 'lucide-react'
 
 import { AnalyticsAvailabilityBadge } from '@/components/sell/analytics/analytics-availability-badge'
@@ -25,17 +26,22 @@ import {
   formatRating,
   formatUtcShortDate,
 } from '@/lib/analytics/analytics-format'
-import { maxAccessibleProductsPage } from '@/lib/analytics/analytics-range'
+import {
+  buildAnalyticsProductDetailHref,
+  maxAccessibleProductsPage,
+} from '@/lib/analytics/analytics-range'
 import type {
   AnalyticsProductItem,
   AnalyticsProductsResult,
   AnalyticsUrlState,
+  AnalyticsUtcRange,
 } from '@/lib/analytics/analytics-types'
 import { cn } from '@/lib/utils'
 
 interface AnalyticsProductsTableProps {
   data: AnalyticsProductsResult
   state: AnalyticsUrlState
+  utcRange: AnalyticsUtcRange
   onChange: (next: Partial<AnalyticsUrlState>) => void
   isUpdating?: boolean
   isPlaceholderData?: boolean
@@ -90,6 +96,7 @@ function handleProductTypeChange(
 export function AnalyticsProductsTable({
   data,
   state,
+  utcRange,
   onChange,
   isUpdating = false,
   isPlaceholderData = false,
@@ -209,7 +216,19 @@ export function AnalyticsProductsTable({
             ) : (
               data.items.map((item) => (
                 <TableRow key={`${item.productKind}-${item.productId}`}>
-                  <TableCell className="max-w-[16rem] truncate font-medium">{item.title}</TableCell>
+                  <TableCell className="max-w-[16rem] truncate font-medium">
+                    <Link
+                      href={buildAnalyticsProductDetailHref(
+                        item.productKind,
+                        item.productId,
+                        state,
+                        utcRange,
+                      )}
+                      className="hover:text-primary hover:underline"
+                    >
+                      {item.title}
+                    </Link>
+                  </TableCell>
                   <TableCell>{item.productKind === 'ASSET' ? 'Asset' : 'Bundle'}</TableCell>
                   <TableCell>
                     <AnalyticsAvailabilityBadge availability={item.availability} />

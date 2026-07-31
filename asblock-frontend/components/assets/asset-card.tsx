@@ -2,14 +2,19 @@
 
 import Link from 'next/link'
 import { Star } from 'lucide-react'
+import { appendAnalyticsQuery } from '@/lib/analytics/telemetry-source'
+import type { AnalyticsSourceQuery } from '@/lib/analytics/telemetry-constants'
 import type { AssetListItem } from '@/lib/catalog/asset-types'
 import { formatUsdWhole } from '@/lib/format-currency'
 
 interface AssetCardProps {
   asset: AssetListItem
+  linkSource?: AnalyticsSourceQuery
+  collectionId?: string
 }
 
-export function AssetCard({ asset }: AssetCardProps) {
+export function AssetCard({ asset, linkSource = 'catalog', collectionId }: AssetCardProps) {
+  const assetHref = appendAnalyticsQuery(`/assets/${asset.id}`, linkSource, { collectionId })
   const visibleTags = asset.tags.slice(0, 3)
   const overflowCount = Math.max(0, asset.tags.length - 3)
 
@@ -86,7 +91,7 @@ export function AssetCard({ asset }: AssetCardProps) {
           </div>
         </div>
         <Link
-          href={`/assets/${asset.id}`}
+          href={assetHref}
           className="w-full px-3 py-2 rounded-lg border border-border text-foreground bg-transparent hover:bg-secondary/50 hover:border-foreground/40 hover:text-foreground transition-smooth text-xs font-medium text-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-card"
         >
           View details

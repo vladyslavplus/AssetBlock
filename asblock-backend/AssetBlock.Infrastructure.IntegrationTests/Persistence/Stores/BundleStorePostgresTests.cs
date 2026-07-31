@@ -269,5 +269,8 @@ public sealed class BundleStorePostgresTests(PostgresFixture fixture)
 
         public Task LockAssetsInOrder(IReadOnlyList<Guid> assetIds, CancellationToken cancellationToken = default) =>
             inner.LockAssetsInOrder(assetIds, cancellationToken);
+
+        public Task<Guid?> GetPublicAnalyticsSellerId(Guid bundleId, CancellationToken cancellationToken = default) =>
+            inner.GetPublicAnalyticsSellerId(bundleId, cancellationToken);
     }
 }

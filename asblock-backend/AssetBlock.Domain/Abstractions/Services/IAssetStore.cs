@@ -53,4 +53,17 @@ public interface IAssetStore
     Task<bool> HasAssetTag(Guid assetId, Guid tagId, CancellationToken cancellationToken = default);
     Task<bool> RemoveTag(Guid assetId, Guid tagId, CancellationToken cancellationToken = default);
     Task<bool> Update(Guid id, string? title, string? description, decimal? price, Guid? categoryId, CancellationToken cancellationToken = default);
+
+    /// <summary>Returns AuthorId when the asset is publicly visible (not soft-deleted), otherwise null.</summary>
+    Task<Guid?> GetPublicAnalyticsSellerId(Guid assetId, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Returns AuthorId when the actor is an entitled purchaser for the requested version.
+    /// Read-only: does not increment download counters or invoke rate limiting.
+    /// </summary>
+    Task<Guid?> ResolveDownloadAnalyticsSellerId(
+        Guid assetId,
+        Guid assetVersionId,
+        Guid actorUserId,
+        CancellationToken cancellationToken = default);
 }

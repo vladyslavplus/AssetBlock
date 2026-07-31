@@ -217,7 +217,8 @@ public sealed class SellerAnalyticsPostgresTests(PostgresFixture fixture)
         DateTimeOffset to)
     {
         var compFrom = from.AddDays(-(to - from).TotalDays);
-        return await store.GetOverviewSnapshot(sellerId, from, to, compFrom, from, 5);
+        return await store.GetOverviewSnapshot(
+            sellerId, from, to, compFrom, from, 5, AnalyticsGranularity.DAY);
     }
 
 
@@ -888,6 +889,118 @@ public sealed class SellerAnalyticsPostgresTests(PostgresFixture fixture)
         var (all, _) = await store.GetSalesPage(
             seller.Id, from, to, AnalyticsProductTypeFilter.ALL, null, null, 10);
         all.Should().HaveCount(2);
+    }
+
+    [Fact]
+    public async Task OpenSalesExportSession_OrdersByPurchasedAtDescThenOrderIdDesc()
+    {
+        await using var db = await fixture.CreateCleanDbContext();
+        var (seller, buyer, _, asset, version) = await SeedSellerBuyerAsset(db, "exportorder");
+
+        var t1 = new DateTimeOffset(2024, 9, 1, 1, 0, 0, TimeSpan.Zero);
+        var t2 = new DateTimeOffset(2024, 9, 1, 2, 0, 0, TimeSpan.Zero);
+        AddDirectOrder(db, buyer.Id, asset, version, seller.Id, 10m, t1);
+        await db.SaveChangesAsync();
+        AddDirectOrder(db, buyer.Id, asset, version, seller.Id, 20m, t2);
+        await db.SaveChangesAsync();
+
+        var store = new SellerAnalyticsStore(db);
+        var from = new DateTimeOffset(2024, 9, 1, 0, 0, 0, TimeSpan.Zero);
+        var to = new DateTimeOffset(2024, 10, 1, 0, 0, 0, TimeSpan.Zero);
+
+        var rows = await CollectExportRows(store, seller.Id, from, to, AnalyticsProductTypeFilter.ALL);
+
+        rows.Should().HaveCount(2);
+        rows[0].PurchasedAt.Should().Be(t2);
+        rows[1].PurchasedAt.Should().Be(t1);
+        rows[0].OrderId.Should().NotBe(rows[1].OrderId);
+    }
+
+    [Fact]
+    public async Task OpenSalesExportSession_ProductTypeFilter_RespectsAssetBundleAll()
+    {
+        await using var db = await fixture.CreateCleanDbContext();
+        var (seller, buyer, _, asset, version) = await SeedSellerBuyerAsset(db, "exportfilter");
+
+        var from = new DateTimeOffset(2024, 10, 1, 0, 0, 0, TimeSpan.Zero);
+        var to = new DateTimeOffset(2024, 11, 1, 0, 0, 0, TimeSpan.Zero);
+
+        AddDirectOrder(db, buyer.Id, asset, version, seller.Id, 10m,
+            new DateTimeOffset(2024, 10, 5, 0, 0, 0, TimeSpan.Zero));
+        await db.SaveChangesAsync();
+        await AddBundleOrder(db, buyer.Id, seller.Id, [(asset, version, 7m)], 7m,
+            new DateTimeOffset(2024, 10, 6, 0, 0, 0, TimeSpan.Zero));
+
+        var store = new SellerAnalyticsStore(db);
+
+        var assets = await CollectExportRows(store, seller.Id, from, to, AnalyticsProductTypeFilter.ASSET);
+        assets.Should().HaveCount(1);
+        assets[0].ProductType.Should().Be("ASSET");
+
+        var bundles = await CollectExportRows(store, seller.Id, from, to, AnalyticsProductTypeFilter.BUNDLE);
+        bundles.Should().HaveCount(1);
+        bundles[0].ProductType.Should().Be("BUNDLE");
+
+        var all = await CollectExportRows(store, seller.Id, from, to, AnalyticsProductTypeFilter.ALL);
+        all.Should().HaveCount(2);
+    }
+
+    [Fact]
+    public async Task OpenSalesExportSession_SellerIsolation_ExcludesOtherSellerOrders()
+    {
+        await using var db = await fixture.CreateCleanDbContext();
+        var (sellerA, buyer, _, assetA, versionA) = await SeedSellerBuyerAsset(db, "exportisoA");
+        var sellerB = TestData.CreateUser("sellerexportisoB", "sellerexportisoB@test.local");
+        db.Users.Add(sellerB);
+        await db.SaveChangesAsync();
+
+        var from = new DateTimeOffset(2024, 11, 1, 0, 0, 0, TimeSpan.Zero);
+        var to = new DateTimeOffset(2024, 12, 1, 0, 0, 0, TimeSpan.Zero);
+        AddDirectOrder(db, buyer.Id, assetA, versionA, sellerA.Id, 10m,
+            new DateTimeOffset(2024, 11, 5, 0, 0, 0, TimeSpan.Zero));
+        await db.SaveChangesAsync();
+
+        var store = new SellerAnalyticsStore(db);
+        var rowsB = await CollectExportRows(store, sellerB.Id, from, to, AnalyticsProductTypeFilter.ALL);
+        rowsB.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task OpenSalesExportSession_WhenWithinLimit_ExceedsMaxIsFalse()
+    {
+        await using var db = await fixture.CreateCleanDbContext();
+        var (seller, buyer, _, asset, version) = await SeedSellerBuyerAsset(db, "exportcapok");
+
+        AddDirectOrder(db, buyer.Id, asset, version, seller.Id, 10m, DateTimeOffset.UtcNow);
+        await db.SaveChangesAsync();
+
+        var store = new SellerAnalyticsStore(db);
+        await using var session = await store.OpenSalesExportSession(
+            seller.Id,
+            DateTimeOffset.UtcNow.AddDays(-1),
+            DateTimeOffset.UtcNow.AddDays(1),
+            AnalyticsProductTypeFilter.ALL);
+
+        session.ExceedsMax.Should().BeFalse();
+    }
+
+    private static async Task<List<AnalyticsSalesExportRow>> CollectExportRows(
+        ISellerAnalyticsStore store,
+        Guid sellerId,
+        DateTimeOffset from,
+        DateTimeOffset to,
+        AnalyticsProductTypeFilter productType)
+    {
+        await using var session = await store.OpenSalesExportSession(sellerId, from, to, productType);
+        session.ExceedsMax.Should().BeFalse();
+
+        var rows = new List<AnalyticsSalesExportRow>();
+        await foreach (var row in session.ReadRows())
+        {
+            rows.Add(row);
+        }
+
+        return rows;
     }
 
 

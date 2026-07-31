@@ -12,7 +12,8 @@ internal sealed class CreateBundleCheckoutSessionCommandHandler(
     IBundleStore bundleStore,
     IPurchaseStore purchaseStore,
     ICheckoutIntentStore checkoutIntentStore,
-    CheckoutSessionOrchestrator checkoutSessionOrchestrator)
+    CheckoutSessionOrchestrator checkoutSessionOrchestrator,
+    CheckoutAttributionNormalizer attributionNormalizer)
     : IRequestHandler<CreateBundleCheckoutSessionCommand, Result<CreateCheckoutSessionResponse>>
 {
     public Task<Result<CreateCheckoutSessionResponse>> Handle(
@@ -116,6 +117,15 @@ internal sealed class CreateBundleCheckoutSessionCommandHandler(
             })
             .ToList();
 
+        // No asset id is passed, so COLLECTION attribution can never survive a bundle checkout.
+        var attribution = await attributionNormalizer.TryNormalize(
+            request.Attribution,
+            assetId: null,
+            snapshot.SellerId,
+            request.AnalyticsVisitorId,
+            request.AnalyticsSessionId,
+            cancellationToken);
+
         return Result.Success(new CheckoutDraft(
             request.UserId,
             AssetId: null,
@@ -124,6 +134,7 @@ internal sealed class CreateBundleCheckoutSessionCommandHandler(
             snapshot.Title,
             snapshot.Price,
             snapshot.Currency,
-            draftItems));
+            draftItems,
+            attribution));
     }
 }

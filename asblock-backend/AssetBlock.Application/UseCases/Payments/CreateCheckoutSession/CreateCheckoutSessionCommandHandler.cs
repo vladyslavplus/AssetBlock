@@ -11,7 +11,8 @@ internal sealed class CreateCheckoutSessionCommandHandler(
     IAssetStore assetStore,
     IPurchaseStore purchaseStore,
     ICheckoutIntentStore checkoutIntentStore,
-    CheckoutSessionOrchestrator checkoutSessionOrchestrator)
+    CheckoutSessionOrchestrator checkoutSessionOrchestrator,
+    CheckoutAttributionNormalizer attributionNormalizer)
     : IRequestHandler<CreateCheckoutSessionCommand, Result<CreateCheckoutSessionResponse>>
 {
     public Task<Result<CreateCheckoutSessionResponse>> Handle(
@@ -56,6 +57,14 @@ internal sealed class CreateCheckoutSessionCommandHandler(
             return Result.NotFound(ErrorCodes.ERR_ASSET_NOT_FOUND);
         }
 
+        var attribution = await attributionNormalizer.TryNormalize(
+            request.Attribution,
+            snapshot.AssetId,
+            snapshot.AuthorId,
+            request.AnalyticsVisitorId,
+            request.AnalyticsSessionId,
+            cancellationToken);
+
         return Result.Success(new CheckoutDraft(
             request.UserId,
             snapshot.AssetId,
@@ -78,6 +87,7 @@ internal sealed class CreateCheckoutSessionCommandHandler(
                     snapshot.LicenseTemplateVersion,
                     snapshot.LicenseDisplayName,
                     snapshot.LicenseTerms)
-            ]));
+            ],
+            attribution));
     }
 }

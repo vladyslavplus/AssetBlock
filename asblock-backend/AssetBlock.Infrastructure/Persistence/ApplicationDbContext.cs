@@ -30,6 +30,11 @@ public sealed class ApplicationDbContext(DbContextOptions<ApplicationDbContext> 
     public DbSet<BundleRevisionItem> BundleRevisionItems => Set<BundleRevisionItem>();
     public DbSet<Order> Orders => Set<Order>();
     public DbSet<OrderLine> OrderLines => Set<OrderLine>();
+    public DbSet<AnalyticsEvent> AnalyticsEvents => Set<AnalyticsEvent>();
+    public DbSet<SellerAnalyticsDaily> SellerAnalyticsDaily => Set<SellerAnalyticsDaily>();
+    public DbSet<ProductAnalyticsDaily> ProductAnalyticsDaily => Set<ProductAnalyticsDaily>();
+    public DbSet<CollectionAnalyticsDaily> CollectionAnalyticsDaily => Set<CollectionAnalyticsDaily>();
+    public DbSet<TrafficAnalyticsDaily> TrafficAnalyticsDaily => Set<TrafficAnalyticsDaily>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -51,6 +56,7 @@ public sealed class ApplicationDbContext(DbContextOptions<ApplicationDbContext> 
 
         ConfigurePostgresAssetSearch(modelBuilder);
         ConfigurePostgresAudit(modelBuilder);
+        ConfigurePostgresAnalyticsEvents(modelBuilder);
     }
 
     private static void ConfigurePostgresAssetSearch(ModelBuilder modelBuilder)
@@ -88,6 +94,16 @@ public sealed class ApplicationDbContext(DbContextOptions<ApplicationDbContext> 
         asset.HasIndex(a => new { a.AuthorId, a.CreatedAt, a.Id })
             .HasFilter("\"DeletedAt\" IS NULL")
             .HasDatabaseName("IX_assets_catalog_AuthorId_CreatedAt_Id");
+    }
+
+    private static void ConfigurePostgresAnalyticsEvents(ModelBuilder modelBuilder)
+    {
+        // BRIN suits an append-only table whose physical order tracks OccurredAt, and it keeps
+        // whole-table retention scans cheap without paying btree maintenance on every insert.
+        modelBuilder.Entity<AnalyticsEvent>()
+            .HasIndex(e => e.OccurredAt)
+            .HasMethod("brin")
+            .HasDatabaseName("IX_analytics_events_OccurredAt_brin");
     }
 
     private static void ConfigurePostgresAudit(ModelBuilder modelBuilder)

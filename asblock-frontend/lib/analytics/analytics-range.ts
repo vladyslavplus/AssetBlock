@@ -1,9 +1,11 @@
 import {
+  ANALYTICS_DEFAULT_COLLECTIONS_PAGE_SIZE,
   ANALYTICS_DEFAULT_PRODUCTS_PAGE_SIZE,
   ANALYTICS_MAX_DAYS,
   ANALYTICS_MAX_PRODUCTS_OFFSET,
   ANALYTICS_MAX_PRODUCTS_PAGE,
   ANALYTICS_RANGE_PRESETS,
+  type AnalyticsCollectionSort,
   type AnalyticsProductSort,
   type AnalyticsProductTypeFilter,
   type AnalyticsRangePreset,
@@ -12,6 +14,7 @@ import {
   type AnalyticsUtcRange,
 } from '@/lib/analytics/analytics-types'
 import {
+  analyticsCollectionSortSchema,
   analyticsProductSortSchema,
   analyticsProductTypeFilterSchema,
   analyticsSortDirectionSchema,
@@ -32,6 +35,9 @@ const ANALYTICS_URL_KEYS = [
   'sort',
   'direction',
   'page',
+  'collectionSort',
+  'collectionDirection',
+  'collectionPage',
   'tab',
 ] as const
 
@@ -147,6 +153,12 @@ export function parseAnalyticsSearchParams(params: URLSearchParams): AnalyticsUr
   const directionParsed = analyticsSortDirectionSchema.safeParse(
     params.get('direction')?.toUpperCase(),
   )
+  const collectionSortParsed = analyticsCollectionSortSchema.safeParse(
+    params.get('collectionSort')?.toUpperCase(),
+  )
+  const collectionDirectionParsed = analyticsSortDirectionSchema.safeParse(
+    params.get('collectionDirection')?.toUpperCase(),
+  )
 
   return {
     range,
@@ -156,6 +168,11 @@ export function parseAnalyticsSearchParams(params: URLSearchParams): AnalyticsUr
     sort: sortParsed.success ? sortParsed.data : 'REVENUE',
     direction: directionParsed.success ? directionParsed.data : 'DESC',
     page: parsePositiveInt(params.get('page'), 1),
+    collectionSort: collectionSortParsed.success ? collectionSortParsed.data : 'VIEWS',
+    collectionDirection: collectionDirectionParsed.success
+      ? collectionDirectionParsed.data
+      : 'DESC',
+    collectionPage: parsePositiveInt(params.get('collectionPage'), 1),
   }
 }
 
@@ -187,12 +204,24 @@ export function canonicalizeAnalyticsState(state: AnalyticsUrlState): AnalyticsU
   if (!analyticsSortDirectionSchema.safeParse(next.direction).success) {
     next = { ...next, direction: 'DESC' }
   }
+  if (!analyticsCollectionSortSchema.safeParse(next.collectionSort).success) {
+    next = { ...next, collectionSort: 'VIEWS' }
+  }
+  if (!analyticsSortDirectionSchema.safeParse(next.collectionDirection).success) {
+    next = { ...next, collectionDirection: 'DESC' }
+  }
 
   const maxPage = maxAccessibleProductsPage(ANALYTICS_DEFAULT_PRODUCTS_PAGE_SIZE)
   if (next.page < 1) {
     next = { ...next, page: 1 }
   } else if (next.page > maxPage) {
     next = { ...next, page: maxPage }
+  }
+
+  if (next.collectionPage < 1) {
+    next = { ...next, collectionPage: 1 }
+  } else if (next.collectionPage > maxPage) {
+    next = { ...next, collectionPage: maxPage }
   }
 
   if (next.productType === 'BUNDLE' && next.sort === 'RATING') {
@@ -231,6 +260,15 @@ function serializeAnalyticsState(params: URLSearchParams, state: AnalyticsUrlSta
   if (state.page > 1) {
     params.set('page', String(state.page))
   }
+  if (state.collectionSort !== 'VIEWS') {
+    params.set('collectionSort', state.collectionSort)
+  }
+  if (state.collectionDirection !== 'DESC') {
+    params.set('collectionDirection', state.collectionDirection)
+  }
+  if (state.collectionPage > 1) {
+    params.set('collectionPage', String(state.collectionPage))
+  }
 }
 
 /** Patch known analytics keys into a copy of current params; preserves unrelated keys. */
@@ -265,6 +303,42 @@ export function buildAnalyticsProductsFilters(state: AnalyticsUrlState) {
     page: state.page,
     pageSize: ANALYTICS_DEFAULT_PRODUCTS_PAGE_SIZE,
   }
+}
+
+export function buildAnalyticsCollectionsFilters(state: AnalyticsUrlState) {
+  return {
+    sort: state.collectionSort as AnalyticsCollectionSort,
+    direction: state.collectionDirection as AnalyticsSortDirection,
+    page: state.collectionPage,
+    pageSize: ANALYTICS_DEFAULT_COLLECTIONS_PAGE_SIZE,
+  }
+}
+
+export function buildAnalyticsDashboardHref(state: AnalyticsUrlState): string {
+  const params = patchAnalyticsSearchParams(new URLSearchParams(), state, 'analytics')
+  const qs = params.toString()
+  return qs ? `/sell?${qs}` : '/sell?tab=analytics'
+}
+
+export function buildAnalyticsProductDetailHref(
+  kind: 'ASSET' | 'BUNDLE',
+  productId: string,
+  state: AnalyticsUrlState,
+  utcRange: AnalyticsUtcRange,
+): string {
+  const detailState: AnalyticsUrlState = {
+    ...state,
+    range: 'custom',
+    customFrom: utcRange.from,
+    customTo: displayInclusiveEndFromApiTo(utcRange.to),
+  }
+  const params = patchAnalyticsSearchParams(new URLSearchParams(), detailState, 'analytics')
+  const qs = params.toString()
+  const base =
+    kind === 'ASSET'
+      ? `/sell/analytics/assets/${productId}`
+      : `/sell/analytics/bundles/${productId}`
+  return qs ? `${base}?${qs}` : base
 }
 
 export function rangePresetLabel(preset: AnalyticsRangePreset): string {

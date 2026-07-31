@@ -2,10 +2,14 @@
 
 import Link from 'next/link'
 import { useQuery } from '@tanstack/react-query'
+import { useSearchParams } from 'next/navigation'
 import { ArrowLeft } from 'lucide-react'
 import { SiteMain } from '@/components/layout/site-main'
 import { SitePageContainer } from '@/components/layout/site-page-container'
 import { Badge } from '@/components/ui/badge'
+import { useAnalyticsPageView } from '@/hooks/use-analytics-page-view'
+import { appendAnalyticsQuery, resolveTrafficSourceFromLocation } from '@/lib/analytics/telemetry-source'
+import { trackAnalyticsEvent } from '@/lib/analytics/telemetry-client'
 import { ApiRequestError } from '@/lib/http/api-client'
 import { collectionKeys, fetchCollectionDetailQuery } from '@/lib/collections/collections-query'
 import { formatUsdWhole } from '@/lib/format-currency'
@@ -15,6 +19,15 @@ interface CollectionDetailViewProps {
 }
 
 export function CollectionDetailView({ collectionId }: CollectionDetailViewProps) {
+  const searchParams = useSearchParams()
+  const trafficSource = resolveTrafficSourceFromLocation(searchParams)
+
+  useAnalyticsPageView(`collection-view:${collectionId}`, {
+    eventType: 'COLLECTION_VIEW',
+    collectionId,
+    source: trafficSource,
+  })
+
   const detailQuery = useQuery({
     queryKey: collectionKeys.publicDetail(collectionId),
     queryFn: () => fetchCollectionDetailQuery(collectionId),
@@ -113,7 +126,17 @@ export function CollectionDetailView({ collectionId }: CollectionDetailViewProps
               </div>
               {item.isAvailable ? (
                 <Link
-                  href={`/assets/${item.assetId}`}
+                  href={appendAnalyticsQuery(`/assets/${item.assetId}`, 'collection', {
+                    collectionId,
+                  })}
+                  onClick={() => {
+                    trackAnalyticsEvent({
+                      eventType: 'COLLECTION_ITEM_CLICK',
+                      assetId: item.assetId,
+                      collectionId,
+                      source: 'COLLECTION',
+                    })
+                  }}
                   className="text-xs font-medium text-primary hover:text-primary/80 shrink-0"
                 >
                   View asset →

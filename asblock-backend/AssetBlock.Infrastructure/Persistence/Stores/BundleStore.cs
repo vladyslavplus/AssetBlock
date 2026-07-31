@@ -494,6 +494,14 @@ internal sealed class BundleStore(ApplicationDbContext dbContext) : IBundleStore
         }
     }
 
+    public Task<Guid?> GetPublicAnalyticsSellerId(Guid bundleId, CancellationToken cancellationToken = default)
+    {
+        return AvailablePublicBundles()
+            .Where(b => b.Id == bundleId)
+            .Select(b => (Guid?)b.SellerId)
+            .FirstOrDefaultAsync(cancellationToken);
+    }
+
     private IQueryable<Bundle> AvailablePublicBundles()
     {
         return dbContext.Bundles

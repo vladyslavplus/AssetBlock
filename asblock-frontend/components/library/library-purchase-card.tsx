@@ -12,6 +12,7 @@ import { Button } from '@/components/ui/button'
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
 import { Label } from '@/components/ui/label'
 import { buildAssetDownloadUrl } from '@/lib/assets/download-url'
+import { trackAnalyticsEvent } from '@/lib/analytics/telemetry-client'
 import { formatUsdWhole } from '@/lib/format-currency'
 import { formatLongDate } from '@/lib/format-date'
 import { fetchLibraryAssetVersions, libraryKeys } from '@/lib/library/library-query'
@@ -156,7 +157,18 @@ export function LibraryPurchaseCard({ purchase }: LibraryPurchaseCardProps) {
             size="sm"
             className="flex-1 bg-primary text-primary-foreground hover:bg-[#6D28D9] transition-smooth font-medium text-xs h-8"
           >
-            <Link href={downloadHref}>
+            <Link
+              href={downloadHref}
+              onClick={() => {
+                if (!effectiveVersionId) return
+                trackAnalyticsEvent({
+                  eventType: 'DOWNLOAD_REQUESTED',
+                  assetId: purchase.assetId,
+                  assetVersionId: effectiveVersionId,
+                  source: 'DIRECT_INTERNAL',
+                })
+              }}
+            >
               <Download className="w-3.5 h-3.5 mr-1.5" />
               Download
             </Link>

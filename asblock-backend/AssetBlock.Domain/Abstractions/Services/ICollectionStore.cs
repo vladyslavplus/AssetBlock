@@ -25,4 +25,19 @@ public interface ICollectionStore
 
     Task<int> CountActiveItems(Guid collectionId, CancellationToken cancellationToken = default);
     Task<bool> OwnsActiveAsset(Guid sellerId, Guid assetId, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Seller of a publicly visible collection, or null when the collection is not published or has no
+    /// visible items. Avoids loading the detail projection when only ownership is needed.
+    /// </summary>
+    Task<Guid?> GetPublishedSellerId(Guid collectionId, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Seller of a published collection that publicly contains the asset, or null otherwise. Returns a
+    /// single answer on purpose so a caller cannot tell which of the two conditions failed.
+    /// </summary>
+    Task<Guid?> GetPublishedMemberSellerId(
+        Guid collectionId,
+        Guid assetId,
+        CancellationToken cancellationToken = default);
 }

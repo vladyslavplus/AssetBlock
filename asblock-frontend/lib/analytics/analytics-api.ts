@@ -1,11 +1,18 @@
 import type { z } from 'zod'
 
 import {
+  analyticsCollectionsResultSchema,
   analyticsProductsResultSchema,
+  analyticsProductDetailAssetSchema,
+  analyticsProductDetailBundleSchema,
   analyticsSalesResultSchema,
   sellerAnalyticsOverviewSchema,
 } from '@/lib/analytics/analytics-schemas'
 import type {
+  AnalyticsAssetDetail,
+  AnalyticsBundleDetail,
+  AnalyticsCollectionsFilters,
+  AnalyticsCollectionsResult,
   AnalyticsProductsFilters,
   AnalyticsProductsResult,
   AnalyticsSalesFilters,
@@ -116,6 +123,52 @@ export async function fetchAnalyticsSalesPage(
   return fetchAnalyticsJson(
     `/api/seller/analytics/sales?${params.toString()}`,
     analyticsSalesResultSchema,
+    signal,
+  )
+}
+
+export async function fetchAnalyticsCollections(
+  range: AnalyticsUtcRange,
+  filters: AnalyticsCollectionsFilters,
+  signal?: AbortSignal,
+): Promise<AnalyticsCollectionsResult> {
+  const params = new URLSearchParams({
+    from: range.from,
+    to: range.to,
+    sort: filters.sort,
+    direction: filters.direction,
+    page: String(filters.page),
+    pageSize: String(filters.pageSize),
+  })
+  return fetchAnalyticsJson(
+    `/api/seller/analytics/collections?${params.toString()}`,
+    analyticsCollectionsResultSchema,
+    signal,
+  )
+}
+
+export async function fetchAnalyticsAssetDetail(
+  assetId: string,
+  range: AnalyticsUtcRange,
+  signal?: AbortSignal,
+): Promise<AnalyticsAssetDetail> {
+  const qs = buildRangeQuery(range)
+  return fetchAnalyticsJson(
+    `/api/seller/analytics/products/assets/${encodeURIComponent(assetId)}?${qs}`,
+    analyticsProductDetailAssetSchema,
+    signal,
+  )
+}
+
+export async function fetchAnalyticsBundleDetail(
+  bundleId: string,
+  range: AnalyticsUtcRange,
+  signal?: AbortSignal,
+): Promise<AnalyticsBundleDetail> {
+  const qs = buildRangeQuery(range)
+  return fetchAnalyticsJson(
+    `/api/seller/analytics/products/bundles/${encodeURIComponent(bundleId)}?${qs}`,
+    analyticsProductDetailBundleSchema,
     signal,
   )
 }

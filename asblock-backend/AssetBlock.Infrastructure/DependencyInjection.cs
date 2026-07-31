@@ -65,6 +65,9 @@ public static class DependencyInjection
             .ValidateOnStart();
         services.AddSingleton<IValidateOptions<DataProtectionOptions>, DataProtectionOptionsValidator>();
 
+        services.AddAnalyticsRateLimitingOptions(configuration);
+        services.AddAnalyticsAggregationOptions(configuration);
+
         services.AddDbContext<ApplicationDbContext>(options =>
             options.UseNpgsql(connectionString));
         services.AddDbContextFactory<ApplicationDbContext>(
@@ -75,6 +78,8 @@ public static class DependencyInjection
         services.AddHostedService<OutboxDispatcher>();
         services.AddHostedService<StorageOrphanCleanupWorker>();
         services.AddHostedService<CheckoutReservationCleanupWorker>();
+        services.AddHostedService<AnalyticsAggregationWorker>();
+        services.AddSingleton(TimeProvider.System);
         services.AddScoped<IUnitOfWork, EfUnitOfWork>();
         services.AddScoped<IOutboxStore, OutboxStore>();
         services.AddScoped<IOutboxMessageHandler, AssetBlobDeleteOutboxHandler>();
@@ -100,6 +105,7 @@ public static class DependencyInjection
         services.AddScoped<INotificationStore, NotificationStore>();
         services.AddScoped<ITagStore, TagStore>();
         services.AddScoped<ISellerAnalyticsStore, SellerAnalyticsStore>();
+        services.AddScoped<IAnalyticsEventStore, AnalyticsEventStore>();
         services.AddScoped<IAuditStore, AuditStore>();
         services.AddScoped<IAuditWriter, AuditWriter>();
         services.AddScoped<IAuditContextAccessor, NullAuditContextAccessor>();

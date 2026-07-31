@@ -34,7 +34,7 @@ public sealed class AssetVersionsControllerIntegrationTests(IntegrationTestFixtu
         raw.ToLowerInvariant().Should().NotContain("storagekey");
         var versions = await response.Content.ReadFromJsonAsync<List<AssetVersionSummaryResponse>>();
         versions.Should().NotBeNull();
-        versions!.Select(v => v.Id).Should().BeEquivalentTo(versionIds);
+        versions.Select(v => v.Id).Should().BeEquivalentTo(versionIds);
         versions.Should().OnlyContain(v =>
             !string.IsNullOrWhiteSpace(v.ContentSha256) &&
             !string.IsNullOrWhiteSpace(v.FileName) &&
@@ -97,7 +97,7 @@ public sealed class AssetVersionsControllerIntegrationTests(IntegrationTestFixtu
         response.StatusCode.Should().Be(HttpStatusCode.OK);
         var versions = await response.Content.ReadFromJsonAsync<List<AssetVersionSummaryResponse>>();
         versions.Should().NotBeNull();
-        versions!.Should().ContainSingle(v => v.Id == versionIds[0]);
+        versions.Should().ContainSingle(v => v.Id == versionIds[0]);
     }
 
     [Fact]
@@ -112,7 +112,7 @@ public sealed class AssetVersionsControllerIntegrationTests(IntegrationTestFixtu
         response.StatusCode.Should().Be(HttpStatusCode.OK);
         var versions = await response.Content.ReadFromJsonAsync<List<AssetVersionSummaryResponse>>();
         versions.Should().NotBeNull();
-        versions!.Should().ContainSingle(v => v.Id == versionIds[0]);
+        versions.Should().ContainSingle(v => v.Id == versionIds[0]);
     }
 
     [Fact]
@@ -145,7 +145,7 @@ public sealed class AssetVersionsControllerIntegrationTests(IntegrationTestFixtu
     [Fact]
     public async Task PublishVersion_WhenNonAuthorVerified_ShouldReturn403()
     {
-        (HttpClient owner, var ownerUsername) = await IntegrationTestAuth.RegisterVerifiedAndAuthenticateAsync(fixture.Factory);
+        (HttpClient _, var ownerUsername) = await IntegrationTestAuth.RegisterVerifiedAndAuthenticateAsync(fixture.Factory);
         var ownerId = await AssetVersionsSeed.GetUserIdAsync(ScopeFactory, ownerUsername);
         (Guid assetId, _) = await AssetVersionsSeed.SeedAssetWithVersionsAsync(ScopeFactory, ownerId, versionCount: 1);
 
@@ -201,9 +201,9 @@ public sealed class AssetVersionsControllerIntegrationTests(IntegrationTestFixtu
         listResponse.StatusCode.Should().Be(HttpStatusCode.OK);
         var versions = await listResponse.Content.ReadFromJsonAsync<List<AssetVersionSummaryResponse>>();
         versions.Should().NotBeNull();
-        versions!.Should().HaveCount(2);
-        versions!.Should().ContainSingle(v => v.Id == versionIds[0] && !v.IsCurrent);
-        var v2 = versions!.Should()
+        versions.Should().HaveCount(2);
+        versions.Should().ContainSingle(v => v.Id == versionIds[0] && !v.IsCurrent);
+        var v2 = versions.Should()
             .ContainSingle(v => v.VersionNumber == 2 && v.IsCurrent && v.License.Code == "COMMERCIAL")
             .Which;
         v2.ContentSha256.Should().Be(expectedSha256);

@@ -1,8 +1,12 @@
 import { z } from 'zod'
 
+import { checkoutAttributionBrowserSchema } from '@/lib/analytics/telemetry-schemas'
+
 export const createCheckoutRequestSchema = z
   .object({
     assetId: z.string().uuid('Asset ID must be a valid UUID.'),
+    attribution: checkoutAttributionBrowserSchema.optional(),
+    doNotTrack: z.literal(true).optional(),
   })
   .strict()
 
@@ -11,6 +15,8 @@ export type CreateCheckoutRequest = z.infer<typeof createCheckoutRequestSchema>
 export const createBundleCheckoutRequestSchema = z
   .object({
     bundleId: z.string().uuid('Bundle ID must be a valid UUID.'),
+    attribution: checkoutAttributionBrowserSchema.optional(),
+    doNotTrack: z.literal(true).optional(),
   })
   .strict()
 

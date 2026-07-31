@@ -27,6 +27,7 @@ export function CollectionsBrowsePage() {
   const items = listQuery.data?.items ?? []
   const totalPages = listQuery.data?.totalPages ?? 0
   const loading = listQuery.isPending
+  const collectionLinkSource = appliedSearch.trim() ? 'search' : 'catalog'
   const error = listQuery.isError
     ? listQuery.error instanceof Error
       ? listQuery.error.message
@@ -79,7 +80,7 @@ export function CollectionsBrowsePage() {
           ) : items.length > 0 ? (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
               {items.map((c) => (
-                <CollectionCard key={c.id} collection={c} />
+                <CollectionCard key={c.id} collection={c} linkSource={collectionLinkSource} />
               ))}
             </div>
           ) : (

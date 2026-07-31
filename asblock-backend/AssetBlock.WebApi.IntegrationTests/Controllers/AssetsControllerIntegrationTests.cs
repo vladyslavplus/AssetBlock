@@ -81,8 +81,8 @@ public sealed class AssetsControllerIntegrationTests(IntegrationTestFixture fixt
         var detail = await response.Content.ReadFromJsonAsync<AssetDetailResponse>();
         detail.Should().NotBeNull();
         detail.Id.Should().Be(assetId);
-        detail.Title.Should().Be(AssetCatalogSeed.SampleTitle);
-        detail.Price.Should().Be(AssetCatalogSeed.SamplePrice);
+        detail.Title.Should().Be(AssetCatalogSeed.SAMPLE_TITLE);
+        detail.Price.Should().Be(AssetCatalogSeed.SAMPLE_PRICE);
         detail.CategoryName.Should().NotBeNullOrWhiteSpace();
         detail.AuthorUsername.Should().NotBeNullOrWhiteSpace();
     }
@@ -100,7 +100,7 @@ public sealed class AssetsControllerIntegrationTests(IntegrationTestFixture fixt
         var list = await response.Content.ReadFromJsonAsync<AssetListResponse>();
         list.Should().NotBeNull();
         list.TotalCount.Should().BeGreaterThanOrEqualTo(1);
-        list.Items.Should().Contain(i => i.Id == assetId && i.Title == AssetCatalogSeed.SampleTitle);
+        list.Items.Should().Contain(i => i.Id == assetId && i.Title == AssetCatalogSeed.SAMPLE_TITLE);
     }
 
     private sealed record AssetListResponse(

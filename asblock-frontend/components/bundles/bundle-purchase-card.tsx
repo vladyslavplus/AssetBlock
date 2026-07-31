@@ -9,6 +9,7 @@ import { Button } from '@/components/ui/button'
 import { useAuth } from '@/components/auth/auth-context'
 import { isEmailVerified } from '@/components/auth/email-verification-notice'
 import { formatUsdWhole } from '@/lib/format-currency'
+import type { CheckoutAttributionInput } from '@/lib/analytics/telemetry-source'
 import { CheckoutRequestError, postCreateBundleCheckoutSession } from '@/lib/payments/checkout-api'
 import { writePendingCheckoutContext } from '@/lib/reviews/review-constants'
 import { fetchLibraryPurchasesOrThrow, libraryKeys } from '@/lib/library/library-query'
@@ -26,6 +27,7 @@ interface BundlePurchaseCardProps {
   items: BundleItem[]
   checkoutConfigured: boolean
   returnPath: string
+  checkoutAttribution?: CheckoutAttributionInput
 }
 
 export function BundlePurchaseCard({
@@ -40,6 +42,7 @@ export function BundlePurchaseCard({
   items,
   checkoutConfigured,
   returnPath,
+  checkoutAttribution,
 }: BundlePurchaseCardProps) {
   const router = useRouter()
   const { user, status } = useAuth()
@@ -61,7 +64,7 @@ export function BundlePurchaseCard({
   const hasOwnedItem = ownedItems.length > 0
 
   const checkoutMutation = useMutation({
-    mutationFn: () => postCreateBundleCheckoutSession(bundleId),
+    mutationFn: () => postCreateBundleCheckoutSession(bundleId, checkoutAttribution),
     onSuccess: (data) => {
       writePendingCheckoutContext({
         checkoutIntentId: data.checkoutIntentId,

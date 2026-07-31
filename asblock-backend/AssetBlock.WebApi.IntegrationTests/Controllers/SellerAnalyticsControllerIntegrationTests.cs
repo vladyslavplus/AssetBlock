@@ -317,5 +317,202 @@ public sealed class SellerAnalyticsControllerIntegrationTests(IntegrationTestFix
         root.TryGetProperty("series", out _).Should().BeTrue();
         root.TryGetProperty("topAssets", out _).Should().BeTrue();
         root.TryGetProperty("topBundles", out _).Should().BeTrue();
+        root.TryGetProperty("engagementAvailableFrom", out _).Should().BeTrue();
+        root.TryGetProperty("engagementTotals", out _).Should().BeTrue();
+        root.TryGetProperty("commerceFunnel", out _).Should().BeTrue();
+        root.TryGetProperty("trackedFunnel", out _).Should().BeTrue();
+        root.TryGetProperty("trackedCheckoutCoverage", out _).Should().BeTrue();
+        root.TryGetProperty("trafficSources", out _).Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task GetAssetDetail_UnverifiedUser_Returns403WithEmailNotVerified()
+    {
+        (HttpClient client, _) = await IntegrationTestAuth.RegisterAndAuthenticateAsync(fixture.Factory);
+        var response = await client.GetAsync(
+            new Uri($"/api/seller/analytics/products/assets/{Guid.NewGuid()}?from=2024-01-01&to=2024-01-11", UriKind.Relative));
+        response.StatusCode.Should().Be(HttpStatusCode.Forbidden);
+        (await response.Content.ReadAsStringAsync()).Should().Contain(ErrorCodes.ERR_EMAIL_NOT_VERIFIED);
+    }
+
+    [Fact]
+    public async Task GetCollections_UnverifiedUser_Returns403WithEmailNotVerified()
+    {
+        (HttpClient client, _) = await IntegrationTestAuth.RegisterAndAuthenticateAsync(fixture.Factory);
+        var response = await client.GetAsync(
+            new Uri("/api/seller/analytics/collections?from=2024-01-01&to=2024-01-11", UriKind.Relative));
+        response.StatusCode.Should().Be(HttpStatusCode.Forbidden);
+        (await response.Content.ReadAsStringAsync()).Should().Contain(ErrorCodes.ERR_EMAIL_NOT_VERIFIED);
+    }
+
+    [Fact]
+    public async Task GetAssetDetail_ForeignAsset_Returns404()
+    {
+        var (_, usernameA) = await IntegrationTestAuth.RegisterVerifiedAndAuthenticateAsync(fixture.Factory);
+        (HttpClient clientB, _) = await IntegrationTestAuth.RegisterVerifiedAndAuthenticateAsync(fixture.Factory);
+
+        Guid foreignAssetId;
+        await using (var scope = fixture.Factory.Services.CreateAsyncScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+            var sellerA = await db.Users.SingleAsync(u => u.Username == usernameA);
+            var category = await db.Categories.FirstAsync();
+            var asset = new Domain.Core.Entities.Asset
+            {
+                Id = Guid.NewGuid(),
+                AuthorId = sellerA.Id,
+                CategoryId = category.Id,
+                Title = "Foreign Detail Asset",
+                Price = 10m,
+                CreatedAt = DateTimeOffset.UtcNow
+            };
+            db.Assets.Add(asset);
+            await db.SaveChangesAsync();
+            foreignAssetId = asset.Id;
+        }
+
+        var response = await clientB.GetAsync(
+            new Uri($"/api/seller/analytics/products/assets/{foreignAssetId}?from=2024-01-01&to=2024-01-11", UriKind.Relative));
+
+        response.StatusCode.Should().Be(HttpStatusCode.NotFound);
+    }
+
+    [Fact]
+    public async Task GetBundleDetail_ForeignBundle_Returns404()
+    {
+        var (_, usernameA) = await IntegrationTestAuth.RegisterVerifiedAndAuthenticateAsync(fixture.Factory);
+        (HttpClient clientB, _) = await IntegrationTestAuth.RegisterVerifiedAndAuthenticateAsync(fixture.Factory);
+
+        Guid foreignBundleId;
+        await using (var scope = fixture.Factory.Services.CreateAsyncScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+            var sellerA = await db.Users.SingleAsync(u => u.Username == usernameA);
+            var category = await db.Categories.FirstAsync();
+            var asset = new Domain.Core.Entities.Asset
+            {
+                Id = Guid.NewGuid(),
+                AuthorId = sellerA.Id,
+                CategoryId = category.Id,
+                Title = "Bundle Detail Asset",
+                Price = 10m,
+                CreatedAt = DateTimeOffset.UtcNow
+            };
+            db.Assets.Add(asset);
+            await db.SaveChangesAsync();
+
+            var version = new Domain.Core.Entities.AssetVersion
+            {
+                Id = Guid.NewGuid(),
+                AssetId = asset.Id,
+                VersionNumber = 1,
+                IsCurrent = true,
+                StorageKey = $"assets/{asset.Id:N}/v1.bin",
+                FileName = "file.zip",
+                ContentLength = 1,
+                ContentSha256 = new string('0', 64),
+                ReleaseNotes = "v1",
+                LicenseCode = Domain.Core.Enums.AssetLicenseCode.PERSONAL,
+                LicenseTemplateVersion = "1.0",
+                LicenseDisplayName = "Personal",
+                LicenseTerms = "terms",
+                CreatedAt = DateTimeOffset.UtcNow
+            };
+            db.AssetVersions.Add(version);
+            await db.SaveChangesAsync();
+
+            var bundleId = Guid.NewGuid();
+            var revisionId = Guid.NewGuid();
+            var now = DateTimeOffset.UtcNow;
+            db.Bundles.Add(new Domain.Core.Entities.Bundle
+            {
+                Id = bundleId,
+                SellerId = sellerA.Id,
+                CreatedAt = now
+            });
+            db.BundleRevisions.Add(new Domain.Core.Entities.BundleRevision
+            {
+                Id = revisionId,
+                BundleId = bundleId,
+                RevisionNumber = 1,
+                IsCurrent = true,
+                Title = "Foreign Bundle",
+                Price = 8m,
+                Currency = "usd",
+                ListPriceTotal = 10m,
+                CreatedAt = now
+            });
+            db.BundleRevisionItems.Add(new Domain.Core.Entities.BundleRevisionItem
+            {
+                Id = Guid.NewGuid(),
+                BundleRevisionId = revisionId,
+                AssetId = asset.Id,
+                Position = 1,
+                AssetTitleSnapshot = asset.Title,
+                ListPriceSnapshot = asset.Price
+            });
+            await db.SaveChangesAsync();
+            foreignBundleId = bundleId;
+        }
+
+        var response = await clientB.GetAsync(
+            new Uri($"/api/seller/analytics/products/bundles/{foreignBundleId}?from=2024-01-01&to=2024-01-11", UriKind.Relative));
+
+        response.StatusCode.Should().Be(HttpStatusCode.NotFound);
+    }
+
+    [Fact]
+    public async Task GetCollections_InvalidRange_ReturnsProblemDetails()
+    {
+        (HttpClient client, _) = await IntegrationTestAuth.RegisterVerifiedAndAuthenticateAsync(fixture.Factory);
+        var response = await client.GetAsync(
+            new Uri("/api/seller/analytics/collections?from=2024-06-01&to=2024-01-01", UriKind.Relative));
+
+        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        response.Content.Headers.ContentType!.MediaType.Should().Be("application/problem+json");
+        var body = await response.Content.ReadAsStringAsync();
+        body.Should().Contain(ErrorCodes.ERR_ANALYTICS_INVALID_RANGE);
+    }
+
+    [Fact]
+    public async Task GetAssetDetail_InvalidRange_ReturnsProblemDetails()
+    {
+        (HttpClient client, _) = await IntegrationTestAuth.RegisterVerifiedAndAuthenticateAsync(fixture.Factory);
+        var response = await client.GetAsync(
+            new Uri($"/api/seller/analytics/products/assets/{Guid.NewGuid()}?from=2024-06-01&to=2024-01-01", UriKind.Relative));
+
+        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        response.Content.Headers.ContentType!.MediaType.Should().Be("application/problem+json");
+        var body = await response.Content.ReadAsStringAsync();
+        body.Should().Contain(ErrorCodes.ERR_ANALYTICS_INVALID_RANGE);
+    }
+
+    [Fact]
+    public async Task GetCollections_VerifiedUserNoCollections_Returns200WithoutSensitiveFields()
+    {
+        (HttpClient client, _) = await IntegrationTestAuth.RegisterVerifiedAndAuthenticateAsync(fixture.Factory);
+        var from = DateTime.UtcNow.AddDays(-7).ToString("yyyy-MM-dd");
+        var to = DateTime.UtcNow.AddDays(1).ToString("yyyy-MM-dd");
+
+        var response = await client.GetAsync(
+            new Uri($"/api/seller/analytics/collections?from={from}&to={to}", UriKind.Relative));
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        var json = await response.Content.ReadAsStringAsync();
+        json.ToLowerInvariant().Should().NotContain("stripe");
+        json.ToLowerInvariant().Should().NotContain("buyer");
+        json.ToLowerInvariant().Should().NotContain("userid");
+
+        using var doc = JsonDocument.Parse(json);
+        doc.RootElement.TryGetProperty("items", out _).Should().BeTrue();
+        doc.RootElement.TryGetProperty("engagementAvailableFrom", out _).Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task IntegrationHost_WithAnalyticsAggregationDisabled_ShouldStartSuccessfully()
+    {
+        var client = fixture.Factory.CreateClient();
+        var response = await client.GetAsync(new Uri("/health/live", UriKind.Relative));
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
     }
 }

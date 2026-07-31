@@ -51,4 +51,6 @@ public static class AuditActions
     public const string BUNDLE_RESTORE = "Bundle.Restore";
 
     public const string PAYMENT_ORDER_COMPLETED = "Payment.OrderCompleted";
+
+    public const string SELLER_ANALYTICS_EXPORTED = "SellerAnalytics.Exported";
 }

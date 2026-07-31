@@ -1,5 +1,6 @@
 import { cookies } from 'next/headers'
 import { createBundleCheckoutRequestSchema } from '@/lib/payments/payments-schemas'
+import { prepareCheckoutAnalyticsContext } from '@/lib/server/checkout-analytics-context'
 import { fetchBackendAuthorized } from '@/lib/server/backend-authorized'
 import {
   assertSameOrigin,
@@ -24,9 +25,27 @@ export async function POST(request: Request) {
   }
 
   const store = await cookies()
+  const analytics = prepareCheckoutAnalyticsContext(request, store, {
+    doNotTrack: parsed.data.doNotTrack,
+    attribution: parsed.data.attribution,
+  })
+
+  const backendBody = {
+    bundleId: parsed.data.bundleId,
+    ...(!analytics.trackingOptedOut && analytics.attribution
+      ? { attribution: analytics.attribution }
+      : {}),
+    ...(!analytics.trackingOptedOut && analytics.analyticsVisitorId
+      ? { analyticsVisitorId: analytics.analyticsVisitorId }
+      : {}),
+    ...(!analytics.trackingOptedOut && analytics.analyticsSessionId
+      ? { analyticsSessionId: analytics.analyticsSessionId }
+      : {}),
+  }
+
   const res = await fetchBackendAuthorized(store, '/api/payments/checkout/bundles', {
     method: 'POST',
-    body: JSON.stringify(parsed.data),
+    body: JSON.stringify(backendBody),
     headers: { 'Content-Type': 'application/json' },
   })
   return forwardBackendResponse(res)

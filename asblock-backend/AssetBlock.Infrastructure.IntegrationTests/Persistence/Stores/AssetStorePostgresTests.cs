@@ -368,4 +368,93 @@ public sealed class AssetStorePostgresTests(PostgresFixture fixture)
         item.Tags.Should().Equal("audio", "loop");
         item.AverageRating.Should().Be(4d);
     }
+
+    [Fact]
+    public async Task ResolveDownloadAnalyticsSellerId_WhenBuyerIsEntitled_ShouldReturnAuthorIdWithoutSideEffects()
+    {
+        await using var db = await fixture.CreateCleanDbContext();
+        (User author, Category category) = await TestData.SeedAuthorAndCategory(db);
+        var buyer = TestData.CreateUser("dl-buyer", "dl-buyer@example.test");
+        db.Users.Add(buyer);
+        var asset = TestData.CreateAsset(author.Id, category.Id, title: "Download Analytics Asset");
+        db.Assets.Add(asset);
+        var version = TestData.CreateAssetVersion(asset.Id, versionNumber: 1);
+        db.AssetVersions.Add(version);
+        await db.SaveChangesAsync();
+        TestData.AddCompletedPurchase(db, TestData.CreatePurchase(buyer.Id, asset.Id, version.Id), asset.Title, author.Id);
+        await db.SaveChangesAsync();
+
+        var store = new AssetStore(db);
+        var sellerId = await store.ResolveDownloadAnalyticsSellerId(
+            asset.Id,
+            version.Id,
+            buyer.Id,
+            CancellationToken.None);
+
+        sellerId.Should().Be(author.Id);
+    }
+
+    [Fact]
+    public async Task ResolveDownloadAnalyticsSellerId_WhenActorIsAuthor_ShouldReturnNull()
+    {
+        await using var db = await fixture.CreateCleanDbContext();
+        (User author, Category category) = await TestData.SeedAuthorAndCategory(db);
+        var asset = TestData.CreateAsset(author.Id, category.Id);
+        db.Assets.Add(asset);
+        var version = TestData.CreateAssetVersion(asset.Id);
+        db.AssetVersions.Add(version);
+        await db.SaveChangesAsync();
+
+        var store = new AssetStore(db);
+        var sellerId = await store.ResolveDownloadAnalyticsSellerId(
+            asset.Id,
+            version.Id,
+            author.Id,
+            CancellationToken.None);
+
+        sellerId.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task GetPublicAnalyticsSellerId_WhenAssetIsSoftDeleted_ShouldReturnNull()
+    {
+        await using var db = await fixture.CreateCleanDbContext();
+        (User author, Category category) = await TestData.SeedAuthorAndCategory(db);
+        var asset = TestData.CreateAsset(author.Id, category.Id);
+        var store = new AssetStore(db);
+        await store.Add(asset);
+        await store.SoftDelete(asset.Id, DateTimeOffset.UtcNow);
+
+        var sellerId = await store.GetPublicAnalyticsSellerId(asset.Id);
+
+        sellerId.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task ResolveDownloadAnalyticsSellerId_WhenBuyerEntitledAndAssetSoftDeleted_ShouldReturnAuthorId()
+    {
+        await using var db = await fixture.CreateCleanDbContext();
+        (User author, Category category) = await TestData.SeedAuthorAndCategory(db);
+        var buyer = TestData.CreateUser("dl-buyer-deleted", "dl-buyer-deleted@example.test");
+        db.Users.Add(buyer);
+        var asset = TestData.CreateAsset(author.Id, category.Id, title: "Soft-deleted Download Asset");
+        db.Assets.Add(asset);
+        var version = TestData.CreateAssetVersion(asset.Id, versionNumber: 1);
+        db.AssetVersions.Add(version);
+        await db.SaveChangesAsync();
+        TestData.AddCompletedPurchase(db, TestData.CreatePurchase(buyer.Id, asset.Id, version.Id), asset.Title, author.Id);
+        await db.SaveChangesAsync();
+
+        var store = new AssetStore(db);
+        await store.SoftDelete(asset.Id, DateTimeOffset.UtcNow);
+
+        var sellerId = await store.ResolveDownloadAnalyticsSellerId(
+            asset.Id,
+            version.Id,
+            buyer.Id,
+            CancellationToken.None);
+
+        sellerId.Should().Be(author.Id);
+        (await store.GetPublicAnalyticsSellerId(asset.Id)).Should().BeNull();
+    }
 }

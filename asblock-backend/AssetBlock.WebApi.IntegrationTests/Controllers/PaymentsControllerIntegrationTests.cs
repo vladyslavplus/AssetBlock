@@ -7,7 +7,6 @@ using AssetBlock.Domain.Core.Enums;
 using AssetBlock.Infrastructure.Persistence;
 using AssetBlock.WebApi.IntegrationTests.Support;
 using FluentAssertions;
-using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace AssetBlock.WebApi.IntegrationTests.Controllers;
@@ -70,7 +69,7 @@ public sealed class PaymentsControllerIntegrationTests(IntegrationTestFixture fi
     [Fact]
     public async Task GetCheckoutStatus_WhenForeignIntent_ShouldReturn404()
     {
-        (HttpClient user1Client, string user1Username) = await IntegrationTestAuth.RegisterVerifiedAndAuthenticateAsync(fixture.Factory);
+        (HttpClient _, string user1Username) = await IntegrationTestAuth.RegisterVerifiedAndAuthenticateAsync(fixture.Factory);
         (HttpClient user2Client, _) = await IntegrationTestAuth.RegisterVerifiedAndAuthenticateAsync(fixture.Factory);
         var scopeFactory = fixture.Factory.Services.GetRequiredService<IServiceScopeFactory>();
         var user1Id = await AssetVersionsSeed.GetUserIdAsync(scopeFactory, user1Username);
@@ -134,7 +133,7 @@ public sealed class PaymentsControllerIntegrationTests(IntegrationTestFixture fi
         response.StatusCode.Should().Be(HttpStatusCode.OK);
         var body = await response.Content.ReadFromJsonAsync<GetCheckoutStatusResponse>(IntegrationTestAuth.JsonOptions);
         body.Should().NotBeNull();
-        body!.Status.Should().Be("pending");
+        body.Status.Should().Be("pending");
         body.CheckoutIntentId.Should().Be(intentId);
         body.OrderId.Should().BeNull();
     }
@@ -172,7 +171,7 @@ public sealed class PaymentsControllerIntegrationTests(IntegrationTestFixture fi
         response.StatusCode.Should().Be(HttpStatusCode.OK);
         var body = await response.Content.ReadFromJsonAsync<GetCheckoutStatusResponse>(IntegrationTestAuth.JsonOptions);
         body.Should().NotBeNull();
-        body!.Status.Should().Be("cancelled");
+        body.Status.Should().Be("cancelled");
         body.CheckoutIntentId.Should().Be(intentId);
         body.OrderId.Should().BeNull();
     }

@@ -14,7 +14,7 @@ internal sealed class GetSellerAnalyticsOverviewQueryHandler(
     ILogger<GetSellerAnalyticsOverviewQueryHandler> logger)
     : IRequestHandler<GetSellerAnalyticsOverviewQuery, Result<SellerAnalyticsOverviewDto>>
 {
-    private static readonly TimeSpan CacheExpiration =
+    private static readonly TimeSpan _cacheExpiration =
         TimeSpan.FromSeconds(AnalyticsConstants.OVERVIEW_CACHE_TTL_SECONDS);
 
     public async Task<Result<SellerAnalyticsOverviewDto>> Handle(
@@ -46,6 +46,7 @@ internal sealed class GetSellerAnalyticsOverviewQueryHandler(
             compFromDto,
             compToDto,
             AnalyticsConstants.OVERVIEW_TOP_N,
+            granularity,
             cancellationToken);
 
         var cur = snapshot.CurrentFacts;
@@ -53,7 +54,13 @@ internal sealed class GetSellerAnalyticsOverviewQueryHandler(
         var ratings = snapshot.CurrentRatings;
         var prevRatings = snapshot.ComparisonRatings;
 
-        var series = AnalyticsRange.BuildSeries(snapshot.DaySeries, request.From, request.To, granularity);
+        var series = AnalyticsRange.BuildSeries(
+            snapshot.DaySeries,
+            request.From,
+            request.To,
+            granularity,
+            snapshot.EngagementAvailableFrom,
+            snapshot.EngagementDaySeries);
 
         var curRevCents = AnalyticsRange.ToCents(cur.GrossRevenue);
         var prevRevCents = AnalyticsRange.ToCents(prev.GrossRevenue);
@@ -75,6 +82,16 @@ internal sealed class GetSellerAnalyticsOverviewQueryHandler(
             ? curRepeatRate.Value - prevRepeatRate.Value
             : (decimal?)null;
 
+        var engagementAvailable = snapshot.EngagementAvailableFrom;
+        var engagementTotals = AnalyticsEngagementMapper.MapEngagementTotals(
+            snapshot.CurrentEngagement,
+            snapshot.ComparisonEngagement);
+        var commerceFunnel = AnalyticsEngagementMapper.MapCommerceFunnel(snapshot.CommerceFunnel);
+        var trackedFunnel = AnalyticsEngagementMapper.MapTrackedFunnel(snapshot.TrackedFunnel);
+        var trafficSources = AnalyticsEngagementMapper.MapTrafficSources(
+            snapshot.TrafficSources,
+            snapshot.ExternalReferrers);
+
         var overviewDto = new SellerAnalyticsOverviewDto(
             From: request.From,
             To: request.To,
@@ -84,7 +101,7 @@ internal sealed class GetSellerAnalyticsOverviewQueryHandler(
             Granularity: granularity,
             GeneratedAt: DateTimeOffset.UtcNow,
             Currency: AnalyticsConstants.CURRENCY,
-            EngagementAvailableFrom: null,
+            EngagementAvailableFrom: engagementAvailable,
             GrossRevenue: new MoneyCentsMetric(curRevCents, prevRevCents, curRevCents - prevRevCents,
                 AnalyticsRange.PercentageChange(curRevCents, prevRevCents)),
             DirectRevenue: new MoneyCentsMetric(curDirCents, prevDirCents, curDirCents - prevDirCents,
@@ -122,9 +139,14 @@ internal sealed class GetSellerAnalyticsOverviewQueryHandler(
                 AnalyticsRange.PercentageChange(ratings.NewReviews, prevRatings.NewReviews)),
             Series: series,
             TopAssets: snapshot.TopAssets.Select(AnalyticsProductMapper.FromAssetRow).ToList(),
-            TopBundles: snapshot.TopBundles.Select(AnalyticsProductMapper.FromBundleRow).ToList());
+            TopBundles: snapshot.TopBundles.Select(AnalyticsProductMapper.FromBundleRow).ToList(),
+            EngagementTotals: engagementTotals,
+            CommerceFunnel: commerceFunnel,
+            TrackedFunnel: trackedFunnel,
+            TrackedCheckoutCoverage: snapshot.TrackedCheckoutCoverage,
+            TrafficSources: trafficSources);
 
-        await cache.Set(cacheKey, overviewDto, CacheExpiration, cancellationToken);
+        await cache.Set(cacheKey, overviewDto, _cacheExpiration, cancellationToken);
 
         return Result.Success(overviewDto);
     }

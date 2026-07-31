@@ -12,4 +12,5 @@ public static class AuditResourceTypes
     public const string COLLECTION = "Collection";
     public const string BUNDLE = "Bundle";
     public const string ORDER = "Order";
+    public const string SELLER_ANALYTICS = "SellerAnalytics";
 }

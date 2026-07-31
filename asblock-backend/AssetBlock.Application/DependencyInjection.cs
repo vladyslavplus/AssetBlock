@@ -23,6 +23,7 @@ public static class DependencyInjection
         services.AddTransient(typeof(IPipelineBehavior<,>), typeof(LoggingBehavior<,>));
         services.AddTransient(typeof(IPipelineBehavior<,>), typeof(ValidationBehavior<,>));
         services.AddScoped<CheckoutSessionOrchestrator>();
+        services.AddScoped<CheckoutAttributionNormalizer>();
         services.AddScoped<ICheckoutCompletionService, HandleStripeWebhookCommandHandler>();
         services.AddSingleton<ITransactionalEmailComposer, TransactionalEmailComposer>();
         services.AddSingleton(sp => (TransactionalEmailComposer)sp.GetRequiredService<ITransactionalEmailComposer>());

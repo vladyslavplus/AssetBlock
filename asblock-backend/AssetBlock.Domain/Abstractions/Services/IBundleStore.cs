@@ -43,6 +43,9 @@ public interface IBundleStore
     Task<BundleCheckoutSnapshot?> GetCheckoutSnapshot(Guid bundleId, CancellationToken cancellationToken = default);
 
     Task LockAssetsInOrder(IReadOnlyList<Guid> assetIds, CancellationToken cancellationToken = default);
+
+    /// <summary>Returns SellerId when the bundle is publicly listable, otherwise null.</summary>
+    Task<Guid?> GetPublicAnalyticsSellerId(Guid bundleId, CancellationToken cancellationToken = default);
 }
 
 /// <summary>Draft item used when creating a bundle revision.</summary>

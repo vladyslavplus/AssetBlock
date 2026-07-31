@@ -35,6 +35,7 @@ public sealed class GetSellerAnalyticsOverviewQueryHandlerTests
                 Arg.Any<DateTimeOffset>(),
                 Arg.Any<DateTimeOffset>(),
                 Arg.Any<int>(),
+                Arg.Any<Domain.Core.Enums.AnalyticsGranularity>(),
                 Arg.Any<CancellationToken>())
             .Returns(new SellerAnalyticsOverviewSnapshot(
                 new SellerAnalyticsRawFacts(0, 0, 0, 0, 0, 0, 0, 0),
@@ -43,7 +44,16 @@ public sealed class GetSellerAnalyticsOverviewQueryHandlerTests
                 Array.Empty<AnalyticsAssetProductRow>(),
                 Array.Empty<AnalyticsBundleProductRow>(),
                 new SellerRatingsRaw(null, 0),
-                new SellerRatingsRaw(null, 0)));
+                new SellerRatingsRaw(null, 0),
+                null,
+                null,
+                null,
+                null,
+                new AnalyticsCommerceFunnelRaw(0, 0, 0, 0, 0),
+                null,
+                null,
+                Array.Empty<AnalyticsTrafficSourceRaw>(),
+                Array.Empty<AnalyticsExternalReferrerRaw>()));
     }
 
     [Fact]
@@ -71,7 +81,12 @@ public sealed class GetSellerAnalyticsOverviewQueryHandlerTests
             NewReviews: new CountMetric(0, 0, 0, null),
             Series: [],
             TopAssets: [],
-            TopBundles: []);
+            TopBundles: [],
+            EngagementTotals: null,
+            CommerceFunnel: null,
+            TrackedFunnel: null,
+            TrackedCheckoutCoverage: null,
+            TrafficSources: null);
 
         _cache.Get<SellerAnalyticsOverviewDto>(Arg.Any<string>(), Arg.Any<CancellationToken>())
             .Returns(cachedDto);
@@ -80,7 +95,7 @@ public sealed class GetSellerAnalyticsOverviewQueryHandlerTests
 
         result.IsSuccess.Should().BeTrue();
         await _store.DidNotReceiveWithAnyArgs().GetOverviewSnapshot(
-            Guid.Empty, default, default, default, default, 0);
+            Guid.Empty, default, default, default, default, 0, default);
     }
 
     [Fact]
@@ -93,6 +108,7 @@ public sealed class GetSellerAnalyticsOverviewQueryHandlerTests
                 Arg.Any<DateTimeOffset>(),
                 Arg.Any<DateTimeOffset>(),
                 Arg.Any<int>(),
+                Arg.Any<Domain.Core.Enums.AnalyticsGranularity>(),
                 Arg.Any<CancellationToken>())
             .Returns(new SellerAnalyticsOverviewSnapshot(
                 new SellerAnalyticsRawFacts(31.50m, 3, 3, 31.50m, 0, 2, 1, 0),
@@ -101,7 +117,16 @@ public sealed class GetSellerAnalyticsOverviewQueryHandlerTests
                 Array.Empty<AnalyticsAssetProductRow>(),
                 Array.Empty<AnalyticsBundleProductRow>(),
                 new SellerRatingsRaw(null, 0),
-                new SellerRatingsRaw(null, 0)));
+                new SellerRatingsRaw(null, 0),
+                null,
+                null,
+                null,
+                null,
+                new AnalyticsCommerceFunnelRaw(0, 0, 0, 0, 0),
+                null,
+                null,
+                Array.Empty<AnalyticsTrafficSourceRaw>(),
+                Array.Empty<AnalyticsExternalReferrerRaw>()));
 
         var result = await _handler.Handle(new GetSellerAnalyticsOverviewQuery(_sellerId, _from, _to), CancellationToken.None);
 
@@ -119,6 +144,7 @@ public sealed class GetSellerAnalyticsOverviewQueryHandlerTests
                 Arg.Any<DateTimeOffset>(),
                 Arg.Any<DateTimeOffset>(),
                 Arg.Any<int>(),
+                Arg.Any<Domain.Core.Enums.AnalyticsGranularity>(),
                 Arg.Any<CancellationToken>())
             .Returns(new SellerAnalyticsOverviewSnapshot(
                 new SellerAnalyticsRawFacts(20.01m, 2, 2, 20.01m, 0, 1, 1, 0),
@@ -127,7 +153,16 @@ public sealed class GetSellerAnalyticsOverviewQueryHandlerTests
                 Array.Empty<AnalyticsAssetProductRow>(),
                 Array.Empty<AnalyticsBundleProductRow>(),
                 new SellerRatingsRaw(null, 0),
-                new SellerRatingsRaw(null, 0)));
+                new SellerRatingsRaw(null, 0),
+                null,
+                null,
+                null,
+                null,
+                new AnalyticsCommerceFunnelRaw(0, 0, 0, 0, 0),
+                null,
+                null,
+                Array.Empty<AnalyticsTrafficSourceRaw>(),
+                Array.Empty<AnalyticsExternalReferrerRaw>()));
 
         var result = await _handler.Handle(new GetSellerAnalyticsOverviewQuery(_sellerId, _from, _to), CancellationToken.None);
 
@@ -145,6 +180,7 @@ public sealed class GetSellerAnalyticsOverviewQueryHandlerTests
                 Arg.Any<DateTimeOffset>(),
                 Arg.Any<DateTimeOffset>(),
                 Arg.Any<int>(),
+                Arg.Any<Domain.Core.Enums.AnalyticsGranularity>(),
                 Arg.Any<CancellationToken>())
             .Returns(new SellerAnalyticsOverviewSnapshot(
                 new SellerAnalyticsRawFacts(100m, 1, 1, 100m, 0, 1, 1, 0),
@@ -153,7 +189,16 @@ public sealed class GetSellerAnalyticsOverviewQueryHandlerTests
                 Array.Empty<AnalyticsAssetProductRow>(),
                 Array.Empty<AnalyticsBundleProductRow>(),
                 new SellerRatingsRaw(null, 0),
-                new SellerRatingsRaw(null, 0)));
+                new SellerRatingsRaw(null, 0),
+                null,
+                null,
+                null,
+                null,
+                new AnalyticsCommerceFunnelRaw(0, 0, 0, 0, 0),
+                null,
+                null,
+                Array.Empty<AnalyticsTrafficSourceRaw>(),
+                Array.Empty<AnalyticsExternalReferrerRaw>()));
 
         var result = await _handler.Handle(new GetSellerAnalyticsOverviewQuery(_sellerId, _from, _to), CancellationToken.None);
 
@@ -171,6 +216,7 @@ public sealed class GetSellerAnalyticsOverviewQueryHandlerTests
                 Arg.Any<DateTimeOffset>(),
                 Arg.Any<DateTimeOffset>(),
                 Arg.Any<int>(),
+                Arg.Any<Domain.Core.Enums.AnalyticsGranularity>(),
                 Arg.Any<CancellationToken>())
             .Returns(new SellerAnalyticsOverviewSnapshot(
                 new SellerAnalyticsRawFacts(200m, 2, 2, 200m, 0, 2, 0, 0),
@@ -179,7 +225,16 @@ public sealed class GetSellerAnalyticsOverviewQueryHandlerTests
                 Array.Empty<AnalyticsAssetProductRow>(),
                 Array.Empty<AnalyticsBundleProductRow>(),
                 new SellerRatingsRaw(null, 0),
-                new SellerRatingsRaw(null, 0)));
+                new SellerRatingsRaw(null, 0),
+                null,
+                null,
+                null,
+                null,
+                new AnalyticsCommerceFunnelRaw(0, 0, 0, 0, 0),
+                null,
+                null,
+                Array.Empty<AnalyticsTrafficSourceRaw>(),
+                Array.Empty<AnalyticsExternalReferrerRaw>()));
 
         var result = await _handler.Handle(new GetSellerAnalyticsOverviewQuery(_sellerId, _from, _to), CancellationToken.None);
 
@@ -207,6 +262,7 @@ public sealed class GetSellerAnalyticsOverviewQueryHandlerTests
                 Arg.Any<DateTimeOffset>(),
                 Arg.Any<DateTimeOffset>(),
                 Arg.Any<int>(),
+                Arg.Any<Domain.Core.Enums.AnalyticsGranularity>(),
                 Arg.Any<CancellationToken>())
             .Returns(new SellerAnalyticsOverviewSnapshot(
                 new SellerAnalyticsRawFacts(500m, 5, 5, 500m, 0, 5, 2, 1),
@@ -215,7 +271,16 @@ public sealed class GetSellerAnalyticsOverviewQueryHandlerTests
                 Array.Empty<AnalyticsAssetProductRow>(),
                 Array.Empty<AnalyticsBundleProductRow>(),
                 new SellerRatingsRaw(null, 0),
-                new SellerRatingsRaw(null, 0)));
+                new SellerRatingsRaw(null, 0),
+                null,
+                null,
+                null,
+                null,
+                new AnalyticsCommerceFunnelRaw(0, 0, 0, 0, 0),
+                null,
+                null,
+                Array.Empty<AnalyticsTrafficSourceRaw>(),
+                Array.Empty<AnalyticsExternalReferrerRaw>()));
 
         var result = await _handler.Handle(new GetSellerAnalyticsOverviewQuery(_sellerId, _from, _to), CancellationToken.None);
 
@@ -272,5 +337,58 @@ public sealed class GetSellerAnalyticsOverviewQueryHandlerTests
         var act = () => _handler.Handle(new GetSellerAnalyticsOverviewQuery(_sellerId, _from, _to), CancellationToken.None);
 
         await act.Should().ThrowAsync<OperationCanceledException>();
+    }
+
+    [Fact]
+    public async Task Handle_WhenEngagementUnavailable_ShouldReturnNullEngagementBlocks()
+    {
+        var result = await _handler.Handle(new GetSellerAnalyticsOverviewQuery(_sellerId, _from, _to), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.EngagementAvailableFrom.Should().BeNull();
+        result.Value.EngagementTotals.Should().BeNull();
+        result.Value.TrackedFunnel.Should().BeNull();
+        result.Value.CommerceFunnel.Should().NotBeNull();
+        result.Value.TrafficSources.Should().NotBeNull();
+    }
+
+    [Fact]
+    public async Task Handle_WhenEngagementAvailableWithZeroCounts_ShouldReturnZeroEngagementTotalsNotNull()
+    {
+        _store.GetOverviewSnapshot(
+                _sellerId,
+                Arg.Any<DateTimeOffset>(),
+                Arg.Any<DateTimeOffset>(),
+                Arg.Any<DateTimeOffset>(),
+                Arg.Any<DateTimeOffset>(),
+                Arg.Any<int>(),
+                Arg.Any<Domain.Core.Enums.AnalyticsGranularity>(),
+                Arg.Any<CancellationToken>())
+            .Returns(new SellerAnalyticsOverviewSnapshot(
+                new SellerAnalyticsRawFacts(0, 0, 0, 0, 0, 0, 0, 0),
+                new SellerAnalyticsRawFacts(0, 0, 0, 0, 0, 0, 0, 0),
+                Array.Empty<AnalyticsDayBucket>(),
+                Array.Empty<AnalyticsAssetProductRow>(),
+                Array.Empty<AnalyticsBundleProductRow>(),
+                new SellerRatingsRaw(null, 0),
+                new SellerRatingsRaw(null, 0),
+                EngagementAvailableFrom: DateTimeOffset.UtcNow.AddDays(-30),
+                CurrentEngagement: new SellerEngagementRawFacts(0, 0, 0, 0, 0),
+                ComparisonEngagement: new SellerEngagementRawFacts(0, 0, 0, 0, 0),
+                EngagementDaySeries: Array.Empty<AnalyticsEngagementDayBucket>(),
+                CommerceFunnel: new AnalyticsCommerceFunnelRaw(0, 0, 0, 0, 0),
+                TrackedFunnel: new AnalyticsTrackedFunnelRaw(0, 0, 0),
+                TrackedCheckoutCoverage: null,
+                TrafficSources: Array.Empty<AnalyticsTrafficSourceRaw>(),
+                ExternalReferrers: Array.Empty<AnalyticsExternalReferrerRaw>()));
+
+        var result = await _handler.Handle(new GetSellerAnalyticsOverviewQuery(_sellerId, _from, _to), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.EngagementAvailableFrom.Should().NotBeNull();
+        result.Value.EngagementTotals.Should().NotBeNull();
+        result.Value.EngagementTotals!.ProductViews.Current.Should().Be(0);
+        result.Value.TrackedFunnel.Should().NotBeNull();
+        result.Value.TrackedFunnel!.ViewSessions.Should().Be(0);
     }
 }

@@ -1,13 +1,17 @@
 'use client'
 
 import Link from 'next/link'
+import { appendAnalyticsQuery } from '@/lib/analytics/telemetry-source'
+import type { AnalyticsSourceQuery } from '@/lib/analytics/telemetry-constants'
 import type { CollectionListItem } from '@/lib/collections/collection-types'
 
 interface CollectionCardProps {
   collection: CollectionListItem
+  linkSource?: AnalyticsSourceQuery
 }
 
-export function CollectionCard({ collection }: CollectionCardProps) {
+export function CollectionCard({ collection, linkSource = 'catalog' }: CollectionCardProps) {
+  const collectionHref = appendAnalyticsQuery(`/collections/${collection.id}`, linkSource)
   return (
     <article
       className="flex-none w-full rounded-xl border border-border p-4 flex flex-col gap-3 group transition-smooth hover:border-primary/50 hover:bg-card-elevated hover:shadow-[0_8px_24px_rgba(124,58,237,0.15)] focus-within:ring-2 focus-within:ring-primary focus-within:ring-offset-2 focus-within:ring-offset-background"
@@ -43,7 +47,7 @@ export function CollectionCard({ collection }: CollectionCardProps) {
       </div>
 
       <Link
-        href={`/collections/${collection.id}`}
+        href={collectionHref}
         className="text-xs font-medium text-primary hover:text-primary/80 transition-colors"
       >
         View collection →

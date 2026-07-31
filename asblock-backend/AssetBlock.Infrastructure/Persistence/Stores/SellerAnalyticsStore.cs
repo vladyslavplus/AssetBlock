@@ -1,4 +1,5 @@
 using AssetBlock.Domain.Abstractions.Services;
+using AssetBlock.Domain.Core.Constants;
 using AssetBlock.Domain.Core.Dto.Analytics;
 using AssetBlock.Domain.Core.Enums;
 using AssetBlock.Infrastructure.Persistence.Analytics;
@@ -39,6 +40,7 @@ internal sealed class SellerAnalyticsStore : ISellerAnalyticsStore
         DateTimeOffset comparisonFrom,
         DateTimeOffset comparisonTo,
         int topN,
+        AnalyticsGranularity seriesGranularity,
         CancellationToken cancellationToken = default)
     {
         var db = await _dbFactory.CreateDbContextAsync(cancellationToken);
@@ -54,6 +56,54 @@ internal sealed class SellerAnalyticsStore : ISellerAnalyticsStore
             var dualRatings = await QueryDualRatings(
                 db, sellerId, from, to, comparisonFrom, comparisonTo, cancellationToken);
 
+            var engagementAvailableFrom = await QueryEngagementAvailableFrom(db, sellerId, cancellationToken);
+
+            var currentAvailable = engagementAvailableFrom.HasValue && from >= engagementAvailableFrom.Value;
+            var comparisonAvailable = engagementAvailableFrom.HasValue && comparisonFrom >= engagementAvailableFrom.Value;
+            var includeEventMetrics = engagementAvailableFrom.HasValue && to > engagementAvailableFrom.Value;
+
+            var commerceFunnel = await QueryCommerceFunnel(db, sellerId, from, to, cancellationToken);
+            var trackedCheckoutCoverage = await QueryTrackedCheckoutCoverage(db, sellerId, from, to, cancellationToken);
+            var trafficSources = await QueryTrafficSources(db, sellerId, from, to, cancellationToken);
+            var externalReferrers = await QueryExternalReferrers(
+                db, sellerId, from, to, AnalyticsConstants.MAX_EXTERNAL_REFERRERS, cancellationToken);
+
+            SellerEngagementRawFacts? currentEngagement = null;
+            SellerEngagementRawFacts? comparisonEngagement = null;
+            AnalyticsTrackedFunnelRaw? trackedFunnel = null;
+
+            if (currentAvailable && comparisonAvailable)
+            {
+                var dualEngagement = await QueryDualPeriodEngagementFacts(
+                    db, sellerId, from, to, comparisonFrom, comparisonTo, cancellationToken);
+                currentEngagement = dualEngagement.Current;
+                comparisonEngagement = dualEngagement.Comparison;
+                trackedFunnel = await QueryTrackedFunnel(db, sellerId, from, to, cancellationToken);
+            }
+            else
+            {
+                if (currentAvailable)
+                {
+                    currentEngagement = await QueryEngagementFacts(db, sellerId, from, to, cancellationToken);
+                    trackedFunnel = await QueryTrackedFunnel(db, sellerId, from, to, cancellationToken);
+                }
+
+                if (comparisonAvailable)
+                {
+                    comparisonEngagement = await QueryEngagementFacts(
+                        db, sellerId, comparisonFrom, comparisonTo, cancellationToken);
+                }
+            }
+
+            IReadOnlyList<AnalyticsEngagementDayBucket> engagementSeries = await QueryEngagementSeries(
+                db,
+                sellerId,
+                from,
+                to,
+                seriesGranularity,
+                includeEventMetrics,
+                cancellationToken);
+
             await tx.CommitAsync(cancellationToken);
 
             return new SellerAnalyticsOverviewSnapshot(
@@ -63,7 +113,16 @@ internal sealed class SellerAnalyticsStore : ISellerAnalyticsStore
                 topAssets,
                 topBundles,
                 dualRatings.Current,
-                dualRatings.Comparison);
+                dualRatings.Comparison,
+                engagementAvailableFrom,
+                currentEngagement,
+                comparisonEngagement,
+                engagementSeries,
+                commerceFunnel,
+                trackedFunnel,
+                trackedCheckoutCoverage,
+                trafficSources,
+                externalReferrers);
         }
         finally
         {
@@ -99,7 +158,7 @@ internal sealed class SellerAnalyticsStore : ISellerAnalyticsStore
             var includeAssets = productType is AnalyticsProductTypeFilter.ALL or AnalyticsProductTypeFilter.ASSET;
             var includeBundles = productType is AnalyticsProductTypeFilter.ALL or AnalyticsProductTypeFilter.BUNDLE;
             var orderBy = BuildProductsOrderBy(sort, direction);
-            var offset = checked((int)(((long)page - 1L) * pageSize));
+            var offset = checked((int)((page - 1L) * pageSize));
 
             var unionParts = new List<string>();
             if (includeAssets)
@@ -217,6 +276,407 @@ internal sealed class SellerAnalyticsStore : ISellerAnalyticsStore
                 await db.DisposeAsync();
             }
         }
+    }
+
+    public Task<ISellerAnalyticsSalesExportSession> OpenSalesExportSession(
+        Guid sellerId,
+        DateTimeOffset from,
+        DateTimeOffset to,
+        AnalyticsProductTypeFilter productType,
+        CancellationToken cancellationToken = default) =>
+        SellerAnalyticsSalesExportSession.OpenAsync(
+            _dbFactory,
+            sellerId,
+            from,
+            to,
+            productType,
+            _disposeContext,
+            cancellationToken);
+
+    public async Task<AnalyticsAssetDetailSnapshot?> GetAssetDetail(
+        Guid sellerId,
+        Guid assetId,
+        DateTimeOffset from,
+        DateTimeOffset to,
+        AnalyticsGranularity seriesGranularity,
+        CancellationToken cancellationToken = default)
+    {
+        var db = await _dbFactory.CreateDbContextAsync(cancellationToken);
+        try
+        {
+            await using var tx = await BeginReadOnlyTransaction(db, cancellationToken);
+
+            var exists = await db.Database
+                .SqlQueryRaw<ScalarBoolSqlRow>(AnalyticsProductDetailSql.ASSET_EXISTS, sellerId, assetId)
+                .SingleAsync(cancellationToken);
+            if (!exists.Value)
+            {
+                return null;
+            }
+
+            var header = await db.Database
+                .SqlQueryRaw<AssetDetailHeaderSqlRow>(
+                    AnalyticsProductDetailSql.ASSET_DETAIL_HEADER,
+                    sellerId,
+                    assetId,
+                    from,
+                    to)
+                .SingleAsync(cancellationToken);
+
+            var commerceDaySeries = await QueryDaySeriesForAsset(db, sellerId, assetId, from, to, cancellationToken);
+            var engagementAvailableFrom = await QueryEngagementAvailableFrom(db, sellerId, cancellationToken);
+            var currentAvailable = engagementAvailableFrom.HasValue && from >= engagementAvailableFrom.Value;
+            var includeEventMetrics = engagementAvailableFrom.HasValue && to > engagementAvailableFrom.Value;
+
+            var checkoutStarts = (await db.Database
+                .SqlQueryRaw<ScalarIntSqlRow>(
+                    AnalyticsProductDetailSql.ASSET_CHECKOUT_STARTS,
+                    sellerId,
+                    assetId,
+                    from,
+                    to)
+                .SingleAsync(cancellationToken)).Value;
+
+            var completedCheckouts = (await db.Database
+                .SqlQueryRaw<ScalarIntSqlRow>(
+                    AnalyticsProductDetailSql.ASSET_COMPLETED_CHECKOUTS,
+                    sellerId,
+                    assetId,
+                    from,
+                    to)
+                .SingleAsync(cancellationToken)).Value;
+
+            long? productViews = null;
+            long? uniqueVisitors = null;
+            long? downloadRequests = null;
+            int? trackedViewSessions = null;
+            int? trackedCheckoutSessions = null;
+            int? trackedCompletedSessions = null;
+
+            if (currentAvailable)
+            {
+                var engagementTotals = await db.Database
+                    .SqlQueryRaw<ProductEngagementTotalsSqlRow>(
+                        AnalyticsProductDetailSql.ASSET_ENGAGEMENT_TOTALS,
+                        sellerId,
+                        assetId,
+                        from,
+                        to)
+                    .SingleAsync(cancellationToken);
+
+                productViews = engagementTotals.ProductViews;
+                uniqueVisitors = engagementTotals.UniqueVisitors;
+                downloadRequests = engagementTotals.DownloadRequests;
+
+                var tracked = await db.Database
+                    .SqlQueryRaw<TrackedFunnelSqlRow>(
+                        AnalyticsProductDetailSql.ASSET_TRACKED_SESSIONS,
+                        sellerId,
+                        assetId,
+                        from,
+                        to)
+                    .SingleAsync(cancellationToken);
+
+                trackedViewSessions = tracked.ViewSessions;
+                trackedCheckoutSessions = tracked.CheckoutSessions;
+                trackedCompletedSessions = tracked.CompletedSessions;
+            }
+
+            IReadOnlyList<AnalyticsEngagementDayBucket> engagementDaySeries = await QueryProductEngagementSeries(
+                db,
+                AnalyticsProductDetailSql.ASSET_ENGAGEMENT_DAY_SERIES,
+                AnalyticsProductDetailSql.ASSET_ENGAGEMENT_WEEK_SERIES,
+                AnalyticsProductDetailSql.ASSET_ENGAGEMENT_MONTH_SERIES,
+                sellerId,
+                assetId,
+                from,
+                to,
+                seriesGranularity,
+                includeEventMetrics,
+                cancellationToken);
+
+            await tx.CommitAsync(cancellationToken);
+
+            return new AnalyticsAssetDetailSnapshot(
+                header.AssetId,
+                header.Title,
+                header.IsDeleted,
+                header.GrossRevenue,
+                header.DirectRevenue,
+                header.BundleAllocatedRevenue,
+                header.Orders,
+                header.UnitsSold,
+                header.AverageRating,
+                header.ReviewCount,
+                header.LatestSaleAt,
+                commerceDaySeries,
+                engagementAvailableFrom,
+                productViews,
+                uniqueVisitors,
+                checkoutStarts,
+                completedCheckouts,
+                downloadRequests,
+                trackedViewSessions,
+                trackedCheckoutSessions,
+                trackedCompletedSessions,
+                engagementDaySeries);
+        }
+        finally
+        {
+            if (_disposeContext)
+            {
+                await db.DisposeAsync();
+            }
+        }
+    }
+
+    public async Task<AnalyticsBundleDetailSnapshot?> GetBundleDetail(
+        Guid sellerId,
+        Guid bundleId,
+        DateTimeOffset from,
+        DateTimeOffset to,
+        AnalyticsGranularity seriesGranularity,
+        CancellationToken cancellationToken = default)
+    {
+        var db = await _dbFactory.CreateDbContextAsync(cancellationToken);
+        try
+        {
+            await using var tx = await BeginReadOnlyTransaction(db, cancellationToken);
+
+            var exists = await db.Database
+                .SqlQueryRaw<ScalarBoolSqlRow>(AnalyticsProductDetailSql.BUNDLE_EXISTS, sellerId, bundleId)
+                .SingleAsync(cancellationToken);
+            if (!exists.Value)
+            {
+                return null;
+            }
+
+            var header = await db.Database
+                .SqlQueryRaw<BundleDetailHeaderSqlRow>(
+                    AnalyticsProductDetailSql.BUNDLE_DETAIL_HEADER,
+                    sellerId,
+                    bundleId,
+                    from,
+                    to)
+                .SingleAsync(cancellationToken);
+
+            var commerceDaySeries = await QueryDaySeriesForBundle(db, sellerId, bundleId, from, to, cancellationToken);
+            var engagementAvailableFrom = await QueryEngagementAvailableFrom(db, sellerId, cancellationToken);
+            var currentAvailable = engagementAvailableFrom.HasValue && from >= engagementAvailableFrom.Value;
+            var includeEventMetrics = engagementAvailableFrom.HasValue && to > engagementAvailableFrom.Value;
+
+            var checkoutStarts = (await db.Database
+                .SqlQueryRaw<ScalarIntSqlRow>(
+                    AnalyticsProductDetailSql.BUNDLE_CHECKOUT_STARTS,
+                    sellerId,
+                    bundleId,
+                    from,
+                    to)
+                .SingleAsync(cancellationToken)).Value;
+
+            var completedCheckouts = (await db.Database
+                .SqlQueryRaw<ScalarIntSqlRow>(
+                    AnalyticsProductDetailSql.BUNDLE_COMPLETED_CHECKOUTS,
+                    sellerId,
+                    bundleId,
+                    from,
+                    to)
+                .SingleAsync(cancellationToken)).Value;
+
+            long? productViews = null;
+            long? uniqueVisitors = null;
+            int? trackedViewSessions = null;
+            int? trackedCheckoutSessions = null;
+            int? trackedCompletedSessions = null;
+
+            if (currentAvailable)
+            {
+                var engagementTotals = await db.Database
+                    .SqlQueryRaw<BundleEngagementTotalsSqlRow>(
+                        AnalyticsProductDetailSql.BUNDLE_ENGAGEMENT_TOTALS,
+                        sellerId,
+                        bundleId,
+                        from,
+                        to)
+                    .SingleAsync(cancellationToken);
+
+                productViews = engagementTotals.ProductViews;
+                uniqueVisitors = engagementTotals.UniqueVisitors;
+
+                var tracked = await db.Database
+                    .SqlQueryRaw<TrackedFunnelSqlRow>(
+                        AnalyticsProductDetailSql.BUNDLE_TRACKED_SESSIONS,
+                        sellerId,
+                        bundleId,
+                        from,
+                        to)
+                    .SingleAsync(cancellationToken);
+
+                trackedViewSessions = tracked.ViewSessions;
+                trackedCheckoutSessions = tracked.CheckoutSessions;
+                trackedCompletedSessions = tracked.CompletedSessions;
+            }
+
+            IReadOnlyList<AnalyticsEngagementDayBucket> engagementDaySeries = await QueryProductEngagementSeries(
+                db,
+                AnalyticsProductDetailSql.BUNDLE_ENGAGEMENT_DAY_SERIES,
+                AnalyticsProductDetailSql.BUNDLE_ENGAGEMENT_WEEK_SERIES,
+                AnalyticsProductDetailSql.BUNDLE_ENGAGEMENT_MONTH_SERIES,
+                sellerId,
+                bundleId,
+                from,
+                to,
+                seriesGranularity,
+                includeEventMetrics,
+                cancellationToken);
+
+            await tx.CommitAsync(cancellationToken);
+
+            return new AnalyticsBundleDetailSnapshot(
+                header.BundleId,
+                header.Title,
+                header.IsArchived,
+                header.GrossRevenue,
+                header.Orders,
+                header.UnitsSold,
+                header.CurrentPrice,
+                header.ListPriceTotal,
+                header.LatestSaleAt,
+                commerceDaySeries,
+                engagementAvailableFrom,
+                productViews,
+                uniqueVisitors,
+                checkoutStarts,
+                completedCheckouts,
+                trackedViewSessions,
+                trackedCheckoutSessions,
+                trackedCompletedSessions,
+                engagementDaySeries);
+        }
+        finally
+        {
+            if (_disposeContext)
+            {
+                await db.DisposeAsync();
+            }
+        }
+    }
+
+    public async Task<(IReadOnlyList<AnalyticsCollectionItem> Items, int TotalCount, DateTimeOffset? EngagementAvailableFrom)>
+        GetCollectionsPage(
+            Guid sellerId,
+            DateTimeOffset from,
+            DateTimeOffset to,
+            int page,
+            int pageSize,
+            AnalyticsCollectionSort sort,
+            AnalyticsSortDirection direction,
+            CancellationToken cancellationToken = default)
+    {
+        var db = await _dbFactory.CreateDbContextAsync(cancellationToken);
+        try
+        {
+            await using var tx = await BeginReadOnlyTransaction(db, cancellationToken);
+
+            var orderBy = AnalyticsCollectionsSql.BuildOrderBy(sort, direction);
+            var offset = checked((int)((page - 1L) * pageSize));
+            var sql = AnalyticsCollectionsSql.BuildCollectionsPageSql(orderBy);
+
+            var rows = await db.Database
+                .SqlQueryRaw<CollectionPageSqlRow>(sql, sellerId, from, to, offset, pageSize)
+                .ToListAsync(cancellationToken);
+
+            if (rows.Count == 0)
+            {
+                var engagementAvailableFromEmpty = await QueryEngagementAvailableFrom(db, sellerId, cancellationToken);
+                var totalCountEmpty = page == 1
+                    ? 0
+                    : await QueryCollectionsUniverseCount(db, sellerId, cancellationToken);
+
+                await tx.CommitAsync(cancellationToken);
+
+                return ([], totalCountEmpty, engagementAvailableFromEmpty);
+            }
+
+            var totalCount = rows[0].TotalCount;
+            var collectionIds = rows.Select(r => r.CollectionId).ToArray();
+            var topAssetsByCollection = await QueryTopClickedAssetsForCollections(
+                db, sellerId, collectionIds, from, to, cancellationToken);
+
+            var items = rows.Select(r =>
+            {
+                topAssetsByCollection.TryGetValue(r.CollectionId, out var topAssets);
+                var clickThroughRate = r.Views > 0
+                    ? decimal.Round((decimal)r.ItemClicks / r.Views, 4, MidpointRounding.AwayFromZero)
+                    : (decimal?)null;
+
+                return new AnalyticsCollectionItem(
+                    r.CollectionId,
+                    r.Title,
+                    Enum.Parse<CollectionStatus>(r.Status),
+                    r.Views,
+                    r.UniqueVisitors,
+                    r.ItemClicks,
+                    clickThroughRate,
+                    r.AttributedCheckoutStarts,
+                    r.AttributedCompletedOrders,
+                    (long)decimal.Round(r.AttributedGrossRevenue * 100m, 0, MidpointRounding.AwayFromZero),
+                    topAssets ?? []);
+            }).ToList();
+
+            var engagementAvailableFrom = await QueryEngagementAvailableFrom(db, sellerId, cancellationToken);
+
+            await tx.CommitAsync(cancellationToken);
+
+            return (items, totalCount, engagementAvailableFrom);
+        }
+        finally
+        {
+            if (_disposeContext)
+            {
+                await db.DisposeAsync();
+            }
+        }
+    }
+
+    private static async Task<int> QueryCollectionsUniverseCount(
+        ApplicationDbContext db,
+        Guid sellerId,
+        CancellationToken cancellationToken)
+    {
+        const string sql = """SELECT COUNT(*)::int AS "Value" FROM collections WHERE "SellerId" = {0}""";
+        var row = await db.Database.SqlQueryRaw<ScalarIntSqlRow>(sql, sellerId).SingleAsync(cancellationToken);
+        return row.Value;
+    }
+
+    private static async Task<Dictionary<Guid, List<AnalyticsCollectionTopAsset>>> QueryTopClickedAssetsForCollections(
+        ApplicationDbContext db,
+        Guid sellerId,
+        Guid[] collectionIds,
+        DateTimeOffset from,
+        DateTimeOffset to,
+        CancellationToken cancellationToken)
+    {
+        if (collectionIds.Length == 0)
+        {
+            return [];
+        }
+
+        var rows = await db.Database
+            .SqlQueryRaw<CollectionTopAssetSqlRow>(
+                AnalyticsCollectionsSql.TOP_CLICKED_ASSETS_FOR_COLLECTIONS,
+                sellerId,
+                collectionIds,
+                from,
+                to,
+                AnalyticsConstants.COLLECTION_TOP_CLICKED_ASSETS)
+            .ToListAsync(cancellationToken);
+
+        return rows
+            .GroupBy(r => r.CollectionId)
+            .ToDictionary(
+                g => g.Key,
+                g => g.Select(r => new AnalyticsCollectionTopAsset(r.AssetId, r.Title, r.Clicks)).ToList());
     }
 
     private static async Task<IDbContextTransaction> BeginReadOnlyTransaction(
@@ -582,6 +1042,318 @@ internal sealed class SellerAnalyticsStore : ISellerAnalyticsStore
         return (
             new SellerRatingsRaw(row.AverageRating, row.CurrentNewReviews),
             new SellerRatingsRaw(row.AverageRating, row.ComparisonNewReviews));
+    }
+
+    private static async Task<DateTimeOffset?> QueryEngagementAvailableFrom(
+        ApplicationDbContext db,
+        Guid sellerId,
+        CancellationToken cancellationToken)
+    {
+        var row = await db.Database
+            .SqlQueryRaw<ScalarDateTimeOffsetSqlRow>(AnalyticsOverviewEngagementSql.ENGAGEMENT_AVAILABLE_FROM, sellerId)
+            .SingleAsync(cancellationToken);
+        return row.Value;
+    }
+
+    private static async Task<SellerEngagementRawFacts> QueryEngagementFacts(
+        ApplicationDbContext db,
+        Guid sellerId,
+        DateTimeOffset from,
+        DateTimeOffset to,
+        CancellationToken cancellationToken)
+    {
+        var row = await db.Database
+            .SqlQueryRaw<EngagementFactsSqlRow>(
+                AnalyticsOverviewEngagementSql.ENGAGEMENT_FACTS,
+                sellerId,
+                from,
+                to)
+            .SingleAsync(cancellationToken);
+
+        return new SellerEngagementRawFacts(
+            row.ProductViews,
+            row.UniqueVisitors,
+            row.DownloadRequests,
+            row.CollectionViews,
+            row.CollectionItemClicks);
+    }
+
+    private static async Task<(SellerEngagementRawFacts Current, SellerEngagementRawFacts Comparison)>
+        QueryDualPeriodEngagementFacts(
+            ApplicationDbContext db,
+            Guid sellerId,
+            DateTimeOffset from,
+            DateTimeOffset to,
+            DateTimeOffset comparisonFrom,
+            DateTimeOffset comparisonTo,
+            CancellationToken cancellationToken)
+    {
+        var row = await db.Database
+            .SqlQueryRaw<DualPeriodEngagementFactsSqlRow>(
+                AnalyticsOverviewEngagementSql.DUAL_PERIOD_ENGAGEMENT_FACTS,
+                sellerId,
+                from,
+                to,
+                comparisonFrom,
+                comparisonTo)
+            .SingleAsync(cancellationToken);
+
+        var current = new SellerEngagementRawFacts(
+            row.CurrentProductViews,
+            row.CurrentUniqueVisitors,
+            row.CurrentDownloadRequests,
+            row.CurrentCollectionViews,
+            row.CurrentCollectionItemClicks);
+
+        var comparison = new SellerEngagementRawFacts(
+            row.ComparisonProductViews,
+            row.ComparisonUniqueVisitors,
+            row.ComparisonDownloadRequests,
+            row.ComparisonCollectionViews,
+            row.ComparisonCollectionItemClicks);
+
+        return (current, comparison);
+    }
+
+    private static async Task<IReadOnlyList<AnalyticsEngagementDayBucket>> QueryEngagementSeries(
+        ApplicationDbContext db,
+        Guid sellerId,
+        DateTimeOffset from,
+        DateTimeOffset to,
+        AnalyticsGranularity granularity,
+        bool includeEventMetrics,
+        CancellationToken cancellationToken)
+    {
+        var (eventSql, checkoutSql) = granularity switch
+        {
+            AnalyticsGranularity.WEEK => (
+                AnalyticsOverviewEngagementSql.ENGAGEMENT_EVENT_WEEK_SERIES,
+                AnalyticsOverviewEngagementSql.ENGAGEMENT_CHECKOUT_WEEK_SERIES),
+            AnalyticsGranularity.MONTH => (
+                AnalyticsOverviewEngagementSql.ENGAGEMENT_EVENT_MONTH_SERIES,
+                AnalyticsOverviewEngagementSql.ENGAGEMENT_CHECKOUT_MONTH_SERIES),
+            _ => (
+                AnalyticsOverviewEngagementSql.ENGAGEMENT_EVENT_DAY_SERIES,
+                AnalyticsOverviewEngagementSql.ENGAGEMENT_CHECKOUT_DAY_SERIES)
+        };
+
+        List<EngagementEventDaySeriesSqlRow> eventRows = [];
+        if (includeEventMetrics)
+        {
+            eventRows = await db.Database
+                .SqlQueryRaw<EngagementEventDaySeriesSqlRow>(eventSql, sellerId, from, to)
+                .ToListAsync(cancellationToken);
+        }
+
+        var checkoutRows = await db.Database
+            .SqlQueryRaw<EngagementCheckoutDaySeriesSqlRow>(checkoutSql, sellerId, from, to)
+            .ToListAsync(cancellationToken);
+
+        var checkoutByBucket = checkoutRows.ToDictionary(r => r.DayUtc);
+        var allBuckets = eventRows.Select(r => r.DayUtc)
+            .Concat(checkoutRows.Select(r => r.DayUtc))
+            .Distinct()
+            .OrderBy(d => d)
+            .ToList();
+
+        var eventByBucket = eventRows.ToDictionary(r => r.DayUtc);
+
+        return allBuckets.Select(bucket =>
+        {
+            eventByBucket.TryGetValue(bucket, out var ev);
+            checkoutByBucket.TryGetValue(bucket, out var ck);
+            return new AnalyticsEngagementDayBucket(
+                bucket,
+                ev?.ProductViews ?? 0,
+                ev?.UniqueVisitors ?? 0,
+                ck?.CheckoutStarts ?? 0,
+                ck?.CompletedOrders ?? 0,
+                ev?.DownloadRequests ?? 0);
+        }).ToList();
+    }
+
+    private static async Task<IReadOnlyList<AnalyticsEngagementDayBucket>> QueryProductEngagementSeries(
+        ApplicationDbContext db,
+        string daySeriesSql,
+        string weekSeriesSql,
+        string monthSeriesSql,
+        Guid sellerId,
+        Guid productId,
+        DateTimeOffset from,
+        DateTimeOffset to,
+        AnalyticsGranularity granularity,
+        bool includeEventMetrics,
+        CancellationToken cancellationToken)
+    {
+        var sql = granularity switch
+        {
+            AnalyticsGranularity.WEEK => weekSeriesSql,
+            AnalyticsGranularity.MONTH => monthSeriesSql,
+            _ => daySeriesSql
+        };
+
+        var rows = await db.Database
+            .SqlQueryRaw<EngagementDaySeriesSqlRow>(sql, sellerId, productId, from, to)
+            .ToListAsync(cancellationToken);
+
+        return rows.Select(r => new AnalyticsEngagementDayBucket(
+            r.DayUtc,
+            includeEventMetrics ? r.ProductViews : 0,
+            includeEventMetrics ? r.UniqueVisitors : 0,
+            r.CheckoutStarts,
+            r.CompletedOrders,
+            includeEventMetrics ? r.DownloadRequests : 0)).ToList();
+    }
+
+    private static async Task<AnalyticsCommerceFunnelRaw> QueryCommerceFunnel(
+        ApplicationDbContext db,
+        Guid sellerId,
+        DateTimeOffset from,
+        DateTimeOffset to,
+        CancellationToken cancellationToken)
+    {
+        var row = await db.Database
+            .SqlQueryRaw<CommerceFunnelSqlRow>(
+                AnalyticsOverviewEngagementSql.COMMERCE_FUNNEL,
+                sellerId,
+                from,
+                to)
+            .SingleAsync(cancellationToken);
+
+        return new AnalyticsCommerceFunnelRaw(
+            row.CheckoutStarts,
+            row.StripeSessionsAttached,
+            row.CompletedOrders,
+            row.CancelledCheckouts,
+            row.PendingCheckouts);
+    }
+
+    private static async Task<AnalyticsTrackedFunnelRaw> QueryTrackedFunnel(
+        ApplicationDbContext db,
+        Guid sellerId,
+        DateTimeOffset from,
+        DateTimeOffset to,
+        CancellationToken cancellationToken)
+    {
+        var row = await db.Database
+            .SqlQueryRaw<TrackedFunnelSqlRow>(
+                AnalyticsOverviewEngagementSql.TRACKED_FUNNEL,
+                sellerId,
+                from,
+                to)
+            .SingleAsync(cancellationToken);
+
+        return new AnalyticsTrackedFunnelRaw(
+            row.ViewSessions,
+            row.CheckoutSessions,
+            row.CompletedSessions);
+    }
+
+    private static async Task<decimal?> QueryTrackedCheckoutCoverage(
+        ApplicationDbContext db,
+        Guid sellerId,
+        DateTimeOffset from,
+        DateTimeOffset to,
+        CancellationToken cancellationToken)
+    {
+        var row = await db.Database
+            .SqlQueryRaw<ScalarDecimalSqlRow>(
+                AnalyticsOverviewEngagementSql.TRACKED_CHECKOUT_COVERAGE,
+                sellerId,
+                from,
+                to)
+            .SingleAsync(cancellationToken);
+        return row.Value;
+    }
+
+    private static async Task<IReadOnlyList<AnalyticsTrafficSourceRaw>> QueryTrafficSources(
+        ApplicationDbContext db,
+        Guid sellerId,
+        DateTimeOffset from,
+        DateTimeOffset to,
+        CancellationToken cancellationToken)
+    {
+        var rows = await db.Database
+            .SqlQueryRaw<TrafficSourceSqlRow>(
+                AnalyticsOverviewEngagementSql.TRAFFIC_SOURCES,
+                sellerId,
+                from,
+                to)
+            .ToListAsync(cancellationToken);
+
+        return rows.Select(r => new AnalyticsTrafficSourceRaw(
+            Enum.Parse<AnalyticsTrafficSource>(r.Source),
+            r.ProductViews,
+            r.UniqueVisitors,
+            r.CheckoutStarts,
+            r.CompletedOrders,
+            r.AttributedGrossRevenue)).ToList();
+    }
+
+    private static async Task<IReadOnlyList<AnalyticsExternalReferrerRaw>> QueryExternalReferrers(
+        ApplicationDbContext db,
+        Guid sellerId,
+        DateTimeOffset from,
+        DateTimeOffset to,
+        int maxReferrers,
+        CancellationToken cancellationToken)
+    {
+        var rows = await db.Database
+            .SqlQueryRaw<ExternalReferrerSqlRow>(
+                AnalyticsOverviewEngagementSql.EXTERNAL_REFERRERS,
+                sellerId,
+                from,
+                to,
+                maxReferrers)
+            .ToListAsync(cancellationToken);
+
+        return rows.Select(r => new AnalyticsExternalReferrerRaw(
+            r.ReferrerHost,
+            r.ProductViews,
+            r.UniqueVisitors,
+            r.CheckoutStarts,
+            r.CompletedOrders,
+            r.AttributedGrossRevenue)).ToList();
+    }
+
+    private static async Task<IReadOnlyList<AnalyticsDayBucket>> QueryDaySeriesForAsset(
+        ApplicationDbContext db,
+        Guid sellerId,
+        Guid assetId,
+        DateTimeOffset from,
+        DateTimeOffset to,
+        CancellationToken cancellationToken)
+    {
+        var rows = await db.Database
+            .SqlQueryRaw<DaySeriesSqlRow>(
+                AnalyticsProductDetailSql.ASSET_COMMERCE_DAY_SERIES,
+                sellerId,
+                assetId,
+                from,
+                to)
+            .ToListAsync(cancellationToken);
+
+        return rows.Select(r => new AnalyticsDayBucket(r.SaleDate, r.GrossRevenue, r.Orders, r.Units)).ToList();
+    }
+
+    private static async Task<IReadOnlyList<AnalyticsDayBucket>> QueryDaySeriesForBundle(
+        ApplicationDbContext db,
+        Guid sellerId,
+        Guid bundleId,
+        DateTimeOffset from,
+        DateTimeOffset to,
+        CancellationToken cancellationToken)
+    {
+        var rows = await db.Database
+            .SqlQueryRaw<DaySeriesSqlRow>(
+                AnalyticsProductDetailSql.BUNDLE_COMMERCE_DAY_SERIES,
+                sellerId,
+                bundleId,
+                from,
+                to)
+            .ToListAsync(cancellationToken);
+
+        return rows.Select(r => new AnalyticsDayBucket(r.SaleDate, r.GrossRevenue, r.Orders, r.Units)).ToList();
     }
 
     private static string BuildProductsPageSql(string productsUnion, string orderBy) =>

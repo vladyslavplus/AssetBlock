@@ -19,6 +19,7 @@ public interface ISellerAnalyticsStore
         DateTimeOffset comparisonFrom,
         DateTimeOffset comparisonTo,
         int topN,
+        AnalyticsGranularity seriesGranularity,
         CancellationToken cancellationToken = default);
 
     /// <summary>
@@ -48,4 +49,50 @@ public interface ISellerAnalyticsStore
         Guid? cursorOrderId,
         int pageSize,
         CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Opens a prepared sales export session. Cap detection and row streaming share one SQL read.
+    /// </summary>
+    Task<ISellerAnalyticsSalesExportSession> OpenSalesExportSession(
+        Guid sellerId,
+        DateTimeOffset from,
+        DateTimeOffset to,
+        AnalyticsProductTypeFilter productType,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Returns asset detail analytics for a seller-owned asset, or null when the asset is not owned.
+    /// </summary>
+    Task<AnalyticsAssetDetailSnapshot?> GetAssetDetail(
+        Guid sellerId,
+        Guid assetId,
+        DateTimeOffset from,
+        DateTimeOffset to,
+        AnalyticsGranularity seriesGranularity,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Returns bundle detail analytics for a seller-owned bundle, or null when the bundle is not owned.
+    /// </summary>
+    Task<AnalyticsBundleDetailSnapshot?> GetBundleDetail(
+        Guid sellerId,
+        Guid bundleId,
+        DateTimeOffset from,
+        DateTimeOffset to,
+        AnalyticsGranularity seriesGranularity,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Returns a paged, SQL-sorted list of seller collections with period engagement and attribution metrics.
+    /// </summary>
+    Task<(IReadOnlyList<AnalyticsCollectionItem> Items, int TotalCount, DateTimeOffset? EngagementAvailableFrom)>
+        GetCollectionsPage(
+            Guid sellerId,
+            DateTimeOffset from,
+            DateTimeOffset to,
+            int page,
+            int pageSize,
+            AnalyticsCollectionSort sort,
+            AnalyticsSortDirection direction,
+            CancellationToken cancellationToken = default);
 }

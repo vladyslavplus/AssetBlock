@@ -30,4 +30,9 @@ public sealed record SellerAnalyticsOverviewDto(
     CountMetric NewReviews,
     IReadOnlyList<AnalyticsSeriesPoint> Series,
     IReadOnlyList<AnalyticsProductItem> TopAssets,
-    IReadOnlyList<AnalyticsProductItem> TopBundles);
+    IReadOnlyList<AnalyticsProductItem> TopBundles,
+    AnalyticsEngagementTotals? EngagementTotals,
+    AnalyticsCommerceFunnel? CommerceFunnel,
+    AnalyticsTrackedFunnel? TrackedFunnel,
+    decimal? TrackedCheckoutCoverage,
+    IReadOnlyList<AnalyticsTrafficSourceRow>? TrafficSources);

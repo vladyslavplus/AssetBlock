@@ -107,12 +107,22 @@ public static class ApiRoutes
         public const string ME_ASSETS = "me/assets";
     }
 
+    public static class Analytics
+    {
+        public const string BASE = "api/analytics";
+        public const string EVENTS = "events";
+    }
+
     public static class SellerAnalytics
     {
         public const string BASE = "api/seller/analytics";
         public const string OVERVIEW = "overview";
         public const string PRODUCTS = "products";
+        public const string PRODUCT_ASSET_BY_ID = "products/assets/{id:guid}";
+        public const string PRODUCT_BUNDLE_BY_ID = "products/bundles/{id:guid}";
+        public const string COLLECTIONS = "collections";
         public const string SALES = "sales";
+        public const string SALES_EXPORT = "sales/export";
     }
 
     public static class Admin

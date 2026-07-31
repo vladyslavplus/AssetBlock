@@ -54,6 +54,7 @@ export default function AssetsPage() {
 
   const pageData = listQuery.data
   const listLoading = listQuery.isPending
+  const assetLinkSource = filters.search.trim() ? 'search' : 'catalog'
   const listError = listQuery.isError
     ? listQuery.error instanceof Error
       ? listQuery.error.message
@@ -213,7 +214,7 @@ export default function AssetsPage() {
               ) : items.length > 0 ? (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                   {items.map((asset) => (
-                    <AssetCard key={asset.id} asset={asset} />
+                    <AssetCard key={asset.id} asset={asset} linkSource={assetLinkSource} />
                   ))}
                 </div>
               ) : (
@@ -340,7 +341,7 @@ export default function AssetsPage() {
             ) : items.length > 0 ? (
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 {items.map((asset) => (
-                  <AssetCard key={asset.id} asset={asset} />
+                  <AssetCard key={asset.id} asset={asset} linkSource={assetLinkSource} />
                 ))}
               </div>
             ) : (

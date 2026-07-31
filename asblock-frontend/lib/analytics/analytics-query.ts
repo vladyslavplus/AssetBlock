@@ -1,9 +1,13 @@
 import {
+  fetchAnalyticsAssetDetail,
+  fetchAnalyticsBundleDetail,
+  fetchAnalyticsCollections,
   fetchAnalyticsOverview,
   fetchAnalyticsProducts,
   fetchAnalyticsSalesPage,
 } from '@/lib/analytics/analytics-api'
 import type {
+  AnalyticsCollectionsFilters,
   AnalyticsProductsFilters,
   AnalyticsSalesFilters,
   AnalyticsUtcRange,
@@ -34,6 +38,21 @@ export const analyticsKeys = {
       filters.productType,
       filters.pageSize,
     ] as const,
+  collections: (range: AnalyticsUtcRange, filters: AnalyticsCollectionsFilters) =>
+    [
+      ...analyticsKeys.all,
+      'collections',
+      range.from,
+      range.to,
+      filters.sort,
+      filters.direction,
+      filters.page,
+      filters.pageSize,
+    ] as const,
+  assetDetail: (assetId: string, range: AnalyticsUtcRange) =>
+    [...analyticsKeys.all, 'asset', assetId, range.from, range.to] as const,
+  bundleDetail: (bundleId: string, range: AnalyticsUtcRange) =>
+    [...analyticsKeys.all, 'bundle', bundleId, range.from, range.to] as const,
 }
 
 export function sellerOverviewQueryOptions(range: AnalyticsUtcRange) {
@@ -68,5 +87,35 @@ export function sellerSalesInfiniteQueryOptions(
     getNextPageParam: (lastPage: Awaited<ReturnType<typeof fetchAnalyticsSalesPage>>) =>
       lastPage.hasMore ? (lastPage.nextCursor ?? undefined) : undefined,
     staleTime: 30_000,
+  }
+}
+
+export function sellerCollectionsQueryOptions(
+  range: AnalyticsUtcRange,
+  filters: AnalyticsCollectionsFilters,
+) {
+  return {
+    queryKey: analyticsKeys.collections(range, filters),
+    queryFn: ({ signal }: { signal: AbortSignal }) =>
+      fetchAnalyticsCollections(range, filters, signal),
+    staleTime: 120_000,
+  }
+}
+
+export function sellerAssetDetailQueryOptions(assetId: string, range: AnalyticsUtcRange) {
+  return {
+    queryKey: analyticsKeys.assetDetail(assetId, range),
+    queryFn: ({ signal }: { signal: AbortSignal }) =>
+      fetchAnalyticsAssetDetail(assetId, range, signal),
+    staleTime: 120_000,
+  }
+}
+
+export function sellerBundleDetailQueryOptions(bundleId: string, range: AnalyticsUtcRange) {
+  return {
+    queryKey: analyticsKeys.bundleDetail(bundleId, range),
+    queryFn: ({ signal }: { signal: AbortSignal }) =>
+      fetchAnalyticsBundleDetail(bundleId, range, signal),
+    staleTime: 120_000,
   }
 }

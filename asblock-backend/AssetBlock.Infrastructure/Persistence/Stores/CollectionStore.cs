@@ -499,4 +499,30 @@ internal sealed class CollectionStore(ApplicationDbContext dbContext) : ICollect
             .AsNoTracking()
             .AnyAsync(a => a.Id == assetId && a.AuthorId == sellerId && a.DeletedAt == null, cancellationToken);
     }
+
+    public Task<Guid?> GetPublishedSellerId(Guid collectionId, CancellationToken cancellationToken = default)
+    {
+        return dbContext.Collections
+            .AsNoTracking()
+            .Where(c => c.Id == collectionId
+                        && c.Status == CollectionStatus.PUBLISHED
+                        && c.Items.Any(i => i.Asset.DeletedAt == null))
+            .Select(c => (Guid?)c.SellerId)
+            .FirstOrDefaultAsync(cancellationToken);
+    }
+
+    public Task<Guid?> GetPublishedMemberSellerId(
+        Guid collectionId,
+        Guid assetId,
+        CancellationToken cancellationToken = default)
+    {
+        return dbContext.CollectionItems
+            .AsNoTracking()
+            .Where(i => i.CollectionId == collectionId
+                        && i.AssetId == assetId
+                        && i.Asset.DeletedAt == null
+                        && i.Collection.Status == CollectionStatus.PUBLISHED)
+            .Select(i => (Guid?)i.Collection.SellerId)
+            .FirstOrDefaultAsync(cancellationToken);
+    }
 }

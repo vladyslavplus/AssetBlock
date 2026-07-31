@@ -89,6 +89,24 @@ public static class CacheKeys
         $"{ANALYTICS_PREFIX}:{sellerId}:sales:{request.From:yyyy-MM-dd}:{request.To:yyyy-MM-dd}" +
         $":{request.ProductType}:{request.PageSize}:{request.Cursor ?? "start"}";
 
+    public static string SellerAnalyticsAssetDetail(
+        Guid sellerId,
+        Guid assetId,
+        DateOnly from,
+        DateOnly to) =>
+        $"{ANALYTICS_PREFIX}:{sellerId}:asset:{assetId}:{from:yyyy-MM-dd}:{to:yyyy-MM-dd}";
+
+    public static string SellerAnalyticsBundleDetail(
+        Guid sellerId,
+        Guid bundleId,
+        DateOnly from,
+        DateOnly to) =>
+        $"{ANALYTICS_PREFIX}:{sellerId}:bundle:{bundleId}:{from:yyyy-MM-dd}:{to:yyyy-MM-dd}";
+
+    public static string SellerAnalyticsCollections(Guid sellerId, AnalyticsCollectionsRequest request) =>
+        $"{ANALYTICS_PREFIX}:{sellerId}:collections:{request.From:yyyy-MM-dd}:{request.To:yyyy-MM-dd}" +
+        $":{request.Sort}:{request.Direction}:{request.Page}:{request.PageSize}";
+
     private static string NormalizeSearch(string? value)
     {
         return string.IsNullOrWhiteSpace(value) ? "none" : value.Trim().Replace(":", "_", StringComparison.Ordinal).ToLowerInvariant();

@@ -2,11 +2,14 @@
 
 import Link from 'next/link'
 import { useQuery } from '@tanstack/react-query'
+import { useSearchParams } from 'next/navigation'
 import { ArrowLeft } from 'lucide-react'
 import { SiteMain } from '@/components/layout/site-main'
 import { SitePageContainer } from '@/components/layout/site-page-container'
 import { BundlePurchaseCard } from '@/components/bundles/bundle-purchase-card'
 import { Badge } from '@/components/ui/badge'
+import { useAnalyticsPageView } from '@/hooks/use-analytics-page-view'
+import { appendAnalyticsQuery, buildCheckoutAttributionFromPage, buildPurchaseReturnPath, resolveTrafficSourceFromLocation } from '@/lib/analytics/telemetry-source'
 import { ApiRequestError } from '@/lib/http/api-client'
 import { bundleKeys, fetchBundleDetailQuery } from '@/lib/bundles/bundles-query'
 import { formatUsdWhole } from '@/lib/format-currency'
@@ -17,6 +20,16 @@ interface BundleDetailViewProps {
 }
 
 export function BundleDetailView({ bundleId, checkoutConfigured }: BundleDetailViewProps) {
+  const searchParams = useSearchParams()
+  const trafficSource = resolveTrafficSourceFromLocation(searchParams)
+  const checkoutAttribution = buildCheckoutAttributionFromPage(searchParams)
+
+  useAnalyticsPageView(`bundle-view:${bundleId}`, {
+    eventType: 'BUNDLE_VIEW',
+    bundleId,
+    source: trafficSource,
+  })
+
   const detailQuery = useQuery({
     queryKey: bundleKeys.publicDetail(bundleId),
     queryFn: () => fetchBundleDetailQuery(bundleId),
@@ -128,7 +141,7 @@ export function BundleDetailView({ bundleId, checkoutConfigured }: BundleDetailV
                     </p>
                     {item.assetId && item.isAvailable ? (
                       <Link
-                        href={`/assets/${item.assetId}`}
+                        href={appendAnalyticsQuery(`/assets/${item.assetId}`, 'bundle_page')}
                         className="text-xs font-medium text-primary hover:text-primary/80"
                       >
                         View asset →
@@ -153,7 +166,8 @@ export function BundleDetailView({ bundleId, checkoutConfigured }: BundleDetailV
                 isAvailable={detail.isAvailable}
                 items={items}
                 checkoutConfigured={checkoutConfigured}
-                returnPath={`/bundles/${bundleId}`}
+                returnPath={buildPurchaseReturnPath(`/bundles/${bundleId}`, searchParams)}
+                checkoutAttribution={checkoutAttribution}
               />
             </div>
           </div>

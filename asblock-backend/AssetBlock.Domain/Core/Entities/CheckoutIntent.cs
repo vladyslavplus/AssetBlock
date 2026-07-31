@@ -33,6 +33,18 @@ public class CheckoutIntent : BaseEntity
     /// </summary>
     public DateTimeOffset? LastStripeReconciledAt { get; set; }
 
+    /// <summary>
+    /// Engagement attribution captured once when the intent is created. All attribution fields are
+    /// optional and must never be rewritten afterwards, so a later session cannot re-attribute a sale.
+    /// AttributionCollectionId intentionally has no foreign key to collections.
+    /// </summary>
+    public Guid? AnalyticsVisitorId { get; set; }
+
+    public Guid? AnalyticsSessionId { get; set; }
+    public AnalyticsTrafficSource? AttributionSource { get; set; }
+    public Guid? AttributionCollectionId { get; set; }
+    public string? AttributionReferrerHost { get; set; }
+
     public User User { get; set; } = null!;
     public Asset? Asset { get; set; }
     public Bundle? Bundle { get; set; }
