@@ -1,6 +1,6 @@
 using System.Security.Claims;
 using FluentAssertions;
-using MediatR;
+using AssetBlock.Application.Messaging;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using NSubstitute;

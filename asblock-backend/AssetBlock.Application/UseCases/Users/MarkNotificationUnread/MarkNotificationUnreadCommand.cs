@@ -1,5 +1,5 @@
 using Ardalis.Result;
-using MediatR;
+using AssetBlock.Application.Messaging;
 
 namespace AssetBlock.Application.UseCases.Users.MarkNotificationUnread;
 

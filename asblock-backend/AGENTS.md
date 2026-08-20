@@ -2,7 +2,7 @@
 
 ## Project and architecture
 
-- This is the canonical guide for `asblock-backend/`: .NET 10, ASP.NET Core controller-based Web API, PostgreSQL/EF Core, MediatR, FluentValidation, Ardalis.Result, Redis, MinIO, Stripe, SignalR, Serilog, and Polly.
+- This is the canonical guide for `asblock-backend/`: .NET 10, ASP.NET Core controller-based Web API, PostgreSQL/EF Core, in-process mediator, FluentValidation, Ardalis.Result, Redis, MinIO, Stripe, SignalR, Serilog, and Polly.
 - Preserve the existing dependency direction: `Domain -> Application -> Infrastructure -> WebApi`.
 - `Domain` intentionally contains entities, DTOs, options, constants, and `I*Store`/service abstractions. Do not move them for textbook Clean Architecture purity.
 - Do not modify `DatabaseMigrationService` during ordinary work. Its migration and demo-seeding behavior is intentional.
@@ -12,7 +12,7 @@
 ## Layer responsibilities
 
 - **Domain:** entities, DTOs, options, constants, error codes/messages, cache keys, domain exceptions, and interfaces. It must not depend on Infrastructure or WebApi.
-- **Application:** MediatR commands/queries, handlers, FluentValidation validators, pipeline behaviors, `ResultError`, and business orchestration. Keep each use case in its own folder.
+- **Application:** commands/queries, handlers, FluentValidation validators, pipeline behaviors, `ResultError`, and business orchestration. Keep each use case in its own folder.
 - **Infrastructure:** `ApplicationDbContext`, EF configurations, `I*Store` implementations, JWT, password hashing, MinIO, encryption, cache, Stripe, Polly, hosted services, and DI registrations.
 - **WebApi:** controllers, request binding, auth/authorization, routing, middleware, OpenAPI, rate limits, exception-to-HTTP mapping, and startup. Controllers must not contain business rules or direct persistence logic.
 - Register implementations in the layer that owns them: application mechanics in `AddApplication`, integrations/stores/hosted services in `AddInfrastructure`, transport concerns in WebApi.
@@ -34,7 +34,7 @@
 - Every new `ERR_*` identifier requires a clear entry in `ErrorCodesToErrorMessages`. Keep error identifiers, cache keys, routes, roles, JWT claims, rate-limit policies, and resilience names in existing constant classes.
 - FluentValidation is the normal input validation path. Do not add duplicate null guards in handlers for values guaranteed by validators.
 - Preserve the active API error contract. If a planned change alters it, change all sources together: Result mapping, model binding, exception handling, JWT challenge/forbid, rate-limit rejection, frontend parsing, OpenAPI, and tests.
-- Apply `[Authorize]` and `[EnableRateLimiting]` at sensitive endpoint boundaries. Pass `CancellationToken` through MediatR, EF Core, streams, and external I/O.
+- Apply `[Authorize]` and `[EnableRateLimiting]` at sensitive endpoint boundaries. Pass `CancellationToken` through the mediator, EF Core, streams, and external I/O.
 
 ## Persistence, transactions, and concurrency
 

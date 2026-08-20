@@ -3,7 +3,7 @@ using AssetBlock.Domain.Core.Constants;
 using AssetBlock.Domain.Core.Dto.Audit;
 using AssetBlock.WebApi.Constants;
 using AssetBlock.WebApi.ProblemDetails;
-using MediatR;
+using AssetBlock.Application.Messaging;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 

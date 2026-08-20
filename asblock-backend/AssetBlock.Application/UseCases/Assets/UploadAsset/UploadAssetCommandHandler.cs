@@ -9,7 +9,7 @@ using AssetBlock.Domain.Core.Exceptions;
 using AssetBlock.Domain.Core.Licenses;
 using AssetBlock.Domain.Core.Primitives.AppSettingsOptions;
 using Ardalis.Result;
-using MediatR;
+using AssetBlock.Application.Messaging;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 

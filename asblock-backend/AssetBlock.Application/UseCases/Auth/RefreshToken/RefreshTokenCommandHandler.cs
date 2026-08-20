@@ -5,7 +5,7 @@ using Ardalis.Result;
 using AssetBlock.Domain.Core.Primitives.Api;
 using AssetBlock.Domain.Core.Dto.Audit;
 using AssetBlock.Domain.Core.Enums;
-using MediatR;
+using AssetBlock.Application.Messaging;
 using Microsoft.Extensions.Logging;
 
 namespace AssetBlock.Application.UseCases.Auth.RefreshToken;

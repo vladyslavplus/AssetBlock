@@ -1,7 +1,7 @@
 using Ardalis.Result;
 using AssetBlock.Application.UseCases.Payments.CreateCheckoutSession;
 using AssetBlock.Domain.Core.Dto.Payments;
-using MediatR;
+using AssetBlock.Application.Messaging;
 
 namespace AssetBlock.Application.UseCases.Payments.CreateBundleCheckoutSession;
 

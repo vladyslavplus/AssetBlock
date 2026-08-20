@@ -2,7 +2,7 @@ using Ardalis.Result;
 using AssetBlock.Domain.Abstractions.Services;
 using AssetBlock.Domain.Core.Constants;
 using AssetBlock.Domain.Core.Enums;
-using MediatR;
+using AssetBlock.Application.Messaging;
 
 namespace AssetBlock.Application.UseCases.Payments.GetCheckoutStatus;
 

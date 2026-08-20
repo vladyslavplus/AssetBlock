@@ -7,7 +7,7 @@ using AssetBlock.Domain.Core.Dto.Payments;
 using AssetBlock.WebApi.Constants;
 using AssetBlock.Domain.Core.Primitives.AppSettingsOptions;
 using AssetBlock.Infrastructure.Options;
-using MediatR;
+using AssetBlock.Application.Messaging;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;

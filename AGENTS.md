@@ -20,6 +20,11 @@
 - Use the narrowest verification that gives meaningful confidence. Escalate to broader builds or tests for cross-cutting, security-sensitive, persistence, routing, or configuration changes.
 - If verification cannot run, report exactly what remains unverified and why.
 
+## Review execution boundary
+
+- Reviews are source- and diff-only. Reviewers must not run tests, builds, linters, formatters, package audits, dependency checks, smoke tests, or other verification commands.
+- Verification execution belongs to the implementer. Reviewers may inspect test code and report implementer-provided results, clearly marking them as not independently rerun.
+
 ## Delivery
 
 - Summarize the outcome, key files, verification commands/results, and remaining risks or follow-ups.

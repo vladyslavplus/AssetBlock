@@ -6,7 +6,7 @@ using AssetBlock.Application.UseCases.Categories.UpdateCategory;
 using AssetBlock.Domain.Core.Constants;
 using AssetBlock.Domain.Core.Dto.Categories;
 using AssetBlock.WebApi.Constants;
-using MediatR;
+using AssetBlock.Application.Messaging;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 

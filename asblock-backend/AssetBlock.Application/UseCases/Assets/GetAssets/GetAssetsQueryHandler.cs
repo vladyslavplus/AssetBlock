@@ -1,7 +1,7 @@
 using System.Text.Json;
 using AssetBlock.Domain.Abstractions.Services;
 using Ardalis.Result;
-using MediatR;
+using AssetBlock.Application.Messaging;
 using AssetBlock.Domain.Core.Constants;
 using AssetBlock.Domain.Core.Dto.Assets;
 using Microsoft.Extensions.Logging;

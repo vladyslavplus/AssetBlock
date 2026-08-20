@@ -1,6 +1,6 @@
 using Ardalis.Result;
 using AssetBlock.Domain.Core.Dto.Outbox;
-using MediatR;
+using AssetBlock.Application.Messaging;
 
 namespace AssetBlock.Application.UseCases.Payments.HandleStripeWebhook;
 

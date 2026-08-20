@@ -1,5 +1,5 @@
 using FluentValidation;
-using MediatR;
+using AssetBlock.Application.Messaging;
 
 namespace AssetBlock.Application.Common.Behaviors;
 

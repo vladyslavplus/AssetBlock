@@ -5,7 +5,7 @@ using AssetBlock.Application.UseCases.Reviews.GetReviews;
 using AssetBlock.Domain.Core.Constants;
 using AssetBlock.Domain.Core.Dto.Reviews;
 using AssetBlock.WebApi.Constants;
-using MediatR;
+using AssetBlock.Application.Messaging;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 

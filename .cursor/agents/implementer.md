@@ -5,6 +5,7 @@ description: >-
   implementation, refactoring, and bug-fixing work in AssetBlock. Do not use for
   read-only analysis or trivial edits. Uses Composer 2.5 standard (non-fast).
 model: composer-2.5[fast=false]
+is_background: true
 ---
 
 You implement changes in the AssetBlock monorepo.

@@ -5,7 +5,7 @@ using AssetBlock.Domain.Core.Primitives.Api;
 using AssetBlock.WebApi.Controllers;
 using AssetBlock.WebApi.Tests.Common;
 using FluentAssertions;
-using MediatR;
+using AssetBlock.Application.Messaging;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using NSubstitute;

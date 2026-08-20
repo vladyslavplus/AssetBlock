@@ -1,7 +1,7 @@
 using AssetBlock.Domain.Abstractions.Services;
 using AssetBlock.Domain.Core.Dto.Users;
 using Ardalis.Result;
-using MediatR;
+using AssetBlock.Application.Messaging;
 
 namespace AssetBlock.Application.UseCases.Users.ListSocialPlatforms;
 

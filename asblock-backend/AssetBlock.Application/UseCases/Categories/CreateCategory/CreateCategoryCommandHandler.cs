@@ -4,7 +4,7 @@ using AssetBlock.Domain.Core.Constants;
 using AssetBlock.Domain.Core.Dto.Audit;
 using AssetBlock.Domain.Core.Dto.Categories;
 using AssetBlock.Domain.Core.Enums;
-using MediatR;
+using AssetBlock.Application.Messaging;
 using AssetBlock.Domain.Core.Exceptions;
 using Microsoft.Extensions.Logging;
 

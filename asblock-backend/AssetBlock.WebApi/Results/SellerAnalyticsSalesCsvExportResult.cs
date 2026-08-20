@@ -2,7 +2,7 @@ using AssetBlock.Application.Common;
 using AssetBlock.Application.UseCases.SellerAnalytics.ExportSellerAnalyticsSales;
 using AssetBlock.Domain.Core.Enums;
 using AssetBlock.WebApi.ProblemDetails;
-using MediatR;
+using AssetBlock.Application.Messaging;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Net.Http.Headers;
 

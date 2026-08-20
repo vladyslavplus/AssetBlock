@@ -3,7 +3,7 @@ using AssetBlock.Domain.Core.Constants;
 using Ardalis.Result;
 using AssetBlock.Domain.Core.Entities;
 using AssetBlock.Domain.Core.Primitives.Api;
-using MediatR;
+using AssetBlock.Application.Messaging;
 using AssetBlock.Domain.Core.Exceptions;
 using AssetBlock.Domain.Core.Dto.Audit;
 using AssetBlock.Domain.Core.Dto.Email;
