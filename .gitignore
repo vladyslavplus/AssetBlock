@@ -4,3 +4,6 @@
 
 # Root tooling (husky / lint-staged)
 node_modules/
+
+# Local AI planning artifacts
+**/.cursor/plans/
