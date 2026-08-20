@@ -50,6 +50,7 @@ Governance checks fail on **High** and **Critical** vulnerabilities reported by:
 | Tool | Version / pin | Role |
 | --- | --- | --- |
 | CycloneDX .NET (`CycloneDX`) | `6.2.0` via `asblock-backend/.config/dotnet-tools.json` | Backend SBOM |
+| ReportGenerator (`dotnet-reportgenerator-globaltool`) | `5.5.11` via `asblock-backend/.config/dotnet-tools.json` (Apache-2.0) | Merge per-project Cobertura into one CI coverage report |
 | `pnpm-lock.yaml` parse | packageManager `pnpm@11.13.0` | Canonical OS-neutral npm inventory from root + `asblock-frontend` lockfiles |
 | npm registry metadata | canonical | Author/source/base license for every npm package (OS-independent); missing registry metadata fails generation |
 | `overrideDetectedLicense` exceptions | `dependency-exceptions.json` | Reviewed license corrections when registry under-reports distributed terms |
