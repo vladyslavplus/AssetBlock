@@ -24,10 +24,8 @@ jobs:
         with:
           node-version: "22.x"
 
-      - uses: pnpm/action-setup@v6
-        with:
-          version: 11.13.0
-          run_install: false
+      - name: Install pnpm
+        run: npm install -g pnpm@11.13.0
 
       - name: Get pnpm store directory
         shell: bash

@@ -20,10 +20,7 @@ export function AnalyticsEngagementNotices({
   utcRange,
   hasSales,
 }: AnalyticsEngagementNoticesProps) {
-  const hasAnyEngagement = hasAnyEngagementCoverage(
-    overview.engagementAvailableFrom,
-    utcRange.to,
-  )
+  const hasAnyEngagement = hasAnyEngagementCoverage(overview.engagementAvailableFrom, utcRange.to)
   const currentDayIncluded = includesCurrentUtcDay(utcRange.from, utcRange.to)
 
   const notices: string[] = []

@@ -37,9 +37,7 @@ import {
   AnalyticsNoSalesNotice,
   AnalyticsTopProducts,
 } from '@/components/sell/analytics/analytics-top-products'
-import {
-  hasFullEngagementCoverage,
-} from '@/lib/analytics/analytics-engagement'
+import { hasFullEngagementCoverage } from '@/lib/analytics/analytics-engagement'
 import { formatUtcDateTime } from '@/lib/analytics/analytics-format'
 import {
   analyticsSearchParamsEqual,
@@ -224,7 +222,10 @@ export function SellAnalyticsDashboard() {
     if (hasFullEngagementCoverage(collectionsData.engagementAvailableFrom, utcRange.from)) {
       return
     }
-    if (urlState.collectionSort === 'ATTRIBUTED_REVENUE' && urlState.collectionDirection === 'DESC') {
+    if (
+      urlState.collectionSort === 'ATTRIBUTED_REVENUE' &&
+      urlState.collectionDirection === 'DESC'
+    ) {
       return
     }
 
@@ -292,8 +293,7 @@ export function SellAnalyticsDashboard() {
     (overview?.topBundles.length ?? 0) > 0
 
   const hasFullEngagement =
-    overview != null &&
-    hasFullEngagementCoverage(overview.engagementAvailableFrom, utcRange.from)
+    overview != null && hasFullEngagementCoverage(overview.engagementAvailableFrom, utcRange.from)
 
   const hasEngagementKpis =
     hasFullEngagement &&

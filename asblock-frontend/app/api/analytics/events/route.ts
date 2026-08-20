@@ -47,9 +47,7 @@ export async function POST(request: Request) {
   if (!clientIp) {
     if (!trustedClientIpUnavailableLogged) {
       trustedClientIpUnavailableLogged = true
-      console.warn(
-        '[analytics/events] trusted client IP unavailable; skipping analytics forward',
-      )
+      console.warn('[analytics/events] trusted client IP unavailable; skipping analytics forward')
     }
     return new Response(null, { status: 202 })
   }
@@ -70,9 +68,7 @@ export async function POST(request: Request) {
 
   const payload = parsed.data
   const referrerHost =
-    payload.source === 'EXTERNAL'
-      ? normalizeAnalyticsReferrerHost(payload.referrerHost)
-      : null
+    payload.source === 'EXTERNAL' ? normalizeAnalyticsReferrerHost(payload.referrerHost) : null
 
   const backendBody = {
     eventId: payload.eventId,

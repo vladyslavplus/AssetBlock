@@ -6,6 +6,8 @@ title = "AssetBlock gitleaks"
 [extend]
 useDefault = true
 
-[[allowlist]]
-description = "Test fixture signing secret in RedisAnalyticsDistributedRateLimiterTests"
-regexes = ["test_signing_secret_at_least_32_chars"]
+[allowlist]
+description = "Test fixtures"
+regexes = [
+  "test_signing_secret_at_least_32_chars"
+]

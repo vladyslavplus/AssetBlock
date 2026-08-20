@@ -8,7 +8,10 @@ import { SiteMain } from '@/components/layout/site-main'
 import { SitePageContainer } from '@/components/layout/site-page-container'
 import { Badge } from '@/components/ui/badge'
 import { useAnalyticsPageView } from '@/hooks/use-analytics-page-view'
-import { appendAnalyticsQuery, resolveTrafficSourceFromLocation } from '@/lib/analytics/telemetry-source'
+import {
+  appendAnalyticsQuery,
+  resolveTrafficSourceFromLocation,
+} from '@/lib/analytics/telemetry-source'
 import { trackAnalyticsEvent } from '@/lib/analytics/telemetry-client'
 import { ApiRequestError } from '@/lib/http/api-client'
 import { collectionKeys, fetchCollectionDetailQuery } from '@/lib/collections/collections-query'

@@ -9,7 +9,12 @@ import { SitePageContainer } from '@/components/layout/site-page-container'
 import { BundlePurchaseCard } from '@/components/bundles/bundle-purchase-card'
 import { Badge } from '@/components/ui/badge'
 import { useAnalyticsPageView } from '@/hooks/use-analytics-page-view'
-import { appendAnalyticsQuery, buildCheckoutAttributionFromPage, buildPurchaseReturnPath, resolveTrafficSourceFromLocation } from '@/lib/analytics/telemetry-source'
+import {
+  appendAnalyticsQuery,
+  buildCheckoutAttributionFromPage,
+  buildPurchaseReturnPath,
+  resolveTrafficSourceFromLocation,
+} from '@/lib/analytics/telemetry-source'
 import { ApiRequestError } from '@/lib/http/api-client'
 import { bundleKeys, fetchBundleDetailQuery } from '@/lib/bundles/bundles-query'
 import { formatUsdWhole } from '@/lib/format-currency'

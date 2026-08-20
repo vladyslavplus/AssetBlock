@@ -88,7 +88,9 @@ export function AnalyticsTrafficSources({
     value: row[chartMetric],
   }))
 
-  const externalRows = rows.filter((row) => row.source === 'EXTERNAL' && row.externalReferrers?.length)
+  const externalRows = rows.filter(
+    (row) => row.source === 'EXTERNAL' && row.externalReferrers?.length,
+  )
 
   return (
     <section

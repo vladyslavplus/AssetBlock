@@ -17,8 +17,7 @@ export function useAnalyticsPageView(
   const eventType = options?.eventType ?? null
   const source = options?.source ?? null
   const assetId = options && 'assetId' in options ? options.assetId : undefined
-  const assetVersionId =
-    options && 'assetVersionId' in options ? options.assetVersionId : undefined
+  const assetVersionId = options && 'assetVersionId' in options ? options.assetVersionId : undefined
   const bundleId = options && 'bundleId' in options ? options.bundleId : undefined
   const collectionId = options && 'collectionId' in options ? options.collectionId : undefined
 
