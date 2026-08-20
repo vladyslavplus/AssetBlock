@@ -1,5 +1,56 @@
 namespace AssetBlock.Infrastructure.Persistence.Analytics;
 
+internal sealed class CommerceContextSqlRow
+{
+    public DateTimeOffset? EngagementAvailableFrom { get; set; }
+    public int CheckoutStarts { get; set; }
+    public int StripeSessionsAttached { get; set; }
+    public int CompletedOrders { get; set; }
+    public int CancelledCheckouts { get; set; }
+    public int PendingCheckouts { get; set; }
+    public decimal? TrackedCheckoutCoverage { get; set; }
+}
+
+internal sealed class EngagementMetricsDualSqlRow
+{
+    public long CurrentProductViews { get; set; }
+    public long CurrentUniqueVisitors { get; set; }
+    public long CurrentDownloadRequests { get; set; }
+    public long CurrentCollectionViews { get; set; }
+    public long CurrentCollectionItemClicks { get; set; }
+    public long ComparisonProductViews { get; set; }
+    public long ComparisonUniqueVisitors { get; set; }
+    public long ComparisonDownloadRequests { get; set; }
+    public long ComparisonCollectionViews { get; set; }
+    public long ComparisonCollectionItemClicks { get; set; }
+    public int ViewSessions { get; set; }
+    public int CheckoutSessions { get; set; }
+    public int CompletedSessions { get; set; }
+}
+
+internal sealed class EngagementMetricsCurrentSqlRow
+{
+    public long CurrentProductViews { get; set; }
+    public long CurrentUniqueVisitors { get; set; }
+    public long CurrentDownloadRequests { get; set; }
+    public long CurrentCollectionViews { get; set; }
+    public long CurrentCollectionItemClicks { get; set; }
+    public int ViewSessions { get; set; }
+    public int CheckoutSessions { get; set; }
+    public int CompletedSessions { get; set; }
+}
+
+internal sealed class TrafficUnionSqlRow
+{
+    public string RowKind { get; set; } = "";
+    public string Key { get; set; } = "";
+    public long ProductViews { get; set; }
+    public long UniqueVisitors { get; set; }
+    public int CheckoutStarts { get; set; }
+    public int CompletedOrders { get; set; }
+    public decimal AttributedGrossRevenue { get; set; }
+}
+
 internal sealed class DualPeriodFactsSqlRow
 {
     public decimal CurrentGrossRevenue { get; set; }
@@ -177,26 +228,6 @@ internal sealed class TrackedFunnelSqlRow
     public int ViewSessions { get; set; }
     public int CheckoutSessions { get; set; }
     public int CompletedSessions { get; set; }
-}
-
-internal sealed class TrafficSourceSqlRow
-{
-    public string Source { get; set; } = "";
-    public long ProductViews { get; set; }
-    public long UniqueVisitors { get; set; }
-    public int CheckoutStarts { get; set; }
-    public int CompletedOrders { get; set; }
-    public decimal AttributedGrossRevenue { get; set; }
-}
-
-internal sealed class ExternalReferrerSqlRow
-{
-    public string ReferrerHost { get; set; } = "";
-    public long ProductViews { get; set; }
-    public long UniqueVisitors { get; set; }
-    public int CheckoutStarts { get; set; }
-    public int CompletedOrders { get; set; }
-    public decimal AttributedGrossRevenue { get; set; }
 }
 
 internal sealed class AssetDetailHeaderSqlRow

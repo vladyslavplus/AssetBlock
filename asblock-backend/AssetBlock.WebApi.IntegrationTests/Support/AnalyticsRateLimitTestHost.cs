@@ -2,6 +2,7 @@ using System.Net;
 using AssetBlock.Domain.Core.Constants;
 using AssetBlock.Infrastructure;
 using AssetBlock.WebApi.Extensions;
+using Microsoft.Extensions.Hosting;
 using AssetBlock.WebApi.Services;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.TestHost;
@@ -26,7 +27,10 @@ internal static class AnalyticsRateLimitTestHost
             builder.Configuration["AnalyticsRateLimiting:BffSigningSecret"] = signingSecret;
         }
 
-        builder.Services.AddAnalyticsRateLimitingOptions(builder.Configuration);
+        builder.Configuration["ConnectionStrings:Redis"] = string.Empty;
+
+        builder.Services.AddSingleton<IHostEnvironment>(new TestHostEnvironment());
+        builder.Services.AddAnalyticsDistributedRateLimiting(builder.Configuration, new TestHostEnvironment());
         builder.Services.AddAnalyticsBffSignatureValidation();
         builder.Services.AddApiRateLimiting();
 

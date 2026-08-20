@@ -51,41 +51,49 @@ internal sealed class SellerAnalyticsStore : ISellerAnalyticsStore
             var currentFacts = await QueryDualPeriodFacts(
                 db, sellerId, from, to, comparisonFrom, comparisonTo, cancellationToken);
             var daySeries = await QueryDaySeries(db, sellerId, from, to, cancellationToken);
-            var topAssets = await QueryTopAssets(db, sellerId, from, to, topN, cancellationToken);
-            var topBundles = await QueryTopBundles(db, sellerId, from, to, topN, cancellationToken);
+            var topProducts = await QueryTopAssetsAndBundles(db, sellerId, from, to, topN, cancellationToken);
             var dualRatings = await QueryDualRatings(
                 db, sellerId, from, to, comparisonFrom, comparisonTo, cancellationToken);
 
-            var engagementAvailableFrom = await QueryEngagementAvailableFrom(db, sellerId, cancellationToken);
+            var commerceContext = await QueryCommerceContext(db, sellerId, from, to, cancellationToken);
+            var engagementAvailableFrom = commerceContext.EngagementAvailableFrom;
 
             var currentAvailable = engagementAvailableFrom.HasValue && from >= engagementAvailableFrom.Value;
             var comparisonAvailable = engagementAvailableFrom.HasValue && comparisonFrom >= engagementAvailableFrom.Value;
             var includeEventMetrics = engagementAvailableFrom.HasValue && to > engagementAvailableFrom.Value;
 
-            var commerceFunnel = await QueryCommerceFunnel(db, sellerId, from, to, cancellationToken);
-            var trackedCheckoutCoverage = await QueryTrackedCheckoutCoverage(db, sellerId, from, to, cancellationToken);
-            var trafficSources = await QueryTrafficSources(db, sellerId, from, to, cancellationToken);
-            var externalReferrers = await QueryExternalReferrers(
-                db, sellerId, from, to, AnalyticsConstants.MAX_EXTERNAL_REFERRERS, cancellationToken);
+            var commerceFunnel = new AnalyticsCommerceFunnelRaw(
+                commerceContext.CheckoutStarts,
+                commerceContext.StripeSessionsAttached,
+                commerceContext.CompletedOrders,
+                commerceContext.CancelledCheckouts,
+                commerceContext.PendingCheckouts);
+            var trackedCheckoutCoverage = commerceContext.TrackedCheckoutCoverage;
 
             SellerEngagementRawFacts? currentEngagement = null;
             SellerEngagementRawFacts? comparisonEngagement = null;
             AnalyticsTrackedFunnelRaw? trackedFunnel = null;
 
+            var traffic = await QueryTrafficBatch(
+                db, sellerId, from, to, AnalyticsConstants.MAX_EXTERNAL_REFERRERS, cancellationToken);
+            var trafficSources = traffic.Sources;
+            var externalReferrers = traffic.Referrers;
+
             if (currentAvailable && comparisonAvailable)
             {
-                var dualEngagement = await QueryDualPeriodEngagementFacts(
+                var metrics = await QueryEngagementMetricsDual(
                     db, sellerId, from, to, comparisonFrom, comparisonTo, cancellationToken);
-                currentEngagement = dualEngagement.Current;
-                comparisonEngagement = dualEngagement.Comparison;
-                trackedFunnel = await QueryTrackedFunnel(db, sellerId, from, to, cancellationToken);
+                currentEngagement = metrics.Current;
+                comparisonEngagement = metrics.Comparison;
+                trackedFunnel = metrics.TrackedFunnel;
             }
             else
             {
                 if (currentAvailable)
                 {
-                    currentEngagement = await QueryEngagementFacts(db, sellerId, from, to, cancellationToken);
-                    trackedFunnel = await QueryTrackedFunnel(db, sellerId, from, to, cancellationToken);
+                    var metrics = await QueryEngagementMetricsCurrent(db, sellerId, from, to, cancellationToken);
+                    currentEngagement = metrics.Engagement;
+                    trackedFunnel = metrics.TrackedFunnel;
                 }
 
                 if (comparisonAvailable)
@@ -95,7 +103,7 @@ internal sealed class SellerAnalyticsStore : ISellerAnalyticsStore
                 }
             }
 
-            IReadOnlyList<AnalyticsEngagementDayBucket> engagementSeries = await QueryEngagementSeries(
+            IReadOnlyList<AnalyticsEngagementDayBucket> engagementSeries = await QueryEngagementSeriesCombined(
                 db,
                 sellerId,
                 from,
@@ -110,8 +118,8 @@ internal sealed class SellerAnalyticsStore : ISellerAnalyticsStore
                 currentFacts.Current,
                 currentFacts.Comparison,
                 daySeries,
-                topAssets,
-                topBundles,
+                topProducts.Assets,
+                topProducts.Bundles,
                 dualRatings.Current,
                 dualRatings.Comparison,
                 engagementAvailableFrom,
@@ -1055,6 +1063,200 @@ internal sealed class SellerAnalyticsStore : ISellerAnalyticsStore
         return row.Value;
     }
 
+    private static async Task<CommerceContextSqlRow> QueryCommerceContext(
+        ApplicationDbContext db,
+        Guid sellerId,
+        DateTimeOffset from,
+        DateTimeOffset to,
+        CancellationToken cancellationToken)
+    {
+        return await db.Database
+            .SqlQueryRaw<CommerceContextSqlRow>(
+                AnalyticsOverviewBatchSql.COMMERCE_CONTEXT,
+                sellerId,
+                from,
+                to)
+            .SingleAsync(cancellationToken);
+    }
+
+    private static async Task<(SellerEngagementRawFacts Current, SellerEngagementRawFacts Comparison, AnalyticsTrackedFunnelRaw TrackedFunnel)>
+        QueryEngagementMetricsDual(
+            ApplicationDbContext db,
+            Guid sellerId,
+            DateTimeOffset from,
+            DateTimeOffset to,
+            DateTimeOffset comparisonFrom,
+            DateTimeOffset comparisonTo,
+            CancellationToken cancellationToken)
+    {
+        var row = await db.Database
+            .SqlQueryRaw<EngagementMetricsDualSqlRow>(
+                AnalyticsOverviewBatchSql.ENGAGEMENT_METRICS_DUAL,
+                sellerId,
+                from,
+                to,
+                comparisonFrom,
+                comparisonTo)
+            .SingleAsync(cancellationToken);
+
+        var current = new SellerEngagementRawFacts(
+            row.CurrentProductViews,
+            row.CurrentUniqueVisitors,
+            row.CurrentDownloadRequests,
+            row.CurrentCollectionViews,
+            row.CurrentCollectionItemClicks);
+        var comparison = new SellerEngagementRawFacts(
+            row.ComparisonProductViews,
+            row.ComparisonUniqueVisitors,
+            row.ComparisonDownloadRequests,
+            row.ComparisonCollectionViews,
+            row.ComparisonCollectionItemClicks);
+        var tracked = new AnalyticsTrackedFunnelRaw(
+            row.ViewSessions,
+            row.CheckoutSessions,
+            row.CompletedSessions);
+
+        return (current, comparison, tracked);
+    }
+
+    private static async Task<(SellerEngagementRawFacts Engagement, AnalyticsTrackedFunnelRaw TrackedFunnel)>
+        QueryEngagementMetricsCurrent(
+            ApplicationDbContext db,
+            Guid sellerId,
+            DateTimeOffset from,
+            DateTimeOffset to,
+            CancellationToken cancellationToken)
+    {
+        var row = await db.Database
+            .SqlQueryRaw<EngagementMetricsCurrentSqlRow>(
+                AnalyticsOverviewBatchSql.ENGAGEMENT_METRICS_CURRENT,
+                sellerId,
+                from,
+                to)
+            .SingleAsync(cancellationToken);
+
+        var engagement = new SellerEngagementRawFacts(
+            row.CurrentProductViews,
+            row.CurrentUniqueVisitors,
+            row.CurrentDownloadRequests,
+            row.CurrentCollectionViews,
+            row.CurrentCollectionItemClicks);
+        var tracked = new AnalyticsTrackedFunnelRaw(
+            row.ViewSessions,
+            row.CheckoutSessions,
+            row.CompletedSessions);
+
+        return (engagement, tracked);
+    }
+
+    private static async Task<(IReadOnlyList<AnalyticsTrafficSourceRaw> Sources, IReadOnlyList<AnalyticsExternalReferrerRaw> Referrers)>
+        QueryTrafficBatch(
+            ApplicationDbContext db,
+            Guid sellerId,
+            DateTimeOffset from,
+            DateTimeOffset to,
+            int maxReferrers,
+            CancellationToken cancellationToken)
+    {
+        var rows = await db.Database
+            .SqlQueryRaw<TrafficUnionSqlRow>(
+                AnalyticsOverviewBatchSql.TRAFFIC_UNION,
+                sellerId,
+                from,
+                to,
+                maxReferrers)
+            .ToListAsync(cancellationToken);
+
+        var sources = rows
+            .Where(r => r.RowKind == "SOURCE")
+            .Select(r => new AnalyticsTrafficSourceRaw(
+                Enum.Parse<AnalyticsTrafficSource>(r.Key),
+                r.ProductViews,
+                r.UniqueVisitors,
+                r.CheckoutStarts,
+                r.CompletedOrders,
+                r.AttributedGrossRevenue))
+            .ToList();
+
+        var referrers = rows
+            .Where(r => r.RowKind == "REFERRER")
+            .Select(r => new AnalyticsExternalReferrerRaw(
+                r.Key,
+                r.ProductViews,
+                r.UniqueVisitors,
+                r.CheckoutStarts,
+                r.CompletedOrders,
+                r.AttributedGrossRevenue))
+            .ToList();
+
+        return (sources, referrers);
+    }
+
+    private static async Task<(IReadOnlyList<AnalyticsAssetProductRow> Assets, IReadOnlyList<AnalyticsBundleProductRow> Bundles)>
+        QueryTopAssetsAndBundles(
+            ApplicationDbContext db,
+            Guid sellerId,
+            DateTimeOffset from,
+            DateTimeOffset to,
+            int topN,
+            CancellationToken cancellationToken)
+    {
+        var assets = await QueryTopAssets(db, sellerId, from, to, topN, cancellationToken);
+        var bundles = await QueryTopBundles(db, sellerId, from, to, topN, cancellationToken);
+        return (assets, bundles);
+    }
+
+    private static async Task<IReadOnlyList<AnalyticsEngagementDayBucket>> QueryEngagementSeriesCombined(
+        ApplicationDbContext db,
+        Guid sellerId,
+        DateTimeOffset from,
+        DateTimeOffset to,
+        AnalyticsGranularity granularity,
+        bool includeEventMetrics,
+        CancellationToken cancellationToken)
+    {
+        if (!includeEventMetrics)
+        {
+            var checkoutSql = granularity switch
+            {
+                AnalyticsGranularity.WEEK => AnalyticsOverviewEngagementSql.ENGAGEMENT_CHECKOUT_WEEK_SERIES,
+                AnalyticsGranularity.MONTH => AnalyticsOverviewEngagementSql.ENGAGEMENT_CHECKOUT_MONTH_SERIES,
+                _ => AnalyticsOverviewEngagementSql.ENGAGEMENT_CHECKOUT_DAY_SERIES
+            };
+
+            var checkoutRows = await db.Database
+                .SqlQueryRaw<EngagementCheckoutDaySeriesSqlRow>(checkoutSql, sellerId, from, to)
+                .ToListAsync(cancellationToken);
+
+            return checkoutRows.Select(r => new AnalyticsEngagementDayBucket(
+                r.DayUtc,
+                0,
+                0,
+                r.CheckoutStarts,
+                r.CompletedOrders,
+                0)).ToList();
+        }
+
+        var sql = granularity switch
+        {
+            AnalyticsGranularity.WEEK => AnalyticsOverviewBatchSql.ENGAGEMENT_SERIES_COMBINED_WEEK,
+            AnalyticsGranularity.MONTH => AnalyticsOverviewBatchSql.ENGAGEMENT_SERIES_COMBINED_MONTH,
+            _ => AnalyticsOverviewBatchSql.ENGAGEMENT_SERIES_COMBINED_DAY
+        };
+
+        var rows = await db.Database
+            .SqlQueryRaw<EngagementDaySeriesSqlRow>(sql, sellerId, from, to)
+            .ToListAsync(cancellationToken);
+
+        return rows.Select(r => new AnalyticsEngagementDayBucket(
+            r.DayUtc,
+            r.ProductViews,
+            r.UniqueVisitors,
+            r.CheckoutStarts,
+            r.CompletedOrders,
+            r.DownloadRequests)).ToList();
+    }
+
     private static async Task<SellerEngagementRawFacts> QueryEngagementFacts(
         ApplicationDbContext db,
         Guid sellerId,
@@ -1076,100 +1278,6 @@ internal sealed class SellerAnalyticsStore : ISellerAnalyticsStore
             row.DownloadRequests,
             row.CollectionViews,
             row.CollectionItemClicks);
-    }
-
-    private static async Task<(SellerEngagementRawFacts Current, SellerEngagementRawFacts Comparison)>
-        QueryDualPeriodEngagementFacts(
-            ApplicationDbContext db,
-            Guid sellerId,
-            DateTimeOffset from,
-            DateTimeOffset to,
-            DateTimeOffset comparisonFrom,
-            DateTimeOffset comparisonTo,
-            CancellationToken cancellationToken)
-    {
-        var row = await db.Database
-            .SqlQueryRaw<DualPeriodEngagementFactsSqlRow>(
-                AnalyticsOverviewEngagementSql.DUAL_PERIOD_ENGAGEMENT_FACTS,
-                sellerId,
-                from,
-                to,
-                comparisonFrom,
-                comparisonTo)
-            .SingleAsync(cancellationToken);
-
-        var current = new SellerEngagementRawFacts(
-            row.CurrentProductViews,
-            row.CurrentUniqueVisitors,
-            row.CurrentDownloadRequests,
-            row.CurrentCollectionViews,
-            row.CurrentCollectionItemClicks);
-
-        var comparison = new SellerEngagementRawFacts(
-            row.ComparisonProductViews,
-            row.ComparisonUniqueVisitors,
-            row.ComparisonDownloadRequests,
-            row.ComparisonCollectionViews,
-            row.ComparisonCollectionItemClicks);
-
-        return (current, comparison);
-    }
-
-    private static async Task<IReadOnlyList<AnalyticsEngagementDayBucket>> QueryEngagementSeries(
-        ApplicationDbContext db,
-        Guid sellerId,
-        DateTimeOffset from,
-        DateTimeOffset to,
-        AnalyticsGranularity granularity,
-        bool includeEventMetrics,
-        CancellationToken cancellationToken)
-    {
-        var (eventSql, checkoutSql) = granularity switch
-        {
-            AnalyticsGranularity.WEEK => (
-                AnalyticsOverviewEngagementSql.ENGAGEMENT_EVENT_WEEK_SERIES,
-                AnalyticsOverviewEngagementSql.ENGAGEMENT_CHECKOUT_WEEK_SERIES),
-            AnalyticsGranularity.MONTH => (
-                AnalyticsOverviewEngagementSql.ENGAGEMENT_EVENT_MONTH_SERIES,
-                AnalyticsOverviewEngagementSql.ENGAGEMENT_CHECKOUT_MONTH_SERIES),
-            _ => (
-                AnalyticsOverviewEngagementSql.ENGAGEMENT_EVENT_DAY_SERIES,
-                AnalyticsOverviewEngagementSql.ENGAGEMENT_CHECKOUT_DAY_SERIES)
-        };
-
-        List<EngagementEventDaySeriesSqlRow> eventRows = [];
-        if (includeEventMetrics)
-        {
-            eventRows = await db.Database
-                .SqlQueryRaw<EngagementEventDaySeriesSqlRow>(eventSql, sellerId, from, to)
-                .ToListAsync(cancellationToken);
-        }
-
-        var checkoutRows = await db.Database
-            .SqlQueryRaw<EngagementCheckoutDaySeriesSqlRow>(checkoutSql, sellerId, from, to)
-            .ToListAsync(cancellationToken);
-
-        var checkoutByBucket = checkoutRows.ToDictionary(r => r.DayUtc);
-        var allBuckets = eventRows.Select(r => r.DayUtc)
-            .Concat(checkoutRows.Select(r => r.DayUtc))
-            .Distinct()
-            .OrderBy(d => d)
-            .ToList();
-
-        var eventByBucket = eventRows.ToDictionary(r => r.DayUtc);
-
-        return allBuckets.Select(bucket =>
-        {
-            eventByBucket.TryGetValue(bucket, out var ev);
-            checkoutByBucket.TryGetValue(bucket, out var ck);
-            return new AnalyticsEngagementDayBucket(
-                bucket,
-                ev?.ProductViews ?? 0,
-                ev?.UniqueVisitors ?? 0,
-                ck?.CheckoutStarts ?? 0,
-                ck?.CompletedOrders ?? 0,
-                ev?.DownloadRequests ?? 0);
-        }).ToList();
     }
 
     private static async Task<IReadOnlyList<AnalyticsEngagementDayBucket>> QueryProductEngagementSeries(
@@ -1203,117 +1311,6 @@ internal sealed class SellerAnalyticsStore : ISellerAnalyticsStore
             r.CheckoutStarts,
             r.CompletedOrders,
             includeEventMetrics ? r.DownloadRequests : 0)).ToList();
-    }
-
-    private static async Task<AnalyticsCommerceFunnelRaw> QueryCommerceFunnel(
-        ApplicationDbContext db,
-        Guid sellerId,
-        DateTimeOffset from,
-        DateTimeOffset to,
-        CancellationToken cancellationToken)
-    {
-        var row = await db.Database
-            .SqlQueryRaw<CommerceFunnelSqlRow>(
-                AnalyticsOverviewEngagementSql.COMMERCE_FUNNEL,
-                sellerId,
-                from,
-                to)
-            .SingleAsync(cancellationToken);
-
-        return new AnalyticsCommerceFunnelRaw(
-            row.CheckoutStarts,
-            row.StripeSessionsAttached,
-            row.CompletedOrders,
-            row.CancelledCheckouts,
-            row.PendingCheckouts);
-    }
-
-    private static async Task<AnalyticsTrackedFunnelRaw> QueryTrackedFunnel(
-        ApplicationDbContext db,
-        Guid sellerId,
-        DateTimeOffset from,
-        DateTimeOffset to,
-        CancellationToken cancellationToken)
-    {
-        var row = await db.Database
-            .SqlQueryRaw<TrackedFunnelSqlRow>(
-                AnalyticsOverviewEngagementSql.TRACKED_FUNNEL,
-                sellerId,
-                from,
-                to)
-            .SingleAsync(cancellationToken);
-
-        return new AnalyticsTrackedFunnelRaw(
-            row.ViewSessions,
-            row.CheckoutSessions,
-            row.CompletedSessions);
-    }
-
-    private static async Task<decimal?> QueryTrackedCheckoutCoverage(
-        ApplicationDbContext db,
-        Guid sellerId,
-        DateTimeOffset from,
-        DateTimeOffset to,
-        CancellationToken cancellationToken)
-    {
-        var row = await db.Database
-            .SqlQueryRaw<ScalarDecimalSqlRow>(
-                AnalyticsOverviewEngagementSql.TRACKED_CHECKOUT_COVERAGE,
-                sellerId,
-                from,
-                to)
-            .SingleAsync(cancellationToken);
-        return row.Value;
-    }
-
-    private static async Task<IReadOnlyList<AnalyticsTrafficSourceRaw>> QueryTrafficSources(
-        ApplicationDbContext db,
-        Guid sellerId,
-        DateTimeOffset from,
-        DateTimeOffset to,
-        CancellationToken cancellationToken)
-    {
-        var rows = await db.Database
-            .SqlQueryRaw<TrafficSourceSqlRow>(
-                AnalyticsOverviewEngagementSql.TRAFFIC_SOURCES,
-                sellerId,
-                from,
-                to)
-            .ToListAsync(cancellationToken);
-
-        return rows.Select(r => new AnalyticsTrafficSourceRaw(
-            Enum.Parse<AnalyticsTrafficSource>(r.Source),
-            r.ProductViews,
-            r.UniqueVisitors,
-            r.CheckoutStarts,
-            r.CompletedOrders,
-            r.AttributedGrossRevenue)).ToList();
-    }
-
-    private static async Task<IReadOnlyList<AnalyticsExternalReferrerRaw>> QueryExternalReferrers(
-        ApplicationDbContext db,
-        Guid sellerId,
-        DateTimeOffset from,
-        DateTimeOffset to,
-        int maxReferrers,
-        CancellationToken cancellationToken)
-    {
-        var rows = await db.Database
-            .SqlQueryRaw<ExternalReferrerSqlRow>(
-                AnalyticsOverviewEngagementSql.EXTERNAL_REFERRERS,
-                sellerId,
-                from,
-                to,
-                maxReferrers)
-            .ToListAsync(cancellationToken);
-
-        return rows.Select(r => new AnalyticsExternalReferrerRaw(
-            r.ReferrerHost,
-            r.ProductViews,
-            r.UniqueVisitors,
-            r.CheckoutStarts,
-            r.CompletedOrders,
-            r.AttributedGrossRevenue)).ToList();
     }
 
     private static async Task<IReadOnlyList<AnalyticsDayBucket>> QueryDaySeriesForAsset(

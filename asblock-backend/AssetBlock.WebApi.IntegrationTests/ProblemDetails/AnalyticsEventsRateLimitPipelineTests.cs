@@ -39,24 +39,28 @@ public sealed class AnalyticsEventsRateLimitPipelineTests
         const string remoteIp = "203.0.113.50";
         const string clientIpA = "198.51.100.1";
         const string clientIpB = "198.51.100.2";
-        var headersA = AnalyticsRateLimitTestHost.CreateSignedHeaders(
-            clientIpA,
-            AnalyticsRateLimitTestHost.TEST_SIGNING_SECRET);
-        var headersB = AnalyticsRateLimitTestHost.CreateSignedHeaders(
-            clientIpB,
-            AnalyticsRateLimitTestHost.TEST_SIGNING_SECRET);
-
         for (var i = 0; i < RateLimitingConstants.Windows.ANALYTICS_EVENTS_LIMIT; i++)
         {
+            var headersA = AnalyticsRateLimitTestHost.CreateSignedHeaders(
+                clientIpA,
+                AnalyticsRateLimitTestHost.TEST_SIGNING_SECRET);
             var ok = await AnalyticsRateLimitTestHost.PostProbeAsync(client, remoteIp, headersA);
             ok.StatusCode.Should().Be(HttpStatusCode.Accepted, $"bff partition A request {i + 1}");
         }
 
-        var limited = await AnalyticsRateLimitTestHost.PostProbeAsync(client, remoteIp, headersA);
+        var limitedHeadersA = AnalyticsRateLimitTestHost.CreateSignedHeaders(
+            clientIpA,
+            AnalyticsRateLimitTestHost.TEST_SIGNING_SECRET);
+        var limited = await AnalyticsRateLimitTestHost.PostProbeAsync(client, remoteIp, limitedHeadersA);
         limited.StatusCode.Should().Be(HttpStatusCode.TooManyRequests);
         await AssertRateLimitedProblemDetails(limited);
 
-        var otherPartition = await AnalyticsRateLimitTestHost.PostProbeAsync(client, remoteIp, headersB);
+        var otherPartition = await AnalyticsRateLimitTestHost.PostProbeAsync(
+            client,
+            remoteIp,
+            AnalyticsRateLimitTestHost.CreateSignedHeaders(
+                clientIpB,
+                AnalyticsRateLimitTestHost.TEST_SIGNING_SECRET));
         otherPartition.StatusCode.Should().Be(HttpStatusCode.Accepted);
     }
 

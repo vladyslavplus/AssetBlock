@@ -116,6 +116,17 @@ dotnet test asblock-backend.slnx
 dotnet run --project AssetBlock.WebApi
 ```
 
+### Seller analytics
+
+- **Gross revenue** only (integer USD cents); commerce from completed `Order`/`OrderLine` rows after Stripe webhook fulfillment.
+- **UTC ranges:** `from` inclusive, `to` exclusive, 1–366 days; `engagementAvailableFrom` marks first retained telemetry.
+- **Engagement:** append-only `analytics_events`, 400-day retention, daily rollups recomputed by `AnalyticsAggregationWorker` (advisory lock).
+- **Rate limits:** `ANALYTICS_EVENTS` (120/min/partition) and `SELLER_ANALYTICS_SALES_EXPORT` (10/hour/seller) use Redis fixed windows in Staging/Production (`ConnectionStrings:Redis` required). Development/IntegrationTesting fall back to in-memory limiters when Redis is unset. During Redis outages the API logs once, returns 202 for telemetry and 503 for CSV export for a short backoff window without per-request Redis calls.
+- **BFF signing:** `AnalyticsRateLimiting:BffSigningSecret` (min 32 chars) + frontend `ASSETBLOCK_ANALYTICS_BFF_SIGNING_SECRET`.
+- **Routes:** `GET /api/seller/analytics/*`, `POST /api/analytics/events`, CSV at `GET /api/seller/analytics/sales/export`.
+- **Worker:** `AnalyticsAggregationWorker` recomputes UTC daily rollups every five minutes (advisory lock) and deletes raw events older than 400 days.
+- **Stripe local webhook:** `stripe listen --forward-to http://localhost:5088/api/payments/webhook`
+
 ### Tests
 
 The solution contains five test projects: three focused unit-test projects and two PostgreSQL/Testcontainers integration-test projects.
@@ -210,7 +221,7 @@ Append-only `audit_logs` records security-sensitive and business-critical mutati
 
 - **Serilog** — technical HTTP/request diagnostics;
 - **transactional outbox** — reliable side-effect delivery after commit;
-- **seller analytics** — product metrics (separate model later).
+- **seller analytics** — seller dashboard gross revenue, engagement telemetry, CSV export (distinct from audit log and Serilog).
 
 Success DB mutations write the audit row in the same `IUnitOfWork` transaction as business changes. Failure/denied paths use best-effort writes so audit infrastructure outages do not change the original API result. Metadata is allowlisted only (no passwords, tokens, Stripe payloads, comments, or full entity snapshots). `ActorUserId` has no FK to `users`.
 

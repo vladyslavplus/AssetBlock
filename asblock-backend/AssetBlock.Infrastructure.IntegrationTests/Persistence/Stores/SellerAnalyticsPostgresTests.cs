@@ -1080,9 +1080,44 @@ public sealed class SellerAnalyticsPostgresTests(PostgresFixture fixture)
 
 
     [Fact]
-    public async Task GetOverviewSnapshot_IssuesFiveAnalyticsSelects()
+    public async Task GetOverviewSnapshot_FullCoverage_IssuesExactlyNineReaderCommands()
     {
-        var interceptor = new AnalyticsSelectCountingInterceptor();
+        var interceptor = new OverviewReaderCountingInterceptor();
+        await using var db = await fixture.CreateCleanDbContext(b => b.AddInterceptors(interceptor));
+        var (seller, _, _, asset, _) = await SeedSellerBuyerAsset(db, "overview-rt");
+
+        var eventStore = new AnalyticsEventStore(db);
+        var occurredAt = new DateTimeOffset(2024, 1, 5, 12, 0, 0, TimeSpan.Zero);
+        await eventStore.TryInsert(CreateAssetView(seller.Id, asset.Id, occurredAt));
+
+        var store = new SellerAnalyticsStore(db);
+        var from = new DateTimeOffset(2024, 1, 15, 0, 0, 0, TimeSpan.Zero);
+        var to = new DateTimeOffset(2024, 1, 25, 0, 0, 0, TimeSpan.Zero);
+
+        interceptor.Reset();
+        await GetSnapshot(store, seller.Id, from, to);
+
+        interceptor.ReaderCommandCount.Should().Be(9);
+    }
+
+    private static AnalyticsEvent CreateAssetView(Guid sellerId, Guid assetId, DateTimeOffset occurredAt) =>
+        new()
+        {
+            Id = Guid.NewGuid(),
+            EventType = AnalyticsEventType.ASSET_VIEW,
+            OccurredAt = occurredAt,
+            SellerId = sellerId,
+            VisitorId = Guid.NewGuid(),
+            SessionId = Guid.NewGuid(),
+            AssetId = assetId,
+            Source = AnalyticsTrafficSource.CATALOG,
+            DeviceClass = AnalyticsDeviceClass.DESKTOP
+        };
+
+    [Fact]
+    public async Task GetOverviewSnapshot_CommerceOnly_IssuesExactlyEightReaderCommands()
+    {
+        var interceptor = new OverviewReaderCountingInterceptor();
         await using var db = await fixture.CreateCleanDbContext(b => b.AddInterceptors(interceptor));
         var (seller, _, _, _, _) = await SeedSellerBuyerAsset(db, "qcount");
 
@@ -1093,21 +1128,21 @@ public sealed class SellerAnalyticsPostgresTests(PostgresFixture fixture)
         interceptor.Reset();
         await GetSnapshot(store, seller.Id, from, to);
 
-        interceptor.AnalyticsSelectCount.Should().Be(5);
+        interceptor.ReaderCommandCount.Should().Be(8);
     }
 
-    private sealed class AnalyticsSelectCountingInterceptor : DbCommandInterceptor
+    private sealed class OverviewReaderCountingInterceptor : DbCommandInterceptor
     {
-        public int AnalyticsSelectCount { get; private set; }
+        public int ReaderCommandCount { get; private set; }
 
-        public void Reset() => AnalyticsSelectCount = 0;
+        public void Reset() => ReaderCommandCount = 0;
 
         public override InterceptionResult<DbDataReader> ReaderExecuting(
             DbCommand command,
             CommandEventData eventData,
             InterceptionResult<DbDataReader> result)
         {
-            CountIfAnalytics(command.CommandText);
+            CountReader(command.CommandText);
             return base.ReaderExecuting(command, eventData, result);
         }
 
@@ -1117,23 +1152,18 @@ public sealed class SellerAnalyticsPostgresTests(PostgresFixture fixture)
             InterceptionResult<DbDataReader> result,
             CancellationToken cancellationToken = default)
         {
-            CountIfAnalytics(command.CommandText);
+            CountReader(command.CommandText);
             return base.ReaderExecutingAsync(command, eventData, result, cancellationToken);
         }
 
-        private void CountIfAnalytics(string sql)
+        private void CountReader(string sql)
         {
-            // Overview analytics SELECTs are raw SqlQuery projections (facts/series/top/ratings).
-            if (sql.Contains("\"GrossRevenue\"", StringComparison.Ordinal)
-                || sql.Contains("\"Day\"", StringComparison.Ordinal)
-                || sql.Contains("\"BundleId\"", StringComparison.Ordinal)
-                || sql.Contains("\"CurrentNewReviews\"", StringComparison.Ordinal)
-                || sql.Contains("seller_first_purchase", StringComparison.Ordinal)
-                || sql.Contains("bundle_stats", StringComparison.Ordinal)
-                || sql.Contains("asset_sales", StringComparison.Ordinal))
+            if (sql.TrimStart().StartsWith("SET TRANSACTION", StringComparison.OrdinalIgnoreCase))
             {
-                AnalyticsSelectCount++;
+                return;
             }
+
+            ReaderCommandCount++;
         }
     }
 }

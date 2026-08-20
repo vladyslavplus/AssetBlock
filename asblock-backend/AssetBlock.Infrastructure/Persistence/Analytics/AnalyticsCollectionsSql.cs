@@ -201,10 +201,14 @@ internal static class AnalyticsCollectionsSql
     {
         return (sort, direction) switch
         {
-            (AnalyticsCollectionSort.VIEWS, _) =>
-                BuildCoverageAwareEngagementOrderBy("views", direction),
-            (AnalyticsCollectionSort.CLICKS, _) =>
-                BuildCoverageAwareEngagementOrderBy("item_clicks", direction),
+            (AnalyticsCollectionSort.VIEWS, AnalyticsSortDirection.ASC) =>
+                BuildCoverageAwareEngagementOrderBy("views", "ASC"),
+            (AnalyticsCollectionSort.VIEWS, AnalyticsSortDirection.DESC) =>
+                BuildCoverageAwareEngagementOrderBy("views", "DESC"),
+            (AnalyticsCollectionSort.CLICKS, AnalyticsSortDirection.ASC) =>
+                BuildCoverageAwareEngagementOrderBy("item_clicks", "ASC"),
+            (AnalyticsCollectionSort.CLICKS, AnalyticsSortDirection.DESC) =>
+                BuildCoverageAwareEngagementOrderBy("item_clicks", "DESC"),
             (AnalyticsCollectionSort.ATTRIBUTED_REVENUE, AnalyticsSortDirection.ASC) =>
                 """ attributed_gross_revenue ASC, "CollectionId" ASC """,
             (AnalyticsCollectionSort.ATTRIBUTED_REVENUE, AnalyticsSortDirection.DESC) =>
@@ -213,20 +217,19 @@ internal static class AnalyticsCollectionsSql
                 """ recent_at ASC NULLS LAST, "CollectionId" ASC """,
             (AnalyticsCollectionSort.RECENT, AnalyticsSortDirection.DESC) =>
                 """ recent_at DESC NULLS LAST, "CollectionId" ASC """,
-            _ => throw new ArgumentOutOfRangeException(nameof(sort), sort, null)
+            _ => throw new ArgumentOutOfRangeException(
+                nameof(direction),
+                direction,
+                $"Unsupported analytics collection sort combination: {sort}/{direction}.")
         };
     }
 
     private static string BuildCoverageAwareEngagementOrderBy(
         string engagementColumn,
-        AnalyticsSortDirection direction)
-    {
-        var engagementDirection = direction == AnalyticsSortDirection.ASC ? "ASC" : "DESC";
-
-        return $"""
+        string engagementDirection) =>
+        $"""
             CASE WHEN {FULL_ENGAGEMENT_COVERAGE_SQL} THEN {engagementColumn} END {engagementDirection} NULLS LAST,
             CASE WHEN NOT {FULL_ENGAGEMENT_COVERAGE_SQL} THEN attributed_gross_revenue END DESC NULLS LAST,
             "CollectionId" ASC
             """;
-    }
 }

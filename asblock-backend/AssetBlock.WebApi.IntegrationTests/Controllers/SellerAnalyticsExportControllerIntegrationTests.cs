@@ -4,7 +4,9 @@ using System.Text;
 using AssetBlock.Domain.Abstractions.Services;
 using AssetBlock.Domain.Core.Constants;
 using AssetBlock.Infrastructure.Persistence;
+using AssetBlock.Infrastructure;
 using AssetBlock.WebApi.Extensions;
+using Microsoft.Extensions.Hosting;
 using AssetBlock.WebApi.IntegrationTests.Support;
 using AssetBlock.WebApi.IntegrationTests.Support.Fakes;
 using FluentAssertions;
@@ -153,6 +155,21 @@ public sealed class SellerAnalyticsExportControllerIntegrationTests(IntegrationT
 public sealed class SellerAnalyticsExportRateLimitIntegrationTests
 {
     [Fact]
+    public async Task ExportSales_WhenRedisUnavailable_ShouldReturn503BeforeHandler()
+    {
+        await using var app = await SellerAnalyticsExportRateLimitTestHost.StartAsync(
+            "127.0.0.1:1,abortConnect=false,connectTimeout=50");
+        var client = app.GetTestClient();
+        const string userId = "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb";
+
+        var response = await SellerAnalyticsExportRateLimitTestHost.GetProbeAsync(client, userId);
+
+        response.StatusCode.Should().Be(HttpStatusCode.ServiceUnavailable);
+        response.Content.Headers.ContentType!.MediaType.Should().Be("application/problem+json");
+        (await response.Content.ReadAsStringAsync()).Should().Contain(ErrorCodes.ERR_ANALYTICS_RATE_LIMIT_UNAVAILABLE);
+    }
+
+    [Fact]
     public async Task ExportSales_WhenSameUserExceedsLimit_ShouldReturn429()
     {
         await using var app = await SellerAnalyticsExportRateLimitTestHost.StartAsync();
@@ -176,11 +193,17 @@ internal static class SellerAnalyticsExportRateLimitTestHost
     private const string TEST_USER_ID_HEADER = "X-Test-User-Id";
     private const string PROBE_PATH = "/probe/seller-analytics/sales/export";
 
-    internal static async Task<WebApplication> StartAsync()
+    internal static async Task<WebApplication> StartAsync(string? redisConnectionString = null)
     {
         var builder = WebApplication.CreateBuilder();
         builder.WebHost.UseTestServer();
         builder.Services.AddRouting();
+        builder.Configuration["AnalyticsRateLimiting:BffSigningSecret"] =
+            AnalyticsRateLimitTestHost.TEST_SIGNING_SECRET;
+        builder.Configuration["ConnectionStrings:Redis"] = redisConnectionString ?? string.Empty;
+        var hostEnvironment = new TestHostEnvironment();
+        builder.Services.AddSingleton<IHostEnvironment>(hostEnvironment);
+        builder.Services.AddAnalyticsDistributedRateLimiting(builder.Configuration, hostEnvironment);
         builder.Services.AddApiRateLimiting();
         builder.Services.AddSingleton<ISellerAnalyticsStore, CapExceededSellerAnalyticsStore>();
         builder.Services.AddSingleton<ISender>(_ => throw new NotSupportedException());

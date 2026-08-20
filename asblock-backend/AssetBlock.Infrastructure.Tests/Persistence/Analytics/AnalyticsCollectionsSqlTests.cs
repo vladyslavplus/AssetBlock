@@ -33,4 +33,25 @@ public sealed class AnalyticsCollectionsSqlTests
         orderBy.Should().Be(""" attributed_gross_revenue DESC, "CollectionId" ASC """);
         orderBy.Should().NotContain("coverage");
     }
+
+    [Theory]
+    [InlineData(AnalyticsCollectionSort.VIEWS)]
+    [InlineData(AnalyticsCollectionSort.CLICKS)]
+    public void BuildOrderBy_WhenEngagementSortHasInvalidDirection_ShouldThrow(
+        AnalyticsCollectionSort sort)
+    {
+        var act = () => AnalyticsCollectionsSql.BuildOrderBy(sort, (AnalyticsSortDirection)999);
+
+        act.Should().Throw<ArgumentOutOfRangeException>();
+    }
+
+    [Fact]
+    public void BuildOrderBy_WhenSortIsInvalid_ShouldThrow()
+    {
+        var act = () => AnalyticsCollectionsSql.BuildOrderBy(
+            (AnalyticsCollectionSort)999,
+            AnalyticsSortDirection.DESC);
+
+        act.Should().Throw<ArgumentOutOfRangeException>();
+    }
 }

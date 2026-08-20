@@ -1,5 +1,7 @@
+using AssetBlock.Domain.Abstractions.Services;
 using AssetBlock.Domain.Core.Constants;
 using AssetBlock.WebApi.ProblemDetails;
+using AssetBlock.WebApi.RateLimiting;
 using Microsoft.AspNetCore.RateLimiting;
 using System.Security.Claims;
 using System.Threading.RateLimiting;
@@ -19,12 +21,63 @@ internal static class RateLimitingExtensions
     {
         opts.OnRejected = async (context, _) =>
         {
+            if (context.Lease.TryGetMetadata(
+                    AnalyticsRateLimitMetadataNames.Unavailable,
+                    out var unavailable)
+                && unavailable)
+            {
+                await HandleUnavailableRateLimitAsync(context);
+                return;
+            }
+
+            if (context.Lease.TryGetMetadata(
+                    AnalyticsRateLimitMetadataNames.RetryAfter,
+                    out var retryAfter))
+            {
+                var retrySeconds = Math.Max(1, (int)Math.Ceiling(retryAfter.TotalSeconds));
+                context.HttpContext.Response.Headers.RetryAfter = retrySeconds.ToString();
+            }
+
             var problem = AssetBlockProblemDetails.Create(
                 context.HttpContext,
                 StatusCodes.Status429TooManyRequests,
                 ErrorCodes.ERR_RATE_LIMITED);
             await AssetBlockProblemDetails.Write(context.HttpContext, problem);
         };
+    }
+
+    private static async Task HandleUnavailableRateLimitAsync(OnRejectedContext context)
+    {
+        var endpoint = context.HttpContext.GetEndpoint();
+        var policyName = endpoint?.Metadata.GetMetadata<EnableRateLimitingAttribute>()?.PolicyName;
+
+        if (string.Equals(
+                policyName,
+                RateLimitingConstants.Policies.ANALYTICS_EVENTS,
+                StringComparison.Ordinal))
+        {
+            context.HttpContext.Response.StatusCode = StatusCodes.Status202Accepted;
+            return;
+        }
+
+        if (string.Equals(
+                policyName,
+                RateLimitingConstants.Policies.SELLER_ANALYTICS_SALES_EXPORT,
+                StringComparison.Ordinal))
+        {
+            var problem = AssetBlockProblemDetails.Create(
+                context.HttpContext,
+                StatusCodes.Status503ServiceUnavailable,
+                ErrorCodes.ERR_ANALYTICS_RATE_LIMIT_UNAVAILABLE);
+            await AssetBlockProblemDetails.Write(context.HttpContext, problem);
+            return;
+        }
+
+        var fallback = AssetBlockProblemDetails.Create(
+            context.HttpContext,
+            StatusCodes.Status503ServiceUnavailable,
+            ErrorCodes.ERR_ANALYTICS_RATE_LIMIT_UNAVAILABLE);
+        await AssetBlockProblemDetails.Write(context.HttpContext, fallback);
     }
 
     extension(IServiceCollection services)
@@ -209,19 +262,18 @@ internal static class RateLimitingExtensions
 
     private static void AddTelemetryPolicies(RateLimiterOptions opts)
     {
-        // BFF forwards an opaque HMAC partition derived from verified client IP (see Next.js BFF).
-        // Direct/API callers fall back to RemoteIpAddress, then connection id — never a shared
-        // "unknown" bucket. ASP.NET in-memory limiter is per-instance, not distributed.
         opts.AddPolicy(RateLimitingConstants.Policies.ANALYTICS_EVENTS, httpContext =>
-            RateLimitPartition.GetFixedWindowLimiter(
-                partitionKey: GetAnalyticsEventsPartitionKey(httpContext),
-                factory: _ => new FixedWindowRateLimiterOptions
-                {
-                    Window = TimeSpan.FromSeconds(RateLimitingConstants.Windows.ANALYTICS_EVENTS_PERIOD_SECONDS),
-                    PermitLimit = RateLimitingConstants.Windows.ANALYTICS_EVENTS_LIMIT,
-                    QueueLimit = 0,
-                    QueueProcessingOrder = QueueProcessingOrder.OldestFirst
-                }));
+        {
+            var distributedLimiter = httpContext.RequestServices.GetRequiredService<IAnalyticsDistributedRateLimiter>();
+            var timeProvider = httpContext.RequestServices.GetService<TimeProvider>() ?? TimeProvider.System;
+            return RateLimitPartition.Get(
+                GetAnalyticsEventsPartitionKey(httpContext),
+                partitionKey => new AnalyticsDistributedRateLimiterAdapter(
+                    distributedLimiter,
+                    AnalyticsRateLimitPolicy.ANALYTICS_EVENTS,
+                    partitionKey,
+                    timeProvider));
+        });
     }
 
     private static void AddSellerAnalyticsPolicies(RateLimiterOptions opts)
@@ -232,8 +284,6 @@ internal static class RateLimitingExtensions
                 ?? httpContext.User.FindFirstValue(JwtClaimTypes.SUB);
             if (string.IsNullOrEmpty(userId))
             {
-                // Rate limiting runs before authorization. Do not share a throttle partition across
-                // anonymous callers; let [Authorize] return 401/403.
                 var connectionId = httpContext.Connection.Id;
                 return RateLimitPartition.GetNoLimiter(
                     string.IsNullOrWhiteSpace(connectionId)
@@ -241,16 +291,15 @@ internal static class RateLimitingExtensions
                         : "seller-analytics-export:anon:" + connectionId);
             }
 
-            return RateLimitPartition.GetFixedWindowLimiter(
+            var distributedLimiter = httpContext.RequestServices.GetRequiredService<IAnalyticsDistributedRateLimiter>();
+            var timeProvider = httpContext.RequestServices.GetService<TimeProvider>() ?? TimeProvider.System;
+            return RateLimitPartition.Get(
                 userId,
-                _ => new FixedWindowRateLimiterOptions
-                {
-                    Window = TimeSpan.FromSeconds(
-                        RateLimitingConstants.Windows.SELLER_ANALYTICS_SALES_EXPORT_PERIOD_SECONDS),
-                    PermitLimit = RateLimitingConstants.Windows.SELLER_ANALYTICS_SALES_EXPORT_LIMIT,
-                    QueueLimit = 0,
-                    QueueProcessingOrder = QueueProcessingOrder.OldestFirst
-                });
+                partitionKey => new AnalyticsDistributedRateLimiterAdapter(
+                    distributedLimiter,
+                    AnalyticsRateLimitPolicy.SELLER_ANALYTICS_SALES_EXPORT,
+                    partitionKey,
+                    timeProvider));
         });
     }
 }

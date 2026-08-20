@@ -10,17 +10,21 @@ using AssetBlock.Infrastructure.Services;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
+using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Options;
 using Minio;
 using Polly;
 using Polly.Retry;
-using StackExchange.Redis;
 
 namespace AssetBlock.Infrastructure;
 
 public static class DependencyInjection
 {
-    public static IServiceCollection AddInfrastructure(this IServiceCollection services, IConfiguration configuration)
+    public static IServiceCollection AddInfrastructure(
+        this IServiceCollection services,
+        IConfiguration configuration,
+        IHostEnvironment environment)
     {
         var connectionString = configuration.GetConnectionString("DefaultConnection")
             ?? throw new InvalidOperationException("Connection string 'DefaultConnection' not found.");
@@ -65,7 +69,8 @@ public static class DependencyInjection
             .ValidateOnStart();
         services.AddSingleton<IValidateOptions<DataProtectionOptions>, DataProtectionOptionsValidator>();
 
-        services.AddAnalyticsRateLimitingOptions(configuration);
+        services.TryAddSingleton(TimeProvider.System);
+        services.AddAnalyticsDistributedRateLimiting(configuration, environment);
         services.AddAnalyticsAggregationOptions(configuration);
 
         services.AddDbContext<ApplicationDbContext>(options =>
@@ -79,7 +84,6 @@ public static class DependencyInjection
         services.AddHostedService<StorageOrphanCleanupWorker>();
         services.AddHostedService<CheckoutReservationCleanupWorker>();
         services.AddHostedService<AnalyticsAggregationWorker>();
-        services.AddSingleton(TimeProvider.System);
         services.AddScoped<IUnitOfWork, EfUnitOfWork>();
         services.AddScoped<IOutboxStore, OutboxStore>();
         services.AddScoped<IOutboxMessageHandler, AssetBlobDeleteOutboxHandler>();
@@ -137,15 +141,9 @@ public static class DependencyInjection
         services.AddSingleton<IPasswordHasher, PasswordHasher>();
 
         var redisConfiguration = configuration.GetConnectionString("Redis");
-        if (!string.IsNullOrEmpty(redisConfiguration))
+        if (!string.IsNullOrWhiteSpace(redisConfiguration))
         {
-            services.AddSingleton<IConnectionMultiplexer>(_ =>
-            {
-                var opts = ConfigurationOptions.Parse(redisConfiguration);
-                opts.AbortOnConnectFail = false;
-                opts.ConnectTimeout = 5000;
-                return ConnectionMultiplexer.Connect(opts);
-            });
+            services.AddRedisConnectionMultiplexer(redisConfiguration);
             services.AddSingleton<ICacheService, RedisCacheService>();
         }
         else

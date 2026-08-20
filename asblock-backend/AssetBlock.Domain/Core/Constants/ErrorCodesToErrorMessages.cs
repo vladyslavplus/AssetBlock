@@ -83,7 +83,8 @@ public static class ErrorCodesToErrorMessages
         { ErrorCodes.ERR_ANALYTICS_EXPORT_TOO_LARGE, "The sales export exceeds the maximum allowed row count." },
         { ErrorCodes.ERR_ANALYTICS_EVENT_INVALID, "The analytics event payload is malformed." },
         { ErrorCodes.ERR_ANALYTICS_ATTRIBUTION_INVALID, "The analytics attribution data is invalid." },
-        { ErrorCodes.ERR_ANALYTICS_BFF_SIGNATURE_INVALID, "Analytics request signature is invalid." }
+        { ErrorCodes.ERR_ANALYTICS_BFF_SIGNATURE_INVALID, "Analytics request signature is invalid." },
+        { ErrorCodes.ERR_ANALYTICS_RATE_LIMIT_UNAVAILABLE, "Analytics rate limiting is temporarily unavailable. Please try again later." }
     };
 
     public static string GetMessage(string code) =>

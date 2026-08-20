@@ -50,6 +50,16 @@ pnpm run build
 
 Point the frontend at your running Web API using environment variables (see `asblock-frontend/.env.example`): **`NEXT_PUBLIC_API_BASE_URL`** for browser-side requests, and **`ASSETBLOCK_API_BASE_URL`** (or the public URL as fallback) for server-side Route Handlers.
 
+## Seller analytics
+
+Seller-facing analytics live under **`/sell` → Analytics** (UTC date ranges, gross revenue in USD cents, commerce from completed Stripe-webhook orders only). Engagement telemetry is first-party, privacy-bounded, and separate from **Vercel Analytics** (deployment metrics only).
+
+- **Commerce source of truth:** `Order` / `OrderLine` — never browser events.
+- **UTC semantics:** `from` inclusive, `to` exclusive, max 366 days; charts label UTC.
+- **Telemetry:** httpOnly `ab_vid` / `ab_sid` cookies via BFF; DNT/GPC → no optional engagement cookies/events.
+- **Rate limits (Redis in Staging/Production):** analytics events 120/min/partition; CSV export 10/hour/seller. Configure `AnalyticsRateLimiting:BffSigningSecret` on the API and `ASSETBLOCK_ANALYTICS_BFF_SIGNING_SECRET` on the frontend BFF.
+- **Local verification:** integration tests (PostgreSQL via Testcontainers; Redis tests when Docker is available).
+
 ## Documentation
 
 - **Interactive API:** Swagger UI when the Web API is running in Development.
