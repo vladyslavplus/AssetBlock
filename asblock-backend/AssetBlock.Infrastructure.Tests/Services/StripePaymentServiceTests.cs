@@ -1,5 +1,4 @@
-using AssetBlock.Domain.Abstractions.Services;
-using AssetBlock.Domain.Core.Entities;
+using AssetBlock.Domain.Core.Dto.Payments;
 using AssetBlock.Domain.Core.Exceptions;
 using AssetBlock.Domain.Core.Primitives.AppSettingsOptions;
 using AssetBlock.Infrastructure.Services;
@@ -27,12 +26,11 @@ public sealed class StripePaymentServiceTests
 
         var sut = new StripePaymentService(
             opts,
-            Substitute.For<IAssetStore>(),
             resilience,
             NullLogger<StripePaymentService>.Instance);
 
-        var act = async () =>
-            await sut.CreateCheckoutSession(Guid.NewGuid(), Guid.NewGuid());
+        var draft = CreateDraft();
+        var act = async () => await sut.CreateCheckoutSession(draft);
 
         await act.Should().ThrowAsync<InvalidOperationException>();
     }
@@ -46,20 +44,6 @@ public sealed class StripePaymentServiceTests
             DefaultSuccessUrl = "https://example.com/success",
             DefaultCancelUrl = "https://example.com/cancel"
         });
-        var assetStore = Substitute.For<IAssetStore>();
-        assetStore.GetById(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
-            .Returns(new Asset
-            {
-                Id = Guid.NewGuid(),
-                AuthorId = Guid.NewGuid(),
-                CategoryId = Guid.NewGuid(),
-                Title = "Asset title",
-                Description = "Asset description",
-                Price = 12.50m,
-                StorageKey = "key",
-                FileName = "file.zip",
-                CreatedAt = DateTimeOffset.UtcNow
-            });
 
         var resilience = Substitute.For<ResiliencePipelineProvider<string>>();
         resilience.GetPipeline(Arg.Any<string>())
@@ -67,12 +51,11 @@ public sealed class StripePaymentServiceTests
 
         var sut = new StripePaymentService(
             opts,
-            assetStore,
             resilience,
             NullLogger<StripePaymentService>.Instance);
 
-        var act = async () =>
-            await sut.CreateCheckoutSession(Guid.NewGuid(), Guid.NewGuid());
+        var draft = CreateDraft();
+        var act = async () => await sut.CreateCheckoutSession(draft);
 
         await act.Should().ThrowAsync<Exception>();
     }
@@ -93,6 +76,14 @@ public sealed class StripePaymentServiceTests
         await act.Should().ThrowAsync<StripeWebhookInvalidSignatureException>();
     }
 
+    private static CheckoutSessionDraft CreateDraft() =>
+        new(
+            Guid.NewGuid(),
+            Guid.NewGuid(),
+            DateTimeOffset.UtcNow.AddHours(1),
+            "usd",
+            [new CheckoutSessionDraftLine("Test Asset", 9.99m, "usd")]);
+
     private static StripePaymentService CreateSut(string webhookSecret)
     {
         var opts = Microsoft.Extensions.Options.Options.Create(new StripeOptions
@@ -103,11 +94,6 @@ public sealed class StripePaymentServiceTests
         var resilience = Substitute.For<ResiliencePipelineProvider<string>>();
         resilience.GetPipeline(Arg.Any<string>())
             .Returns(_ => new ResiliencePipelineBuilder().Build());
-
-        return new StripePaymentService(
-            opts,
-            Substitute.For<IAssetStore>(),
-            resilience,
-            NullLogger<StripePaymentService>.Instance);
+        return new StripePaymentService(opts, resilience, NullLogger<StripePaymentService>.Instance);
     }
 }

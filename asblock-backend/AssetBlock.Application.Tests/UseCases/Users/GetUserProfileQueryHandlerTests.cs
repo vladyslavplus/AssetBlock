@@ -10,11 +10,12 @@ namespace AssetBlock.Application.Tests.UseCases.Users;
 public class GetUserProfileQueryHandlerTests
 {
     private readonly IUserStore _userStore = Substitute.For<IUserStore>();
+    private readonly IEmailActionStore _emailActionStore = Substitute.For<IEmailActionStore>();
     private readonly GetUserProfileQueryHandler _handler;
 
     public GetUserProfileQueryHandlerTests()
     {
-        _handler = new GetUserProfileQueryHandler(_userStore);
+        _handler = new GetUserProfileQueryHandler(_userStore, _emailActionStore);
     }
 
     [Fact]

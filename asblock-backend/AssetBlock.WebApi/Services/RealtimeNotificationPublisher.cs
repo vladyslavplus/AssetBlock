@@ -19,17 +19,6 @@ public sealed class RealtimeNotificationPublisher(
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase
     };
 
-    public Task NotifyPurchaseCompleted(Guid userId, Guid assetId, string assetTitle, CancellationToken cancellationToken = default)
-    {
-        var payload = new PurchaseCompletedMessage(assetId, assetTitle);
-        return PersistAndSend(
-            userId,
-            NotificationKind.PURCHASE_COMPLETED,
-            NotificationsHub.PURCHASE_COMPLETED,
-            payload,
-            cancellationToken);
-    }
-
     public Task NotifyDownloadReady(Guid userId, Guid assetId, string assetTitle, CancellationToken cancellationToken = default)
     {
         var payload = new DownloadReadyMessage(assetId, assetTitle);

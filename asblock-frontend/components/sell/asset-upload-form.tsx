@@ -13,7 +13,12 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { Textarea } from '@/components/ui/textarea'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { useAuth } from '@/components/auth/auth-context'
+import {
+  EmailVerificationNotice,
+  isEmailVerified,
+} from '@/components/auth/email-verification-notice'
 import Link from 'next/link'
+import { AssetLicenseSelector } from '@/components/assets/asset-license-selector'
 import { applyApiFieldErrorsToForm } from '@/lib/http/api-errors'
 import {
   ASSET_UPLOAD_ALLOWED_EXTENSIONS,
@@ -23,15 +28,17 @@ import {
 import { uploadSellerAsset } from '@/lib/seller/seller-api'
 import { catalogKeys, fetchCatalogFacets } from '@/lib/catalog/catalog-query'
 import { sellerKeys } from '@/lib/seller/seller-query'
+import { invalidateQueriesInBackground } from '@/lib/query/query-refresh'
 import { SellerPriceStepInput } from '@/components/sell/seller-price-step-input'
 import { SessionBlockSkeleton } from '@/components/skeletons/session-block-skeleton'
 
 export function AssetUploadForm() {
   const router = useRouter()
   const queryClient = useQueryClient()
-  const { status } = useAuth()
+  const { status, user } = useAuth()
   const authed = status === 'authenticated'
   const pending = status === 'loading'
+  const verified = isEmailVerified(user)
 
   const facetsQuery = useQuery({
     queryKey: catalogKeys.facets(),
@@ -59,6 +66,7 @@ export function AssetUploadForm() {
       description: '',
       price: undefined,
       categoryId: '',
+      licenseCode: 'PERSONAL',
       tags: '',
     },
   })
@@ -76,6 +84,7 @@ export function AssetUploadForm() {
     if (desc) fd.set('description', desc)
     fd.set('price', String(values.price))
     fd.set('categoryId', values.categoryId)
+    fd.set('licenseCode', values.licenseCode)
     fd.set('file', values.file)
 
     const tagParts = (values.tags ?? '')
@@ -97,8 +106,8 @@ export function AssetUploadForm() {
 
     toast.success('Asset published.')
     reset()
-    void queryClient.invalidateQueries({ queryKey: sellerKeys.all })
-    void queryClient.invalidateQueries({ queryKey: catalogKeys.all })
+    invalidateQueriesInBackground(queryClient, { queryKey: sellerKeys.all })
+    invalidateQueriesInBackground(queryClient, { queryKey: catalogKeys.all })
     router.push(`/assets/${result.assetId}`)
     router.refresh()
   })
@@ -116,6 +125,10 @@ export function AssetUploadForm() {
         </Button>
       </div>
     )
+  }
+
+  if (!verified) {
+    return <EmailVerificationNotice />
   }
 
   return (
@@ -223,6 +236,13 @@ export function AssetUploadForm() {
         />
         <p className="text-[11px] text-muted-foreground">Comma-separated.</p>
       </div>
+
+      <AssetLicenseSelector
+        control={control}
+        name="licenseCode"
+        errors={errors}
+        idPrefix="upload"
+      />
 
       <div className="space-y-1.5">
         <Label htmlFor="upload-file" className="text-xs font-medium">

@@ -100,6 +100,64 @@ public sealed class TransactionalEmailComposerTests
         payload.Subject.Length.Should().BeLessThanOrEqualTo(EmailContentLimits.MAX_SUBJECT_LENGTH);
     }
 
+    [Fact]
+    public void CreateOrderReceipt_WhenValid_ShouldIncludeAmountItemsAndLibraryUrl()
+    {
+        var purchasedAt = new DateTimeOffset(2026, 7, 18, 12, 0, 0, TimeSpan.Zero);
+        var payload = _sut.CreateOrderReceipt(
+            "buyer@example.com",
+            Guid.NewGuid(),
+            "Bundle <b>Deal</b>",
+            19.99m,
+            "usd",
+            purchasedAt,
+            ["Alpha", "Beta <script>"]);
+
+        payload.TemplateKind.Should().Be(EmailTemplateKind.ORDER_RECEIPT);
+        payload.Subject.Should().Contain("Order receipt");
+        payload.TextBody.Should().Contain("19.99 USD");
+        payload.TextBody.Should().Contain("- Alpha");
+        payload.TextBody.Should().Contain("- Beta <script>");
+        payload.TextBody.Should().Contain("http://localhost:3000/library");
+        payload.HtmlBody.Should().Contain("Bundle &lt;b&gt;Deal&lt;/b&gt;");
+        payload.HtmlBody.Should().Contain("Beta &lt;script&gt;");
+        payload.HtmlBody.Should().NotContain("<script>");
+    }
+
+    [Fact]
+    public void CreateOrderSold_WhenValid_ShouldUseSellerListingsUrl()
+    {
+        var payload = _sut.CreateOrderSold(
+            "author@example.com",
+            Guid.NewGuid(),
+            "My Bundle",
+            29.50m,
+            "usd",
+            DateTimeOffset.UtcNow,
+            ["One", "Two"]);
+
+        payload.TemplateKind.Should().Be(EmailTemplateKind.ORDER_SOLD);
+        payload.Subject.Should().StartWith("Order sold:");
+        payload.TextBody.Should().Contain("29.50 USD");
+        payload.TextBody.Should().Contain("http://localhost:3000/sell");
+        payload.HtmlBody.Should().Contain("http://localhost:3000/sell");
+    }
+
+    [Fact]
+    public void CreateOrderReceipt_WhenAmountNotPositive_ShouldThrow()
+    {
+        var act = () => _sut.CreateOrderReceipt(
+            "buyer@example.com",
+            Guid.NewGuid(),
+            "Pack",
+            0m,
+            "usd",
+            DateTimeOffset.UtcNow,
+            ["A"]);
+
+        act.Should().Throw<ArgumentOutOfRangeException>().WithParameterName("amountTotal");
+    }
+
     private static EmailOptions CreateOptions(string publicAppBaseUrl = "http://localhost:3000") => new()
     {
         Provider = "Smtp",

@@ -1,4 +1,5 @@
 import { redirect } from 'next/navigation'
+import { EmailVerificationNotice } from '@/components/auth/email-verification-notice'
 import { SiteMain } from '@/components/layout/site-main'
 import { SitePageContainer } from '@/components/layout/site-page-container'
 import { SiteFooter } from '@/components/site-footer'
@@ -12,6 +13,8 @@ export default async function AdminLayout({ children }: { children: React.ReactN
     redirect('/')
   }
 
+  const verified = Boolean(user.emailVerifiedAt)
+
   return (
     <div className="min-h-screen flex flex-col bg-background text-foreground">
       <SiteHeader />
@@ -24,7 +27,17 @@ export default async function AdminLayout({ children }: { children: React.ReactN
               <span className="font-mono text-foreground/90">{user.username}</span>.
             </p>
           </div>
-          {children}
+          {verified ? (
+            children
+          ) : (
+            <div className="space-y-4">
+              <EmailVerificationNotice />
+              <p className="text-sm text-muted-foreground">
+                Admin tools stay locked until your email is verified. The API enforces this even if
+                the UI is bypassed.
+              </p>
+            </div>
+          )}
         </SitePageContainer>
       </SiteMain>
       <SiteFooter />

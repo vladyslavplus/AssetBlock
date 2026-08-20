@@ -1,34 +1,47 @@
-using AssetBlock.Application.Common;
+using AssetBlock.Application.UseCases.Payments.Checkout;
 using AssetBlock.Domain.Abstractions.Services;
 using AssetBlock.Domain.Core.Constants;
+using AssetBlock.Domain.Core.Licenses;
 using Ardalis.Result;
 using MediatR;
-using Microsoft.Extensions.Logging;
 
 namespace AssetBlock.Application.UseCases.Payments.CreateCheckoutSession;
 
 internal sealed class CreateCheckoutSessionCommandHandler(
-    IPaymentService paymentService,
     IAssetStore assetStore,
     IPurchaseStore purchaseStore,
-    ILogger<CreateCheckoutSessionCommandHandler> logger)
+    ICheckoutIntentStore checkoutIntentStore,
+    CheckoutSessionOrchestrator checkoutSessionOrchestrator,
+    CheckoutAttributionNormalizer attributionNormalizer)
     : IRequestHandler<CreateCheckoutSessionCommand, Result<CreateCheckoutSessionResponse>>
 {
-    public async Task<Result<CreateCheckoutSessionResponse>> Handle(CreateCheckoutSessionCommand request,
+    public Task<Result<CreateCheckoutSessionResponse>> Handle(
+        CreateCheckoutSessionCommand request,
         CancellationToken cancellationToken)
     {
-        var asset = await assetStore.GetById(request.AssetId, cancellationToken);
-        if (asset is null)
+        return checkoutSessionOrchestrator.Execute(
+            ct => PrepareDraft(request, ct),
+            ct => checkoutIntentStore.GetPendingForAsset(request.UserId, request.AssetId, ct),
+            cancellationToken);
+    }
+
+    private async Task<Result<CheckoutDraft>> PrepareDraft(
+        CreateCheckoutSessionCommand request,
+        CancellationToken cancellationToken)
+    {
+        var locked = await assetStore.GetForUpdate(request.AssetId, cancellationToken);
+        if (locked is null || locked.DeletedAt.HasValue)
         {
             return Result.NotFound(ErrorCodes.ERR_ASSET_NOT_FOUND);
         }
 
-        if (asset.DeletedAt.HasValue)
+        var snapshot = await assetStore.GetCurrentVersionSnapshot(request.AssetId, cancellationToken);
+        if (snapshot is null || snapshot.DeletedAt.HasValue)
         {
             return Result.NotFound(ErrorCodes.ERR_ASSET_NOT_FOUND);
         }
 
-        if (asset.AuthorId == request.UserId)
+        if (snapshot.AuthorId == request.UserId)
         {
             return Result.Forbidden(ErrorCodes.ERR_CANNOT_PURCHASE_OWN_ASSET);
         }
@@ -39,22 +52,42 @@ internal sealed class CreateCheckoutSessionCommandHandler(
             return Result.Conflict(ErrorCodes.ERR_ASSET_ALREADY_PURCHASED);
         }
 
-        try
+        if (!AssetLicenseCatalog.TryParseCode(snapshot.LicenseCode, out var licenseCode))
         {
-            var sessionUrl = await paymentService.CreateCheckoutSession(
-                request.AssetId,
-                request.UserId,
-                cancellationToken);
-            return Result.Success(new CreateCheckoutSessionResponse(sessionUrl));
+            return Result.NotFound(ErrorCodes.ERR_ASSET_NOT_FOUND);
         }
-        catch (OperationCanceledException)
-        {
-            throw;
-        }
-        catch (Exception ex)
-        {
-            logger.LogError(ex, "Failed to create checkout session for asset {AssetId}", request.AssetId);
-            return ResultError.Error<CreateCheckoutSessionResponse>(ErrorCodes.ERR_PAYMENT_FAILED);
-        }
+
+        var attribution = await attributionNormalizer.TryNormalize(
+            request.Attribution,
+            snapshot.AssetId,
+            snapshot.AuthorId,
+            request.AnalyticsVisitorId,
+            request.AnalyticsSessionId,
+            cancellationToken);
+
+        return Result.Success(new CheckoutDraft(
+            request.UserId,
+            snapshot.AssetId,
+            BundleId: null,
+            BundleRevisionId: null,
+            snapshot.Title,
+            snapshot.Price,
+            StripeConstants.CURRENCY_USD,
+            [
+                new CheckoutDraftItem(
+                    snapshot.AssetId,
+                    snapshot.AssetVersionId,
+                    snapshot.AuthorId,
+                    Position: 1,
+                    snapshot.Title,
+                    snapshot.VersionNumber,
+                    snapshot.Price,
+                    snapshot.Price,
+                    licenseCode,
+                    snapshot.LicenseTemplateVersion,
+                    snapshot.LicenseDisplayName,
+                    snapshot.LicenseTerms)
+            ],
+            attribution));
     }
 }

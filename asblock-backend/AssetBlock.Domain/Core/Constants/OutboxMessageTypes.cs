@@ -4,9 +4,10 @@ namespace AssetBlock.Domain.Core.Constants;
 public static class OutboxMessageTypes
 {
     public const string ASSET_BLOB_DELETE = "AssetBlobDelete";
-    public const string PURCHASE_COMPLETED = "PurchaseCompleted";
+    public const string ORDER_COMPLETED = "OrderCompleted";
     public const string NOTIFICATION_DISPATCH = "NotificationDispatch";
     public const string EMAIL_DISPATCH = "EmailDispatch";
+    public const string EMAIL_ACTION_DISPATCH = "EmailActionDispatch";
 
     public const int MAX_ATTEMPTS = 10;
     public const int DISPATCH_BATCH_SIZE = 50;

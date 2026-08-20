@@ -24,11 +24,13 @@ public class DeleteAssetCommandHandlerTests
     {
         _assetStoreMock = Substitute.For<IAssetStore>();
         _purchaseStoreMock = Substitute.For<IPurchaseStore>();
+        var checkoutIntentStoreMock = Substitute.For<ICheckoutIntentStore>();
         var unitOfWorkMock = Substitute.For<IUnitOfWork>();
         _outboxStoreMock = Substitute.For<IOutboxStore>();
         _auditWriterMock = Substitute.For<IAuditWriter>();
         _cacheMock = Substitute.For<ICacheService>();
         _purchaseStoreMock.HasPurchasesForAsset(Arg.Any<Guid>(), Arg.Any<CancellationToken>()).Returns(false);
+        checkoutIntentStoreMock.HasActiveForAsset(Arg.Any<Guid>(), Arg.Any<DateTimeOffset>(), Arg.Any<CancellationToken>()).Returns(false);
 
         unitOfWorkMock.ExecuteInTransaction(Arg.Any<Func<CancellationToken, Task>>(), Arg.Any<CancellationToken>())
             .Returns(ci => ci.Arg<Func<CancellationToken, Task>>()(CancellationToken.None));
@@ -36,6 +38,7 @@ public class DeleteAssetCommandHandlerTests
         _handler = new DeleteAssetCommandHandler(
             _assetStoreMock,
             _purchaseStoreMock,
+            checkoutIntentStoreMock,
             unitOfWorkMock,
             _outboxStoreMock,
             _auditWriterMock,
@@ -59,7 +62,7 @@ public class DeleteAssetCommandHandlerTests
     public async Task Handle_WhenUserIsNotAuthor_ShouldReturnForbiddenAndWriteDeniedAudit()
     {
         var command = new DeleteAssetCommand(Guid.NewGuid(), Guid.NewGuid());
-        var asset = new Asset { Id = command.Id, AuthorId = Guid.NewGuid(), CategoryId = Guid.NewGuid(), Title = "t", StorageKey = "k", FileName = "f" };
+        var asset = new Asset { Id = command.Id, AuthorId = Guid.NewGuid(), CategoryId = Guid.NewGuid(), Title = "t" };
         _assetStoreMock.GetById(command.Id).Returns(asset);
 
         var result = await _handler.Handle(command, CancellationToken.None);
@@ -80,8 +83,11 @@ public class DeleteAssetCommandHandlerTests
     {
         var authorId = Guid.NewGuid();
         var command = new DeleteAssetCommand(Guid.NewGuid(), authorId);
-        var asset = new Asset { Id = command.Id, AuthorId = authorId, StorageKey = "key", CategoryId = Guid.NewGuid(), Title = "t", FileName = "f" };
+        var asset = new Asset { Id = command.Id, AuthorId = authorId, CategoryId = Guid.NewGuid(), Title = "t" };
         _assetStoreMock.GetById(command.Id).Returns(asset);
+        _assetStoreMock.GetForUpdate(command.Id, Arg.Any<CancellationToken>()).Returns(asset);
+        _assetStoreMock.GetAllStorageKeys(command.Id, Arg.Any<CancellationToken>())
+            .Returns(["key"]);
 
         var result = await _handler.Handle(command, CancellationToken.None);
 
@@ -107,8 +113,9 @@ public class DeleteAssetCommandHandlerTests
     {
         var authorId = Guid.NewGuid();
         var command = new DeleteAssetCommand(Guid.NewGuid(), authorId);
-        var asset = new Asset { Id = command.Id, AuthorId = authorId, StorageKey = "key", CategoryId = Guid.NewGuid(), Title = "t", FileName = "f" };
+        var asset = new Asset { Id = command.Id, AuthorId = authorId, CategoryId = Guid.NewGuid(), Title = "t" };
         _assetStoreMock.GetById(command.Id).Returns(asset);
+        _assetStoreMock.GetForUpdate(command.Id, Arg.Any<CancellationToken>()).Returns(asset);
         _purchaseStoreMock.HasPurchasesForAsset(command.Id, Arg.Any<CancellationToken>()).Returns(true);
 
         var result = await _handler.Handle(command, CancellationToken.None);
@@ -134,13 +141,12 @@ public class DeleteAssetCommandHandlerTests
         {
             Id = command.Id,
             AuthorId = authorId,
-            StorageKey = "key",
             CategoryId = Guid.NewGuid(),
             Title = "t",
-            FileName = "f",
             DeletedAt = DateTimeOffset.UtcNow.AddHours(-1),
         };
         _assetStoreMock.GetById(command.Id).Returns(asset);
+        _assetStoreMock.GetForUpdate(command.Id, Arg.Any<CancellationToken>()).Returns(asset);
 
         var result = await _handler.Handle(command, CancellationToken.None);
 
@@ -153,12 +159,52 @@ public class DeleteAssetCommandHandlerTests
     }
 
     [Fact]
+    public async Task Handle_WhenActiveCheckoutExists_ShouldSoftDeleteWithAuditWithoutOutbox()
+    {
+        var authorId = Guid.NewGuid();
+        var command = new DeleteAssetCommand(Guid.NewGuid(), authorId);
+        var asset = new Asset { Id = command.Id, AuthorId = authorId, CategoryId = Guid.NewGuid(), Title = "t" };
+        _assetStoreMock.GetById(command.Id).Returns(asset);
+        _assetStoreMock.GetForUpdate(command.Id, Arg.Any<CancellationToken>()).Returns(asset);
+        _purchaseStoreMock.HasPurchasesForAsset(command.Id, Arg.Any<CancellationToken>()).Returns(false);
+
+        // Active checkout present (purchases are absent)
+        var checkoutIntentStoreMock = Substitute.For<ICheckoutIntentStore>();
+        checkoutIntentStoreMock.HasActiveForAsset(command.Id, Arg.Any<DateTimeOffset>(), Arg.Any<CancellationToken>()).Returns(true);
+        var unitOfWorkMock = Substitute.For<IUnitOfWork>();
+        unitOfWorkMock.ExecuteInTransaction(Arg.Any<Func<CancellationToken, Task>>(), Arg.Any<CancellationToken>())
+            .Returns(ci => ci.Arg<Func<CancellationToken, Task>>()(CancellationToken.None));
+        var handler = new DeleteAssetCommandHandler(
+            _assetStoreMock,
+            _purchaseStoreMock,
+            checkoutIntentStoreMock,
+            unitOfWorkMock,
+            _outboxStoreMock,
+            _auditWriterMock,
+            _cacheMock,
+            Microsoft.Extensions.Logging.Abstractions.NullLogger<DeleteAssetCommandHandler>.Instance);
+
+        var result = await handler.Handle(command, CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        await _assetStoreMock.Received(1).SoftDelete(command.Id, Arg.Any<DateTimeOffset>(), Arg.Any<CancellationToken>());
+        await _assetStoreMock.DidNotReceive().Delete(Arg.Any<Guid>(), Arg.Any<CancellationToken>());
+        await _outboxStoreMock.DidNotReceiveWithAnyArgs().Enqueue(Arg.Any<string>(), Arg.Any<object>(), Arg.Any<CancellationToken>());
+        await _auditWriterMock.Received(1).Write(
+            Arg.Is<AuditEvent>(e =>
+                e.Action == AuditActions.ASSET_SOFT_DELETE &&
+                e.Outcome == AuditOutcome.SUCCESS),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
     public async Task Handle_WhenTransactionThrows_ShouldReturnError()
     {
         var authorId = Guid.NewGuid();
         var command = new DeleteAssetCommand(Guid.NewGuid(), authorId);
-        var asset = new Asset { Id = command.Id, AuthorId = authorId, StorageKey = "key", CategoryId = Guid.NewGuid(), Title = "t", FileName = "f" };
+        var asset = new Asset { Id = command.Id, AuthorId = authorId, CategoryId = Guid.NewGuid(), Title = "t" };
         _assetStoreMock.GetById(command.Id).Returns(asset);
+        _assetStoreMock.GetForUpdate(command.Id, Arg.Any<CancellationToken>()).Returns(asset);
         _assetStoreMock.Delete(command.Id, Arg.Any<CancellationToken>())
             .ThrowsAsync(new InvalidOperationException("db"));
 

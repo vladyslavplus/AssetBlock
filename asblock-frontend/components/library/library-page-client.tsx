@@ -16,6 +16,7 @@ import {
   libraryKeys,
   LibraryFetchError,
 } from '@/lib/library/library-query'
+import { runQueryInBackground } from '@/lib/query/query-refresh'
 
 export function LibraryPageClient() {
   const { status } = useAuth()
@@ -82,7 +83,9 @@ export function LibraryPageClient() {
                 variant="outline"
                 size="sm"
                 className="mt-3"
-                onClick={() => void purchasesQuery.refetch()}
+                onClick={() =>
+                  runQueryInBackground(purchasesQuery.refetch({ cancelRefetch: false }))
+                }
               >
                 Retry
               </Button>

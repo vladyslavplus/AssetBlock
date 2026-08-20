@@ -11,6 +11,9 @@ namespace AssetBlock.WebApi.IntegrationTests.Support;
 /// <summary>WebApplicationFactory with Postgres connection string and integration-only settings.</summary>
 public sealed class AssetBlockWebApplicationFactory(string connectionString) : WebApplicationFactory<Program>
 {
+    internal const string TEST_ANALYTICS_BFF_SIGNING_SECRET =
+        "integration_test_analytics_bff_signing_secret_32chars";
+
     private const string TEST_JWT_KEY = "integration_test_jwt_signing_key_min_32_chars!";
     // Synthetic 32 zero bytes (Base64) — not a production key.
     private const string TEST_ENCRYPTION_KEY_BASE64 = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=";
@@ -18,6 +21,9 @@ public sealed class AssetBlockWebApplicationFactory(string connectionString) : W
     private readonly string _connectionString = connectionString ?? throw new ArgumentNullException(nameof(connectionString));
 
     private RecordingEmailSender RecordingEmailSender { get; } = new();
+
+    /// <summary>In-memory object store standing in for MinIO so upload/publish/download flows work without Docker.</summary>
+    public FakeAssetStorageService AssetStorage { get; } = new();
 
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
@@ -28,6 +34,8 @@ public sealed class AssetBlockWebApplicationFactory(string connectionString) : W
         builder.UseSetting("ConnectionStrings:Redis", string.Empty);
         builder.UseSetting("Database:AutoMigrate", "true");
         builder.UseSetting("Database:EnsureCreated", "false");
+        builder.UseSetting("AnalyticsRateLimiting:BffSigningSecret", TEST_ANALYTICS_BFF_SIGNING_SECRET);
+        builder.UseSetting("AnalyticsAggregation:Enabled", "false");
         builder.UseSetting("Jwt:Key", TEST_JWT_KEY);
         builder.UseSetting("Jwt:Issuer", "AssetBlock.Integration");
         builder.UseSetting("Jwt:Audience", "AssetBlock.Integration.Api");
@@ -52,11 +60,21 @@ public sealed class AssetBlockWebApplicationFactory(string connectionString) : W
         builder.UseSetting("Email:Smtp:Port", "1025");
         builder.UseSetting("Email:Smtp:Security", "NONE");
         builder.UseSetting("Email:Smtp:TimeoutSeconds", "30");
+        builder.UseSetting(
+            "DataProtection:KeysPath",
+            Path.Combine(Path.GetTempPath(), $"assetblock-dataprotection-keys-{Guid.NewGuid():N}"));
+        builder.UseSetting("DataProtection:ProtectionMode", "None");
 
         builder.ConfigureTestServices(services =>
         {
             services.RemoveAll<IEmailSender>();
             services.AddSingleton<IEmailSender>(RecordingEmailSender);
+
+            services.RemoveAll<IAssetStorageService>();
+            services.AddSingleton<IAssetStorageService>(AssetStorage);
+
+            services.RemoveAll<IPaymentService>();
+            services.AddSingleton<IPaymentService, FakePaymentService>();
         });
     }
 }

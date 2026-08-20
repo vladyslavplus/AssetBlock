@@ -22,12 +22,24 @@ internal sealed class GetAssetByIdQueryHandler(IAssetStore assetStore, IReviewSt
             return Result.NotFound(ErrorCodes.ERR_ASSET_NOT_FOUND);
         }
 
+        var snapshot = await assetStore.GetCurrentVersionSnapshot(request.Id, cancellationToken);
+        if (snapshot is null)
+        {
+            return Result.NotFound(ErrorCodes.ERR_ASSET_NOT_FOUND);
+        }
+
         var tags = asset.AssetTags
             .Select(at => at.Tag.Name)
             .OrderBy(n => n, StringComparer.OrdinalIgnoreCase)
             .ToList();
         var averageRating = await reviewStore.GetAverageRatingForAsset(asset.Id, cancellationToken);
         var authorUsername = asset.Author.Username;
+
+        var license = new AssetLicenseSummaryDto(
+            snapshot.LicenseCode,
+            snapshot.LicenseDisplayName,
+            snapshot.LicenseTemplateVersion,
+            snapshot.LicenseTerms);
 
         var item = new AssetDetailItem(
             asset.Id,
@@ -41,7 +53,14 @@ internal sealed class GetAssetByIdQueryHandler(IAssetStore assetStore, IReviewSt
             asset.CreatedAt,
             asset.UpdatedAt,
             tags,
-            averageRating);
+            averageRating,
+            snapshot.VersionNumber,
+            snapshot.AssetVersionId,
+            snapshot.VersionCreatedAt,
+            snapshot.FileName,
+            snapshot.ContentLength,
+            snapshot.ContentSha256,
+            license);
         return Result.Success(item);
     }
 }

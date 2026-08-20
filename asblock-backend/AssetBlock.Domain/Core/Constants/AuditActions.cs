@@ -6,6 +6,11 @@ public static class AuditActions
     public const string AUTH_REGISTER = "Auth.Register";
     public const string AUTH_LOGIN = "Auth.Login";
     public const string AUTH_REFRESH_TOKEN = "Auth.RefreshToken";
+    public const string AUTH_EMAIL_VERIFICATION = "Auth.EmailVerification";
+    public const string AUTH_PASSWORD_RESET_REQUEST = "Auth.PasswordResetRequest";
+    public const string AUTH_PASSWORD_RESET_CONFIRM = "Auth.PasswordResetConfirm";
+    public const string AUTH_EMAIL_CHANGE_REQUEST = "Auth.EmailChangeRequest";
+    public const string AUTH_EMAIL_CHANGE_CONFIRM = "Auth.EmailChangeConfirm";
 
     public const string USER_PASSWORD_CHANGE = "User.PasswordChange";
     public const string USER_PROFILE_UPDATE = "User.ProfileUpdate";
@@ -18,6 +23,7 @@ public static class AuditActions
     public const string ASSET_HARD_DELETE = "Asset.HardDelete";
     public const string ASSET_TAG_ADD = "Asset.TagAdd";
     public const string ASSET_TAG_REMOVE = "Asset.TagRemove";
+    public const string ASSET_VERSION_PUBLISH = "Asset.VersionPublish";
 
     public const string CATEGORY_CREATE = "Category.Create";
     public const string CATEGORY_UPDATE = "Category.Update";
@@ -30,5 +36,21 @@ public static class AuditActions
     public const string REVIEW_CREATE = "Review.Create";
     public const string REVIEW_DELETE = "Review.Delete";
 
-    public const string PAYMENT_PURCHASE_COMPLETED = "Payment.PurchaseCompleted";
+    public const string COLLECTION_CREATE = "Collection.Create";
+    public const string COLLECTION_UPDATE = "Collection.Update";
+    public const string COLLECTION_ITEM_ADD = "Collection.ItemAdd";
+    public const string COLLECTION_ITEM_REMOVE = "Collection.ItemRemove";
+    public const string COLLECTION_REORDER = "Collection.Reorder";
+    public const string COLLECTION_PUBLISH = "Collection.Publish";
+    public const string COLLECTION_ARCHIVE = "Collection.Archive";
+    public const string COLLECTION_RESTORE = "Collection.Restore";
+
+    public const string BUNDLE_CREATE = "Bundle.Create";
+    public const string BUNDLE_REVISE = "Bundle.Revise";
+    public const string BUNDLE_ARCHIVE = "Bundle.Archive";
+    public const string BUNDLE_RESTORE = "Bundle.Restore";
+
+    public const string PAYMENT_ORDER_COMPLETED = "Payment.OrderCompleted";
+
+    public const string SELLER_ANALYTICS_EXPORTED = "SellerAnalytics.Exported";
 }

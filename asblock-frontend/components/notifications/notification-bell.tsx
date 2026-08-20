@@ -31,7 +31,7 @@ import type {
 } from '@/lib/notifications/notification-types'
 import { subscribeNotificationHub } from '@/lib/notifications/notification-hub'
 import {
-  getNotificationAssetId,
+  getNotificationHref,
   getNotificationBody,
   getNotificationTitle,
 } from '@/lib/notifications/notification-ui'
@@ -45,6 +45,7 @@ import {
   postMarkAllNotificationsRead,
 } from '@/lib/notifications/notifications-query'
 import { cn } from '@/lib/utils'
+import { invalidateQueriesInBackground } from '@/lib/query/query-refresh'
 
 function updateInboxItemReadAt(
   old: InfiniteData<PagedNotificationsDto, number> | undefined,
@@ -113,7 +114,10 @@ export function NotificationBell() {
   const refreshMutation = useMutation({
     mutationFn: async () => {
       await queryClient.resetQueries({ queryKey: notificationsKeys.inbox(), exact: true })
-      await queryClient.invalidateQueries({ queryKey: notificationsKeys.unread() })
+      await queryClient.invalidateQueries(
+        { queryKey: notificationsKeys.unread() },
+        { cancelRefetch: false },
+      )
     },
     onError: () => {
       toast.error('Could not refresh notifications.')
@@ -133,8 +137,8 @@ export function NotificationBell() {
           ? `Marked ${data.updatedCount} notification${data.updatedCount === 1 ? '' : 's'} as read.`
           : 'Nothing unread.',
       )
-      void queryClient.invalidateQueries({ queryKey: notificationsKeys.unread() })
-      void queryClient.invalidateQueries({ queryKey: notificationsKeys.inbox() })
+      invalidateQueriesInBackground(queryClient, { queryKey: notificationsKeys.unread() })
+      invalidateQueriesInBackground(queryClient, { queryKey: notificationsKeys.inbox() })
     },
     onError: (err: unknown) => {
       const msg =
@@ -148,7 +152,7 @@ export function NotificationBell() {
       return
     }
     return subscribeNotificationHub(() => {
-      void queryClient.invalidateQueries({ queryKey: notificationsKeys.all })
+      invalidateQueriesInBackground(queryClient, { queryKey: notificationsKeys.all })
     })
   }, [status, queryClient])
 
@@ -168,7 +172,7 @@ export function NotificationBell() {
           (old) => updateInboxItemReadAt(old, n.id, null),
         )
       }
-      void queryClient.invalidateQueries({ queryKey: notificationsKeys.unread() })
+      invalidateQueriesInBackground(queryClient, { queryKey: notificationsKeys.unread() })
     } catch (err) {
       toast.error(
         err instanceof Error
@@ -277,7 +281,7 @@ export function NotificationBell() {
               {items.map((n) => {
                 const title = getNotificationTitle(n.kind)
                 const body = getNotificationBody(n.kind, n.metadataJson)
-                const assetId = getNotificationAssetId(n.metadataJson)
+                const href = getNotificationHref(n.kind, n.metadataJson)
                 const unread = !n.readAt
                 return (
                   <li key={n.id}>
@@ -306,15 +310,13 @@ export function NotificationBell() {
                       {body ? (
                         <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2">{body}</p>
                       ) : null}
-                      {assetId ? (
-                        <Link
-                          href={`/assets/${assetId}`}
-                          className="text-xs text-accent mt-1 inline-block hover:underline"
-                          onClick={(e) => e.stopPropagation()}
-                        >
-                          View asset
-                        </Link>
-                      ) : null}
+                      <Link
+                        href={href}
+                        className="text-xs text-accent mt-1 inline-block hover:underline"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        Open
+                      </Link>
                     </button>
                   </li>
                 )

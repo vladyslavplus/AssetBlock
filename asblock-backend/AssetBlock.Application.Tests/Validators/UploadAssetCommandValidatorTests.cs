@@ -1,5 +1,6 @@
 using AssetBlock.Application.UseCases.Assets.UploadAsset;
 using AssetBlock.Domain.Core.Dto.Assets;
+using AssetBlock.Domain.Core.Payments;
 using FluentAssertions;
 
 namespace AssetBlock.Application.Tests.Validators;
@@ -19,7 +20,7 @@ public class UploadAssetCommandValidatorTests
         int? downloadLimitPerHour = null,
         long fileLength = 1) =>
         new(Guid.NewGuid(),
-            new UploadAssetRequest(title, null, price, Guid.NewGuid(), downloadLimitPerHour),
+            new UploadAssetRequest(title, null, price, Guid.NewGuid(), "PERSONAL", downloadLimitPerHour),
             new MemoryStream([1]),
             fileName,
             fileLength);
@@ -29,7 +30,7 @@ public class UploadAssetCommandValidatorTests
     {
         var command = new UploadAssetCommand(
             Guid.Empty,
-            new UploadAssetRequest("Title", null, 5m, Guid.NewGuid()),
+            new UploadAssetRequest("Title", null, 5m, Guid.NewGuid(), "PERSONAL"),
             new MemoryStream([1]),
             "file.zip",
             1);
@@ -114,12 +115,20 @@ public class UploadAssetCommandValidatorTests
     }
 
     [Fact]
+    public async Task Validate_WhenPriceOverMaxAmount_ShouldFail()
+    {
+        var result = await _validator.ValidateAsync(ValidCommand(price: BundlePriceAllocator.MAX_AMOUNT + 0.01m));
+        result.IsValid.Should().BeFalse();
+        result.Errors.Should().Contain(e => e.PropertyName.Contains("Price"));
+    }
+
+    [Fact]
     public async Task Validate_WhenDescriptionExceeds5000Chars_ShouldFail()
     {
         var longDesc = new string('x', 5001);
         var command = new UploadAssetCommand(
             Guid.NewGuid(),
-            new UploadAssetRequest("Title", longDesc, 5m, Guid.NewGuid()),
+            new UploadAssetRequest("Title", longDesc, 5m, Guid.NewGuid(), "PERSONAL"),
             new MemoryStream([1]),
             "file.zip",
             1);

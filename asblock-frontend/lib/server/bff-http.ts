@@ -79,3 +79,20 @@ export function forwardBackendResponse(response: Response): Response {
     headers,
   })
 }
+
+/** Streams a download response; forwards Content-Type/Disposition and sets Cache-Control: no-store. */
+export function forwardBackendDownloadResponse(response: Response): Response {
+  const headers = new Headers()
+  for (const name of SAFE_BACKEND_RESPONSE_HEADERS) {
+    const value = response.headers.get(name)
+    if (value) {
+      headers.set(name, value)
+    }
+  }
+  headers.set('Cache-Control', 'no-store')
+
+  return new Response(BODYLESS_STATUSES.has(response.status) ? null : response.body, {
+    status: response.status,
+    headers,
+  })
+}

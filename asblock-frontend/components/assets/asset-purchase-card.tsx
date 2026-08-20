@@ -5,9 +5,11 @@ import { useRouter } from 'next/navigation'
 import { useMutation } from '@tanstack/react-query'
 import { Button } from '@/components/ui/button'
 import { useAuth } from '@/components/auth/auth-context'
+import { isEmailVerified } from '@/components/auth/email-verification-notice'
 import { formatUsdWhole } from '@/lib/format-currency'
+import type { CheckoutAttributionInput } from '@/lib/analytics/telemetry-source'
 import { CheckoutRequestError, postCreateCheckoutSession } from '@/lib/payments/checkout-api'
-import { PENDING_REVIEW_ASSET_ID_KEY } from '@/lib/reviews/review-constants'
+import { writePendingCheckoutContext } from '@/lib/reviews/review-constants'
 import { Download, Lock, Loader2, Zap } from 'lucide-react'
 import { toast } from 'sonner'
 
@@ -18,6 +20,7 @@ interface AssetPurchaseCardProps {
   price: number
   checkoutConfigured: boolean
   returnPath: string
+  checkoutAttribution?: CheckoutAttributionInput
 }
 
 export function AssetPurchaseCard({
@@ -27,21 +30,23 @@ export function AssetPurchaseCard({
   price,
   checkoutConfigured,
   returnPath,
+  checkoutAttribution,
 }: AssetPurchaseCardProps) {
   const router = useRouter()
   const { user, status } = useAuth()
 
   const isOwner = Boolean(user && user.id === authorId)
+  const verified = isEmailVerified(user)
   const loginHref = `/login?returnUrl=${encodeURIComponent(returnPath)}`
 
   const checkoutMutation = useMutation({
-    mutationFn: () => postCreateCheckoutSession(assetId),
+    mutationFn: () => postCreateCheckoutSession(assetId, checkoutAttribution),
     onSuccess: (data) => {
-      try {
-        sessionStorage.setItem(PENDING_REVIEW_ASSET_ID_KEY, assetId)
-      } catch {
-        // Private mode / storage blocked — success page prompt may be unavailable; library still works.
-      }
+      writePendingCheckoutContext({
+        checkoutIntentId: data.checkoutIntentId,
+        kind: 'asset',
+        assetId,
+      })
       window.location.assign(data.checkoutUrl)
     },
     onError: (err: unknown) => {
@@ -87,6 +92,14 @@ export function AssetPurchaseCard({
           className="bg-primary text-primary-foreground hover:bg-[#6D28D9] transition-smooth font-medium w-full h-10"
         >
           <Link href={loginHref}>Sign in to purchase</Link>
+        </Button>
+      ) : !verified ? (
+        <Button
+          type="button"
+          asChild
+          className="bg-primary text-primary-foreground hover:bg-[#6D28D9] transition-smooth font-medium w-full h-10"
+        >
+          <Link href="/account">Verify email to purchase</Link>
         </Button>
       ) : !checkoutConfigured ? (
         <Button type="button" disabled className="w-full h-10 font-medium">

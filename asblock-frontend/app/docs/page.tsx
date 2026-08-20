@@ -40,6 +40,17 @@ export default function DocsPage() {
             </ul>
           </section>
 
+          <section className="space-y-4 mb-12" id="licenses">
+            <h2 className="text-lg font-semibold text-foreground">Licenses &amp; versions</h2>
+            <p className="text-sm text-muted-foreground leading-relaxed">
+              Sellers choose a <span className="text-foreground">Personal</span> or{' '}
+              <span className="text-foreground">Commercial</span> platform license when uploading or
+              publishing a version. Buyers receive the licensed version they purchased and any newer
+              entitled updates. Each published package includes a SHA-256 content hash on the asset
+              page so you can verify downloads.
+            </p>
+          </section>
+
           <section className="space-y-4" id="api">
             <h2 className="text-lg font-semibold text-foreground">API reference</h2>
             <p className="text-sm text-muted-foreground leading-relaxed">

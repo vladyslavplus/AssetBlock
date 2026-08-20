@@ -16,6 +16,7 @@ import {
 } from '@/lib/admin/admin-schemas'
 import type { TagDtoApi } from '@/lib/catalog/assets-api'
 import { catalogKeys } from '@/lib/catalog/catalog-query'
+import { invalidateQueriesInBackground } from '@/lib/query/query-refresh'
 
 const SEARCH_DEBOUNCE_MS = 320
 
@@ -78,8 +79,8 @@ export function useAdminTags() {
   })
 
   const invalidateLists = () => {
-    void queryClient.invalidateQueries({ queryKey: adminKeys.tags() })
-    void queryClient.invalidateQueries({ queryKey: catalogKeys.all })
+    invalidateQueriesInBackground(queryClient, { queryKey: adminKeys.tags() })
+    invalidateQueriesInBackground(queryClient, { queryKey: catalogKeys.all })
   }
 
   const createMutation = useMutation({

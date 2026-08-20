@@ -16,8 +16,16 @@ public sealed class MemoryCacheServiceTests
     [Fact]
     public async Task SetString_withoutExpiration_stillReadable()
     {
-        await _sut.SetString("k0", "v0", null);
+        await _sut.SetString("k0", "v0");
         (await _sut.GetString("k0")).Should().Be("v0");
+    }
+
+    [Fact]
+    public async Task Remove_deletesExactKey()
+    {
+        await _sut.SetString("k1", "v1");
+        await _sut.Remove("k1");
+        (await _sut.GetString("k1")).Should().BeNull();
     }
 
     [Fact]

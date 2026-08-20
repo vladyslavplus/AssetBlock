@@ -19,8 +19,6 @@ internal sealed class AssetConfiguration : IEntityTypeConfiguration<Asset>
         builder.Property(a => a.Title).IsRequired().HasMaxLength(500);
         builder.Property(a => a.Description).HasMaxLength(5000);
         builder.Property(a => a.Price).HasPrecision(18, 2);
-        builder.Property(a => a.StorageKey).IsRequired().HasMaxLength(1024);
-        builder.Property(a => a.FileName).IsRequired().HasMaxLength(512);
 
         builder.Property(a => a.CreatedAt).IsRequired();
         builder.Property(a => a.UpdatedAt);
@@ -36,5 +34,8 @@ internal sealed class AssetConfiguration : IEntityTypeConfiguration<Asset>
             .WithMany(c => c.Assets)
             .HasForeignKey(a => a.CategoryId)
             .OnDelete(DeleteBehavior.Restrict);
+
+        builder.HasIndex(a => new { a.AuthorId, a.Id })
+            .HasDatabaseName("IX_assets_author_id");
     }
 }

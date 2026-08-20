@@ -10,6 +10,7 @@ public sealed class ApplicationDbContext(DbContextOptions<ApplicationDbContext> 
     public DbSet<User> Users => Set<User>();
     public DbSet<Category> Categories => Set<Category>();
     public DbSet<Asset> Assets => Set<Asset>();
+    public DbSet<AssetVersion> AssetVersions => Set<AssetVersion>();
     public DbSet<Purchase> Purchases => Set<Purchase>();
     public DbSet<RefreshToken> RefreshTokens => Set<RefreshToken>();
     public DbSet<Review> Reviews => Set<Review>();
@@ -18,6 +19,22 @@ public sealed class ApplicationDbContext(DbContextOptions<ApplicationDbContext> 
     public DbSet<UserNotification> UserNotifications => Set<UserNotification>();
     public DbSet<OutboxMessage> OutboxMessages => Set<OutboxMessage>();
     public DbSet<AuditLog> AuditLogs => Set<AuditLog>();
+    public DbSet<EmailAction> EmailActions => Set<EmailAction>();
+    public DbSet<CheckoutIntent> CheckoutIntents => Set<CheckoutIntent>();
+    public DbSet<CheckoutIntentItem> CheckoutIntentItems => Set<CheckoutIntentItem>();
+    public DbSet<CheckoutReservation> CheckoutReservations => Set<CheckoutReservation>();
+    public DbSet<Collection> Collections => Set<Collection>();
+    public DbSet<CollectionItem> CollectionItems => Set<CollectionItem>();
+    public DbSet<Bundle> Bundles => Set<Bundle>();
+    public DbSet<BundleRevision> BundleRevisions => Set<BundleRevision>();
+    public DbSet<BundleRevisionItem> BundleRevisionItems => Set<BundleRevisionItem>();
+    public DbSet<Order> Orders => Set<Order>();
+    public DbSet<OrderLine> OrderLines => Set<OrderLine>();
+    public DbSet<AnalyticsEvent> AnalyticsEvents => Set<AnalyticsEvent>();
+    public DbSet<SellerAnalyticsDaily> SellerAnalyticsDaily => Set<SellerAnalyticsDaily>();
+    public DbSet<ProductAnalyticsDaily> ProductAnalyticsDaily => Set<ProductAnalyticsDaily>();
+    public DbSet<CollectionAnalyticsDaily> CollectionAnalyticsDaily => Set<CollectionAnalyticsDaily>();
+    public DbSet<TrafficAnalyticsDaily> TrafficAnalyticsDaily => Set<TrafficAnalyticsDaily>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -39,6 +56,7 @@ public sealed class ApplicationDbContext(DbContextOptions<ApplicationDbContext> 
 
         ConfigurePostgresAssetSearch(modelBuilder);
         ConfigurePostgresAudit(modelBuilder);
+        ConfigurePostgresAnalyticsEvents(modelBuilder);
     }
 
     private static void ConfigurePostgresAssetSearch(ModelBuilder modelBuilder)
@@ -76,6 +94,16 @@ public sealed class ApplicationDbContext(DbContextOptions<ApplicationDbContext> 
         asset.HasIndex(a => new { a.AuthorId, a.CreatedAt, a.Id })
             .HasFilter("\"DeletedAt\" IS NULL")
             .HasDatabaseName("IX_assets_catalog_AuthorId_CreatedAt_Id");
+    }
+
+    private static void ConfigurePostgresAnalyticsEvents(ModelBuilder modelBuilder)
+    {
+        // BRIN suits an append-only table whose physical order tracks OccurredAt, and it keeps
+        // whole-table retention scans cheap without paying btree maintenance on every insert.
+        modelBuilder.Entity<AnalyticsEvent>()
+            .HasIndex(e => e.OccurredAt)
+            .HasMethod("brin")
+            .HasDatabaseName("IX_analytics_events_OccurredAt_brin");
     }
 
     private static void ConfigurePostgresAudit(ModelBuilder modelBuilder)

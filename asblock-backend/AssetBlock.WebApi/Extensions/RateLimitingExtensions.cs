@@ -1,6 +1,9 @@
+using AssetBlock.Domain.Abstractions.Services;
 using AssetBlock.Domain.Core.Constants;
 using AssetBlock.WebApi.ProblemDetails;
+using AssetBlock.WebApi.RateLimiting;
 using Microsoft.AspNetCore.RateLimiting;
+using System.Security.Claims;
 using System.Threading.RateLimiting;
 
 namespace AssetBlock.WebApi.Extensions;
@@ -18,12 +21,63 @@ internal static class RateLimitingExtensions
     {
         opts.OnRejected = async (context, _) =>
         {
+            if (context.Lease.TryGetMetadata(
+                    AnalyticsRateLimitMetadataNames.Unavailable,
+                    out var unavailable)
+                && unavailable)
+            {
+                await HandleUnavailableRateLimitAsync(context);
+                return;
+            }
+
+            if (context.Lease.TryGetMetadata(
+                    AnalyticsRateLimitMetadataNames.RetryAfter,
+                    out var retryAfter))
+            {
+                var retrySeconds = Math.Max(1, (int)Math.Ceiling(retryAfter.TotalSeconds));
+                context.HttpContext.Response.Headers.RetryAfter = retrySeconds.ToString();
+            }
+
             var problem = AssetBlockProblemDetails.Create(
                 context.HttpContext,
                 StatusCodes.Status429TooManyRequests,
                 ErrorCodes.ERR_RATE_LIMITED);
             await AssetBlockProblemDetails.Write(context.HttpContext, problem);
         };
+    }
+
+    private static async Task HandleUnavailableRateLimitAsync(OnRejectedContext context)
+    {
+        var endpoint = context.HttpContext.GetEndpoint();
+        var policyName = endpoint?.Metadata.GetMetadata<EnableRateLimitingAttribute>()?.PolicyName;
+
+        if (string.Equals(
+                policyName,
+                RateLimitingConstants.Policies.ANALYTICS_EVENTS,
+                StringComparison.Ordinal))
+        {
+            context.HttpContext.Response.StatusCode = StatusCodes.Status202Accepted;
+            return;
+        }
+
+        if (string.Equals(
+                policyName,
+                RateLimitingConstants.Policies.SELLER_ANALYTICS_SALES_EXPORT,
+                StringComparison.Ordinal))
+        {
+            var problem = AssetBlockProblemDetails.Create(
+                context.HttpContext,
+                StatusCodes.Status503ServiceUnavailable,
+                ErrorCodes.ERR_ANALYTICS_RATE_LIMIT_UNAVAILABLE);
+            await AssetBlockProblemDetails.Write(context.HttpContext, problem);
+            return;
+        }
+
+        var fallback = AssetBlockProblemDetails.Create(
+            context.HttpContext,
+            StatusCodes.Status503ServiceUnavailable,
+            ErrorCodes.ERR_ANALYTICS_RATE_LIMIT_UNAVAILABLE);
+        await AssetBlockProblemDetails.Write(context.HttpContext, fallback);
     }
 
     extension(IServiceCollection services)
@@ -36,6 +90,8 @@ internal static class RateLimitingExtensions
                 ConfigureRejectedHandler(opts);
                 AddAuthPolicies(opts);
                 AddSlidingWindowPolicies(opts);
+                AddTelemetryPolicies(opts);
+                AddSellerAnalyticsPolicies(opts);
             });
         }
 
@@ -49,9 +105,15 @@ internal static class RateLimitingExtensions
                 AddNoOpPolicy(RateLimitingConstants.Policies.AUTH_REGISTER);
                 AddNoOpPolicy(RateLimitingConstants.Policies.AUTH_LOGIN);
                 AddNoOpPolicy(RateLimitingConstants.Policies.AUTH_REFRESH);
+                AddNoOpPolicy(RateLimitingConstants.Policies.AUTH_PASSWORD_RESET_REQUEST);
+                AddNoOpPolicy(RateLimitingConstants.Policies.AUTH_EMAIL_ACTION_CONFIRM);
+                AddNoOpPolicy(RateLimitingConstants.Policies.USERS_EMAIL_VERIFICATION_RESEND);
+                AddNoOpPolicy(RateLimitingConstants.Policies.USERS_EMAIL_CHANGE_REQUEST);
                 AddNoOpPolicy(RateLimitingConstants.Policies.ASSETS_UPLOAD);
                 AddNoOpPolicy(RateLimitingConstants.Policies.ASSETS_DOWNLOAD);
                 AddNoOpPolicy(RateLimitingConstants.Policies.PAYMENTS_CHECKOUT);
+                AddNoOpPolicy(RateLimitingConstants.Policies.ANALYTICS_EVENTS);
+                AddNoOpPolicy(RateLimitingConstants.Policies.SELLER_ANALYTICS_SALES_EXPORT);
                 return;
 
                 void AddNoOpPolicy(string policyName)
@@ -93,10 +155,50 @@ internal static class RateLimitingExtensions
                     PermitLimit = RateLimitingConstants.Windows.AUTH_REFRESH_LIMIT,
                     QueueProcessingOrder = QueueProcessingOrder.OldestFirst
                 }));
+
+        opts.AddPolicy(RateLimitingConstants.Policies.AUTH_PASSWORD_RESET_REQUEST, httpContext =>
+            RateLimitPartition.GetFixedWindowLimiter(
+                partitionKey: httpContext.Connection.RemoteIpAddress?.ToString() ?? UNKNOWN_PARTITION_KEY,
+                factory: _ => new FixedWindowRateLimiterOptions
+                {
+                    Window = TimeSpan.FromSeconds(RateLimitingConstants.Windows.AUTH_PASSWORD_RESET_REQUEST_PERIOD_SECONDS),
+                    PermitLimit = RateLimitingConstants.Windows.AUTH_PASSWORD_RESET_REQUEST_LIMIT,
+                    QueueProcessingOrder = QueueProcessingOrder.OldestFirst
+                }));
+
+        opts.AddPolicy(RateLimitingConstants.Policies.AUTH_EMAIL_ACTION_CONFIRM, httpContext =>
+            RateLimitPartition.GetFixedWindowLimiter(
+                partitionKey: httpContext.Connection.RemoteIpAddress?.ToString() ?? UNKNOWN_PARTITION_KEY,
+                factory: _ => new FixedWindowRateLimiterOptions
+                {
+                    Window = TimeSpan.FromSeconds(RateLimitingConstants.Windows.AUTH_EMAIL_ACTION_CONFIRM_PERIOD_SECONDS),
+                    PermitLimit = RateLimitingConstants.Windows.AUTH_EMAIL_ACTION_CONFIRM_LIMIT,
+                    QueueProcessingOrder = QueueProcessingOrder.OldestFirst
+                }));
     }
 
     private static void AddSlidingWindowPolicies(RateLimiterOptions opts)
     {
+        opts.AddPolicy(RateLimitingConstants.Policies.USERS_EMAIL_VERIFICATION_RESEND, httpContext =>
+            RateLimitPartition.GetFixedWindowLimiter(
+                partitionKey: GetUserPartitionKey(httpContext),
+                factory: _ => new FixedWindowRateLimiterOptions
+                {
+                    Window = TimeSpan.FromSeconds(RateLimitingConstants.Windows.USERS_EMAIL_VERIFICATION_RESEND_PERIOD_SECONDS),
+                    PermitLimit = RateLimitingConstants.Windows.USERS_EMAIL_VERIFICATION_RESEND_LIMIT,
+                    QueueProcessingOrder = QueueProcessingOrder.OldestFirst
+                }));
+
+        opts.AddPolicy(RateLimitingConstants.Policies.USERS_EMAIL_CHANGE_REQUEST, httpContext =>
+            RateLimitPartition.GetFixedWindowLimiter(
+                partitionKey: GetUserPartitionKey(httpContext),
+                factory: _ => new FixedWindowRateLimiterOptions
+                {
+                    Window = TimeSpan.FromSeconds(RateLimitingConstants.Windows.USERS_EMAIL_CHANGE_REQUEST_PERIOD_SECONDS),
+                    PermitLimit = RateLimitingConstants.Windows.USERS_EMAIL_CHANGE_REQUEST_LIMIT,
+                    QueueProcessingOrder = QueueProcessingOrder.OldestFirst
+                }));
+
         opts.AddPolicy(RateLimitingConstants.Policies.ASSETS_UPLOAD, httpContext =>
             RateLimitPartition.GetSlidingWindowLimiter(
                 partitionKey: GetUserPartitionKey(httpContext),
@@ -129,5 +231,75 @@ internal static class RateLimitingExtensions
                     SegmentsPerWindow = RateLimitingConstants.Windows.SLIDING_WINDOW_SEGMENTS,
                     QueueProcessingOrder = QueueProcessingOrder.OldestFirst
                 }));
+    }
+
+    private static string GetAnalyticsEventsPartitionKey(HttpContext httpContext)
+    {
+        if (httpContext.Items.TryGetValue(
+                AnalyticsRateLimitContextKeys.VERIFIED_BFF_PARTITION,
+                out var partitionObj)
+            && partitionObj is string verifiedPartition
+            && !string.IsNullOrWhiteSpace(verifiedPartition))
+        {
+            return "bff:" + verifiedPartition;
+        }
+
+        if (httpContext.Connection.RemoteIpAddress is { } remoteIp)
+        {
+            return "direct:" + remoteIp;
+        }
+
+        var connectionId = httpContext.Connection.Id;
+        if (!string.IsNullOrWhiteSpace(connectionId))
+        {
+            return "direct:conn:" + connectionId;
+        }
+
+        // Middleware should short-circuit analytics POSTs without a stable identifier before
+        // the rate limiter. This fallback must never be a per-request TraceIdentifier.
+        return "direct:conn:missing";
+    }
+
+    private static void AddTelemetryPolicies(RateLimiterOptions opts)
+    {
+        opts.AddPolicy(RateLimitingConstants.Policies.ANALYTICS_EVENTS, httpContext =>
+        {
+            var distributedLimiter = httpContext.RequestServices.GetRequiredService<IAnalyticsDistributedRateLimiter>();
+            var timeProvider = httpContext.RequestServices.GetService<TimeProvider>() ?? TimeProvider.System;
+            return RateLimitPartition.Get(
+                GetAnalyticsEventsPartitionKey(httpContext),
+                partitionKey => new AnalyticsDistributedRateLimiterAdapter(
+                    distributedLimiter,
+                    AnalyticsRateLimitPolicy.ANALYTICS_EVENTS,
+                    partitionKey,
+                    timeProvider));
+        });
+    }
+
+    private static void AddSellerAnalyticsPolicies(RateLimiterOptions opts)
+    {
+        opts.AddPolicy(RateLimitingConstants.Policies.SELLER_ANALYTICS_SALES_EXPORT, httpContext =>
+        {
+            var userId = httpContext.User.FindFirstValue(ClaimTypes.NameIdentifier)
+                ?? httpContext.User.FindFirstValue(JwtClaimTypes.SUB);
+            if (string.IsNullOrEmpty(userId))
+            {
+                var connectionId = httpContext.Connection.Id;
+                return RateLimitPartition.GetNoLimiter(
+                    string.IsNullOrWhiteSpace(connectionId)
+                        ? "seller-analytics-export:anon:missing"
+                        : "seller-analytics-export:anon:" + connectionId);
+            }
+
+            var distributedLimiter = httpContext.RequestServices.GetRequiredService<IAnalyticsDistributedRateLimiter>();
+            var timeProvider = httpContext.RequestServices.GetService<TimeProvider>() ?? TimeProvider.System;
+            return RateLimitPartition.Get(
+                userId,
+                partitionKey => new AnalyticsDistributedRateLimiterAdapter(
+                    distributedLimiter,
+                    AnalyticsRateLimitPolicy.SELLER_ANALYTICS_SALES_EXPORT,
+                    partitionKey,
+                    timeProvider));
+        });
     }
 }

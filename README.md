@@ -19,7 +19,7 @@ asblock/
 
 **Stack:** .NET 10, ASP.NET Core Web API, **Clean Architecture** (Domain / Application / Infrastructure / WebApi), CQRS-style use cases with **MediatR**, **FluentValidation**, **Ardalis.Result**, Entity Framework Core with PostgreSQL (catalog FTS via `tsvector` + `pg_trgm`), optional **Redis** caching, **MinIO** (S3-compatible) for encrypted asset storage, **Stripe** Checkout and webhooks, **SignalR** for real-time notifications, **Serilog** for structured logging.
 
-**High-level capabilities:** JWT-based auth (access + refresh), role-based access (including admin), asset lifecycle (upload, update, tags, download for purchasers or author), soft delete when purchases exist (delist from catalog while keeping DB row and blob for buyers), hard delete when there are no purchases, categories and tags (admin writes), reviews, user profiles and social links, notifications, Stripe-backed purchases and library, transactional email via SMTP (purchase receipt / asset-sold) with Mailpit for local inbox capture. Append-only **audit log** records critical mutations and is available to administrators; it remains distinct from Serilog, the outbox, and analytics.
+**High-level capabilities:** JWT-based auth (access + refresh), role-based access (including admin), **verified-email authorization** for marketplace writes (upload, checkout, reviews, profile/socials, admin APIs — recovery and owned downloads remain available while unverified), asset lifecycle (upload, versioned packages with Personal/Commercial licenses, metadata updates, tags, SHA-256 content provenance, download for purchasers or author), soft delete when purchases or active checkouts exist (delist from catalog while keeping DB row and blobs for buyers), hard delete when there are no purchases/active checkouts (terminal unpaid checkout intents referencing the asset are removed first), categories and tags (admin writes), **editorial Collections** (seller-curated groupings without checkout) and **sellable Bundles** (same-seller multi-asset offers with immutable revisions and fixed USD pricing), reviews, user profiles and social links, notifications, Stripe-backed **generalized orders** (`CheckoutIntent` → `Order`/`OrderLine` → per-asset `Purchase` entitlements for both direct asset and bundle checkout) and library (purchased vs latest entitled version, bundle provenance), transactional email via SMTP with Mailpit for local inbox capture — including email verification on registration, resend with cooldown, password reset (anti-enumeration, 30-min link; successful reset also proves the mailbox), email address change (current-password confirmation + confirm-new-address link), and password/email-change notices; action links are time-limited and tamper-evident via ASP.NET Core Data Protection (no token stored in DB). Append-only **audit log** records critical mutations and is available to administrators; it remains distinct from Serilog, the outbox, and analytics.
 
 **Typical commands** (from `asblock-backend/`):
 
@@ -37,7 +37,7 @@ Bring up dependencies with Docker Compose when needed (`docker-compose.yml` in t
 
 **Stack:** **Next.js** (App Router), **React**, **TypeScript**, **Tailwind CSS**, **TanStack Query** for server state, **react-hook-form** with **Zod** for validation, **next-themes**, **Radix UI**-style primitives under `components/ui`, **lucide-react** icons, **@microsoft/signalr** for notifications. Route Handlers under `app/api/` act as a **BFF**: proxy to the backend and use **httpOnly** cookies for session tokens where applicable.
 
-**High-level capabilities:** marketing home with featured catalog strip, asset catalog with filters and pagination, asset detail and checkout flow, authenticated library and account settings, seller hub (listings, upload, edit), admin UI for categories/tags/review moderation and audit log browse, lightweight docs page, login and registration.
+**High-level capabilities:** marketing home with featured catalog strip, asset catalog with filters and pagination, **public Collections and Bundles browse/detail**, asset detail (current version, license terms, content hash, version history) and checkout flow (direct asset + bundle), authenticated library (purchased vs latest entitled version, update badge, version-specific download, “Purchased in bundle” provenance), and account settings (including email verification UX gates for marketplace actions), seller hub (listings, upload with license selection, edit metadata, publish new versions, **Collections and Bundles management**), admin UI for categories/tags/review moderation and audit log browse, lightweight docs page, login and registration.
 
 **Typical commands** (from `asblock-frontend/`):
 
@@ -50,6 +50,16 @@ pnpm run build
 
 Point the frontend at your running Web API using environment variables (see `asblock-frontend/.env.example`): **`NEXT_PUBLIC_API_BASE_URL`** for browser-side requests, and **`ASSETBLOCK_API_BASE_URL`** (or the public URL as fallback) for server-side Route Handlers.
 
+## Seller analytics
+
+Seller-facing analytics live under **`/sell` → Analytics** (UTC date ranges, gross revenue in USD cents, commerce from completed Stripe-webhook orders only). Engagement telemetry is first-party, privacy-bounded, and separate from **Vercel Analytics** (deployment metrics only).
+
+- **Commerce source of truth:** `Order` / `OrderLine` — never browser events.
+- **UTC semantics:** `from` inclusive, `to` exclusive, max 366 days; charts label UTC.
+- **Telemetry:** httpOnly `ab_vid` / `ab_sid` cookies via BFF; DNT/GPC → no optional engagement cookies/events.
+- **Rate limits (Redis in Staging/Production):** analytics events 120/min/partition; CSV export 10/hour/seller. Configure `AnalyticsRateLimiting:BffSigningSecret` on the API and `ASSETBLOCK_ANALYTICS_BFF_SIGNING_SECRET` on the frontend BFF.
+- **Local verification:** integration tests (PostgreSQL via Testcontainers; Redis tests when Docker is available).
+
 ## Documentation
 
 - **Interactive API:** Swagger UI when the Web API is running in Development.
@@ -59,3 +69,5 @@ Point the frontend at your running Web API using environment variables (see `asb
 ## Contributing / quality
 
 GitHub Actions run all backend projects, frontend `check`/production build, and Gitleaks. Keep secrets out of source control.
+
+**Frontend pre-commit (repo root):** after cloning, run `pnpm install` once at the monorepo root. Husky installs a git `pre-commit` hook that, whenever staged files include `asblock-frontend/`, runs `eslint --fix` and Prettier on those files (works whether you commit from the root or from a subdirectory). Backend-only commits skip the hook work.

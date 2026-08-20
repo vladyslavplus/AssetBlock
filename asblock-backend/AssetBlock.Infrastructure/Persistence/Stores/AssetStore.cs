@@ -40,6 +40,26 @@ internal sealed class AssetStore(ApplicationDbContext dbContext) : IAssetStore
         return asset;
     }
 
+    public async Task<Asset> AddWithVersion(Asset asset, AssetVersion version, List<Tag>? tags, CancellationToken cancellationToken = default)
+    {
+        if (tags is { Count: > 0 })
+        {
+            foreach (var tag in tags)
+            {
+                asset.AssetTags.Add(new AssetTag
+                {
+                    AssetId = asset.Id,
+                    TagId = tag.Id
+                });
+            }
+        }
+
+        dbContext.Assets.Add(asset);
+        dbContext.AssetVersions.Add(version);
+        await dbContext.SaveChangesAsync(cancellationToken);
+        return asset;
+    }
+
     public Task<Asset?> GetById(Guid id, CancellationToken cancellationToken = default)
     {
         return dbContext.Assets
@@ -50,11 +70,159 @@ internal sealed class AssetStore(ApplicationDbContext dbContext) : IAssetStore
             .FirstOrDefaultAsync(a => a.Id == id, cancellationToken);
     }
 
-    public Task<bool> ExistsByStorageKey(string storageKey, CancellationToken cancellationToken = default)
+    public async Task<Asset?> GetForUpdate(Guid id, CancellationToken cancellationToken = default)
     {
-        return dbContext.Assets
+        // FOR UPDATE locks the row for the ambient transaction; AsNoTracking returns a fresh
+        // projection without detaching tracked entities (which would drop pending UoW changes).
+        // SoftDelete syncs DeletedAt on any local tracker instance after ExecuteUpdate.
+        return await dbContext.Assets
+            .FromSqlRaw("""SELECT * FROM assets WHERE "Id" = {0} FOR UPDATE""", id)
             .AsNoTracking()
-            .AnyAsync(a => a.StorageKey == storageKey, cancellationToken);
+            .FirstOrDefaultAsync(cancellationToken);
+    }
+
+    public Task<AssetCurrentVersionSnapshot?> GetCurrentVersionSnapshot(Guid assetId, CancellationToken cancellationToken = default)
+    {
+        return dbContext.AssetVersions
+            .AsNoTracking()
+            .Where(v => v.AssetId == assetId && v.IsCurrent)
+            .Select(v => new AssetCurrentVersionSnapshot(
+                v.AssetId,
+                v.Id,
+                v.Asset.AuthorId,
+                v.Asset.Title,
+                v.Asset.Description,
+                v.Asset.Price,
+                v.Asset.DeletedAt,
+                v.VersionNumber,
+                v.CreatedAt,
+                v.FileName,
+                v.StorageKey,
+                v.ContentLength,
+                v.ContentSha256,
+                v.LicenseCode.ToString(),
+                v.LicenseTemplateVersion,
+                v.LicenseDisplayName,
+                v.LicenseTerms))
+            .FirstOrDefaultAsync(cancellationToken);
+    }
+
+    public Task<AssetVersion?> GetVersion(Guid assetId, Guid versionId, CancellationToken cancellationToken = default)
+    {
+        return dbContext.AssetVersions
+            .AsNoTracking()
+            .FirstOrDefaultAsync(v => v.AssetId == assetId && v.Id == versionId, cancellationToken);
+    }
+
+    public async Task<IReadOnlyList<AssetVersionSummaryDto>> ListVersions(
+        Guid assetId,
+        bool includeDeletedAsset,
+        Guid? requesterUserId,
+        CancellationToken cancellationToken = default)
+    {
+        var assetQuery = dbContext.Assets.AsNoTracking().Where(a => a.Id == assetId);
+        if (!includeDeletedAsset)
+        {
+            assetQuery = assetQuery.Where(a => a.DeletedAt == null);
+        }
+
+        var assetExists = await assetQuery.AnyAsync(cancellationToken);
+        if (!assetExists)
+        {
+            return Array.Empty<AssetVersionSummaryDto>();
+        }
+
+        // Active (non-deleted) listings expose version history publicly.
+        // Soft-deleted assets require author or entitled purchaser.
+        if (includeDeletedAsset)
+        {
+            var isAuthor = requesterUserId.HasValue
+                && await dbContext.Assets.AsNoTracking()
+                    .AnyAsync(a => a.Id == assetId && a.AuthorId == requesterUserId.Value, cancellationToken);
+
+            if (!isAuthor)
+            {
+                if (!requesterUserId.HasValue)
+                {
+                    return Array.Empty<AssetVersionSummaryDto>();
+                }
+
+                var hasPurchase = await dbContext.Purchases.AsNoTracking()
+                    .AnyAsync(p => p.AssetId == assetId && p.UserId == requesterUserId.Value, cancellationToken);
+                if (!hasPurchase)
+                {
+                    return Array.Empty<AssetVersionSummaryDto>();
+                }
+            }
+        }
+
+        return await dbContext.AssetVersions
+            .AsNoTracking()
+            .Where(v => v.AssetId == assetId)
+            .OrderByDescending(v => v.VersionNumber)
+            .Select(v => new AssetVersionSummaryDto(
+                v.Id,
+                v.VersionNumber,
+                v.IsCurrent,
+                v.FileName,
+                v.ContentLength,
+                v.ContentSha256,
+                v.ReleaseNotes,
+                v.CreatedAt,
+                new AssetLicenseSummaryDto(
+                    v.LicenseCode.ToString(),
+                    v.LicenseDisplayName,
+                    v.LicenseTemplateVersion,
+                    v.LicenseTerms)))
+            .ToListAsync(cancellationToken);
+    }
+
+    public async Task<AssetVersion> PublishNextVersion(Guid assetId, Guid authorId, AssetVersion draft, CancellationToken cancellationToken = default)
+    {
+        // Row lock to prevent concurrent publishes on the same asset.
+        var asset = await GetForUpdate(assetId, cancellationToken)
+            ?? throw new Domain.Core.Exceptions.AssetNotFoundException();
+
+        if (asset.DeletedAt.HasValue)
+        {
+            throw new Domain.Core.Exceptions.AssetNotFoundException();
+        }
+
+        if (asset.AuthorId != authorId)
+        {
+            throw new UnauthorizedAccessException($"User {authorId} is not the author of asset {assetId}.");
+        }
+
+        var maxVersion = await dbContext.AssetVersions
+            .Where(v => v.AssetId == assetId)
+            .MaxAsync(v => (int?)v.VersionNumber, cancellationToken) ?? 0;
+
+        await dbContext.AssetVersions
+            .Where(v => v.AssetId == assetId && v.IsCurrent)
+            .ExecuteUpdateAsync(s => s.SetProperty(v => v.IsCurrent, false), cancellationToken);
+
+        draft.AssetId = assetId;
+        draft.VersionNumber = maxVersion + 1;
+        draft.IsCurrent = true;
+
+        dbContext.AssetVersions.Add(draft);
+        await dbContext.SaveChangesAsync(cancellationToken);
+        return draft;
+    }
+
+    public async Task<IReadOnlyList<string>> GetAllStorageKeys(Guid assetId, CancellationToken cancellationToken = default)
+    {
+        return await dbContext.AssetVersions
+            .AsNoTracking()
+            .Where(v => v.AssetId == assetId)
+            .Select(v => v.StorageKey)
+            .ToListAsync(cancellationToken);
+    }
+
+    public async Task<bool> ExistsByStorageKey(string storageKey, CancellationToken cancellationToken = default)
+    {
+        return await dbContext.AssetVersions.AsNoTracking()
+            .AnyAsync(v => v.StorageKey == storageKey, cancellationToken);
     }
 
     public async Task<PagedResult<AssetListItem>> GetPaged(GetAssetsRequest request, CancellationToken cancellationToken = default)
@@ -174,6 +342,13 @@ internal sealed class AssetStore(ApplicationDbContext dbContext) : IAssetStore
                     .SetProperty(a => a.DeletedAt, deletedAt)
                     .SetProperty(a => a.UpdatedAt, deletedAt),
                 cancellationToken);
+
+        var local = dbContext.Assets.Local.FirstOrDefault(a => a.Id == id);
+        if (local is not null)
+        {
+            local.DeletedAt = deletedAt;
+            local.UpdatedAt = deletedAt;
+        }
     }
 
     public async Task Delete(Guid id, CancellationToken cancellationToken = default)
@@ -243,6 +418,37 @@ internal sealed class AssetStore(ApplicationDbContext dbContext) : IAssetStore
         asset.UpdatedAt = DateTimeOffset.UtcNow;
         await dbContext.SaveChangesAsync(cancellationToken);
         return true;
+    }
+
+    public Task<Guid?> GetPublicAnalyticsSellerId(Guid assetId, CancellationToken cancellationToken = default)
+    {
+        return dbContext.Assets
+            .AsNoTracking()
+            .Where(a => a.Id == assetId && a.DeletedAt == null)
+            .Select(a => (Guid?)a.AuthorId)
+            .FirstOrDefaultAsync(cancellationToken);
+    }
+
+    public Task<Guid?> ResolveDownloadAnalyticsSellerId(
+        Guid assetId,
+        Guid assetVersionId,
+        Guid actorUserId,
+        CancellationToken cancellationToken = default)
+    {
+        return (
+            from asset in dbContext.Assets.AsNoTracking()
+            // Soft-deleted assets remain downloadable for entitled buyers; public view projections
+            // still exclude them via GetPublicAnalyticsSellerId.
+            where asset.Id == assetId && asset.AuthorId != actorUserId
+            from requestedVersion in dbContext.AssetVersions.AsNoTracking()
+                .Where(v => v.AssetId == assetId && v.Id == assetVersionId)
+            from purchase in dbContext.Purchases.AsNoTracking()
+                .Where(p => p.UserId == actorUserId && p.AssetId == assetId)
+            from purchasedVersion in dbContext.AssetVersions.AsNoTracking()
+                .Where(v => v.AssetId == assetId && v.Id == purchase.AssetVersionId)
+            where requestedVersion.VersionNumber >= purchasedVersion.VersionNumber
+            select (Guid?)asset.AuthorId
+        ).FirstOrDefaultAsync(cancellationToken);
     }
 
     private static string EscapeLikePattern(string value)

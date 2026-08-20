@@ -34,7 +34,7 @@ public sealed class ErrorContractPipelineIntegrationTests(IntegrationTestFixture
     [Fact]
     public async Task ModelBinding_WhenBodyInvalid_ShouldReturnValidationProblemDetails()
     {
-        (HttpClient client, _) = await IntegrationTestAuth.RegisterAndAuthenticateAsync(fixture.Factory);
+        (HttpClient client, _) = await IntegrationTestAuth.RegisterVerifiedAndAuthenticateAsync(fixture.Factory);
         using var content = new StringContent(
             """{"assetId":"not-a-guid"}""",
             Encoding.UTF8,

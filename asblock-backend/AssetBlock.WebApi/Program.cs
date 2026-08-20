@@ -13,7 +13,9 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Host.UseSerilogConfiguration();
 
 builder.Services.AddApplication();
-builder.Services.AddInfrastructure(builder.Configuration);
+builder.Services.AddInfrastructure(builder.Configuration, builder.Environment);
+builder.Services.AddAssetBlockDataProtection(builder.Configuration, builder.Environment);
+
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<IAuditContextAccessor, HttpAuditContextAccessor>();
 builder.Services.AddFileUploadLimits(builder.Configuration);
@@ -44,6 +46,8 @@ builder.Services.AddScoped<IOutboxMessageHandler, NotificationDispatchOutboxHand
 builder.Services.AddOpenApi();
 builder.Services.AddSwaggerConfiguration();
 builder.Services.AddJwtAuthentication(builder.Configuration);
+builder.Services.AddAssetBlockAuthorization();
+builder.Services.AddAnalyticsBffSignatureValidation();
 if (builder.Environment.IsEnvironment("IntegrationTesting"))
 {
     builder.Services.AddIntegrationTestingRateLimiting();
@@ -71,6 +75,7 @@ if (!app.Environment.IsEnvironment("IntegrationTesting") && !app.Environment.IsD
 
 app.UseAssetBlockCors();
 app.UseAuthentication();
+app.UseAnalyticsBffSignatureValidation();
 app.UseRateLimiter();
 app.UseAuthorization();
 app.MapControllers();

@@ -6,10 +6,12 @@ import Link from 'next/link'
 import { ChevronLeft, ChevronRight, ArrowRight } from 'lucide-react'
 import type { AssetListItem } from '@/lib/catalog/asset-types'
 import { catalogKeys, fetchFeaturedAssets } from '@/lib/catalog/catalog-query'
+import { appendAnalyticsQuery } from '@/lib/analytics/telemetry-source'
 import { formatUsdWhole } from '@/lib/format-currency'
 import { FeaturedAssetCarouselSkeleton } from '@/components/assets/asset-card-skeleton'
 import { Button } from '@/components/ui/button'
 import { siteShellClass } from '@/lib/site-layout'
+import { runQueryInBackground } from '@/lib/query/query-refresh'
 
 const EMPTY_ASSETS: AssetListItem[] = []
 
@@ -126,7 +128,7 @@ function AssetCard({ asset }: { asset: AssetListItem }) {
           <StarRating value={asset.averageRating} />
         </div>
         <Link
-          href={`/assets/${asset.id}`}
+          href={appendAnalyticsQuery(`/assets/${asset.id}`, 'catalog')}
           className="w-full px-3 py-2 rounded-lg border border-border text-foreground bg-transparent hover:bg-secondary/50 hover:border-foreground/40 hover:text-foreground transition-smooth text-xs font-medium text-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-card"
         >
           View details
@@ -268,7 +270,7 @@ export function FeaturedAssetsSection() {
               type="button"
               variant="outline"
               size="sm"
-              onClick={() => void featuredQuery.refetch()}
+              onClick={() => runQueryInBackground(featuredQuery.refetch({ cancelRefetch: false }))}
             >
               Try again
             </Button>

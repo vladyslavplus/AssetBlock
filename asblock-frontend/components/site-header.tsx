@@ -15,6 +15,10 @@ import {
 import { cn } from '@/lib/utils'
 import { siteShellClass } from '@/lib/site-layout'
 import { useAuth } from '@/components/auth/auth-context'
+import {
+  EmailVerificationNotice,
+  isEmailVerified,
+} from '@/components/auth/email-verification-notice'
 import { NotificationBell } from '@/components/notifications/notification-bell'
 import { BrandLogo } from '@/components/brand-logo'
 
@@ -26,6 +30,7 @@ export function SiteHeader() {
 
   const authed = status === 'authenticated' && user !== null
   const authPending = status === 'loading'
+  const showVerificationNotice = authed && !isEmailVerified(user)
 
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 8)
@@ -64,6 +69,18 @@ export function SiteHeader() {
               className="text-sm text-muted-foreground hover:text-foreground transition-colors"
             >
               Browse assets
+            </Link>
+            <Link
+              href="/collections"
+              className="text-sm text-muted-foreground hover:text-foreground transition-colors"
+            >
+              Collections
+            </Link>
+            <Link
+              href="/bundles"
+              className="text-sm text-muted-foreground hover:text-foreground transition-colors"
+            >
+              Bundles
             </Link>
             <Link
               href="/library"
@@ -167,6 +184,20 @@ export function SiteHeader() {
               Browse assets
             </Link>
             <Link
+              href="/collections"
+              className="text-sm text-muted-foreground hover:text-foreground transition-colors py-1"
+              onClick={() => setMenuOpen(false)}
+            >
+              Collections
+            </Link>
+            <Link
+              href="/bundles"
+              className="text-sm text-muted-foreground hover:text-foreground transition-colors py-1"
+              onClick={() => setMenuOpen(false)}
+            >
+              Bundles
+            </Link>
+            <Link
               href="/library"
               className="text-sm text-muted-foreground hover:text-foreground transition-colors py-1"
               onClick={() => setMenuOpen(false)}
@@ -246,6 +277,7 @@ export function SiteHeader() {
           </div>
         </div>
       )}
+      {showVerificationNotice ? <EmailVerificationNotice compact /> : null}
     </header>
   )
 }

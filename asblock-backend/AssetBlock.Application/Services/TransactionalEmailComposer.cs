@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Net.Mail;
 using System.Text;
 using System.Text.Encodings.Web;
+using AssetBlock.Domain.Abstractions.Services;
 using AssetBlock.Domain.Core.Constants;
 using AssetBlock.Domain.Core.Dto.Email;
 using AssetBlock.Domain.Core.Enums;
@@ -10,11 +11,12 @@ using Microsoft.Extensions.Options;
 
 namespace AssetBlock.Application.Services;
 
-/// <summary>Builds provider-neutral purchase transactional email payloads (no SMTP / DB / HTTP).</summary>
-public sealed class TransactionalEmailComposer(IOptions<EmailOptions> emailOptions)
+/// <summary>Builds provider-neutral transactional email payloads (no SMTP / DB / HTTP).</summary>
+public sealed class TransactionalEmailComposer(IOptions<EmailOptions> emailOptions) : ITransactionalEmailComposer
 {
     private const string LIBRARY_PATH = "/library";
     private const string SELLER_LISTINGS_PATH = "/sell";
+    private const int MAX_ITEM_TITLE_LINES = 20;
 
     private readonly EmailOptions _options = emailOptions.Value;
 
@@ -104,6 +106,275 @@ public sealed class TransactionalEmailComposer(IOptions<EmailOptions> emailOptio
             html);
     }
 
+    public EmailDispatchPayload CreateOrderReceipt(
+        string recipientAddress,
+        Guid recipientUserId,
+        string productTitle,
+        decimal amountTotal,
+        string currency,
+        DateTimeOffset purchasedAt,
+        IReadOnlyList<string> itemTitles)
+    {
+        ValidateRecipient(recipientAddress);
+        var title = NormalizeTitle(productTitle, nameof(productTitle));
+        var when = FormatTimestamp(purchasedAt);
+        var amount = FormatAmount(amountTotal, currency);
+        var libraryUrl = BuildFixedAppUrl(LIBRARY_PATH);
+        var itemLines = FormatItemTitleLines(itemTitles);
+
+        var subject = NormalizeSubject($"Order receipt: {title}");
+        var text = new StringBuilder()
+            .AppendLine("Thanks for your purchase on AssetBlock.")
+            .AppendLine()
+            .AppendLine($"Product: {title}")
+            .AppendLine($"Amount: {amount}")
+            .AppendLine($"Purchased at (UTC): {when}")
+            .AppendLine()
+            .AppendLine("Items:")
+            .Append(itemLines.Text)
+            .AppendLine()
+            .AppendLine($"Open your library: {libraryUrl}")
+            .ToString();
+
+        var safeTitle = HtmlEncoder.Default.Encode(title);
+        var safeAmount = HtmlEncoder.Default.Encode(amount);
+        var safeWhen = HtmlEncoder.Default.Encode(when);
+        var safeLibraryUrl = HtmlEncoder.Default.Encode(libraryUrl);
+        var html = WrapHtmlLayout(
+            "Order receipt",
+            $"""
+            <p>Thanks for your purchase on AssetBlock.</p>
+            <p><strong>Product:</strong> {safeTitle}</p>
+            <p><strong>Amount:</strong> {safeAmount}</p>
+            <p><strong>Purchased at (UTC):</strong> {safeWhen}</p>
+            <p><strong>Items:</strong></p>
+            {itemLines.Html}
+            <p><a href="{safeLibraryUrl}">Open your library</a></p>
+            """);
+
+        EnsureBounded(subject, text, html);
+        return new EmailDispatchPayload(
+            recipientAddress.Trim(),
+            recipientUserId,
+            EmailTemplateKind.ORDER_RECEIPT,
+            subject,
+            text,
+            html);
+    }
+
+    public EmailDispatchPayload CreateOrderSold(
+        string recipientAddress,
+        Guid recipientUserId,
+        string productTitle,
+        decimal amountTotal,
+        string currency,
+        DateTimeOffset purchasedAt,
+        IReadOnlyList<string> itemTitles)
+    {
+        ValidateRecipient(recipientAddress);
+        var title = NormalizeTitle(productTitle, nameof(productTitle));
+        var when = FormatTimestamp(purchasedAt);
+        var amount = FormatAmount(amountTotal, currency);
+        var sellUrl = BuildFixedAppUrl(SELLER_LISTINGS_PATH);
+        var itemLines = FormatItemTitleLines(itemTitles);
+
+        var subject = NormalizeSubject($"Order sold: {title}");
+        var text = new StringBuilder()
+            .AppendLine("One of your listings was purchased on AssetBlock.")
+            .AppendLine()
+            .AppendLine($"Product: {title}")
+            .AppendLine($"Amount: {amount}")
+            .AppendLine($"Sold at (UTC): {when}")
+            .AppendLine()
+            .AppendLine("Items:")
+            .Append(itemLines.Text)
+            .AppendLine()
+            .AppendLine($"Open your listings: {sellUrl}")
+            .ToString();
+
+        var safeTitle = HtmlEncoder.Default.Encode(title);
+        var safeAmount = HtmlEncoder.Default.Encode(amount);
+        var safeWhen = HtmlEncoder.Default.Encode(when);
+        var safeSellUrl = HtmlEncoder.Default.Encode(sellUrl);
+        var html = WrapHtmlLayout(
+            "Order sold",
+            $"""
+            <p>One of your listings was purchased on AssetBlock.</p>
+            <p><strong>Product:</strong> {safeTitle}</p>
+            <p><strong>Amount:</strong> {safeAmount}</p>
+            <p><strong>Sold at (UTC):</strong> {safeWhen}</p>
+            <p><strong>Items:</strong></p>
+            {itemLines.Html}
+            <p><a href="{safeSellUrl}">Open your listings</a></p>
+            """);
+
+        EnsureBounded(subject, text, html);
+        return new EmailDispatchPayload(
+            recipientAddress.Trim(),
+            recipientUserId,
+            EmailTemplateKind.ORDER_SOLD,
+            subject,
+            text,
+            html);
+    }
+
+    public EmailDispatchPayload CreatePasswordChangedNotice(string recipientAddress, Guid recipientUserId)
+    {
+        ValidateRecipient(recipientAddress);
+        var subject = NormalizeSubject("Your AssetBlock password has been changed");
+        var text = new StringBuilder()
+            .AppendLine("Your AssetBlock account password was recently changed.")
+            .AppendLine()
+            .AppendLine("If you made this change, no action is needed.")
+            .AppendLine("If you did not change your password, please contact support immediately.")
+            .ToString();
+        var html = WrapHtmlLayout(
+            "Password changed",
+            """
+            <p>Your AssetBlock account password was recently changed.</p>
+            <p>If you made this change, no action is needed.</p>
+            <p>If you did not change your password, please contact support immediately.</p>
+            """);
+        EnsureBounded(subject, text, html);
+        return new EmailDispatchPayload(
+            recipientAddress.Trim(),
+            recipientUserId,
+            EmailTemplateKind.PASSWORD_CHANGED_NOTICE,
+            subject,
+            text,
+            html);
+    }
+
+    public EmailDispatchPayload CreateEmailChangedNotice(string recipientAddress, Guid recipientUserId)
+    {
+        ValidateRecipient(recipientAddress);
+        var subject = NormalizeSubject("Your AssetBlock email address has been changed");
+        var text = new StringBuilder()
+            .AppendLine("Your AssetBlock account email address was recently changed.")
+            .AppendLine()
+            .AppendLine("If you made this change, no action is needed.")
+            .AppendLine("If you did not make this change, please contact support immediately.")
+            .ToString();
+        var html = WrapHtmlLayout(
+            "Email address changed",
+            """
+            <p>Your AssetBlock account email address was recently changed.</p>
+            <p>If you made this change, no action is needed.</p>
+            <p>If you did not make this change, please contact support immediately.</p>
+            """);
+        EnsureBounded(subject, text, html);
+        return new EmailDispatchPayload(
+            recipientAddress.Trim(),
+            recipientUserId,
+            EmailTemplateKind.EMAIL_CHANGED_NOTICE,
+            subject,
+            text,
+            html);
+    }
+
+    public EmailMessage CreateEmailVerification(string recipientAddress, Guid recipientUserId, string actionUrl)
+    {
+        ValidateRecipient(recipientAddress);
+        ValidateActionUrl(actionUrl);
+        var safeUrl = HtmlEncoder.Default.Encode(actionUrl);
+        var subject = NormalizeSubject("Verify your AssetBlock email");
+        var text = new StringBuilder()
+            .AppendLine("Confirm your email address for AssetBlock.")
+            .AppendLine()
+            .AppendLine($"Open this link to verify: {actionUrl}")
+            .AppendLine()
+            .AppendLine("If you did not create an account, you can ignore this email.")
+            .ToString();
+        var html = WrapHtmlLayout(
+            "Verify your email",
+            $"""
+            <p>Confirm your email address for AssetBlock.</p>
+            <p><a href="{safeUrl}">Verify email</a></p>
+            <p>If you did not create an account, you can ignore this email.</p>
+            """);
+        EnsureBounded(subject, text, html);
+        return new EmailMessage(
+            recipientAddress.Trim(),
+            recipientUserId,
+            subject,
+            text,
+            html,
+            EmailTemplateKind.EMAIL_VERIFICATION,
+            MessageId: "pending");
+    }
+
+    public EmailMessage CreatePasswordReset(string recipientAddress, Guid recipientUserId, string actionUrl)
+    {
+        ValidateRecipient(recipientAddress);
+        ValidateActionUrl(actionUrl);
+        var safeUrl = HtmlEncoder.Default.Encode(actionUrl);
+        var subject = NormalizeSubject("Reset your AssetBlock password");
+        var text = new StringBuilder()
+            .AppendLine("We received a request to reset your AssetBlock password.")
+            .AppendLine()
+            .AppendLine($"Open this link to choose a new password: {actionUrl}")
+            .AppendLine()
+            .AppendLine("If you did not request a reset, you can ignore this email.")
+            .ToString();
+        var html = WrapHtmlLayout(
+            "Reset your password",
+            $"""
+            <p>We received a request to reset your AssetBlock password.</p>
+            <p><a href="{safeUrl}">Choose a new password</a></p>
+            <p>If you did not request a reset, you can ignore this email.</p>
+            """);
+        EnsureBounded(subject, text, html);
+        return new EmailMessage(
+            recipientAddress.Trim(),
+            recipientUserId,
+            subject,
+            text,
+            html,
+            EmailTemplateKind.PASSWORD_RESET,
+            MessageId: "pending");
+    }
+
+    public EmailMessage CreateEmailChangeConfirmation(string recipientAddress, Guid recipientUserId, string actionUrl)
+    {
+        ValidateRecipient(recipientAddress);
+        ValidateActionUrl(actionUrl);
+        var safeUrl = HtmlEncoder.Default.Encode(actionUrl);
+        var subject = NormalizeSubject("Confirm your new AssetBlock email");
+        var text = new StringBuilder()
+            .AppendLine("Confirm this email address for your AssetBlock account.")
+            .AppendLine()
+            .AppendLine($"Open this link to confirm: {actionUrl}")
+            .AppendLine()
+            .AppendLine("If you did not request an email change, you can ignore this email.")
+            .ToString();
+        var html = WrapHtmlLayout(
+            "Confirm your new email",
+            $"""
+            <p>Confirm this email address for your AssetBlock account.</p>
+            <p><a href="{safeUrl}">Confirm email change</a></p>
+            <p>If you did not request an email change, you can ignore this email.</p>
+            """);
+        EnsureBounded(subject, text, html);
+        return new EmailMessage(
+            recipientAddress.Trim(),
+            recipientUserId,
+            subject,
+            text,
+            html,
+            EmailTemplateKind.EMAIL_CHANGE_CONFIRMATION,
+            MessageId: "pending");
+    }
+
+    private static void ValidateActionUrl(string actionUrl)
+    {
+        if (string.IsNullOrWhiteSpace(actionUrl)
+            || !Uri.TryCreate(actionUrl, UriKind.Absolute, out var uri)
+            || (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps))
+        {
+            throw new ArgumentException("Action URL must be an absolute http(s) URL.", nameof(actionUrl));
+        }
+    }
+
     private static void ValidateRecipient(string recipientAddress)
     {
         if (string.IsNullOrWhiteSpace(recipientAddress))
@@ -121,14 +392,17 @@ public sealed class TransactionalEmailComposer(IOptions<EmailOptions> emailOptio
         }
     }
 
-    private static string NormalizeTitle(string assetTitle)
+    private static string NormalizeTitle(string assetTitle) =>
+        NormalizeTitle(assetTitle, nameof(assetTitle));
+
+    private static string NormalizeTitle(string title, string paramName)
     {
-        if (string.IsNullOrWhiteSpace(assetTitle))
+        if (string.IsNullOrWhiteSpace(title))
         {
-            throw new ArgumentException("Asset title is required.", nameof(assetTitle));
+            throw new ArgumentException("Title is required.", paramName);
         }
 
-        return assetTitle.Trim();
+        return title.Trim();
     }
 
     private static string FormatTimestamp(DateTimeOffset purchasedAt)
@@ -141,9 +415,56 @@ public sealed class TransactionalEmailComposer(IOptions<EmailOptions> emailOptio
         return purchasedAt.UtcDateTime.ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture) + " UTC";
     }
 
+    private static string FormatAmount(decimal amountTotal, string currency)
+    {
+        if (amountTotal <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(amountTotal), "Amount must be positive.");
+        }
+
+        if (string.IsNullOrWhiteSpace(currency))
+        {
+            throw new ArgumentException("Currency is required.", nameof(currency));
+        }
+
+        return $"{amountTotal.ToString("0.00", CultureInfo.InvariantCulture)} {currency.Trim().ToUpperInvariant()}";
+    }
+
+    private static (string Text, string Html) FormatItemTitleLines(IReadOnlyList<string> itemTitles)
+    {
+        ArgumentNullException.ThrowIfNull(itemTitles);
+
+        var text = new StringBuilder();
+        var html = new StringBuilder("<ul>");
+        var count = Math.Min(itemTitles.Count, MAX_ITEM_TITLE_LINES);
+        for (var i = 0; i < count; i++)
+        {
+            var raw = string.IsNullOrWhiteSpace(itemTitles[i]) ? "(untitled)" : itemTitles[i].Trim();
+            text.AppendLine($"- {raw}");
+            html.Append("<li>").Append(HtmlEncoder.Default.Encode(raw)).Append("</li>");
+        }
+
+        if (itemTitles.Count > MAX_ITEM_TITLE_LINES)
+        {
+            var omitted = itemTitles.Count - MAX_ITEM_TITLE_LINES;
+            var more = $"…and {omitted} more";
+            text.AppendLine(more);
+            html.Append("<li>").Append(HtmlEncoder.Default.Encode(more)).Append("</li>");
+        }
+
+        html.Append("</ul>");
+        if (count == 0)
+        {
+            text.AppendLine("- (none)");
+            html = new StringBuilder("<ul><li>(none)</li></ul>");
+        }
+
+        return (text.ToString(), html.ToString());
+    }
+
     private string BuildFixedAppUrl(string absolutePath)
     {
-        var configured = _options.PublicAppBaseUrl?.Trim() ?? string.Empty;
+        var configured = _options.PublicAppBaseUrl.Trim();
         if (!Uri.TryCreate(configured, UriKind.Absolute, out var uri)
             || (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps)
             || !string.IsNullOrEmpty(uri.UserInfo)

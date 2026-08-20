@@ -13,6 +13,9 @@ public sealed class UploadAssetFormWithFile
     public decimal Price { get; set; }
     public Guid CategoryId { get; set; }
 
+    /// <summary>License code identifying which platform license template applies (e.g. PERSONAL, COMMERCIAL).</summary>
+    public string LicenseCode { get; set; } = string.Empty;
+
     /// <summary>Optional max downloads per user per hour. Null = unlimited.</summary>
     public int? DownloadLimitPerHour { get; set; }
 

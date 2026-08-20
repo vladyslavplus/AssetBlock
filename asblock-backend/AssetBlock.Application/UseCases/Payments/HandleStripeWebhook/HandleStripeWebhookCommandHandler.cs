@@ -1,4 +1,4 @@
-using System.Text.Json;
+﻿using System.Text.Json;
 using AssetBlock.Application.Common;
 using AssetBlock.Application.Services;
 using AssetBlock.Domain.Abstractions.Services;
@@ -7,6 +7,7 @@ using AssetBlock.Domain.Core.Dto.Audit;
 using AssetBlock.Domain.Core.Dto.Email;
 using AssetBlock.Domain.Core.Dto.Notifications;
 using AssetBlock.Domain.Core.Dto.Outbox;
+using AssetBlock.Domain.Core.Dto.Payments;
 using AssetBlock.Domain.Core.Entities;
 using AssetBlock.Domain.Core.Enums;
 using AssetBlock.Domain.Core.Exceptions;
@@ -19,121 +20,40 @@ namespace AssetBlock.Application.UseCases.Payments.HandleStripeWebhook;
 internal sealed class HandleStripeWebhookCommandHandler(
     IPaymentService paymentService,
     IAssetStore assetStore,
-    IPurchaseStore purchaseStore,
+    IBundleStore bundleStore,
+    IOrderStore orderStore,
+    ICheckoutIntentStore checkoutIntentStore,
     IUserStore userStore,
     IUnitOfWork unitOfWork,
     IOutboxStore outboxStore,
     IAuditWriter auditWriter,
     TransactionalEmailComposer emailComposer,
     ILogger<HandleStripeWebhookCommandHandler> logger)
-    : IRequestHandler<HandleStripeWebhookCommand, Result<PurchaseCompletedPayload?>>
+    : IRequestHandler<HandleStripeWebhookCommand, Result<OrderCompletedPayload?>>, ICheckoutCompletionService
 {
+    private const int MAX_EMAIL_ITEM_TITLES = 20;
     private static readonly JsonSerializerOptions _json = new() { PropertyNamingPolicy = JsonNamingPolicy.CamelCase };
 
-    public async Task<Result<PurchaseCompletedPayload?>> Handle(HandleStripeWebhookCommand request, CancellationToken cancellationToken)
+    public async Task<Result<OrderCompletedPayload?>> Handle(
+        HandleStripeWebhookCommand request,
+        CancellationToken cancellationToken)
     {
         try
         {
-            var verified = await paymentService.VerifyCheckoutCompleted(request.Payload, request.Signature, cancellationToken);
+            var verified = await paymentService.VerifyCheckoutCompleted(
+                request.Payload,
+                request.Signature,
+                cancellationToken);
             if (verified is null)
             {
-                return Result.Success<PurchaseCompletedPayload?>(null);
+                return Result.Success<OrderCompletedPayload?>(null);
             }
 
-            var existingBySession = await purchaseStore.GetByStripePaymentId(verified.StripeSessionId, cancellationToken);
-            if (existingBySession is not null)
-            {
-                return Result.Success<PurchaseCompletedPayload?>(
-                    new PurchaseCompletedPayload(existingBySession.UserId, existingBySession.AssetId));
-            }
-
-            var asset = await assetStore.GetById(verified.AssetId, cancellationToken);
-            if (asset is null)
-            {
-                logger.LogWarning("Checkout completed for missing asset {AssetId}; ignoring.", verified.AssetId);
-                return Result.Success<PurchaseCompletedPayload?>(null);
-            }
-
-            var buyer = await userStore.GetEmailRecipientById(verified.UserId, cancellationToken);
-            EmailRecipient? author = null;
-            if (asset.AuthorId != verified.UserId)
-            {
-                author = await userStore.GetEmailRecipientById(asset.AuthorId, cancellationToken);
-            }
-
-            var purchaseId = Guid.NewGuid();
-            var purchasedAt = DateTimeOffset.UtcNow;
-            try
-            {
-                await unitOfWork.ExecuteInTransaction(async ct =>
-                {
-                    var purchase = new Purchase
-                    {
-                        Id = purchaseId,
-                        UserId = verified.UserId,
-                        AssetId = verified.AssetId,
-                        StripePaymentId = verified.StripeSessionId,
-                        PurchasedAt = purchasedAt
-                    };
-                    await purchaseStore.Add(purchase, ct);
-
-                    await outboxStore.Enqueue(
-                        OutboxMessageTypes.PURCHASE_COMPLETED,
-                        new Domain.Core.Dto.Outbox.PurchaseCompletedPayload(
-                            purchaseId,
-                            verified.UserId,
-                            verified.AssetId,
-                            asset.Title,
-                            asset.AuthorId),
-                        ct);
-
-                    await EnqueueNotification(
-                        verified.UserId,
-                        NotificationKind.PURCHASE_COMPLETED,
-                        NotificationHubMethods.PURCHASE_COMPLETED,
-                        new PurchaseCompletedMessage(asset.Id, asset.Title),
-                        ct);
-                    await EnqueueNotification(
-                        verified.UserId,
-                        NotificationKind.DOWNLOAD_READY,
-                        NotificationHubMethods.DOWNLOAD_READY,
-                        new DownloadReadyMessage(asset.Id, asset.Title),
-                        ct);
-                    if (asset.AuthorId != verified.UserId)
-                    {
-                        await EnqueueNotification(
-                            asset.AuthorId,
-                            NotificationKind.ASSET_SOLD,
-                            NotificationHubMethods.ASSET_SOLD,
-                            new AssetSoldMessage(asset.Id, asset.Title, verified.UserId),
-                            ct);
-                    }
-
-                    await EnqueuePurchaseEmails(buyer, author, asset, verified.UserId, purchasedAt, ct);
-
-                    await auditWriter.Write(new AuditEvent(
-                        AuditActions.PAYMENT_PURCHASE_COMPLETED,
-                        AuditOutcome.SUCCESS,
-                        AuditResourceTypes.PURCHASE,
-                        purchaseId.ToString(),
-                        new Dictionary<string, object?> { ["assetId"] = verified.AssetId.ToString() },
-                        ActorTypeOverride: AuditActorType.USER,
-                        ActorUserIdOverride: verified.UserId), ct);
-                }, cancellationToken);
-            }
-            catch (DuplicatePurchaseException)
-            {
-                logger.LogInformation(
-                    "Idempotent webhook: purchase already exists for session {SessionId}",
-                    verified.StripeSessionId);
-            }
-
-            return Result.Success<PurchaseCompletedPayload?>(
-                new PurchaseCompletedPayload(verified.UserId, verified.AssetId));
+            return Result.Success(await CompletePaidCheckout(verified, cancellationToken));
         }
         catch (StripeWebhookInvalidSignatureException)
         {
-            return ResultError.Error<PurchaseCompletedPayload?>(ErrorCodes.ERR_STRIPE_WEBHOOK_INVALID);
+            return ResultError.Error<OrderCompletedPayload?>(ErrorCodes.ERR_STRIPE_WEBHOOK_INVALID);
         }
         catch (OperationCanceledException)
         {
@@ -146,48 +66,329 @@ internal sealed class HandleStripeWebhookCommandHandler(
         }
     }
 
-    private async Task EnqueuePurchaseEmails(
+    public async Task<OrderCompletedPayload?> CompletePaidCheckout(
+        StripeCheckoutCompleted verified,
+        CancellationToken cancellationToken = default)
+    {
+        var existingBySession = await orderStore.GetByStripeSessionId(
+            verified.StripeSessionId,
+            cancellationToken);
+        if (existingBySession is not null)
+        {
+            return ToPayload(existingBySession);
+        }
+
+        var checkoutIntent = await checkoutIntentStore.GetByIdWithItems(
+            verified.CheckoutIntentId,
+            cancellationToken);
+        if (checkoutIntent is null
+            || checkoutIntent.Status != CheckoutIntentStatus.PENDING
+            || checkoutIntent.UserId != verified.UserId
+            || checkoutIntent.AmountTotal != verified.AmountTotal
+            || !string.Equals(checkoutIntent.Currency, verified.Currency, StringComparison.Ordinal)
+            || (checkoutIntent.StripeSessionId is not null
+                && !string.Equals(
+                    checkoutIntent.StripeSessionId,
+                    verified.StripeSessionId,
+                    StringComparison.Ordinal)))
+        {
+            logger.LogError(
+                "Paid Stripe checkout does not match a pending intent. Intent {CheckoutIntentId}, session {SessionId}",
+                verified.CheckoutIntentId,
+                verified.StripeSessionId);
+            throw new InvalidOperationException("Paid Stripe checkout does not match its pending checkout intent.");
+        }
+
+        var items = checkoutIntent.Items.OrderBy(i => i.Position).ToList();
+        if (items.Count == 0)
+        {
+            logger.LogError(
+                "Paid Stripe checkout intent {CheckoutIntentId} has no items; session {SessionId}",
+                verified.CheckoutIntentId,
+                verified.StripeSessionId);
+            throw new InvalidOperationException("Paid Stripe checkout references an empty checkout intent.");
+        }
+
+        foreach (var item in items)
+        {
+            var assetVersion = await assetStore.GetVersion(item.AssetId, item.AssetVersionId, cancellationToken);
+            if (assetVersion is null)
+            {
+                logger.LogError(
+                    "Paid Stripe checkout references missing AssetVersion {AssetVersionId} on asset {AssetId}; session {SessionId}",
+                    item.AssetVersionId,
+                    item.AssetId,
+                    verified.StripeSessionId);
+                throw new InvalidOperationException("Paid Stripe checkout references a missing asset version.");
+            }
+        }
+
+        var sellerId = items[0].SellerId;
+        var buyer = await userStore.GetEmailRecipientById(verified.UserId, cancellationToken);
+        EmailRecipient? seller = null;
+        if (sellerId != verified.UserId)
+        {
+            seller = await userStore.GetEmailRecipientById(sellerId, cancellationToken);
+        }
+
+        var orderId = Guid.NewGuid();
+        var purchasedAt = DateTimeOffset.UtcNow;
+        var lostCompletionRace = false;
+        Order? createdOrder = null;
+
+        try
+        {
+            await unitOfWork.ExecuteInTransaction(async ct =>
+            {
+                // Claim completion first so concurrent webhooks serialize on the intent row.
+                // Then take asset locks before inserting entitlements.
+                var completed = await checkoutIntentStore.TryCompleteAndRelease(
+                    verified.CheckoutIntentId,
+                    verified.UserId,
+                    verified.StripeSessionId,
+                    purchasedAt,
+                    ct);
+                if (!completed)
+                {
+                    lostCompletionRace = true;
+                    return;
+                }
+
+                var assetIds = items.Select(i => i.AssetId).OrderBy(id => id).ToArray();
+                await bundleStore.LockAssetsInOrder(assetIds, ct);
+
+                var lines = new List<OrderLine>(items.Count);
+                var purchases = new List<Purchase>(items.Count);
+                foreach (var item in items)
+                {
+                    var lineId = Guid.NewGuid();
+                    lines.Add(new OrderLine
+                    {
+                        Id = lineId,
+                        OrderId = orderId,
+                        AssetId = item.AssetId,
+                        AssetVersionId = item.AssetVersionId,
+                        SellerId = item.SellerId,
+                        Position = item.Position,
+                        AssetTitleSnapshot = item.AssetTitleSnapshot,
+                        VersionNumber = item.VersionNumber,
+                        ListPrice = item.ListPrice,
+                        PricePaid = item.AllocatedPrice,
+                        LicenseCode = item.LicenseCode,
+                        LicenseTemplateVersion = item.LicenseTemplateVersion,
+                        LicenseDisplayName = item.LicenseDisplayName,
+                        LicenseTerms = item.LicenseTerms
+                    });
+                    purchases.Add(new Purchase
+                    {
+                        Id = Guid.NewGuid(),
+                        UserId = verified.UserId,
+                        AssetId = item.AssetId,
+                        AssetVersionId = item.AssetVersionId,
+                        OrderLineId = lineId,
+                        PurchasedAt = purchasedAt
+                    });
+                }
+
+                var order = new Order
+                {
+                    Id = orderId,
+                    UserId = verified.UserId,
+                    CheckoutIntentId = verified.CheckoutIntentId,
+                    AssetId = checkoutIntent.AssetId,
+                    BundleId = checkoutIntent.BundleId,
+                    BundleRevisionId = checkoutIntent.BundleRevisionId,
+                    ProductTitle = checkoutIntent.ProductTitle,
+                    StripeSessionId = verified.StripeSessionId,
+                    AmountPaid = verified.AmountTotal,
+                    Currency = verified.Currency,
+                    PurchasedAt = purchasedAt,
+                    Lines = lines
+                };
+
+                createdOrder = await orderStore.CreateWithLinesAndPurchases(order, lines, purchases, ct);
+
+                await outboxStore.Enqueue(
+                    OutboxMessageTypes.ORDER_COMPLETED,
+                    ToPayload(createdOrder, sellerId),
+                    ct);
+
+                // One buyer notification per order (plan: not per-item, not dual ORDER_COMPLETED+ORDER_READY).
+                await EnqueueNotification(
+                    verified.UserId,
+                    NotificationKind.ORDER_READY,
+                    NotificationHubMethods.ORDER_READY,
+                    new OrderReadyMessage(
+                        createdOrder.Id,
+                        createdOrder.ProductTitle,
+                        lines.Count,
+                        createdOrder.AssetId,
+                        createdOrder.BundleId),
+                    ct);
+
+                if (sellerId != verified.UserId)
+                {
+                    await EnqueueNotification(
+                        sellerId,
+                        NotificationKind.ASSET_SOLD,
+                        NotificationHubMethods.ASSET_SOLD,
+                        new OrderSoldMessage(
+                            createdOrder.Id,
+                            createdOrder.ProductTitle,
+                            lines.Count,
+                            verified.UserId,
+                            createdOrder.AssetId,
+                            createdOrder.BundleId),
+                        ct);
+                }
+
+                await EnqueueOrderEmails(
+                    buyer,
+                    seller,
+                    sellerId,
+                    createdOrder,
+                    lines,
+                    verified.UserId,
+                    purchasedAt,
+                    ct);
+
+                await auditWriter.Write(new AuditEvent(
+                    AuditActions.PAYMENT_ORDER_COMPLETED,
+                    AuditOutcome.SUCCESS,
+                    AuditResourceTypes.ORDER,
+                    createdOrder.Id.ToString(),
+                    new Dictionary<string, object?>
+                    {
+                        ["checkoutIntentId"] = verified.CheckoutIntentId.ToString(),
+                        ["stripeSessionId"] = verified.StripeSessionId,
+                        ["itemCount"] = lines.Count,
+                        ["assetId"] = createdOrder.AssetId?.ToString(),
+                        ["bundleId"] = createdOrder.BundleId?.ToString()
+                    },
+                    ActorTypeOverride: AuditActorType.USER,
+                    ActorUserIdOverride: verified.UserId), ct);
+            }, cancellationToken);
+        }
+        catch (DuplicateOrderException)
+        {
+            logger.LogInformation(
+                "Idempotent webhook: order unique constraint for session {SessionId}",
+                verified.StripeSessionId);
+        }
+        catch (DuplicateEntitlementException ex)
+        {
+            logger.LogError(
+                ex,
+                "Entitlement conflict without durable order for session {SessionId}, intent {CheckoutIntentId}. Requires reconciliation.",
+                verified.StripeSessionId,
+                verified.CheckoutIntentId);
+            throw;
+        }
+
+        if (lostCompletionRace)
+        {
+            var existingAfterRace = await orderStore.GetByStripeSessionId(
+                verified.StripeSessionId,
+                cancellationToken);
+            if (existingAfterRace is null)
+            {
+                existingAfterRace = await orderStore.GetByCheckoutIntentId(
+                    verified.CheckoutIntentId,
+                    cancellationToken);
+            }
+
+            if (existingAfterRace is null)
+            {
+                throw new InvalidOperationException(
+                    $"Checkout intent {verified.CheckoutIntentId} could not be completed for session {verified.StripeSessionId}.");
+            }
+
+            logger.LogInformation(
+                "Idempotent webhook: concurrent delivery lost TryComplete race for session {SessionId}",
+                verified.StripeSessionId);
+            return ToPayload(existingAfterRace);
+        }
+
+        if (createdOrder is not null)
+        {
+            return ToPayload(createdOrder, sellerId);
+        }
+
+        var existingAfterDuplicate = await orderStore.GetByStripeSessionId(
+            verified.StripeSessionId,
+            cancellationToken);
+        if (existingAfterDuplicate is null)
+        {
+            existingAfterDuplicate = await orderStore.GetByCheckoutIntentId(
+                verified.CheckoutIntentId,
+                cancellationToken);
+        }
+
+        if (existingAfterDuplicate is not null)
+        {
+            return ToPayload(existingAfterDuplicate);
+        }
+
+        throw new InvalidOperationException(
+            $"Order unique conflict for session {verified.StripeSessionId} but no durable order was found. Requires reconciliation.");
+    }
+
+    private async Task EnqueueOrderEmails(
         EmailRecipient? buyer,
-        EmailRecipient? author,
-        Asset asset,
+        EmailRecipient? sellerRecipient,
+        Guid sellerId,
+        Order order,
+        IReadOnlyList<OrderLine> lines,
         Guid buyerUserId,
         DateTimeOffset purchasedAt,
         CancellationToken cancellationToken)
     {
+        var itemTitles = lines
+            .OrderBy(l => l.Position)
+            .Select(l => l.AssetTitleSnapshot)
+            .Take(MAX_EMAIL_ITEM_TITLES)
+            .ToArray();
+
         if (buyer is null)
         {
             logger.LogWarning(
-                "Skipping purchase receipt email: buyer user {UserId} was not found.",
+                "Skipping order receipt email: buyer user {UserId} was not found.",
                 buyerUserId);
         }
         else
         {
-            var receipt = emailComposer.CreatePurchaseReceipt(
+            var receipt = emailComposer.CreateOrderReceipt(
                 buyer.Email,
                 buyer.Id,
-                asset.Title,
-                purchasedAt);
+                order.ProductTitle,
+                order.AmountPaid,
+                order.Currency,
+                purchasedAt,
+                itemTitles);
             await outboxStore.Enqueue(OutboxMessageTypes.EMAIL_DISPATCH, receipt, cancellationToken);
         }
 
-        if (asset.AuthorId == buyerUserId)
+        if (sellerId == buyerUserId)
         {
             return;
         }
 
-        if (author is null)
+        if (sellerRecipient is null)
         {
             logger.LogWarning(
-                "Skipping asset-sold email: author user {UserId} was not found.",
-                asset.AuthorId);
+                "Skipping order-sold email: seller user {UserId} was not found.",
+                sellerId);
             return;
         }
 
-        var sold = emailComposer.CreateAssetSold(
-            author.Email,
-            author.Id,
-            asset.Title,
-            purchasedAt);
+        var sold = emailComposer.CreateOrderSold(
+            sellerRecipient.Email,
+            sellerRecipient.Id,
+            order.ProductTitle,
+            order.AmountPaid,
+            order.Currency,
+            purchasedAt,
+            itemTitles);
         await outboxStore.Enqueue(OutboxMessageTypes.EMAIL_DISPATCH, sold, cancellationToken);
     }
 
@@ -203,5 +404,19 @@ internal sealed class HandleStripeWebhookCommandHandler(
             OutboxMessageTypes.NOTIFICATION_DISPATCH,
             new NotificationDispatchPayload(recipientUserId, kind, hubMethod, json),
             cancellationToken);
+    }
+
+    private static OrderCompletedPayload ToPayload(Order order, Guid? sellerId = null)
+    {
+        var resolvedSellerId = sellerId
+            ?? order.Lines.OrderBy(l => l.Position).Select(l => l.SellerId).FirstOrDefault();
+        return new OrderCompletedPayload(
+            order.Id,
+            order.UserId,
+            order.AssetId,
+            order.BundleId,
+            order.ProductTitle,
+            order.Lines.Count,
+            resolvedSellerId);
     }
 }

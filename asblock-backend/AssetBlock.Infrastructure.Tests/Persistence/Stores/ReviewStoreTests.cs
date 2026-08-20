@@ -42,8 +42,6 @@ public sealed class ReviewStoreTests
             AuthorId = authorId,
             CategoryId = catId,
             Title = "A",
-            StorageKey = "k",
-            FileName = "f",
             CreatedAt = DateTimeOffset.UtcNow
         });
         await db.SaveChangesAsync();

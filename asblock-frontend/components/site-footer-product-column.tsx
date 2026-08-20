@@ -6,6 +6,8 @@ import { isAdminRole } from '@/lib/auth/roles'
 
 const PRODUCT_LINKS = [
   { label: 'Browse assets', href: '/assets' },
+  { label: 'Collections', href: '/collections' },
+  { label: 'Bundles', href: '/bundles' },
   { label: 'Sell on AssetBlock', href: '/sell' },
   { label: 'Pricing', href: '#' },
   { label: 'Changelog', href: '#' },

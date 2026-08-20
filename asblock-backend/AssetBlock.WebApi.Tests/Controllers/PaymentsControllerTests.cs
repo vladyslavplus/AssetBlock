@@ -4,6 +4,7 @@ using AssetBlock.Application.Common;
 using AssetBlock.Application.UseCases.Payments.CreateCheckoutSession;
 using AssetBlock.Application.UseCases.Payments.HandleStripeWebhook;
 using AssetBlock.Domain.Core.Constants;
+using AssetBlock.Domain.Core.Dto.Outbox;
 using AssetBlock.Domain.Core.Dto.Payments;
 using AssetBlock.Domain.Core.Primitives.AppSettingsOptions;
 using AssetBlock.WebApi.Controllers;
@@ -85,7 +86,7 @@ public sealed class PaymentsControllerTests : ControllerTestBase
     public async Task CreateCheckout_WhenAuthenticated_ShouldReturnOk()
     {
         Sender.Send(Arg.Any<CreateCheckoutSessionCommand>(), Arg.Any<CancellationToken>())
-            .Returns(Task.FromResult(Result.Success(new CreateCheckoutSessionResponse("https://stripe.test"))));
+            .Returns(Task.FromResult(Result.Success(new CreateCheckoutSessionResponse("https://stripe.test", Guid.NewGuid()))));
 
         var controller = new PaymentsController(Sender);
         SetupUser(_userId, controller);
@@ -98,7 +99,7 @@ public sealed class PaymentsControllerTests : ControllerTestBase
     public async Task Webhook_WhenSuccess_ShouldReturnOk()
     {
         Sender.Send(Arg.Any<HandleStripeWebhookCommand>(), Arg.Any<CancellationToken>())
-            .Returns(Task.FromResult(Result.Success<PurchaseCompletedPayload?>(null)));
+            .Returns(Task.FromResult(Result.Success<OrderCompletedPayload?>(null)));
 
         var controller = new PaymentsController(Sender);
         var bytes = Encoding.UTF8.GetBytes("{}");
@@ -118,7 +119,7 @@ public sealed class PaymentsControllerTests : ControllerTestBase
     public async Task Webhook_WhenFailure_ShouldMapResult()
     {
         Sender.Send(Arg.Any<HandleStripeWebhookCommand>(), Arg.Any<CancellationToken>())
-            .Returns(Task.FromResult(ResultError.Error<PurchaseCompletedPayload?>(ErrorCodes.ERR_PAYMENT_FAILED)));
+            .Returns(Task.FromResult(ResultError.Error<OrderCompletedPayload?>(ErrorCodes.ERR_PAYMENT_FAILED)));
 
         var controller = new PaymentsController(Sender);
         var bytes = "{}"u8.ToArray();

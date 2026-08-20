@@ -108,7 +108,7 @@ public class GetNotificationsQueryHandlerTests
         {
             Id = Guid.NewGuid(),
             RecipientUserId = userId,
-            Kind = NotificationKind.PURCHASE_COMPLETED,
+            Kind = NotificationKind.ORDER_READY,
             MetadataJson = """{"assetId":"a1"}""",
             CreatedAt = DateTimeOffset.UtcNow.AddMinutes(-2),
             ReadAt = null
@@ -133,7 +133,7 @@ public class GetNotificationsQueryHandlerTests
         result.Value!.Items.Should().HaveCount(2);
         result.Value.Items[0].Id.Should().Be(first.Id);
         result.Value.Items[1].Id.Should().Be(second.Id);
-        result.Value.Items[0].Kind.Should().Be(nameof(NotificationKind.PURCHASE_COMPLETED));
+        result.Value.Items[0].Kind.Should().Be(nameof(NotificationKind.ORDER_READY));
         result.Value.Items[1].Kind.Should().Be(nameof(NotificationKind.DOWNLOAD_READY));
         result.Value.TotalCount.Should().Be(5);
         result.Value.Page.Should().Be(2);
@@ -180,7 +180,7 @@ public class GetNotificationsQueryHandlerTests
             {
                 Id = Guid.NewGuid(),
                 RecipientUserId = userId,
-                Kind = NotificationKind.PURCHASE_COMPLETED,
+                Kind = NotificationKind.ORDER_READY,
                 MetadataJson = """{"type":"purchase"}""",
                 CreatedAt = DateTimeOffset.UtcNow.AddMinutes(-3),
                 ReadAt = null
@@ -223,7 +223,7 @@ public class GetNotificationsQueryHandlerTests
         result.Value.Should().NotBeNull();
         result.Value!.Items.Should().HaveCount(4);
         result.Value.Items.Select(i => i.Kind).Should().Equal(
-            nameof(NotificationKind.PURCHASE_COMPLETED),
+            nameof(NotificationKind.ORDER_READY),
             nameof(NotificationKind.DOWNLOAD_READY),
             nameof(NotificationKind.ASSET_SOLD),
             nameof(NotificationKind.REVIEW_RECEIVED));

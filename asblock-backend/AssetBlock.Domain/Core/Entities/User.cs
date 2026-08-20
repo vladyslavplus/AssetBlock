@@ -13,10 +13,12 @@ public class User : BaseEntity
     public string? AvatarUrl { get; set; }
     public string? Bio { get; set; }
     public bool IsPublicProfile { get; set; } = true;
+    public DateTimeOffset? EmailVerifiedAt { get; set; }
 
     public ICollection<Asset> AuthoredAssets { get; set; } = new List<Asset>();
     public ICollection<Purchase> Purchases { get; set; } = new List<Purchase>();
     public ICollection<RefreshToken> RefreshTokens { get; set; } = new List<RefreshToken>();
     public ICollection<Review> Reviews { get; set; } = new List<Review>();
     public ICollection<UserSocialLink> SocialLinks { get; set; } = new List<UserSocialLink>();
+    public ICollection<EmailAction> EmailActions { get; set; } = new List<EmailAction>();
 }

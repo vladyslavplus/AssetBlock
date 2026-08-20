@@ -1,9 +1,15 @@
 import { getApiErrorMessage } from '@/lib/http/api-errors'
-import type { PurchaseLibraryItem, PagedPurchaseLibraryDto } from '@/lib/library/purchase-types'
+import type { AssetVersionSummaryApi } from '@/lib/catalog/assets-api'
+import {
+  normalizePurchaseSource,
+  type PurchaseLibraryItem,
+  type PagedPurchaseLibraryDto,
+} from '@/lib/library/purchase-types'
 
 export const libraryKeys = {
   all: ['library'] as const,
   purchases: () => [...libraryKeys.all, 'purchases'] as const,
+  assetVersions: (assetId: string) => [...libraryKeys.all, 'versions', assetId] as const,
 }
 
 export type LibraryPurchasesResult =
@@ -48,7 +54,18 @@ export async function fetchLibraryPurchases(): Promise<LibraryPurchasesResult> {
   const rawItems = Array.isArray(data.items) ? data.items : []
   const items: PurchaseLibraryItem[] = rawItems.map((row) => ({
     ...row,
+    orderId: row.orderId ?? '',
     hasUserReviewed: Boolean(row.hasUserReviewed),
+    purchasedVersionNumber: Number(row.purchasedVersionNumber),
+    purchasedVersionId: row.purchasedVersionId,
+    latestEntitledVersionNumber: Number(row.latestEntitledVersionNumber),
+    latestEntitledVersionId: row.latestEntitledVersionId,
+    hasUpdate: Boolean(row.hasUpdate),
+    pricePaid: Number(row.pricePaid),
+    currency: row.currency ?? 'usd',
+    source: normalizePurchaseSource(row.source),
+    bundleId: row.bundleId ?? null,
+    bundleTitle: row.bundleTitle ?? null,
   }))
   return {
     ok: true,
@@ -67,4 +84,28 @@ export async function fetchLibraryPurchasesOrThrow(): Promise<PagedPurchaseLibra
     throw new LibraryFetchError(r.status, r.message)
   }
   return r.data
+}
+
+export async function fetchLibraryAssetVersions(
+  assetId: string,
+): Promise<AssetVersionSummaryApi[]> {
+  const res = await fetch(`/api/assets/${encodeURIComponent(assetId)}/versions`, {
+    credentials: 'include',
+  })
+  const text = await res.text()
+  let parsed: unknown = text
+  if (text.length > 0) {
+    try {
+      parsed = JSON.parse(text) as unknown
+    } catch {
+      parsed = text
+    }
+  }
+  if (!res.ok) {
+    throw new LibraryFetchError(
+      res.status,
+      getApiErrorMessage(parsed, `Could not load versions (${res.status})`),
+    )
+  }
+  return Array.isArray(parsed) ? (parsed as AssetVersionSummaryApi[]) : []
 }

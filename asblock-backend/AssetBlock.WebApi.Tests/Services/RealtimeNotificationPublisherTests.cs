@@ -45,15 +45,15 @@ public sealed class RealtimeNotificationPublisherTests
         await publisher.DeliverPersistedNotification(
             outboxId,
             recipientId,
-            NotificationKind.PURCHASE_COMPLETED,
-            "PurchaseCompleted",
+            NotificationKind.ORDER_READY,
+            "OrderReady",
             "{}",
             CancellationToken.None);
         await publisher.DeliverPersistedNotification(
             outboxId,
             recipientId,
-            NotificationKind.PURCHASE_COMPLETED,
-            "PurchaseCompleted",
+            NotificationKind.ORDER_READY,
+            "OrderReady",
             "{}",
             CancellationToken.None);
 

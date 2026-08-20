@@ -13,6 +13,12 @@ export interface ApiErrorsArrayBody {
 const GENERIC_VALIDATION_DETAIL = 'One or more validation errors occurred.'
 const TYPE_PREFIX = 'urn:assetblock:error:'
 
+/** Friendly fallbacks when ProblemDetails detail is missing or generic. */
+const FRIENDLY_ERROR_MESSAGES: Record<string, string> = {
+  ERR_EMAIL_NOT_VERIFIED:
+    'Email verification is required to perform this action. Verify your email on the Account page.',
+}
+
 function isPlainObject(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
 }
@@ -167,7 +173,11 @@ export function parseApiErrorBody(body: unknown): ParsedApiError | undefined {
   }
 
   if (!summary && code) {
-    summary = code
+    summary = FRIENDLY_ERROR_MESSAGES[code] ?? code
+  }
+
+  if (code && summary === code && FRIENDLY_ERROR_MESSAGES[code]) {
+    summary = FRIENDLY_ERROR_MESSAGES[code]
   }
 
   if (!summary) {

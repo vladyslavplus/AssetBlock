@@ -16,11 +16,13 @@ namespace AssetBlock.WebApi.Controllers;
 [ApiController]
 [Route(ApiRoutes.Admin.AUDIT_LOGS)]
 [Authorize(Roles = AppRoles.ADMIN)]
+[Authorize(Policy = AuthorizationPolicies.VERIFIED_EMAIL)]
 [Produces("application/json")]
 public sealed class AuditLogsController(ISender sender) : ControllerBase
 {
     /// <summary>
     /// Get paged audit log entries with optional filters. Sorted by OccurredAt DESC, Id DESC.
+    /// Requires Admin role and a verified email address.
     /// </summary>
     [HttpGet]
     [ProducesResponseType(StatusCodes.Status200OK)]

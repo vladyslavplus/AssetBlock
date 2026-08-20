@@ -8,4 +8,6 @@ public interface IJwtTokenService
     Task StoreRefreshToken(Guid userId, string refreshToken, DateTimeOffset expiresAt, CancellationToken cancellationToken = default);
     Task<(Guid UserId, string Username, string Email, string Role, Guid TokenId)?> ValidateRefreshToken(string refreshToken, CancellationToken cancellationToken = default);
     Task RevokeRefreshToken(Guid tokenId, CancellationToken cancellationToken = default);
+    /// <summary>Revokes every active refresh token for the user. Does not log or return token values.</summary>
+    Task RevokeAllRefreshTokens(Guid userId, CancellationToken cancellationToken = default);
 }

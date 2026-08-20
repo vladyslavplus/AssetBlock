@@ -10,7 +10,7 @@ namespace AssetBlock.WebApi.Hubs;
 [Authorize]
 public sealed class NotificationsHub : Hub
 {
-    public const string PURCHASE_COMPLETED = NotificationHubMethods.PURCHASE_COMPLETED;
+    public const string ORDER_READY = NotificationHubMethods.ORDER_READY;
     public const string DOWNLOAD_READY = NotificationHubMethods.DOWNLOAD_READY;
     public const string ASSET_SOLD = NotificationHubMethods.ASSET_SOLD;
     public const string REVIEW_RECEIVED = NotificationHubMethods.REVIEW_RECEIVED;

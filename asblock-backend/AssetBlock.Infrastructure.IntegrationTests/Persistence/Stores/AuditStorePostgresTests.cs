@@ -26,7 +26,7 @@ public sealed class AuditStorePostgresTests(PostgresFixture fixture)
         var writer = CreateWriter(db);
 
         await writer.Write(new AuditEvent(
-            AuditActions.PAYMENT_PURCHASE_COMPLETED,
+            AuditActions.PAYMENT_ORDER_COMPLETED,
             AuditOutcome.SUCCESS,
             AuditResourceTypes.PURCHASE,
             Guid.NewGuid().ToString(),

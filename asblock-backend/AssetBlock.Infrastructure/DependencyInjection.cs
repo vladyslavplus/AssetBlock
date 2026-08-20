@@ -10,17 +10,21 @@ using AssetBlock.Infrastructure.Services;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
+using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Options;
 using Minio;
 using Polly;
 using Polly.Retry;
-using StackExchange.Redis;
 
 namespace AssetBlock.Infrastructure;
 
 public static class DependencyInjection
 {
-    public static IServiceCollection AddInfrastructure(this IServiceCollection services, IConfiguration configuration)
+    public static IServiceCollection AddInfrastructure(
+        this IServiceCollection services,
+        IConfiguration configuration,
+        IHostEnvironment environment)
     {
         var connectionString = configuration.GetConnectionString("DefaultConnection")
             ?? throw new InvalidOperationException("Connection string 'DefaultConnection' not found.");
@@ -60,27 +64,52 @@ public static class DependencyInjection
             .ValidateOnStart();
         services.AddSingleton<IValidateOptions<EmailOptions>, EmailOptionsValidator>();
 
+        services.AddOptions<DataProtectionOptions>()
+            .Bind(configuration.GetSection(DataProtectionOptions.SECTION_NAME))
+            .ValidateOnStart();
+        services.AddSingleton<IValidateOptions<DataProtectionOptions>, DataProtectionOptionsValidator>();
+
+        services.TryAddSingleton(TimeProvider.System);
+        services.AddAnalyticsDistributedRateLimiting(configuration, environment);
+        services.AddAnalyticsAggregationOptions(configuration);
+
         services.AddDbContext<ApplicationDbContext>(options =>
             options.UseNpgsql(connectionString));
+        services.AddDbContextFactory<ApplicationDbContext>(
+            options => options.UseNpgsql(connectionString),
+            ServiceLifetime.Scoped);
         services.AddHostedService<DatabaseMigrationService>();
         services.AddHostedService<MinioBucketEnsureHostedService>();
         services.AddHostedService<OutboxDispatcher>();
         services.AddHostedService<StorageOrphanCleanupWorker>();
+        services.AddHostedService<CheckoutReservationCleanupWorker>();
+        services.AddHostedService<AnalyticsAggregationWorker>();
         services.AddScoped<IUnitOfWork, EfUnitOfWork>();
         services.AddScoped<IOutboxStore, OutboxStore>();
         services.AddScoped<IOutboxMessageHandler, AssetBlobDeleteOutboxHandler>();
-        services.AddScoped<IOutboxMessageHandler, PurchaseCompletedOutboxHandler>();
+        services.AddScoped<IOutboxMessageHandler, OrderCompletedOutboxHandler>();
         services.AddScoped<IOutboxMessageHandler, EmailDispatchOutboxHandler>();
+        services.AddScoped<IOutboxMessageHandler, EmailActionDispatchOutboxHandler>();
         services.AddScoped<IEmailSender, SmtpEmailSender>();
+        services.AddSingleton<IEmailActionLinkProtector, EmailActionLinkProtector>();
+        services.AddScoped<IEmailActionStore, EmailActionStore>();
         services.AddScoped<IJwtTokenService, JwtTokenService>();
         services.AddScoped<IUserStore, UserStore>();
+        services.AddScoped<IUserVerificationStore, UserVerificationStore>();
+
         services.AddScoped<ICategoryStore, CategoryStore>();
         services.AddScoped<IAssetStore, AssetStore>();
         services.AddScoped<IPurchaseStore, PurchaseStore>();
+        services.AddScoped<ICheckoutIntentStore, CheckoutIntentStore>();
+        services.AddScoped<ICollectionStore, CollectionStore>();
+        services.AddScoped<IBundleStore, BundleStore>();
+        services.AddScoped<IOrderStore, OrderStore>();
         services.AddScoped<IReviewStore, ReviewStore>();
         services.AddScoped<ISocialPlatformStore, SocialPlatformStore>();
         services.AddScoped<INotificationStore, NotificationStore>();
         services.AddScoped<ITagStore, TagStore>();
+        services.AddScoped<ISellerAnalyticsStore, SellerAnalyticsStore>();
+        services.AddScoped<IAnalyticsEventStore, AnalyticsEventStore>();
         services.AddScoped<IAuditStore, AuditStore>();
         services.AddScoped<IAuditWriter, AuditWriter>();
         services.AddScoped<IAuditContextAccessor, NullAuditContextAccessor>();
@@ -112,15 +141,9 @@ public static class DependencyInjection
         services.AddSingleton<IPasswordHasher, PasswordHasher>();
 
         var redisConfiguration = configuration.GetConnectionString("Redis");
-        if (!string.IsNullOrEmpty(redisConfiguration))
+        if (!string.IsNullOrWhiteSpace(redisConfiguration))
         {
-            services.AddSingleton<IConnectionMultiplexer>(_ =>
-            {
-                var opts = ConfigurationOptions.Parse(redisConfiguration);
-                opts.AbortOnConnectFail = false;
-                opts.ConnectTimeout = 5000;
-                return ConnectionMultiplexer.Connect(opts);
-            });
+            services.AddRedisConnectionMultiplexer(redisConfiguration);
             services.AddSingleton<ICacheService, RedisCacheService>();
         }
         else

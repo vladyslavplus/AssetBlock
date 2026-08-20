@@ -1,3 +1,4 @@
+using AssetBlock.Application.Common.Validators;
 using AssetBlock.Application.UseCases.Assets.UpdateAsset;
 using FluentValidation;
 
@@ -23,8 +24,9 @@ internal sealed class UpdateAssetCommandValidator : AbstractValidator<UpdateAsse
             .MaximumLength(DESCRIPTION_MAX_LENGTH).WithMessage("Description must not exceed 5000 characters.")
             .When(c => c.Description is not null);
 
-        RuleFor(c => c.Price)
-            .GreaterThan(0).WithMessage("Price must be greater than zero.")
-            .When(c => c.Price.HasValue);
+        When(c => c.Price.HasValue, () =>
+        {
+            RuleFor(c => c.Price!.Value).MarketplacePrice();
+        });
     }
 }

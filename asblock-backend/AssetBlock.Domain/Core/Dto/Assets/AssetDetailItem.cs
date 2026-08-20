@@ -12,4 +12,11 @@ public sealed record AssetDetailItem(
     DateTimeOffset CreatedAt,
     DateTimeOffset? UpdatedAt,
     IReadOnlyList<string> Tags,
-    double AverageRating);
+    double AverageRating,
+    int CurrentVersionNumber,
+    Guid CurrentVersionId,
+    DateTimeOffset CurrentVersionCreatedAt,
+    string CurrentFileName,
+    long CurrentContentLength,
+    string CurrentContentSha256,
+    AssetLicenseSummaryDto CurrentLicense);

@@ -90,7 +90,6 @@ internal static class JwtAuthenticationExtensions
                     }
                 };
             });
-        services.AddAuthorization();
         return services;
     }
 }

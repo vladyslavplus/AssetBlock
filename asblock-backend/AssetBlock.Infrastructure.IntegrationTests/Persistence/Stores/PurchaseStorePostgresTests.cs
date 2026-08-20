@@ -1,6 +1,7 @@
 using AssetBlock.Domain.Core.Dto.Paging;
 using AssetBlock.Domain.Core.Dto.Users;
 using AssetBlock.Domain.Core.Entities;
+using AssetBlock.Domain.Core.Exceptions;
 using AssetBlock.Infrastructure.IntegrationTests.Support;
 using AssetBlock.Infrastructure.Persistence.Stores;
 
@@ -21,12 +22,25 @@ public sealed class PurchaseStorePostgresTests(PostgresFixture fixture)
         var reviewedAsset = TestData.CreateAsset(author.Id, category.Id, title: "Reviewed Pack", price: 12.50m);
         var plainAsset = TestData.CreateAsset(author.Id, category.Id, title: "Plain Pack", price: 3.00m);
         db.Assets.AddRange(reviewedAsset, plainAsset);
+        var reviewedVersion = TestData.CreateAssetVersion(reviewedAsset.Id);
+        var plainVersion = TestData.CreateAssetVersion(plainAsset.Id);
+        db.AssetVersions.AddRange(reviewedVersion, plainVersion);
         await db.SaveChangesAsync();
 
         var older = DateTimeOffset.UtcNow.AddDays(-2);
         var newer = DateTimeOffset.UtcNow.AddDays(-1);
-        db.Purchases.Add(TestData.CreatePurchase(buyer.Id, reviewedAsset.Id, purchasedAt: older));
-        db.Purchases.Add(TestData.CreatePurchase(buyer.Id, plainAsset.Id, purchasedAt: newer));
+        TestData.AddCompletedPurchase(
+            db,
+            TestData.CreatePurchase(buyer.Id, reviewedAsset.Id, reviewedVersion.Id, purchasedAt: older),
+            reviewedAsset.Title,
+            author.Id,
+            pricePaid: 12.50m);
+        TestData.AddCompletedPurchase(
+            db,
+            TestData.CreatePurchase(buyer.Id, plainAsset.Id, plainVersion.Id, purchasedAt: newer),
+            plainAsset.Title,
+            author.Id,
+            pricePaid: 3.00m);
         db.Reviews.Add(TestData.CreateReview(buyer.Id, reviewedAsset.Id, rating: 4));
         await db.SaveChangesAsync();
 
@@ -66,7 +80,14 @@ public sealed class PurchaseStorePostgresTests(PostgresFixture fixture)
             var asset = TestData.CreateAsset(author.Id, category.Id, title: $"Asset {i}");
             db.Assets.Add(asset);
             await db.SaveChangesAsync();
-            db.Purchases.Add(TestData.CreatePurchase(buyer.Id, asset.Id, purchasedAt: baseTime.AddMinutes(i)));
+            var version = TestData.CreateAssetVersion(asset.Id);
+            db.AssetVersions.Add(version);
+            await db.SaveChangesAsync();
+            TestData.AddCompletedPurchase(
+                db,
+                TestData.CreatePurchase(buyer.Id, asset.Id, version.Id, purchasedAt: baseTime.AddMinutes(i)),
+                asset.Title,
+                author.Id);
             await db.SaveChangesAsync();
         }
 
@@ -107,10 +128,21 @@ public sealed class PurchaseStorePostgresTests(PostgresFixture fixture)
         var assetA = TestData.CreateAsset(author.Id, category.Id, title: "A");
         var assetB = TestData.CreateAsset(author.Id, category.Id, title: "B");
         db.Assets.AddRange(assetA, assetB);
+        var versionA = TestData.CreateAssetVersion(assetA.Id);
+        var versionB = TestData.CreateAssetVersion(assetB.Id);
+        db.AssetVersions.AddRange(versionA, versionB);
         await db.SaveChangesAsync();
 
-        db.Purchases.Add(TestData.CreatePurchase(buyer.Id, assetA.Id, purchasedAt: sharedTime, id: idHigh));
-        db.Purchases.Add(TestData.CreatePurchase(buyer.Id, assetB.Id, purchasedAt: sharedTime, id: idLow));
+        TestData.AddCompletedPurchase(
+            db,
+            TestData.CreatePurchase(buyer.Id, assetA.Id, versionA.Id, purchasedAt: sharedTime, id: idHigh),
+            assetA.Title,
+            author.Id);
+        TestData.AddCompletedPurchase(
+            db,
+            TestData.CreatePurchase(buyer.Id, assetB.Id, versionB.Id, purchasedAt: sharedTime, id: idLow),
+            assetB.Title,
+            author.Id);
         await db.SaveChangesAsync();
 
         var store = new PurchaseStore(db);
@@ -123,5 +155,65 @@ public sealed class PurchaseStorePostgresTests(PostgresFixture fixture)
         });
 
         page.Items.Select(i => i.Id).Should().Equal(idLow, idHigh);
+    }
+
+    [Fact]
+    public async Task Add_WhenOrderLineIdDuplicates_ShouldThrowDuplicateEntitlementException()
+    {
+        await using var db = await fixture.CreateCleanDbContext();
+        (User author, Category category) = await TestData.SeedAuthorAndCategory(db);
+        var buyerA = TestData.CreateUser("dup-line-a", "dup-line-a@example.test");
+        var buyerB = TestData.CreateUser("dup-line-b", "dup-line-b@example.test");
+        db.Users.AddRange(buyerA, buyerB);
+        var assetA = TestData.CreateAsset(author.Id, category.Id, title: "Line Dup A");
+        var assetB = TestData.CreateAsset(author.Id, category.Id, title: "Line Dup B");
+        db.Assets.AddRange(assetA, assetB);
+        var versionA = TestData.CreateAssetVersion(assetA.Id);
+        var versionB = TestData.CreateAssetVersion(assetB.Id);
+        db.AssetVersions.AddRange(versionA, versionB);
+        await db.SaveChangesAsync();
+
+        var first = TestData.CreatePurchase(buyerA.Id, assetA.Id, versionA.Id);
+        TestData.AddCompletedPurchase(db, first, assetA.Title, author.Id);
+        await db.SaveChangesAsync();
+        db.ChangeTracker.Clear();
+
+        var duplicate = TestData.CreatePurchase(buyerB.Id, assetB.Id, versionB.Id, orderLineId: first.OrderLineId);
+        var act = () => new PurchaseStore(db).Add(duplicate);
+
+        await act.Should().ThrowAsync<DuplicateEntitlementException>();
+    }
+
+    [Fact]
+    public async Task Add_WhenUserIdAssetIdDuplicatesWithNewOrderLine_ShouldThrowDuplicateEntitlementException()
+    {
+        await using var db = await fixture.CreateCleanDbContext();
+        (User author, Category category) = await TestData.SeedAuthorAndCategory(db);
+        var buyer = TestData.CreateUser("dup-user-asset", "dup-user-asset@example.test");
+        db.Users.Add(buyer);
+        var asset = TestData.CreateAsset(author.Id, category.Id, title: "User Asset Dup");
+        db.Assets.Add(asset);
+        var version = TestData.CreateAssetVersion(asset.Id);
+        db.AssetVersions.Add(version);
+        await db.SaveChangesAsync();
+
+        var first = TestData.CreatePurchase(buyer.Id, asset.Id, version.Id);
+        TestData.AddCompletedPurchase(db, first, asset.Title, author.Id, stripeSessionId: "cs_user_asset_first");
+        await db.SaveChangesAsync();
+
+        var conflict = TestData.CreatePurchase(buyer.Id, asset.Id, version.Id);
+        TestData.AddCompletedCheckoutIntent(
+            db,
+            conflict,
+            asset.Title,
+            author.Id,
+            stripeSessionId: "cs_user_asset_second");
+        await db.SaveChangesAsync();
+        db.ChangeTracker.Clear();
+
+        var store = new PurchaseStore(db);
+        var act = () => store.Add(conflict);
+
+        await act.Should().ThrowAsync<DuplicateEntitlementException>();
     }
 }

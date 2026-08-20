@@ -8,15 +8,12 @@ using AssetBlock.Infrastructure.Persistence;
 using AssetBlock.Infrastructure.Persistence.Stores;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
-using Npgsql;
 
 namespace AssetBlock.Infrastructure.IntegrationTests.Persistence.Stores;
 
 [Collection(nameof(PostgresStoreCollection))]
 public sealed class OutboxStorePostgresTests(PostgresFixture fixture)
 {
-    private const string PRE_OUTBOX_MIGRATION = "20260511061023_AddAssetSoftDelete";
-
     private static OutboxStore CreateStore(ApplicationDbContext db) =>
         new(db, NullLogger<OutboxStore>.Instance);
 
@@ -27,7 +24,7 @@ public sealed class OutboxStorePostgresTests(PostgresFixture fixture)
         var seedStore = CreateStore(seedDb);
         for (var i = 0; i < 20; i++)
         {
-            await seedStore.Enqueue(OutboxMessageTypes.PURCHASE_COMPLETED, new { i }, CancellationToken.None);
+            await seedStore.Enqueue(OutboxMessageTypes.ORDER_COMPLETED, new { i }, CancellationToken.None);
         }
 
         await using var dbA = fixture.CreateDbContext();
@@ -90,6 +87,9 @@ public sealed class OutboxStorePostgresTests(PostgresFixture fixture)
         var asset = TestData.CreateAsset(author.Id, category.Id);
         db.Assets.Add(asset);
         await db.SaveChangesAsync();
+        var version = TestData.CreateAssetVersion(asset.Id);
+        db.AssetVersions.Add(version);
+        await db.SaveChangesAsync();
 
         var unitOfWork = new EfUnitOfWork(db);
         var outbox = CreateStore(db);
@@ -97,14 +97,16 @@ public sealed class OutboxStorePostgresTests(PostgresFixture fixture)
 
         var act = async () => await unitOfWork.ExecuteInTransaction(async ct =>
         {
-            db.Purchases.Add(new Purchase
+            var purchase = new Purchase
             {
                 Id = purchaseId,
                 UserId = buyer.Id,
                 AssetId = asset.Id,
-                StripePaymentId = "cs_email_rollback",
+                AssetVersionId = version.Id,
+                OrderLineId = Guid.NewGuid(),
                 PurchasedAt = DateTimeOffset.UtcNow
-            });
+            };
+            TestData.AddCompletedPurchase(db, purchase, asset.Title, author.Id, stripeSessionId: "cs_email_rollback");
             await db.SaveChangesAsync(ct);
             await outbox.Enqueue(
                 OutboxMessageTypes.EMAIL_DISPATCH,
@@ -136,6 +138,9 @@ public sealed class OutboxStorePostgresTests(PostgresFixture fixture)
         var asset = TestData.CreateAsset(author.Id, category.Id);
         db.Assets.Add(asset);
         await db.SaveChangesAsync();
+        var version = TestData.CreateAssetVersion(asset.Id);
+        db.AssetVersions.Add(version);
+        await db.SaveChangesAsync();
 
         var unitOfWork = new EfUnitOfWork(db);
         var outbox = CreateStore(db);
@@ -150,14 +155,16 @@ public sealed class OutboxStorePostgresTests(PostgresFixture fixture)
 
         await unitOfWork.ExecuteInTransaction(async ct =>
         {
-            db.Purchases.Add(new Purchase
+            var purchase = new Purchase
             {
                 Id = purchaseId,
                 UserId = buyer.Id,
                 AssetId = asset.Id,
-                StripePaymentId = "cs_email_commit",
+                AssetVersionId = version.Id,
+                OrderLineId = Guid.NewGuid(),
                 PurchasedAt = DateTimeOffset.UtcNow
-            });
+            };
+            TestData.AddCompletedPurchase(db, purchase, asset.Title, author.Id, stripeSessionId: "cs_email_commit");
             await db.SaveChangesAsync(ct);
             await outbox.Enqueue(OutboxMessageTypes.EMAIL_DISPATCH, payload, ct);
         });
@@ -172,7 +179,7 @@ public sealed class OutboxStorePostgresTests(PostgresFixture fixture)
         row.Payload.Should().Contain(buyer.Email);
         row.Payload.Should().NotContain("sk_live");
         row.Payload.Should().NotContain("whsec_");
-        row.Payload.Should().NotContain(asset.StorageKey);
+        row.Payload.Should().NotContain(version.StorageKey);
         row.Payload.Should().NotContain("Password");
         row.Payload.Should().NotContain("cs_email_commit");
     }
@@ -239,55 +246,4 @@ public sealed class OutboxStorePostgresTests(PostgresFixture fixture)
         retry[0].ProcessedAt.Should().BeNull();
     }
 
-    [Fact]
-    public async Task Migrate_WhenLegacyNullStripePaymentId_ShouldBackfillAndSucceed()
-    {
-        NpgsqlConnection.ClearAllPools();
-        await using (var setup = fixture.CreateDbContext())
-        {
-            await setup.Database.ExecuteSqlRawAsync(
-                """
-                DROP SCHEMA IF EXISTS public CASCADE;
-                CREATE SCHEMA public;
-                """);
-            await setup.Database.MigrateAsync(PRE_OUTBOX_MIGRATION);
-        }
-
-        NpgsqlConnection.ClearAllPools();
-        Guid purchaseId;
-        await using (var db = fixture.CreateDbContext())
-        {
-            (User author, Category category) = await TestData.SeedAuthorAndCategory(db);
-            var buyer = TestData.CreateUser("legacy-buyer", "legacy-buyer@example.test");
-            db.Users.Add(buyer);
-            await db.SaveChangesAsync();
-
-            // Insert via SQL: current EF model includes generated search_vector, but this
-            // database is still on a pre-FTS migration until MigrateAsync below.
-            var assetId = Guid.NewGuid();
-            var now = DateTimeOffset.UtcNow;
-            await db.Database.ExecuteSqlInterpolatedAsync($"""
-                INSERT INTO assets ("Id", "AuthorId", "CategoryId", "Title", "Description", "Price", "StorageKey", "FileName", "CreatedAt")
-                VALUES ({assetId}, {author.Id}, {category.Id}, {"Legacy Asset"}, {null}, {9.99m}, {"assets/legacy.bin"}, {"package.zip"}, {now});
-                """);
-
-            purchaseId = Guid.NewGuid();
-            await db.Database.ExecuteSqlInterpolatedAsync($"""
-                INSERT INTO purchases ("Id", "UserId", "AssetId", "StripePaymentId", "PurchasedAt", "CreatedAt")
-                VALUES ({purchaseId}, {buyer.Id}, {assetId}, NULL, {DateTimeOffset.UtcNow}, {DateTimeOffset.UtcNow});
-                """);
-        }
-
-        NpgsqlConnection.ClearAllPools();
-        await using (var migrateDb = fixture.CreateDbContext())
-        {
-            await migrateDb.Database.MigrateAsync();
-        }
-
-        await using var verify = fixture.CreateDbContext();
-        var purchase = await verify.Purchases.AsNoTracking().SingleAsync(p => p.Id == purchaseId);
-        purchase.StripePaymentId.Should().Be($"legacy-{purchaseId}");
-        (await verify.OutboxMessages.CountAsync()).Should().Be(0);
-        (await verify.Database.GetPendingMigrationsAsync()).Should().BeEmpty();
-    }
 }

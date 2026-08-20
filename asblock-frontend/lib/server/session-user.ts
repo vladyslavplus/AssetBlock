@@ -21,10 +21,12 @@ function mapApiUserToSessionUser(data: Record<string, unknown>): SessionUser | n
       })
     : []
   const role = data.role
+  const emailVerifiedAtRaw = data.emailVerifiedAt
   return {
     id,
     username,
     role: typeof role === 'string' ? role : role === null ? null : undefined,
+    emailVerifiedAt: typeof emailVerifiedAtRaw === 'string' ? emailVerifiedAtRaw : null,
     avatarUrl: typeof data.avatarUrl === 'string' ? data.avatarUrl : null,
     bio: typeof data.bio === 'string' ? data.bio : null,
     isPublicProfile: Boolean(data.isPublicProfile),

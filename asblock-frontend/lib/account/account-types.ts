@@ -7,6 +7,9 @@ export interface AccountProfileDto {
   bio: string | null
   isPublicProfile: boolean
   createdAt: string
+  emailVerifiedAt: string | null
+  pendingEmail: string | null
+  pendingEmailChangeExpiresAt: string | null
   socialLinks: Array<{
     id: string
     platformName: string

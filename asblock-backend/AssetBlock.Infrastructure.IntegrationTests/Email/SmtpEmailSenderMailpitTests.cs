@@ -14,6 +14,7 @@ public sealed class SmtpEmailSenderMailpitTests : IAsyncLifetime
 {
     private const string MAILPIT_IMAGE = "axllent/mailpit:v1.30.0";
     private const string MESSAGE_ID_DOMAIN = "mail.integration.test";
+    private static readonly TimeSpan _startTimeout = TimeSpan.FromMinutes(2);
 
     private IContainer? _mailpit;
     private HttpClient? _http;
@@ -27,7 +28,22 @@ public sealed class SmtpEmailSenderMailpitTests : IAsyncLifetime
             .WithWaitStrategy(Wait.ForUnixContainer().UntilHttpRequestIsSucceeded(r => r.ForPort(8025).ForPath("/api/v1/info")))
             .Build();
 
-        await _mailpit.StartAsync();
+        using var cts = new CancellationTokenSource(_startTimeout);
+        try
+        {
+            await _mailpit.StartAsync(cts.Token);
+        }
+        catch (OperationCanceledException) when (!cts.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (OperationCanceledException)
+        {
+            throw new TimeoutException(
+                $"Mailpit Testcontainers failed to start within {_startTimeout.TotalSeconds:0}s. " +
+                "Check Docker Desktop is running and not wedged (restart if containers stay in Created).");
+        }
+
         _http = new HttpClient
         {
             BaseAddress = new Uri($"http://{_mailpit.Hostname}:{_mailpit.GetMappedPublicPort(8025)}/")

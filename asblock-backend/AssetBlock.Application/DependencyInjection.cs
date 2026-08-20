@@ -1,5 +1,9 @@
 using AssetBlock.Application.Common.Behaviors;
+using AssetBlock.Application.Common.Caching;
 using AssetBlock.Application.Services;
+using AssetBlock.Application.UseCases.Payments.Checkout;
+using AssetBlock.Application.UseCases.Payments.HandleStripeWebhook;
+using AssetBlock.Domain.Abstractions.Services;
 using FluentValidation;
 using MediatR;
 using Microsoft.Extensions.DependencyInjection;
@@ -18,7 +22,12 @@ public static class DependencyInjection
             includeInternalTypes: true);
         services.AddTransient(typeof(IPipelineBehavior<,>), typeof(LoggingBehavior<,>));
         services.AddTransient(typeof(IPipelineBehavior<,>), typeof(ValidationBehavior<,>));
-        services.AddSingleton<TransactionalEmailComposer>();
+        services.AddScoped<CheckoutSessionOrchestrator>();
+        services.AddScoped<CheckoutAttributionNormalizer>();
+        services.AddScoped<ICheckoutCompletionService, HandleStripeWebhookCommandHandler>();
+        services.AddSingleton<ITransactionalEmailComposer, TransactionalEmailComposer>();
+        services.AddSingleton(sp => (TransactionalEmailComposer)sp.GetRequiredService<ITransactionalEmailComposer>());
+        services.AddSingleton<ITypedCache, JsonTypedCache>();
         return services;
     }
 }
