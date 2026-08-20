@@ -68,6 +68,17 @@ Seller-facing analytics live under **`/sell` → Analytics** (UTC date ranges, g
 
 ## Contributing / quality
 
-GitHub Actions run all backend projects, frontend `check`/production build, and Gitleaks. Keep secrets out of source control.
+GitHub Actions run all backend projects, frontend `check`/production build, dependency governance, and Gitleaks. Keep secrets out of source control.
+
+**License:** this repository is licensed under the Apache License 2.0 (`LICENSE`). Third-party notices are generated into `THIRD-PARTY-NOTICES.md`.
+
+**Dependency governance** (from the repository root, after `pnpm install` and frontend/backend restores):
+
+```bash
+pnpm deps:generate   # refresh THIRD-PARTY-NOTICES.md + artifacts/sbom/*
+pnpm deps:check      # licenses, exceptions, High/Critical vulns, notices freshness
+```
+
+Policy: `DEPENDENCY-POLICY.md` and `dependency-policy.json`. Reviewed exceptions: `dependency-exceptions.json`. CI workflow: `.github/workflows/dependency-ci.yml` (same `pnpm deps:check` command; CycloneDX SBOMs uploaded as artifacts).
 
 **Frontend pre-commit (repo root):** after cloning, run `pnpm install` once at the monorepo root. Husky installs a git `pre-commit` hook that, whenever staged files include `asblock-frontend/`, runs `eslint --fix` and Prettier on those files (works whether you commit from the root or from a subdirectory). Backend-only commits skip the hook work.

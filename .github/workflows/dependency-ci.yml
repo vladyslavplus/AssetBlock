@@ -1,0 +1,76 @@
+name: Dependency Governance
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: dependency-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    name: Licenses, vulns, notices
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: "10.0.x"
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "22.x"
+
+      - name: Install pnpm
+        run: npm install -g pnpm@11.13.0
+
+      - name: Get pnpm store directory
+        shell: bash
+        run: echo "STORE_PATH=$(pnpm store path --silent)" >> "$GITHUB_ENV"
+
+      - uses: actions/cache@v4
+        with:
+          path: ${{ env.STORE_PATH }}
+          key: ${{ runner.os }}-pnpm-store-${{ hashFiles('pnpm-lock.yaml', 'asblock-frontend/pnpm-lock.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-pnpm-store-
+
+      - uses: actions/cache@v6
+        with:
+          path: ~/.nuget/packages
+          key: nuget-${{ hashFiles('asblock-backend/**/*.csproj', 'asblock-backend/Directory.Packages.props', 'asblock-backend/NuGet.config', 'asblock-backend/**/packages.lock.json', 'asblock-backend/global.json', 'asblock-backend/.config/dotnet-tools.json') }}
+          restore-keys: nuget-
+
+      - name: Install root tooling
+        run: pnpm install --frozen-lockfile
+
+      - name: Restore frontend dependencies
+        working-directory: asblock-frontend
+        run: pnpm install --frozen-lockfile
+
+      - name: Restore backend
+        working-directory: asblock-backend
+        run: |
+          dotnet restore asblock-backend.slnx
+          dotnet tool restore
+
+      - name: Dependency governance unit tests
+        run: pnpm deps:test
+
+      - name: Dependency governance check
+        run: pnpm deps:check
+
+      - name: Upload CycloneDX SBOMs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cyclonedx-sboms
+          path: artifacts/sbom/
+          if-no-files-found: warn

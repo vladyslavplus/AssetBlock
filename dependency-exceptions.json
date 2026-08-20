@@ -1,0 +1,100 @@
+{
+  "exceptions": [
+    {
+      "ecosystem": "nuget",
+      "name": "Stripe.net",
+      "versions": ["50.4.0"],
+      "license": "Apache-2.0",
+      "reason": "Official Stripe .NET SDK. Nuspec ships license type=file (LICENSE in the nupkg) without an SPDX expression; reviewed as Apache-2.0.",
+      "reviewedOn": "2026-08-20"
+    },
+    {
+      "ecosystem": "nuget",
+      "name": "xunit.abstractions",
+      "versions": ["2.0.3"],
+      "license": "Apache-2.0",
+      "reason": "Transitive xUnit abstractions package only publishes a licenseUrl to the Apache-2.0 text; no SPDX expression in the nuspec.",
+      "reviewedOn": "2026-08-20"
+    },
+    {
+      "ecosystem": "npm",
+      "namePattern": "^@img/sharp-(?!libvips)",
+      "versions": ["0.35.3"],
+      "license": "Apache-2.0 AND LGPL-3.0-or-later",
+      "reason": "Optional platform binaries for sharp (Next.js image pipeline). Retained LGPL-3.0-or-later transitive terms across OS packages; no replacement planned.",
+      "reviewedOn": "2026-08-20"
+    },
+    {
+      "ecosystem": "npm",
+      "namePattern": "^@img/sharp-libvips-",
+      "versions": ["1.3.2"],
+      "license": "LGPL-3.0-or-later",
+      "reason": "Optional libvips native binaries pulled by sharp; LGPL-3.0-or-later retained with notices.",
+      "reviewedOn": "2026-08-20"
+    },
+    {
+      "ecosystem": "npm",
+      "name": "minimatch",
+      "versions": ["10.2.5"],
+      "license": "BlueOak-1.0.0",
+      "reason": "Permissive BlueOak-1.0.0 transitive dependency; not on the default allowlist, reviewed and accepted.",
+      "reviewedOn": "2026-08-20"
+    },
+    {
+      "ecosystem": "npm",
+      "name": "caniuse-lite",
+      "versions": ["1.0.30001769"],
+      "license": "CC-BY-4.0",
+      "reason": "Browserslist dataset under CC-BY-4.0; attribution retained via generated notices.",
+      "reviewedOn": "2026-08-20"
+    },
+    {
+      "ecosystem": "npm",
+      "name": "language-subtag-registry",
+      "versions": ["0.3.23"],
+      "license": "CC0-1.0",
+      "reason": "Public-domain equivalent language subtag data (CC0-1.0); accepted for tooling use.",
+      "reviewedOn": "2026-08-20"
+    },
+    {
+      "ecosystem": "npm",
+      "name": "axe-core",
+      "versions": ["4.11.2"],
+      "license": "MPL-2.0",
+      "reason": "Transitive accessibility engine under MPL-2.0; retained with notices, no replacement planned.",
+      "reviewedOn": "2026-08-20"
+    },
+    {
+      "ecosystem": "npm",
+      "name": "lightningcss",
+      "versions": ["1.31.1"],
+      "license": "MPL-2.0",
+      "reason": "CSS transformer used by Tailwind/Next tooling under MPL-2.0; retained with notices.",
+      "reviewedOn": "2026-08-20"
+    },
+    {
+      "ecosystem": "npm",
+      "namePattern": "^lightningcss-",
+      "versions": ["1.31.1"],
+      "license": "MPL-2.0",
+      "reason": "Optional platform binaries for lightningcss under MPL-2.0; retained with notices.",
+      "reviewedOn": "2026-08-20"
+    },
+    {
+      "ecosystem": "npm",
+      "name": "argparse",
+      "versions": ["2.0.1"],
+      "license": "Python-2.0",
+      "reason": "Transitive CLI parsing helper under Python-2.0 license text; reviewed and accepted.",
+      "reviewedOn": "2026-08-20"
+    },
+    {
+      "ecosystem": "npm",
+      "name": "fetch-cookie",
+      "versions": ["2.2.0"],
+      "license": "Unlicense",
+      "reason": "Public-domain equivalent (Unlicense) transitive helper; accepted.",
+      "reviewedOn": "2026-08-20"
+    }
+  ]
+}
