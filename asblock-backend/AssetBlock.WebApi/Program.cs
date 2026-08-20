@@ -59,8 +59,8 @@ else
 
 var app = builder.Build();
 
-app.UseValidationExceptionHandler();
 app.UseSerilogRequestLoggingConfiguration();
+app.UseValidationExceptionHandler();
 
 if (app.Environment.IsDevelopment())
 {

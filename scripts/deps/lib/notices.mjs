@@ -45,8 +45,9 @@ export function buildNoticesMarkdown(packages) {
     "inventory is OS-independent across repository npm roots.",
     "",
     "Where available, each entry includes author/copyright, source repository/homepage,",
-    "and a license URL (SPDX page or package-declared license URL). Metadata is read from",
-    "local package.json when present, with the npm registry used as a fallback.",
+    "and a license URL (SPDX page or package-declared license URL). npm metadata is read",
+    "from the npm registry (canonical, OS-independent). Reviewed exceptions may set",
+    "`overrideDetectedLicense` when registry manifests under-report distributed terms.",
     "",
   ];
 
@@ -78,7 +79,19 @@ export function evaluatePackages(packages, policy, exceptions) {
     const exception = findException(exceptions, pkg.ecosystem, pkg.name, pkg.version);
 
     let effectiveLicense = pkg.license;
-    if (!effectiveLicense && exception?.license) {
+    if (exception?.overrideDetectedLicense === true && exception.license) {
+      // Explicit reviewed override replaces under-reported registry metadata in
+      // notices/SBOM. Ordinary exceptions never rewrite a detected license.
+      effectiveLicense = exception.license;
+      pkg.license = exception.license;
+      pkg.licenseFromException = true;
+      pkg.licenseOverridden = true;
+      if (/^[A-Za-z0-9.\-+]+$/.test(exception.license)) {
+        pkg.licenseUrl = `https://spdx.org/licenses/${exception.license}.html`;
+      } else {
+        pkg.licenseUrl = null;
+      }
+    } else if (!effectiveLicense && exception?.license) {
       effectiveLicense = exception.license;
       pkg.license = exception.license;
       pkg.licenseFromException = true;

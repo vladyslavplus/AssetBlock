@@ -42,6 +42,7 @@ public sealed class RedisAnalyticsDistributedRateLimitIntegrationTests : IAsyncL
         var clientB = appB.GetTestClient();
         const string ip = "203.0.113.77";
 
+        await AnalyticsFixedWindowTestGuard.EnsureWindowHasRemainingAsync();
         for (var i = 0; i < RateLimitingConstants.Windows.ANALYTICS_EVENTS_LIMIT; i++)
         {
             var ok = await AnalyticsRateLimitTestHost.PostProbeAsync(clientA, ip);
@@ -60,6 +61,7 @@ public sealed class RedisAnalyticsDistributedRateLimitIntegrationTests : IAsyncL
         var client = app.GetTestClient();
         const string ip = "203.0.113.78";
 
+        await AnalyticsFixedWindowTestGuard.EnsureWindowHasRemainingAsync();
         for (var i = 0; i < RateLimitingConstants.Windows.ANALYTICS_EVENTS_LIMIT; i++)
         {
             (await AnalyticsRateLimitTestHost.PostProbeAsync(client, ip)).StatusCode.Should().Be(HttpStatusCode.Accepted);
@@ -78,6 +80,7 @@ public sealed class RedisAnalyticsDistributedRateLimitIntegrationTests : IAsyncL
         var clientB = appB.GetTestClient();
         const string ip = "203.0.113.79";
 
+        await AnalyticsFixedWindowTestGuard.EnsureWindowHasRemainingAsync();
         for (var i = 0; i < RateLimitingConstants.Windows.ANALYTICS_EVENTS_LIMIT - 1; i++)
         {
             (await AnalyticsRateLimitTestHost.PostProbeAsync(clientA, ip)).StatusCode.Should().Be(HttpStatusCode.Accepted);
@@ -104,6 +107,7 @@ public sealed class RedisAnalyticsDistributedRateLimitIntegrationTests : IAsyncL
         const string remoteIp = "203.0.113.90";
         const string clientIp = "198.51.100.10";
 
+        await AnalyticsFixedWindowTestGuard.EnsureWindowHasRemainingAsync();
         for (var i = 0; i < RateLimitingConstants.Windows.ANALYTICS_EVENTS_LIMIT; i++)
         {
             var headers = AnalyticsRateLimitTestHost.CreateSignedHeaders(

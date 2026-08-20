@@ -17,6 +17,7 @@ public sealed class AnalyticsEventsRateLimitPipelineTests
         const string ipA = "203.0.113.1";
         const string ipB = "203.0.113.2";
 
+        await AnalyticsFixedWindowTestGuard.EnsureWindowHasRemainingAsync();
         for (var i = 0; i < RateLimitingConstants.Windows.ANALYTICS_EVENTS_LIMIT; i++)
         {
             var ok = await AnalyticsRateLimitTestHost.PostProbeAsync(client, ipA);
@@ -39,6 +40,8 @@ public sealed class AnalyticsEventsRateLimitPipelineTests
         const string remoteIp = "203.0.113.50";
         const string clientIpA = "198.51.100.1";
         const string clientIpB = "198.51.100.2";
+
+        await AnalyticsFixedWindowTestGuard.EnsureWindowHasRemainingAsync();
         for (var i = 0; i < RateLimitingConstants.Windows.ANALYTICS_EVENTS_LIMIT; i++)
         {
             var headersA = AnalyticsRateLimitTestHost.CreateSignedHeaders(
@@ -72,6 +75,7 @@ public sealed class AnalyticsEventsRateLimitPipelineTests
         const string directIp = "203.0.113.99";
         const string clientIp = "198.51.100.77";
 
+        await AnalyticsFixedWindowTestGuard.EnsureWindowHasRemainingAsync();
         for (var i = 0; i < RateLimitingConstants.Windows.ANALYTICS_EVENTS_LIMIT; i++)
         {
             var ok = await AnalyticsRateLimitTestHost.PostProbeAsync(client, directIp);

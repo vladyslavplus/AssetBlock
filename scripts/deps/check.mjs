@@ -5,7 +5,13 @@ import { generateAll } from "./generate.mjs";
 import { listNugetVulnerabilities } from "./lib/nuget.mjs";
 import { listNpmVulnerabilities } from "./lib/npm.mjs";
 import { filterSevereVulnerabilities } from "./lib/notices.mjs";
-import { NOTICES_PATH } from "./lib/paths.mjs";
+import { writeNoticesDiagnostics } from "./lib/diff.mjs";
+import {
+  GENERATED_NOTICES_DIAG,
+  GOVERNANCE_DIAG_DIR,
+  NOTICES_DIFF_DIAG,
+  NOTICES_PATH,
+} from "./lib/paths.mjs";
 
 function fail(messages) {
   console.error(messages.join("\n"));
@@ -18,6 +24,7 @@ if (isDirectRun) {
   const existingNotices = fs.existsSync(NOTICES_PATH) ? fs.readFileSync(NOTICES_PATH, "utf8") : null;
 
   // Regenerate notices/SBOMs without writing notices yet so we can diff.
+  // deps:check must never modify the committed THIRD-PARTY-NOTICES.md.
   const { notices, licenseErrors, policy } = await generateAll({
     writeNotices: false,
     writeSboms: true,
@@ -35,9 +42,20 @@ if (isDirectRun) {
   if (existingNotices === null) {
     errors.push(`Missing ${NOTICES_PATH}. Run pnpm deps:generate and commit the result.`);
   } else if (existingNotices !== notices) {
+    const { diff, generatedPath, diffPath } = writeNoticesDiagnostics({
+      existingNotices,
+      generatedNotices: notices,
+      outputDir: GOVERNANCE_DIAG_DIR,
+      generatedPath: GENERATED_NOTICES_DIAG,
+      diffPath: NOTICES_DIFF_DIAG,
+    });
     errors.push(
       "THIRD-PARTY-NOTICES.md is out of date. Run `pnpm deps:generate` and commit the updated file.",
     );
+    errors.push(`Wrote diagnostic generated notices: ${generatedPath}`);
+    errors.push(`Wrote diagnostic notices diff: ${diffPath}`);
+    errors.push("Notices diff (bounded):");
+    errors.push(diff.trimEnd());
   }
 
   const vulns = [

@@ -5,10 +5,8 @@ import {
   listPackagesFromPnpmLocks,
   NPM_LOCKFILES,
   NPM_PROJECT_DIRS,
-  pnpmVirtualStorePackageJsonPath,
 } from "./pnpm-lock.mjs";
 import { writeCycloneDxBom } from "./sbom.mjs";
-import fs from "node:fs";
 
 function resolveCommand(command) {
   if (process.platform !== "win32") {
@@ -78,21 +76,6 @@ function spdxLicenseUrl(license) {
   return `https://spdx.org/licenses/${license}.html`;
 }
 
-function readLocalPackageJson(name, version) {
-  for (const projectDir of NPM_PROJECT_DIRS) {
-    const candidate = pnpmVirtualStorePackageJsonPath(projectDir, name, version);
-    if (!fs.existsSync(candidate)) {
-      continue;
-    }
-    try {
-      return JSON.parse(fs.readFileSync(candidate, "utf8"));
-    } catch {
-      // Try the next project store.
-    }
-  }
-  return null;
-}
-
 const metadataCache = new Map();
 
 async function fetchNpmRegistryMetadata(name, version) {
@@ -149,7 +132,39 @@ function metadataFromPackageJson(pkgJson) {
   };
 }
 
-export async function listNpmPackages() {
+/**
+ * Resolve canonical npm package metadata from the registry only.
+ * Local package.json is never used for notices/SBOM output (OS-dependent installs).
+ * Optional localPkgJson may be supplied for tests/validation but does not affect result.
+ */
+export async function resolveCanonicalNpmMetadata(name, version, {
+  fetchRegistry = fetchNpmRegistryMetadata,
+  localPkgJson = undefined,
+} = {}) {
+  const remote = await fetchRegistry(name, version);
+  if (!remote) {
+    throw new Error(
+      `Canonical npm registry metadata missing for ${name}@${version}`,
+    );
+  }
+
+  const meta = metadataFromPackageJson(remote);
+  if (!meta) {
+    throw new Error(
+      `Canonical npm registry metadata unreadable for ${name}@${version}`,
+    );
+  }
+
+  // Local metadata is intentionally ignored for output. Presence is allowed for
+  // cache/validation callers, but must not change generated notices by OS.
+  void localPkgJson;
+
+  return meta;
+}
+
+export async function listNpmPackages({
+  fetchRegistry = fetchNpmRegistryMetadata,
+} = {}) {
   const lockPackages = listPackagesFromPnpmLocks(NPM_LOCKFILES);
   const enriched = new Array(lockPackages.length);
   let nextIndex = 0;
@@ -159,28 +174,19 @@ export async function listNpmPackages() {
     while (nextIndex < lockPackages.length) {
       const index = nextIndex++;
       const pkg = lockPackages[index];
-      const local = metadataFromPackageJson(readLocalPackageJson(pkg.name, pkg.version));
-      let meta = local;
-      if (!meta?.license) {
-        const remote = await fetchNpmRegistryMetadata(pkg.name, pkg.version);
-        const remoteMeta = metadataFromPackageJson(remote);
-        meta = {
-          license: local?.license ?? remoteMeta?.license ?? null,
-          author: local?.author ?? remoteMeta?.author ?? null,
-          sourceUrl: local?.sourceUrl ?? remoteMeta?.sourceUrl ?? null,
-          licenseUrl: local?.licenseUrl ?? remoteMeta?.licenseUrl ?? null,
-        };
-      }
+      const meta = await resolveCanonicalNpmMetadata(pkg.name, pkg.version, {
+        fetchRegistry,
+      });
 
       enriched[index] = {
         ecosystem: "npm",
         name: pkg.name,
         version: pkg.version,
         direct: false,
-        license: meta?.license ?? null,
-        author: meta?.author ?? null,
-        sourceUrl: meta?.sourceUrl ?? null,
-        licenseUrl: meta?.licenseUrl ?? spdxLicenseUrl(meta?.license),
+        license: meta.license ?? null,
+        author: meta.author ?? null,
+        sourceUrl: meta.sourceUrl ?? null,
+        licenseUrl: meta.licenseUrl ?? spdxLicenseUrl(meta.license),
       };
     }
   }

@@ -60,6 +60,19 @@ export function validateExceptionEntry(entry, index) {
     errors.push(`${prefix}: reviewedOn must be an ISO date (YYYY-MM-DD)`);
   }
 
+  if (
+    entry.overrideDetectedLicense !== undefined &&
+    typeof entry.overrideDetectedLicense !== "boolean"
+  ) {
+    errors.push(`${prefix}: overrideDetectedLicense must be a boolean when set`);
+  }
+
+  if (entry.overrideDetectedLicense === true) {
+    if (typeof entry.license !== "string" || !entry.license.trim()) {
+      errors.push(`${prefix}: overrideDetectedLicense requires license`);
+    }
+  }
+
   if (hasPattern) {
     try {
       // eslint-disable-next-line no-new

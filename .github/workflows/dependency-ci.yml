@@ -74,3 +74,11 @@ jobs:
           name: cyclonedx-sboms
           path: artifacts/sbom/
           if-no-files-found: warn
+
+      - name: Upload notices diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: dependency-governance-diagnostics
+          path: artifacts/dependency-governance/
+          if-no-files-found: ignore

@@ -13,3 +13,9 @@ export const NOTICES_PATH = path.join(ROOT, "THIRD-PARTY-NOTICES.md");
 export const SBOM_DIR = path.join(ROOT, "artifacts", "sbom");
 export const BACKEND_SBOM = path.join(SBOM_DIR, "backend.cdx.json");
 export const FRONTEND_SBOM = path.join(SBOM_DIR, "frontend.cdx.json");
+export const GOVERNANCE_DIAG_DIR = path.join(ROOT, "artifacts", "dependency-governance");
+export const GENERATED_NOTICES_DIAG = path.join(
+  GOVERNANCE_DIAG_DIR,
+  "THIRD-PARTY-NOTICES.generated.md",
+);
+export const NOTICES_DIFF_DIAG = path.join(GOVERNANCE_DIAG_DIR, "THIRD-PARTY-NOTICES.diff");

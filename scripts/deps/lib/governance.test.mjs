@@ -3,10 +3,11 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
-import { interpretNpmAuditResult, parseNpmAuditJson } from "./npm.mjs";
-import { filterSevereVulnerabilities } from "./notices.mjs";
+import { interpretNpmAuditResult, parseNpmAuditJson, resolveCanonicalNpmMetadata } from "./npm.mjs";
+import { evaluatePackages, filterSevereVulnerabilities } from "./notices.mjs";
 import { validateExceptionEntry } from "./policy.mjs";
 import { listPackagesFromPnpmLock, listPackagesFromPnpmLocks } from "./pnpm-lock.mjs";
+import { buildBoundedLineDiff } from "./diff.mjs";
 
 test("parseNpmAuditJson_WhenHighDevAdvisory_ShouldSurfaceFinding", () => {
   const findings = parseNpmAuditJson(
@@ -267,4 +268,141 @@ test("listPackagesFromPnpmLocks_WhenRootAndFrontend_ShouldDeduplicateAndIncludeT
       "shared@1.0.0",
     ],
   );
+});
+
+test("resolveCanonicalNpmMetadata_WhenLocalAndRegistryDiffer_ShouldIgnoreLocal", async () => {
+  const registry = {
+    license: "Apache-2.0",
+    author: "Registry Author",
+    repository: { url: "git+https://github.com/example/pkg.git" },
+  };
+  const localWindows = {
+    license: "Apache-2.0 AND LGPL-3.0-or-later",
+    author: "Local Windows Author",
+    repository: { url: "git+https://github.com/example/local-win.git" },
+  };
+
+  const fetchRegistry = async () => registry;
+  const fromWindowsPath = await resolveCanonicalNpmMetadata("@img/sharp-win32-x64", "0.35.3", {
+    fetchRegistry,
+    localPkgJson: localWindows,
+  });
+  const fromLinuxPath = await resolveCanonicalNpmMetadata("@img/sharp-win32-x64", "0.35.3", {
+    fetchRegistry,
+    localPkgJson: null,
+  });
+
+  assert.deepEqual(fromWindowsPath, fromLinuxPath);
+  assert.equal(fromWindowsPath.license, "Apache-2.0");
+  assert.equal(fromWindowsPath.author, "Registry Author");
+  assert.equal(fromWindowsPath.sourceUrl, "https://github.com/example/pkg");
+});
+
+test("evaluatePackages_WhenOverrideDetectedLicense_ShouldApplyToAllPlatformMatches", () => {
+  const packages = [
+    {
+      ecosystem: "npm",
+      name: "@img/sharp-win32-x64",
+      version: "0.35.3",
+      license: "Apache-2.0",
+      licenseUrl: "https://spdx.org/licenses/Apache-2.0.html",
+    },
+    {
+      ecosystem: "npm",
+      name: "@img/sharp-linux-x64",
+      version: "0.35.3",
+      license: "Apache-2.0",
+      licenseUrl: "https://spdx.org/licenses/Apache-2.0.html",
+    },
+    {
+      ecosystem: "npm",
+      name: "@img/sharp-darwin-arm64",
+      version: "0.35.3",
+      license: "Apache-2.0",
+      licenseUrl: "https://spdx.org/licenses/Apache-2.0.html",
+    },
+  ];
+  const exceptions = [
+    {
+      ecosystem: "npm",
+      namePattern: "^@img/sharp-(?!libvips)",
+      versions: ["0.35.3"],
+      license: "Apache-2.0 AND LGPL-3.0-or-later",
+      overrideDetectedLicense: true,
+      reason: "Registry under-reports LGPL terms versus distributed sharp platform packages.",
+      reviewedOn: "2026-08-20",
+    },
+  ];
+  const policy = { allowedLicenses: ["MIT", "Apache-2.0"] };
+
+  const errors = evaluatePackages(packages, policy, exceptions);
+  assert.deepEqual(errors, []);
+  for (const pkg of packages) {
+    assert.equal(pkg.license, "Apache-2.0 AND LGPL-3.0-or-later");
+    assert.equal(pkg.licenseOverridden, true);
+  }
+});
+
+test("evaluatePackages_WhenExceptionWithoutOverride_ShouldNotRewriteDetectedLicense", () => {
+  const packages = [
+    {
+      ecosystem: "npm",
+      name: "axe-core",
+      version: "4.11.2",
+      license: "MPL-2.0",
+      licenseUrl: "https://spdx.org/licenses/MPL-2.0.html",
+    },
+  ];
+  const exceptions = [
+    {
+      ecosystem: "npm",
+      name: "axe-core",
+      versions: ["4.11.2"],
+      license: "MPL-2.0",
+      reason: "Transitive accessibility engine under MPL-2.0; retained with notices.",
+      reviewedOn: "2026-08-20",
+    },
+  ];
+  const policy = { allowedLicenses: ["MIT", "Apache-2.0"] };
+
+  const errors = evaluatePackages(packages, policy, exceptions);
+  assert.deepEqual(errors, []);
+  assert.equal(packages[0].license, "MPL-2.0");
+  assert.equal(packages[0].licenseOverridden, undefined);
+});
+
+test("evaluatePackages_WhenExceptionWithoutOverrideAndDifferentLicense_ShouldNotSilentlyReplace", () => {
+  const packages = [
+    {
+      ecosystem: "npm",
+      name: "@img/sharp-linux-x64",
+      version: "0.35.3",
+      license: "Apache-2.0",
+    },
+  ];
+  const exceptions = [
+    {
+      ecosystem: "npm",
+      namePattern: "^@img/sharp-(?!libvips)",
+      versions: ["0.35.3"],
+      license: "Apache-2.0 AND LGPL-3.0-or-later",
+      reason: "Authorize LGPL retention without rewriting detected Apache-only registry metadata.",
+      reviewedOn: "2026-08-20",
+    },
+  ];
+  const policy = { allowedLicenses: ["MIT", "Apache-2.0"] };
+
+  const errors = evaluatePackages(packages, policy, exceptions);
+  assert.deepEqual(errors, []);
+  assert.equal(packages[0].license, "Apache-2.0");
+  assert.equal(packages[0].licenseOverridden, undefined);
+});
+
+test("buildBoundedLineDiff_WhenTextsDiffer_ShouldIncludeChangedLines", () => {
+  const diff = buildBoundedLineDiff("alpha\nbeta\n", "alpha\ngamma\n", {
+    beforeLabel: "a",
+    afterLabel: "b",
+  });
+  assert.match(diff, /^-beta$/m);
+  assert.match(diff, /^\+gamma$/m);
 });

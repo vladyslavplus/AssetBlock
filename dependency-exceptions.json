@@ -21,7 +21,8 @@
       "namePattern": "^@img/sharp-(?!libvips)",
       "versions": ["0.35.3"],
       "license": "Apache-2.0 AND LGPL-3.0-or-later",
-      "reason": "Optional platform binaries for sharp (Next.js image pipeline). Retained LGPL-3.0-or-later transitive terms across OS packages; no replacement planned.",
+      "overrideDetectedLicense": true,
+      "reason": "Optional platform binaries for sharp (Next.js image pipeline). Registry under-reports LGPL-3.0-or-later vs distributed package manifests; overrideDetectedLicense applies the reviewed combined license on every OS.",
       "reviewedOn": "2026-08-20"
     },
     {
@@ -29,7 +30,8 @@
       "namePattern": "^@img/sharp-libvips-",
       "versions": ["1.3.2"],
       "license": "LGPL-3.0-or-later",
-      "reason": "Optional libvips native binaries pulled by sharp; LGPL-3.0-or-later retained with notices.",
+      "overrideDetectedLicense": true,
+      "reason": "Optional libvips native binaries pulled by sharp; overrideDetectedLicense keeps LGPL-3.0-or-later canonical across platforms when registry metadata differs.",
       "reviewedOn": "2026-08-20"
     },
     {

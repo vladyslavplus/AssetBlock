@@ -41,18 +41,55 @@ jobs:
 
       - name: Test & Collect Coverage
         working-directory: asblock-backend
-        run: dotnet test asblock-backend.slnx --no-build --configuration Release --logger "console;verbosity=normal" --collect:"XPlat Code Coverage"
+        run: |
+          mkdir -p artifacts/test-results
+          # Unique TRX name per test project avoids collisions under a shared results directory.
+          for csproj in \
+            AssetBlock.Application.Tests/AssetBlock.Application.Tests.csproj \
+            AssetBlock.Infrastructure.Tests/AssetBlock.Infrastructure.Tests.csproj \
+            AssetBlock.Infrastructure.IntegrationTests/AssetBlock.Infrastructure.IntegrationTests.csproj \
+            AssetBlock.WebApi.Tests/AssetBlock.WebApi.Tests.csproj \
+            AssetBlock.WebApi.IntegrationTests/AssetBlock.WebApi.IntegrationTests.csproj
+          do
+            name="$(basename "$csproj" .csproj)"
+            echo "::group::Test $name"
+            dotnet test "$csproj" \
+              --no-build \
+              --configuration Release \
+              --logger "console;verbosity=normal" \
+              --logger "trx;LogFileName=${name}.trx" \
+              --results-directory "${GITHUB_WORKSPACE}/asblock-backend/artifacts/test-results/${name}" \
+              --collect:"XPlat Code Coverage"
+            echo "::endgroup::"
+          done
+
+      - name: Upload test results (TRX)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-trx-results
+          path: asblock-backend/artifacts/test-results/**/*.trx
+          if-no-files-found: warn
+
+      - name: Upload coverage
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-coverage
+          path: asblock-backend/artifacts/test-results/**/coverage.cobertura.xml
+          if-no-files-found: warn
 
       - name: Code Coverage Summary Report
+        if: success()
         uses: irongut/CodeCoverageSummary@v1.3.0
         with:
-          filename: "asblock-backend/**/coverage.cobertura.xml"
+          filename: "asblock-backend/artifacts/test-results/**/coverage.cobertura.xml"
           badge: true
           format: markdown
           output: both
 
       - name: Add PR Coverage Comment
-        if: github.event_name == 'pull_request'
+        if: success() && github.event_name == 'pull_request'
         uses: marocchino/sticky-pull-request-comment@v3
         with:
           recreate: true

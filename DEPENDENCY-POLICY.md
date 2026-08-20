@@ -33,6 +33,11 @@ Exceptions must include ecosystem, package `name` or `namePattern`, explicit `ve
 (no bare `*` unless `allowVersionWildcard` + `wildcardReason`), license, reason, and ISO
 `reviewedOn` date. Do not silently ignore packages with missing metadata.
 
+Set `overrideDetectedLicense: true` only when a reviewed exception must replace the
+canonical detected license in notices/SBOM (for example npm registry under-reports
+terms that appear in the distributed package). Ordinary exceptions authorize a
+non-allowlisted license without rewriting detected metadata.
+
 ## Security
 
 Governance checks fail on **High** and **Critical** vulnerabilities reported by:
@@ -46,10 +51,15 @@ Governance checks fail on **High** and **Critical** vulnerabilities reported by:
 | --- | --- | --- |
 | CycloneDX .NET (`CycloneDX`) | `6.2.0` via `asblock-backend/.config/dotnet-tools.json` | Backend SBOM |
 | `pnpm-lock.yaml` parse | packageManager `pnpm@11.13.0` | Canonical OS-neutral npm inventory from root + `asblock-frontend` lockfiles |
-| npm registry metadata | fallback only | License/author/source when local `node_modules` metadata is missing |
+| npm registry metadata | canonical | Author/source/base license for every npm package (OS-independent); missing registry metadata fails generation |
+| `overrideDetectedLicense` exceptions | `dependency-exceptions.json` | Reviewed license corrections when registry under-reports distributed terms |
 | `scripts/deps` CycloneDX writer | repo scripts | Combined npm (app + tooling) SBOM |
 | `dotnet list package` | .NET SDK 10 | NuGet inventory + vulns |
 | `pnpm audit` | packageManager `pnpm@11.13.0` | npm vulns for every pnpm root |
+
+`pnpm deps:check` never modifies committed `THIRD-PARTY-NOTICES.md`. On mismatch it
+writes `artifacts/dependency-governance/THIRD-PARTY-NOTICES.generated.md` and a
+bounded `.diff` for CI inspection.
 
 ## Commands
 
