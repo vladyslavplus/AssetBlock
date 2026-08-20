@@ -7,6 +7,7 @@
 - Before changing or reviewing frontend code, read `asblock-frontend/AGENTS.md` completely.
 - For cross-stack work, read both nested guides and keep backend contracts, BFF routes, schemas, query keys, and UI behavior aligned.
 - For non-trivial implementation, refactoring, or bug-fixing work, read and follow `.agents/skills/implement-change/SKILL.md`.
+- When asked to review, inspect, audit, validate, or check code changes, read and follow `.agents/skills/review-change/SKILL.md`. Route backend and frontend changes to their separate review lanes.
 - `.cursor/plans/` is optional ignored scratch space for local plans. Do not depend on a specific plan file or reference one from tracked source files.
 
 ## Working agreement
