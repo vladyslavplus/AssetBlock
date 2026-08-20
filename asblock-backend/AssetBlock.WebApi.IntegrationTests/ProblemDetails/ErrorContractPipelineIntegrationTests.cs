@@ -55,6 +55,8 @@ public sealed class ErrorContractPipelineIntegrationTests(IntegrationTestFixture
             new Uri("/api/auth/register", UriKind.Relative),
             new { username = $"w_{suffix}", email = $"w-{suffix}@test.local", password = "short" });
 
+        // Serilog is outside ExceptionHandler so request logging observes this final 400,
+        // not an intermediate unhandled ValidationException 500.
         await AssertProblemAsync(response, HttpStatusCode.BadRequest, ErrorCodes.ERR_VALIDATION_FAILED);
     }
 

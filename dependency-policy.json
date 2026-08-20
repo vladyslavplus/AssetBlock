@@ -1,0 +1,21 @@
+{
+  "allowedLicenses": [
+    "0BSD",
+    "Apache-2.0",
+    "BSD-2-Clause",
+    "BSD-3-Clause",
+    "BSD-3-Clause-Clear",
+    "ISC",
+    "MIT",
+    "PostgreSQL"
+  ],
+  "failVulnerabilitySeverities": [
+    "Critical",
+    "High"
+  ],
+  "tools": {
+    "cyclonedxDotnet": "6.2.0",
+    "frontendSbom": "scripts/deps CycloneDX 1.5 generator from aggregated root + frontend pnpm-lock.yaml inventories (canonical npm registry metadata; overrideDetectedLicense exceptions may correct under-reported licenses)",
+    "pnpmInventory": "pnpm-lock.yaml package keys from repository root and asblock-frontend (packageManager pnpm@11.13.0); optional platform packages included for OS-neutral notices; npm registry is the canonical metadata source"
+  }
+}

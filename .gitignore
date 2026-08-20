@@ -5,5 +5,8 @@
 # Root tooling (husky / lint-staged)
 node_modules/
 
+# Generated dependency governance artifacts (SBOMs are CI/local outputs)
+artifacts/
+
 # Local AI planning artifacts
 **/.cursor/plans/
