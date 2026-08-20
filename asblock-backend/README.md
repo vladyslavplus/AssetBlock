@@ -121,7 +121,7 @@ dotnet run --project AssetBlock.WebApi
 - **Gross revenue** only (integer USD cents); commerce from completed `Order`/`OrderLine` rows after Stripe webhook fulfillment.
 - **UTC ranges:** `from` inclusive, `to` exclusive, 1–366 days; `engagementAvailableFrom` marks first retained telemetry.
 - **Engagement:** append-only `analytics_events`, 400-day retention, daily rollups recomputed by `AnalyticsAggregationWorker` (advisory lock).
-- **Rate limits:** `ANALYTICS_EVENTS` (120/min/partition) and `SELLER_ANALYTICS_SALES_EXPORT` (10/hour/seller) use Redis fixed windows in Staging/Production (`ConnectionStrings:Redis` required). Development/IntegrationTesting fall back to in-memory limiters when Redis is unset. During Redis outages the API logs once, returns 202 for telemetry and 503 for CSV export for a short backoff window without per-request Redis calls.
+- **Rate limits:** `ANALYTICS_EVENTS` (120/min/partition) and `SELLER_ANALYTICS_SALES_EXPORT` (10/hour/seller) use Redis-protocol fixed windows in Staging/Production (`ConnectionStrings:Redis` required; Valkey locally). Development/IntegrationTesting fall back to in-memory limiters when Redis connection is unset. During Redis outages the API logs once, returns 202 for telemetry and 503 for CSV export for a short backoff window without per-request Redis calls.
 - **BFF signing:** `AnalyticsRateLimiting:BffSigningSecret` (min 32 chars) + frontend `ASSETBLOCK_ANALYTICS_BFF_SIGNING_SECRET`.
 - **Routes:** `GET /api/seller/analytics/*`, `POST /api/analytics/events`, CSV at `GET /api/seller/analytics/sales/export`.
 - **Worker:** `AnalyticsAggregationWorker` recomputes UTC daily rollups every five minutes (advisory lock) and deletes raw events older than 400 days.
@@ -232,6 +232,6 @@ Success DB mutations write the audit row in the same `IUnitOfWork` transaction a
 ### Health checks
 
 - `GET /health/live` reports process liveness only and does not probe external dependencies.
-- `GET /health/ready` probes PostgreSQL, the configured MinIO bucket, and Redis when a Redis connection string is configured.
+- `GET /health/ready` probes PostgreSQL, the configured MinIO bucket, and Redis connection when configured (Valkey locally).
 
 Both endpoints return a small JSON report. Readiness returns HTTP 503 while any required dependency is unavailable.

@@ -1,6 +1,6 @@
 using AssetBlock.Application.UseCases.Users.UpdateSocialLinks;
 using AssetBlock.Domain.Core.Dto.Users;
-using FluentAssertions;
+using AwesomeAssertions;
 
 namespace AssetBlock.Application.Tests.Validators;
 

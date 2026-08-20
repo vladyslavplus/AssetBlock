@@ -1,5 +1,5 @@
 using AssetBlock.Application.UseCases.Reviews.CreateReview;
-using FluentAssertions;
+using AwesomeAssertions;
 
 namespace AssetBlock.Application.Tests.Validators;
 

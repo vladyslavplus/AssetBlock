@@ -7,7 +7,7 @@ using AssetBlock.Domain.Core.Constants;
 using AssetBlock.Domain.Core.Dto.Reviews;
 using AssetBlock.WebApi.Controllers;
 using AssetBlock.WebApi.Tests.Common;
-using FluentAssertions;
+using AwesomeAssertions;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using NSubstitute;

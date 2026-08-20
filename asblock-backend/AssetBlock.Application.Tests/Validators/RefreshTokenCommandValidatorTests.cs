@@ -1,5 +1,5 @@
 using AssetBlock.Application.UseCases.Auth.RefreshToken;
-using FluentAssertions;
+using AwesomeAssertions;
 
 namespace AssetBlock.Application.Tests.Validators;
 

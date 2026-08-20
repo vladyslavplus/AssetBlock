@@ -4,7 +4,7 @@ using System.Text;
 using System.Text.Json;
 using AssetBlock.Domain.Core.Constants;
 using AssetBlock.WebApi.IntegrationTests.Support;
-using FluentAssertions;
+using AwesomeAssertions;
 
 namespace AssetBlock.WebApi.IntegrationTests.ProblemDetails;
 

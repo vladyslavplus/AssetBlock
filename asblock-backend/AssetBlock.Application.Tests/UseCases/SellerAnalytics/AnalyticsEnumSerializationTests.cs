@@ -1,6 +1,6 @@
 using System.Text.Json;
 using AssetBlock.Domain.Core.Enums;
-using FluentAssertions;
+using AwesomeAssertions;
 
 namespace AssetBlock.Application.Tests.UseCases.SellerAnalytics;
 

@@ -3,7 +3,7 @@ using AssetBlock.Application.Common.Behaviors;
 using AssetBlock.Application.Messaging;
 using AssetBlock.Application.UseCases.Tags.GetTagById;
 using AssetBlock.Domain.Core.Dto.Tags;
-using FluentAssertions;
+using AwesomeAssertions;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace AssetBlock.Application.Tests;

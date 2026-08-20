@@ -1,6 +1,6 @@
 using AssetBlock.Application.UseCases.Bundles.GetBundles;
 using AssetBlock.Domain.Core.Dto.Bundles;
-using FluentAssertions;
+using AwesomeAssertions;
 
 namespace AssetBlock.Application.Tests.Validators;
 

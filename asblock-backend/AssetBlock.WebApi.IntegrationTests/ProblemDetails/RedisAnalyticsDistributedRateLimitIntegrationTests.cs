@@ -3,7 +3,7 @@ using AssetBlock.Domain.Core.Constants;
 using AssetBlock.Infrastructure;
 using AssetBlock.WebApi.Extensions;
 using AssetBlock.WebApi.IntegrationTests.Support;
-using FluentAssertions;
+using AwesomeAssertions;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.TestHost;
 using Microsoft.Extensions.DependencyInjection;
@@ -19,7 +19,7 @@ public sealed class RedisAnalyticsDistributedRateLimitIntegrationTests : IAsyncL
 
     public async Task InitializeAsync()
     {
-        _redis = new RedisBuilder().Build();
+        _redis = new RedisBuilder("valkey/valkey:9.1.1").Build();
         using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(60));
         await _redis.StartAsync(cts.Token);
         _connectionString = _redis.GetConnectionString();

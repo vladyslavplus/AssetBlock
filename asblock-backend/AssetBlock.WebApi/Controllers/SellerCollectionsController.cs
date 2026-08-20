@@ -14,7 +14,6 @@ using AssetBlock.Domain.Core.Constants;
 using AssetBlock.Domain.Core.Dto.Collections;
 using AssetBlock.WebApi.Constants;
 using AssetBlock.WebApi.ProblemDetails;
-using Asp.Versioning;
 using AssetBlock.Application.Messaging;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -26,7 +25,6 @@ namespace AssetBlock.WebApi.Controllers;
 /// Absolute route avoids inheriting api/[controller] from ApiControllerBase.
 /// </summary>
 [ApiController]
-[ApiVersion("1.0")]
 [Route("api/seller/collections")]
 [Produces("application/json")]
 public sealed class SellerCollectionsController(ISender sender) : ControllerBase

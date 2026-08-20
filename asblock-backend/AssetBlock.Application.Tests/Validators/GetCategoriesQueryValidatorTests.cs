@@ -1,6 +1,6 @@
 using AssetBlock.Application.UseCases.Categories.GetCategories;
 using AssetBlock.Domain.Core.Dto.Categories;
-using FluentAssertions;
+using AwesomeAssertions;
 
 namespace AssetBlock.Application.Tests.Validators;
 

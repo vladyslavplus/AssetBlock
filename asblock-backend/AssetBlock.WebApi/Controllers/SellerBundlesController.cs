@@ -9,7 +9,6 @@ using AssetBlock.Domain.Core.Constants;
 using AssetBlock.Domain.Core.Dto.Bundles;
 using AssetBlock.WebApi.Constants;
 using AssetBlock.WebApi.ProblemDetails;
-using Asp.Versioning;
 using AssetBlock.Application.Messaging;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -20,7 +19,6 @@ namespace AssetBlock.WebApi.Controllers;
 /// Seller-owned bundle management. Absolute route avoids inheriting api/[controller].
 /// </summary>
 [ApiController]
-[ApiVersion("1.0")]
 [Route(ApiRoutes.SellerBundles.BASE)]
 [Authorize]
 [Produces("application/json")]

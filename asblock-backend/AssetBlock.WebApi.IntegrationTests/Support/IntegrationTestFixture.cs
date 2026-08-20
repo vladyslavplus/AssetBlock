@@ -6,7 +6,7 @@ public sealed class IntegrationTestFixture : IAsyncLifetime
 {
     private static readonly TimeSpan _startTimeout = TimeSpan.FromMinutes(2);
 
-    private readonly PostgreSqlContainer _postgres = new PostgreSqlBuilder().Build();
+    private readonly PostgreSqlContainer _postgres = new PostgreSqlBuilder("postgres:16.14-alpine3.24").Build();
 
     private AssetBlockWebApplicationFactory? _factory;
 

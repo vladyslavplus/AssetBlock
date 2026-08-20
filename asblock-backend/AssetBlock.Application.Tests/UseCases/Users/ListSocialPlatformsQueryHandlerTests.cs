@@ -1,7 +1,7 @@
 using AssetBlock.Application.UseCases.Users.ListSocialPlatforms;
 using AssetBlock.Domain.Abstractions.Services;
 using AssetBlock.Domain.Core.Entities;
-using FluentAssertions;
+using AwesomeAssertions;
 using NSubstitute;
 
 namespace AssetBlock.Application.Tests.UseCases.Users;

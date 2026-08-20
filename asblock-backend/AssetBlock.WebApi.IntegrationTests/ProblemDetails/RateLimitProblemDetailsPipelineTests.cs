@@ -3,7 +3,7 @@ using System.Text.Json;
 using System.Threading.RateLimiting;
 using AssetBlock.Domain.Core.Constants;
 using AssetBlock.WebApi.ProblemDetails;
-using FluentAssertions;
+using AwesomeAssertions;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.RateLimiting;

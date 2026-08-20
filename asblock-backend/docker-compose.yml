@@ -1,7 +1,8 @@
 # Local dev stack for AssetBlock backend.
 # Env vars: set in .env (copy from .env.example) or export; defaults used if unset.
 # Run: docker-compose up -d
-# API expects: Postgres (5432), MinIO (9000/9001), optional Redis (6379), Mailpit (1025/8025) for local email.
+# API expects: Postgres (5432), MinIO (9000/9001), optional Valkey (6379), Mailpit (1025/8025) for local email.
+# Valkey is Redis-protocol-compatible; application uses StackExchange.Redis and ConnectionStrings:Redis config.
 #
 # MinIO: "Host local has more than 0 drives" is expected for single-node dev and can be ignored.
 # Set MINIO_ROOT_USER and MINIO_ROOT_PASSWORD in .env (avoid default creds in shared envs).
@@ -10,7 +11,7 @@
 services:
   # Uncomment when postgres is needed
   # postgres:
-  #   image: postgres:16-alpine
+  #   image: postgres:16.14-alpine3.24
   #   container_name: assetblock-postgres
   #   ports:
   #     - "${POSTGRES_PORT:-5432}:5432"
@@ -40,14 +41,14 @@ services:
       - minio_data:/data
 
   redis:
-    image: redis:7-alpine
+    image: valkey/valkey:9.1.1
     container_name: assetblock-redis
     ports:
       - "${REDIS_PORT:-6379}:6379"
     volumes:
       - redis_data:/data
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test: ["CMD", "valkey-cli", "ping"]
       interval: 5s
       timeout: 3s
       retries: 5

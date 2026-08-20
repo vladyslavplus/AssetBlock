@@ -1,5 +1,5 @@
 using AssetBlock.Domain.Core.Primitives.AppSettingsOptions;
-using FluentAssertions;
+using AwesomeAssertions;
 
 namespace AssetBlock.Application.Tests.Options;
 

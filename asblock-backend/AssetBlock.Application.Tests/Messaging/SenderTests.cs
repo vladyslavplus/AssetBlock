@@ -1,6 +1,6 @@
 using AssetBlock.Application.Common.Behaviors;
 using AssetBlock.Application.Messaging;
-using FluentAssertions;
+using AwesomeAssertions;
 using FluentValidation;
 using Microsoft.Extensions.DependencyInjection;
 

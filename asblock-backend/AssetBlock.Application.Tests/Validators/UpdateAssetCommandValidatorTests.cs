@@ -1,6 +1,6 @@
 using AssetBlock.Application.UseCases.Assets.UpdateAsset;
 using AssetBlock.Application.Validators.Assets;
-using FluentAssertions;
+using AwesomeAssertions;
 
 namespace AssetBlock.Application.Tests.Validators;
 

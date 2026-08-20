@@ -2,7 +2,7 @@ using AssetBlock.Application.Common.Caching;
 using AssetBlock.Application.UseCases.SellerAnalytics.GetSellerAnalyticsOverview;
 using AssetBlock.Domain.Abstractions.Services;
 using AssetBlock.Domain.Core.Dto.Analytics;
-using FluentAssertions;
+using AwesomeAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
 using NSubstitute;
 

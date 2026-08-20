@@ -1,5 +1,5 @@
 using AssetBlock.Application.UseCases.Users.GetProfile;
-using FluentAssertions;
+using AwesomeAssertions;
 
 namespace AssetBlock.Application.Tests.Validators;
 

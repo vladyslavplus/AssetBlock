@@ -1,7 +1,7 @@
 using AssetBlock.Application.UseCases.Bundles.CreateBundle;
 using AssetBlock.Domain.Core.Constants;
 using AssetBlock.Domain.Core.Payments;
-using FluentAssertions;
+using AwesomeAssertions;
 
 namespace AssetBlock.Application.Tests.Validators;
 

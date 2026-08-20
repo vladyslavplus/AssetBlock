@@ -11,7 +11,7 @@ using AssetBlock.Domain.Core.Dto.Notifications;
 using AssetBlock.Domain.Core.Dto.Users;
 using AssetBlock.WebApi.Controllers;
 using AssetBlock.WebApi.Tests.Common;
-using FluentAssertions;
+using AwesomeAssertions;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using NSubstitute;

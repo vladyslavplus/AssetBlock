@@ -1,6 +1,6 @@
 using AssetBlock.Application.UseCases.Tags.CreateTag;
 using AssetBlock.Application.Validators.Tags;
-using FluentAssertions;
+using AwesomeAssertions;
 
 namespace AssetBlock.Application.Tests.Validators;
 

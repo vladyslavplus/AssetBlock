@@ -1,6 +1,6 @@
 using AssetBlock.Application.UseCases.Collections.CreateCollection;
 using AssetBlock.Domain.Core.Constants;
-using FluentAssertions;
+using AwesomeAssertions;
 
 namespace AssetBlock.Application.Tests.Validators;
 

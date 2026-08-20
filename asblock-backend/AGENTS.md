@@ -76,7 +76,7 @@
 
 ## Tests and verification
 
-- Use xUnit, NSubstitute, FluentAssertions, and `NullLogger<T>`; do not add Moq.
+- Use xUnit, NSubstitute, AwesomeAssertions, and `NullLogger<T>`; do not add Moq.
 - Prefer one meaningful integration test against the real application pipeline and PostgreSQL behavior over several mock-heavy unit tests that only restate implementation details.
 - Do not add SQLite or EF Core InMemory fallbacks to production code solely to make tests pass. PostgreSQL-specific queries, constraints, transactions, locking, JSON, and search behavior must be covered by integration tests against PostgreSQL.
 - Mirror application structure in tests. Name tests `Handle_When<Condition>_Should<Expected>` or `Validate_When<Condition>_Should<Expected>`.

@@ -7,7 +7,7 @@ using AssetBlock.Domain.Core.Dto.Auth;
 using AssetBlock.Domain.Core.Primitives.Api;
 using AssetBlock.WebApi.Controllers;
 using AssetBlock.WebApi.Tests.Common;
-using FluentAssertions;
+using AwesomeAssertions;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.AspNetCore.Mvc;
 using NSubstitute;

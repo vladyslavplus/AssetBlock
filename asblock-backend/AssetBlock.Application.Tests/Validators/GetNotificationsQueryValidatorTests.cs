@@ -1,6 +1,6 @@
 using AssetBlock.Application.UseCases.Users.ListNotifications;
 using AssetBlock.Domain.Core.Dto.Notifications;
-using FluentAssertions;
+using AwesomeAssertions;
 
 namespace AssetBlock.Application.Tests.Validators;
 

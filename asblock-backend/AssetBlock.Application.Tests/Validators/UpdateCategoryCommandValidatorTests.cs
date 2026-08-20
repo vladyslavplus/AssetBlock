@@ -1,5 +1,5 @@
 using AssetBlock.Application.UseCases.Categories.UpdateCategory;
-using FluentAssertions;
+using AwesomeAssertions;
 
 namespace AssetBlock.Application.Tests.Validators;
 

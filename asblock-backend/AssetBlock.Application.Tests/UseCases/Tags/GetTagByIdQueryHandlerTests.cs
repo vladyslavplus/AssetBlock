@@ -3,7 +3,7 @@ using AssetBlock.Application.UseCases.Tags.GetTagById;
 using AssetBlock.Domain.Abstractions.Services;
 using AssetBlock.Domain.Core.Constants;
 using AssetBlock.Domain.Core.Entities;
-using FluentAssertions;
+using AwesomeAssertions;
 using NSubstitute;
 
 namespace AssetBlock.Application.Tests.UseCases.Tags;

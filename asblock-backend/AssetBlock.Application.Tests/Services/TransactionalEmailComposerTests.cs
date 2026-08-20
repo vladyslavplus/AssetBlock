@@ -2,7 +2,7 @@ using AssetBlock.Application.Services;
 using AssetBlock.Domain.Core.Constants;
 using AssetBlock.Domain.Core.Enums;
 using AssetBlock.Domain.Core.Primitives.AppSettingsOptions;
-using FluentAssertions;
+using AwesomeAssertions;
 
 namespace AssetBlock.Application.Tests.Services;
 

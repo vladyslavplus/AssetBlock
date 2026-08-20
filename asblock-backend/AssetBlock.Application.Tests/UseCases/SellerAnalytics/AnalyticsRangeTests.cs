@@ -1,7 +1,7 @@
 using AssetBlock.Application.UseCases.SellerAnalytics;
 using AssetBlock.Domain.Core.Dto.Analytics;
 using AssetBlock.Domain.Core.Enums;
-using FluentAssertions;
+using AwesomeAssertions;
 
 namespace AssetBlock.Application.Tests.UseCases.SellerAnalytics;
 

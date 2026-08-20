@@ -2,7 +2,7 @@ using System.Net;
 using System.Net.Http.Json;
 using AssetBlock.Domain.Core.Dto.Auth;
 using AssetBlock.WebApi.IntegrationTests.Support;
-using FluentAssertions;
+using AwesomeAssertions;
 
 namespace AssetBlock.WebApi.IntegrationTests.Controllers;
 

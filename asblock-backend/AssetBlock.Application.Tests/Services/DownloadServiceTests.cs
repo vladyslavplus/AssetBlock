@@ -3,7 +3,7 @@ using AssetBlock.Domain.Core.Dto.Assets;
 using AssetBlock.Domain.Core.Entities;
 using AssetBlock.Domain.Core.Primitives.Api;
 using AssetBlock.Infrastructure.Services;
-using FluentAssertions;
+using AwesomeAssertions;
 using NSubstitute;
 
 namespace AssetBlock.Application.Tests.Services;

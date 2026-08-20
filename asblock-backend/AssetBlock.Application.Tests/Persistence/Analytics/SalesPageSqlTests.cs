@@ -1,6 +1,6 @@
 using AssetBlock.Domain.Core.Enums;
 using AssetBlock.Infrastructure.Persistence.Analytics;
-using FluentAssertions;
+using AwesomeAssertions;
 
 namespace AssetBlock.Application.Tests.Persistence.Analytics;
 

@@ -5,7 +5,7 @@ using System.Net.Http.Json;
 using AssetBlock.Domain.Abstractions.Services;
 using AssetBlock.Domain.Core.Constants;
 using AssetBlock.WebApi.IntegrationTests.Support;
-using FluentAssertions;
+using AwesomeAssertions;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace AssetBlock.WebApi.IntegrationTests.Controllers;

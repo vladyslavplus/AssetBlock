@@ -1,7 +1,7 @@
 using Ardalis.Result;
 using AssetBlock.Application.UseCases.Users.MarkAllNotificationsRead;
 using AssetBlock.Domain.Abstractions.Services;
-using FluentAssertions;
+using AwesomeAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
 using NSubstitute;
 

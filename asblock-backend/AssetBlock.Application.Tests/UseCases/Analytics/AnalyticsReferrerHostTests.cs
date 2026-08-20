@@ -1,6 +1,6 @@
 using AssetBlock.Domain.Core.Analytics;
 using AssetBlock.Domain.Core.Constants;
-using FluentAssertions;
+using AwesomeAssertions;
 
 namespace AssetBlock.Application.Tests.UseCases.Analytics;
 

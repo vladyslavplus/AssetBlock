@@ -1,5 +1,5 @@
 using AssetBlock.Domain.Core.Payments;
-using FluentAssertions;
+using AwesomeAssertions;
 
 namespace AssetBlock.Application.Tests.Payments;
 

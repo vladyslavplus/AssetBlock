@@ -1,7 +1,7 @@
 using AssetBlock.Application.UseCases.Assets.UploadAsset;
 using AssetBlock.Domain.Core.Dto.Assets;
 using AssetBlock.Domain.Core.Payments;
-using FluentAssertions;
+using AwesomeAssertions;
 
 namespace AssetBlock.Application.Tests.Validators;
 

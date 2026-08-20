@@ -1,6 +1,6 @@
 using AssetBlock.Domain.Abstractions.Services;
 using AssetBlock.WebApi.RateLimiting;
-using FluentAssertions;
+using AwesomeAssertions;
 using NSubstitute;
 
 namespace AssetBlock.WebApi.Tests.RateLimiting;

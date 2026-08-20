@@ -6,7 +6,7 @@ using AssetBlock.Application.UseCases.Categories.UpdateCategory;
 using AssetBlock.Domain.Core.Dto.Categories;
 using AssetBlock.WebApi.Controllers;
 using AssetBlock.WebApi.Tests.Common;
-using FluentAssertions;
+using AwesomeAssertions;
 using Microsoft.AspNetCore.Mvc;
 using NSubstitute;
 using NoValueResult = Ardalis.Result.Result;

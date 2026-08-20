@@ -9,7 +9,7 @@ using AssetBlock.WebApi.Extensions;
 using Microsoft.Extensions.Hosting;
 using AssetBlock.WebApi.IntegrationTests.Support;
 using AssetBlock.WebApi.IntegrationTests.Support.Fakes;
-using FluentAssertions;
+using AwesomeAssertions;
 using AssetBlock.Application.Messaging;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.TestHost;

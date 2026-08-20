@@ -1,5 +1,5 @@
 using AssetBlock.Application.UseCases.Auth.Register;
-using FluentAssertions;
+using AwesomeAssertions;
 
 namespace AssetBlock.Application.Tests.Validators;
 

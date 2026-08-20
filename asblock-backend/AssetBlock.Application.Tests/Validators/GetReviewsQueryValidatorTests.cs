@@ -1,6 +1,6 @@
 using AssetBlock.Application.UseCases.Reviews.GetReviews;
 using AssetBlock.Domain.Core.Dto.Reviews;
-using FluentAssertions;
+using AwesomeAssertions;
 
 namespace AssetBlock.Application.Tests.Validators;
 

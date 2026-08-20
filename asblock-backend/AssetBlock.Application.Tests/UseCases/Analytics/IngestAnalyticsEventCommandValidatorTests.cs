@@ -2,7 +2,7 @@ using AssetBlock.Application.UseCases.Analytics.IngestAnalyticsEvent;
 using AssetBlock.Domain.Core.Constants;
 using AssetBlock.Domain.Core.Dto.Analytics;
 using AssetBlock.Domain.Core.Enums;
-using FluentAssertions;
+using AwesomeAssertions;
 
 namespace AssetBlock.Application.Tests.UseCases.Analytics;
 

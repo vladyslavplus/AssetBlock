@@ -2,7 +2,7 @@ using Ardalis.Result;
 using AssetBlock.Application.Common.Behaviors;
 using AssetBlock.Application.UseCases.Auth.Login;
 using AssetBlock.Domain.Core.Primitives.Api;
-using FluentAssertions;
+using AwesomeAssertions;
 using FluentValidation;
 
 namespace AssetBlock.Application.Tests.Behaviors;

@@ -1,5 +1,5 @@
 using AssetBlock.WebApi.Extensions;
-using FluentAssertions;
+using AwesomeAssertions;
 using Microsoft.AspNetCore.Http.Features;
 using Microsoft.AspNetCore.Server.Kestrel.Core;
 using Microsoft.Extensions.Configuration;

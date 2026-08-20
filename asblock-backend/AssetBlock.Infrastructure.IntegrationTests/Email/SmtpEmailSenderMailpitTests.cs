@@ -21,8 +21,7 @@ public sealed class SmtpEmailSenderMailpitTests : IAsyncLifetime
 
     public async Task InitializeAsync()
     {
-        _mailpit = new ContainerBuilder()
-            .WithImage(MAILPIT_IMAGE)
+        _mailpit = new ContainerBuilder(MAILPIT_IMAGE)
             .WithPortBinding(1025, true)
             .WithPortBinding(8025, true)
             .WithWaitStrategy(Wait.ForUnixContainer().UntilHttpRequestIsSucceeded(r => r.ForPort(8025).ForPath("/api/v1/info")))

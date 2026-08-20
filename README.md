@@ -10,14 +10,14 @@ This repository is a non-commercial / academic project.
 asblock/
 ├── asblock-backend/           # ASP.NET Core Web API + application/domain/infrastructure
 │   ├── asblock-backend.slnx
-│   ├── docker-compose.yml     # Local dependencies (PostgreSQL, Redis, MinIO, Mailpit)
+│   ├── docker-compose.yml     # Local dependencies (PostgreSQL, Valkey, MinIO, Mailpit)
 │   └── README.md
 └── asblock-frontend/          # Next.js web application (App Router)
 ```
 
 ## Backend (`asblock-backend`)
 
-**Stack:** .NET 10, ASP.NET Core Web API, **Clean Architecture** (Domain / Application / Infrastructure / WebApi), CQRS-style use cases with an in-process mediator, **FluentValidation**, **Ardalis.Result**, Entity Framework Core with PostgreSQL (catalog FTS via `tsvector` + `pg_trgm`), optional **Redis** caching, **MinIO** (S3-compatible) for encrypted asset storage, **Stripe** Checkout and webhooks, **SignalR** for real-time notifications, **Serilog** for structured logging.
+**Stack:** .NET 10, ASP.NET Core Web API, **Clean Architecture** (Domain / Application / Infrastructure / WebApi), CQRS-style use cases with an in-process mediator, **FluentValidation**, **Ardalis.Result**, Entity Framework Core with PostgreSQL (catalog FTS via `tsvector` + `pg_trgm`), optional **Redis-protocol caching** (local Valkey), **MinIO** (S3-compatible) for encrypted asset storage, **Stripe** Checkout and webhooks, **SignalR** for real-time notifications, **Serilog** for structured logging.
 
 **High-level capabilities:** JWT-based auth (access + refresh), role-based access (including admin), **verified-email authorization** for marketplace writes (upload, checkout, reviews, profile/socials, admin APIs — recovery and owned downloads remain available while unverified), asset lifecycle (upload, versioned packages with Personal/Commercial licenses, metadata updates, tags, SHA-256 content provenance, download for purchasers or author), soft delete when purchases or active checkouts exist (delist from catalog while keeping DB row and blobs for buyers), hard delete when there are no purchases/active checkouts (terminal unpaid checkout intents referencing the asset are removed first), categories and tags (admin writes), **editorial Collections** (seller-curated groupings without checkout) and **sellable Bundles** (same-seller multi-asset offers with immutable revisions and fixed USD pricing), reviews, user profiles and social links, notifications, Stripe-backed **generalized orders** (`CheckoutIntent` → `Order`/`OrderLine` → per-asset `Purchase` entitlements for both direct asset and bundle checkout) and library (purchased vs latest entitled version, bundle provenance), transactional email via SMTP with Mailpit for local inbox capture — including email verification on registration, resend with cooldown, password reset (anti-enumeration, 30-min link; successful reset also proves the mailbox), email address change (current-password confirmation + confirm-new-address link), and password/email-change notices; action links are time-limited and tamper-evident via ASP.NET Core Data Protection (no token stored in DB). Append-only **audit log** records critical mutations and is available to administrators; it remains distinct from Serilog, the outbox, and analytics.
 
@@ -58,13 +58,13 @@ Seller-facing analytics live under **`/sell` → Analytics** (UTC date ranges, g
 - **UTC semantics:** `from` inclusive, `to` exclusive, max 366 days; charts label UTC.
 - **Telemetry:** httpOnly `ab_vid` / `ab_sid` cookies via BFF; DNT/GPC → no optional engagement cookies/events.
 - **Rate limits (Redis in Staging/Production):** analytics events 120/min/partition; CSV export 10/hour/seller. Configure `AnalyticsRateLimiting:BffSigningSecret` on the API and `ASSETBLOCK_ANALYTICS_BFF_SIGNING_SECRET` on the frontend BFF.
-- **Local verification:** integration tests (PostgreSQL via Testcontainers; Redis tests when Docker is available).
+- **Local verification:** integration tests (PostgreSQL via Testcontainers; Valkey tests when Docker is available).
 
 ## Documentation
 
 - **Interactive API:** Swagger UI when the Web API is running in Development.
 - **Liveness:** `GET /health/live` checks that the API process can serve requests.
-- **Readiness:** `GET /health/ready` checks PostgreSQL, MinIO, and Redis when Redis is configured.
+- **Readiness:** `GET /health/ready` checks PostgreSQL, MinIO, and Redis connection when configured (Valkey locally).
 
 ## Contributing / quality
 

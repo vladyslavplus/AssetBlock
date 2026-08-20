@@ -1,7 +1,7 @@
 using System.Security.Claims;
 using AssetBlock.Domain.Abstractions.Services;
 using AssetBlock.WebApi.Authorization;
-using FluentAssertions;
+using AwesomeAssertions;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using NSubstitute;

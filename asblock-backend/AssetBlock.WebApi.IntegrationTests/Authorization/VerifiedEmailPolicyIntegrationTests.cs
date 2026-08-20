@@ -8,7 +8,7 @@ using AssetBlock.Domain.Core.Dto.Auth;
 using AssetBlock.Domain.Core.Dto.Payments;
 using AssetBlock.Infrastructure.Persistence;
 using AssetBlock.WebApi.IntegrationTests.Support;
-using FluentAssertions;
+using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 

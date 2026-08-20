@@ -1,7 +1,7 @@
 using System.Net;
 using System.Text.Json;
 using AssetBlock.WebApi.IntegrationTests.Support;
-using FluentAssertions;
+using AwesomeAssertions;
 
 namespace AssetBlock.WebApi.IntegrationTests.HealthChecks;
 

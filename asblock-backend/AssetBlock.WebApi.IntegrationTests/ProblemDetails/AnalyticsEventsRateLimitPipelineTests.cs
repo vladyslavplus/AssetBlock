@@ -2,7 +2,7 @@ using System.Net;
 using System.Text.Json;
 using AssetBlock.Domain.Core.Constants;
 using AssetBlock.WebApi.IntegrationTests.Support;
-using FluentAssertions;
+using AwesomeAssertions;
 using Microsoft.AspNetCore.TestHost;
 
 namespace AssetBlock.WebApi.IntegrationTests.ProblemDetails;

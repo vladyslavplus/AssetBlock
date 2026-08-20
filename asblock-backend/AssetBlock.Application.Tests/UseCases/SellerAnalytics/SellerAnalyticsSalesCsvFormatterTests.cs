@@ -1,6 +1,6 @@
 using AssetBlock.Application.UseCases.SellerAnalytics.ExportSellerAnalyticsSales;
 using AssetBlock.Domain.Core.Dto.Analytics;
-using FluentAssertions;
+using AwesomeAssertions;
 
 namespace AssetBlock.Application.Tests.UseCases.SellerAnalytics;
 
