@@ -18,6 +18,7 @@ import {
 import { ApiRequestError } from '@/lib/http/api-client'
 import { bundleKeys, fetchBundleDetailQuery } from '@/lib/bundles/bundles-query'
 import { formatUsdWhole } from '@/lib/format-currency'
+import { ZodError } from 'zod'
 
 interface BundleDetailViewProps {
   bundleId: string
@@ -70,9 +71,11 @@ export function BundleDetailView({ bundleId, checkoutConfigured }: BundleDetailV
           <p className="text-sm text-destructive" role="alert">
             {notFound
               ? 'This bundle is not available.'
-              : detailQuery.error instanceof Error
-                ? detailQuery.error.message
-                : 'Could not load bundle.'}
+              : detailQuery.error instanceof ZodError
+                ? 'Could not load this bundle right now. Please try again later.'
+                : detailQuery.error instanceof Error
+                  ? detailQuery.error.message
+                  : 'Could not load bundle.'}
           </p>
         </SitePageContainer>
       </SiteMain>

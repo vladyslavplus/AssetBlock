@@ -23,6 +23,7 @@ public class UploadAssetCommandHandlerTests
     private readonly IAssetStorageService _assetStorageServiceMock;
     private readonly IEncryptionService _encryptionServiceMock;
     private readonly IAssetArchiveInspector _archiveInspectorMock;
+    private readonly IUnitOfWork _unitOfWorkMock;
     private readonly IAuditWriter _auditWriterMock;
     private readonly ICacheService _cacheMock;
     private readonly UploadAssetCommandHandler _handler;
@@ -35,14 +36,14 @@ public class UploadAssetCommandHandlerTests
         _assetStorageServiceMock = Substitute.For<IAssetStorageService>();
         _encryptionServiceMock = Substitute.For<IEncryptionService>();
         _archiveInspectorMock = Substitute.For<IAssetArchiveInspector>();
-        var unitOfWorkMock = Substitute.For<IUnitOfWork>();
+        _unitOfWorkMock = Substitute.For<IUnitOfWork>();
         _auditWriterMock = Substitute.For<IAuditWriter>();
         _cacheMock = Substitute.For<ICacheService>();
 
         _encryptionServiceMock.ComputeCiphertextLength(Arg.Any<long>()).Returns(4L);
         _archiveInspectorMock.Inspect(Arg.Any<Stream>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
             .Returns(Task.CompletedTask);
-        unitOfWorkMock.ExecuteInTransaction(Arg.Any<Func<CancellationToken, Task>>(), Arg.Any<CancellationToken>())
+        _unitOfWorkMock.ExecuteInTransaction(Arg.Any<Func<CancellationToken, Task>>(), Arg.Any<CancellationToken>())
             .Returns(ci => ci.Arg<Func<CancellationToken, Task>>()(CancellationToken.None));
 
         _handler = new UploadAssetCommandHandler(
@@ -53,7 +54,7 @@ public class UploadAssetCommandHandlerTests
             _encryptionServiceMock,
             _archiveInspectorMock,
             Microsoft.Extensions.Options.Options.Create(new FileUploadOptions()),
-            unitOfWorkMock,
+            _unitOfWorkMock,
             _auditWriterMock,
             _cacheMock,
             NullLogger<UploadAssetCommandHandler>.Instance);
@@ -149,6 +150,7 @@ public class UploadAssetCommandHandlerTests
 
         result.IsSuccess.Should().BeFalse();
         result.ValidationErrors.Should().Contain(e => e.Identifier == ErrorCodes.ERR_ASSET_UPLOAD_FAILED);
+        await _assetStorageServiceMock.Received(1).Delete(Arg.Any<string>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -166,6 +168,7 @@ public class UploadAssetCommandHandlerTests
 
         result.IsSuccess.Should().BeFalse();
         result.ValidationErrors.Should().Contain(e => e.Identifier == ErrorCodes.ERR_ASSET_UPLOAD_FAILED);
+        await _assetStorageServiceMock.Received(1).Delete(Arg.Any<string>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -224,6 +227,7 @@ public class UploadAssetCommandHandlerTests
         var act = () => _handler.Handle(command, new CancellationToken(canceled: true));
 
         await act.Should().ThrowAsync<OperationCanceledException>();
+        await _assetStorageServiceMock.Received(1).Delete(Arg.Any<string>(), Arg.Any<CancellationToken>());
         await _assetStoreMock.DidNotReceiveWithAnyArgs().AddWithVersion(
             Arg.Any<Asset>(),
             Arg.Any<AssetVersion>(),
@@ -232,7 +236,7 @@ public class UploadAssetCommandHandlerTests
     }
 
     [Fact]
-    public async Task Handle_WhenDbAddFails_ShouldAttemptToDeleteStorageAndThrow()
+    public async Task Handle_WhenDbAddFails_ShouldNotDeleteStorageAndThrow()
     {
         var request = DefaultRequest();
         var command = CreateCommand(request);
@@ -245,7 +249,26 @@ public class UploadAssetCommandHandlerTests
         Func<Task> act = async () => await _handler.Handle(command, CancellationToken.None);
 
         await act.Should().ThrowAsync<Exception>().WithMessage("DB Error");
-        await _assetStorageServiceMock.Received(1).Delete(Arg.Any<string>(), Arg.Any<CancellationToken>());
+        await _assetStorageServiceMock.DidNotReceive()
+            .Delete(Arg.Any<string>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Handle_WhenDbPhaseIsCancelled_ShouldNotDeleteStorage()
+    {
+        var request = DefaultRequest();
+        var command = CreateCommand(request);
+        var category = new Category { Id = request.CategoryId, Name = "Cat", Slug = "cat" };
+
+        _categoryStoreMock.GetById(request.CategoryId, Arg.Any<CancellationToken>()).Returns(category);
+        _unitOfWorkMock.ExecuteInTransaction(Arg.Any<Func<CancellationToken, Task>>(), Arg.Any<CancellationToken>())
+            .ThrowsAsync(new OperationCanceledException());
+
+        var act = () => _handler.Handle(command, CancellationToken.None);
+
+        await act.Should().ThrowAsync<OperationCanceledException>();
+        await _assetStorageServiceMock.DidNotReceive()
+            .Delete(Arg.Any<string>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]

@@ -5,9 +5,9 @@ using Microsoft.Extensions.Options;
 
 namespace AssetBlock.Infrastructure.Options;
 
-internal sealed class MinioOptionsValidator(IConfiguration configuration) : IValidateOptions<MinioOptions>
+internal sealed class SeaweedFsOptionsValidator(IConfiguration configuration) : IValidateOptions<SeaweedFsOptions>
 {
-    public ValidateOptionsResult Validate(string? name, MinioOptions options)
+    public ValidateOptionsResult Validate(string? name, SeaweedFsOptions options)
     {
         if (!IsActiveProvider())
         {
@@ -19,25 +19,25 @@ internal sealed class MinioOptionsValidator(IConfiguration configuration) : IVal
         if (!OptionsValidation.TryValidateS3CompatibleEndpoint(
                 options.Endpoint,
                 options.UseSsl,
-                MinioOptions.SECTION_NAME,
+                SeaweedFsOptions.SECTION_NAME,
                 out var endpointError))
         {
-            failures.Add(endpointError ?? "Minio:Endpoint is invalid.");
+            failures.Add(endpointError ?? "SeaweedFs:Endpoint is invalid.");
         }
 
         if (OptionsValidation.IsMissingOrPlaceholder(options.Bucket))
         {
-            failures.Add("Minio:Bucket must be non-empty.");
+            failures.Add("SeaweedFs:Bucket must be non-empty.");
         }
 
         if (OptionsValidation.IsMissingOrPlaceholder(options.AccessKey))
         {
-            failures.Add("Minio:AccessKey must be non-empty.");
+            failures.Add("SeaweedFs:AccessKey must be non-empty.");
         }
 
         if (OptionsValidation.IsMissingOrPlaceholder(options.SecretKey))
         {
-            failures.Add("Minio:SecretKey must be non-empty.");
+            failures.Add("SeaweedFs:SecretKey must be non-empty.");
         }
 
         return failures.Count > 0
@@ -49,6 +49,6 @@ internal sealed class MinioOptionsValidator(IConfiguration configuration) : IVal
     {
         var provider = configuration.GetSection(StorageOptions.SECTION_NAME)["Provider"];
         return StorageProvider.TryParse(provider, out var canonical)
-            && canonical == StorageProvider.MINIO;
+            && canonical == StorageProvider.SEAWEED_FS;
     }
 }

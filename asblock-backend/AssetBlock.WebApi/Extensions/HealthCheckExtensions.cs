@@ -21,8 +21,8 @@ public static class HealthCheckExtensions
                 failureStatus: HealthStatus.Unhealthy,
                 tags: [READY_TAG],
                 timeout: _dependencyTimeout)
-            .AddCheck<MinioHealthCheck>(
-                "minio",
+            .AddCheck<StorageHealthCheck>(
+                "storage",
                 failureStatus: HealthStatus.Unhealthy,
                 tags: [READY_TAG],
                 timeout: _dependencyTimeout);

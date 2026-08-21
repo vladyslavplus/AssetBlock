@@ -113,10 +113,12 @@ internal sealed class UploadAssetCommandHandler(
         }
         catch (OperationCanceledException)
         {
+            await TryDeletePartialObject(storageKey);
             throw;
         }
         catch (Exception ex)
         {
+            await TryDeletePartialObject(storageKey);
             logger.LogError(ex, "Encrypt/upload failed for asset {AssetId}", assetId);
             return ResultError.Error<Guid>(ErrorCodes.ERR_ASSET_UPLOAD_FAILED);
         }
@@ -174,24 +176,19 @@ internal sealed class UploadAssetCommandHandler(
         }
         catch (OperationCanceledException)
         {
+            // Do not delete storage: commit outcome may be indeterminate (cancel or
+            // connection drop after commit). Orphan blobs are cleaned later by
+            // StorageOrphanCleanupWorker when no DB row references the key.
             throw;
         }
         catch (Exception ex)
         {
-            logger.LogWarning(ex, "DB add failed for asset {AssetId}; removing orphan from storage", assetId);
-            try
-            {
-                await assetStorageService.Delete(storageKey, cancellationToken);
-            }
-            catch (OperationCanceledException)
-            {
-                throw;
-            }
-            catch (Exception delEx)
-            {
-                logger.LogWarning(delEx, "Storage delete failed for {Key}", storageKey);
-            }
-
+            // Same indeterminate-commit risk as cancellation for generic DB/network errors.
+            logger.LogWarning(
+                ex,
+                "DB add failed for asset {AssetId}; leaving storage object {Key} for orphan cleanup if uncommitted",
+                assetId,
+                storageKey);
             throw;
         }
 
@@ -271,5 +268,22 @@ internal sealed class UploadAssetCommandHandler(
         }
 
         return hashingStream.HashHex;
+    }
+
+    /// <summary>
+    /// Best-effort delete of the attempted UUID key after encrypt/upload or DB failure.
+    /// Uses a short independent token so a cancelled request cannot block cleanup.
+    /// </summary>
+    private async Task TryDeletePartialObject(string storageKey)
+    {
+        try
+        {
+            using var cleanupCts = new CancellationTokenSource(TimeSpan.FromSeconds(15));
+            await assetStorageService.Delete(storageKey, cleanupCts.Token);
+        }
+        catch (Exception delEx)
+        {
+            logger.LogWarning(delEx, "Storage delete failed for {Key}", storageKey);
+        }
     }
 }

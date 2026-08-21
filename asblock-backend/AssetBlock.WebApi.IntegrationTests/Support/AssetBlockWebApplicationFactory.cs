@@ -22,7 +22,7 @@ public sealed class AssetBlockWebApplicationFactory(string connectionString) : W
 
     private RecordingEmailSender RecordingEmailSender { get; } = new();
 
-    /// <summary>In-memory object store standing in for MinIO so upload/publish/download flows work without Docker.</summary>
+    /// <summary>In-memory object store standing in for configured storage so upload/publish/download flows work without Docker.</summary>
     public FakeAssetStorageService AssetStorage { get; } = new();
 
     protected override void ConfigureWebHost(IWebHostBuilder builder)
@@ -41,11 +41,17 @@ public sealed class AssetBlockWebApplicationFactory(string connectionString) : W
         builder.UseSetting("Jwt:Audience", "AssetBlock.Integration.Api");
         builder.UseSetting("Jwt:AccessTokenMinutes", "60");
         builder.UseSetting("Jwt:RefreshTokenDays", "7");
+        builder.UseSetting("Storage:Provider", "Minio");
         builder.UseSetting("Minio:Endpoint", "http://127.0.0.1:9000");
         builder.UseSetting("Minio:Bucket", "assets");
         builder.UseSetting("Minio:AccessKey", "minioadmin");
         builder.UseSetting("Minio:SecretKey", "minioadmin");
         builder.UseSetting("Minio:UseSsl", "false");
+        builder.UseSetting("SeaweedFs:Endpoint", "http://127.0.0.1:8333");
+        builder.UseSetting("SeaweedFs:Bucket", "assets");
+        builder.UseSetting("SeaweedFs:AccessKey", "unused");
+        builder.UseSetting("SeaweedFs:SecretKey", "unused");
+        builder.UseSetting("SeaweedFs:UseSsl", "false");
         builder.UseSetting("Encryption:KeyBase64", TEST_ENCRYPTION_KEY_BASE64);
         builder.UseSetting("Stripe:SecretKey", "stripe_integration_secret_key_not_real");
         builder.UseSetting("Stripe:WebhookSecret", "stripe_integration_webhook_secret_not_real");

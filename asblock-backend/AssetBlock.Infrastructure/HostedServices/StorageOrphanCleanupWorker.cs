@@ -6,7 +6,7 @@ using Microsoft.Extensions.Logging;
 namespace AssetBlock.Infrastructure.HostedServices;
 
 /// <summary>
-/// Daily cleanup of MinIO objects under assets/ with no matching Asset row and older than 24 hours.
+/// Daily cleanup of storage objects under assets/ with no matching Asset row and older than 24 hours.
 /// </summary>
 internal sealed class StorageOrphanCleanupWorker(
     IServiceScopeFactory scopeFactory,

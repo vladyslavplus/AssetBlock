@@ -3,7 +3,6 @@ using System.Text;
 using System.Text.Json;
 using AssetBlock.Domain.Abstractions.Services;
 using AssetBlock.Domain.Core.Primitives.AppSettingsOptions;
-using AssetBlock.Infrastructure;
 using AssetBlock.Infrastructure.Persistence;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.Extensions.Configuration;
@@ -56,7 +55,9 @@ public sealed class DependencyInjectionTests
             ConnectionStrings = new { DefaultConnection = "Host=127.0.0.1;Port=5432;Database=test;Username=u;Password=p" },
             Jwt = new { Key = new string('k', 32), Issuer = "iss", Audience = "aud", AccessTokenMinutes = 15, RefreshTokenDays = 7 },
             Encryption = new { KeyBase64 = "not-valid-base64!!" },
+            Storage = new { Provider = "Minio" },
             Minio = new { Endpoint = "http://localhost:9000", Bucket = "assets", AccessKey = "local-access", SecretKey = "local-secret", UseSsl = false },
+            SeaweedFs = new { Endpoint = "<seaweedfs-endpoint>:8333", Bucket = "<bucket-name>", AccessKey = "<k>", SecretKey = "<s>", UseSsl = true },
             Stripe = new
             {
                 SecretKey = "stripe_test_secret_key_not_real",
@@ -171,7 +172,9 @@ public sealed class DependencyInjectionTests
             },
             Jwt = new { Key = new string('k', 32), Issuer = "iss", Audience = "aud", AccessTokenMinutes = 15, RefreshTokenDays = 7 },
             Encryption = new { KeyBase64 = key },
+            Storage = new { Provider = "Minio" },
             Minio = new { Endpoint = "http://localhost:9000", Bucket = "assets", AccessKey = "local-access", SecretKey = "local-secret", UseSsl = false },
+            SeaweedFs = new { Endpoint = "<seaweedfs-endpoint>:8333", Bucket = "<bucket-name>", AccessKey = "<k>", SecretKey = "<s>", UseSsl = true },
             Stripe = new
             {
                 SecretKey = "stripe_test_secret_key_not_real",
@@ -228,7 +231,9 @@ public sealed class DependencyInjectionTests
             AnalyticsRateLimiting = new { BffSigningSecret = new string('s', 32) },
             Encryption = new { KeyBase64 = key },
             Jwt = new { Key = new string('k', 32), Issuer = "iss", Audience = "aud", AccessTokenMinutes = 15, RefreshTokenDays = 7 },
+            Storage = new { Provider = "Minio" },
             Minio = new { Endpoint = "http://localhost:9000", Bucket = "assets", AccessKey = "local-access", SecretKey = "local-secret", UseSsl = false },
+            SeaweedFs = new { Endpoint = "<seaweedfs-endpoint>:8333", Bucket = "<bucket-name>", AccessKey = "<k>", SecretKey = "<s>", UseSsl = true },
             Stripe = new
             {
                 SecretKey = "stripe_test_secret_key_not_real",

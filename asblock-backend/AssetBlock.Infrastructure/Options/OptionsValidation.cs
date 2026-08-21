@@ -66,23 +66,28 @@ internal static class OptionsValidation
     }
 
     /// <summary>
-    /// Validates MinIO endpoint as host:port or absolute http(s) URI.
+    /// Validates an S3-compatible endpoint as host:port or absolute http(s) URI.
     /// Absolute URIs must agree with UseSsl and must not include user-info, path, query, or fragment.
     /// </summary>
-    public static bool TryValidateMinioEndpoint(string? endpoint, bool useSsl, out string? error)
+    /// <param name="configPrefix">Options path prefix used in error messages (e.g. Minio or SeaweedFs).</param>
+    public static bool TryValidateS3CompatibleEndpoint(
+        string? endpoint,
+        bool useSsl,
+        string configPrefix,
+        out string? error)
     {
         error = null;
 
         if (IsMissingOrPlaceholder(endpoint))
         {
-            error = "Minio:Endpoint must be non-empty.";
+            error = $"{configPrefix}:Endpoint must be non-empty.";
             return false;
         }
 
         if (Uri.TryCreate(endpoint, UriKind.Absolute, out var absolute)
             && (absolute.Scheme == Uri.UriSchemeHttp || absolute.Scheme == Uri.UriSchemeHttps))
         {
-            if (!TryRejectEndpointExtras(absolute, out error))
+            if (!TryRejectEndpointExtras(absolute, configPrefix, out error))
             {
                 return false;
             }
@@ -91,14 +96,14 @@ internal static class OptionsValidation
             if (useSsl != requiresSsl)
             {
                 error = requiresSsl
-                    ? "Minio:UseSsl must be true when Endpoint uses the https scheme."
-                    : "Minio:UseSsl must be false when Endpoint uses the http scheme.";
+                    ? $"{configPrefix}:UseSsl must be true when Endpoint uses the https scheme."
+                    : $"{configPrefix}:UseSsl must be false when Endpoint uses the http scheme.";
                 return false;
             }
 
             if (string.IsNullOrWhiteSpace(absolute.Host))
             {
-                error = "Minio:Endpoint host is invalid.";
+                error = $"{configPrefix}:Endpoint host is invalid.";
                 return false;
             }
 
@@ -107,7 +112,7 @@ internal static class OptionsValidation
 
         if (endpoint!.Contains("://", StringComparison.Ordinal))
         {
-            error = "Minio:Endpoint must be a host:port value or an absolute http/https URI.";
+            error = $"{configPrefix}:Endpoint must be a host:port value or an absolute http/https URI.";
             return false;
         }
 
@@ -115,11 +120,11 @@ internal static class OptionsValidation
             || string.IsNullOrWhiteSpace(hostPortUri.Host)
             || hostPortUri.Host.Contains(' ', StringComparison.Ordinal))
         {
-            error = "Minio:Endpoint host:port value is invalid.";
+            error = $"{configPrefix}:Endpoint host:port value is invalid.";
             return false;
         }
 
-        if (!TryRejectEndpointExtras(hostPortUri, out error))
+        if (!TryRejectEndpointExtras(hostPortUri, configPrefix, out error))
         {
             return false;
         }
@@ -132,7 +137,7 @@ internal static class OptionsValidation
             if (portPart.Length > 0
                 && (!int.TryParse(portPart, out var port) || port is <= 0 or > 65535))
             {
-                error = "Minio:Endpoint port is invalid.";
+                error = $"{configPrefix}:Endpoint port is invalid.";
                 return false;
             }
         }
@@ -140,31 +145,31 @@ internal static class OptionsValidation
         return true;
     }
 
-    private static bool TryRejectEndpointExtras(Uri uri, out string? error)
+    private static bool TryRejectEndpointExtras(Uri uri, string configPrefix, out string? error)
     {
         error = null;
 
         if (!string.IsNullOrEmpty(uri.UserInfo))
         {
-            error = "Minio:Endpoint must not include user info.";
+            error = $"{configPrefix}:Endpoint must not include user info.";
             return false;
         }
 
         if (!string.IsNullOrEmpty(uri.AbsolutePath) && uri.AbsolutePath != "/")
         {
-            error = "Minio:Endpoint must not include a path.";
+            error = $"{configPrefix}:Endpoint must not include a path.";
             return false;
         }
 
         if (!string.IsNullOrEmpty(uri.Query))
         {
-            error = "Minio:Endpoint must not include a query string.";
+            error = $"{configPrefix}:Endpoint must not include a query string.";
             return false;
         }
 
         if (!string.IsNullOrEmpty(uri.Fragment))
         {
-            error = "Minio:Endpoint must not include a fragment.";
+            error = $"{configPrefix}:Endpoint must not include a fragment.";
             return false;
         }
 

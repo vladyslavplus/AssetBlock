@@ -16,6 +16,8 @@
   "tools": {
     "cyclonedxDotnet": "6.2.0",
     "reportgenerator": "5.5.11 (dotnet-reportgenerator-globaltool, Apache-2.0; CI Cobertura merge)",
+    "seaweedfsCompose": "chrislusf/seaweedfs:4.42 (Apache-2.0; default local S3-compatible storage)",
+    "minioCompose": "minio/minio:RELEASE.2025-09-07T16-13-09Z (compatibility profile minio)",
     "frontendSbom": "scripts/deps CycloneDX 1.5 generator from aggregated root + frontend pnpm-lock.yaml inventories (canonical npm registry metadata; overrideDetectedLicense exceptions may correct under-reported licenses)",
     "pnpmInventory": "pnpm-lock.yaml package keys from repository root and asblock-frontend (packageManager pnpm@11.13.0); optional platform packages included for OS-neutral notices; npm registry is the canonical metadata source"
   }

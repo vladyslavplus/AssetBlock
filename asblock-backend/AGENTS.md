@@ -2,7 +2,7 @@
 
 ## Project and architecture
 
-- This is the canonical guide for `asblock-backend/`: .NET 10, ASP.NET Core controller-based Web API, PostgreSQL/EF Core, in-process mediator, FluentValidation, Ardalis.Result, Redis, MinIO, Stripe, SignalR, Serilog, and Polly.
+- This is the canonical guide for `asblock-backend/`: .NET 10, ASP.NET Core controller-based Web API, PostgreSQL/EF Core, in-process mediator, FluentValidation, Ardalis.Result, Redis, S3-compatible encrypted asset storage (SeaweedFS/MinIO), Stripe, SignalR, Serilog, and Polly.
 - Preserve the existing dependency direction: `Domain -> Application -> Infrastructure -> WebApi`.
 - `Domain` intentionally contains entities, DTOs, options, constants, and `I*Store`/service abstractions. Do not move them for textbook Clean Architecture purity.
 - Do not modify `DatabaseMigrationService` during ordinary work. Its migration and demo-seeding behavior is intentional.
@@ -13,7 +13,7 @@
 
 - **Domain:** entities, DTOs, options, constants, error codes/messages, cache keys, domain exceptions, and interfaces. It must not depend on Infrastructure or WebApi.
 - **Application:** commands/queries, handlers, FluentValidation validators, pipeline behaviors, `ResultError`, and business orchestration. Keep each use case in its own folder.
-- **Infrastructure:** `ApplicationDbContext`, EF configurations, `I*Store` implementations, JWT, password hashing, MinIO, encryption, cache, Stripe, Polly, hosted services, and DI registrations.
+- **Infrastructure:** `ApplicationDbContext`, EF configurations, `I*Store` implementations, JWT, password hashing, S3-compatible asset storage, encryption, cache, Stripe, Polly, hosted services, and DI registrations.
 - **WebApi:** controllers, request binding, auth/authorization, routing, middleware, OpenAPI, rate limits, exception-to-HTTP mapping, and startup. Controllers must not contain business rules or direct persistence logic.
 - Register implementations in the layer that owns them: application mechanics in `AddApplication`, integrations/stores/hosted services in `AddInfrastructure`, transport concerns in WebApi.
 
@@ -42,16 +42,16 @@
 - Use async EF Core APIs and `AsNoTracking()` for read-only queries where appropriate. Project only required fields; avoid loading entity graphs or creating N+1 queries without a reason.
 - Use pagination for list endpoints, deterministic ordering for paged results, and database-side filtering/sorting rather than in-memory work.
 - Translate known PostgreSQL unique violations narrowly into business outcomes; never swallow unexpected `DbUpdateException` failures.
-- Keep transactions short. Never place Stripe, MinIO, cache network calls, SignalR delivery, or slow file work inside an open transaction.
+- Keep transactions short. Never place Stripe, object-storage, cache network calls, SignalR delivery, or slow file work inside an open transaction.
 - For concurrent writes, enforce invariants with unique indexes, conditional updates, row locking, or explicit idempotency. Do not rely on a prior read alone when a race can produce duplicate effects.
 - Generate migrations only via `dotnet ef migrations add ...` after explicit user approval. Never hand-edit migration files, designer files, or the model snapshot.
 
 ## Files, external services, cache, and performance
 
-- Treat upload/download, encryption, MinIO, Stripe, Redis, SignalR, and catalog query paths as failure-prone I/O boundaries. Use the existing Polly and logging patterns where meaningful.
+- Treat upload/download, encryption, object storage, Stripe, Redis, SignalR, and catalog query paths as failure-prone I/O boundaries. Use the existing Polly and logging patterns where meaningful.
 - Preserve AES-GCM chunk integrity rules: fresh nonce per chunk, authenticated data ordering, and end-of-stream validation. Never expose plaintext blobs or encryption keys.
 - When changing file handling, avoid buffering an entire payload in memory or persisting plaintext to disk unless the requirement explicitly accepts that trade-off. Preserve cancellation and clean up partial/orphaned objects safely.
-- Build MinIO object keys server-side; do not trust client filenames as paths. Keep download authorization before content delivery.
+- Build object storage keys server-side; do not trust client filenames as paths. Keep download authorization before content delivery.
 - Cache only safely reusable data. Use `CacheKeys`, explicit TTLs, and invalidation after committed writes. Cache failures may degrade only when stale/missed data is acceptable.
 - Keep catalog search derived from PostgreSQL state (FTS + pg_trgm). Do not silently return an empty catalog when a database failure must be visible.
 - Use `IHttpClientFactory` for new HTTP integrations. Reuse existing configured clients/pipelines before adding a package or retry mechanism.

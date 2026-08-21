@@ -100,10 +100,12 @@ internal sealed class PublishAssetVersionCommandHandler(
         }
         catch (OperationCanceledException)
         {
+            await TryDeletePartialObject(storageKey);
             throw;
         }
         catch (Exception ex)
         {
+            await TryDeletePartialObject(storageKey);
             logger.LogError(ex, "Encrypt/upload failed for asset {AssetId} version {VersionId}", request.AssetId, versionId);
             return ResultError.Error<Guid>(ErrorCodes.ERR_ASSET_UPLOAD_FAILED);
         }
@@ -147,24 +149,31 @@ internal sealed class PublishAssetVersionCommandHandler(
         }
         catch (OperationCanceledException)
         {
+            // Do not delete storage: commit outcome may be indeterminate.
             throw;
         }
         catch (AssetNotFoundException)
         {
-            await DeleteOrphan(storageKey, cancellationToken);
+            // Guaranteed pre-commit domain failure from PublishNextVersion.
+            await TryDeletePartialObject(storageKey);
             return Result.NotFound(ErrorCodes.ERR_ASSET_NOT_FOUND);
         }
         catch (UnauthorizedAccessException)
         {
-            await DeleteOrphan(storageKey, cancellationToken);
+            // Guaranteed pre-commit domain failure from PublishNextVersion.
+            await TryDeletePartialObject(storageKey);
 
             return Result.Forbidden(ErrorCodes.ERR_FORBIDDEN);
         }
         catch (Exception ex)
         {
-            logger.LogWarning(ex, "DB publish failed for asset {AssetId} version {VersionId}; removing orphan from storage", request.AssetId, versionId);
-            await DeleteOrphan(storageKey, cancellationToken);
-
+            // Generic DB/network errors after CommitAsync may mean the row is already committed.
+            logger.LogWarning(
+                ex,
+                "DB publish failed for asset {AssetId} version {VersionId}; leaving storage object {Key} for orphan cleanup if uncommitted",
+                request.AssetId,
+                versionId,
+                storageKey);
             throw;
         }
 
@@ -244,15 +253,16 @@ internal sealed class PublishAssetVersionCommandHandler(
         return hashingStream.HashHex;
     }
 
-    private async Task DeleteOrphan(string storageKey, CancellationToken cancellationToken)
+    /// <summary>
+    /// Best-effort delete of the attempted UUID key after encrypt/upload or DB failure.
+    /// Uses a short independent token so a cancelled request cannot block cleanup.
+    /// </summary>
+    private async Task TryDeletePartialObject(string storageKey)
     {
         try
         {
-            await assetStorageService.Delete(storageKey, cancellationToken);
-        }
-        catch (OperationCanceledException)
-        {
-            throw;
+            using var cleanupCts = new CancellationTokenSource(TimeSpan.FromSeconds(15));
+            await assetStorageService.Delete(storageKey, cleanupCts.Token);
         }
         catch (Exception delEx)
         {

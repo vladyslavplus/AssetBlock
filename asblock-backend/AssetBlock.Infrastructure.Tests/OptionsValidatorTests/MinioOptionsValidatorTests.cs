@@ -1,11 +1,12 @@
 using AssetBlock.Domain.Core.Primitives.AppSettingsOptions;
 using AssetBlock.Infrastructure.Options;
+using Microsoft.Extensions.Configuration;
 
 namespace AssetBlock.Infrastructure.Tests.OptionsValidatorTests;
 
 public sealed class MinioOptionsValidatorTests
 {
-    private readonly MinioOptionsValidator _sut = new();
+    private readonly MinioOptionsValidator _sut = CreateValidator(provider: "Minio");
 
     [Fact]
     public void Validate_WhenHostPortEndpoint_ShouldSucceed()
@@ -134,6 +135,33 @@ public sealed class MinioOptionsValidatorTests
 
         result.Failed.Should().BeTrue();
         result.Failures.Should().Contain(m => m.Contains("Endpoint"));
+    }
+
+    [Fact]
+    public void Validate_WhenInactiveProvider_ShouldIgnoreInvalidPlaceholders()
+    {
+        var sut = CreateValidator(provider: "SeaweedFs");
+        var result = sut.Validate(null, new MinioOptions
+        {
+            Endpoint = "<minio-endpoint>:9000",
+            Bucket = "<bucket-name>",
+            AccessKey = "<minio-access-key>",
+            SecretKey = "<minio-secret-key>",
+            UseSsl = true
+        });
+
+        result.Succeeded.Should().BeTrue();
+    }
+
+    private static MinioOptionsValidator CreateValidator(string provider)
+    {
+        var config = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["Storage:Provider"] = provider
+            })
+            .Build();
+        return new MinioOptionsValidator(config);
     }
 
     private static MinioOptions CreateValid(string endpoint, bool useSsl) => new()

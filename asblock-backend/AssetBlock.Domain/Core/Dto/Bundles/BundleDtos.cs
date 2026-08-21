@@ -78,7 +78,7 @@ public sealed record BundleItemDto(
     bool IsAvailable,
     string? UnavailableReason,
     int? CurrentVersionNumber,
-    AssetLicenseCode? LicenseCode,
+    string? LicenseCode,
     string? LicenseDisplayName);
 
 public sealed record BundleDetailDto(

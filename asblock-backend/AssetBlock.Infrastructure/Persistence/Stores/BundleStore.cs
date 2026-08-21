@@ -142,7 +142,7 @@ internal sealed class BundleStore(ApplicationDbContext dbContext) : IBundleStore
                 available,
                 reason,
                 i.CurrentVersionNumber,
-                i.LicenseCode,
+                i.LicenseCode?.ToString(),
                 i.LicenseDisplayName);
         }).ToList();
 

@@ -32,10 +32,11 @@ public sealed class MinioAssetStorageServiceTests
     }
 
     [Fact]
-    public async Task EnsureBucket_swallowsConnectionFailure()
+    public async Task EnsureBucket_WhenServerUnreachable_ShouldPropagate()
     {
         var sut = CreateSut("http://127.0.0.1:59997");
-        await sut.EnsureBucket(CancellationToken.None);
+        var act = async () => await sut.EnsureBucket(CancellationToken.None);
+        await act.Should().ThrowAsync<Exception>();
     }
 
     [Fact]

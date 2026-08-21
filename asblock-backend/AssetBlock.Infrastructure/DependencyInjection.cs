@@ -13,7 +13,6 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Options;
-using Minio;
 using Polly;
 using Polly.Retry;
 
@@ -38,11 +37,6 @@ public static class DependencyInjection
             .Bind(configuration.GetSection(JwtOptions.SECTION_NAME))
             .ValidateOnStart();
         services.AddSingleton<IValidateOptions<JwtOptions>, JwtOptionsValidator>();
-
-        services.AddOptions<MinioOptions>()
-            .Bind(configuration.GetSection(MinioOptions.SECTION_NAME))
-            .ValidateOnStart();
-        services.AddSingleton<IValidateOptions<MinioOptions>, MinioOptionsValidator>();
 
         services.AddOptions<EncryptionOptions>()
             .Bind(configuration.GetSection(EncryptionOptions.SECTION_NAME))
@@ -79,7 +73,6 @@ public static class DependencyInjection
             options => options.UseNpgsql(connectionString),
             ServiceLifetime.Scoped);
         services.AddHostedService<DatabaseMigrationService>();
-        services.AddHostedService<MinioBucketEnsureHostedService>();
         services.AddHostedService<OutboxDispatcher>();
         services.AddHostedService<StorageOrphanCleanupWorker>();
         services.AddHostedService<CheckoutReservationCleanupWorker>();
@@ -115,27 +108,7 @@ public static class DependencyInjection
         services.AddScoped<IAuditContextAccessor, NullAuditContextAccessor>();
         services.AddScoped<IPaymentService, StripePaymentService>();
         services.AddScoped<IDownloadService, DownloadService>();
-        services.AddSingleton<IMinioClient>(sp =>
-        {
-            var opts = sp.GetRequiredService<IOptions<MinioOptions>>().Value;
-            var builder = new MinioClient();
-            if (Uri.TryCreate(opts.Endpoint, UriKind.Absolute, out var uri)
-                && (uri.Scheme == Uri.UriSchemeHttp || uri.Scheme == Uri.UriSchemeHttps))
-            {
-                return builder
-                    .WithEndpoint(uri.Host, uri.Port)
-                    .WithCredentials(opts.AccessKey, opts.SecretKey)
-                    .WithSSL(opts.UseSsl)
-                    .Build();
-            }
-
-            return builder
-                .WithEndpoint(opts.Endpoint)
-                .WithCredentials(opts.AccessKey, opts.SecretKey)
-                .WithSSL(opts.UseSsl)
-                .Build();
-        });
-        services.AddScoped<IAssetStorageService, MinioAssetStorageService>();
+        services.AddAssetStorage(configuration);
         services.AddSingleton<IAssetArchiveInspector, SharpCompressAssetArchiveInspector>();
         services.AddSingleton<IEncryptionService, AesGcmEncryptionService>();
         services.AddSingleton<IPasswordHasher, PasswordHasher>();
@@ -170,26 +143,6 @@ public static class DependencyInjection
                 BreakDuration = TimeSpan.FromSeconds(ResilienceConstants.Stripe.BREAK_DURATION_SECONDS)
             });
             builder.AddTimeout(TimeSpan.FromSeconds(ResilienceConstants.Stripe.TIMEOUT_SECONDS));
-        });
-
-        // Delete/list operations can safely be replayed after a transient failure.
-        services.AddResiliencePipeline(ResilienceConstants.Pipelines.MINIO_REPLAYABLE, builder =>
-        {
-            builder.AddRetry(new RetryStrategyOptions
-            {
-                MaxRetryAttempts = ResilienceConstants.Minio.MAX_RETRIES,
-                Delay = TimeSpan.FromMilliseconds(ResilienceConstants.Minio.RETRY_DELAY_MS),
-                BackoffType = DelayBackoffType.Exponential,
-                UseJitter = true
-            });
-            builder.AddTimeout(TimeSpan.FromSeconds(ResilienceConstants.Minio.TIMEOUT_SECONDS));
-        });
-
-        // Upload and download bodies are one-shot streams. Retrying them would send a partial
-        // upload or append a second plaintext sequence to an already-started HTTP response.
-        services.AddResiliencePipeline(ResilienceConstants.Pipelines.MINIO_STREAMING, builder =>
-        {
-            builder.AddTimeout(TimeSpan.FromSeconds(ResilienceConstants.Minio.TIMEOUT_SECONDS));
         });
 
         return services;

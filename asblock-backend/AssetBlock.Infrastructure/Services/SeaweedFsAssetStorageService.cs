@@ -8,15 +8,15 @@ using Polly.Registry;
 
 namespace AssetBlock.Infrastructure.Services;
 
-internal sealed class MinioAssetStorageService : IAssetStorageService
+internal sealed class SeaweedFsAssetStorageService : IAssetStorageService
 {
     private readonly S3CompatibleObjectStore _store;
 
-    public MinioAssetStorageService(
+    public SeaweedFsAssetStorageService(
         IMinioClient client,
-        IOptions<MinioOptions> options,
+        IOptions<SeaweedFsOptions> options,
         ResiliencePipelineProvider<string> resilience,
-        ILogger<MinioAssetStorageService> logger)
+        ILogger<SeaweedFsAssetStorageService> logger)
     {
         var opts = options.Value;
         _store = new S3CompatibleObjectStore(client, opts.Bucket, resilience, logger);

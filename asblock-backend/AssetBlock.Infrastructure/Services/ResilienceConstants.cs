@@ -8,8 +8,8 @@ internal static class ResilienceConstants
     public static class Pipelines
     {
         public const string STRIPE = "stripe";
-        public const string MINIO_REPLAYABLE = "minio-replayable";
-        public const string MINIO_STREAMING = "minio-streaming";
+        public const string STORAGE_REPLAYABLE = "storage-replayable";
+        public const string STORAGE_STREAMING = "storage-streaming";
     }
 
     public static class Stripe
@@ -23,7 +23,7 @@ internal static class ResilienceConstants
         public const int BREAK_DURATION_SECONDS = 30;
     }
 
-    public static class Minio
+    public static class Storage
     {
         public const int MAX_RETRIES = 2;
         public const int RETRY_DELAY_MS = 300;

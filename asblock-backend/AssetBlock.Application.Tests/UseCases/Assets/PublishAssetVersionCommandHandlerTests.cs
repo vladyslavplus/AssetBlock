@@ -139,7 +139,7 @@ public class PublishAssetVersionCommandHandlerTests
     }
 
     [Fact]
-    public async Task Handle_WhenDbPublishFails_ShouldDeleteOrphanBlobAndThrow()
+    public async Task Handle_WhenDbPublishFails_ShouldNotDeleteStorageAndThrow()
     {
         StubOwnedAsset();
         _unitOfWorkMock.ExecuteInTransaction(Arg.Any<Func<CancellationToken, Task>>(), Arg.Any<CancellationToken>())
@@ -148,6 +148,62 @@ public class PublishAssetVersionCommandHandlerTests
         var act = () => _handler.Handle(CreateCommand(), CancellationToken.None);
 
         await act.Should().ThrowAsync<Exception>().WithMessage("DB fail");
+        await _assetStorageServiceMock.DidNotReceive()
+            .Delete(Arg.Any<string>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Handle_WhenDbPhaseIsCancelled_ShouldNotDeleteStorage()
+    {
+        StubOwnedAsset();
+        _unitOfWorkMock.ExecuteInTransaction(Arg.Any<Func<CancellationToken, Task>>(), Arg.Any<CancellationToken>())
+            .ThrowsAsync(new OperationCanceledException());
+
+        var act = () => _handler.Handle(CreateCommand(), CancellationToken.None);
+
+        await act.Should().ThrowAsync<OperationCanceledException>();
+        await _assetStorageServiceMock.DidNotReceive()
+            .Delete(Arg.Any<string>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Handle_WhenEncryptionFails_ShouldCleanupAttemptedKeyAndReturnError()
+    {
+        StubOwnedAsset();
+        _encryptionServiceMock.Encrypt(Arg.Any<Stream>(), Arg.Any<Stream>(), Arg.Any<CancellationToken>())
+            .ThrowsAsync(new Exception("encrypt failed"));
+
+        var result = await _handler.Handle(CreateCommand(), CancellationToken.None);
+
+        result.IsSuccess.Should().BeFalse();
+        result.ValidationErrors.Should().Contain(e => e.Identifier == ErrorCodes.ERR_ASSET_UPLOAD_FAILED);
+        await _assetStorageServiceMock.Received(1).Delete(Arg.Any<string>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Handle_WhenStorageUploadFails_ShouldCleanupAttemptedKeyAndReturnError()
+    {
+        StubOwnedAsset();
+        _assetStorageServiceMock.Upload(Arg.Any<string>(), Arg.Any<Stream>(), Arg.Any<long>(), Arg.Any<CancellationToken>())
+            .ThrowsAsync(new Exception("upload failed"));
+
+        var result = await _handler.Handle(CreateCommand(), CancellationToken.None);
+
+        result.IsSuccess.Should().BeFalse();
+        result.ValidationErrors.Should().Contain(e => e.Identifier == ErrorCodes.ERR_ASSET_UPLOAD_FAILED);
+        await _assetStorageServiceMock.Received(1).Delete(Arg.Any<string>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Handle_WhenStreamingIsCancelled_ShouldCleanupAndPropagateCancellation()
+    {
+        StubOwnedAsset();
+        _encryptionServiceMock.Encrypt(Arg.Any<Stream>(), Arg.Any<Stream>(), Arg.Any<CancellationToken>())
+            .ThrowsAsync(new OperationCanceledException());
+
+        var act = () => _handler.Handle(CreateCommand(), new CancellationToken(canceled: true));
+
+        await act.Should().ThrowAsync<OperationCanceledException>();
         await _assetStorageServiceMock.Received(1).Delete(Arg.Any<string>(), Arg.Any<CancellationToken>());
     }
 

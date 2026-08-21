@@ -7,7 +7,7 @@ namespace AssetBlock.Infrastructure.Tests.OptionsValidatorTests;
 public sealed class PlaceholderAppSettingsOptionsTests
 {
     [Fact]
-    public void TrackedAppSettingsPlaceholders_ShouldFailRequiredOptions_AndKeepStripeOptional()
+    public void TrackedAppSettingsPlaceholders_ShouldFailActiveStorageAndKeepInactiveOptional()
     {
         var path = FindTrackedAppSettings();
         var config = new ConfigurationBuilder()
@@ -16,12 +16,21 @@ public sealed class PlaceholderAppSettingsOptionsTests
 
         var jwt = config.GetSection(JwtOptions.SECTION_NAME).Get<JwtOptions>()!;
         var encryption = config.GetSection(EncryptionOptions.SECTION_NAME).Get<EncryptionOptions>()!;
+        var storage = config.GetSection(StorageOptions.SECTION_NAME).Get<StorageOptions>()!;
+        var seaweed = config.GetSection(SeaweedFsOptions.SECTION_NAME).Get<SeaweedFsOptions>()!;
         var minio = config.GetSection(MinioOptions.SECTION_NAME).Get<MinioOptions>()!;
         var stripe = config.GetSection(StripeOptions.SECTION_NAME).Get<StripeOptions>()!;
 
         new JwtOptionsValidator().Validate(null, jwt).Failed.Should().BeTrue();
         new EncryptionOptionsValidator().Validate(null, encryption).Failed.Should().BeTrue();
-        new MinioOptionsValidator().Validate(null, minio).Failed.Should().BeTrue();
+        new StorageOptionsValidator().Validate(null, storage).Succeeded.Should().BeTrue();
+        storage.Provider.Should().Be("SeaweedFs");
+
+        new SeaweedFsOptionsValidator(config).Validate(null, seaweed).Failed.Should().BeTrue(
+            "Active SeaweedFs placeholders must fail validation.");
+        new MinioOptionsValidator(config).Validate(null, minio).Succeeded.Should().BeTrue(
+            "Inactive Minio placeholders must not break startup.");
+
         config.GetSection("Elasticsearch").Exists().Should().BeFalse();
         new StripeOptionsValidator().Validate(null, stripe).Succeeded.Should().BeTrue(
             "Stripe placeholders must be treated as unset so Stripe stays optional.");

@@ -1,0 +1,47 @@
+using AssetBlock.Domain.Abstractions.Services;
+using AssetBlock.WebApi.HealthChecks;
+using AwesomeAssertions;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Diagnostics.HealthChecks;
+using NSubstitute;
+
+namespace AssetBlock.WebApi.Tests;
+
+public sealed class StorageHealthCheckTests
+{
+    [Fact]
+    public async Task CheckHealthAsync_WhenListObjectsSucceeds_ShouldBeHealthy()
+    {
+        var storage = Substitute.For<IAssetStorageService>();
+        storage.ListObjects(Arg.Any<string?>(), Arg.Any<CancellationToken>())
+            .Returns(Array.Empty<Domain.Core.Primitives.Storage.StorageObjectInfo>());
+
+        var sut = CreateSut(storage);
+        var result = await sut.CheckHealthAsync(new HealthCheckContext());
+
+        result.Status.Should().Be(HealthStatus.Healthy);
+        await storage.Received(1).ListObjects("__health__/", Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task CheckHealthAsync_WhenListObjectsFails_ShouldBeUnhealthy()
+    {
+        var storage = Substitute.For<IAssetStorageService>();
+        storage.ListObjects(Arg.Any<string?>(), Arg.Any<CancellationToken>())
+            .Returns<Task<IReadOnlyList<Domain.Core.Primitives.Storage.StorageObjectInfo>>>(_ =>
+                throw new InvalidOperationException("down"));
+
+        var sut = CreateSut(storage);
+        var result = await sut.CheckHealthAsync(new HealthCheckContext());
+
+        result.Status.Should().Be(HealthStatus.Unhealthy);
+        result.Description.Should().Contain("storage provider");
+    }
+
+    private static StorageHealthCheck CreateSut(IAssetStorageService storage)
+    {
+        var services = new ServiceCollection();
+        services.AddSingleton(storage);
+        return new StorageHealthCheck(services.BuildServiceProvider().GetRequiredService<IServiceScopeFactory>());
+    }
+}

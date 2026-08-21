@@ -2,6 +2,8 @@ using AssetBlock.Domain.Abstractions.Services;
 using AssetBlock.Domain.Core.Dto.Bundles;
 using AssetBlock.Domain.Core.Dto.Paging;
 using AssetBlock.Domain.Core.Entities;
+using AssetBlock.Domain.Core.Enums;
+using AssetBlock.Domain.Core.Licenses;
 using AssetBlock.Infrastructure.IntegrationTests.Support;
 using AssetBlock.Infrastructure.Persistence;
 using AssetBlock.Infrastructure.Persistence.Stores;
@@ -121,6 +123,79 @@ public sealed class BundleStorePostgresTests(PostgresFixture fixture)
         (await store.GetCheckoutSnapshot(bundle.Id)).Should().BeNull();
         var after = await store.ListPublic(new ListBundlesRequest { Page = 1, PageSize = 20 });
         after.Items.Should().NotContain(i => i.Id == bundle.Id);
+    }
+
+    [Fact]
+    public async Task GetPublicDetail_ShouldReturnSemanticStringLicenseCodes()
+    {
+        await using var db = await fixture.CreateCleanDbContext();
+        (User author, Category category) = await TestData.SeedAuthorAndCategory(db);
+        var assetPersonal = TestData.CreateAsset(author.Id, category.Id, title: "Personal Asset", price: 10m);
+        var assetCommercial = TestData.CreateAsset(author.Id, category.Id, title: "Commercial Asset", price: 20m);
+        db.Assets.AddRange(assetPersonal, assetCommercial);
+        await db.SaveChangesAsync();
+
+        var commercialLicense = AssetLicenseCatalog.Get(AssetLicenseCode.COMMERCIAL);
+        var commercialVersion = TestData.CreateAssetVersion(assetCommercial.Id);
+        commercialVersion.LicenseCode = commercialLicense.Code;
+        commercialVersion.LicenseTemplateVersion = commercialLicense.TemplateVersion;
+        commercialVersion.LicenseDisplayName = commercialLicense.DisplayName;
+        commercialVersion.LicenseTerms = commercialLicense.TermsPlainText;
+        db.AssetVersions.AddRange(
+            TestData.CreateAssetVersion(assetPersonal.Id),
+            commercialVersion);
+        await db.SaveChangesAsync();
+
+        var store = new BundleStore(db);
+        (Bundle bundle, _) = await store.CreateWithRevision(
+            author.Id,
+            "License Codes",
+            null,
+            25m,
+            "usd",
+            30m,
+            [
+                new(assetPersonal.Id, 1, assetPersonal.Title, assetPersonal.Price),
+                new(assetCommercial.Id, 2, assetCommercial.Title, assetCommercial.Price)
+            ]);
+
+        var detail = await store.GetPublicDetail(bundle.Id);
+        detail.Should().NotBeNull();
+        detail!.Items.Should().HaveCount(2);
+        detail.Items.Single(i => i.Position == 1).LicenseCode.Should().Be("PERSONAL");
+        detail.Items.Single(i => i.Position == 2).LicenseCode.Should().Be("COMMERCIAL");
+
+        var snapshot = await store.GetCheckoutSnapshot(bundle.Id);
+        snapshot.Should().NotBeNull();
+        snapshot!.Items.Select(i => i.LicenseCode).Should().BeEquivalentTo(
+            [AssetLicenseCode.PERSONAL, AssetLicenseCode.COMMERCIAL]);
+    }
+
+    [Fact]
+    public async Task GetSellerDetail_WhenItemAssetHardDeleted_ShouldReturnNullLicenseCode()
+    {
+        await using var db = await fixture.CreateCleanDbContext();
+        (User author, Category category) = await TestData.SeedAuthorAndCategory(db);
+        var assetA = TestData.CreateAsset(author.Id, category.Id, title: "Keep", price: 10m);
+        var assetB = TestData.CreateAsset(author.Id, category.Id, title: "Drop", price: 20m);
+        db.Assets.AddRange(assetA, assetB);
+        await db.SaveChangesAsync();
+        db.AssetVersions.AddRange(
+            TestData.CreateAssetVersion(assetA.Id),
+            TestData.CreateAssetVersion(assetB.Id));
+        await db.SaveChangesAsync();
+
+        var store = new BundleStore(db);
+        (Bundle bundle, _) = await store.CreateWithRevision(
+            author.Id, "Nullable license", null, 15m, "usd", 30m, CreateItems(assetA, assetB));
+
+        await new AssetStore(db).Delete(assetB.Id);
+
+        var detail = await store.GetSellerDetail(bundle.Id, author.Id);
+        detail.Should().NotBeNull();
+        detail!.Items.Single(i => i.Position == 1).LicenseCode.Should().Be("PERSONAL");
+        detail.Items.Single(i => i.Position == 2).LicenseCode.Should().BeNull();
+        detail.Items.Single(i => i.Position == 2).AssetId.Should().BeNull();
     }
 
     [Fact]

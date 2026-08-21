@@ -1,12 +1,14 @@
 # Local dev stack for AssetBlock backend.
 # Env vars: set in .env (copy from .env.example) or export; defaults used if unset.
-# Run: docker-compose up -d
-# API expects: Postgres (5432), MinIO (9000/9001), optional Valkey (6379), Mailpit (1025/8025) for local email.
+# Run: docker compose up -d
+# Default object storage is SeaweedFS (S3-compatible) on port 8333.
+# MinIO remains available via: docker compose --profile minio up -d
+# API expects: Postgres (5432), SeaweedFS S3 (8333) or MinIO (9000) when that profile is used,
+# optional Valkey (6379), Mailpit (1025/8025) for local email.
 # Valkey is Redis-protocol-compatible; application uses StackExchange.Redis and ConnectionStrings:Redis config.
 #
-# MinIO: "Host local has more than 0 drives" is expected for single-node dev and can be ignored.
-# Set MINIO_ROOT_USER and MINIO_ROOT_PASSWORD in .env (avoid default creds in shared envs).
-# MinIO image pinned: latest no longer updates on Docker Hub; use specific release for reproducibility.
+# Switching Storage:Provider does not migrate existing encrypted objects.
+# Do not wipe Docker volumes or databases unless you intentionally discard local data.
 
 services:
   # Uncomment when postgres is needed
@@ -27,24 +29,51 @@ services:
   #     timeout: 5s
   #     retries: 5
 
+  seaweedfs:
+    image: chrislusf/seaweedfs:4.42
+    container_name: assetblock-seaweedfs
+    ports:
+      - "127.0.0.1:${SEAWEEDFS_S3_PORT:-8333}:8333"
+    environment:
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-assetblock}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-dev_seaweedfs_secret}
+      S3_BUCKET: ${S3_BUCKET:-assets}
+    command: ["mini", "-ip=0.0.0.0", "-ip.bind=0.0.0.0", "-dir=/data", "-s3.port=8333"]
+    volumes:
+      - seaweedfs_data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:8333/ || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
+  # Compatibility profile: keep pinned MinIO for local A/B against SeaweedFS.
   minio:
+    profiles: ["minio"]
     image: minio/minio:RELEASE.2025-09-07T16-13-09Z
     container_name: assetblock-minio
     ports:
-      - "${MINIO_API_PORT:-9000}:9000"
-      - "${MINIO_CONSOLE_PORT:-9001}:9001"
+      - "127.0.0.1:${MINIO_API_PORT:-9000}:9000"
+      - "127.0.0.1:${MINIO_CONSOLE_PORT:-9001}:9001"
     environment:
       MINIO_ROOT_USER: ${MINIO_ROOT_USER:-assetblock}
       MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-dev_minio_secret}
     command: server /data --console-address ":9001"
     volumes:
       - minio_data:/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://127.0.0.1:9000/minio/health/live"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 5s
 
   redis:
     image: valkey/valkey:9.1.1
     container_name: assetblock-redis
     ports:
-      - "${REDIS_PORT:-6379}:6379"
+      - "127.0.0.1:${REDIS_PORT:-6379}:6379"
     volumes:
       - redis_data:/data
     healthcheck:
@@ -65,5 +94,6 @@ services:
 
 volumes:
   # postgres_data:
+  seaweedfs_data:
   minio_data:
   redis_data:

@@ -1,9 +1,6 @@
-using AssetBlock.Domain.Core.Primitives.AppSettingsOptions;
+using AssetBlock.Domain.Abstractions.Services;
 using AssetBlock.Infrastructure.Persistence;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
-using Microsoft.Extensions.Options;
-using Minio;
-using Minio.DataModel.Args;
 using StackExchange.Redis;
 
 namespace AssetBlock.WebApi.HealthChecks;
@@ -33,22 +30,24 @@ internal sealed class PostgreSqlHealthCheck(IServiceScopeFactory scopeFactory) :
     }
 }
 
-internal sealed class MinioHealthCheck(
-    IMinioClient client,
-    IOptions<MinioOptions> options) : IHealthCheck
+/// <summary>
+/// Readiness probe for the active asset storage provider via IAssetStorageService.
+/// Uses a cheap non-mutating prefix listing; does not depend on provider SDKs or options.
+/// </summary>
+internal sealed class StorageHealthCheck(IServiceScopeFactory scopeFactory) : IHealthCheck
 {
+    private const string READINESS_PREFIX = "__health__/";
+
     public async Task<HealthCheckResult> CheckHealthAsync(
         HealthCheckContext context,
         CancellationToken cancellationToken = default)
     {
         try
         {
-            var exists = await client.BucketExistsAsync(
-                new BucketExistsArgs().WithBucket(options.Value.Bucket),
-                cancellationToken);
-            return exists
-                ? HealthCheckResult.Healthy()
-                : HealthCheckResult.Unhealthy("The configured MinIO bucket is unavailable.");
+            await using var scope = scopeFactory.CreateAsyncScope();
+            var storage = scope.ServiceProvider.GetRequiredService<IAssetStorageService>();
+            _ = await storage.ListObjects(READINESS_PREFIX, cancellationToken);
+            return HealthCheckResult.Healthy();
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
@@ -56,7 +55,7 @@ internal sealed class MinioHealthCheck(
         }
         catch (Exception ex)
         {
-            return HealthCheckResult.Unhealthy("MinIO readiness check failed.", ex);
+            return HealthCheckResult.Unhealthy("The configured storage provider is unavailable.", ex);
         }
     }
 }

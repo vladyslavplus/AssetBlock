@@ -19,10 +19,27 @@ From `asblock-backend/`:
 dotnet user-secrets set "ConnectionStrings:DefaultConnection" "<your-postgres-connection-string>" --project AssetBlock.WebApi
 dotnet user-secrets set "ConnectionStrings:Redis" "<your-redis-connection-string-or-empty>" --project AssetBlock.WebApi
 dotnet user-secrets set "Jwt:Key" "<hmac-signing-key-at-least-32-characters>" --project AssetBlock.WebApi
-dotnet user-secrets set "Minio:AccessKey" "<minio-access-key>" --project AssetBlock.WebApi
-dotnet user-secrets set "Minio:SecretKey" "<minio-secret-key>" --project AssetBlock.WebApi
+dotnet user-secrets set "Storage:Provider" "SeaweedFs" --project AssetBlock.WebApi
+dotnet user-secrets set "SeaweedFs:Endpoint" "http://127.0.0.1:8333" --project AssetBlock.WebApi
+dotnet user-secrets set "SeaweedFs:Bucket" "assets" --project AssetBlock.WebApi
+dotnet user-secrets set "SeaweedFs:AccessKey" "assetblock" --project AssetBlock.WebApi
+dotnet user-secrets set "SeaweedFs:SecretKey" "dev_seaweedfs_secret" --project AssetBlock.WebApi
+dotnet user-secrets set "SeaweedFs:UseSsl" "false" --project AssetBlock.WebApi
 dotnet user-secrets set "Encryption:KeyBase64" "<base64-encoded-32-byte-aes-key>" --project AssetBlock.WebApi
 ```
+
+MinIO compatibility provider (after `docker compose --profile minio up -d`):
+
+```bash
+dotnet user-secrets set "Storage:Provider" "Minio" --project AssetBlock.WebApi
+dotnet user-secrets set "Minio:Endpoint" "http://127.0.0.1:9000" --project AssetBlock.WebApi
+dotnet user-secrets set "Minio:Bucket" "assets" --project AssetBlock.WebApi
+dotnet user-secrets set "Minio:AccessKey" "assetblock" --project AssetBlock.WebApi
+dotnet user-secrets set "Minio:SecretKey" "dev_minio_secret" --project AssetBlock.WebApi
+dotnet user-secrets set "Minio:UseSsl" "false" --project AssetBlock.WebApi
+```
+
+> Switching `Storage:Provider` does **not** migrate existing encrypted objects. Keep using the provider that holds your blobs, or re-upload.
 
 Optional Stripe (omit all Stripe keys to run with payments inactive):
 
@@ -77,10 +94,15 @@ openssl rand -base64 32
 | `Jwt:Issuer` / `Jwt:Audience` | Yes | Non-secret; placeholders in tracked config |
 | `Jwt:Key` | Yes | ≥ 32 characters |
 | `Jwt:AccessTokenMinutes` / `Jwt:RefreshTokenDays` | Yes | Positive integers |
-| `Minio:Endpoint` | Yes | `host:port` or absolute `http`/`https` URI (no path/query); `UseSsl` must match scheme when URI is used |
-| `Minio:Bucket` | Yes | e.g. `assets` |
-| `Minio:AccessKey` / `Minio:SecretKey` | Yes | No code fallbacks |
-| `Minio:UseSsl` | Yes | `false` for local HTTP MinIO |
+| `Storage:Provider` | Yes | `SeaweedFs` (local default) or `Minio` (case-insensitive). Exactly one active provider; no fallback/dual-write. |
+| `SeaweedFs:Endpoint` | When SeaweedFs | `host:port` or absolute `http`/`https` URI (no path/query); `UseSsl` must match scheme when URI is used |
+| `SeaweedFs:Bucket` | When SeaweedFs | e.g. `assets` |
+| `SeaweedFs:AccessKey` / `SeaweedFs:SecretKey` | When SeaweedFs | Match compose `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` for local mini |
+| `SeaweedFs:UseSsl` | When SeaweedFs | `false` for local HTTP SeaweedFS |
+| `Minio:Endpoint` | When Minio | `host:port` or absolute `http`/`https` URI (no path/query); `UseSsl` must match scheme when URI is used |
+| `Minio:Bucket` | When Minio | e.g. `assets` |
+| `Minio:AccessKey` / `Minio:SecretKey` | When Minio | No code fallbacks |
+| `Minio:UseSsl` | When Minio | `false` for local HTTP MinIO |
 | `Encryption:KeyBase64` | Yes | Base64 of exactly 32 bytes |
 | `Stripe:*` | No | If **any** Stripe field is set, all of `SecretKey`, `WebhookSecret`, `DefaultSuccessUrl`, `DefaultCancelUrl` are required |
 | `Email:Provider` | Yes | Must be `Smtp` (case-insensitive) |
@@ -105,7 +127,7 @@ If Stripe secret or webhook keys were ever committed or shared, **rotate/revoke 
 
 ### 5. AES key rotation (local data)
 
-After changing `Encryption:KeyBase64`, previously encrypted MinIO objects cannot be decrypted with the new key. Clearing local MinIO buckets and/or the dev database is a **manual** step after you confirm there is nothing valuable to keep (take a backup first if unsure). Agents must not wipe Docker volumes or databases for you.
+After changing `Encryption:KeyBase64`, previously encrypted storage objects cannot be decrypted with the new key. Clearing local storage buckets and/or the dev database is a **manual** step after you confirm there is nothing valuable to keep (take a backup first if unsure). Agents must not wipe Docker volumes or databases for you. Switching `Storage:Provider` also does not migrate blobs between SeaweedFS and MinIO.
 
 ## Typical commands
 
@@ -232,6 +254,6 @@ Success DB mutations write the audit row in the same `IUnitOfWork` transaction a
 ### Health checks
 
 - `GET /health/live` reports process liveness only and does not probe external dependencies.
-- `GET /health/ready` probes PostgreSQL, the configured MinIO bucket, and Redis connection when configured (Valkey locally).
+- `GET /health/ready` probes PostgreSQL, the configured storage provider, and Redis connection when configured (Valkey locally).
 
 Both endpoints return a small JSON report. Readiness returns HTTP 503 while any required dependency is unavailable.
