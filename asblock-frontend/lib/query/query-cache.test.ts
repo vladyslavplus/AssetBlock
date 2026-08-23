@@ -151,7 +151,7 @@ describe('catalog fetcher cancellation', () => {
     vi.stubGlobal(
       'fetch',
       vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
-        seen = init?.signal ?? (undefined as AbortSignal)
+        seen = init?.signal ?? undefined
         return new Response(JSON.stringify({ items: [], totalCount: 0, page: 1, pageSize: 12 }), {
           status: 200,
           headers: { 'Content-Type': 'application/json' },
