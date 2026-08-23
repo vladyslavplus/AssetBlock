@@ -64,7 +64,9 @@
 
 ## Tests and verification
 
+- Use Vitest for Node helper tests and jsdom component tests (same runner, split via `vitest.config.ts` projects). Use Playwright Chromium only for the small smoke suite in `e2e/`. Do not add Jest, a second component runner, or MSW unless repeated HTTP fixtures clearly require it.
+- Import production modules in tests. Mock `fetch` narrowly (`vi.stubGlobal`) rather than copying wrappers.
 - Add focused tests for behavior changes: happy path, validation/error behavior, auth/session behavior, mutation invalidation, and regression-prone edge cases.
+- Scripts from `asblock-frontend/`: `pnpm run test`, `pnpm run test:watch`, `pnpm run test:coverage`, `pnpm run test:e2e`.
 - Don't Run `pnpm run lint` after code changes - only if really needed; run `pnpm run check` for formatting; run `pnpm run build` when routing, server rendering, configuration, or TypeScript boundaries change.
-- Keep new tests feature-local and follow the repository's chosen test tooling. Do not add a second test framework without approval.
-- If verification cannot run, state precisely what was not verified and why.
+- Keep new tests feature-local. If verification cannot run, state precisely what was not verified and why.

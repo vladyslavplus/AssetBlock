@@ -63,7 +63,17 @@ const strictRules = {
 
 const eslintConfig = [
   {
-    ignores: ['node_modules/**', '.next/**', 'out/**', 'public/**', 'pnpm-lock.yaml'],
+    ignores: [
+      'node_modules/**',
+      '.next/**',
+      'out/**',
+      'public/**',
+      'pnpm-lock.yaml',
+      'coverage/**',
+      'playwright-report/**',
+      'test-results/**',
+      'blob-report/**',
+    ],
   },
   ...nextCoreWebVitals,
   ...nextTypescript,

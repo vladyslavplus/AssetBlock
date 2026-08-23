@@ -1,10 +1,11 @@
 'use client'
 
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { createContext, useContext, type ReactNode } from 'react'
+import { createContext, useContext, useEffect, useRef, type ReactNode } from 'react'
 import type { SessionUser } from '@/lib/auth/auth-types'
 import { authKeys, fetchSessionUser } from '@/lib/auth/auth-query'
 import { isAdminRole } from '@/lib/auth/roles'
+import { clearPrivateUserQueries } from '@/lib/query/clear-user-scoped-queries'
 
 type AuthStatus = 'loading' | 'anonymous' | 'authenticated'
 
@@ -40,6 +41,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       : 'anonymous'
   const isAdmin = isAdminRole(user?.role)
 
+  const previousUserIdRef = useRef<string | null | undefined>(undefined)
+
+  useEffect(() => {
+    if (sessionQuery.isPending) return
+    const nextId = user?.id ?? null
+    const previousId = previousUserIdRef.current
+    previousUserIdRef.current = nextId
+    if (previousId === undefined) return
+    if (previousId !== nextId) {
+      clearPrivateUserQueries(queryClient)
+    }
+  }, [queryClient, sessionQuery.isPending, user?.id])
+
   const refresh = async () => {
     await queryClient.invalidateQueries({ queryKey: authKeys.session() }, { cancelRefetch: false })
     await queryClient.refetchQueries({ queryKey: authKeys.session() })
@@ -47,7 +61,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const logout = async () => {
     await fetch('/api/auth/logout', { method: 'POST' })
-    queryClient.clear()
+    clearPrivateUserQueries(queryClient)
+    queryClient.setQueryData(authKeys.session(), null)
   }
 
   const value = { user, status, isAdmin, refresh, logout }

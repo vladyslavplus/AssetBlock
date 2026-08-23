@@ -6,7 +6,9 @@ by default or covered by an explicit, reviewed exception.
 ## Allowed by default (SPDX)
 
 - `MIT`
+- `MIT-0`
 - `Apache-2.0`
+- `BlueOak-1.0.0`
 - `BSD-2-Clause`
 - `BSD-3-Clause`
 - `BSD-3-Clause-Clear`

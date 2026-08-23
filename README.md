@@ -45,8 +45,14 @@ Bring up dependencies with Docker Compose when needed (`docker-compose.yml` in t
 pnpm install
 pnpm dev
 pnpm run check
+pnpm run test
+pnpm run test:watch
+pnpm run test:coverage
+pnpm run test:e2e
 pnpm run build
 ```
+
+Frontend tests: Vitest (jsdom + Node) for helpers, query cache, and critical forms; Playwright Chromium smoke for catalog, auth, seller upload, and checkout availability. Playwright does not call live Stripe or production APIs — browser requests are intercepted. From `asblock-frontend/`, `pnpm exec playwright install chromium` once per machine.
 
 Point the frontend at your running Web API using environment variables (see `asblock-frontend/.env.example`): **`NEXT_PUBLIC_API_BASE_URL`** for browser-side requests, and **`ASSETBLOCK_API_BASE_URL`** (or the public URL as fallback) for server-side Route Handlers.
 

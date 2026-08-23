@@ -102,6 +102,7 @@ export function loadExceptions() {
 const ALIASES = new Map([
   ["mit", "MIT"],
   ["mit license", "MIT"],
+  ["mit-0", "MIT-0"],
   ["apache-2.0", "Apache-2.0"],
   ["apache 2.0", "Apache-2.0"],
   ["apache license 2.0", "Apache-2.0"],

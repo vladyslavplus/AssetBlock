@@ -13,6 +13,7 @@ const nextConfig = {
   turbopack: {
     root: appRoot,
   },
+  allowedDevOrigins: ['127.0.0.1'],
   outputFileTracingRoot: appRoot,
 }
 

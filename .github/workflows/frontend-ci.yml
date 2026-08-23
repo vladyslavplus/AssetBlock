@@ -44,10 +44,47 @@ jobs:
         working-directory: asblock-frontend
         run: pnpm install --frozen-lockfile
 
+      - name: Unit and component tests
+        working-directory: asblock-frontend
+        run: pnpm run test:coverage
+
+      - name: Upload Vitest coverage
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: frontend-vitest-coverage
+          path: asblock-frontend/coverage
+          if-no-files-found: ignore
+
       - name: Check
         working-directory: asblock-frontend
         run: pnpm run check
 
       - name: Build
         working-directory: asblock-frontend
+        env:
+          NEXT_PUBLIC_API_BASE_URL: http://127.0.0.1:3999
+          ASSETBLOCK_API_BASE_URL: http://127.0.0.1:3999
         run: pnpm run build
+
+      - name: Install Playwright Chromium
+        working-directory: asblock-frontend
+        run: pnpm exec playwright install --with-deps chromium
+
+      - name: Playwright smoke
+        working-directory: asblock-frontend
+        env:
+          CI: true
+          NEXT_PUBLIC_API_BASE_URL: http://127.0.0.1:3999
+          ASSETBLOCK_API_BASE_URL: http://127.0.0.1:3999
+        run: pnpm run test:e2e
+
+      - name: Upload Playwright report
+        uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: frontend-playwright-report
+          path: |
+            asblock-frontend/playwright-report
+            asblock-frontend/test-results
+          if-no-files-found: ignore
