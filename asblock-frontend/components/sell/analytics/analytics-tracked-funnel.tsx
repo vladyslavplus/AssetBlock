@@ -18,11 +18,7 @@ export function AnalyticsTrackedFunnel({
   const coverage = overview.trackedCheckoutCoverage
 
   return (
-    <section
-      aria-labelledby="analytics-tracked-funnel-heading"
-      className={isUpdating ? 'opacity-80' : undefined}
-      aria-busy={isUpdating}
-    >
+    <section aria-labelledby="analytics-tracked-funnel-heading" aria-busy={isUpdating}>
       <h3 id="analytics-tracked-funnel-heading" className="text-base font-semibold">
         Tracked funnel
       </h3>

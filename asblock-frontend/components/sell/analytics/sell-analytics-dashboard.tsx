@@ -3,6 +3,7 @@
 import { keepPreviousData, useInfiniteQuery, useQuery } from '@tanstack/react-query'
 import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import { useEffect } from 'react'
+import { Loader2 } from 'lucide-react'
 
 import { useAuth } from '@/components/auth/auth-context'
 import {
@@ -24,8 +25,7 @@ import { AnalyticsRecentSales } from '@/components/sell/analytics/analytics-rece
 import { AnalyticsRevenueSplit } from '@/components/sell/analytics/analytics-revenue-split'
 import { AnalyticsSectionError } from '@/components/sell/analytics/analytics-section-error'
 import {
-  AnalyticsChartSkeleton,
-  AnalyticsKpiSkeletonGrid,
+  AnalyticsDashboardSkeleton,
   AnalyticsListSkeleton,
   AnalyticsTableSkeleton,
 } from '@/components/sell/analytics/analytics-skeletons'
@@ -61,6 +61,7 @@ import {
 } from '@/lib/analytics/analytics-types'
 import { ApiRequestError } from '@/lib/http/api-client'
 import { SessionBlockSkeleton } from '@/components/skeletons/session-block-skeleton'
+import { runQueryInBackground } from '@/lib/query/query-refresh'
 
 function queryErrorMessage(error: unknown, fallback: string): string {
   if (error instanceof ApiRequestError) {
@@ -70,10 +71,6 @@ function queryErrorMessage(error: unknown, fallback: string): string {
     if (error.status === 403) {
       return 'Verify your email address to view seller analytics.'
     }
-    return error.message || fallback
-  }
-  if (error instanceof Error) {
-    return error.message
   }
   return fallback
 }
@@ -261,6 +258,8 @@ export function SellAnalyticsDashboard() {
     collectionsQuery.isFetching &&
     (collectionsQuery.isPlaceholderData || collectionsQuery.isRefetching)
   const salesUpdating = salesQuery.isFetching && !salesQuery.isFetchingNextPage
+  const isUpdatingAnalytics =
+    overviewUpdating || productsUpdating || collectionsUpdating || salesUpdating
 
   if (pending) {
     return <SessionBlockSkeleton />
@@ -282,6 +281,10 @@ export function SellAnalyticsDashboard() {
   const productsLoading = productsQuery.isPending && !productsQuery.data
   const collectionsLoading = collectionsQuery.isPending && !collectionsQuery.data
   const salesLoading = salesQuery.isPending && !salesQuery.data
+
+  if (overviewLoading) {
+    return <AnalyticsDashboardSkeleton />
+  }
 
   const overview = overviewQuery.data
   const hasSales =
@@ -318,13 +321,24 @@ export function SellAnalyticsDashboard() {
       </div>
 
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <AnalyticsRangePicker state={urlState} onChange={patchAnalyticsState} />
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-3 min-w-0">
+          <AnalyticsRangePicker state={urlState} onChange={patchAnalyticsState} />
+          {isUpdatingAnalytics ? (
+            <p
+              className="inline-flex items-center gap-1.5 text-xs text-muted-foreground shrink-0"
+              aria-live="polite"
+            >
+              <Loader2 className="size-3.5 animate-spin motion-reduce:animate-none" aria-hidden />
+              Updating analytics…
+            </p>
+          ) : null}
+        </div>
         {hasSales ? (
           <AnalyticsExportButton range={utcRange} productType={urlState.productType} />
         ) : null}
       </div>
 
-      {!hasSales && !overviewLoading && !overviewQuery.isError ? <AnalyticsNoSalesNotice /> : null}
+      {!hasSales && !overviewQuery.isError ? <AnalyticsNoSalesNotice /> : null}
       {!hasProducts && !productsLoading && !productsQuery.isError ? (
         <AnalyticsNoProductsNotice />
       ) : null}
@@ -333,13 +347,8 @@ export function SellAnalyticsDashboard() {
         <AnalyticsSectionError
           title="Overview unavailable"
           message={queryErrorMessage(overviewQuery.error, 'Could not load overview metrics.')}
-          onRetry={() => overviewQuery.refetch()}
+          onRetry={() => runQueryInBackground(overviewQuery.refetch())}
         />
-      ) : overviewLoading ? (
-        <>
-          <AnalyticsKpiSkeletonGrid />
-          <AnalyticsChartSkeleton />
-        </>
       ) : overview ? (
         <>
           <section aria-labelledby="analytics-commerce-heading" className="space-y-6">
@@ -420,7 +429,7 @@ export function SellAnalyticsDashboard() {
         <AnalyticsSectionError
           title="Products table unavailable"
           message={queryErrorMessage(productsQuery.error, 'Could not load product performance.')}
-          onRetry={() => productsQuery.refetch()}
+          onRetry={() => runQueryInBackground(productsQuery.refetch())}
         />
       ) : productsLoading ? (
         <AnalyticsTableSkeleton />
@@ -442,7 +451,7 @@ export function SellAnalyticsDashboard() {
             collectionsQuery.error,
             'Could not load collection performance.',
           )}
-          onRetry={() => collectionsQuery.refetch()}
+          onRetry={() => runQueryInBackground(collectionsQuery.refetch())}
         />
       ) : collectionsLoading ? (
         <AnalyticsTableSkeleton />
@@ -460,7 +469,7 @@ export function SellAnalyticsDashboard() {
         <AnalyticsSectionError
           title="Recent sales unavailable"
           message={queryErrorMessage(salesQuery.error, 'Could not load recent sales.')}
-          onRetry={() => salesQuery.refetch()}
+          onRetry={() => runQueryInBackground(salesQuery.refetch())}
         />
       ) : salesLoading ? (
         <AnalyticsListSkeleton />
@@ -472,8 +481,8 @@ export function SellAnalyticsDashboard() {
           isFetchingMore={salesQuery.isFetchingNextPage}
           isFetchNextPageError={salesQuery.isFetchNextPageError}
           fetchNextPageError={salesQuery.isFetchNextPageError ? salesQuery.error : undefined}
-          onLoadMore={() => salesQuery.fetchNextPage()}
-          onRetryLoadMore={() => salesQuery.fetchNextPage()}
+          onLoadMore={() => runQueryInBackground(salesQuery.fetchNextPage())}
+          onRetryLoadMore={() => runQueryInBackground(salesQuery.fetchNextPage())}
           isUpdating={salesUpdating}
         />
       )}

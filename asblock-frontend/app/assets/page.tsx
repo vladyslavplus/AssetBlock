@@ -33,8 +33,8 @@ export default function AssetsPage() {
 
   const facetsQuery = useQuery({
     queryKey: catalogKeys.facets(),
-    // Keep short public catalog reads alive across route transitions. Forwarding React Query's
-    // cancellation signal to browser fetch causes Next dev to report an unhandled AbortError.
+    // Do not read React Query's AbortSignal here (same pattern as analytics/seller lists).
+    // Consuming it aborts on unmount and Next.js dev logs unhandledRejection AbortError.
     queryFn: () => fetchCatalogFacets(),
     staleTime: 5 * 60 * 1000,
   })

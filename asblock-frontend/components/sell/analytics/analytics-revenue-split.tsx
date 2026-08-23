@@ -1,6 +1,5 @@
 import { formatMoneyCents } from '@/lib/analytics/analytics-format'
 import type { SellerAnalyticsOverview } from '@/lib/analytics/analytics-types'
-import { cn } from '@/lib/utils'
 
 interface AnalyticsRevenueSplitProps {
   overview: SellerAnalyticsOverview
@@ -20,10 +19,9 @@ export function AnalyticsRevenueSplit({
   return (
     <section
       aria-labelledby="analytics-revenue-split-heading"
-      className={cn('space-y-4', isUpdating && 'opacity-80')}
+      className="space-y-4"
       aria-busy={isUpdating}
     >
-      {isUpdating ? <p className="text-xs text-muted-foreground">Updating…</p> : null}
       <h2 id="analytics-revenue-split-heading" className="text-lg font-semibold">
         Direct vs bundle revenue
       </h2>

@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button'
 import { downloadAnalyticsSalesExport } from '@/lib/analytics/analytics-export'
 import type { AnalyticsProductTypeFilter, AnalyticsUtcRange } from '@/lib/analytics/analytics-types'
 import { ApiRequestError } from '@/lib/http/api-client'
+import { isAbortError } from '@/lib/http/is-abort-error'
 
 interface AnalyticsExportButtonProps {
   range: AnalyticsUtcRange
@@ -41,16 +42,15 @@ export function AnalyticsExportButton({
       await downloadAnalyticsSalesExport(range, productType, controller.signal)
       toast.success('Sales export downloaded.')
     } catch (error) {
-      if (error instanceof DOMException && error.name === 'AbortError') {
-        return
-      }
-      if (error instanceof Error && error.name === 'AbortError') {
+      if (isAbortError(error, controller.signal)) {
         return
       }
       const message =
-        error instanceof ApiRequestError
-          ? error.message
-          : 'Could not export sales. Check your connection and try again.'
+        error instanceof ApiRequestError && error.status === 401
+          ? 'Please sign in to export sales.'
+          : error instanceof ApiRequestError && error.status === 403
+            ? 'Verify your email address to export sales.'
+            : 'Could not export sales. Check your connection and try again.'
       toast.error(message)
     } finally {
       if (abortRef.current === controller) {

@@ -108,12 +108,7 @@ export function AnalyticsKpiCards({ overview, isUpdating = false }: AnalyticsKpi
   ]
 
   return (
-    <div
-      className={cn('space-y-2', isUpdating && 'opacity-80')}
-      aria-busy={isUpdating}
-      aria-live="polite"
-    >
-      {isUpdating ? <p className="text-xs text-muted-foreground">Updating…</p> : null}
+    <div className="space-y-2" aria-busy={isUpdating} aria-live="polite">
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
         {cards.map((card) => (
           <article

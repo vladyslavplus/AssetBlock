@@ -1,13 +1,7 @@
 import type { AnalyticsProductTypeFilter, AnalyticsUtcRange } from '@/lib/analytics/analytics-types'
 import { getApiErrorMessage, parseApiErrorBody, readApiResponseBody } from '@/lib/http/api-errors'
 import { ApiRequestError } from '@/lib/http/api-client'
-
-function isAbortError(error: unknown, signal?: AbortSignal): boolean {
-  if (signal?.aborted) return true
-  if (error instanceof DOMException && error.name === 'AbortError') return true
-  if (error instanceof Error && error.name === 'AbortError') return true
-  return false
-}
+import { isAbortError } from '@/lib/http/is-abort-error'
 
 function parseContentDispositionFilename(header: string | null): string | null {
   if (!header) return null
@@ -72,7 +66,13 @@ export async function downloadAnalyticsSalesExport(
     throw new ApiRequestError(exportErrorMessage(response.status, body), response.status, body)
   }
 
-  const blob = await response.blob()
+  let blob: Blob
+  try {
+    blob = await response.blob()
+  } catch (error) {
+    if (isAbortError(error, signal)) throw error
+    throw error
+  }
   const filename =
     parseContentDispositionFilename(response.headers.get('Content-Disposition')) ??
     `assetblock-sales-${range.from}-${range.to}.csv`

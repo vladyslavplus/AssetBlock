@@ -25,6 +25,7 @@ import {
 } from '@/lib/analytics/analytics-range'
 import { sellerAssetDetailQueryOptions } from '@/lib/analytics/analytics-query'
 import { ApiRequestError } from '@/lib/http/api-client'
+import { runQueryInBackground } from '@/lib/query/query-refresh'
 import { SessionBlockSkeleton } from '@/components/skeletons/session-block-skeleton'
 
 interface AnalyticsAssetDetailViewProps {
@@ -36,9 +37,7 @@ function queryErrorMessage(error: unknown, fallback: string): string {
     if (error.status === 401) return 'Please sign in to view analytics.'
     if (error.status === 403) return 'Verify your email address to view seller analytics.'
     if (error.status === 404) return 'Asset not found.'
-    return error.message || fallback
   }
-  if (error instanceof Error) return error.message
   return fallback
 }
 
@@ -77,7 +76,7 @@ export function AnalyticsAssetDetailView({ assetId }: AnalyticsAssetDetailViewPr
       <AnalyticsSectionError
         title="Asset analytics unavailable"
         message={queryErrorMessage(detailQuery.error, 'Could not load asset analytics.')}
-        onRetry={() => detailQuery.refetch()}
+        onRetry={() => runQueryInBackground(detailQuery.refetch())}
       />
     )
   }

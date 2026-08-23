@@ -16,11 +16,7 @@ export function AnalyticsCommerceFunnel({
   if (!funnel) return null
 
   return (
-    <section
-      aria-labelledby="analytics-commerce-funnel-heading"
-      className={isUpdating ? 'opacity-80' : undefined}
-      aria-busy={isUpdating}
-    >
+    <section aria-labelledby="analytics-commerce-funnel-heading" aria-busy={isUpdating}>
       <h3 id="analytics-commerce-funnel-heading" className="text-base font-semibold">
         Commerce funnel
       </h3>

@@ -14,7 +14,6 @@ import type {
   AnalyticsUrlState,
   AnalyticsUtcRange,
 } from '@/lib/analytics/analytics-types'
-import { cn } from '@/lib/utils'
 
 interface AnalyticsTopProductsProps {
   title: string
@@ -82,7 +81,7 @@ export function AnalyticsTopProducts({
   return (
     <section
       aria-labelledby={`top-${title.replace(/\s+/g, '-').toLowerCase()}`}
-      className={cn('space-y-3', isUpdating && 'opacity-80')}
+      className="space-y-3"
       aria-busy={isUpdating}
     >
       <div className="flex items-center justify-between gap-2">
@@ -92,7 +91,6 @@ export function AnalyticsTopProducts({
         >
           {title}
         </h3>
-        {isUpdating ? <span className="text-xs text-muted-foreground">Updating…</span> : null}
       </div>
       {items.length === 0 ? (
         <p className="text-sm text-muted-foreground">{emptyLabel}</p>

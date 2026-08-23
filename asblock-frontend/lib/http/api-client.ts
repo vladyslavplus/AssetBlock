@@ -1,5 +1,6 @@
-import { apiUrl } from '@/lib/http/api-config'
-import { getApiErrorMessage, parseApiErrorBody, readApiResponseBody } from '@/lib/http/api-errors'
+import { apiUrl } from './api-config.ts'
+import { getApiErrorMessage, parseApiErrorBody, readApiResponseBody } from './api-errors.ts'
+import { isAbortError } from './is-abort-error.ts'
 
 export class ApiRequestError extends Error {
   readonly status: number
@@ -31,9 +32,10 @@ export interface ApiFetchOptions extends Omit<RequestInit, 'body'> {
 /**
  * Fetch against AssetBlock Web API. Prefixes NEXT_PUBLIC_API_BASE_URL.
  * Throws {@link ApiRequestError} on non-OK responses after trying to parse JSON error body.
+ * AbortError from fetch/body read propagates unchanged for TanStack Query cancellation.
  */
 export async function apiFetch<T = unknown>(options: ApiFetchOptions): Promise<T> {
-  const { path, jsonBody, body: optionBody, headers: initHeaders, ...rest } = options
+  const { path, jsonBody, body: optionBody, headers: initHeaders, signal, ...rest } = options
   const url = apiUrl(path)
 
   const headers = new Headers(initHeaders ?? undefined)
@@ -48,11 +50,18 @@ export async function apiFetch<T = unknown>(options: ApiFetchOptions): Promise<T
 
   const res = await fetch(url, {
     ...rest,
+    signal,
     headers,
     body,
   })
 
-  const parsed = await readApiResponseBody(res)
+  let parsed: unknown
+  try {
+    parsed = await readApiResponseBody(res)
+  } catch (error) {
+    if (isAbortError(error, signal)) throw error
+    throw error
+  }
 
   if (!res.ok) {
     const fallback =

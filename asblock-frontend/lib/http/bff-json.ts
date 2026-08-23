@@ -1,6 +1,7 @@
 import type { z } from 'zod'
 
-import { getApiErrorMessage } from '@/lib/http/api-errors'
+import { getApiErrorMessage } from './api-errors.ts'
+import { isAbortError } from './is-abort-error.ts'
 
 export type BffJsonResult<T> =
   | { ok: true; data: T }
@@ -15,6 +16,10 @@ function parseMaybeJson(text: string): unknown {
   }
 }
 
+/**
+ * BFF JSON GET/POST helper. Forwards AbortSignal to fetch so TanStack Query can cancel.
+ * AbortError from fetch/body read propagates unchanged (do not wrap as a generic failure).
+ */
 export async function fetchBffJson<TSchema extends z.ZodTypeAny>(
   path: string,
   schema: TSchema,
@@ -28,7 +33,17 @@ export async function fetchBffJson<TSchema extends z.ZodTypeAny>(
       ...init?.headers,
     },
   })
-  const body = parseMaybeJson(await response.text())
+
+  let text: string
+  try {
+    text = await response.text()
+  } catch (error) {
+    // Body read can reject with AbortError after headers when the query is cancelled.
+    if (isAbortError(error, init?.signal)) throw error
+    throw error
+  }
+
+  const body = parseMaybeJson(text)
 
   if (!response.ok) {
     return {

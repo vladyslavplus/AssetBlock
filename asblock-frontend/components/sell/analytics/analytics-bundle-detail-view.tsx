@@ -25,6 +25,7 @@ import {
 } from '@/lib/analytics/analytics-range'
 import { sellerBundleDetailQueryOptions } from '@/lib/analytics/analytics-query'
 import { ApiRequestError } from '@/lib/http/api-client'
+import { runQueryInBackground } from '@/lib/query/query-refresh'
 import { SessionBlockSkeleton } from '@/components/skeletons/session-block-skeleton'
 
 interface AnalyticsBundleDetailViewProps {
@@ -36,9 +37,7 @@ function queryErrorMessage(error: unknown, fallback: string): string {
     if (error.status === 401) return 'Please sign in to view analytics.'
     if (error.status === 403) return 'Verify your email address to view seller analytics.'
     if (error.status === 404) return 'Bundle not found.'
-    return error.message || fallback
   }
-  if (error instanceof Error) return error.message
   return fallback
 }
 
@@ -77,7 +76,7 @@ export function AnalyticsBundleDetailView({ bundleId }: AnalyticsBundleDetailVie
       <AnalyticsSectionError
         title="Bundle analytics unavailable"
         message={queryErrorMessage(detailQuery.error, 'Could not load bundle analytics.')}
-        onRetry={() => detailQuery.refetch()}
+        onRetry={() => runQueryInBackground(detailQuery.refetch())}
       />
     )
   }

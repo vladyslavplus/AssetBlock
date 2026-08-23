@@ -45,7 +45,7 @@ import {
   postMarkAllNotificationsRead,
 } from '@/lib/notifications/notifications-query'
 import { cn } from '@/lib/utils'
-import { invalidateQueriesInBackground } from '@/lib/query/query-refresh'
+import { invalidateQueriesInBackground, runQueryInBackground } from '@/lib/query/query-refresh'
 
 function updateInboxItemReadAt(
   old: InfiniteData<PagedNotificationsDto, number> | undefined,
@@ -331,7 +331,7 @@ export function NotificationBell() {
             <button
               type="button"
               className="text-xs font-medium text-accent hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary rounded-sm"
-              onClick={() => void inboxQuery.fetchNextPage()}
+              onClick={() => runQueryInBackground(inboxQuery.fetchNextPage())}
               disabled={inboxQuery.isFetchingNextPage}
             >
               {inboxQuery.isFetchingNextPage ? 'Loading…' : 'Load more'}

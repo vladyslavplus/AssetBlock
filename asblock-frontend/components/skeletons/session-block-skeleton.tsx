@@ -20,7 +20,7 @@ export function SessionBlockSkeleton({
         <Skeleton
           key={i}
           className={cn(
-            'h-3.5 rounded-sm bg-muted-foreground/20 animate-pulse',
+            'h-3.5 rounded-sm bg-muted-foreground/20 animate-pulse motion-reduce:animate-none',
             i === 0 ? 'w-[min(100%,14rem)]' : 'w-[min(100%,10rem)]',
           )}
         />

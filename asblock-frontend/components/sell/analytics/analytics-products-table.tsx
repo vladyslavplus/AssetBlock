@@ -36,7 +36,6 @@ import type {
   AnalyticsUrlState,
   AnalyticsUtcRange,
 } from '@/lib/analytics/analytics-types'
-import { cn } from '@/lib/utils'
 
 interface AnalyticsProductsTableProps {
   data: AnalyticsProductsResult
@@ -116,7 +115,7 @@ export function AnalyticsProductsTable({
   return (
     <section
       aria-labelledby="analytics-products-heading"
-      className={cn('space-y-4', isUpdating && 'opacity-80')}
+      className="space-y-4"
       aria-busy={isUpdating}
     >
       <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
@@ -126,7 +125,6 @@ export function AnalyticsProductsTable({
           </h2>
           <p className="text-sm text-muted-foreground">
             Server-side sort and pagination · {formatCount(data.totalCount)} products
-            {isUpdating ? ' · Updating…' : ''}
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -268,7 +266,7 @@ export function AnalyticsProductsTable({
                 {state.direction === 'DESC' ? '↓' : '↑'}
               </>
             ) : (
-              <>Updating…</>
+              <>Loading page…</>
             )}
           </p>
           <div className="flex items-center gap-2">
@@ -289,7 +287,7 @@ export function AnalyticsProductsTable({
                   Page {displayPage} of {totalPages}
                 </>
               ) : (
-                <>Updating…</>
+                <>Loading page…</>
               )}
             </span>
             <Button

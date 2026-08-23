@@ -11,6 +11,7 @@ import { SellMyListings } from '@/components/sell/sell-my-listings'
 import { SellMyCollections } from '@/components/sell/sell-my-collections'
 import { SellMyBundles } from '@/components/sell/sell-my-bundles'
 import { AssetUploadForm } from '@/components/sell/asset-upload-form'
+import { AnalyticsDashboardSkeleton } from '@/components/sell/analytics/analytics-skeletons'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { SessionBlockSkeleton } from '@/components/skeletons/session-block-skeleton'
 import { isValidSellTab, parseSellTab, type SellTab } from '@/lib/sell/sell-tabs'
@@ -21,7 +22,7 @@ const SellAnalyticsDashboard = dynamic(
       (mod) => mod.SellAnalyticsDashboard,
     ),
   {
-    loading: () => <SessionBlockSkeleton />,
+    loading: () => <AnalyticsDashboardSkeleton />,
     ssr: false,
   },
 )

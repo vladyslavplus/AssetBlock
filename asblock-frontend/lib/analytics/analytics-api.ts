@@ -22,6 +22,7 @@ import type {
 } from '@/lib/analytics/analytics-types'
 import { ApiRequestError } from '@/lib/http/api-client'
 import { fetchBffJson } from '@/lib/http/bff-json'
+import { isAbortError } from '@/lib/http/is-abort-error'
 
 function buildRangeQuery(range: AnalyticsUtcRange): string {
   const params = new URLSearchParams({
@@ -43,13 +44,6 @@ function throwBffFailure(result: {
   throw new ApiRequestError(result.message, result.status, result.body)
 }
 
-function isAbortError(error: unknown, signal?: AbortSignal): boolean {
-  if (signal?.aborted) return true
-  if (error instanceof DOMException && error.name === 'AbortError') return true
-  if (error instanceof Error && error.name === 'AbortError') return true
-  return false
-}
-
 async function fetchAnalyticsJson<TSchema extends z.ZodTypeAny>(
   path: string,
   schema: TSchema,
@@ -59,9 +53,8 @@ async function fetchAnalyticsJson<TSchema extends z.ZodTypeAny>(
   try {
     result = await fetchBffJson(path, schema, { signal })
   } catch (error) {
-    if (isAbortError(error, signal)) {
-      throw error
-    }
+    // Keep AbortError as cancellation; do not map it to a 502 ApiRequestError.
+    if (isAbortError(error, signal)) throw error
     throw new ApiRequestError('Unexpected analytics response', 502, null)
   }
 

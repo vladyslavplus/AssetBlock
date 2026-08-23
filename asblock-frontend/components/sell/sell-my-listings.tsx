@@ -22,12 +22,13 @@ import {
 } from '@/components/auth/email-verification-notice'
 import { SessionBlockSkeleton } from '@/components/skeletons/session-block-skeleton'
 import { SellListingListSkeleton } from '@/components/sell/sell-listing-row-skeleton'
+import { SellQueryError } from '@/components/sell/sell-query-error'
 import { deleteSellerAsset } from '@/lib/seller/seller-api'
 import { formatUsdWhole } from '@/lib/format-currency'
 import type { AssetListItemApi } from '@/lib/catalog/assets-api'
 import { catalogKeys } from '@/lib/catalog/catalog-query'
 import { fetchSellerListingsQuery, sellerKeys } from '@/lib/seller/seller-query'
-import { invalidateQueriesInBackground } from '@/lib/query/query-refresh'
+import { invalidateQueriesInBackground, runQueryInBackground } from '@/lib/query/query-refresh'
 import { useState } from 'react'
 
 export function SellMyListings() {
@@ -63,14 +64,6 @@ export function SellMyListings() {
 
   const items: AssetListItemApi[] = listingsQuery.data?.items ?? []
   const loading = authed && listingsQuery.isPending
-  const error =
-    listingsQuery.error instanceof Error
-      ? listingsQuery.error.message === 'SIGN_IN_REQUIRED'
-        ? 'Please sign in to view your listings.'
-        : listingsQuery.error.message
-      : listingsQuery.isError
-        ? 'Could not load listings.'
-        : null
 
   async function confirmDeleteListing() {
     if (!deleteTarget) return
@@ -83,7 +76,7 @@ export function SellMyListings() {
 
   if (!authed) {
     return (
-      <div className="rounded-lg border border-border bg-card-elevated/50 px-4 py-8 text-center space-y-3">
+      <div className="max-w-lg w-full rounded-lg border border-border bg-card-elevated/50 px-4 py-8 text-center space-y-3">
         <p className="text-sm text-muted-foreground">Sign in to see assets you have published.</p>
         <Button asChild className="bg-primary text-primary-foreground hover:bg-[#6D28D9]">
           <Link href="/login?returnUrl=/sell">Sign in</Link>
@@ -94,23 +87,31 @@ export function SellMyListings() {
 
   if (loading) {
     return (
-      <div className="py-4">
+      <div className="max-w-lg w-full py-4">
         <SellListingListSkeleton rows={5} />
       </div>
     )
   }
 
-  if (error) {
+  if (listingsQuery.isError) {
+    const signInRequired =
+      listingsQuery.error instanceof Error && listingsQuery.error.message === 'SIGN_IN_REQUIRED'
     return (
-      <p className="text-sm text-destructive py-4" role="alert">
-        {error}
-      </p>
+      <div className="max-w-lg w-full">
+        <SellQueryError
+          title={
+            signInRequired ? 'Please sign in to view your listings.' : 'Could not load listings.'
+          }
+          onRetry={() => runQueryInBackground(listingsQuery.refetch())}
+          retrying={listingsQuery.isRefetching}
+        />
+      </div>
     )
   }
 
   if (items.length === 0) {
     return (
-      <div className="rounded-lg border border-dashed border-border px-6 py-12 text-center">
+      <div className="max-w-lg w-full rounded-lg border border-dashed border-border px-6 py-12 text-center">
         <Package className="h-10 w-10 text-muted-foreground/50 mx-auto mb-3" aria-hidden />
         <p className="font-medium text-foreground mb-1">No listings yet</p>
         <p className="text-sm text-muted-foreground mb-4">
@@ -127,7 +128,7 @@ export function SellMyListings() {
   const deletingId = deleteMutation.isPending ? (deleteTarget?.id ?? null) : null
 
   return (
-    <>
+    <div className="max-w-lg w-full">
       {!verified ? <EmailVerificationNotice className="mb-4" /> : null}
       <ul className="space-y-3">
         {items.map((a) => (
@@ -222,6 +223,6 @@ export function SellMyListings() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-    </>
+    </div>
   )
 }

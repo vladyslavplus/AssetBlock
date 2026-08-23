@@ -13,7 +13,7 @@
 
 - **Domain:** entities, DTOs, options, constants, error codes/messages, cache keys, domain exceptions, and interfaces. It must not depend on Infrastructure or WebApi.
 - **Application:** commands/queries, handlers, FluentValidation validators, pipeline behaviors, `ResultError`, and business orchestration. Keep each use case in its own folder.
-- **Infrastructure:** `ApplicationDbContext`, EF configurations, `I*Store` implementations, JWT, password hashing, S3-compatible asset storage, encryption, cache, Stripe, Polly, hosted services, and DI registrations.
+- **Infrastructure:** `ApplicationDbContext`, EF configurations, `I*Store` implementations, JWT, credential hashing, object-storage adapters (SeaweedFS/MinIO), content encryption, cache, Stripe, Polly, hosted services, and DI registrations.
 - **WebApi:** controllers, request binding, auth/authorization, routing, middleware, OpenAPI, rate limits, exception-to-HTTP mapping, and startup. Controllers must not contain business rules or direct persistence logic.
 - Register implementations in the layer that owns them: application mechanics in `AddApplication`, integrations/stores/hosted services in `AddInfrastructure`, transport concerns in WebApi.
 

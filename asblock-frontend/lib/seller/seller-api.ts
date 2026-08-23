@@ -1,5 +1,6 @@
 import { apiFetch } from '@/lib/http/api-client'
 import { getApiErrorMessage, parseApiErrorBody } from '@/lib/http/api-errors'
+import { isAbortError } from '@/lib/http/is-abort-error'
 import type {
   AssetListItemApi,
   AssetVersionSummaryApi,
@@ -31,7 +32,13 @@ export async function fetchMyListings(
     credentials: 'include',
     signal,
   })
-  const text = await res.text()
+  let text: string
+  try {
+    text = await res.text()
+  } catch (error) {
+    if (isAbortError(error, signal)) throw error
+    throw error
+  }
   const parsed = parseMaybeJson(text)
   if (res.status === 401) {
     throw new Error('SIGN_IN_REQUIRED')

@@ -10,7 +10,7 @@ import { Button } from '@/components/ui/button'
 import { fetchCheckoutStatus } from '@/lib/payments/checkout-api'
 import { libraryKeys } from '@/lib/library/library-query'
 import { notificationsKeys } from '@/lib/notifications/notifications-query'
-import { invalidateQueriesInBackground } from '@/lib/query/query-refresh'
+import { invalidateQueriesInBackground, runQueryInBackground } from '@/lib/query/query-refresh'
 import {
   clearPendingCheckoutContext,
   readPendingCheckoutContext,
@@ -78,7 +78,7 @@ export function PostCheckoutReviewBanner() {
   const handleCheckAgain = () => {
     setPollDeadline(Date.now() + POLL_TIMEOUT_MS)
     setPollTimedOut(false)
-    void statusQuery.refetch()
+    runQueryInBackground(statusQuery.refetch())
   }
 
   if (dismissed || !storageReady || !context) {

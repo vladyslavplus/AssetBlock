@@ -22,7 +22,6 @@ import { collectionSortLabel, collectionStatusLabel } from '@/lib/analytics/anal
 import { formatCount, formatMoneyCents, formatRatePercent } from '@/lib/analytics/analytics-format'
 import { maxAccessibleProductsPage } from '@/lib/analytics/analytics-range'
 import type { AnalyticsCollectionsResult, AnalyticsUrlState } from '@/lib/analytics/analytics-types'
-import { cn } from '@/lib/utils'
 
 interface AnalyticsCollectionsTableProps {
   data: AnalyticsCollectionsResult
@@ -58,7 +57,7 @@ export function AnalyticsCollectionsTable({
   return (
     <section
       aria-labelledby="analytics-collections-heading"
-      className={cn('space-y-4', isUpdating && 'opacity-80')}
+      className="space-y-4"
       aria-busy={isUpdating}
     >
       <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
@@ -68,7 +67,6 @@ export function AnalyticsCollectionsTable({
           </h3>
           <p className="text-sm text-muted-foreground">
             Server-side sort and pagination · {formatCount(data.totalCount)} collections
-            {isUpdating ? ' · Updating…' : ''}
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -202,7 +200,7 @@ export function AnalyticsCollectionsTable({
                 {state.collectionDirection === 'DESC' ? '↓' : '↑'}
               </>
             ) : (
-              <>Updating…</>
+              <>Loading page…</>
             )}
           </p>
           <div className="flex items-center gap-2">
@@ -223,7 +221,7 @@ export function AnalyticsCollectionsTable({
                   Page {displayPage} of {totalPages}
                 </>
               ) : (
-                <>Updating…</>
+                <>Loading page…</>
               )}
             </span>
             <Button

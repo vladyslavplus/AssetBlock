@@ -9,13 +9,13 @@ export function SellListingRowSkeleton() {
       aria-hidden
     >
       <div className="min-w-0 space-y-2 flex-1">
-        <Skeleton className="h-4 w-[min(100%,18rem)] rounded-sm bg-muted-foreground/20 animate-pulse" />
-        <Skeleton className="h-3 w-32 rounded-sm bg-muted-foreground/20 animate-pulse" />
+        <Skeleton className="h-4 w-[min(100%,18rem)] rounded-sm bg-muted-foreground/20 animate-pulse motion-reduce:animate-none" />
+        <Skeleton className="h-3 w-32 rounded-sm bg-muted-foreground/20 animate-pulse motion-reduce:animate-none" />
       </div>
       <div className="flex flex-wrap gap-2 shrink-0">
-        <Skeleton className="h-8 w-16 rounded-md bg-muted-foreground/20 animate-pulse" />
-        <Skeleton className="h-8 w-20 rounded-md bg-muted-foreground/20 animate-pulse" />
-        <Skeleton className="h-8 w-20 rounded-md bg-muted-foreground/20 animate-pulse" />
+        <Skeleton className="h-8 w-16 rounded-md bg-muted-foreground/20 animate-pulse motion-reduce:animate-none" />
+        <Skeleton className="h-8 w-20 rounded-md bg-muted-foreground/20 animate-pulse motion-reduce:animate-none" />
+        <Skeleton className="h-8 w-20 rounded-md bg-muted-foreground/20 animate-pulse motion-reduce:animate-none" />
       </div>
     </li>
   )

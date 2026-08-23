@@ -95,7 +95,7 @@ export function AnalyticsTrafficSources({
   return (
     <section
       aria-labelledby="analytics-traffic-heading"
-      className={cn('space-y-4', isUpdating && 'opacity-80')}
+      className="space-y-4"
       aria-busy={isUpdating}
     >
       <div>

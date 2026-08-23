@@ -35,6 +35,12 @@ import {
 } from '@/components/auth/email-verification-notice'
 import { SessionBlockSkeleton } from '@/components/skeletons/session-block-skeleton'
 import {
+  SellCollectionListSkeleton,
+  SellCollectionManagementSkeleton,
+  SellSelectControlSkeleton,
+} from '@/components/sell/sell-panel-skeletons'
+import { SellQueryError } from '@/components/sell/sell-query-error'
+import {
   addSellerCollectionItem,
   archiveSellerCollection,
   createSellerCollection,
@@ -43,6 +49,7 @@ import {
   reorderSellerCollectionItems,
   restoreSellerCollection,
   updateSellerCollection,
+  type SellerMutationResult,
 } from '@/lib/collections/collections-api'
 import {
   collectionMetadataFormSchema,
@@ -54,7 +61,7 @@ import {
   fetchSellerCollectionsQuery,
 } from '@/lib/collections/collections-query'
 import { fetchSellerListingsQuery, sellerKeys } from '@/lib/seller/seller-query'
-import { invalidateQueriesInBackground } from '@/lib/query/query-refresh'
+import { invalidateQueriesInBackground, runQueryInBackground } from '@/lib/query/query-refresh'
 import { formatUsdWhole } from '@/lib/format-currency'
 
 function statusBadgeVariant(status: string): 'default' | 'secondary' | 'outline' {
@@ -130,9 +137,9 @@ export function SellMyCollections() {
   })
 
   const updateMutation = useMutation({
-    mutationFn: (values: CollectionMetadataFormValues) => {
+    mutationFn: async (values: CollectionMetadataFormValues): Promise<SellerMutationResult> => {
       if (!selectedId) {
-        return Promise.resolve({ ok: false as const, message: 'No collection selected.' })
+        return { ok: false, message: 'No collection selected.' }
       }
       return updateSellerCollection(selectedId, {
         title: values.title,
@@ -150,8 +157,10 @@ export function SellMyCollections() {
   })
 
   const actionMutation = useMutation({
-    mutationFn: async (action: 'publish' | 'archive' | 'restore') => {
-      if (!selectedId) return { ok: false as const, message: 'No collection selected.' }
+    mutationFn: async (
+      action: 'publish' | 'archive' | 'restore',
+    ): Promise<SellerMutationResult> => {
+      if (!selectedId) return { ok: false, message: 'No collection selected.' }
       if (action === 'publish') return publishSellerCollection(selectedId)
       if (action === 'archive') return archiveSellerCollection(selectedId)
       return restoreSellerCollection(selectedId)
@@ -209,7 +218,7 @@ export function SellMyCollections() {
 
   if (!authed) {
     return (
-      <div className="rounded-lg border border-border bg-card-elevated/50 px-4 py-8 text-center space-y-3">
+      <div className="max-w-lg w-full rounded-lg border border-border bg-card-elevated/50 px-4 py-8 text-center space-y-3">
         <p className="text-sm text-muted-foreground">Sign in to manage collections.</p>
         <Button asChild className="bg-primary text-primary-foreground hover:bg-[#6D28D9]">
           <Link href="/login?returnUrl=/sell">Sign in</Link>
@@ -220,9 +229,17 @@ export function SellMyCollections() {
 
   const items = listQuery.data?.items ?? []
   const detail = detailQuery.data
-  const orderedItems = detail ? [...detail.items].sort((a, b) => a.position - b.position) : []
+  const managedDetail = selectedId && detail && detail.id === selectedId ? detail : null
+  const detailReady = managedDetail != null
+  const detailInitialLoading = Boolean(selectedId) && detailQuery.isPending && !detailReady
+  const orderedItems = managedDetail
+    ? [...managedDetail.items].sort((a, b) => a.position - b.position)
+    : []
   const memberIds = new Set(orderedItems.map((i) => i.assetId))
+  const listingsPending = listingsQuery.isPending
   const ownAssets = (listingsQuery.data?.items ?? []).filter((a) => !memberIds.has(a.id))
+  const pendingAction = actionMutation.isPending ? actionMutation.variables : null
+  const pendingItem = itemMutation.isPending ? itemMutation.variables : null
 
   const moveItem = (assetId: string, direction: -1 | 1) => {
     const ids = orderedItems.map((i) => i.assetId)
@@ -235,16 +252,21 @@ export function SellMyCollections() {
     if (left === undefined || right === undefined) return
     nextIds[index] = right
     nextIds[next] = left
-    itemMutation.mutate({ type: 'reorder', assetIds: nextIds })
+    itemMutation.mutate({ type: 'reorder', assetIds: nextIds, assetId })
   }
 
+  const createTitleInvalid = Boolean(createForm.formState.errors.title)
+  const createDescriptionInvalid = Boolean(createForm.formState.errors.description)
+  const editTitleInvalid = Boolean(editForm.formState.errors.title)
+  const editDescriptionInvalid = Boolean(editForm.formState.errors.description)
+
   return (
-    <div className="space-y-8">
+    <div className="max-w-lg w-full space-y-8">
       {!verified ? <EmailVerificationNotice /> : null}
 
       {verified ? (
         <form
-          className="rounded-lg border border-border bg-card-elevated p-4 space-y-3"
+          className="space-y-5"
           onSubmit={createForm.handleSubmit((values) =>
             createMutation.mutate({
               title: values.title,
@@ -254,8 +276,15 @@ export function SellMyCollections() {
         >
           <h2 className="text-sm font-semibold text-foreground">Create collection</h2>
           <div className="space-y-1.5">
-            <Label htmlFor="collection-title">Title</Label>
-            <Input id="collection-title" {...createForm.register('title')} className="bg-input" />
+            <Label htmlFor="collection-title" className="text-xs font-medium">
+              Title
+            </Label>
+            <Input
+              id="collection-title"
+              className="bg-input border-border"
+              aria-invalid={createTitleInvalid || undefined}
+              {...createForm.register('title')}
+            />
             {createForm.formState.errors.title ? (
               <p className="text-xs text-destructive">
                 {createForm.formState.errors.title.message}
@@ -263,37 +292,49 @@ export function SellMyCollections() {
             ) : null}
           </div>
           <div className="space-y-1.5">
-            <Label htmlFor="collection-description">Description</Label>
+            <Label htmlFor="collection-description" className="text-xs font-medium">
+              Description <span className="text-muted-foreground font-normal">(optional)</span>
+            </Label>
             <Textarea
               id="collection-description"
-              rows={3}
+              className="bg-input border-border h-44 sm:h-40 md:h-36"
+              aria-invalid={createDescriptionInvalid || undefined}
               {...createForm.register('description')}
-              className="bg-input"
             />
+            {createForm.formState.errors.description ? (
+              <p className="text-xs text-destructive">
+                {createForm.formState.errors.description.message}
+              </p>
+            ) : null}
           </div>
           <Button
             type="submit"
             disabled={createMutation.isPending}
-            className="bg-primary text-primary-foreground hover:bg-[#6D28D9]"
+            className="bg-primary text-primary-foreground hover:bg-[#6D28D9] w-full sm:w-auto"
           >
             {createMutation.isPending ? (
-              <Loader2 className="size-4 animate-spin mr-2" aria-hidden />
+              <>
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" aria-hidden />
+                Creating…
+              </>
             ) : (
-              <Plus className="size-4 mr-2" aria-hidden />
+              <>
+                <Plus className="h-4 w-4 mr-2" aria-hidden />
+                Create draft
+              </>
             )}
-            Create draft
           </Button>
         </form>
       ) : null}
 
       {listQuery.isPending ? (
-        <p className="text-sm text-muted-foreground">Loading collections…</p>
+        <SellCollectionListSkeleton />
       ) : listQuery.isError ? (
-        <p className="text-sm text-destructive" role="alert">
-          {listQuery.error instanceof Error
-            ? listQuery.error.message
-            : 'Could not load collections.'}
-        </p>
+        <SellQueryError
+          title="Could not load collections."
+          onRetry={() => runQueryInBackground(listQuery.refetch())}
+          retrying={listQuery.isRefetching}
+        />
       ) : items.length === 0 ? (
         <div className="rounded-lg border border-dashed border-border px-6 py-12 text-center">
           <FolderOpen className="h-10 w-10 text-muted-foreground/50 mx-auto mb-3" aria-hidden />
@@ -332,40 +373,61 @@ export function SellMyCollections() {
         </ul>
       )}
 
-      {selectedId && detailQuery.isPending ? (
-        <p className="text-sm text-muted-foreground">Loading collection…</p>
+      {detailInitialLoading ? <SellCollectionManagementSkeleton /> : null}
+
+      {selectedId && detailQuery.isError && !detailReady ? (
+        <SellQueryError
+          title="Could not load this collection."
+          onRetry={() => runQueryInBackground(detailQuery.refetch())}
+          retrying={detailQuery.isRefetching}
+        />
       ) : null}
 
-      {selectedId && detail ? (
+      {managedDetail ? (
         <div className="rounded-lg border border-border bg-card-elevated p-4 space-y-4">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <h2 className="text-sm font-semibold text-foreground">Manage collection</h2>
-            <Badge variant={statusBadgeVariant(detail.status)} className="text-[10px]">
-              {detail.status}
+            <Badge variant={statusBadgeVariant(managedDetail.status)} className="text-[10px]">
+              {managedDetail.status}
             </Badge>
           </div>
 
           {verified ? (
             <form
-              className="space-y-3"
+              className="space-y-5"
               onSubmit={editForm.handleSubmit((values) => updateMutation.mutate(values))}
             >
               <div className="space-y-1.5">
-                <Label htmlFor="edit-collection-title">Title</Label>
+                <Label htmlFor="edit-collection-title" className="text-xs font-medium">
+                  Title
+                </Label>
                 <Input
                   id="edit-collection-title"
+                  className="bg-input border-border"
+                  aria-invalid={editTitleInvalid || undefined}
                   {...editForm.register('title')}
-                  className="bg-input"
                 />
+                {editForm.formState.errors.title ? (
+                  <p className="text-xs text-destructive">
+                    {editForm.formState.errors.title.message}
+                  </p>
+                ) : null}
               </div>
               <div className="space-y-1.5">
-                <Label htmlFor="edit-collection-description">Description</Label>
+                <Label htmlFor="edit-collection-description" className="text-xs font-medium">
+                  Description <span className="text-muted-foreground font-normal">(optional)</span>
+                </Label>
                 <Textarea
                   id="edit-collection-description"
-                  rows={3}
+                  className="bg-input border-border h-44 sm:h-40 md:h-36"
+                  aria-invalid={editDescriptionInvalid || undefined}
                   {...editForm.register('description')}
-                  className="bg-input"
                 />
+                {editForm.formState.errors.description ? (
+                  <p className="text-xs text-destructive">
+                    {editForm.formState.errors.description.message}
+                  </p>
+                ) : null}
               </div>
               <div className="flex flex-wrap gap-2">
                 <Button
@@ -375,9 +437,16 @@ export function SellMyCollections() {
                   disabled={updateMutation.isPending}
                   className="border-border"
                 >
-                  Save metadata
+                  {updateMutation.isPending ? (
+                    <>
+                      <Loader2 className="size-3.5 mr-1.5 animate-spin" aria-hidden />
+                      Saving…
+                    </>
+                  ) : (
+                    'Save metadata'
+                  )}
                 </Button>
-                {detail.status === 'DRAFT' ? (
+                {managedDetail.status === 'DRAFT' ? (
                   <Button
                     type="button"
                     size="sm"
@@ -385,10 +454,17 @@ export function SellMyCollections() {
                     disabled={actionMutation.isPending}
                     onClick={() => actionMutation.mutate('publish')}
                   >
-                    Publish
+                    {pendingAction === 'publish' ? (
+                      <>
+                        <Loader2 className="size-3.5 mr-1.5 animate-spin" aria-hidden />
+                        Publishing…
+                      </>
+                    ) : (
+                      'Publish'
+                    )}
                   </Button>
                 ) : null}
-                {detail.status === 'PUBLISHED' ? (
+                {managedDetail.status === 'PUBLISHED' ? (
                   <Button
                     type="button"
                     variant="outline"
@@ -397,11 +473,20 @@ export function SellMyCollections() {
                     disabled={actionMutation.isPending}
                     onClick={() => actionMutation.mutate('archive')}
                   >
-                    <Archive className="size-3.5 mr-1.5" aria-hidden />
-                    Archive
+                    {pendingAction === 'archive' ? (
+                      <>
+                        <Loader2 className="size-3.5 mr-1.5 animate-spin" aria-hidden />
+                        Archiving…
+                      </>
+                    ) : (
+                      <>
+                        <Archive className="size-3.5 mr-1.5" aria-hidden />
+                        Archive
+                      </>
+                    )}
                   </Button>
                 ) : null}
-                {detail.status === 'ARCHIVED' ? (
+                {managedDetail.status === 'ARCHIVED' ? (
                   <Button
                     type="button"
                     variant="outline"
@@ -410,13 +495,22 @@ export function SellMyCollections() {
                     disabled={actionMutation.isPending}
                     onClick={() => actionMutation.mutate('restore')}
                   >
-                    <RotateCcw className="size-3.5 mr-1.5" aria-hidden />
-                    Restore to draft
+                    {pendingAction === 'restore' ? (
+                      <>
+                        <Loader2 className="size-3.5 mr-1.5 animate-spin" aria-hidden />
+                        Restoring…
+                      </>
+                    ) : (
+                      <>
+                        <RotateCcw className="size-3.5 mr-1.5" aria-hidden />
+                        Restore to draft
+                      </>
+                    )}
                   </Button>
                 ) : null}
-                {detail.status === 'PUBLISHED' ? (
+                {managedDetail.status === 'PUBLISHED' ? (
                   <Button asChild variant="outline" size="sm" className="border-border">
-                    <Link href={`/collections/${detail.id}`}>View public page</Link>
+                    <Link href={`/collections/${managedDetail.id}`}>View public page</Link>
                   </Button>
                 ) : null}
               </div>
@@ -431,86 +525,144 @@ export function SellMyCollections() {
               <p className="text-sm text-muted-foreground">No assets in this collection yet.</p>
             ) : (
               <ul className="space-y-2">
-                {orderedItems.map((item, index) => (
-                  <li
-                    key={item.assetId}
-                    className="flex flex-col sm:flex-row sm:items-center gap-2 rounded-md border border-border/60 px-3 py-2"
-                  >
-                    <div className="min-w-0 flex-1">
-                      <p className="text-sm font-medium text-foreground line-clamp-1">
-                        {item.title}
-                      </p>
-                      <p className="text-[11px] text-muted-foreground font-mono">
-                        {formatUsdWhole(item.price)}
-                        {!item.isAvailable ? ' · unavailable' : ''}
-                      </p>
-                    </div>
-                    {verified && detail.status !== 'ARCHIVED' ? (
-                      <div className="flex gap-1 shrink-0">
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="sm"
-                          className="border-border h-8 w-8 p-0"
-                          disabled={index === 0 || itemMutation.isPending}
-                          aria-label={`Move ${item.title} up`}
-                          onClick={() => moveItem(item.assetId, -1)}
-                        >
-                          <ArrowUp className="size-3.5" />
-                        </Button>
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="sm"
-                          className="border-border h-8 w-8 p-0"
-                          disabled={index === orderedItems.length - 1 || itemMutation.isPending}
-                          aria-label={`Move ${item.title} down`}
-                          onClick={() => moveItem(item.assetId, 1)}
-                        >
-                          <ArrowDown className="size-3.5" />
-                        </Button>
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="sm"
-                          className="border-destructive/40 text-destructive h-8 w-8 p-0"
-                          disabled={itemMutation.isPending}
-                          aria-label={`Remove ${item.title}`}
-                          onClick={() =>
-                            itemMutation.mutate({ type: 'remove', assetId: item.assetId })
-                          }
-                        >
-                          <Trash2 className="size-3.5" />
-                        </Button>
+                {orderedItems.map((item, index) => {
+                  const rowBusy =
+                    pendingItem?.type === 'remove' && pendingItem.assetId === item.assetId
+                  const rowReorderBusy =
+                    pendingItem?.type === 'reorder' && pendingItem.assetId === item.assetId
+                  return (
+                    <li
+                      key={item.assetId}
+                      className="flex flex-col sm:flex-row sm:items-center gap-2 rounded-md border border-border/60 px-3 py-2"
+                    >
+                      <div className="min-w-0 flex-1">
+                        <p className="text-sm font-medium text-foreground line-clamp-1">
+                          {item.title}
+                        </p>
+                        <p className="text-[11px] text-muted-foreground font-mono">
+                          {formatUsdWhole(item.price)}
+                          {!item.isAvailable ? ' · unavailable' : ''}
+                        </p>
                       </div>
-                    ) : null}
-                  </li>
-                ))}
+                      {verified && managedDetail.status !== 'ARCHIVED' ? (
+                        <div className="flex gap-1 shrink-0">
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            className="border-border h-8 w-8 p-0"
+                            disabled={index === 0 || itemMutation.isPending}
+                            aria-label={`Move ${item.title} up`}
+                            onClick={() => moveItem(item.assetId, -1)}
+                          >
+                            {rowReorderBusy ? (
+                              <Loader2 className="size-3.5 animate-spin" aria-hidden />
+                            ) : (
+                              <ArrowUp className="size-3.5" />
+                            )}
+                          </Button>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            className="border-border h-8 w-8 p-0"
+                            disabled={index === orderedItems.length - 1 || itemMutation.isPending}
+                            aria-label={`Move ${item.title} down`}
+                            onClick={() => moveItem(item.assetId, 1)}
+                          >
+                            {rowReorderBusy ? (
+                              <Loader2 className="size-3.5 animate-spin" aria-hidden />
+                            ) : (
+                              <ArrowDown className="size-3.5" />
+                            )}
+                          </Button>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            className="border-destructive/40 text-destructive h-8 w-8 p-0"
+                            disabled={itemMutation.isPending}
+                            aria-label={`Remove ${item.title}`}
+                            onClick={() =>
+                              itemMutation.mutate({ type: 'remove', assetId: item.assetId })
+                            }
+                          >
+                            {rowBusy ? (
+                              <Loader2 className="size-3.5 animate-spin" aria-hidden />
+                            ) : (
+                              <Trash2 className="size-3.5" />
+                            )}
+                          </Button>
+                        </div>
+                      ) : null}
+                    </li>
+                  )
+                })}
               </ul>
             )}
 
-            {verified && detail.status !== 'ARCHIVED' ? (
+            {verified && managedDetail.status !== 'ARCHIVED' ? (
               <div className="flex flex-col sm:flex-row gap-2 pt-2">
-                <Select value={addAssetId || undefined} onValueChange={setAddAssetId}>
-                  <SelectTrigger className="bg-input border-border" aria-label="Add own asset">
-                    <SelectValue placeholder="Add an asset you own…" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {ownAssets.map((a) => (
-                      <SelectItem key={a.id} value={a.id}>
-                        {a.title}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                {listingsPending ? (
+                  <div className="flex-1 min-w-0">
+                    <SellSelectControlSkeleton label="Loading assets" />
+                  </div>
+                ) : listingsQuery.isError ? (
+                  <div className="flex-1 min-w-0">
+                    <SellQueryError
+                      title="Could not load your assets."
+                      onRetry={() => runQueryInBackground(listingsQuery.refetch())}
+                      retrying={listingsQuery.isRefetching}
+                    />
+                  </div>
+                ) : (
+                  <Select
+                    value={addAssetId || undefined}
+                    onValueChange={setAddAssetId}
+                    disabled={ownAssets.length === 0}
+                  >
+                    <SelectTrigger
+                      className="bg-input border-border flex-1 min-w-0"
+                      aria-label="Add own asset"
+                    >
+                      <SelectValue
+                        placeholder={
+                          ownAssets.length === 0
+                            ? 'No available assets to add'
+                            : 'Add an asset you own…'
+                        }
+                      />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {ownAssets.map((a) => (
+                        <SelectItem key={a.id} value={a.id}>
+                          {a.title}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )}
                 <Button
                   type="button"
                   variant="outline"
                   className="border-border shrink-0"
-                  disabled={!addAssetId || ownAssets.length === 0 || itemMutation.isPending}
+                  disabled={
+                    listingsPending ||
+                    listingsQuery.isError ||
+                    !addAssetId ||
+                    ownAssets.length === 0 ||
+                    itemMutation.isPending
+                  }
                   onClick={() => itemMutation.mutate({ type: 'add', assetId: addAssetId })}
                 >
-                  Add item
+                  {pendingItem?.type === 'add' ? (
+                    <>
+                      <Loader2 className="size-3.5 mr-1.5 animate-spin" aria-hidden />
+                      Adding…
+                    </>
+                  ) : (
+                    'Add item'
+                  )}
                 </Button>
               </div>
             ) : null}

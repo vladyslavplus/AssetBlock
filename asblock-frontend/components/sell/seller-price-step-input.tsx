@@ -9,6 +9,7 @@ const MIN_USD = 0.01
 export interface SellerPriceStepInputProps {
   id?: string
   'aria-label'?: string
+  'aria-invalid'?: boolean
   value: number | undefined
   onChange: (value: number | undefined) => void
   onBlur: () => void
@@ -21,6 +22,7 @@ export interface SellerPriceStepInputProps {
 export function SellerPriceStepInput({
   id,
   'aria-label': ariaLabel,
+  'aria-invalid': ariaInvalid,
   value,
   onChange,
   onBlur,
@@ -69,6 +71,7 @@ export function SellerPriceStepInput({
       <input
         id={id}
         aria-label={ariaLabel}
+        aria-invalid={ariaInvalid || undefined}
         type="number"
         inputMode="decimal"
         min={MIN_USD}

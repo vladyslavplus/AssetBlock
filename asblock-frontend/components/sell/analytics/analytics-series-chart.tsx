@@ -29,7 +29,6 @@ import type {
   AnalyticsSeriesMetric,
   AnalyticsSeriesPoint,
 } from '@/lib/analytics/analytics-types'
-import { cn } from '@/lib/utils'
 
 interface AnalyticsSeriesChartProps {
   series: AnalyticsSeriesPoint[]
@@ -122,7 +121,7 @@ export function AnalyticsSeriesChart({
   return (
     <section
       aria-labelledby="analytics-series-heading"
-      className={cn('space-y-4', isUpdating && 'opacity-80')}
+      className="space-y-4"
       aria-busy={isUpdating}
     >
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -151,8 +150,6 @@ export function AnalyticsSeriesChart({
           </ToggleGroupItem>
         </ToggleGroup>
       </div>
-
-      {isUpdating ? <p className="text-xs text-muted-foreground">Updating…</p> : null}
 
       <p className="text-sm text-muted-foreground">
         Total {metricLabel(metric).toLowerCase()} in range:{' '}

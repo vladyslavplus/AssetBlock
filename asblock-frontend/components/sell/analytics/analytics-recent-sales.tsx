@@ -14,7 +14,6 @@ import {
 } from '@/components/ui/table'
 import { formatCount, formatMoneyCents, formatUtcDateTime } from '@/lib/analytics/analytics-format'
 import type { AnalyticsSaleItem } from '@/lib/analytics/analytics-types'
-import { cn } from '@/lib/utils'
 
 interface AnalyticsRecentSalesProps {
   items: AnalyticsSaleItem[]
@@ -34,27 +33,20 @@ export function AnalyticsRecentSales({
   hasMore,
   isFetchingMore,
   isFetchNextPageError = false,
-  fetchNextPageError,
   onLoadMore,
   onRetryLoadMore,
   isUpdating = false,
 }: AnalyticsRecentSalesProps) {
-  const loadMoreErrorMessage =
-    fetchNextPageError instanceof Error ? fetchNextPageError.message : 'Could not load more sales.'
+  const loadMoreErrorMessage = 'Could not load more sales.'
 
   return (
-    <section
-      aria-labelledby="analytics-sales-heading"
-      className={cn('space-y-4', isUpdating && 'opacity-80')}
-      aria-busy={isUpdating}
-    >
+    <section aria-labelledby="analytics-sales-heading" className="space-y-4" aria-busy={isUpdating}>
       <div>
         <h2 id="analytics-sales-heading" className="text-lg font-semibold">
           Recent sales
         </h2>
         <p className="text-sm text-muted-foreground">
           Newest orders first · buyer and payment details are not shown
-          {isUpdating ? ' · Updating…' : ''}
         </p>
       </div>
 

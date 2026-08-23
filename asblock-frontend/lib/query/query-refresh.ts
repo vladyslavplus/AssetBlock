@@ -1,11 +1,5 @@
 import type { InvalidateQueryFilters, QueryClient } from '@tanstack/react-query'
-
-function isAbortError(error: unknown): boolean {
-  return (
-    (error instanceof DOMException && error.name === 'AbortError') ||
-    (typeof error === 'object' && error !== null && 'name' in error && error.name === 'AbortError')
-  )
-}
+import { isAbortError } from '@/lib/http/is-abort-error'
 
 export function runQueryInBackground(task: Promise<unknown>): void {
   void task.catch((error: unknown) => {
