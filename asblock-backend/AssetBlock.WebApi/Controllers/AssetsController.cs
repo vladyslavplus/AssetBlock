@@ -114,7 +114,7 @@ public sealed class AssetsController(
     /// <summary>
     /// Upload a new asset archive. Requires an authenticated user with a verified email address.
     /// Multipart/form-data; form field name: "file".
-    /// Allowed extensions: .zip, .7z, .rar, .tar, .tar.gz, .tgz. Max size 250 MiB.
+    /// Allowed extensions: .zip, .tar, .tar.gz, .tgz. Max size 250 MiB.
     /// </summary>
     [HttpPost(ApiRoutes.Assets.UPLOAD)]
     [Authorize(Policy = AuthorizationPolicies.VERIFIED_EMAIL)]

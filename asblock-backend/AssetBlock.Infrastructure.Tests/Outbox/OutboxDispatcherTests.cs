@@ -8,6 +8,7 @@ using NSubstitute.ExceptionExtensions;
 
 namespace AssetBlock.Infrastructure.Tests.Outbox;
 
+[Collection(Observability.AssetBlockDiagnosticsCollection.NAME)]
 public sealed class OutboxDispatcherTests
 {
     [Fact]
@@ -59,5 +60,117 @@ public sealed class OutboxDispatcherTests
             Arg.Any<Guid>(),
             Arg.Any<Guid>(),
             Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task DispatchBatch_WhenHandlerMissing_ShouldRecordMissingHandlerWithElapsedDuration()
+    {
+        var lockToken = Guid.NewGuid();
+        var message = new OutboxMessage
+        {
+            Id = Guid.NewGuid(),
+            Type = "test.missing",
+            Payload = "{}",
+            LockToken = lockToken
+        };
+        var outbox = Substitute.For<IOutboxStore>();
+        outbox.ClaimPendingBatch(Arg.Any<int>(), Arg.Any<TimeSpan>(), Arg.Any<CancellationToken>())
+            .Returns([message]);
+        outbox.MarkFailed(Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<DateTimeOffset>(), Arg.Any<CancellationToken>())
+            .Returns(async _ =>
+            {
+                await Task.Delay(15);
+                return true;
+            });
+
+        var services = new ServiceCollection();
+        services.AddSingleton(outbox);
+        await using var provider = services.BuildServiceProvider();
+        var dispatcher = new OutboxDispatcher(
+            provider.GetRequiredService<IServiceScopeFactory>(),
+            NullLogger<OutboxDispatcher>.Instance);
+
+        using var listener = new System.Diagnostics.Metrics.MeterListener();
+        listener.InstrumentPublished = (instrument, l) =>
+        {
+            if (instrument.Meter.Name == "AssetBlock.Backend")
+            {
+                l.EnableMeasurementEvents(instrument);
+            }
+        };
+
+        var recordedOutcomes = new List<string?>();
+        var recordedDurations = new List<double>();
+
+        listener.SetMeasurementEventCallback<double>((instrument, measurement, tags, _) =>
+        {
+            if (instrument.Name == "assetblock.outbox.processing.duration")
+            {
+                recordedOutcomes.Add(tags.ToArray().FirstOrDefault(t => t.Key == "outbox.outcome").Value?.ToString());
+                recordedDurations.Add(measurement);
+            }
+        });
+
+        listener.Start();
+
+        await dispatcher.DispatchBatch(CancellationToken.None);
+
+        listener.RecordObservableInstruments();
+
+        recordedOutcomes.Should().ContainSingle().Which.Should().Be("missing_handler");
+        recordedDurations.Should().ContainSingle().Which.Should().BeGreaterThan(0);
+    }
+
+    [Fact]
+    public async Task DispatchBatch_WhenMissingHandlerMarkFails_ShouldRecordFailureOnce()
+    {
+        var lockToken = Guid.NewGuid();
+        var message = new OutboxMessage
+        {
+            Id = Guid.NewGuid(),
+            Type = "test.missing",
+            Payload = "{}",
+            LockToken = lockToken
+        };
+        var outbox = Substitute.For<IOutboxStore>();
+        outbox.ClaimPendingBatch(Arg.Any<int>(), Arg.Any<TimeSpan>(), Arg.Any<CancellationToken>())
+            .Returns([message]);
+        outbox.MarkFailed(Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<DateTimeOffset>(), Arg.Any<CancellationToken>())
+            .ThrowsAsync(new InvalidOperationException("db offline"));
+
+        var services = new ServiceCollection();
+        services.AddSingleton(outbox);
+        await using var provider = services.BuildServiceProvider();
+        var dispatcher = new OutboxDispatcher(
+            provider.GetRequiredService<IServiceScopeFactory>(),
+            NullLogger<OutboxDispatcher>.Instance);
+
+        using var listener = new System.Diagnostics.Metrics.MeterListener();
+        listener.InstrumentPublished = (instrument, l) =>
+        {
+            if (instrument.Meter.Name == "AssetBlock.Backend")
+            {
+                l.EnableMeasurementEvents(instrument);
+            }
+        };
+
+        var recordedOutcomes = new List<string?>();
+
+        listener.SetMeasurementEventCallback<double>((instrument, _, tags, _) =>
+        {
+            if (instrument.Name == "assetblock.outbox.processing.duration")
+            {
+                recordedOutcomes.Add(tags.ToArray().FirstOrDefault(t => t.Key == "outbox.outcome").Value?.ToString());
+            }
+        });
+
+        listener.Start();
+
+        var act = () => dispatcher.DispatchBatch(CancellationToken.None);
+        await act.Should().ThrowAsync<InvalidOperationException>();
+
+        listener.RecordObservableInstruments();
+
+        recordedOutcomes.Should().ContainSingle().Which.Should().Be("failure");
     }
 }

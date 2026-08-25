@@ -20,7 +20,6 @@ public class HandleStripeWebhookCommandHandlerTests
 {
     private readonly IPaymentService _paymentServiceMock;
     private readonly IAssetStore _assetStoreMock;
-    private readonly IBundleStore _bundleStoreMock;
     private readonly IOrderStore _orderStoreMock;
     private readonly ICheckoutIntentStore _checkoutIntentStoreMock;
     private readonly IUserStore _userStoreMock;
@@ -33,7 +32,7 @@ public class HandleStripeWebhookCommandHandlerTests
     {
         _paymentServiceMock = Substitute.For<IPaymentService>();
         _assetStoreMock = Substitute.For<IAssetStore>();
-        _bundleStoreMock = Substitute.For<IBundleStore>();
+        var bundleStoreMock = Substitute.For<IBundleStore>();
         _orderStoreMock = Substitute.For<IOrderStore>();
         _checkoutIntentStoreMock = Substitute.For<ICheckoutIntentStore>();
         _userStoreMock = Substitute.For<IUserStore>();
@@ -57,7 +56,7 @@ public class HandleStripeWebhookCommandHandlerTests
         _handler = new HandleStripeWebhookCommandHandler(
             _paymentServiceMock,
             _assetStoreMock,
-            _bundleStoreMock,
+            bundleStoreMock,
             _orderStoreMock,
             _checkoutIntentStoreMock,
             _userStoreMock,
@@ -701,6 +700,9 @@ public class HandleStripeWebhookCommandHandlerTests
         LicenseCode = AssetLicenseCode.PERSONAL,
         LicenseTemplateVersion = "1.0",
         LicenseDisplayName = "Personal use",
-        LicenseTerms = "terms"
+        LicenseTerms = "terms",
+        ProcessingStatus = AssetVersionProcessingStatus.READY,
+        ProcessingUpdatedAt = DateTimeOffset.UtcNow,
+        CreatedAt = DateTimeOffset.UtcNow
     };
 }

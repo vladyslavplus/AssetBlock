@@ -65,7 +65,7 @@ public sealed class DependencyInjectionTests
                 DefaultSuccessUrl = "http://localhost:3000/payment/success",
                 DefaultCancelUrl = "http://localhost:3000/payment/cancel"
             },
-            FileUpload = new { MaxFileBytes = 262144000L, AllowedExtensions = new[] { ".zip", ".7z", ".rar", ".tar", ".tar.gz", ".tgz" } },
+            FileUpload = new { MaxFileBytes = 262144000L, AllowedExtensions = new[] { ".zip", ".tar", ".tar.gz", ".tgz" } },
             Email = new
             {
                 Provider = "Smtp",
@@ -182,7 +182,7 @@ public sealed class DependencyInjectionTests
                 DefaultSuccessUrl = "http://localhost:3000/payment/success",
                 DefaultCancelUrl = "http://localhost:3000/payment/cancel"
             },
-            FileUpload = new { MaxFileBytes = 262144000L, AllowedExtensions = new[] { ".zip", ".7z", ".rar", ".tar", ".tar.gz", ".tgz" } },
+            FileUpload = new { MaxFileBytes = 262144000L, AllowedExtensions = new[] { ".zip", ".tar", ".tar.gz", ".tgz" } },
             Email = new
             {
                 Provider = "Smtp",

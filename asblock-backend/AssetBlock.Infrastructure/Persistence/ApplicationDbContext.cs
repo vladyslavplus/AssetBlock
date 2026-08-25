@@ -35,6 +35,8 @@ public sealed class ApplicationDbContext(DbContextOptions<ApplicationDbContext> 
     public DbSet<ProductAnalyticsDaily> ProductAnalyticsDaily => Set<ProductAnalyticsDaily>();
     public DbSet<CollectionAnalyticsDaily> CollectionAnalyticsDaily => Set<CollectionAnalyticsDaily>();
     public DbSet<TrafficAnalyticsDaily> TrafficAnalyticsDaily => Set<TrafficAnalyticsDaily>();
+    public DbSet<AssetProcessingJob> AssetProcessingJobs => Set<AssetProcessingJob>();
+    public DbSet<AssetArchiveAnalysis> AssetArchiveAnalyses => Set<AssetArchiveAnalysis>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

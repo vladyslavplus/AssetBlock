@@ -1,7 +1,11 @@
 using AssetBlock.Domain.Abstractions.Services;
 using AssetBlock.Domain.Core.Primitives.AppSettingsOptions;
+using AssetBlock.Domain.Core.Dto;
+using AssetBlock.Domain.Core.Enums;
 using AssetBlock.Infrastructure.Email;
 using AssetBlock.Infrastructure.HostedServices;
+using AssetBlock.Infrastructure.HostedServices.AssetProcessing;
+using AssetBlock.Infrastructure.HostedServices.AssetProcessing.Handlers;
 using AssetBlock.Infrastructure.Options;
 using AssetBlock.Infrastructure.Outbox;
 using AssetBlock.Infrastructure.Persistence;
@@ -63,6 +67,16 @@ public static class DependencyInjection
             .ValidateOnStart();
         services.AddSingleton<IValidateOptions<DataProtectionOptions>, DataProtectionOptionsValidator>();
 
+        services.AddOptions<ObservabilityOptions>()
+            .Bind(configuration.GetSection(ObservabilityOptions.SECTION_NAME))
+            .ValidateOnStart();
+        services.AddSingleton<IValidateOptions<ObservabilityOptions>, ObservabilityOptionsValidator>();
+
+        services.AddOptions<AssetProcessingOptions>()
+            .Bind(configuration.GetSection(AssetProcessingOptions.SECTION_NAME))
+            .ValidateOnStart();
+        services.AddSingleton<IValidateOptions<AssetProcessingOptions>, AssetProcessingOptionsValidator>();
+
         services.TryAddSingleton(TimeProvider.System);
         services.AddAnalyticsDistributedRateLimiting(configuration, environment);
         services.AddAnalyticsAggregationOptions(configuration);
@@ -74,11 +88,32 @@ public static class DependencyInjection
             ServiceLifetime.Scoped);
         services.AddHostedService<DatabaseMigrationService>();
         services.AddHostedService<OutboxDispatcher>();
+        services.AddOptions<ArchiveInspectionOptions>()
+            .Bind(configuration.GetSection(ArchiveInspectionOptions.SECTION_NAME))
+            .ValidateOnStart();
+        services.AddSingleton<IValidateOptions<ArchiveInspectionOptions>, ArchiveInspectionOptionsValidator>();
+
+        services.AddOptions<ClamAvOptions>()
+            .Bind(configuration.GetSection(ClamAvOptions.SECTION_NAME))
+            .ValidateOnStart();
+        services.AddSingleton<IValidateOptions<ClamAvOptions>, ClamAvOptionsValidator>();
+
         services.AddHostedService<StorageOrphanCleanupWorker>();
         services.AddHostedService<CheckoutReservationCleanupWorker>();
         services.AddHostedService<AnalyticsAggregationWorker>();
+        services.AddHostedService<AssetProcessingWorker>();
+        services.AddSingleton<IAssetProcessingJobRegistry, AssetProcessingJobRegistry>();
+        services.AddSingleton<IAssetProcessingJobHandlerAdapter, AssetProcessingJobHandlerAdapter<ArchiveInspectionJobHandler, ArchiveInspectionPayload, ArchiveInspectionResult>>(
+            _ => new AssetProcessingJobHandlerAdapter<ArchiveInspectionJobHandler, ArchiveInspectionPayload, ArchiveInspectionResult>(AssetProcessingJobType.ARCHIVE_INSPECTION));
+        services.AddSingleton<IAssetProcessingJobHandlerAdapter, AssetProcessingJobHandlerAdapter<MalwareScanJobHandler, MalwareScanPayload, MalwareScanResult>>(
+            _ => new AssetProcessingJobHandlerAdapter<MalwareScanJobHandler, MalwareScanPayload, MalwareScanResult>(AssetProcessingJobType.MALWARE_SCAN));
+        services.AddScoped<ArchiveInspectionJobHandler>();
+        services.AddScoped<MalwareScanJobHandler>();
+        services.AddSingleton<IArchiveSafetyInspector, ArchiveSafetyInspector>();
+        services.AddSingleton<IContentMalwareScanner, ClamAvContentMalwareScanner>();
         services.AddScoped<IUnitOfWork, EfUnitOfWork>();
         services.AddScoped<IOutboxStore, OutboxStore>();
+        services.AddScoped<IAssetProcessingJobStore, AssetProcessingJobStore>();
         services.AddScoped<IOutboxMessageHandler, AssetBlobDeleteOutboxHandler>();
         services.AddScoped<IOutboxMessageHandler, OrderCompletedOutboxHandler>();
         services.AddScoped<IOutboxMessageHandler, EmailDispatchOutboxHandler>();
@@ -92,6 +127,8 @@ public static class DependencyInjection
 
         services.AddScoped<ICategoryStore, CategoryStore>();
         services.AddScoped<IAssetStore, AssetStore>();
+        services.AddScoped<IAssetArchiveAnalysisStore, AssetArchiveAnalysisStore>();
+        services.AddScoped<IAssetProcessingLifecycleStore, AssetProcessingLifecycleStore>();
         services.AddScoped<IPurchaseStore, PurchaseStore>();
         services.AddScoped<ICheckoutIntentStore, CheckoutIntentStore>();
         services.AddScoped<ICollectionStore, CollectionStore>();
@@ -109,7 +146,6 @@ public static class DependencyInjection
         services.AddScoped<IPaymentService, StripePaymentService>();
         services.AddScoped<IDownloadService, DownloadService>();
         services.AddAssetStorage(configuration);
-        services.AddSingleton<IAssetArchiveInspector, SharpCompressAssetArchiveInspector>();
         services.AddSingleton<IEncryptionService, AesGcmEncryptionService>();
         services.AddSingleton<IPasswordHasher, PasswordHasher>();
 
@@ -145,6 +181,19 @@ public static class DependencyInjection
             builder.AddTimeout(TimeSpan.FromSeconds(ResilienceConstants.Stripe.TIMEOUT_SECONDS));
         });
 
+        return services;
+    }
+
+    public static IServiceCollection AddAssetProcessingJobHandler<THandler, TPayload, TResult>(
+        this IServiceCollection services,
+        AssetProcessingJobType jobType)
+        where THandler : class, IAssetProcessingJobHandler<TPayload, TResult>
+        where TPayload : AssetProcessingPayload
+        where TResult : AssetProcessingResult
+    {
+        services.AddScoped<THandler>();
+        services.AddSingleton<IAssetProcessingJobHandlerAdapter>(
+            new AssetProcessingJobHandlerAdapter<THandler, TPayload, TResult>(jobType));
         return services;
     }
 }

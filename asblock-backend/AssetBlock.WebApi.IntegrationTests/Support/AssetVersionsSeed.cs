@@ -78,6 +78,8 @@ internal static class AssetVersionsSeed
                 LicenseTemplateVersion = license.TemplateVersion,
                 LicenseDisplayName = license.DisplayName,
                 LicenseTerms = license.TermsPlainText,
+                ProcessingStatus = AssetVersionProcessingStatus.READY,
+                ProcessingUpdatedAt = now.AddMinutes(i),
                 CreatedAt = now.AddMinutes(i)
             });
         }

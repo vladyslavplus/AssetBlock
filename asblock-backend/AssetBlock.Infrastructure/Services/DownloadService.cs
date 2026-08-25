@@ -1,4 +1,5 @@
 using AssetBlock.Domain.Abstractions.Services;
+using AssetBlock.Domain.Core.Enums;
 using AssetBlock.Domain.Core.Primitives.Api;
 using System.Globalization;
 
@@ -112,6 +113,11 @@ internal sealed class DownloadService(
             if (requested.VersionNumber < purchasedVersionNumber)
             {
                 return VersionResolution.Forbidden;
+            }
+
+            if (requested.ProcessingStatus != AssetVersionProcessingStatus.READY)
+            {
+                return null;
             }
 
             return new VersionResolution(requested.StorageKey, requested.FileName);

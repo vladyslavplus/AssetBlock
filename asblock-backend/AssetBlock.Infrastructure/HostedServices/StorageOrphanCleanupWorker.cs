@@ -2,6 +2,8 @@ using AssetBlock.Domain.Abstractions.Services;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using System.Diagnostics;
+using AssetBlock.Infrastructure.Observability;
 
 namespace AssetBlock.Infrastructure.HostedServices;
 
@@ -69,37 +71,63 @@ internal sealed class StorageOrphanCleanupWorker(
         var storage = scope.ServiceProvider.GetRequiredService<IAssetStorageService>();
         var assetStore = scope.ServiceProvider.GetRequiredService<IAssetStore>();
 
-        var objects = await storage.ListObjects(ASSETS_PREFIX, cancellationToken);
-        var cutoff = DateTimeOffset.UtcNow - _orphanAge;
+        var stopwatch = Stopwatch.StartNew();
+        var deletedCount = 0;
+        var failedCount = 0;
+        var outcome = DiagnosticsOutcome.SUCCESS;
 
-        foreach (var obj in objects)
+        try
         {
-            cancellationToken.ThrowIfCancellationRequested();
+            var objects = await storage.ListObjects(ASSETS_PREFIX, cancellationToken);
+            var cutoff = DateTimeOffset.UtcNow - _orphanAge;
 
-            if (obj.LastModified is null || obj.LastModified > cutoff)
+            foreach (var obj in objects)
             {
-                continue;
-            }
+                cancellationToken.ThrowIfCancellationRequested();
 
-            try
-            {
-                if (await assetStore.ExistsByStorageKey(obj.Key, cancellationToken))
+                if (obj.LastModified is null || obj.LastModified > cutoff)
                 {
                     continue;
                 }
 
-                await storage.Delete(obj.Key, cancellationToken);
-                logger.LogInformation("Deleted orphan storage object {Key} (LastModified={LastModified})",
-                    obj.Key, obj.LastModified);
+                try
+                {
+                    if (await assetStore.ExistsByStorageKey(obj.Key, cancellationToken))
+                    {
+                        continue;
+                    }
+
+                    await storage.Delete(obj.Key, cancellationToken);
+                    deletedCount++;
+                    logger.LogInformation("Deleted orphan storage object {Key} (LastModified={LastModified})",
+                        obj.Key, obj.LastModified);
+                }
+                catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+                {
+                    throw;
+                }
+                catch (Exception ex)
+                {
+                    failedCount++;
+                    outcome = DiagnosticsOutcome.PARTIAL_FAILURE;
+                    logger.LogWarning(ex, "Failed to evaluate/delete orphan object {Key}", obj.Key);
+                }
             }
-            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
-            {
-                throw;
-            }
-            catch (Exception ex)
-            {
-                logger.LogWarning(ex, "Failed to evaluate/delete orphan object {Key}", obj.Key);
-            }
+        }
+        catch (OperationCanceledException)
+        {
+            outcome = DiagnosticsOutcome.CANCELLED;
+            throw;
+        }
+        catch (Exception)
+        {
+            outcome = DiagnosticsOutcome.FAILURE;
+            failedCount = Math.Max(failedCount, 1);
+            throw;
+        }
+        finally
+        {
+            AssetBlockDiagnostics.RecordOrphanCleanup(stopwatch.Elapsed, outcome, deletedCount, failedCount);
         }
     }
 }

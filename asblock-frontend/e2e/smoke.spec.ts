@@ -284,7 +284,7 @@ test('seller upload client validation and successful mocked publish', async ({ p
   await seedRefreshCookie(page)
   await interceptBrowserApi(page, sessionUser)
   await page.goto('/sell?tab=upload')
-  await page.getByRole('button', { name: /publish asset/i }).click()
+  await page.getByRole('button', { name: /upload asset/i }).click()
   await expect(page.getByText(/title is required/i)).toBeVisible()
   await page.getByRole('textbox', { name: /^title$/i }).fill('New Pack')
   await page.getByRole('spinbutton', { name: 'Price in USD' }).fill('11')
@@ -294,8 +294,8 @@ test('seller upload client validation and successful mocked publish', async ({ p
     mimeType: 'application/zip',
     buffer: Buffer.from('zip'),
   })
-  await page.getByRole('button', { name: /publish asset/i }).click()
-  await expect(page).toHaveURL(new RegExp(`/assets/${assetId}`))
+  await page.getByRole('button', { name: /upload asset/i }).click()
+  await expect(page).toHaveURL(/\/sell\?tab=listings/)
 })
 
 test('checkout unavailable never navigates to Stripe', async ({ page }) => {

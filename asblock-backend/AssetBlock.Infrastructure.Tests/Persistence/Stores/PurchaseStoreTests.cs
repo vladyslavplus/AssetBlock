@@ -283,6 +283,8 @@ public sealed class PurchaseStoreTests
         LicenseTemplateVersion = "1.0",
         LicenseDisplayName = "Personal",
         LicenseTerms = "terms",
+        ProcessingStatus = AssetVersionProcessingStatus.READY,
+        ProcessingUpdatedAt = DateTimeOffset.UtcNow,
         CreatedAt = DateTimeOffset.UtcNow
     };
 }

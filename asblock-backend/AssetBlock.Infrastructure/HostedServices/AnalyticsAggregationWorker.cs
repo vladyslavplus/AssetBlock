@@ -7,6 +7,7 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using System.Diagnostics;
+using AssetBlock.Infrastructure.Observability;
 
 namespace AssetBlock.Infrastructure.HostedServices;
 
@@ -81,30 +82,50 @@ internal sealed class AnalyticsAggregationWorker(
         var store = scope.ServiceProvider.GetRequiredService<IAnalyticsEventStore>();
 
         var rollupStopwatch = Stopwatch.StartNew();
-        var rollup = await store.TryAcquireAndRecomputeDaily(
-            currentDayUtc,
-            previousDayUtc,
-            now,
-            opts.CommandTimeoutSeconds,
-            cancellationToken);
-
-        if (rollup.Outcome == AnalyticsDailyRecomputeOutcome.COMPLETED)
+        var outcome = DiagnosticsOutcome.SUCCESS;
+        
+        try
         {
-            logger.LogInformation(
-                "Analytics daily rollup completed in {DurationMs}ms for days {PreviousDayUtc} and {CurrentDayUtc}; upserted seller={SellerRows} product={ProductRows} collection={CollectionRows} traffic={TrafficRows}",
-                rollupStopwatch.ElapsedMilliseconds,
-                previousDayUtc,
+            var rollup = await store.TryAcquireAndRecomputeDaily(
                 currentDayUtc,
-                rollup.SellerRowsUpserted,
-                rollup.ProductRowsUpserted,
-                rollup.CollectionRowsUpserted,
-                rollup.TrafficRowsUpserted);
+                previousDayUtc,
+                now,
+                opts.CommandTimeoutSeconds,
+                cancellationToken);
+
+            if (rollup.Outcome == AnalyticsDailyRecomputeOutcome.COMPLETED)
+            {
+                logger.LogInformation(
+                    "Analytics daily rollup completed in {DurationMs}ms for days {PreviousDayUtc} and {CurrentDayUtc}; upserted seller={SellerRows} product={ProductRows} collection={CollectionRows} traffic={TrafficRows}",
+                    rollupStopwatch.ElapsedMilliseconds,
+                    previousDayUtc,
+                    currentDayUtc,
+                    rollup.SellerRowsUpserted,
+                    rollup.ProductRowsUpserted,
+                    rollup.CollectionRowsUpserted,
+                    rollup.TrafficRowsUpserted);
+            }
+            else
+            {
+                outcome = DiagnosticsOutcome.SKIPPED_LOCKED;
+                logger.LogDebug(
+                    "Analytics daily rollup skipped after {DurationMs}ms; advisory lock held by another worker",
+                    rollupStopwatch.ElapsedMilliseconds);
+            }
         }
-        else
+        catch (OperationCanceledException)
         {
-            logger.LogDebug(
-                "Analytics daily rollup skipped after {DurationMs}ms; advisory lock held by another worker",
-                rollupStopwatch.ElapsedMilliseconds);
+            outcome = DiagnosticsOutcome.CANCELLED;
+            throw;
+        }
+        catch (Exception)
+        {
+            outcome = DiagnosticsOutcome.FAILURE;
+            throw;
+        }
+        finally
+        {
+            AssetBlockDiagnostics.RecordAnalyticsAggregation(rollupStopwatch.Elapsed, outcome);
         }
 
         if (_lastRetentionDayUtc == currentDayUtc)

@@ -3,7 +3,7 @@ import { ASSET_LICENSE_CODES } from '@/lib/assets/license-types'
 import { marketplacePriceSchema } from '@/lib/marketplace/price-schema'
 
 export const ASSET_UPLOAD_MAX_BYTES = 250 * 1024 * 1024
-export const ASSET_UPLOAD_ALLOWED_EXTENSIONS = ['.zip', '.7z', '.rar', '.tar', '.tar.gz', '.tgz']
+export const ASSET_UPLOAD_ALLOWED_EXTENSIONS = ['.zip', '.tar', '.tar.gz', '.tgz']
 
 function hasAllowedArchiveExtension(file: File): boolean {
   const fileName = file.name.toLowerCase()
@@ -30,7 +30,7 @@ export const assetUploadFormSchema = z.object({
     )
     .refine(
       (file) => !(file instanceof File) || hasAllowedArchiveExtension(file),
-      'Choose a .zip, .7z, .rar, .tar, .tar.gz, or .tgz archive',
+      'Choose a .zip, .tar, .tar.gz, or .tgz archive',
     ),
 })
 
@@ -66,7 +66,7 @@ export const publishVersionFormSchema = z.object({
     )
     .refine(
       (file) => !(file instanceof File) || hasAllowedArchiveExtension(file),
-      'Choose a .zip, .7z, .rar, .tar, .tar.gz, or .tgz archive',
+      'Choose a .zip, .tar, .tar.gz, or .tgz archive',
     ),
 })
 

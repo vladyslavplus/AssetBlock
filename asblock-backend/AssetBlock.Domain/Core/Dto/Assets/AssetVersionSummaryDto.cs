@@ -1,3 +1,5 @@
+using AssetBlock.Domain.Core.Enums;
+
 namespace AssetBlock.Domain.Core.Dto.Assets;
 
 public sealed record AssetVersionSummaryDto(
@@ -9,4 +11,8 @@ public sealed record AssetVersionSummaryDto(
     string ContentSha256,
     string ReleaseNotes,
     DateTimeOffset CreatedAt,
-    AssetLicenseSummaryDto License);
+    AssetLicenseSummaryDto License,
+    AssetVersionProcessingStatus ProcessingStatus = AssetVersionProcessingStatus.READY,
+    string? ProcessingErrorCode = null,
+    string? ProcessingErrorSummary = null,
+    DateTimeOffset? ProcessingUpdatedAt = null);

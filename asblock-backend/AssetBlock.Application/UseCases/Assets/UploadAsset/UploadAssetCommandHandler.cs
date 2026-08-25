@@ -2,10 +2,10 @@ using System.IO.Pipelines;
 using AssetBlock.Application.Common;
 using AssetBlock.Domain.Abstractions.Services;
 using AssetBlock.Domain.Core.Constants;
+using AssetBlock.Domain.Core.Dto;
 using AssetBlock.Domain.Core.Dto.Audit;
 using AssetBlock.Domain.Core.Entities;
 using AssetBlock.Domain.Core.Enums;
-using AssetBlock.Domain.Core.Exceptions;
 using AssetBlock.Domain.Core.Licenses;
 using AssetBlock.Domain.Core.Primitives.AppSettingsOptions;
 using Ardalis.Result;
@@ -21,7 +21,7 @@ internal sealed class UploadAssetCommandHandler(
     ITagStore tagStore,
     IAssetStorageService assetStorageService,
     IEncryptionService encryptionService,
-    IAssetArchiveInspector archiveInspector,
+    IAssetProcessingJobStore processingJobStore,
     IOptions<FileUploadOptions> fileUploadOptions,
     IUnitOfWork unitOfWork,
     IAuditWriter auditWriter,
@@ -81,26 +81,6 @@ internal sealed class UploadAssetCommandHandler(
             }
         }
 
-        try
-        {
-            if (request.FileContent.CanSeek)
-            {
-                request.FileContent.Position = 0;
-            }
-
-            await archiveInspector.Inspect(request.FileContent, displayFileName, cancellationToken);
-
-            if (request.FileContent.CanSeek)
-            {
-                request.FileContent.Position = 0;
-            }
-        }
-        catch (ArchiveRejectedException ex)
-        {
-            logger.LogWarning(ex, "Archive rejected for upload by {AuthorId}", request.AuthorId);
-            return ResultError.Error<Guid>(ErrorCodes.ERR_ARCHIVE_REJECTED);
-        }
-
         var assetId = Guid.NewGuid();
         var versionId = Guid.NewGuid();
         var storageKey = $"assets/{request.AuthorId}/{assetId}/{versionId}{matchedExtension}";
@@ -141,7 +121,7 @@ internal sealed class UploadAssetCommandHandler(
             Id = versionId,
             AssetId = assetId,
             VersionNumber = 1,
-            IsCurrent = true,
+            IsCurrent = false,
             StorageKey = storageKey,
             FileName = displayFileName,
             ContentLength = request.FileLength,
@@ -151,6 +131,8 @@ internal sealed class UploadAssetCommandHandler(
             LicenseTemplateVersion = licenseTemplate.TemplateVersion,
             LicenseDisplayName = licenseTemplate.DisplayName,
             LicenseTerms = licenseTemplate.TermsPlainText,
+            ProcessingStatus = AssetVersionProcessingStatus.PENDING_INSPECTION,
+            ProcessingUpdatedAt = now,
             CreatedAt = now
         };
 
@@ -159,6 +141,18 @@ internal sealed class UploadAssetCommandHandler(
             await unitOfWork.ExecuteInTransaction(async ct =>
             {
                 await assetStore.AddWithVersion(asset, version, existingTags, ct);
+
+                // Enqueue archive inspection job atomically with the version insert.
+                // Keeps the version from staying permanently in PENDING_INSPECTION.
+                await processingJobStore.Enqueue(
+                    assetId,
+                    versionId,
+                    AssetProcessingJobType.ARCHIVE_INSPECTION,
+                    definitionVersion: AssetProcessingDefaults.DEFINITION_VERSION,
+                    initialDelay: TimeSpan.Zero,
+                    payload: new ArchiveInspectionPayload(),
+                    traceParent: null,
+                    ct);
 
                 await auditWriter.Write(new AuditEvent(
                     AuditActions.ASSET_CREATE,

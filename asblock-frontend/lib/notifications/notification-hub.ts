@@ -2,9 +2,14 @@ import * as signalR from '@microsoft/signalr'
 
 import { formatHubToastMessage } from '@/lib/notifications/notification-ui'
 import { getNotificationsHubUrl } from '@/lib/notifications/notifications-hub-url'
+import {
+  assetProcessingUpdateMessageSchema,
+  type AssetProcessingUpdateMessage,
+} from '@/lib/seller/seller-processing-schemas'
 import { toast } from 'sonner'
 
 const HUB_METHODS = ['OrderReady', 'DownloadReady', 'AssetSold', 'ReviewReceived'] as const
+const ASSET_PROCESSING_UPDATED_METHOD = 'AssetProcessingUpdated'
 
 /** When the last subscriber leaves, delay stop so React Strict Mode / HMR remounts do not abort negotiate. */
 const STOP_DEBOUNCE_MS = 500
@@ -38,8 +43,10 @@ function createHubLogger(): signalR.ILogger {
 }
 
 type InvalidateFn = () => void
+export type ProcessingUpdateFn = (message: AssetProcessingUpdateMessage) => void
 
 const invalidateHandlers = new Set<InvalidateFn>()
+const processingUpdateHandlers = new Set<ProcessingUpdateFn>()
 
 let hubConnection: signalR.HubConnection | null = null
 let startPromise: Promise<void> | null = null
@@ -58,6 +65,21 @@ function dispatchHubEvent(method: string, payload: unknown): void {
   for (const fn of invalidateHandlers) {
     try {
       fn()
+    } catch {
+      /* subscriber must not break hub */
+    }
+  }
+}
+
+function dispatchProcessingEvent(rawPayload: unknown): void {
+  const result = assetProcessingUpdateMessageSchema.safeParse(rawPayload)
+  if (!result.success) {
+    // Malformed event ignored safely without throwing
+    return
+  }
+  for (const fn of processingUpdateHandlers) {
+    try {
+      fn(result.data)
     } catch {
       /* subscriber must not break hub */
     }
@@ -94,6 +116,8 @@ function buildConnection(): signalR.HubConnection {
   for (const m of HUB_METHODS) {
     conn.on(m, (payload: unknown) => dispatchHubEvent(m, payload))
   }
+
+  conn.on(ASSET_PROCESSING_UPDATED_METHOD, (payload: unknown) => dispatchProcessingEvent(payload))
 
   return conn
 }
@@ -160,12 +184,12 @@ async function tearDownConnection(): Promise<void> {
 
 function scheduleStopIfIdle(): void {
   cancelPendingStop()
-  if (invalidateHandlers.size > 0) {
+  if (invalidateHandlers.size > 0 || processingUpdateHandlers.size > 0) {
     return
   }
   pendingStopTimer = setTimeout(() => {
     pendingStopTimer = null
-    if (invalidateHandlers.size === 0) {
+    if (invalidateHandlers.size === 0 && processingUpdateHandlers.size === 0) {
       void tearDownConnection()
     }
   }, STOP_DEBOUNCE_MS)
@@ -181,7 +205,22 @@ export function subscribeNotificationHub(onInvalidate: InvalidateFn): () => void
 
   return () => {
     invalidateHandlers.delete(onInvalidate)
-    if (invalidateHandlers.size === 0) {
+    if (invalidateHandlers.size === 0 && processingUpdateHandlers.size === 0) {
+      scheduleStopIfIdle()
+    }
+  }
+}
+
+/**
+ * Subscribe to real-time AssetProcessingUpdated events on the shared hub connection.
+ */
+export function subscribeProcessingHub(onProcessingUpdate: ProcessingUpdateFn): () => void {
+  processingUpdateHandlers.add(onProcessingUpdate)
+  ensureConnection()
+
+  return () => {
+    processingUpdateHandlers.delete(onProcessingUpdate)
+    if (invalidateHandlers.size === 0 && processingUpdateHandlers.size === 0) {
       scheduleStopIfIdle()
     }
   }

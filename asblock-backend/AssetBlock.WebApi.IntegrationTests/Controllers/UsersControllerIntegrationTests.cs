@@ -130,4 +130,40 @@ public sealed class UsersControllerIntegrationTests(IntegrationTestFixture fixtu
 
         response.StatusCode.Should().Be(HttpStatusCode.OK);
     }
+
+    [Fact]
+    public async Task GetMyAssetProcessingJobs_WithoutAuth_ShouldReturn401()
+    {
+        var client = fixture.Factory.CreateClient();
+        var response = await client.GetAsync(new Uri($"/api/users/me/assets/{Guid.NewGuid()}/processing-jobs", UriKind.Relative));
+
+        response.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+    }
+
+    [Fact]
+    public async Task GetMyAssetProcessingJobs_WithAuth_WhenAssetNotFound_ShouldReturn404()
+    {
+        (HttpClient client, _) = await IntegrationTestAuth.RegisterAndAuthenticateAsync(fixture.Factory);
+        var response = await client.GetAsync(new Uri($"/api/users/me/assets/{Guid.NewGuid()}/processing-jobs", UriKind.Relative));
+
+        response.StatusCode.Should().Be(HttpStatusCode.NotFound);
+    }
+
+    [Fact]
+    public async Task GetMyAssetVersionProcessingJobs_WithoutAuth_ShouldReturn401()
+    {
+        var client = fixture.Factory.CreateClient();
+        var response = await client.GetAsync(new Uri($"/api/users/me/asset-versions/{Guid.NewGuid()}/processing-jobs", UriKind.Relative));
+
+        response.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+    }
+
+    [Fact]
+    public async Task GetMyAssetVersionProcessingJobs_WithAuth_WhenVersionNotFound_ShouldReturn404()
+    {
+        (HttpClient client, _) = await IntegrationTestAuth.RegisterAndAuthenticateAsync(fixture.Factory);
+        var response = await client.GetAsync(new Uri($"/api/users/me/asset-versions/{Guid.NewGuid()}/processing-jobs", UriKind.Relative));
+
+        response.StatusCode.Should().Be(HttpStatusCode.NotFound);
+    }
 }

@@ -2,6 +2,7 @@ using AssetBlock.Domain.Core.Constants;
 using AssetBlock.Domain.Core.Dto.Assets;
 using AssetBlock.Domain.Core.Dto.Paging;
 using AssetBlock.Domain.Core.Entities;
+using AssetBlock.Domain.Core.Enums;
 using AssetBlock.Infrastructure.Persistence.Stores;
 using AssetBlock.Infrastructure.Tests.Infrastructure;
 
@@ -46,6 +47,27 @@ public sealed class AssetStoreTests
             CreatedAt = DateTimeOffset.UtcNow
         };
         await sut.Add(asset);
+        var version = new AssetVersion
+        {
+            Id = Guid.NewGuid(),
+            AssetId = asset.Id,
+            VersionNumber = 1,
+            IsCurrent = true,
+            ProcessingStatus = AssetVersionProcessingStatus.READY,
+            StorageKey = $"assets/{asset.Id:N}/v1.bin",
+            FileName = "model.fbx",
+            ContentLength = 100,
+            ContentSha256 = new string('0', 64),
+            ReleaseNotes = "Initial release",
+            LicenseCode = AssetLicenseCode.COMMERCIAL,
+            LicenseTemplateVersion = "1.0",
+            LicenseDisplayName = "Standard Commercial",
+            LicenseTerms = "Terms",
+            CreatedAt = DateTimeOffset.UtcNow,
+            ProcessingUpdatedAt = DateTimeOffset.UtcNow
+        };
+        db.AssetVersions.Add(version);
+        await db.SaveChangesAsync();
 
         var loaded = await sut.GetById(asset.Id);
         loaded!.Title.Should().Be("Title");

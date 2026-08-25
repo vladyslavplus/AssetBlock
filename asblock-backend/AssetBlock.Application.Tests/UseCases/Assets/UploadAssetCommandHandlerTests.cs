@@ -6,7 +6,6 @@ using AssetBlock.Domain.Core.Dto.Audit;
 using AssetBlock.Domain.Core.Dto.Assets;
 using AssetBlock.Domain.Core.Entities;
 using AssetBlock.Domain.Core.Enums;
-using AssetBlock.Domain.Core.Exceptions;
 using AssetBlock.Domain.Core.Primitives.AppSettingsOptions;
 using AwesomeAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -22,7 +21,6 @@ public class UploadAssetCommandHandlerTests
     private readonly ITagStore _tagStoreMock;
     private readonly IAssetStorageService _assetStorageServiceMock;
     private readonly IEncryptionService _encryptionServiceMock;
-    private readonly IAssetArchiveInspector _archiveInspectorMock;
     private readonly IUnitOfWork _unitOfWorkMock;
     private readonly IAuditWriter _auditWriterMock;
     private readonly ICacheService _cacheMock;
@@ -35,14 +33,12 @@ public class UploadAssetCommandHandlerTests
         _tagStoreMock = Substitute.For<ITagStore>();
         _assetStorageServiceMock = Substitute.For<IAssetStorageService>();
         _encryptionServiceMock = Substitute.For<IEncryptionService>();
-        _archiveInspectorMock = Substitute.For<IAssetArchiveInspector>();
+        var processingJobStoreMock = Substitute.For<IAssetProcessingJobStore>();
         _unitOfWorkMock = Substitute.For<IUnitOfWork>();
         _auditWriterMock = Substitute.For<IAuditWriter>();
         _cacheMock = Substitute.For<ICacheService>();
 
         _encryptionServiceMock.ComputeCiphertextLength(Arg.Any<long>()).Returns(4L);
-        _archiveInspectorMock.Inspect(Arg.Any<Stream>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
-            .Returns(Task.CompletedTask);
         _unitOfWorkMock.ExecuteInTransaction(Arg.Any<Func<CancellationToken, Task>>(), Arg.Any<CancellationToken>())
             .Returns(ci => ci.Arg<Func<CancellationToken, Task>>()(CancellationToken.None));
 
@@ -52,7 +48,7 @@ public class UploadAssetCommandHandlerTests
             _tagStoreMock,
             _assetStorageServiceMock,
             _encryptionServiceMock,
-            _archiveInspectorMock,
+            processingJobStoreMock,
             Microsoft.Extensions.Options.Options.Create(new FileUploadOptions()),
             _unitOfWorkMock,
             _auditWriterMock,
@@ -102,22 +98,6 @@ public class UploadAssetCommandHandlerTests
 
         result.IsSuccess.Should().BeFalse();
         result.ValidationErrors.Should().Contain(e => e.Identifier == ErrorCodes.ERR_FILE_EXTENSION_NOT_ALLOWED);
-    }
-
-    [Fact]
-    public async Task Handle_WhenArchiveRejected_ShouldReturnError()
-    {
-        var request = DefaultRequest();
-        var command = CreateCommand(request);
-        var category = new Category { Id = request.CategoryId, Name = "Cat", Slug = "cat" };
-        _categoryStoreMock.GetById(request.CategoryId, Arg.Any<CancellationToken>()).Returns(category);
-        _archiveInspectorMock.Inspect(Arg.Any<Stream>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
-            .ThrowsAsync(new ArchiveRejectedException("bad archive"));
-
-        var result = await _handler.Handle(command, CancellationToken.None);
-
-        result.IsSuccess.Should().BeFalse();
-        result.ValidationErrors.Should().Contain(e => e.Identifier == ErrorCodes.ERR_ARCHIVE_REJECTED);
     }
 
     [Fact]

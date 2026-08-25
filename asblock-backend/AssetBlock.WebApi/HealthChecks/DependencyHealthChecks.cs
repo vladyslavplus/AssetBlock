@@ -81,3 +81,35 @@ internal sealed class RedisHealthCheck(IConnectionMultiplexer connection) : IHea
         }
     }
 }
+
+internal sealed class ClamAvHealthCheck(IContentMalwareScanner scanner) : IHealthCheck
+{
+    public async Task<HealthCheckResult> CheckHealthAsync(
+        HealthCheckContext context,
+        CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            var state = await scanner.GetSignatureState(cancellationToken);
+            if (!state.IsAvailable)
+            {
+                return HealthCheckResult.Unhealthy("Malware scanner readiness check failed.");
+            }
+
+            if (!state.IsFresh)
+            {
+                return HealthCheckResult.Unhealthy("Malware scanner signatures are stale.");
+            }
+
+            return HealthCheckResult.Healthy();
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception)
+        {
+            return HealthCheckResult.Unhealthy("Malware scanner readiness check failed.");
+        }
+    }
+}

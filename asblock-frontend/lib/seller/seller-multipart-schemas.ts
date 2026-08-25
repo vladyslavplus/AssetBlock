@@ -41,7 +41,7 @@ export function validateArchiveUploadFile(file: File | null): string | null {
     return 'File must be at most 250 MiB.'
   }
   if (!hasAllowedArchiveExtension(file.name)) {
-    return 'Choose a .zip, .7z, .rar, .tar, .tar.gz, or .tgz archive.'
+    return 'Choose a .zip, .tar, .tar.gz, or .tgz archive.'
   }
   return null
 }

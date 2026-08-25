@@ -2,6 +2,7 @@ using AssetBlock.Domain.Abstractions.Services;
 using AssetBlock.Domain.Core.Dto.Assets;
 using AssetBlock.Domain.Core.Dto.Paging;
 using AssetBlock.Domain.Core.Entities;
+using AssetBlock.Domain.Core.Enums;
 using AssetBlock.Infrastructure.Persistence.Configurations;
 using Microsoft.EntityFrameworkCore;
 using NpgsqlTypes;
@@ -54,6 +55,21 @@ internal sealed class AssetStore(ApplicationDbContext dbContext) : IAssetStore
             }
         }
 
+        var dbNow = await dbContext.Database.SqlQueryRaw<DateTimeOffset>(
+            """SELECT clock_timestamp() AS "Value" """).FirstAsync(cancellationToken);
+
+        if (asset.CreatedAt == default)
+        {
+            asset.CreatedAt = dbNow;
+        }
+
+        if (version.CreatedAt == default)
+        {
+            version.CreatedAt = dbNow;
+        }
+
+        version.ProcessingUpdatedAt = dbNow;
+
         dbContext.Assets.Add(asset);
         dbContext.AssetVersions.Add(version);
         await dbContext.SaveChangesAsync(cancellationToken);
@@ -85,7 +101,7 @@ internal sealed class AssetStore(ApplicationDbContext dbContext) : IAssetStore
     {
         return dbContext.AssetVersions
             .AsNoTracking()
-            .Where(v => v.AssetId == assetId && v.IsCurrent)
+            .Where(v => v.AssetId == assetId && v.IsCurrent && v.ProcessingStatus == Domain.Core.Enums.AssetVersionProcessingStatus.READY)
             .Select(v => new AssetCurrentVersionSnapshot(
                 v.AssetId,
                 v.Id,
@@ -132,14 +148,14 @@ internal sealed class AssetStore(ApplicationDbContext dbContext) : IAssetStore
             return Array.Empty<AssetVersionSummaryDto>();
         }
 
+        var isAuthor = requesterUserId.HasValue
+            && await dbContext.Assets.AsNoTracking()
+                .AnyAsync(a => a.Id == assetId && a.AuthorId == requesterUserId.Value, cancellationToken);
+
         // Active (non-deleted) listings expose version history publicly.
         // Soft-deleted assets require author or entitled purchaser.
         if (includeDeletedAsset)
         {
-            var isAuthor = requesterUserId.HasValue
-                && await dbContext.Assets.AsNoTracking()
-                    .AnyAsync(a => a.Id == assetId && a.AuthorId == requesterUserId.Value, cancellationToken);
-
             if (!isAuthor)
             {
                 if (!requesterUserId.HasValue)
@@ -156,9 +172,17 @@ internal sealed class AssetStore(ApplicationDbContext dbContext) : IAssetStore
             }
         }
 
-        return await dbContext.AssetVersions
+        IQueryable<AssetVersion> versionQuery = dbContext.AssetVersions
             .AsNoTracking()
-            .Where(v => v.AssetId == assetId)
+            .Where(v => v.AssetId == assetId);
+
+        // Non-authors only see READY versions in the version history
+        if (!isAuthor)
+        {
+            versionQuery = versionQuery.Where(v => v.ProcessingStatus == Domain.Core.Enums.AssetVersionProcessingStatus.READY);
+        }
+
+        return await versionQuery
             .OrderByDescending(v => v.VersionNumber)
             .Select(v => new AssetVersionSummaryDto(
                 v.Id,
@@ -173,11 +197,15 @@ internal sealed class AssetStore(ApplicationDbContext dbContext) : IAssetStore
                     v.LicenseCode.ToString(),
                     v.LicenseDisplayName,
                     v.LicenseTemplateVersion,
-                    v.LicenseTerms)))
+                    v.LicenseTerms),
+                v.ProcessingStatus,
+                v.ProcessingErrorCode,
+                v.ProcessingErrorSummary,
+                v.ProcessingUpdatedAt))
             .ToListAsync(cancellationToken);
     }
 
-    public async Task<AssetVersion> PublishNextVersion(Guid assetId, Guid authorId, AssetVersion draft, CancellationToken cancellationToken = default)
+    public async Task<AssetVersion> CreateNextCandidateVersion(Guid assetId, Guid authorId, AssetVersion draft, CancellationToken cancellationToken = default)
     {
         // Row lock to prevent concurrent publishes on the same asset.
         var asset = await GetForUpdate(assetId, cancellationToken)
@@ -197,13 +225,18 @@ internal sealed class AssetStore(ApplicationDbContext dbContext) : IAssetStore
             .Where(v => v.AssetId == assetId)
             .MaxAsync(v => (int?)v.VersionNumber, cancellationToken) ?? 0;
 
-        await dbContext.AssetVersions
-            .Where(v => v.AssetId == assetId && v.IsCurrent)
-            .ExecuteUpdateAsync(s => s.SetProperty(v => v.IsCurrent, false), cancellationToken);
+        var dbNow = await dbContext.Database.SqlQueryRaw<DateTimeOffset>(
+            """SELECT clock_timestamp() AS "Value" """).FirstAsync(cancellationToken);
 
         draft.AssetId = assetId;
         draft.VersionNumber = maxVersion + 1;
-        draft.IsCurrent = true;
+        draft.IsCurrent = false;
+        draft.ProcessingStatus = Domain.Core.Enums.AssetVersionProcessingStatus.PENDING_INSPECTION;
+        draft.ProcessingUpdatedAt = dbNow;
+        if (draft.CreatedAt == default)
+        {
+            draft.CreatedAt = dbNow;
+        }
 
         dbContext.AssetVersions.Add(draft);
         await dbContext.SaveChangesAsync(cancellationToken);
@@ -227,8 +260,29 @@ internal sealed class AssetStore(ApplicationDbContext dbContext) : IAssetStore
 
     public async Task<PagedResult<AssetListItem>> GetPaged(GetAssetsRequest request, CancellationToken cancellationToken = default)
     {
+        // Public catalog query: ALWAYS requires asset to have a current READY version.
         IQueryable<Asset> query = dbContext.Assets.AsNoTracking()
-            .Where(a => a.DeletedAt == null);
+            .Where(a => a.DeletedAt == null
+                && a.Versions.Any(v => v.IsCurrent && v.ProcessingStatus == Domain.Core.Enums.AssetVersionProcessingStatus.READY));
+
+        return await QueryPagedAssets(query, request, cancellationToken);
+    }
+
+    public async Task<PagedResult<AssetListItem>> GetMyListings(Guid authorId, GetAssetsRequest request, CancellationToken cancellationToken = default)
+    {
+        // Authenticated seller listings: scoped to the authenticated author, includes pending/processing versions.
+        IQueryable<Asset> query = dbContext.Assets.AsNoTracking()
+            .Where(a => a.DeletedAt == null && a.AuthorId == authorId);
+
+        return await QueryPagedAssets(query, request, cancellationToken);
+    }
+
+    private static async Task<PagedResult<AssetListItem>> QueryPagedAssets(
+        IQueryable<Asset> baseQuery,
+        GetAssetsRequest request,
+        CancellationToken cancellationToken)
+    {
+        var query = baseQuery;
 
         if (!string.IsNullOrWhiteSpace(request.Search))
         {
@@ -447,6 +501,7 @@ internal sealed class AssetStore(ApplicationDbContext dbContext) : IAssetStore
             from purchasedVersion in dbContext.AssetVersions.AsNoTracking()
                 .Where(v => v.AssetId == assetId && v.Id == purchase.AssetVersionId)
             where requestedVersion.VersionNumber >= purchasedVersion.VersionNumber
+                  && requestedVersion.ProcessingStatus == AssetVersionProcessingStatus.READY
             select (Guid?)asset.AuthorId
         ).FirstOrDefaultAsync(cancellationToken);
     }

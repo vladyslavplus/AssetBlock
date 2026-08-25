@@ -7,4 +7,5 @@ public static class NotificationHubMethods
     public const string ASSET_SOLD = "AssetSold";
     public const string REVIEW_RECEIVED = "ReviewReceived";
     public const string ORDER_READY = "OrderReady";
+    public const string ASSET_PROCESSING_UPDATED = "AssetProcessingUpdated";
 }

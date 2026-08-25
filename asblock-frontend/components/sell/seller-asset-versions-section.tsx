@@ -4,6 +4,7 @@ import { useQuery } from '@tanstack/react-query'
 import { Loader2 } from 'lucide-react'
 import { AssetVersionHistory } from '@/components/assets/asset-version-history'
 import { PublishVersionForm } from '@/components/sell/publish-version-form'
+import { AssetProcessingStatusPanel } from '@/components/sell/asset-processing-status-panel'
 import { fetchSellerAssetVersions } from '@/lib/seller/seller-api'
 import { sellerKeys } from '@/lib/seller/seller-query'
 
@@ -23,6 +24,8 @@ export function SellerAssetVersionsSection({ assetId }: SellerAssetVersionsSecti
 
   return (
     <div className="space-y-6 pt-6 border-t border-border">
+      <AssetProcessingStatusPanel assetId={assetId} versions={versions} />
+
       <PublishVersionForm assetId={assetId} />
 
       <div className="space-y-3">

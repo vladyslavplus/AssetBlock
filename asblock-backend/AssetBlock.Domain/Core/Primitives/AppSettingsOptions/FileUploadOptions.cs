@@ -14,8 +14,6 @@ public sealed class FileUploadOptions
     public string[] AllowedExtensions { get; set; } =
     [
         ".zip",
-        ".7z",
-        ".rar",
         ".tar",
         ".tar.gz",
         ".tgz"

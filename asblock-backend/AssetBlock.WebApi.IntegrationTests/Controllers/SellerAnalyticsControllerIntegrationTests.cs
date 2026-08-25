@@ -192,6 +192,8 @@ public sealed class SellerAnalyticsControllerIntegrationTests(IntegrationTestFix
                 LicenseTemplateVersion = "1.0",
                 LicenseDisplayName = "Personal",
                 LicenseTerms = "terms",
+                ProcessingStatus = Domain.Core.Enums.AssetVersionProcessingStatus.READY,
+                ProcessingUpdatedAt = DateTimeOffset.UtcNow,
                 CreatedAt = DateTimeOffset.UtcNow
             };
             db.AssetVersions.Add(version);
@@ -416,6 +418,8 @@ public sealed class SellerAnalyticsControllerIntegrationTests(IntegrationTestFix
                 LicenseTemplateVersion = "1.0",
                 LicenseDisplayName = "Personal",
                 LicenseTerms = "terms",
+                ProcessingStatus = Domain.Core.Enums.AssetVersionProcessingStatus.READY,
+                ProcessingUpdatedAt = DateTimeOffset.UtcNow,
                 CreatedAt = DateTimeOffset.UtcNow
             };
             db.AssetVersions.Add(version);

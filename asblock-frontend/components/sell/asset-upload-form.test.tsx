@@ -93,7 +93,7 @@ describe('AssetUploadForm', () => {
   it('blocks invalid submit and does not call the API', async () => {
     const user = userEvent.setup()
     renderUpload()
-    await user.click(screen.getByRole('button', { name: /publish asset/i }))
+    await user.click(screen.getByRole('button', { name: /upload asset/i }))
     expect(await screen.findByText(/title is required/i)).toBeInTheDocument()
     expect(uploadSellerAsset).not.toHaveBeenCalled()
   })
@@ -121,7 +121,7 @@ describe('AssetUploadForm', () => {
     await user.selectOptions(screen.getByLabelText('Category'), categoryId)
     setPackageFile(new File(['zip'], 'pack.zip', { type: 'application/zip' }))
 
-    const submit = screen.getByRole('button', { name: /publish asset/i })
+    const submit = screen.getByRole('button', { name: /upload asset/i })
     await user.click(submit)
     expect(submit).toBeDisabled()
     await user.click(submit)
@@ -136,10 +136,10 @@ describe('AssetUploadForm', () => {
     expect(JSON.stringify(toastError.mock.calls)).not.toMatch(/ZodError/)
 
     uploadSellerAsset.mockResolvedValueOnce({ ok: true, assetId: 'asset-1' })
-    await user.click(screen.getByRole('button', { name: /publish asset/i }))
+    await user.click(screen.getByRole('button', { name: /upload asset/i }))
     await waitFor(() => {
-      expect(routerPush).toHaveBeenCalledWith('/assets/asset-1')
+      expect(routerPush).toHaveBeenCalledWith('/sell?tab=listings')
     })
-    expect(toastSuccess).toHaveBeenCalled()
+    expect(toastSuccess).toHaveBeenCalledWith('Asset uploaded. Security processing started.')
   })
 })

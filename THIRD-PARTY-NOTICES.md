@@ -147,6 +147,38 @@ from the npm registry (canonical, OS-independent). Reviewed exceptions may set
   - copyright/author: MinIO, Inc.
   - source: https://github.com/minio/minio-dotnet
   - license-url: https://licenses.nuget.org/Apache-2.0
+- `nuget` OpenTelemetry@1.18.0
+  - copyright/author: OpenTelemetry Authors
+  - source: https://opentelemetry.io/
+  - license-url: https://licenses.nuget.org/Apache-2.0
+- `nuget` OpenTelemetry.Api@1.18.0
+  - copyright/author: OpenTelemetry Authors
+  - source: https://opentelemetry.io/
+  - license-url: https://licenses.nuget.org/Apache-2.0
+- `nuget` OpenTelemetry.Api.ProviderBuilderExtensions@1.18.0
+  - copyright/author: OpenTelemetry Authors
+  - source: https://opentelemetry.io/
+  - license-url: https://licenses.nuget.org/Apache-2.0
+- `nuget` OpenTelemetry.Exporter.OpenTelemetryProtocol@1.18.0
+  - copyright/author: OpenTelemetry Authors
+  - source: https://opentelemetry.io/
+  - license-url: https://licenses.nuget.org/Apache-2.0
+- `nuget` OpenTelemetry.Extensions.Hosting@1.18.0
+  - copyright/author: OpenTelemetry Authors
+  - source: https://opentelemetry.io/
+  - license-url: https://licenses.nuget.org/Apache-2.0
+- `nuget` OpenTelemetry.Instrumentation.AspNetCore@1.18.0
+  - copyright/author: OpenTelemetry Authors
+  - source: https://opentelemetry.io/
+  - license-url: https://licenses.nuget.org/Apache-2.0
+- `nuget` OpenTelemetry.Instrumentation.Http@1.18.0
+  - copyright/author: OpenTelemetry Authors
+  - source: https://opentelemetry.io/
+  - license-url: https://licenses.nuget.org/Apache-2.0
+- `nuget` OpenTelemetry.Instrumentation.Runtime@1.18.0
+  - copyright/author: OpenTelemetry Authors
+  - source: https://opentelemetry.io/
+  - license-url: https://licenses.nuget.org/Apache-2.0
 - `nuget` Serilog@4.3.0
   - copyright/author: Serilog Contributors
   - source: https://serilog.net/
@@ -3779,6 +3811,10 @@ from the npm registry (canonical, OS-independent). Reviewed exceptions may set
 - `nuget` Npgsql.EntityFrameworkCore.PostgreSQL@10.0.0
   - copyright/author: Shay Rojansky,Austin Drenski,Yoh Deadfall
   - source: https://github.com/npgsql/efcore.pg
+  - license-url: https://licenses.nuget.org/PostgreSQL
+- `nuget` Npgsql.OpenTelemetry@10.0.1
+  - copyright/author: Shay Rojansky
+  - source: https://github.com/npgsql/npgsql
   - license-url: https://licenses.nuget.org/PostgreSQL
 
 ## Python-2.0

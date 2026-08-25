@@ -7,6 +7,8 @@ using AssetBlock.Domain.Core.Entities;
 using AssetBlock.Domain.Core.Primitives.AppSettingsOptions;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using System.Diagnostics;
+using AssetBlock.Infrastructure.Observability;
 
 namespace AssetBlock.Infrastructure.Outbox;
 
@@ -52,16 +54,20 @@ internal sealed class EmailDispatchOutboxHandler(
             payload.TemplateKind,
             payload.RecipientUserId);
 
+        var stopwatch = Stopwatch.StartNew();
+        var outcome = DiagnosticsOutcome.SUCCESS;
         try
         {
             await emailSender.Send(email, cancellationToken);
         }
         catch (OperationCanceledException)
         {
+            outcome = DiagnosticsOutcome.CANCELLED;
             throw;
         }
         catch (Exception ex)
         {
+            outcome = DiagnosticsOutcome.FAILURE;
             logger.LogWarning(
                 "EmailDispatch failed: Outbox {OutboxId}, Template {TemplateKind}, RecipientUser {RecipientUserId}, ExceptionType {ExceptionType}",
                 message.Id,
@@ -69,6 +75,10 @@ internal sealed class EmailDispatchOutboxHandler(
                 payload.RecipientUserId,
                 ex.GetType().FullName);
             throw new InvalidOperationException(SAFE_TRANSPORT_FAILURE);
+        }
+        finally
+        {
+            AssetBlockDiagnostics.RecordEmailDispatch(stopwatch.Elapsed, payload.TemplateKind, outcome);
         }
 
         logger.LogInformation(

@@ -21,6 +21,7 @@ import {
 } from '@/lib/seller/seller-schemas'
 import { publishSellerAssetVersion } from '@/lib/seller/seller-api'
 import { sellerKeys } from '@/lib/seller/seller-query'
+import { sellerProcessingKeys } from '@/lib/seller/seller-processing-query'
 
 interface PublishVersionFormProps {
   assetId: string
@@ -66,10 +67,12 @@ export function PublishVersionForm({ assetId }: PublishVersionFormProps) {
       return
     }
 
-    toast.success('New version published.')
+    toast.success('New version uploaded. Security processing started.')
     reset({ licenseCode: values.licenseCode, releaseNotes: '' })
     invalidateQueriesInBackground(queryClient, { queryKey: sellerKeys.versions(assetId) })
     invalidateQueriesInBackground(queryClient, { queryKey: sellerKeys.all })
+    invalidateQueriesInBackground(queryClient, { queryKey: sellerProcessingKeys.asset(assetId) })
+    invalidateQueriesInBackground(queryClient, { queryKey: sellerProcessingKeys.all })
     invalidateQueriesInBackground(queryClient, { queryKey: assetKeys.detail(assetId) })
     invalidateQueriesInBackground(queryClient, { queryKey: assetKeys.versions(assetId) })
     invalidateQueriesInBackground(queryClient, { queryKey: catalogKeys.all })
@@ -165,10 +168,10 @@ export function PublishVersionForm({ assetId }: PublishVersionFormProps) {
         {isSubmitting ? (
           <>
             <Loader2 className="h-4 w-4 mr-2 animate-spin" aria-hidden />
-            Publishing…
+            Uploading…
           </>
         ) : (
-          'Publish version'
+          'Upload version'
         )}
       </Button>
     </form>

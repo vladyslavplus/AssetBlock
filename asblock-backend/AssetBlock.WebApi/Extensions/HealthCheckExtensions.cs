@@ -36,6 +36,15 @@ public static class HealthCheckExtensions
                 timeout: _dependencyTimeout);
         }
 
+        if (configuration.GetValue("AssetProcessing:Enabled", false))
+        {
+            builder.AddCheck<ClamAvHealthCheck>(
+                "clamav",
+                failureStatus: HealthStatus.Unhealthy,
+                tags: [READY_TAG],
+                timeout: _dependencyTimeout);
+        }
+
         return services;
     }
 

@@ -25,6 +25,13 @@ internal sealed class FileUploadOptionsValidator : IValidateOptions<FileUploadOp
                 if (string.IsNullOrWhiteSpace(ext) || !ext.StartsWith('.'))
                 {
                     failures.Add($"FileUpload:AllowedExtensions entry '{ext}' must be a non-empty suffix starting with '.'.");
+                    continue;
+                }
+
+                if (ext.Equals(".rar", StringComparison.OrdinalIgnoreCase)
+                    || ext.Equals(".7z", StringComparison.OrdinalIgnoreCase))
+                {
+                    failures.Add($"FileUpload:AllowedExtensions must not include '{ext}' until a real safety fixture exists.");
                 }
             }
         }

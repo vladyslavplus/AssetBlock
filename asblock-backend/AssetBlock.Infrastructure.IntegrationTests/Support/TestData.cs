@@ -66,10 +66,13 @@ internal static class TestData
         string fileName = "package.zip",
         int versionNumber = 1,
         bool isCurrent = true,
-        Guid? id = null)
+        Guid? id = null,
+        AssetVersionProcessingStatus? processingStatus = null)
     {
         var license = AssetLicenseCatalog.Get(AssetLicenseCode.PERSONAL);
         var key = storageKey ?? $"assets/{assetId:N}/v{versionNumber}.bin";
+        var status = processingStatus ?? (isCurrent ? AssetVersionProcessingStatus.READY : AssetVersionProcessingStatus.PENDING_INSPECTION);
+        var now = DateTimeOffset.UtcNow;
         return new AssetVersion
         {
             Id = id ?? Guid.NewGuid(),
@@ -85,7 +88,9 @@ internal static class TestData
             LicenseTemplateVersion = license.TemplateVersion,
             LicenseDisplayName = license.DisplayName,
             LicenseTerms = license.TermsPlainText,
-            CreatedAt = DateTimeOffset.UtcNow
+            ProcessingStatus = status,
+            ProcessingUpdatedAt = now,
+            CreatedAt = now
         };
     }
 

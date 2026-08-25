@@ -1,5 +1,5 @@
 using Ardalis.Result;
-using AssetBlock.Application.UseCases.Assets.GetAssets;
+using AssetBlock.Application.UseCases.Users.GetMyListings;
 using AssetBlock.Application.UseCases.Users.GetProfile;
 using AssetBlock.Application.UseCases.Users.ListNotifications;
 using AssetBlock.Application.UseCases.Users.ListSocialPlatforms;
@@ -71,7 +71,7 @@ public sealed class UsersControllerTests : ControllerTestBase
     [Fact]
     public async Task ListMyAssets_WhenAuthenticated_ShouldReturnOk()
     {
-        Sender.Send(Arg.Any<GetAssetsQuery>(), Arg.Any<CancellationToken>())
+        Sender.Send(Arg.Any<GetMyListingsQuery>(), Arg.Any<CancellationToken>())
             .Returns(Task.FromResult(Result.Success(new DomainPaging.PagedResult<AssetListItem>([], 0, 1, 10))));
 
         var controller = new UsersController(Sender);

@@ -30,20 +30,21 @@ public sealed class AssetVersionStorePostgresTests(PostgresFixture fixture)
         await store.AddWithVersion(asset, v1, null);
 
         var draft = TestData.CreateAssetVersion(asset.Id, storageKey: "assets/publish/v2.bin", versionNumber: 0, isCurrent: false);
-        var published = await store.PublishNextVersion(asset.Id, author.Id, draft);
+        var candidate = await store.CreateNextCandidateVersion(asset.Id, author.Id, draft);
 
-        published.VersionNumber.Should().Be(2);
-        published.IsCurrent.Should().BeTrue();
+        candidate.VersionNumber.Should().Be(2);
+        candidate.IsCurrent.Should().BeFalse();
+        candidate.ProcessingStatus.Should().Be(AssetVersionProcessingStatus.PENDING_INSPECTION);
 
         await using var verify = fixture.CreateDbContext();
         var rows = await verify.AssetVersions.AsNoTracking().Where(v => v.AssetId == asset.Id).ToListAsync();
         rows.Should().HaveCount(2);
-        rows.Single(v => v.VersionNumber == 1).IsCurrent.Should().BeFalse();
-        rows.Single(v => v.VersionNumber == 2).IsCurrent.Should().BeTrue();
+        rows.Single(v => v.VersionNumber == 1).IsCurrent.Should().BeTrue();
+        rows.Single(v => v.VersionNumber == 2).IsCurrent.Should().BeFalse();
     }
 
     [Fact]
-    public async Task PublishNextVersion_WhenAssetSoftDeleted_ShouldThrowAssetNotFoundException()
+    public async Task CreateNextCandidateVersion_WhenAssetSoftDeleted_ShouldThrowAssetNotFoundException()
     {
         await using var db = await fixture.CreateCleanDbContext();
         (User author, Category category) = await TestData.SeedAuthorAndCategory(db);
@@ -54,13 +55,13 @@ public sealed class AssetVersionStorePostgresTests(PostgresFixture fixture)
         await store.SoftDelete(asset.Id, DateTimeOffset.UtcNow);
 
         var draft = TestData.CreateAssetVersion(asset.Id, storageKey: "assets/publish-deleted/v2.bin", versionNumber: 0, isCurrent: false);
-        var act = () => store.PublishNextVersion(asset.Id, author.Id, draft);
+        Func<Task> act = () => store.CreateNextCandidateVersion(asset.Id, author.Id, draft);
 
         await act.Should().ThrowAsync<Domain.Core.Exceptions.AssetNotFoundException>();
     }
 
     [Fact]
-    public async Task PublishNextVersion_WhenCallerIsNotAuthor_ShouldThrowUnauthorizedAccessException()
+    public async Task CreateNextCandidateVersion_WhenCallerIsNotAuthor_ShouldThrowUnauthorizedAccessException()
     {
         await using var db = await fixture.CreateCleanDbContext();
         (User author, Category category) = await TestData.SeedAuthorAndCategory(db);
@@ -70,7 +71,7 @@ public sealed class AssetVersionStorePostgresTests(PostgresFixture fixture)
         await store.AddWithVersion(asset, v1, null);
 
         var draft = TestData.CreateAssetVersion(asset.Id, storageKey: "assets/publish-forbidden/v2.bin", versionNumber: 0, isCurrent: false);
-        var act = () => store.PublishNextVersion(asset.Id, Guid.NewGuid(), draft);
+        Func<Task> act = () => store.CreateNextCandidateVersion(asset.Id, Guid.NewGuid(), draft);
 
         await act.Should().ThrowAsync<UnauthorizedAccessException>();
     }
@@ -94,8 +95,8 @@ public sealed class AssetVersionStorePostgresTests(PostgresFixture fixture)
         var draftA = TestData.CreateAssetVersion(asset.Id, storageKey: "assets/publish-race/vA.bin", versionNumber: 0, isCurrent: false);
         var draftB = TestData.CreateAssetVersion(asset.Id, storageKey: "assets/publish-race/vB.bin", versionNumber: 0, isCurrent: false);
 
-        var taskA = uowA.ExecuteInTransaction(ct => storeA.PublishNextVersion(asset.Id, author.Id, draftA, ct));
-        var taskB = uowB.ExecuteInTransaction(ct => storeB.PublishNextVersion(asset.Id, author.Id, draftB, ct));
+        var taskA = uowA.ExecuteInTransaction(ct => storeA.CreateNextCandidateVersion(asset.Id, author.Id, draftA, ct));
+        var taskB = uowB.ExecuteInTransaction(ct => storeB.CreateNextCandidateVersion(asset.Id, author.Id, draftB, ct));
         await Task.WhenAll(taskA, taskB);
 
         new[] { draftA.VersionNumber, draftB.VersionNumber }.Should().BeEquivalentTo([2, 3]);
@@ -104,7 +105,7 @@ public sealed class AssetVersionStorePostgresTests(PostgresFixture fixture)
         var rows = await verify.AssetVersions.AsNoTracking().Where(v => v.AssetId == asset.Id).ToListAsync();
         rows.Should().HaveCount(3);
         rows.Count(v => v.IsCurrent).Should().Be(1);
-        rows.Single(v => v.IsCurrent).VersionNumber.Should().Be(3);
+        rows.Single(v => v.IsCurrent).VersionNumber.Should().Be(1);
     }
 
     [Fact]
@@ -175,9 +176,9 @@ public sealed class AssetVersionStorePostgresTests(PostgresFixture fixture)
         var store = new AssetStore(db);
         var v1 = TestData.CreateAssetVersion(asset.Id, storageKey: "assets/lifecycle/v1.bin", versionNumber: 1);
         await store.AddWithVersion(asset, v1, null);
-        await store.PublishNextVersion(asset.Id, author.Id,
+        await store.CreateNextCandidateVersion(asset.Id, author.Id,
             TestData.CreateAssetVersion(asset.Id, storageKey: "assets/lifecycle/v2.bin", versionNumber: 0, isCurrent: false));
-        await store.PublishNextVersion(asset.Id, author.Id,
+        await store.CreateNextCandidateVersion(asset.Id, author.Id,
             TestData.CreateAssetVersion(asset.Id, storageKey: "assets/lifecycle/v3.bin", versionNumber: 0, isCurrent: false));
 
         var keys = await store.GetAllStorageKeys(asset.Id);
@@ -247,7 +248,7 @@ public sealed class AssetVersionStorePostgresTests(PostgresFixture fixture)
         var store = new AssetStore(db);
         var v1 = TestData.CreateAssetVersion(asset.Id, storageKey: "assets/delete-lifecycle/v1.bin", versionNumber: 1);
         await store.AddWithVersion(asset, v1, null);
-        await store.PublishNextVersion(
+        await store.CreateNextCandidateVersion(
             asset.Id,
             author.Id,
             TestData.CreateAssetVersion(asset.Id, storageKey: "assets/delete-lifecycle/v2.bin", versionNumber: 0, isCurrent: false));
@@ -282,10 +283,22 @@ public sealed class AssetVersionStorePostgresTests(PostgresFixture fixture)
         SeedPendingAssetCheckout(seedDb, intentId, buyer.Id, author.Id, asset.Id, v1.Id, asset.Title, 10m);
         await seedDb.SaveChangesAsync();
 
-        await seedStore.PublishNextVersion(
+        var v2 = await seedStore.CreateNextCandidateVersion(
             asset.Id,
             author.Id,
             TestData.CreateAssetVersion(asset.Id, storageKey: "assets/pin/v2.bin", versionNumber: 0, isCurrent: false));
+
+        await using (var promoteDb = fixture.CreateDbContext())
+        {
+            await promoteDb.AssetVersions
+                .Where(v => v.Id == v1.Id)
+                .ExecuteUpdateAsync(s => s.SetProperty(v => v.IsCurrent, false));
+            await promoteDb.AssetVersions
+                .Where(v => v.Id == v2.Id)
+                .ExecuteUpdateAsync(s => s
+                    .SetProperty(v => v.IsCurrent, true)
+                    .SetProperty(v => v.ProcessingStatus, AssetVersionProcessingStatus.READY));
+        }
 
         await using (var priceDb = fixture.CreateDbContext())
         {

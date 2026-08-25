@@ -108,17 +108,17 @@ namespace AssetBlock.Infrastructure.Migrations
 
                     b.ToTable("analytics_events", null, t =>
                         {
-                            t.HasCheckConstraint("CK_analytics_events_DeviceClass", "\"DeviceClass\" IN (\r\n    'MOBILE',\r\n    'TABLET',\r\n    'DESKTOP',\r\n    'UNKNOWN')");
+                            t.HasCheckConstraint("CK_analytics_events_DeviceClass", "\"DeviceClass\" IN (\n    'MOBILE',\n    'TABLET',\n    'DESKTOP',\n    'UNKNOWN')");
 
-                            t.HasCheckConstraint("CK_analytics_events_EventType", "\"EventType\" IN (\r\n    'ASSET_VIEW',\r\n    'BUNDLE_VIEW',\r\n    'COLLECTION_VIEW',\r\n    'COLLECTION_ITEM_CLICK',\r\n    'DOWNLOAD_REQUESTED')");
+                            t.HasCheckConstraint("CK_analytics_events_EventType", "\"EventType\" IN (\n    'ASSET_VIEW',\n    'BUNDLE_VIEW',\n    'COLLECTION_VIEW',\n    'COLLECTION_ITEM_CLICK',\n    'DOWNLOAD_REQUESTED')");
 
-                            t.HasCheckConstraint("CK_analytics_events_ReferrerHost_length", "\"ReferrerHost\" IS NULL\r\nOR (length(\"ReferrerHost\") > 0 AND length(\"ReferrerHost\") <= 253)");
+                            t.HasCheckConstraint("CK_analytics_events_ReferrerHost_length", "\"ReferrerHost\" IS NULL\nOR (length(\"ReferrerHost\") > 0 AND length(\"ReferrerHost\") <= 253)");
 
                             t.HasCheckConstraint("CK_analytics_events_ReferrerHost_source", "\"ReferrerHost\" IS NULL OR \"Source\" = 'EXTERNAL'");
 
-                            t.HasCheckConstraint("CK_analytics_events_Source", "\"Source\" IN (\r\n    'CATALOG',\r\n    'SEARCH',\r\n    'SELLER_PROFILE',\r\n    'COLLECTION',\r\n    'BUNDLE_PAGE',\r\n    'DIRECT_INTERNAL',\r\n    'EXTERNAL',\r\n    'UNKNOWN')");
+                            t.HasCheckConstraint("CK_analytics_events_Source", "\"Source\" IN (\n    'CATALOG',\n    'SEARCH',\n    'SELLER_PROFILE',\n    'COLLECTION',\n    'BUNDLE_PAGE',\n    'DIRECT_INTERNAL',\n    'EXTERNAL',\n    'UNKNOWN')");
 
-                            t.HasCheckConstraint("CK_analytics_events_target_shape", "(\"EventType\" = 'ASSET_VIEW'\r\n    AND \"AssetId\" IS NOT NULL AND \"AssetVersionId\" IS NULL AND \"BundleId\" IS NULL AND \"CollectionId\" IS NULL)\r\nOR (\"EventType\" = 'BUNDLE_VIEW'\r\n    AND \"BundleId\" IS NOT NULL AND \"AssetId\" IS NULL AND \"AssetVersionId\" IS NULL AND \"CollectionId\" IS NULL)\r\nOR (\"EventType\" = 'COLLECTION_VIEW'\r\n    AND \"CollectionId\" IS NOT NULL AND \"AssetId\" IS NULL AND \"AssetVersionId\" IS NULL AND \"BundleId\" IS NULL)\r\nOR (\"EventType\" = 'COLLECTION_ITEM_CLICK'\r\n    AND \"CollectionId\" IS NOT NULL AND \"AssetId\" IS NOT NULL AND \"AssetVersionId\" IS NULL AND \"BundleId\" IS NULL)\r\nOR (\"EventType\" = 'DOWNLOAD_REQUESTED'\r\n    AND \"AssetId\" IS NOT NULL AND \"AssetVersionId\" IS NOT NULL AND \"BundleId\" IS NULL AND \"CollectionId\" IS NULL)");
+                            t.HasCheckConstraint("CK_analytics_events_target_shape", "(\"EventType\" = 'ASSET_VIEW'\n    AND \"AssetId\" IS NOT NULL AND \"AssetVersionId\" IS NULL AND \"BundleId\" IS NULL AND \"CollectionId\" IS NULL)\nOR (\"EventType\" = 'BUNDLE_VIEW'\n    AND \"BundleId\" IS NOT NULL AND \"AssetId\" IS NULL AND \"AssetVersionId\" IS NULL AND \"CollectionId\" IS NULL)\nOR (\"EventType\" = 'COLLECTION_VIEW'\n    AND \"CollectionId\" IS NOT NULL AND \"AssetId\" IS NULL AND \"AssetVersionId\" IS NULL AND \"BundleId\" IS NULL)\nOR (\"EventType\" = 'COLLECTION_ITEM_CLICK'\n    AND \"CollectionId\" IS NOT NULL AND \"AssetId\" IS NOT NULL AND \"AssetVersionId\" IS NULL AND \"BundleId\" IS NULL)\nOR (\"EventType\" = 'DOWNLOAD_REQUESTED'\n    AND \"AssetId\" IS NOT NULL AND \"AssetVersionId\" IS NOT NULL AND \"BundleId\" IS NULL AND \"CollectionId\" IS NULL)");
                         });
                 });
 
@@ -202,6 +202,168 @@ namespace AssetBlock.Infrastructure.Migrations
                     b.ToTable("assets", (string)null);
                 });
 
+            modelBuilder.Entity("AssetBlock.Domain.Core.Entities.AssetArchiveAnalysis", b =>
+                {
+                    b.Property<Guid>("AssetVersionId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("FileCount")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("ManifestMetadata")
+                        .HasColumnType("jsonb");
+
+                    b.Property<string>("ReadmeContent")
+                        .HasMaxLength(16384)
+                        .HasColumnType("character varying(16384)");
+
+                    b.Property<long>("TotalExpandedBytes")
+                        .HasColumnType("bigint");
+
+                    b.Property<DateTimeOffset?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("AssetVersionId");
+
+                    b.ToTable("asset_archive_analyses", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_asset_archive_analyses_file_count", "\"FileCount\" >= 0");
+
+                            t.HasCheckConstraint("CK_asset_archive_analyses_manifest_metadata", "\"ManifestMetadata\" IS NULL OR jsonb_typeof(\"ManifestMetadata\") = 'object'");
+
+                            t.HasCheckConstraint("CK_asset_archive_analyses_manifest_metadata_size", "\"ManifestMetadata\" IS NULL OR octet_length(CAST(\"ManifestMetadata\" AS text)) <= 16384");
+
+                            t.HasCheckConstraint("CK_asset_archive_analyses_readme_content_size", "\"ReadmeContent\" IS NULL OR octet_length(\"ReadmeContent\") <= 16384");
+
+                            t.HasCheckConstraint("CK_asset_archive_analyses_total_expanded_bytes", "\"TotalExpandedBytes\" >= 0");
+                        });
+                });
+
+            modelBuilder.Entity("AssetBlock.Domain.Core.Entities.AssetProcessingJob", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("AssetId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("AssetVersionId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("AttemptCount")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTimeOffset>("AvailableAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTimeOffset?>("CompletedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("DefinitionVersion")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("ErrorCode")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("ErrorSummary")
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)");
+
+                    b.Property<DateTimeOffset?>("LeaseExpiresAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("LeaseOwner")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.Property<Guid?>("LeaseToken")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("MaxAttempts")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Payload")
+                        .IsRequired()
+                        .HasColumnType("jsonb");
+
+                    b.Property<string>("Result")
+                        .HasColumnType("jsonb");
+
+                    b.Property<string>("Stage")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<DateTimeOffset?>("StartedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("TraceParent")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.Property<string>("Type")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<DateTimeOffset?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("LeaseExpiresAt")
+                        .HasDatabaseName("IX_asset_processing_jobs_lease_expiry");
+
+                    b.HasIndex("AssetId", "AssetVersionId");
+
+                    b.HasIndex("AssetVersionId", "Type", "DefinitionVersion")
+                        .IsUnique()
+                        .HasDatabaseName("UIX_asset_processing_jobs_idempotency");
+
+                    b.HasIndex("Status", "AvailableAt", "Id")
+                        .HasDatabaseName("IX_asset_processing_jobs_claim");
+
+                    b.ToTable("asset_processing_jobs", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_asset_processing_jobs_attempt_count", "\"AttemptCount\" >= 0 AND \"AttemptCount\" <= \"MaxAttempts\"");
+
+                            t.HasCheckConstraint("CK_asset_processing_jobs_definition_version", "\"DefinitionVersion\" > 0");
+
+                            t.HasCheckConstraint("CK_asset_processing_jobs_error_code", "\"ErrorCode\" IS NULL OR \"ErrorCode\" ~ '^[A-Z0-9_]{1,64}$'");
+
+                            t.HasCheckConstraint("CK_asset_processing_jobs_max_attempts", "\"MaxAttempts\" > 0 AND \"MaxAttempts\" <= 10");
+
+                            t.HasCheckConstraint("CK_asset_processing_jobs_payload_size", "octet_length(CAST(\"Payload\" AS text)) <= 4000");
+
+                            t.HasCheckConstraint("CK_asset_processing_jobs_payload_type", "jsonb_typeof(\"Payload\") = 'object'");
+
+                            t.HasCheckConstraint("CK_asset_processing_jobs_result_size", "\"Result\" IS NULL OR octet_length(CAST(\"Result\" AS text)) <= 4000");
+
+                            t.HasCheckConstraint("CK_asset_processing_jobs_result_type", "\"Result\" IS NULL OR jsonb_typeof(\"Result\") = 'object'");
+
+                            t.HasCheckConstraint("CK_asset_processing_jobs_running_lease", "(\"Status\" = 'RUNNING' AND \"LeaseOwner\" IS NOT NULL AND \"LeaseToken\" IS NOT NULL AND \"LeaseExpiresAt\" IS NOT NULL) OR (\"Status\" != 'RUNNING' AND \"LeaseOwner\" IS NULL AND \"LeaseToken\" IS NULL AND \"LeaseExpiresAt\" IS NULL)");
+
+                            t.HasCheckConstraint("CK_asset_processing_jobs_status", "\"Status\" IN ('QUEUED', 'RUNNING', 'RETRY_SCHEDULED', 'SUCCEEDED', 'FAILED', 'CANCELLED')");
+
+                            t.HasCheckConstraint("CK_asset_processing_jobs_terminal_completed_at", "(\"Status\" IN ('SUCCEEDED', 'FAILED', 'CANCELLED') AND \"CompletedAt\" IS NOT NULL) OR (\"Status\" NOT IN ('SUCCEEDED', 'FAILED', 'CANCELLED') AND \"CompletedAt\" IS NULL)");
+
+                            t.HasCheckConstraint("CK_asset_processing_jobs_type", "\"Type\" IN ('ARCHIVE_INSPECTION', 'MALWARE_SCAN', 'LISTING_COPILOT')");
+                        });
+                });
+
             modelBuilder.Entity("AssetBlock.Domain.Core.Entities.AssetTag", b =>
                 {
                     b.Property<Guid>("AssetId")
@@ -266,6 +428,22 @@ namespace AssetBlock.Infrastructure.Migrations
                         .HasMaxLength(16000)
                         .HasColumnType("character varying(16000)");
 
+                    b.Property<string>("ProcessingErrorCode")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("ProcessingErrorSummary")
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)");
+
+                    b.Property<string>("ProcessingStatus")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<DateTimeOffset>("ProcessingUpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
                     b.Property<string>("ReleaseNotes")
                         .IsRequired()
                         .HasMaxLength(4000)
@@ -289,6 +467,9 @@ namespace AssetBlock.Infrastructure.Migrations
                         .HasDatabaseName("UIX_asset_versions_asset_current")
                         .HasFilter("\"IsCurrent\" = true");
 
+                    b.HasIndex("ProcessingStatus")
+                        .HasDatabaseName("IX_asset_versions_processing_status");
+
                     b.HasIndex("StorageKey")
                         .IsUnique()
                         .HasDatabaseName("UIX_asset_versions_storage_key");
@@ -300,6 +481,14 @@ namespace AssetBlock.Infrastructure.Migrations
                     b.ToTable("asset_versions", null, t =>
                         {
                             t.HasCheckConstraint("CK_asset_versions_content_length_positive", "\"ContentLength\" > 0");
+
+                            t.HasCheckConstraint("CK_asset_versions_processing_error_code", "\"ProcessingErrorCode\" IS NULL OR \"ProcessingErrorCode\" ~ '^[A-Z0-9_]{1,64}$'");
+
+                            t.HasCheckConstraint("CK_asset_versions_processing_status", "\"ProcessingStatus\" IN ('PENDING_INSPECTION', 'PENDING_MALWARE_SCAN', 'READY', 'REJECTED', 'PROCESSING_FAILED')");
+
+                            t.HasCheckConstraint("CK_asset_versions_ready_current", "\"IsCurrent\" = false OR (\"IsCurrent\" = true AND \"ProcessingStatus\" = 'READY')");
+
+                            t.HasCheckConstraint("CK_asset_versions_state_error_consistency", "(\"ProcessingStatus\" IN ('PENDING_INSPECTION', 'PENDING_MALWARE_SCAN', 'READY') AND \"ProcessingErrorCode\" IS NULL AND \"ProcessingErrorSummary\" IS NULL) OR (\"ProcessingStatus\" IN ('REJECTED', 'PROCESSING_FAILED') AND \"ProcessingErrorCode\" IS NOT NULL AND \"ProcessingErrorSummary\" IS NOT NULL AND length(trim(\"ProcessingErrorSummary\")) > 0)");
 
                             t.HasCheckConstraint("CK_asset_versions_version_number_positive", "\"VersionNumber\" > 0");
                         });
@@ -669,21 +858,21 @@ namespace AssetBlock.Infrastructure.Migrations
 
                     b.ToTable("checkout_intents", null, t =>
                         {
-                            t.HasCheckConstraint("CK_checkout_intents_AttributionSource", "\"AttributionSource\" IS NULL OR \"AttributionSource\" IN (\r\n    'CATALOG',\r\n    'SEARCH',\r\n    'SELLER_PROFILE',\r\n    'COLLECTION',\r\n    'BUNDLE_PAGE',\r\n    'DIRECT_INTERNAL',\r\n    'EXTERNAL',\r\n    'UNKNOWN')");
+                            t.HasCheckConstraint("CK_checkout_intents_AttributionSource", "\"AttributionSource\" IS NULL OR \"AttributionSource\" IN (\n    'CATALOG',\n    'SEARCH',\n    'SELLER_PROFILE',\n    'COLLECTION',\n    'BUNDLE_PAGE',\n    'DIRECT_INTERNAL',\n    'EXTERNAL',\n    'UNKNOWN')");
 
                             t.HasCheckConstraint("CK_checkout_intents_amount_total_positive", "\"AmountTotal\" > 0");
 
-                            t.HasCheckConstraint("CK_checkout_intents_attribution_collection", "(\"AttributionSource\" = 'COLLECTION'\r\n    AND \"AttributionCollectionId\" IS NOT NULL\r\n    AND \"AssetId\" IS NOT NULL\r\n    AND \"BundleId\" IS NULL)\r\nOR (\"AttributionSource\" IS DISTINCT FROM 'COLLECTION'\r\n    AND \"AttributionCollectionId\" IS NULL)");
+                            t.HasCheckConstraint("CK_checkout_intents_attribution_collection", "(\"AttributionSource\" = 'COLLECTION'\n    AND \"AttributionCollectionId\" IS NOT NULL\n    AND \"AssetId\" IS NOT NULL\n    AND \"BundleId\" IS NULL)\nOR (\"AttributionSource\" IS DISTINCT FROM 'COLLECTION'\n    AND \"AttributionCollectionId\" IS NULL)");
 
-                            t.HasCheckConstraint("CK_checkout_intents_attribution_null_consistency", "\"AttributionSource\" IS NOT NULL\r\nOR (\"AnalyticsVisitorId\" IS NULL\r\n    AND \"AnalyticsSessionId\" IS NULL\r\n    AND \"AttributionCollectionId\" IS NULL\r\n    AND \"AttributionReferrerHost\" IS NULL)");
+                            t.HasCheckConstraint("CK_checkout_intents_attribution_null_consistency", "\"AttributionSource\" IS NOT NULL\nOR (\"AnalyticsVisitorId\" IS NULL\n    AND \"AnalyticsSessionId\" IS NULL\n    AND \"AttributionCollectionId\" IS NULL\n    AND \"AttributionReferrerHost\" IS NULL)");
 
-                            t.HasCheckConstraint("CK_checkout_intents_attribution_referrer_host", "\"AttributionReferrerHost\" IS NULL\r\nOR \"AttributionSource\" = 'EXTERNAL'");
+                            t.HasCheckConstraint("CK_checkout_intents_attribution_referrer_host", "\"AttributionReferrerHost\" IS NULL\nOR \"AttributionSource\" = 'EXTERNAL'");
 
                             t.HasCheckConstraint("CK_checkout_intents_currency_iso_lower", "length(\"Currency\") = 3 AND \"Currency\" = lower(\"Currency\")");
 
                             t.HasCheckConstraint("CK_checkout_intents_currency_usd_v1", "\"Currency\" = 'usd'");
 
-                            t.HasCheckConstraint("CK_checkout_intents_exactly_one_product", "(\"AssetId\" IS NOT NULL AND \"BundleId\" IS NULL AND \"BundleRevisionId\" IS NULL)\r\nOR (\"AssetId\" IS NULL AND \"BundleId\" IS NOT NULL AND \"BundleRevisionId\" IS NOT NULL)");
+                            t.HasCheckConstraint("CK_checkout_intents_exactly_one_product", "(\"AssetId\" IS NOT NULL AND \"BundleId\" IS NULL AND \"BundleRevisionId\" IS NULL)\nOR (\"AssetId\" IS NULL AND \"BundleId\" IS NOT NULL AND \"BundleRevisionId\" IS NOT NULL)");
 
                             t.HasCheckConstraint("CK_checkout_intents_expires_after_created", "\"ExpiresAt\" > \"CreatedAt\"");
                         });
@@ -1053,7 +1242,7 @@ namespace AssetBlock.Infrastructure.Migrations
 
                             t.HasCheckConstraint("CK_orders_currency_usd_v1", "\"Currency\" = 'usd'");
 
-                            t.HasCheckConstraint("CK_orders_exactly_one_product", "(\"AssetId\" IS NOT NULL AND \"BundleId\" IS NULL AND \"BundleRevisionId\" IS NULL)\r\nOR (\"AssetId\" IS NULL AND \"BundleId\" IS NOT NULL AND \"BundleRevisionId\" IS NOT NULL)");
+                            t.HasCheckConstraint("CK_orders_exactly_one_product", "(\"AssetId\" IS NOT NULL AND \"BundleId\" IS NULL AND \"BundleRevisionId\" IS NULL)\nOR (\"AssetId\" IS NULL AND \"BundleId\" IS NOT NULL AND \"BundleRevisionId\" IS NOT NULL)");
                         });
                 });
 
@@ -1373,7 +1562,7 @@ namespace AssetBlock.Infrastructure.Migrations
 
                     b.ToTable("seller_analytics_daily", null, t =>
                         {
-                            t.HasCheckConstraint("CK_seller_analytics_daily_counters_non_negative", "\"AssetViews\" >= 0 AND \"BundleViews\" >= 0 AND \"CollectionViews\" >= 0\r\nAND \"CollectionItemClicks\" >= 0 AND \"DownloadRequests\" >= 0 AND \"UniqueVisitors\" >= 0");
+                            t.HasCheckConstraint("CK_seller_analytics_daily_counters_non_negative", "\"AssetViews\" >= 0 AND \"BundleViews\" >= 0 AND \"CollectionViews\" >= 0\nAND \"CollectionItemClicks\" >= 0 AND \"DownloadRequests\" >= 0 AND \"UniqueVisitors\" >= 0");
                         });
                 });
 
@@ -1521,7 +1710,7 @@ namespace AssetBlock.Infrastructure.Migrations
                         {
                             t.HasCheckConstraint("CK_traffic_analytics_daily_ReferrerHostKey_external_only", "\"ReferrerHostKey\" = '' OR \"Source\" = 'EXTERNAL'");
 
-                            t.HasCheckConstraint("CK_traffic_analytics_daily_Source", "\"Source\" IN (\r\n    'CATALOG',\r\n    'SEARCH',\r\n    'SELLER_PROFILE',\r\n    'COLLECTION',\r\n    'BUNDLE_PAGE',\r\n    'DIRECT_INTERNAL',\r\n    'EXTERNAL',\r\n    'UNKNOWN')");
+                            t.HasCheckConstraint("CK_traffic_analytics_daily_Source", "\"Source\" IN (\n    'CATALOG',\n    'SEARCH',\n    'SELLER_PROFILE',\n    'COLLECTION',\n    'BUNDLE_PAGE',\n    'DIRECT_INTERNAL',\n    'EXTERNAL',\n    'UNKNOWN')");
 
                             t.HasCheckConstraint("CK_traffic_analytics_daily_counters_non_negative", "\"ProductViews\" >= 0 AND \"UniqueVisitors\" >= 0");
                         });
@@ -1679,6 +1868,37 @@ namespace AssetBlock.Infrastructure.Migrations
                     b.Navigation("Author");
 
                     b.Navigation("Category");
+                });
+
+            modelBuilder.Entity("AssetBlock.Domain.Core.Entities.AssetArchiveAnalysis", b =>
+                {
+                    b.HasOne("AssetBlock.Domain.Core.Entities.AssetVersion", "AssetVersion")
+                        .WithOne("ArchiveAnalysis")
+                        .HasForeignKey("AssetBlock.Domain.Core.Entities.AssetArchiveAnalysis", "AssetVersionId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("AssetVersion");
+                });
+
+            modelBuilder.Entity("AssetBlock.Domain.Core.Entities.AssetProcessingJob", b =>
+                {
+                    b.HasOne("AssetBlock.Domain.Core.Entities.Asset", "Asset")
+                        .WithMany()
+                        .HasForeignKey("AssetId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("AssetBlock.Domain.Core.Entities.AssetVersion", "AssetVersion")
+                        .WithMany()
+                        .HasForeignKey("AssetId", "AssetVersionId")
+                        .HasPrincipalKey("AssetId", "Id")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Asset");
+
+                    b.Navigation("AssetVersion");
                 });
 
             modelBuilder.Entity("AssetBlock.Domain.Core.Entities.AssetTag", b =>
@@ -2072,6 +2292,8 @@ namespace AssetBlock.Infrastructure.Migrations
 
             modelBuilder.Entity("AssetBlock.Domain.Core.Entities.AssetVersion", b =>
                 {
+                    b.Navigation("ArchiveAnalysis");
+
                     b.Navigation("Purchases");
                 });
 
