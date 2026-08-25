@@ -38,10 +38,14 @@
     </ItemGroup>
 
     <ItemGroup>
-    <PackageReference Include="Microsoft.Extensions.Configuration.Json" Version="10.0.3" />
-    <PackageReference Include="Microsoft.Extensions.Configuration.Binder" Version="10.0.3" />
-    <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="10.0.3" />
-    <PackageReference Include="Microsoft.Extensions.Hosting" Version="10.0.3" />
-  </ItemGroup>
+      <None Include="Ai\model-policy.fixture.json" CopyToOutputDirectory="PreserveNewest" />
+    </ItemGroup>
 
+    <ItemGroup>
+      <PackageReference Include="Microsoft.Extensions.Configuration.Json" Version="10.0.3" />
+      <PackageReference Include="Microsoft.Extensions.Configuration.Binder" Version="10.0.3" />
+      <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="10.0.3" />
+      <PackageReference Include="Microsoft.Extensions.Hosting" Version="10.0.3" />
+      <PackageReference Include="Microsoft.Extensions.Http" Version="10.0.3" />
+    </ItemGroup>
 </Project>

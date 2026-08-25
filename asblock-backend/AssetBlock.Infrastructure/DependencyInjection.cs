@@ -2,6 +2,7 @@ using AssetBlock.Domain.Abstractions.Services;
 using AssetBlock.Domain.Core.Primitives.AppSettingsOptions;
 using AssetBlock.Domain.Core.Dto;
 using AssetBlock.Domain.Core.Enums;
+using AssetBlock.Infrastructure.Ai;
 using AssetBlock.Infrastructure.Email;
 using AssetBlock.Infrastructure.HostedServices;
 using AssetBlock.Infrastructure.HostedServices.AssetProcessing;
@@ -31,6 +32,9 @@ public static class DependencyInjection
     {
         var connectionString = configuration.GetConnectionString("DefaultConnection")
             ?? throw new InvalidOperationException("Connection string 'DefaultConnection' not found.");
+
+        services.TryAddSingleton<IConfiguration>(configuration);
+        services.TryAddSingleton<IHostEnvironment>(environment);
 
         services.AddOptions<DatabaseOptions>()
             .Bind(configuration.GetSection(DatabaseOptions.SECTION_NAME))
@@ -97,6 +101,36 @@ public static class DependencyInjection
             .Bind(configuration.GetSection(ClamAvOptions.SECTION_NAME))
             .ValidateOnStart();
         services.AddSingleton<IValidateOptions<ClamAvOptions>, ClamAvOptionsValidator>();
+
+        services.AddSingleton<IAiModelPolicyCatalog, FileAiModelPolicyCatalog>();
+        services.AddSingleton<IAiTelemetry, AiTelemetry>();
+        services.AddOptions<AiOptions>()
+            .Bind(configuration.GetSection(AiOptions.SECTION_NAME))
+            .ValidateOnStart();
+        services.AddSingleton<IValidateOptions<AiOptions>, AiOptionsValidator>();
+        services.AddOptions<OpenRouterOptions>()
+            .Bind(configuration.GetSection(OpenRouterOptions.SECTION_NAME))
+            .ValidateOnStart();
+        services.AddSingleton<IValidateOptions<OpenRouterOptions>, OpenRouterOptionsValidator>();
+        services.AddOptions<OllamaOptions>()
+            .Bind(configuration.GetSection(OllamaOptions.SECTION_NAME))
+            .ValidateOnStart();
+        services.AddSingleton<IValidateOptions<OllamaOptions>, OllamaOptionsValidator>();
+        services.AddHttpClient(OpenRouterAiGenerationProvider.HTTP_CLIENT_NAME, (sp, client) =>
+        {
+            var options = sp.GetRequiredService<IOptions<OpenRouterOptions>>().Value;
+            client.BaseAddress = new Uri(EnsureTrailingSlash(options.BaseUrl));
+            client.Timeout = Timeout.InfiniteTimeSpan;
+        });
+        services.AddHttpClient(OllamaAiGenerationProvider.HTTP_CLIENT_NAME, (sp, client) =>
+        {
+            var options = sp.GetRequiredService<IOptions<OllamaOptions>>().Value;
+            client.BaseAddress = new Uri(EnsureTrailingSlash(options.BaseUrl));
+            client.Timeout = Timeout.InfiniteTimeSpan;
+        });
+        services.AddSingleton<IAiGenerationProvider, OpenRouterAiGenerationProvider>();
+        services.AddSingleton<IAiGenerationProvider, OllamaAiGenerationProvider>();
+        services.AddSingleton<IAiGenerationProviderRegistry, AiGenerationProviderRegistry>();
 
         services.AddHostedService<StorageOrphanCleanupWorker>();
         services.AddHostedService<CheckoutReservationCleanupWorker>();
@@ -183,6 +217,9 @@ public static class DependencyInjection
 
         return services;
     }
+
+    private static string EnsureTrailingSlash(string baseUrl) =>
+        baseUrl.EndsWith('/') ? baseUrl : baseUrl + "/";
 
     public static IServiceCollection AddAssetProcessingJobHandler<THandler, TPayload, TResult>(
         this IServiceCollection services,

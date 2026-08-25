@@ -115,7 +115,21 @@ public static class ErrorCodesToErrorMessages
         { ErrorCodes.INVALID_JOB_RESULT, "The processing job result is invalid." },
         { ErrorCodes.WORKER_SHUTDOWN, "Processing was interrupted because the worker stopped." },
         { ErrorCodes.PROCESSING_TIMEOUT, "Asset processing timed out." },
-        { ErrorCodes.PROCESSING_EXCEPTION, "Asset processing failed due to an internal error." }
+        { ErrorCodes.PROCESSING_EXCEPTION, "Asset processing failed due to an internal error." },
+        { ErrorCodes.AI_DISABLED, "AI generation is disabled." },
+        { ErrorCodes.AI_PROVIDER_UNAVAILABLE, "The AI provider is temporarily unavailable." },
+        { ErrorCodes.AI_RATE_LIMITED, "The AI provider rate limit was reached. Try again later." },
+        { ErrorCodes.AI_TIMEOUT, "The AI provider timed out." },
+        { ErrorCodes.AI_UNAUTHORIZED, "The AI provider rejected the credentials." },
+        { ErrorCodes.AI_PAYMENT_REQUIRED, "The AI provider requires billing or quota." },
+        { ErrorCodes.AI_FORBIDDEN, "The AI provider denied the request." },
+        { ErrorCodes.AI_INVALID_REQUEST, "The AI request was rejected." },
+        { ErrorCodes.AI_INVALID_RESPONSE, "The AI provider returned an invalid response." },
+        { ErrorCodes.AI_MODEL_NOT_ALLOWED, "The configured AI model is not approved by policy." },
+        { ErrorCodes.AI_CATEGORY_NOT_ALLOWED, "The suggested category is not in the allowed list." },
+        { ErrorCodes.AI_TAGS_NOT_ALLOWED, "One or more suggested tags are not in the allowed list." },
+        { ErrorCodes.AI_INPUT_TOO_LARGE, "The listing context exceeds the AI input limit." },
+        { ErrorCodes.AI_ERROR, "AI generation failed." }
     };
 
     public static string GetMessage(string code) =>

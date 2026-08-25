@@ -1,0 +1,29 @@
+{
+  "schemaVersion": 1,
+  "policyVersion": "listing-copilot-v1",
+  "entries": [
+    {
+      "provider": "OPENROUTER",
+      "modelId": "fixture/openrouter-test",
+      "useCase": "LISTING_COPILOT",
+      "structuredOutput": true,
+      "privacy": "EXTERNAL_METADATA_ONLY",
+      "maxInputChars": 12000,
+      "maxOutputTokens": 1000,
+      "licenseNote": "Test fixture only. Not an approved production model.",
+      "reviewedOn": "2026-08-25"
+    },
+    {
+      "provider": "OLLAMA",
+      "modelId": "fixture-ollama-test",
+      "useCase": "LISTING_COPILOT",
+      "structuredOutput": true,
+      "privacy": "LOCAL_ONLY",
+      "maxInputChars": 12000,
+      "maxOutputTokens": 1000,
+      "licenseNote": "Test fixture only. Not an approved production model.",
+      "reviewedOn": "2026-08-25",
+      "digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    }
+  ]
+}

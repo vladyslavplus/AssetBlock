@@ -244,6 +244,66 @@ public static class AssetBlockDiagnostics
         ScanByteKind.TRANSFERRED => "TRANSFERRED",
         _ => "READ"
     };
+
+    private static readonly Counter<long> _aiRequests = _meter.CreateCounter<long>(
+        "assetblock.ai.requests",
+        description: "Count of AI generation attempts");
+
+    private static readonly Counter<long> _aiResults = _meter.CreateCounter<long>(
+        "assetblock.ai.results",
+        description: "Count of AI generation outcomes");
+
+    private static readonly Histogram<double> _aiDuration = _meter.CreateHistogram<double>(
+        "assetblock.ai.duration",
+        unit: "s",
+        description: "Duration of AI generation attempts");
+
+    private static readonly Histogram<long> _aiInputTokens = _meter.CreateHistogram<long>(
+        "assetblock.ai.input_tokens",
+        description: "Prompt token counts reported by an AI provider");
+
+    private static readonly Histogram<long> _aiOutputTokens = _meter.CreateHistogram<long>(
+        "assetblock.ai.output_tokens",
+        description: "Completion token counts reported by an AI provider");
+
+    internal static void RecordAiGeneration(
+        AiProviderKind? provider,
+        string modelTag,
+        AiDiagnosticsOutcome outcome,
+        TimeSpan duration,
+        int? inputTokens,
+        int? outputTokens)
+    {
+        var tags = new TagList
+        {
+            { "ai.provider", provider is { } kind ? kind.ToString() : "UNKNOWN" },
+            { "ai.model", modelTag },
+            { "ai.outcome", ToTagValue(outcome) }
+        };
+
+        _aiRequests.Add(1, in tags);
+        _aiResults.Add(1, in tags);
+        _aiDuration.Record(Math.Max(0.0, duration.TotalSeconds), in tags);
+        if (inputTokens is { } input)
+        {
+            _aiInputTokens.Record(Math.Max(0L, input), in tags);
+        }
+
+        if (outputTokens is { } output)
+        {
+            _aiOutputTokens.Record(Math.Max(0L, output), in tags);
+        }
+    }
+
+    private static string ToTagValue(AiDiagnosticsOutcome outcome) => outcome switch
+    {
+        AiDiagnosticsOutcome.SUCCESS => "SUCCESS",
+        AiDiagnosticsOutcome.DISABLED => "DISABLED",
+        AiDiagnosticsOutcome.RETRYABLE => "RETRYABLE",
+        AiDiagnosticsOutcome.TERMINAL => "TERMINAL",
+        AiDiagnosticsOutcome.CANCELLED => "CANCELLED",
+        _ => "TERMINAL"
+    };
 }
 
 public static class JobOutcomeNames

@@ -295,3 +295,19 @@ docker-compose up -d clamav
 ```
 
 clamd binds to `127.0.0.1:3310`. Signature data lives on the `clamav_data` volume. Enable processing in Development (`AssetProcessing:Enabled` and `ClamAv:Enabled`).
+
+### Local Ollama (optional AI)
+
+AI generation is disabled in tracked config (`Ai:Enabled=false`). Marketplace and API startup do not call OpenRouter or Ollama until AI is explicitly enabled.
+
+OpenRouter is the default provider. Ollama is an explicit alternative with no automatic fallback. AssetBlock does not start Ollama, ping it at startup, or pull models.
+
+Native setup:
+
+1. Install Ollama on the host and start the local daemon (`http://127.0.0.1:11434`).
+2. Pull a model yourself with the Ollama CLI. Use that exact model tag in `Ollama:Model`.
+3. Add a matching policy entry to `AssetBlock.WebApi/ai/model-policy.json` (provider `OLLAMA`, exact id, exact `digest` from `ollama show` / `/api/tags`, `LISTING_COPILOT`, `structuredOutput: true`, `privacy: LOCAL_ONLY`, limits, license note, and review date). Generation calls `/api/tags` first and refuses to run unless name and digest match.
+4. Set `Ai:Enabled=true`, `Ai:Provider=Ollama`, and keep `Ollama:BaseUrl` as a loopback HTTP URL. Put secrets in user secrets or environment variables, never in tracked files.
+
+OpenRouter requires an API key, a non-empty ordered distinct `OpenRouter:Models` list, and a policy entry for every configured model (`privacy: EXTERNAL_METADATA_ONLY`). Requests send `require_parameters=true` and `data_collection=deny`. Optional `OpenRouter:ZeroDataRetention` adds `zdr=true` and may reduce available endpoints. Real calls are rejected until the exact model id exists in the policy file. The checked-in policy list is empty on purpose.
+

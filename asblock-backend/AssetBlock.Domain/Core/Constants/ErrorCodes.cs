@@ -17,7 +17,6 @@ public static class ErrorCodes
     public const string ERR_EMAIL_CHANGE_TARGET_TAKEN = "ERR_EMAIL_CHANGE_TARGET_TAKEN";
     public const string ERR_EMAIL_NOT_VERIFIED = "ERR_EMAIL_NOT_VERIFIED";
 
-
     public const string ERR_CATEGORY_NOT_FOUND = "ERR_CATEGORY_NOT_FOUND";
     public const string ERR_TAG_NOT_FOUND = "ERR_TAG_NOT_FOUND";
     public const string ERR_TAG_ALREADY_EXISTS = "ERR_TAG_ALREADY_EXISTS";
@@ -130,4 +129,18 @@ public static class ErrorCodes
     public const string WORKER_SHUTDOWN = "WORKER_SHUTDOWN";
     public const string PROCESSING_TIMEOUT = "PROCESSING_TIMEOUT";
     public const string PROCESSING_EXCEPTION = "PROCESSING_EXCEPTION";
+    public const string AI_DISABLED = "AI_DISABLED";
+    public const string AI_PROVIDER_UNAVAILABLE = "AI_PROVIDER_UNAVAILABLE";
+    public const string AI_RATE_LIMITED = "AI_RATE_LIMITED";
+    public const string AI_TIMEOUT = "AI_TIMEOUT";
+    public const string AI_UNAUTHORIZED = "AI_UNAUTHORIZED";
+    public const string AI_PAYMENT_REQUIRED = "AI_PAYMENT_REQUIRED";
+    public const string AI_FORBIDDEN = "AI_FORBIDDEN";
+    public const string AI_INVALID_REQUEST = "AI_INVALID_REQUEST";
+    public const string AI_INVALID_RESPONSE = "AI_INVALID_RESPONSE";
+    public const string AI_MODEL_NOT_ALLOWED = "AI_MODEL_NOT_ALLOWED";
+    public const string AI_CATEGORY_NOT_ALLOWED = "AI_CATEGORY_NOT_ALLOWED";
+    public const string AI_TAGS_NOT_ALLOWED = "AI_TAGS_NOT_ALLOWED";
+    public const string AI_INPUT_TOO_LARGE = "AI_INPUT_TOO_LARGE";
+    public const string AI_ERROR = "AI_ERROR";
 }

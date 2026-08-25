@@ -252,6 +252,57 @@ public sealed class AssetBlockDiagnosticsTests : IDisposable
         Convert.ToDouble(second[1].Measurement).Should().BeGreaterThan(Convert.ToDouble(second[0].Measurement));
     }
 
+    [Fact]
+    public void RecordAiGeneration_ShouldRecordBoundedTagsAndSeconds()
+    {
+        AssetBlockDiagnostics.RecordAiGeneration(
+            AiProviderKind.OPENROUTER,
+            "fixture/openrouter-test",
+            AiDiagnosticsOutcome.SUCCESS,
+            TimeSpan.FromSeconds(1.25),
+            11,
+            7);
+
+        var requests = GetMeasurements("assetblock.ai.requests").ToList();
+        var results = GetMeasurements("assetblock.ai.results").ToList();
+        var durations = GetMeasurements("assetblock.ai.duration").ToList();
+        var input = GetMeasurements("assetblock.ai.input_tokens").ToList();
+        var output = GetMeasurements("assetblock.ai.output_tokens").ToList();
+
+        requests.Should().HaveCount(1);
+        results.Should().HaveCount(1);
+        durations.Should().HaveCount(1);
+        durations[0].Instrument.Unit.Should().Be("s");
+        durations[0].Measurement.Should().Be(1.25);
+        requests[0].Tags.Keys.Should().BeEquivalentTo("ai.provider", "ai.model", "ai.outcome");
+        requests[0].Tags["ai.provider"].Should().Be("OPENROUTER");
+        requests[0].Tags["ai.model"].Should().Be("fixture/openrouter-test");
+        requests[0].Tags["ai.outcome"].Should().Be("SUCCESS");
+        requests[0].Tags.Should().NotContainKey("ai.request_id");
+        input.Should().HaveCount(1);
+        input[0].Measurement.Should().Be(11L);
+        output[0].Measurement.Should().Be(7L);
+    }
+
+    [Fact]
+    public void RecordAiGeneration_WhenModelMissing_ShouldUseUnknownTag()
+    {
+        AssetBlockDiagnostics.RecordAiGeneration(
+            null,
+            "UNKNOWN",
+            AiDiagnosticsOutcome.DISABLED,
+            TimeSpan.FromMilliseconds(5),
+            null,
+            null);
+
+        var results = GetMeasurements("assetblock.ai.results").ToList();
+        results.Should().HaveCount(1);
+        results[0].Tags["ai.provider"].Should().Be("UNKNOWN");
+        results[0].Tags["ai.model"].Should().Be("UNKNOWN");
+        results[0].Tags["ai.outcome"].Should().Be("DISABLED");
+        GetMeasurements("assetblock.ai.input_tokens").Should().BeEmpty();
+    }
+
     private sealed class ControllableTimeProvider(DateTimeOffset utcNow) : TimeProvider
     {
         private DateTimeOffset _utcNow = utcNow;

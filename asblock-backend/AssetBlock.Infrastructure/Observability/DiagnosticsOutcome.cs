@@ -44,3 +44,12 @@ internal enum ScanByteKind
     ATTEMPTED,
     TRANSFERRED
 }
+
+internal enum AiDiagnosticsOutcome
+{
+    SUCCESS,
+    DISABLED,
+    RETRYABLE,
+    TERMINAL,
+    CANCELLED
+}

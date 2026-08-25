@@ -1,3 +1,4 @@
+using AssetBlock.Application.Ai;
 using AssetBlock.Application.Common.Behaviors;
 using AssetBlock.Application.Common.Caching;
 using AssetBlock.Application.Messaging;
@@ -23,6 +24,7 @@ public static class DependencyInjection
         // Registration order is execution order: logging, then validation, then handler.
         services.AddTransient(typeof(IPipelineBehavior<,>), typeof(LoggingBehavior<,>));
         services.AddTransient(typeof(IPipelineBehavior<,>), typeof(ValidationBehavior<,>));
+        services.AddSingleton<IListingSuggestionOrchestrator, ListingSuggestionOrchestrator>();
         services.AddScoped<CheckoutSessionOrchestrator>();
         services.AddScoped<CheckoutAttributionNormalizer>();
         services.AddScoped<ICheckoutCompletionService, HandleStripeWebhookCommandHandler>();

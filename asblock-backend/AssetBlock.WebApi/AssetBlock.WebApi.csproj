@@ -38,8 +38,11 @@
     </ItemGroup>
 
     <ItemGroup>
+      <Content Update="ai\model-policy.json" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    </ItemGroup>
+
+    <ItemGroup>
       <InternalsVisibleTo Include="AssetBlock.WebApi.Tests" />
       <InternalsVisibleTo Include="AssetBlock.WebApi.IntegrationTests" />
     </ItemGroup>
-
 </Project>
