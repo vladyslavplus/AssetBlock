@@ -52,9 +52,19 @@ public interface IAssetStore
     Task<PagedResult<AssetListItem>> GetPaged(GetAssetsRequest request, CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Returns listings for an authenticated seller dashboard, scoped by author.
+    /// Returns listings for an authenticated seller dashboard, scoped by author,
+    /// including the latest processing state without a per-row versions round-trip.
     /// </summary>
-    Task<PagedResult<AssetListItem>> GetMyListings(Guid authorId, GetAssetsRequest request, CancellationToken cancellationToken = default);
+    Task<PagedResult<SellerAssetListItem>> GetMyListings(Guid authorId, GetAssetsRequest request, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Returns owner-only seller detail for an asset owned by <paramref name="ownerUserId"/>.
+    /// Missing, deleted, or foreign assets return null (no existence leak).
+    /// </summary>
+    Task<SellerAssetDetailItem?> GetOwnedSellerDetail(
+        Guid assetId,
+        Guid ownerUserId,
+        CancellationToken cancellationToken = default);
     Task SoftDelete(Guid id, DateTimeOffset deletedAt, CancellationToken cancellationToken = default);
     Task Delete(Guid id, CancellationToken cancellationToken = default);
     Task AddTag(Guid assetId, Guid tagId, CancellationToken cancellationToken = default);

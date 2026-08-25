@@ -64,9 +64,9 @@ export function SellMyBundles() {
 
   const detailQuery = useQuery({
     queryKey: bundleKeys.sellerDetail(selectedId ?? ''),
-    queryFn: () => {
+    queryFn: ({ signal }) => {
       if (!selectedId) throw new Error('Missing bundle id')
-      return fetchSellerBundleQuery(selectedId)
+      return fetchSellerBundleQuery(selectedId, signal)
     },
     enabled: authed && Boolean(selectedId) && mode === 'revise',
   })

@@ -15,7 +15,6 @@ import {
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
-import { useAssetProcessingSubscription } from '@/hooks/use-asset-processing-subscription'
 import type { AssetVersionSummaryApi } from '@/lib/catalog/assets-api'
 import { formatShortMonthDate } from '@/lib/format-date'
 import { runQueryInBackground } from '@/lib/query/query-refresh'
@@ -137,9 +136,6 @@ export function AssetProcessingStatusPanel({
   title = 'Processing status',
   className,
 }: AssetProcessingStatusPanelProps) {
-  // Subscribe to real-time SignalR invalidations
-  useAssetProcessingSubscription()
-
   const isVersionQuery = Boolean(assetVersionId)
   const assetQuery = useAssetProcessingJobsQuery(assetId, {
     enabled: !isVersionQuery && Boolean(assetId),

@@ -9,7 +9,7 @@ export const notificationsKeys = {
   unread: () => [...notificationsKeys.all, 'unread'] as const,
 }
 
-export async function fetchNotificationsUnreadCount(): Promise<number> {
+export async function fetchNotificationsUnreadCount(signal?: AbortSignal): Promise<number> {
   const params = new URLSearchParams({
     page: '1',
     pageSize: '1',
@@ -20,6 +20,7 @@ export async function fetchNotificationsUnreadCount(): Promise<number> {
   const res = await fetch(`/api/account/notifications?${params}`, {
     credentials: 'include',
     cache: 'no-store',
+    signal,
   })
   if (!res.ok) {
     return 0
@@ -31,6 +32,7 @@ export async function fetchNotificationsUnreadCount(): Promise<number> {
 export async function fetchNotificationsPage(
   page: number,
   pageSize: number,
+  signal?: AbortSignal,
 ): Promise<PagedNotificationsDto> {
   const params = new URLSearchParams({
     page: String(page),
@@ -41,6 +43,7 @@ export async function fetchNotificationsPage(
   const res = await fetch(`/api/account/notifications?${params}`, {
     credentials: 'include',
     cache: 'no-store',
+    signal,
   })
   if (!res.ok) {
     throw new Error('Notifications request failed')

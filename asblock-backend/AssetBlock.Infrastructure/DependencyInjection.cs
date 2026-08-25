@@ -33,8 +33,8 @@ public static class DependencyInjection
         var connectionString = configuration.GetConnectionString("DefaultConnection")
             ?? throw new InvalidOperationException("Connection string 'DefaultConnection' not found.");
 
-        services.TryAddSingleton<IConfiguration>(configuration);
-        services.TryAddSingleton<IHostEnvironment>(environment);
+        services.TryAddSingleton(configuration);
+        services.TryAddSingleton(environment);
 
         services.AddOptions<DatabaseOptions>()
             .Bind(configuration.GetSection(DatabaseOptions.SECTION_NAME))
@@ -102,18 +102,17 @@ public static class DependencyInjection
             .ValidateOnStart();
         services.AddSingleton<IValidateOptions<ClamAvOptions>, ClamAvOptionsValidator>();
 
-        services.AddSingleton<IAiModelPolicyCatalog, FileAiModelPolicyCatalog>();
         services.AddSingleton<IAiTelemetry, AiTelemetry>();
         services.AddOptions<AiOptions>()
             .Bind(configuration.GetSection(AiOptions.SECTION_NAME))
             .ValidateOnStart();
         services.AddSingleton<IValidateOptions<AiOptions>, AiOptionsValidator>();
         services.AddOptions<OpenRouterOptions>()
-            .Bind(configuration.GetSection(OpenRouterOptions.SECTION_NAME))
+            .Bind(configuration.GetSection(OpenRouterOptions.CONFIGURATION_PATH))
             .ValidateOnStart();
         services.AddSingleton<IValidateOptions<OpenRouterOptions>, OpenRouterOptionsValidator>();
         services.AddOptions<OllamaOptions>()
-            .Bind(configuration.GetSection(OllamaOptions.SECTION_NAME))
+            .Bind(configuration.GetSection(OllamaOptions.CONFIGURATION_PATH))
             .ValidateOnStart();
         services.AddSingleton<IValidateOptions<OllamaOptions>, OllamaOptionsValidator>();
         services.AddHttpClient(OpenRouterAiGenerationProvider.HTTP_CLIENT_NAME, (sp, client) =>
@@ -143,6 +142,8 @@ public static class DependencyInjection
             _ => new AssetProcessingJobHandlerAdapter<MalwareScanJobHandler, MalwareScanPayload, MalwareScanResult>(AssetProcessingJobType.MALWARE_SCAN));
         services.AddScoped<ArchiveInspectionJobHandler>();
         services.AddScoped<MalwareScanJobHandler>();
+        services.AddAssetProcessingJobHandler<ListingCopilotJobHandler, ListingCopilotPayload, ListingCopilotResult>(
+            AssetProcessingJobType.LISTING_COPILOT);
         services.AddSingleton<IArchiveSafetyInspector, ArchiveSafetyInspector>();
         services.AddSingleton<IContentMalwareScanner, ClamAvContentMalwareScanner>();
         services.AddScoped<IUnitOfWork, EfUnitOfWork>();
@@ -162,6 +163,7 @@ public static class DependencyInjection
         services.AddScoped<ICategoryStore, CategoryStore>();
         services.AddScoped<IAssetStore, AssetStore>();
         services.AddScoped<IAssetArchiveAnalysisStore, AssetArchiveAnalysisStore>();
+        services.AddScoped<IListingCopilotStore, ListingCopilotStore>();
         services.AddScoped<IAssetProcessingLifecycleStore, AssetProcessingLifecycleStore>();
         services.AddScoped<IPurchaseStore, PurchaseStore>();
         services.AddScoped<ICheckoutIntentStore, CheckoutIntentStore>();
@@ -221,7 +223,7 @@ public static class DependencyInjection
     private static string EnsureTrailingSlash(string baseUrl) =>
         baseUrl.EndsWith('/') ? baseUrl : baseUrl + "/";
 
-    public static IServiceCollection AddAssetProcessingJobHandler<THandler, TPayload, TResult>(
+    private static IServiceCollection AddAssetProcessingJobHandler<THandler, TPayload, TResult>(
         this IServiceCollection services,
         AssetProcessingJobType jobType)
         where THandler : class, IAssetProcessingJobHandler<TPayload, TResult>

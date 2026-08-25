@@ -43,7 +43,7 @@ export function AssetUploadForm() {
 
   const facetsQuery = useQuery({
     queryKey: catalogKeys.facets(),
-    queryFn: fetchCatalogFacets,
+    queryFn: ({ signal }) => fetchCatalogFacets({ signal }),
     staleTime: 5 * 60 * 1000,
     enabled: authed,
   })

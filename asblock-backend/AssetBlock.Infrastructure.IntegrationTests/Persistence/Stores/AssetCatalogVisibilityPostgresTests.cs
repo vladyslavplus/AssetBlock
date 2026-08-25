@@ -62,8 +62,112 @@ public sealed class AssetCatalogVisibilityPostgresTests(PostgresFixture fixture)
             PageSize = 50
         });
 
-        // Assert 2: Owner sees all 3 assets (Ready, Pending, and Rejected)
+        // Assert 2: Owner sees all 3 assets (Ready, Pending, and Rejected) with latest processing state.
         ownerResult.Items.Should().HaveCount(3);
         ownerResult.Items.Select(i => i.Id).Should().BeEquivalentTo([readyAsset.Id, pendingAsset.Id, rejectedAsset.Id]);
+
+        var readyRow = ownerResult.Items.Single(i => i.Id == readyAsset.Id);
+        readyRow.LatestProcessingStatus.Should().Be(AssetVersionProcessingStatus.READY);
+        readyRow.CurrentReadyVersionId.Should().Be(readyVersion.Id);
+        readyRow.LatestVersionId.Should().Be(readyVersion.Id);
+
+        var pendingRow = ownerResult.Items.Single(i => i.Id == pendingAsset.Id);
+        pendingRow.LatestProcessingStatus.Should().Be(AssetVersionProcessingStatus.PENDING_INSPECTION);
+        pendingRow.CurrentReadyVersionId.Should().BeNull();
+        pendingRow.LatestVersionId.Should().Be(pendingVersion.Id);
+
+        var rejectedRow = ownerResult.Items.Single(i => i.Id == rejectedAsset.Id);
+        rejectedRow.LatestProcessingStatus.Should().Be(AssetVersionProcessingStatus.REJECTED);
+        rejectedRow.CurrentReadyVersionId.Should().BeNull();
+        rejectedRow.LatestProcessingErrorCode.Should().Be("MALWARE_DETECTED");
+    }
+
+    [Fact]
+    public async Task GetOwnedSellerDetail_WhenPendingOwned_ShouldReturnProcessingState()
+    {
+        var db = await fixture.CreateCleanDbContext();
+        (User author, Category category) = await TestData.SeedAuthorAndCategory(db);
+        var pendingAsset = TestData.CreateAsset(author.Id, category.Id, title: "Pending Quarantine Asset");
+        db.Assets.Add(pendingAsset);
+        await db.SaveChangesAsync();
+        var pendingVersion = TestData.CreateAssetVersion(
+            pendingAsset.Id,
+            isCurrent: false,
+            processingStatus: AssetVersionProcessingStatus.PENDING_INSPECTION);
+        db.AssetVersions.Add(pendingVersion);
+        await db.SaveChangesAsync();
+
+        var assetStore = new AssetStore(db);
+        var detail = await assetStore.GetOwnedSellerDetail(pendingAsset.Id, author.Id);
+
+        detail.Should().NotBeNull();
+        detail!.LatestProcessingStatus.Should().Be(AssetVersionProcessingStatus.PENDING_INSPECTION);
+        detail.CurrentReadyVersionId.Should().BeNull();
+        detail.LatestVersionId.Should().Be(pendingVersion.Id);
+        detail.Title.Should().Be("Pending Quarantine Asset");
+    }
+
+    [Fact]
+    public async Task GetOwnedSellerDetail_WhenForeignOrMissing_ShouldReturnNull()
+    {
+        var db = await fixture.CreateCleanDbContext();
+        (User author, Category category) = await TestData.SeedAuthorAndCategory(db);
+        var stranger = TestData.CreateUser("stranger", "stranger@example.test");
+        db.Users.Add(stranger);
+        var asset = TestData.CreateAsset(author.Id, category.Id, title: "Owned");
+        db.Assets.Add(asset);
+        await db.SaveChangesAsync();
+        db.AssetVersions.Add(TestData.CreateAssetVersion(asset.Id, isCurrent: true, processingStatus: AssetVersionProcessingStatus.READY));
+        await db.SaveChangesAsync();
+
+        var assetStore = new AssetStore(db);
+        (await assetStore.GetOwnedSellerDetail(asset.Id, stranger.Id)).Should().BeNull();
+        (await assetStore.GetOwnedSellerDetail(Guid.NewGuid(), author.Id)).Should().BeNull();
+    }
+
+    [Theory]
+    [InlineData(AssetVersionProcessingStatus.READY, true)]
+    [InlineData(AssetVersionProcessingStatus.REJECTED, false)]
+    [InlineData(AssetVersionProcessingStatus.PROCESSING_FAILED, false)]
+    public async Task GetOwnedSellerDetail_WhenOwnedTerminalStates_ShouldReturnProcessingState(
+        AssetVersionProcessingStatus status,
+        bool expectCurrentReady)
+    {
+        var db = await fixture.CreateCleanDbContext();
+        (User author, Category category) = await TestData.SeedAuthorAndCategory(db);
+        var asset = TestData.CreateAsset(author.Id, category.Id, title: "Owned terminal");
+        db.Assets.Add(asset);
+        await db.SaveChangesAsync();
+        var version = TestData.CreateAssetVersion(
+            asset.Id,
+            isCurrent: status == AssetVersionProcessingStatus.READY,
+            processingStatus: status);
+        if (status == AssetVersionProcessingStatus.REJECTED)
+        {
+            version.ProcessingErrorCode = "MALWARE_DETECTED";
+            version.ProcessingErrorSummary = "Malicious content detected in upload.";
+        }
+        else if (status == AssetVersionProcessingStatus.PROCESSING_FAILED)
+        {
+            version.ProcessingErrorCode = "SCANNER_UNAVAILABLE";
+            version.ProcessingErrorSummary = "The malware scanner is temporarily unavailable.";
+        }
+
+        db.AssetVersions.Add(version);
+        await db.SaveChangesAsync();
+
+        var detail = await new AssetStore(db).GetOwnedSellerDetail(asset.Id, author.Id);
+
+        detail.Should().NotBeNull();
+        detail!.LatestProcessingStatus.Should().Be(status);
+        detail.LatestVersionId.Should().Be(version.Id);
+        if (expectCurrentReady)
+        {
+            detail.CurrentReadyVersionId.Should().Be(version.Id);
+        }
+        else
+        {
+            detail.CurrentReadyVersionId.Should().BeNull();
+        }
     }
 }

@@ -40,7 +40,7 @@ public sealed class OllamaAiGenerationProviderTests
         result.Outcome.Should().Be(AiGenerationOutcomeKind.SUCCESS);
         result.ActualModel.Should().Be("fixture-ollama-test");
         result.UpstreamProvider.Should().BeNull();
-        result.ModelRevision.Should().Be(StaticAiModelPolicyCatalog.FixtureDigest);
+        result.ModelRevision.Should().Be(AiTestDigests.FixtureDigest);
         result.InputTokens.Should().Be(9);
         result.OutputTokens.Should().Be(4);
         handler.LastRequest!.Headers.Authorization.Should().BeNull();
@@ -70,15 +70,16 @@ public sealed class OllamaAiGenerationProviderTests
     }
 
     [Fact]
-    public async Task Generate_WhenModelMissingFromPolicy_ShouldNotSendHttp()
+    public async Task Generate_WhenDigestIsMissing_ShouldNotSendHttp()
     {
         var handler = new RecordingHttpMessageHandler();
-        var sut = CreateSut(handler, model: "missing-model", catalog: new StaticAiModelPolicyCatalog());
+        var sut = CreateSut(handler, digest: "");
 
         var result = await sut.Generate(AiProviderTestFactory.OllamaRequest(), CancellationToken.None);
 
         handler.SendCount.Should().Be(0);
         result.ErrorCode.Should().Be(ErrorCodes.AI_MODEL_NOT_ALLOWED);
+        result.ModelRevision.Should().BeNull();
     }
 
     [Theory]
@@ -143,9 +144,8 @@ public sealed class OllamaAiGenerationProviderTests
     }
 
     [Fact]
-    public async Task Generate_WhenReturnedModelIsInPolicyButNotRequested_ShouldBeTerminal()
+    public async Task Generate_WhenReturnedModelDoesNotMatchConfiguredModel_ShouldBeTerminal()
     {
-        var otherDigest = "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
         var handler = new RecordingHttpMessageHandler
         {
             Responder = (request, _) =>
@@ -163,14 +163,7 @@ public sealed class OllamaAiGenerationProviderTests
                     """));
             }
         };
-        var catalog = new StaticAiModelPolicyCatalog(
-            StaticAiModelPolicyCatalog.OllamaFixture(),
-            StaticAiModelPolicyCatalog.OllamaFixture() with
-            {
-                ModelId = "other-ollama-test",
-                Digest = otherDigest
-            });
-        var sut = CreateSut(handler, catalog: catalog);
+        var sut = CreateSut(handler);
 
         var result = await sut.Generate(AiProviderTestFactory.OllamaRequest(), CancellationToken.None);
 
@@ -219,15 +212,15 @@ public sealed class OllamaAiGenerationProviderTests
     private static OllamaAiGenerationProvider CreateSut(
         RecordingHttpMessageHandler handler,
         string model = "fixture-ollama-test",
-        StaticAiModelPolicyCatalog? catalog = null,
+        string? digest = null,
         CollectingLogger<OllamaAiGenerationProvider>? logger = null,
         TimeSpan? timeout = null)
     {
-        catalog ??= new StaticAiModelPolicyCatalog(StaticAiModelPolicyCatalog.OllamaFixture());
         var options = Microsoft.Extensions.Options.Options.Create(new OllamaOptions
         {
             BaseUrl = "http://127.0.0.1:11434",
             Model = model,
+            Digest = digest ?? AiTestDigests.FixtureDigest,
             Timeout = timeout ?? TimeSpan.FromSeconds(5),
             MaxInputChars = 12000,
             MaxOutputTokens = 1000
@@ -239,7 +232,6 @@ public sealed class OllamaAiGenerationProviderTests
         return new OllamaAiGenerationProvider(
             factory,
             options,
-            catalog,
             logger ?? new CollectingLogger<OllamaAiGenerationProvider>());
     }
 }

@@ -2,6 +2,7 @@ using System.Data;
 using System.Diagnostics;
 using System.Text.RegularExpressions;
 using AssetBlock.Domain.Abstractions.Services;
+using AssetBlock.Domain.Core.Constants;
 using AssetBlock.Domain.Core.Dto;
 using AssetBlock.Domain.Core.Entities;
 using AssetBlock.Domain.Core.Enums;
@@ -461,6 +462,8 @@ internal sealed partial class AssetProcessingJobStore(ApplicationDbContext dbCon
 
     public async Task<int> RecoverExpiredLeases(CancellationToken cancellationToken = default)
     {
+        var leaseExpiredCode = ErrorCodes.LEASE_EXPIRED;
+        var leaseExpiredSummary = ErrorCodesToErrorMessages.GetMessage(ErrorCodes.LEASE_EXPIRED);
         var updated = await dbContext.Database.ExecuteSqlInterpolatedAsync($"""
             WITH expired AS (
                 SELECT j."Id"
@@ -468,6 +471,10 @@ internal sealed partial class AssetProcessingJobStore(ApplicationDbContext dbCon
                 WHERE j."Status" = 'RUNNING'
                   AND j."LeaseExpiresAt" IS NOT NULL
                   AND j."LeaseExpiresAt" <= clock_timestamp()
+                  AND NOT (
+                      j."AttemptCount" >= j."MaxAttempts"
+                      AND j."Type" IN ('ARCHIVE_INSPECTION', 'MALWARE_SCAN')
+                  )
                 ORDER BY j."LeaseExpiresAt", j."Id"
                 FOR UPDATE SKIP LOCKED
                 LIMIT 100
@@ -477,8 +484,8 @@ internal sealed partial class AssetProcessingJobStore(ApplicationDbContext dbCon
                 "Stage" = CASE WHEN j."AttemptCount" < j."MaxAttempts" THEN 'LEASE_RECOVERED' ELSE 'FAILED_LEASE_EXPIRED' END,
                 "CompletedAt" = CASE WHEN j."AttemptCount" < j."MaxAttempts" THEN j."CompletedAt" ELSE clock_timestamp() END,
                 "AvailableAt" = CASE WHEN j."AttemptCount" < j."MaxAttempts" THEN clock_timestamp() ELSE j."AvailableAt" END,
-                "ErrorCode" = 'LEASE_EXPIRED',
-                "ErrorSummary" = 'The job lease expired and was recovered.',
+                "ErrorCode" = {leaseExpiredCode},
+                "ErrorSummary" = {leaseExpiredSummary},
                 "LeaseOwner" = NULL,
                 "LeaseToken" = NULL,
                 "LeaseExpiresAt" = NULL,

@@ -549,4 +549,256 @@ public sealed class AssetProcessingLifecycleStorePostgresTests(PostgresFixture f
         var job = await ctx.Db.AssetProcessingJobs.AsNoTracking().FirstAsync(j => j.Id == ctx.ClaimedJob.JobId);
         job.Status.Should().Be(AssetProcessingJobStatus.FAILED);
     }
+
+    [Fact]
+    public async Task TransitionMalwareScanClean_ShouldCreateOneDurableNotificationAndOutbox()
+    {
+        var ctx = await SetupRunningJob(AssetProcessingJobType.MALWARE_SCAN);
+        var success = await ctx.LifecycleStore.TransitionMalwareScanClean(
+            ctx.ClaimedJob.JobId,
+            ctx.ClaimedJob.LeaseToken,
+            ctx.Asset.Id,
+            ctx.Version.Id,
+            new MalwareScanResult(IsClean: true));
+
+        success.Should().BeTrue();
+        await AssertSingleTerminalNotification(
+            ctx.Db,
+            ctx.Author.Id,
+            ctx.Asset.Id,
+            ctx.Version.Id,
+            NotificationKind.ASSET_PROCESSING_READY,
+            "READY");
+    }
+
+    [Fact]
+    public async Task TransitionMalwareScanClean_WhenReplayed_ShouldNotDuplicateNotification()
+    {
+        var ctx = await SetupRunningJob(AssetProcessingJobType.MALWARE_SCAN);
+        var first = await ctx.LifecycleStore.TransitionMalwareScanClean(
+            ctx.ClaimedJob.JobId,
+            ctx.ClaimedJob.LeaseToken,
+            ctx.Asset.Id,
+            ctx.Version.Id,
+            new MalwareScanResult(IsClean: true));
+        var second = await ctx.LifecycleStore.TransitionMalwareScanClean(
+            ctx.ClaimedJob.JobId,
+            ctx.ClaimedJob.LeaseToken,
+            ctx.Asset.Id,
+            ctx.Version.Id,
+            new MalwareScanResult(IsClean: true));
+
+        first.Should().BeTrue();
+        second.Should().BeTrue();
+        (await ctx.Db.UserNotifications.AsNoTracking().CountAsync()).Should().Be(1);
+        (await ctx.Db.OutboxMessages.AsNoTracking()
+            .CountAsync(m => m.Type == OutboxMessageTypes.NOTIFICATION_DISPATCH)).Should().Be(1);
+    }
+
+    [Fact]
+    public async Task TransitionArchiveInspectionRejected_ShouldCreateRejectedNotification()
+    {
+        var ctx = await SetupRunningJob(AssetProcessingJobType.ARCHIVE_INSPECTION);
+        var success = await ctx.LifecycleStore.TransitionArchiveInspectionRejected(
+            ctx.ClaimedJob.JobId,
+            ctx.ClaimedJob.LeaseToken,
+            ctx.Asset.Id,
+            ctx.Version.Id,
+            "ARCHIVE_CORRUPT",
+            "The archive could not be decompressed safely.");
+
+        success.Should().BeTrue();
+        await AssertSingleTerminalNotification(
+            ctx.Db,
+            ctx.Author.Id,
+            ctx.Asset.Id,
+            ctx.Version.Id,
+            NotificationKind.ASSET_PROCESSING_REJECTED,
+            "REJECTED");
+    }
+
+    [Fact]
+    public async Task TransitionProcessingFailed_ShouldCreateFailedNotification()
+    {
+        var ctx = await SetupRunningJob(AssetProcessingJobType.MALWARE_SCAN);
+        var success = await ctx.LifecycleStore.TransitionProcessingFailed(
+            ctx.ClaimedJob.JobId,
+            ctx.ClaimedJob.LeaseToken,
+            ctx.Asset.Id,
+            ctx.Version.Id,
+            AssetProcessingJobType.MALWARE_SCAN,
+            "SCANNER_UNAVAILABLE",
+            "The malware scanner is temporarily unavailable.");
+
+        success.Should().BeTrue();
+        await AssertSingleTerminalNotification(
+            ctx.Db,
+            ctx.Author.Id,
+            ctx.Asset.Id,
+            ctx.Version.Id,
+            NotificationKind.ASSET_PROCESSING_FAILED,
+            "PROCESSING_FAILED");
+    }
+
+    [Fact]
+    public async Task TransitionArchiveInspectionAccepted_ShouldNotCreateNotification()
+    {
+        var ctx = await SetupRunningJob(AssetProcessingJobType.ARCHIVE_INSPECTION);
+        var success = await ctx.LifecycleStore.TransitionArchiveInspectionAccepted(
+            ctx.ClaimedJob.JobId,
+            ctx.ClaimedJob.LeaseToken,
+            ctx.Asset.Id,
+            ctx.Version.Id,
+            new ArchiveInspectionResult(1, 100),
+            new BoundedArchiveAnalysisRecord(1, 100, null, null));
+
+        success.Should().BeTrue();
+        (await ctx.Db.UserNotifications.AsNoTracking().CountAsync()).Should().Be(0);
+        (await ctx.Db.OutboxMessages.AsNoTracking()
+            .CountAsync(m => m.Type == OutboxMessageTypes.NOTIFICATION_DISPATCH)).Should().Be(0);
+    }
+
+    [Fact]
+    public async Task TransitionArchiveInspectionRejected_WhenLeaseLost_ShouldNotCreateNotification()
+    {
+        var ctx = await SetupRunningJob(AssetProcessingJobType.ARCHIVE_INSPECTION);
+        var success = await ctx.LifecycleStore.TransitionArchiveInspectionRejected(
+            ctx.ClaimedJob.JobId,
+            Guid.NewGuid(),
+            ctx.Asset.Id,
+            ctx.Version.Id,
+            "ARCHIVE_CORRUPT",
+            "The archive could not be decompressed safely.");
+
+        success.Should().BeFalse();
+        (await ctx.Db.UserNotifications.AsNoTracking().CountAsync()).Should().Be(0);
+        (await ctx.Db.OutboxMessages.AsNoTracking()
+            .CountAsync(m => m.Type == OutboxMessageTypes.NOTIFICATION_DISPATCH)).Should().Be(0);
+    }
+
+    [Fact]
+    public async Task TransitionMalwareScanClean_WhenVersionNotPending_ShouldRollbackWithoutNotification()
+    {
+        var ctx = await SetupRunningJob(AssetProcessingJobType.MALWARE_SCAN);
+        await ctx.Db.AssetVersions
+            .Where(v => v.Id == ctx.Version.Id)
+            .ExecuteUpdateAsync(s => s
+                .SetProperty(v => v.ProcessingStatus, AssetVersionProcessingStatus.READY)
+                .SetProperty(v => v.IsCurrent, true));
+
+        var success = await ctx.LifecycleStore.TransitionMalwareScanClean(
+            ctx.ClaimedJob.JobId,
+            ctx.ClaimedJob.LeaseToken,
+            ctx.Asset.Id,
+            ctx.Version.Id,
+            new MalwareScanResult(IsClean: true));
+
+        success.Should().BeFalse();
+        (await ctx.Db.UserNotifications.AsNoTracking().CountAsync()).Should().Be(0);
+        (await ctx.Db.OutboxMessages.AsNoTracking()
+            .CountAsync(m => m.Type == OutboxMessageTypes.NOTIFICATION_DISPATCH)).Should().Be(0);
+        var job = await ctx.Db.AssetProcessingJobs.AsNoTracking().FirstAsync(j => j.Id == ctx.ClaimedJob.JobId);
+        job.Status.Should().Be(AssetProcessingJobStatus.RUNNING);
+    }
+
+    [Fact]
+    public async Task TransitionArchiveInspectionRejected_WhenReplayed_ShouldNotDuplicateNotification()
+    {
+        var ctx = await SetupRunningJob(AssetProcessingJobType.ARCHIVE_INSPECTION);
+        var first = await ctx.LifecycleStore.TransitionArchiveInspectionRejected(
+            ctx.ClaimedJob.JobId,
+            ctx.ClaimedJob.LeaseToken,
+            ctx.Asset.Id,
+            ctx.Version.Id,
+            "ARCHIVE_CORRUPT",
+            "The archive could not be decompressed safely.");
+        var second = await ctx.LifecycleStore.TransitionArchiveInspectionRejected(
+            ctx.ClaimedJob.JobId,
+            ctx.ClaimedJob.LeaseToken,
+            ctx.Asset.Id,
+            ctx.Version.Id,
+            "ARCHIVE_CORRUPT",
+            "The archive could not be decompressed safely.");
+
+        first.Should().BeTrue();
+        second.Should().BeTrue();
+        (await ctx.Db.UserNotifications.AsNoTracking().CountAsync()).Should().Be(1);
+    }
+
+    [Theory]
+    [InlineData(AssetProcessingJobType.ARCHIVE_INSPECTION)]
+    [InlineData(AssetProcessingJobType.MALWARE_SCAN)]
+    public async Task RecoverExpiredExhaustedSecurityJobs_WhenFinalAttemptExpires_ShouldFailVersionAndNotify(
+        AssetProcessingJobType jobType)
+    {
+        var ctx = await SetupRunningJob(jobType);
+        await ctx.Db.Database.ExecuteSqlRawAsync(
+            """UPDATE asset_processing_jobs SET "MaxAttempts" = {1}, "AttemptCount" = {2} WHERE "Id" = {0}""",
+            ctx.ClaimedJob.JobId, 1, 1);
+        await ctx.Db.Database.ExecuteSqlRawAsync(
+            """UPDATE asset_processing_jobs SET "LeaseExpiresAt" = CURRENT_TIMESTAMP - INTERVAL '1 second' WHERE "Id" = {0}""",
+            ctx.ClaimedJob.JobId);
+
+        (await ctx.JobStore.RecoverExpiredLeases()).Should().Be(0);
+        (await ctx.LifecycleStore.RecoverExpiredExhaustedSecurityJobs()).Should().Be(1);
+
+        ctx.Db.ChangeTracker.Clear();
+        var version = await ctx.Db.AssetVersions.AsNoTracking().SingleAsync(v => v.Id == ctx.Version.Id);
+        version.ProcessingStatus.Should().Be(AssetVersionProcessingStatus.PROCESSING_FAILED);
+        version.ProcessingErrorCode.Should().Be(ErrorCodes.LEASE_EXPIRED);
+
+        var job = await ctx.Db.AssetProcessingJobs.AsNoTracking().SingleAsync(j => j.Id == ctx.ClaimedJob.JobId);
+        job.Status.Should().Be(AssetProcessingJobStatus.FAILED);
+        job.Stage.Should().Be("FAILED_LEASE_EXPIRED");
+        job.ErrorCode.Should().Be(ErrorCodes.LEASE_EXPIRED);
+
+        await AssertSingleTerminalNotification(
+            ctx.Db,
+            ctx.Author.Id,
+            ctx.Asset.Id,
+            ctx.Version.Id,
+            NotificationKind.ASSET_PROCESSING_FAILED,
+            "PROCESSING_FAILED");
+    }
+
+    [Fact]
+    public async Task RecoverExpiredExhaustedSecurityJobs_WhenReplayed_ShouldNotDuplicateNotification()
+    {
+        var ctx = await SetupRunningJob(AssetProcessingJobType.ARCHIVE_INSPECTION);
+        await ctx.Db.Database.ExecuteSqlRawAsync(
+            """UPDATE asset_processing_jobs SET "MaxAttempts" = {1}, "AttemptCount" = {2} WHERE "Id" = {0}""",
+            ctx.ClaimedJob.JobId, 1, 1);
+        await ctx.Db.Database.ExecuteSqlRawAsync(
+            """UPDATE asset_processing_jobs SET "LeaseExpiresAt" = CURRENT_TIMESTAMP - INTERVAL '1 second' WHERE "Id" = {0}""",
+            ctx.ClaimedJob.JobId);
+
+        (await ctx.LifecycleStore.RecoverExpiredExhaustedSecurityJobs()).Should().Be(1);
+        (await ctx.LifecycleStore.RecoverExpiredExhaustedSecurityJobs()).Should().Be(0);
+        (await ctx.Db.UserNotifications.AsNoTracking().CountAsync()).Should().Be(1);
+    }
+
+    private static async Task AssertSingleTerminalNotification(
+        ApplicationDbContext db,
+        Guid recipientUserId,
+        Guid assetId,
+        Guid assetVersionId,
+        NotificationKind kind,
+        string processingStatus)
+    {
+        var notifications = await db.UserNotifications.AsNoTracking().ToListAsync();
+        notifications.Should().ContainSingle();
+        var notification = notifications[0];
+        notification.RecipientUserId.Should().Be(recipientUserId);
+        notification.Kind.Should().Be(kind);
+        notification.SourceOutboxMessageId.Should().NotBeNull();
+        notification.MetadataJson.Should().Contain(assetId.ToString());
+        notification.MetadataJson.Should().Contain(assetVersionId.ToString());
+        notification.MetadataJson.Should().Contain(processingStatus);
+        notification.MetadataJson.Should().NotContain("storageKey");
+        notification.MetadataJson.Should().NotContain("package.zip");
+
+        var outbox = await db.OutboxMessages.AsNoTracking()
+            .SingleAsync(m => m.Type == OutboxMessageTypes.NOTIFICATION_DISPATCH);
+        outbox.Id.Should().Be(notification.SourceOutboxMessageId!.Value);
+    }
 }

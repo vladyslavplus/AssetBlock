@@ -101,7 +101,7 @@ internal sealed class AssetStore(ApplicationDbContext dbContext) : IAssetStore
     {
         return dbContext.AssetVersions
             .AsNoTracking()
-            .Where(v => v.AssetId == assetId && v.IsCurrent && v.ProcessingStatus == Domain.Core.Enums.AssetVersionProcessingStatus.READY)
+            .Where(v => v.AssetId == assetId && v.IsCurrent && v.ProcessingStatus == AssetVersionProcessingStatus.READY)
             .Select(v => new AssetCurrentVersionSnapshot(
                 v.AssetId,
                 v.Id,
@@ -179,7 +179,7 @@ internal sealed class AssetStore(ApplicationDbContext dbContext) : IAssetStore
         // Non-authors only see READY versions in the version history
         if (!isAuthor)
         {
-            versionQuery = versionQuery.Where(v => v.ProcessingStatus == Domain.Core.Enums.AssetVersionProcessingStatus.READY);
+            versionQuery = versionQuery.Where(v => v.ProcessingStatus == AssetVersionProcessingStatus.READY);
         }
 
         return await versionQuery
@@ -231,7 +231,7 @@ internal sealed class AssetStore(ApplicationDbContext dbContext) : IAssetStore
         draft.AssetId = assetId;
         draft.VersionNumber = maxVersion + 1;
         draft.IsCurrent = false;
-        draft.ProcessingStatus = Domain.Core.Enums.AssetVersionProcessingStatus.PENDING_INSPECTION;
+        draft.ProcessingStatus = AssetVersionProcessingStatus.PENDING_INSPECTION;
         draft.ProcessingUpdatedAt = dbNow;
         if (draft.CreatedAt == default)
         {
@@ -263,18 +263,88 @@ internal sealed class AssetStore(ApplicationDbContext dbContext) : IAssetStore
         // Public catalog query: ALWAYS requires asset to have a current READY version.
         IQueryable<Asset> query = dbContext.Assets.AsNoTracking()
             .Where(a => a.DeletedAt == null
-                && a.Versions.Any(v => v.IsCurrent && v.ProcessingStatus == Domain.Core.Enums.AssetVersionProcessingStatus.READY));
+                && a.Versions.Any(v => v.IsCurrent && v.ProcessingStatus == AssetVersionProcessingStatus.READY));
 
         return await QueryPagedAssets(query, request, cancellationToken);
     }
 
-    public async Task<PagedResult<AssetListItem>> GetMyListings(Guid authorId, GetAssetsRequest request, CancellationToken cancellationToken = default)
+    public async Task<PagedResult<SellerAssetListItem>> GetMyListings(Guid authorId, GetAssetsRequest request, CancellationToken cancellationToken = default)
     {
         // Authenticated seller listings: scoped to the authenticated author, includes pending/processing versions.
         IQueryable<Asset> query = dbContext.Assets.AsNoTracking()
             .Where(a => a.DeletedAt == null && a.AuthorId == authorId);
 
-        return await QueryPagedAssets(query, request, cancellationToken);
+        query = ApplyAssetListFilters(query, request);
+        var totalCount = await query.CountAsync(cancellationToken);
+        query = ApplyAssetListSort(query, request);
+        var (page, pageSize) = NormalizePaging(request);
+
+        var items = await query
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
+            .Select(a => new SellerAssetListItem(
+                a.Id,
+                a.Title,
+                a.Description,
+                a.Price,
+                a.CategoryId,
+                a.Category.Name,
+                a.AuthorId,
+                a.Author.Username,
+                a.CreatedAt,
+                a.AssetTags
+                    .Select(at => at.Tag.Name)
+                    .OrderBy(n => n)
+                    .ToList(),
+                a.Reviews.Average(r => (double?)r.Rating) ?? 0d,
+                a.Versions.OrderByDescending(v => v.VersionNumber).Select(v => v.Id).FirstOrDefault(),
+                a.Versions.OrderByDescending(v => v.VersionNumber).Select(v => v.VersionNumber).FirstOrDefault(),
+                a.Versions
+                    .Where(v => v.IsCurrent && v.ProcessingStatus == AssetVersionProcessingStatus.READY)
+                    .Select(v => (Guid?)v.Id)
+                    .FirstOrDefault(),
+                a.Versions.OrderByDescending(v => v.VersionNumber).Select(v => v.ProcessingStatus).FirstOrDefault(),
+                a.Versions.OrderByDescending(v => v.VersionNumber).Select(v => v.ProcessingUpdatedAt).FirstOrDefault(),
+                a.Versions.OrderByDescending(v => v.VersionNumber).Select(v => v.ProcessingErrorCode).FirstOrDefault(),
+                a.Versions.OrderByDescending(v => v.VersionNumber).Select(v => v.ProcessingErrorSummary).FirstOrDefault()))
+            .ToListAsync(cancellationToken);
+
+        return new PagedResult<SellerAssetListItem>(items, totalCount, page, pageSize);
+    }
+
+    public async Task<SellerAssetDetailItem?> GetOwnedSellerDetail(
+        Guid assetId,
+        Guid ownerUserId,
+        CancellationToken cancellationToken = default)
+    {
+        return await dbContext.Assets.AsNoTracking()
+            .Where(a => a.Id == assetId && a.AuthorId == ownerUserId && a.DeletedAt == null && a.Versions.Any())
+            .Select(a => new SellerAssetDetailItem(
+                a.Id,
+                a.Title,
+                a.Description,
+                a.Price,
+                a.CategoryId,
+                a.Category.Name,
+                a.AuthorId,
+                a.Author.Username,
+                a.CreatedAt,
+                a.UpdatedAt,
+                a.AssetTags
+                    .Select(at => at.Tag.Name)
+                    .OrderBy(n => n)
+                    .ToList(),
+                a.Versions.OrderByDescending(v => v.VersionNumber).Select(v => v.Id).First(),
+                a.Versions.OrderByDescending(v => v.VersionNumber).Select(v => v.VersionNumber).First(),
+                a.Versions
+                    .Where(v => v.IsCurrent && v.ProcessingStatus == AssetVersionProcessingStatus.READY)
+                    .Select(v => (Guid?)v.Id)
+                    .FirstOrDefault(),
+                a.Versions.OrderByDescending(v => v.VersionNumber).Select(v => v.ProcessingStatus).First(),
+                a.Versions.OrderByDescending(v => v.VersionNumber).Select(v => v.ProcessingUpdatedAt).First(),
+                a.Versions.OrderByDescending(v => v.VersionNumber).Select(v => v.ProcessingErrorCode).FirstOrDefault(),
+                a.Versions.OrderByDescending(v => v.VersionNumber).Select(v => v.ProcessingErrorSummary).FirstOrDefault()))
+            .FirstOrDefaultAsync(cancellationToken);
     }
 
     private static async Task<PagedResult<AssetListItem>> QueryPagedAssets(
@@ -282,8 +352,36 @@ internal sealed class AssetStore(ApplicationDbContext dbContext) : IAssetStore
         GetAssetsRequest request,
         CancellationToken cancellationToken)
     {
-        var query = baseQuery;
+        var query = ApplyAssetListFilters(baseQuery, request);
+        var totalCount = await query.CountAsync(cancellationToken);
+        query = ApplyAssetListSort(query, request);
+        var (page, pageSize) = NormalizePaging(request);
 
+        var items = await query
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
+            .Select(a => new AssetListItem(
+                a.Id,
+                a.Title,
+                a.Description,
+                a.Price,
+                a.CategoryId,
+                a.Category.Name,
+                a.AuthorId,
+                a.Author.Username,
+                a.CreatedAt,
+                a.AssetTags
+                    .Select(at => at.Tag.Name)
+                    .OrderBy(n => n)
+                    .ToList(),
+                a.Reviews.Average(r => (double?)r.Rating) ?? 0d))
+            .ToListAsync(cancellationToken);
+
+        return new PagedResult<AssetListItem>(items, totalCount, page, pageSize);
+    }
+
+    private static IQueryable<Asset> ApplyAssetListFilters(IQueryable<Asset> query, GetAssetsRequest request)
+    {
         if (!string.IsNullOrWhiteSpace(request.Search))
         {
             var searchText = request.Search.Trim();
@@ -339,15 +437,18 @@ internal sealed class AssetStore(ApplicationDbContext dbContext) : IAssetStore
             }
         }
 
-        var totalCount = await query.CountAsync(cancellationToken);
+        return query;
+    }
 
+    private static IQueryable<Asset> ApplyAssetListSort(IQueryable<Asset> query, GetAssetsRequest request)
+    {
         var sortBy = string.IsNullOrWhiteSpace(request.SortBy) || !GetAssetsRequest.AllowedSortBy.Contains(request.SortBy)
             ? "CreatedAt"
             : request.SortBy.Trim();
         var sortKey = sortBy.ToUpperInvariant();
         var isDesc = request.SortDirection == SortDirection.DESC;
 
-        query = sortKey switch
+        return sortKey switch
         {
             "TITLE" => isDesc
                 ? query.OrderByDescending(a => a.Title).ThenBy(a => a.Id)
@@ -360,31 +461,13 @@ internal sealed class AssetStore(ApplicationDbContext dbContext) : IAssetStore
                 ? query.OrderByDescending(a => a.CreatedAt).ThenBy(a => a.Id)
                 : query.OrderBy(a => a.CreatedAt).ThenBy(a => a.Id)
         };
+    }
 
+    private static (int Page, int PageSize) NormalizePaging(GetAssetsRequest request)
+    {
         var page = Math.Max(PagedRequest.DEFAULT_PAGE, request.Page);
         var pageSize = Math.Clamp(request.PageSize, PagedRequest.MIN_PAGE_SIZE, PagedRequest.MAX_PAGE_SIZE);
-
-        var items = await query
-            .Skip((page - 1) * pageSize)
-            .Take(pageSize)
-            .Select(a => new AssetListItem(
-                a.Id,
-                a.Title,
-                a.Description,
-                a.Price,
-                a.CategoryId,
-                a.Category.Name,
-                a.AuthorId,
-                a.Author.Username,
-                a.CreatedAt,
-                a.AssetTags
-                    .Select(at => at.Tag.Name)
-                    .OrderBy(n => n)
-                    .ToList(),
-                a.Reviews.Average(r => (double?)r.Rating) ?? 0d))
-            .ToListAsync(cancellationToken);
-
-        return new PagedResult<AssetListItem>(items, totalCount, page, pageSize);
+        return (page, pageSize);
     }
 
     public async Task SoftDelete(Guid id, DateTimeOffset deletedAt, CancellationToken cancellationToken = default)

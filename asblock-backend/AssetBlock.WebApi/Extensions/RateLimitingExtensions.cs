@@ -114,6 +114,7 @@ internal static class RateLimitingExtensions
                 AddNoOpPolicy(RateLimitingConstants.Policies.PAYMENTS_CHECKOUT);
                 AddNoOpPolicy(RateLimitingConstants.Policies.ANALYTICS_EVENTS);
                 AddNoOpPolicy(RateLimitingConstants.Policies.SELLER_ANALYTICS_SALES_EXPORT);
+                AddNoOpPolicy(RateLimitingConstants.Policies.LISTING_COPILOT_ENQUEUE);
                 return;
 
                 void AddNoOpPolicy(string policyName)
@@ -228,6 +229,17 @@ internal static class RateLimitingExtensions
                 {
                     Window = TimeSpan.FromSeconds(RateLimitingConstants.Windows.PAYMENTS_CHECKOUT_PERIOD_SECONDS),
                     PermitLimit = RateLimitingConstants.Windows.PAYMENTS_CHECKOUT_LIMIT,
+                    SegmentsPerWindow = RateLimitingConstants.Windows.SLIDING_WINDOW_SEGMENTS,
+                    QueueProcessingOrder = QueueProcessingOrder.OldestFirst
+                }));
+
+        opts.AddPolicy(RateLimitingConstants.Policies.LISTING_COPILOT_ENQUEUE, httpContext =>
+            RateLimitPartition.GetSlidingWindowLimiter(
+                partitionKey: GetUserPartitionKey(httpContext),
+                factory: _ => new SlidingWindowRateLimiterOptions
+                {
+                    Window = TimeSpan.FromSeconds(RateLimitingConstants.Windows.LISTING_COPILOT_ENQUEUE_PERIOD_SECONDS),
+                    PermitLimit = RateLimitingConstants.Windows.LISTING_COPILOT_ENQUEUE_LIMIT,
                     SegmentsPerWindow = RateLimitingConstants.Windows.SLIDING_WINDOW_SEGMENTS,
                     QueueProcessingOrder = QueueProcessingOrder.OldestFirst
                 }));

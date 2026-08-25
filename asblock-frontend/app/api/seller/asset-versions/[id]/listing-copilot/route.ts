@@ -1,0 +1,31 @@
+import { cookies } from 'next/headers'
+
+import { fetchBackendAuthorized } from '@/lib/server/backend-authorized'
+import { assertSameOrigin, forwardBackendResponse } from '@/lib/server/bff-http'
+
+export async function GET(_request: Request, context: { params: Promise<{ id: string }> }) {
+  const { id } = await context.params
+  const store = await cookies()
+  const res = await fetchBackendAuthorized(
+    store,
+    `/api/users/me/asset-versions/${encodeURIComponent(id)}/listing-copilot`,
+    { method: 'GET' },
+  )
+  return forwardBackendResponse(res)
+}
+
+export async function POST(request: Request, context: { params: Promise<{ id: string }> }) {
+  const originError = assertSameOrigin(request)
+  if (originError) {
+    return originError
+  }
+
+  const { id } = await context.params
+  const store = await cookies()
+  const res = await fetchBackendAuthorized(
+    store,
+    `/api/users/me/asset-versions/${encodeURIComponent(id)}/listing-copilot`,
+    { method: 'POST' },
+  )
+  return forwardBackendResponse(res)
+}

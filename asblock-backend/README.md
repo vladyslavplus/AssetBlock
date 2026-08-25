@@ -296,6 +296,30 @@ docker-compose up -d clamav
 
 clamd binds to `127.0.0.1:3310`. Signature data lives on the `clamav_data` volume. Enable processing in Development (`AssetProcessing:Enabled` and `ClamAv:Enabled`).
 
+### Listing Copilot (optional AI)
+
+Sellers can request a listing suggestion for a **READY** version that already has archive analysis. The API never writes title/description/category/tags automatically; Apply in the seller UI only fills the edit form.
+
+- `POST /api/users/me/asset-versions/{assetVersionId}/listing-copilot` (verified email, local rate limit) enqueues one idempotent `LISTING_COPILOT` job (`DefinitionVersion` 1). Repeated POST returns the same `jobId` with `202 Accepted`.
+- `GET /api/users/me/asset-versions/{assetVersionId}/listing-copilot` returns the stored suggestion or `404`. It never includes prompts, raw provider JSON, tokens, or `providerRequestId`.
+- Disabled AI (`Ai:Enabled=false`) returns `AI_DISABLED` and does not enqueue.
+
+Models come from typed configuration only. Local Development lists ordered OpenRouter models under `Ai:OpenRouter:Models`. Deployment overrides use standard .NET configuration providers (environment variables, user secrets). Configuration changes apply after restart. Inactive provider sections are not validated.
+
+Environment overrides (do not commit real values):
+
+```bash
+Ai__Enabled=true
+Ai__Provider=OpenRouter
+Ai__PromptPolicyVersion=listing-copilot-v1
+Ai__OpenRouter__ApiKey=          # user secrets only
+Ai__OpenRouter__Models__0=model-a
+Ai__OpenRouter__Models__1=model-b
+Ai__Ollama__BaseUrl=http://127.0.0.1:11434
+Ai__Ollama__Model=               # exact local tag
+Ai__Ollama__Digest=              # exact sha256: digest from ollama show /api/tags
+```
+
 ### Local Ollama (optional AI)
 
 AI generation is disabled in tracked config (`Ai:Enabled=false`). Marketplace and API startup do not call OpenRouter or Ollama until AI is explicitly enabled.
@@ -305,9 +329,9 @@ OpenRouter is the default provider. Ollama is an explicit alternative with no au
 Native setup:
 
 1. Install Ollama on the host and start the local daemon (`http://127.0.0.1:11434`).
-2. Pull a model yourself with the Ollama CLI. Use that exact model tag in `Ollama:Model`.
-3. Add a matching policy entry to `AssetBlock.WebApi/ai/model-policy.json` (provider `OLLAMA`, exact id, exact `digest` from `ollama show` / `/api/tags`, `LISTING_COPILOT`, `structuredOutput: true`, `privacy: LOCAL_ONLY`, limits, license note, and review date). Generation calls `/api/tags` first and refuses to run unless name and digest match.
-4. Set `Ai:Enabled=true`, `Ai:Provider=Ollama`, and keep `Ollama:BaseUrl` as a loopback HTTP URL. Put secrets in user secrets or environment variables, never in tracked files.
+2. Pull a model yourself with the Ollama CLI. Use that exact model tag in `Ai:Ollama:Model`.
+3. Set `Ai:Ollama:Digest` to the exact `sha256:` digest from `ollama show` or `/api/tags`. Generation calls `/api/tags` first and refuses to run unless name and digest match.
+4. Set `Ai:Enabled=true`, `Ai:Provider=Ollama`, and keep `Ai:Ollama:BaseUrl` as a loopback HTTP URL. Put secrets in user secrets or environment variables, never in tracked files.
 
-OpenRouter requires an API key, a non-empty ordered distinct `OpenRouter:Models` list, and a policy entry for every configured model (`privacy: EXTERNAL_METADATA_ONLY`). Requests send `require_parameters=true` and `data_collection=deny`. Optional `OpenRouter:ZeroDataRetention` adds `zdr=true` and may reduce available endpoints. Real calls are rejected until the exact model id exists in the policy file. The checked-in policy list is empty on purpose.
+OpenRouter requires an API key and a non-empty ordered distinct `Ai:OpenRouter:Models` list (1–16 unique ids). That list is both the allowlist and the OpenRouter fallback order. Requests send `require_parameters=true` and `data_collection=deny`. Optional `Ai:OpenRouter:ZeroDataRetention` adds `zdr=true` and may reduce available endpoints. The returned `actualModel` must match a configured id exactly (ordinal); otherwise the call is terminal `AI_MODEL_NOT_ALLOWED` and no `ModelRevision` is stored. There is no OpenRouter → Ollama fallback. Tracked `appsettings.json` keeps `Ai:Enabled=false` and empty models.
 

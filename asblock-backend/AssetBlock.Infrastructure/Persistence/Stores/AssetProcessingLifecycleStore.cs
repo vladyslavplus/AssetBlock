@@ -1,9 +1,12 @@
 using System.Data;
 using System.Text;
+using System.Text.Json;
 using System.Text.RegularExpressions;
 using AssetBlock.Domain.Abstractions.Services;
 using AssetBlock.Domain.Core.Constants;
 using AssetBlock.Domain.Core.Dto;
+using AssetBlock.Domain.Core.Dto.Notifications;
+using AssetBlock.Domain.Core.Dto.Outbox;
 using AssetBlock.Domain.Core.Enums;
 using AssetBlock.Domain.Core.Primitives.AppSettingsOptions;
 using Microsoft.EntityFrameworkCore;
@@ -17,6 +20,16 @@ public sealed partial class AssetProcessingLifecycleStore(
     : IAssetProcessingLifecycleStore
 {
     private static readonly Regex _errorCodeRegex = MyRegex();
+    private static readonly JsonSerializerOptions _jsonOptions = new()
+    {
+        PropertyNamingPolicy = JsonNamingPolicy.CamelCase
+    };
+
+    private sealed class AssetOwnerRow
+    {
+        public Guid AuthorId { get; init; }
+        public string Title { get; init; } = "";
+    }
 
     private sealed class JobValidationRecord
     {
@@ -343,6 +356,13 @@ public sealed partial class AssetProcessingLifecycleStore(
             WHERE "Id" = {jobId}
             """, cancellationToken);
 
+        await EnqueueTerminalProcessingNotification(
+            assetId,
+            assetVersionId,
+            AssetVersionProcessingStatus.READY,
+            dbNow,
+            cancellationToken);
+
         await tx.CommitAsync(cancellationToken);
         return true;
     }
@@ -538,8 +558,183 @@ public sealed partial class AssetProcessingLifecycleStore(
             return false;
         }
 
+        await EnqueueTerminalProcessingNotification(
+            assetId,
+            assetVersionId,
+            targetVersionStatus,
+            dbNow,
+            cancellationToken);
+
         await tx.CommitAsync(cancellationToken);
         return true;
+    }
+
+    public async Task<int> RecoverExpiredExhaustedSecurityJobs(CancellationToken cancellationToken = default)
+    {
+        var recovered = 0;
+        while (recovered < 100)
+        {
+            if (!await RecoverOneExpiredExhaustedSecurityJob(cancellationToken))
+            {
+                break;
+            }
+
+            recovered++;
+        }
+
+        return recovered;
+    }
+
+    private async Task<bool> RecoverOneExpiredExhaustedSecurityJob(CancellationToken cancellationToken)
+    {
+        var errorCode = ErrorCodes.LEASE_EXPIRED;
+        var boundedSummary = AssetProcessingJobStore.BoundErrorSummary(
+            ErrorCodesToErrorMessages.GetMessage(ErrorCodes.LEASE_EXPIRED));
+
+        await using var tx = await dbContext.Database.BeginTransactionAsync(IsolationLevel.ReadCommitted, cancellationToken);
+
+        var jobs = await dbContext.AssetProcessingJobs
+            .FromSqlInterpolated($"""
+                SELECT *
+                FROM asset_processing_jobs AS j
+                WHERE j."Status" = 'RUNNING'
+                  AND j."LeaseExpiresAt" IS NOT NULL
+                  AND j."LeaseExpiresAt" <= clock_timestamp()
+                  AND j."AttemptCount" >= j."MaxAttempts"
+                  AND j."Type" IN ('ARCHIVE_INSPECTION', 'MALWARE_SCAN')
+                ORDER BY j."LeaseExpiresAt", j."Id"
+                FOR UPDATE SKIP LOCKED
+                LIMIT 1
+                """)
+            .AsNoTracking()
+            .ToListAsync(cancellationToken);
+
+        if (jobs.Count == 0)
+        {
+            return false;
+        }
+
+        var job = jobs[0];
+        var expectedSourceStatus = job.Type == AssetProcessingJobType.ARCHIVE_INSPECTION
+            ? nameof(AssetVersionProcessingStatus.PENDING_INSPECTION)
+            : nameof(AssetVersionProcessingStatus.PENDING_MALWARE_SCAN);
+        var failedStatus = nameof(AssetVersionProcessingStatus.PROCESSING_FAILED);
+
+        var dbNow = await dbContext.Database.SqlQueryRaw<DateTimeOffset>(
+            """SELECT clock_timestamp() AS "Value" """).FirstAsync(cancellationToken);
+
+        var versionRowsUpdated = await dbContext.Database.ExecuteSqlInterpolatedAsync($"""
+            UPDATE asset_versions
+            SET "ProcessingStatus" = {failedStatus},
+                "ProcessingErrorCode" = {errorCode},
+                "ProcessingErrorSummary" = {boundedSummary},
+                "ProcessingUpdatedAt" = {dbNow}
+            WHERE "Id" = {job.AssetVersionId}
+              AND "AssetId" = {job.AssetId}
+              AND "ProcessingStatus" = {expectedSourceStatus}
+            """, cancellationToken);
+
+        var jobRowsUpdated = await dbContext.Database.ExecuteSqlInterpolatedAsync($"""
+            UPDATE asset_processing_jobs
+            SET "Status" = 'FAILED',
+                "Stage" = 'FAILED_LEASE_EXPIRED',
+                "CompletedAt" = {dbNow},
+                "UpdatedAt" = {dbNow},
+                "ErrorCode" = {errorCode},
+                "ErrorSummary" = {boundedSummary},
+                "LeaseOwner" = NULL,
+                "LeaseToken" = NULL,
+                "LeaseExpiresAt" = NULL
+            WHERE "Id" = {job.Id}
+              AND "Status" = 'RUNNING'
+            """, cancellationToken);
+
+        if (jobRowsUpdated != 1)
+        {
+            return false;
+        }
+
+        if (versionRowsUpdated == 1)
+        {
+            await EnqueueTerminalProcessingNotification(
+                job.AssetId,
+                job.AssetVersionId,
+                AssetVersionProcessingStatus.PROCESSING_FAILED,
+                dbNow,
+                cancellationToken);
+        }
+
+        await tx.CommitAsync(cancellationToken);
+        return true;
+    }
+
+    private async Task EnqueueTerminalProcessingNotification(
+        Guid assetId,
+        Guid assetVersionId,
+        AssetVersionProcessingStatus status,
+        DateTimeOffset occurredAt,
+        CancellationToken cancellationToken)
+    {
+        (NotificationKind kind, var hubMethod) = status switch
+        {
+            AssetVersionProcessingStatus.READY => (
+                NotificationKind.ASSET_PROCESSING_READY,
+                NotificationHubMethods.ASSET_PROCESSING_READY),
+            AssetVersionProcessingStatus.REJECTED => (
+                NotificationKind.ASSET_PROCESSING_REJECTED,
+                NotificationHubMethods.ASSET_PROCESSING_REJECTED),
+            AssetVersionProcessingStatus.PROCESSING_FAILED => (
+                NotificationKind.ASSET_PROCESSING_FAILED,
+                NotificationHubMethods.ASSET_PROCESSING_FAILED),
+            _ => throw new ArgumentOutOfRangeException(
+                nameof(status),
+                status,
+                "Only terminal security statuses enqueue notifications.")
+        };
+
+        var owners = await dbContext.Database.SqlQueryRaw<AssetOwnerRow>(
+            """
+            SELECT "AuthorId", "Title"
+            FROM assets
+            WHERE "Id" = {0}
+            """, assetId).ToListAsync(cancellationToken);
+
+        if (owners.Count == 0)
+        {
+            return;
+        }
+
+        var owner = owners[0];
+        var notificationId = Guid.NewGuid();
+        var outboxId = Guid.NewGuid();
+        var metadata = JsonSerializer.Serialize(
+            new AssetProcessingTerminalMessage(
+                notificationId,
+                assetId,
+                assetVersionId,
+                status.ToString(),
+                owner.Title),
+            _jsonOptions);
+
+        if (metadata.Length > NotificationConstraints.MAX_METADATA_JSON_LENGTH)
+        {
+            return;
+        }
+
+        var payload = JsonSerializer.Serialize(
+            new NotificationDispatchPayload(owner.AuthorId, kind, hubMethod, metadata),
+            _jsonOptions);
+
+        await dbContext.Database.ExecuteSqlInterpolatedAsync($"""
+            INSERT INTO outbox_messages ("Id", "Type", "Payload", "OccurredAt", "AttemptCount")
+            VALUES ({outboxId}, {OutboxMessageTypes.NOTIFICATION_DISPATCH}, {payload}, {occurredAt}, 0)
+            """, cancellationToken);
+
+        var kindName = kind.ToString();
+        await dbContext.Database.ExecuteSqlInterpolatedAsync($"""
+            INSERT INTO user_notifications ("Id", "RecipientUserId", "Kind", "MetadataJson", "CreatedAt", "SourceOutboxMessageId")
+            VALUES ({notificationId}, {owner.AuthorId}, {kindName}, {metadata}, {occurredAt}, {outboxId})
+            """, cancellationToken);
     }
 
     [GeneratedRegex("^[A-Z0-9_]{1,64}$", RegexOptions.Compiled)]

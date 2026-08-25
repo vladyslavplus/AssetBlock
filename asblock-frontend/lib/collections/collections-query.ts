@@ -26,10 +26,15 @@ export async function fetchCollectionDetailQuery(id: string): Promise<Collection
   return fetchPublicCollection(id)
 }
 
-export async function fetchSellerCollectionsQuery(): Promise<PagedCollections> {
-  return fetchMyCollections()
+export async function fetchSellerCollectionsQuery({
+  signal,
+}: { signal?: AbortSignal } = {}): Promise<PagedCollections> {
+  return fetchMyCollections(signal)
 }
 
-export async function fetchSellerCollectionQuery(id: string): Promise<CollectionDetail> {
-  return fetchMyCollection(id)
+export async function fetchSellerCollectionQuery(
+  id: string,
+  signal?: AbortSignal,
+): Promise<CollectionDetail> {
+  return fetchMyCollection(id, signal)
 }

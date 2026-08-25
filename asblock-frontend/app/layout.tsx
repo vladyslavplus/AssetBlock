@@ -1,5 +1,6 @@
 import type { Metadata } from 'next'
 import { AuthProvider } from '@/components/auth/auth-context'
+import { AuthenticatedProcessingListener } from '@/components/providers/authenticated-processing-listener'
 import { QueryProvider } from '@/components/providers/query-provider'
 import { ThemeProvider } from '@/components/theme-provider'
 import { Toaster } from '@/components/ui/sonner'
@@ -25,6 +26,7 @@ export default function RootLayout({
         >
           <QueryProvider>
             <AuthProvider>
+              <AuthenticatedProcessingListener />
               {children}
               <Toaster />
             </AuthProvider>

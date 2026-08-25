@@ -26,10 +26,15 @@ export async function fetchBundleDetailQuery(id: string): Promise<BundleDetail> 
   return fetchPublicBundle(id)
 }
 
-export async function fetchSellerBundlesQuery(): Promise<PagedBundles> {
-  return fetchMyBundles()
+export async function fetchSellerBundlesQuery({
+  signal,
+}: { signal?: AbortSignal } = {}): Promise<PagedBundles> {
+  return fetchMyBundles(signal)
 }
 
-export async function fetchSellerBundleQuery(id: string): Promise<BundleDetail> {
-  return fetchMyBundle(id)
+export async function fetchSellerBundleQuery(
+  id: string,
+  signal?: AbortSignal,
+): Promise<BundleDetail> {
+  return fetchMyBundle(id, signal)
 }

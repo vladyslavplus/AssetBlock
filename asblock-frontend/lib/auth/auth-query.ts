@@ -5,8 +5,10 @@ export const authKeys = {
   session: () => [...authKeys.all, 'session'] as const,
 }
 
-export async function fetchSessionUser(): Promise<SessionUser | null> {
-  const res = await fetch('/api/auth/session', { cache: 'no-store' })
+export async function fetchSessionUser({
+  signal,
+}: { signal?: AbortSignal } = {}): Promise<SessionUser | null> {
+  const res = await fetch('/api/auth/session', { cache: 'no-store', signal })
   if (!res.ok) {
     return null
   }

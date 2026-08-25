@@ -1,6 +1,6 @@
 import { z } from 'zod'
 import { getApiErrorMessage } from '@/lib/http/api-errors'
-import { isAbortError } from '@/lib/http/is-abort-error'
+import { isAbortError, toAbortError } from '@/lib/http/is-abort-error'
 import {
   assetProcessingJobSchema,
   type AssetProcessingJobDto,
@@ -15,21 +15,33 @@ function parseMaybeJson(text: string): unknown {
   }
 }
 
+async function fetchJson(url: string, signal?: AbortSignal): Promise<Response> {
+  try {
+    return await fetch(url, { credentials: 'include', signal })
+  } catch (error) {
+    if (isAbortError(error, signal)) throw toAbortError(error, signal)
+    throw error
+  }
+}
+
+async function readResponseText(res: Response, signal?: AbortSignal): Promise<string> {
+  try {
+    return await res.text()
+  } catch (error) {
+    if (isAbortError(error, signal)) throw toAbortError(error, signal)
+    throw error
+  }
+}
+
 export async function fetchAssetProcessingJobs(
   assetId: string,
   signal?: AbortSignal,
 ): Promise<AssetProcessingJobDto[]> {
-  const res = await fetch(`/api/seller/assets/${encodeURIComponent(assetId)}/processing-jobs`, {
-    credentials: 'include',
+  const res = await fetchJson(
+    `/api/seller/assets/${encodeURIComponent(assetId)}/processing-jobs`,
     signal,
-  })
-  let text: string
-  try {
-    text = await res.text()
-  } catch (error) {
-    if (isAbortError(error, signal)) throw error
-    throw error
-  }
+  )
+  const text = await readResponseText(res, signal)
   const parsed = parseMaybeJson(text)
   if (res.status === 401) {
     throw new Error('SIGN_IN_REQUIRED')
@@ -49,20 +61,11 @@ export async function fetchAssetVersionProcessingJobs(
   assetVersionId: string,
   signal?: AbortSignal,
 ): Promise<AssetProcessingJobDto[]> {
-  const res = await fetch(
+  const res = await fetchJson(
     `/api/seller/asset-versions/${encodeURIComponent(assetVersionId)}/processing-jobs`,
-    {
-      credentials: 'include',
-      signal,
-    },
+    signal,
   )
-  let text: string
-  try {
-    text = await res.text()
-  } catch (error) {
-    if (isAbortError(error, signal)) throw error
-    throw error
-  }
+  const text = await readResponseText(res, signal)
   const parsed = parseMaybeJson(text)
   if (res.status === 401) {
     throw new Error('SIGN_IN_REQUIRED')

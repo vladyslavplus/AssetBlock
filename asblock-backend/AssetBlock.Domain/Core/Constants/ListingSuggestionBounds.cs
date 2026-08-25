@@ -22,6 +22,9 @@ public static class ListingSuggestionBounds
     public const int MODEL_ID_MAX_LENGTH = 200;
     public const int APP_NAME_MAX_LENGTH = 64;
     public const int REQUEST_ID_MAX_LENGTH = 128;
-    public const int MAX_OPENROUTER_MODELS = 8;
-    public const int LICENSE_NOTE_MAX_LENGTH = 500;
+    public const int MAX_OPENROUTER_MODELS = 16;
+    public const int MODEL_REVISION_MAX_LENGTH = 200;
+    public const int UPSTREAM_PROVIDER_MAX_LENGTH = 128;
+    public const int TAGS_JSON_MAX_BYTES = 4000;
+    public const string README_LABEL = "README";
 }

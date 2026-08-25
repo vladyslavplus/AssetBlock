@@ -2,7 +2,8 @@ namespace AssetBlock.Domain.Core.Primitives.AppSettingsOptions;
 
 public sealed class OpenRouterOptions
 {
-    public const string SECTION_NAME = "OpenRouter";
+    private const string SECTION_NAME = "OpenRouter";
+    public const string CONFIGURATION_PATH = AiOptions.SECTION_NAME + ":" + SECTION_NAME;
 
     public static readonly TimeSpan MinTimeout = TimeSpan.FromSeconds(5);
     public static readonly TimeSpan MaxTimeout = TimeSpan.FromMinutes(5);

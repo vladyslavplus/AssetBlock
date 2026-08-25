@@ -42,7 +42,6 @@ public sealed record ListingSuggestionResult(
 public sealed record AiGenerationRequest(
     AiProviderKind RequestedProvider,
     string PromptPolicyVersion,
-    IReadOnlyList<string> OrderedModelIds,
     string SystemPrompt,
     string UserPrompt,
     string ResponseSchemaJson,
@@ -62,15 +61,3 @@ public sealed record AiGenerationProviderResult(
     string? ErrorCode,
     string? StructuredJson,
     string? ModelRevision = null);
-
-public sealed record AiModelPolicyEntry(
-    AiProviderKind Provider,
-    string ModelId,
-    AiModelUseCase UseCase,
-    bool StructuredOutput,
-    AiPrivacyDecision Privacy,
-    int MaxInputChars,
-    int MaxOutputTokens,
-    string LicenseNote,
-    DateOnly ReviewedOn,
-    string? Digest = null);

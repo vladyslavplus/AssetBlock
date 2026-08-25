@@ -41,6 +41,21 @@ const listing = {
   createdAt: '2026-01-01T00:00:00.000Z',
   tags: [],
   averageRating: 0,
+  latestVersionId: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
+  latestVersionNumber: 1,
+  currentReadyVersionId: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
+  latestProcessingStatus: 'READY',
+  latestProcessingUpdatedAt: '2026-01-01T00:00:00.000Z',
+  latestProcessingErrorCode: null,
+  latestProcessingErrorSummary: null,
+}
+
+const pendingListing = {
+  ...listing,
+  id: 'dddddddd-dddd-4ddd-8ddd-dddddddddddd',
+  title: 'Pending Pack',
+  currentReadyVersionId: null,
+  latestProcessingStatus: 'PENDING_INSPECTION',
 }
 
 describe('SellMyListings', () => {
@@ -122,5 +137,39 @@ describe('SellMyListings', () => {
         expect.anything(),
       )
     })
+  })
+
+  it('shows View for a READY listing and Manage for a pending listing', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => {
+        return new Response(
+          JSON.stringify({
+            items: [listing, pendingListing],
+            totalCount: 2,
+            page: 1,
+            pageSize: 50,
+          }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } },
+        )
+      }),
+    )
+    render(
+      <QueryClientProvider client={createTestQueryClient()}>
+        <SellMyListings />
+      </QueryClientProvider>,
+    )
+    expect(await screen.findByText('Forest Pack')).toBeInTheDocument()
+    expect(screen.getByText('Pending Pack')).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: /view/i })).toHaveAttribute(
+      'href',
+      '/assets/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+    )
+    expect(screen.getByRole('link', { name: /manage/i })).toHaveAttribute(
+      'href',
+      '/sell/assets/dddddddd-dddd-4ddd-8ddd-dddddddddddd/edit',
+    )
+    expect(screen.getByText('Live')).toBeInTheDocument()
+    expect(screen.getByText('Inspecting archive')).toBeInTheDocument()
   })
 })

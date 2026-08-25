@@ -15,7 +15,6 @@ namespace AssetBlock.Application.Ai;
 internal sealed class ListingSuggestionOrchestrator(
     IOptions<AiOptions> aiOptions,
     IAiGenerationProviderRegistry providers,
-    IAiModelPolicyCatalog modelPolicyCatalog,
     IAiTelemetry telemetry,
     ILogger<ListingSuggestionOrchestrator> logger) : IListingSuggestionOrchestrator
 {
@@ -89,7 +88,6 @@ internal sealed class ListingSuggestionOrchestrator(
             var generationRequest = new AiGenerationRequest(
                 requestedProvider,
                 ListingCopilotPrompt.POLICY_VERSION,
-                provider.OrderedModelIds,
                 ListingCopilotPrompt.BuildSystemPrompt(),
                 ListingCopilotPrompt.BuildUserPrompt(request),
                 ListingSuggestionJsonSchema.ForAllowlists(request.AllowedCategories, request.AllowedTags),
@@ -106,7 +104,7 @@ internal sealed class ListingSuggestionOrchestrator(
                 return Complete(
                     MapProviderFailure(providerResult),
                     started,
-                    allowlistedModel: AllowlistedModel(requestedProvider, providerResult.ActualModel),
+                    allowlistedModel: AllowlistedModel(provider, providerResult.ActualModel),
                     requestId: providerResult.RequestId);
             }
 
@@ -125,7 +123,7 @@ internal sealed class ListingSuggestionOrchestrator(
                         providerResult.RequestId,
                         providerResult.ModelRevision),
                     started,
-                    allowlistedModel: AllowlistedModel(requestedProvider, providerResult.ActualModel),
+                    allowlistedModel: AllowlistedModel(provider, providerResult.ActualModel),
                     requestId: providerResult.RequestId);
             }
 
@@ -144,7 +142,7 @@ internal sealed class ListingSuggestionOrchestrator(
                         providerResult.RequestId,
                         providerResult.ModelRevision),
                     started,
-                    allowlistedModel: AllowlistedModel(requestedProvider, providerResult.ActualModel),
+                    allowlistedModel: AllowlistedModel(provider, providerResult.ActualModel),
                     requestId: providerResult.RequestId);
             }
 
@@ -165,7 +163,7 @@ internal sealed class ListingSuggestionOrchestrator(
             return Complete(
                 success,
                 started,
-                AllowlistedModel(requestedProvider, providerResult.ActualModel),
+                AllowlistedModel(provider, providerResult.ActualModel),
                 providerResult.RequestId);
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
@@ -182,14 +180,14 @@ internal sealed class ListingSuggestionOrchestrator(
         }
     }
 
-    private string? AllowlistedModel(AiProviderKind provider, string? modelId)
+    private static string? AllowlistedModel(IAiGenerationProvider provider, string? modelId)
     {
         if (string.IsNullOrWhiteSpace(modelId))
         {
             return null;
         }
 
-        return modelPolicyCatalog.TryGet(provider, modelId, out _) ? modelId : null;
+        return provider.OrderedModelIds.Contains(modelId, StringComparer.Ordinal) ? modelId : null;
     }
 
     private ListingSuggestionResult Complete(

@@ -2,7 +2,6 @@ using System.Net;
 using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
-using AssetBlock.Domain.Abstractions.Services;
 using AssetBlock.Domain.Core.Constants;
 using AssetBlock.Domain.Core.Enums;
 using AssetBlock.Domain.Core.Primitives.AppSettingsOptions;
@@ -21,13 +20,10 @@ public sealed class OpenRouterAiGenerationProviderTests
         {
             Responder = (_, _) => Task.FromResult(AiProviderTestFactory.Json(HttpStatusCode.OK, AiProviderTestFactory.OpenRouterSuccessBody()))
         };
-        var catalog = new StaticAiModelPolicyCatalog(
-            StaticAiModelPolicyCatalog.OpenRouterFixture(),
-            StaticAiModelPolicyCatalog.OpenRouterFixture() with { ModelId = "fixture/openrouter-test-b" });
-        var sut = CreateSut(handler, ["fixture/openrouter-test", "fixture/openrouter-test-b"], catalog);
+        var sut = CreateSut(handler, ["fixture/openrouter-test", "fixture/openrouter-test-b"]);
 
         var result = await sut.Generate(
-            AiProviderTestFactory.OpenRouterRequest("fixture/openrouter-test", "fixture/openrouter-test-b"),
+            AiProviderTestFactory.OpenRouterRequest(),
             CancellationToken.None);
 
         handler.SendCount.Should().Be(1);
@@ -55,16 +51,17 @@ public sealed class OpenRouterAiGenerationProviderTests
     }
 
     [Fact]
-    public async Task Generate_WhenModelIsNotInPolicy_ShouldNotSendHttp()
+    public async Task Generate_WhenConfiguredModelsAreEmpty_ShouldNotSendHttp()
     {
         var handler = new RecordingHttpMessageHandler();
-        var sut = CreateSut(handler, ["unapproved/model"], new StaticAiModelPolicyCatalog());
+        var sut = CreateSut(handler, []);
 
-        var result = await sut.Generate(AiProviderTestFactory.OpenRouterRequest("unapproved/model"), CancellationToken.None);
+        var result = await sut.Generate(AiProviderTestFactory.OpenRouterRequest(), CancellationToken.None);
 
         handler.SendCount.Should().Be(0);
         result.ErrorCode.Should().Be(ErrorCodes.AI_MODEL_NOT_ALLOWED);
         result.IsRetryable.Should().BeFalse();
+        result.ModelRevision.Should().BeNull();
         result.ErrorCode.Should().NotBeNull();
         ErrorCodesToErrorMessages.GetMessage(result.ErrorCode!).Should().NotContain("unapproved/model");
     }
@@ -253,11 +250,12 @@ public sealed class OpenRouterAiGenerationProviderTests
         result.ErrorCode.Should().Be(ErrorCodes.AI_MODEL_NOT_ALLOWED);
         result.ActualModel.Should().Be("unexpected/model");
         result.UpstreamProvider.Should().Be("TestHost");
+        result.ModelRevision.Should().BeNull();
         result.IsRetryable.Should().BeFalse();
     }
 
     [Fact]
-    public async Task Generate_WhenReturnedModelIsInPolicyButNotRequested_ShouldBeTerminal()
+    public async Task Generate_WhenReturnedModelIsFallbackInConfiguredList_ShouldSucceed()
     {
         var handler = new RecordingHttpMessageHandler
         {
@@ -265,15 +263,32 @@ public sealed class OpenRouterAiGenerationProviderTests
                 HttpStatusCode.OK,
                 AiProviderTestFactory.OpenRouterSuccessBody(model: "fixture/openrouter-test-b")))
         };
-        var catalog = new StaticAiModelPolicyCatalog(
-            StaticAiModelPolicyCatalog.OpenRouterFixture(),
-            StaticAiModelPolicyCatalog.OpenRouterFixture() with { ModelId = "fixture/openrouter-test-b" });
-        var sut = CreateSut(handler, ["fixture/openrouter-test"], catalog);
+        var sut = CreateSut(handler, ["fixture/openrouter-test", "fixture/openrouter-test-b"]);
 
-        var result = await sut.Generate(AiProviderTestFactory.OpenRouterRequest("fixture/openrouter-test"), CancellationToken.None);
+        var result = await sut.Generate(AiProviderTestFactory.OpenRouterRequest(), CancellationToken.None);
+
+        result.Outcome.Should().Be(AiGenerationOutcomeKind.SUCCESS);
+        result.ActualModel.Should().Be("fixture/openrouter-test-b");
+        result.ModelRevision.Should().BeNull();
+        result.ErrorCode.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task Generate_WhenReturnedModelIsOutsideConfiguredList_ShouldBeTerminal()
+    {
+        var handler = new RecordingHttpMessageHandler
+        {
+            Responder = (_, _) => Task.FromResult(AiProviderTestFactory.Json(
+                HttpStatusCode.OK,
+                AiProviderTestFactory.OpenRouterSuccessBody(model: "fixture/openrouter-test-b")))
+        };
+        var sut = CreateSut(handler, ["fixture/openrouter-test"]);
+
+        var result = await sut.Generate(AiProviderTestFactory.OpenRouterRequest(), CancellationToken.None);
 
         result.ErrorCode.Should().Be(ErrorCodes.AI_MODEL_NOT_ALLOWED);
         result.ActualModel.Should().Be("fixture/openrouter-test-b");
+        result.ModelRevision.Should().BeNull();
         result.IsRetryable.Should().BeFalse();
     }
 
@@ -370,12 +385,10 @@ public sealed class OpenRouterAiGenerationProviderTests
     private static OpenRouterAiGenerationProvider CreateSut(
         RecordingHttpMessageHandler handler,
         IReadOnlyList<string>? models = null,
-        IAiModelPolicyCatalog? catalog = null,
         CollectingLogger<OpenRouterAiGenerationProvider>? logger = null,
         TimeSpan? timeout = null,
         bool zeroDataRetention = false)
     {
-        catalog ??= new StaticAiModelPolicyCatalog(StaticAiModelPolicyCatalog.OpenRouterFixture());
         var options = Microsoft.Extensions.Options.Options.Create(new OpenRouterOptions
         {
             BaseUrl = "https://openrouter.ai/api/v1",
@@ -396,7 +409,6 @@ public sealed class OpenRouterAiGenerationProviderTests
         return new OpenRouterAiGenerationProvider(
             factory,
             options,
-            catalog,
             logger ?? new CollectingLogger<OpenRouterAiGenerationProvider>());
     }
 }

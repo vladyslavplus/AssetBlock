@@ -38,6 +38,12 @@ export function getNotificationTitle(kindOrMethod: string): string {
       return 'Sale completed'
     case 'REVIEW_RECEIVED':
       return 'New review'
+    case 'ASSET_PROCESSING_READY':
+      return 'Listing ready'
+    case 'ASSET_PROCESSING_REJECTED':
+      return 'Listing rejected'
+    case 'ASSET_PROCESSING_FAILED':
+      return 'Listing processing failed'
     default:
       return 'Notification'
   }
@@ -87,6 +93,13 @@ export function getNotificationHref(kindOrMethod: string, metadataJson: string):
     }
     const assetId = pickString(r, 'assetId')
     if (assetId) {
+      if (
+        k === 'ASSET_PROCESSING_READY' ||
+        k === 'ASSET_PROCESSING_REJECTED' ||
+        k === 'ASSET_PROCESSING_FAILED'
+      ) {
+        return `/sell/assets/${encodeURIComponent(assetId)}/edit`
+      }
       return `/assets/${encodeURIComponent(assetId)}`
     }
   }

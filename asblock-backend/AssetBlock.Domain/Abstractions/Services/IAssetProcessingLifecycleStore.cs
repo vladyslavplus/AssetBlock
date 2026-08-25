@@ -79,4 +79,11 @@ public interface IAssetProcessingLifecycleStore
         string errorCode,
         string safeSummary,
         CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Recovers expired RUNNING ARCHIVE_INSPECTION/MALWARE_SCAN jobs whose attempts are exhausted:
+    /// fails the job, transitions the version to PROCESSING_FAILED, and enqueues one terminal notification.
+    /// LISTING_COPILOT recovery remains on the job store.
+    /// </summary>
+    Task<int> RecoverExpiredExhaustedSecurityJobs(CancellationToken cancellationToken = default);
 }

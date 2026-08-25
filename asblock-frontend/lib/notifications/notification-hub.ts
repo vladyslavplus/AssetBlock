@@ -6,10 +6,27 @@ import {
   assetProcessingUpdateMessageSchema,
   type AssetProcessingUpdateMessage,
 } from '@/lib/seller/seller-processing-schemas'
+import { z } from 'zod'
 import { toast } from 'sonner'
 
-const HUB_METHODS = ['OrderReady', 'DownloadReady', 'AssetSold', 'ReviewReceived'] as const
+const HUB_METHODS = [
+  'OrderReady',
+  'DownloadReady',
+  'AssetSold',
+  'ReviewReceived',
+  'AssetProcessingReady',
+  'AssetProcessingRejected',
+  'AssetProcessingFailed',
+] as const
 const ASSET_PROCESSING_UPDATED_METHOD = 'AssetProcessingUpdated'
+const PROCESSING_NOTIFICATION_METHODS = new Set<string>([
+  'AssetProcessingReady',
+  'AssetProcessingRejected',
+  'AssetProcessingFailed',
+])
+
+const seenNotificationIds = new Set<string>()
+const MAX_SEEN_NOTIFICATION_IDS = 200
 
 /** When the last subscriber leaves, delay stop so React Strict Mode / HMR remounts do not abort negotiate. */
 const STOP_DEBOUNCE_MS = 500
@@ -52,6 +69,7 @@ let hubConnection: signalR.HubConnection | null = null
 let startPromise: Promise<void> | null = null
 let disconnectRequested = false
 let pendingStopTimer: ReturnType<typeof setTimeout> | null = null
+let boundUserId: string | null = null
 
 function cancelPendingStop(): void {
   if (pendingStopTimer != null) {
@@ -60,8 +78,52 @@ function cancelPendingStop(): void {
   }
 }
 
+const processingNotificationPayloadSchema = z
+  .object({
+    notificationId: z.string().uuid(),
+    assetId: z.string().uuid(),
+    assetVersionId: z.string().uuid(),
+    processingStatus: z.enum(['READY', 'REJECTED', 'PROCESSING_FAILED']),
+    assetTitle: z.string().min(1).max(500),
+  })
+  .strict()
+
+function notificationIdFromPayload(payload: unknown): string | undefined {
+  if (typeof payload !== 'object' || payload === null || Array.isArray(payload)) {
+    return undefined
+  }
+  const value = (payload as Record<string, unknown>).notificationId
+  return typeof value === 'string' && value.length > 0 ? value : undefined
+}
+
+function rememberNotificationId(id: string): boolean {
+  if (seenNotificationIds.has(id)) {
+    return false
+  }
+  if (seenNotificationIds.size >= MAX_SEEN_NOTIFICATION_IDS) {
+    const first = seenNotificationIds.values().next().value
+    if (typeof first === 'string') {
+      seenNotificationIds.delete(first)
+    }
+  }
+  seenNotificationIds.add(id)
+  return true
+}
+
 function dispatchHubEvent(method: string, payload: unknown): void {
-  toast.info(formatHubToastMessage(method, payload))
+  if (PROCESSING_NOTIFICATION_METHODS.has(method)) {
+    const parsed = processingNotificationPayloadSchema.safeParse(payload)
+    if (!parsed.success) {
+      return
+    }
+    payload = parsed.data
+  }
+
+  const notificationId = notificationIdFromPayload(payload)
+  const isNew = notificationId ? rememberNotificationId(notificationId) : true
+  if (isNew) {
+    toast.info(formatHubToastMessage(method, payload))
+  }
   for (const fn of invalidateHandlers) {
     try {
       fn()
@@ -114,16 +176,39 @@ function buildConnection(): signalR.HubConnection {
     .build()
 
   for (const m of HUB_METHODS) {
-    conn.on(m, (payload: unknown) => dispatchHubEvent(m, payload))
+    conn.on(m, (payload: unknown) => {
+      if (hubConnection !== conn) {
+        return
+      }
+      dispatchHubEvent(m, payload)
+    })
   }
 
-  conn.on(ASSET_PROCESSING_UPDATED_METHOD, (payload: unknown) => dispatchProcessingEvent(payload))
+  conn.on(ASSET_PROCESSING_UPDATED_METHOD, (payload: unknown) => {
+    if (hubConnection !== conn) {
+      return
+    }
+    dispatchProcessingEvent(payload)
+  })
 
   return conn
 }
 
+function bindHubUser(userId: string): void {
+  cancelPendingStop()
+  if (boundUserId === userId) {
+    return
+  }
+  seenNotificationIds.clear()
+  boundUserId = userId
+  void tearDownConnection()
+}
+
 function ensureConnection(): void {
   cancelPendingStop()
+  if (boundUserId == null) {
+    return
+  }
   if (hubConnection != null) {
     const state = hubConnection.state
     if (
@@ -199,7 +284,11 @@ function scheduleStopIfIdle(): void {
  * Subscribe to the shared notifications hub. Multiple callers share one connection; unsubscribing uses a debounced
  * disconnect so dev remounts do not spam negotiate errors.
  */
-export function subscribeNotificationHub(onInvalidate: InvalidateFn): () => void {
+export function subscribeNotificationHub(onInvalidate: InvalidateFn, userId: string): () => void {
+  if (!userId) {
+    return () => {}
+  }
+  bindHubUser(userId)
   invalidateHandlers.add(onInvalidate)
   ensureConnection()
 
@@ -214,7 +303,14 @@ export function subscribeNotificationHub(onInvalidate: InvalidateFn): () => void
 /**
  * Subscribe to real-time AssetProcessingUpdated events on the shared hub connection.
  */
-export function subscribeProcessingHub(onProcessingUpdate: ProcessingUpdateFn): () => void {
+export function subscribeProcessingHub(
+  onProcessingUpdate: ProcessingUpdateFn,
+  userId: string,
+): () => void {
+  if (!userId) {
+    return () => {}
+  }
+  bindHubUser(userId)
   processingUpdateHandlers.add(onProcessingUpdate)
   ensureConnection()
 

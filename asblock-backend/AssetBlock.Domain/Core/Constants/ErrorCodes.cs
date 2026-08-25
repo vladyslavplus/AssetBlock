@@ -119,6 +119,7 @@ public static class ErrorCodes
     public const string STORAGE_UNAVAILABLE = "STORAGE_UNAVAILABLE";
     public const string STORAGE_IO_ERROR = "STORAGE_IO_ERROR";
     public const string LEASE_LOST = "LEASE_LOST";
+    public const string LEASE_EXPIRED = "LEASE_EXPIRED";
     public const string MALWARE_DETECTED = "MALWARE_DETECTED";
     public const string SCANNER_UNAVAILABLE = "SCANNER_UNAVAILABLE";
     public const string SCANNER_ERROR = "SCANNER_ERROR";
@@ -143,4 +144,7 @@ public static class ErrorCodes
     public const string AI_TAGS_NOT_ALLOWED = "AI_TAGS_NOT_ALLOWED";
     public const string AI_INPUT_TOO_LARGE = "AI_INPUT_TOO_LARGE";
     public const string AI_ERROR = "AI_ERROR";
+    public const string AI_VERSION_NOT_READY = "AI_VERSION_NOT_READY";
+    public const string AI_ARCHIVE_ANALYSIS_MISSING = "AI_ARCHIVE_ANALYSIS_MISSING";
+    public const string AI_ALLOWLIST_OVERFLOW = "AI_ALLOWLIST_OVERFLOW";
 }

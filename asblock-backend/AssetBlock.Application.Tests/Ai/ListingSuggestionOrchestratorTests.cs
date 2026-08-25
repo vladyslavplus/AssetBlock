@@ -6,7 +6,6 @@ using AssetBlock.Domain.Core.Enums;
 using AssetBlock.Domain.Core.Primitives.AppSettingsOptions;
 using AwesomeAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
-using NSubstitute;
 using System.Text.Json;
 
 namespace AssetBlock.Application.Tests.Ai;
@@ -154,6 +153,7 @@ public sealed class ListingSuggestionOrchestratorTests
         result.Suggestion!.Title.Should().Be("Oak Table");
         result.Suggestion.Category.Should().Be("3D");
         result.Suggestion.Tags.Should().Equal("lowpoly");
+        provider.LastRequest!.PromptPolicyVersion.Should().Be(AiPromptPolicies.LISTING_COPILOT_V1);
     }
 
     [Fact]
@@ -183,24 +183,6 @@ public sealed class ListingSuggestionOrchestratorTests
         FakeAiGenerationProvider provider,
         RecordingAiTelemetry telemetry)
     {
-        var catalog = Substitute.For<IAiModelPolicyCatalog>();
-        AiModelPolicyEntry entry = new(
-            AiProviderKind.OPENROUTER,
-            "fixture/openrouter-test",
-            AiModelUseCase.LISTING_COPILOT,
-            true,
-            AiPrivacyDecision.EXTERNAL_METADATA_ONLY,
-            12000,
-            1000,
-            "test",
-            new DateOnly(2026, 8, 25));
-        catalog.TryGet(AiProviderKind.OPENROUTER, "fixture/openrouter-test", out Arg.Any<AiModelPolicyEntry?>())
-            .Returns(x =>
-            {
-                x[2] = entry;
-                return true;
-            });
-
         return new ListingSuggestionOrchestrator(
             Microsoft.Extensions.Options.Options.Create(new AiOptions
             {
@@ -209,7 +191,6 @@ public sealed class ListingSuggestionOrchestratorTests
                 PromptPolicyVersion = AiPromptPolicies.LISTING_COPILOT_V1
             }),
             new FakeProviderRegistry(provider),
-            catalog,
             telemetry,
             NullLogger<ListingSuggestionOrchestrator>.Instance);
     }

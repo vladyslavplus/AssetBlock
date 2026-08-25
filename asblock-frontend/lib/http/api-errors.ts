@@ -17,6 +17,7 @@ const TYPE_PREFIX = 'urn:assetblock:error:'
 const FRIENDLY_ERROR_MESSAGES: Record<string, string> = {
   ERR_EMAIL_NOT_VERIFIED:
     'Email verification is required to perform this action. Verify your email on the Account page.',
+  AI_DISABLED: 'AI listing suggestions are not available right now.',
 }
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {

@@ -1,8 +1,6 @@
-using System.Diagnostics.CodeAnalysis;
 using System.Net;
 using System.Text;
 using System.Text.Json;
-using AssetBlock.Domain.Abstractions.Services;
 using AssetBlock.Domain.Core.Constants;
 using AssetBlock.Domain.Core.Dto;
 using AssetBlock.Domain.Core.Enums;
@@ -28,50 +26,9 @@ internal sealed class RecordingHttpMessageHandler : HttpMessageHandler
     }
 }
 
-internal sealed class StaticAiModelPolicyCatalog : IAiModelPolicyCatalog
+internal static class AiTestDigests
 {
-    private readonly Dictionary<(AiProviderKind, string), AiModelPolicyEntry> _entries;
-
-    public StaticAiModelPolicyCatalog(params AiModelPolicyEntry[] entries)
-    {
-        _entries = entries.ToDictionary(e => (e.Provider, e.ModelId));
-        SchemaVersion = 1;
-    }
-
-    public int SchemaVersion { get; }
-
-    public bool TryGet(
-        AiProviderKind provider,
-        string modelId,
-        [NotNullWhen(true)] out AiModelPolicyEntry? entry) =>
-        _entries.TryGetValue((provider, modelId), out entry);
-
-    public static string FixtureDigest { get; } = "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
-
-    public static AiModelPolicyEntry OpenRouterFixture() =>
-        new(
-            AiProviderKind.OPENROUTER,
-            "fixture/openrouter-test",
-            AiModelUseCase.LISTING_COPILOT,
-            true,
-            AiPrivacyDecision.EXTERNAL_METADATA_ONLY,
-            12000,
-            1000,
-            "test",
-            new DateOnly(2026, 8, 25));
-
-    public static AiModelPolicyEntry OllamaFixture() =>
-        new(
-            AiProviderKind.OLLAMA,
-            "fixture-ollama-test",
-            AiModelUseCase.LISTING_COPILOT,
-            true,
-            AiPrivacyDecision.LOCAL_ONLY,
-            12000,
-            1000,
-            "test",
-            new DateOnly(2026, 8, 25),
-            FixtureDigest);
+    public const string FixtureDigest = "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
 }
 
 internal sealed class CollectingLogger<T> : ILogger<T>
@@ -116,11 +73,10 @@ internal static class AiProviderTestFactory
         return services.BuildServiceProvider().GetRequiredService<IHttpClientFactory>();
     }
 
-    public static AiGenerationRequest OpenRouterRequest(params string[] models) =>
+    public static AiGenerationRequest OpenRouterRequest() =>
         new(
             AiProviderKind.OPENROUTER,
             AiPromptPolicies.LISTING_COPILOT_V1,
-            models.Length == 0 ? ["fixture/openrouter-test"] : models,
             "system",
             "user",
             """{"type":"object"}""",
@@ -130,7 +86,6 @@ internal static class AiProviderTestFactory
         new(
             AiProviderKind.OLLAMA,
             AiPromptPolicies.LISTING_COPILOT_V1,
-            ["fixture-ollama-test"],
             "system",
             "user",
             """{"type":"object"}""",
@@ -173,7 +128,7 @@ internal static class AiProviderTestFactory
         {
             models = new[]
             {
-                new { name = model, digest = digest ?? StaticAiModelPolicyCatalog.FixtureDigest }
+                new { name = model, digest = digest ?? AiTestDigests.FixtureDigest }
             }
         });
 }

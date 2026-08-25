@@ -1,4 +1,5 @@
 using Ardalis.Result;
+using AssetBlock.Application.UseCases.Assets.GetSellerAssetDetail;
 using AssetBlock.Application.UseCases.Users.GetMyListings;
 using AssetBlock.Application.UseCases.Users.GetProfile;
 using AssetBlock.Application.UseCases.Users.ListNotifications;
@@ -72,7 +73,7 @@ public sealed class UsersControllerTests : ControllerTestBase
     public async Task ListMyAssets_WhenAuthenticated_ShouldReturnOk()
     {
         Sender.Send(Arg.Any<GetMyListingsQuery>(), Arg.Any<CancellationToken>())
-            .Returns(Task.FromResult(Result.Success(new DomainPaging.PagedResult<AssetListItem>([], 0, 1, 10))));
+            .Returns(Task.FromResult(Result.Success(new DomainPaging.PagedResult<SellerAssetListItem>([], 0, 1, 10))));
 
         var controller = new UsersController(Sender);
         SetupUser(_userId, controller);
@@ -214,5 +215,63 @@ public sealed class UsersControllerTests : ControllerTestBase
         var result = await controller.GetByUsername("name", CancellationToken.None);
 
         result.Should().BeOfType<OkObjectResult>();
+    }
+
+    [Fact]
+    public async Task GetMyAsset_WhenNoUser_ShouldReturnUnauthorized()
+    {
+        var controller = new UsersController(Sender);
+        SetupAnonymous(controller);
+        var result = await controller.GetMyAsset(Guid.NewGuid(), CancellationToken.None);
+
+        await AssertStatusCodeAsync(controller, result, StatusCodes.Status401Unauthorized);
+    }
+
+    [Fact]
+    public async Task GetMyAsset_WhenNotFound_ShouldReturnNotFound()
+    {
+        Sender.Send(Arg.Any<GetSellerAssetDetailQuery>(), Arg.Any<CancellationToken>())
+            .Returns(Result<SellerAssetDetailItem>.NotFound("ERR_ASSET_NOT_FOUND"));
+
+        var controller = new UsersController(Sender);
+        SetupUser(_userId, controller);
+        var result = await controller.GetMyAsset(Guid.NewGuid(), CancellationToken.None);
+
+        await AssertStatusCodeAsync(controller, result, StatusCodes.Status404NotFound);
+    }
+
+    [Fact]
+    public async Task GetMyAsset_WhenAuthenticated_ShouldReturnOk()
+    {
+        var assetId = Guid.NewGuid();
+        var now = DateTimeOffset.UtcNow;
+        var detail = new SellerAssetDetailItem(
+            assetId,
+            "Pending Pack",
+            null,
+            9.99m,
+            Guid.NewGuid(),
+            "3D",
+            _userId,
+            "seller",
+            now,
+            null,
+            [],
+            Guid.NewGuid(),
+            1,
+            null,
+            Domain.Core.Enums.AssetVersionProcessingStatus.PENDING_INSPECTION,
+            now,
+            null,
+            null);
+
+        Sender.Send(Arg.Any<GetSellerAssetDetailQuery>(), Arg.Any<CancellationToken>())
+            .Returns(Result.Success(detail));
+
+        var controller = new UsersController(Sender);
+        SetupUser(_userId, controller);
+        var action = await controller.GetMyAsset(assetId, CancellationToken.None);
+
+        action.Should().BeOfType<OkObjectResult>();
     }
 }

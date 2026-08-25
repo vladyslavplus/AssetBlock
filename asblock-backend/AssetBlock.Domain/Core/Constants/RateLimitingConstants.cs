@@ -19,6 +19,7 @@ public static class RateLimitingConstants
         public const string PAYMENTS_CHECKOUT = "payments-checkout";
         public const string ANALYTICS_EVENTS = "analytics-events";
         public const string SELLER_ANALYTICS_SALES_EXPORT = "seller-analytics-sales-export";
+        public const string LISTING_COPILOT_ENQUEUE = "listing-copilot-enqueue";
     }
 
     public static class Windows
@@ -60,5 +61,8 @@ public static class RateLimitingConstants
 
         public const int SELLER_ANALYTICS_SALES_EXPORT_LIMIT = 10;
         public const int SELLER_ANALYTICS_SALES_EXPORT_PERIOD_SECONDS = 3600;
+
+        public const int LISTING_COPILOT_ENQUEUE_LIMIT = 5;
+        public const int LISTING_COPILOT_ENQUEUE_PERIOD_SECONDS = 60;
     }
 }

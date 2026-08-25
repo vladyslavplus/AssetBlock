@@ -16,12 +16,6 @@ internal sealed class AiOptionsValidator : IValidateOptions<AiOptions>
             errors.Add("Ai:PromptPolicyVersion must be a bounded kebab-case version.");
         }
 
-        if (string.IsNullOrWhiteSpace(options.ModelPolicyPath)
-            || options.ModelPolicyPath.Length > 512)
-        {
-            errors.Add("Ai:ModelPolicyPath must be a non-empty path.");
-        }
-
         if (!options.Enabled)
         {
             return errors.Count > 0 ? ValidateOptionsResult.Fail(errors) : ValidateOptionsResult.Success;

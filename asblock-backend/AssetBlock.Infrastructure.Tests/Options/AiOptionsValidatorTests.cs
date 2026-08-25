@@ -14,8 +14,7 @@ public sealed class AiOptionsValidatorTests
         {
             Enabled = false,
             Provider = "NotAProvider",
-            PromptPolicyVersion = "listing-copilot-v1",
-            ModelPolicyPath = "ai/model-policy.json"
+            PromptPolicyVersion = "listing-copilot-v1"
         });
 
         result.Succeeded.Should().BeTrue();
@@ -28,8 +27,7 @@ public sealed class AiOptionsValidatorTests
         {
             Enabled = true,
             Provider = "SemanticKernel",
-            PromptPolicyVersion = "listing-copilot-v1",
-            ModelPolicyPath = "ai/model-policy.json"
+            PromptPolicyVersion = "listing-copilot-v1"
         });
 
         result.Failed.Should().BeTrue();
@@ -43,8 +41,7 @@ public sealed class AiOptionsValidatorTests
         {
             Enabled = true,
             Provider = "OpenRouter",
-            PromptPolicyVersion = "listing-copilot-v1",
-            ModelPolicyPath = "ai/model-policy.json"
+            PromptPolicyVersion = "listing-copilot-v1"
         });
 
         result.Succeeded.Should().BeTrue();
@@ -56,8 +53,7 @@ public sealed class OpenRouterAndOllamaOptionsValidatorTests
     [Fact]
     public void OpenRouter_WhenAiDisabled_ShouldSkipApiKeyAndModels()
     {
-        var config = DisabledConfig();
-        var sut = new OpenRouterOptionsValidator(config, new StaticAiModelPolicyCatalog());
+        var sut = new OpenRouterOptionsValidator(DisabledConfig());
 
         var result = sut.Validate(null, new OpenRouterOptions { ApiKey = "", Models = [] });
 
@@ -67,32 +63,17 @@ public sealed class OpenRouterAndOllamaOptionsValidatorTests
     [Fact]
     public void OpenRouter_WhenOllamaIsActive_ShouldSkipOpenRouterSecrets()
     {
-        var config = EnabledConfig("Ollama");
-        var sut = new OpenRouterOptionsValidator(config, new StaticAiModelPolicyCatalog());
+        var sut = new OpenRouterOptionsValidator(EnabledConfig("Ollama"));
 
-        var result = sut.Validate(null, new OpenRouterOptions { ApiKey = "", Models = [] });
+        var result = sut.Validate(null, new OpenRouterOptions { ApiKey = "", Models = ["placeholder/not-validated"] });
 
         result.Succeeded.Should().BeTrue();
     }
 
     [Fact]
-    public void OpenRouter_WhenActiveWithoutPolicyEntry_ShouldFail()
+    public void OpenRouter_WhenActiveWithValidModels_ShouldSucceed()
     {
-        var config = EnabledConfig("OpenRouter");
-        var sut = new OpenRouterOptionsValidator(config, new StaticAiModelPolicyCatalog());
-        var options = ValidOpenRouterOptions();
-
-        var result = sut.Validate(null, options);
-
-        result.Failed.Should().BeTrue();
-        result.FailureMessage.Should().Contain("policy");
-    }
-
-    [Fact]
-    public void OpenRouter_WhenActiveWithFixturePolicy_ShouldSucceed()
-    {
-        var config = EnabledConfig("OpenRouter");
-        var sut = new OpenRouterOptionsValidator(config, new StaticAiModelPolicyCatalog(StaticAiModelPolicyCatalog.OpenRouterFixture()));
+        var sut = new OpenRouterOptionsValidator(EnabledConfig("OpenRouter"));
 
         var result = sut.Validate(null, ValidOpenRouterOptions());
 
@@ -100,65 +81,106 @@ public sealed class OpenRouterAndOllamaOptionsValidatorTests
     }
 
     [Fact]
-    public void OpenRouter_WhenConfiguredLimitsExceedPolicy_ShouldFail()
+    public void OpenRouter_WhenModelsAreEmpty_ShouldFail()
     {
-        var config = EnabledConfig("OpenRouter");
-        var sut = new OpenRouterOptionsValidator(config, new StaticAiModelPolicyCatalog(StaticAiModelPolicyCatalog.OpenRouterFixture()));
+        var sut = new OpenRouterOptionsValidator(EnabledConfig("OpenRouter"));
         var options = ValidOpenRouterOptions();
-        options.MaxInputChars = 12001;
+        options.Models = [];
 
         var result = sut.Validate(null, options);
 
         result.Failed.Should().BeTrue();
-        result.FailureMessage.Should().Contain("limits");
+        result.FailureMessage.Should().Contain("Models");
     }
 
     [Fact]
     public void OpenRouter_WhenModelsAreDuplicated_ShouldFail()
     {
-        var config = EnabledConfig("OpenRouter");
-        var sut = new OpenRouterOptionsValidator(config, new StaticAiModelPolicyCatalog(StaticAiModelPolicyCatalog.OpenRouterFixture()));
+        var sut = new OpenRouterOptionsValidator(EnabledConfig("OpenRouter"));
         var options = ValidOpenRouterOptions();
         options.Models = ["fixture/openrouter-test", "fixture/openrouter-test"];
 
         var result = sut.Validate(null, options);
 
         result.Failed.Should().BeTrue();
+        result.FailureMessage.Should().Contain("distinct");
+    }
+
+    [Fact]
+    public void OpenRouter_WhenModelIdIsOversized_ShouldFail()
+    {
+        var sut = new OpenRouterOptionsValidator(EnabledConfig("OpenRouter"));
+        var options = ValidOpenRouterOptions();
+        options.Models = [new string('a', 201)];
+
+        var result = sut.Validate(null, options);
+
+        result.Failed.Should().BeTrue();
+        result.FailureMessage.Should().Contain("bounded");
+    }
+
+    [Fact]
+    public void OpenRouter_WhenTooManyModels_ShouldFail()
+    {
+        var sut = new OpenRouterOptionsValidator(EnabledConfig("OpenRouter"));
+        var options = ValidOpenRouterOptions();
+        options.Models = Enumerable.Range(0, 17).Select(i => $"model-{i}").ToList();
+
+        var result = sut.Validate(null, options);
+
+        result.Failed.Should().BeTrue();
+        result.FailureMessage.Should().Contain("16");
+    }
+
+    [Fact]
+    public void Ollama_WhenOpenRouterIsActive_ShouldSkipOllamaPlaceholders()
+    {
+        var sut = new OllamaOptionsValidator(EnabledConfig("OpenRouter"));
+
+        var result = sut.Validate(null, new OllamaOptions
+        {
+            BaseUrl = "http://example.invalid:11434",
+            Model = "",
+            Digest = ""
+        });
+
+        result.Succeeded.Should().BeTrue();
     }
 
     [Fact]
     public void Ollama_WhenActiveWithNonLoopbackUrl_ShouldFail()
     {
-        var config = EnabledConfig("Ollama");
-        var sut = new OllamaOptionsValidator(config, new StaticAiModelPolicyCatalog(StaticAiModelPolicyCatalog.OllamaFixture()));
+        var sut = new OllamaOptionsValidator(EnabledConfig("Ollama"));
 
-        var result = sut.Validate(null, new OllamaOptions
-        {
-            BaseUrl = "http://ollama.example:11434",
-            Model = "fixture-ollama-test",
-            Timeout = TimeSpan.FromMinutes(2),
-            MaxInputChars = 12000,
-            MaxOutputTokens = 1000
-        });
+        var options = ValidOllamaOptions();
+        options.BaseUrl = "http://ollama.example:11434";
+
+        var result = sut.Validate(null, options);
 
         result.Failed.Should().BeTrue();
         result.FailureMessage.Should().Contain("loopback");
     }
 
     [Fact]
-    public void Ollama_WhenActiveWithFixturePolicy_ShouldSucceed()
+    public void Ollama_WhenActiveWithoutDigest_ShouldFail()
     {
-        var config = EnabledConfig("Ollama");
-        var sut = new OllamaOptionsValidator(config, new StaticAiModelPolicyCatalog(StaticAiModelPolicyCatalog.OllamaFixture()));
+        var sut = new OllamaOptionsValidator(EnabledConfig("Ollama"));
 
-        var result = sut.Validate(null, new OllamaOptions
-        {
-            BaseUrl = "http://127.0.0.1:11434",
-            Model = "fixture-ollama-test",
-            Timeout = TimeSpan.FromMinutes(2),
-            MaxInputChars = 12000,
-            MaxOutputTokens = 1000
-        });
+        var options = ValidOllamaOptions();
+        options.Digest = "";
+
+        var result = sut.Validate(null, options);
+
+        result.Failed.Should().BeTrue();
+        result.FailureMessage.Should().Contain("Digest");
+    }
+
+    [Fact]
+    public void Ollama_WhenActiveWithValidModelAndDigest_ShouldSucceed()
+    {
+        var sut = new OllamaOptionsValidator(EnabledConfig("Ollama"));
+
+        var result = sut.Validate(null, ValidOllamaOptions());
 
         result.Succeeded.Should().BeTrue();
     }
@@ -167,13 +189,23 @@ public sealed class OpenRouterAndOllamaOptionsValidatorTests
     {
         BaseUrl = "https://openrouter.ai/api/v1",
         ApiKey = "sk-test-key-value",
-        Models = ["fixture/openrouter-test"],
+        Models = ["fixture/openrouter-test", "fixture/openrouter-test-b"],
         Timeout = TimeSpan.FromMinutes(1),
         MaxInputChars = 12000,
         MaxOutputTokens = 1000,
         MaxRetryAfter = TimeSpan.FromHours(1),
         SiteUrl = "https://example.test",
         AppName = "AssetBlock"
+    };
+
+    private static OllamaOptions ValidOllamaOptions() => new()
+    {
+        BaseUrl = "http://127.0.0.1:11434",
+        Model = "fixture-ollama-test",
+        Digest = AiTestDigests.FixtureDigest,
+        Timeout = TimeSpan.FromMinutes(2),
+        MaxInputChars = 12000,
+        MaxOutputTokens = 1000
     };
 
     private static IConfiguration DisabledConfig() =>

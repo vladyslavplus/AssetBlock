@@ -93,6 +93,27 @@ public sealed class AssetProcessingWorkerTests
     }
 
     [Fact]
+    public async Task Worker_WhenRecoveringLeases_AlsoRecoversExhaustedSecurityJobs()
+    {
+        var options = CreateDefaultOptions();
+        var worker = CreateWorker(options);
+
+        _store.ClaimPendingBatch(Arg.Any<int>(), Arg.Any<TimeSpan>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<IReadOnlyList<ClaimedAssetProcessingJob>>([]));
+        _store.RecoverExpiredLeases(Arg.Any<CancellationToken>()).Returns(0);
+        _lifecycleStore.RecoverExpiredExhaustedSecurityJobs(Arg.Any<CancellationToken>()).Returns(0);
+
+        using var cts = new CancellationTokenSource(TimeSpan.FromMilliseconds(200));
+
+        await worker.StartAsync(cts.Token);
+        await Task.Delay(80);
+        await worker.StopAsync(CancellationToken.None);
+
+        await _store.Received().RecoverExpiredLeases(Arg.Any<CancellationToken>());
+        await _lifecycleStore.Received().RecoverExpiredExhaustedSecurityJobs(Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
     public async Task Worker_WhenDisabled_DoesNotClaimJobs()
     {
         var options = CreateDefaultOptions(enabled: false);
@@ -324,6 +345,81 @@ public sealed class AssetProcessingWorkerTests
         publishedMessages[0].Status.Should().Be(AssetProcessingJobStatus.RUNNING);
         publishedMessages[0].UpdatedAt.Should().Be(updatedAt);
         publishedMessages[1].Status.Should().Be(AssetProcessingJobStatus.SUCCEEDED);
+    }
+
+    [Fact]
+    public async Task Worker_WhenListingCopilotCommitsAtomically_ShouldPublishFinalStateOnceWithoutMarkSucceeded()
+    {
+        var options = CreateDefaultOptions();
+        var worker = CreateWorker(options);
+
+        var jobId = Guid.NewGuid();
+        var leaseToken = Guid.NewGuid();
+        var ownerUserId = Guid.NewGuid();
+        var claimedJob = new ClaimedAssetProcessingJob(
+            jobId,
+            Guid.NewGuid(),
+            Guid.NewGuid(),
+            ownerUserId,
+            AssetProcessingJobType.LISTING_COPILOT,
+            1,
+            1,
+            3,
+            "{}",
+            null,
+            leaseToken,
+            DateTimeOffset.UtcNow,
+            DateTimeOffset.UtcNow,
+            DateTimeOffset.UtcNow);
+
+        var adapter = Substitute.For<IAssetProcessingJobHandlerAdapter>();
+        adapter.Execute(Arg.Any<IServiceProvider>(), Arg.Any<ClaimedAssetProcessingJob>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(AssetProcessingJobOutcome.CommittedSucceeded()));
+
+        _registry.GetHandler(AssetProcessingJobType.LISTING_COPILOT).Returns(adapter);
+
+        var callCount = 0;
+        _store.ClaimPendingBatch(Arg.Any<int>(), Arg.Any<TimeSpan>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(_ =>
+            {
+                if (Interlocked.Increment(ref callCount) == 1)
+                {
+                    return Task.FromResult<IReadOnlyList<ClaimedAssetProcessingJob>>([claimedJob]);
+                }
+
+                return Task.FromResult<IReadOnlyList<ClaimedAssetProcessingJob>>([]);
+            });
+
+        var realtimeState = new AssetProcessingJobRealtimeState(
+            jobId,
+            claimedJob.AssetId,
+            claimedJob.AssetVersionId,
+            ownerUserId,
+            AssetProcessingJobType.LISTING_COPILOT,
+            AssetProcessingJobStatus.SUCCEEDED,
+            "SUCCEEDED",
+            DateTimeOffset.UtcNow);
+
+        _store.GetRealtimeState(jobId, Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<AssetProcessingJobRealtimeState?>(realtimeState));
+
+        var publishedMessages = new List<AssetProcessingUpdateMessage>();
+        _publisher.PublishJobUpdated(ownerUserId, Arg.Do<AssetProcessingUpdateMessage>(publishedMessages.Add), Arg.Any<CancellationToken>())
+            .Returns(Task.CompletedTask);
+
+        using var cts = new CancellationTokenSource(TimeSpan.FromMilliseconds(200));
+        await worker.StartAsync(cts.Token);
+        await Task.Delay(100, cts.Token);
+        await worker.StopAsync(CancellationToken.None);
+
+        await _store.DidNotReceive().MarkSucceeded(
+            Arg.Any<Guid>(),
+            Arg.Any<Guid>(),
+            Arg.Any<AssetProcessingResult>(),
+            Arg.Any<CancellationToken>());
+        publishedMessages.Should().HaveCount(2);
+        publishedMessages[1].Status.Should().Be(AssetProcessingJobStatus.SUCCEEDED);
+        publishedMessages.Count(m => m.Status == AssetProcessingJobStatus.SUCCEEDED).Should().Be(1);
     }
 
     [Fact]

@@ -17,7 +17,6 @@ namespace AssetBlock.Infrastructure.Ai;
 internal sealed class OpenRouterAiGenerationProvider(
     IHttpClientFactory httpClientFactory,
     IOptions<OpenRouterOptions> optionsAccessor,
-    IAiModelPolicyCatalog modelPolicyCatalog,
     ILogger<OpenRouterAiGenerationProvider> logger) : IAiGenerationProvider
 {
     public const string HTTP_CLIENT_NAME = "OpenRouter";
@@ -33,34 +32,19 @@ internal sealed class OpenRouterAiGenerationProvider(
     {
         var started = Stopwatch.GetTimestamp();
         var options = optionsAccessor.Value;
-        var entries = new List<AiModelPolicyEntry>();
-        foreach (var modelId in request.OrderedModelIds)
-        {
-            if (!modelPolicyCatalog.TryGet(AiProviderKind.OPENROUTER, modelId, out var entry)
-                || !entry.StructuredOutput
-                || entry.UseCase != AiModelUseCase.LISTING_COPILOT
-                || entry.Privacy != AiPrivacyDecision.EXTERNAL_METADATA_ONLY)
-            {
-                return Terminal(ErrorCodes.AI_MODEL_NOT_ALLOWED, started);
-            }
-
-            entries.Add(entry);
-        }
-
-        if (entries.Count == 0)
+        var models = options.Models;
+        if (models.Count == 0 || models.Any(model => !AiConfigurationRules.IsModelId(model)))
         {
             return Terminal(ErrorCodes.AI_MODEL_NOT_ALLOWED, started);
         }
 
-        var minInput = Math.Min(options.MaxInputChars, entries.Min(e => e.MaxInputChars));
-        var minOutput = Math.Min(options.MaxOutputTokens, entries.Min(e => e.MaxOutputTokens));
         var promptChars = request.SystemPrompt.Length + request.UserPrompt.Length;
-        if (promptChars > minInput)
+        if (promptChars > options.MaxInputChars)
         {
             return Terminal(ErrorCodes.AI_INPUT_TOO_LARGE, started);
         }
 
-        if (request.MaxOutputTokens > minOutput)
+        if (request.MaxOutputTokens > options.MaxOutputTokens)
         {
             return Terminal(ErrorCodes.AI_INVALID_REQUEST, started);
         }
@@ -142,10 +126,10 @@ internal sealed class OpenRouterAiGenerationProvider(
             return Terminal(ErrorCodes.AI_INVALID_RESPONSE, started);
         }
 
-        return ParseSuccess(timed.Body, started, request);
+        return ParseSuccess(timed.Body, started);
     }
 
-    private AiGenerationProviderResult ParseSuccess(string body, long started, AiGenerationRequest request)
+    private AiGenerationProviderResult ParseSuccess(string body, long started)
     {
         try
         {
@@ -170,7 +154,7 @@ internal sealed class OpenRouterAiGenerationProvider(
                 }
             }
 
-            if (!IsRequestedAllowlistedModel(actualModel, request.OrderedModelIds))
+            if (!IsConfiguredModel(actualModel, optionsAccessor.Value.Models))
             {
                 return new AiGenerationProviderResult(
                     AiGenerationOutcomeKind.TERMINAL_FAILURE,
@@ -212,17 +196,9 @@ internal sealed class OpenRouterAiGenerationProvider(
         }
     }
 
-    private bool IsRequestedAllowlistedModel(string? actualModel, IReadOnlyList<string> orderedModelIds)
-    {
-        if (string.IsNullOrWhiteSpace(actualModel)
-            || !orderedModelIds.Contains(actualModel, StringComparer.Ordinal)
-            || !modelPolicyCatalog.TryGet(AiProviderKind.OPENROUTER, actualModel, out var entry))
-        {
-            return false;
-        }
-
-        return entry is { StructuredOutput: true, UseCase: AiModelUseCase.LISTING_COPILOT, Privacy: AiPrivacyDecision.EXTERNAL_METADATA_ONLY };
-    }
+    private static bool IsConfiguredModel(string? actualModel, IReadOnlyList<string> configuredModels) =>
+        !string.IsNullOrWhiteSpace(actualModel)
+        && configuredModels.Contains(actualModel, StringComparer.Ordinal);
 
     private static string? ReadUpstreamProvider(JsonElement root)
     {
@@ -304,7 +280,7 @@ internal sealed class OpenRouterAiGenerationProvider(
     private static string BuildPayload(AiGenerationRequest request, OpenRouterOptions options)
     {
         var models = new JsonArray();
-        foreach (var model in request.OrderedModelIds)
+        foreach (var model in options.Models)
         {
             models.Add(model);
         }

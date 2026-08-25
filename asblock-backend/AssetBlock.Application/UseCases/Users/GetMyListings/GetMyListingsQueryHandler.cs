@@ -6,9 +6,9 @@ using AssetBlock.Domain.Core.Dto.Assets;
 namespace AssetBlock.Application.UseCases.Users.GetMyListings;
 
 internal sealed class GetMyListingsQueryHandler(IAssetStore assetStore)
-    : IRequestHandler<GetMyListingsQuery, Result<Domain.Core.Dto.Paging.PagedResult<AssetListItem>>>
+    : IRequestHandler<GetMyListingsQuery, Result<Domain.Core.Dto.Paging.PagedResult<SellerAssetListItem>>>
 {
-    public async Task<Result<Domain.Core.Dto.Paging.PagedResult<AssetListItem>>> Handle(
+    public async Task<Result<Domain.Core.Dto.Paging.PagedResult<SellerAssetListItem>>> Handle(
         GetMyListingsQuery request,
         CancellationToken cancellationToken)
     {
@@ -18,12 +18,13 @@ internal sealed class GetMyListingsQueryHandler(IAssetStore assetStore)
         return Result.Success(normalized);
     }
 
-    private static Domain.Core.Dto.Paging.PagedResult<AssetListItem> NormalizeDescriptions(Domain.Core.Dto.Paging.PagedResult<AssetListItem> paged)
+    private static Domain.Core.Dto.Paging.PagedResult<SellerAssetListItem> NormalizeDescriptions(
+        Domain.Core.Dto.Paging.PagedResult<SellerAssetListItem> paged)
     {
         var items = paged.Items
             .Select(i => i with { Description = string.IsNullOrWhiteSpace(i.Description) ? null : i.Description })
             .ToList();
-        return new Domain.Core.Dto.Paging.PagedResult<AssetListItem>(items, paged.TotalCount, paged.Page, paged.PageSize);
+        return new Domain.Core.Dto.Paging.PagedResult<SellerAssetListItem>(items, paged.TotalCount, paged.Page, paged.PageSize);
     }
 
     private static List<string>? NormalizeTags(IReadOnlyList<string>? tags)

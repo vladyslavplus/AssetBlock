@@ -15,7 +15,8 @@ vi.mock('@/components/auth/auth-context', () => ({
 }))
 
 vi.mock('@/lib/notifications/notification-hub', () => ({
-  subscribeNotificationHub: (cb: () => void) => subscribeNotificationHub(cb),
+  subscribeNotificationHub: (cb: () => void, userId: string) =>
+    subscribeNotificationHub(cb, userId),
 }))
 
 vi.mock('sonner', () => ({ toast: { error: vi.fn(), success: vi.fn(), info: vi.fn() } }))
@@ -48,6 +49,7 @@ describe('NotificationBell hub invalidation', () => {
       </QueryClientProvider>,
     )
     await screen.findByRole('button', { name: /notifications/i })
+    expect(subscribeNotificationHub).toHaveBeenCalledWith(expect.any(Function), verifiedSeller().id)
     hubCb?.()
     expect(invalidate).toHaveBeenCalledWith(
       expect.objectContaining({ queryKey: notificationsKeys.all }),

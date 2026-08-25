@@ -45,12 +45,51 @@ public sealed class DependencyInjectionTests
         sp.GetRequiredService<IEmailActionStore>().Should().NotBeNull();
         sp.GetRequiredService<IEmailActionLinkProtector>().Should().NotBeNull();
         sp.GetRequiredService<ApplicationDbContext>();
-        sp.GetRequiredService<IAiModelPolicyCatalog>().Should().NotBeNull();
         sp.GetRequiredService<IAiTelemetry>().Should().NotBeNull();
         sp.GetServices<IAiGenerationProvider>().Select(p => p.Kind).Should()
             .BeEquivalentTo([AiProviderKind.OPENROUTER, AiProviderKind.OLLAMA]);
         sp.GetRequiredService<IAiGenerationProviderRegistry>().Should().NotBeNull();
+        sp.GetRequiredService<IListingCopilotStore>().Should().NotBeNull();
         sp.GetRequiredService<IOptions<AiOptions>>().Value.Enabled.Should().BeFalse();
+        sp.GetRequiredService<IOptions<OpenRouterOptions>>().Value.Models.Should().BeEmpty();
+    }
+
+    [Fact]
+    public void AddInfrastructure_WhenAiEnabledWithValidOpenRouterModels_ShouldBindOrderedModels()
+    {
+        var services = BuildValidServices(new TestHostEnvironment(), includeRedis: false, extra: new Dictionary<string, string?>
+        {
+            ["Ai:Enabled"] = "true",
+            ["Ai:Provider"] = "OpenRouter",
+            ["Ai:PromptPolicyVersion"] = "listing-copilot-v1",
+            ["Ai:OpenRouter:ApiKey"] = "sk-test-key-value",
+            ["Ai:OpenRouter:Models:0"] = "nvidia/nemotron-3-super-120b-a12b:free",
+            ["Ai:OpenRouter:Models:1"] = "nex-agi/nex-n2-pro:free"
+        });
+
+        using var sp = services.BuildServiceProvider();
+        var models = sp.GetRequiredService<IOptions<OpenRouterOptions>>().Value.Models;
+
+        models.Should().Equal(
+            "nvidia/nemotron-3-super-120b-a12b:free",
+            "nex-agi/nex-n2-pro:free");
+    }
+
+    [Fact]
+    public void AddInfrastructure_WhenAiEnabledOpenRouterWithEmptyModels_ShouldFailOptionsValidation()
+    {
+        var services = BuildValidServices(new TestHostEnvironment(), includeRedis: false, extra: new Dictionary<string, string?>
+        {
+            ["Ai:Enabled"] = "true",
+            ["Ai:Provider"] = "OpenRouter",
+            ["Ai:PromptPolicyVersion"] = "listing-copilot-v1",
+            ["Ai:OpenRouter:ApiKey"] = "sk-test-key-value"
+        });
+
+        using var sp = services.BuildServiceProvider();
+        var act = () => _ = sp.GetRequiredService<IOptions<OpenRouterOptions>>().Value;
+
+        act.Should().Throw<OptionsValidationException>();
     }
 
     [Fact]

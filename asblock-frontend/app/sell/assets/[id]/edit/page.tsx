@@ -7,7 +7,7 @@ import { SitePageContainer } from '@/components/layout/site-page-container'
 import { SiteHeader } from '@/components/site-header'
 import { SiteFooter } from '@/components/site-footer'
 import { AssetEditPageClient } from '@/components/sell/asset-edit-page-client'
-import { getAssetDetailCached } from '@/lib/server/asset-detail-server'
+import { getSellerAssetDetailForRequest } from '@/lib/server/seller-asset-detail-server'
 
 interface PageProps {
   params: Promise<{ id: string }>
@@ -15,20 +15,20 @@ interface PageProps {
 
 export async function generateMetadata({ params }: PageProps): Promise<Metadata> {
   const { id } = await params
-  const raw = await getAssetDetailCached(id)
-  if (!raw) {
+  const lookup = await getSellerAssetDetailForRequest(id)
+  if (lookup.status !== 'ok') {
     return { title: 'Edit asset · AssetBlock' }
   }
   return {
-    title: `Edit · ${raw.title} · AssetBlock`,
+    title: `Edit · ${lookup.asset.title} · AssetBlock`,
     description: 'Update your marketplace listing.',
   }
 }
 
 export default async function SellAssetEditPage({ params }: PageProps) {
   const { id } = await params
-  const raw = await getAssetDetailCached(id)
-  if (!raw) {
+  const lookup = await getSellerAssetDetailForRequest(id)
+  if (lookup.status === 'not_found') {
     notFound()
   }
 
@@ -49,7 +49,10 @@ export default async function SellAssetEditPage({ params }: PageProps) {
           <p className="text-xs font-mono text-accent tracking-widest uppercase mb-3">Seller</p>
           <h1 className="text-3xl sm:text-4xl font-semibold text-balance mb-8">Edit listing</h1>
 
-          <AssetEditPageClient initialAsset={raw} />
+          <AssetEditPageClient
+            assetId={id}
+            initialAsset={lookup.status === 'ok' ? lookup.asset : null}
+          />
         </SitePageContainer>
       </SiteMain>
 

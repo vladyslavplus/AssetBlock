@@ -1,6 +1,9 @@
 using Ardalis.Result;
+using AssetBlock.Application.UseCases.Assets.EnqueueListingCopilot;
+using AssetBlock.Application.UseCases.Assets.GetListingCopilotSuggestion;
 using AssetBlock.Application.UseCases.Assets.GetMyAssetProcessingJobs;
 using AssetBlock.Application.UseCases.Assets.GetMyAssetVersionProcessingJobs;
+using AssetBlock.Domain.Core.Constants;
 using AssetBlock.Domain.Core.Dto;
 using AssetBlock.Domain.Core.Enums;
 using AssetBlock.WebApi.Controllers;
@@ -8,6 +11,7 @@ using AssetBlock.WebApi.Tests.Common;
 using AwesomeAssertions;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using NSubstitute;
 
 namespace AssetBlock.WebApi.Tests.Controllers;
@@ -167,5 +171,75 @@ public sealed class UsersControllerProcessingJobsTests : ControllerTestBase
 
         json.Should().Contain("\"Type\":\"ARCHIVE_INSPECTION\"");
         json.Should().Contain("\"Status\":\"RUNNING\"");
+    }
+}
+
+public sealed class UsersControllerListingCopilotTests : ControllerTestBase
+{
+    private readonly Guid _userId = Guid.NewGuid();
+    private readonly Guid _versionId = Guid.NewGuid();
+
+    [Fact]
+    public async Task EnqueueListingCopilot_WhenAnonymous_ShouldReturnUnauthorized()
+    {
+        var controller = new UsersController(Sender);
+        SetupAnonymous(controller);
+
+        var result = await controller.EnqueueListingCopilot(_versionId, CancellationToken.None);
+
+        await AssertStatusCodeAsync(controller, result, StatusCodes.Status401Unauthorized);
+    }
+
+    [Fact]
+    public async Task EnqueueListingCopilot_WhenSuccess_ShouldReturnAccepted()
+    {
+        var controller = new UsersController(Sender);
+        SetupUser(_userId, controller);
+        var payload = new ListingCopilotEnqueueResponse(Guid.NewGuid(), _versionId);
+        Sender.Send(Arg.Any<EnqueueListingCopilotCommand>(), Arg.Any<CancellationToken>())
+            .Returns(Result<ListingCopilotEnqueueResponse>.Success(payload));
+
+        var result = await controller.EnqueueListingCopilot(_versionId, CancellationToken.None);
+
+        var accepted = result.Should().BeOfType<AcceptedResult>().Subject;
+        accepted.Value.Should().Be(payload);
+    }
+
+    [Fact]
+    public async Task GetListingCopilotSuggestion_WhenNotFound_ShouldReturnNotFound()
+    {
+        var controller = new UsersController(Sender);
+        SetupUser(_userId, controller);
+        Sender.Send(Arg.Any<GetListingCopilotSuggestionQuery>(), Arg.Any<CancellationToken>())
+            .Returns(Result<ListingCopilotSuggestionDto>.NotFound());
+
+        var result = await controller.GetListingCopilotSuggestion(_versionId, CancellationToken.None);
+
+        await AssertStatusCodeAsync(controller, result, StatusCodes.Status404NotFound);
+    }
+
+    [Fact]
+    public async Task EnqueueListingCopilot_WhenConflict_ShouldReturnConflict()
+    {
+        var controller = new UsersController(Sender);
+        SetupUser(_userId, controller);
+        Sender.Send(Arg.Any<EnqueueListingCopilotCommand>(), Arg.Any<CancellationToken>())
+            .Returns(Result<ListingCopilotEnqueueResponse>.Conflict(ErrorCodes.AI_VERSION_NOT_READY));
+
+        var result = await controller.EnqueueListingCopilot(_versionId, CancellationToken.None);
+
+        await AssertStatusCodeAsync(controller, result, StatusCodes.Status409Conflict);
+    }
+
+    [Fact]
+    public void EnqueueListingCopilot_ShouldUseDedicatedRateLimitPolicy()
+    {
+        var method = typeof(UsersController).GetMethod(nameof(UsersController.EnqueueListingCopilot));
+        var attribute = method!
+            .GetCustomAttributes(typeof(EnableRateLimitingAttribute), inherit: true)
+            .Cast<EnableRateLimitingAttribute>()
+            .Single();
+
+        attribute.PolicyName.Should().Be(RateLimitingConstants.Policies.LISTING_COPILOT_ENQUEUE);
     }
 }

@@ -31,7 +31,8 @@ public sealed class MigrationSmokePostgresTests(PostgresFixture fixture)
             "collection_items",
             "bundles",
             "bundle_revisions",
-            "bundle_revision_items"
+            "bundle_revision_items",
+            "asset_listing_suggestions"
         ]);
 
         (await db.Assets.CountAsync()).Should().Be(0);

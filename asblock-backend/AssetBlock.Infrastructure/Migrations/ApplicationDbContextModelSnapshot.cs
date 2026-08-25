@@ -242,6 +242,94 @@ namespace AssetBlock.Infrastructure.Migrations
                         });
                 });
 
+            modelBuilder.Entity("AssetBlock.Domain.Core.Entities.AssetListingSuggestion", b =>
+                {
+                    b.Property<Guid>("JobId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Category")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<string>("ContentHash")
+                        .IsRequired()
+                        .HasColumnType("char(64)")
+                        .IsFixedLength();
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Description")
+                        .IsRequired()
+                        .HasMaxLength(5000)
+                        .HasColumnType("character varying(5000)");
+
+                    b.Property<int?>("InputTokens")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("ModelId")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<string>("ModelRevision")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<int?>("OutputTokens")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("PromptPolicyVersion")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("Provider")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<string>("ProviderRequestId")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.Property<string>("Tags")
+                        .IsRequired()
+                        .HasColumnType("jsonb");
+
+                    b.Property<string>("Title")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<string>("UpstreamProvider")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.HasKey("JobId")
+                        .HasName("PK_asset_listing_suggestions");
+
+                    b.ToTable("asset_listing_suggestions", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_asset_listing_suggestions_content_hash", "\"ContentHash\" ~ '^[a-f0-9]{64}$'");
+
+                            t.HasCheckConstraint("CK_asset_listing_suggestions_input_tokens", "\"InputTokens\" IS NULL OR \"InputTokens\" >= 0");
+
+                            t.HasCheckConstraint("CK_asset_listing_suggestions_output_tokens", "\"OutputTokens\" IS NULL OR \"OutputTokens\" >= 0");
+
+                            t.HasCheckConstraint("CK_asset_listing_suggestions_provider", "\"Provider\" IN ('OPENROUTER', 'OLLAMA')");
+
+                            t.HasCheckConstraint("CK_asset_listing_suggestions_tags_items", "NOT jsonb_path_exists(\"Tags\", '$[*] ? (@.type() != \"string\")')");
+
+                            t.HasCheckConstraint("CK_asset_listing_suggestions_tags_length", "jsonb_array_length(\"Tags\") <= 10");
+
+                            t.HasCheckConstraint("CK_asset_listing_suggestions_tags_size", "octet_length(CAST(\"Tags\" AS text)) <= 4000");
+
+                            t.HasCheckConstraint("CK_asset_listing_suggestions_tags_type", "jsonb_typeof(\"Tags\") = 'array'");
+                        });
+                });
+
             modelBuilder.Entity("AssetBlock.Domain.Core.Entities.AssetProcessingJob", b =>
                 {
                     b.Property<Guid>("Id")
@@ -1879,6 +1967,17 @@ namespace AssetBlock.Infrastructure.Migrations
                         .IsRequired();
 
                     b.Navigation("AssetVersion");
+                });
+
+            modelBuilder.Entity("AssetBlock.Domain.Core.Entities.AssetListingSuggestion", b =>
+                {
+                    b.HasOne("AssetBlock.Domain.Core.Entities.AssetProcessingJob", "Job")
+                        .WithOne()
+                        .HasForeignKey("AssetBlock.Domain.Core.Entities.AssetListingSuggestion", "JobId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Job");
                 });
 
             modelBuilder.Entity("AssetBlock.Domain.Core.Entities.AssetProcessingJob", b =>

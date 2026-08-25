@@ -4,14 +4,14 @@ import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { AssetProcessingStatusPanel } from '@/components/sell/asset-processing-status-panel'
-import { sellerProcessingKeys } from '@/lib/seller/seller-processing-query'
 import type { AssetProcessingJobDto } from '@/lib/seller/seller-processing-schemas'
 import { createTestQueryClient } from '@/test/query-client'
 
 const subscribeProcessingHub = vi.hoisted(() => vi.fn())
 
 vi.mock('@/lib/notifications/notification-hub', () => ({
-  subscribeProcessingHub: (cb: (msg: unknown) => void) => subscribeProcessingHub(cb),
+  subscribeProcessingHub: (cb: (msg: unknown) => void, userId: string) =>
+    subscribeProcessingHub(cb, userId),
 }))
 
 const activeJob: AssetProcessingJobDto = {
@@ -73,7 +73,7 @@ const succeededJob: AssetProcessingJobDto = {
 
 describe('AssetProcessingStatusPanel', () => {
   beforeEach(() => {
-    subscribeProcessingHub.mockImplementation(() => () => {})
+    subscribeProcessingHub.mockReset()
   })
 
   it('renders loading skeleton while query is pending', () => {
@@ -215,13 +215,7 @@ describe('AssetProcessingStatusPanel', () => {
     expect(screen.getByText('Passed')).toBeInTheDocument()
   })
 
-  it('subscribes to SignalR and invalidates exact query keys on event', async () => {
-    let signalRCb: ((msg: unknown) => void) | undefined
-    subscribeProcessingHub.mockImplementation((cb: (msg: unknown) => void) => {
-      signalRCb = cb
-      return () => {}
-    })
-
+  it('does not subscribe to SignalR; that belongs to the authenticated shell', async () => {
     vi.stubGlobal(
       'fetch',
       vi.fn(
@@ -233,11 +227,8 @@ describe('AssetProcessingStatusPanel', () => {
       ),
     )
 
-    const queryClient = createTestQueryClient()
-    const invalidateSpy = vi.spyOn(queryClient, 'invalidateQueries')
-
     render(
-      <QueryClientProvider client={queryClient}>
+      <QueryClientProvider client={createTestQueryClient()}>
         <AssetProcessingStatusPanel
           assetId="22222222-2222-4222-8222-222222222222"
           assetVersionId="33333333-3333-4333-8333-333333333333"
@@ -246,31 +237,7 @@ describe('AssetProcessingStatusPanel', () => {
     )
 
     expect(await screen.findByText('Archive Inspection')).toBeInTheDocument()
-
-    // Trigger SignalR event
-    signalRCb?.({
-      jobId: activeJob.id,
-      assetId: activeJob.assetId,
-      assetVersionId: activeJob.assetVersionId,
-      type: 'ARCHIVE_INSPECTION',
-      status: 'SUCCEEDED',
-      stage: 'SUCCEEDED',
-    })
-
-    await waitFor(() => {
-      expect(invalidateSpy).toHaveBeenCalledWith(
-        expect.objectContaining({
-          queryKey: sellerProcessingKeys.asset(activeJob.assetId),
-        }),
-        expect.anything(),
-      )
-      expect(invalidateSpy).toHaveBeenCalledWith(
-        expect.objectContaining({
-          queryKey: sellerProcessingKeys.version(activeJob.assetVersionId),
-        }),
-        expect.anything(),
-      )
-    })
+    expect(subscribeProcessingHub).not.toHaveBeenCalled()
   })
 
   it('renders distinct version labels when versions metadata is provided', async () => {

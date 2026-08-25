@@ -105,8 +105,10 @@ public static class ApiRoutes
         public const string ME_NOTIFICATION_UNREAD = "me/notifications/{id:guid}/unread";
         public const string ME_PURCHASES = "me/purchases";
         public const string ME_ASSETS = "me/assets";
+        public const string ME_ASSET = "me/assets/{assetId:guid}";
         public const string ME_ASSET_PROCESSING_JOBS = "me/assets/{assetId:guid}/processing-jobs";
         public const string ME_ASSET_VERSION_PROCESSING_JOBS = "me/asset-versions/{assetVersionId:guid}/processing-jobs";
+        public const string ME_ASSET_VERSION_LISTING_COPILOT = "me/asset-versions/{assetVersionId:guid}/listing-copilot";
     }
 
     public static class Analytics

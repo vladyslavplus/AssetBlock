@@ -25,7 +25,7 @@ public sealed class AssetProcessingJobStorePostgresTests(PostgresFixture fixture
     private static AssetProcessingJobStore CreateStore(ApplicationDbContext db) =>
         new(db, NullLogger<AssetProcessingJobStore>.Instance, Microsoft.Extensions.Options.Options.Create(new AssetProcessingOptions()));
 
-    private async Task<SeedData> Seed(int jobCount = 1)
+    private async Task<SeedData> Seed(int jobCount = 1, AssetProcessingJobType type = AssetProcessingJobType.ARCHIVE_INSPECTION)
     {
         var db = await fixture.CreateCleanDbContext();
         (User author, Category category) = await TestData.SeedAuthorAndCategory(db);
@@ -38,16 +38,22 @@ public sealed class AssetProcessingJobStorePostgresTests(PostgresFixture fixture
 
         var store = CreateStore(db);
         var jobIds = new List<Guid>(jobCount);
+        AssetProcessingPayload payload = type switch
+        {
+            AssetProcessingJobType.MALWARE_SCAN => new MalwareScanPayload("1.0"),
+            AssetProcessingJobType.LISTING_COPILOT => new ListingCopilotPayload("copilot-policy-1"),
+            _ => new ArchiveInspectionPayload()
+        };
 
         for (var i = 0; i < jobCount; i++)
         {
             jobIds.Add(await store.Enqueue(
                 asset.Id,
                 version.Id,
-                AssetProcessingJobType.ARCHIVE_INSPECTION,
+                type,
                 definitionVersion: 1 + i,
                 TimeSpan.Zero,
-                new ArchiveInspectionPayload()));
+                payload));
         }
 
         return new SeedData(db, author, asset, version, store, jobIds);
@@ -282,7 +288,7 @@ public sealed class AssetProcessingJobStorePostgresTests(PostgresFixture fixture
     [Fact]
     public async Task RecoverExpiredLeases_WhenAttemptsExhausted_ShouldFailJobTerminally()
     {
-        var seed = await Seed();
+        var seed = await Seed(type: AssetProcessingJobType.LISTING_COPILOT);
         var (jobId, _) = await Claim(seed.Store, seed.JobIds[0]);
 
         SetAttemptCount(seed.Db, jobId, maxAttempts: 1, attemptCount: 1);
@@ -295,6 +301,24 @@ public sealed class AssetProcessingJobStorePostgresTests(PostgresFixture fixture
         job.Status.Should().Be(AssetProcessingJobStatus.FAILED);
         job.Stage.Should().Be("FAILED_LEASE_EXPIRED");
         job.CompletedAt.Should().NotBeNull();
+    }
+
+    [Fact]
+    public async Task RecoverExpiredLeases_WhenExhaustedSecurityJob_ShouldLeaveJobForLifecycleRecovery()
+    {
+        var seed = await Seed();
+        var (jobId, _) = await Claim(seed.Store, seed.JobIds[0]);
+
+        SetAttemptCount(seed.Db, jobId, maxAttempts: 1, attemptCount: 1);
+        ExpireLease(seed.Db, jobId);
+
+        (await seed.Store.RecoverExpiredLeases()).Should().Be(0);
+
+        seed.Db.ChangeTracker.Clear();
+        var job = await seed.Db.AssetProcessingJobs.AsNoTracking().SingleAsync(j => j.Id == jobId);
+        job.Status.Should().Be(AssetProcessingJobStatus.RUNNING);
+        var version = await seed.Db.AssetVersions.AsNoTracking().SingleAsync(v => v.Id == seed.Version.Id);
+        version.ProcessingStatus.Should().NotBe(AssetVersionProcessingStatus.PROCESSING_FAILED);
     }
 
     [Fact]

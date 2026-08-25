@@ -1,6 +1,5 @@
 using AssetBlock.Domain.Core;
 using AssetBlock.Domain.Core.Constants;
-using AssetBlock.Domain.Core.Dto;
 using AssetBlock.Domain.Core.Enums;
 using AssetBlock.Domain.Core.Primitives.AppSettingsOptions;
 using Microsoft.Extensions.Configuration;
@@ -15,7 +14,7 @@ internal static partial class AiConfigurationRules
     private static readonly Regex _appNamePattern = MyRegex2();
     private static readonly Regex _digestPattern = MyRegex3();
 
-    public static bool IsEnabled(IConfiguration configuration) =>
+    private static bool IsEnabled(IConfiguration configuration) =>
         configuration.GetValue($"{AiOptions.SECTION_NAME}:Enabled", false);
 
     public static bool IsActiveProvider(IConfiguration configuration, AiProviderKind kind)
@@ -46,9 +45,6 @@ internal static partial class AiConfigurationRules
 
     public static bool IsSha256Digest(string? value) =>
         !string.IsNullOrWhiteSpace(value) && _digestPattern.IsMatch(value);
-
-    public static bool ConfiguredLimitsFitPolicy(int maxInputChars, int maxOutputTokens, AiModelPolicyEntry entry) =>
-        maxInputChars <= entry.MaxInputChars && maxOutputTokens <= entry.MaxOutputTokens;
 
     public static bool IsAbsoluteHttpOrHttps(string? value, bool allowHttps, bool requireLoopback)
     {

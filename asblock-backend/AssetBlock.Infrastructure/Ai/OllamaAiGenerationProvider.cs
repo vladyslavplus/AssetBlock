@@ -16,7 +16,6 @@ namespace AssetBlock.Infrastructure.Ai;
 internal sealed class OllamaAiGenerationProvider(
     IHttpClientFactory httpClientFactory,
     IOptions<OllamaOptions> optionsAccessor,
-    IAiModelPolicyCatalog modelPolicyCatalog,
     ILogger<OllamaAiGenerationProvider> logger) : IAiGenerationProvider
 {
     public const string HTTP_CLIENT_NAME = "Ollama";
@@ -34,23 +33,18 @@ internal sealed class OllamaAiGenerationProvider(
         var started = Stopwatch.GetTimestamp();
         var options = optionsAccessor.Value;
         var modelId = options.Model;
-        if (!modelPolicyCatalog.TryGet(AiProviderKind.OLLAMA, modelId, out var entry)
-            || !entry.StructuredOutput
-            || entry.UseCase != AiModelUseCase.LISTING_COPILOT
-            || entry.Privacy != AiPrivacyDecision.LOCAL_ONLY
-            || !AiConfigurationRules.IsSha256Digest(entry.Digest))
+        var expectedDigest = options.Digest;
+        if (!AiConfigurationRules.IsModelId(modelId) || !AiConfigurationRules.IsSha256Digest(expectedDigest))
         {
             return Terminal(ErrorCodes.AI_MODEL_NOT_ALLOWED, started);
         }
 
-        var minInput = Math.Min(options.MaxInputChars, entry.MaxInputChars);
-        var minOutput = Math.Min(options.MaxOutputTokens, entry.MaxOutputTokens);
-        if (request.SystemPrompt.Length + request.UserPrompt.Length > minInput)
+        if (request.SystemPrompt.Length + request.UserPrompt.Length > options.MaxInputChars)
         {
             return Terminal(ErrorCodes.AI_INPUT_TOO_LARGE, started);
         }
 
-        if (request.MaxOutputTokens > minOutput)
+        if (request.MaxOutputTokens > options.MaxOutputTokens)
         {
             return Terminal(ErrorCodes.AI_INVALID_REQUEST, started);
         }
@@ -61,7 +55,7 @@ internal sealed class OllamaAiGenerationProvider(
             client,
             options,
             modelId,
-            entry.Digest!,
+            expectedDigest,
             cancellationToken,
             started,
             budget);
@@ -109,7 +103,7 @@ internal sealed class OllamaAiGenerationProvider(
             return Terminal(ErrorCodes.AI_INVALID_RESPONSE, started);
         }
 
-        return ParseSuccess(timed.Body, started, modelId, entry);
+        return ParseSuccess(timed.Body, started, modelId, expectedDigest);
     }
 
     private async Task<AiGenerationProviderResult?> VerifyInstalledModel(
@@ -178,11 +172,11 @@ internal sealed class OllamaAiGenerationProvider(
         }
     }
 
-    private AiGenerationProviderResult ParseSuccess(
+    private static AiGenerationProviderResult ParseSuccess(
         string body,
         long started,
         string modelId,
-        AiModelPolicyEntry verifiedEntry)
+        string expectedDigest)
     {
         try
         {
@@ -193,12 +187,7 @@ internal sealed class OllamaAiGenerationProvider(
             int? outputTokens = ReadInt(root, "eval_count");
 
             if (string.IsNullOrWhiteSpace(actualModel)
-                || !string.Equals(actualModel, modelId, StringComparison.Ordinal)
-                || !modelPolicyCatalog.TryGet(AiProviderKind.OLLAMA, actualModel, out var actualEntry)
-                || !string.Equals(actualEntry.Digest, verifiedEntry.Digest, StringComparison.Ordinal)
-                || actualEntry.UseCase != AiModelUseCase.LISTING_COPILOT
-                || actualEntry.Privacy != AiPrivacyDecision.LOCAL_ONLY
-                || !actualEntry.StructuredOutput)
+                || !string.Equals(actualModel, modelId, StringComparison.Ordinal))
             {
                 return new AiGenerationProviderResult(
                     AiGenerationOutcomeKind.TERMINAL_FAILURE,
@@ -215,7 +204,7 @@ internal sealed class OllamaAiGenerationProvider(
                     null);
             }
 
-            var modelRevision = verifiedEntry.Digest;
+            var modelRevision = expectedDigest;
 
             if (!root.TryGetProperty("message", out var message)
                 || !message.TryGetProperty("content", out var content))

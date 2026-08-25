@@ -57,6 +57,36 @@ public class GetAssetByIdQueryHandlerTests
     }
 
     [Fact]
+    public async Task Handle_WhenPendingWithoutReadyCurrent_ShouldReturnNotFound()
+    {
+        var assetId = Guid.NewGuid();
+        var asset = new Asset
+        {
+            Id = assetId,
+            AuthorId = Guid.NewGuid(),
+            CategoryId = Guid.NewGuid(),
+            Title = "Pending",
+            Category = new Category { Id = Guid.NewGuid(), Name = "3D", Slug = "3d" },
+            Author = new User
+            {
+                Id = Guid.NewGuid(),
+                Username = "seller",
+                Email = "seller@test.local",
+                PasswordHash = "hash",
+                Role = AppRoles.USER
+            }
+        };
+        _assetStoreMock.GetById(assetId, Arg.Any<CancellationToken>()).Returns(asset);
+        _assetStoreMock.GetCurrentVersionSnapshot(assetId, Arg.Any<CancellationToken>())
+            .Returns((AssetCurrentVersionSnapshot?)null);
+
+        var result = await _handler.Handle(new GetAssetByIdQuery(assetId), CancellationToken.None);
+
+        result.Status.Should().Be(ResultStatus.NotFound);
+        result.Errors.Should().Contain(ErrorCodes.ERR_ASSET_NOT_FOUND);
+    }
+
+    [Fact]
     public async Task Handle_WhenAssetFound_ShouldReturnMappedDetailItem()
     {
         // Arrange

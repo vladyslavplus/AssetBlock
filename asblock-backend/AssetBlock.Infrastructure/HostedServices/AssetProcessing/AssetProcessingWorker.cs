@@ -155,7 +155,9 @@ public sealed class AssetProcessingWorker(
         {
             await using var scope = scopeFactory.CreateAsyncScope();
             var store = scope.ServiceProvider.GetRequiredService<IAssetProcessingJobStore>();
+            var lifecycleStore = scope.ServiceProvider.GetRequiredService<IAssetProcessingLifecycleStore>();
             await store.RecoverExpiredLeases(cancellationToken);
+            await lifecycleStore.RecoverExpiredExhaustedSecurityJobs(cancellationToken);
         }
         catch (Exception ex)
         {

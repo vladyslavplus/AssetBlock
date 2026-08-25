@@ -12,54 +12,61 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Alert, AlertDescription } from '@/components/ui/alert'
-import type { AssetDetailItemApi } from '@/lib/catalog/assets-api'
+import { Badge } from '@/components/ui/badge'
+import type { SellerAssetDetail } from '@/lib/seller/seller-asset-schemas'
 import { applyApiFieldErrorsToForm } from '@/lib/http/api-errors'
 import { assetEditFormSchema, type AssetEditFormValues } from '@/lib/seller/seller-schemas'
 import { fetchTagNameToIdMap, patchSellerAsset, syncSellerAssetTags } from '@/lib/seller/seller-api'
 import { assetKeys } from '@/lib/catalog/asset-detail-query'
 import { catalogKeys, fetchCatalogFacets } from '@/lib/catalog/catalog-query'
 import { sellerKeys } from '@/lib/seller/seller-query'
+import {
+  getSellerProcessingBadgeClass,
+  getSellerProcessingStatusDescription,
+  getSellerProcessingStatusLabel,
+} from '@/lib/seller/seller-processing-status'
 import { invalidateQueriesInBackground } from '@/lib/query/query-refresh'
 import { SellerPriceStepInput } from '@/components/sell/seller-price-step-input'
 import { SellerAssetVersionsSection } from '@/components/sell/seller-asset-versions-section'
+import { ListingCopilotPanel } from '@/components/sell/listing-copilot-panel'
 
 interface AssetEditFormProps {
-  initialAsset: AssetDetailItemApi
+  asset: SellerAssetDetail
 }
 
-export function AssetEditForm({ initialAsset }: AssetEditFormProps) {
+export function AssetEditForm({ asset }: AssetEditFormProps) {
   const router = useRouter()
   const queryClient = useQueryClient()
-  const assetId = initialAsset.id
+  const assetId = asset.id
+  const publiclyReady = asset.currentReadyVersionId != null
 
   const facetsQuery = useQuery({
     queryKey: catalogKeys.facets(),
-    queryFn: fetchCatalogFacets,
+    queryFn: ({ signal }) => fetchCatalogFacets({ signal }),
     staleTime: 5 * 60 * 1000,
   })
 
   const categories = facetsQuery.data?.categories ?? []
   const categoriesError = facetsQuery.isError ? 'Could not load categories.' : null
 
-  const initialTagsCsv = (initialAsset.tags ?? []).join(', ')
+  const initialTagsCsv = (asset.tags ?? []).join(', ')
 
-  const initialTagKeys = (initialAsset.tags ?? [])
-    .map((t) => t.trim().toLowerCase())
-    .filter(Boolean)
+  const initialTagKeys = (asset.tags ?? []).map((t) => t.trim().toLowerCase()).filter(Boolean)
 
   const {
     register,
     control,
     setError,
+    setValue,
     handleSubmit,
     formState: { errors, isSubmitting },
   } = useForm<AssetEditFormValues>({
     resolver: zodResolver(assetEditFormSchema),
     defaultValues: {
-      title: initialAsset.title,
-      description: initialAsset.description ?? '',
-      price: Number(initialAsset.price),
-      categoryId: initialAsset.categoryId,
+      title: asset.title,
+      description: asset.description ?? '',
+      price: Number(asset.price),
+      categoryId: asset.categoryId,
       tags: initialTagsCsv,
     },
   })
@@ -98,12 +105,33 @@ export function AssetEditForm({ initialAsset }: AssetEditFormProps) {
     invalidateQueriesInBackground(queryClient, { queryKey: sellerKeys.all })
     invalidateQueriesInBackground(queryClient, { queryKey: catalogKeys.all })
     invalidateQueriesInBackground(queryClient, { queryKey: assetKeys.detail(assetId) })
-    router.push(`/assets/${assetId}`)
+    if (publiclyReady) {
+      router.push(`/assets/${assetId}`)
+    }
     router.refresh()
   })
 
   return (
     <div className="space-y-6 max-w-lg">
+      <Alert className="border-border bg-card-elevated/40 py-3">
+        <AlertDescription className="flex flex-col gap-2">
+          <Badge
+            variant="outline"
+            className={getSellerProcessingBadgeClass(asset.latestProcessingStatus)}
+          >
+            {getSellerProcessingStatusLabel(asset.latestProcessingStatus)}
+          </Badge>
+          <p className="text-xs text-muted-foreground">
+            {getSellerProcessingStatusDescription(asset.latestProcessingStatus)}
+          </p>
+          {asset.latestProcessingErrorSummary &&
+          (asset.latestProcessingStatus === 'REJECTED' ||
+            asset.latestProcessingStatus === 'PROCESSING_FAILED') ? (
+            <p className="text-xs text-destructive">{asset.latestProcessingErrorSummary}</p>
+          ) : null}
+        </AlertDescription>
+      </Alert>
+
       {categoriesError && (
         <Alert className="border-amber-500/40 bg-amber-500/10 py-2">
           <AlertCircle className="h-4 w-4 text-amber-600 dark:text-amber-400" />
@@ -167,9 +195,7 @@ export function AssetEditForm({ initialAsset }: AssetEditFormProps) {
               {...register('categoryId')}
             >
               {categories.length === 0 ? (
-                <option value={initialAsset.categoryId}>
-                  {initialAsset.categoryName ?? 'Current category'}
-                </option>
+                <option value={asset.categoryId}>{asset.categoryName ?? 'Current category'}</option>
               ) : (
                 categories.map((c) => (
                   <option key={c.id} value={c.id}>
@@ -200,6 +226,16 @@ export function AssetEditForm({ initialAsset }: AssetEditFormProps) {
           </p>
         </div>
 
+        {asset.currentReadyVersionId ? (
+          <ListingCopilotPanel
+            assetId={assetId}
+            assetVersionId={asset.currentReadyVersionId}
+            categories={categories}
+            catalogTags={facetsQuery.data?.tags ?? []}
+            setValue={setValue}
+          />
+        ) : null}
+
         <div className="flex flex-col sm:flex-row gap-3 pt-2">
           <Button
             type="submit"
@@ -221,7 +257,7 @@ export function AssetEditForm({ initialAsset }: AssetEditFormProps) {
             className="border-border w-full sm:w-auto"
             asChild
           >
-            <Link href={`/assets/${assetId}`}>Cancel</Link>
+            <Link href={publiclyReady ? `/assets/${assetId}` : '/sell'}>Cancel</Link>
           </Button>
         </div>
       </form>

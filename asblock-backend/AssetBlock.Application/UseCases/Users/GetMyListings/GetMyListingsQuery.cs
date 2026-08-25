@@ -5,4 +5,4 @@ using AssetBlock.Domain.Core.Dto.Assets;
 namespace AssetBlock.Application.UseCases.Users.GetMyListings;
 
 public sealed record GetMyListingsQuery(Guid AuthorId, GetAssetsRequest Request)
-    : IRequest<Result<Domain.Core.Dto.Paging.PagedResult<AssetListItem>>>;
+    : IRequest<Result<Domain.Core.Dto.Paging.PagedResult<SellerAssetListItem>>>;

@@ -106,6 +106,7 @@ public static class ErrorCodesToErrorMessages
         { ErrorCodes.STORAGE_UNAVAILABLE, "Storage was unavailable while retrieving archive content." },
         { ErrorCodes.STORAGE_IO_ERROR, "An I/O error occurred while retrieving archive content." },
         { ErrorCodes.LEASE_LOST, "The processing job lease expired or was preempted." },
+        { ErrorCodes.LEASE_EXPIRED, "The job lease expired and was recovered." },
         { ErrorCodes.MALWARE_DETECTED, "Malware was detected in the uploaded archive." },
         { ErrorCodes.SCANNER_UNAVAILABLE, "The malware scanner is temporarily unavailable." },
         { ErrorCodes.SCANNER_ERROR, "The malware scanner rejected the scan request." },
@@ -129,7 +130,10 @@ public static class ErrorCodesToErrorMessages
         { ErrorCodes.AI_CATEGORY_NOT_ALLOWED, "The suggested category is not in the allowed list." },
         { ErrorCodes.AI_TAGS_NOT_ALLOWED, "One or more suggested tags are not in the allowed list." },
         { ErrorCodes.AI_INPUT_TOO_LARGE, "The listing context exceeds the AI input limit." },
-        { ErrorCodes.AI_ERROR, "AI generation failed." }
+        { ErrorCodes.AI_ERROR, "AI generation failed." },
+        { ErrorCodes.AI_VERSION_NOT_READY, "This version is not ready for AI listing suggestions." },
+        { ErrorCodes.AI_ARCHIVE_ANALYSIS_MISSING, "Archive analysis is not available for this version." },
+        { ErrorCodes.AI_ALLOWLIST_OVERFLOW, "The catalog is too large for AI listing suggestions." }
     };
 
     public static string GetMessage(string code) =>
