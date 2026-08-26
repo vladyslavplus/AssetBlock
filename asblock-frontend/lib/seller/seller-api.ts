@@ -1,12 +1,13 @@
 import { apiFetch } from '@/lib/http/api-client'
 import { getApiErrorMessage, parseApiErrorBody } from '@/lib/http/api-errors'
-import { isAbortError } from '@/lib/http/is-abort-error'
-import type {
-  AssetListItemApi,
-  AssetVersionSummaryApi,
-  PagedResultDto,
-  TagDtoApi,
-} from '@/lib/catalog/assets-api'
+import { isAbortError, toAbortError } from '@/lib/http/is-abort-error'
+import type { AssetVersionSummaryApi, PagedResultDto, TagDtoApi } from '@/lib/catalog/assets-api'
+import {
+  pagedSellerAssetListSchema,
+  sellerAssetDetailSchema,
+  type SellerAssetDetail,
+  type SellerAssetListItem,
+} from '@/lib/seller/seller-asset-schemas'
 
 const TAG_PAGE_SIZE = 100
 
@@ -19,26 +20,38 @@ function parseMaybeJson(text: string): unknown {
   }
 }
 
+async function readResponseText(res: Response, signal?: AbortSignal): Promise<string> {
+  try {
+    return await res.text()
+  } catch (error) {
+    if (isAbortError(error, signal)) throw toAbortError(error, signal)
+    throw error
+  }
+}
+
+async function fetchJson(url: string, init: RequestInit = {}): Promise<Response> {
+  try {
+    return await fetch(url, init)
+  } catch (error) {
+    if (isAbortError(error, init.signal)) throw toAbortError(error, init.signal)
+    throw error
+  }
+}
+
 export async function fetchMyListings(
   signal?: AbortSignal,
-): Promise<PagedResultDto<AssetListItemApi>> {
+): Promise<PagedResultDto<SellerAssetListItem>> {
   const params = new URLSearchParams({
     page: '1',
     pageSize: '50',
     sortBy: 'CreatedAt',
     sortDirection: 'DESC',
   })
-  const res = await fetch(`/api/seller/listings?${params.toString()}`, {
+  const res = await fetchJson(`/api/seller/listings?${params.toString()}`, {
     credentials: 'include',
     signal,
   })
-  let text: string
-  try {
-    text = await res.text()
-  } catch (error) {
-    if (isAbortError(error, signal)) throw error
-    throw error
-  }
+  const text = await readResponseText(res, signal)
   const parsed = parseMaybeJson(text)
   if (res.status === 401) {
     throw new Error('SIGN_IN_REQUIRED')
@@ -47,7 +60,38 @@ export async function fetchMyListings(
     const msg = getApiErrorMessage(parsed, `Could not load listings (${res.status})`)
     throw new Error(msg)
   }
-  return parsed as PagedResultDto<AssetListItemApi>
+  const list = pagedSellerAssetListSchema.safeParse(parsed)
+  if (!list.success) {
+    throw new Error('Listings response was invalid.')
+  }
+  return list.data
+}
+
+export async function fetchSellerAssetDetail(
+  assetId: string,
+  signal?: AbortSignal,
+): Promise<SellerAssetDetail> {
+  const res = await fetchJson(`/api/seller/assets/${encodeURIComponent(assetId)}`, {
+    credentials: 'include',
+    signal,
+  })
+  const text = await readResponseText(res, signal)
+  const parsed = parseMaybeJson(text)
+  if (res.status === 401) {
+    throw new Error('SIGN_IN_REQUIRED')
+  }
+  if (res.status === 404) {
+    throw new Error('NOT_FOUND')
+  }
+  if (!res.ok) {
+    const msg = getApiErrorMessage(parsed, `Could not load listing (${res.status})`)
+    throw new Error(msg)
+  }
+  const detail = sellerAssetDetailSchema.safeParse(parsed)
+  if (!detail.success) {
+    throw new Error('Listing response was invalid.')
+  }
+  return detail.data
 }
 
 export type UploadAssetResult =
@@ -83,11 +127,15 @@ export async function uploadSellerAsset(formData: FormData): Promise<UploadAsset
   return { ok: false, message: 'Unexpected response from server.' }
 }
 
-export async function fetchSellerAssetVersions(assetId: string): Promise<AssetVersionSummaryApi[]> {
-  const res = await fetch(`/api/assets/${encodeURIComponent(assetId)}/versions`, {
+export async function fetchSellerAssetVersions(
+  assetId: string,
+  signal?: AbortSignal,
+): Promise<AssetVersionSummaryApi[]> {
+  const res = await fetchJson(`/api/assets/${encodeURIComponent(assetId)}/versions`, {
     credentials: 'include',
+    signal,
   })
-  const text = await res.text()
+  const text = await readResponseText(res, signal)
   const parsed = parseMaybeJson(text)
   if (res.status === 401) {
     throw new Error('SIGN_IN_REQUIRED')

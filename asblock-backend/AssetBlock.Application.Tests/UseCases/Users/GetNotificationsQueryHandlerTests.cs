@@ -211,6 +211,33 @@ public class GetNotificationsQueryHandlerTests
                 MetadataJson = """{"type":"review"}""",
                 CreatedAt = DateTimeOffset.UtcNow,
                 ReadAt = null
+            },
+            new()
+            {
+                Id = Guid.NewGuid(),
+                RecipientUserId = userId,
+                Kind = NotificationKind.ASSET_PROCESSING_READY,
+                MetadataJson = """{"processingStatus":"READY"}""",
+                CreatedAt = DateTimeOffset.UtcNow.AddSeconds(1),
+                ReadAt = null
+            },
+            new()
+            {
+                Id = Guid.NewGuid(),
+                RecipientUserId = userId,
+                Kind = NotificationKind.ASSET_PROCESSING_REJECTED,
+                MetadataJson = """{"processingStatus":"REJECTED"}""",
+                CreatedAt = DateTimeOffset.UtcNow.AddSeconds(2),
+                ReadAt = null
+            },
+            new()
+            {
+                Id = Guid.NewGuid(),
+                RecipientUserId = userId,
+                Kind = NotificationKind.ASSET_PROCESSING_FAILED,
+                MetadataJson = """{"processingStatus":"PROCESSING_FAILED"}""",
+                CreatedAt = DateTimeOffset.UtcNow.AddSeconds(3),
+                ReadAt = null
             }
         };
         var request = new GetNotificationsRequest { Page = 1, PageSize = 10 };
@@ -221,12 +248,15 @@ public class GetNotificationsQueryHandlerTests
 
         result.IsSuccess.Should().BeTrue();
         result.Value.Should().NotBeNull();
-        result.Value!.Items.Should().HaveCount(4);
+        result.Value!.Items.Should().HaveCount(7);
         result.Value.Items.Select(i => i.Kind).Should().Equal(
             nameof(NotificationKind.ORDER_READY),
             nameof(NotificationKind.DOWNLOAD_READY),
             nameof(NotificationKind.ASSET_SOLD),
-            nameof(NotificationKind.REVIEW_RECEIVED));
+            nameof(NotificationKind.REVIEW_RECEIVED),
+            nameof(NotificationKind.ASSET_PROCESSING_READY),
+            nameof(NotificationKind.ASSET_PROCESSING_REJECTED),
+            nameof(NotificationKind.ASSET_PROCESSING_FAILED));
         result.Value.Items[0].MetadataJson.Should().Be("""{"type":"purchase"}""");
         result.Value.Items[1].MetadataJson.Should().Be("""{"type":"download"}""");
         result.Value.Items[2].MetadataJson.Should().Be("""{"type":"sold"}""");

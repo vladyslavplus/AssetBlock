@@ -111,15 +111,104 @@ describe('fetchBackend session refresh', () => {
     expect(res.status).toBe(401)
     expect(resourceCalls).toBe(1)
     expect(refreshCalls).toBe(1)
+    expect(store.snapshot()[AUTH_COOKIE_ACCESS]).toBeUndefined()
+    expect(store.snapshot()[AUTH_COOKIE_REFRESH]).toBeUndefined()
   })
 
-  it('does not put tokens in the 401 body when refresh is missing', async () => {
+  it('clears cookies when refresh fails on expired access before the backend is called', async () => {
+    const expiredAccess = makeJwt(Math.floor(Date.now() / 1000) - 60)
+    const store = createMemoryCookieStore({
+      [AUTH_COOKIE_ACCESS]: expiredAccess,
+      [AUTH_COOKIE_REFRESH]: 'refresh-token',
+    })
+    let resourceCalls = 0
+    vi.stubGlobal('fetch', async (input: RequestInfo | URL) => {
+      const url = String(input)
+      if (url === `${API}/api/auth/refresh`) {
+        return jsonResponse({ title: 'Unauthorized' }, 401)
+      }
+      resourceCalls += 1
+      return jsonResponse({ ok: true })
+    })
+
+    const res = await fetchBackend(store, '/api/seller/listings', { method: 'GET' }, 'required')
+    expect(res.status).toBe(401)
+    expect(resourceCalls).toBe(0)
+    expect(store.snapshot()[AUTH_COOKIE_ACCESS]).toBeUndefined()
+    expect(store.snapshot()[AUTH_COOKIE_REFRESH]).toBeUndefined()
+  })
+
+  it('does not mutate cookies for anonymous required-auth requests', async () => {
     const store = createMemoryCookieStore()
+    const deleteSpy = vi.spyOn(store, 'delete')
     vi.stubGlobal('fetch', async () => {
       throw new Error('backend must not be called without access')
     })
+
     const res = await fetchBackend(store, '/api/seller/listings', { method: 'GET' }, 'required')
     expect(res.status).toBe(401)
     expect(await res.text()).toBe('')
+    expect(deleteSpy).not.toHaveBeenCalled()
+    expect(store.setCalls).toHaveLength(0)
+  })
+
+  it('does not clear cookies on expired access when persistRefreshedTokens is false', async () => {
+    const expiredAccess = makeJwt(Math.floor(Date.now() / 1000) - 60)
+    const store = createMemoryCookieStore({
+      [AUTH_COOKIE_ACCESS]: expiredAccess,
+      [AUTH_COOKIE_REFRESH]: 'refresh-token',
+    })
+    const deleteSpy = vi.spyOn(store, 'delete')
+    vi.stubGlobal('fetch', async (input: RequestInfo | URL) => {
+      const url = String(input)
+      if (url === `${API}/api/auth/refresh`) {
+        return jsonResponse({ title: 'Unauthorized' }, 401)
+      }
+      throw new Error('backend must not be called without access')
+    })
+
+    const res = await fetchBackend(store, '/api/seller/listings', { method: 'GET' }, 'required', {
+      persistRefreshedTokens: false,
+    })
+    expect(res.status).toBe(401)
+    expect(deleteSpy).not.toHaveBeenCalled()
+    expect(store.snapshot()[AUTH_COOKIE_ACCESS]).toBe(expiredAccess)
+    expect(store.snapshot()[AUTH_COOKIE_REFRESH]).toBe('refresh-token')
+  })
+
+  it('does not clear cookies on failed refresh when persistRefreshedTokens is false', async () => {
+    const access = makeJwt(Math.floor(Date.now() / 1000) + 3600)
+    const store = createMemoryCookieStore({
+      [AUTH_COOKIE_ACCESS]: access,
+      [AUTH_COOKIE_REFRESH]: 'refresh-token',
+    })
+    vi.stubGlobal('fetch', async (input: RequestInfo | URL) => {
+      const url = String(input)
+      if (url === `${API}/api/auth/refresh`) {
+        return jsonResponse({ title: 'Unauthorized' }, 401)
+      }
+      return jsonResponse({ title: 'Unauthorized' }, 401)
+    })
+
+    const res = await fetchBackend(store, '/api/seller/listings', { method: 'GET' }, 'required', {
+      persistRefreshedTokens: false,
+    })
+    expect(res.status).toBe(401)
+    expect(store.snapshot()[AUTH_COOKIE_ACCESS]).toBe(access)
+    expect(store.snapshot()[AUTH_COOKIE_REFRESH]).toBe('refresh-token')
+  })
+
+  it('throws when given an absolute URL path', async () => {
+    const store = createMemoryCookieStore()
+    await expect(
+      fetchBackend(
+        store,
+        'https://evil.example/api/seller/listings',
+        { method: 'GET' },
+        'required',
+      ),
+    ).rejects.toThrow(
+      'fetchBackend path must be a backend-relative API path, not an absolute URL: https://evil.example/api/seller/listings',
+    )
   })
 })

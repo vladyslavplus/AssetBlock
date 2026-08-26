@@ -202,9 +202,9 @@ public sealed class AssetVersionsControllerIntegrationTests(IntegrationTestFixtu
         var versions = await listResponse.Content.ReadFromJsonAsync<List<AssetVersionSummaryResponse>>();
         versions.Should().NotBeNull();
         versions.Should().HaveCount(2);
-        versions.Should().ContainSingle(v => v.Id == versionIds[0] && !v.IsCurrent);
+        versions.Should().ContainSingle(v => v.Id == versionIds[0] && v.IsCurrent);
         var v2 = versions.Should()
-            .ContainSingle(v => v.VersionNumber == 2 && v.IsCurrent && v.License.Code == "COMMERCIAL")
+            .ContainSingle(v => v.VersionNumber == 2 && !v.IsCurrent && v.License.Code == "COMMERCIAL")
             .Which;
         v2.ContentSha256.Should().Be(expectedSha256);
         v2.ContentLength.Should().Be(zipBytes.Length);

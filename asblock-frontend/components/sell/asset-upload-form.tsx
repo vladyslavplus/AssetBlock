@@ -28,6 +28,7 @@ import {
 import { uploadSellerAsset } from '@/lib/seller/seller-api'
 import { catalogKeys, fetchCatalogFacets } from '@/lib/catalog/catalog-query'
 import { sellerKeys } from '@/lib/seller/seller-query'
+import { sellerProcessingKeys } from '@/lib/seller/seller-processing-query'
 import { invalidateQueriesInBackground } from '@/lib/query/query-refresh'
 import { SellerPriceStepInput } from '@/components/sell/seller-price-step-input'
 import { SessionBlockSkeleton } from '@/components/skeletons/session-block-skeleton'
@@ -42,7 +43,7 @@ export function AssetUploadForm() {
 
   const facetsQuery = useQuery({
     queryKey: catalogKeys.facets(),
-    queryFn: fetchCatalogFacets,
+    queryFn: ({ signal }) => fetchCatalogFacets({ signal }),
     staleTime: 5 * 60 * 1000,
     enabled: authed,
   })
@@ -57,7 +58,7 @@ export function AssetUploadForm() {
     setError,
     trigger,
     handleSubmit,
-    formState: { errors, isSubmitting },
+    formState: { errors, isSubmitting, isValidating },
     reset,
   } = useForm<AssetUploadFormValues>({
     resolver: zodResolver(assetUploadFormSchema),
@@ -104,12 +105,12 @@ export function AssetUploadForm() {
       return
     }
 
-    toast.success('Asset published.')
+    toast.success('Asset uploaded. Security processing started.')
     reset()
     invalidateQueriesInBackground(queryClient, { queryKey: sellerKeys.all })
+    invalidateQueriesInBackground(queryClient, { queryKey: sellerProcessingKeys.all })
     invalidateQueriesInBackground(queryClient, { queryKey: catalogKeys.all })
-    router.push(`/assets/${result.assetId}`)
-    router.refresh()
+    router.push('/sell?tab=listings')
   })
 
   if (pending) {
@@ -287,14 +288,17 @@ export function AssetUploadForm() {
         </div>
         {errors.file && <p className="text-xs text-destructive">{errors.file.message as string}</p>}
         <p className="text-[11px] text-muted-foreground">
-          Max 250 MiB. Supported archives: zip, 7z, rar, tar, tar.gz, tgz.
+          Max 250 MiB. Supported archives: zip, tar, tar.gz, tgz.
         </p>
       </div>
 
       <Button
         type="submit"
         disabled={
-          isSubmitting || categoriesLoading || Boolean(categoriesError && categories.length === 0)
+          isSubmitting ||
+          isValidating ||
+          categoriesLoading ||
+          Boolean(categoriesError && categories.length === 0)
         }
         className="bg-primary text-primary-foreground hover:bg-[#6D28D9] w-full sm:w-auto"
       >
@@ -304,7 +308,7 @@ export function AssetUploadForm() {
             Uploading…
           </>
         ) : (
-          'Publish asset'
+          'Upload asset'
         )}
       </Button>
     </form>

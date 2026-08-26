@@ -177,6 +177,28 @@ Do not set this in CI unless Ryuk is proven broken there. Fixtures also apply a 
 
 Bring up local app dependencies with `docker-compose.yml` in this folder when running the API outside tests.
 
+### Aspire Dashboard (Local Observability)
+
+The `docker-compose.yml` includes the official standalone **Aspire Dashboard** container for OpenTelemetry traces, metrics, and logs. It does not run an Aspire AppHost; it functions purely as an OTLP receiver and UI viewer.
+
+```bash
+docker-compose up -d aspire-dashboard
+```
+
+- **Dashboard UI**: `http://localhost:18888` (unsecured/anonymous mode for local dev)
+- **OTLP gRPC receiver**: `http://localhost:4317`
+- Ports bind to `127.0.0.1` only.
+
+When you run the API directly on the host (e.g. from an IDE or `dotnet run`), it exports telemetry to `http://127.0.0.1:4317`. If the API is later containerized within Compose, it should use the internal service DNS (`http://aspire-dashboard:18889`).
+
+Observability is disabled by default in tracking configuration so a missing dashboard does not break startup. Enable it via user secrets or environment variables:
+
+```bash
+dotnet user-secrets set "Observability:Enabled" "true" --project AssetBlock.WebApi
+```
+
+If the exporter cannot reach the dashboard, telemetry is dropped. The API endpoints and health checks will remain healthy and operational.
+
 ### Mailpit (local SMTP inbox)
 
 Mailpit is a **development SMTP catcher**, not an `IEmailSender` implementation and never a production email endpoint. The API sends through `SmtpEmailSender` (MailKit); point SMTP at Mailpit locally.
@@ -254,6 +276,62 @@ Success DB mutations write the audit row in the same `IUnitOfWork` transaction a
 ### Health checks
 
 - `GET /health/live` reports process liveness only and does not probe external dependencies.
-- `GET /health/ready` probes PostgreSQL, the configured storage provider, and Redis connection when configured (Valkey locally).
+- `GET /health/ready` probes PostgreSQL, the configured storage provider, Redis when configured, and ClamAV when `AssetProcessing:Enabled` is true. ClamAV readiness requires a parseable `VERSION` response whose signature database age is within `ClamAv:MaxSignatureAge` (default 72h, allowed 1h–7d). Liveness is unchanged.
 
 Both endpoints return a small JSON report. Readiness returns HTTP 503 while any required dependency is unavailable.
+
+### Asset processing, archives, and ClamAV
+
+New uploads stay seller-visible and out of the public catalog until archive inspection and a clean ClamAV scan succeed. A pending version never replaces a previous READY current version; rejection or `PROCESSING_FAILED` leaves the READY version in place. Purchasers cannot download pending, rejected, or failed versions; authors may still download their own files.
+
+`ArchiveSafetyInspector` inspects only the outer ZIP/TAR/TAR.GZ container (path safety, entry types, sizes, and compression ratio). `MaxPathDepth` is filesystem path depth, not nested-archive depth. Nested archives are ordinary files to the inspector; ClamAV enforces nesting through `MaxRecursion`, `MaxScanSize`, `MaxFiles`, and `AlertExceedsMax yes` in `clamav/clamd.env`.
+
+ClamAV uses clamd `INSTREAM` over TCP. `ClamAv:DaemonMaxStreamBytes` is an optional hint (`0` disables inference). A non-zero value must match the daemon `StreamMaxLength` exactly. Ambiguous disconnects are retryable `SCANNER_UNAVAILABLE`; explicit or known stream limits are terminal `SCANNER_LIMIT_EXCEEDED`.
+
+Local daemon:
+
+```bash
+docker-compose up -d clamav
+```
+
+clamd binds to `127.0.0.1:3310`. Signature data lives on the `clamav_data` volume. Enable processing in Development (`AssetProcessing:Enabled` and `ClamAv:Enabled`).
+
+### Listing Copilot (optional AI)
+
+Sellers can request a listing suggestion for a **READY** version that already has archive analysis. The API never writes title/description/category/tags automatically; Apply in the seller UI only fills the edit form.
+
+- `POST /api/users/me/asset-versions/{assetVersionId}/listing-copilot` (verified email, local rate limit) enqueues one idempotent `LISTING_COPILOT` job (`DefinitionVersion` 1). Repeated POST returns the same `jobId` with `202 Accepted`.
+- `GET /api/users/me/asset-versions/{assetVersionId}/listing-copilot` returns the stored suggestion or `404`. It never includes prompts, raw provider JSON, tokens, or `providerRequestId`.
+- Disabled AI (`Ai:Enabled=false`) returns `AI_DISABLED` and does not enqueue.
+
+Models come from typed configuration only. Local Development lists ordered OpenRouter models under `Ai:OpenRouter:Models`. Deployment overrides use standard .NET configuration providers (environment variables, user secrets). Configuration changes apply after restart. Inactive provider sections are not validated.
+
+Environment overrides (do not commit real values):
+
+```bash
+Ai__Enabled=true
+Ai__Provider=OpenRouter
+Ai__PromptPolicyVersion=listing-copilot-v1
+Ai__OpenRouter__ApiKey=          # user secrets only
+Ai__OpenRouter__Models__0=model-a
+Ai__OpenRouter__Models__1=model-b
+Ai__Ollama__BaseUrl=http://127.0.0.1:11434
+Ai__Ollama__Model=               # exact local tag
+Ai__Ollama__Digest=              # exact sha256: digest from ollama show /api/tags
+```
+
+### Local Ollama (optional AI)
+
+AI generation is disabled in tracked config (`Ai:Enabled=false`). Marketplace and API startup do not call OpenRouter or Ollama until AI is explicitly enabled.
+
+OpenRouter is the default provider. Ollama is an explicit alternative with no automatic fallback. AssetBlock does not start Ollama, ping it at startup, or pull models.
+
+Native setup:
+
+1. Install Ollama on the host and start the local daemon (`http://127.0.0.1:11434`).
+2. Pull a model yourself with the Ollama CLI. Use that exact model tag in `Ai:Ollama:Model`.
+3. Set `Ai:Ollama:Digest` to the exact `sha256:` digest from `ollama show` or `/api/tags`. Generation calls `/api/tags` first and refuses to run unless name and digest match.
+4. Set `Ai:Enabled=true`, `Ai:Provider=Ollama`, and keep `Ai:Ollama:BaseUrl` as a loopback HTTP URL. Put secrets in user secrets or environment variables, never in tracked files.
+
+OpenRouter requires an API key and a non-empty ordered distinct `Ai:OpenRouter:Models` list (1–16 unique ids). That list is both the allowlist and the OpenRouter fallback order. Requests send `require_parameters=true` and `data_collection=deny`. Optional `Ai:OpenRouter:ZeroDataRetention` adds `zdr=true` and may reduce available endpoints. The returned `actualModel` must match a configured id exactly (ordinal); otherwise the call is terminal `AI_MODEL_NOT_ALLOWED` and no `ModelRevision` is stored. There is no OpenRouter → Ollama fallback. Tracked `appsettings.json` keeps `Ai:Enabled=false` and empty models.
+

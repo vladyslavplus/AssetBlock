@@ -2,6 +2,7 @@ using System.IO.Pipelines;
 using AssetBlock.Application.Common;
 using AssetBlock.Domain.Abstractions.Services;
 using AssetBlock.Domain.Core.Constants;
+using AssetBlock.Domain.Core.Dto;
 using AssetBlock.Domain.Core.Dto.Audit;
 using AssetBlock.Domain.Core.Enums;
 using AssetBlock.Domain.Core.Entities;
@@ -19,7 +20,7 @@ internal sealed class PublishAssetVersionCommandHandler(
     IAssetStore assetStore,
     IAssetStorageService assetStorageService,
     IEncryptionService encryptionService,
-    IAssetArchiveInspector archiveInspector,
+    IAssetProcessingJobStore processingJobStore,
     IOptions<FileUploadOptions> fileUploadOptions,
     IUnitOfWork unitOfWork,
     IAuditWriter auditWriter,
@@ -69,26 +70,6 @@ internal sealed class PublishAssetVersionCommandHandler(
             return Result.Forbidden(ErrorCodes.ERR_FORBIDDEN);
         }
 
-        try
-        {
-            if (request.FileContent.CanSeek)
-            {
-                request.FileContent.Position = 0;
-            }
-
-            await archiveInspector.Inspect(request.FileContent, displayFileName, cancellationToken);
-
-            if (request.FileContent.CanSeek)
-            {
-                request.FileContent.Position = 0;
-            }
-        }
-        catch (ArchiveRejectedException ex)
-        {
-            logger.LogWarning(ex, "Archive rejected for version publish by {AuthorId} on asset {AssetId}", request.AuthorId, request.AssetId);
-            return ResultError.Error<Guid>(ErrorCodes.ERR_ARCHIVE_REJECTED);
-        }
-
         var versionId = Guid.NewGuid();
         var storageKey = $"assets/{request.AuthorId}/{request.AssetId}/{versionId}{matchedExtension}";
         var ciphertextLength = encryptionService.ComputeCiphertextLength(request.FileLength);
@@ -115,8 +96,8 @@ internal sealed class PublishAssetVersionCommandHandler(
         {
             Id = versionId,
             AssetId = request.AssetId,
-            VersionNumber = 0, // Set by PublishNextVersion.
-            IsCurrent = false, // Set by PublishNextVersion.
+            VersionNumber = 0, // Set by CreateNextCandidateVersion.
+            IsCurrent = false, // Set by CreateNextCandidateVersion.
             StorageKey = storageKey,
             FileName = displayFileName,
             ContentLength = request.FileLength,
@@ -126,6 +107,8 @@ internal sealed class PublishAssetVersionCommandHandler(
             LicenseTemplateVersion = licenseTemplate.TemplateVersion,
             LicenseDisplayName = licenseTemplate.DisplayName,
             LicenseTerms = licenseTemplate.TermsPlainText,
+            ProcessingStatus = AssetVersionProcessingStatus.PENDING_INSPECTION,
+            ProcessingUpdatedAt = now,
             CreatedAt = now
         };
 
@@ -133,7 +116,19 @@ internal sealed class PublishAssetVersionCommandHandler(
         {
             await unitOfWork.ExecuteInTransaction(async ct =>
             {
-                await assetStore.PublishNextVersion(request.AssetId, request.AuthorId, draft, ct);
+                await assetStore.CreateNextCandidateVersion(request.AssetId, request.AuthorId, draft, ct);
+
+                // Enqueue archive inspection job atomically with the version insert.
+                // Keeps the version from staying permanently in PENDING_INSPECTION.
+                await processingJobStore.Enqueue(
+                    request.AssetId,
+                    versionId,
+                    AssetProcessingJobType.ARCHIVE_INSPECTION,
+                    definitionVersion: AssetProcessingDefaults.DEFINITION_VERSION,
+                    initialDelay: TimeSpan.Zero,
+                    payload: new ArchiveInspectionPayload(),
+                    traceParent: null,
+                    ct);
 
                 await auditWriter.Write(new AuditEvent(
                     AuditActions.ASSET_VERSION_PUBLISH,

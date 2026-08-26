@@ -20,6 +20,16 @@ internal sealed class LoggingBehavior<TRequest, TResponse>(ILogger<LoggingBehavi
             logger.LogDebug("Handled {RequestName} in {ElapsedMs} ms", requestName, stopwatch.ElapsedMilliseconds);
             return response;
         }
+        catch (OperationCanceledException ex) when (cancellationToken.IsCancellationRequested)
+        {
+            stopwatch.Stop();
+            logger.LogDebug(
+                ex,
+                "Cancelled {RequestName} after {ElapsedMs} ms",
+                requestName,
+                stopwatch.ElapsedMilliseconds);
+            throw;
+        }
         catch (Exception ex)
         {
             stopwatch.Stop();

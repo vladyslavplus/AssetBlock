@@ -14,6 +14,18 @@ internal sealed class AssetVersionConfiguration : IEntityTypeConfiguration<Asset
         {
             table.HasCheckConstraint("CK_asset_versions_version_number_positive", "\"VersionNumber\" > 0");
             table.HasCheckConstraint("CK_asset_versions_content_length_positive", "\"ContentLength\" > 0");
+            table.HasCheckConstraint(
+                "CK_asset_versions_processing_status",
+                "\"ProcessingStatus\" IN ('PENDING_INSPECTION', 'PENDING_MALWARE_SCAN', 'READY', 'REJECTED', 'PROCESSING_FAILED')");
+            table.HasCheckConstraint(
+                "CK_asset_versions_processing_error_code",
+                "\"ProcessingErrorCode\" IS NULL OR \"ProcessingErrorCode\" ~ '^[A-Z0-9_]{1,64}$'");
+            table.HasCheckConstraint(
+                "CK_asset_versions_ready_current",
+                "\"IsCurrent\" = false OR (\"IsCurrent\" = true AND \"ProcessingStatus\" = 'READY')");
+            table.HasCheckConstraint(
+                "CK_asset_versions_state_error_consistency",
+                "(\"ProcessingStatus\" IN ('PENDING_INSPECTION', 'PENDING_MALWARE_SCAN', 'READY') AND \"ProcessingErrorCode\" IS NULL AND \"ProcessingErrorSummary\" IS NULL) OR (\"ProcessingStatus\" IN ('REJECTED', 'PROCESSING_FAILED') AND \"ProcessingErrorCode\" IS NOT NULL AND \"ProcessingErrorSummary\" IS NOT NULL AND length(trim(\"ProcessingErrorSummary\")) > 0)");
         });
 
         builder.HasKey(v => v.Id);
@@ -37,11 +49,22 @@ internal sealed class AssetVersionConfiguration : IEntityTypeConfiguration<Asset
         builder.Property(v => v.LicenseDisplayName).IsRequired().HasMaxLength(128);
         builder.Property(v => v.LicenseTerms).IsRequired().HasMaxLength(16000);
 
+        builder.Property(v => v.ProcessingStatus)
+            .IsRequired()
+            .HasMaxLength(64)
+            .HasConversion(
+                status => status.ToString(),
+                raw => Enum.Parse<AssetVersionProcessingStatus>(raw));
+
+        builder.Property(v => v.ProcessingErrorCode).HasMaxLength(64);
+        builder.Property(v => v.ProcessingErrorSummary).HasMaxLength(2000);
+        builder.Property(v => v.ProcessingUpdatedAt).IsRequired();
+
         builder.Property(v => v.CreatedAt).IsRequired();
         // Versions are append-only; UpdatedAt from BaseEntity is unused and ignored.
         builder.Ignore(v => v.UpdatedAt);
 
-        // Only current-version pointer changes after insert. Content and license snapshot stay immutable.
+        // Only current-version pointer and processing lifecycle fields change after insert. Content and license snapshot stay immutable.
         builder.Property(v => v.StorageKey).Metadata.SetAfterSaveBehavior(PropertySaveBehavior.Throw);
         builder.Property(v => v.FileName).Metadata.SetAfterSaveBehavior(PropertySaveBehavior.Throw);
         builder.Property(v => v.ContentLength).Metadata.SetAfterSaveBehavior(PropertySaveBehavior.Throw);
@@ -75,5 +98,8 @@ internal sealed class AssetVersionConfiguration : IEntityTypeConfiguration<Asset
         builder.HasIndex(v => v.StorageKey)
             .IsUnique()
             .HasDatabaseName("UIX_asset_versions_storage_key");
+
+        builder.HasIndex(v => v.ProcessingStatus)
+            .HasDatabaseName("IX_asset_versions_processing_status");
     }
 }

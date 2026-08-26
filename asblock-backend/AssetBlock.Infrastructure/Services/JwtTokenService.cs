@@ -91,14 +91,17 @@ internal sealed class JwtTokenService(
 
     public async Task RevokeRefreshToken(Guid tokenId, CancellationToken cancellationToken = default)
     {
-        var entity = await dbContext.RefreshTokens.FirstOrDefaultAsync(rt => rt.Id == tokenId, cancellationToken);
-        if (entity is null)
+        var now = DateTimeOffset.UtcNow;
+        var affected = await dbContext.RefreshTokens
+            .Where(rt => rt.Id == tokenId && rt.RevokedAt == null)
+            .ExecuteUpdateAsync(setters => setters.SetProperty(rt => rt.RevokedAt, now), cancellationToken);
+
+        if (affected == 0)
         {
-            logger.LogDebug("Attempted to revoke non-existent refresh token {TokenId}", tokenId);
+            logger.LogDebug("Attempted to revoke non-existent or already-revoked refresh token {TokenId}", tokenId);
             return;
         }
-        entity.RevokedAt = DateTimeOffset.UtcNow;
-        await dbContext.SaveChangesAsync(cancellationToken);
+
         logger.LogDebug("Revoked refresh token {TokenId}", tokenId);
     }
 

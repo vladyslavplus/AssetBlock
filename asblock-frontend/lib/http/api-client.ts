@@ -1,6 +1,6 @@
 import { apiUrl } from './api-config.ts'
 import { getApiErrorMessage, parseApiErrorBody, readApiResponseBody } from './api-errors.ts'
-import { isAbortError } from './is-abort-error.ts'
+import { isAbortError, toAbortError } from './is-abort-error.ts'
 
 export class ApiRequestError extends Error {
   readonly status: number
@@ -48,18 +48,24 @@ export async function apiFetch<T = unknown>(options: ApiFetchOptions): Promise<T
     }
   }
 
-  const res = await fetch(url, {
-    ...rest,
-    signal,
-    headers,
-    body,
-  })
+  let res: Response
+  try {
+    res = await fetch(url, {
+      ...rest,
+      signal,
+      headers,
+      body,
+    })
+  } catch (error) {
+    if (isAbortError(error, signal)) throw toAbortError(error, signal)
+    throw error
+  }
 
   let parsed: unknown
   try {
     parsed = await readApiResponseBody(res)
   } catch (error) {
-    if (isAbortError(error, signal)) throw error
+    if (isAbortError(error, signal)) throw toAbortError(error, signal)
     throw error
   }
 

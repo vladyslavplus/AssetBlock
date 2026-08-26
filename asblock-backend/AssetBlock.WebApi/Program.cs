@@ -11,10 +11,12 @@ using AssetBlock.WebApi.Outbox;
 var builder = WebApplication.CreateBuilder(args);
 
 builder.Host.UseSerilogConfiguration();
+builder.Logging.AddAssetBlockOpenTelemetryLogging(builder.Configuration, builder.Environment);
 
 builder.Services.AddApplication();
 builder.Services.AddInfrastructure(builder.Configuration, builder.Environment);
 builder.Services.AddAssetBlockDataProtection(builder.Configuration, builder.Environment);
+builder.Services.AddAssetBlockObservability(builder.Configuration, builder.Environment);
 
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<IAuditContextAccessor, HttpAuditContextAccessor>();
@@ -42,6 +44,7 @@ builder.Services.AddControllers(options => options.Conventions.Add(new Lowercase
 builder.Services.AddAssetBlockCors(builder.Configuration, builder.Environment);
 builder.Services.AddSignalR();
 builder.Services.AddScoped<IRealtimeNotificationPublisher, RealtimeNotificationPublisher>();
+builder.Services.AddSingleton<IAssetProcessingRealtimePublisher, AssetProcessingRealtimePublisher>();
 builder.Services.AddScoped<IOutboxMessageHandler, NotificationDispatchOutboxHandler>();
 builder.Services.AddOpenApi();
 builder.Services.AddSwaggerConfiguration();

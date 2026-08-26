@@ -1,7 +1,7 @@
 import type { z } from 'zod'
 
 import { getApiErrorMessage } from './api-errors.ts'
-import { isAbortError } from './is-abort-error.ts'
+import { isAbortError, toAbortError } from './is-abort-error.ts'
 
 export type BffJsonResult<T> =
   | { ok: true; data: T }
@@ -25,21 +25,27 @@ export async function fetchBffJson<TSchema extends z.ZodTypeAny>(
   schema: TSchema,
   init?: RequestInit,
 ): Promise<BffJsonResult<z.infer<TSchema>>> {
-  const response = await fetch(path, {
-    credentials: 'include',
-    ...init,
-    headers: {
-      ...(init?.body ? { 'Content-Type': 'application/json' } : {}),
-      ...init?.headers,
-    },
-  })
+  let response: Response
+  try {
+    response = await fetch(path, {
+      credentials: 'include',
+      ...init,
+      headers: {
+        ...(init?.body ? { 'Content-Type': 'application/json' } : {}),
+        ...init?.headers,
+      },
+    })
+  } catch (error) {
+    if (isAbortError(error, init?.signal)) throw toAbortError(error, init?.signal)
+    throw error
+  }
 
   let text: string
   try {
     text = await response.text()
   } catch (error) {
     // Body read can reject with AbortError after headers when the query is cancelled.
-    if (isAbortError(error, init?.signal)) throw error
+    if (isAbortError(error, init?.signal)) throw toAbortError(error, init?.signal)
     throw error
   }
 

@@ -4,7 +4,6 @@ using AssetBlock.Domain.Abstractions.Services;
 using AssetBlock.Domain.Core.Constants;
 using AssetBlock.Domain.Core.Dto.Assets;
 using AssetBlock.Domain.Core.Entities;
-using AssetBlock.Domain.Core.Exceptions;
 using AssetBlock.Domain.Core.Primitives.AppSettingsOptions;
 using AwesomeAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -18,7 +17,7 @@ public class PublishAssetVersionCommandHandlerTests
     private readonly IAssetStore _assetStoreMock = Substitute.For<IAssetStore>();
     private readonly IAssetStorageService _assetStorageServiceMock = Substitute.For<IAssetStorageService>();
     private readonly IEncryptionService _encryptionServiceMock = Substitute.For<IEncryptionService>();
-    private readonly IAssetArchiveInspector _archiveInspectorMock = Substitute.For<IAssetArchiveInspector>();
+    private readonly IAssetProcessingJobStore _processingJobStoreMock = Substitute.For<IAssetProcessingJobStore>();
     private readonly IUnitOfWork _unitOfWorkMock = Substitute.For<IUnitOfWork>();
     private readonly IAuditWriter _auditWriterMock = Substitute.For<IAuditWriter>();
     private readonly ICacheService _cacheMock = Substitute.For<ICacheService>();
@@ -30,18 +29,16 @@ public class PublishAssetVersionCommandHandlerTests
     public PublishAssetVersionCommandHandlerTests()
     {
         _encryptionServiceMock.ComputeCiphertextLength(Arg.Any<long>()).Returns(4L);
-        _archiveInspectorMock.Inspect(Arg.Any<Stream>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
-            .Returns(Task.CompletedTask);
         _unitOfWorkMock.ExecuteInTransaction(Arg.Any<Func<CancellationToken, Task>>(), Arg.Any<CancellationToken>())
             .Returns(ci => ci.Arg<Func<CancellationToken, Task>>()(CancellationToken.None));
-        _assetStoreMock.PublishNextVersion(Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<AssetVersion>(), Arg.Any<CancellationToken>())
+        _assetStoreMock.CreateNextCandidateVersion(Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<AssetVersion>(), Arg.Any<CancellationToken>())
             .Returns(ci => ci.Arg<AssetVersion>());
 
         _handler = new PublishAssetVersionCommandHandler(
             _assetStoreMock,
             _assetStorageServiceMock,
             _encryptionServiceMock,
-            _archiveInspectorMock,
+            _processingJobStoreMock,
             Microsoft.Extensions.Options.Options.Create(new FileUploadOptions()),
             _unitOfWorkMock,
             _auditWriterMock,
@@ -127,7 +124,7 @@ public class PublishAssetVersionCommandHandlerTests
         var result = await _handler.Handle(CreateCommand(), CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
-        await _assetStoreMock.Received(1).PublishNextVersion(
+        await _assetStoreMock.Received(1).CreateNextCandidateVersion(
             _assetId,
             _authorId,
             Arg.Is<AssetVersion>(v =>
@@ -205,20 +202,5 @@ public class PublishAssetVersionCommandHandlerTests
 
         await act.Should().ThrowAsync<OperationCanceledException>();
         await _assetStorageServiceMock.Received(1).Delete(Arg.Any<string>(), Arg.Any<CancellationToken>());
-    }
-
-    [Fact]
-    public async Task Handle_WhenArchiveRejected_ShouldNotUpload()
-    {
-        StubOwnedAsset();
-        _archiveInspectorMock.Inspect(Arg.Any<Stream>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
-            .ThrowsAsync(new ArchiveRejectedException("bad"));
-
-        var result = await _handler.Handle(CreateCommand(), CancellationToken.None);
-
-        result.IsSuccess.Should().BeFalse();
-        result.ValidationErrors.Should().Contain(e => e.Identifier == ErrorCodes.ERR_ARCHIVE_REJECTED);
-        await _assetStorageServiceMock.DidNotReceiveWithAnyArgs()
-            .Upload(null!, null!, 0, CancellationToken.None);
     }
 }

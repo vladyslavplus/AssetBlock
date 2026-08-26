@@ -3,6 +3,8 @@ using AssetBlock.Domain.Core.Constants;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using System.Diagnostics;
+using AssetBlock.Infrastructure.Observability;
 
 namespace AssetBlock.Infrastructure.Outbox;
 
@@ -62,21 +64,43 @@ internal sealed class OutboxDispatcher(
                 continue;
             }
 
+            var stopwatch = Stopwatch.StartNew();
+            
             if (!handlers.TryGetValue(message.Type, out var handler))
             {
-                if (!await outbox.MarkFailed(
-                        message.Id,
-                        lockToken,
-                        $"No handler for outbox type '{message.Type}'.",
-                        DateTimeOffset.UtcNow.AddYears(100),
-                        cancellationToken))
+                var outcome = DiagnosticsOutcome.MISSING_HANDLER;
+                try
                 {
-                    logger.LogWarning("Lost outbox lease for {OutboxId} while marking missing-handler failure", message.Id);
+                    if (!await outbox.MarkFailed(
+                            message.Id,
+                            lockToken,
+                            $"No handler for outbox type '{message.Type}'.",
+                            DateTimeOffset.UtcNow.AddYears(100),
+                            cancellationToken))
+                    {
+                        logger.LogWarning("Lost outbox lease for {OutboxId} while marking missing-handler failure", message.Id);
+                        outcome = DiagnosticsOutcome.LEASE_LOST;
+                    }
                 }
-
+                catch (OperationCanceledException)
+                {
+                    outcome = DiagnosticsOutcome.CANCELLED;
+                    throw;
+                }
+                catch (Exception)
+                {
+                    outcome = DiagnosticsOutcome.FAILURE;
+                    throw;
+                }
+                finally
+                {
+                    AssetBlockDiagnostics.RecordOutboxProcessing(stopwatch.Elapsed, message.Type, outcome);
+                }
+                
                 continue;
             }
 
+            var processingOutcome = DiagnosticsOutcome.SUCCESS;
             try
             {
                 await handler.Handle(message, cancellationToken);
@@ -86,14 +110,17 @@ internal sealed class OutboxDispatcher(
                         "Lost outbox lease for {OutboxId} type {Type} after successful handler; another worker owns it",
                         message.Id,
                         message.Type);
+                    processingOutcome = DiagnosticsOutcome.LEASE_LOST;
                 }
             }
             catch (OperationCanceledException)
             {
+                processingOutcome = DiagnosticsOutcome.CANCELLED;
                 throw;
             }
             catch (Exception ex)
             {
+                processingOutcome = DiagnosticsOutcome.HANDLER_FAILURE;
                 var delay = TimeSpan.FromSeconds(Math.Min(3600, Math.Pow(2, Math.Min(message.AttemptCount, 10))));
                 var next = DateTimeOffset.UtcNow.Add(delay);
                 logger.LogError(
@@ -105,7 +132,12 @@ internal sealed class OutboxDispatcher(
                 if (!await outbox.MarkFailed(message.Id, lockToken, ex.Message, next, cancellationToken))
                 {
                     logger.LogWarning("Lost outbox lease for {OutboxId} while recording failure", message.Id);
+                    processingOutcome = DiagnosticsOutcome.LEASE_LOST;
                 }
+            }
+            finally
+            {
+                AssetBlockDiagnostics.RecordOutboxProcessing(stopwatch.Elapsed, message.Type, processingOutcome);
             }
         }
     }

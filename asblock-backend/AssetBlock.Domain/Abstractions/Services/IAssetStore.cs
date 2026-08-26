@@ -35,10 +35,10 @@ public interface IAssetStore
         CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Within the caller's transaction: acquires a row-level lock on the asset, clears IsCurrent on all
-    /// prior versions, assigns VersionNumber = max + 1, sets IsCurrent = true, inserts and returns the new version.
+    /// Within the caller's transaction: acquires a row-level lock on the asset, assigns VersionNumber = max + 1,
+    /// sets IsCurrent = false and ProcessingStatus = PENDING_INSPECTION, inserts and returns the candidate version.
     /// </summary>
-    Task<AssetVersion> PublishNextVersion(Guid assetId, Guid authorId, AssetVersion draft, CancellationToken cancellationToken = default);
+    Task<AssetVersion> CreateNextCandidateVersion(Guid assetId, Guid authorId, AssetVersion draft, CancellationToken cancellationToken = default);
 
     /// <summary>Returns all storage keys for an asset's published versions.</summary>
     Task<IReadOnlyList<string>> GetAllStorageKeys(Guid assetId, CancellationToken cancellationToken = default);
@@ -46,7 +46,25 @@ public interface IAssetStore
     /// <summary>Returns true when the key is referenced by any AssetVersion row.</summary>
     Task<bool> ExistsByStorageKey(string storageKey, CancellationToken cancellationToken = default);
 
+    /// <summary>
+    /// Returns public catalog assets. Always filters for assets that have a current READY version.
+    /// </summary>
     Task<PagedResult<AssetListItem>> GetPaged(GetAssetsRequest request, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Returns listings for an authenticated seller dashboard, scoped by author,
+    /// including the latest processing state without a per-row versions round-trip.
+    /// </summary>
+    Task<PagedResult<SellerAssetListItem>> GetMyListings(Guid authorId, GetAssetsRequest request, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Returns owner-only seller detail for an asset owned by <paramref name="ownerUserId"/>.
+    /// Missing, deleted, or foreign assets return null (no existence leak).
+    /// </summary>
+    Task<SellerAssetDetailItem?> GetOwnedSellerDetail(
+        Guid assetId,
+        Guid ownerUserId,
+        CancellationToken cancellationToken = default);
     Task SoftDelete(Guid id, DateTimeOffset deletedAt, CancellationToken cancellationToken = default);
     Task Delete(Guid id, CancellationToken cancellationToken = default);
     Task AddTag(Guid assetId, Guid tagId, CancellationToken cancellationToken = default);

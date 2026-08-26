@@ -19,7 +19,9 @@ internal sealed class UpdateUserProfileCommandValidator : AbstractValidator<Upda
         {
             RuleFor(c => c.AvatarUrl!)
                 .MaximumLength(500)
-                .WithMessage("Avatar URL must not exceed 500 characters.");
+                .WithMessage("Avatar URL must not exceed 500 characters.")
+                .Must(BeValidHttpOrHttpsUrl)
+                .WithMessage("Avatar URL must be a valid http or https address.");
         });
 
         When(c => c.Bio is not null, () =>
@@ -28,5 +30,20 @@ internal sealed class UpdateUserProfileCommandValidator : AbstractValidator<Upda
                 .MaximumLength(1000)
                 .WithMessage("Bio must not exceed 1000 characters.");
         });
+    }
+
+    private static bool BeValidHttpOrHttpsUrl(string url)
+    {
+        if (string.IsNullOrWhiteSpace(url))
+        {
+            return true;
+        }
+
+        if (!Uri.TryCreate(url.Trim(), UriKind.Absolute, out var uri))
+        {
+            return false;
+        }
+
+        return uri.Scheme == Uri.UriSchemeHttp || uri.Scheme == Uri.UriSchemeHttps;
     }
 }

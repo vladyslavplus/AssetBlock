@@ -1,3 +1,4 @@
+import { keepAbortable } from '@/lib/http/is-abort-error'
 import {
   fetchAssetsPage,
   fetchCategoryOptions,
@@ -23,8 +24,8 @@ export async function fetchCatalogFacets({
   signal,
 }: { signal?: AbortSignal } = {}): Promise<CatalogFacets> {
   const [categories, tags] = await Promise.all([
-    fetchCategoryOptions({ signal }),
-    fetchTagNamesForFilters({ signal }),
+    keepAbortable(fetchCategoryOptions({ signal }), signal),
+    keepAbortable(fetchTagNamesForFilters({ signal }), signal),
   ])
   return { categories, tags }
 }

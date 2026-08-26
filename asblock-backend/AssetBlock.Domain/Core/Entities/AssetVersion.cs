@@ -33,6 +33,12 @@ public class AssetVersion : BaseEntity
     public required string LicenseDisplayName { get; set; }
     public required string LicenseTerms { get; set; }
 
+    public AssetVersionProcessingStatus ProcessingStatus { get; set; } = AssetVersionProcessingStatus.PENDING_INSPECTION;
+    public string? ProcessingErrorCode { get; set; }
+    public string? ProcessingErrorSummary { get; set; }
+    public required DateTimeOffset ProcessingUpdatedAt { get; set; }
+
     public Asset Asset { get; set; } = null!;
+    public AssetArchiveAnalysis? ArchiveAnalysis { get; set; }
     public ICollection<Purchase> Purchases { get; set; } = new List<Purchase>();
 }

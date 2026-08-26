@@ -27,4 +27,11 @@ public sealed class FileUploadOptionsValidatorTests
         var result = _sut.Validate(null, new FileUploadOptions { AllowedExtensions = ["zip"] });
         result.Failed.Should().BeTrue();
     }
+
+    [Fact]
+    public void Validate_WhenRarIsAllowed_ShouldFail()
+    {
+        var result = _sut.Validate(null, new FileUploadOptions { AllowedExtensions = [".zip", ".rar"] });
+        result.Failed.Should().BeTrue();
+    }
 }

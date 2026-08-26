@@ -56,15 +56,13 @@ export const analyticsKeys = {
 }
 
 /**
- * Intentionally does not read React Query's `signal`.
- * Forwarding it to `fetch` makes Query.removeObserver → abortController.abort() on unmount
- * (Strict Mode / tab switches), which Next.js dev reports as unhandledRejection AbortError.
- * Without consuming the signal, in-flight responses can still populate the cache after navigation.
+ * Forwards React Query's abort signal so tab switches cancel in-flight BFF reads
+ * without mapping AbortError to a query failure.
  */
 export function sellerOverviewQueryOptions(range: AnalyticsUtcRange) {
   return {
     queryKey: analyticsKeys.overview(range),
-    queryFn: () => fetchAnalyticsOverview(range),
+    queryFn: ({ signal }: { signal?: AbortSignal }) => fetchAnalyticsOverview(range, signal),
     staleTime: 120_000,
   }
 }
@@ -75,7 +73,8 @@ export function sellerProductsQueryOptions(
 ) {
   return {
     queryKey: analyticsKeys.products(range, filters),
-    queryFn: () => fetchAnalyticsProducts(range, filters),
+    queryFn: ({ signal }: { signal?: AbortSignal }) =>
+      fetchAnalyticsProducts(range, filters, signal),
     staleTime: 120_000,
   }
 }
@@ -86,8 +85,8 @@ export function sellerSalesInfiniteQueryOptions(
 ) {
   return {
     queryKey: analyticsKeys.sales(range, filters),
-    queryFn: ({ pageParam }: { pageParam: string | undefined }) =>
-      fetchAnalyticsSalesPage(range, filters, pageParam),
+    queryFn: ({ pageParam, signal }: { pageParam: string | undefined; signal?: AbortSignal }) =>
+      fetchAnalyticsSalesPage(range, filters, pageParam, signal),
     initialPageParam: undefined as string | undefined,
     getNextPageParam: (lastPage: Awaited<ReturnType<typeof fetchAnalyticsSalesPage>>) =>
       lastPage.hasMore ? (lastPage.nextCursor ?? undefined) : undefined,
@@ -101,7 +100,8 @@ export function sellerCollectionsQueryOptions(
 ) {
   return {
     queryKey: analyticsKeys.collections(range, filters),
-    queryFn: () => fetchAnalyticsCollections(range, filters),
+    queryFn: ({ signal }: { signal?: AbortSignal }) =>
+      fetchAnalyticsCollections(range, filters, signal),
     staleTime: 120_000,
   }
 }
@@ -109,7 +109,8 @@ export function sellerCollectionsQueryOptions(
 export function sellerAssetDetailQueryOptions(assetId: string, range: AnalyticsUtcRange) {
   return {
     queryKey: analyticsKeys.assetDetail(assetId, range),
-    queryFn: () => fetchAnalyticsAssetDetail(assetId, range),
+    queryFn: ({ signal }: { signal?: AbortSignal }) =>
+      fetchAnalyticsAssetDetail(assetId, range, signal),
     staleTime: 120_000,
   }
 }
@@ -117,7 +118,8 @@ export function sellerAssetDetailQueryOptions(assetId: string, range: AnalyticsU
 export function sellerBundleDetailQueryOptions(bundleId: string, range: AnalyticsUtcRange) {
   return {
     queryKey: analyticsKeys.bundleDetail(bundleId, range),
-    queryFn: () => fetchAnalyticsBundleDetail(bundleId, range),
+    queryFn: ({ signal }: { signal?: AbortSignal }) =>
+      fetchAnalyticsBundleDetail(bundleId, range, signal),
     staleTime: 120_000,
   }
 }

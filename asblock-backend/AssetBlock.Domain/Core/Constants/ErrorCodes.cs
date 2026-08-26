@@ -17,7 +17,6 @@ public static class ErrorCodes
     public const string ERR_EMAIL_CHANGE_TARGET_TAKEN = "ERR_EMAIL_CHANGE_TARGET_TAKEN";
     public const string ERR_EMAIL_NOT_VERIFIED = "ERR_EMAIL_NOT_VERIFIED";
 
-
     public const string ERR_CATEGORY_NOT_FOUND = "ERR_CATEGORY_NOT_FOUND";
     public const string ERR_TAG_NOT_FOUND = "ERR_TAG_NOT_FOUND";
     public const string ERR_TAG_ALREADY_EXISTS = "ERR_TAG_ALREADY_EXISTS";
@@ -98,4 +97,54 @@ public static class ErrorCodes
     public const string ERR_ANALYTICS_ATTRIBUTION_INVALID = "ERR_ANALYTICS_ATTRIBUTION_INVALID";
     public const string ERR_ANALYTICS_BFF_SIGNATURE_INVALID = "ERR_ANALYTICS_BFF_SIGNATURE_INVALID";
     public const string ERR_ANALYTICS_RATE_LIMIT_UNAVAILABLE = "ERR_ANALYTICS_RATE_LIMIT_UNAVAILABLE";
+
+    public const string VERSION_NOT_FOUND = "VERSION_NOT_FOUND";
+    public const string ARCHIVE_CORRUPT = "ARCHIVE_CORRUPT";
+    public const string ARCHIVE_UNSEEKABLE = "ARCHIVE_UNSEEKABLE";
+    public const string ARCHIVE_ENCRYPTED = "ARCHIVE_ENCRYPTED";
+    public const string ARCHIVE_EMPTY_PATH = "ARCHIVE_EMPTY_PATH";
+    public const string ARCHIVE_PATH_TOO_LONG = "ARCHIVE_PATH_TOO_LONG";
+    public const string ARCHIVE_PATH_TOO_DEEP = "ARCHIVE_PATH_TOO_DEEP";
+    public const string ARCHIVE_ABSOLUTE_PATH = "ARCHIVE_ABSOLUTE_PATH";
+    public const string ARCHIVE_PATH_TRAVERSAL = "ARCHIVE_PATH_TRAVERSAL";
+    public const string ARCHIVE_DUPLICATE_ENTRY = "ARCHIVE_DUPLICATE_ENTRY";
+    public const string ARCHIVE_SYMLINK_NOT_ALLOWED = "ARCHIVE_SYMLINK_NOT_ALLOWED";
+    public const string ARCHIVE_SPECIAL_ENTRY_NOT_ALLOWED = "ARCHIVE_SPECIAL_ENTRY_NOT_ALLOWED";
+    public const string ARCHIVE_TOO_MANY_ENTRIES = "ARCHIVE_TOO_MANY_ENTRIES";
+    public const string ARCHIVE_ENTRY_TOO_LARGE = "ARCHIVE_ENTRY_TOO_LARGE";
+    public const string ARCHIVE_COMPRESSION_RATIO_EXCEEDED = "ARCHIVE_COMPRESSION_RATIO_EXCEEDED";
+    public const string ARCHIVE_TOTAL_SIZE_EXCEEDED = "ARCHIVE_TOTAL_SIZE_EXCEEDED";
+    public const string ARCHIVE_EMPTY = "ARCHIVE_EMPTY";
+    public const string ARCHIVE_UNSAFE = "ARCHIVE_UNSAFE";
+    public const string STORAGE_UNAVAILABLE = "STORAGE_UNAVAILABLE";
+    public const string STORAGE_IO_ERROR = "STORAGE_IO_ERROR";
+    public const string LEASE_LOST = "LEASE_LOST";
+    public const string LEASE_EXPIRED = "LEASE_EXPIRED";
+    public const string MALWARE_DETECTED = "MALWARE_DETECTED";
+    public const string SCANNER_UNAVAILABLE = "SCANNER_UNAVAILABLE";
+    public const string SCANNER_ERROR = "SCANNER_ERROR";
+    public const string SCANNER_LIMIT_EXCEEDED = "SCANNER_LIMIT_EXCEEDED";
+    public const string MISSING_HANDLER = "MISSING_HANDLER";
+    public const string INVALID_JOB_PAYLOAD = "INVALID_JOB_PAYLOAD";
+    public const string INVALID_JOB_RESULT = "INVALID_JOB_RESULT";
+    public const string WORKER_SHUTDOWN = "WORKER_SHUTDOWN";
+    public const string PROCESSING_TIMEOUT = "PROCESSING_TIMEOUT";
+    public const string PROCESSING_EXCEPTION = "PROCESSING_EXCEPTION";
+    public const string AI_DISABLED = "AI_DISABLED";
+    public const string AI_PROVIDER_UNAVAILABLE = "AI_PROVIDER_UNAVAILABLE";
+    public const string AI_RATE_LIMITED = "AI_RATE_LIMITED";
+    public const string AI_TIMEOUT = "AI_TIMEOUT";
+    public const string AI_UNAUTHORIZED = "AI_UNAUTHORIZED";
+    public const string AI_PAYMENT_REQUIRED = "AI_PAYMENT_REQUIRED";
+    public const string AI_FORBIDDEN = "AI_FORBIDDEN";
+    public const string AI_INVALID_REQUEST = "AI_INVALID_REQUEST";
+    public const string AI_INVALID_RESPONSE = "AI_INVALID_RESPONSE";
+    public const string AI_MODEL_NOT_ALLOWED = "AI_MODEL_NOT_ALLOWED";
+    public const string AI_CATEGORY_NOT_ALLOWED = "AI_CATEGORY_NOT_ALLOWED";
+    public const string AI_TAGS_NOT_ALLOWED = "AI_TAGS_NOT_ALLOWED";
+    public const string AI_INPUT_TOO_LARGE = "AI_INPUT_TOO_LARGE";
+    public const string AI_ERROR = "AI_ERROR";
+    public const string AI_VERSION_NOT_READY = "AI_VERSION_NOT_READY";
+    public const string AI_ARCHIVE_ANALYSIS_MISSING = "AI_ARCHIVE_ANALYSIS_MISSING";
+    public const string AI_ALLOWLIST_OVERFLOW = "AI_ALLOWLIST_OVERFLOW";
 }

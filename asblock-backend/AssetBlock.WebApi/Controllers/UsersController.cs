@@ -1,6 +1,11 @@
-using AssetBlock.Application.UseCases.Assets.GetAssets;
+using AssetBlock.Application.UseCases.Assets.EnqueueListingCopilot;
+using AssetBlock.Application.UseCases.Assets.GetListingCopilotSuggestion;
+using AssetBlock.Application.UseCases.Assets.GetMyAssetProcessingJobs;
+using AssetBlock.Application.UseCases.Assets.GetMyAssetVersionProcessingJobs;
+using AssetBlock.Application.UseCases.Assets.GetSellerAssetDetail;
 using AssetBlock.Application.UseCases.Auth.ResendEmailVerification;
 using AssetBlock.Application.UseCases.Users.ChangePassword;
+using AssetBlock.Application.UseCases.Users.GetMyListings;
 using AssetBlock.Application.UseCases.Users.GetProfile;
 using AssetBlock.Application.UseCases.Users.ListMyPurchases;
 using AssetBlock.Application.UseCases.Users.ListNotifications;
@@ -19,6 +24,7 @@ using AssetBlock.Domain.Core.Dto.Assets;
 using AssetBlock.Domain.Core.Dto.Users;
 using AssetBlock.WebApi.Constants;
 using AssetBlock.Application.Messaging;
+using AssetBlock.Domain.Core.Dto;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
@@ -67,7 +73,7 @@ public sealed class UsersController(ISender sender) : ApiControllerBase(sender)
     /// </summary>
     [HttpGet(ApiRoutes.Users.ME_ASSETS)]
     [Authorize]
-    [ProducesResponseType(typeof(PagedResult<AssetListItem>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(PagedResult<SellerAssetListItem>), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> ListMyAssets([FromQuery] GetAssetsRequest request, CancellationToken cancellationToken)
@@ -78,8 +84,29 @@ public sealed class UsersController(ISender sender) : ApiControllerBase(sender)
             return UnauthorizedProblem();
         }
 
-        var scoped = request with { AuthorId = userId.Value };
-        var result = await Sender.Send(new GetAssetsQuery(scoped), cancellationToken);
+        var result = await Sender.Send(new GetMyListingsQuery(userId.Value, request), cancellationToken);
+        return MapResultToActionResult(result);
+    }
+
+    /// <summary>
+    /// Get owner-only seller detail for an owned asset, including processing summary.
+    /// Missing, deleted, or foreign assets return 404.
+    /// </summary>
+    [HttpGet(ApiRoutes.Users.ME_ASSET)]
+    [Authorize]
+    [ProducesResponseType(typeof(SellerAssetDetailItem), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> GetMyAsset([FromRoute] Guid assetId, CancellationToken cancellationToken)
+    {
+        var userId = GetUserId();
+        if (userId is null)
+        {
+            return UnauthorizedProblem();
+        }
+
+        var result = await Sender.Send(new GetSellerAssetDetailQuery(assetId, userId.Value), cancellationToken);
         return MapResultToActionResult(result);
     }
 
@@ -318,6 +345,87 @@ public sealed class UsersController(ISender sender) : ApiControllerBase(sender)
     {
         var currentUserId = GetUserId();
         var result = await Sender.Send(new GetUserProfileQuery(username, currentUserId), cancellationToken);
+        return MapResultToActionResult(result);
+    }
+
+    /// <summary>
+    /// Get processing jobs for an owned asset.
+    /// </summary>
+    [HttpGet(ApiRoutes.Users.ME_ASSET_PROCESSING_JOBS)]
+    [Authorize]
+    [ProducesResponseType(typeof(IReadOnlyList<AssetProcessingJobDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> GetMyAssetProcessingJobs([FromRoute] Guid assetId, CancellationToken cancellationToken)
+    {
+        var userId = GetUserId();
+        if (userId is null)
+        {
+            return UnauthorizedProblem();
+        }
+
+        var result = await Sender.Send(new GetMyAssetProcessingJobsQuery(assetId, userId.Value), cancellationToken);
+        return MapResultToActionResult(result);
+    }
+
+    /// <summary>
+    /// Get processing jobs for an owned asset version.
+    /// </summary>
+    [HttpGet(ApiRoutes.Users.ME_ASSET_VERSION_PROCESSING_JOBS)]
+    [Authorize]
+    [ProducesResponseType(typeof(IReadOnlyList<AssetProcessingJobDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> GetMyAssetVersionProcessingJobs([FromRoute] Guid assetVersionId, CancellationToken cancellationToken)
+    {
+        var userId = GetUserId();
+        if (userId is null)
+        {
+            return UnauthorizedProblem();
+        }
+
+        var result = await Sender.Send(new GetMyAssetVersionProcessingJobsQuery(assetVersionId, userId.Value), cancellationToken);
+        return MapResultToActionResult(result);
+    }
+
+    [HttpPost(ApiRoutes.Users.ME_ASSET_VERSION_LISTING_COPILOT)]
+    [Authorize(Policy = AuthorizationPolicies.VERIFIED_EMAIL)]
+    [EnableRateLimiting(RateLimitingConstants.Policies.LISTING_COPILOT_ENQUEUE)]
+    [ProducesResponseType(typeof(ListingCopilotEnqueueResponse), StatusCodes.Status202Accepted)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
+    [ProducesResponseType(StatusCodes.Status429TooManyRequests)]
+    public async Task<IActionResult> EnqueueListingCopilot([FromRoute] Guid assetVersionId, CancellationToken cancellationToken)
+    {
+        var userId = GetUserId();
+        if (userId is null)
+        {
+            return UnauthorizedProblem();
+        }
+
+        var result = await Sender.Send(new EnqueueListingCopilotCommand(assetVersionId, userId.Value), cancellationToken);
+        return result.IsSuccess ? Accepted(result.Value) : MapResultToActionResult(result);
+    }
+
+    [HttpGet(ApiRoutes.Users.ME_ASSET_VERSION_LISTING_COPILOT)]
+    [Authorize]
+    [ProducesResponseType(typeof(ListingCopilotSuggestionDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> GetListingCopilotSuggestion([FromRoute] Guid assetVersionId, CancellationToken cancellationToken)
+    {
+        var userId = GetUserId();
+        if (userId is null)
+        {
+            return UnauthorizedProblem();
+        }
+
+        var result = await Sender.Send(new GetListingCopilotSuggestionQuery(assetVersionId, userId.Value), cancellationToken);
         return MapResultToActionResult(result);
     }
 }

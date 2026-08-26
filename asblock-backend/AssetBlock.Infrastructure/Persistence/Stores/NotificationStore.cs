@@ -126,25 +126,20 @@ internal sealed class NotificationStore(ApplicationDbContext dbContext, ILogger<
 
     public async Task<int> MarkAllRead(Guid recipientUserId, CancellationToken cancellationToken = default)
     {
-        var rows = await dbContext.UserNotifications
-            .Where(n => n.RecipientUserId == recipientUserId && n.ReadAt == null)
-            .ToListAsync(cancellationToken);
-        if (rows.Count == 0)
-        {
-            return 0;
-        }
-
         var now = DateTimeOffset.UtcNow;
-        foreach (var row in rows)
-        {
-            row.ReadAt = now;
-        }
-
         try
         {
-            await dbContext.SaveChangesAsync(cancellationToken);
-            logger.LogDebug("Marked {Count} notifications read for user {UserId}", rows.Count, recipientUserId);
-            return rows.Count;
+            var affected = await dbContext.UserNotifications
+                .Where(n => n.RecipientUserId == recipientUserId && n.ReadAt == null)
+                .ExecuteUpdateAsync(
+                    setters => setters.SetProperty(n => n.ReadAt, now),
+                    cancellationToken);
+            if (affected > 0)
+            {
+                logger.LogDebug("Marked {Count} notifications read for user {UserId}", affected, recipientUserId);
+            }
+
+            return affected;
         }
         catch (Exception ex)
         {

@@ -14,4 +14,8 @@ public sealed class NotificationsHub : Hub
     public const string DOWNLOAD_READY = NotificationHubMethods.DOWNLOAD_READY;
     public const string ASSET_SOLD = NotificationHubMethods.ASSET_SOLD;
     public const string REVIEW_RECEIVED = NotificationHubMethods.REVIEW_RECEIVED;
+    public const string ASSET_PROCESSING_UPDATED = NotificationHubMethods.ASSET_PROCESSING_UPDATED;
+    public const string ASSET_PROCESSING_READY = NotificationHubMethods.ASSET_PROCESSING_READY;
+    public const string ASSET_PROCESSING_REJECTED = NotificationHubMethods.ASSET_PROCESSING_REJECTED;
+    public const string ASSET_PROCESSING_FAILED = NotificationHubMethods.ASSET_PROCESSING_FAILED;
 }

@@ -2,7 +2,7 @@ import { getServerApiBaseUrl } from '@/lib/http/api-config'
 import { readApiResponseBody } from '@/lib/http/api-errors'
 import { transportErrorBody } from '@/lib/server/transport-error-body'
 
-type AuthAction = 'login' | 'register' | 'refresh'
+type AuthAction = 'login' | 'register' | 'refresh' | 'logout'
 
 /**
  * POST JSON to `/api/auth/{action}` on the AssetBlock Web API from the Next.js server.

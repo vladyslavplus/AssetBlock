@@ -3,6 +3,8 @@ import { SiteHeader } from '@/components/site-header'
 import { SiteFooter } from '@/components/site-footer'
 import { SellDashboard } from '@/components/sell/sell-dashboard'
 
+export const dynamic = 'force-dynamic'
+
 export const metadata: Metadata = {
   title: 'Sell · AssetBlock',
   description: 'List and upload digital assets on the AssetBlock marketplace.',

@@ -87,9 +87,9 @@ export function SellMyCollections() {
 
   const detailQuery = useQuery({
     queryKey: collectionKeys.sellerDetail(selectedId ?? ''),
-    queryFn: () => {
+    queryFn: ({ signal }) => {
       if (!selectedId) throw new Error('Missing collection id')
-      return fetchSellerCollectionQuery(selectedId)
+      return fetchSellerCollectionQuery(selectedId, signal)
     },
     enabled: authed && Boolean(selectedId),
   })

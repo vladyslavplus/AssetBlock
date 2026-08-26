@@ -130,4 +130,93 @@ public sealed class UsersControllerIntegrationTests(IntegrationTestFixture fixtu
 
         response.StatusCode.Should().Be(HttpStatusCode.OK);
     }
+
+    [Fact]
+    public async Task GetMyAssetProcessingJobs_WithoutAuth_ShouldReturn401()
+    {
+        var client = fixture.Factory.CreateClient();
+        var response = await client.GetAsync(new Uri($"/api/users/me/assets/{Guid.NewGuid()}/processing-jobs", UriKind.Relative));
+
+        response.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+    }
+
+    [Fact]
+    public async Task GetMyAssetProcessingJobs_WithAuth_WhenAssetNotFound_ShouldReturn404()
+    {
+        (HttpClient client, _) = await IntegrationTestAuth.RegisterAndAuthenticateAsync(fixture.Factory);
+        var response = await client.GetAsync(new Uri($"/api/users/me/assets/{Guid.NewGuid()}/processing-jobs", UriKind.Relative));
+
+        response.StatusCode.Should().Be(HttpStatusCode.NotFound);
+    }
+
+    [Fact]
+    public async Task GetMyAssetVersionProcessingJobs_WithoutAuth_ShouldReturn401()
+    {
+        var client = fixture.Factory.CreateClient();
+        var response = await client.GetAsync(new Uri($"/api/users/me/asset-versions/{Guid.NewGuid()}/processing-jobs", UriKind.Relative));
+
+        response.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+    }
+
+    [Fact]
+    public async Task GetMyAssetVersionProcessingJobs_WithAuth_WhenVersionNotFound_ShouldReturn404()
+    {
+        (HttpClient client, _) = await IntegrationTestAuth.RegisterAndAuthenticateAsync(fixture.Factory);
+        var response = await client.GetAsync(new Uri($"/api/users/me/asset-versions/{Guid.NewGuid()}/processing-jobs", UriKind.Relative));
+
+        response.StatusCode.Should().Be(HttpStatusCode.NotFound);
+    }
+
+    [Fact]
+    public async Task GetMyAsset_WithoutAuth_ShouldReturn401()
+    {
+        var client = fixture.Factory.CreateClient();
+        var response = await client.GetAsync(new Uri($"/api/users/me/assets/{Guid.NewGuid()}", UriKind.Relative));
+
+        response.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+    }
+
+    [Fact]
+    public async Task GetMyAsset_WithAuth_WhenMissing_ShouldReturn404()
+    {
+        (HttpClient client, _) = await IntegrationTestAuth.RegisterAndAuthenticateAsync(fixture.Factory);
+        var response = await client.GetAsync(new Uri($"/api/users/me/assets/{Guid.NewGuid()}", UriKind.Relative));
+
+        response.StatusCode.Should().Be(HttpStatusCode.NotFound);
+    }
+
+    [Fact]
+    public async Task ListingCopilot_WithoutAuth_ShouldReturn401()
+    {
+        var client = fixture.Factory.CreateClient();
+        var versionId = Guid.NewGuid();
+        var get = await client.GetAsync(new Uri($"/api/users/me/asset-versions/{versionId}/listing-copilot", UriKind.Relative));
+        var post = await client.PostAsync(new Uri($"/api/users/me/asset-versions/{versionId}/listing-copilot", UriKind.Relative), null);
+
+        get.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+        post.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+    }
+
+    [Fact]
+    public async Task ListingCopilotPost_WhenEmailUnverified_ShouldReturn403()
+    {
+        (HttpClient client, _) = await IntegrationTestAuth.RegisterAndAuthenticateAsync(fixture.Factory);
+        var response = await client.PostAsync(
+            new Uri($"/api/users/me/asset-versions/{Guid.NewGuid()}/listing-copilot", UriKind.Relative),
+            null);
+
+        response.StatusCode.Should().Be(HttpStatusCode.Forbidden);
+    }
+
+    [Fact]
+    public async Task ListingCopilot_WithAuth_WhenVersionMissing_ShouldReturn404()
+    {
+        (HttpClient client, _) = await IntegrationTestAuth.RegisterVerifiedAndAuthenticateAsync(fixture.Factory);
+        var versionId = Guid.NewGuid();
+        var get = await client.GetAsync(new Uri($"/api/users/me/asset-versions/{versionId}/listing-copilot", UriKind.Relative));
+        var post = await client.PostAsync(new Uri($"/api/users/me/asset-versions/{versionId}/listing-copilot", UriKind.Relative), null);
+
+        get.StatusCode.Should().Be(HttpStatusCode.NotFound);
+        post.StatusCode.Should().Be(HttpStatusCode.NotFound);
+    }
 }

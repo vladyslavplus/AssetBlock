@@ -30,4 +30,44 @@ public class UpdateUserProfileCommandValidatorTests
         var result = await _validator.ValidateAsync(cmd);
         result.IsValid.Should().BeFalse();
     }
+
+    [Fact]
+    public async Task Validate_WhenAvatarUrlJavascriptScheme_ShouldFail()
+    {
+        var cmd = new UpdateUserProfileCommand(Guid.NewGuid(), null, "javascript:alert(1)", null, null);
+        var result = await _validator.ValidateAsync(cmd);
+        result.IsValid.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task Validate_WhenAvatarUrlRelative_ShouldFail()
+    {
+        var cmd = new UpdateUserProfileCommand(Guid.NewGuid(), null, "/images/avatar.png", null, null);
+        var result = await _validator.ValidateAsync(cmd);
+        result.IsValid.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task Validate_WhenAvatarUrlHttpsValid_ShouldPass()
+    {
+        var cmd = new UpdateUserProfileCommand(Guid.NewGuid(), null, "https://cdn.example.com/avatar.png", null, null);
+        var result = await _validator.ValidateAsync(cmd);
+        result.IsValid.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task Validate_WhenAvatarUrlEmpty_ShouldPass()
+    {
+        var cmd = new UpdateUserProfileCommand(Guid.NewGuid(), null, "", null, null);
+        var result = await _validator.ValidateAsync(cmd);
+        result.IsValid.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task Validate_WhenAvatarUrlWhitespace_ShouldPass()
+    {
+        var cmd = new UpdateUserProfileCommand(Guid.NewGuid(), null, "   ", null, null);
+        var result = await _validator.ValidateAsync(cmd);
+        result.IsValid.Should().BeTrue();
+    }
 }

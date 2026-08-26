@@ -77,6 +77,8 @@ internal static class AssetCatalogSeed
             LicenseTemplateVersion = license.TemplateVersion,
             LicenseDisplayName = license.DisplayName,
             LicenseTerms = license.TermsPlainText,
+            ProcessingStatus = AssetVersionProcessingStatus.READY,
+            ProcessingUpdatedAt = now,
             CreatedAt = now
         };
 

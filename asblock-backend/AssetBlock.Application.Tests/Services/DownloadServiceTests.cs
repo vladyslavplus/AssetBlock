@@ -1,6 +1,7 @@
 using AssetBlock.Domain.Abstractions.Services;
 using AssetBlock.Domain.Core.Dto.Assets;
 using AssetBlock.Domain.Core.Entities;
+using AssetBlock.Domain.Core.Enums;
 using AssetBlock.Domain.Core.Primitives.Api;
 using AssetBlock.Infrastructure.Services;
 using AwesomeAssertions;
@@ -243,6 +244,51 @@ public class DownloadServiceTests
         later.Permit!.StorageKey.Should().Be("assets/v3.bin");
     }
 
+    [Theory]
+    [InlineData(AssetVersionProcessingStatus.PENDING_INSPECTION)]
+    [InlineData(AssetVersionProcessingStatus.PENDING_MALWARE_SCAN)]
+    [InlineData(AssetVersionProcessingStatus.REJECTED)]
+    [InlineData(AssetVersionProcessingStatus.PROCESSING_FAILED)]
+    public async Task AuthorizeDownload_Purchaser_CannotDownloadNonReadyVersion(
+        AssetVersionProcessingStatus processingStatus)
+    {
+        var asset = MakeAsset(authorId: _authorId, downloadLimit: null);
+        var purchasedVersionId = Guid.NewGuid();
+        var laterVersionId = Guid.NewGuid();
+        var purchase = MakePurchase(_userId, _assetId, purchasedVersionId);
+        _assetStoreMock.GetById(_assetId, Arg.Any<CancellationToken>()).Returns(asset);
+        _purchaseStoreMock.GetPurchase(_userId, _assetId, Arg.Any<CancellationToken>()).Returns(purchase);
+        _assetStoreMock.GetVersion(_assetId, purchasedVersionId, Arg.Any<CancellationToken>())
+            .Returns(MakeVersion(purchasedVersionId, 1, "assets/v1.bin", "v1.zip"));
+        _assetStoreMock.GetVersion(_assetId, laterVersionId, Arg.Any<CancellationToken>())
+            .Returns(MakeVersion(laterVersionId, 2, "assets/v2.bin", "v2.zip", processingStatus));
+
+        var result = await _service.AuthorizeDownload(_assetId, _userId, laterVersionId);
+
+        result.Status.Should().Be(AssetDownloadStatus.NOT_FOUND);
+        result.Permit.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task AuthorizeDownload_Author_CanDownloadPendingVersion()
+    {
+        var asset = MakeAsset(authorId: _userId, downloadLimit: null);
+        var versionId = Guid.NewGuid();
+        var version = MakeVersion(
+            versionId,
+            versionNumber: 2,
+            storageKey: "assets/pending.bin",
+            fileName: "pending.zip",
+            processingStatus: AssetVersionProcessingStatus.PENDING_INSPECTION);
+        _assetStoreMock.GetById(_assetId, Arg.Any<CancellationToken>()).Returns(asset);
+        _assetStoreMock.GetVersion(_assetId, versionId, Arg.Any<CancellationToken>()).Returns(version);
+
+        var result = await _service.AuthorizeDownload(_assetId, _userId, versionId);
+
+        result.Status.Should().Be(AssetDownloadStatus.SUCCESS);
+        result.Permit!.StorageKey.Should().Be("assets/pending.bin");
+    }
+
     [Fact]
     public async Task AuthorizeDownload_Purchaser_CannotDownloadPrePurchaseVersion()
     {
@@ -373,7 +419,12 @@ public class DownloadServiceTests
             "Personal use",
             "terms");
 
-    private static AssetVersion MakeVersion(Guid id, int versionNumber, string storageKey, string fileName) => new()
+    private static AssetVersion MakeVersion(
+        Guid id,
+        int versionNumber,
+        string storageKey,
+        string fileName,
+        AssetVersionProcessingStatus processingStatus = AssetVersionProcessingStatus.READY) => new()
     {
         Id = id,
         AssetId = _assetId,
@@ -384,10 +435,12 @@ public class DownloadServiceTests
         ContentLength = 1,
         ContentSha256 = new string('a', 64),
         ReleaseNotes = "Initial release",
-        LicenseCode = Domain.Core.Enums.AssetLicenseCode.PERSONAL,
+        LicenseCode = AssetLicenseCode.PERSONAL,
         LicenseTemplateVersion = "1.0",
         LicenseDisplayName = "Personal use",
         LicenseTerms = "terms",
+        ProcessingStatus = processingStatus,
+        ProcessingUpdatedAt = DateTimeOffset.UtcNow,
         CreatedAt = DateTimeOffset.UtcNow
     };
 }

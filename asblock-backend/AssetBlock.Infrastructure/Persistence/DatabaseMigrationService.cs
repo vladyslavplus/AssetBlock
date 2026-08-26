@@ -369,6 +369,8 @@ internal sealed class DatabaseMigrationService(
                     LicenseTemplateVersion = personalLicense.TemplateVersion,
                     LicenseDisplayName = personalLicense.DisplayName,
                     LicenseTerms = personalLicense.TermsPlainText,
+                    ProcessingStatus = AssetVersionProcessingStatus.READY,
+                    ProcessingUpdatedAt = createdAt,
                     CreatedAt = createdAt,
                 });
                 inserted.Add((assetId, versionId, title, price));

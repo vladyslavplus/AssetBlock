@@ -81,19 +81,20 @@ function markAllInboxItemsRead(
 }
 
 export function NotificationBell() {
-  const { status } = useAuth()
+  const { status, user } = useAuth()
   const [open, setOpen] = useState(false)
   const queryClient = useQueryClient()
 
   const unreadQuery = useQuery({
     queryKey: notificationsKeys.unread(),
-    queryFn: fetchNotificationsUnreadCount,
+    queryFn: ({ signal }) => fetchNotificationsUnreadCount(signal),
     enabled: status === 'authenticated',
   })
 
   const inboxQuery = useInfiniteQuery({
     queryKey: notificationsKeys.inbox(),
-    queryFn: ({ pageParam }) => fetchNotificationsPage(pageParam, NOTIFICATIONS_PAGE_SIZE),
+    queryFn: ({ pageParam, signal }) =>
+      fetchNotificationsPage(pageParam, NOTIFICATIONS_PAGE_SIZE, signal),
     initialPageParam: 1,
     getNextPageParam: (lastPage, allPages) => {
       const batch = lastPage.items ?? []
@@ -148,13 +149,13 @@ export function NotificationBell() {
   })
 
   useEffect(() => {
-    if (status !== 'authenticated') {
+    if (status !== 'authenticated' || !user?.id) {
       return
     }
     return subscribeNotificationHub(() => {
       invalidateQueriesInBackground(queryClient, { queryKey: notificationsKeys.all })
-    })
-  }, [status, queryClient])
+    }, user.id)
+  }, [status, user?.id, queryClient])
 
   const toggleRead = async (n: NotificationListItem) => {
     const wasUnread = !n.readAt

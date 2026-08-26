@@ -1,5 +1,4 @@
 using AssetBlock.Domain.Core.Entities;
-using AssetBlock.Infrastructure.Persistence;
 using AssetBlock.Infrastructure.Tests.Infrastructure;
 
 namespace AssetBlock.Infrastructure.Tests.Persistence;
@@ -15,5 +14,6 @@ public sealed class ApplicationDbContextTests
         db.Model.FindEntityType(typeof(User)).Should().NotBeNull();
         db.Model.FindEntityType(typeof(Asset)).Should().NotBeNull();
         db.Model.FindEntityType(typeof(SocialPlatform)).Should().NotBeNull();
+        db.Model.FindEntityType(typeof(AssetListingSuggestion)).Should().NotBeNull();
     }
 }

@@ -37,7 +37,7 @@ public sealed class StorageBucketEnsureHostedServiceTests
         var sut = CreateSut(provider);
 
         await sut.StartAsync(cts.Token);
-        await Task.Delay(80, cts.Token);
+        await Task.Delay(200, cts.Token);
         await cts.CancelAsync();
         await WaitForIdle(sut);
 

@@ -92,8 +92,35 @@ services:
     environment:
       MP_MAX_MESSAGES: "1000"
 
+  aspire-dashboard:
+    image: mcr.microsoft.com/dotnet/aspire-dashboard:9.0.0
+    container_name: assetblock-aspire-dashboard
+    ports:
+      - "127.0.0.1:18888:18888" # Dashboard UI
+      - "127.0.0.1:4317:18889" # OTLP gRPC endpoint
+      - "127.0.0.1:4318:18890" # OTLP HTTP endpoint
+    environment:
+      DOTNET_DASHBOARD_UNSECURED_ALLOW_ANONYMOUS: "true"
+
+  clamav:
+    image: clamav/clamav:1.4.6
+    container_name: assetblock-clamav
+    ports:
+      - "127.0.0.1:${CLAMAV_PORT:-3310}:3310"
+    env_file:
+      - ./clamav/clamd.env
+    volumes:
+      - clamav_data:/var/lib/clamav
+    healthcheck:
+      test: ["CMD-SHELL", "clamdscan /etc/clamav/clamd.conf || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
 volumes:
   # postgres_data:
   seaweedfs_data:
   minio_data:
   redis_data:
+  clamav_data:

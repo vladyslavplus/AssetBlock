@@ -10,8 +10,6 @@ public sealed class FileUploadOptionsTests
     [Theory]
     [InlineData("archive.zip", ".zip")]
     [InlineData("ARCHIVE.ZIP", ".zip")]
-    [InlineData("a.7z", ".7z")]
-    [InlineData("a.rar", ".rar")]
     [InlineData("a.tar", ".tar")]
     [InlineData("a.tgz", ".tgz")]
     [InlineData("a.tar.gz", ".tar.gz")]
@@ -24,6 +22,8 @@ public sealed class FileUploadOptionsTests
 
     [Theory]
     [InlineData("file.png")]
+    [InlineData("file.7z")]
+    [InlineData("file.rar")]
     [InlineData("file.gz")]
     [InlineData("")]
     [InlineData("noext")]
