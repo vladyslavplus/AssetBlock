@@ -1,4 +1,5 @@
 using AssetBlock.Infrastructure.Persistence;
+using AssetBlock.Infrastructure.Persistence.Configurations;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata;
@@ -67,6 +68,22 @@ internal sealed class SqliteTestMigrationsSqlGenerator(
             if (targetConstraint is not null)
             {
                 operation.CheckConstraints.Remove(targetConstraint);
+            }
+        }
+
+        if (operation.Name == "asset_listing_suggestions")
+        {
+            var targetConstraints = operation.CheckConstraints
+                .Where(c => c.Name is "CK_asset_listing_suggestions_content_hash"
+                    or AssetListingSuggestionConfiguration.CK_TAGS_TYPE
+                    or AssetListingSuggestionConfiguration.CK_TAGS_LENGTH
+                    or AssetListingSuggestionConfiguration.CK_TAGS_ITEMS
+                    or AssetListingSuggestionConfiguration.CK_TAGS_SIZE)
+                .ToList();
+
+            foreach (var constraint in targetConstraints)
+            {
+                operation.CheckConstraints.Remove(constraint);
             }
         }
 

@@ -111,7 +111,6 @@ export function AssetUploadForm() {
     invalidateQueriesInBackground(queryClient, { queryKey: sellerProcessingKeys.all })
     invalidateQueriesInBackground(queryClient, { queryKey: catalogKeys.all })
     router.push('/sell?tab=listings')
-    router.refresh()
   })
 
   if (pending) {

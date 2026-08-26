@@ -11,11 +11,12 @@ import { verifiedSeller } from '@/test/session-user'
 const uploadSellerAsset = vi.hoisted(() => vi.fn())
 const useAuth = vi.hoisted(() => vi.fn())
 const routerPush = vi.hoisted(() => vi.fn())
+const routerRefresh = vi.hoisted(() => vi.fn())
 const toastError = vi.hoisted(() => vi.fn())
 const toastSuccess = vi.hoisted(() => vi.fn())
 
 vi.mock('next/navigation', () => ({
-  useRouter: () => ({ push: routerPush, refresh: vi.fn(), replace: vi.fn() }),
+  useRouter: () => ({ push: routerPush, refresh: routerRefresh, replace: vi.fn() }),
   usePathname: () => '/sell',
   useSearchParams: () => new URLSearchParams('tab=upload'),
 }))
@@ -140,6 +141,7 @@ describe('AssetUploadForm', () => {
     await waitFor(() => {
       expect(routerPush).toHaveBeenCalledWith('/sell?tab=listings')
     })
+    expect(routerRefresh).not.toHaveBeenCalled()
     expect(toastSuccess).toHaveBeenCalledWith('Asset uploaded. Security processing started.')
   })
 })

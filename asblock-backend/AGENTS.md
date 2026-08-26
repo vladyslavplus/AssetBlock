@@ -78,7 +78,7 @@
 
 - Use xUnit, NSubstitute, AwesomeAssertions, and `NullLogger<T>`; do not add Moq.
 - Prefer one meaningful integration test against the real application pipeline and PostgreSQL behavior over several mock-heavy unit tests that only restate implementation details.
-- Do not add SQLite or EF Core InMemory fallbacks to production code solely to make tests pass. PostgreSQL-specific queries, constraints, transactions, locking, JSON, and search behavior must be covered by integration tests against PostgreSQL.
+- Do not add SQLite or EF Core InMemory fallbacks or fake function emulations to make provider-specific logic pass in-memory. If logic depends on PostgreSQL-specific features (constraints, regex, JSONB functions, locking, search) and fails in SQLite/InMemory, strip/bypass the unsupported constraints in the test migration generator and rely directly on PostgreSQL integration tests for fidelity and performance.
 - Mirror application structure in tests. Name tests `Handle_When<Condition>_Should<Expected>` or `Validate_When<Condition>_Should<Expected>`.
 - Cover happy paths plus validation, not-found, authorization, conflict, external failure, cancellation, and idempotency when relevant. Assert store/cache/event interactions with `Received` and `DidNotReceive`.
 - Test handlers and validators first; add WebApi/integration tests when HTTP pipeline, auth, configuration, persistence, or DI behavior changes.
