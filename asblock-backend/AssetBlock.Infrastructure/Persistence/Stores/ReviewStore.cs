@@ -12,17 +12,10 @@ internal sealed class ReviewStore(ApplicationDbContext dbContext, ILogger<Review
 {
     public async Task<double> GetAverageRatingForAsset(Guid assetId, CancellationToken cancellationToken = default)
     {
-        var ratings = await dbContext.Reviews
+        return await dbContext.Reviews
             .AsNoTracking()
             .Where(r => r.AssetId == assetId)
-            .Select(r => r.Rating)
-            .ToListAsync(cancellationToken);
-        if (ratings.Count == 0)
-        {
-            return 0;
-        }
-
-        return ratings.Average(r => (double)r);
+            .AverageAsync(r => (double?)r.Rating, cancellationToken) ?? 0d;
     }
 
     public async Task<Review> Create(Guid assetId, Guid userId, int rating, string? comment, CancellationToken cancellationToken = default)

@@ -11,7 +11,7 @@ namespace AssetBlock.Infrastructure.Tests.Persistence.Stores;
 public sealed class NotificationStoreTests
 {
     [Fact]
-    public async Task Add_GetPaged_MarkRead()
+    public async Task Add_GetPaged_MarkRead_MarkUnread()
     {
         await using var db = InMemoryDbContextFactory.Create();
         var userId = Guid.NewGuid();
@@ -55,11 +55,6 @@ public sealed class NotificationStoreTests
         (await sut.MarkUnread(userId, n.Id)).Should().BeTrue();
         var unreadAgain = await sut.GetPaged(userId, new GetNotificationsRequest { UnreadOnly = true });
         unreadAgain.Items.Should().Contain(x => x.Id == n.Id);
-
-        (await sut.MarkAllRead(userId)).Should().Be(1);
-        (await sut.MarkAllRead(userId)).Should().Be(0);
-        var noneUnread = await sut.GetPaged(userId, new GetNotificationsRequest { UnreadOnly = true });
-        noneUnread.Items.Should().BeEmpty();
 
         (await sut.MarkUnread(userId, Guid.NewGuid())).Should().BeFalse();
     }

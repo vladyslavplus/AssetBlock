@@ -2,6 +2,8 @@ using AssetBlock.Domain.Core.Constants;
 using AssetBlock.WebApi.ProblemDetails;
 using FluentValidation;
 using Microsoft.AspNetCore.Diagnostics;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 
 namespace AssetBlock.WebApi.Extensions;
 
@@ -26,6 +28,12 @@ internal static class ExceptionHandlerExtensions
                     return;
                 }
 
+                var logger = context.RequestServices.GetRequiredService<ILogger<ExceptionHandlerLog>>();
+                logger.LogError(
+                    exception,
+                    "Unhandled exception; traceId={TraceId}",
+                    context.TraceIdentifier);
+
                 var internalProblem = AssetBlockProblemDetails.Create(
                     context,
                     StatusCodes.Status500InternalServerError,
@@ -36,3 +44,5 @@ internal static class ExceptionHandlerExtensions
         return app;
     }
 }
+
+internal sealed class ExceptionHandlerLog;

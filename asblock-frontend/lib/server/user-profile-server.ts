@@ -1,3 +1,4 @@
+import { cache } from 'react'
 import { CATALOG_ASSETS_PAGE_SIZE } from '@/lib/catalog/catalog-filters'
 import { getServerApiBaseUrl } from '@/lib/http/api-config'
 import type { PagedResultDto, AssetListItemApi } from '@/lib/catalog/assets-api'
@@ -5,23 +6,25 @@ import { mapApiAssetToListItem } from '@/lib/catalog/assets-api'
 import type { AssetListItem } from '@/lib/catalog/asset-types'
 import type { UserProfilePublic } from '@/lib/profile/public-profile-types'
 
-export async function fetchPublicProfileByUsername(
-  username: string,
-): Promise<UserProfilePublic | null> {
-  const trimmed = username.trim()
-  if (!trimmed) {
-    return null
-  }
-  const base = getServerApiBaseUrl()
-  const res = await fetch(`${base}/api/users/${encodeURIComponent(trimmed)}`, { cache: 'no-store' })
-  if (res.status === 404) {
-    return null
-  }
-  if (!res.ok) {
-    return null
-  }
-  return (await res.json()) as UserProfilePublic
-}
+export const fetchPublicProfileByUsername = cache(
+  async (username: string): Promise<UserProfilePublic | null> => {
+    const trimmed = username.trim()
+    if (!trimmed) {
+      return null
+    }
+    const base = getServerApiBaseUrl()
+    const res = await fetch(`${base}/api/users/${encodeURIComponent(trimmed)}`, {
+      cache: 'no-store',
+    })
+    if (res.status === 404) {
+      return null
+    }
+    if (!res.ok) {
+      return null
+    }
+    return (await res.json()) as UserProfilePublic
+  },
+)
 
 export interface AuthorCatalogPageResult {
   items: AssetListItem[]

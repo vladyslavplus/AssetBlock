@@ -2,6 +2,7 @@ using AssetBlock.Application.UseCases.Auth.ConfirmEmailChange;
 using AssetBlock.Application.UseCases.Auth.ConfirmEmailVerification;
 using AssetBlock.Application.UseCases.Auth.ConfirmPasswordReset;
 using AssetBlock.Application.UseCases.Auth.Login;
+using AssetBlock.Application.UseCases.Auth.Logout;
 using AssetBlock.Application.UseCases.Auth.RefreshToken;
 using AssetBlock.Application.UseCases.Auth.Register;
 using AssetBlock.Application.UseCases.Auth.RequestPasswordReset;
@@ -45,6 +46,21 @@ public sealed class AuthController(ISender sender) : ApiControllerBase(sender)
         var command = new RefreshTokenCommand(request.RefreshToken);
         var result = await Sender.Send(command, cancellationToken);
         return MapResultToActionResult(result);
+    }
+
+    /// <summary>
+    /// Revoke the presented refresh token. Always succeeds when the token is unknown, expired, or already revoked.
+    /// </summary>
+    [HttpPost(ApiRoutes.Auth.LOGOUT)]
+    [AllowAnonymous]
+    [EnableRateLimiting(RateLimitingConstants.Policies.AUTH_REFRESH)]
+    [RequestSizeLimit(16_384)]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> Logout([FromBody] RefreshTokenRequest request, CancellationToken cancellationToken)
+    {
+        var result = await Sender.Send(new LogoutCommand(request.RefreshToken), cancellationToken);
+        return result.IsSuccess ? Ok() : MapResultToActionResult(result);
     }
 
     /// <summary>

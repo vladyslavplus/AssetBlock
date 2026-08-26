@@ -1,8 +1,28 @@
-import { AUTH_COOKIE_ACCESS } from '@/lib/auth/constants'
+import { AUTH_COOKIE_ACCESS, AUTH_COOKIE_REFRESH } from '@/lib/auth/constants'
 import { getServerApiBaseUrl } from '@/lib/http/api-config'
 import { isAccessTokenExpired } from '@/lib/server/access-token'
-import type { AuthCookieStore } from '@/lib/server/auth-cookies'
+import { clearAuthCookies, type AuthCookieStore } from '@/lib/server/auth-cookies'
 import { tryRefreshFromCookies } from '@/lib/server/refresh-session'
+
+function clearStaleAuthCookiesIfNeeded(
+  cookieStore: AuthCookieStore,
+  persistRefreshedTokens: boolean,
+): void {
+  if (!persistRefreshedTokens || !cookieStore.get(AUTH_COOKIE_REFRESH)?.value) {
+    return
+  }
+  clearAuthCookies(cookieStore)
+}
+
+function resolveBackendUrl(path: string): string {
+  if (/^https?:\/\//i.test(path) || path.startsWith('//')) {
+    throw new Error(
+      `fetchBackend path must be a backend-relative API path, not an absolute URL: ${path}`,
+    )
+  }
+  const base = getServerApiBaseUrl()
+  return `${base}${path.startsWith('/') ? path : `/${path}`}`
+}
 
 export interface FetchBackendOptions {
   /** Set false when called from a Server Component (cannot mutate cookies). Default true. */
@@ -24,8 +44,7 @@ export async function fetchBackend(
   const persistRefreshedTokens = authOpts.persistRefreshedTokens !== false
   const refreshOpts = { persistCookies: persistRefreshedTokens }
 
-  const base = getServerApiBaseUrl()
-  const url = path.startsWith('http') ? path : `${base}${path.startsWith('/') ? path : `/${path}`}`
+  const url = resolveBackendUrl(path)
 
   const headers = new Headers(init.headers)
 
@@ -39,6 +58,7 @@ export async function fetchBackend(
   }
 
   if (mode === 'required' && !access) {
+    clearStaleAuthCookiesIfNeeded(cookieStore, persistRefreshedTokens)
     return new Response(null, { status: 401 })
   }
 
@@ -61,6 +81,7 @@ export async function fetchBackend(
       headers.set('Authorization', `Bearer ${rotated.accessToken}`)
       res = await fetch(url, { ...init, headers, cache: 'no-store' })
     } else if (mode === 'required') {
+      clearStaleAuthCookiesIfNeeded(cookieStore, persistRefreshedTokens)
       return res
     }
   }

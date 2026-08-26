@@ -106,6 +106,30 @@ describe('auth BFF routes', () => {
   it('logout clears auth cookies and returns ok', async () => {
     cookieStore.set(AUTH_COOKIE_ACCESS, 'access')
     cookieStore.set(AUTH_COOKIE_REFRESH, 'refresh')
+    const fetchMock = vi.fn(
+      async (_input: RequestInfo | URL, _init?: RequestInit) => new Response(null, { status: 200 }),
+    )
+    vi.stubGlobal('fetch', fetchMock)
+    const res = await logoutPost(
+      new Request('http://localhost:3000/api/auth/logout', {
+        method: 'POST',
+        headers: { Origin: 'http://localhost:3000' },
+      }),
+    )
+    expect(res.status).toBe(200)
+    expect(await res.json()).toEqual({ ok: true })
+    expect(cookieStore.snapshot()).toEqual({})
+    expect(fetchMock).toHaveBeenCalledOnce()
+    expect(fetchMock.mock.calls[0]?.[0]).toMatch(/\/api\/auth\/logout$/)
+  })
+
+  it('logout clears cookies even when backend logout fails', async () => {
+    cookieStore.set(AUTH_COOKIE_ACCESS, 'access')
+    cookieStore.set(AUTH_COOKIE_REFRESH, 'refresh')
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => new Response(JSON.stringify({ title: 'Server Error' }), { status: 500 })),
+    )
     const res = await logoutPost(
       new Request('http://localhost:3000/api/auth/logout', {
         method: 'POST',

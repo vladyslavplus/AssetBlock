@@ -1,5 +1,6 @@
 using Ardalis.Result;
 using AssetBlock.Application.UseCases.Auth.Login;
+using AssetBlock.Application.UseCases.Auth.Logout;
 using AssetBlock.Application.UseCases.Auth.RefreshToken;
 using AssetBlock.Application.UseCases.Auth.Register;
 using AssetBlock.Domain.Core.Constants;
@@ -46,6 +47,31 @@ public sealed class AuthControllerTests : ControllerTestBase
     public void Refresh_ShouldUseDedicatedRateLimitPolicy()
     {
         var method = typeof(AuthController).GetMethod(nameof(AuthController.Refresh));
+
+        var attribute = method!
+            .GetCustomAttributes(typeof(EnableRateLimitingAttribute), inherit: true)
+            .Cast<EnableRateLimitingAttribute>()
+            .Single();
+
+        attribute.PolicyName.Should().Be(RateLimitingConstants.Policies.AUTH_REFRESH);
+    }
+
+    [Fact]
+    public async Task Logout_WhenSuccess_ShouldReturnOk()
+    {
+        Sender.Send(Arg.Any<LogoutCommand>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(Result.Success()));
+
+        var controller = new AuthController(Sender);
+        var result = await controller.Logout(new RefreshTokenRequest("rt"), CancellationToken.None);
+
+        result.Should().BeOfType<OkResult>();
+    }
+
+    [Fact]
+    public void Logout_ShouldUseDedicatedRateLimitPolicy()
+    {
+        var method = typeof(AuthController).GetMethod(nameof(AuthController.Logout));
 
         var attribute = method!
             .GetCustomAttributes(typeof(EnableRateLimitingAttribute), inherit: true)

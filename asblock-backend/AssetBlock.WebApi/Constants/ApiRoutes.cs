@@ -9,6 +9,7 @@ public static class ApiRoutes
     {
         public const string LOGIN = "login";
         public const string REFRESH = "refresh";
+        public const string LOGOUT = "logout";
         public const string REGISTER = "register";
         public const string PASSWORD_RESET_REQUEST = "password-reset/request";
         public const string PASSWORD_RESET_CONFIRM = "password-reset/confirm";
