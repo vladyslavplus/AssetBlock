@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { AUTH_COOKIE_ACCESS, AUTH_COOKIE_REFRESH } from '@/lib/auth/constants'
 import { fetchBackend } from '@/lib/server/fetch-backend'
+import { tryRefreshFromCookies } from '@/lib/server/refresh-session'
 import { createMemoryCookieStore, makeJwt } from '@/test/cookie-store'
 
 const API = 'http://api.test'
@@ -196,6 +197,99 @@ describe('fetchBackend session refresh', () => {
     expect(res.status).toBe(401)
     expect(store.snapshot()[AUTH_COOKIE_ACCESS]).toBe(access)
     expect(store.snapshot()[AUTH_COOKIE_REFRESH]).toBe('refresh-token')
+  })
+
+  it('deduplicates concurrent refresh calls into a single network request', async () => {
+    const expiredAccess = makeJwt(Math.floor(Date.now() / 1000) - 60)
+    const store1 = createMemoryCookieStore({
+      [AUTH_COOKIE_ACCESS]: expiredAccess,
+      [AUTH_COOKIE_REFRESH]: 'same-refresh-token',
+    })
+    const store2 = createMemoryCookieStore({
+      [AUTH_COOKIE_ACCESS]: expiredAccess,
+      [AUTH_COOKIE_REFRESH]: 'same-refresh-token',
+    })
+
+    let refreshCalls = 0
+    vi.stubGlobal('fetch', async (input: RequestInfo | URL) => {
+      const url = String(input)
+      if (url === `${API}/api/auth/refresh`) {
+        refreshCalls++
+        await new Promise((r) => setTimeout(r, 20))
+        return jsonResponse(rotatedTokens(), 200)
+      }
+      return jsonResponse({ ok: true }, 200)
+    })
+
+    const [res1, res2] = await Promise.all([
+      fetchBackend(store1, '/api/seller/listings', { method: 'GET' }, 'required'),
+      fetchBackend(store2, '/api/seller/listings', { method: 'GET' }, 'required'),
+    ])
+
+    expect(res1.status).toBe(200)
+    expect(res2.status).toBe(200)
+    expect(refreshCalls).toBe(1)
+  })
+
+  it('aborts never-resolving fetch after 10s timeout and cleans up in-flight map for subsequent calls', async () => {
+    vi.useFakeTimers()
+    try {
+      const store = createMemoryCookieStore({
+        [AUTH_COOKIE_REFRESH]: 'timeout-token',
+      })
+
+      let fetchCount = 0
+      vi.stubGlobal('fetch', async (input: RequestInfo | URL, init?: RequestInit) => {
+        const url = String(input)
+        if (url === `${API}/api/auth/refresh`) {
+          fetchCount++
+          if (fetchCount === 1) {
+            return new Promise((_, reject) => {
+              init?.signal?.addEventListener('abort', () => {
+                reject(new DOMException('The operation was aborted', 'AbortError'))
+              })
+            })
+          }
+          return jsonResponse(rotatedTokens(), 200)
+        }
+        return jsonResponse({ ok: true }, 200)
+      })
+
+      const firstCallPromise = tryRefreshFromCookies(store)
+      await vi.advanceTimersByTimeAsync(10_000)
+      const firstResult = await firstCallPromise
+      expect(firstResult).toBeNull()
+      expect(fetchCount).toBe(1)
+
+      // Subsequent call with the same token key makes a new network request, proving inFlightRefreshes was cleaned up
+      const secondResult = await tryRefreshFromCookies(store)
+      expect(secondResult).not.toBeNull()
+      expect(fetchCount).toBe(2)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('passes AbortSignal to fetch and cleans up on refresh timeout/abort', async () => {
+    const expiredAccess = makeJwt(Math.floor(Date.now() / 1000) - 60)
+    const store = createMemoryCookieStore({
+      [AUTH_COOKIE_ACCESS]: expiredAccess,
+      [AUTH_COOKIE_REFRESH]: 'signal-refresh-token',
+    })
+
+    let receivedSignal: AbortSignal | undefined
+    vi.stubGlobal('fetch', async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input)
+      if (url === `${API}/api/auth/refresh`) {
+        receivedSignal = init?.signal as AbortSignal
+        return jsonResponse(rotatedTokens(), 200)
+      }
+      return jsonResponse({ ok: true }, 200)
+    })
+
+    const res = await fetchBackend(store, '/api/seller/listings', { method: 'GET' }, 'required')
+    expect(res.status).toBe(200)
+    expect(receivedSignal).toBeDefined()
   })
 
   it('throws when given an absolute URL path', async () => {

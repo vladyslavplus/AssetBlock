@@ -25,8 +25,13 @@ public class ReviewsController(ISender sender) : ApiControllerBase(sender)
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
     public async Task<IActionResult> CreateReview(Guid assetId, [FromBody] CreateReviewRequest request, CancellationToken cancellationToken)
     {
-        var userId = GetUserId()!.Value;
-        var command = new CreateReviewCommand(assetId, userId, request.Rating, request.Comment);
+        var userId = GetUserId();
+        if (userId is null)
+        {
+            return UnauthorizedProblem();
+        }
+
+        var command = new CreateReviewCommand(assetId, userId.Value, request.Rating, request.Comment);
 
         var result = await Sender.Send(command, cancellationToken);
         return result.IsSuccess ? Ok() : MapResultToActionResult(result);

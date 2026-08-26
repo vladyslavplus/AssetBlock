@@ -11,8 +11,30 @@ export interface RefreshSessionOptions {
   persistCookies?: boolean
 }
 
+const REFRESH_TIMEOUT_MS = 10_000
+
+/**
+ * Module-level in-flight single-flight map to deduplicate concurrent refresh requests
+ * for the same refresh token within the same Next.js process instance.
+ * Multi-process concurrency is safely coordinated by backend atomic conditional token rotation.
+ */
+const inFlightRefreshes = new Map<string, Promise<{ ok: boolean; data: unknown }>>()
+
+async function fetchWithTimeout(payload: {
+  refreshToken: string
+}): Promise<{ ok: boolean; data: unknown }> {
+  const controller = new AbortController()
+  const timeoutId = setTimeout(() => controller.abort(), REFRESH_TIMEOUT_MS)
+  try {
+    return await postAuthJson('refresh', payload, { signal: controller.signal })
+  } finally {
+    clearTimeout(timeoutId)
+  }
+}
+
 /**
  * Calls Web API refresh and optionally persists rotated tokens in httpOnly cookies.
+ * Concurrent callers sharing the exact same refresh token share the single in-flight network request.
  */
 export async function exchangeRefreshToken(
   store: AuthCookieStore,
@@ -20,7 +42,20 @@ export async function exchangeRefreshToken(
   options: RefreshSessionOptions = {},
 ): Promise<TokensPayload | null> {
   const persistCookies = options.persistCookies !== false
-  const { ok, data } = await postAuthJson('refresh', { refreshToken })
+  const tokenKey = refreshToken.trim()
+  if (!tokenKey) {
+    return null
+  }
+
+  let refreshPromise = inFlightRefreshes.get(tokenKey)
+  if (!refreshPromise) {
+    refreshPromise = fetchWithTimeout({ refreshToken: tokenKey }).finally(() => {
+      inFlightRefreshes.delete(tokenKey)
+    })
+    inFlightRefreshes.set(tokenKey, refreshPromise)
+  }
+
+  const { ok, data } = await refreshPromise
   if (!ok) {
     return null
   }

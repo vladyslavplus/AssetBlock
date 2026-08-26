@@ -89,7 +89,7 @@ internal sealed class JwtTokenService(
         return (entity.UserId, entity.Username, entity.Email, entity.Role, entity.Id);
     }
 
-    public async Task RevokeRefreshToken(Guid tokenId, CancellationToken cancellationToken = default)
+    public async Task<bool> RevokeRefreshToken(Guid tokenId, CancellationToken cancellationToken = default)
     {
         var now = DateTimeOffset.UtcNow;
         var affected = await dbContext.RefreshTokens
@@ -99,10 +99,11 @@ internal sealed class JwtTokenService(
         if (affected == 0)
         {
             logger.LogDebug("Attempted to revoke non-existent or already-revoked refresh token {TokenId}", tokenId);
-            return;
+            return false;
         }
 
         logger.LogDebug("Revoked refresh token {TokenId}", tokenId);
+        return true;
     }
 
     public async Task RevokeAllRefreshTokens(Guid userId, CancellationToken cancellationToken = default)

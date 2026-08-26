@@ -33,9 +33,16 @@ internal sealed class RefreshTokenCommandHandler(
         (Guid userId, var username, var email, var role, Guid tokenId) = payload.Value;
         var tokens = jwtTokenService.GenerateTokenPair(userId, username, email, role);
 
+        var rotated = false;
         await unitOfWork.ExecuteInTransaction(async ct =>
         {
-            await jwtTokenService.RevokeRefreshToken(tokenId, ct);
+            var revoked = await jwtTokenService.RevokeRefreshToken(tokenId, ct);
+            if (!revoked)
+            {
+                logger.LogWarning("Concurrent refresh detected for token {TokenId}; rotation aborted", tokenId);
+                return;
+            }
+
             await jwtTokenService.StoreRefreshToken(userId, tokens.RefreshToken, tokens.RefreshExpiresAt, ct);
             await auditWriter.Write(new AuditEvent(
                 AuditActions.AUTH_REFRESH_TOKEN,
@@ -44,7 +51,20 @@ internal sealed class RefreshTokenCommandHandler(
                 userId.ToString(),
                 ActorTypeOverride: AuditActorType.USER,
                 ActorUserIdOverride: userId), ct);
+            rotated = true;
         }, cancellationToken);
+
+        if (!rotated)
+        {
+            await auditWriter.WriteBestEffort(new AuditEvent(
+                AuditActions.AUTH_REFRESH_TOKEN,
+                AuditOutcome.FAILURE,
+                AuditResourceTypes.USER,
+                userId.ToString(),
+                ActorTypeOverride: AuditActorType.USER,
+                ActorUserIdOverride: userId), cancellationToken);
+            return ResultError.Error<TokensResponse>(ErrorCodes.ERR_AUTH_TOKEN_INVALID);
+        }
 
         logger.LogInformation("Refresh token used successfully for user {UserId}", userId);
         return Result.Success(tokens);

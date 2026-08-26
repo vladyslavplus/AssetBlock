@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { useMutation, useQuery } from '@tanstack/react-query'
+import { useMutation } from '@tanstack/react-query'
 import { Download, Lock, Loader2, Zap } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
@@ -12,7 +12,6 @@ import { formatUsdWhole } from '@/lib/format-currency'
 import type { CheckoutAttributionInput } from '@/lib/analytics/telemetry-source'
 import { CheckoutRequestError, postCreateBundleCheckoutSession } from '@/lib/payments/checkout-api'
 import { writePendingCheckoutContext } from '@/lib/reviews/review-constants'
-import { fetchLibraryPurchasesOrThrow, libraryKeys } from '@/lib/library/library-query'
 import type { BundleItem } from '@/lib/bundles/bundle-types'
 
 interface BundlePurchaseCardProps {
@@ -39,7 +38,7 @@ export function BundlePurchaseCard({
   savingsAmount,
   savingsPercent,
   isAvailable,
-  items,
+  items: _items,
   checkoutConfigured,
   returnPath,
   checkoutAttribution,
@@ -49,19 +48,6 @@ export function BundlePurchaseCard({
   const isOwner = Boolean(user && user.id === sellerId)
   const verified = isEmailVerified(user)
   const loginHref = `/login?returnUrl=${encodeURIComponent(returnPath)}`
-
-  const libraryQuery = useQuery({
-    queryKey: libraryKeys.purchases(),
-    queryFn: fetchLibraryPurchasesOrThrow,
-    enabled: status === 'authenticated',
-  })
-
-  const isCheckingLibrary =
-    status === 'authenticated' &&
-    (libraryQuery.isPending || (libraryQuery.isFetching && !libraryQuery.data))
-  const ownedAssetIds = new Set((libraryQuery.data?.items ?? []).map((p) => p.assetId))
-  const ownedItems = items.filter((item) => item.assetId && ownedAssetIds.has(item.assetId))
-  const hasOwnedItem = ownedItems.length > 0
 
   const checkoutMutation = useMutation({
     mutationFn: () => postCreateBundleCheckoutSession(bundleId, checkoutAttribution),
@@ -80,6 +66,14 @@ export function BundlePurchaseCard({
           router.push(loginHref)
           return
         }
+        if (err.status === 409) {
+          if (err.code === 'ERR_BUNDLE_CONTAINS_OWNED_ASSET') {
+            toast.error('You already own an item in this bundle. Bundle purchase unavailable.')
+            return
+          }
+          toast.error(err.message)
+          return
+        }
         toast.error(err.message)
         return
       }
@@ -88,8 +82,7 @@ export function BundlePurchaseCard({
   })
 
   const onBuyClick = () => {
-    if (status === 'loading' || isCheckingLibrary || checkoutMutation.isPending || hasOwnedItem)
-      return
+    if (status === 'loading' || checkoutMutation.isPending) return
     if (status === 'anonymous' || !user) {
       router.push(loginHref)
       return
@@ -118,7 +111,7 @@ export function BundlePurchaseCard({
 
       {!isAvailable ? (
         <p className="text-sm text-muted-foreground rounded-md border border-border/60 bg-secondary/30 px-3 py-2">
-          This bundle is currently unavailable for purchase.
+          This bundle cannot be purchased (archived or unavailable).
         </p>
       ) : isOwner ? (
         <p className="text-sm text-muted-foreground rounded-md border border-border/60 bg-secondary/30 px-3 py-2">
@@ -140,21 +133,6 @@ export function BundlePurchaseCard({
         >
           <Link href="/account">Verify email to purchase</Link>
         </Button>
-      ) : isCheckingLibrary ? (
-        <Button type="button" disabled className="w-full h-10 font-medium">
-          <Loader2 className="mr-2 size-4 animate-spin" aria-hidden />
-          Checking your library…
-        </Button>
-      ) : hasOwnedItem ? (
-        <div className="space-y-2">
-          <Button type="button" disabled className="w-full h-10 font-medium">
-            Already own an item
-          </Button>
-          <p className="text-xs text-muted-foreground leading-relaxed">
-            You already own: {ownedItems.map((i) => i.title).join(', ')}. Bundle checkout requires
-            none of the included assets to be in your library.
-          </p>
-        </div>
       ) : !checkoutConfigured ? (
         <Button type="button" disabled className="w-full h-10 font-medium">
           Checkout unavailable

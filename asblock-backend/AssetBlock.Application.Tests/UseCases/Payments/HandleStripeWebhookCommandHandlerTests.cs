@@ -68,7 +68,7 @@ public class HandleStripeWebhookCommandHandlerTests
     }
 
     [Fact]
-    public async Task Handle_WhenAssetVersionMissing_ShouldRejectWebhookForRetry()
+    public async Task Handle_WhenAssetVersionMissing_ShouldReturnMismatchError()
     {
         var userId = Guid.NewGuid();
         var sellerId = Guid.NewGuid();
@@ -83,10 +83,10 @@ public class HandleStripeWebhookCommandHandlerTests
         _assetStoreMock.GetVersion(assetId, versionId, Arg.Any<CancellationToken>())
             .Returns((AssetVersion?)null);
 
-        var act = () => _handler.Handle(command, CancellationToken.None);
+        var result = await _handler.Handle(command, CancellationToken.None);
 
-        await act.Should().ThrowAsync<InvalidOperationException>()
-            .WithMessage("*missing asset version*");
+        result.IsSuccess.Should().BeFalse();
+        result.ValidationErrors.Select(v => v.Identifier).Should().Contain(ErrorCodes.ERR_PAYMENT_WEBHOOK_MISMATCH);
         await _orderStoreMock.DidNotReceiveWithAnyArgs()
             .CreateWithLinesAndPurchases(
                 Arg.Any<Order>(),
@@ -379,7 +379,7 @@ public class HandleStripeWebhookCommandHandlerTests
     }
 
     [Fact]
-    public async Task Handle_WhenCheckoutCompletedButVersionMissing_ShouldRejectWebhookForRetry()
+    public async Task Handle_WhenCheckoutCompletedButVersionMissing_ShouldReturnMismatchError()
     {
         var userId = Guid.NewGuid();
         var sellerId = Guid.NewGuid();
@@ -392,10 +392,10 @@ public class HandleStripeWebhookCommandHandlerTests
         _orderStoreMock.GetByStripeSessionId(sessionId, Arg.Any<CancellationToken>()).Returns((Order?)null);
         _assetStoreMock.GetVersion(assetId, versionId, Arg.Any<CancellationToken>()).Returns((AssetVersion?)null);
 
-        var act = () => _handler.Handle(command, CancellationToken.None);
+        var result = await _handler.Handle(command, CancellationToken.None);
 
-        await act.Should().ThrowAsync<InvalidOperationException>()
-            .WithMessage("*missing asset version*");
+        result.IsSuccess.Should().BeFalse();
+        result.ValidationErrors.Select(v => v.Identifier).Should().Contain(ErrorCodes.ERR_PAYMENT_WEBHOOK_MISMATCH);
         await _orderStoreMock.DidNotReceiveWithAnyArgs()
             .CreateWithLinesAndPurchases(
                 Arg.Any<Order>(),

@@ -66,6 +66,7 @@ public class RefreshTokenCommandHandlerTests
 
         _jwtTokenServiceMock.ValidateRefreshToken(command.RefreshToken, Arg.Any<CancellationToken>())
             .Returns((userId, username, email, role, tokenId));
+        _jwtTokenServiceMock.RevokeRefreshToken(tokenId, Arg.Any<CancellationToken>()).Returns(true);
         _jwtTokenServiceMock.GenerateTokenPair(userId, username, email, role).Returns(tokenResponse);
 
         var result = await _handler.Handle(command, CancellationToken.None);
@@ -82,6 +83,36 @@ public class RefreshTokenCommandHandlerTests
                 e.Action == AuditActions.AUTH_REFRESH_TOKEN &&
                 e.Outcome == AuditOutcome.SUCCESS &&
                 e.ActorTypeOverride == AuditActorType.USER &&
+                e.ActorUserIdOverride == userId),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Handle_WhenConcurrentRevocationFails_ShouldReturnInvalidTokenAndNotStoreNewTokens()
+    {
+        var command = new RefreshTokenCommand("concurrent-token");
+        var userId = Guid.NewGuid();
+        var tokenId = Guid.NewGuid();
+        const string email = "test@example.com";
+        const string username = "testuser";
+        const string role = AppRoles.USER;
+
+        var tokenResponse = new TokensResponse("new-acc", "new-ref", DateTimeOffset.UtcNow.AddMinutes(15), DateTimeOffset.UtcNow.AddDays(7));
+
+        _jwtTokenServiceMock.ValidateRefreshToken(command.RefreshToken, Arg.Any<CancellationToken>())
+            .Returns((userId, username, email, role, tokenId));
+        _jwtTokenServiceMock.RevokeRefreshToken(tokenId, Arg.Any<CancellationToken>()).Returns(false);
+        _jwtTokenServiceMock.GenerateTokenPair(userId, username, email, role).Returns(tokenResponse);
+
+        var result = await _handler.Handle(command, CancellationToken.None);
+
+        result.IsSuccess.Should().BeFalse();
+        result.ValidationErrors.Should().Contain(e => e.Identifier == ErrorCodes.ERR_AUTH_TOKEN_INVALID);
+        await _jwtTokenServiceMock.DidNotReceive().StoreRefreshToken(Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<DateTimeOffset>(), Arg.Any<CancellationToken>());
+        await _auditWriterMock.Received(1).WriteBestEffort(
+            Arg.Is<AuditEvent>(e =>
+                e.Action == AuditActions.AUTH_REFRESH_TOKEN &&
+                e.Outcome == AuditOutcome.FAILURE &&
                 e.ActorUserIdOverride == userId),
             Arg.Any<CancellationToken>());
     }

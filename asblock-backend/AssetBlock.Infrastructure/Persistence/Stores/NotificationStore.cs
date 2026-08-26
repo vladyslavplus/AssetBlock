@@ -56,18 +56,19 @@ internal sealed class NotificationStore(ApplicationDbContext dbContext, ILogger<
 
         query = sortKey switch
         {
-            "CREATEDAT" => isDesc ? query.OrderByDescending(n => n.CreatedAt) : query.OrderBy(n => n.CreatedAt),
-            "READAT" => isDesc ? query.OrderByDescending(n => n.ReadAt) : query.OrderBy(n => n.ReadAt),
+            "CREATEDAT" => isDesc ? query.OrderByDescending(n => n.CreatedAt).ThenBy(n => n.Id) : query.OrderBy(n => n.CreatedAt).ThenBy(n => n.Id),
+            "READAT" => isDesc ? query.OrderByDescending(n => n.ReadAt).ThenBy(n => n.Id) : query.OrderBy(n => n.ReadAt).ThenBy(n => n.Id),
             _ => throw new ArgumentOutOfRangeException(nameof(request.SortBy), sortBy, $"Unexpected sort key after validation: {sortBy}.")
         };
 
-        var page = Math.Max(1, request.Page);
+        var page = Math.Max(PagedRequest.DEFAULT_PAGE, request.Page);
+        var pageSize = Math.Clamp(request.PageSize, PagedRequest.MIN_PAGE_SIZE, PagedRequest.MAX_PAGE_SIZE);
         var items = await query
-            .Skip((page - 1) * request.PageSize)
-            .Take(request.PageSize)
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
             .ToListAsync(cancellationToken);
 
-        return new PagedResult<UserNotification>(items, total, page, request.PageSize);
+        return new PagedResult<UserNotification>(items, total, page, pageSize);
     }
 
     public async Task<bool> MarkRead(Guid recipientUserId, Guid notificationId, CancellationToken cancellationToken = default)

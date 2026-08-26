@@ -14,6 +14,7 @@ public static class RateLimitingConstants
         public const string AUTH_EMAIL_ACTION_CONFIRM = "auth-email-action-confirm";
         public const string USERS_EMAIL_VERIFICATION_RESEND = "users-email-verification-resend";
         public const string USERS_EMAIL_CHANGE_REQUEST = "users-email-change-request";
+        public const string USERS_PASSWORD_CHANGE = "users-password-change";
         public const string ASSETS_UPLOAD = "assets-upload";
         public const string ASSETS_DOWNLOAD = "assets-download";
         public const string PAYMENTS_CHECKOUT = "payments-checkout";
@@ -46,6 +47,9 @@ public static class RateLimitingConstants
 
         public const int USERS_EMAIL_CHANGE_REQUEST_LIMIT = 5;
         public const int USERS_EMAIL_CHANGE_REQUEST_PERIOD_SECONDS = 60;
+
+        public const int USERS_PASSWORD_CHANGE_LIMIT = 5;
+        public const int USERS_PASSWORD_CHANGE_PERIOD_SECONDS = 3600;
 
         public const int ASSETS_UPLOAD_LIMIT = 10;
         public const int ASSETS_UPLOAD_PERIOD_SECONDS = 3600;

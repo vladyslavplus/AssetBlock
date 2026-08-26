@@ -42,9 +42,9 @@ internal sealed class CategoryStore(
 
         query = sortBy.ToLowerInvariant() switch
         {
-            "slug" => isDesc ? query.OrderByDescending(c => c.Slug) : query.OrderBy(c => c.Slug),
+            "slug" => isDesc ? query.OrderByDescending(c => c.Slug).ThenBy(c => c.Id) : query.OrderBy(c => c.Slug).ThenBy(c => c.Id),
             "id" => isDesc ? query.OrderByDescending(c => c.Id) : query.OrderBy(c => c.Id),
-            _ => isDesc ? query.OrderByDescending(c => c.Name) : query.OrderBy(c => c.Name)
+            _ => isDesc ? query.OrderByDescending(c => c.Name).ThenBy(c => c.Id) : query.OrderBy(c => c.Name).ThenBy(c => c.Id)
         };
 
         var page = Math.Max(PagedRequest.DEFAULT_PAGE, request.Page);

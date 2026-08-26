@@ -11,6 +11,8 @@ import { libraryKeys } from '@/lib/library/library-query'
 import { notificationsKeys } from '@/lib/notifications/notifications-query'
 import { authKeys } from '@/lib/auth/auth-query'
 import { accountKeys } from '@/lib/account/account-query'
+import { adminAuditKeys } from '@/lib/admin/admin-audit-query'
+import { adminKeys } from '@/lib/admin/admin-query'
 import { clearPrivateUserQueries } from '@/lib/query/clear-user-scoped-queries'
 import { runQueryInBackground } from '@/lib/query/query-refresh'
 import { createTestQueryClient } from '@/test/query-client'
@@ -91,6 +93,8 @@ describe('session cache isolation', () => {
     client.setQueryData(authKeys.session(), { id: 'u1' })
     client.setQueryData(accountKeys.me(), { username: 'seller' })
     client.setQueryData(collectionKeys.sellerList(), { items: [] })
+    client.setQueryData(adminKeys.categories(), { items: ['admin-cat'] })
+    client.setQueryData(adminAuditKeys.all, { items: ['audit-log'] })
 
     clearPrivateUserQueries(client)
 
@@ -106,6 +110,8 @@ describe('session cache isolation', () => {
     expect(client.getQueryData(notificationsKeys.inbox())).toBeUndefined()
     expect(client.getQueryData(accountKeys.me())).toBeUndefined()
     expect(client.getQueryData(collectionKeys.sellerList())).toBeUndefined()
+    expect(client.getQueryData(adminKeys.categories())).toBeUndefined()
+    expect(client.getQueryData(adminAuditKeys.all)).toBeUndefined()
   })
 })
 

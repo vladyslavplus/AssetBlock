@@ -115,6 +115,7 @@ public sealed class PaymentsController(ISender sender) : ApiControllerBase(sende
     /// </summary>
     [HttpPost(ApiRoutes.Payments.WEBHOOK)]
     [AllowAnonymous]
+    [RequestSizeLimit(262_144)]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status500InternalServerError)]
@@ -127,6 +128,16 @@ public sealed class PaymentsController(ISender sender) : ApiControllerBase(sende
 
         var command = new HandleStripeWebhookCommand(payload, signature);
         var result = await Sender.Send(command, cancellationToken);
-        return result.IsSuccess ? Ok() : MapResultToActionResult(result);
+        if (result.IsSuccess)
+        {
+            return Ok();
+        }
+
+        if (result.ValidationErrors.Any(v => v.Identifier == ErrorCodes.ERR_PAYMENT_WEBHOOK_MISMATCH))
+        {
+            return Ok(new { received = true, status = "ignored_mismatch" });
+        }
+
+        return MapResultToActionResult(result);
     }
 }

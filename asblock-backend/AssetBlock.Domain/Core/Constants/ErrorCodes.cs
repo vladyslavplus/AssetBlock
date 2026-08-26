@@ -32,6 +32,7 @@ public static class ErrorCodes
     public const string ERR_PAYMENT_FAILED = "ERR_PAYMENT_FAILED";
     public const string ERR_STRIPE_URLS_NOT_CONFIGURED = "ERR_STRIPE_URLS_NOT_CONFIGURED";
     public const string ERR_STRIPE_WEBHOOK_INVALID = "ERR_STRIPE_WEBHOOK_INVALID";
+    public const string ERR_PAYMENT_WEBHOOK_MISMATCH = "ERR_PAYMENT_WEBHOOK_MISMATCH";
 
     // User / profile
     public const string ERR_USER_NOT_FOUND = "ERR_USER_NOT_FOUND";

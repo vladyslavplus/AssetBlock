@@ -1,4 +1,4 @@
-﻿using System.Text.Json;
+using System.Text.Json;
 using AssetBlock.Application.Common;
 using AssetBlock.Application.Services;
 using AssetBlock.Domain.Abstractions.Services;
@@ -55,6 +55,11 @@ internal sealed class HandleStripeWebhookCommandHandler(
         {
             return ResultError.Error<OrderCompletedPayload?>(ErrorCodes.ERR_STRIPE_WEBHOOK_INVALID);
         }
+        catch (PaymentWebhookMismatchException ex)
+        {
+            logger.LogWarning(ex, "Stripe webhook payload mismatch.");
+            return ResultError.Error<OrderCompletedPayload?>(ErrorCodes.ERR_PAYMENT_WEBHOOK_MISMATCH);
+        }
         catch (OperationCanceledException)
         {
             throw;
@@ -96,7 +101,7 @@ internal sealed class HandleStripeWebhookCommandHandler(
                 "Paid Stripe checkout does not match a pending intent. Intent {CheckoutIntentId}, session {SessionId}",
                 verified.CheckoutIntentId,
                 verified.StripeSessionId);
-            throw new InvalidOperationException("Paid Stripe checkout does not match its pending checkout intent.");
+            throw new PaymentWebhookMismatchException("Paid Stripe checkout does not match its pending checkout intent.");
         }
 
         var items = checkoutIntent.Items.OrderBy(i => i.Position).ToList();
@@ -106,7 +111,7 @@ internal sealed class HandleStripeWebhookCommandHandler(
                 "Paid Stripe checkout intent {CheckoutIntentId} has no items; session {SessionId}",
                 verified.CheckoutIntentId,
                 verified.StripeSessionId);
-            throw new InvalidOperationException("Paid Stripe checkout references an empty checkout intent.");
+            throw new PaymentWebhookMismatchException("Paid Stripe checkout references an empty checkout intent.");
         }
 
         foreach (var item in items)
@@ -119,7 +124,7 @@ internal sealed class HandleStripeWebhookCommandHandler(
                     item.AssetVersionId,
                     item.AssetId,
                     verified.StripeSessionId);
-                throw new InvalidOperationException("Paid Stripe checkout references a missing asset version.");
+                throw new PaymentWebhookMismatchException("Paid Stripe checkout references a missing asset version.");
             }
         }
 

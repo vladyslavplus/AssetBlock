@@ -136,4 +136,54 @@ public sealed class PaymentsControllerTests : ControllerTestBase
 
         await AssertStatusCodeAsync(controller, result, StatusCodes.Status400BadRequest);
     }
+
+    [Fact]
+    public async Task Webhook_WhenMismatchError_ShouldReturnOkWithIgnoredMismatch()
+    {
+        Sender.Send(Arg.Any<HandleStripeWebhookCommand>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(ResultError.Error<OrderCompletedPayload?>(ErrorCodes.ERR_PAYMENT_WEBHOOK_MISMATCH)));
+
+        var controller = new PaymentsController(Sender);
+        var bytes = "{}"u8.ToArray();
+        var httpContext = new DefaultHttpContext
+        {
+            Response = { Body = new MemoryStream() },
+            Request =
+            {
+                Body = new MemoryStream(bytes),
+                Headers = { ["Stripe-Signature"] = "sig" }
+            }
+        };
+        controller.ControllerContext = new ControllerContext { HttpContext = httpContext };
+
+        var result = await controller.Webhook(CancellationToken.None);
+
+        var okResult = result.Should().BeOfType<OkObjectResult>().Which;
+        okResult.StatusCode.Should().Be(StatusCodes.Status200OK);
+        okResult.Value.Should().BeEquivalentTo(new { received = true, status = "ignored_mismatch" });
+    }
+
+    [Fact]
+    public async Task Webhook_WhenInvalidSignature_ShouldReturnBadRequest400()
+    {
+        Sender.Send(Arg.Any<HandleStripeWebhookCommand>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(ResultError.Error<OrderCompletedPayload?>(ErrorCodes.ERR_STRIPE_WEBHOOK_INVALID)));
+
+        var controller = new PaymentsController(Sender);
+        var bytes = "{}"u8.ToArray();
+        var httpContext = new DefaultHttpContext
+        {
+            Response = { Body = new MemoryStream() },
+            Request =
+            {
+                Body = new MemoryStream(bytes),
+                Headers = { ["Stripe-Signature"] = "invalid_sig" }
+            }
+        };
+        controller.ControllerContext = new ControllerContext { HttpContext = httpContext };
+
+        var result = await controller.Webhook(CancellationToken.None);
+
+        await AssertStatusCodeAsync(controller, result, StatusCodes.Status400BadRequest);
+    }
 }

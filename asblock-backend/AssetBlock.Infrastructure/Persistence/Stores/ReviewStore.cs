@@ -109,15 +109,17 @@ internal sealed class ReviewStore(ApplicationDbContext dbContext, ILogger<Review
 
         query = sortKey switch
         {
-            "RATING" => isDesc ? query.OrderByDescending(r => r.Rating) : query.OrderBy(r => r.Rating),
-            _ => isDesc ? query.OrderByDescending(r => r.CreatedAt) : query.OrderBy(r => r.CreatedAt)
+            "RATING" => isDesc ? query.OrderByDescending(r => r.Rating).ThenBy(r => r.Id) : query.OrderBy(r => r.Rating).ThenBy(r => r.Id),
+            _ => isDesc ? query.OrderByDescending(r => r.CreatedAt).ThenBy(r => r.Id) : query.OrderBy(r => r.CreatedAt).ThenBy(r => r.Id)
         };
 
+        var page = Math.Max(PagedRequest.DEFAULT_PAGE, request.Page);
+        var pageSize = Math.Clamp(request.PageSize, PagedRequest.MIN_PAGE_SIZE, PagedRequest.MAX_PAGE_SIZE);
         var items = await query
-            .Skip((request.Page - 1) * request.PageSize)
-            .Take(request.PageSize)
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
             .ToListAsync(cancellationToken);
 
-        return new PagedResult<Review>(items, total, request.Page, request.PageSize);
+        return new PagedResult<Review>(items, total, page, pageSize);
     }
 }

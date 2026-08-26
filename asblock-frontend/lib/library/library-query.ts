@@ -6,9 +6,17 @@ import {
   type PagedPurchaseLibraryDto,
 } from '@/lib/library/purchase-types'
 
+export interface LibraryPurchasesParams {
+  page?: number
+  pageSize?: number
+}
+
 export const libraryKeys = {
   all: ['library'] as const,
-  purchases: () => [...libraryKeys.all, 'purchases'] as const,
+  purchases: (params?: LibraryPurchasesParams) =>
+    params
+      ? ([...libraryKeys.all, 'purchases', params] as const)
+      : ([...libraryKeys.all, 'purchases'] as const),
   assetVersions: (assetId: string) => [...libraryKeys.all, 'versions', assetId] as const,
 }
 
@@ -27,8 +35,15 @@ export class LibraryFetchError extends Error {
   }
 }
 
-export async function fetchLibraryPurchases(): Promise<LibraryPurchasesResult> {
-  const res = await fetch('/api/account/library', { credentials: 'include', cache: 'no-store' })
+export async function fetchLibraryPurchases(
+  params?: LibraryPurchasesParams,
+): Promise<LibraryPurchasesResult> {
+  const qs = new URLSearchParams()
+  if (params?.page) qs.set('page', String(Math.max(1, params.page)))
+  if (params?.pageSize) qs.set('pageSize', String(Math.max(1, params.pageSize)))
+  const queryStr = qs.toString()
+  const path = queryStr ? `/api/account/library?${queryStr}` : '/api/account/library'
+  const res = await fetch(path, { credentials: 'include', cache: 'no-store' })
   const text = await res.text()
   let parsed: unknown = text
   if (text.length > 0) {
@@ -78,8 +93,14 @@ export async function fetchLibraryPurchases(): Promise<LibraryPurchasesResult> {
   }
 }
 
-export async function fetchLibraryPurchasesOrThrow(): Promise<PagedPurchaseLibraryDto> {
-  const r = await fetchLibraryPurchases()
+export async function fetchLibraryPurchasesOrThrow(
+  params?: LibraryPurchasesParams,
+): Promise<PagedPurchaseLibraryDto> {
+  const normalizedParams =
+    params && typeof params === 'object' && ('page' in params || 'pageSize' in params)
+      ? params
+      : undefined
+  const r = await fetchLibraryPurchases(normalizedParams)
   if (!r.ok) {
     throw new LibraryFetchError(r.status, r.message)
   }

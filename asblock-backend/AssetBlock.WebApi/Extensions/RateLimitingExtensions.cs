@@ -14,6 +14,7 @@ internal static class RateLimitingExtensions
 
     private static string GetUserPartitionKey(HttpContext httpContext) =>
         httpContext.User.FindFirst(JwtClaimTypes.SUB)?.Value
+        ?? httpContext.User.FindFirst(ClaimTypes.NameIdentifier)?.Value
         ?? httpContext.Connection.RemoteIpAddress?.ToString()
         ?? UNKNOWN_PARTITION_KEY;
 
@@ -109,6 +110,7 @@ internal static class RateLimitingExtensions
                 AddNoOpPolicy(RateLimitingConstants.Policies.AUTH_EMAIL_ACTION_CONFIRM);
                 AddNoOpPolicy(RateLimitingConstants.Policies.USERS_EMAIL_VERIFICATION_RESEND);
                 AddNoOpPolicy(RateLimitingConstants.Policies.USERS_EMAIL_CHANGE_REQUEST);
+                AddNoOpPolicy(RateLimitingConstants.Policies.USERS_PASSWORD_CHANGE);
                 AddNoOpPolicy(RateLimitingConstants.Policies.ASSETS_UPLOAD);
                 AddNoOpPolicy(RateLimitingConstants.Policies.ASSETS_DOWNLOAD);
                 AddNoOpPolicy(RateLimitingConstants.Policies.PAYMENTS_CHECKOUT);
@@ -197,6 +199,17 @@ internal static class RateLimitingExtensions
                 {
                     Window = TimeSpan.FromSeconds(RateLimitingConstants.Windows.USERS_EMAIL_CHANGE_REQUEST_PERIOD_SECONDS),
                     PermitLimit = RateLimitingConstants.Windows.USERS_EMAIL_CHANGE_REQUEST_LIMIT,
+                    QueueProcessingOrder = QueueProcessingOrder.OldestFirst
+                }));
+
+        opts.AddPolicy(RateLimitingConstants.Policies.USERS_PASSWORD_CHANGE, httpContext =>
+            RateLimitPartition.GetSlidingWindowLimiter(
+                partitionKey: GetUserPartitionKey(httpContext),
+                factory: _ => new SlidingWindowRateLimiterOptions
+                {
+                    Window = TimeSpan.FromSeconds(RateLimitingConstants.Windows.USERS_PASSWORD_CHANGE_PERIOD_SECONDS),
+                    PermitLimit = RateLimitingConstants.Windows.USERS_PASSWORD_CHANGE_LIMIT,
+                    SegmentsPerWindow = RateLimitingConstants.Windows.SLIDING_WINDOW_SEGMENTS,
                     QueueProcessingOrder = QueueProcessingOrder.OldestFirst
                 }));
 

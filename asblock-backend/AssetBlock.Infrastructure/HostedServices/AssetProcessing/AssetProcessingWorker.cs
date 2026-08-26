@@ -250,12 +250,92 @@ public sealed class AssetProcessingWorker(
             }
 
             AssetProcessingJobOutcome outcome;
+            using var leaseLossCts = new CancellationTokenSource();
+            using var executionCts = CancellationTokenSource.CreateLinkedTokenSource(linkedCts.Token, leaseLossCts.Token);
+            using var renewalCts = CancellationTokenSource.CreateLinkedTokenSource(executionCts.Token);
+            var renewalInterval = TimeSpan.FromTicks(_options.LeaseDuration.Ticks / 2);
+            var renewalTask = Task.Run(async () =>
+            {
+                if (renewalInterval <= TimeSpan.Zero)
+                {
+                    return;
+                }
+
+                try
+                {
+                    using var timer = new PeriodicTimer(renewalInterval, timeProvider);
+                    while (await timer.WaitForNextTickAsync(renewalCts.Token))
+                    {
+                        try
+                        {
+                            await using var renewalScope = scopeFactory.CreateAsyncScope();
+                            var store = renewalScope.ServiceProvider.GetRequiredService<IAssetProcessingJobStore>();
+                            var renewed = await store.RenewLease(job.JobId, job.LeaseToken, _options.LeaseDuration, renewalCts.Token);
+                            if (!renewed)
+                            {
+                                logger.LogWarning("Failed to renew lease for job {JobId}; lease was lost", job.JobId);
+                                await leaseLossCts.CancelAsync();
+                                break;
+                            }
+                        }
+                        catch (OperationCanceledException) when (renewalCts.IsCancellationRequested)
+                        {
+                            break;
+                        }
+                        catch (Exception ex)
+                        {
+                            logger.LogError(ex, "Error renewing lease for job {JobId}; canceling execution to prevent dual worker processing", job.JobId);
+                            await leaseLossCts.CancelAsync();
+                            break;
+                        }
+                    }
+                }
+                catch (OperationCanceledException) when (renewalCts.IsCancellationRequested)
+                {
+                    // Expected when renewal task is stopped
+                }
+            }, CancellationToken.None);
+
             try
             {
-                outcome = await adapter.Execute(scope.ServiceProvider, job, linkedCts.Token);
+                try
+                {
+                    outcome = await adapter.Execute(scope.ServiceProvider, job, executionCts.Token);
+                }
+                finally
+                {
+                    await renewalCts.CancelAsync();
+                    try
+                    {
+                        await renewalTask;
+                    }
+                    catch (OperationCanceledException) when (renewalCts.IsCancellationRequested)
+                    {
+                        // Expected on shutdown
+                    }
+                    catch (Exception ex)
+                    {
+                        logger.LogWarning(ex, "Error awaiting renewal task for job {JobId}", job.JobId);
+                    }
+                }
+            }
+            catch (OperationCanceledException) when (leaseLossCts.IsCancellationRequested)
+            {
+                logger.LogWarning("Job {JobId} abandoned due to lease loss or renewal failure", job.JobId);
+                transitionSucceeded = false;
+                finalOutcome = JobOutcomeNames.LEASE_LOST;
+                return;
             }
             catch (AssetProcessingSerializerException)
             {
+                if (leaseLossCts.IsCancellationRequested)
+                {
+                    logger.LogWarning("Job {JobId} abandoned due to lease loss; skipping serializer error transition", job.JobId);
+                    transitionSucceeded = false;
+                    finalOutcome = JobOutcomeNames.LEASE_LOST;
+                    return;
+                }
+
                 logger.LogWarning("Invalid payload for job {JobId} of type {Type}", job.JobId, job.Type);
 
                 using var cleanupCts = new CancellationTokenSource(_cleanupTimeout);
@@ -270,6 +350,14 @@ public sealed class AssetProcessingWorker(
             }
             catch (InvalidAssetProcessingJobResultException ex)
             {
+                if (leaseLossCts.IsCancellationRequested)
+                {
+                    logger.LogWarning(ex, "Job {JobId} abandoned due to lease loss; skipping invalid result error transition", job.JobId);
+                    transitionSucceeded = false;
+                    finalOutcome = JobOutcomeNames.LEASE_LOST;
+                    return;
+                }
+
                 logger.LogWarning(ex, "Invalid result returned by handler for job {JobId} of type {Type}", job.JobId, job.Type);
 
                 using var cleanupCts = new CancellationTokenSource(_cleanupTimeout);
@@ -284,6 +372,14 @@ public sealed class AssetProcessingWorker(
             }
             catch (OperationCanceledException) when (hostStoppingToken.IsCancellationRequested)
             {
+                if (leaseLossCts.IsCancellationRequested)
+                {
+                    logger.LogWarning("Job {JobId} abandoned due to lease loss; skipping shutdown transition", job.JobId);
+                    transitionSucceeded = false;
+                    finalOutcome = JobOutcomeNames.LEASE_LOST;
+                    return;
+                }
+
                 logger.LogInformation("Job {JobId} interrupted by worker host shutdown", job.JobId);
 
                 using var cleanupCts = new CancellationTokenSource(_cleanupTimeout);
@@ -298,6 +394,14 @@ public sealed class AssetProcessingWorker(
             }
             catch (OperationCanceledException) when (opTimeoutCts.IsCancellationRequested)
             {
+                if (leaseLossCts.IsCancellationRequested)
+                {
+                    logger.LogWarning("Job {JobId} abandoned due to lease loss; skipping timeout transition", job.JobId);
+                    transitionSucceeded = false;
+                    finalOutcome = JobOutcomeNames.LEASE_LOST;
+                    return;
+                }
+
                 logger.LogWarning("Job {JobId} of type {Type} timed out after {Timeout}", job.JobId, job.Type, _options.OperationTimeout);
 
                 var retryDelay = CalculateRetryDelay(job.AttemptCount, null);
@@ -313,6 +417,14 @@ public sealed class AssetProcessingWorker(
             }
             catch (Exception ex)
             {
+                if (leaseLossCts.IsCancellationRequested)
+                {
+                    logger.LogWarning(ex, "Job {JobId} abandoned due to lease loss; skipping exception transition", job.JobId);
+                    transitionSucceeded = false;
+                    finalOutcome = JobOutcomeNames.LEASE_LOST;
+                    return;
+                }
+
                 logger.LogError(ex, "Unexpected handler exception for job {JobId} of type {Type}, attempt {Attempt}",
                     job.JobId, job.Type, job.AttemptCount);
 
@@ -327,6 +439,14 @@ public sealed class AssetProcessingWorker(
                 finalOutcome = transitionSucceeded
                     ? (job.AttemptCount >= job.MaxAttempts ? JobOutcomeNames.FAILED : JobOutcomeNames.RETRY_SCHEDULED)
                     : JobOutcomeNames.LEASE_LOST;
+                return;
+            }
+
+            if (leaseLossCts.IsCancellationRequested)
+            {
+                logger.LogWarning("Job {JobId} finished execution after lease was lost; skipping state transition", job.JobId);
+                transitionSucceeded = false;
+                finalOutcome = JobOutcomeNames.LEASE_LOST;
                 return;
             }
 

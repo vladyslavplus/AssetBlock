@@ -890,6 +890,400 @@ public sealed class AssetProcessingWorkerTests
             Arg.Any<CancellationToken>());
     }
 
+    [Fact]
+    public async Task Worker_WhenLeaseLost_CancelsExecutionAndAbandonsJobWithoutTransition()
+    {
+        var options = new AssetProcessingOptions
+        {
+            Enabled = true,
+            PollInterval = TimeSpan.FromMilliseconds(20),
+            BatchSize = 1,
+            Concurrency = 1,
+            LeaseDuration = TimeSpan.FromMilliseconds(40),
+            OperationTimeout = TimeSpan.FromSeconds(5),
+            MaxAttempts = 3,
+            InitialRetryDelay = TimeSpan.FromSeconds(1),
+            MaxRetryDelay = TimeSpan.FromSeconds(5)
+        };
+        var worker = CreateWorker(options);
+
+        var jobId = Guid.NewGuid();
+        var leaseToken = Guid.NewGuid();
+        var claimedJob = new ClaimedAssetProcessingJob(
+            jobId,
+            Guid.NewGuid(),
+            Guid.NewGuid(),
+            Guid.NewGuid(),
+            AssetProcessingJobType.ARCHIVE_INSPECTION,
+            1,
+            1,
+            3,
+            "{}",
+            null,
+            leaseToken,
+            DateTimeOffset.UtcNow,
+            DateTimeOffset.UtcNow,
+            DateTimeOffset.UtcNow);
+
+        var adapterCancelled = false;
+        var adapter = Substitute.For<IAssetProcessingJobHandlerAdapter>();
+        adapter.Execute(Arg.Any<IServiceProvider>(), Arg.Any<ClaimedAssetProcessingJob>(), Arg.Any<CancellationToken>())
+            .Returns<Task<AssetProcessingJobOutcome>>(async info =>
+            {
+                var ct = info.Arg<CancellationToken>();
+                try
+                {
+                    await Task.Delay(TimeSpan.FromSeconds(5), ct);
+                    return AssetProcessingJobOutcome.Succeeded(new ArchiveInspectionResult(1, 1));
+                }
+                catch (OperationCanceledException)
+                {
+                    adapterCancelled = true;
+                    throw;
+                }
+            });
+        _registry.GetHandler(AssetProcessingJobType.ARCHIVE_INSPECTION).Returns(adapter);
+
+        var claimCount = 0;
+        _store.ClaimPendingBatch(Arg.Any<int>(), Arg.Any<TimeSpan>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(_ =>
+            {
+                if (Interlocked.Increment(ref claimCount) == 1)
+                {
+                    return Task.FromResult<IReadOnlyList<ClaimedAssetProcessingJob>>([claimedJob]);
+                }
+                return Task.FromResult<IReadOnlyList<ClaimedAssetProcessingJob>>([]);
+            });
+
+        // Renewal returns false (lease lost)
+        _store.RenewLease(jobId, leaseToken, Arg.Any<TimeSpan>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(false));
+
+        using var cts = new CancellationTokenSource(TimeSpan.FromMilliseconds(300));
+        await worker.StartAsync(cts.Token);
+        await Task.Delay(150, cts.Token);
+        await worker.StopAsync(CancellationToken.None);
+
+        adapterCancelled.Should().BeTrue();
+        await _store.DidNotReceive().MarkSucceeded(Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<AssetProcessingResult?>(), Arg.Any<CancellationToken>());
+        await _store.DidNotReceive().MarkFailedTerminal(Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>());
+        await _store.DidNotReceive().MarkFailedRetryable(Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<TimeSpan>(), Arg.Any<CancellationToken>());
+        await _lifecycleStore.DidNotReceive().TransitionProcessingFailed(Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<AssetProcessingJobType>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Worker_WhenLeaseRenewalThrowsException_CancelsExecutionAndAbandonsJobWithoutTransition()
+    {
+        var options = new AssetProcessingOptions
+        {
+            Enabled = true,
+            PollInterval = TimeSpan.FromMilliseconds(20),
+            BatchSize = 1,
+            Concurrency = 1,
+            LeaseDuration = TimeSpan.FromMilliseconds(40),
+            OperationTimeout = TimeSpan.FromSeconds(5),
+            MaxAttempts = 3,
+            InitialRetryDelay = TimeSpan.FromSeconds(1),
+            MaxRetryDelay = TimeSpan.FromSeconds(5)
+        };
+        var worker = CreateWorker(options);
+
+        var jobId = Guid.NewGuid();
+        var leaseToken = Guid.NewGuid();
+        var claimedJob = new ClaimedAssetProcessingJob(
+            jobId,
+            Guid.NewGuid(),
+            Guid.NewGuid(),
+            Guid.NewGuid(),
+            AssetProcessingJobType.ARCHIVE_INSPECTION,
+            1,
+            1,
+            3,
+            "{}",
+            null,
+            leaseToken,
+            DateTimeOffset.UtcNow,
+            DateTimeOffset.UtcNow,
+            DateTimeOffset.UtcNow);
+
+        var adapterCancelled = false;
+        var adapter = Substitute.For<IAssetProcessingJobHandlerAdapter>();
+        adapter.Execute(Arg.Any<IServiceProvider>(), Arg.Any<ClaimedAssetProcessingJob>(), Arg.Any<CancellationToken>())
+            .Returns<Task<AssetProcessingJobOutcome>>(async info =>
+            {
+                var ct = info.Arg<CancellationToken>();
+                try
+                {
+                    await Task.Delay(TimeSpan.FromSeconds(5), ct);
+                    return AssetProcessingJobOutcome.Succeeded(new ArchiveInspectionResult(1, 1));
+                }
+                catch (OperationCanceledException)
+                {
+                    adapterCancelled = true;
+                    throw;
+                }
+            });
+        _registry.GetHandler(AssetProcessingJobType.ARCHIVE_INSPECTION).Returns(adapter);
+
+        var claimCount = 0;
+        _store.ClaimPendingBatch(Arg.Any<int>(), Arg.Any<TimeSpan>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(_ =>
+            {
+                if (Interlocked.Increment(ref claimCount) == 1)
+                {
+                    return Task.FromResult<IReadOnlyList<ClaimedAssetProcessingJob>>([claimedJob]);
+                }
+                return Task.FromResult<IReadOnlyList<ClaimedAssetProcessingJob>>([]);
+            });
+
+        // Renewal throws exception
+        _store.RenewLease(jobId, leaseToken, Arg.Any<TimeSpan>(), Arg.Any<CancellationToken>())
+            .Returns<Task<bool>>(_ => throw new InvalidOperationException("DB connection dropped"));
+
+        using var cts = new CancellationTokenSource(TimeSpan.FromMilliseconds(300));
+        await worker.StartAsync(cts.Token);
+        await Task.Delay(150, cts.Token);
+        await worker.StopAsync(CancellationToken.None);
+
+        adapterCancelled.Should().BeTrue();
+        await _store.DidNotReceive().MarkSucceeded(Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<AssetProcessingResult?>(), Arg.Any<CancellationToken>());
+        await _store.DidNotReceive().MarkFailedTerminal(Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>());
+        await _store.DidNotReceive().MarkFailedRetryable(Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<TimeSpan>(), Arg.Any<CancellationToken>());
+        await _lifecycleStore.DidNotReceive().TransitionProcessingFailed(Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<AssetProcessingJobType>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Worker_WhenAdapterIgnoresCancellationAfterLeaseLoss_AbandonsJobWithoutMarkingSucceeded()
+    {
+        var options = new AssetProcessingOptions
+        {
+            Enabled = true,
+            PollInterval = TimeSpan.FromMilliseconds(20),
+            BatchSize = 1,
+            Concurrency = 1,
+            LeaseDuration = TimeSpan.FromMilliseconds(40),
+            OperationTimeout = TimeSpan.FromSeconds(5),
+            MaxAttempts = 3,
+            InitialRetryDelay = TimeSpan.FromSeconds(1),
+            MaxRetryDelay = TimeSpan.FromSeconds(5)
+        };
+        var worker = CreateWorker(options);
+
+        var jobId = Guid.NewGuid();
+        var leaseToken = Guid.NewGuid();
+        var claimedJob = new ClaimedAssetProcessingJob(
+            jobId,
+            Guid.NewGuid(),
+            Guid.NewGuid(),
+            Guid.NewGuid(),
+            AssetProcessingJobType.ARCHIVE_INSPECTION,
+            1,
+            1,
+            3,
+            "{}",
+            null,
+            leaseToken,
+            DateTimeOffset.UtcNow,
+            DateTimeOffset.UtcNow,
+            DateTimeOffset.UtcNow);
+
+        var adapter = Substitute.For<IAssetProcessingJobHandlerAdapter>();
+        adapter.Execute(Arg.Any<IServiceProvider>(), Arg.Any<ClaimedAssetProcessingJob>(), Arg.Any<CancellationToken>())
+            .Returns<Task<AssetProcessingJobOutcome>>(async _ =>
+            {
+                // Ignores cancellation and returns Success after delay
+                await Task.Delay(80);
+                return AssetProcessingJobOutcome.Succeeded(new ArchiveInspectionResult(1, 1));
+            });
+        _registry.GetHandler(AssetProcessingJobType.ARCHIVE_INSPECTION).Returns(adapter);
+
+        var claimCount = 0;
+        _store.ClaimPendingBatch(Arg.Any<int>(), Arg.Any<TimeSpan>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(_ =>
+            {
+                if (Interlocked.Increment(ref claimCount) == 1)
+                {
+                    return Task.FromResult<IReadOnlyList<ClaimedAssetProcessingJob>>([claimedJob]);
+                }
+                return Task.FromResult<IReadOnlyList<ClaimedAssetProcessingJob>>([]);
+            });
+
+        // Renewal returns false (lease lost)
+        _store.RenewLease(jobId, leaseToken, Arg.Any<TimeSpan>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(false));
+
+        using var cts = new CancellationTokenSource(TimeSpan.FromMilliseconds(300));
+        await worker.StartAsync(cts.Token);
+        await Task.Delay(150, cts.Token);
+        await worker.StopAsync(CancellationToken.None);
+
+        await _store.DidNotReceive().MarkSucceeded(Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<AssetProcessingResult?>(), Arg.Any<CancellationToken>());
+        await _store.DidNotReceive().MarkFailedTerminal(Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>());
+        await _store.DidNotReceive().MarkFailedRetryable(Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<TimeSpan>(), Arg.Any<CancellationToken>());
+        await _lifecycleStore.DidNotReceive().TransitionProcessingFailed(Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<AssetProcessingJobType>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Worker_WhenAdapterThrowsNonOceAfterLeaseLoss_AbandonsJobWithoutFailingProcessing()
+    {
+        var options = new AssetProcessingOptions
+        {
+            Enabled = true,
+            PollInterval = TimeSpan.FromMilliseconds(20),
+            BatchSize = 1,
+            Concurrency = 1,
+            LeaseDuration = TimeSpan.FromMilliseconds(40),
+            OperationTimeout = TimeSpan.FromSeconds(5),
+            MaxAttempts = 3,
+            InitialRetryDelay = TimeSpan.FromSeconds(1),
+            MaxRetryDelay = TimeSpan.FromSeconds(5)
+        };
+        var worker = CreateWorker(options);
+
+        var jobId = Guid.NewGuid();
+        var leaseToken = Guid.NewGuid();
+        var claimedJob = new ClaimedAssetProcessingJob(
+            jobId,
+            Guid.NewGuid(),
+            Guid.NewGuid(),
+            Guid.NewGuid(),
+            AssetProcessingJobType.ARCHIVE_INSPECTION,
+            1,
+            1,
+            3,
+            "{}",
+            null,
+            leaseToken,
+            DateTimeOffset.UtcNow,
+            DateTimeOffset.UtcNow,
+            DateTimeOffset.UtcNow);
+
+        var adapter = Substitute.For<IAssetProcessingJobHandlerAdapter>();
+        adapter.Execute(Arg.Any<IServiceProvider>(), Arg.Any<ClaimedAssetProcessingJob>(), Arg.Any<CancellationToken>())
+            .Returns<Task<AssetProcessingJobOutcome>>(async info =>
+            {
+                var ct = info.Arg<CancellationToken>();
+                try
+                {
+                    await Task.Delay(TimeSpan.FromSeconds(5), ct);
+                    return AssetProcessingJobOutcome.Succeeded(new ArchiveInspectionResult(1, 1));
+                }
+                catch (OperationCanceledException)
+                {
+                    // Throws non-OCE upon cancellation
+                    throw new InvalidOperationException("External service failed during cancellation");
+                }
+            });
+        _registry.GetHandler(AssetProcessingJobType.ARCHIVE_INSPECTION).Returns(adapter);
+
+        var claimCount = 0;
+        _store.ClaimPendingBatch(Arg.Any<int>(), Arg.Any<TimeSpan>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(_ =>
+            {
+                if (Interlocked.Increment(ref claimCount) == 1)
+                {
+                    return Task.FromResult<IReadOnlyList<ClaimedAssetProcessingJob>>([claimedJob]);
+                }
+                return Task.FromResult<IReadOnlyList<ClaimedAssetProcessingJob>>([]);
+            });
+
+        // Renewal returns false (lease lost)
+        _store.RenewLease(jobId, leaseToken, Arg.Any<TimeSpan>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(false));
+
+        using var cts = new CancellationTokenSource(TimeSpan.FromMilliseconds(300));
+        await worker.StartAsync(cts.Token);
+        await Task.Delay(150, cts.Token);
+        await worker.StopAsync(CancellationToken.None);
+
+        await _store.DidNotReceive().MarkSucceeded(Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<AssetProcessingResult?>(), Arg.Any<CancellationToken>());
+        await _store.DidNotReceive().MarkFailedTerminal(Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>());
+        await _store.DidNotReceive().MarkFailedRetryable(Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<TimeSpan>(), Arg.Any<CancellationToken>());
+        await _lifecycleStore.DidNotReceive().TransitionProcessingFailed(Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<AssetProcessingJobType>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Worker_WhenRenewLeaseThrowsUnexpectedOce_CancelsExecutionAndAbandonsJobWithoutTransition()
+    {
+        var options = new AssetProcessingOptions
+        {
+            Enabled = true,
+            PollInterval = TimeSpan.FromMilliseconds(20),
+            BatchSize = 1,
+            Concurrency = 1,
+            LeaseDuration = TimeSpan.FromMilliseconds(40),
+            OperationTimeout = TimeSpan.FromSeconds(5),
+            MaxAttempts = 3,
+            InitialRetryDelay = TimeSpan.FromSeconds(1),
+            MaxRetryDelay = TimeSpan.FromSeconds(5)
+        };
+        var worker = CreateWorker(options);
+
+        var jobId = Guid.NewGuid();
+        var leaseToken = Guid.NewGuid();
+        var claimedJob = new ClaimedAssetProcessingJob(
+            jobId,
+            Guid.NewGuid(),
+            Guid.NewGuid(),
+            Guid.NewGuid(),
+            AssetProcessingJobType.ARCHIVE_INSPECTION,
+            1,
+            1,
+            3,
+            "{}",
+            null,
+            leaseToken,
+            DateTimeOffset.UtcNow,
+            DateTimeOffset.UtcNow,
+            DateTimeOffset.UtcNow);
+
+        var adapterCancelled = false;
+        var adapter = Substitute.For<IAssetProcessingJobHandlerAdapter>();
+        adapter.Execute(Arg.Any<IServiceProvider>(), Arg.Any<ClaimedAssetProcessingJob>(), Arg.Any<CancellationToken>())
+            .Returns<Task<AssetProcessingJobOutcome>>(async info =>
+            {
+                var ct = info.Arg<CancellationToken>();
+                try
+                {
+                    await Task.Delay(TimeSpan.FromSeconds(5), ct);
+                    return AssetProcessingJobOutcome.Succeeded(new ArchiveInspectionResult(1, 1));
+                }
+                catch (OperationCanceledException)
+                {
+                    adapterCancelled = true;
+                    throw;
+                }
+            });
+        _registry.GetHandler(AssetProcessingJobType.ARCHIVE_INSPECTION).Returns(adapter);
+
+        var claimCount = 0;
+        _store.ClaimPendingBatch(Arg.Any<int>(), Arg.Any<TimeSpan>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(_ =>
+            {
+                if (Interlocked.Increment(ref claimCount) == 1)
+                {
+                    return Task.FromResult<IReadOnlyList<ClaimedAssetProcessingJob>>([claimedJob]);
+                }
+                return Task.FromResult<IReadOnlyList<ClaimedAssetProcessingJob>>([]);
+            });
+
+        // Renewal throws unexpected OperationCanceledException with external/unrelated token
+        using var externalCts = new CancellationTokenSource();
+        _store.RenewLease(jobId, leaseToken, Arg.Any<TimeSpan>(), Arg.Any<CancellationToken>())
+            .Returns<Task<bool>>(_ => throw new OperationCanceledException("Custom timeout OCE", externalCts.Token));
+
+        using var cts = new CancellationTokenSource(TimeSpan.FromMilliseconds(300));
+        await worker.StartAsync(cts.Token);
+        await Task.Delay(150, cts.Token);
+        await worker.StopAsync(CancellationToken.None);
+
+        adapterCancelled.Should().BeTrue();
+        await _store.DidNotReceive().MarkSucceeded(Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<AssetProcessingResult?>(), Arg.Any<CancellationToken>());
+        await _store.DidNotReceive().MarkFailedTerminal(Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>());
+        await _store.DidNotReceive().MarkFailedRetryable(Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<TimeSpan>(), Arg.Any<CancellationToken>());
+        await _lifecycleStore.DidNotReceive().TransitionProcessingFailed(Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<AssetProcessingJobType>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>());
+    }
+
     private static async Task<AssetProcessingJobOutcome> TimeoutThenSucceed(CancellationToken cancellationToken)
     {
         await Task.Delay(TimeSpan.FromSeconds(5), cancellationToken);

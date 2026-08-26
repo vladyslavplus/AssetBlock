@@ -16,7 +16,8 @@ public abstract class ApiControllerBase(ISender sender) : ControllerBase
 
     protected Guid? GetUserId()
     {
-        var value = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        var value = User.FindFirstValue(ClaimTypes.NameIdentifier)
+            ?? User.FindFirstValue(JwtClaimTypes.SUB);
         return Guid.TryParse(value, out var id) ? id : null;
     }
 

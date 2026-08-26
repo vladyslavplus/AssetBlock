@@ -33,6 +33,7 @@ public static class ErrorCodesToErrorMessages
         { ErrorCodes.ERR_PAYMENT_FAILED, "Payment failed." },
         { ErrorCodes.ERR_STRIPE_URLS_NOT_CONFIGURED, "Payment redirect URLs are not configured. Contact support." },
         { ErrorCodes.ERR_STRIPE_WEBHOOK_INVALID, "Stripe webhook signature validation failed." },
+        { ErrorCodes.ERR_PAYMENT_WEBHOOK_MISMATCH, "Paid Stripe checkout payload does not match pending checkout intent." },
         { ErrorCodes.ERR_DOWNLOAD_LIMIT_EXCEEDED, "Download limit for this asset has been reached. Please try again later." },
         { ErrorCodes.ERR_CANNOT_PURCHASE_OWN_ASSET, "You cannot purchase your own asset." },
         { ErrorCodes.ERR_ASSET_ALREADY_PURCHASED, "You have already purchased this asset." },

@@ -1,0 +1,5 @@
+**/appsettings.Development.json
+**/appsettings.*.local.json
+**/.env
+**/.env.local
+**/dataprotection-keys/

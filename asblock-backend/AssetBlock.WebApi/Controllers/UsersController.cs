@@ -244,6 +244,7 @@ public sealed class UsersController(ISender sender) : ApiControllerBase(sender)
     /// </summary>
     [HttpPost(ApiRoutes.Users.ME_PASSWORD)]
     [Authorize]
+    [EnableRateLimiting(RateLimitingConstants.Policies.USERS_PASSWORD_CHANGE)]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
