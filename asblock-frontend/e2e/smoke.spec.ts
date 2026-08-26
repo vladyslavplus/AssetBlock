@@ -294,8 +294,29 @@ test('seller upload client validation and successful mocked publish', async ({ p
     mimeType: 'application/zip',
     buffer: Buffer.from('zip'),
   })
+  await expect(page.getByText('pack.zip')).toBeVisible()
+  await expect(page.getByText(/choose a \.zip|file is required/i)).toHaveCount(0)
+
+  const uploadResponsePromise = page.waitForResponse((response) => {
+    try {
+      const url = new URL(response.url())
+      return url.pathname === '/api/seller/upload' && response.request().method() === 'POST'
+    } catch {
+      return false
+    }
+  })
+
   await page.getByRole('button', { name: /upload asset/i }).click()
+
+  const uploadResponse = await uploadResponsePromise
+  expect(uploadResponse.ok()).toBeTruthy()
+
+  await expect(page.getByText(/asset uploaded\. security processing started\./i)).toBeVisible()
   await expect(page).toHaveURL(/\/sell\?tab=listings/)
+  await expect(page.getByRole('tab', { name: /my listings/i })).toHaveAttribute(
+    'data-state',
+    'active',
+  )
 })
 
 test('checkout unavailable never navigates to Stripe', async ({ page }) => {

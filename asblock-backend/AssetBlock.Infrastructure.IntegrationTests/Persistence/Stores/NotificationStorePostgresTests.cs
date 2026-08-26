@@ -47,6 +47,9 @@ public sealed class NotificationStorePostgresTests(PostgresFixture fixture)
         db.UserNotifications.AddRange(unreadA, unreadB, alreadyRead);
         await db.SaveChangesAsync();
 
+        await db.Entry(alreadyRead).ReloadAsync();
+        var expectedAlreadyReadAt = alreadyRead.ReadAt;
+
         var sut = CreateStore(db);
 
         var affected = await sut.MarkAllRead(user.Id);
@@ -57,13 +60,12 @@ public sealed class NotificationStorePostgresTests(PostgresFixture fixture)
         var rows = await verify.UserNotifications
             .AsNoTracking()
             .Where(n => n.RecipientUserId == user.Id)
-            .OrderBy(n => n.CreatedAt)
-            .ToListAsync();
+            .ToDictionaryAsync(n => n.Id);
 
         rows.Should().HaveCount(3);
-        rows[0].ReadAt.Should().NotBeNull();
-        rows[1].ReadAt.Should().NotBeNull();
-        rows[2].ReadAt.Should().Be(alreadyReadAt);
+        rows[unreadA.Id].ReadAt.Should().NotBeNull();
+        rows[unreadB.Id].ReadAt.Should().NotBeNull();
+        rows[alreadyRead.Id].ReadAt.Should().Be(expectedAlreadyReadAt);
 
         var verifyStore = CreateStore(verify);
         var unreadPage = await verifyStore.GetPaged(user.Id, new GetNotificationsRequest { UnreadOnly = true });

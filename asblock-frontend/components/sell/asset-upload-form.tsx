@@ -58,7 +58,7 @@ export function AssetUploadForm() {
     setError,
     trigger,
     handleSubmit,
-    formState: { errors, isSubmitting },
+    formState: { errors, isSubmitting, isValidating },
     reset,
   } = useForm<AssetUploadFormValues>({
     resolver: zodResolver(assetUploadFormSchema),
@@ -295,7 +295,10 @@ export function AssetUploadForm() {
       <Button
         type="submit"
         disabled={
-          isSubmitting || categoriesLoading || Boolean(categoriesError && categories.length === 0)
+          isSubmitting ||
+          isValidating ||
+          categoriesLoading ||
+          Boolean(categoriesError && categories.length === 0)
         }
         className="bg-primary text-primary-foreground hover:bg-[#6D28D9] w-full sm:w-auto"
       >
