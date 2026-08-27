@@ -12,6 +12,24 @@ namespace AssetBlock.Infrastructure.Tests.HostedServices;
 
 public sealed class CheckoutReservationCleanupWorkerTests
 {
+    [Fact]
+    public void CalculateInitialDelay_WithJitter_ShouldScaleAccurately()
+    {
+        // Initial delay base is 30s
+        CheckoutReservationCleanupWorker.CalculateInitialDelay(() => 0.0).Should().Be(TimeSpan.FromSeconds(24));
+        CheckoutReservationCleanupWorker.CalculateInitialDelay(() => 0.5).Should().Be(TimeSpan.FromSeconds(30));
+        CheckoutReservationCleanupWorker.CalculateInitialDelay(() => 1.0).Should().Be(TimeSpan.FromSeconds(36));
+    }
+
+    [Fact]
+    public void CalculateIntervalDelay_WithJitter_ShouldScaleAccurately()
+    {
+        // Interval base is 1 minute (60s)
+        CheckoutReservationCleanupWorker.CalculateIntervalDelay(() => 0.0).Should().Be(TimeSpan.FromSeconds(48));
+        CheckoutReservationCleanupWorker.CalculateIntervalDelay(() => 0.5).Should().Be(TimeSpan.FromSeconds(60));
+        CheckoutReservationCleanupWorker.CalculateIntervalDelay(() => 1.0).Should().Be(TimeSpan.FromSeconds(72));
+    }
+
     private static (CheckoutReservationCleanupWorker Worker, ServiceProvider Provider) BuildWorker(
         ICheckoutIntentStore checkoutStore,
         IPaymentService paymentService,

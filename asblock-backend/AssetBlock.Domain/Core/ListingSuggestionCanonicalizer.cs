@@ -15,8 +15,12 @@ public static class ListingSuggestionCanonicalizer
     public static string ComputeContentHash(ListingSuggestion suggestion)
     {
         ArgumentNullException.ThrowIfNull(suggestion);
+        var sortedTags = suggestion.Tags is null
+            ? (IReadOnlyList<string>)[]
+            : suggestion.Tags.OrderBy(t => t, StringComparer.Ordinal).ToArray();
+
         var canonical = JsonSerializer.Serialize(
-            new CanonicalSuggestion(suggestion.Category, suggestion.Description, suggestion.Tags, suggestion.Title),
+            new CanonicalSuggestion(suggestion.Category, suggestion.Description, sortedTags, suggestion.Title),
             _jsonOptions);
         var hash = SHA256.HashData(Encoding.UTF8.GetBytes(canonical));
         return Convert.ToHexString(hash).ToLowerInvariant();

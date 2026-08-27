@@ -55,7 +55,8 @@ internal static class JwtAuthenticationExtensions
                     OnAuthenticationFailed = ctx =>
                     {
                         var logger = ctx.HttpContext.RequestServices.GetRequiredService<ILogger<JwtBearerEvents>>();
-                        logger.LogWarning(ctx.Exception, "JWT validation failed: {Reason}", ctx.Exception.Message);
+                        var reason = ResolveJwtFailureReason(ctx.Exception);
+                        logger.LogDebug("JWT authentication failed: {Reason}", reason);
                         return Task.CompletedTask;
                     },
                     OnTokenValidated = ctx =>
@@ -69,12 +70,17 @@ internal static class JwtAuthenticationExtensions
                     {
                         ctx.HandleResponse();
                         var logger = ctx.HttpContext.RequestServices.GetRequiredService<ILogger<JwtBearerEvents>>();
-                        var hasAuth = ctx.Request.Headers.Authorization.Count > 0;
-                        logger.LogInformation(
-                            "JWT challenge: {Path}, HasAuthorizationHeader={HasAuth}, Error={Error}",
-                            ctx.Request.Path,
-                            hasAuth,
-                            ctx.AuthenticateFailure?.Message ?? (hasAuth ? "invalid or expired token" : "missing Bearer token"));
+
+                        // If authentication failed (e.g. expired or bad signature token), OnAuthenticationFailed already logged the reason.
+                        // Only log challenge here when AuthenticateFailure is null (e.g. missing token).
+                        if (ctx.AuthenticateFailure is null)
+                        {
+                            var hasAuth = ctx.Request.Headers.Authorization.Count > 0;
+                            logger.LogDebug(
+                                "JWT challenge: {Path}, HasAuthorizationHeader={HasAuth}, Reason=missing_token",
+                                ctx.Request.Path,
+                                hasAuth);
+                        }
 
                         var problem = AssetBlockProblemDetails.Create(
                             ctx.HttpContext,
@@ -93,5 +99,19 @@ internal static class JwtAuthenticationExtensions
                 };
             });
         return services;
+    }
+
+    private static string ResolveJwtFailureReason(Exception? exception)
+    {
+        return exception switch
+        {
+            SecurityTokenExpiredException => "expired",
+            SecurityTokenInvalidSignatureException or SecurityTokenSignatureKeyNotFoundException => "bad_signature",
+            SecurityTokenInvalidAudienceException => "bad_audience",
+            SecurityTokenInvalidIssuerException => "bad_issuer",
+            SecurityTokenNotYetValidException => "not_yet_valid",
+            SecurityTokenMalformedException or ArgumentException => "malformed",
+            _ => "invalid"
+        };
     }
 }

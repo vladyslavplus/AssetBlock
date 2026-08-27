@@ -13,7 +13,7 @@ internal sealed class GetTagsQueryHandler(
     ICacheService cache,
     ILogger<GetTagsQueryHandler> logger) : IRequestHandler<GetTagsQuery, Result<Domain.Core.Dto.Paging.PagedResult<TagDto>>>
 {
-    private static readonly TimeSpan _cacheExpiration = TimeSpan.FromMinutes(10);
+    private static readonly TimeSpan _cacheExpiration = CatalogCacheConstants.TAGS_LIST_TTL;
     private static readonly JsonSerializerOptions _jsonOptions = new() { PropertyNamingPolicy = JsonNamingPolicy.CamelCase };
 
     public async Task<Result<Domain.Core.Dto.Paging.PagedResult<TagDto>>> Handle(GetTagsQuery request, CancellationToken cancellationToken)

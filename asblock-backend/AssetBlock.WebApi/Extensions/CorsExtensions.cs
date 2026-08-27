@@ -1,3 +1,4 @@
+using AssetBlock.Domain.Core.Constants;
 using AssetBlock.WebApi.Configuration;
 
 namespace AssetBlock.WebApi.Extensions;
@@ -5,6 +6,31 @@ namespace AssetBlock.WebApi.Extensions;
 public static class CorsExtensions
 {
     private const string ASSETBLOCK_CORS_POLICY = "AssetBlockCors";
+
+    private static readonly string[] _allowedMethods =
+    [
+        "GET",
+        "POST",
+        "PUT",
+        "PATCH",
+        "DELETE",
+        "OPTIONS",
+        "HEAD"
+    ];
+
+    private static readonly string[] _allowedHeaders =
+    [
+        "Authorization",
+        "Content-Type",
+        "Accept",
+        "Origin",
+        "X-Requested-With",
+        "X-SignalR-User-Agent",
+        "x-ms-signalr-request-id",
+        AnalyticsBffRateLimitHeaders.PARTITION,
+        AnalyticsBffRateLimitHeaders.TIMESTAMP,
+        AnalyticsBffRateLimitHeaders.SIGNATURE
+    ];
 
     /// <summary>
     /// Registers CORS for browser access to the API. When <see cref="CorsOptions.AllowedOrigins"/> is empty
@@ -41,8 +67,8 @@ public static class CorsExtensions
             {
                 policy
                     .WithOrigins(origins)
-                    .AllowAnyHeader()
-                    .AllowAnyMethod()
+                    .WithMethods(_allowedMethods)
+                    .WithHeaders(_allowedHeaders)
                     .AllowCredentials();
             });
         });

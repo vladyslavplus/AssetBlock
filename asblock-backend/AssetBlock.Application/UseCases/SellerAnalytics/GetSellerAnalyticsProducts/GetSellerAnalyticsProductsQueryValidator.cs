@@ -8,18 +8,10 @@ internal sealed class GetSellerAnalyticsProductsQueryValidator : AbstractValidat
 {
     public GetSellerAnalyticsProductsQueryValidator()
     {
-        RuleFor(q => q.Request.To)
-            .Must((q, to) => to > q.Request.From)
-            .WithMessage(ErrorCodes.ERR_ANALYTICS_INVALID_RANGE + ": 'to' must be after 'from'.");
-
-        RuleFor(q => q.Request)
-            .Must(r => r.To.DayNumber - r.From.DayNumber <= AnalyticsConstants.MAX_DAYS)
-            .WithMessage(
-                ErrorCodes.ERR_ANALYTICS_INVALID_RANGE + $": range must not exceed {AnalyticsConstants.MAX_DAYS} days.");
-
-        RuleFor(q => q.Request.To)
-            .Must(to => to <= DateOnly.FromDateTime(DateTime.UtcNow.AddDays(1)))
-            .WithMessage(ErrorCodes.ERR_ANALYTICS_INVALID_RANGE + ": 'to' must not be after tomorrow UTC.");
+        SellerAnalyticsRangeRules.ApplyDateRangeRules(
+            this,
+            q => q.Request.From,
+            q => q.Request.To);
 
         RuleFor(q => q.Request.ProductType)
             .IsInEnum()
@@ -42,7 +34,7 @@ internal sealed class GetSellerAnalyticsProductsQueryValidator : AbstractValidat
                 $": 'page' must not exceed {AnalyticsConstants.MAX_PRODUCTS_PAGE}.");
 
         RuleFor(q => q)
-            .Must(q => ((long)q.Request.Page - 1L) * q.Request.PageSize <= AnalyticsConstants.MAX_PRODUCTS_OFFSET)
+            .Must(q => (q.Request.Page - 1L) * q.Request.PageSize <= AnalyticsConstants.MAX_PRODUCTS_OFFSET)
             .WithMessage(
                 ErrorCodes.ERR_ANALYTICS_INVALID_FILTER +
                 $": page offset must not exceed {AnalyticsConstants.MAX_PRODUCTS_OFFSET}.");

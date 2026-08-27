@@ -1,4 +1,5 @@
 using AssetBlock.Application.Common.Validators;
+using AssetBlock.Domain.Core.Constants;
 using AssetBlock.Domain.Core.Licenses;
 using AssetBlock.Domain.Core.Primitives.AppSettingsOptions;
 using FluentValidation;
@@ -20,7 +21,8 @@ internal sealed class UploadAssetCommandValidator : AbstractValidator<UploadAsse
             {
                 RuleFor(c => c.Request.Title)
                     .NotEmpty().WithMessage("Title is required.")
-                    .MaximumLength(500).WithMessage("Title must not exceed 500 characters.");
+                    .MaximumLength(ListingSuggestionBounds.TITLE_MAX_LENGTH)
+                    .WithMessage($"Title must not exceed {ListingSuggestionBounds.TITLE_MAX_LENGTH} characters.");
                 RuleFor(c => c.Request.Price).MarketplacePrice();
                 RuleFor(c => c.Request.CategoryId)
                     .NotEmpty().WithMessage("CategoryId is required.");
@@ -28,8 +30,8 @@ internal sealed class UploadAssetCommandValidator : AbstractValidator<UploadAsse
                     .GreaterThan(0).When(c => c.Request.DownloadLimitPerHour.HasValue)
                     .WithMessage("DownloadLimitPerHour must be greater than zero when specified.");
                 RuleFor(c => c.Request.Description)
-                    .MaximumLength(5000)
-                    .WithMessage("Description must not exceed 5000 characters.")
+                    .MaximumLength(ListingSuggestionBounds.DESCRIPTION_MAX_LENGTH)
+                    .WithMessage($"Description must not exceed {ListingSuggestionBounds.DESCRIPTION_MAX_LENGTH} characters.")
                     .When(c => !string.IsNullOrEmpty(c.Request.Description));
                 RuleFor(c => c.Request.LicenseCode)
                     .NotEmpty().WithMessage("LicenseCode is required.")

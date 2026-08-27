@@ -85,6 +85,61 @@ public sealed class SellerAnalyticsQueryValidatorTests
     }
 
     [Fact]
+    public async Task Products_ToBeforeFrom_FailsValidation()
+    {
+        var req = new AnalyticsProductsRequest(_validTo, _validFrom);
+        var query = new GetSellerAnalyticsProductsQuery(_sellerId, req);
+        var result = await _productsValidator.ValidateAsync(query);
+        result.IsValid.Should().BeFalse();
+        result.Errors.Should().Contain(e => e.ErrorMessage.Contains(ErrorCodes.ERR_ANALYTICS_INVALID_RANGE));
+    }
+
+    [Fact]
+    public async Task Products_SameFromTo_FailsValidation()
+    {
+        var req = new AnalyticsProductsRequest(_validFrom, _validFrom);
+        var query = new GetSellerAnalyticsProductsQuery(_sellerId, req);
+        var result = await _productsValidator.ValidateAsync(query);
+        result.IsValid.Should().BeFalse();
+        result.Errors.Should().Contain(e => e.ErrorMessage.Contains(ErrorCodes.ERR_ANALYTICS_INVALID_RANGE));
+    }
+
+    [Fact]
+    public async Task Products_RangeExceeds366Days_FailsValidation()
+    {
+        var from = new DateOnly(2024, 1, 1);
+        var to = from.AddDays(AnalyticsConstants.MAX_DAYS + 1);
+        var req = new AnalyticsProductsRequest(from, to);
+        var query = new GetSellerAnalyticsProductsQuery(_sellerId, req);
+        var result = await _productsValidator.ValidateAsync(query);
+        result.IsValid.Should().BeFalse();
+        result.Errors.Should().Contain(e => e.ErrorMessage.Contains(ErrorCodes.ERR_ANALYTICS_INVALID_RANGE));
+    }
+
+    [Fact]
+    public async Task Products_ToAfterTomorrowUtc_FailsValidation()
+    {
+        var to = DateOnly.FromDateTime(DateTime.UtcNow.AddDays(3));
+        var req = new AnalyticsProductsRequest(_validFrom, to);
+        var query = new GetSellerAnalyticsProductsQuery(_sellerId, req);
+        var result = await _productsValidator.ValidateAsync(query);
+        result.IsValid.Should().BeFalse();
+        result.Errors.Should().Contain(e => e.ErrorMessage.Contains(ErrorCodes.ERR_ANALYTICS_INVALID_RANGE));
+    }
+
+    [Fact]
+    public async Task Products_ComparisonPeriodNotRepresentable_FailsValidation()
+    {
+        var from = DateOnly.MinValue.AddDays(1);
+        var to = from.AddDays(10);
+        var req = new AnalyticsProductsRequest(from, to);
+        var query = new GetSellerAnalyticsProductsQuery(_sellerId, req);
+        var result = await _productsValidator.ValidateAsync(query);
+        result.IsValid.Should().BeFalse();
+        result.Errors.Should().Contain(e => e.ErrorMessage.Contains(ErrorCodes.ERR_ANALYTICS_INVALID_RANGE));
+    }
+
+    [Fact]
     public async Task Products_RatingSortWithBundleFilter_FailsValidation()
     {
         var req = new AnalyticsProductsRequest(_validFrom, _validTo,
@@ -157,6 +212,61 @@ public sealed class SellerAnalyticsQueryValidatorTests
         var query = new GetSellerAnalyticsSalesQuery(_sellerId, req);
         var result = await _salesValidator.ValidateAsync(query);
         result.IsValid.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task Sales_ToBeforeFrom_FailsValidation()
+    {
+        var req = new AnalyticsSalesRequest(_validTo, _validFrom);
+        var query = new GetSellerAnalyticsSalesQuery(_sellerId, req);
+        var result = await _salesValidator.ValidateAsync(query);
+        result.IsValid.Should().BeFalse();
+        result.Errors.Should().Contain(e => e.ErrorMessage.Contains(ErrorCodes.ERR_ANALYTICS_INVALID_RANGE));
+    }
+
+    [Fact]
+    public async Task Sales_SameFromTo_FailsValidation()
+    {
+        var req = new AnalyticsSalesRequest(_validFrom, _validFrom);
+        var query = new GetSellerAnalyticsSalesQuery(_sellerId, req);
+        var result = await _salesValidator.ValidateAsync(query);
+        result.IsValid.Should().BeFalse();
+        result.Errors.Should().Contain(e => e.ErrorMessage.Contains(ErrorCodes.ERR_ANALYTICS_INVALID_RANGE));
+    }
+
+    [Fact]
+    public async Task Sales_RangeExceeds366Days_FailsValidation()
+    {
+        var from = new DateOnly(2024, 1, 1);
+        var to = from.AddDays(AnalyticsConstants.MAX_DAYS + 1);
+        var req = new AnalyticsSalesRequest(from, to);
+        var query = new GetSellerAnalyticsSalesQuery(_sellerId, req);
+        var result = await _salesValidator.ValidateAsync(query);
+        result.IsValid.Should().BeFalse();
+        result.Errors.Should().Contain(e => e.ErrorMessage.Contains(ErrorCodes.ERR_ANALYTICS_INVALID_RANGE));
+    }
+
+    [Fact]
+    public async Task Sales_ToAfterTomorrowUtc_FailsValidation()
+    {
+        var to = DateOnly.FromDateTime(DateTime.UtcNow.AddDays(3));
+        var req = new AnalyticsSalesRequest(_validFrom, to);
+        var query = new GetSellerAnalyticsSalesQuery(_sellerId, req);
+        var result = await _salesValidator.ValidateAsync(query);
+        result.IsValid.Should().BeFalse();
+        result.Errors.Should().Contain(e => e.ErrorMessage.Contains(ErrorCodes.ERR_ANALYTICS_INVALID_RANGE));
+    }
+
+    [Fact]
+    public async Task Sales_ComparisonPeriodNotRepresentable_FailsValidation()
+    {
+        var from = DateOnly.MinValue.AddDays(1);
+        var to = from.AddDays(10);
+        var req = new AnalyticsSalesRequest(from, to);
+        var query = new GetSellerAnalyticsSalesQuery(_sellerId, req);
+        var result = await _salesValidator.ValidateAsync(query);
+        result.IsValid.Should().BeFalse();
+        result.Errors.Should().Contain(e => e.ErrorMessage.Contains(ErrorCodes.ERR_ANALYTICS_INVALID_RANGE));
     }
 
     [Fact]

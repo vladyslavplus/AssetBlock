@@ -1,5 +1,6 @@
 using AssetBlock.Domain.Abstractions.Services;
 using AssetBlock.Domain.Core.Constants;
+using AssetBlock.Infrastructure.Common;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
@@ -13,12 +14,14 @@ namespace AssetBlock.Infrastructure.HostedServices;
 internal sealed class CheckoutReservationCleanupWorker(
     IServiceScopeFactory scopeFactory,
     IHostEnvironment environment,
-    ILogger<CheckoutReservationCleanupWorker> logger) : BackgroundService
+    ILogger<CheckoutReservationCleanupWorker> logger,
+    Func<double>? jitterProvider = null) : BackgroundService
 {
     private static readonly TimeSpan _interval = TimeSpan.FromMinutes(1);
     /// <summary>Minimum age since create/last poll before another Stripe API check (1–5 min target).</summary>
     private static readonly TimeSpan _reconcileAfter = TimeSpan.FromMinutes(2);
     private const int BATCH_SIZE = 100;
+    private readonly Func<double>? _jitterProvider = jitterProvider;
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
@@ -32,7 +35,8 @@ internal sealed class CheckoutReservationCleanupWorker(
 
         try
         {
-            await Task.Delay(TimeSpan.FromSeconds(30), stoppingToken);
+            var initialDelay = CalculateInitialDelay(_jitterProvider);
+            await Task.Delay(initialDelay, stoppingToken);
         }
         catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
         {
@@ -56,13 +60,24 @@ internal sealed class CheckoutReservationCleanupWorker(
 
             try
             {
-                await Task.Delay(_interval, stoppingToken);
+                var loopDelay = CalculateIntervalDelay(_jitterProvider);
+                await Task.Delay(loopDelay, stoppingToken);
             }
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
             {
                 break;
             }
         }
+    }
+
+    internal static TimeSpan CalculateInitialDelay(Func<double>? jitterProvider = null)
+    {
+        return DelayJitter.Apply(TimeSpan.FromSeconds(30), jitterProvider);
+    }
+
+    internal static TimeSpan CalculateIntervalDelay(Func<double>? jitterProvider = null)
+    {
+        return DelayJitter.Apply(_interval, jitterProvider);
     }
 
     internal async Task RunCleanup(CancellationToken cancellationToken)

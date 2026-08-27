@@ -1,0 +1,35 @@
+using AssetBlock.Application.UseCases.Payments.GetCheckoutStatus;
+using AwesomeAssertions;
+
+namespace AssetBlock.Application.Tests.Validators;
+
+public sealed class GetCheckoutStatusQueryValidatorTests
+{
+    private readonly GetCheckoutStatusQueryValidator _validator = new();
+
+    [Fact]
+    public async Task Validate_WhenValidQuery_ShouldPass()
+    {
+        var query = new GetCheckoutStatusQuery(Guid.NewGuid(), Guid.NewGuid());
+        var result = await _validator.ValidateAsync(query);
+        result.IsValid.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task Validate_WhenEmptyCheckoutIntentId_ShouldFail()
+    {
+        var query = new GetCheckoutStatusQuery(Guid.Empty, Guid.NewGuid());
+        var result = await _validator.ValidateAsync(query);
+        result.IsValid.Should().BeFalse();
+        result.Errors.Should().Contain(e => e.PropertyName == nameof(query.CheckoutIntentId));
+    }
+
+    [Fact]
+    public async Task Validate_WhenEmptyUserId_ShouldFail()
+    {
+        var query = new GetCheckoutStatusQuery(Guid.NewGuid(), Guid.Empty);
+        var result = await _validator.ValidateAsync(query);
+        result.IsValid.Should().BeFalse();
+        result.Errors.Should().Contain(e => e.PropertyName == nameof(query.UserId));
+    }
+}

@@ -1,5 +1,6 @@
 using AssetBlock.Domain.Abstractions.Services;
 using AssetBlock.Domain.Core.Constants;
+using AssetBlock.Infrastructure.Common;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
@@ -10,7 +11,8 @@ namespace AssetBlock.Infrastructure.Outbox;
 
 internal sealed class OutboxDispatcher(
     IServiceScopeFactory scopeFactory,
-    ILogger<OutboxDispatcher> logger) : BackgroundService
+    ILogger<OutboxDispatcher> logger,
+    Func<double>? jitterProvider = null) : BackgroundService
 {
     private static readonly TimeSpan _pollInterval = TimeSpan.FromSeconds(2);
     private static readonly TimeSpan _lease = TimeSpan.FromMinutes(OutboxMessageTypes.LEASE_MINUTES);
@@ -35,13 +37,27 @@ internal sealed class OutboxDispatcher(
 
             try
             {
-                await Task.Delay(_pollInterval, stoppingToken);
+                var pollDelay = CalculatePollInterval(jitterProvider);
+                await Task.Delay(pollDelay, stoppingToken);
             }
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
             {
                 break;
             }
         }
+    }
+
+    internal static TimeSpan CalculatePollInterval(Func<double>? jitterProvider = null)
+    {
+        return DelayJitter.Apply(_pollInterval, jitterProvider);
+    }
+
+    internal static TimeSpan CalculateRetryDelay(int attemptCount, Func<double>? jitterProvider = null)
+    {
+        var baseSeconds = Math.Min(3600, Math.Pow(2, Math.Min(attemptCount, 10)));
+        var baseDelay = TimeSpan.FromSeconds(baseSeconds);
+        var jitteredDelay = DelayJitter.Apply(baseDelay, jitterProvider);
+        return jitteredDelay > TimeSpan.FromSeconds(3600) ? TimeSpan.FromSeconds(3600) : jitteredDelay;
     }
 
     internal async Task DispatchBatch(CancellationToken cancellationToken)
@@ -65,7 +81,7 @@ internal sealed class OutboxDispatcher(
             }
 
             var stopwatch = Stopwatch.StartNew();
-            
+
             if (!handlers.TryGetValue(message.Type, out var handler))
             {
                 var outcome = DiagnosticsOutcome.DEAD_LETTER;
@@ -96,7 +112,7 @@ internal sealed class OutboxDispatcher(
                 {
                     AssetBlockDiagnostics.RecordOutboxProcessing(stopwatch.Elapsed, message.Type, outcome);
                 }
-                
+
                 continue;
             }
 
@@ -141,8 +157,8 @@ internal sealed class OutboxDispatcher(
                 else
                 {
                     processingOutcome = DiagnosticsOutcome.HANDLER_FAILURE;
-                    var delay = TimeSpan.FromSeconds(Math.Min(3600, Math.Pow(2, Math.Min(message.AttemptCount, 10))));
-                    var next = DateTimeOffset.UtcNow.Add(delay);
+                    var cappedDelay = CalculateRetryDelay(message.AttemptCount, jitterProvider);
+                    var next = DateTimeOffset.UtcNow.Add(cappedDelay);
                     logger.LogError(
                         ex,
                         "Outbox handler failed for {OutboxId} type {Type} attempt {Attempt}",

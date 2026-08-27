@@ -25,7 +25,7 @@ namespace AssetBlock.WebApi.Controllers;
 /// Absolute route avoids inheriting api/[controller] from ApiControllerBase.
 /// </summary>
 [ApiController]
-[Route("api/seller/collections")]
+[Route(ApiRoutes.SellerCollections.BASE)]
 [Produces("application/json")]
 public sealed class SellerCollectionsController(ISender sender) : ControllerBase
 {

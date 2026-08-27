@@ -1,14 +1,12 @@
 using AssetBlock.Application.Common.Validators;
 using AssetBlock.Application.UseCases.Assets.UpdateAsset;
+using AssetBlock.Domain.Core.Constants;
 using FluentValidation;
 
 namespace AssetBlock.Application.Validators.Assets;
 
 internal sealed class UpdateAssetCommandValidator : AbstractValidator<UpdateAssetCommand>
 {
-    private const int TITLE_MAX_LENGTH = 500;
-    private const int DESCRIPTION_MAX_LENGTH = 5000;
-
     public UpdateAssetCommandValidator()
     {
         RuleFor(c => c)
@@ -17,11 +15,13 @@ internal sealed class UpdateAssetCommandValidator : AbstractValidator<UpdateAsse
 
         RuleFor(c => c.Title)
             .NotEmpty().WithMessage("Title cannot be empty when provided.")
-            .MaximumLength(TITLE_MAX_LENGTH).WithMessage("Title must not exceed 500 characters.")
+            .MaximumLength(ListingSuggestionBounds.TITLE_MAX_LENGTH)
+            .WithMessage($"Title must not exceed {ListingSuggestionBounds.TITLE_MAX_LENGTH} characters.")
             .When(c => c.Title is not null);
 
         RuleFor(c => c.Description)
-            .MaximumLength(DESCRIPTION_MAX_LENGTH).WithMessage("Description must not exceed 5000 characters.")
+            .MaximumLength(ListingSuggestionBounds.DESCRIPTION_MAX_LENGTH)
+            .WithMessage($"Description must not exceed {ListingSuggestionBounds.DESCRIPTION_MAX_LENGTH} characters.")
             .When(c => c.Description is not null);
 
         When(c => c.Price.HasValue, () =>

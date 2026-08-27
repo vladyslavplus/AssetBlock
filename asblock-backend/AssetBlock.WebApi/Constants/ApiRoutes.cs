@@ -68,6 +68,7 @@ public static class ApiRoutes
 
     public static class SellerCollections
     {
+        public const string BASE = "api/seller/collections";
         public const string LIST = "";
         public const string BY_ID = "{id:guid}";
         public const string ITEMS = "{id:guid}/items";

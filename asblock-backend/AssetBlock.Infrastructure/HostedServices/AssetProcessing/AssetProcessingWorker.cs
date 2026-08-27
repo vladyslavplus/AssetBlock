@@ -5,6 +5,7 @@ using AssetBlock.Domain.Core.Constants;
 using AssetBlock.Domain.Core.Dto;
 using AssetBlock.Domain.Core.Enums;
 using AssetBlock.Domain.Core.Primitives.AppSettingsOptions;
+using AssetBlock.Infrastructure.Common;
 using AssetBlock.Infrastructure.Observability;
 using AssetBlock.Infrastructure.Persistence.Stores;
 using Microsoft.Extensions.DependencyInjection;
@@ -20,7 +21,8 @@ public sealed class AssetProcessingWorker(
     IAssetProcessingRealtimePublisher realtimePublisher,
     IOptions<AssetProcessingOptions> options,
     TimeProvider timeProvider,
-    ILogger<AssetProcessingWorker> logger)
+    ILogger<AssetProcessingWorker> logger,
+    Func<double>? jitterProvider = null)
     : BackgroundService
 {
     private static readonly TimeSpan _signalRPublishTimeout = TimeSpan.FromSeconds(3);
@@ -29,6 +31,7 @@ public sealed class AssetProcessingWorker(
 
     private readonly AssetProcessingOptions _options = options.Value;
     private readonly string _workerId = $"worker-{Environment.MachineName}-{Guid.NewGuid():N}";
+    private readonly Func<double>? _jitterProvider = jitterProvider;
 
     private readonly ConcurrentDictionary<Guid, Task> _activeTasks = new();
 
@@ -85,7 +88,8 @@ public sealed class AssetProcessingWorker(
                 }
                 else
                 {
-                    await Task.Delay(_options.PollInterval, timeProvider, stoppingToken);
+                    var pollDelay = DelayJitter.Apply(_options.PollInterval, _jitterProvider);
+                    await Task.Delay(pollDelay, timeProvider, stoppingToken);
                 }
             }
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
@@ -97,7 +101,8 @@ public sealed class AssetProcessingWorker(
                 logger.LogError(ex, "Error in AssetProcessingWorker polling cycle.");
                 try
                 {
-                    await Task.Delay(_options.PollInterval, timeProvider, stoppingToken);
+                    var pollDelay = DelayJitter.Apply(_options.PollInterval, _jitterProvider);
+                    await Task.Delay(pollDelay, timeProvider, stoppingToken);
                 }
                 catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
                 {
@@ -598,10 +603,11 @@ public sealed class AssetProcessingWorker(
         var multiplier = Math.Pow(2, Math.Min(30, exponent));
         var exponentialTicks = (long)(_options.InitialRetryDelay.Ticks * multiplier);
         var exponentialDelay = TimeSpan.FromTicks(exponentialTicks);
+        var jitteredDelay = DelayJitter.Apply(exponentialDelay, _jitterProvider);
 
-        var delay = handlerRetryAfter.HasValue && handlerRetryAfter.Value > exponentialDelay
+        var delay = handlerRetryAfter.HasValue && handlerRetryAfter.Value > jitteredDelay
             ? handlerRetryAfter.Value
-            : exponentialDelay;
+            : jitteredDelay;
 
         return delay > _options.MaxRetryDelay ? _options.MaxRetryDelay : delay;
     }

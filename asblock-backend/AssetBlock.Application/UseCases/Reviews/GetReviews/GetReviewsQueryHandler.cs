@@ -14,7 +14,7 @@ internal sealed class GetReviewsQueryHandler(
     ILogger<GetReviewsQueryHandler> logger)
     : IRequestHandler<GetReviewsQuery, Result<Domain.Core.Dto.Paging.PagedResult<ReviewListItem>>>
 {
-    private static readonly TimeSpan _cacheExpiration = TimeSpan.FromMinutes(5);
+    private static readonly TimeSpan _cacheExpiration = CatalogCacheConstants.REVIEWS_LIST_TTL;
     private static readonly JsonSerializerOptions _jsonOptions = new() { PropertyNamingPolicy = JsonNamingPolicy.CamelCase };
 
     public async Task<Result<Domain.Core.Dto.Paging.PagedResult<ReviewListItem>>> Handle(GetReviewsQuery request, CancellationToken cancellationToken)

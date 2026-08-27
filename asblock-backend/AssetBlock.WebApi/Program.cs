@@ -41,6 +41,7 @@ builder.Services.AddControllers(options => options.Conventions.Add(new Lowercase
             return AssetBlock.WebApi.ProblemDetails.AssetBlockProblemDetails.ToActionResult(problem);
         };
     });
+builder.Services.AddAssetBlockHostFiltering(builder.Configuration, builder.Environment);
 builder.Services.AddAssetBlockCors(builder.Configuration, builder.Environment);
 builder.Services.AddSignalR();
 builder.Services.AddScoped<IRealtimeNotificationPublisher, RealtimeNotificationPublisher>();

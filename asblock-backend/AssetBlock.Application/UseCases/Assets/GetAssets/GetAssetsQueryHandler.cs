@@ -14,7 +14,7 @@ internal sealed class GetAssetsQueryHandler(
     ILogger<GetAssetsQueryHandler> logger)
     : IRequestHandler<GetAssetsQuery, Result<Domain.Core.Dto.Paging.PagedResult<AssetListItem>>>
 {
-    private static readonly TimeSpan _cacheExpiration = TimeSpan.FromMinutes(2);
+    private static readonly TimeSpan _cacheExpiration = CatalogCacheConstants.ASSETS_LIST_TTL;
     private static readonly JsonSerializerOptions _jsonOptions = new() { PropertyNamingPolicy = JsonNamingPolicy.CamelCase };
 
     public async Task<Result<Domain.Core.Dto.Paging.PagedResult<AssetListItem>>> Handle(GetAssetsQuery request, CancellationToken cancellationToken)

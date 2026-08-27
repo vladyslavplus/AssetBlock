@@ -7,18 +7,10 @@ internal sealed class GetSellerAnalyticsSalesQueryValidator : AbstractValidator<
 {
     public GetSellerAnalyticsSalesQueryValidator()
     {
-        RuleFor(q => q.Request.To)
-            .Must((q, to) => to > q.Request.From)
-            .WithMessage(ErrorCodes.ERR_ANALYTICS_INVALID_RANGE + ": 'to' must be after 'from'.");
-
-        RuleFor(q => q.Request)
-            .Must(r => r.To.DayNumber - r.From.DayNumber <= AnalyticsConstants.MAX_DAYS)
-            .WithMessage(
-                ErrorCodes.ERR_ANALYTICS_INVALID_RANGE + $": range must not exceed {AnalyticsConstants.MAX_DAYS} days.");
-
-        RuleFor(q => q.Request.To)
-            .Must(to => to <= DateOnly.FromDateTime(DateTime.UtcNow.AddDays(1)))
-            .WithMessage(ErrorCodes.ERR_ANALYTICS_INVALID_RANGE + ": 'to' must not be after tomorrow UTC.");
+        SellerAnalyticsRangeRules.ApplyDateRangeRules(
+            this,
+            q => q.Request.From,
+            q => q.Request.To);
 
         RuleFor(q => q.Request.ProductType)
             .IsInEnum()

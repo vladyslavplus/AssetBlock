@@ -33,7 +33,9 @@ public sealed class AssetProcessingWorkerTests
         MaxRetryDelay = TimeSpan.FromMinutes(5)
     };
 
-    private AssetProcessingWorker CreateWorker(AssetProcessingOptions options)
+    private AssetProcessingWorker CreateWorker(
+        AssetProcessingOptions options,
+        Func<double>? jitterProvider = null)
     {
         var serviceProvider = Substitute.For<IServiceProvider>();
         var scope = Substitute.For<IServiceScope>();
@@ -49,7 +51,8 @@ public sealed class AssetProcessingWorkerTests
             _publisher,
             Microsoft.Extensions.Options.Options.Create(options),
             _timeProvider,
-            NullLogger<AssetProcessingWorker>.Instance);
+            NullLogger<AssetProcessingWorker>.Instance,
+            jitterProvider ?? (() => 0.5));
     }
 
     [Theory]
