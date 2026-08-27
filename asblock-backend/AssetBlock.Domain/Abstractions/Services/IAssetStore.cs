@@ -13,6 +13,7 @@ public interface IAssetStore
     Task<Asset> AddWithVersion(Asset asset, AssetVersion version, List<Tag>? tags, CancellationToken cancellationToken = default);
 
     Task<Asset?> GetById(Guid id, CancellationToken cancellationToken = default);
+    Task<Asset?> GetById(Guid id, bool includeDeleted, CancellationToken cancellationToken = default);
 
     /// <summary>Locks one asset row for a short lifecycle transaction.</summary>
     Task<Asset?> GetForUpdate(Guid id, CancellationToken cancellationToken = default);

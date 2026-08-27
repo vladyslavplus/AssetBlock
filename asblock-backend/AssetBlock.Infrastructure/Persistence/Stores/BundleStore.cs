@@ -485,13 +485,16 @@ internal sealed class BundleStore(ApplicationDbContext dbContext) : IBundleStore
 
     public async Task LockAssetsInOrder(IReadOnlyList<Guid> assetIds, CancellationToken cancellationToken = default)
     {
-        foreach (var assetId in assetIds.Distinct().OrderBy(id => id))
+        var distinctIds = assetIds.Distinct().OrderBy(id => id).ToArray();
+        if (distinctIds.Length == 0)
         {
-            _ = await dbContext.Assets
-                .FromSqlRaw("""SELECT * FROM assets WHERE "Id" = {0} FOR UPDATE""", assetId)
-                .AsNoTracking()
-                .FirstOrDefaultAsync(cancellationToken);
+            return;
         }
+
+        _ = await dbContext.Assets
+            .FromSqlRaw("""SELECT * FROM assets WHERE "Id" = ANY({0}) ORDER BY "Id" FOR UPDATE""", distinctIds)
+            .AsNoTracking()
+            .ToListAsync(cancellationToken);
     }
 
     public Task<Guid?> GetPublicAnalyticsSellerId(Guid bundleId, CancellationToken cancellationToken = default)

@@ -414,9 +414,10 @@ public sealed class UsersController(ISender sender) : ApiControllerBase(sender)
     }
 
     [HttpGet(ApiRoutes.Users.ME_ASSET_VERSION_LISTING_COPILOT)]
-    [Authorize]
+    [Authorize(Policy = AuthorizationPolicies.VERIFIED_EMAIL)]
     [ProducesResponseType(typeof(ListingCopilotSuggestionDto), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> GetListingCopilotSuggestion([FromRoute] Guid assetVersionId, CancellationToken cancellationToken)
     {

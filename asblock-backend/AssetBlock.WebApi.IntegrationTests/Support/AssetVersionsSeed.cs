@@ -99,7 +99,7 @@ internal static class AssetVersionsSeed
         using var scope = scopeFactory.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
 
-        var sellerId = await db.Assets.AsNoTracking()
+        var sellerId = await db.Assets.IgnoreQueryFilters().AsNoTracking()
             .Where(a => a.Id == assetId)
             .Select(a => a.AuthorId)
             .SingleAsync();

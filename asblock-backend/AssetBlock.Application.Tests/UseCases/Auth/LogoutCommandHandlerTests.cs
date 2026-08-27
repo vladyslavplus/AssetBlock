@@ -1,6 +1,7 @@
 using AssetBlock.Application.UseCases.Auth.Logout;
 using AssetBlock.Domain.Abstractions.Services;
 using AssetBlock.Domain.Core.Constants;
+using AssetBlock.Domain.Core.Dto.Auth;
 using AwesomeAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
 using NSubstitute;
@@ -26,7 +27,7 @@ public class LogoutCommandHandlerTests
         var tokenId = Guid.NewGuid();
 
         _jwtTokenServiceMock.ValidateRefreshToken(command.RefreshToken, Arg.Any<CancellationToken>())
-            .Returns((userId, "testuser", "test@example.com", AppRoles.USER, tokenId));
+            .Returns(new RefreshTokenValidationResult(RefreshTokenValidationStatus.VALID, userId, "testuser", "test@example.com", AppRoles.USER, tokenId));
 
         var result = await _handler.Handle(command, CancellationToken.None);
 
@@ -40,7 +41,7 @@ public class LogoutCommandHandlerTests
     {
         var command = new LogoutCommand("unknown-token");
         _jwtTokenServiceMock.ValidateRefreshToken(command.RefreshToken, Arg.Any<CancellationToken>())
-            .Returns(((Guid, string, string, string, Guid)?)null);
+            .Returns(new RefreshTokenValidationResult(RefreshTokenValidationStatus.NOT_FOUND_OR_EXPIRED));
 
         var result = await _handler.Handle(command, CancellationToken.None);
 
@@ -54,7 +55,7 @@ public class LogoutCommandHandlerTests
     {
         var command = new LogoutCommand("revoked-or-expired-token");
         _jwtTokenServiceMock.ValidateRefreshToken(command.RefreshToken, Arg.Any<CancellationToken>())
-            .Returns(((Guid, string, string, string, Guid)?)null);
+            .Returns(new RefreshTokenValidationResult(RefreshTokenValidationStatus.NOT_FOUND_OR_EXPIRED));
 
         var result = await _handler.Handle(command, CancellationToken.None);
 
@@ -70,7 +71,7 @@ public class LogoutCommandHandlerTests
         var tokenId = Guid.NewGuid();
 
         _jwtTokenServiceMock.ValidateRefreshToken(command.RefreshToken, Arg.Any<CancellationToken>())
-            .Returns((userId, "testuser", "test@example.com", AppRoles.USER, tokenId));
+            .Returns(new RefreshTokenValidationResult(RefreshTokenValidationStatus.VALID, userId, "testuser", "test@example.com", AppRoles.USER, tokenId));
 
         await _handler.Handle(command, CancellationToken.None);
 

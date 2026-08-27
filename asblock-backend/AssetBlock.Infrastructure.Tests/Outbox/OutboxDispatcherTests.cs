@@ -63,7 +63,7 @@ public sealed class OutboxDispatcherTests
     }
 
     [Fact]
-    public async Task DispatchBatch_WhenHandlerMissing_ShouldRecordMissingHandlerWithElapsedDuration()
+    public async Task DispatchBatch_WhenHandlerMissing_ShouldRecordDeadLetterWithElapsedDuration()
     {
         var lockToken = Guid.NewGuid();
         var message = new OutboxMessage
@@ -76,7 +76,7 @@ public sealed class OutboxDispatcherTests
         var outbox = Substitute.For<IOutboxStore>();
         outbox.ClaimPendingBatch(Arg.Any<int>(), Arg.Any<TimeSpan>(), Arg.Any<CancellationToken>())
             .Returns([message]);
-        outbox.MarkFailed(Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<DateTimeOffset>(), Arg.Any<CancellationToken>())
+        outbox.MarkDeadLettered(Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
             .Returns(async _ =>
             {
                 await Task.Delay(15);
@@ -117,8 +117,55 @@ public sealed class OutboxDispatcherTests
 
         listener.RecordObservableInstruments();
 
-        recordedOutcomes.Should().ContainSingle().Which.Should().Be("missing_handler");
+        recordedOutcomes.Should().ContainSingle().Which.Should().Be("dead_letter");
         recordedDurations.Should().ContainSingle().Which.Should().BeGreaterThan(0);
+        await outbox.Received(1).MarkDeadLettered(message.Id, lockToken, Arg.Is<string>(s => s.Contains("test.missing")), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task DispatchBatch_WhenMaxAttemptsReached_ShouldTransitionToDeadLetter()
+    {
+        var lockToken = Guid.NewGuid();
+        var message = new OutboxMessage
+        {
+            Id = Guid.NewGuid(),
+            Type = "test.external",
+            Payload = "{}",
+            LockToken = lockToken,
+            AttemptCount = 10
+        };
+        var outbox = Substitute.For<IOutboxStore>();
+        outbox.ClaimPendingBatch(Arg.Any<int>(), Arg.Any<TimeSpan>(), Arg.Any<CancellationToken>())
+            .Returns([message]);
+        outbox.MarkDeadLettered(message.Id, lockToken, Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(true);
+
+        var handler = Substitute.For<IOutboxMessageHandler>();
+        handler.MessageType.Returns(message.Type);
+        handler.Handle(message, Arg.Any<CancellationToken>())
+            .ThrowsAsync(new InvalidOperationException("persistent failure"));
+
+        var services = new ServiceCollection();
+        services.AddSingleton(outbox);
+        services.AddSingleton(handler);
+        await using var provider = services.BuildServiceProvider();
+        var dispatcher = new OutboxDispatcher(
+            provider.GetRequiredService<IServiceScopeFactory>(),
+            NullLogger<OutboxDispatcher>.Instance);
+
+        await dispatcher.DispatchBatch(CancellationToken.None);
+
+        await outbox.Received(1).MarkDeadLettered(
+            message.Id,
+            lockToken,
+            "persistent failure",
+            Arg.Any<CancellationToken>());
+        await outbox.DidNotReceive().MarkFailed(
+            Arg.Any<Guid>(),
+            Arg.Any<Guid>(),
+            Arg.Any<string>(),
+            Arg.Any<DateTimeOffset>(),
+            Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -135,7 +182,7 @@ public sealed class OutboxDispatcherTests
         var outbox = Substitute.For<IOutboxStore>();
         outbox.ClaimPendingBatch(Arg.Any<int>(), Arg.Any<TimeSpan>(), Arg.Any<CancellationToken>())
             .Returns([message]);
-        outbox.MarkFailed(Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<DateTimeOffset>(), Arg.Any<CancellationToken>())
+        outbox.MarkDeadLettered(Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
             .ThrowsAsync(new InvalidOperationException("db offline"));
 
         var services = new ServiceCollection();

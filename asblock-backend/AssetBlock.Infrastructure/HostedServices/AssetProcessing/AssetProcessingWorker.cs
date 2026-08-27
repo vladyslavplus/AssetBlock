@@ -25,6 +25,7 @@ public sealed class AssetProcessingWorker(
 {
     private static readonly TimeSpan _signalRPublishTimeout = TimeSpan.FromSeconds(3);
     private static readonly TimeSpan _cleanupTimeout = TimeSpan.FromSeconds(5);
+    private static readonly TimeSpan _shutdownTimeout = TimeSpan.FromSeconds(30);
 
     private readonly AssetProcessingOptions _options = options.Value;
     private readonly string _workerId = $"worker-{Environment.MachineName}-{Guid.NewGuid():N}";
@@ -105,17 +106,22 @@ public sealed class AssetProcessingWorker(
             }
         }
 
-        // Wait for running active tasks to complete or be interrupted during graceful shutdown
+        // Wait for running active tasks to complete or be interrupted during graceful shutdown (bounded by budget)
         if (!_activeTasks.IsEmpty)
         {
-            logger.LogInformation("AssetProcessingWorker waiting for {Count} active tasks to finish...", _activeTasks.Count);
+            logger.LogInformation("AssetProcessingWorker waiting up to {Seconds}s for {Count} active tasks to finish...", _shutdownTimeout.TotalSeconds, _activeTasks.Count);
             try
             {
-                await Task.WhenAll(_activeTasks.Values);
+                var allTasks = Task.WhenAll(_activeTasks.Values);
+                var completed = await Task.WhenAny(allTasks, Task.Delay(_shutdownTimeout, timeProvider, CancellationToken.None));
+                if (completed != allTasks)
+                {
+                    logger.LogWarning("AssetProcessingWorker shutdown budget ({Seconds}s) exceeded; {Count} tasks remain in-flight and will be reclaimed by another worker", _shutdownTimeout.TotalSeconds, _activeTasks.Count);
+                }
             }
-            catch
+            catch (Exception ex)
             {
-                // Individual task exceptions are logged inside RunTrackedJob
+                logger.LogWarning(ex, "Exception while awaiting active tasks during shutdown");
             }
         }
 

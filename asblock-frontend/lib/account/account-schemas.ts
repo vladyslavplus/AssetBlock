@@ -20,6 +20,39 @@ export const accountProfileFormSchema = z
 
 export type AccountProfileFormValues = z.infer<typeof accountProfileFormSchema>
 
+export const accountProfileUpdateSchema = z
+  .object({
+    username: z.string().min(1, 'Username is required').max(50, 'Max 50 characters').optional(),
+    bio: z.string().max(1000, 'Bio must be at most 1000 characters').nullable().optional(),
+    avatarUrl: z.string().max(500, 'URL too long').nullable().optional(),
+    isPublicProfile: z.boolean().optional(),
+  })
+  .superRefine((data, ctx) => {
+    if (data.avatarUrl) {
+      const u = data.avatarUrl.trim()
+      if (u.length > 0 && !z.string().url().safeParse(u).success) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: 'Enter a valid URL or leave empty',
+          path: ['avatarUrl'],
+        })
+      }
+    }
+  })
+
+export type AccountProfileUpdateValues = z.infer<typeof accountProfileUpdateSchema>
+
+export const updateSocialLinksSchema = z.object({
+  links: z.array(
+    z.object({
+      platformId: z.string().uuid(),
+      url: z.string().url().max(500),
+    }),
+  ),
+})
+
+export type UpdateSocialLinksValues = z.infer<typeof updateSocialLinksSchema>
+
 export const changePasswordFormSchema = z
   .object({
     currentPassword: z.string().min(1, 'Current password is required'),

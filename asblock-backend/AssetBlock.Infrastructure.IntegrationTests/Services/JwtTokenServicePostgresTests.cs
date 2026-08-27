@@ -1,4 +1,5 @@
 using AssetBlock.Domain.Core.Constants;
+using AssetBlock.Domain.Core.Dto.Auth;
 using AssetBlock.Domain.Core.Entities;
 using AssetBlock.Domain.Core.Primitives.AppSettingsOptions;
 using AssetBlock.Infrastructure.IntegrationTests.Support;
@@ -31,11 +32,46 @@ public sealed class JwtTokenServicePostgresTests(PostgresFixture fixture)
         await sut.StoreRefreshToken(userId, tokens.RefreshToken, DateTimeOffset.UtcNow.AddDays(1));
 
         var validated = await sut.ValidateRefreshToken(tokens.RefreshToken);
-        validated.Should().NotBeNull();
-        var revoked = await sut.RevokeRefreshToken(validated!.Value.TokenId);
+        validated.Status.Should().Be(RefreshTokenValidationStatus.VALID);
+        var revoked = await sut.RevokeRefreshToken(validated.TokenId!.Value);
         revoked.Should().BeTrue();
 
-        (await sut.ValidateRefreshToken(tokens.RefreshToken)).Should().BeNull();
+        var afterRevocation = await sut.ValidateRefreshToken(tokens.RefreshToken);
+        afterRevocation.Status.Should().NotBe(RefreshTokenValidationStatus.VALID);
+    }
+
+    [Fact]
+    public async Task ValidateRefreshToken_WhenReusedBeyondGrace_ReturnsRevokedReused()
+    {
+        await using var db = await fixture.CreateCleanDbContext();
+        var userId = Guid.NewGuid();
+        db.Users.Add(new User
+        {
+            Id = userId,
+            Username = "tester_reuse",
+            Email = "reuse@test.com",
+            PasswordHash = "hash",
+            Role = AppRoles.USER,
+            CreatedAt = DateTimeOffset.UtcNow
+        });
+        await db.SaveChangesAsync();
+
+        var sut = CreateSut(db);
+        var tokens = sut.GenerateTokenPair(userId, "tester_reuse", "reuse@test.com", AppRoles.USER);
+        await sut.StoreRefreshToken(userId, tokens.RefreshToken, DateTimeOffset.UtcNow.AddDays(1));
+
+        var validated = await sut.ValidateRefreshToken(tokens.RefreshToken);
+        validated.Status.Should().Be(RefreshTokenValidationStatus.VALID);
+        await sut.RevokeRefreshToken(validated.TokenId!.Value);
+
+        // Manually age the RevokedAt timestamp past the 15s grace window
+        var storedToken = await db.RefreshTokens.FindAsync(validated.TokenId!.Value);
+        storedToken!.RevokedAt = DateTimeOffset.UtcNow.AddSeconds(-60);
+        await db.SaveChangesAsync();
+
+        var reuseCheck = await sut.ValidateRefreshToken(tokens.RefreshToken);
+        reuseCheck.Status.Should().Be(RefreshTokenValidationStatus.REVOKED_REUSED);
+        reuseCheck.UserId.Should().Be(userId);
     }
 
     [Fact]
@@ -67,7 +103,7 @@ public sealed class JwtTokenServicePostgresTests(PostgresFixture fixture)
         var tokens = sut1.GenerateTokenPair(userId, "tester_conc", "conc@test.com", AppRoles.USER);
         await sut1.StoreRefreshToken(userId, tokens.RefreshToken, DateTimeOffset.UtcNow.AddDays(1));
         var validated = await sut1.ValidateRefreshToken(tokens.RefreshToken);
-        validated.Should().NotBeNull();
+        validated.Status.Should().Be(RefreshTokenValidationStatus.VALID);
 
         await using var db2 = fixture.CreateDbContext();
         var sut2 = CreateSut(db2);
@@ -76,12 +112,12 @@ public sealed class JwtTokenServicePostgresTests(PostgresFixture fixture)
         var task1 = Task.Run(async () =>
         {
             barrier.SignalAndWait();
-            return await sut1.RevokeRefreshToken(validated!.Value.TokenId);
+            return await sut1.RevokeRefreshToken(validated.TokenId!.Value);
         });
         var task2 = Task.Run(async () =>
         {
             barrier.SignalAndWait();
-            return await sut2.RevokeRefreshToken(validated!.Value.TokenId);
+            return await sut2.RevokeRefreshToken(validated.TokenId!.Value);
         });
 
         var results = await Task.WhenAll(task1, task2);

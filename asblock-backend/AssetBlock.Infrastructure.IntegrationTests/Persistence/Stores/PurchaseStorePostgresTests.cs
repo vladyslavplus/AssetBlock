@@ -216,4 +216,54 @@ public sealed class PurchaseStorePostgresTests(PostgresFixture fixture)
 
         await act.Should().ThrowAsync<DuplicateEntitlementException>();
     }
+
+    [Fact]
+    public async Task ListForUser_WhenAssetIsSoftDeleted_ShouldStillReturnPurchaseAndPreserveLibraryEntitlement()
+    {
+        await using var db = await fixture.CreateCleanDbContext();
+        (User author, Category category) = await TestData.SeedAuthorAndCategory(db);
+        var buyer = TestData.CreateUser("library-buyer", "library-buyer@example.test");
+        db.Users.Add(buyer);
+        await db.SaveChangesAsync();
+
+        var asset = TestData.CreateAsset(author.Id, category.Id, title: "Soft Deleted Pack", price: 19.99m);
+        db.Assets.Add(asset);
+        var version = TestData.CreateAssetVersion(asset.Id);
+        db.AssetVersions.Add(version);
+        await db.SaveChangesAsync();
+
+        TestData.AddCompletedPurchase(
+            db,
+            TestData.CreatePurchase(buyer.Id, asset.Id, version.Id),
+            asset.Title,
+            author.Id,
+            pricePaid: 19.99m);
+        await db.SaveChangesAsync();
+
+        // Soft-delete the asset after purchase
+        var assetStore = new AssetStore(db);
+        await assetStore.SoftDelete(asset.Id, DateTimeOffset.UtcNow);
+
+        // Verify public lookup returns null due to global query filter
+        var publicLookup = await assetStore.GetById(asset.Id);
+        publicLookup.Should().BeNull();
+
+        // Verify purchaser library query still includes the soft-deleted asset with matching total count
+        var store = new PurchaseStore(db);
+        var result = await store.ListForUser(buyer.Id, new ListMyPurchasesRequest
+        {
+            Page = 1,
+            PageSize = 10,
+            SortBy = "PurchasedAt",
+            SortDirection = SortDirection.DESC
+        });
+
+        result.TotalCount.Should().Be(1);
+        result.Items.Should().HaveCount(1);
+        result.Items[0].AssetId.Should().Be(asset.Id);
+        result.Items[0].AssetTitle.Should().Be("Soft Deleted Pack");
+        result.Items[0].Price.Should().Be(19.99m);
+        result.Items[0].AuthorUsername.Should().Be(author.Username);
+    }
 }
+

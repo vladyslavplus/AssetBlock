@@ -20,7 +20,7 @@ internal sealed class DownloadService(
         CancellationToken cancellationToken = default)
     {
         // Load the asset for ownership check and download-rate-limit value.
-        var asset = await assetStore.GetById(assetId, cancellationToken);
+        var asset = await assetStore.GetById(assetId, includeDeleted: true, cancellationToken);
         if (asset is null)
         {
             return new DownloadAuthorization(AssetDownloadStatus.NOT_FOUND);

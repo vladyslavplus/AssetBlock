@@ -116,4 +116,24 @@ internal sealed class OutboxStore(ApplicationDbContext dbContext, ILogger<Outbox
                 cancellationToken);
         return updated > 0;
     }
+
+    public async Task<bool> MarkDeadLettered(
+        Guid id,
+        Guid lockToken,
+        string reason,
+        CancellationToken cancellationToken = default)
+    {
+        var error = "DEAD_LETTER: " + (reason.Length > 1980 ? reason[..1980] : reason);
+        var updated = await dbContext.OutboxMessages
+            .Where(m => m.Id == id && m.LockToken == lockToken && m.ProcessedAt == null)
+            .ExecuteUpdateAsync(
+                setters => setters
+                    .SetProperty(m => m.AttemptCount, OutboxMessageTypes.MAX_ATTEMPTS)
+                    .SetProperty(m => m.LastError, error)
+                    .SetProperty(m => m.NextAttemptAt, (DateTimeOffset?)null)
+                    .SetProperty(m => m.LockedUntil, (DateTimeOffset?)null)
+                    .SetProperty(m => m.LockToken, (Guid?)null),
+                cancellationToken);
+        return updated > 0;
+    }
 }

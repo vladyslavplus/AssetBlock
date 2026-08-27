@@ -29,4 +29,14 @@ public interface IOutboxStore
         string error,
         DateTimeOffset nextAttemptAt,
         CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Permanently transitions an outbox message to dead-lettered state upon exceeding max attempts or missing handler.
+    /// Returns false when the lease was lost to another worker.
+    /// </summary>
+    Task<bool> MarkDeadLettered(
+        Guid id,
+        Guid lockToken,
+        string reason,
+        CancellationToken cancellationToken = default);
 }

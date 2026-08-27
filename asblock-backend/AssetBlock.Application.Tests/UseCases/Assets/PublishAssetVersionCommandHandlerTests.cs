@@ -105,16 +105,6 @@ public class PublishAssetVersionCommandHandlerTests
         result.Errors.Should().Contain(ErrorCodes.ERR_FORBIDDEN);
     }
 
-    [Fact]
-    public async Task Handle_WhenLicenseInvalid_ShouldReturnValidationError()
-    {
-        StubOwnedAsset();
-
-        var result = await _handler.Handle(CreateCommand(license: "CUSTOM"), CancellationToken.None);
-
-        result.IsSuccess.Should().BeFalse();
-        result.ValidationErrors.Should().Contain(e => e.Identifier == ErrorCodes.ERR_LICENSE_CODE_INVALID);
-    }
 
     [Fact]
     public async Task Handle_WhenSuccessful_ShouldPublishNextVersionAndInvalidateCache()

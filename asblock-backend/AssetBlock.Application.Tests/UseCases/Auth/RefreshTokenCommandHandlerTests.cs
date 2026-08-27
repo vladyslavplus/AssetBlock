@@ -1,6 +1,7 @@
 using AssetBlock.Application.UseCases.Auth.RefreshToken;
 using AssetBlock.Domain.Abstractions.Services;
 using AssetBlock.Domain.Core.Constants;
+using AssetBlock.Domain.Core.Dto.Auth;
 using AssetBlock.Domain.Core.Dto.Audit;
 using AssetBlock.Domain.Core.Enums;
 using AssetBlock.Domain.Core.Primitives.Api;
@@ -38,7 +39,7 @@ public class RefreshTokenCommandHandlerTests
     {
         var command = new RefreshTokenCommand("invalid-token");
         _jwtTokenServiceMock.ValidateRefreshToken(command.RefreshToken, Arg.Any<CancellationToken>())
-            .Returns(((Guid, string, string, string, Guid)?)null);
+            .Returns(new RefreshTokenValidationResult(RefreshTokenValidationStatus.NOT_FOUND_OR_EXPIRED));
 
         var result = await _handler.Handle(command, CancellationToken.None);
 
@@ -49,6 +50,27 @@ public class RefreshTokenCommandHandlerTests
                 e.Action == AuditActions.AUTH_REFRESH_TOKEN &&
                 e.Outcome == AuditOutcome.FAILURE &&
                 e.ActorTypeOverride == AuditActorType.ANONYMOUS),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Handle_WhenTokenReusedAfterRevocation_ShouldRevokeAllSessionsAndWriteAudit()
+    {
+        var command = new RefreshTokenCommand("stolen-reused-token");
+        var userId = Guid.NewGuid();
+        _jwtTokenServiceMock.ValidateRefreshToken(command.RefreshToken, Arg.Any<CancellationToken>())
+            .Returns(new RefreshTokenValidationResult(RefreshTokenValidationStatus.REVOKED_REUSED, userId, "user", "u@e.com", AppRoles.USER, Guid.NewGuid()));
+
+        var result = await _handler.Handle(command, CancellationToken.None);
+
+        result.IsSuccess.Should().BeFalse();
+        result.ValidationErrors.Should().Contain(e => e.Identifier == ErrorCodes.ERR_AUTH_TOKEN_INVALID);
+        await _jwtTokenServiceMock.Received(1).RevokeAllRefreshTokens(userId, Arg.Any<CancellationToken>());
+        await _auditWriterMock.Received(1).WriteBestEffort(
+            Arg.Is<AuditEvent>(e =>
+                e.Action == AuditActions.AUTH_REFRESH_TOKEN &&
+                e.Outcome == AuditOutcome.FAILURE &&
+                e.ActorUserIdOverride == userId),
             Arg.Any<CancellationToken>());
     }
 
@@ -65,7 +87,7 @@ public class RefreshTokenCommandHandlerTests
         var tokenResponse = new TokensResponse("new-acc", "new-ref", DateTimeOffset.UtcNow.AddMinutes(15), DateTimeOffset.UtcNow.AddDays(7));
 
         _jwtTokenServiceMock.ValidateRefreshToken(command.RefreshToken, Arg.Any<CancellationToken>())
-            .Returns((userId, username, email, role, tokenId));
+            .Returns(new RefreshTokenValidationResult(RefreshTokenValidationStatus.VALID, userId, username, email, role, tokenId));
         _jwtTokenServiceMock.RevokeRefreshToken(tokenId, Arg.Any<CancellationToken>()).Returns(true);
         _jwtTokenServiceMock.GenerateTokenPair(userId, username, email, role).Returns(tokenResponse);
 
@@ -100,7 +122,7 @@ public class RefreshTokenCommandHandlerTests
         var tokenResponse = new TokensResponse("new-acc", "new-ref", DateTimeOffset.UtcNow.AddMinutes(15), DateTimeOffset.UtcNow.AddDays(7));
 
         _jwtTokenServiceMock.ValidateRefreshToken(command.RefreshToken, Arg.Any<CancellationToken>())
-            .Returns((userId, username, email, role, tokenId));
+            .Returns(new RefreshTokenValidationResult(RefreshTokenValidationStatus.VALID, userId, username, email, role, tokenId));
         _jwtTokenServiceMock.RevokeRefreshToken(tokenId, Arg.Any<CancellationToken>()).Returns(false);
         _jwtTokenServiceMock.GenerateTokenPair(userId, username, email, role).Returns(tokenResponse);
 

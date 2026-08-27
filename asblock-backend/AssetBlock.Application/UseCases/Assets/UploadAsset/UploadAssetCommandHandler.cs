@@ -31,33 +31,9 @@ internal sealed class UploadAssetCommandHandler(
     public async Task<Result<Guid>> Handle(UploadAssetCommand request, CancellationToken cancellationToken)
     {
         var uploadOpts = fileUploadOptions.Value;
-
-        if (request.FileLength <= 0)
-        {
-            return ResultError.Error<Guid>(ErrorCodes.ERR_FILE_REQUIRED);
-        }
-
-        if (request.FileLength > uploadOpts.MaxFileBytes)
-        {
-            return ResultError.Error<Guid>(ErrorCodes.ERR_FILE_TOO_LARGE);
-        }
-
         var displayFileName = Path.GetFileName(request.FileName);
-        if (string.IsNullOrWhiteSpace(displayFileName))
-        {
-            return ResultError.Error<Guid>(ErrorCodes.ERR_FILE_EXTENSION_NOT_ALLOWED);
-        }
-
-        if (!uploadOpts.TryMatchAllowedExtension(displayFileName, out var matchedExtension))
-        {
-            return ResultError.Error<Guid>(ErrorCodes.ERR_FILE_EXTENSION_NOT_ALLOWED);
-        }
-
-        if (!AssetLicenseCatalog.TryParseCode(request.Request.LicenseCode, out var licenseCode))
-        {
-            return ResultError.Error<Guid>(ErrorCodes.ERR_LICENSE_CODE_INVALID);
-        }
-
+        uploadOpts.TryMatchAllowedExtension(displayFileName, out var matchedExtension);
+        AssetLicenseCatalog.TryParseCode(request.Request.LicenseCode, out var licenseCode);
         var licenseTemplate = AssetLicenseCatalog.Get(licenseCode);
 
         var category = await categoryStore.GetById(request.Request.CategoryId, cancellationToken);

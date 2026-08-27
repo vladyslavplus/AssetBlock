@@ -285,40 +285,44 @@ export function NotificationBell() {
                 const href = getNotificationHref(n.kind, n.metadataJson)
                 const unread = !n.readAt
                 return (
-                  <li key={n.id}>
-                    <button
-                      type="button"
-                      className={cn(
-                        'w-full text-left px-3 py-2.5 hover:bg-secondary/50 transition-colors',
-                        unread && 'bg-primary/5',
-                      )}
-                      onClick={() => void toggleRead(n)}
-                      title={unread ? 'Mark as read' : 'Mark as unread'}
-                    >
-                      <div className="flex items-start justify-between gap-2">
-                        <span
-                          className={cn(
-                            'text-xs font-medium text-foreground',
-                            unread && 'font-semibold',
-                          )}
-                        >
-                          {title}
-                        </span>
-                        <span className="text-[10px] text-muted-foreground shrink-0 tabular-nums">
-                          {formatDistanceToNow(new Date(n.createdAt), { addSuffix: true })}
-                        </span>
-                      </div>
-                      {body ? (
-                        <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2">{body}</p>
-                      ) : null}
+                  <li
+                    key={n.id}
+                    className={cn(
+                      'px-3 py-2.5 hover:bg-secondary/50 transition-colors',
+                      unread && 'bg-primary/5',
+                    )}
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <span
+                        className={cn(
+                          'text-xs font-medium text-foreground',
+                          unread && 'font-semibold',
+                        )}
+                      >
+                        {title}
+                      </span>
+                      <span className="text-[10px] text-muted-foreground shrink-0 tabular-nums">
+                        {formatDistanceToNow(new Date(n.createdAt), { addSuffix: true })}
+                      </span>
+                    </div>
+                    {body ? (
+                      <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2">{body}</p>
+                    ) : null}
+                    <div className="flex items-center gap-3 mt-1.5">
                       <Link
                         href={href}
-                        className="text-xs text-accent mt-1 inline-block hover:underline"
-                        onClick={(e) => e.stopPropagation()}
+                        className="text-xs text-accent hover:underline inline-flex items-center"
                       >
                         Open
                       </Link>
-                    </button>
+                      <button
+                        type="button"
+                        className="text-[11px] text-muted-foreground hover:text-foreground underline-offset-2 hover:underline"
+                        onClick={() => void toggleRead(n)}
+                      >
+                        {unread ? 'Mark read' : 'Mark unread'}
+                      </button>
+                    </div>
                   </li>
                 )
               })}

@@ -1,17 +1,17 @@
 using AssetBlock.Application.UseCases.Assets.UploadAsset;
 using AssetBlock.Domain.Core.Dto.Assets;
 using AssetBlock.Domain.Core.Payments;
+using AssetBlock.Domain.Core.Primitives.AppSettingsOptions;
 using AwesomeAssertions;
 
 namespace AssetBlock.Application.Tests.Validators;
 
 /// <summary>
 /// Tests for FluentValidation validators.
-/// We instantiate validators directly — no DI needed.
 /// </summary>
 public class UploadAssetCommandValidatorTests
 {
-    private readonly UploadAssetCommandValidator _validator = new();
+    private readonly UploadAssetCommandValidator _validator = new(Microsoft.Extensions.Options.Options.Create(new FileUploadOptions()));
 
     private static UploadAssetCommand ValidCommand(
         string title = "My Asset",
@@ -137,5 +137,36 @@ public class UploadAssetCommandValidatorTests
 
         result.IsValid.Should().BeFalse();
         result.Errors.Should().Contain(e => e.PropertyName.Contains("Description"));
+    }
+
+    [Fact]
+    public async Task Validate_WhenFileLengthExceedsMaxBytes_ShouldFail()
+    {
+        var result = await _validator.ValidateAsync(ValidCommand(fileLength: 250L * 1024 * 1024 + 1));
+        result.IsValid.Should().BeFalse();
+        result.Errors.Should().Contain(e => e.PropertyName.Contains("FileLength"));
+    }
+
+    [Fact]
+    public async Task Validate_WhenExtensionNotAllowed_ShouldFail()
+    {
+        var result = await _validator.ValidateAsync(ValidCommand(fileName: "image.png"));
+        result.IsValid.Should().BeFalse();
+        result.Errors.Should().Contain(e => e.PropertyName.Contains("FileName"));
+    }
+
+    [Fact]
+    public async Task Validate_WhenLicenseCodeIsInvalid_ShouldFail()
+    {
+        var command = new UploadAssetCommand(
+            Guid.NewGuid(),
+            new UploadAssetRequest("Title", null, 5m, Guid.NewGuid(), "INVALID_CODE"),
+            new MemoryStream([1]),
+            "file.zip",
+            1);
+
+        var result = await _validator.ValidateAsync(command);
+        result.IsValid.Should().BeFalse();
+        result.Errors.Should().Contain(e => e.PropertyName.Contains("LicenseCode"));
     }
 }

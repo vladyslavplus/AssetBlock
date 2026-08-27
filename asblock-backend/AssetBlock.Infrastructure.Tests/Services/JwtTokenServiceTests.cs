@@ -30,36 +30,9 @@ public sealed class JwtTokenServiceTests
         await sut.StoreRefreshToken(userId, tokens.RefreshToken, DateTimeOffset.UtcNow.AddDays(1));
 
         var validated = await sut.ValidateRefreshToken(tokens.RefreshToken);
-        validated.Should().NotBeNull();
-        validated!.Value.UserId.Should().Be(userId);
-        validated.Value.Username.Should().Be("tester");
-    }
-
-    [Fact(Skip = "ExecuteUpdateAsync is not supported by the EF InMemory provider; RevokeRefreshToken is covered against PostgreSQL in integration tests.")]
-    public async Task RevokeRefreshToken_makes_validation_fail()
-    {
-        await using var db = InMemoryDbContextFactory.Create();
-        var userId = Guid.NewGuid();
-        db.Users.Add(new User
-        {
-            Id = userId,
-            Username = "tester",
-            Email = "t@test.com",
-            PasswordHash = "hash",
-            Role = AppRoles.USER,
-            CreatedAt = DateTimeOffset.UtcNow
-        });
-        await db.SaveChangesAsync();
-
-        var sut = CreateSut(db);
-        var tokens = sut.GenerateTokenPair(userId, "tester", "t@test.com", AppRoles.USER);
-        await sut.StoreRefreshToken(userId, tokens.RefreshToken, DateTimeOffset.UtcNow.AddDays(1));
-
-        var validated = await sut.ValidateRefreshToken(tokens.RefreshToken);
-        validated.Should().NotBeNull();
-        await sut.RevokeRefreshToken(validated!.Value.TokenId);
-
-        (await sut.ValidateRefreshToken(tokens.RefreshToken)).Should().BeNull();
+        validated.Status.Should().Be(AssetBlock.Domain.Core.Dto.Auth.RefreshTokenValidationStatus.VALID);
+        validated.UserId.Should().Be(userId);
+        validated.Username.Should().Be("tester");
     }
 
     [Fact]
@@ -82,15 +55,7 @@ public sealed class JwtTokenServiceTests
         var tokens = sut.GenerateTokenPair(userId, "tester", "t@test.com", AppRoles.USER);
         await sut.StoreRefreshToken(userId, tokens.RefreshToken, DateTimeOffset.UtcNow.AddDays(-1));
 
-        (await sut.ValidateRefreshToken(tokens.RefreshToken)).Should().BeNull();
-    }
-
-    [Fact(Skip = "ExecuteUpdateAsync is not supported by the EF InMemory provider; RevokeRefreshToken is covered against PostgreSQL in integration tests.")]
-    public async Task RevokeRefreshToken_whenTokenMissing_isNoOp()
-    {
-        await using var db = InMemoryDbContextFactory.Create();
-        var sut = CreateSut(db);
-        await sut.RevokeRefreshToken(Guid.NewGuid());
+        (await sut.ValidateRefreshToken(tokens.RefreshToken)).Status.Should().Be(AssetBlock.Domain.Core.Dto.Auth.RefreshTokenValidationStatus.NOT_FOUND_OR_EXPIRED);
     }
 
     private static JwtTokenService CreateSut(ApplicationDbContext db)

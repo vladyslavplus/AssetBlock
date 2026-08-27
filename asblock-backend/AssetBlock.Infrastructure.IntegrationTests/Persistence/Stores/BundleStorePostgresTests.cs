@@ -161,13 +161,13 @@ public sealed class BundleStorePostgresTests(PostgresFixture fixture)
 
         var detail = await store.GetPublicDetail(bundle.Id);
         detail.Should().NotBeNull();
-        detail!.Items.Should().HaveCount(2);
+        detail.Items.Should().HaveCount(2);
         detail.Items.Single(i => i.Position == 1).LicenseCode.Should().Be("PERSONAL");
         detail.Items.Single(i => i.Position == 2).LicenseCode.Should().Be("COMMERCIAL");
 
         var snapshot = await store.GetCheckoutSnapshot(bundle.Id);
         snapshot.Should().NotBeNull();
-        snapshot!.Items.Select(i => i.LicenseCode).Should().BeEquivalentTo(
+        snapshot.Items.Select(i => i.LicenseCode).Should().BeEquivalentTo(
             [AssetLicenseCode.PERSONAL, AssetLicenseCode.COMMERCIAL]);
     }
 
@@ -193,7 +193,7 @@ public sealed class BundleStorePostgresTests(PostgresFixture fixture)
 
         var detail = await store.GetSellerDetail(bundle.Id, author.Id);
         detail.Should().NotBeNull();
-        detail!.Items.Single(i => i.Position == 1).LicenseCode.Should().Be("PERSONAL");
+        detail.Items.Single(i => i.Position == 1).LicenseCode.Should().Be("PERSONAL");
         detail.Items.Single(i => i.Position == 2).LicenseCode.Should().BeNull();
         detail.Items.Single(i => i.Position == 2).AssetId.Should().BeNull();
     }
@@ -258,6 +258,24 @@ public sealed class BundleStorePostgresTests(PostgresFixture fixture)
         byRange.Items.Select(i => i.Id).Should().Contain(mid.Id);
         byRange.Items.Select(i => i.Id).Should().NotContain(cheap.Id);
         byRange.Items.Select(i => i.Id).Should().NotContain(exp.Id);
+    }
+
+    [Fact]
+    public async Task LockAssetsInOrder_WhenAssetsExist_LocksInSingleQuery()
+    {
+        await using var db = await fixture.CreateCleanDbContext();
+        (User author, Category category) = await TestData.SeedAuthorAndCategory(db);
+        var asset1 = TestData.CreateAsset(author.Id, category.Id, title: "Lock 1", price: 10m);
+        var asset2 = TestData.CreateAsset(author.Id, category.Id, title: "Lock 2", price: 20m);
+        db.Assets.AddRange(asset1, asset2);
+        await db.SaveChangesAsync();
+
+        var store = new BundleStore(db);
+        var uow = new EfUnitOfWork(db);
+        await uow.ExecuteInTransaction(async ct =>
+        {
+            await store.LockAssetsInOrder([asset2.Id, asset1.Id, asset2.Id], ct);
+        });
     }
 
     private static IReadOnlyList<BundleRevisionItemDraft> CreateItems(Asset assetA, Asset assetB) =>

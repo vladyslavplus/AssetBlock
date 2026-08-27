@@ -68,17 +68,17 @@ internal sealed class OutboxDispatcher(
             
             if (!handlers.TryGetValue(message.Type, out var handler))
             {
-                var outcome = DiagnosticsOutcome.MISSING_HANDLER;
+                var outcome = DiagnosticsOutcome.DEAD_LETTER;
                 try
                 {
-                    if (!await outbox.MarkFailed(
+                    logger.LogError("No handler found for outbox message {OutboxId} of type '{Type}'; moving to dead letter", message.Id, message.Type);
+                    if (!await outbox.MarkDeadLettered(
                             message.Id,
                             lockToken,
                             $"No handler for outbox type '{message.Type}'.",
-                            DateTimeOffset.UtcNow.AddYears(100),
                             cancellationToken))
                     {
-                        logger.LogWarning("Lost outbox lease for {OutboxId} while marking missing-handler failure", message.Id);
+                        logger.LogWarning("Lost outbox lease for {OutboxId} while marking missing-handler dead-letter", message.Id);
                         outcome = DiagnosticsOutcome.LEASE_LOST;
                     }
                 }
@@ -120,19 +120,40 @@ internal sealed class OutboxDispatcher(
             }
             catch (Exception ex)
             {
-                processingOutcome = DiagnosticsOutcome.HANDLER_FAILURE;
-                var delay = TimeSpan.FromSeconds(Math.Min(3600, Math.Pow(2, Math.Min(message.AttemptCount, 10))));
-                var next = DateTimeOffset.UtcNow.Add(delay);
-                logger.LogError(
-                    ex,
-                    "Outbox handler failed for {OutboxId} type {Type} attempt {Attempt}",
-                    message.Id,
-                    message.Type,
-                    message.AttemptCount);
-                if (!await outbox.MarkFailed(message.Id, lockToken, ex.Message, next, cancellationToken))
+                var maxAttemptsReached = message.AttemptCount >= OutboxMessageTypes.MAX_ATTEMPTS;
+                if (maxAttemptsReached)
                 {
-                    logger.LogWarning("Lost outbox lease for {OutboxId} while recording failure", message.Id);
-                    processingOutcome = DiagnosticsOutcome.LEASE_LOST;
+                    processingOutcome = DiagnosticsOutcome.DEAD_LETTER;
+                    logger.LogError(
+                        ex,
+                        "Outbox message {OutboxId} of type {Type} reached max attempts ({Attempt}/{Max}); transitioning to dead-letter",
+                        message.Id,
+                        message.Type,
+                        message.AttemptCount,
+                        OutboxMessageTypes.MAX_ATTEMPTS);
+
+                    if (!await outbox.MarkDeadLettered(message.Id, lockToken, ex.Message, cancellationToken))
+                    {
+                        logger.LogWarning("Lost outbox lease for {OutboxId} while recording dead-letter failure", message.Id);
+                        processingOutcome = DiagnosticsOutcome.LEASE_LOST;
+                    }
+                }
+                else
+                {
+                    processingOutcome = DiagnosticsOutcome.HANDLER_FAILURE;
+                    var delay = TimeSpan.FromSeconds(Math.Min(3600, Math.Pow(2, Math.Min(message.AttemptCount, 10))));
+                    var next = DateTimeOffset.UtcNow.Add(delay);
+                    logger.LogError(
+                        ex,
+                        "Outbox handler failed for {OutboxId} type {Type} attempt {Attempt}",
+                        message.Id,
+                        message.Type,
+                        message.AttemptCount);
+                    if (!await outbox.MarkFailed(message.Id, lockToken, ex.Message, next, cancellationToken))
+                    {
+                        logger.LogWarning("Lost outbox lease for {OutboxId} while recording failure", message.Id);
+                        processingOutcome = DiagnosticsOutcome.LEASE_LOST;
+                    }
                 }
             }
             finally

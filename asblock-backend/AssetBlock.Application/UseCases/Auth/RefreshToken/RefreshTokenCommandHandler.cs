@@ -1,6 +1,7 @@
 using AssetBlock.Application.Common;
 using AssetBlock.Domain.Abstractions.Services;
 using AssetBlock.Domain.Core.Constants;
+using AssetBlock.Domain.Core.Dto.Auth;
 using Ardalis.Result;
 using AssetBlock.Domain.Core.Primitives.Api;
 using AssetBlock.Domain.Core.Dto.Audit;
@@ -18,8 +19,22 @@ internal sealed class RefreshTokenCommandHandler(
 {
     public async Task<Result<TokensResponse>> Handle(RefreshTokenCommand request, CancellationToken cancellationToken)
     {
-        var payload = await jwtTokenService.ValidateRefreshToken(request.RefreshToken, cancellationToken);
-        if (payload is null)
+        var validation = await jwtTokenService.ValidateRefreshToken(request.RefreshToken, cancellationToken);
+        if (validation.Status == RefreshTokenValidationStatus.REVOKED_REUSED && validation.UserId is { } reusedUserId)
+        {
+            logger.LogWarning("Refresh token theft/reuse detected for user {UserId}! Revoking all active user sessions", reusedUserId);
+            await jwtTokenService.RevokeAllRefreshTokens(reusedUserId, cancellationToken);
+            await auditWriter.WriteBestEffort(new AuditEvent(
+                AuditActions.AUTH_REFRESH_TOKEN,
+                AuditOutcome.FAILURE,
+                AuditResourceTypes.USER,
+                reusedUserId.ToString(),
+                ActorTypeOverride: AuditActorType.USER,
+                ActorUserIdOverride: reusedUserId), cancellationToken);
+            return ResultError.Error<TokensResponse>(ErrorCodes.ERR_AUTH_TOKEN_INVALID);
+        }
+
+        if (validation.Status != RefreshTokenValidationStatus.VALID || validation.UserId is null || validation.TokenId is null)
         {
             logger.LogDebug("Refresh token validation failed");
             await auditWriter.WriteBestEffort(new AuditEvent(
@@ -30,7 +45,11 @@ internal sealed class RefreshTokenCommandHandler(
             return ResultError.Error<TokensResponse>(ErrorCodes.ERR_AUTH_TOKEN_INVALID);
         }
 
-        (Guid userId, var username, var email, var role, Guid tokenId) = payload.Value;
+        var userId = validation.UserId.Value;
+        var tokenId = validation.TokenId.Value;
+        var username = validation.Username!;
+        var email = validation.Email!;
+        var role = validation.Role!;
         var tokens = jwtTokenService.GenerateTokenPair(userId, username, email, role);
 
         var rotated = false;

@@ -9,7 +9,8 @@ public enum DiagnosticsOutcome
     CANCELLED,
     MISSING_HANDLER,
     LEASE_LOST,
-    SKIPPED_LOCKED
+    SKIPPED_LOCKED,
+    DEAD_LETTER
 }
 
 public static class DiagnosticsOutcomeExtensions
@@ -24,6 +25,7 @@ public static class DiagnosticsOutcomeExtensions
         DiagnosticsOutcome.MISSING_HANDLER => "missing_handler",
         DiagnosticsOutcome.LEASE_LOST => "lease_lost",
         DiagnosticsOutcome.SKIPPED_LOCKED => "skipped_locked",
+        DiagnosticsOutcome.DEAD_LETTER => "dead_letter",
         _ => "unknown"
     };
 }

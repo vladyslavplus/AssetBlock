@@ -33,9 +33,12 @@ public sealed class AssetStorePostgresTests(PostgresFixture fixture)
         paged.Items.Should().BeEmpty();
         paged.TotalCount.Should().Be(0);
 
-        var row = await db.Assets.AsNoTracking().SingleAsync(a => a.Id == asset.Id);
+        var row = await db.Assets.IgnoreQueryFilters().AsNoTracking().SingleAsync(a => a.Id == asset.Id);
         row.DeletedAt.Should().NotBeNull();
         row.DeletedAt.Should().BeCloseTo(deletedAt, TimeSpan.FromSeconds(1));
+
+        var fetched = await store.GetById(asset.Id);
+        fetched.Should().BeNull();
     }
 
     [Fact]
@@ -51,7 +54,7 @@ public sealed class AssetStorePostgresTests(PostgresFixture fixture)
         var updated = await store.Update(asset.Id, title: "After delete", description: null, price: null, categoryId: null);
 
         updated.Should().BeFalse();
-        var row = await db.Assets.AsNoTracking().SingleAsync(a => a.Id == asset.Id);
+        var row = await db.Assets.IgnoreQueryFilters().AsNoTracking().SingleAsync(a => a.Id == asset.Id);
         row.Title.Should().Be("Before delete");
     }
 

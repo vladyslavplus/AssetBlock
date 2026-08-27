@@ -1,6 +1,7 @@
 using System.Security.Claims;
 using System.Security.Cryptography;
 using System.Text;
+using AssetBlock.Domain.Core.Dto.Auth;
 using AssetBlock.Domain.Abstractions.Services;
 using AssetBlock.Domain.Core.Constants;
 using AssetBlock.Domain.Core.Entities;
@@ -19,6 +20,7 @@ internal sealed class JwtTokenService(
     IOptions<JwtOptions> options,
     ILogger<JwtTokenService> logger) : IJwtTokenService
 {
+    private static readonly TimeSpan _reusedGraceWindow = TimeSpan.FromSeconds(15);
     public TokensResponse GenerateTokenPair(Guid userId, string username, string email, string role)
     {
         var jwtOptions = options.Value;
@@ -70,23 +72,47 @@ internal sealed class JwtTokenService(
         logger.LogDebug("Stored refresh token for user {UserId}", userId);
     }
 
-    public async Task<(Guid UserId, string Username, string Email, string Role, Guid TokenId)?> ValidateRefreshToken(string refreshToken, CancellationToken cancellationToken = default)
+    public async Task<RefreshTokenValidationResult> ValidateRefreshToken(string refreshToken, CancellationToken cancellationToken = default)
     {
         var hash = ComputeSha256Hash(refreshToken);
         var now = DateTimeOffset.UtcNow;
         var entity = await dbContext.RefreshTokens
             .AsNoTracking()
-            .Where(rt => rt.TokenHash == hash && rt.RevokedAt == null && rt.ExpiresAt > now)
-            .Select(rt => new { rt.Id, rt.UserId, rt.User.Username, rt.User.Email, rt.User.Role })
+            .Where(rt => rt.TokenHash == hash && rt.ExpiresAt > now)
+            .Select(rt => new { rt.Id, rt.UserId, rt.User.Username, rt.User.Email, rt.User.Role, rt.RevokedAt })
             .FirstOrDefaultAsync(cancellationToken);
 
         if (entity is null)
         {
             logger.LogDebug("Refresh token validation failed: token not found or expired");
-            return null;
+            return new RefreshTokenValidationResult(RefreshTokenValidationStatus.NOT_FOUND_OR_EXPIRED);
         }
 
-        return (entity.UserId, entity.Username, entity.Email, entity.Role, entity.Id);
+        if (entity.RevokedAt != null)
+        {
+            if (now - entity.RevokedAt.Value <= _reusedGraceWindow)
+            {
+                logger.LogDebug("Refresh token {TokenId} was recently revoked within grace window {GraceSeconds}s; rejecting without full session revocation", entity.Id, _reusedGraceWindow.TotalSeconds);
+                return new RefreshTokenValidationResult(RefreshTokenValidationStatus.NOT_FOUND_OR_EXPIRED, entity.UserId);
+            }
+
+            logger.LogWarning("Refresh token reuse detected for token {TokenId} and user {UserId} (revoked at {RevokedAt})", entity.Id, entity.UserId, entity.RevokedAt);
+            return new RefreshTokenValidationResult(
+                RefreshTokenValidationStatus.REVOKED_REUSED,
+                entity.UserId,
+                entity.Username,
+                entity.Email,
+                entity.Role,
+                entity.Id);
+        }
+
+        return new RefreshTokenValidationResult(
+            RefreshTokenValidationStatus.VALID,
+            entity.UserId,
+            entity.Username,
+            entity.Email,
+            entity.Role,
+            entity.Id);
     }
 
     public async Task<bool> RevokeRefreshToken(Guid tokenId, CancellationToken cancellationToken = default)

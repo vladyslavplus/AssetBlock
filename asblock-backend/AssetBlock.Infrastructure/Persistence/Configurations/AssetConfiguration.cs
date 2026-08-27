@@ -37,5 +37,7 @@ internal sealed class AssetConfiguration : IEntityTypeConfiguration<Asset>
 
         builder.HasIndex(a => new { a.AuthorId, a.Id })
             .HasDatabaseName("IX_assets_author_id");
+
+        builder.HasQueryFilter(a => a.DeletedAt == null);
     }
 }

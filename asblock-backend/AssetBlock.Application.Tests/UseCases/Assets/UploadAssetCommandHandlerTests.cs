@@ -63,18 +63,6 @@ public class UploadAssetCommandHandlerTests
         new(Guid.NewGuid(), request, new MemoryStream([1]), fileName, length);
 
     [Fact]
-    public async Task Handle_WhenFileTooLarge_ShouldReturnError()
-    {
-        var request = DefaultRequest();
-        var command = CreateCommand(request, length: 250L * 1024 * 1024 + 1);
-
-        var result = await _handler.Handle(command, CancellationToken.None);
-
-        result.IsSuccess.Should().BeFalse();
-        result.ValidationErrors.Should().Contain(e => e.Identifier == ErrorCodes.ERR_FILE_TOO_LARGE);
-    }
-
-    [Fact]
     public async Task Handle_WhenFileIsExactlyAtConfiguredLimit_ShouldAcceptUpload()
     {
         var request = DefaultRequest();
@@ -86,18 +74,6 @@ public class UploadAssetCommandHandlerTests
 
         result.IsSuccess.Should().BeTrue();
         _encryptionServiceMock.Received(1).ComputeCiphertextLength(250L * 1024 * 1024);
-    }
-
-    [Fact]
-    public async Task Handle_WhenExtensionNotAllowed_ShouldReturnError()
-    {
-        var request = DefaultRequest();
-        var command = CreateCommand(request, fileName: "test.png");
-
-        var result = await _handler.Handle(command, CancellationToken.None);
-
-        result.IsSuccess.Should().BeFalse();
-        result.ValidationErrors.Should().Contain(e => e.Identifier == ErrorCodes.ERR_FILE_EXTENSION_NOT_ALLOWED);
     }
 
     [Fact]

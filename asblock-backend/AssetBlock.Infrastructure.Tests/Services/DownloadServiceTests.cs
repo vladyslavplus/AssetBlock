@@ -15,7 +15,7 @@ public sealed class DownloadServiceTests
     public async Task AuthorizeDownload_whenAssetMissing_returnsNotFound()
     {
         var assetStore = Substitute.For<IAssetStore>();
-        assetStore.GetById(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
+        assetStore.GetById(Arg.Any<Guid>(), Arg.Any<bool>(), Arg.Any<CancellationToken>())
             .Returns(Task.FromResult<Asset?>(null));
 
         var sut = new DownloadService(
@@ -34,7 +34,7 @@ public sealed class DownloadServiceTests
     {
         var asset = CreateAsset(Guid.NewGuid(), Guid.NewGuid());
         var assetStore = Substitute.For<IAssetStore>();
-        assetStore.GetById(asset.Id, Arg.Any<CancellationToken>()).Returns(Task.FromResult<Asset?>(asset));
+        assetStore.GetById(asset.Id, Arg.Any<bool>(), Arg.Any<CancellationToken>()).Returns(Task.FromResult<Asset?>(asset));
 
         var purchaseStore = Substitute.For<IPurchaseStore>();
         purchaseStore.Exists(Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<CancellationToken>())
@@ -112,7 +112,7 @@ public sealed class DownloadServiceTests
         var versionId = Guid.NewGuid();
 
         var assetStore = Substitute.For<IAssetStore>();
-        assetStore.GetById(asset.Id, Arg.Any<CancellationToken>()).Returns(Task.FromResult<Asset?>(asset));
+        assetStore.GetById(asset.Id, Arg.Any<bool>(), Arg.Any<CancellationToken>()).Returns(Task.FromResult<Asset?>(asset));
         assetStore.GetCurrentVersionSnapshot(asset.Id, Arg.Any<CancellationToken>())
             .Returns(Task.FromResult<Domain.Core.Dto.Assets.AssetCurrentVersionSnapshot?>(
                 new Domain.Core.Dto.Assets.AssetCurrentVersionSnapshot(
