@@ -23,6 +23,7 @@ const DEFAULT_SCHEMA = path.resolve(
   "references",
   "execution-report.schema.json",
 );
+export const DEFAULT_MODEL = "gemini-3.7-flash-medium";
 const MAX_UNTRACKED_FILES = 10_000;
 const MAX_UNTRACKED_BYTES = 512 * 1024 * 1024;
 
@@ -75,6 +76,14 @@ export function parseArgs(argv) {
   }
 
   return options;
+}
+
+export function resolveSessionOptions(options, state = {}) {
+  return {
+    model: options.model ?? state.model ?? DEFAULT_MODEL,
+    effort: options.effort ?? state.effort ?? null,
+    agent: options.agent ?? state.agent ?? null,
+  };
 }
 
 async function isExecutableFile(candidate) {
@@ -145,6 +154,20 @@ export function normalizeAgyResult(envelope) {
   }
 
   return { conversationId, report };
+}
+
+function classifyRepositoryLane(value) {
+  if (/\basblock-backend\b|\bdotnet\b/iu.test(value)) {
+    return "backend";
+  }
+  if (
+    /\basblock-frontend\b|\bpnpm\b|\bnpm\b|\byarn\b|\bprettier\b|\beslint\b/iu.test(
+      value,
+    )
+  ) {
+    return "frontend";
+  }
+  return "global";
 }
 
 function gitCapture(cwd, args) {
@@ -357,7 +380,162 @@ export function inspectAgyStream(stdout) {
     events.find((event) => event.init?.conversation_id)?.init?.conversation_id ??
     null;
 
-  return { terminal: terminal?.result ?? null, conversationId, invalidLines };
+  const unresolvedPermissionDenials = new Map();
+  const commandRuns = new Map();
+  const lastMutationStepIndexByLane = {
+    global: null,
+    backend: null,
+    frontend: null,
+  };
+  const mutatingTools = new Set([
+    "multi_replace_file_content",
+    "notebook_edit",
+    "replace_file_content",
+    "sed_file",
+    "write_to_file",
+  ]);
+  for (const event of events) {
+    const step = event.step_update;
+    if (step?.step_type !== "tool") {
+      continue;
+    }
+
+    const tool = step.tool_name ?? step.tool_info?.name ?? "unknown";
+    const parameters = step.tool_info?.parameters ?? {};
+    const key = `${tool}:${JSON.stringify(parameters)}`;
+    if (step.state === "DONE") {
+      unresolvedPermissionDenials.delete(key);
+      if (mutatingTools.has(tool)) {
+        const lane = classifyRepositoryLane(JSON.stringify(parameters));
+        lastMutationStepIndexByLane[lane] =
+          step.step_index ?? lastMutationStepIndexByLane[lane];
+      }
+      if (tool === "run_command" && parameters.CommandLine) {
+        const command = parameters.CommandLine.trim().replace(/\s+/gu, " ");
+        const output = step.tool_info?.output ?? "";
+        const isVerification =
+          /^(?:dotnet\s+(?:build|test)|pnpm\b.*\b(?:build|check|lint|test|typecheck)\b|npm\b.*\b(?:build|lint|test)\b|yarn\b.*\b(?:build|lint|test)\b)/iu.test(
+            command,
+          );
+        const failed =
+          isVerification &&
+          /Build FAILED\.|Test Run Failed\.|Failed!.*Failed:\s*[1-9]|\berror (?:CS|TS|NU)\d+|ELIFECYCLE|ERR_PNPM|exit(?:ed)? (?:with )?(?:exit )?code [1-9]/isu.test(
+            output,
+          );
+        commandRuns.set(command, {
+          command,
+          lane: classifyRepositoryLane(command),
+          stepIndex: step.step_index ?? null,
+          failed,
+        });
+        if (
+          /\b(?:prettier\b.*--write|eslint\b.*--fix|dotnet\s+format\b)/iu.test(
+            command,
+          )
+        ) {
+          const lane = classifyRepositoryLane(command);
+          lastMutationStepIndexByLane[lane] =
+            step.step_index ?? lastMutationStepIndexByLane[lane];
+        }
+      }
+      continue;
+    }
+
+    const message = step.tool_info?.error?.message ?? "";
+    if (
+      step.state === "ERROR" &&
+      /permission check failed|user denied permission/iu.test(message)
+    ) {
+      unresolvedPermissionDenials.set(key, { tool, parameters, message });
+    }
+  }
+
+  return {
+    terminal: terminal?.result ?? null,
+    conversationId,
+    invalidLines,
+    unresolvedPermissionDenials: [...unresolvedPermissionDenials.values()],
+    commandRuns: [...commandRuns.values()],
+    failedVerificationCommands: [...commandRuns.values()].filter(
+      (entry) => entry.failed,
+    ),
+    lastMutationStepIndexByLane,
+  };
+}
+
+export function validateExecutionReport(report, streamInspection) {
+  const errors = [];
+  if (!report || typeof report !== "object") {
+    return ["Structured execution report is missing"];
+  }
+
+  if (report.status === "completed") {
+    const incompleteVerification = (report.verification ?? []).filter(
+      (entry) => entry.status !== "passed",
+    );
+    if (incompleteVerification.length > 0) {
+      errors.push(
+        `Completed report contains ${incompleteVerification.length} failed or not-run verification entries`,
+      );
+    }
+    if (report.needs_human_reason) {
+      errors.push("Completed report still declares a human-decision reason");
+    }
+    if ((streamInspection.unresolvedPermissionDenials ?? []).length > 0) {
+      errors.push(
+        `Completed report followed ${streamInspection.unresolvedPermissionDenials.length} unresolved permission denial(s)`,
+      );
+    }
+    if ((streamInspection.failedVerificationCommands ?? []).length > 0) {
+      errors.push(
+        `Completed report followed ${streamInspection.failedVerificationCommands.length} unresolved failed verification command(s)`,
+      );
+    }
+    const mutationSteps = streamInspection.lastMutationStepIndexByLane ?? {
+      global: streamInspection.lastMutationStepIndex ?? null,
+      backend: null,
+      frontend: null,
+    };
+    if (Object.values(mutationSteps).some((stepIndex) => stepIndex !== null)) {
+      const commandRuns = new Map(
+        (streamInspection.commandRuns ?? []).map((entry) => [entry.command, entry]),
+      );
+      const staleVerification = (report.verification ?? []).filter((entry) => {
+        if (entry.status !== "passed") {
+          return false;
+        }
+        const command = entry.command.trim().replace(/\s+/gu, " ");
+        const run = commandRuns.get(command);
+        if (!run || run.stepIndex === null) {
+          return false;
+        }
+        const lane = run.lane ?? classifyRepositoryLane(command);
+        const relevantMutationStep = Math.max(
+          mutationSteps.global ?? -1,
+          lane === "global" ? mutationSteps.backend ?? -1 : -1,
+          lane === "global" ? mutationSteps.frontend ?? -1 : -1,
+          lane === "backend" ? mutationSteps.backend ?? -1 : -1,
+          lane === "frontend" ? mutationSteps.frontend ?? -1 : -1,
+        );
+        return run.stepIndex < relevantMutationStep;
+      });
+      if (staleVerification.length > 0) {
+        errors.push(
+          `Completed report contains ${staleVerification.length} verification command(s) run before the last file mutation`,
+        );
+      }
+    }
+  }
+
+  if (
+    report.status === "blocked" &&
+    (typeof report.needs_human_reason !== "string" ||
+      report.needs_human_reason.trim().length === 0)
+  ) {
+    errors.push("Blocked report does not explain why human input is required");
+  }
+
+  return errors;
 }
 
 export function parseAgyStream(stdout) {
@@ -422,6 +600,7 @@ export async function main(argv = process.argv.slice(2)) {
     options.runDir ?? path.join(cwd, ".agentflow", "runs", createRunId()),
   );
   const state = await readState(runDir);
+  const sessionOptions = resolveSessionOptions(options, state);
   const round = state.rounds.length + 1;
   const roundLabel = `round-${String(round).padStart(2, "0")}`;
 
@@ -439,14 +618,12 @@ export async function main(argv = process.argv.slice(2)) {
   if (state.conversation_id) {
     args.push("--conversation", state.conversation_id);
   }
-  if (options.model) {
-    args.push("--model", options.model);
+  args.push("--model", sessionOptions.model);
+  if (sessionOptions.effort) {
+    args.push("--effort", sessionOptions.effort);
   }
-  if (options.effort) {
-    args.push("--effort", options.effort);
-  }
-  if (options.agent) {
-    args.push("--agent", options.agent);
+  if (sessionOptions.agent) {
+    args.push("--agent", sessionOptions.agent);
   }
 
   if (options.dryRun) {
@@ -459,6 +636,9 @@ export async function main(argv = process.argv.slice(2)) {
       schema: schemaPath,
       run_dir: runDir,
       resumes_conversation: Boolean(state.conversation_id),
+      model: sessionOptions.model,
+      effort: sessionOptions.effort,
+      agent: sessionOptions.agent,
     };
     process.stdout.write(`${JSON.stringify(result, null, 2)}${os.EOL}`);
     return result;
@@ -488,6 +668,9 @@ export async function main(argv = process.argv.slice(2)) {
   };
   const runningState = {
     conversation_id: state.conversation_id,
+    model: sessionOptions.model,
+    effort: sessionOptions.effort,
+    agent: sessionOptions.agent,
     rounds: [...state.rounds, runningRound],
   };
   await writeState(runDir, runningState);
@@ -511,7 +694,9 @@ export async function main(argv = process.argv.slice(2)) {
 
   let envelope;
   let streamError;
+  let streamInspection;
   try {
+    streamInspection = inspectAgyStream(processResult.stdout);
     envelope = parseAgyStream(processResult.stdout);
   } catch (error) {
     streamError = error;
@@ -585,12 +770,29 @@ export async function main(argv = process.argv.slice(2)) {
   }
 
   runningRound.execution_report_status = normalized.report.status ?? "unknown";
+  const reportValidationErrors = validateExecutionReport(
+    normalized.report,
+    streamInspection,
+  );
+  if (reportValidationErrors.length > 0) {
+    runningRound.status = "invalid_report";
+    runningRound.report_validation_errors = reportValidationErrors;
+  }
   await writeState(runDir, runningState);
+
+  if (reportValidationErrors.length > 0) {
+    throw new Error(
+      `Antigravity execution report failed validation: ${reportValidationErrors.join("; ")}. See ${path.join(runDir, `${roundLabel}-stdout.json`)}`,
+    );
+  }
 
   const result = {
     ok: true,
     run_dir: runDir,
     conversation_id: runningState.conversation_id,
+    model: sessionOptions.model,
+    effort: sessionOptions.effort,
+    agent: sessionOptions.agent,
     round,
     report: normalized.report,
   };

@@ -5,12 +5,15 @@ import path from "node:path";
 import test from "node:test";
 
 import {
+  DEFAULT_MODEL,
   compareUntrackedManifests,
   inspectAgyStream,
   normalizeAgyResult,
   parseAgyStream,
   parseArgs,
   resolveAgyBinary,
+  resolveSessionOptions,
+  validateExecutionReport,
 } from "./run-antigravity.mjs";
 
 test("parseArgs accepts supported orchestration options", () => {
@@ -35,6 +38,28 @@ test("parseArgs accepts supported orchestration options", () => {
 
 test("parseArgs rejects missing prompt", () => {
   assert.throws(() => parseArgs([]), /--prompt-file is required/);
+});
+
+test("resolveSessionOptions defaults to Gemini 3.7 Flash Medium", () => {
+  assert.deepEqual(resolveSessionOptions({}, {}), {
+    model: DEFAULT_MODEL,
+    effort: null,
+    agent: null,
+  });
+});
+
+test("resolveSessionOptions preserves a run model and accepts an explicit override", () => {
+  assert.equal(
+    resolveSessionOptions({}, { model: "gemini-3.7-flash-high" }).model,
+    "gemini-3.7-flash-high",
+  );
+  assert.equal(
+    resolveSessionOptions(
+      { model: "claude-sonnet-4-6" },
+      { model: "gemini-3.7-flash-high" },
+    ).model,
+    "claude-sonnet-4-6",
+  );
 });
 
 test("normalizeAgyResult extracts a structured string result", () => {
@@ -90,6 +115,132 @@ test("inspectAgyStream preserves init conversation ID from a truncated stream", 
   assert.equal(inspected.conversationId, "conversation-4");
   assert.equal(inspected.terminal, null);
   assert.deepEqual(inspected.invalidLines, ["{"]);
+});
+
+test("inspectAgyStream reports an unresolved permission denial", () => {
+  const inspected = inspectAgyStream(
+    [
+      JSON.stringify({
+        event: "step_update",
+        step_update: {
+          state: "ERROR",
+          step_type: "tool",
+          tool_name: "run_command",
+          tool_info: {
+            parameters: { CommandLine: "pnpm run lint" },
+            error: {
+              message:
+                'permission check failed for command "pnpm run lint": user denied permission',
+            },
+          },
+        },
+      }),
+      JSON.stringify({
+        event: "result",
+        result: { status: "SUCCESS", structured_output: { status: "completed" } },
+      }),
+    ].join("\n"),
+  );
+
+  assert.equal(inspected.unresolvedPermissionDenials.length, 1);
+  assert.equal(inspected.unresolvedPermissionDenials[0].tool, "run_command");
+});
+
+test("validateExecutionReport rejects stale completed reports", () => {
+  const errors = validateExecutionReport(
+    {
+      status: "completed",
+      needs_human_reason: null,
+      verification: [{ command: "pnpm run lint", status: "passed" }],
+    },
+    {
+      unresolvedPermissionDenials: [{ tool: "run_command" }],
+    },
+  );
+
+  assert.match(errors.join("\n"), /unresolved permission denial/);
+});
+
+test("validateExecutionReport accepts a consistent completed report", () => {
+  const errors = validateExecutionReport(
+    {
+      status: "completed",
+      needs_human_reason: null,
+      verification: [{ command: "pnpm run lint", status: "passed" }],
+    },
+    { unresolvedPermissionDenials: [] },
+  );
+
+  assert.deepEqual(errors, []);
+});
+
+test("validateExecutionReport rejects a hidden failed verification command", () => {
+  const errors = validateExecutionReport(
+    {
+      status: "completed",
+      needs_human_reason: null,
+      verification: [{ command: "dotnet test tests.csproj", status: "passed" }],
+    },
+    {
+      unresolvedPermissionDenials: [],
+      failedVerificationCommands: [{ command: "dotnet test tests.csproj" }],
+      commandRuns: [],
+      lastMutationStepIndex: null,
+    },
+  );
+
+  assert.match(errors.join("\n"), /failed verification command/);
+});
+
+test("validateExecutionReport rejects verification made stale by a later edit", () => {
+  const errors = validateExecutionReport(
+    {
+      status: "completed",
+      needs_human_reason: null,
+      verification: [{ command: "pnpm run lint", status: "passed" }],
+    },
+    {
+      unresolvedPermissionDenials: [],
+      failedVerificationCommands: [],
+      commandRuns: [
+        { command: "pnpm run lint", stepIndex: 10, failed: false },
+      ],
+      lastMutationStepIndex: 11,
+    },
+  );
+
+  assert.match(errors.join("\n"), /before the last file mutation/);
+});
+
+test("validateExecutionReport keeps backend verification valid after a frontend-only edit", () => {
+  const errors = validateExecutionReport(
+    {
+      status: "completed",
+      needs_human_reason: null,
+      verification: [
+        { command: "dotnet test backend.csproj", status: "passed" },
+      ],
+    },
+    {
+      unresolvedPermissionDenials: [],
+      failedVerificationCommands: [],
+      commandRuns: [
+        {
+          command: "dotnet test backend.csproj",
+          lane: "backend",
+          stepIndex: 10,
+          failed: false,
+        },
+      ],
+      lastMutationStepIndexByLane: {
+        global: null,
+        backend: null,
+        frontend: 11,
+      },
+    },
+  );
+
+  assert.deepEqual(errors, []);
 });
 
 test("compareUntrackedManifests detects recoverable overwrite and deletion", () => {

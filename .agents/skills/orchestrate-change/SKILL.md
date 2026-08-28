@@ -16,6 +16,10 @@ Read [README.md](README.md) only when the user asks how to invoke, install, conf
 3. Create an outcome-first plan with scope, constraints, acceptance criteria, affected boundaries, and verification commands.
 4. Inspect `git status --short`. Do not create a branch, worktree, commit, stash, or reset.
 5. Preserve existing user changes. If planned edits overlap already-modified files and safe preservation is uncertain, stop and ask the user before invoking Antigravity.
+6. Divide verification into two tiers:
+   - focused checks that give fast feedback on edited behavior;
+   - final expensive checks such as full PostgreSQL suites, broad builds, and full frontend checks.
+7. Select the Antigravity model. Use `gemini-3.7-flash-medium` unless the user explicitly requests another available model. Translate friendly names such as “3.7 Flash High” to the exact slug returned by `agy models`; never invent a slug.
 
 ## Delegate implementation
 
@@ -28,26 +32,39 @@ Create a focused English executor prompt in a temporary ignored path under `.age
 - relevant repository and nested instructions;
 - a request to inspect and use `.agents/skills/implement-change/SKILL.md`;
 - exact verification expectations;
+- the exact planned read/write locations and command lines needed for focused and final verification;
 - a requirement to preserve pre-existing changes and avoid commits, branches, worktrees, pushes, resets, and unrelated cleanup;
 - a requirement to return the structured execution report.
+
+Before editing, require Antigravity to call `list_permissions` once and compare the result with every planned location and exact command. If anything is missing, it must stop before edits and return one complete permission-gap list in `needs_human_reason`. Do not discover permissions one command per adapter round.
+
+For the initial implementation phase, require Antigravity to:
+
+1. implement one coherent unit at a time when the plan spans several subsystems;
+2. run formatting once after edits;
+3. run focused verification only;
+4. report final expensive verification as deferred in `remaining_risks`, not as falsely passed or failed verification entries;
+5. make no further edits after its last focused verification command.
 
 Run from repository root:
 
 ```powershell
-node .agents/skills/orchestrate-change/scripts/run-antigravity.mjs --prompt-file <absolute-prompt-path>
+node .agents/skills/orchestrate-change/scripts/run-antigravity.mjs --prompt-file <absolute-prompt-path> --model <model-slug>
 ```
 
 Invoke the dependency-free Node adapter directly. Never route it through `pnpm`, `npm`, `yarn`, or another package manager; package-manager bootstrap and registry checks can block before Antigravity starts.
 
-The adapter records baseline and post-run Git evidence under ignored `.agentflow/runs/` and returns a run directory plus Antigravity conversation ID. Treat Git state and command output as authoritative; executor summary is supporting context only.
+The adapter defaults to `gemini-3.7-flash-medium`, records the selected model in run state, and reuses it on continuation unless explicitly overridden. It records baseline and post-run Git evidence under ignored `.agentflow/runs/` and returns a run directory plus Antigravity conversation ID. Treat Git state and command output as authoritative; executor summary is supporting context only.
+
+The adapter rejects a `completed` report when it contains failed/not-run verification, still declares a human-decision reason, or follows an unresolved permission denial in that round. Treat such output as invalid, not as success.
 
 Do not use Antigravity's `--dangerously-skip-permissions`. If a required command is soft-denied, report the exact denial and ask the user to add a narrow Antigravity permission rule.
 
 ## Verify and review
 
-1. Inspect the executor result, current diff, untracked files, and reported verification.
+1. Inspect the executor result, current diff, untracked files, and focused verification.
 2. Do not rerun implementation verification as reviewer. Verification execution belongs to the executor under repository rules.
-3. Spawn one dedicated review subagent for the run. Give it the raw request, accepted plan, acceptance criteria, baseline evidence, current diff, relevant files, and executor-provided verification results.
+3. Spawn one dedicated review subagent before expensive final verification. Give it the raw request, accepted plan, acceptance criteria, baseline evidence, current diff, relevant files, focused verification, and the explicitly deferred final checks.
 4. Require the reviewer to read and follow `.agents/skills/review-change/SKILL.md`. It must remain read-only and return its standard verdict and findings.
 5. For meaningful cross-stack changes, let that reviewer route independent backend and frontend lanes as required by the review skill.
 
@@ -57,7 +74,7 @@ The first reviewer turn must be independent of planning. Reuse the same reviewer
 
 When verdict is `CHANGES REQUESTED`:
 
-1. Build a focused English fix prompt containing the unchanged acceptance criteria, exact findings, and required verification.
+1. Build a compact English fix prompt containing exact findings, affected files, and focused verification. Refer to the original request and acceptance criteria already present in the conversation; do not repeat the full history.
 2. Continue the same Antigravity conversation and run directory:
 
 ```powershell
@@ -66,6 +83,14 @@ node .agents/skills/orchestrate-change/scripts/run-antigravity.mjs --prompt-file
 
 3. Inspect new Git evidence and executor verification.
 4. Send the updated diff and results to the existing review subagent.
+
+When the reviewer returns `APPROVE`, run one final verification phase in the same Antigravity conversation:
+
+1. Send only the final command ledger and current source-approval status.
+2. Require each expensive integration suite/build/check at most once unless it fails or later source edits invalidate it.
+3. Require no formatting or source/test edits in this phase.
+4. If verification fails, send a focused fix prompt, rerun only invalidated checks, then return the changed diff to the same reviewer.
+5. If any file changes during final verification, review that delta before finishing.
 
 Stop with `NEEDS HUMAN` rather than continuing when any condition holds:
 
@@ -76,4 +101,4 @@ Stop with `NEEDS HUMAN` rather than continuing when any condition holds:
 - existing user changes conflict with required edits;
 - Antigravity returns `blocked` or needs interactive input.
 
-Finish only when reviewer verdict is `APPROVE`, no required verification is failing or missing, and the diff still matches the accepted scope. Do not commit, push, merge, reset, or deploy. Report outcome, files, verification, review rounds, residual risks, and the retained run-directory path.
+Finish only when reviewer verdict is `APPROVE`, final required verification is passing, no final-phase file change escaped review, and the diff still matches the accepted scope. Do not commit, push, merge, reset, or deploy. Report outcome, selected Antigravity model, files, verification, review rounds, residual risks, and the retained run-directory path.
