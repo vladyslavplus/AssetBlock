@@ -302,7 +302,7 @@ Sellers can request a listing suggestion for a **READY** version that already ha
 
 - `POST /api/users/me/asset-versions/{assetVersionId}/listing-copilot` (verified email, local rate limit) enqueues one idempotent `LISTING_COPILOT` job (`DefinitionVersion` 1). Repeated POST returns the same `jobId` with `202 Accepted`.
 - `GET /api/users/me/asset-versions/{assetVersionId}/listing-copilot` returns the stored suggestion or `404`. It never includes prompts, raw provider JSON, tokens, or `providerRequestId`.
-- Disabled AI (`Ai:Enabled=false`) returns `AI_DISABLED` and does not enqueue.
+- Disabled AI (`Ai:Enabled=false`) returns `ERR_AI_DISABLED` and does not enqueue.
 
 Models come from typed configuration only. Local Development lists ordered OpenRouter models under `Ai:OpenRouter:Models`. Deployment overrides use standard .NET configuration providers (environment variables, user secrets). Configuration changes apply after restart. Inactive provider sections are not validated.
 
@@ -333,5 +333,5 @@ Native setup:
 3. Set `Ai:Ollama:Digest` to the exact `sha256:` digest from `ollama show` or `/api/tags`. Generation calls `/api/tags` first and refuses to run unless name and digest match.
 4. Set `Ai:Enabled=true`, `Ai:Provider=Ollama`, and keep `Ai:Ollama:BaseUrl` as a loopback HTTP URL. Put secrets in user secrets or environment variables, never in tracked files.
 
-OpenRouter requires an API key and a non-empty ordered distinct `Ai:OpenRouter:Models` list (1–16 unique ids). That list is both the allowlist and the OpenRouter fallback order. Requests send `require_parameters=true` and `data_collection=deny`. Optional `Ai:OpenRouter:ZeroDataRetention` adds `zdr=true` and may reduce available endpoints. The returned `actualModel` must match a configured id exactly (ordinal); otherwise the call is terminal `AI_MODEL_NOT_ALLOWED` and no `ModelRevision` is stored. There is no OpenRouter → Ollama fallback. Tracked `appsettings.json` keeps `Ai:Enabled=false` and empty models.
+OpenRouter requires an API key and a non-empty ordered distinct `Ai:OpenRouter:Models` list (1–16 unique ids). That list is both the allowlist and the OpenRouter fallback order. Requests send `require_parameters=true` and `data_collection=deny`. Optional `Ai:OpenRouter:ZeroDataRetention` adds `zdr=true` and may reduce available endpoints. The returned `actualModel` must match a configured id exactly (ordinal); otherwise the call is terminal `ERR_AI_MODEL_NOT_ALLOWED` and no `ModelRevision` is stored. There is no OpenRouter → Ollama fallback. Tracked `appsettings.json` keeps `Ai:Enabled=false` and empty models.
 

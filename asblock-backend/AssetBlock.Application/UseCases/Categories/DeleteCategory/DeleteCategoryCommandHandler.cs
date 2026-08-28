@@ -1,5 +1,4 @@
 using Ardalis.Result;
-using AssetBlock.Application.Common;
 using AssetBlock.Domain.Abstractions.Services;
 using AssetBlock.Domain.Core.Constants;
 using AssetBlock.Domain.Core.Dto.Audit;
@@ -39,7 +38,7 @@ internal sealed class DeleteCategoryCommandHandler(
         catch (CategoryInUseException)
         {
             logger.LogWarning("Cannot delete category {CategoryId}: in use by assets", request.Id);
-            return ResultError.Error(ErrorCodes.ERR_BAD_REQUEST);
+            return Result.Conflict(ErrorCodes.ERR_CATEGORY_IN_USE);
         }
 
         if (!deleted)

@@ -59,7 +59,7 @@ public sealed class OpenRouterAiGenerationProviderTests
         var result = await sut.Generate(AiProviderTestFactory.OpenRouterRequest(), CancellationToken.None);
 
         handler.SendCount.Should().Be(0);
-        result.ErrorCode.Should().Be(ErrorCodes.AI_MODEL_NOT_ALLOWED);
+        result.ErrorCode.Should().Be(ErrorCodes.ERR_AI_MODEL_NOT_ALLOWED);
         result.IsRetryable.Should().BeFalse();
         result.ModelRevision.Should().BeNull();
         result.ErrorCode.Should().NotBeNull();
@@ -67,15 +67,15 @@ public sealed class OpenRouterAiGenerationProviderTests
     }
 
     [Theory]
-    [InlineData(HttpStatusCode.RequestTimeout, ErrorCodes.AI_TIMEOUT, true)]
-    [InlineData(HttpStatusCode.TooManyRequests, ErrorCodes.AI_RATE_LIMITED, true)]
-    [InlineData(HttpStatusCode.InternalServerError, ErrorCodes.AI_PROVIDER_UNAVAILABLE, true)]
-    [InlineData(HttpStatusCode.BadGateway, ErrorCodes.AI_PROVIDER_UNAVAILABLE, true)]
-    [InlineData(HttpStatusCode.Unauthorized, ErrorCodes.AI_UNAUTHORIZED, false)]
-    [InlineData(HttpStatusCode.PaymentRequired, ErrorCodes.AI_PAYMENT_REQUIRED, false)]
-    [InlineData(HttpStatusCode.Forbidden, ErrorCodes.AI_FORBIDDEN, false)]
-    [InlineData(HttpStatusCode.BadRequest, ErrorCodes.AI_INVALID_REQUEST, false)]
-    [InlineData(HttpStatusCode.UnprocessableEntity, ErrorCodes.AI_INVALID_REQUEST, false)]
+    [InlineData(HttpStatusCode.RequestTimeout, ErrorCodes.ERR_AI_TIMEOUT, true)]
+    [InlineData(HttpStatusCode.TooManyRequests, ErrorCodes.ERR_AI_RATE_LIMITED, true)]
+    [InlineData(HttpStatusCode.InternalServerError, ErrorCodes.ERR_AI_PROVIDER_UNAVAILABLE, true)]
+    [InlineData(HttpStatusCode.BadGateway, ErrorCodes.ERR_AI_PROVIDER_UNAVAILABLE, true)]
+    [InlineData(HttpStatusCode.Unauthorized, ErrorCodes.ERR_AI_UNAUTHORIZED, false)]
+    [InlineData(HttpStatusCode.PaymentRequired, ErrorCodes.ERR_AI_PAYMENT_REQUIRED, false)]
+    [InlineData(HttpStatusCode.Forbidden, ErrorCodes.ERR_AI_FORBIDDEN, false)]
+    [InlineData(HttpStatusCode.BadRequest, ErrorCodes.ERR_AI_INVALID_REQUEST, false)]
+    [InlineData(HttpStatusCode.UnprocessableEntity, ErrorCodes.ERR_AI_INVALID_REQUEST, false)]
     public async Task Generate_ShouldMapStatusCodes(HttpStatusCode status, string errorCode, bool retryable)
     {
         var handler = new RecordingHttpMessageHandler
@@ -162,7 +162,7 @@ public sealed class OpenRouterAiGenerationProviderTests
 
         var result = await CreateSut(handler).Generate(AiProviderTestFactory.OpenRouterRequest(), CancellationToken.None);
 
-        result.ErrorCode.Should().Be(ErrorCodes.AI_PROVIDER_UNAVAILABLE);
+        result.ErrorCode.Should().Be(ErrorCodes.ERR_AI_PROVIDER_UNAVAILABLE);
         result.IsRetryable.Should().BeTrue();
     }
 
@@ -181,7 +181,7 @@ public sealed class OpenRouterAiGenerationProviderTests
 
         var result = await sut.Generate(AiProviderTestFactory.OpenRouterRequest(), CancellationToken.None);
 
-        result.ErrorCode.Should().Be(ErrorCodes.AI_TIMEOUT);
+        result.ErrorCode.Should().Be(ErrorCodes.ERR_AI_TIMEOUT);
         result.IsRetryable.Should().BeTrue();
     }
 
@@ -214,7 +214,7 @@ public sealed class OpenRouterAiGenerationProviderTests
 
         var result = await CreateSut(handler).Generate(AiProviderTestFactory.OpenRouterRequest(), CancellationToken.None);
 
-        result.ErrorCode.Should().Be(ErrorCodes.AI_INVALID_RESPONSE);
+        result.ErrorCode.Should().Be(ErrorCodes.ERR_AI_INVALID_RESPONSE);
         result.IsRetryable.Should().BeFalse();
     }
 
@@ -232,7 +232,7 @@ public sealed class OpenRouterAiGenerationProviderTests
 
         var result = await CreateSut(handler).Generate(AiProviderTestFactory.OpenRouterRequest(), CancellationToken.None);
 
-        result.ErrorCode.Should().Be(ErrorCodes.AI_INVALID_RESPONSE);
+        result.ErrorCode.Should().Be(ErrorCodes.ERR_AI_INVALID_RESPONSE);
     }
 
     [Fact]
@@ -247,7 +247,7 @@ public sealed class OpenRouterAiGenerationProviderTests
 
         var result = await CreateSut(handler).Generate(AiProviderTestFactory.OpenRouterRequest(), CancellationToken.None);
 
-        result.ErrorCode.Should().Be(ErrorCodes.AI_MODEL_NOT_ALLOWED);
+        result.ErrorCode.Should().Be(ErrorCodes.ERR_AI_MODEL_NOT_ALLOWED);
         result.ActualModel.Should().Be("unexpected/model");
         result.UpstreamProvider.Should().Be("TestHost");
         result.ModelRevision.Should().BeNull();
@@ -286,7 +286,7 @@ public sealed class OpenRouterAiGenerationProviderTests
 
         var result = await sut.Generate(AiProviderTestFactory.OpenRouterRequest(), CancellationToken.None);
 
-        result.ErrorCode.Should().Be(ErrorCodes.AI_MODEL_NOT_ALLOWED);
+        result.ErrorCode.Should().Be(ErrorCodes.ERR_AI_MODEL_NOT_ALLOWED);
         result.ActualModel.Should().Be("fixture/openrouter-test-b");
         result.ModelRevision.Should().BeNull();
         result.IsRetryable.Should().BeFalse();
@@ -349,7 +349,7 @@ public sealed class OpenRouterAiGenerationProviderTests
         var result = await sut.Generate(AiProviderTestFactory.OpenRouterRequest(), CancellationToken.None);
 
         handler.SendCount.Should().Be(1);
-        result.ErrorCode.Should().Be(ErrorCodes.AI_TIMEOUT);
+        result.ErrorCode.Should().Be(ErrorCodes.ERR_AI_TIMEOUT);
         result.IsRetryable.Should().BeTrue();
     }
 
@@ -363,7 +363,7 @@ public sealed class OpenRouterAiGenerationProviderTests
 
         var result = await CreateSut(handler).Generate(AiProviderTestFactory.OpenRouterRequest(), CancellationToken.None);
 
-        result.ErrorCode.Should().Be(ErrorCodes.AI_PROVIDER_UNAVAILABLE);
+        result.ErrorCode.Should().Be(ErrorCodes.ERR_AI_PROVIDER_UNAVAILABLE);
         result.IsRetryable.Should().BeTrue();
     }
 

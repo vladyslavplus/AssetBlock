@@ -73,7 +73,7 @@ public sealed class ListingCopilotJobHandlerTests
         var outcome = await _sut.Process(context, CancellationToken.None);
 
         var terminal = outcome.Should().BeOfType<AssetProcessingJobOutcome.TerminalFailure>().Subject;
-        terminal.ErrorCode.Should().Be(ErrorCodes.AI_ALLOWLIST_OVERFLOW);
+        terminal.ErrorCode.Should().Be(ErrorCodes.ERR_AI_ALLOWLIST_OVERFLOW);
         await _orchestrator.DidNotReceive().Generate(Arg.Any<ListingSuggestionGenerationRequest>(), Arg.Any<CancellationToken>());
     }
 
@@ -132,12 +132,12 @@ public sealed class ListingCopilotJobHandlerTests
                 TimeSpan.FromMilliseconds(5),
                 null,
                 TimeSpan.FromSeconds(9),
-                ErrorCodes.AI_RATE_LIMITED));
+                ErrorCodes.ERR_AI_RATE_LIMITED));
 
         var outcome = await _sut.Process(context, CancellationToken.None);
 
         var retryable = outcome.Should().BeOfType<AssetProcessingJobOutcome.RetryableFailure>().Subject;
-        retryable.ErrorCode.Should().Be(ErrorCodes.AI_RATE_LIMITED);
+        retryable.ErrorCode.Should().Be(ErrorCodes.ERR_AI_RATE_LIMITED);
         retryable.RetryAfter.Should().Be(TimeSpan.FromSeconds(9));
     }
 
@@ -186,12 +186,12 @@ public sealed class ListingCopilotJobHandlerTests
                 TimeSpan.Zero,
                 null,
                 null,
-                ErrorCodes.AI_DISABLED));
+                ErrorCodes.ERR_AI_DISABLED));
 
         var outcome = await _sut.Process(context, CancellationToken.None);
 
         var terminal = outcome.Should().BeOfType<AssetProcessingJobOutcome.TerminalFailure>().Subject;
-        terminal.ErrorCode.Should().Be(ErrorCodes.AI_DISABLED);
+        terminal.ErrorCode.Should().Be(ErrorCodes.ERR_AI_DISABLED);
         await _copilotStore.DidNotReceive().TryCommitSucceeded(
             Arg.Any<Guid>(),
             Arg.Any<Guid>(),
@@ -222,12 +222,12 @@ public sealed class ListingCopilotJobHandlerTests
                 TimeSpan.FromMilliseconds(4),
                 null,
                 null,
-                ErrorCodes.AI_INVALID_RESPONSE));
+                ErrorCodes.ERR_AI_INVALID_RESPONSE));
 
         var outcome = await _sut.Process(context, CancellationToken.None);
 
         var terminal = outcome.Should().BeOfType<AssetProcessingJobOutcome.TerminalFailure>().Subject;
-        terminal.ErrorCode.Should().Be(ErrorCodes.AI_INVALID_RESPONSE);
+        terminal.ErrorCode.Should().Be(ErrorCodes.ERR_AI_INVALID_RESPONSE);
     }
 
     private static AssetProcessingJobContext<ListingCopilotPayload> CreateContext(

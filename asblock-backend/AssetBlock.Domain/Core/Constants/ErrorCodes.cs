@@ -60,6 +60,7 @@ public static class ErrorCodes
     public const string ERR_BUNDLE_CONTAINS_OWNED_ASSET = "ERR_BUNDLE_CONTAINS_OWNED_ASSET";
 
     public const string ERR_CATEGORY_SLUG_EXISTS = "ERR_CATEGORY_SLUG_EXISTS";
+    public const string ERR_CATEGORY_IN_USE = "ERR_CATEGORY_IN_USE";
 
     public const string ERR_REVIEW_ALREADY_EXISTS = "ERR_REVIEW_ALREADY_EXISTS";
     public const string ERR_REVIEW_TIME_WINDOW_EXPIRED = "ERR_REVIEW_TIME_WINDOW_EXPIRED";
@@ -135,21 +136,21 @@ public static class ErrorCodes
     public const string WORKER_SHUTDOWN = "WORKER_SHUTDOWN";
     public const string PROCESSING_TIMEOUT = "PROCESSING_TIMEOUT";
     public const string PROCESSING_EXCEPTION = "PROCESSING_EXCEPTION";
-    public const string AI_DISABLED = "AI_DISABLED";
-    public const string AI_PROVIDER_UNAVAILABLE = "AI_PROVIDER_UNAVAILABLE";
-    public const string AI_RATE_LIMITED = "AI_RATE_LIMITED";
-    public const string AI_TIMEOUT = "AI_TIMEOUT";
-    public const string AI_UNAUTHORIZED = "AI_UNAUTHORIZED";
-    public const string AI_PAYMENT_REQUIRED = "AI_PAYMENT_REQUIRED";
-    public const string AI_FORBIDDEN = "AI_FORBIDDEN";
-    public const string AI_INVALID_REQUEST = "AI_INVALID_REQUEST";
-    public const string AI_INVALID_RESPONSE = "AI_INVALID_RESPONSE";
-    public const string AI_MODEL_NOT_ALLOWED = "AI_MODEL_NOT_ALLOWED";
-    public const string AI_CATEGORY_NOT_ALLOWED = "AI_CATEGORY_NOT_ALLOWED";
-    public const string AI_TAGS_NOT_ALLOWED = "AI_TAGS_NOT_ALLOWED";
-    public const string AI_INPUT_TOO_LARGE = "AI_INPUT_TOO_LARGE";
-    public const string AI_ERROR = "AI_ERROR";
-    public const string AI_VERSION_NOT_READY = "AI_VERSION_NOT_READY";
-    public const string AI_ARCHIVE_ANALYSIS_MISSING = "AI_ARCHIVE_ANALYSIS_MISSING";
-    public const string AI_ALLOWLIST_OVERFLOW = "AI_ALLOWLIST_OVERFLOW";
+    public const string ERR_AI_DISABLED = "ERR_AI_DISABLED";
+    public const string ERR_AI_PROVIDER_UNAVAILABLE = "ERR_AI_PROVIDER_UNAVAILABLE";
+    public const string ERR_AI_RATE_LIMITED = "ERR_AI_RATE_LIMITED";
+    public const string ERR_AI_TIMEOUT = "ERR_AI_TIMEOUT";
+    public const string ERR_AI_UNAUTHORIZED = "ERR_AI_UNAUTHORIZED";
+    public const string ERR_AI_PAYMENT_REQUIRED = "ERR_AI_PAYMENT_REQUIRED";
+    public const string ERR_AI_FORBIDDEN = "ERR_AI_FORBIDDEN";
+    public const string ERR_AI_INVALID_REQUEST = "ERR_AI_INVALID_REQUEST";
+    public const string ERR_AI_INVALID_RESPONSE = "ERR_AI_INVALID_RESPONSE";
+    public const string ERR_AI_MODEL_NOT_ALLOWED = "ERR_AI_MODEL_NOT_ALLOWED";
+    public const string ERR_AI_CATEGORY_NOT_ALLOWED = "ERR_AI_CATEGORY_NOT_ALLOWED";
+    public const string ERR_AI_TAGS_NOT_ALLOWED = "ERR_AI_TAGS_NOT_ALLOWED";
+    public const string ERR_AI_INPUT_TOO_LARGE = "ERR_AI_INPUT_TOO_LARGE";
+    public const string ERR_AI_ERROR = "ERR_AI_ERROR";
+    public const string ERR_AI_VERSION_NOT_READY = "ERR_AI_VERSION_NOT_READY";
+    public const string ERR_AI_ARCHIVE_ANALYSIS_MISSING = "ERR_AI_ARCHIVE_ANALYSIS_MISSING";
+    public const string ERR_AI_ALLOWLIST_OVERFLOW = "ERR_AI_ALLOWLIST_OVERFLOW";
 }

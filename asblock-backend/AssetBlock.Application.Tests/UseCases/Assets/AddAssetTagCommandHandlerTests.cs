@@ -2,6 +2,7 @@ using Ardalis.Result;
 using AssetBlock.Application.UseCases.Assets.AddAssetTag;
 using AssetBlock.Domain.Abstractions.Services;
 using AssetBlock.Domain.Core.Constants;
+using AssetBlock.Domain.Core.Dto.Assets;
 using AssetBlock.Domain.Core.Dto.Audit;
 using AssetBlock.Domain.Core.Entities;
 using AssetBlock.Domain.Core.Enums;
@@ -44,7 +45,7 @@ public class AddAssetTagCommandHandlerTests
     public async Task Handle_WhenAssetNotFound_ShouldReturnNotFound()
     {
         var command = new AddAssetTagCommand(Guid.NewGuid(), Guid.NewGuid(), "test");
-        _assetStoreMock.GetById(command.AssetId).Returns((Asset?)null);
+        _assetStoreMock.GetOwnership(command.AssetId).Returns((AssetOwnershipDto?)null);
 
         var result = await _handler.Handle(command, CancellationToken.None);
 
@@ -57,8 +58,8 @@ public class AddAssetTagCommandHandlerTests
     public async Task Handle_WhenUserIsNotAuthor_ShouldReturnForbiddenAndWriteDeniedAudit()
     {
         var command = new AddAssetTagCommand(Guid.NewGuid(), Guid.NewGuid(), "test");
-        var asset = new Asset { Id = command.AssetId, AuthorId = Guid.NewGuid(), CategoryId = Guid.NewGuid(), Title = "t", AssetTags = [] };
-        _assetStoreMock.GetById(command.AssetId).Returns(asset);
+        var ownership = new AssetOwnershipDto(command.AssetId, Guid.NewGuid(), false);
+        _assetStoreMock.GetOwnership(command.AssetId).Returns(ownership);
 
         var result = await _handler.Handle(command, CancellationToken.None);
 
@@ -69,7 +70,7 @@ public class AddAssetTagCommandHandlerTests
             Arg.Is<AuditEvent>(e =>
                 e.Action == AuditActions.ASSET_TAG_ADD &&
                 e.Outcome == AuditOutcome.DENIED &&
-                e.ResourceId == asset.Id.ToString()),
+                e.ResourceId == ownership.Id.ToString()),
             Arg.Any<CancellationToken>());
     }
 
@@ -78,9 +79,9 @@ public class AddAssetTagCommandHandlerTests
     {
         var authorId = Guid.NewGuid();
         var command = new AddAssetTagCommand(Guid.NewGuid(), authorId, " New-Tag ");
-        var asset = new Asset { Id = command.AssetId, AuthorId = authorId, CategoryId = Guid.NewGuid(), Title = "t", AssetTags = [] };
+        var ownership = new AssetOwnershipDto(command.AssetId, authorId, false);
 
-        _assetStoreMock.GetById(command.AssetId).Returns(asset);
+        _assetStoreMock.GetOwnership(command.AssetId).Returns(ownership);
         _tagStoreMock.GetByName("new-tag").Returns((Tag?)null);
 
         var result = await _handler.Handle(command, CancellationToken.None);
@@ -88,7 +89,7 @@ public class AddAssetTagCommandHandlerTests
         result.IsSuccess.Should().BeFalse();
         result.Errors.Should().Contain(ErrorCodes.ERR_TAG_NOT_FOUND);
         await _tagStoreMock.DidNotReceive().Add(Arg.Any<Tag>());
-        await _assetStoreMock.DidNotReceive().AddTag(Arg.Any<Guid>(), Arg.Any<Guid>());
+        await _assetStoreMock.DidNotReceive().TryAddTag(Arg.Any<Guid>(), Arg.Any<Guid>());
     }
 
     [Fact]
@@ -97,25 +98,18 @@ public class AddAssetTagCommandHandlerTests
         var authorId = Guid.NewGuid();
         var assetId = Guid.NewGuid();
         var tag = new Tag { Id = Guid.NewGuid(), Name = "existing" };
-        var asset = new Asset
-        {
-            Id = assetId,
-            AuthorId = authorId,
-            CategoryId = Guid.NewGuid(),
-            Title = "t",
-            AssetTags = [new AssetTag { AssetId = assetId, TagId = tag.Id }]
-        };
+        var ownership = new AssetOwnershipDto(assetId, authorId, false);
         var command = new AddAssetTagCommand(assetId, authorId, "existing");
 
-        _assetStoreMock.GetById(command.AssetId).Returns(asset);
+        _assetStoreMock.GetOwnership(command.AssetId).Returns(ownership);
         _tagStoreMock.GetByName("existing").Returns(tag);
+        _assetStoreMock.TryAddTag(assetId, tag.Id, Arg.Any<CancellationToken>()).Returns(false);
 
         var result = await _handler.Handle(command, CancellationToken.None);
 
         result.IsSuccess.Should().BeFalse();
         result.Status.Should().Be(ResultStatus.Conflict);
         result.Errors.Should().Contain(ErrorCodes.ERR_ASSET_TAG_ALREADY_EXISTS);
-        await _assetStoreMock.DidNotReceive().AddTag(Arg.Any<Guid>(), Arg.Any<Guid>());
     }
 
     [Fact]
@@ -123,17 +117,19 @@ public class AddAssetTagCommandHandlerTests
     {
         var authorId = Guid.NewGuid();
         var command = new AddAssetTagCommand(Guid.NewGuid(), authorId, "existing");
-        var asset = new Asset { Id = command.AssetId, AuthorId = authorId, CategoryId = Guid.NewGuid(), Title = "t", AssetTags = [] };
+        var ownership = new AssetOwnershipDto(command.AssetId, authorId, false);
         var tag = new Tag { Id = Guid.NewGuid(), Name = "existing" };
 
-        _assetStoreMock.GetById(command.AssetId).Returns(asset);
+        _assetStoreMock.GetOwnership(command.AssetId).Returns(ownership);
         _tagStoreMock.GetByName("existing").Returns(tag);
+        _assetStoreMock.TryAddTag(command.AssetId, tag.Id, Arg.Any<CancellationToken>()).Returns(true);
 
         var result = await _handler.Handle(command, CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
+        result.Value.Name.Should().Be("existing");
         await _tagStoreMock.DidNotReceive().Add(Arg.Any<Tag>());
-        await _assetStoreMock.Received(1).AddTag(command.AssetId, tag.Id);
+        await _assetStoreMock.Received(1).TryAddTag(command.AssetId, tag.Id, Arg.Any<CancellationToken>());
         await _unitOfWorkMock.Received(1).ExecuteInTransaction(Arg.Any<Func<CancellationToken, Task>>(), Arg.Any<CancellationToken>());
         await _auditWriterMock.Received(1).Write(
             Arg.Is<AuditEvent>(e =>
@@ -148,12 +144,12 @@ public class AddAssetTagCommandHandlerTests
     {
         var authorId = Guid.NewGuid();
         var command = new AddAssetTagCommand(Guid.NewGuid(), authorId, "existing");
-        var asset = new Asset { Id = command.AssetId, AuthorId = authorId, CategoryId = Guid.NewGuid(), Title = "t", AssetTags = [] };
+        var ownership = new AssetOwnershipDto(command.AssetId, authorId, false);
         var tag = new Tag { Id = Guid.NewGuid(), Name = "existing" };
 
-        _assetStoreMock.GetById(command.AssetId).Returns(asset);
+        _assetStoreMock.GetOwnership(command.AssetId).Returns(ownership);
         _tagStoreMock.GetByName("existing").Returns(tag);
-        _assetStoreMock.AddTag(command.AssetId, tag.Id, Arg.Any<CancellationToken>())
+        _assetStoreMock.TryAddTag(command.AssetId, tag.Id, Arg.Any<CancellationToken>())
             .ThrowsAsync(new InvalidOperationException("db"));
 
         var result = await _handler.Handle(command, CancellationToken.None);

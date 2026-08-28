@@ -140,79 +140,68 @@ internal sealed class AssetStore(ApplicationDbContext dbContext) : IAssetStore
             .FirstOrDefaultAsync(v => v.AssetId == assetId && v.Id == versionId, cancellationToken);
     }
 
-    public async Task<IReadOnlyList<AssetVersionSummaryDto>> ListVersions(
+    public async Task<AssetOwnershipDto?> GetOwnership(Guid assetId, CancellationToken cancellationToken = default)
+    {
+        return await dbContext.Assets
+            .IgnoreQueryFilters()
+            .AsNoTracking()
+            .Where(a => a.Id == assetId)
+            .Select(a => new AssetOwnershipDto(a.Id, a.AuthorId, a.DeletedAt != null))
+            .FirstOrDefaultAsync(cancellationToken);
+    }
+
+    public async Task<IReadOnlyList<AssetVersionSummaryDto>?> ListVersions(
         Guid assetId,
-        bool includeDeletedAsset,
         Guid? requesterUserId,
         CancellationToken cancellationToken = default)
     {
-        var assetQuery = dbContext.Assets.AsNoTracking().Where(a => a.Id == assetId);
-        if (includeDeletedAsset)
-        {
-            assetQuery = assetQuery.IgnoreQueryFilters();
-        }
-
-        var assetExists = await assetQuery.AnyAsync(cancellationToken);
-        if (!assetExists)
-        {
-            return Array.Empty<AssetVersionSummaryDto>();
-        }
-
-        var isAuthor = requesterUserId.HasValue
-            && await dbContext.Assets.IgnoreQueryFilters().AsNoTracking()
-                .AnyAsync(a => a.Id == assetId && a.AuthorId == requesterUserId.Value, cancellationToken);
-
-        // Active (non-deleted) listings expose version history publicly.
-        // Soft-deleted assets require author or entitled purchaser.
-        if (includeDeletedAsset)
-        {
-            if (!isAuthor)
-            {
-                if (!requesterUserId.HasValue)
-                {
-                    return Array.Empty<AssetVersionSummaryDto>();
-                }
-
-                var hasPurchase = await dbContext.Purchases.AsNoTracking()
-                    .AnyAsync(p => p.AssetId == assetId && p.UserId == requesterUserId.Value, cancellationToken);
-                if (!hasPurchase)
-                {
-                    return Array.Empty<AssetVersionSummaryDto>();
-                }
-            }
-        }
-
-        IQueryable<AssetVersion> versionQuery = dbContext.AssetVersions
+        var result = await dbContext.Assets
+            .IgnoreQueryFilters()
             .AsNoTracking()
-            .Where(v => v.AssetId == assetId);
+            .Where(a => a.Id == assetId)
+            .Select(a => new
+            {
+                IsDeleted = a.DeletedAt != null,
+                IsAuthor = requesterUserId.HasValue && a.AuthorId == requesterUserId.Value,
+                HasPurchased = requesterUserId.HasValue && dbContext.Purchases
+                    .Any(p => p.AssetId == a.Id && p.UserId == requesterUserId.Value),
+                Versions = a.Versions
+                    .Where(v => (requesterUserId.HasValue && a.AuthorId == requesterUserId.Value)
+                                || v.ProcessingStatus == AssetVersionProcessingStatus.READY)
+                    .OrderByDescending(v => v.VersionNumber)
+                    .Select(v => new AssetVersionSummaryDto(
+                        v.Id,
+                        v.VersionNumber,
+                        v.IsCurrent,
+                        v.FileName,
+                        v.ContentLength,
+                        v.ContentSha256,
+                        v.ReleaseNotes,
+                        v.CreatedAt,
+                        new AssetLicenseSummaryDto(
+                            v.LicenseCode.ToString(),
+                            v.LicenseDisplayName,
+                            v.LicenseTemplateVersion,
+                            v.LicenseTerms),
+                        v.ProcessingStatus,
+                        v.ProcessingErrorCode,
+                        v.ProcessingErrorSummary,
+                        v.ProcessingUpdatedAt))
+                    .ToList()
+            })
+            .FirstOrDefaultAsync(cancellationToken);
 
-        // Non-authors only see READY versions in the version history
-        if (!isAuthor)
+        if (result is null)
         {
-            versionQuery = versionQuery.Where(v => v.ProcessingStatus == AssetVersionProcessingStatus.READY);
+            return null;
         }
 
-        return await versionQuery
-            .OrderByDescending(v => v.VersionNumber)
-            .Select(v => new AssetVersionSummaryDto(
-                v.Id,
-                v.VersionNumber,
-                v.IsCurrent,
-                v.FileName,
-                v.ContentLength,
-                v.ContentSha256,
-                v.ReleaseNotes,
-                v.CreatedAt,
-                new AssetLicenseSummaryDto(
-                    v.LicenseCode.ToString(),
-                    v.LicenseDisplayName,
-                    v.LicenseTemplateVersion,
-                    v.LicenseTerms),
-                v.ProcessingStatus,
-                v.ProcessingErrorCode,
-                v.ProcessingErrorSummary,
-                v.ProcessingUpdatedAt))
-            .ToListAsync(cancellationToken);
+        if (result.IsDeleted && !result.IsAuthor && !result.HasPurchased)
+        {
+            return null;
+        }
+
+        return result.Versions;
     }
 
     public async Task<AssetVersion> CreateNextCandidateVersion(Guid assetId, Guid authorId, AssetVersion draft, CancellationToken cancellationToken = default)
@@ -505,23 +494,16 @@ internal sealed class AssetStore(ApplicationDbContext dbContext) : IAssetStore
 
     public async Task AddTag(Guid assetId, Guid tagId, CancellationToken cancellationToken = default)
     {
-        const string assetTagPrimaryKey = "PK_asset_tags";
-        var assetTag = new AssetTag { AssetId = assetId, TagId = tagId };
-        try
-        {
-            dbContext.Set<AssetTag>().Add(assetTag);
-            await dbContext.SaveChangesAsync(cancellationToken);
-        }
-        catch (DbUpdateException ex) when (
-            ex.InnerException is Npgsql.PostgresException
-            {
-                SqlState: Npgsql.PostgresErrorCodes.UniqueViolation,
-                ConstraintName: assetTagPrimaryKey
-            })
-        {
-            // Tag already linked to asset — detach so the scoped context stays usable.
-            dbContext.Entry(assetTag).State = EntityState.Detached;
-        }
+        await TryAddTag(assetId, tagId, cancellationToken);
+    }
+
+    public async Task<bool> TryAddTag(Guid assetId, Guid tagId, CancellationToken cancellationToken = default)
+    {
+        var rows = await dbContext.Database.ExecuteSqlInterpolatedAsync(
+            $"INSERT INTO asset_tags (\"AssetId\", \"TagId\") VALUES ({assetId}, {tagId}) ON CONFLICT (\"AssetId\", \"TagId\") DO NOTHING",
+            cancellationToken);
+
+        return rows > 0;
     }
 
     public Task<bool> HasAssetTag(Guid assetId, Guid tagId, CancellationToken cancellationToken = default)

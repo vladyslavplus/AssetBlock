@@ -59,6 +59,93 @@ public sealed class AssetStorePostgresTests(PostgresFixture fixture)
     }
 
     [Fact]
+    public async Task TryAddTag_WhenTagAddedFirstTime_ShouldReturnTrue_WhenAddedSecondTime_ShouldReturnFalse()
+    {
+        await using var db = await fixture.CreateCleanDbContext();
+        (User author, Category category) = await TestData.SeedAuthorAndCategory(db);
+        var asset = TestData.CreateAsset(author.Id, category.Id);
+        var tag = TestData.CreateTag("atomic-tag");
+        db.Tags.Add(tag);
+        await db.SaveChangesAsync();
+
+        var store = new AssetStore(db);
+        await store.Add(asset);
+
+        var first = await store.TryAddTag(asset.Id, tag.Id);
+        first.Should().BeTrue();
+
+        var second = await store.TryAddTag(asset.Id, tag.Id);
+        second.Should().BeFalse();
+
+        (await store.HasAssetTag(asset.Id, tag.Id)).Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task TryAddTag_WhenCalledConcurrentlyAcrossTwoContexts_ShouldReturnOneTrueOneFalseAndPersistOneRow()
+    {
+        await using var seedDb = await fixture.CreateCleanDbContext();
+        (User author, Category category) = await TestData.SeedAuthorAndCategory(seedDb);
+        var asset = TestData.CreateAsset(author.Id, category.Id);
+        var tag = TestData.CreateTag("concurrent-tag");
+        seedDb.Tags.Add(tag);
+        await seedDb.SaveChangesAsync();
+
+        var store = new AssetStore(seedDb);
+        await store.Add(asset);
+
+        await using var db1 = fixture.CreateDbContext();
+        await using var db2 = fixture.CreateDbContext();
+        var store1 = new AssetStore(db1);
+        var store2 = new AssetStore(db2);
+
+        var task1 = store1.TryAddTag(asset.Id, tag.Id);
+        var task2 = store2.TryAddTag(asset.Id, tag.Id);
+        var results = await Task.WhenAll(task1, task2);
+
+        results.Should().BeEquivalentTo([true, false]);
+
+        await using var verifyDb = fixture.CreateDbContext();
+        var count = await verifyDb.Set<AssetTag>().CountAsync(at => at.AssetId == asset.Id && at.TagId == tag.Id);
+        count.Should().Be(1);
+    }
+
+    [Fact]
+    public async Task TryAddTag_WhenTagDoesNotExist_ShouldPropagateForeignKeyViolation()
+    {
+        await using var db = await fixture.CreateCleanDbContext();
+        (User author, Category category) = await TestData.SeedAuthorAndCategory(db);
+        var asset = TestData.CreateAsset(author.Id, category.Id);
+        var store = new AssetStore(db);
+        await store.Add(asset);
+
+        var act = () => store.TryAddTag(asset.Id, Guid.NewGuid());
+
+        var ex = await act.Should().ThrowAsync<Npgsql.PostgresException>();
+        ex.Which.SqlState.Should().Be(Npgsql.PostgresErrorCodes.ForeignKeyViolation);
+    }
+
+    [Fact]
+    public async Task GetOwnership_ShouldReturnAuthorIdAndIsDeleted()
+    {
+        await using var db = await fixture.CreateCleanDbContext();
+        (User author, Category category) = await TestData.SeedAuthorAndCategory(db);
+        var asset = TestData.CreateAsset(author.Id, category.Id);
+        var store = new AssetStore(db);
+        await store.Add(asset);
+
+        var activeOwnership = await store.GetOwnership(asset.Id);
+        activeOwnership.Should().NotBeNull();
+        activeOwnership.AuthorId.Should().Be(author.Id);
+        activeOwnership.IsDeleted.Should().BeFalse();
+
+        await store.SoftDelete(asset.Id, DateTimeOffset.UtcNow);
+
+        var deletedOwnership = await store.GetOwnership(asset.Id);
+        deletedOwnership.Should().NotBeNull();
+        deletedOwnership.IsDeleted.Should().BeTrue();
+    }
+
+    [Fact]
     public async Task AddTag_WhenSamePairAddedTwice_ShouldRemainNoOpAndAllowAnotherTag()
     {
         await using var db = await fixture.CreateCleanDbContext();

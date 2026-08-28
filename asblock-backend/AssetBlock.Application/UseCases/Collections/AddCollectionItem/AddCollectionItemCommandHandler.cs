@@ -23,27 +23,17 @@ internal sealed class AddCollectionItemCommandHandler(
         {
             await unitOfWork.ExecuteInTransaction(async ct =>
             {
-                var collection = await collectionStore.GetForUpdate(request.CollectionId, ct);
-                if (collection is null)
-                {
-                    outcome = Result.NotFound(ErrorCodes.ERR_COLLECTION_NOT_FOUND);
-                    return;
-                }
+                (Result? failure, _) = await CollectionMutationGuard.ValidateMutable(
+                    collectionStore,
+                    auditWriter,
+                    request.CollectionId,
+                    request.SellerId,
+                    AuditActions.COLLECTION_ITEM_ADD,
+                    ct);
 
-                if (collection.SellerId != request.SellerId)
+                if (failure is not null)
                 {
-                    await auditWriter.Write(new AuditEvent(
-                        AuditActions.COLLECTION_ITEM_ADD,
-                        AuditOutcome.DENIED,
-                        AuditResourceTypes.COLLECTION,
-                        request.CollectionId.ToString()), ct);
-                    outcome = Result.Forbidden(ErrorCodes.ERR_FORBIDDEN);
-                    return;
-                }
-
-                if (collection.Status == CollectionStatus.ARCHIVED)
-                {
-                    outcome = Result.Conflict(ErrorCodes.ERR_COLLECTION_STATE_INVALID);
+                    outcome = failure;
                     return;
                 }
 

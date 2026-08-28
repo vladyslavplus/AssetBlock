@@ -65,7 +65,7 @@ public sealed class OllamaAiGenerationProviderTests
         var result = await CreateSut(handler).Generate(AiProviderTestFactory.OllamaRequest(), CancellationToken.None);
 
         handler.SendCount.Should().Be(1);
-        result.ErrorCode.Should().Be(ErrorCodes.AI_MODEL_NOT_ALLOWED);
+        result.ErrorCode.Should().Be(ErrorCodes.ERR_AI_MODEL_NOT_ALLOWED);
         result.IsRetryable.Should().BeFalse();
     }
 
@@ -78,14 +78,14 @@ public sealed class OllamaAiGenerationProviderTests
         var result = await sut.Generate(AiProviderTestFactory.OllamaRequest(), CancellationToken.None);
 
         handler.SendCount.Should().Be(0);
-        result.ErrorCode.Should().Be(ErrorCodes.AI_MODEL_NOT_ALLOWED);
+        result.ErrorCode.Should().Be(ErrorCodes.ERR_AI_MODEL_NOT_ALLOWED);
         result.ModelRevision.Should().BeNull();
     }
 
     [Theory]
-    [InlineData(HttpStatusCode.InternalServerError, ErrorCodes.AI_PROVIDER_UNAVAILABLE, true)]
-    [InlineData(HttpStatusCode.BadRequest, ErrorCodes.AI_INVALID_REQUEST, false)]
-    [InlineData(HttpStatusCode.NotFound, ErrorCodes.AI_INVALID_REQUEST, false)]
+    [InlineData(HttpStatusCode.InternalServerError, ErrorCodes.ERR_AI_PROVIDER_UNAVAILABLE, true)]
+    [InlineData(HttpStatusCode.BadRequest, ErrorCodes.ERR_AI_INVALID_REQUEST, false)]
+    [InlineData(HttpStatusCode.NotFound, ErrorCodes.ERR_AI_INVALID_REQUEST, false)]
     public async Task Generate_ShouldMapTagLookupStatusCodes(HttpStatusCode status, string errorCode, bool retryable)
     {
         var handler = new RecordingHttpMessageHandler
@@ -100,7 +100,40 @@ public sealed class OllamaAiGenerationProviderTests
         handler.SendCount.Should().Be(1);
         result.ErrorCode.Should().Be(errorCode);
         result.IsRetryable.Should().Be(retryable);
-        logger.Messages.Should().NotContain(m => m.Contains("model not found raw"));
+        result.ModelRevision.Should().BeNull();
+        result.ErrorCode.Should().NotBeNull();
+        ErrorCodesToErrorMessages.GetMessage(result.ErrorCode!).Should().NotContain("model not found raw");
+    }
+
+    [Theory]
+    [InlineData(HttpStatusCode.InternalServerError, ErrorCodes.ERR_AI_PROVIDER_UNAVAILABLE, true)]
+    [InlineData(HttpStatusCode.BadRequest, ErrorCodes.ERR_AI_INVALID_REQUEST, false)]
+    [InlineData(HttpStatusCode.NotFound, ErrorCodes.ERR_AI_INVALID_REQUEST, false)]
+    public async Task Generate_ShouldMapChatStatusCodes(HttpStatusCode status, string errorCode, bool retryable)
+    {
+        var handler = new RecordingHttpMessageHandler
+        {
+            Responder = (request, _) =>
+            {
+                if (request.Method == HttpMethod.Get)
+                {
+                    return Task.FromResult(AiProviderTestFactory.Json(HttpStatusCode.OK, AiProviderTestFactory.OllamaTagsBody()));
+                }
+
+                return Task.FromResult(AiProviderTestFactory.Json(status, """{"error":"model failed raw sk-leak"}"""));
+            }
+        };
+        var logger = new CollectingLogger<OllamaAiGenerationProvider>();
+        var sut = CreateSut(handler, logger: logger);
+
+        var result = await sut.Generate(AiProviderTestFactory.OllamaRequest(), CancellationToken.None);
+
+        handler.SendCount.Should().Be(2);
+        result.ErrorCode.Should().Be(errorCode);
+        result.IsRetryable.Should().Be(retryable);
+        result.ModelRevision.Should().BeNull();
+        result.ErrorCode.Should().NotBeNull();
+        ErrorCodesToErrorMessages.GetMessage(result.ErrorCode!).Should().NotContain("model failed raw");
     }
 
     [Fact]
@@ -139,7 +172,7 @@ public sealed class OllamaAiGenerationProviderTests
 
         var result = await CreateSut(handler).Generate(AiProviderTestFactory.OllamaRequest(), CancellationToken.None);
 
-        result.ErrorCode.Should().Be(ErrorCodes.AI_INVALID_RESPONSE);
+        result.ErrorCode.Should().Be(ErrorCodes.ERR_AI_INVALID_RESPONSE);
         result.IsRetryable.Should().BeFalse();
     }
 
@@ -168,7 +201,7 @@ public sealed class OllamaAiGenerationProviderTests
         var result = await sut.Generate(AiProviderTestFactory.OllamaRequest(), CancellationToken.None);
 
         handler.SendCount.Should().Be(2);
-        result.ErrorCode.Should().Be(ErrorCodes.AI_MODEL_NOT_ALLOWED);
+        result.ErrorCode.Should().Be(ErrorCodes.ERR_AI_MODEL_NOT_ALLOWED);
         result.ActualModel.Should().Be("other-ollama-test");
         result.UpstreamProvider.Should().BeNull();
         result.ModelRevision.Should().BeNull();
@@ -202,7 +235,7 @@ public sealed class OllamaAiGenerationProviderTests
         var result = await sut.Generate(AiProviderTestFactory.OllamaRequest(), CancellationToken.None);
 
         elapsed.Stop();
-        result.ErrorCode.Should().Be(ErrorCodes.AI_TIMEOUT);
+        result.ErrorCode.Should().Be(ErrorCodes.ERR_AI_TIMEOUT);
         result.IsRetryable.Should().BeTrue();
         elapsed.Elapsed.Should().BeGreaterThan(tagsDelay);
         // Shared remaining budget ~400ms. A fresh chat Timeout would be ~650ms+.

@@ -49,7 +49,7 @@ public class DeleteCategoryCommandHandlerTests
     }
 
     [Fact]
-    public async Task Handle_WhenCategoryInUse_ShouldReturnBadRequest()
+    public async Task Handle_WhenCategoryInUse_ShouldReturnConflict()
     {
         var command = new DeleteCategoryCommand(Guid.NewGuid());
         _categoryStoreMock.Delete(command.Id, Arg.Any<CancellationToken>()).ThrowsAsync(new CategoryInUseException());
@@ -57,8 +57,8 @@ public class DeleteCategoryCommandHandlerTests
         var result = await _handler.Handle(command, CancellationToken.None);
 
         result.IsSuccess.Should().BeFalse();
-        result.Status.Should().Be(Ardalis.Result.ResultStatus.Invalid);
-        result.ValidationErrors.Should().Contain(e => e.Identifier == ErrorCodes.ERR_BAD_REQUEST);
+        result.Status.Should().Be(Ardalis.Result.ResultStatus.Conflict);
+        result.Errors.Should().Contain(ErrorCodes.ERR_CATEGORY_IN_USE);
     }
 
     [Fact]

@@ -41,8 +41,8 @@ internal sealed class ListingCopilotJobHandler(
         if (analysis is null)
         {
             return AssetProcessingJobOutcome.Terminal(
-                ErrorCodes.AI_ARCHIVE_ANALYSIS_MISSING,
-                ErrorCodesToErrorMessages.GetMessage(ErrorCodes.AI_ARCHIVE_ANALYSIS_MISSING));
+                ErrorCodes.ERR_AI_ARCHIVE_ANALYSIS_MISSING,
+                ErrorCodesToErrorMessages.GetMessage(ErrorCodes.ERR_AI_ARCHIVE_ANALYSIS_MISSING));
         }
 
         IReadOnlyList<RecognizedManifestItem> manifests;
@@ -66,8 +66,8 @@ internal sealed class ListingCopilotJobHandler(
             || tags.Count > ListingSuggestionBounds.MAX_ALLOWLIST_TAGS)
         {
             return AssetProcessingJobOutcome.Terminal(
-                ErrorCodes.AI_ALLOWLIST_OVERFLOW,
-                ErrorCodesToErrorMessages.GetMessage(ErrorCodes.AI_ALLOWLIST_OVERFLOW));
+                ErrorCodes.ERR_AI_ALLOWLIST_OVERFLOW,
+                ErrorCodesToErrorMessages.GetMessage(ErrorCodes.ERR_AI_ALLOWLIST_OVERFLOW));
         }
 
         SafeReadmeExcerpt? readme = string.IsNullOrWhiteSpace(analysis.ReadmeContent)
@@ -91,14 +91,14 @@ internal sealed class ListingCopilotJobHandler(
         {
             AiGenerationOutcomeKind.SUCCESS => await CommitSuccess(context, result, categories, tags, cancellationToken),
             AiGenerationOutcomeKind.RETRYABLE_FAILURE => AssetProcessingJobOutcome.Retryable(
-                result.ErrorCode ?? ErrorCodes.AI_ERROR,
+                result.ErrorCode ?? ErrorCodes.ERR_AI_ERROR,
                 SafeSummary(result.ErrorCode),
                 result.RetryAfter),
             AiGenerationOutcomeKind.DISABLED => AssetProcessingJobOutcome.Terminal(
-                ErrorCodes.AI_DISABLED,
-                ErrorCodesToErrorMessages.GetMessage(ErrorCodes.AI_DISABLED)),
+                ErrorCodes.ERR_AI_DISABLED,
+                ErrorCodesToErrorMessages.GetMessage(ErrorCodes.ERR_AI_DISABLED)),
             _ => AssetProcessingJobOutcome.Terminal(
-                result.ErrorCode ?? ErrorCodes.AI_ERROR,
+                result.ErrorCode ?? ErrorCodes.ERR_AI_ERROR,
                 SafeSummary(result.ErrorCode))
         };
     }
@@ -116,8 +116,8 @@ internal sealed class ListingCopilotJobHandler(
             || result.Suggestion.Tags.Any(tag => !allowedTags.Contains(tag, StringComparer.Ordinal)))
         {
             return AssetProcessingJobOutcome.Terminal(
-                ErrorCodes.AI_INVALID_RESPONSE,
-                ErrorCodesToErrorMessages.GetMessage(ErrorCodes.AI_INVALID_RESPONSE));
+                ErrorCodes.ERR_AI_INVALID_RESPONSE,
+                ErrorCodesToErrorMessages.GetMessage(ErrorCodes.ERR_AI_INVALID_RESPONSE));
         }
 
         var hash = ListingSuggestionCanonicalizer.ComputeContentHash(result.Suggestion);
@@ -154,7 +154,7 @@ internal sealed class ListingCopilotJobHandler(
     }
 
     private static string SafeSummary(string? errorCode) =>
-        ErrorCodesToErrorMessages.GetMessage(errorCode ?? ErrorCodes.AI_ERROR);
+        ErrorCodesToErrorMessages.GetMessage(errorCode ?? ErrorCodes.ERR_AI_ERROR);
 
     private static string ArchiveFormatFromFileName(string fileName)
     {

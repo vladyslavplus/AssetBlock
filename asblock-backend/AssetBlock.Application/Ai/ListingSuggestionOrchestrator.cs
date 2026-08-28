@@ -51,7 +51,7 @@ internal sealed class ListingSuggestionOrchestrator(
             if (!parsedProvider)
             {
                 return Complete(
-                    Terminal(AiProviderKind.OPENROUTER, ErrorCodes.AI_ERROR, TimeSpan.Zero),
+                    Terminal(AiProviderKind.OPENROUTER, ErrorCodes.ERR_AI_ERROR, TimeSpan.Zero),
                     started,
                     allowlistedModel: null,
                     requestId: null);
@@ -60,7 +60,7 @@ internal sealed class ListingSuggestionOrchestrator(
             if (!string.Equals(options.PromptPolicyVersion, ListingCopilotPrompt.POLICY_VERSION, StringComparison.Ordinal))
             {
                 return Complete(
-                    Terminal(requestedProvider, ErrorCodes.AI_INVALID_REQUEST, TimeSpan.Zero),
+                    Terminal(requestedProvider, ErrorCodes.ERR_AI_INVALID_REQUEST, TimeSpan.Zero),
                     started,
                     allowlistedModel: null,
                     requestId: null);
@@ -69,7 +69,7 @@ internal sealed class ListingSuggestionOrchestrator(
             if (!providers.TryGet(requestedProvider, out var provider))
             {
                 return Complete(
-                    Terminal(requestedProvider, ErrorCodes.AI_ERROR, TimeSpan.Zero),
+                    Terminal(requestedProvider, ErrorCodes.ERR_AI_ERROR, TimeSpan.Zero),
                     started,
                     allowlistedModel: null,
                     requestId: null);
@@ -214,24 +214,24 @@ internal sealed class ListingSuggestionOrchestrator(
     {
         if (!string.Equals(request.PromptPolicyVersion, ListingCopilotPrompt.POLICY_VERSION, StringComparison.Ordinal))
         {
-            return ErrorCodes.AI_INVALID_REQUEST;
+            return ErrorCodes.ERR_AI_INVALID_REQUEST;
         }
 
         if (request.AllowedCategories.Count is 0 or > ListingSuggestionBounds.MAX_ALLOWLIST_CATEGORIES)
         {
-            return ErrorCodes.AI_INVALID_REQUEST;
+            return ErrorCodes.ERR_AI_INVALID_REQUEST;
         }
 
         if (request.AllowedTags.Count > ListingSuggestionBounds.MAX_ALLOWLIST_TAGS)
         {
-            return ErrorCodes.AI_INVALID_REQUEST;
+            return ErrorCodes.ERR_AI_INVALID_REQUEST;
         }
 
         foreach (var category in request.AllowedCategories)
         {
             if (string.IsNullOrWhiteSpace(category) || category.Length > ListingSuggestionBounds.CATEGORY_NAME_MAX_LENGTH)
             {
-                return ErrorCodes.AI_INVALID_REQUEST;
+                return ErrorCodes.ERR_AI_INVALID_REQUEST;
             }
         }
 
@@ -239,26 +239,26 @@ internal sealed class ListingSuggestionOrchestrator(
         {
             if (string.IsNullOrWhiteSpace(tag) || tag.Length > ListingSuggestionBounds.TAG_NAME_MAX_LENGTH)
             {
-                return ErrorCodes.AI_INVALID_REQUEST;
+                return ErrorCodes.ERR_AI_INVALID_REQUEST;
             }
         }
 
         if (request.Archive.SampleEntryPaths.Count > ListingSuggestionBounds.MAX_ARCHIVE_SAMPLE_PATHS
             || request.Archive.Manifests.Count > ListingSuggestionBounds.MAX_MANIFESTS)
         {
-            return ErrorCodes.AI_INVALID_REQUEST;
+            return ErrorCodes.ERR_AI_INVALID_REQUEST;
         }
 
         if (request.Readme is not null
             && (request.Readme.FileName.Length > ListingSuggestionBounds.README_FILE_NAME_MAX_LENGTH
                 || request.Readme.Text.Length > ListingSuggestionBounds.README_TEXT_MAX_CHARS))
         {
-            return ErrorCodes.AI_INPUT_TOO_LARGE;
+            return ErrorCodes.ERR_AI_INPUT_TOO_LARGE;
         }
 
         var promptLength = ListingCopilotPrompt.BuildSystemPrompt().Length
             + ListingCopilotPrompt.BuildUserPrompt(request).Length;
-        return promptLength > maxInputChars ? ErrorCodes.AI_INPUT_TOO_LARGE : null;
+        return promptLength > maxInputChars ? ErrorCodes.ERR_AI_INPUT_TOO_LARGE : null;
     }
 
     private static bool TryParseSuggestion(
@@ -267,7 +267,7 @@ internal sealed class ListingSuggestionOrchestrator(
         out string errorCode)
     {
         draft = null!;
-        errorCode = ErrorCodes.AI_INVALID_RESPONSE;
+        errorCode = ErrorCodes.ERR_AI_INVALID_RESPONSE;
         try
         {
             var parsed = JsonSerializer.Deserialize<ListingSuggestionDraft>(json, _suggestionJsonOptions);
@@ -309,7 +309,7 @@ internal sealed class ListingSuggestionOrchestrator(
             string.Equals(c, draft.Category, StringComparison.Ordinal));
         if (category is null)
         {
-            errorCode = ErrorCodes.AI_CATEGORY_NOT_ALLOWED;
+            errorCode = ErrorCodes.ERR_AI_CATEGORY_NOT_ALLOWED;
             return false;
         }
 
@@ -320,7 +320,7 @@ internal sealed class ListingSuggestionOrchestrator(
                 string.Equals(t, tag, StringComparison.Ordinal));
             if (allowed is null)
             {
-                errorCode = ErrorCodes.AI_TAGS_NOT_ALLOWED;
+                errorCode = ErrorCodes.ERR_AI_TAGS_NOT_ALLOWED;
                 return false;
             }
 
@@ -348,7 +348,7 @@ internal sealed class ListingSuggestionOrchestrator(
             TimeSpan.Zero,
             null,
             null,
-            ErrorCodes.AI_DISABLED);
+            ErrorCodes.ERR_AI_DISABLED);
 
     private static ListingSuggestionResult Terminal(
         AiProviderKind provider,
@@ -390,7 +390,7 @@ internal sealed class ListingSuggestionOrchestrator(
             result.Latency,
             result.RequestId,
             result.RetryAfter,
-            result.ErrorCode ?? ErrorCodes.AI_ERROR,
+            result.ErrorCode ?? ErrorCodes.ERR_AI_ERROR,
             result.ModelRevision);
 
     private static AiTelemetryOutcome ToTelemetryOutcome(AiGenerationOutcomeKind outcome) => outcome switch

@@ -35,18 +35,18 @@ internal sealed class OpenRouterAiGenerationProvider(
         var models = options.Models;
         if (models.Count == 0 || models.Any(model => !AiConfigurationRules.IsModelId(model)))
         {
-            return Terminal(ErrorCodes.AI_MODEL_NOT_ALLOWED, started);
+            return Terminal(ErrorCodes.ERR_AI_MODEL_NOT_ALLOWED, started);
         }
 
         var promptChars = request.SystemPrompt.Length + request.UserPrompt.Length;
         if (promptChars > options.MaxInputChars)
         {
-            return Terminal(ErrorCodes.AI_INPUT_TOO_LARGE, started);
+            return Terminal(ErrorCodes.ERR_AI_INPUT_TOO_LARGE, started);
         }
 
         if (request.MaxOutputTokens > options.MaxOutputTokens)
         {
-            return Terminal(ErrorCodes.AI_INVALID_REQUEST, started);
+            return Terminal(ErrorCodes.ERR_AI_INVALID_REQUEST, started);
         }
 
         var client = httpClientFactory.CreateClient(HTTP_CLIENT_NAME);
@@ -73,13 +73,13 @@ internal sealed class OpenRouterAiGenerationProvider(
         if (timed.TimedOut)
         {
             logger.LogWarning("OpenRouter generation timed out");
-            return Retryable(ErrorCodes.AI_TIMEOUT, started, retryAfter: null);
+            return Retryable(ErrorCodes.ERR_AI_TIMEOUT, started, retryAfter: null);
         }
 
         if (timed.NetworkFailure)
         {
             logger.LogWarning("OpenRouter generation failed due to a network error");
-            return Retryable(ErrorCodes.AI_PROVIDER_UNAVAILABLE, started, retryAfter: null);
+            return Retryable(ErrorCodes.ERR_AI_PROVIDER_UNAVAILABLE, started, retryAfter: null);
         }
 
         var response = timed.Response!;
@@ -89,41 +89,41 @@ internal sealed class OpenRouterAiGenerationProvider(
         if (IsRetryableStatus(response.StatusCode))
         {
             var code = response.StatusCode == HttpStatusCode.TooManyRequests
-                ? ErrorCodes.AI_RATE_LIMITED
+                ? ErrorCodes.ERR_AI_RATE_LIMITED
                 : response.StatusCode == HttpStatusCode.RequestTimeout
-                    ? ErrorCodes.AI_TIMEOUT
-                    : ErrorCodes.AI_PROVIDER_UNAVAILABLE;
+                    ? ErrorCodes.ERR_AI_TIMEOUT
+                    : ErrorCodes.ERR_AI_PROVIDER_UNAVAILABLE;
             return Retryable(code, started, retryAfter);
         }
 
         if (response.StatusCode == HttpStatusCode.Unauthorized)
         {
-            return Terminal(ErrorCodes.AI_UNAUTHORIZED, started);
+            return Terminal(ErrorCodes.ERR_AI_UNAUTHORIZED, started);
         }
 
         if (response.StatusCode == HttpStatusCode.PaymentRequired)
         {
-            return Terminal(ErrorCodes.AI_PAYMENT_REQUIRED, started);
+            return Terminal(ErrorCodes.ERR_AI_PAYMENT_REQUIRED, started);
         }
 
         if (response.StatusCode == HttpStatusCode.Forbidden)
         {
-            return Terminal(ErrorCodes.AI_FORBIDDEN, started);
+            return Terminal(ErrorCodes.ERR_AI_FORBIDDEN, started);
         }
 
         if ((int)response.StatusCode is >= 400 and < 500)
         {
-            return Terminal(ErrorCodes.AI_INVALID_REQUEST, started);
+            return Terminal(ErrorCodes.ERR_AI_INVALID_REQUEST, started);
         }
 
         if (!response.IsSuccessStatusCode)
         {
-            return Retryable(ErrorCodes.AI_PROVIDER_UNAVAILABLE, started, retryAfter);
+            return Retryable(ErrorCodes.ERR_AI_PROVIDER_UNAVAILABLE, started, retryAfter);
         }
 
         if (timed.Oversized || timed.Body is null)
         {
-            return Terminal(ErrorCodes.AI_INVALID_RESPONSE, started);
+            return Terminal(ErrorCodes.ERR_AI_INVALID_RESPONSE, started);
         }
 
         return ParseSuccess(timed.Body, started);
@@ -167,13 +167,13 @@ internal sealed class OpenRouterAiGenerationProvider(
                     Stopwatch.GetElapsedTime(started),
                     requestId,
                     null,
-                    ErrorCodes.AI_MODEL_NOT_ALLOWED,
+                    ErrorCodes.ERR_AI_MODEL_NOT_ALLOWED,
                     null);
             }
 
             if (!TryReadContent(root, out var structuredJson))
             {
-                return Terminal(ErrorCodes.AI_INVALID_RESPONSE, started, actualModel, upstream, inputTokens, outputTokens, requestId);
+                return Terminal(ErrorCodes.ERR_AI_INVALID_RESPONSE, started, actualModel, upstream, inputTokens, outputTokens, requestId);
             }
 
             return new AiGenerationProviderResult(
@@ -192,7 +192,7 @@ internal sealed class OpenRouterAiGenerationProvider(
         }
         catch (JsonException)
         {
-            return Terminal(ErrorCodes.AI_INVALID_RESPONSE, started);
+            return Terminal(ErrorCodes.ERR_AI_INVALID_RESPONSE, started);
         }
     }
 

@@ -1,5 +1,6 @@
 using AssetBlock.Application.UseCases.Assets.GetListingCopilotSuggestion;
 using AssetBlock.Domain.Abstractions.Services;
+using AssetBlock.Domain.Core.Constants;
 using AssetBlock.Domain.Core.Dto;
 using AssetBlock.Domain.Core.Enums;
 using AwesomeAssertions;
@@ -28,6 +29,7 @@ public sealed class GetListingCopilotSuggestionQueryHandlerTests
         var result = await _handler.Handle(new GetListingCopilotSuggestionQuery(versionId, ownerId), CancellationToken.None);
 
         result.Status.Should().Be(Ardalis.Result.ResultStatus.NotFound);
+        result.Errors.Should().Contain(ErrorCodes.ERR_ASSET_NOT_FOUND);
     }
 
     [Fact]
@@ -49,6 +51,7 @@ public sealed class GetListingCopilotSuggestionQueryHandlerTests
             CancellationToken.None);
 
         result.Status.Should().Be(Ardalis.Result.ResultStatus.NotFound);
+        result.Errors.Should().Contain(ErrorCodes.ERR_NOT_FOUND);
     }
 
     [Fact]

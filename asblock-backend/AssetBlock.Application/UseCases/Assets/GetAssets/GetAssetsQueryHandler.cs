@@ -1,6 +1,7 @@
 using System.Text.Json;
 using AssetBlock.Domain.Abstractions.Services;
 using Ardalis.Result;
+using AssetBlock.Application.Common;
 using AssetBlock.Application.Messaging;
 using AssetBlock.Domain.Core.Constants;
 using AssetBlock.Domain.Core.Dto.Assets;
@@ -19,7 +20,7 @@ internal sealed class GetAssetsQueryHandler(
 
     public async Task<Result<Domain.Core.Dto.Paging.PagedResult<AssetListItem>>> Handle(GetAssetsQuery request, CancellationToken cancellationToken)
     {
-        var normalizedRequest = request.Request with { Tags = NormalizeTags(request.Request.Tags) };
+        var normalizedRequest = request.Request with { Tags = AssetListNormalization.NormalizeTags(request.Request.Tags) };
         var key = CacheKeys.AssetsList(normalizedRequest);
         var cached = await cache.GetString(key, cancellationToken);
         if (cached is not null)
@@ -30,7 +31,7 @@ internal sealed class GetAssetsQueryHandler(
                 if (cachedResult is not null)
                 {
                     logger.LogDebug("Asset list cache hit for key {Key}", key);
-                    return Result.Success(NormalizeDescriptions(cachedResult));
+                    return Result.Success(AssetListNormalization.NormalizeDescriptions(cachedResult));
                 }
             }
             catch (JsonException ex)
@@ -41,34 +42,9 @@ internal sealed class GetAssetsQueryHandler(
         }
 
         var paged = await assetStore.GetPaged(normalizedRequest, cancellationToken);
-        var normalized = NormalizeDescriptions(paged);
+        var normalized = AssetListNormalization.NormalizeDescriptions(paged);
 
         await cache.SetString(key, JsonSerializer.Serialize(normalized, _jsonOptions), _cacheExpiration, cancellationToken);
         return Result.Success(normalized);
-    }
-
-    /// <summary>Aligns list API with DB/detail: whitespace-only or empty string becomes null (incl. legacy cache payloads).</summary>
-    private static Domain.Core.Dto.Paging.PagedResult<AssetListItem> NormalizeDescriptions(
-        Domain.Core.Dto.Paging.PagedResult<AssetListItem> paged)
-    {
-        var items = paged.Items
-            .Select(i => i with { Description = string.IsNullOrWhiteSpace(i.Description) ? null : i.Description })
-            .ToList();
-        return new Domain.Core.Dto.Paging.PagedResult<AssetListItem>(items, paged.TotalCount, paged.Page, paged.PageSize);
-    }
-
-    private static List<string>? NormalizeTags(IReadOnlyList<string>? tags)
-    {
-        if (tags is null || tags.Count == 0)
-        {
-            return null;
-        }
-        var list = tags
-            .SelectMany(t => t.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
-            .Select(t => t.Trim().ToLowerInvariant())
-            .Where(t => t.Length > 0)
-            .Distinct()
-            .ToList();
-        return list.Count > 0 ? list : null;
     }
 }

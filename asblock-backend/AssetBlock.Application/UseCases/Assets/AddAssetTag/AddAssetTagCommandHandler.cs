@@ -19,7 +19,7 @@ internal sealed class AddAssetTagCommandHandler(
 {
     public async Task<Result<TagDto>> Handle(AddAssetTagCommand request, CancellationToken cancellationToken)
     {
-        var asset = await assetStore.GetById(request.AssetId, cancellationToken);
+        var asset = await assetStore.GetOwnership(request.AssetId, cancellationToken);
         if (asset is null)
         {
             return Result.NotFound(ErrorCodes.ERR_ASSET_NOT_FOUND);
@@ -35,7 +35,7 @@ internal sealed class AddAssetTagCommandHandler(
             return Result.Forbidden(ErrorCodes.ERR_FORBIDDEN);
         }
 
-        if (asset.DeletedAt.HasValue)
+        if (asset.IsDeleted)
         {
             return Result.NotFound(ErrorCodes.ERR_ASSET_NOT_FOUND);
         }
@@ -48,17 +48,19 @@ internal sealed class AddAssetTagCommandHandler(
             return Result.NotFound(ErrorCodes.ERR_TAG_NOT_FOUND);
         }
 
-        if (asset.AssetTags.Any(at => at.TagId == tag.Id))
-        {
-            logger.LogDebug("Add tag failed: tag already on asset {AssetId} {TagId}", request.AssetId, tag.Id);
-            return Result.Conflict(ErrorCodes.ERR_ASSET_TAG_ALREADY_EXISTS);
-        }
-
+        Result? outcome = null;
         try
         {
             await unitOfWork.ExecuteInTransaction(async ct =>
             {
-                await assetStore.AddTag(asset.Id, tag.Id, ct);
+                var added = await assetStore.TryAddTag(asset.Id, tag.Id, ct);
+                if (!added)
+                {
+                    logger.LogDebug("Add tag failed: tag already on asset {AssetId} {TagId}", request.AssetId, tag.Id);
+                    outcome = Result.Conflict(ErrorCodes.ERR_ASSET_TAG_ALREADY_EXISTS);
+                    return;
+                }
+
                 await auditWriter.Write(new AuditEvent(
                     AuditActions.ASSET_TAG_ADD,
                     AuditOutcome.SUCCESS,
@@ -66,23 +68,6 @@ internal sealed class AddAssetTagCommandHandler(
                     asset.Id.ToString(),
                     new Dictionary<string, object?> { ["tagId"] = tag.Id.ToString() }), ct);
             }, cancellationToken);
-
-            try
-            {
-                await cache.RemoveByPrefix(CacheKeys.ASSETS_LIST_PREFIX, cancellationToken);
-                await cache.RemoveByPrefix(CacheKeys.TAGS_LIST_PREFIX, cancellationToken);
-            }
-            catch (OperationCanceledException)
-            {
-                throw;
-            }
-            catch (Exception ex)
-            {
-                logger.LogWarning(ex, "Cache invalidation failed after add tag {AssetId}", request.AssetId);
-            }
-
-            logger.LogInformation("Added tag {TagName} to asset: {AssetId}", normalizedName, asset.Id);
-            return Result.Success(new TagDto(tag.Id, tag.Name));
         }
         catch (OperationCanceledException)
         {
@@ -93,5 +78,27 @@ internal sealed class AddAssetTagCommandHandler(
             logger.LogError(ex, "Failed to add tag to asset: {AssetId}", request.AssetId);
             return Result.Error(ErrorCodes.ERR_INTERNAL);
         }
+
+        if (outcome is not null)
+        {
+            return outcome;
+        }
+
+        try
+        {
+            await cache.RemoveByPrefix(CacheKeys.ASSETS_LIST_PREFIX, cancellationToken);
+            await cache.RemoveByPrefix(CacheKeys.TAGS_LIST_PREFIX, cancellationToken);
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Cache invalidation failed after add tag {AssetId}", request.AssetId);
+        }
+
+        logger.LogInformation("Added tag {TagName} to asset: {AssetId}", normalizedName, asset.Id);
+        return Result.Success(new TagDto(tag.Id, tag.Name));
     }
 }

@@ -219,6 +219,65 @@ public sealed class AssetVersionStorePostgresTests(PostgresFixture fixture)
     }
 
     [Fact]
+    public async Task ListVersions_WhenAssetDoesNotExist_ShouldReturnNull()
+    {
+        await using var db = await fixture.CreateCleanDbContext();
+        var store = new AssetStore(db);
+
+        var result = await store.ListVersions(Guid.NewGuid(), requesterUserId: null);
+        result.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task ListVersions_WhenAssetHasZeroVersions_ShouldReturnEmptyList()
+    {
+        await using var db = await fixture.CreateCleanDbContext();
+        (User author, Category category) = await TestData.SeedAuthorAndCategory(db);
+        var asset = TestData.CreateAsset(author.Id, category.Id);
+        var store = new AssetStore(db);
+        await store.Add(asset);
+
+        var result = await store.ListVersions(asset.Id, requesterUserId: null);
+        result.Should().NotBeNull();
+        result.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task ListVersions_WhenActiveAsset_AuthorSeesAllVersions_StrangerAndAnonymousSeeOnlyReadyVersions()
+    {
+        await using var db = await fixture.CreateCleanDbContext();
+        (User author, Category category) = await TestData.SeedAuthorAndCategory(db);
+        var stranger = TestData.CreateUser("stranger", "stranger@example.test");
+        db.Users.Add(stranger);
+        var asset = TestData.CreateAsset(author.Id, category.Id);
+        var store = new AssetStore(db);
+        var v1 = TestData.CreateAssetVersion(asset.Id, storageKey: "assets/vis/v1.bin", versionNumber: 1, processingStatus: AssetVersionProcessingStatus.READY);
+        await store.AddWithVersion(asset, v1, null);
+        var v2 = TestData.CreateAssetVersion(
+            asset.Id,
+            storageKey: "assets/vis/v2.bin",
+            versionNumber: 2,
+            isCurrent: false,
+            processingStatus: AssetVersionProcessingStatus.PENDING_INSPECTION);
+        db.AssetVersions.Add(v2);
+        await db.SaveChangesAsync();
+
+        var authorView = await store.ListVersions(asset.Id, requesterUserId: author.Id);
+        authorView.Should().NotBeNull();
+        authorView.Should().HaveCount(2);
+
+        var strangerView = await store.ListVersions(asset.Id, requesterUserId: stranger.Id);
+        strangerView.Should().NotBeNull();
+        strangerView.Should().ContainSingle();
+        strangerView![0].VersionNumber.Should().Be(1);
+
+        var anonView = await store.ListVersions(asset.Id, requesterUserId: null);
+        anonView.Should().NotBeNull();
+        anonView.Should().ContainSingle();
+        anonView![0].VersionNumber.Should().Be(1);
+    }
+
+    [Fact]
     public async Task ListVersions_WhenAssetSoftDeleted_ShouldOnlyExposeHistoryToAuthorOrPurchaser()
     {
         await using var db = await fixture.CreateCleanDbContext();
@@ -233,10 +292,10 @@ public sealed class AssetVersionStorePostgresTests(PostgresFixture fixture)
         await db.SaveChangesAsync();
         await store.SoftDelete(asset.Id, DateTimeOffset.UtcNow);
 
-        (await store.ListVersions(asset.Id, includeDeletedAsset: true, requesterUserId: null)).Should().BeEmpty();
-        (await store.ListVersions(asset.Id, includeDeletedAsset: true, requesterUserId: Guid.NewGuid())).Should().BeEmpty();
-        (await store.ListVersions(asset.Id, includeDeletedAsset: true, requesterUserId: buyer.Id)).Should().ContainSingle();
-        (await store.ListVersions(asset.Id, includeDeletedAsset: true, requesterUserId: author.Id)).Should().ContainSingle();
+        (await store.ListVersions(asset.Id, requesterUserId: null)).Should().BeNull();
+        (await store.ListVersions(asset.Id, requesterUserId: Guid.NewGuid())).Should().BeNull();
+        (await store.ListVersions(asset.Id, requesterUserId: buyer.Id)).Should().ContainSingle();
+        (await store.ListVersions(asset.Id, requesterUserId: author.Id)).Should().ContainSingle();
     }
 
     [Fact]

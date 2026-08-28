@@ -24,14 +24,17 @@ public interface IAssetStore
     /// <summary>Returns a specific version of an asset (used for version-pinned downloads).</summary>
     Task<AssetVersion?> GetVersion(Guid assetId, Guid versionId, CancellationToken cancellationToken = default);
 
+    /// <summary>Returns lightweight ownership and deletion status for an asset without loading full entity graphs.</summary>
+    Task<AssetOwnershipDto?> GetOwnership(Guid assetId, CancellationToken cancellationToken = default);
+
     /// <summary>
-    /// Lists published versions visible to the requester.
-    /// All versions are returned when the requester is the author or has a purchase.
-    /// Only returns results when the asset is not deleted, unless <paramref name="includeDeletedAsset"/> is true.
+    /// Lists published versions visible to the requester in a single coherent evaluation.
+    /// Active listings expose READY versions publicly; authors see all version processing states.
+    /// Soft-deleted assets are visible only to the author or entitled purchasers.
+    /// Returns null when the asset does not exist or is inaccessible/unauthorized (no existence leak).
     /// </summary>
-    Task<IReadOnlyList<AssetVersionSummaryDto>> ListVersions(
+    Task<IReadOnlyList<AssetVersionSummaryDto>?> ListVersions(
         Guid assetId,
-        bool includeDeletedAsset,
         Guid? requesterUserId,
         CancellationToken cancellationToken = default);
 
@@ -69,6 +72,7 @@ public interface IAssetStore
     Task SoftDelete(Guid id, DateTimeOffset deletedAt, CancellationToken cancellationToken = default);
     Task Delete(Guid id, CancellationToken cancellationToken = default);
     Task AddTag(Guid assetId, Guid tagId, CancellationToken cancellationToken = default);
+    Task<bool> TryAddTag(Guid assetId, Guid tagId, CancellationToken cancellationToken = default);
     Task<bool> HasAssetTag(Guid assetId, Guid tagId, CancellationToken cancellationToken = default);
     Task<bool> RemoveTag(Guid assetId, Guid tagId, CancellationToken cancellationToken = default);
     Task<bool> Update(Guid id, string? title, string? description, decimal? price, Guid? categoryId, CancellationToken cancellationToken = default);

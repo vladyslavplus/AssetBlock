@@ -24,30 +24,30 @@ internal sealed class EnqueueListingCopilotCommandHandler(
         var owned = await listingCopilotStore.GetOwnedVersion(request.AssetVersionId, request.OwnerUserId, cancellationToken);
         if (owned is null)
         {
-            return Result.NotFound();
+            return Result.NotFound(ErrorCodes.ERR_ASSET_NOT_FOUND);
         }
 
         var options = aiOptions.Value;
         if (!options.Enabled)
         {
-            return ResultError.Error<ListingCopilotEnqueueResponse>(ErrorCodes.AI_DISABLED);
+            return ResultError.Error<ListingCopilotEnqueueResponse>(ErrorCodes.ERR_AI_DISABLED);
         }
 
         if (!AiProviderParser.TryParse(options.Provider, out var providerKind)
             || !providers.TryGet(providerKind, out var provider)
             || provider.OrderedModelIds.Count == 0)
         {
-            return ResultError.Error<ListingCopilotEnqueueResponse>(ErrorCodes.AI_ERROR);
+            return ResultError.Error<ListingCopilotEnqueueResponse>(ErrorCodes.ERR_AI_ERROR);
         }
 
         if (owned.ProcessingStatus != AssetVersionProcessingStatus.READY)
         {
-            return Result.Conflict(ErrorCodes.AI_VERSION_NOT_READY);
+            return Result.Conflict(ErrorCodes.ERR_AI_VERSION_NOT_READY);
         }
 
         if (!owned.HasArchiveAnalysis)
         {
-            return Result.Conflict(ErrorCodes.AI_ARCHIVE_ANALYSIS_MISSING);
+            return Result.Conflict(ErrorCodes.ERR_AI_ARCHIVE_ANALYSIS_MISSING);
         }
 
         var jobId = await jobStore.Enqueue(

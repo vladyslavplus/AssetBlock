@@ -11,10 +11,6 @@ internal sealed class GetCheckoutStatusQueryHandler(
     IOrderStore orderStore)
     : IRequestHandler<GetCheckoutStatusQuery, Result<GetCheckoutStatusResponse>>
 {
-    private const string STATUS_PENDING = "pending";
-    private const string STATUS_COMPLETED = "completed";
-    private const string STATUS_CANCELLED = "cancelled";
-
     public async Task<Result<GetCheckoutStatusResponse>> Handle(
         GetCheckoutStatusQuery request,
         CancellationToken cancellationToken)
@@ -29,7 +25,7 @@ internal sealed class GetCheckoutStatusQueryHandler(
         if (order is not null || intent.Status == CheckoutIntentStatus.COMPLETED)
         {
             return Result.Success(new GetCheckoutStatusResponse(
-                STATUS_COMPLETED,
+                CheckoutFulfillmentStatuses.COMPLETED,
                 intent.Id,
                 order?.Id,
                 intent.ProductTitle,
@@ -40,7 +36,7 @@ internal sealed class GetCheckoutStatusQueryHandler(
         if (intent.Status == CheckoutIntentStatus.CANCELLED)
         {
             return Result.Success(new GetCheckoutStatusResponse(
-                STATUS_CANCELLED,
+                CheckoutFulfillmentStatuses.CANCELLED,
                 intent.Id,
                 OrderId: null,
                 intent.ProductTitle,
@@ -49,7 +45,7 @@ internal sealed class GetCheckoutStatusQueryHandler(
         }
 
         return Result.Success(new GetCheckoutStatusResponse(
-            STATUS_PENDING,
+            CheckoutFulfillmentStatuses.PENDING,
             intent.Id,
             OrderId: null,
             intent.ProductTitle,

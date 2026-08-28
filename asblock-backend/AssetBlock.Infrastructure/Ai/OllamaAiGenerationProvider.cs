@@ -36,17 +36,17 @@ internal sealed class OllamaAiGenerationProvider(
         var expectedDigest = options.Digest;
         if (!AiConfigurationRules.IsModelId(modelId) || !AiConfigurationRules.IsSha256Digest(expectedDigest))
         {
-            return Terminal(ErrorCodes.AI_MODEL_NOT_ALLOWED, started);
+            return Terminal(ErrorCodes.ERR_AI_MODEL_NOT_ALLOWED, started);
         }
 
         if (request.SystemPrompt.Length + request.UserPrompt.Length > options.MaxInputChars)
         {
-            return Terminal(ErrorCodes.AI_INPUT_TOO_LARGE, started);
+            return Terminal(ErrorCodes.ERR_AI_INPUT_TOO_LARGE, started);
         }
 
         if (request.MaxOutputTokens > options.MaxOutputTokens)
         {
-            return Terminal(ErrorCodes.AI_INVALID_REQUEST, started);
+            return Terminal(ErrorCodes.ERR_AI_INVALID_REQUEST, started);
         }
 
         var client = httpClientFactory.CreateClient(HTTP_CLIENT_NAME);
@@ -76,13 +76,13 @@ internal sealed class OllamaAiGenerationProvider(
         if (timed.TimedOut)
         {
             logger.LogWarning("Ollama generation timed out");
-            return Retryable(ErrorCodes.AI_TIMEOUT, started);
+            return Retryable(ErrorCodes.ERR_AI_TIMEOUT, started);
         }
 
         if (timed.NetworkFailure)
         {
             logger.LogWarning("Ollama generation failed due to a network error");
-            return Retryable(ErrorCodes.AI_PROVIDER_UNAVAILABLE, started);
+            return Retryable(ErrorCodes.ERR_AI_PROVIDER_UNAVAILABLE, started);
         }
 
         var response = timed.Response!;
@@ -90,17 +90,17 @@ internal sealed class OllamaAiGenerationProvider(
 
         if ((int)response.StatusCode >= 500 || response.StatusCode == HttpStatusCode.RequestTimeout)
         {
-            return Retryable(ErrorCodes.AI_PROVIDER_UNAVAILABLE, started);
+            return Retryable(ErrorCodes.ERR_AI_PROVIDER_UNAVAILABLE, started);
         }
 
         if (!response.IsSuccessStatusCode)
         {
-            return Terminal(ErrorCodes.AI_INVALID_REQUEST, started);
+            return Terminal(ErrorCodes.ERR_AI_INVALID_REQUEST, started);
         }
 
         if (timed.Oversized || timed.Body is null)
         {
-            return Terminal(ErrorCodes.AI_INVALID_RESPONSE, started);
+            return Terminal(ErrorCodes.ERR_AI_INVALID_RESPONSE, started);
         }
 
         return ParseSuccess(timed.Body, started, modelId, expectedDigest);
@@ -125,24 +125,24 @@ internal sealed class OllamaAiGenerationProvider(
         if (timed.TimedOut)
         {
             logger.LogWarning("Ollama model tag lookup timed out");
-            return Retryable(ErrorCodes.AI_TIMEOUT, started);
+            return Retryable(ErrorCodes.ERR_AI_TIMEOUT, started);
         }
 
         if (timed.NetworkFailure)
         {
             logger.LogWarning("Ollama model tag lookup failed due to a network error");
-            return Retryable(ErrorCodes.AI_PROVIDER_UNAVAILABLE, started);
+            return Retryable(ErrorCodes.ERR_AI_PROVIDER_UNAVAILABLE, started);
         }
 
         var response = timed.Response!;
         if ((int)response.StatusCode >= 500 || response.StatusCode == HttpStatusCode.RequestTimeout)
         {
-            return Retryable(ErrorCodes.AI_PROVIDER_UNAVAILABLE, started);
+            return Retryable(ErrorCodes.ERR_AI_PROVIDER_UNAVAILABLE, started);
         }
 
         if (!response.IsSuccessStatusCode || timed.Oversized || timed.Body is null)
         {
-            return Terminal(ErrorCodes.AI_INVALID_REQUEST, started);
+            return Terminal(ErrorCodes.ERR_AI_INVALID_REQUEST, started);
         }
 
         try
@@ -150,7 +150,7 @@ internal sealed class OllamaAiGenerationProvider(
             using var document = JsonDocument.Parse(timed.Body);
             if (!document.RootElement.TryGetProperty("models", out var models) || models.ValueKind != JsonValueKind.Array)
             {
-                return Terminal(ErrorCodes.AI_INVALID_RESPONSE, started);
+                return Terminal(ErrorCodes.ERR_AI_INVALID_RESPONSE, started);
             }
 
             foreach (var model in models.EnumerateArray())
@@ -164,11 +164,11 @@ internal sealed class OllamaAiGenerationProvider(
                 }
             }
 
-            return Terminal(ErrorCodes.AI_MODEL_NOT_ALLOWED, started);
+            return Terminal(ErrorCodes.ERR_AI_MODEL_NOT_ALLOWED, started);
         }
         catch (JsonException)
         {
-            return Terminal(ErrorCodes.AI_INVALID_RESPONSE, started);
+            return Terminal(ErrorCodes.ERR_AI_INVALID_RESPONSE, started);
         }
     }
 
@@ -200,7 +200,7 @@ internal sealed class OllamaAiGenerationProvider(
                     Stopwatch.GetElapsedTime(started),
                     null,
                     null,
-                    ErrorCodes.AI_MODEL_NOT_ALLOWED,
+                    ErrorCodes.ERR_AI_MODEL_NOT_ALLOWED,
                     null);
             }
 
@@ -209,7 +209,7 @@ internal sealed class OllamaAiGenerationProvider(
             if (!root.TryGetProperty("message", out var message)
                 || !message.TryGetProperty("content", out var content))
             {
-                return Terminal(ErrorCodes.AI_INVALID_RESPONSE, started, actualModel, inputTokens, outputTokens, modelRevision);
+                return Terminal(ErrorCodes.ERR_AI_INVALID_RESPONSE, started, actualModel, inputTokens, outputTokens, modelRevision);
             }
 
             string? structuredJson = content.ValueKind switch
@@ -221,7 +221,7 @@ internal sealed class OllamaAiGenerationProvider(
 
             if (string.IsNullOrWhiteSpace(structuredJson))
             {
-                return Terminal(ErrorCodes.AI_INVALID_RESPONSE, started, actualModel, inputTokens, outputTokens, modelRevision);
+                return Terminal(ErrorCodes.ERR_AI_INVALID_RESPONSE, started, actualModel, inputTokens, outputTokens, modelRevision);
             }
 
             return new AiGenerationProviderResult(
@@ -241,7 +241,7 @@ internal sealed class OllamaAiGenerationProvider(
         }
         catch (JsonException)
         {
-            return Terminal(ErrorCodes.AI_INVALID_RESPONSE, started);
+            return Terminal(ErrorCodes.ERR_AI_INVALID_RESPONSE, started);
         }
     }
 

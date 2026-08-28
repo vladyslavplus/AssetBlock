@@ -1,3 +1,5 @@
+import type { CheckoutFulfillmentStatus } from './payments-schemas'
+
 export interface PaymentsCapabilities {
   checkoutConfigured: boolean
 }
@@ -7,7 +9,7 @@ export interface CreateCheckoutResponse {
   checkoutIntentId: string
 }
 
-export type CheckoutFulfillmentStatus = 'pending' | 'completed' | 'cancelled'
+export type { CheckoutFulfillmentStatus }
 
 export interface CheckoutStatusResponse {
   status: CheckoutFulfillmentStatus

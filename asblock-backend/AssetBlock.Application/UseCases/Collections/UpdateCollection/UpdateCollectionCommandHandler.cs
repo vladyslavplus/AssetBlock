@@ -26,27 +26,17 @@ internal sealed class UpdateCollectionCommandHandler(
         {
             await unitOfWork.ExecuteInTransaction(async ct =>
             {
-                var collection = await collectionStore.GetForUpdate(request.Id, ct);
-                if (collection is null)
-                {
-                    outcome = Result.NotFound(ErrorCodes.ERR_COLLECTION_NOT_FOUND);
-                    return;
-                }
+                (Result? failure, _) = await CollectionMutationGuard.ValidateMutable(
+                    collectionStore,
+                    auditWriter,
+                    request.Id,
+                    request.SellerId,
+                    AuditActions.COLLECTION_UPDATE,
+                    ct);
 
-                if (collection.SellerId != request.SellerId)
+                if (failure is not null)
                 {
-                    await auditWriter.Write(new AuditEvent(
-                        AuditActions.COLLECTION_UPDATE,
-                        AuditOutcome.DENIED,
-                        AuditResourceTypes.COLLECTION,
-                        request.Id.ToString()), ct);
-                    outcome = Result.Forbidden(ErrorCodes.ERR_FORBIDDEN);
-                    return;
-                }
-
-                if (collection.Status == CollectionStatus.ARCHIVED)
-                {
-                    outcome = Result.Conflict(ErrorCodes.ERR_COLLECTION_STATE_INVALID);
+                    outcome = failure;
                     return;
                 }
 

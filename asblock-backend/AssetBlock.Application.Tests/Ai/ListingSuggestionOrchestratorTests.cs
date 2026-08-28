@@ -22,7 +22,7 @@ public sealed class ListingSuggestionOrchestratorTests
         var result = await sut.Generate(ValidRequest(), CancellationToken.None);
 
         result.Outcome.Should().Be(AiGenerationOutcomeKind.DISABLED);
-        result.ErrorCode.Should().Be(ErrorCodes.AI_DISABLED);
+        result.ErrorCode.Should().Be(ErrorCodes.ERR_AI_DISABLED);
         result.ErrorCode.Should().NotBeNull();
         ErrorCodesToErrorMessages.GetMessage(result.ErrorCode!).Should().NotContain("sk-");
         provider.GenerateCalls.Should().Be(0);
@@ -90,7 +90,7 @@ public sealed class ListingSuggestionOrchestratorTests
         var result = await sut.Generate(ValidRequest(), CancellationToken.None);
 
         result.Outcome.Should().Be(AiGenerationOutcomeKind.TERMINAL_FAILURE);
-        result.ErrorCode.Should().Be(ErrorCodes.AI_CATEGORY_NOT_ALLOWED);
+        result.ErrorCode.Should().Be(ErrorCodes.ERR_AI_CATEGORY_NOT_ALLOWED);
         result.Suggestion.Should().BeNull();
         telemetry.Outcomes.Should().Equal(AiTelemetryOutcome.TERMINAL);
     }
@@ -106,7 +106,7 @@ public sealed class ListingSuggestionOrchestratorTests
 
         var result = await sut.Generate(ValidRequest(), CancellationToken.None);
 
-        result.ErrorCode.Should().Be(ErrorCodes.AI_TAGS_NOT_ALLOWED);
+        result.ErrorCode.Should().Be(ErrorCodes.ERR_AI_TAGS_NOT_ALLOWED);
         result.IsRetryable.Should().BeFalse();
     }
 
@@ -121,7 +121,7 @@ public sealed class ListingSuggestionOrchestratorTests
 
         var result = await sut.Generate(ValidRequest(), CancellationToken.None);
 
-        result.ErrorCode.Should().Be(ErrorCodes.AI_INVALID_RESPONSE);
+        result.ErrorCode.Should().Be(ErrorCodes.ERR_AI_INVALID_RESPONSE);
         result.IsRetryable.Should().BeFalse();
     }
 
@@ -134,7 +134,7 @@ public sealed class ListingSuggestionOrchestratorTests
 
         var result = await sut.Generate(ValidRequest(), CancellationToken.None);
 
-        result.ErrorCode.Should().Be(ErrorCodes.AI_INPUT_TOO_LARGE);
+        result.ErrorCode.Should().Be(ErrorCodes.ERR_AI_INPUT_TOO_LARGE);
         provider.GenerateCalls.Should().Be(0);
         telemetry.Outcomes.Should().Equal(AiTelemetryOutcome.TERMINAL);
     }

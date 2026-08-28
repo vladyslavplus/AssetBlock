@@ -50,6 +50,7 @@ public sealed class EnqueueListingCopilotCommandHandlerTests
         var result = await _handler.Handle(new EnqueueListingCopilotCommand(versionId, ownerId), CancellationToken.None);
 
         result.Status.Should().Be(ResultStatus.NotFound);
+        result.Errors.Should().Contain(ErrorCodes.ERR_ASSET_NOT_FOUND);
         await _jobStore.DidNotReceive().Enqueue(
             Arg.Any<Guid>(),
             Arg.Any<Guid>(),
@@ -78,7 +79,7 @@ public sealed class EnqueueListingCopilotCommandHandlerTests
             CancellationToken.None);
 
         result.Status.Should().Be(ResultStatus.Invalid);
-        result.ValidationErrors.Should().Contain(e => e.Identifier == ErrorCodes.AI_DISABLED);
+        result.ValidationErrors.Should().Contain(e => e.Identifier == ErrorCodes.ERR_AI_DISABLED);
         await _jobStore.DidNotReceive().Enqueue(
             Arg.Any<Guid>(),
             Arg.Any<Guid>(),
@@ -102,7 +103,7 @@ public sealed class EnqueueListingCopilotCommandHandlerTests
             CancellationToken.None);
 
         result.Status.Should().Be(ResultStatus.Conflict);
-        result.Errors.Should().Contain(ErrorCodes.AI_VERSION_NOT_READY);
+        result.Errors.Should().Contain(ErrorCodes.ERR_AI_VERSION_NOT_READY);
     }
 
     [Fact]
@@ -117,7 +118,7 @@ public sealed class EnqueueListingCopilotCommandHandlerTests
             CancellationToken.None);
 
         result.Status.Should().Be(ResultStatus.Conflict);
-        result.Errors.Should().Contain(ErrorCodes.AI_ARCHIVE_ANALYSIS_MISSING);
+        result.Errors.Should().Contain(ErrorCodes.ERR_AI_ARCHIVE_ANALYSIS_MISSING);
     }
 
     [Fact]

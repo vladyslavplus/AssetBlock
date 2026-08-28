@@ -5,6 +5,7 @@ using AssetBlock.Domain.Core.Dto.Audit;
 using AssetBlock.Domain.Core.Enums;
 using AssetBlock.Domain.Core.Exceptions;
 using AssetBlock.Application.Messaging;
+using AssetBlock.Domain.Core.Entities;
 using Microsoft.Extensions.Logging;
 
 namespace AssetBlock.Application.UseCases.Collections.ReorderCollectionItems;
@@ -23,27 +24,17 @@ internal sealed class ReorderCollectionItemsCommandHandler(
         {
             await unitOfWork.ExecuteInTransaction(async ct =>
             {
-                var collection = await collectionStore.GetForUpdate(request.CollectionId, ct);
-                if (collection is null)
-                {
-                    outcome = Result.NotFound(ErrorCodes.ERR_COLLECTION_NOT_FOUND);
-                    return;
-                }
+                (Result? failure, Collection? _) = await CollectionMutationGuard.ValidateMutable(
+                    collectionStore,
+                    auditWriter,
+                    request.CollectionId,
+                    request.SellerId,
+                    AuditActions.COLLECTION_REORDER,
+                    ct);
 
-                if (collection.SellerId != request.SellerId)
+                if (failure is not null)
                 {
-                    await auditWriter.Write(new AuditEvent(
-                        AuditActions.COLLECTION_REORDER,
-                        AuditOutcome.DENIED,
-                        AuditResourceTypes.COLLECTION,
-                        request.CollectionId.ToString()), ct);
-                    outcome = Result.Forbidden(ErrorCodes.ERR_FORBIDDEN);
-                    return;
-                }
-
-                if (collection.Status == CollectionStatus.ARCHIVED)
-                {
-                    outcome = Result.Conflict(ErrorCodes.ERR_COLLECTION_STATE_INVALID);
+                    outcome = failure;
                     return;
                 }
 

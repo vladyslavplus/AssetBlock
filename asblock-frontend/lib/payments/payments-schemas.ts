@@ -27,8 +27,11 @@ export const createCheckoutResponseSchema = z.object({
   checkoutIntentId: z.string().uuid(),
 })
 
+export const CHECKOUT_FULFILLMENT_STATUSES = ['pending', 'completed', 'cancelled'] as const
+export type CheckoutFulfillmentStatus = (typeof CHECKOUT_FULFILLMENT_STATUSES)[number]
+
 export const checkoutStatusResponseSchema = z.object({
-  status: z.enum(['pending', 'completed', 'cancelled']),
+  status: z.enum(CHECKOUT_FULFILLMENT_STATUSES),
   checkoutIntentId: z.string().uuid(),
   orderId: z.string().uuid().nullable(),
   productTitle: z.string(),

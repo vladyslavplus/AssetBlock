@@ -183,14 +183,14 @@ describe('ListingCopilotPanel', () => {
     await waitFor(() => expect(fetch).toHaveBeenCalled())
   })
 
-  it('treats AI_DISABLED as unavailable and does not render provider internals', async () => {
+  it('treats AI_DISABLED and ERR_AI_DISABLED as unavailable and does not render provider internals', async () => {
     const user = userEvent.setup()
     mockFetch({
       jobs: [],
       post: () =>
         new Response(
           JSON.stringify({
-            type: 'urn:assetblock:error:AI_DISABLED',
+            type: 'urn:assetblock:error:ERR_AI_DISABLED',
             title: 'Bad Request',
             status: 400,
             detail: 'internal model dump',

@@ -224,7 +224,7 @@ public sealed class UsersControllerListingCopilotTests : ControllerTestBase
         var controller = new UsersController(Sender);
         SetupUser(_userId, controller);
         Sender.Send(Arg.Any<EnqueueListingCopilotCommand>(), Arg.Any<CancellationToken>())
-            .Returns(Result<ListingCopilotEnqueueResponse>.Conflict(ErrorCodes.AI_VERSION_NOT_READY));
+            .Returns(Result<ListingCopilotEnqueueResponse>.Conflict(ErrorCodes.ERR_AI_VERSION_NOT_READY));
 
         var result = await controller.EnqueueListingCopilot(_versionId, CancellationToken.None);
 
