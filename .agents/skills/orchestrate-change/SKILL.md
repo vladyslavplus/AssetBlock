@@ -34,8 +34,10 @@ Create a focused English executor prompt in a temporary ignored path under `.age
 Run from repository root:
 
 ```powershell
-pnpm agent:antigravity -- --prompt-file <absolute-prompt-path>
+node .agents/skills/orchestrate-change/scripts/run-antigravity.mjs --prompt-file <absolute-prompt-path>
 ```
+
+Invoke the dependency-free Node adapter directly. Never route it through `pnpm`, `npm`, `yarn`, or another package manager; package-manager bootstrap and registry checks can block before Antigravity starts.
 
 The adapter records baseline and post-run Git evidence under ignored `.agentflow/runs/` and returns a run directory plus Antigravity conversation ID. Treat Git state and command output as authoritative; executor summary is supporting context only.
 
@@ -59,7 +61,7 @@ When verdict is `CHANGES REQUESTED`:
 2. Continue the same Antigravity conversation and run directory:
 
 ```powershell
-pnpm agent:antigravity -- --prompt-file <absolute-fix-prompt-path> --run-dir <absolute-run-directory>
+node .agents/skills/orchestrate-change/scripts/run-antigravity.mjs --prompt-file <absolute-fix-prompt-path> --run-dir <absolute-run-directory>
 ```
 
 3. Inspect new Git evidence and executor verification.

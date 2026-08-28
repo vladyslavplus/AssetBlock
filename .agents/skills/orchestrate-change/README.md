@@ -26,7 +26,7 @@ On Windows, the adapter checks `agy` on `PATH` and then falls back to:
 Check binary discovery, prompt access, and schema access without starting an agent turn:
 
 ```powershell
-pnpm agent:antigravity -- --prompt-file .agents/skills/orchestrate-change/examples/smoke-prompt.md --dry-run
+node .agents/skills/orchestrate-change/scripts/run-antigravity.mjs --prompt-file .agents/skills/orchestrate-change/examples/smoke-prompt.md --dry-run
 ```
 
 ## Recommended Codex UI prompt
@@ -61,7 +61,7 @@ $orchestrate-change Use Antigravity to implement <task>. Plan it, run the execut
 First execution:
 
 ```powershell
-pnpm agent:antigravity -- --prompt-file D:\absolute\path\executor-prompt.md
+node .agents/skills/orchestrate-change/scripts/run-antigravity.mjs --prompt-file D:\absolute\path\executor-prompt.md
 ```
 
 The command sends the prompt through Antigravity's NDJSON stdin protocol, avoiding Windows command-line length limits. It prints JSON containing `run_dir`, `conversation_id`, and the normalized execution report.
@@ -69,8 +69,10 @@ The command sends the prompt through Antigravity's NDJSON stdin protocol, avoidi
 Continue the same Antigravity conversation after review findings:
 
 ```powershell
-pnpm agent:antigravity -- --prompt-file D:\absolute\path\fix-prompt.md --run-dir D:\absolute\path\.agentflow\runs\<run-id>
+node .agents/skills/orchestrate-change/scripts/run-antigravity.mjs --prompt-file D:\absolute\path\fix-prompt.md --run-dir D:\absolute\path\.agentflow\runs\<run-id>
 ```
+
+Run the adapter directly with `node`. Do not wrap it in `pnpm`, `npm`, or `yarn`: this script has no package dependencies, while package managers may perform unrelated registry/bootstrap work before it starts.
 
 Optional arguments:
 
@@ -108,6 +110,10 @@ agy
 ```
 
 Complete sign-in and trust the workspace, then exit and retry from Codex UI.
+
+### The command is retrying requests to `registry.npmjs.org`
+
+Stop that command. It used the obsolete package-manager wrapper and has not started Antigravity. Retry with the direct `node .agents/skills/orchestrate-change/scripts/run-antigravity.mjs ...` command shown above. No npm registry access is required by the adapter.
 
 ### Review does not approve after repeated fixes
 
