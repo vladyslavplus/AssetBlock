@@ -10,3 +10,6 @@ artifacts/
 
 # Local AI planning artifacts
 **/.cursor/plans/
+
+# Local agent-orchestration runs (prompts, diffs, transcripts, state)
+.agentflow/

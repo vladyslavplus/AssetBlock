@@ -3,6 +3,8 @@
   "private": true,
   "scripts": {
     "prepare": "husky",
+    "agent:antigravity": "node .agents/skills/orchestrate-change/scripts/run-antigravity.mjs",
+    "agent:antigravity:test": "node --test .agents/skills/orchestrate-change/scripts/run-antigravity.test.mjs",
     "deps:generate": "node scripts/deps/generate.mjs",
     "deps:check": "node scripts/deps/check.mjs",
     "deps:test": "node --test scripts/deps/lib/governance.test.mjs"
