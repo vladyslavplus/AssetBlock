@@ -21,6 +21,7 @@ public static class RateLimitingConstants
         public const string ANALYTICS_EVENTS = "analytics-events";
         public const string SELLER_ANALYTICS_SALES_EXPORT = "seller-analytics-sales-export";
         public const string LISTING_COPILOT_ENQUEUE = "listing-copilot-enqueue";
+        public const string ADMIN_OUTBOX_REPLAY = "admin-outbox-replay";
     }
 
     public static class Windows
@@ -68,5 +69,8 @@ public static class RateLimitingConstants
 
         public const int LISTING_COPILOT_ENQUEUE_LIMIT = 5;
         public const int LISTING_COPILOT_ENQUEUE_PERIOD_SECONDS = 60;
+
+        public const int ADMIN_OUTBOX_REPLAY_LIMIT = 10;
+        public const int ADMIN_OUTBOX_REPLAY_PERIOD_SECONDS = 60;
     }
 }

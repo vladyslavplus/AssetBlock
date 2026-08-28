@@ -13,6 +13,7 @@ namespace AssetBlock.Infrastructure.Outbox;
 
 internal sealed class EmailActionDispatchOutboxHandler(
     IEmailSender emailSender,
+    IEmailDeliveryStore emailDeliveryStore,
     IEmailActionStore emailActionStore,
     IUserStore userStore,
     IEmailActionLinkProtector linkProtector,
@@ -21,6 +22,7 @@ internal sealed class EmailActionDispatchOutboxHandler(
     ILogger<EmailActionDispatchOutboxHandler> logger) : IOutboxMessageHandler
 {
     private const string SAFE_TRANSPORT_FAILURE = "Email transport failed.";
+    private const string CLAIM_LOST_FAILURE = "Email delivery claim was lost before confirmation.";
 
     private static readonly JsonSerializerOptions _json = new() { PropertyNamingPolicy = JsonNamingPolicy.CamelCase };
 
@@ -108,7 +110,41 @@ internal sealed class EmailActionDispatchOutboxHandler(
             throw new InvalidOperationException(SAFE_TRANSPORT_FAILURE);
         }
 
+        var smtpTimeoutSeconds = Math.Max(emailOptions.Value.Smtp.TimeoutSeconds, 5);
+        var sendDeadline = TimeSpan.FromSeconds(smtpTimeoutSeconds);
+        var claimSafetyMargin = TimeSpan.FromSeconds(Math.Max(smtpTimeoutSeconds, 30));
+        var claimDuration = sendDeadline + claimSafetyMargin;
+
         var email = CreateMessage(payload.TemplateKind, deliveryAddress, payload.RecipientUserId, actionUrl, message.Id);
+
+        var (claimStatus, claimToken) = await emailDeliveryStore.TryClaimDelivery(
+            message.Id,
+            email.MessageId,
+            deliveryAddress,
+            payload.RecipientUserId,
+            payload.TemplateKind,
+            claimDuration,
+            cancellationToken);
+
+        if (claimStatus == DeliveryClaimStatus.ALREADY_DELIVERED)
+        {
+            logger.LogInformation(
+                "EmailActionDispatch already delivered: Outbox {OutboxId}, Template {TemplateKind}, RecipientUser {RecipientUserId}",
+                message.Id,
+                payload.TemplateKind,
+                payload.RecipientUserId);
+            return;
+        }
+
+        if (claimStatus == DeliveryClaimStatus.CONCURRENT_CONFLICT)
+        {
+            logger.LogWarning(
+                "EmailActionDispatch active claim exists: Outbox {OutboxId}, Template {TemplateKind}, RecipientUser {RecipientUserId}",
+                message.Id,
+                payload.TemplateKind,
+                payload.RecipientUserId);
+            throw new InvalidOperationException("Email delivery is currently locked by another worker.");
+        }
 
         logger.LogInformation(
             "EmailActionDispatch starting: Outbox {OutboxId}, Template {TemplateKind}, RecipientUser {RecipientUserId}",
@@ -116,15 +152,45 @@ internal sealed class EmailActionDispatchOutboxHandler(
             payload.TemplateKind,
             payload.RecipientUserId);
 
+        var transportSucceeded = false;
+        bool deliveryConfirmed;
+        using var sendCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        sendCts.CancelAfter(sendDeadline);
+
         try
         {
-            await emailSender.Send(email, cancellationToken);
+            await emailSender.Send(email, sendCts.Token);
+            transportSucceeded = true;
+
+            using var confirmCts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+            deliveryConfirmed = await emailDeliveryStore.ConfirmDelivery(
+                message.Id,
+                claimToken!.Value,
+                DateTimeOffset.UtcNow,
+                confirmCts.Token);
+
+            if (!deliveryConfirmed)
+            {
+                logger.LogWarning(
+                    "EmailActionDispatch confirmation failed (claim lost or expired): Outbox {OutboxId}",
+                    message.Id);
+                throw new InvalidOperationException(CLAIM_LOST_FAILURE);
+            }
         }
-        catch (OperationCanceledException)
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested && !transportSucceeded)
         {
             throw;
         }
-        catch (Exception ex)
+        catch (OperationCanceledException) when (sendCts.IsCancellationRequested && !transportSucceeded)
+        {
+            logger.LogWarning(
+                "EmailActionDispatch send deadline exceeded: Outbox {OutboxId}, Template {TemplateKind}, RecipientUser {RecipientUserId}",
+                message.Id,
+                payload.TemplateKind,
+                payload.RecipientUserId);
+            throw new InvalidOperationException(SAFE_TRANSPORT_FAILURE);
+        }
+        catch (Exception ex) when (ex is not InvalidOperationException { Message: CLAIM_LOST_FAILURE })
         {
             logger.LogWarning(
                 "EmailActionDispatch failed: Outbox {OutboxId}, Template {TemplateKind}, RecipientUser {RecipientUserId}, ExceptionType {ExceptionType}",
@@ -133,6 +199,29 @@ internal sealed class EmailActionDispatchOutboxHandler(
                 payload.RecipientUserId,
                 ex.GetType().FullName);
             throw new InvalidOperationException(SAFE_TRANSPORT_FAILURE);
+        }
+        finally
+        {
+            if (!transportSucceeded && claimToken.HasValue)
+            {
+                try
+                {
+                    using var cleanupCts = new CancellationTokenSource(TimeSpan.FromSeconds(3));
+                    await emailDeliveryStore.ReleaseClaim(message.Id, claimToken.Value, cleanupCts.Token);
+                }
+                catch (Exception releaseEx)
+                {
+                    logger.LogWarning(
+                        "EmailActionDispatch release claim failed: Outbox {OutboxId}, ExceptionType {ExceptionType}",
+                        message.Id,
+                        releaseEx.GetType().FullName);
+                }
+            }
+        }
+
+        if (!deliveryConfirmed)
+        {
+            throw new InvalidOperationException("Email delivery was not confirmed.");
         }
 
         logger.LogInformation(

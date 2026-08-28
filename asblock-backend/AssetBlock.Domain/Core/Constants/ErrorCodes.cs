@@ -99,6 +99,10 @@ public static class ErrorCodes
     public const string ERR_ANALYTICS_BFF_SIGNATURE_INVALID = "ERR_ANALYTICS_BFF_SIGNATURE_INVALID";
     public const string ERR_ANALYTICS_RATE_LIMIT_UNAVAILABLE = "ERR_ANALYTICS_RATE_LIMIT_UNAVAILABLE";
 
+    // Outbox admin
+    public const string ERR_OUTBOX_MESSAGE_NOT_FOUND = "ERR_OUTBOX_MESSAGE_NOT_FOUND";
+    public const string ERR_OUTBOX_NOT_DEAD_LETTERED = "ERR_OUTBOX_NOT_DEAD_LETTERED";
+
     public const string VERSION_NOT_FOUND = "VERSION_NOT_FOUND";
     public const string ARCHIVE_CORRUPT = "ARCHIVE_CORRUPT";
     public const string ARCHIVE_UNSEEKABLE = "ARCHIVE_UNSEEKABLE";

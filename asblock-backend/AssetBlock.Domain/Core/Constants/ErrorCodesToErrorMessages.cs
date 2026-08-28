@@ -86,6 +86,8 @@ public static class ErrorCodesToErrorMessages
         { ErrorCodes.ERR_ANALYTICS_ATTRIBUTION_INVALID, "The analytics attribution data is invalid." },
         { ErrorCodes.ERR_ANALYTICS_BFF_SIGNATURE_INVALID, "Analytics request signature is invalid." },
         { ErrorCodes.ERR_ANALYTICS_RATE_LIMIT_UNAVAILABLE, "Analytics rate limiting is temporarily unavailable. Please try again later." },
+        { ErrorCodes.ERR_OUTBOX_MESSAGE_NOT_FOUND, "The requested outbox message could not be found." },
+        { ErrorCodes.ERR_OUTBOX_NOT_DEAD_LETTERED, "The requested outbox message is not in a dead-lettered state." },
         { ErrorCodes.VERSION_NOT_FOUND, "Asset version could not be found." },
         { ErrorCodes.ARCHIVE_CORRUPT, "The archive could not be decompressed or parsed safely." },
         { ErrorCodes.ARCHIVE_UNSEEKABLE, "The archive stream could not be inspected." },

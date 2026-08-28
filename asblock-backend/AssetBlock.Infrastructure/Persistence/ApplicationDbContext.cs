@@ -38,6 +38,7 @@ public sealed class ApplicationDbContext(DbContextOptions<ApplicationDbContext> 
     public DbSet<AssetProcessingJob> AssetProcessingJobs => Set<AssetProcessingJob>();
     public DbSet<AssetArchiveAnalysis> AssetArchiveAnalyses => Set<AssetArchiveAnalysis>();
     public DbSet<AssetListingSuggestion> AssetListingSuggestions => Set<AssetListingSuggestion>();
+    public DbSet<OutboxEmailDelivery> OutboxEmailDeliveries => Set<OutboxEmailDelivery>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

@@ -148,6 +148,7 @@ public static class DependencyInjection
         services.AddSingleton<IContentMalwareScanner, ClamAvContentMalwareScanner>();
         services.AddScoped<IUnitOfWork, EfUnitOfWork>();
         services.AddScoped<IOutboxStore, OutboxStore>();
+        services.AddScoped<IEmailDeliveryStore, EmailDeliveryStore>();
         services.AddScoped<IAssetProcessingJobStore, AssetProcessingJobStore>();
         services.AddScoped<IOutboxMessageHandler, AssetBlobDeleteOutboxHandler>();
         services.AddScoped<IOutboxMessageHandler, OrderCompletedOutboxHandler>();

@@ -4,15 +4,22 @@ using AssetBlock.Domain.Core.Enums;
 using AssetBlock.Domain.Core.Primitives.AppSettingsOptions;
 using MailKit.Net.Smtp;
 using MailKit.Security;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using MimeKit;
 
 namespace AssetBlock.Infrastructure.Email;
 
 /// <summary>SMTP transport via MailKit. Works with Mailpit locally and SMTP relays in deployment.</summary>
-internal sealed class SmtpEmailSender(IOptions<EmailOptions> emailOptions) : IEmailSender
+internal sealed class SmtpEmailSender(
+    IOptions<EmailOptions> emailOptions,
+    ILogger<SmtpEmailSender>? logger = null,
+    Func<ISmtpClient>? clientFactory = null) : IEmailSender
 {
     private readonly EmailOptions _options = emailOptions.Value;
+    private readonly ILogger<SmtpEmailSender> _logger = logger ?? NullLogger<SmtpEmailSender>.Instance;
+    private readonly Func<ISmtpClient> _clientFactory = clientFactory ?? (() => new SmtpClient());
 
     public async Task Send(EmailMessage message, CancellationToken cancellationToken = default)
     {
@@ -22,8 +29,10 @@ internal sealed class SmtpEmailSender(IOptions<EmailOptions> emailOptions) : IEm
         var smtp = _options.Smtp;
         var timeout = TimeSpan.FromSeconds(smtp.TimeoutSeconds);
 
-        using var client = new SmtpClient();
+        using var client = _clientFactory();
         client.Timeout = (int)timeout.TotalMilliseconds;
+        var sendCompleted = false;
+
         try
         {
             await client.ConnectAsync(
@@ -40,12 +49,29 @@ internal sealed class SmtpEmailSender(IOptions<EmailOptions> emailOptions) : IEm
             }
 
             await client.SendAsync(mime, cancellationToken);
+            sendCompleted = true;
         }
         finally
         {
             if (client.IsConnected)
             {
-                await client.DisconnectAsync(quit: true, cancellationToken);
+                try
+                {
+                    // Disconnect is best-effort with an independent bounded token.
+                    // A failure during disconnect must not alter the outcome of a successfully completed send.
+                    using var disconnectCts = new CancellationTokenSource(TimeSpan.FromSeconds(3));
+                    await client.DisconnectAsync(quit: true, disconnectCts.Token);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(
+                        "SMTP disconnect encountered an error (sendCompleted={SendCompleted}): ExceptionType {ExceptionType}",
+                        sendCompleted,
+                        ex.GetType().FullName);
+
+                    // If send was not completed, do nothing here so the original exception from the try block propagates.
+                    // If send was completed, suppress the disconnect error so transport is reported as successful.
+                }
             }
         }
     }

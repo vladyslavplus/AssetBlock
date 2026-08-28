@@ -53,4 +53,6 @@ public static class AuditActions
     public const string PAYMENT_ORDER_COMPLETED = "Payment.OrderCompleted";
 
     public const string SELLER_ANALYTICS_EXPORTED = "SellerAnalytics.Exported";
+
+    public const string OUTBOX_DEAD_LETTER_REPLAY = "Outbox.DeadLetterReplay";
 }

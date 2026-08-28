@@ -62,4 +62,48 @@ public sealed class RateLimitProblemDetailsPipelineTests
         doc.RootElement.GetProperty("type").GetString().Should().Be($"urn:assetblock:error:{ErrorCodes.ERR_RATE_LIMITED}");
         doc.RootElement.TryGetProperty("traceId", out _).Should().BeTrue();
     }
+
+    [Fact]
+    public async Task AdminOutboxReplay_WhenRateLimited_ShouldReturn429ProblemDetails()
+    {
+        var builder = WebApplication.CreateBuilder();
+        builder.WebHost.UseTestServer();
+        builder.Services.AddRouting();
+        builder.Services.AddRateLimiter(opts =>
+        {
+            opts.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+            opts.OnRejected = async (context, _) =>
+            {
+                var problem = AssetBlockProblemDetails.Create(
+                    context.HttpContext,
+                    StatusCodes.Status429TooManyRequests,
+                    ErrorCodes.ERR_RATE_LIMITED);
+                await AssetBlockProblemDetails.Write(context.HttpContext, problem);
+            };
+            opts.AddFixedWindowLimiter(RateLimitingConstants.Policies.ADMIN_OUTBOX_REPLAY, options =>
+            {
+                options.PermitLimit = 1;
+                options.Window = TimeSpan.FromMinutes(1);
+                options.QueueLimit = 0;
+            });
+        });
+
+        await using var app = builder.Build();
+        app.UseRateLimiter();
+        app.MapPost("/api/admin/outbox/dead-letters/{id}/replay", () => Microsoft.AspNetCore.Http.Results.Ok())
+            .RequireRateLimiting(RateLimitingConstants.Policies.ADMIN_OUTBOX_REPLAY);
+        await app.StartAsync();
+
+        var client = app.GetTestClient();
+        var id = Guid.NewGuid();
+        var first = await client.PostAsync(new Uri($"/api/admin/outbox/dead-letters/{id}/replay", UriKind.Relative), null);
+        first.StatusCode.Should().Be(HttpStatusCode.OK);
+
+        var second = await client.PostAsync(new Uri($"/api/admin/outbox/dead-letters/{id}/replay", UriKind.Relative), null);
+        second.StatusCode.Should().Be(HttpStatusCode.TooManyRequests);
+        second.Content.Headers.ContentType!.MediaType.Should().Be("application/problem+json");
+        var json = await second.Content.ReadAsStringAsync();
+        using var doc = JsonDocument.Parse(json);
+        doc.RootElement.GetProperty("code").GetString().Should().Be(ErrorCodes.ERR_RATE_LIMITED);
+    }
 }

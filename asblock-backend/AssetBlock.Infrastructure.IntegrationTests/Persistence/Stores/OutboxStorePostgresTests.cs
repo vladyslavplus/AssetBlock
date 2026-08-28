@@ -8,6 +8,8 @@ using AssetBlock.Infrastructure.Persistence;
 using AssetBlock.Infrastructure.Persistence.Stores;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
+using NSubstitute;
+using NSubstitute.ExceptionExtensions;
 
 namespace AssetBlock.Infrastructure.IntegrationTests.Persistence.Stores;
 
@@ -246,4 +248,120 @@ public sealed class OutboxStorePostgresTests(PostgresFixture fixture)
         retry[0].ProcessedAt.Should().BeNull();
     }
 
+    [Fact]
+    public async Task DeadLetterAndReplay_ShouldTransitionStateAndAllowReclaiming()
+    {
+        await using var db = await fixture.CreateCleanDbContext();
+        var store = CreateStore(db);
+        await store.Enqueue(
+            OutboxMessageTypes.ASSET_BLOB_DELETE,
+            new AssetBlobDeletePayload(Guid.NewGuid(), "assets/dead-letter.bin"),
+            CancellationToken.None);
+
+        var batch = await store.ClaimPendingBatch(1, TimeSpan.FromMinutes(5));
+        batch.Should().ContainSingle();
+        var msg = batch[0];
+
+        // 1. Mark dead-lettered
+        var dlSuccess = await store.MarkDeadLettered(msg.Id, msg.LockToken!.Value, "Max attempts reached");
+        dlSuccess.Should().BeTrue();
+
+        // Verify state in DB
+        await using var verifyDb = fixture.CreateDbContext();
+        var row = await verifyDb.OutboxMessages.AsNoTracking().SingleAsync(m => m.Id == msg.Id);
+        row.Status.Should().Be(OutboxMessageStatus.DEAD_LETTERED);
+        row.DeadLetteredAt.Should().NotBeNull();
+        row.DeadLetterReason.Should().Be("Max attempts reached");
+        row.ReplayCount.Should().Be(0);
+
+        // 2. Query GetDeadLetters
+        var paged = await store.GetDeadLetters(new GetDeadLettersRequest(1, 10));
+        paged.TotalCount.Should().Be(1);
+        paged.Items.Should().ContainSingle();
+        paged.Items[0].Id.Should().Be(msg.Id);
+        paged.Items[0].DeadLetterReason.Should().Be("Max attempts reached");
+
+        // Dead-lettered message must not be claimable
+        var emptyBatch = await store.ClaimPendingBatch(10, TimeSpan.FromMinutes(5));
+        emptyBatch.Should().BeEmpty();
+
+        // 3. Replay non-existent -> NOT_FOUND
+        var (notFoundOutcome, _) = await store.ReplayDeadLetter(Guid.NewGuid());
+        notFoundOutcome.Should().Be(OutboxReplayOutcome.NOT_FOUND);
+
+        // 4. Replay valid dead-letter -> SUCCESS
+        var (successOutcome, replayResponse) = await store.ReplayDeadLetter(msg.Id);
+        successOutcome.Should().Be(OutboxReplayOutcome.SUCCESS);
+        replayResponse.Should().NotBeNull();
+        replayResponse!.Id.Should().Be(msg.Id);
+        replayResponse.ReplayCount.Should().Be(1);
+
+        // 5. Replay again -> NOT_DEAD_LETTERED (because it is now PENDING)
+        var (conflictOutcome, _) = await store.ReplayDeadLetter(msg.Id);
+        conflictOutcome.Should().Be(OutboxReplayOutcome.NOT_DEAD_LETTERED);
+
+        // 6. Claim batch should now claim the replayed message
+        var replayedBatch = await store.ClaimPendingBatch(10, TimeSpan.FromMinutes(5));
+        replayedBatch.Should().ContainSingle();
+        replayedBatch[0].Id.Should().Be(msg.Id);
+        replayedBatch[0].AttemptCount.Should().Be(1); // 0 incremented on claim to 1
+        replayedBatch[0].Status.Should().Be(OutboxMessageStatus.PENDING);
+    }
+
+    [Fact]
+    public async Task ReplayDeadLetter_WhenAuditFailsInsideTransaction_ShouldRollbackReplayAndKeepDeadLetterState()
+    {
+        await using var db = await fixture.CreateCleanDbContext();
+        var store = CreateStore(db);
+        await store.Enqueue(
+            OutboxMessageTypes.ASSET_BLOB_DELETE,
+            new AssetBlobDeletePayload(Guid.NewGuid(), "assets/rollback-replay.bin"),
+            CancellationToken.None);
+
+        var batch = await store.ClaimPendingBatch(1, TimeSpan.FromMinutes(5));
+        batch.Should().ContainSingle();
+        var msg = batch[0];
+
+        var dlSuccess = await store.MarkDeadLettered(msg.Id, msg.LockToken!.Value, "Permanent schema corruption");
+        dlSuccess.Should().BeTrue();
+
+        await using (var verifyInitial = fixture.CreateDbContext())
+        {
+            var initialRow = await verifyInitial.OutboxMessages.AsNoTracking().SingleAsync(m => m.Id == msg.Id);
+            initialRow.Status.Should().Be(OutboxMessageStatus.DEAD_LETTERED);
+            initialRow.ReplayCount.Should().Be(0);
+            initialRow.LastReplayedAt.Should().BeNull();
+        }
+
+        // Setup Handler with real EfUnitOfWork, real OutboxStore, and failing IAuditWriter
+        var unitOfWork = new EfUnitOfWork(db);
+        var auditWriterMock = Substitute.For<Domain.Abstractions.Services.IAuditWriter>();
+        auditWriterMock.Write(Arg.Any<Domain.Core.Dto.Audit.AuditEvent>(), Arg.Any<CancellationToken>())
+            .ThrowsAsync(new InvalidOperationException("Audit database down."));
+
+        var handler = new Application.UseCases.Admin.Outbox.ReplayDeadLetter.ReplayDeadLetterCommandHandler(
+            store,
+            unitOfWork,
+            auditWriterMock);
+
+        var act = () => handler.Handle(
+            new Application.UseCases.Admin.Outbox.ReplayDeadLetter.ReplayDeadLetterCommand(msg.Id),
+            CancellationToken.None);
+
+        await act.Should().ThrowAsync<InvalidOperationException>()
+            .WithMessage("Audit database down.");
+
+        // Verify that database state remained DEAD_LETTERED, ReplayCount is still 0, and no audit row committed
+        await using var verifyAfterRollback = fixture.CreateDbContext();
+        var reloaded = await verifyAfterRollback.OutboxMessages.AsNoTracking().SingleAsync(m => m.Id == msg.Id);
+        reloaded.Status.Should().Be(OutboxMessageStatus.DEAD_LETTERED);
+        reloaded.ReplayCount.Should().Be(0);
+        reloaded.LastReplayedAt.Should().BeNull();
+        reloaded.DeadLetterReason.Should().Be("Permanent schema corruption");
+
+        (await verifyAfterRollback.AuditLogs.CountAsync()).Should().Be(0);
+
+        var emptyClaimBatch = await CreateStore(verifyAfterRollback).ClaimPendingBatch(10, TimeSpan.FromMinutes(5));
+        emptyClaimBatch.Should().BeEmpty();
+    }
 }

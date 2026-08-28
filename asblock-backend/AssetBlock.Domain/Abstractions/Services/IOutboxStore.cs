@@ -1,4 +1,7 @@
+using AssetBlock.Domain.Core.Dto.Outbox;
+using AssetBlock.Domain.Core.Dto.Paging;
 using AssetBlock.Domain.Core.Entities;
+using AssetBlock.Domain.Core.Enums;
 
 namespace AssetBlock.Domain.Abstractions.Services;
 
@@ -38,5 +41,18 @@ public interface IOutboxStore
         Guid id,
         Guid lockToken,
         string reason,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>Gets a paged list of dead-lettered outbox messages without serialized payloads.</summary>
+    Task<PagedResult<DeadLetterOutboxListItemDto>> GetDeadLetters(
+        GetDeadLettersRequest request,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Replays a dead-lettered message by resetting its status to PENDING and incrementing ReplayCount.
+    /// Returns OutboxReplayOutcome indicating success, not found, or not dead-lettered.
+    /// </summary>
+    Task<(OutboxReplayOutcome Outcome, ReplayDeadLetterResponseDto? Response)> ReplayDeadLetter(
+        Guid id,
         CancellationToken cancellationToken = default);
 }

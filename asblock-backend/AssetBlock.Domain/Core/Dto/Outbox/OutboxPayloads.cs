@@ -18,3 +18,20 @@ public sealed record NotificationDispatchPayload(
     NotificationKind Kind,
     string HubMethod,
     string MetadataJson);
+
+public sealed record GetDeadLettersRequest(int Page = 1, int PageSize = 20);
+
+public sealed record DeadLetterOutboxListItemDto(
+    Guid Id,
+    string Type,
+    DateTimeOffset OccurredAt,
+    int AttemptCount,
+    DateTimeOffset? DeadLetteredAt,
+    string? DeadLetterReason,
+    int ReplayCount,
+    DateTimeOffset? LastReplayedAt);
+
+public sealed record ReplayDeadLetterResponseDto(
+    Guid Id,
+    DateTimeOffset ReplayedAt,
+    int ReplayCount);

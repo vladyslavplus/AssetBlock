@@ -1,4 +1,5 @@
 using AssetBlock.Infrastructure.IntegrationTests.Support;
+using AssetBlock.Infrastructure.Persistence.Stores;
 using Microsoft.EntityFrameworkCore;
 using Npgsql;
 
@@ -410,5 +411,123 @@ public sealed class MigrationSmokePostgresTests(PostgresFixture fixture)
 
         (await actMissingProcessing.Should().ThrowAsync<PostgresException>())
             .Which.SqlState.Should().Be(PostgresErrorCodes.NotNullViolation);
+    }
+
+    [Fact]
+    public async Task MigrateUpgrade_WhenLegacyOutboxRowsExist_ShouldBackfillStatusesAndDeadLetterFields()
+    {
+        // 1. Drop and recreate schema; apply migrations up to AddAssetListingSuggestions only
+        NpgsqlConnection.ClearAllPools();
+        await using (var setup = fixture.CreateDbContext())
+        {
+            await setup.Database.ExecuteSqlRawAsync("""
+                DROP SCHEMA IF EXISTS public CASCADE;
+                CREATE SCHEMA public;
+                """);
+
+            await setup.Database.MigrateAsync("20260825151905_AddAssetListingSuggestions");
+        }
+
+        NpgsqlConnection.ClearAllPools();
+
+        var legacyProcessedId = Guid.NewGuid();
+        var legacyMaxAttemptsId = Guid.NewGuid();
+        var legacyExplicitDlId = Guid.NewGuid();
+        var legacyPendingId = Guid.NewGuid();
+
+        await using (var seed = fixture.CreateDbContext())
+        {
+            var now = DateTimeOffset.UtcNow;
+
+            // 1. Legacy processed row
+            await seed.Database.ExecuteSqlRawAsync(
+                """
+                INSERT INTO outbox_messages ("Id","Type","Payload","OccurredAt","AttemptCount","ProcessedAt")
+                VALUES ({0},'EmailDispatch','{{}}',{1},1,{2})
+                """,
+                legacyProcessedId, now.AddMinutes(-30), now.AddMinutes(-29));
+
+            // 2. Legacy max-attempt row with future LockedUntil lease
+            await seed.Database.ExecuteSqlRawAsync(
+                """
+                INSERT INTO outbox_messages ("Id","Type","Payload","OccurredAt","AttemptCount","LastError","LockedUntil")
+                VALUES ({0},'EmailDispatch','{{}}',{1},10,'SMTP timeout after 10 retries',{2})
+                """,
+                legacyMaxAttemptsId, now.AddMinutes(-20), now.AddMinutes(50));
+
+            // 3. Legacy explicit convention row with space ("DEAD_LETTER: ")
+            await seed.Database.ExecuteSqlRawAsync(
+                """
+                INSERT INTO outbox_messages ("Id","Type","Payload","OccurredAt","AttemptCount","LastError")
+                VALUES ({0},'EmailDispatch','{{}}',{1},3,'DEAD_LETTER: Payload schema deprecated')
+                """,
+                legacyExplicitDlId, now.AddMinutes(-15));
+
+            // 4. Legacy pending row
+            await seed.Database.ExecuteSqlRawAsync(
+                """
+                INSERT INTO outbox_messages ("Id","Type","Payload","OccurredAt","AttemptCount")
+                VALUES ({0},'EmailDispatch','{{}}',{1},0)
+                """,
+                legacyPendingId, now.AddMinutes(-5));
+        }
+
+        NpgsqlConnection.ClearAllPools();
+
+        // 3. Apply latest migration
+        await using (var upgrade = fixture.CreateDbContext())
+        {
+            await upgrade.Database.MigrateAsync();
+        }
+
+        NpgsqlConnection.ClearAllPools();
+
+        // 4. Verify backfill states
+        await using var verify = fixture.CreateDbContext();
+
+        var rows = await verify.OutboxMessages.AsNoTracking()
+            .Where(m => m.Id == legacyProcessedId || m.Id == legacyMaxAttemptsId || m.Id == legacyExplicitDlId || m.Id == legacyPendingId)
+            .ToDictionaryAsync(m => m.Id);
+
+        // Processed
+        rows[legacyProcessedId].Status.Should().Be(Domain.Core.Enums.OutboxMessageStatus.PROCESSED);
+        rows[legacyProcessedId].DeadLetteredAt.Should().BeNull();
+
+        // Max attempts -> DEAD_LETTERED (DeadLetteredAt must not be in future despite LockedUntil)
+        rows[legacyMaxAttemptsId].Status.Should().Be(Domain.Core.Enums.OutboxMessageStatus.DEAD_LETTERED);
+        rows[legacyMaxAttemptsId].DeadLetteredAt.Should().NotBeNull();
+        rows[legacyMaxAttemptsId].DeadLetteredAt.Should().BeBefore(DateTimeOffset.UtcNow);
+        rows[legacyMaxAttemptsId].DeadLetterReason.Should().Be("SMTP timeout after 10 retries");
+
+        // Explicit convention -> DEAD_LETTERED (prefix and leading space stripped)
+        rows[legacyExplicitDlId].Status.Should().Be(Domain.Core.Enums.OutboxMessageStatus.DEAD_LETTERED);
+        rows[legacyExplicitDlId].DeadLetteredAt.Should().NotBeNull();
+        rows[legacyExplicitDlId].DeadLetterReason.Should().Be("Payload schema deprecated");
+
+        // Pending
+        rows[legacyPendingId].Status.Should().Be(Domain.Core.Enums.OutboxMessageStatus.PENDING);
+        rows[legacyPendingId].DeadLetteredAt.Should().BeNull();
+        rows[legacyPendingId].DeadLetterReason.Should().BeNull();
+
+        // 5. Store operations verify queryability, claiming, and replay
+        var store = new OutboxStore(verify, Microsoft.Extensions.Logging.Abstractions.NullLogger<OutboxStore>.Instance);
+
+        var deadLetters = await store.GetDeadLetters(new Domain.Core.Dto.Outbox.GetDeadLettersRequest(1, 10));
+        deadLetters.TotalCount.Should().Be(2);
+        deadLetters.Items.Select(i => i.Id).Should().Contain([legacyMaxAttemptsId, legacyExplicitDlId]);
+
+        var claimBatch = await store.ClaimPendingBatch(10, TimeSpan.FromMinutes(5));
+        claimBatch.Should().ContainSingle();
+        claimBatch[0].Id.Should().Be(legacyPendingId);
+
+        // Replay legacy max-attempt dead letter
+        var (replayOutcome, replayDto) = await store.ReplayDeadLetter(legacyMaxAttemptsId);
+        replayOutcome.Should().Be(Domain.Core.Enums.OutboxReplayOutcome.SUCCESS);
+        replayDto!.ReplayCount.Should().Be(1);
+
+        // Should now be claimable
+        var secondClaimBatch = await store.ClaimPendingBatch(10, TimeSpan.FromMinutes(5));
+        secondClaimBatch.Should().ContainSingle();
+        secondClaimBatch[0].Id.Should().Be(legacyMaxAttemptsId);
     }
 }

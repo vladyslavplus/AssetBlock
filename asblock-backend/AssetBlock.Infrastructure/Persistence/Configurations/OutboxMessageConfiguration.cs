@@ -14,10 +14,15 @@ internal sealed class OutboxMessageConfiguration : IEntityTypeConfiguration<Outb
         builder.Property(m => m.Type).IsRequired().HasMaxLength(128);
         builder.Property(m => m.Payload).IsRequired();
         builder.Property(m => m.OccurredAt).IsRequired();
+        builder.Property(m => m.Status).IsRequired();
         builder.Property(m => m.AttemptCount).IsRequired();
         builder.Property(m => m.LastError).HasMaxLength(2000);
+        builder.Property(m => m.DeadLetterReason).HasMaxLength(2000);
 
-        builder.HasIndex(m => new { m.ProcessedAt, m.NextAttemptAt, m.LockedUntil, m.OccurredAt })
+        builder.HasIndex(m => new { m.Status, m.NextAttemptAt, m.LockedUntil, m.OccurredAt })
             .HasDatabaseName("IX_outbox_messages_dispatch");
+
+        builder.HasIndex(m => new { m.Status, m.DeadLetteredAt, m.OccurredAt })
+            .HasDatabaseName("IX_outbox_messages_dead_letter");
     }
 }
