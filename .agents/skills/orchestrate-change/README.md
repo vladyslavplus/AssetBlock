@@ -132,7 +132,7 @@ All manifest paths are repository-relative and resolved from the active working 
 
 The adapter reads the global Antigravity `settings.json` and checks every path and exact command before spawning `agy`. Missing rules are returned together, before any model turn or edit. This gate is adapter-owned; it does not depend on the executor model calling `list_permissions`.
 
-`required_verification` is phase-specific. `allowed_command_prefixes` and `allowed_command_patterns` are optional and must stay narrowly scoped. Path postconditions are optional but required when acceptance depends on actual creation, relocation, or removal. A completed report is rejected unless each required command has passed raw evidence and every path postcondition holds. Use a new compact manifest for fix and final phases.
+`required_verification` is phase-specific. Prefer exact commands. Antigravity regex rules have fixed token arity: `.*` matches one token, not an arbitrary command tail. Keep `allowed_command_patterns` narrowly scoped and token-count compatible; avoid legacy `allowed_command_prefixes` in new manifests. Path postconditions are optional but required when acceptance depends on actual creation, relocation, or removal. A completed report is rejected unless each required command has passed raw evidence and every path postcondition holds. Use a new compact manifest for fix and final phases.
 
 Repository source edits should use Antigravity's `replace_file_content` / `multi_replace_file_content`. `write_to_file` targets Antigravity's artifact area and can reject repository paths; do not fall back to shell-writing commands.
 

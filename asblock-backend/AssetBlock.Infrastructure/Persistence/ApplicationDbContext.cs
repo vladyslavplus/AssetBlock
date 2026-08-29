@@ -59,8 +59,46 @@ public sealed class ApplicationDbContext(DbContextOptions<ApplicationDbContext> 
             .HasName("similarity");
 
         ConfigurePostgresAssetSearch(modelBuilder);
+        ConfigurePostgresSecondarySearch(modelBuilder);
         ConfigurePostgresAudit(modelBuilder);
         ConfigurePostgresAnalyticsEvents(modelBuilder);
+    }
+
+    private static void ConfigurePostgresSecondarySearch(ModelBuilder modelBuilder)
+    {
+        var bundleRevision = modelBuilder.Entity<BundleRevision>();
+        bundleRevision.HasIndex(r => r.Title)
+            .HasMethod("GIN")
+            .HasOperators("gin_trgm_ops")
+            .HasDatabaseName("IX_bundle_revisions_Title_trgm");
+        bundleRevision.HasIndex(r => r.Description)
+            .HasMethod("GIN")
+            .HasOperators("gin_trgm_ops")
+            .HasDatabaseName("IX_bundle_revisions_Description_trgm");
+
+        var collection = modelBuilder.Entity<Collection>();
+        collection.HasIndex(c => c.Title)
+            .HasMethod("GIN")
+            .HasOperators("gin_trgm_ops")
+            .HasDatabaseName("IX_collections_Title_trgm");
+        collection.HasIndex(c => c.Description)
+            .HasMethod("GIN")
+            .HasOperators("gin_trgm_ops")
+            .HasDatabaseName("IX_collections_Description_trgm");
+
+        var category = modelBuilder.Entity<Category>();
+        category.HasIndex(c => c.Name)
+            .HasMethod("GIN")
+            .HasOperators("gin_trgm_ops")
+            .HasDatabaseName("IX_categories_Name_trgm");
+        category.HasIndex(c => c.Slug, "IX_categories_Slug_trgm")
+            .IsUnique(false)
+            .HasMethod("GIN")
+            .HasOperators("gin_trgm_ops");
+        category.HasIndex(c => c.Description)
+            .HasMethod("GIN")
+            .HasOperators("gin_trgm_ops")
+            .HasDatabaseName("IX_categories_Description_trgm");
     }
 
     private static void ConfigurePostgresAssetSearch(ModelBuilder modelBuilder)

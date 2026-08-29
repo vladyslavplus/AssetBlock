@@ -88,6 +88,7 @@ internal sealed class AssetStore(ApplicationDbContext dbContext) : IAssetStore
         }
 
         return query
+            .AsSplitQuery()
             .Include(a => a.Category)
             .Include(a => a.Author)
             .Include(a => a.AssetTags).ThenInclude(at => at.Tag)
@@ -281,31 +282,58 @@ internal sealed class AssetStore(ApplicationDbContext dbContext) : IAssetStore
         var items = await query
             .Skip((page - 1) * pageSize)
             .Take(pageSize)
-            .Select(a => new SellerAssetListItem(
+            .Select(a => new
+            {
                 a.Id,
                 a.Title,
                 a.Description,
                 a.Price,
                 a.CategoryId,
-                a.Category.Name,
+                CategoryName = a.Category.Name,
                 a.AuthorId,
-                a.Author.Username,
+                AuthorUsername = a.Author.Username,
                 a.CreatedAt,
-                a.AssetTags
+                Tags = a.AssetTags
                     .Select(at => at.Tag.Name)
                     .OrderBy(n => n)
                     .ToList(),
-                a.Reviews.Average(r => (double?)r.Rating) ?? 0d,
-                a.Versions.OrderByDescending(v => v.VersionNumber).Select(v => v.Id).FirstOrDefault(),
-                a.Versions.OrderByDescending(v => v.VersionNumber).Select(v => v.VersionNumber).FirstOrDefault(),
-                a.Versions
+                AverageRating = a.Reviews.Average(r => (double?)r.Rating) ?? 0d,
+                LatestVersion = a.Versions
+                    .OrderByDescending(v => v.VersionNumber)
+                    .Select(v => new
+                    {
+                        v.Id,
+                        v.VersionNumber,
+                        v.ProcessingStatus,
+                        v.ProcessingUpdatedAt,
+                        v.ProcessingErrorCode,
+                        v.ProcessingErrorSummary
+                    })
+                    .FirstOrDefault(),
+                CurrentReadyVersionId = a.Versions
                     .Where(v => v.IsCurrent && v.ProcessingStatus == AssetVersionProcessingStatus.READY)
                     .Select(v => (Guid?)v.Id)
-                    .FirstOrDefault(),
-                a.Versions.OrderByDescending(v => v.VersionNumber).Select(v => v.ProcessingStatus).FirstOrDefault(),
-                a.Versions.OrderByDescending(v => v.VersionNumber).Select(v => v.ProcessingUpdatedAt).FirstOrDefault(),
-                a.Versions.OrderByDescending(v => v.VersionNumber).Select(v => v.ProcessingErrorCode).FirstOrDefault(),
-                a.Versions.OrderByDescending(v => v.VersionNumber).Select(v => v.ProcessingErrorSummary).FirstOrDefault()))
+                    .FirstOrDefault()
+            })
+            .Select(x => new SellerAssetListItem(
+                x.Id,
+                x.Title,
+                x.Description,
+                x.Price,
+                x.CategoryId,
+                x.CategoryName,
+                x.AuthorId,
+                x.AuthorUsername,
+                x.CreatedAt,
+                x.Tags,
+                x.AverageRating,
+                x.LatestVersion != null ? x.LatestVersion.Id : Guid.Empty,
+                x.LatestVersion != null ? x.LatestVersion.VersionNumber : 0,
+                x.CurrentReadyVersionId,
+                x.LatestVersion != null ? x.LatestVersion.ProcessingStatus : AssetVersionProcessingStatus.PENDING_INSPECTION,
+                x.LatestVersion != null ? x.LatestVersion.ProcessingUpdatedAt : default,
+                x.LatestVersion != null ? x.LatestVersion.ProcessingErrorCode : null,
+                x.LatestVersion != null ? x.LatestVersion.ProcessingErrorSummary : null))
             .ToListAsync(cancellationToken);
 
         return new PagedResult<SellerAssetListItem>(items, totalCount, page, pageSize);
@@ -318,31 +346,58 @@ internal sealed class AssetStore(ApplicationDbContext dbContext) : IAssetStore
     {
         return await dbContext.Assets.AsNoTracking()
             .Where(a => a.Id == assetId && a.AuthorId == ownerUserId && a.DeletedAt == null && a.Versions.Any())
-            .Select(a => new SellerAssetDetailItem(
+            .Select(a => new
+            {
                 a.Id,
                 a.Title,
                 a.Description,
                 a.Price,
                 a.CategoryId,
-                a.Category.Name,
+                CategoryName = a.Category.Name,
                 a.AuthorId,
-                a.Author.Username,
+                AuthorUsername = a.Author.Username,
                 a.CreatedAt,
                 a.UpdatedAt,
-                a.AssetTags
+                Tags = a.AssetTags
                     .Select(at => at.Tag.Name)
                     .OrderBy(n => n)
                     .ToList(),
-                a.Versions.OrderByDescending(v => v.VersionNumber).Select(v => v.Id).First(),
-                a.Versions.OrderByDescending(v => v.VersionNumber).Select(v => v.VersionNumber).First(),
-                a.Versions
+                LatestVersion = a.Versions
+                    .OrderByDescending(v => v.VersionNumber)
+                    .Select(v => new
+                    {
+                        v.Id,
+                        v.VersionNumber,
+                        v.ProcessingStatus,
+                        v.ProcessingUpdatedAt,
+                        v.ProcessingErrorCode,
+                        v.ProcessingErrorSummary
+                    })
+                    .FirstOrDefault(),
+                CurrentReadyVersionId = a.Versions
                     .Where(v => v.IsCurrent && v.ProcessingStatus == AssetVersionProcessingStatus.READY)
                     .Select(v => (Guid?)v.Id)
-                    .FirstOrDefault(),
-                a.Versions.OrderByDescending(v => v.VersionNumber).Select(v => v.ProcessingStatus).First(),
-                a.Versions.OrderByDescending(v => v.VersionNumber).Select(v => v.ProcessingUpdatedAt).First(),
-                a.Versions.OrderByDescending(v => v.VersionNumber).Select(v => v.ProcessingErrorCode).FirstOrDefault(),
-                a.Versions.OrderByDescending(v => v.VersionNumber).Select(v => v.ProcessingErrorSummary).FirstOrDefault()))
+                    .FirstOrDefault()
+            })
+            .Select(x => new SellerAssetDetailItem(
+                x.Id,
+                x.Title,
+                x.Description,
+                x.Price,
+                x.CategoryId,
+                x.CategoryName,
+                x.AuthorId,
+                x.AuthorUsername,
+                x.CreatedAt,
+                x.UpdatedAt,
+                x.Tags,
+                x.LatestVersion != null ? x.LatestVersion.Id : Guid.Empty,
+                x.LatestVersion != null ? x.LatestVersion.VersionNumber : 0,
+                x.CurrentReadyVersionId,
+                x.LatestVersion != null ? x.LatestVersion.ProcessingStatus : AssetVersionProcessingStatus.PENDING_INSPECTION,
+                x.LatestVersion != null ? x.LatestVersion.ProcessingUpdatedAt : default,
+                x.LatestVersion != null ? x.LatestVersion.ProcessingErrorCode : null,
+                x.LatestVersion != null ? x.LatestVersion.ProcessingErrorSummary : null))
             .FirstOrDefaultAsync(cancellationToken);
     }
 
@@ -564,21 +619,24 @@ internal sealed class AssetStore(ApplicationDbContext dbContext) : IAssetStore
         Guid actorUserId,
         CancellationToken cancellationToken = default)
     {
-        return (
-            from asset in dbContext.Assets.IgnoreQueryFilters().AsNoTracking()
-            // Soft-deleted assets remain downloadable for entitled buyers; public view projections
-            // still exclude them via GetPublicAnalyticsSellerId.
-            where asset.Id == assetId && asset.AuthorId != actorUserId
-            from requestedVersion in dbContext.AssetVersions.AsNoTracking()
-                .Where(v => v.AssetId == assetId && v.Id == assetVersionId)
-            from purchase in dbContext.Purchases.AsNoTracking()
-                .Where(p => p.UserId == actorUserId && p.AssetId == assetId)
-            from purchasedVersion in dbContext.AssetVersions.AsNoTracking()
-                .Where(v => v.AssetId == assetId && v.Id == purchase.AssetVersionId)
-            where requestedVersion.VersionNumber >= purchasedVersion.VersionNumber
-                  && requestedVersion.ProcessingStatus == AssetVersionProcessingStatus.READY
-            select (Guid?)asset.AuthorId
-        ).FirstOrDefaultAsync(cancellationToken);
+        return dbContext.Assets
+            .IgnoreQueryFilters()
+            .AsNoTracking()
+            .Where(a => a.Id == assetId
+                && a.AuthorId != actorUserId
+                && dbContext.AssetVersions.Any(rv =>
+                    rv.AssetId == assetId
+                    && rv.Id == assetVersionId
+                    && rv.ProcessingStatus == AssetVersionProcessingStatus.READY
+                    && dbContext.Purchases.Any(p =>
+                        p.UserId == actorUserId
+                        && p.AssetId == assetId
+                        && dbContext.AssetVersions.Any(pv =>
+                            pv.AssetId == assetId
+                            && pv.Id == p.AssetVersionId
+                            && rv.VersionNumber >= pv.VersionNumber))))
+            .Select(a => (Guid?)a.AuthorId)
+            .FirstOrDefaultAsync(cancellationToken);
     }
 
     private static string EscapeLikePattern(string value)

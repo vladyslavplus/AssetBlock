@@ -13,6 +13,8 @@ internal sealed class CategoryStore(
     ApplicationDbContext dbContext,
     ILogger<CategoryStore> logger) : ICategoryStore
 {
+    private const string LIKE_ESCAPE = "\\";
+
     public Task<Category?> GetById(Guid id, CancellationToken cancellationToken = default)
     {
         return dbContext.Categories
@@ -26,11 +28,12 @@ internal sealed class CategoryStore(
 
         if (!string.IsNullOrWhiteSpace(request.Search))
         {
-            var term = request.Search.Trim().ToLower();
+            var searchText = request.Search.Trim();
+            var likePattern = $"%{EscapeLikePattern(searchText)}%";
             query = query.Where(c =>
-                c.Name.ToLower().Contains(term) ||
-                c.Slug.ToLower().Contains(term) ||
-                (c.Description != null && c.Description.ToLower().Contains(term)));
+                EF.Functions.ILike(c.Name, likePattern, LIKE_ESCAPE) ||
+                EF.Functions.ILike(c.Slug, likePattern, LIKE_ESCAPE) ||
+                (c.Description != null && EF.Functions.ILike(c.Description, likePattern, LIKE_ESCAPE)));
         }
 
         var totalCount = await query.CountAsync(cancellationToken);
@@ -128,6 +131,14 @@ internal sealed class CategoryStore(
             logger.LogError(ex, "Failed to delete category {Id}", id);
             throw;
         }
+    }
+
+    private static string EscapeLikePattern(string value)
+    {
+        return value
+            .Replace("\\", @"\\", StringComparison.Ordinal)
+            .Replace("%", "\\%", StringComparison.Ordinal)
+            .Replace("_", "\\_", StringComparison.Ordinal);
     }
 }
 

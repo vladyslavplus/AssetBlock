@@ -26,6 +26,10 @@ internal sealed class UserNotificationConfiguration : IEntityTypeConfiguration<U
         builder.Property(n => n.SourceOutboxMessageId);
 
         builder.HasIndex(n => new { n.RecipientUserId, n.CreatedAt });
+        builder.HasIndex(n => new { n.RecipientUserId, n.CreatedAt, n.Id })
+            .IsDescending(false, true, false)
+            .HasFilter("\"ReadAt\" IS NULL")
+            .HasDatabaseName("IX_user_notifications_recipient_unread_created_id");
         builder.HasIndex(n => n.SourceOutboxMessageId)
             .IsUnique()
             .HasFilter("\"SourceOutboxMessageId\" IS NOT NULL");

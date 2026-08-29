@@ -53,6 +53,15 @@ export function redactMachineLocalPaths(
   return redacted;
 }
 
+export function buildExecutionPrompt(prompt, workspaceRoot = process.cwd()) {
+  return [
+    `Execution workspace root: ${path.resolve(workspaceRoot)}`,
+    "Resolve every repository-relative path against that workspace root. Antigravity tool paths must target that workspace, not the CLI scratch directory. Do not run a shell command only to discover the working directory.",
+    "",
+    prompt,
+  ].join(os.EOL);
+}
+
 export function parseArgs(argv) {
   const options = {
     timeout: "15m",
@@ -141,7 +150,7 @@ function tokenizeCommand(value) {
 function commandRuleCovers(ruleValue, command) {
   const ruleTokens = tokenizeCommand(ruleValue);
   const commandTokens = tokenizeCommand(command);
-  if (ruleTokens.length > commandTokens.length) {
+  if (ruleTokens.length !== commandTokens.length) {
     return false;
   }
   return ruleTokens.every((pattern, index) => {
@@ -1010,7 +1019,12 @@ export async function main(argv = process.argv.slice(2)) {
 
   let processResult;
   try {
-    processResult = await runProcess(agyBinary, args, cwd, prompt);
+    processResult = await runProcess(
+      agyBinary,
+      args,
+      cwd,
+      buildExecutionPrompt(prompt, cwd),
+    );
   } catch (error) {
     runningRound.status = "spawn_error";
     runningRound.completed_at = new Date().toISOString();

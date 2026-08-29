@@ -45,9 +45,9 @@ internal sealed class OutboxStore(ApplicationDbContext dbContext, ILogger<Outbox
 
         await using var tx = await dbContext.Database.BeginTransactionAsync(IsolationLevel.ReadCommitted, cancellationToken);
 
-        var rows = await dbContext.OutboxMessages
-            .FromSqlInterpolated($"""
-                SELECT *
+        var ids = await dbContext.Database
+            .SqlQuery<Guid>($"""
+                SELECT o."Id" AS "Value"
                 FROM outbox_messages AS o
                 WHERE o."Status" = {(int)OutboxMessageStatus.PENDING}
                   AND o."ProcessedAt" IS NULL
@@ -58,16 +58,14 @@ internal sealed class OutboxStore(ApplicationDbContext dbContext, ILogger<Outbox
                 FOR UPDATE SKIP LOCKED
                 LIMIT {batchSize}
                 """)
-            .AsNoTracking()
             .ToListAsync(cancellationToken);
 
-        if (rows.Count == 0)
+        if (ids.Count == 0)
         {
             await tx.CommitAsync(cancellationToken);
             return [];
         }
 
-        var ids = rows.Select(r => r.Id).ToList();
         await dbContext.OutboxMessages
             .Where(m => ids.Contains(m.Id))
             .ExecuteUpdateAsync(

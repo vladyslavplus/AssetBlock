@@ -7,6 +7,7 @@ import { fileURLToPath } from "node:url";
 
 import {
   DEFAULT_MODEL,
+  buildExecutionPrompt,
   compareUntrackedManifests,
   inspectPermissionCoverage,
   inspectPathPostconditions,
@@ -47,6 +48,16 @@ test("redactMachineLocalPaths removes raw and JSON-escaped local locations", () 
   assert.equal(redacted.includes("X:"), false);
   assert.match(redacted, /workspace-root/u);
   assert.match(redacted, /user-home/u);
+});
+
+test("buildExecutionPrompt anchors relative tool paths to the checkout", () => {
+  const workspace = ["X:", "work", "project"].join("\\");
+  const prompt = buildExecutionPrompt("Read AGENTS.md", workspace);
+
+  assert.match(prompt, /Execution workspace root:/u);
+  assert.match(prompt, /Read AGENTS\.md/u);
+  assert.match(prompt, /not the CLI scratch directory/u);
+  assert.equal(prompt.includes(path.resolve(workspace)), true);
 });
 
 test("parseArgs accepts supported orchestration options", () => {
@@ -384,9 +395,16 @@ test("inspectPermissionCoverage accepts ancestor file rules and exact commands",
   });
 });
 
-test("inspectPermissionCoverage understands Antigravity command prefixes", () => {
+test("inspectPermissionCoverage requires executable rules for commands and declared prefixes", () => {
   const coverage = inspectPermissionCoverage(
-    { permissions: { allow: ["command(git diff)"] } },
+    {
+      permissions: {
+        allow: [
+          "command(git diff)",
+          "command(git diff -- src/file.cs)",
+        ],
+      },
+    },
     {
       read_paths: [],
       write_paths: [],
@@ -403,6 +421,21 @@ test("inspectPermissionCoverage understands Antigravity command prefixes", () =>
     missing_command_prefixes: [],
     missing_command_patterns: [],
   });
+});
+
+test("inspectPermissionCoverage rejects shorter regex rules for multi-token commands", () => {
+  const command = "dotnet test backend.csproj --filter FullyQualifiedName~StoreTests";
+  const coverage = inspectPermissionCoverage(
+    { permissions: { allow: ["command(dotnet test .*)"] } },
+    {
+      read_paths: [],
+      write_paths: [],
+      allowed_commands: [command],
+      required_verification: [command],
+    },
+  );
+
+  assert.deepEqual(coverage.missing_commands, [command]);
 });
 
 test("inspectPermissionCoverage reports every exact command and path gap", () => {

@@ -68,7 +68,16 @@ public sealed class MigrationSmokePostgresTests(PostgresFixture fixture)
                 """
                 SELECT indexname AS "Value"
                 FROM pg_indexes
-                WHERE tablename IN ('assets', 'asset_tags', 'reviews')
+                WHERE tablename IN (
+                    'assets',
+                    'asset_tags',
+                    'reviews',
+                    'purchases',
+                    'user_notifications',
+                    'bundle_revisions',
+                    'collections',
+                    'categories'
+                )
                 """)
             .ToListAsync();
 
@@ -80,6 +89,15 @@ public sealed class MigrationSmokePostgresTests(PostgresFixture fixture)
         indexNames.Should().Contain("IX_assets_catalog_AuthorId_CreatedAt_Id");
         indexNames.Should().Contain("IX_asset_tags_TagId_AssetId");
         indexNames.Should().Contain("IX_reviews_AssetId");
+        indexNames.Should().Contain("IX_purchases_user_purchased_at_id");
+        indexNames.Should().Contain("IX_user_notifications_recipient_unread_created_id");
+        indexNames.Should().Contain("IX_bundle_revisions_Title_trgm");
+        indexNames.Should().Contain("IX_bundle_revisions_Description_trgm");
+        indexNames.Should().Contain("IX_collections_Title_trgm");
+        indexNames.Should().Contain("IX_collections_Description_trgm");
+        indexNames.Should().Contain("IX_categories_Name_trgm");
+        indexNames.Should().Contain("IX_categories_Slug_trgm");
+        indexNames.Should().Contain("IX_categories_Description_trgm");
     }
 
     [Fact]
@@ -158,6 +176,8 @@ public sealed class MigrationSmokePostgresTests(PostgresFixture fixture)
             m.Contains("AddAssetProcessingJobs", StringComparison.OrdinalIgnoreCase));
         applied.Should().Contain(m =>
             m.Contains("AddAssetVersionProcessingLifecycle", StringComparison.OrdinalIgnoreCase));
+        applied.Should().Contain(m =>
+            m.Contains("OptimizePersistenceQueriesBatch7", StringComparison.OrdinalIgnoreCase));
     }
 
     [Fact]
@@ -529,5 +549,37 @@ public sealed class MigrationSmokePostgresTests(PostgresFixture fixture)
         var secondClaimBatch = await store.ClaimPendingBatch(10, TimeSpan.FromMinutes(5));
         secondClaimBatch.Should().ContainSingle();
         secondClaimBatch[0].Id.Should().Be(legacyMaxAttemptsId);
+    }
+
+    [Fact]
+    public async Task CategoryStore_WhenSearchingBySlug_ShouldHandleMixedCaseAndEscapedWildcards()
+    {
+        await using var db = await fixture.CreateCleanDbContext();
+        var c1 = new Domain.Core.Entities.Category { Id = Guid.NewGuid(), Name = "Special 100% Deals", Slug = "special-100%-deal_v1\\pack", Description = "A 100% discount", CreatedAt = DateTimeOffset.UtcNow };
+        var c2 = new Domain.Core.Entities.Category { Id = Guid.NewGuid(), Name = "Other Items", Slug = "other-items-deal-v1-pack", Description = "Normal", CreatedAt = DateTimeOffset.UtcNow };
+        db.Categories.AddRange(c1, c2);
+        await db.SaveChangesAsync();
+
+        var store = new CategoryStore(db, Microsoft.Extensions.Logging.Abstractions.NullLogger<CategoryStore>.Instance);
+
+        // Mixed case search matching slug
+        var caseMatch = await store.GetPaged(new Domain.Core.Dto.Categories.GetCategoriesRequest { Search = "SPECIAL-100%" });
+        caseMatch.Items.Should().ContainSingle();
+        caseMatch.Items[0].Id.Should().Be(c1.Id);
+
+        // Literal '%' in slug
+        var percentMatch = await store.GetPaged(new Domain.Core.Dto.Categories.GetCategoriesRequest { Search = "100%" });
+        percentMatch.Items.Should().ContainSingle();
+        percentMatch.Items[0].Id.Should().Be(c1.Id);
+
+        // Literal '_' in slug (should not match '-' in other item)
+        var underscoreMatch = await store.GetPaged(new Domain.Core.Dto.Categories.GetCategoriesRequest { Search = "deal_v1" });
+        underscoreMatch.Items.Should().ContainSingle();
+        underscoreMatch.Items[0].Id.Should().Be(c1.Id);
+
+        // Literal '\' in slug
+        var backslashMatch = await store.GetPaged(new Domain.Core.Dto.Categories.GetCategoriesRequest { Search = "v1\\pack" });
+        backslashMatch.Items.Should().ContainSingle();
+        backslashMatch.Items[0].Id.Should().Be(c1.Id);
     }
 }

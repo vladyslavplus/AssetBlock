@@ -9,6 +9,8 @@ namespace AssetBlock.Infrastructure.Persistence.Stores;
 
 internal sealed class BundleStore(ApplicationDbContext dbContext) : IBundleStore
 {
+    private const string LIKE_ESCAPE = "\\";
+
     public Task<Bundle?> GetById(Guid id, CancellationToken cancellationToken = default)
     {
         return dbContext.Bundles
@@ -24,30 +26,25 @@ internal sealed class BundleStore(ApplicationDbContext dbContext) : IBundleStore
             .FirstOrDefaultAsync(cancellationToken);
     }
 
-    public async Task<BundleDetailDto?> GetPublicDetail(Guid id, CancellationToken cancellationToken = default)
+    public Task<BundleDetailDto?> GetPublicDetail(Guid id, CancellationToken cancellationToken = default)
     {
-        // Gate on the translatable availability query first; detail is loaded separately.
-        if (!await AvailablePublicBundles().AnyAsync(b => b.Id == id, cancellationToken))
-        {
-            return null;
-        }
-
-        return await LoadDetail(id, sellerId: null, cancellationToken);
+        return LoadDetail(id, sellerId: null, publicOnly: true, cancellationToken);
     }
 
     public Task<BundleDetailDto?> GetSellerDetail(Guid id, Guid sellerId, CancellationToken cancellationToken = default)
     {
-        return LoadDetail(id, sellerId, cancellationToken);
+        return LoadDetail(id, sellerId, publicOnly: false, cancellationToken);
     }
 
     private async Task<BundleDetailDto?> LoadDetail(
         Guid id,
         Guid? sellerId,
+        bool publicOnly,
         CancellationToken cancellationToken)
     {
-        var query = dbContext.Bundles
-            .AsNoTracking()
-            .Where(b => b.Id == id);
+        var query = publicOnly
+            ? AvailablePublicBundles().Where(b => b.Id == id)
+            : dbContext.Bundles.AsNoTracking().Where(b => b.Id == id);
         if (sellerId is { } sid)
         {
             query = query.Where(b => b.SellerId == sid);
@@ -199,11 +196,12 @@ internal sealed class BundleStore(ApplicationDbContext dbContext) : IBundleStore
 
         if (!string.IsNullOrWhiteSpace(request.Search))
         {
-            var term = request.Search.Trim().ToLower();
+            var searchText = request.Search.Trim();
+            var likePattern = $"%{EscapeLikePattern(searchText)}%";
             query = query.Where(b =>
                 b.Revisions.Any(r => r.IsCurrent
-                    && (r.Title.ToLower().Contains(term)
-                        || (r.Description != null && r.Description.ToLower().Contains(term)))));
+                    && (EF.Functions.ILike(r.Title, likePattern, LIKE_ESCAPE)
+                        || (r.Description != null && EF.Functions.ILike(r.Description, likePattern, LIKE_ESCAPE)))));
         }
 
         var total = await query.CountAsync(cancellationToken);
@@ -233,11 +231,12 @@ internal sealed class BundleStore(ApplicationDbContext dbContext) : IBundleStore
 
         if (!string.IsNullOrWhiteSpace(request.Search))
         {
-            var term = request.Search.Trim().ToLower();
+            var searchText = request.Search.Trim();
+            var likePattern = $"%{EscapeLikePattern(searchText)}%";
             query = query.Where(b =>
                 b.Revisions.Any(r => r.IsCurrent
-                    && (r.Title.ToLower().Contains(term)
-                        || (r.Description != null && r.Description.ToLower().Contains(term)))));
+                    && (EF.Functions.ILike(r.Title, likePattern, LIKE_ESCAPE)
+                        || (r.Description != null && EF.Functions.ILike(r.Description, likePattern, LIKE_ESCAPE)))));
         }
 
         var total = await query.CountAsync(cancellationToken);
@@ -512,12 +511,12 @@ internal sealed class BundleStore(ApplicationDbContext dbContext) : IBundleStore
             .Where(b => b.ArchivedAt == null)
             .Where(b => b.Revisions.Any(r => r.IsCurrent
                 && r.Items.Any()
-                && r.Items.All(i =>
-                    i.AssetId != null
-                    && i.Asset != null
-                    && i.Asset.DeletedAt == null
-                    && i.Asset.AuthorId == b.SellerId
-                    && i.Asset.Versions.Any(v => v.IsCurrent))));
+                && !r.Items.Any(i =>
+                    i.AssetId == null
+                    || i.Asset == null
+                    || i.Asset.DeletedAt != null
+                    || i.Asset.AuthorId != b.SellerId
+                    || !i.Asset.Versions.Any(v => v.IsCurrent))));
     }
 
     private async Task<bool> IsCurrentRevisionAvailable(Guid bundleId, CancellationToken cancellationToken)
@@ -527,12 +526,12 @@ internal sealed class BundleStore(ApplicationDbContext dbContext) : IBundleStore
             .Where(b => b.Id == bundleId)
             .Where(b => b.Revisions.Any(r => r.IsCurrent
                 && r.Items.Any()
-                && r.Items.All(i =>
-                    i.AssetId != null
-                    && i.Asset != null
-                    && i.Asset.DeletedAt == null
-                    && i.Asset.AuthorId == b.SellerId
-                    && i.Asset.Versions.Any(v => v.IsCurrent))))
+                && !r.Items.Any(i =>
+                    i.AssetId == null
+                    || i.Asset == null
+                    || i.Asset.DeletedAt != null
+                    || i.Asset.AuthorId != b.SellerId
+                    || !i.Asset.Versions.Any(v => v.IsCurrent))))
             .AnyAsync(cancellationToken);
     }
 
@@ -591,11 +590,19 @@ internal sealed class BundleStore(ApplicationDbContext dbContext) : IBundleStore
             b.ArchivedAt == null
             && b.Revisions.Any(r => r.IsCurrent
                 && r.Items.Any()
-                && r.Items.All(i =>
-                    i.AssetId != null
-                    && i.Asset != null
-                    && i.Asset.DeletedAt == null
-                    && i.Asset.AuthorId == b.SellerId
-                    && i.Asset.Versions.Any(v => v.IsCurrent)))));
+                && !r.Items.Any(i =>
+                    i.AssetId == null
+                    || i.Asset == null
+                    || i.Asset.DeletedAt != null
+                    || i.Asset.AuthorId != b.SellerId
+                    || !i.Asset.Versions.Any(v => v.IsCurrent)))));
+    }
+
+    private static string EscapeLikePattern(string value)
+    {
+        return value
+            .Replace("\\", @"\\", StringComparison.Ordinal)
+            .Replace("%", "\\%", StringComparison.Ordinal)
+            .Replace("_", "\\_", StringComparison.Ordinal);
     }
 }

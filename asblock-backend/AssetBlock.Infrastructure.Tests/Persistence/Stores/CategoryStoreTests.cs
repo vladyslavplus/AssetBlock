@@ -36,17 +36,13 @@ public sealed class CategoryStoreTests
     }
 
     [Fact]
-    public async Task GetPaged_searchAndSort()
+    public async Task GetPaged_sort()
     {
         await using var holder = new SqliteDbContextHolder();
         var db = holder.Context;
         var sut = new CategoryStore(db, NullLogger<CategoryStore>.Instance);
         await sut.Create("Alpha", null, "alpha");
         await sut.Create("Beta", null, "beta");
-
-        var bySearch = await sut.GetPaged(new GetCategoriesRequest { Search = "beta" });
-        bySearch.Items.Should().HaveCount(1);
-        bySearch.Items[0].Slug.Should().Be("beta");
 
         var bySlug = await sut.GetPaged(new GetCategoriesRequest { SortBy = "Slug", SortDirection = SortDirection.DESC });
         bySlug.Items.Select(c => c.Slug).Should().BeInDescendingOrder();

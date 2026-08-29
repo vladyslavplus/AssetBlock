@@ -4,13 +4,12 @@ using System.Text.RegularExpressions;
 using AssetBlock.Domain.Abstractions.Services;
 using AssetBlock.Domain.Core.Constants;
 using AssetBlock.Domain.Core.Dto;
-using AssetBlock.Domain.Core.Entities;
 using AssetBlock.Domain.Core.Enums;
 using AssetBlock.Domain.Core.Primitives.AppSettingsOptions;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Storage;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
-using Npgsql;
 
 namespace AssetBlock.Infrastructure.Persistence.Stores;
 
@@ -43,11 +42,6 @@ internal sealed partial class AssetProcessingJobStore(ApplicationDbContext dbCon
         return errorSummary[..utf16CharCount];
     }
 
-    private async Task<DateTimeOffset> GetServerTime(CancellationToken cancellationToken)
-    {
-        return await dbContext.Database.SqlQueryRaw<DateTimeOffset>("SELECT clock_timestamp() AS \"Value\"").SingleAsync(cancellationToken);
-    }
-
     public async Task<Guid> Enqueue(
         Guid assetId,
         Guid assetVersionId,
@@ -69,59 +63,126 @@ internal sealed partial class AssetProcessingJobStore(ApplicationDbContext dbCon
         }
 
         var serializedPayload = AssetProcessingSerializer.SerializePayload(type, payload);
+        var newId = Guid.NewGuid();
+        var typeString = type.ToString();
+        var maxAttempts = _options.MaxAttempts;
 
-        var existingId = await dbContext.AssetProcessingJobs
-            .Where(j => j.AssetId == assetId && j.AssetVersionId == assetVersionId && j.Type == type && j.DefinitionVersion == definitionVersion)
-            .Select(j => j.Id)
-            .FirstOrDefaultAsync(cancellationToken);
-
-        if (existingId != Guid.Empty)
+        var connection = dbContext.Database.GetDbConnection();
+        if (connection.State != ConnectionState.Open)
         {
-            return existingId;
+            await connection.OpenAsync(cancellationToken);
         }
 
-        var now = await GetServerTime(cancellationToken);
+        await using var cmd = connection.CreateCommand();
+        cmd.Transaction = dbContext.Database.CurrentTransaction?.GetDbTransaction();
+        cmd.CommandText = """
+            WITH inserted AS (
+                INSERT INTO asset_processing_jobs (
+                    "Id",
+                    "AssetId",
+                    "AssetVersionId",
+                    "Type",
+                    "DefinitionVersion",
+                    "Status",
+                    "Stage",
+                    "AttemptCount",
+                    "MaxAttempts",
+                    "AvailableAt",
+                    "Payload",
+                    "TraceParent",
+                    "CreatedAt"
+                )
+                VALUES (
+                    @id,
+                    @assetId,
+                    @assetVersionId,
+                    @type,
+                    @defVer,
+                    'QUEUED',
+                    'QUEUED',
+                    0,
+                    @maxAttempts,
+                    clock_timestamp() + @initialDelay,
+                    CAST(@payload AS jsonb),
+                    @traceParent,
+                    clock_timestamp()
+                )
+                ON CONFLICT ("AssetVersionId", "Type", "DefinitionVersion") DO NOTHING
+                RETURNING "Id"
+            )
+            SELECT "Id" FROM inserted
+            UNION ALL
+            SELECT j."Id"
+            FROM asset_processing_jobs j
+            WHERE j."AssetVersionId" = @assetVersionId
+              AND j."Type" = @type
+              AND j."DefinitionVersion" = @defVer
+            LIMIT 1;
+            """;
 
-        var job = new AssetProcessingJob
-        {
-            Id = Guid.NewGuid(),
-            AssetId = assetId,
-            AssetVersionId = assetVersionId,
-            Type = type,
-            DefinitionVersion = definitionVersion,
-            Status = AssetProcessingJobStatus.QUEUED,
-            Stage = "QUEUED",
-            AttemptCount = 0,
-            MaxAttempts = _options.MaxAttempts,
-            AvailableAt = now + initialDelay,
-            Payload = serializedPayload,
-            TraceParent = traceParent,
-            CreatedAt = now
-        };
+        var pId = cmd.CreateParameter();
+        pId.ParameterName = "@id";
+        pId.Value = newId;
+        cmd.Parameters.Add(pId);
 
-        try
+        var pAssetId = cmd.CreateParameter();
+        pAssetId.ParameterName = "@assetId";
+        pAssetId.Value = assetId;
+        cmd.Parameters.Add(pAssetId);
+
+        var pVersionId = cmd.CreateParameter();
+        pVersionId.ParameterName = "@assetVersionId";
+        pVersionId.Value = assetVersionId;
+        cmd.Parameters.Add(pVersionId);
+
+        var pType = cmd.CreateParameter();
+        pType.ParameterName = "@type";
+        pType.Value = typeString;
+        cmd.Parameters.Add(pType);
+
+        var pDefVer = cmd.CreateParameter();
+        pDefVer.ParameterName = "@defVer";
+        pDefVer.Value = definitionVersion;
+        cmd.Parameters.Add(pDefVer);
+
+        var pMaxAttempts = cmd.CreateParameter();
+        pMaxAttempts.ParameterName = "@maxAttempts";
+        pMaxAttempts.Value = maxAttempts;
+        cmd.Parameters.Add(pMaxAttempts);
+
+        var pDelay = cmd.CreateParameter();
+        pDelay.ParameterName = "@initialDelay";
+        pDelay.Value = initialDelay;
+        cmd.Parameters.Add(pDelay);
+
+        var pPayload = cmd.CreateParameter();
+        pPayload.ParameterName = "@payload";
+        pPayload.Value = serializedPayload;
+        cmd.Parameters.Add(pPayload);
+
+        var pTrace = cmd.CreateParameter();
+        pTrace.ParameterName = "@traceParent";
+        pTrace.Value = (object?)traceParent ?? DBNull.Value;
+        cmd.Parameters.Add(pTrace);
+
+        var result = await cmd.ExecuteScalarAsync(cancellationToken);
+        if (result is null or DBNull)
         {
-            dbContext.AssetProcessingJobs.Add(job);
-            await dbContext.SaveChangesAsync(cancellationToken);
-            logger.LogDebug("Enqueued processing job {JobId} of type {Type}", job.Id, job.Type);
-            return job.Id;
+            cmd.CommandText = """
+                SELECT j."Id"
+                FROM asset_processing_jobs j
+                WHERE j."AssetVersionId" = @assetVersionId
+                  AND j."Type" = @type
+                  AND j."DefinitionVersion" = @defVer
+                LIMIT 1;
+                """;
+            result = await cmd.ExecuteScalarAsync(cancellationToken);
         }
-        catch (DbUpdateException ex) when (ex.InnerException is PostgresException { SqlState: "23505", ConstraintName: "UIX_asset_processing_jobs_idempotency" })
-        {
-            dbContext.Entry(job).State = EntityState.Detached;
 
-            existingId = await dbContext.AssetProcessingJobs
-                .Where(j => j.AssetId == assetId && j.AssetVersionId == assetVersionId && j.Type == type && j.DefinitionVersion == definitionVersion)
-                .Select(j => j.Id)
-                .FirstOrDefaultAsync(cancellationToken);
+        var jobId = (Guid)result!;
 
-            if (existingId != Guid.Empty)
-            {
-                return existingId;
-            }
-
-            throw;
-        }
+        logger.LogDebug("Enqueued processing job {JobId} of type {Type}", jobId, type);
+        return jobId;
     }
 
     public async Task<IReadOnlyList<ClaimedAssetProcessingJob>> ClaimPendingBatch(

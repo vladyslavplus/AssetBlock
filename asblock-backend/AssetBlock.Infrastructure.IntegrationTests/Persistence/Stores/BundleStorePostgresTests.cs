@@ -261,6 +261,37 @@ public sealed class BundleStorePostgresTests(PostgresFixture fixture)
     }
 
     [Fact]
+    public async Task ListPublic_WhenSearching_ShouldHandleCaseInsensitivityAndWildcards()
+    {
+        await using var db = await fixture.CreateCleanDbContext();
+        (User author, Category category) = await TestData.SeedAuthorAndCategory(db);
+        var asset1 = TestData.CreateAsset(author.Id, category.Id, title: "Asset 100% discount", price: 10m);
+        var asset2 = TestData.CreateAsset(author.Id, category.Id, title: "Asset regular", price: 10m);
+        db.Assets.AddRange(asset1, asset2);
+        await db.SaveChangesAsync();
+        db.AssetVersions.AddRange(
+            TestData.CreateAssetVersion(asset1.Id),
+            TestData.CreateAssetVersion(asset2.Id));
+        await db.SaveChangesAsync();
+
+        var store = new BundleStore(db);
+        (Bundle b1, _) = await store.CreateWithRevision(author.Id, "Super 100% Deal", "Mega pack", 5m, "usd", 10m,
+            [new BundleRevisionItemDraft(asset1.Id, 1, asset1.Title, asset1.Price)]);
+        await store.CreateWithRevision(author.Id, "Regular Pack", "No wildcard match", 5m, "usd", 10m,
+            [new BundleRevisionItemDraft(asset2.Id, 1, asset2.Title, asset2.Price)]);
+
+        // Case insensitive match
+        var caseMatch = await store.ListPublic(new ListBundlesRequest { Search = "super 100%" });
+        caseMatch.Items.Should().ContainSingle();
+        caseMatch.Items[0].Id.Should().Be(b1.Id);
+
+        // Literal '%' escaping check - "100%" should not match random text unless literal
+        var literalMatch = await store.ListPublic(new ListBundlesRequest { Search = "100%" });
+        literalMatch.Items.Should().ContainSingle();
+        literalMatch.Items[0].Id.Should().Be(b1.Id);
+    }
+
+    [Fact]
     public async Task LockAssetsInOrder_WhenAssetsExist_LocksInSingleQuery()
     {
         await using var db = await fixture.CreateCleanDbContext();

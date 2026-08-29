@@ -584,4 +584,68 @@ public sealed class AssetStorePostgresTests(PostgresFixture fixture)
 
         sellerId.Should().BeNull();
     }
+
+    [Fact]
+    public async Task GetById_WithMultipleTags_ShouldLoadCategoryAuthorAndAllTags()
+    {
+        await using var db = await fixture.CreateCleanDbContext();
+        (User author, Category category) = await TestData.SeedAuthorAndCategory(db);
+        var tag1 = TestData.CreateTag("tag-split-1");
+        var tag2 = TestData.CreateTag("tag-split-2");
+        db.Tags.AddRange(tag1, tag2);
+        await db.SaveChangesAsync();
+
+        var asset = TestData.CreateAsset(author.Id, category.Id, title: "Split Query Asset");
+        var store = new AssetStore(db);
+        await store.AddWithTags(asset, [tag1, tag2]);
+
+        var fetched = await store.GetById(asset.Id);
+        fetched.Should().NotBeNull();
+        fetched.Category.Should().NotBeNull();
+        fetched.Category.Name.Should().Be(category.Name);
+        fetched.Author.Should().NotBeNull();
+        fetched.Author.Username.Should().Be(author.Username);
+        fetched.AssetTags.Should().HaveCount(2);
+        fetched.AssetTags.Select(at => at.Tag.Name).Should().BeEquivalentTo(["tag-split-1", "tag-split-2"]);
+    }
+
+    [Fact]
+    public async Task GetMyListings_AndGetOwnedSellerDetail_ShouldProjectCoherentLatestVersionShape()
+    {
+        await using var db = await fixture.CreateCleanDbContext();
+        (User author, Category category) = await TestData.SeedAuthorAndCategory(db);
+        var asset = TestData.CreateAsset(author.Id, category.Id, title: "Seller Coherent Asset", price: 19.99m);
+        db.Assets.Add(asset);
+        var v1 = TestData.CreateAssetVersion(asset.Id, versionNumber: 1, isCurrent: true, processingStatus: AssetVersionProcessingStatus.READY);
+        var v2 = TestData.CreateAssetVersion(
+            asset.Id,
+            versionNumber: 2,
+            isCurrent: false,
+            processingStatus: AssetVersionProcessingStatus.PROCESSING_FAILED);
+        v2.ProcessingErrorCode = "CORRUPT_ARCHIVE";
+        v2.ProcessingErrorSummary = "Invalid zip structure";
+        db.AssetVersions.AddRange(v1, v2);
+        await db.SaveChangesAsync();
+
+        var store = new AssetStore(db);
+        var listings = await store.GetMyListings(author.Id, new GetAssetsRequest { Page = 1, PageSize = 10 });
+        var listing = listings.Items.Should().ContainSingle().Subject;
+        listing.Id.Should().Be(asset.Id);
+        listing.LatestVersionId.Should().Be(v2.Id);
+        listing.LatestVersionNumber.Should().Be(2);
+        listing.CurrentReadyVersionId.Should().Be(v1.Id);
+        listing.LatestProcessingStatus.Should().Be(AssetVersionProcessingStatus.PROCESSING_FAILED);
+        listing.LatestProcessingErrorCode.Should().Be("CORRUPT_ARCHIVE");
+        listing.LatestProcessingErrorSummary.Should().Be("Invalid zip structure");
+
+        var detail = await store.GetOwnedSellerDetail(asset.Id, author.Id);
+        detail.Should().NotBeNull();
+        detail.Id.Should().Be(asset.Id);
+        detail.LatestVersionId.Should().Be(v2.Id);
+        detail.LatestVersionNumber.Should().Be(2);
+        detail.CurrentReadyVersionId.Should().Be(v1.Id);
+        detail.LatestProcessingStatus.Should().Be(AssetVersionProcessingStatus.PROCESSING_FAILED);
+        detail.LatestProcessingErrorCode.Should().Be("CORRUPT_ARCHIVE");
+        detail.LatestProcessingErrorSummary.Should().Be("Invalid zip structure");
+    }
 }

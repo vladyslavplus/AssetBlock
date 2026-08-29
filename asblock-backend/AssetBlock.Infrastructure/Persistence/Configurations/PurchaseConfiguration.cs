@@ -48,5 +48,9 @@ internal sealed class PurchaseConfiguration : IEntityTypeConfiguration<Purchase>
         builder.HasIndex(p => p.OrderLineId)
             .IsUnique()
             .HasDatabaseName(UNIQUE_ORDER_LINE);
+
+        builder.HasIndex(p => new { p.UserId, p.PurchasedAt, p.Id })
+            .IsDescending(false, true, false)
+            .HasDatabaseName("IX_purchases_user_purchased_at_id");
     }
 }

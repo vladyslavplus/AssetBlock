@@ -13,6 +13,7 @@ internal sealed class CollectionStore(ApplicationDbContext dbContext) : ICollect
 {
     private const string UNIQUE_COLLECTION_ASSET = "PK_collection_items";
     private const string UNIQUE_COLLECTION_POSITION = "UIX_collection_items_collection_position";
+    private const string LIKE_ESCAPE = "\\";
 
     public Task<Collection?> GetById(Guid id, CancellationToken cancellationToken = default)
     {
@@ -154,10 +155,11 @@ internal sealed class CollectionStore(ApplicationDbContext dbContext) : ICollect
 
         if (!string.IsNullOrWhiteSpace(request.Search))
         {
-            var term = request.Search.Trim().ToLower();
+            var searchText = request.Search.Trim();
+            var likePattern = $"%{EscapeLikePattern(searchText)}%";
             query = query.Where(c =>
-                c.Title.ToLower().Contains(term)
-                || (c.Description != null && c.Description.ToLower().Contains(term)));
+                EF.Functions.ILike(c.Title, likePattern, LIKE_ESCAPE)
+                || (c.Description != null && EF.Functions.ILike(c.Description, likePattern, LIKE_ESCAPE)));
         }
 
         var total = await query.CountAsync(cancellationToken);
@@ -219,10 +221,11 @@ internal sealed class CollectionStore(ApplicationDbContext dbContext) : ICollect
 
         if (!string.IsNullOrWhiteSpace(request.Search))
         {
-            var term = request.Search.Trim().ToLower();
+            var searchText = request.Search.Trim();
+            var likePattern = $"%{EscapeLikePattern(searchText)}%";
             query = query.Where(c =>
-                c.Title.ToLower().Contains(term)
-                || (c.Description != null && c.Description.ToLower().Contains(term)));
+                EF.Functions.ILike(c.Title, likePattern, LIKE_ESCAPE)
+                || (c.Description != null && EF.Functions.ILike(c.Description, likePattern, LIKE_ESCAPE)));
         }
 
         if (!string.IsNullOrWhiteSpace(request.Status)
@@ -524,5 +527,13 @@ internal sealed class CollectionStore(ApplicationDbContext dbContext) : ICollect
                         && i.Collection.Status == CollectionStatus.PUBLISHED)
             .Select(i => (Guid?)i.Collection.SellerId)
             .FirstOrDefaultAsync(cancellationToken);
+    }
+
+    private static string EscapeLikePattern(string value)
+    {
+        return value
+            .Replace("\\", @"\\", StringComparison.Ordinal)
+            .Replace("%", "\\%", StringComparison.Ordinal)
+            .Replace("_", "\\_", StringComparison.Ordinal);
     }
 }

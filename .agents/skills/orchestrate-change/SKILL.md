@@ -41,14 +41,14 @@ Create a JSON permission manifest beside the prompt with these arrays:
 - `read_paths`: every planned repository read root/file;
 - `write_paths`: every planned write root/file;
 - `allowed_commands`: all exact commands for focused and final phases;
-- `allowed_command_prefixes`: optional narrow prefixes for harmless variable-tail inspection commands such as `git diff`;
-- `allowed_command_patterns`: optional Antigravity token-regex patterns scoped to repository operations whose exact spelling may vary, such as a move constrained to repository-relative source and destination tokens;
+- `allowed_command_prefixes`: legacy adapter ledger support only; avoid it for new manifests because Antigravity permission rules do not authorize arbitrary token tails;
+- `allowed_command_patterns`: optional Antigravity token-regex patterns with the same token count as the command, scoped to repository operations whose token values may vary;
 - `required_verification`: exact commands required in the current turn.
 - `required_paths_present` / `required_paths_absent`: optional actual filesystem postconditions for moves, generated files, and removals that a command ledger cannot prove.
 
 Use repository-relative paths rooted at the active working directory in permission manifests, executor prompts, examples, tests, documentation, and persisted run artifacts. The adapter may resolve them internally for execution, but must not persist developer-specific drives, usernames, home directories, or checkout locations.
 
-The adapter reads Antigravity's global `settings.json` and validates the whole manifest before starting the executor using Antigravity's token-prefix/regex command semantics. Missing rules fail before a conversation turn or edit and are returned as one complete list. Do not rely on the model to call `list_permissions`; tool availability and model compliance are not deterministic enough for a safety gate.
+The adapter reads Antigravity's global `settings.json` and validates the whole manifest before starting the executor using Antigravity's fixed-arity token-regex command semantics. A regex token such as `.*` matches one command token, never an arbitrary tail. Missing rules fail before a conversation turn or edit and are returned as one complete list. Do not rely on the model to call `list_permissions`; tool availability and model compliance are not deterministic enough for a safety gate.
 
 For repository edits, instruct Antigravity to use `replace_file_content` / `multi_replace_file_content` and not `write_to_file`, which is reserved for Antigravity artifact paths. Never authorize shell-writing fallbacks such as `Set-Content`, redirection, or heredocs for source files.
 
@@ -69,6 +69,8 @@ node .agents/skills/orchestrate-change/scripts/run-antigravity.mjs --prompt-file
 Invoke the dependency-free Node adapter directly. Never route it through `pnpm`, `npm`, `yarn`, or another package manager; package-manager bootstrap and registry checks can block before Antigravity starts.
 
 The adapter defaults to `gemini-3.7-flash-medium`, records the selected model in run state, and reuses it on continuation unless explicitly overridden. It records baseline and post-run Git evidence under ignored `.agentflow/runs/` and returns a run directory plus Antigravity conversation ID. Treat Git state and command output as authoritative; executor summary is supporting context only.
+
+The adapter injects the concrete checkout root only into the in-memory Antigravity message so repository-relative tool paths resolve against the checkout instead of the CLI scratch directory. Persisted prompts and evidence remain machine-path-redacted.
 
 The adapter rejects any report after an unresolved permission denial, any command attempt absent from the current manifest, or an empty changed-file ledger after successful file mutations. It also rejects a `completed` report when required path postconditions fail, verification contains failed/not-run entries, a human-decision reason remains, a required command is omitted, raw command evidence is missing, or later same-lane edits make verification stale. Treat such output as invalid, not as success.
 
