@@ -178,6 +178,8 @@ public sealed class MigrationSmokePostgresTests(PostgresFixture fixture)
             m.Contains("AddAssetVersionProcessingLifecycle", StringComparison.OrdinalIgnoreCase));
         applied.Should().Contain(m =>
             m.Contains("OptimizePersistenceQueriesBatch7", StringComparison.OrdinalIgnoreCase));
+        applied.Should().Contain(m =>
+            m.Contains("OptimizeDataAccessLifecycleBatch8", StringComparison.OrdinalIgnoreCase));
     }
 
     [Fact]
@@ -581,5 +583,100 @@ public sealed class MigrationSmokePostgresTests(PostgresFixture fixture)
         var backslashMatch = await store.GetPaged(new Domain.Core.Dto.Categories.GetCategoriesRequest { Search = "v1\\pack" });
         backslashMatch.Items.Should().ContainSingle();
         backslashMatch.Items[0].Id.Should().Be(c1.Id);
+    }
+
+    [Fact]
+    public async Task MigrateUpgrade_WhenLegacyReviewsExist_ShouldBackfillRatingAggregatesAndCreateRefreshTokenIndex()
+    {
+        // 1. Drop and recreate schema; apply migrations up to OptimizePersistenceQueriesBatch7 only
+        NpgsqlConnection.ClearAllPools();
+        await using (var setup = fixture.CreateDbContext())
+        {
+            await setup.Database.ExecuteSqlRawAsync("""
+                DROP SCHEMA IF EXISTS public CASCADE;
+                CREATE SCHEMA public;
+                """);
+
+            await setup.Database.MigrateAsync("20260829081511_OptimizePersistenceQueriesBatch7");
+        }
+
+        NpgsqlConnection.ClearAllPools();
+
+        var authorId = Guid.NewGuid();
+        var reviewer1Id = Guid.NewGuid();
+        var reviewer2Id = Guid.NewGuid();
+        var categoryId = Guid.NewGuid();
+        var assetId = Guid.NewGuid();
+        var assetNoReviewsId = Guid.NewGuid();
+        var now = DateTimeOffset.UtcNow;
+
+        await using (var seed = fixture.CreateDbContext())
+        {
+            await seed.Database.ExecuteSqlRawAsync(
+                """
+                INSERT INTO users ("Id","Username","Email","PasswordHash","Role","CreatedAt")
+                VALUES ({0},'author','author@test.com','hash','User',{1}),
+                       ({2},'rev1','rev1@test.com','hash','User',{1}),
+                       ({3},'rev2','rev2@test.com','hash','User',{1})
+                """,
+                authorId, now, reviewer1Id, reviewer2Id);
+
+            await seed.Database.ExecuteSqlRawAsync(
+                """
+                INSERT INTO categories ("Id","Name","Slug","Description","CreatedAt","UpdatedAt")
+                VALUES ({0},'Cat','cat','Cat',{1},{2})
+                """,
+                categoryId, now, now);
+
+            await seed.Database.ExecuteSqlRawAsync(
+                """
+                INSERT INTO assets ("Id","AuthorId","CategoryId","Title","Description","Price","CreatedAt","UpdatedAt")
+                VALUES ({0},{1},{2},'Reviewed Asset','Desc',10,{3},{4}),
+                       ({5},{1},{2},'Unreviewed Asset','Desc',20,{3},{4})
+                """,
+                assetId, authorId, categoryId, now, now, assetNoReviewsId);
+
+            await seed.Database.ExecuteSqlRawAsync(
+                """
+                INSERT INTO reviews ("Id","AssetId","UserId","Rating","Comment","CreatedAt")
+                VALUES ({0},{1},{2},4,'good',{3}),
+                       ({4},{1},{5},5,'great',{3})
+                """,
+                Guid.NewGuid(), assetId, reviewer1Id, now, Guid.NewGuid(), reviewer2Id);
+        }
+
+        NpgsqlConnection.ClearAllPools();
+
+        // 2. Apply latest migration (OptimizeDataAccessLifecycleBatch8)
+        await using (var upgrade = fixture.CreateDbContext())
+        {
+            await upgrade.Database.MigrateAsync();
+        }
+
+        NpgsqlConnection.ClearAllPools();
+
+        // 3. Verify backfill results and migration applied
+        await using var verify = fixture.CreateDbContext();
+
+        var applied = await verify.Database.GetAppliedMigrationsAsync();
+        applied.Should().Contain(m => m.Contains("OptimizeDataAccessLifecycleBatch8", StringComparison.OrdinalIgnoreCase));
+
+        var assetWithReviews = await verify.Assets.AsNoTracking().SingleAsync(a => a.Id == assetId);
+        assetWithReviews.RatingCount.Should().Be(2);
+        assetWithReviews.RatingAverage.Should().Be(4.5d);
+
+        var unreviewedAsset = await verify.Assets.AsNoTracking().SingleAsync(a => a.Id == assetNoReviewsId);
+        unreviewedAsset.RatingCount.Should().Be(0);
+        unreviewedAsset.RatingAverage.Should().Be(0.0d);
+
+        var hasRefreshTokenIndex = await verify.Database.SqlQueryRaw<bool>(
+            """
+            SELECT EXISTS (
+                SELECT 1
+                FROM pg_indexes
+                WHERE tablename = 'refresh_tokens' AND indexname = 'IX_refresh_tokens_expires_at'
+            ) AS "Value"
+            """).SingleAsync();
+        hasRefreshTokenIndex.Should().BeTrue();
     }
 }

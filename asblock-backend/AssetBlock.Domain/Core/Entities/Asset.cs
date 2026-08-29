@@ -1,4 +1,4 @@
-using AssetBlock.Domain.Core.Primitives.BaseEntities;
+﻿using AssetBlock.Domain.Core.Primitives.BaseEntities;
 
 namespace AssetBlock.Domain.Core.Entities;
 
@@ -15,6 +15,12 @@ public class Asset : BaseEntity
 
     /// <summary>When set, the listing is removed from the catalog but the row remains for purchasers (FK).</summary>
     public DateTimeOffset? DeletedAt { get; set; }
+
+    /// <summary>Denormalized rating average updated atomically on review changes.</summary>
+    public double RatingAverage { get; set; }
+
+    /// <summary>Denormalized review count updated atomically on review changes.</summary>
+    public int RatingCount { get; set; }
 
     public User Author { get; set; } = null!;
     public Category Category { get; set; } = null!;

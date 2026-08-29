@@ -4,6 +4,7 @@ using AssetBlock.Domain.Core.Enums;
 using AssetBlock.Domain.Core.Exceptions;
 using AssetBlock.Infrastructure.Persistence.Configurations;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Storage;
 using Npgsql;
 
 namespace AssetBlock.Infrastructure.Persistence.Stores;
@@ -102,26 +103,13 @@ internal sealed class CheckoutIntentStore(ApplicationDbContext dbContext) : IChe
 
     public async Task<bool> HasActiveForAsset(Guid assetId, DateTimeOffset now, CancellationToken cancellationToken = default)
     {
-        var hasPendingItem = await dbContext.CheckoutIntentItems
+        return await dbContext.CheckoutIntents
             .AsNoTracking()
-            .AnyAsync(
-                i => i.AssetId == assetId
-                     && i.CheckoutIntent.Status == CheckoutIntentStatus.PENDING
-                     && (i.CheckoutIntent.ExpiresAt > now || i.CheckoutIntent.StripeSessionId != null),
-                cancellationToken);
-
-        if (hasPendingItem)
-        {
-            return true;
-        }
-
-        return await dbContext.CheckoutReservations
-            .AsNoTracking()
-            .AnyAsync(
-                r => r.AssetId == assetId
-                     && (r.ExpiresAt > now || r.CheckoutIntent.StripeSessionId != null)
-                     && r.CheckoutIntent.Status == CheckoutIntentStatus.PENDING,
-                cancellationToken);
+            .Where(i => i.Status == CheckoutIntentStatus.PENDING
+                        && (i.ExpiresAt > now || i.StripeSessionId != null)
+                        && (i.Items.Any(item => item.AssetId == assetId)
+                            || i.Reservations.Any(r => r.AssetId == assetId)))
+            .AnyAsync(cancellationToken);
     }
 
     public async Task<bool> TryCancelAndRelease(Guid id, CancellationToken cancellationToken = default)
@@ -194,11 +182,11 @@ internal sealed class CheckoutIntentStore(ApplicationDbContext dbContext) : IChe
             return 0;
         }
 
-        await using var tx = await dbContext.Database.BeginTransactionAsync(cancellationToken);
+        await using IDbContextTransaction tx = await dbContext.Database.BeginTransactionAsync(cancellationToken);
 
-        var rows = await dbContext.CheckoutIntents
-            .FromSqlInterpolated($"""
-                SELECT *
+        List<Guid> ids = await dbContext.Database
+            .SqlQuery<Guid>($"""
+                SELECT "Id" AS "Value"
                 FROM checkout_intents
                 WHERE "Status" = 'PENDING'
                   AND "ExpiresAt" <= {now}
@@ -207,16 +195,14 @@ internal sealed class CheckoutIntentStore(ApplicationDbContext dbContext) : IChe
                 FOR UPDATE SKIP LOCKED
                 LIMIT {batchSize}
                 """)
-            .AsNoTracking()
             .ToListAsync(cancellationToken);
 
-        if (rows.Count == 0)
+        if (ids.Count == 0)
         {
             await tx.CommitAsync(cancellationToken);
             return 0;
         }
 
-        var ids = rows.Select(r => r.Id).ToList();
         await dbContext.CheckoutIntents
             .Where(i => ids.Contains(i.Id) && i.Status == CheckoutIntentStatus.PENDING)
             .ExecuteUpdateAsync(
@@ -242,12 +228,12 @@ internal sealed class CheckoutIntentStore(ApplicationDbContext dbContext) : IChe
             return [];
         }
 
-        await using var tx = await dbContext.Database.BeginTransactionAsync(cancellationToken);
+        await using IDbContextTransaction tx = await dbContext.Database.BeginTransactionAsync(cancellationToken);
 
         // Claim lease = LastStripeReconciledAt := now so sibling workers SKIP LOCKED / miss due window.
-        var rows = await dbContext.CheckoutIntents
-            .FromSqlInterpolated($"""
-                SELECT *
+        List<CheckoutIntentSyncClaimRow> rows = await dbContext.Database
+            .SqlQuery<CheckoutIntentSyncClaimRow>($"""
+                SELECT "Id", "StripeSessionId"
                 FROM checkout_intents
                 WHERE "Status" = 'PENDING'
                   AND "StripeSessionId" IS NOT NULL
@@ -256,7 +242,6 @@ internal sealed class CheckoutIntentStore(ApplicationDbContext dbContext) : IChe
                 FOR UPDATE SKIP LOCKED
                 LIMIT {batchSize}
                 """)
-            .AsNoTracking()
             .ToListAsync(cancellationToken);
 
         if (rows.Count == 0)
@@ -280,6 +265,12 @@ internal sealed class CheckoutIntentStore(ApplicationDbContext dbContext) : IChe
             .ToList();
     }
 
+    private sealed class CheckoutIntentSyncClaimRow
+    {
+        public Guid Id { get; set; }
+        public string? StripeSessionId { get; set; }
+    }
+
     public async Task TouchLastStripeReconciledAt(
         Guid id,
         DateTimeOffset reconciledAt,
@@ -294,8 +285,8 @@ internal sealed class CheckoutIntentStore(ApplicationDbContext dbContext) : IChe
 
     public async Task DeleteTerminalUnpaidReferencingAsset(Guid assetId, CancellationToken cancellationToken = default)
     {
-        var now = DateTimeOffset.UtcNow;
-        var intentIds = await dbContext.CheckoutIntentItems
+        DateTimeOffset now = DateTimeOffset.UtcNow;
+        List<Guid> intentIds = await dbContext.CheckoutIntentItems
             .AsNoTracking()
             .Where(i => i.AssetId == assetId)
             .Where(i =>
@@ -324,12 +315,12 @@ internal sealed class CheckoutIntentStore(ApplicationDbContext dbContext) : IChe
         IReadOnlyList<CheckoutReservation> reservations)
     {
         dbContext.Entry(intent).State = EntityState.Detached;
-        foreach (var item in items)
+        foreach (CheckoutIntentItem item in items)
         {
             dbContext.Entry(item).State = EntityState.Detached;
         }
 
-        foreach (var reservation in reservations)
+        foreach (CheckoutReservation reservation in reservations)
         {
             dbContext.Entry(reservation).State = EntityState.Detached;
         }

@@ -1,4 +1,4 @@
-using AssetBlock.Domain.Core.Dto.Auth;
+﻿using AssetBlock.Domain.Core.Dto.Auth;
 using AssetBlock.Domain.Core.Primitives.Api;
 
 namespace AssetBlock.Domain.Abstractions.Services;
@@ -12,4 +12,6 @@ public interface IJwtTokenService
     Task<bool> RevokeRefreshToken(Guid tokenId, CancellationToken cancellationToken = default);
     /// <summary>Revokes every active refresh token for the user. Does not log or return token values.</summary>
     Task RevokeAllRefreshTokens(Guid userId, CancellationToken cancellationToken = default);
+    /// <summary>Deletes expired refresh tokens in batches up to batchSize. Preserves unexpired revoked tokens for grace window and reuse detection.</summary>
+    Task<int> CleanupExpiredTokens(DateTimeOffset now, int batchSize, CancellationToken cancellationToken = default);
 }

@@ -1,4 +1,4 @@
-using AssetBlock.Domain.Abstractions.Services;
+﻿using AssetBlock.Domain.Abstractions.Services;
 using AssetBlock.Domain.Core.Constants;
 using AssetBlock.Domain.Core.Dto.Analytics;
 using AssetBlock.Domain.Core.Enums;
@@ -43,20 +43,22 @@ internal sealed class SellerAnalyticsStore : ISellerAnalyticsStore
         AnalyticsGranularity seriesGranularity,
         CancellationToken cancellationToken = default)
     {
-        var db = await _dbFactory.CreateDbContextAsync(cancellationToken);
+        ApplicationDbContext db = await _dbFactory.CreateDbContextAsync(cancellationToken);
         try
         {
-            await using var tx = await BeginReadOnlyTransaction(db, cancellationToken);
+            await using IDbContextTransaction tx = await BeginReadOnlyTransaction(db, cancellationToken);
 
-            var currentFacts = await QueryDualPeriodFacts(
+            (SellerAnalyticsRawFacts CurrentFacts, SellerAnalyticsRawFacts ComparisonFacts, SellerRatingsRaw CurrentRatings, SellerRatingsRaw ComparisonRatings, CommerceContextSqlRow CommerceContext) factsAndCommerce = await QueryOverviewFactsAndCommerceContext(
                 db, sellerId, from, to, comparisonFrom, comparisonTo, cancellationToken);
-            var daySeries = await QueryDaySeries(db, sellerId, from, to, cancellationToken);
-            var topProducts = await QueryTopAssetsAndBundles(db, sellerId, from, to, topN, cancellationToken);
-            var dualRatings = await QueryDualRatings(
-                db, sellerId, from, to, comparisonFrom, comparisonTo, cancellationToken);
+            SellerAnalyticsRawFacts currentFacts = factsAndCommerce.CurrentFacts;
+            SellerAnalyticsRawFacts comparisonFacts = factsAndCommerce.ComparisonFacts;
+            SellerRatingsRaw currentRatings = factsAndCommerce.CurrentRatings;
+            SellerRatingsRaw comparisonRatings = factsAndCommerce.ComparisonRatings;
+            CommerceContextSqlRow commerceContext = factsAndCommerce.CommerceContext;
 
-            var commerceContext = await QueryCommerceContext(db, sellerId, from, to, cancellationToken);
-            var engagementAvailableFrom = commerceContext.EngagementAvailableFrom;
+            IReadOnlyList<AnalyticsDayBucket> daySeries = await QueryDaySeries(db, sellerId, from, to, cancellationToken);
+            (IReadOnlyList<AnalyticsAssetProductRow> Assets, IReadOnlyList<AnalyticsBundleProductRow> Bundles) topProducts = await QueryTopAssetsAndBundles(db, sellerId, from, to, topN, cancellationToken);
+            DateTimeOffset? engagementAvailableFrom = commerceContext.EngagementAvailableFrom;
 
             var currentAvailable = engagementAvailableFrom.HasValue && from >= engagementAvailableFrom.Value;
             var comparisonAvailable = engagementAvailableFrom.HasValue && comparisonFrom >= engagementAvailableFrom.Value;
@@ -74,14 +76,14 @@ internal sealed class SellerAnalyticsStore : ISellerAnalyticsStore
             SellerEngagementRawFacts? comparisonEngagement = null;
             AnalyticsTrackedFunnelRaw? trackedFunnel = null;
 
-            var traffic = await QueryTrafficBatch(
+            (IReadOnlyList<AnalyticsTrafficSourceRaw> Sources, IReadOnlyList<AnalyticsExternalReferrerRaw> Referrers) traffic = await QueryTrafficBatch(
                 db, sellerId, from, to, AnalyticsConstants.MAX_EXTERNAL_REFERRERS, cancellationToken);
-            var trafficSources = traffic.Sources;
-            var externalReferrers = traffic.Referrers;
+            IReadOnlyList<AnalyticsTrafficSourceRaw> trafficSources = traffic.Sources;
+            IReadOnlyList<AnalyticsExternalReferrerRaw> externalReferrers = traffic.Referrers;
 
             if (currentAvailable && comparisonAvailable)
             {
-                var metrics = await QueryEngagementMetricsDual(
+                (SellerEngagementRawFacts Current, SellerEngagementRawFacts Comparison, AnalyticsTrackedFunnelRaw TrackedFunnel) metrics = await QueryEngagementMetricsDual(
                     db, sellerId, from, to, comparisonFrom, comparisonTo, cancellationToken);
                 currentEngagement = metrics.Current;
                 comparisonEngagement = metrics.Comparison;
@@ -91,7 +93,7 @@ internal sealed class SellerAnalyticsStore : ISellerAnalyticsStore
             {
                 if (currentAvailable)
                 {
-                    var metrics = await QueryEngagementMetricsCurrent(db, sellerId, from, to, cancellationToken);
+                    (SellerEngagementRawFacts Engagement, AnalyticsTrackedFunnelRaw TrackedFunnel) metrics = await QueryEngagementMetricsCurrent(db, sellerId, from, to, cancellationToken);
                     currentEngagement = metrics.Engagement;
                     trackedFunnel = metrics.TrackedFunnel;
                 }
@@ -115,13 +117,13 @@ internal sealed class SellerAnalyticsStore : ISellerAnalyticsStore
             await tx.CommitAsync(cancellationToken);
 
             return new SellerAnalyticsOverviewSnapshot(
-                currentFacts.Current,
-                currentFacts.Comparison,
+                currentFacts,
+                comparisonFacts,
                 daySeries,
                 topProducts.Assets,
                 topProducts.Bundles,
-                dualRatings.Current,
-                dualRatings.Comparison,
+                currentRatings,
+                comparisonRatings,
                 engagementAvailableFrom,
                 currentEngagement,
                 comparisonEngagement,
@@ -152,7 +154,7 @@ internal sealed class SellerAnalyticsStore : ISellerAnalyticsStore
         AnalyticsSortDirection direction,
         CancellationToken cancellationToken = default)
     {
-        var db = await _dbFactory.CreateDbContextAsync(cancellationToken);
+        ApplicationDbContext db = await _dbFactory.CreateDbContextAsync(cancellationToken);
         try
         {
             if (productType is not (
@@ -183,7 +185,7 @@ internal sealed class SellerAnalyticsStore : ISellerAnalyticsStore
             var sql = BuildProductsPageSql(productsUnion, orderBy);
 
 #pragma warning disable EF1003
-            var rows = await db.Database
+            List<AnalyticsProductSqlRow> rows = await db.Database
                 .SqlQueryRaw<AnalyticsProductSqlRow>(
                     sql,
                     sellerId,
@@ -203,7 +205,7 @@ internal sealed class SellerAnalyticsStore : ISellerAnalyticsStore
 
                 var countSql = BuildProductsUniverseCountSql(productType);
 #pragma warning disable EF1003
-                var totalOnly = await db.Database
+                ScalarIntSqlRow totalOnly = await db.Database
                     .SqlQueryRaw<ScalarIntSqlRow>(countSql, sellerId)
                     .SingleAsync(cancellationToken);
 #pragma warning restore EF1003
@@ -234,7 +236,7 @@ internal sealed class SellerAnalyticsStore : ISellerAnalyticsStore
         int pageSize,
         CancellationToken cancellationToken = default)
     {
-        var db = await _dbFactory.CreateDbContextAsync(cancellationToken);
+        ApplicationDbContext db = await _dbFactory.CreateDbContextAsync(cancellationToken);
         try
         {
             var hasCursor = cursorPurchasedAt.HasValue && cursorOrderId.HasValue;
@@ -251,11 +253,11 @@ internal sealed class SellerAnalyticsStore : ISellerAnalyticsStore
                 ]
                 : [sellerId, from, to, pageSize + 1];
 
-            var rows = await db.Database.SqlQueryRaw<AnalyticsSaleSqlRow>(sql, parameters)
+            List<AnalyticsSaleSqlRow> rows = await db.Database.SqlQueryRaw<AnalyticsSaleSqlRow>(sql, parameters)
                 .ToListAsync(cancellationToken);
 
             var hasMore = rows.Count > pageSize;
-            var page = hasMore ? rows.Take(pageSize).ToList() : rows;
+            List<AnalyticsSaleSqlRow> page = hasMore ? rows.Take(pageSize).ToList() : rows;
 
             var items = page.Select(r =>
             {
@@ -309,12 +311,12 @@ internal sealed class SellerAnalyticsStore : ISellerAnalyticsStore
         AnalyticsGranularity seriesGranularity,
         CancellationToken cancellationToken = default)
     {
-        var db = await _dbFactory.CreateDbContextAsync(cancellationToken);
+        ApplicationDbContext db = await _dbFactory.CreateDbContextAsync(cancellationToken);
         try
         {
-            await using var tx = await BeginReadOnlyTransaction(db, cancellationToken);
+            await using IDbContextTransaction tx = await BeginReadOnlyTransaction(db, cancellationToken);
 
-            var exists = await db.Database
+            ScalarBoolSqlRow exists = await db.Database
                 .SqlQueryRaw<ScalarBoolSqlRow>(AnalyticsProductDetailSql.ASSET_EXISTS, sellerId, assetId)
                 .SingleAsync(cancellationToken);
             if (!exists.Value)
@@ -322,7 +324,7 @@ internal sealed class SellerAnalyticsStore : ISellerAnalyticsStore
                 return null;
             }
 
-            var header = await db.Database
+            AssetDetailHeaderSqlRow header = await db.Database
                 .SqlQueryRaw<AssetDetailHeaderSqlRow>(
                     AnalyticsProductDetailSql.ASSET_DETAIL_HEADER,
                     sellerId,
@@ -331,8 +333,8 @@ internal sealed class SellerAnalyticsStore : ISellerAnalyticsStore
                     to)
                 .SingleAsync(cancellationToken);
 
-            var commerceDaySeries = await QueryDaySeriesForAsset(db, sellerId, assetId, from, to, cancellationToken);
-            var engagementAvailableFrom = await QueryEngagementAvailableFrom(db, sellerId, cancellationToken);
+            IReadOnlyList<AnalyticsDayBucket> commerceDaySeries = await QueryDaySeriesForAsset(db, sellerId, assetId, from, to, cancellationToken);
+            DateTimeOffset? engagementAvailableFrom = await QueryEngagementAvailableFrom(db, sellerId, cancellationToken);
             var currentAvailable = engagementAvailableFrom.HasValue && from >= engagementAvailableFrom.Value;
             var includeEventMetrics = engagementAvailableFrom.HasValue && to > engagementAvailableFrom.Value;
 
@@ -363,7 +365,7 @@ internal sealed class SellerAnalyticsStore : ISellerAnalyticsStore
 
             if (currentAvailable)
             {
-                var engagementTotals = await db.Database
+                ProductEngagementTotalsSqlRow engagementTotals = await db.Database
                     .SqlQueryRaw<ProductEngagementTotalsSqlRow>(
                         AnalyticsProductDetailSql.ASSET_ENGAGEMENT_TOTALS,
                         sellerId,
@@ -376,7 +378,7 @@ internal sealed class SellerAnalyticsStore : ISellerAnalyticsStore
                 uniqueVisitors = engagementTotals.UniqueVisitors;
                 downloadRequests = engagementTotals.DownloadRequests;
 
-                var tracked = await db.Database
+                TrackedFunnelSqlRow tracked = await db.Database
                     .SqlQueryRaw<TrackedFunnelSqlRow>(
                         AnalyticsProductDetailSql.ASSET_TRACKED_SESSIONS,
                         sellerId,
@@ -446,12 +448,12 @@ internal sealed class SellerAnalyticsStore : ISellerAnalyticsStore
         AnalyticsGranularity seriesGranularity,
         CancellationToken cancellationToken = default)
     {
-        var db = await _dbFactory.CreateDbContextAsync(cancellationToken);
+        ApplicationDbContext db = await _dbFactory.CreateDbContextAsync(cancellationToken);
         try
         {
-            await using var tx = await BeginReadOnlyTransaction(db, cancellationToken);
+            await using IDbContextTransaction tx = await BeginReadOnlyTransaction(db, cancellationToken);
 
-            var exists = await db.Database
+            ScalarBoolSqlRow exists = await db.Database
                 .SqlQueryRaw<ScalarBoolSqlRow>(AnalyticsProductDetailSql.BUNDLE_EXISTS, sellerId, bundleId)
                 .SingleAsync(cancellationToken);
             if (!exists.Value)
@@ -459,7 +461,7 @@ internal sealed class SellerAnalyticsStore : ISellerAnalyticsStore
                 return null;
             }
 
-            var header = await db.Database
+            BundleDetailHeaderSqlRow header = await db.Database
                 .SqlQueryRaw<BundleDetailHeaderSqlRow>(
                     AnalyticsProductDetailSql.BUNDLE_DETAIL_HEADER,
                     sellerId,
@@ -468,8 +470,8 @@ internal sealed class SellerAnalyticsStore : ISellerAnalyticsStore
                     to)
                 .SingleAsync(cancellationToken);
 
-            var commerceDaySeries = await QueryDaySeriesForBundle(db, sellerId, bundleId, from, to, cancellationToken);
-            var engagementAvailableFrom = await QueryEngagementAvailableFrom(db, sellerId, cancellationToken);
+            IReadOnlyList<AnalyticsDayBucket> commerceDaySeries = await QueryDaySeriesForBundle(db, sellerId, bundleId, from, to, cancellationToken);
+            DateTimeOffset? engagementAvailableFrom = await QueryEngagementAvailableFrom(db, sellerId, cancellationToken);
             var currentAvailable = engagementAvailableFrom.HasValue && from >= engagementAvailableFrom.Value;
             var includeEventMetrics = engagementAvailableFrom.HasValue && to > engagementAvailableFrom.Value;
 
@@ -499,7 +501,7 @@ internal sealed class SellerAnalyticsStore : ISellerAnalyticsStore
 
             if (currentAvailable)
             {
-                var engagementTotals = await db.Database
+                BundleEngagementTotalsSqlRow engagementTotals = await db.Database
                     .SqlQueryRaw<BundleEngagementTotalsSqlRow>(
                         AnalyticsProductDetailSql.BUNDLE_ENGAGEMENT_TOTALS,
                         sellerId,
@@ -511,7 +513,7 @@ internal sealed class SellerAnalyticsStore : ISellerAnalyticsStore
                 productViews = engagementTotals.ProductViews;
                 uniqueVisitors = engagementTotals.UniqueVisitors;
 
-                var tracked = await db.Database
+                TrackedFunnelSqlRow tracked = await db.Database
                     .SqlQueryRaw<TrackedFunnelSqlRow>(
                         AnalyticsProductDetailSql.BUNDLE_TRACKED_SESSIONS,
                         sellerId,
@@ -581,39 +583,39 @@ internal sealed class SellerAnalyticsStore : ISellerAnalyticsStore
             AnalyticsSortDirection direction,
             CancellationToken cancellationToken = default)
     {
-        var db = await _dbFactory.CreateDbContextAsync(cancellationToken);
+        ApplicationDbContext db = await _dbFactory.CreateDbContextAsync(cancellationToken);
         try
         {
-            await using var tx = await BeginReadOnlyTransaction(db, cancellationToken);
+            await using IDbContextTransaction tx = await BeginReadOnlyTransaction(db, cancellationToken);
 
             var orderBy = AnalyticsCollectionsSql.BuildOrderBy(sort, direction);
             var offset = checked((int)((page - 1L) * pageSize));
             var sql = AnalyticsCollectionsSql.BuildCollectionsPageSql(orderBy);
 
-            var rows = await db.Database
+            List<CollectionPageSqlRow> rows = await db.Database
                 .SqlQueryRaw<CollectionPageSqlRow>(sql, sellerId, from, to, offset, pageSize)
                 .ToListAsync(cancellationToken);
 
             if (rows.Count == 0)
             {
-                var engagementAvailableFromEmpty = await QueryEngagementAvailableFrom(db, sellerId, cancellationToken);
+                DateTimeOffset? engagementAvailableFromEmpty = await QueryEngagementAvailableFrom(db, sellerId, cancellationToken);
                 var totalCountEmpty = page == 1
                     ? 0
                     : await QueryCollectionsUniverseCount(db, sellerId, cancellationToken);
 
                 await tx.CommitAsync(cancellationToken);
 
-                return ([], totalCountEmpty, engagementAvailableFromEmpty);
+                return (new List<AnalyticsCollectionItem>(), totalCountEmpty, engagementAvailableFromEmpty);
             }
 
             var totalCount = rows[0].TotalCount;
-            var collectionIds = rows.Select(r => r.CollectionId).ToArray();
-            var topAssetsByCollection = await QueryTopClickedAssetsForCollections(
+            Guid[] collectionIds = rows.Select(r => r.CollectionId).ToArray();
+            Dictionary<Guid, List<AnalyticsCollectionTopAsset>> topAssetsByCollection = await QueryTopClickedAssetsForCollections(
                 db, sellerId, collectionIds, from, to, cancellationToken);
 
             var items = rows.Select(r =>
             {
-                topAssetsByCollection.TryGetValue(r.CollectionId, out var topAssets);
+                topAssetsByCollection.TryGetValue(r.CollectionId, out List<AnalyticsCollectionTopAsset>? topAssets);
                 var clickThroughRate = r.Views > 0
                     ? decimal.Round((decimal)r.ItemClicks / r.Views, 4, MidpointRounding.AwayFromZero)
                     : (decimal?)null;
@@ -632,7 +634,7 @@ internal sealed class SellerAnalyticsStore : ISellerAnalyticsStore
                     topAssets ?? []);
             }).ToList();
 
-            var engagementAvailableFrom = await QueryEngagementAvailableFrom(db, sellerId, cancellationToken);
+            DateTimeOffset? engagementAvailableFrom = await QueryEngagementAvailableFrom(db, sellerId, cancellationToken);
 
             await tx.CommitAsync(cancellationToken);
 
@@ -653,7 +655,7 @@ internal sealed class SellerAnalyticsStore : ISellerAnalyticsStore
         CancellationToken cancellationToken)
     {
         const string sql = """SELECT COUNT(*)::int AS "Value" FROM collections WHERE "SellerId" = {0}""";
-        var row = await db.Database.SqlQueryRaw<ScalarIntSqlRow>(sql, sellerId).SingleAsync(cancellationToken);
+        ScalarIntSqlRow row = await db.Database.SqlQueryRaw<ScalarIntSqlRow>(sql, sellerId).SingleAsync(cancellationToken);
         return row.Value;
     }
 
@@ -670,7 +672,7 @@ internal sealed class SellerAnalyticsStore : ISellerAnalyticsStore
             return [];
         }
 
-        var rows = await db.Database
+        List<CollectionTopAssetSqlRow> rows = await db.Database
             .SqlQueryRaw<CollectionTopAssetSqlRow>(
                 AnalyticsCollectionsSql.TOP_CLICKED_ASSETS_FOR_COLLECTIONS,
                 sellerId,
@@ -691,134 +693,39 @@ internal sealed class SellerAnalyticsStore : ISellerAnalyticsStore
         ApplicationDbContext db,
         CancellationToken cancellationToken)
     {
-        var tx = await db.Database.BeginTransactionAsync(
+        IDbContextTransaction tx = await db.Database.BeginTransactionAsync(
             System.Data.IsolationLevel.RepeatableRead,
             cancellationToken);
         await db.Database.ExecuteSqlRawAsync("SET TRANSACTION READ ONLY", cancellationToken);
         return tx;
     }
 
-    private static async Task<(SellerAnalyticsRawFacts Current, SellerAnalyticsRawFacts Comparison)> QueryDualPeriodFacts(
-        ApplicationDbContext db,
-        Guid sellerId,
-        DateTimeOffset from,
-        DateTimeOffset to,
-        DateTimeOffset comparisonFrom,
-        DateTimeOffset comparisonTo,
-        CancellationToken cancellationToken)
+    private static async Task<(
+        SellerAnalyticsRawFacts CurrentFacts,
+        SellerAnalyticsRawFacts ComparisonFacts,
+        SellerRatingsRaw CurrentRatings,
+        SellerRatingsRaw ComparisonRatings,
+        CommerceContextSqlRow CommerceContext)>
+        QueryOverviewFactsAndCommerceContext(
+            ApplicationDbContext db,
+            Guid sellerId,
+            DateTimeOffset from,
+            DateTimeOffset to,
+            DateTimeOffset comparisonFrom,
+            DateTimeOffset comparisonTo,
+            CancellationToken cancellationToken)
     {
-        const string sql = """
-            WITH seller_first_purchase AS (
-                SELECT o."UserId", MIN(o."PurchasedAt") AS first_at
-                FROM order_lines ol
-                INNER JOIN orders o ON o."Id" = ol."OrderId"
-                WHERE ol."SellerId" = {0}
-                GROUP BY o."UserId"
-            ),
-            current_lines AS (
-                SELECT
-                    ol."OrderId",
-                    o."UserId",
-                    ol."PricePaid",
-                    o."AssetId",
-                    o."BundleId"
-                FROM order_lines ol
-                INNER JOIN orders o ON o."Id" = ol."OrderId"
-                WHERE ol."SellerId" = {0}
-                  AND o."PurchasedAt" >= {1}
-                  AND o."PurchasedAt" < {2}
-            ),
-            comparison_lines AS (
-                SELECT
-                    ol."OrderId",
-                    o."UserId",
-                    ol."PricePaid",
-                    o."AssetId",
-                    o."BundleId"
-                FROM order_lines ol
-                INNER JOIN orders o ON o."Id" = ol."OrderId"
-                WHERE ol."SellerId" = {0}
-                  AND o."PurchasedAt" >= {3}
-                  AND o."PurchasedAt" < {4}
-            ),
-            current_agg AS (
-                SELECT
-                    COALESCE(SUM("PricePaid"), 0) AS "GrossRevenue",
-                    COUNT(DISTINCT "OrderId")::int AS "Orders",
-                    COUNT(*)::int AS "Units",
-                    COALESCE(SUM(CASE WHEN "AssetId" IS NOT NULL THEN "PricePaid" ELSE 0 END), 0) AS "DirectRevenue",
-                    COALESCE(SUM(CASE WHEN "BundleId" IS NOT NULL THEN "PricePaid" ELSE 0 END), 0) AS "BundleRevenue",
-                    COUNT(DISTINCT "UserId")::int AS "UniqueCustomers"
-                FROM current_lines
-            ),
-            comparison_agg AS (
-                SELECT
-                    COALESCE(SUM("PricePaid"), 0) AS "GrossRevenue",
-                    COUNT(DISTINCT "OrderId")::int AS "Orders",
-                    COUNT(*)::int AS "Units",
-                    COALESCE(SUM(CASE WHEN "AssetId" IS NOT NULL THEN "PricePaid" ELSE 0 END), 0) AS "DirectRevenue",
-                    COALESCE(SUM(CASE WHEN "BundleId" IS NOT NULL THEN "PricePaid" ELSE 0 END), 0) AS "BundleRevenue",
-                    COUNT(DISTINCT "UserId")::int AS "UniqueCustomers"
-                FROM comparison_lines
-            ),
-            current_repeat AS (
-                SELECT COUNT(*)::int AS "RepeatCustomers"
-                FROM (
-                    SELECT "UserId"
-                    FROM current_lines
-                    GROUP BY "UserId"
-                    HAVING COUNT(DISTINCT "OrderId") >= 2
-                ) rc
-            ),
-            comparison_repeat AS (
-                SELECT COUNT(*)::int AS "RepeatCustomers"
-                FROM (
-                    SELECT "UserId"
-                    FROM comparison_lines
-                    GROUP BY "UserId"
-                    HAVING COUNT(DISTINCT "OrderId") >= 2
-                ) rc
-            ),
-            current_new AS (
-                SELECT COUNT(*)::int AS "NewCustomers"
-                FROM seller_first_purchase bf
-                WHERE bf.first_at >= {1} AND bf.first_at < {2}
-            ),
-            comparison_new AS (
-                SELECT COUNT(*)::int AS "NewCustomers"
-                FROM seller_first_purchase bf
-                WHERE bf.first_at >= {3} AND bf.first_at < {4}
-            )
-            SELECT
-                ca."GrossRevenue" AS "CurrentGrossRevenue",
-                ca."Orders" AS "CurrentOrders",
-                ca."Units" AS "CurrentUnits",
-                ca."DirectRevenue" AS "CurrentDirectRevenue",
-                ca."BundleRevenue" AS "CurrentBundleRevenue",
-                ca."UniqueCustomers" AS "CurrentUniqueCustomers",
-                cn."NewCustomers" AS "CurrentNewCustomers",
-                cr."RepeatCustomers" AS "CurrentRepeatCustomers",
-                coa."GrossRevenue" AS "ComparisonGrossRevenue",
-                coa."Orders" AS "ComparisonOrders",
-                coa."Units" AS "ComparisonUnits",
-                coa."DirectRevenue" AS "ComparisonDirectRevenue",
-                coa."BundleRevenue" AS "ComparisonBundleRevenue",
-                coa."UniqueCustomers" AS "ComparisonUniqueCustomers",
-                con."NewCustomers" AS "ComparisonNewCustomers",
-                cor."RepeatCustomers" AS "ComparisonRepeatCustomers"
-            FROM current_agg ca
-            CROSS JOIN comparison_agg coa
-            CROSS JOIN current_repeat cr
-            CROSS JOIN comparison_repeat cor
-            CROSS JOIN current_new cn
-            CROSS JOIN comparison_new con
-            """;
-
-        var row = await db.Database
-            .SqlQueryRaw<DualPeriodFactsSqlRow>(sql, sellerId, from, to, comparisonFrom, comparisonTo)
+        OverviewFactsAndCommerceContextSqlRow row = await db.Database
+            .SqlQueryRaw<OverviewFactsAndCommerceContextSqlRow>(
+                AnalyticsOverviewBatchSql.OVERVIEW_FACTS_AND_COMMERCE_CONTEXT,
+                sellerId,
+                from,
+                to,
+                comparisonFrom,
+                comparisonTo)
             .SingleAsync(cancellationToken);
 
-        var current = new SellerAnalyticsRawFacts(
+        var currentFacts = new SellerAnalyticsRawFacts(
             row.CurrentGrossRevenue,
             row.CurrentOrders,
             row.CurrentUnits,
@@ -828,7 +735,7 @@ internal sealed class SellerAnalyticsStore : ISellerAnalyticsStore
             row.CurrentNewCustomers,
             row.CurrentRepeatCustomers);
 
-        var comparison = new SellerAnalyticsRawFacts(
+        var comparisonFacts = new SellerAnalyticsRawFacts(
             row.ComparisonGrossRevenue,
             row.ComparisonOrders,
             row.ComparisonUnits,
@@ -838,245 +745,21 @@ internal sealed class SellerAnalyticsStore : ISellerAnalyticsStore
             row.ComparisonNewCustomers,
             row.ComparisonRepeatCustomers);
 
-        return (current, comparison);
-    }
+        var currentRatings = new SellerRatingsRaw(row.AverageRating, row.CurrentNewReviews);
+        var comparisonRatings = new SellerRatingsRaw(row.AverageRating, row.ComparisonNewReviews);
 
-    private static async Task<IReadOnlyList<AnalyticsDayBucket>> QueryDaySeries(
-        ApplicationDbContext db,
-        Guid sellerId,
-        DateTimeOffset from,
-        DateTimeOffset to,
-        CancellationToken cancellationToken)
-    {
-        const string sql = """
-            SELECT
-                (o."PurchasedAt" AT TIME ZONE 'UTC')::date AS "SaleDate",
-                COALESCE(SUM(ol."PricePaid"), 0) AS "GrossRevenue",
-                COUNT(DISTINCT ol."OrderId")::int AS "Orders",
-                COUNT(*)::int AS "Units"
-            FROM order_lines ol
-            INNER JOIN orders o ON o."Id" = ol."OrderId"
-            WHERE ol."SellerId" = {0}
-              AND o."PurchasedAt" >= {1}
-              AND o."PurchasedAt" < {2}
-            GROUP BY (o."PurchasedAt" AT TIME ZONE 'UTC')::date
-            ORDER BY "SaleDate"
-            """;
+        var commerceContext = new CommerceContextSqlRow
+        {
+            EngagementAvailableFrom = row.EngagementAvailableFrom,
+            CheckoutStarts = row.CheckoutStarts,
+            StripeSessionsAttached = row.StripeSessionsAttached,
+            CompletedOrders = row.CompletedOrders,
+            CancelledCheckouts = row.CancelledCheckouts,
+            PendingCheckouts = row.PendingCheckouts,
+            TrackedCheckoutCoverage = row.TrackedCheckoutCoverage
+        };
 
-        var rows = await db.Database
-            .SqlQueryRaw<DaySeriesSqlRow>(sql, sellerId, from, to)
-            .ToListAsync(cancellationToken);
-
-        return rows
-            .Select(r => new AnalyticsDayBucket(r.SaleDate, r.GrossRevenue, r.Orders, r.Units))
-            .ToList();
-    }
-
-    private static async Task<IReadOnlyList<AnalyticsAssetProductRow>> QueryTopAssets(
-        ApplicationDbContext db,
-        Guid sellerId,
-        DateTimeOffset from,
-        DateTimeOffset to,
-        int topN,
-        CancellationToken cancellationToken)
-    {
-        const string sql = """
-            WITH asset_sales AS (
-                SELECT
-                    ol."AssetId",
-                    SUM(ol."PricePaid") AS gross_revenue,
-                    SUM(CASE WHEN o."AssetId" IS NOT NULL THEN ol."PricePaid" ELSE 0 END) AS direct_revenue,
-                    SUM(CASE WHEN o."BundleId" IS NOT NULL THEN ol."PricePaid" ELSE 0 END) AS bundle_revenue,
-                    COUNT(DISTINCT ol."OrderId")::int AS orders,
-                    COUNT(*)::int AS units_sold,
-                    MAX(o."PurchasedAt") AS latest_sale_at
-                FROM order_lines ol
-                INNER JOIN orders o ON o."Id" = ol."OrderId"
-                WHERE ol."SellerId" = {0}
-                  AND o."PurchasedAt" >= {1}
-                  AND o."PurchasedAt" < {2}
-                GROUP BY ol."AssetId"
-                HAVING SUM(ol."PricePaid") > 0
-                ORDER BY gross_revenue DESC, ol."AssetId" ASC
-                LIMIT {3}
-            ),
-            ratings AS (
-                SELECT
-                    r."AssetId",
-                    AVG(r."Rating")::float8 AS avg_rating,
-                    COUNT(*)::int AS review_count
-                FROM reviews r
-                INNER JOIN assets a ON a."Id" = r."AssetId"
-                WHERE r."AssetId" IN (SELECT "AssetId" FROM asset_sales)
-                  AND a."AuthorId" = {0}
-                GROUP BY r."AssetId"
-            )
-            SELECT
-                a."Id" AS "AssetId",
-                a."Title" AS "Title",
-                (a."DeletedAt" IS NOT NULL) AS "IsDeleted",
-                s.gross_revenue AS "GrossRevenue",
-                s.direct_revenue AS "DirectRevenue",
-                s.bundle_revenue AS "BundleAllocatedRevenue",
-                s.orders AS "Orders",
-                s.units_sold AS "UnitsSold",
-                ar.avg_rating AS "AverageRating",
-                COALESCE(ar.review_count, 0) AS "ReviewCount",
-                s.latest_sale_at AS "LatestSaleAt"
-            FROM asset_sales s
-            INNER JOIN assets a ON a."Id" = s."AssetId"
-            LEFT JOIN ratings ar ON ar."AssetId" = a."Id"
-            ORDER BY s.gross_revenue DESC, a."Id" ASC
-            """;
-
-        var rows = await db.Database
-            .SqlQueryRaw<TopAssetSqlRow>(sql, sellerId, from, to, topN)
-            .ToListAsync(cancellationToken);
-
-        return rows.Select(r => new AnalyticsAssetProductRow(
-            r.AssetId,
-            r.Title,
-            r.IsDeleted,
-            r.GrossRevenue,
-            r.DirectRevenue,
-            r.BundleAllocatedRevenue,
-            r.Orders,
-            r.UnitsSold,
-            r.AverageRating,
-            r.ReviewCount,
-            r.LatestSaleAt)).ToList();
-    }
-
-    private static async Task<IReadOnlyList<AnalyticsBundleProductRow>> QueryTopBundles(
-        ApplicationDbContext db,
-        Guid sellerId,
-        DateTimeOffset from,
-        DateTimeOffset to,
-        int topN,
-        CancellationToken cancellationToken)
-    {
-        const string sql = """
-            WITH seller_bundle_orders AS (
-                SELECT
-                    o."Id",
-                    o."BundleId",
-                    o."AmountPaid",
-                    o."PurchasedAt",
-                    COUNT(*)::int AS units
-                FROM order_lines ol
-                INNER JOIN orders o ON o."Id" = ol."OrderId"
-                WHERE ol."SellerId" = {0}
-                  AND o."BundleId" IS NOT NULL
-                  AND o."PurchasedAt" >= {1}
-                  AND o."PurchasedAt" < {2}
-                GROUP BY
-                    o."Id",
-                    o."BundleId",
-                    o."AmountPaid",
-                    o."PurchasedAt"
-            ),
-            bundle_stats AS (
-                SELECT
-                    "BundleId",
-                    SUM("AmountPaid") AS gross_revenue,
-                    COUNT(*)::int AS orders,
-                    SUM(units)::int AS units_sold,
-                    MAX("PurchasedAt") AS latest_sale_at
-                FROM seller_bundle_orders
-                GROUP BY "BundleId"
-                HAVING SUM("AmountPaid") > 0
-            )
-            SELECT
-                b."Id" AS "BundleId",
-                COALESCE(br."Title", b."Id"::text) AS "Title",
-                (b."ArchivedAt" IS NOT NULL) AS "IsArchived",
-                s.gross_revenue AS "GrossRevenue",
-                s.orders AS "Orders",
-                s.units_sold AS "UnitsSold",
-                s.latest_sale_at AS "LatestSaleAt",
-                br."Price" AS "CurrentPrice",
-                br."ListPriceTotal" AS "ListPriceTotal"
-            FROM bundle_stats s
-            INNER JOIN bundles b ON b."Id" = s."BundleId"
-            LEFT JOIN bundle_revisions br ON br."BundleId" = b."Id" AND br."IsCurrent" = true
-            WHERE b."SellerId" = {0}
-            ORDER BY s.gross_revenue DESC, b."Id" ASC
-            LIMIT {3}
-            """;
-
-        var rows = await db.Database
-            .SqlQueryRaw<TopBundleSqlRow>(sql, sellerId, from, to, topN)
-            .ToListAsync(cancellationToken);
-
-        return rows.Select(r => new AnalyticsBundleProductRow(
-            r.BundleId,
-            r.Title,
-            r.IsArchived,
-            r.GrossRevenue,
-            r.Orders,
-            r.UnitsSold,
-            r.LatestSaleAt,
-            r.CurrentPrice,
-            r.ListPriceTotal)).ToList();
-    }
-
-    private static async Task<(SellerRatingsRaw Current, SellerRatingsRaw Comparison)> QueryDualRatings(
-        ApplicationDbContext db,
-        Guid sellerId,
-        DateTimeOffset from,
-        DateTimeOffset to,
-        DateTimeOffset comparisonFrom,
-        DateTimeOffset comparisonTo,
-        CancellationToken cancellationToken)
-    {
-        const string sql = """
-            SELECT
-                AVG(r."Rating")::float8 AS "AverageRating",
-                COUNT(*) FILTER (
-                    WHERE r."CreatedAt" >= {1} AND r."CreatedAt" < {2}
-                )::int AS "CurrentNewReviews",
-                COUNT(*) FILTER (
-                    WHERE r."CreatedAt" >= {3} AND r."CreatedAt" < {4}
-                )::int AS "ComparisonNewReviews"
-            FROM reviews r
-            INNER JOIN assets a ON a."Id" = r."AssetId"
-            WHERE a."AuthorId" = {0}
-            """;
-
-        var row = await db.Database
-            .SqlQueryRaw<DualRatingsSqlRow>(sql, sellerId, from, to, comparisonFrom, comparisonTo)
-            .SingleAsync(cancellationToken);
-
-        return (
-            new SellerRatingsRaw(row.AverageRating, row.CurrentNewReviews),
-            new SellerRatingsRaw(row.AverageRating, row.ComparisonNewReviews));
-    }
-
-    private static async Task<DateTimeOffset?> QueryEngagementAvailableFrom(
-        ApplicationDbContext db,
-        Guid sellerId,
-        CancellationToken cancellationToken)
-    {
-        var row = await db.Database
-            .SqlQueryRaw<ScalarDateTimeOffsetSqlRow>(AnalyticsOverviewEngagementSql.ENGAGEMENT_AVAILABLE_FROM, sellerId)
-            .SingleAsync(cancellationToken);
-        return row.Value;
-    }
-
-    private static async Task<CommerceContextSqlRow> QueryCommerceContext(
-        ApplicationDbContext db,
-        Guid sellerId,
-        DateTimeOffset from,
-        DateTimeOffset to,
-        CancellationToken cancellationToken)
-    {
-        return await db.Database
-            .SqlQueryRaw<CommerceContextSqlRow>(
-                AnalyticsOverviewBatchSql.COMMERCE_CONTEXT,
-                sellerId,
-                from,
-                to)
-            .SingleAsync(cancellationToken);
+        return (currentFacts, comparisonFacts, currentRatings, comparisonRatings, commerceContext);
     }
 
     private static async Task<(SellerEngagementRawFacts Current, SellerEngagementRawFacts Comparison, AnalyticsTrackedFunnelRaw TrackedFunnel)>
@@ -1089,7 +772,7 @@ internal sealed class SellerAnalyticsStore : ISellerAnalyticsStore
             DateTimeOffset comparisonTo,
             CancellationToken cancellationToken)
     {
-        var row = await db.Database
+        EngagementMetricsDualSqlRow row = await db.Database
             .SqlQueryRaw<EngagementMetricsDualSqlRow>(
                 AnalyticsOverviewBatchSql.ENGAGEMENT_METRICS_DUAL,
                 sellerId,
@@ -1127,7 +810,7 @@ internal sealed class SellerAnalyticsStore : ISellerAnalyticsStore
             DateTimeOffset to,
             CancellationToken cancellationToken)
     {
-        var row = await db.Database
+        EngagementMetricsCurrentSqlRow row = await db.Database
             .SqlQueryRaw<EngagementMetricsCurrentSqlRow>(
                 AnalyticsOverviewBatchSql.ENGAGEMENT_METRICS_CURRENT,
                 sellerId,
@@ -1158,7 +841,7 @@ internal sealed class SellerAnalyticsStore : ISellerAnalyticsStore
             int maxReferrers,
             CancellationToken cancellationToken)
     {
-        var rows = await db.Database
+        List<TrafficUnionSqlRow> rows = await db.Database
             .SqlQueryRaw<TrafficUnionSqlRow>(
                 AnalyticsOverviewBatchSql.TRAFFIC_UNION,
                 sellerId,
@@ -1201,8 +884,49 @@ internal sealed class SellerAnalyticsStore : ISellerAnalyticsStore
             int topN,
             CancellationToken cancellationToken)
     {
-        var assets = await QueryTopAssets(db, sellerId, from, to, topN, cancellationToken);
-        var bundles = await QueryTopBundles(db, sellerId, from, to, topN, cancellationToken);
+        List<TopProductsUnionSqlRow> rows = await db.Database
+            .SqlQueryRaw<TopProductsUnionSqlRow>(
+                AnalyticsOverviewBatchSql.TOP_ASSETS_AND_BUNDLES,
+                sellerId,
+                from,
+                to,
+                topN)
+            .ToListAsync(cancellationToken);
+
+        var assets = rows
+            .Where(r => r.ProductKind == "ASSET")
+            .OrderByDescending(r => r.GrossRevenue)
+            .ThenBy(r => r.ProductId)
+            .Select(r => new AnalyticsAssetProductRow(
+                r.ProductId,
+                r.Title,
+                r.IsDeletedOrArchived,
+                r.GrossRevenue,
+                r.DirectRevenue,
+                r.BundleAllocatedRevenue,
+                r.Orders,
+                r.UnitsSold,
+                r.AverageRating,
+                r.ReviewCount,
+                r.LatestSaleAt))
+            .ToList();
+
+        var bundles = rows
+            .Where(r => r.ProductKind == "BUNDLE")
+            .OrderByDescending(r => r.GrossRevenue)
+            .ThenBy(r => r.ProductId)
+            .Select(r => new AnalyticsBundleProductRow(
+                r.ProductId,
+                r.Title,
+                r.IsDeletedOrArchived,
+                r.GrossRevenue,
+                r.Orders,
+                r.UnitsSold,
+                r.LatestSaleAt,
+                r.CurrentPrice,
+                r.ListPriceTotal))
+            .ToList();
+
         return (assets, bundles);
     }
 
@@ -1224,7 +948,7 @@ internal sealed class SellerAnalyticsStore : ISellerAnalyticsStore
                 _ => AnalyticsOverviewEngagementSql.ENGAGEMENT_CHECKOUT_DAY_SERIES
             };
 
-            var checkoutRows = await db.Database
+            List<EngagementCheckoutDaySeriesSqlRow> checkoutRows = await db.Database
                 .SqlQueryRaw<EngagementCheckoutDaySeriesSqlRow>(checkoutSql, sellerId, from, to)
                 .ToListAsync(cancellationToken);
 
@@ -1244,7 +968,7 @@ internal sealed class SellerAnalyticsStore : ISellerAnalyticsStore
             _ => AnalyticsOverviewBatchSql.ENGAGEMENT_SERIES_COMBINED_DAY
         };
 
-        var rows = await db.Database
+        List<EngagementDaySeriesSqlRow> rows = await db.Database
             .SqlQueryRaw<EngagementDaySeriesSqlRow>(sql, sellerId, from, to)
             .ToListAsync(cancellationToken);
 
@@ -1264,7 +988,7 @@ internal sealed class SellerAnalyticsStore : ISellerAnalyticsStore
         DateTimeOffset to,
         CancellationToken cancellationToken)
     {
-        var row = await db.Database
+        EngagementFactsSqlRow row = await db.Database
             .SqlQueryRaw<EngagementFactsSqlRow>(
                 AnalyticsOverviewEngagementSql.ENGAGEMENT_FACTS,
                 sellerId,
@@ -1300,7 +1024,7 @@ internal sealed class SellerAnalyticsStore : ISellerAnalyticsStore
             _ => daySeriesSql
         };
 
-        var rows = await db.Database
+        List<EngagementDaySeriesSqlRow> rows = await db.Database
             .SqlQueryRaw<EngagementDaySeriesSqlRow>(sql, sellerId, productId, from, to)
             .ToListAsync(cancellationToken);
 
@@ -1313,6 +1037,49 @@ internal sealed class SellerAnalyticsStore : ISellerAnalyticsStore
             includeEventMetrics ? r.DownloadRequests : 0)).ToList();
     }
 
+    private static async Task<IReadOnlyList<AnalyticsDayBucket>> QueryDaySeries(
+        ApplicationDbContext db,
+        Guid sellerId,
+        DateTimeOffset from,
+        DateTimeOffset to,
+        CancellationToken cancellationToken)
+    {
+        const string sql = """
+            SELECT
+                (o."PurchasedAt" AT TIME ZONE 'UTC')::date AS "SaleDate",
+                COALESCE(SUM(ol."PricePaid"), 0) AS "GrossRevenue",
+                COUNT(DISTINCT o."Id")::int AS "Orders",
+                COUNT(*)::int AS "Units"
+            FROM order_lines ol
+            INNER JOIN orders o ON o."Id" = ol."OrderId"
+            WHERE ol."SellerId" = {0}
+              AND o."PurchasedAt" >= {1}
+              AND o."PurchasedAt" < {2}
+            GROUP BY (o."PurchasedAt" AT TIME ZONE 'UTC')::date
+            ORDER BY "SaleDate"
+            """;
+
+        List<DaySeriesSqlRow> rows = await db.Database
+            .SqlQueryRaw<DaySeriesSqlRow>(sql, sellerId, from, to)
+            .ToListAsync(cancellationToken);
+
+        return rows.Select(r => new AnalyticsDayBucket(r.SaleDate, r.GrossRevenue, r.Orders, r.Units)).ToList();
+    }
+
+    private static async Task<DateTimeOffset?> QueryEngagementAvailableFrom(
+        ApplicationDbContext db,
+        Guid sellerId,
+        CancellationToken cancellationToken)
+    {
+        ScalarDateTimeOffsetSqlRow row = await db.Database
+            .SqlQueryRaw<ScalarDateTimeOffsetSqlRow>(
+                AnalyticsOverviewEngagementSql.ENGAGEMENT_AVAILABLE_FROM,
+                sellerId)
+            .SingleAsync(cancellationToken);
+
+        return row.Value;
+    }
+
     private static async Task<IReadOnlyList<AnalyticsDayBucket>> QueryDaySeriesForAsset(
         ApplicationDbContext db,
         Guid sellerId,
@@ -1321,7 +1088,7 @@ internal sealed class SellerAnalyticsStore : ISellerAnalyticsStore
         DateTimeOffset to,
         CancellationToken cancellationToken)
     {
-        var rows = await db.Database
+        List<DaySeriesSqlRow> rows = await db.Database
             .SqlQueryRaw<DaySeriesSqlRow>(
                 AnalyticsProductDetailSql.ASSET_COMMERCE_DAY_SERIES,
                 sellerId,
@@ -1341,7 +1108,7 @@ internal sealed class SellerAnalyticsStore : ISellerAnalyticsStore
         DateTimeOffset to,
         CancellationToken cancellationToken)
     {
-        var rows = await db.Database
+        List<DaySeriesSqlRow> rows = await db.Database
             .SqlQueryRaw<DaySeriesSqlRow>(
                 AnalyticsProductDetailSql.BUNDLE_COMMERCE_DAY_SERIES,
                 sellerId,

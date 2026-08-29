@@ -1,4 +1,4 @@
-using AssetBlock.Domain.Core.Entities;
+﻿using AssetBlock.Domain.Core.Entities;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 
@@ -24,6 +24,8 @@ internal sealed class AssetConfiguration : IEntityTypeConfiguration<Asset>
         builder.Property(a => a.UpdatedAt);
         builder.Property(a => a.DownloadLimitPerHour);
         builder.Property(a => a.DeletedAt);
+        builder.Property(a => a.RatingAverage).HasDefaultValue(0d);
+        builder.Property(a => a.RatingCount).HasDefaultValue(0);
 
         builder.HasOne(a => a.Author)
             .WithMany(u => u.AuthoredAssets)

@@ -35,7 +35,7 @@ internal sealed class CheckoutReservationCleanupWorker(
 
         try
         {
-            var initialDelay = CalculateInitialDelay(_jitterProvider);
+            TimeSpan initialDelay = CalculateInitialDelay(_jitterProvider);
             await Task.Delay(initialDelay, stoppingToken);
         }
         catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
@@ -60,7 +60,7 @@ internal sealed class CheckoutReservationCleanupWorker(
 
             try
             {
-                var loopDelay = CalculateIntervalDelay(_jitterProvider);
+                TimeSpan loopDelay = CalculateIntervalDelay(_jitterProvider);
                 await Task.Delay(loopDelay, stoppingToken);
             }
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
@@ -82,12 +82,12 @@ internal sealed class CheckoutReservationCleanupWorker(
 
     internal async Task RunCleanup(CancellationToken cancellationToken)
     {
-        await using var scope = scopeFactory.CreateAsyncScope();
-        var checkoutIntentStore = scope.ServiceProvider.GetRequiredService<ICheckoutIntentStore>();
-        var paymentService = scope.ServiceProvider.GetRequiredService<IPaymentService>();
-        var completionService = scope.ServiceProvider.GetRequiredService<ICheckoutCompletionService>();
-        var now = DateTimeOffset.UtcNow;
-        var dueBefore = now - _reconcileAfter;
+        await using AsyncServiceScope scope = scopeFactory.CreateAsyncScope();
+        ICheckoutIntentStore checkoutIntentStore = scope.ServiceProvider.GetRequiredService<ICheckoutIntentStore>();
+        IPaymentService paymentService = scope.ServiceProvider.GetRequiredService<IPaymentService>();
+        ICheckoutCompletionService completionService = scope.ServiceProvider.GetRequiredService<ICheckoutCompletionService>();
+        DateTimeOffset now = DateTimeOffset.UtcNow;
+        DateTimeOffset dueBefore = now - _reconcileAfter;
 
         var unattached = await checkoutIntentStore.CleanupExpiredUnattachedPendingBatch(
             now,
@@ -99,7 +99,7 @@ internal sealed class CheckoutReservationCleanupWorker(
         }
 
         // Short TX claim (SKIP LOCKED + lease); Stripe / CompletePaidCheckout stay outside any DB TX.
-        var attached = await checkoutIntentStore.ClaimAttachedPendingForStripeSyncBatch(
+        IReadOnlyList<(Guid Id, string StripeSessionId)> attached = await checkoutIntentStore.ClaimAttachedPendingForStripeSyncBatch(
             now,
             dueBefore,
             BATCH_SIZE,
@@ -110,7 +110,7 @@ internal sealed class CheckoutReservationCleanupWorker(
         {
             try
             {
-                var session = await paymentService.GetCheckoutSession(stripeSessionId, cancellationToken);
+                StripeCheckoutSessionSnapshot session = await paymentService.GetCheckoutSession(stripeSessionId, cancellationToken);
                 if (string.Equals(
                         session.Status,
                         StripeConstants.CheckoutSessionStatuses.COMPLETE,
@@ -161,5 +161,102 @@ internal sealed class CheckoutReservationCleanupWorker(
                 "Reconciled {Count} completed Stripe checkout sessions without relying on webhook redelivery",
                 reconciledCompleted);
         }
+    }
+}
+
+/// <summary>
+/// Periodically removes expired refresh tokens in bounded batches.
+/// Preserves unexpired revoked tokens for the 15-second grace window and reuse detection.
+/// </summary>
+internal sealed class RefreshTokenRetentionWorker(
+    IServiceScopeFactory scopeFactory,
+    IHostEnvironment environment,
+    ILogger<RefreshTokenRetentionWorker> logger,
+    Func<double>? jitterProvider = null) : BackgroundService
+{
+    private static readonly TimeSpan _interval = TimeSpan.FromHours(1);
+    private const int BATCH_SIZE = 500;
+    private const int MAX_BATCHES_PER_CYCLE = 20;
+
+    protected override async Task ExecuteAsync(CancellationToken stoppingToken)
+    {
+        if (environment.IsEnvironment("IntegrationTesting"))
+        {
+            logger.LogInformation("RefreshTokenRetentionWorker skipped in IntegrationTesting.");
+            return;
+        }
+
+        logger.LogInformation("RefreshTokenRetentionWorker started");
+
+        try
+        {
+            TimeSpan initialDelay = CalculateInitialDelay(jitterProvider);
+            await Task.Delay(initialDelay, stoppingToken);
+        }
+        catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+        {
+            return;
+        }
+
+        while (!stoppingToken.IsCancellationRequested)
+        {
+            try
+            {
+                await RunCleanup(stoppingToken);
+            }
+            catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+            {
+                break;
+            }
+            catch (Exception ex)
+            {
+                logger.LogError(ex, "RefreshTokenRetentionWorker cycle failed");
+            }
+
+            try
+            {
+                TimeSpan loopDelay = CalculateIntervalDelay(jitterProvider);
+                await Task.Delay(loopDelay, stoppingToken);
+            }
+            catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+            {
+                break;
+            }
+        }
+    }
+
+    internal static TimeSpan CalculateInitialDelay(Func<double>? jitterProvider = null)
+    {
+        return DelayJitter.Apply(TimeSpan.FromMinutes(2), jitterProvider);
+    }
+
+    internal static TimeSpan CalculateIntervalDelay(Func<double>? jitterProvider = null)
+    {
+        return DelayJitter.Apply(_interval, jitterProvider);
+    }
+
+    internal async Task<int> RunCleanup(CancellationToken cancellationToken)
+    {
+        await using AsyncServiceScope scope = scopeFactory.CreateAsyncScope();
+        IJwtTokenService jwtTokenService = scope.ServiceProvider.GetRequiredService<IJwtTokenService>();
+        DateTimeOffset now = DateTimeOffset.UtcNow;
+        var totalDeleted = 0;
+
+        for (var i = 0; i < MAX_BATCHES_PER_CYCLE; i++)
+        {
+            var deleted = await jwtTokenService.CleanupExpiredTokens(now, BATCH_SIZE, cancellationToken);
+            totalDeleted += deleted;
+            if (deleted < BATCH_SIZE)
+            {
+                break;
+            }
+        }
+
+        if (totalDeleted > 0)
+        {
+            logger.LogInformation("Cleaned up {TotalDeleted} expired refresh tokens in retention cycle", totalDeleted);
+        }
+
+        return totalDeleted;
     }
 }

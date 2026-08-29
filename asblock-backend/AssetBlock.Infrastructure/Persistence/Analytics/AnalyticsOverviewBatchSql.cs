@@ -1,8 +1,290 @@
-namespace AssetBlock.Infrastructure.Persistence.Analytics;
+﻿namespace AssetBlock.Infrastructure.Persistence.Analytics;
 
 /// <summary>Combined overview queries to reduce PostgreSQL round-trips.</summary>
 internal static class AnalyticsOverviewBatchSql
 {
+    internal const string OVERVIEW_FACTS_AND_COMMERCE_CONTEXT = """
+        WITH seller_first_purchase AS (
+            SELECT o."UserId", MIN(o."PurchasedAt") AS first_at
+            FROM order_lines ol
+            INNER JOIN orders o ON o."Id" = ol."OrderId"
+            WHERE ol."SellerId" = {0}
+            GROUP BY o."UserId"
+        ),
+        current_lines AS (
+            SELECT
+                ol."OrderId",
+                o."UserId",
+                ol."PricePaid",
+                o."AssetId",
+                o."BundleId"
+            FROM order_lines ol
+            INNER JOIN orders o ON o."Id" = ol."OrderId"
+            WHERE ol."SellerId" = {0}
+              AND o."PurchasedAt" >= {1}
+              AND o."PurchasedAt" < {2}
+        ),
+        comparison_lines AS (
+            SELECT
+                ol."OrderId",
+                o."UserId",
+                ol."PricePaid",
+                o."AssetId",
+                o."BundleId"
+            FROM order_lines ol
+            INNER JOIN orders o ON o."Id" = ol."OrderId"
+            WHERE ol."SellerId" = {0}
+              AND o."PurchasedAt" >= {3}
+              AND o."PurchasedAt" < {4}
+        ),
+        current_agg AS (
+            SELECT
+                COALESCE(SUM("PricePaid"), 0) AS "GrossRevenue",
+                COUNT(DISTINCT "OrderId")::int AS "Orders",
+                COUNT(*)::int AS "Units",
+                COALESCE(SUM(CASE WHEN "AssetId" IS NOT NULL THEN "PricePaid" ELSE 0 END), 0) AS "DirectRevenue",
+                COALESCE(SUM(CASE WHEN "BundleId" IS NOT NULL THEN "PricePaid" ELSE 0 END), 0) AS "BundleRevenue",
+                COUNT(DISTINCT "UserId")::int AS "UniqueCustomers"
+            FROM current_lines
+        ),
+        comparison_agg AS (
+            SELECT
+                COALESCE(SUM("PricePaid"), 0) AS "GrossRevenue",
+                COUNT(DISTINCT "OrderId")::int AS "Orders",
+                COUNT(*)::int AS "Units",
+                COALESCE(SUM(CASE WHEN "AssetId" IS NOT NULL THEN "PricePaid" ELSE 0 END), 0) AS "DirectRevenue",
+                COALESCE(SUM(CASE WHEN "BundleId" IS NOT NULL THEN "PricePaid" ELSE 0 END), 0) AS "BundleRevenue",
+                COUNT(DISTINCT "UserId")::int AS "UniqueCustomers"
+            FROM comparison_lines
+        ),
+        current_repeat AS (
+            SELECT COUNT(*)::int AS "RepeatCustomers"
+            FROM (
+                SELECT "UserId"
+                FROM current_lines
+                GROUP BY "UserId"
+                HAVING COUNT(DISTINCT "OrderId") >= 2
+            ) rc
+        ),
+        comparison_repeat AS (
+            SELECT COUNT(*)::int AS "RepeatCustomers"
+            FROM (
+                SELECT "UserId"
+                FROM comparison_lines
+                GROUP BY "UserId"
+                HAVING COUNT(DISTINCT "OrderId") >= 2
+            ) rc
+        ),
+        current_new AS (
+            SELECT COUNT(*)::int AS "NewCustomers"
+            FROM seller_first_purchase bf
+            WHERE bf.first_at >= {1} AND bf.first_at < {2}
+        ),
+        comparison_new AS (
+            SELECT COUNT(*)::int AS "NewCustomers"
+            FROM seller_first_purchase bf
+            WHERE bf.first_at >= {3} AND bf.first_at < {4}
+        ),
+        dual_ratings AS (
+            SELECT
+                AVG(r."Rating")::float8 AS "AverageRating",
+                COUNT(*) FILTER (
+                    WHERE r."CreatedAt" >= {1} AND r."CreatedAt" < {2}
+                )::int AS "CurrentNewReviews",
+                COUNT(*) FILTER (
+                    WHERE r."CreatedAt" >= {3} AND r."CreatedAt" < {4}
+                )::int AS "ComparisonNewReviews"
+            FROM reviews r
+            INNER JOIN assets a ON a."Id" = r."AssetId"
+            WHERE a."AuthorId" = {0}
+        ),
+        seller_intents AS (
+            SELECT DISTINCT ON (ci."Id")
+                ci."Id",
+                ci."StripeSessionId",
+                ci."Status",
+                ci."AnalyticsSessionId"
+            FROM checkout_intents ci
+            INNER JOIN checkout_intent_items cii ON cii."CheckoutIntentId" = ci."Id"
+            WHERE cii."SellerId" = {0}
+              AND ci."CreatedAt" >= {1}
+              AND ci."CreatedAt" < {2}
+            ORDER BY ci."Id"
+        ),
+        commerce_funnel AS (
+            SELECT
+                COUNT(*)::int AS "CheckoutStarts",
+                COUNT(*) FILTER (WHERE "StripeSessionId" IS NOT NULL)::int AS "StripeSessionsAttached",
+                COUNT(*) FILTER (
+                    WHERE EXISTS (
+                        SELECT 1
+                        FROM orders o
+                        WHERE o."CheckoutIntentId" = seller_intents."Id"
+                    )
+                )::int AS "CompletedOrders",
+                COUNT(*) FILTER (WHERE "Status" = 'CANCELLED')::int AS "CancelledCheckouts",
+                COUNT(*) FILTER (WHERE "Status" = 'PENDING')::int AS "PendingCheckouts"
+            FROM seller_intents
+        ),
+        tracked_coverage AS (
+            SELECT
+                CASE
+                    WHEN COUNT(*) = 0 THEN NULL::numeric
+                    ELSE COUNT(*) FILTER (WHERE "AnalyticsSessionId" IS NOT NULL)::numeric / COUNT(*)::numeric
+                END AS "TrackedCheckoutCoverage"
+            FROM seller_intents
+        )
+        SELECT
+            ca."GrossRevenue" AS "CurrentGrossRevenue",
+            ca."Orders" AS "CurrentOrders",
+            ca."Units" AS "CurrentUnits",
+            ca."DirectRevenue" AS "CurrentDirectRevenue",
+            ca."BundleRevenue" AS "CurrentBundleRevenue",
+            ca."UniqueCustomers" AS "CurrentUniqueCustomers",
+            cn."NewCustomers" AS "CurrentNewCustomers",
+            cr."RepeatCustomers" AS "CurrentRepeatCustomers",
+            coa."GrossRevenue" AS "ComparisonGrossRevenue",
+            coa."Orders" AS "ComparisonOrders",
+            coa."Units" AS "ComparisonUnits",
+            coa."DirectRevenue" AS "ComparisonDirectRevenue",
+            coa."BundleRevenue" AS "ComparisonBundleRevenue",
+            coa."UniqueCustomers" AS "ComparisonUniqueCustomers",
+            con."NewCustomers" AS "ComparisonNewCustomers",
+            cor."RepeatCustomers" AS "ComparisonRepeatCustomers",
+            dr."AverageRating",
+            dr."CurrentNewReviews",
+            dr."ComparisonNewReviews",
+            (
+                SELECT MIN(ae."OccurredAt")
+                FROM analytics_events ae
+                WHERE ae."SellerId" = {0}
+            ) AS "EngagementAvailableFrom",
+            cf."CheckoutStarts",
+            cf."StripeSessionsAttached",
+            cf."CompletedOrders",
+            cf."CancelledCheckouts",
+            cf."PendingCheckouts",
+            tc."TrackedCheckoutCoverage"
+        FROM current_agg ca
+        CROSS JOIN comparison_agg coa
+        CROSS JOIN current_repeat cr
+        CROSS JOIN comparison_repeat cor
+        CROSS JOIN current_new cn
+        CROSS JOIN comparison_new con
+        CROSS JOIN dual_ratings dr
+        CROSS JOIN commerce_funnel cf
+        CROSS JOIN tracked_coverage tc
+        """;
+
+    internal const string TOP_ASSETS_AND_BUNDLES = """
+        WITH asset_sales AS (
+            SELECT
+                ol."AssetId",
+                SUM(ol."PricePaid") AS gross_revenue,
+                SUM(CASE WHEN o."AssetId" IS NOT NULL THEN ol."PricePaid" ELSE 0 END) AS direct_revenue,
+                SUM(CASE WHEN o."BundleId" IS NOT NULL THEN ol."PricePaid" ELSE 0 END) AS bundle_revenue,
+                COUNT(DISTINCT ol."OrderId")::int AS orders,
+                COUNT(*)::int AS units_sold,
+                MAX(o."PurchasedAt") AS latest_sale_at
+            FROM order_lines ol
+            INNER JOIN orders o ON o."Id" = ol."OrderId"
+            WHERE ol."SellerId" = {0}
+              AND o."PurchasedAt" >= {1}
+              AND o."PurchasedAt" < {2}
+            GROUP BY ol."AssetId"
+            HAVING SUM(ol."PricePaid") > 0
+            ORDER BY gross_revenue DESC, ol."AssetId" ASC
+            LIMIT {3}
+        ),
+        ratings AS (
+            SELECT
+                r."AssetId",
+                AVG(r."Rating")::float8 AS avg_rating,
+                COUNT(*)::int AS review_count
+            FROM reviews r
+            INNER JOIN assets a ON a."Id" = r."AssetId"
+            WHERE r."AssetId" IN (SELECT "AssetId" FROM asset_sales)
+              AND a."AuthorId" = {0}
+            GROUP BY r."AssetId"
+        ),
+        top_assets AS (
+            SELECT
+                'ASSET' AS "ProductKind",
+                a."Id" AS "ProductId",
+                a."Title" AS "Title",
+                (a."DeletedAt" IS NOT NULL) AS "IsDeletedOrArchived",
+                s.gross_revenue AS "GrossRevenue",
+                s.direct_revenue AS "DirectRevenue",
+                s.bundle_revenue AS "BundleAllocatedRevenue",
+                s.orders AS "Orders",
+                s.units_sold AS "UnitsSold",
+                ar.avg_rating AS "AverageRating",
+                COALESCE(ar.review_count, 0) AS "ReviewCount",
+                s.latest_sale_at AS "LatestSaleAt",
+                NULL::numeric AS "CurrentPrice",
+                NULL::numeric AS "ListPriceTotal"
+            FROM asset_sales s
+            INNER JOIN assets a ON a."Id" = s."AssetId"
+            LEFT JOIN ratings ar ON ar."AssetId" = a."Id"
+        ),
+        seller_bundle_orders AS (
+            SELECT
+                o."Id",
+                o."BundleId",
+                o."AmountPaid",
+                o."PurchasedAt",
+                COUNT(*)::int AS units
+            FROM order_lines ol
+            INNER JOIN orders o ON o."Id" = ol."OrderId"
+            WHERE ol."SellerId" = {0}
+              AND o."BundleId" IS NOT NULL
+              AND o."PurchasedAt" >= {1}
+              AND o."PurchasedAt" < {2}
+            GROUP BY
+                o."Id",
+                o."BundleId",
+                o."AmountPaid",
+                o."PurchasedAt"
+        ),
+        bundle_stats AS (
+            SELECT
+                "BundleId",
+                SUM("AmountPaid") AS gross_revenue,
+                COUNT(*)::int AS orders,
+                SUM(units)::int AS units_sold,
+                MAX("PurchasedAt") AS latest_sale_at
+            FROM seller_bundle_orders
+            GROUP BY "BundleId"
+            HAVING SUM("AmountPaid") > 0
+        ),
+        top_bundles AS (
+            SELECT
+                'BUNDLE' AS "ProductKind",
+                b."Id" AS "ProductId",
+                COALESCE(br."Title", b."Id"::text) AS "Title",
+                (b."ArchivedAt" IS NOT NULL) AS "IsDeletedOrArchived",
+                s.gross_revenue AS "GrossRevenue",
+                0::numeric AS "DirectRevenue",
+                0::numeric AS "BundleAllocatedRevenue",
+                s.orders AS "Orders",
+                s.units_sold AS "UnitsSold",
+                NULL::float8 AS "AverageRating",
+                0::int AS "ReviewCount",
+                s.latest_sale_at AS "LatestSaleAt",
+                br."Price" AS "CurrentPrice",
+                br."ListPriceTotal" AS "ListPriceTotal"
+            FROM bundle_stats s
+            INNER JOIN bundles b ON b."Id" = s."BundleId"
+            LEFT JOIN bundle_revisions br ON br."BundleId" = b."Id" AND br."IsCurrent" = true
+            WHERE b."SellerId" = {0}
+            ORDER BY s.gross_revenue DESC, b."Id" ASC
+            LIMIT {3}
+        )
+        SELECT * FROM top_assets
+        UNION ALL
+        SELECT * FROM top_bundles
+        """;
+
     internal const string COMMERCE_CONTEXT = """
         WITH seller_intents AS (
             SELECT DISTINCT ON (ci."Id")

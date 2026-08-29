@@ -1,4 +1,4 @@
-using AssetBlock.Domain.Core.Dto.Paging;
+﻿using AssetBlock.Domain.Core.Dto.Paging;
 using AssetBlock.Domain.Core.Dto.Reviews;
 using AssetBlock.Domain.Core.Entities;
 
@@ -11,5 +11,5 @@ public interface IReviewStore
     Task<bool> Delete(Guid id, CancellationToken cancellationToken = default);
     Task<bool> Exists(Guid userId, Guid assetId, CancellationToken cancellationToken = default);
     Task<Review?> GetById(Guid id, CancellationToken cancellationToken = default);
-    Task<PagedResult<Review>> GetPaged(Guid assetId, GetReviewsRequest request, CancellationToken cancellationToken = default);
+    Task<PagedResult<ReviewListItem>> GetPaged(Guid assetId, GetReviewsRequest request, CancellationToken cancellationToken = default);
 }

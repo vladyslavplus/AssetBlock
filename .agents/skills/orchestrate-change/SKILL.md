@@ -55,7 +55,7 @@ For repository edits, instruct Antigravity to use `replace_file_content` / `mult
 For the initial implementation phase, require Antigravity to:
 
 1. implement one coherent unit at a time when the plan spans several subsystems;
-2. run formatting once after edits;
+2. format only changed files or narrowly scoped changed roots, using `--include` for `dotnet format`; never run solution-wide formatting in a dirty or multi-file repository, and skip explicit formatting when it cannot be safely scoped;
 3. run focused verification only;
 4. report final expensive verification as deferred in `remaining_risks`, not as falsely passed or failed verification entries;
 5. make no further edits after its last focused verification command.

@@ -39,9 +39,9 @@ public sealed class CheckoutReservationCleanupWorkerTests
         services.AddScoped(_ => checkoutStore);
         services.AddScoped(_ => paymentService);
         services.AddScoped(_ => completionService ?? Substitute.For<ICheckoutCompletionService>());
-        var provider = services.BuildServiceProvider();
+        ServiceProvider provider = services.BuildServiceProvider();
 
-        var environment = Substitute.For<IHostEnvironment>();
+        IHostEnvironment environment = Substitute.For<IHostEnvironment>();
         environment.EnvironmentName.Returns(Environments.Development);
 
         var worker = new CheckoutReservationCleanupWorker(
@@ -55,8 +55,8 @@ public sealed class CheckoutReservationCleanupWorkerTests
     [Fact]
     public async Task RunCleanup_WhenAttachedIntentStripeReportsExpired_ShouldCancelAndRelease()
     {
-        var store = Substitute.For<ICheckoutIntentStore>();
-        var payment = Substitute.For<IPaymentService>();
+        ICheckoutIntentStore store = Substitute.For<ICheckoutIntentStore>();
+        IPaymentService payment = Substitute.For<IPaymentService>();
         var intentId = Guid.NewGuid();
         const string sessionId = "cs_expired_test";
 
@@ -72,7 +72,7 @@ public sealed class CheckoutReservationCleanupWorkerTests
             .Returns(new StripeCheckoutSessionSnapshot(sessionId, StripeConstants.CheckoutSessionStatuses.EXPIRED, null));
         store.TryCancelAndRelease(intentId, Arg.Any<CancellationToken>()).Returns(true);
 
-        var (sut, provider) = BuildWorker(store, payment);
+        (CheckoutReservationCleanupWorker? sut, ServiceProvider? provider) = BuildWorker(store, payment);
         await using (provider)
         {
             await sut.RunCleanup(CancellationToken.None);
@@ -85,8 +85,8 @@ public sealed class CheckoutReservationCleanupWorkerTests
     [Fact]
     public async Task RunCleanup_WhenAttachedIntentStripeReportsOpen_ShouldNotCancel()
     {
-        var store = Substitute.For<ICheckoutIntentStore>();
-        var payment = Substitute.For<IPaymentService>();
+        ICheckoutIntentStore store = Substitute.For<ICheckoutIntentStore>();
+        IPaymentService payment = Substitute.For<IPaymentService>();
         var intentId = Guid.NewGuid();
         const string sessionId = "cs_open_test";
 
@@ -101,7 +101,7 @@ public sealed class CheckoutReservationCleanupWorkerTests
         payment.GetCheckoutSession(sessionId, Arg.Any<CancellationToken>())
             .Returns(new StripeCheckoutSessionSnapshot(sessionId, StripeConstants.CheckoutSessionStatuses.OPEN, null));
 
-        var (sut, provider) = BuildWorker(store, payment);
+        (CheckoutReservationCleanupWorker? sut, ServiceProvider? provider) = BuildWorker(store, payment);
         await using (provider)
         {
             await sut.RunCleanup(CancellationToken.None);
@@ -115,9 +115,9 @@ public sealed class CheckoutReservationCleanupWorkerTests
     [Fact]
     public async Task RunCleanup_WhenAttachedPaidSessionWithoutWebhook_ShouldCompleteViaReconciliation()
     {
-        var store = Substitute.For<ICheckoutIntentStore>();
-        var payment = Substitute.For<IPaymentService>();
-        var completion = Substitute.For<ICheckoutCompletionService>();
+        ICheckoutIntentStore store = Substitute.For<ICheckoutIntentStore>();
+        IPaymentService payment = Substitute.For<IPaymentService>();
+        ICheckoutCompletionService completion = Substitute.For<ICheckoutCompletionService>();
         var intentId = Guid.NewGuid();
         var userId = Guid.NewGuid();
         const string sessionId = "cs_complete_early_test";
@@ -140,7 +140,7 @@ public sealed class CheckoutReservationCleanupWorkerTests
         completion.CompletePaidCheckout(completed, Arg.Any<CancellationToken>())
             .Returns((OrderCompletedPayload?)null);
 
-        var (sut, provider) = BuildWorker(store, payment, completion);
+        (CheckoutReservationCleanupWorker? sut, ServiceProvider? provider) = BuildWorker(store, payment, completion);
         await using (provider)
         {
             await sut.RunCleanup(CancellationToken.None);
@@ -154,8 +154,8 @@ public sealed class CheckoutReservationCleanupWorkerTests
     [Fact]
     public async Task RunCleanup_WhenNoDueAttachedIntents_ShouldNotCallPaymentService()
     {
-        var store = Substitute.For<ICheckoutIntentStore>();
-        var payment = Substitute.For<IPaymentService>();
+        ICheckoutIntentStore store = Substitute.For<ICheckoutIntentStore>();
+        IPaymentService payment = Substitute.For<IPaymentService>();
 
         store.CleanupExpiredUnattachedPendingBatch(Arg.Any<DateTimeOffset>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
             .Returns(0);
@@ -166,12 +166,89 @@ public sealed class CheckoutReservationCleanupWorkerTests
                 Arg.Any<CancellationToken>())
             .Returns(new List<(Guid, string)>());
 
-        var (sut, provider) = BuildWorker(store, payment);
+        (CheckoutReservationCleanupWorker? sut, ServiceProvider? provider) = BuildWorker(store, payment);
         await using (provider)
         {
             await sut.RunCleanup(CancellationToken.None);
         }
 
         await payment.DidNotReceiveWithAnyArgs().GetCheckoutSession(Arg.Any<string>(), Arg.Any<CancellationToken>());
+    }
+}
+
+public sealed class RefreshTokenRetentionWorkerTests
+{
+    [Fact]
+    public void CalculateInitialDelay_WithJitter_ShouldScaleAccurately()
+    {
+        // Initial delay base is 2 minutes (120s)
+        RefreshTokenRetentionWorker.CalculateInitialDelay(() => 0.0).Should().Be(TimeSpan.FromSeconds(96));
+        RefreshTokenRetentionWorker.CalculateInitialDelay(() => 0.5).Should().Be(TimeSpan.FromSeconds(120));
+        RefreshTokenRetentionWorker.CalculateInitialDelay(() => 1.0).Should().Be(TimeSpan.FromSeconds(144));
+    }
+
+    [Fact]
+    public void CalculateIntervalDelay_WithJitter_ShouldScaleAccurately()
+    {
+        // Interval base is 1 hour (3600s)
+        RefreshTokenRetentionWorker.CalculateIntervalDelay(() => 0.0).Should().Be(TimeSpan.FromMinutes(48));
+        RefreshTokenRetentionWorker.CalculateIntervalDelay(() => 0.5).Should().Be(TimeSpan.FromMinutes(60));
+        RefreshTokenRetentionWorker.CalculateIntervalDelay(() => 1.0).Should().Be(TimeSpan.FromMinutes(72));
+    }
+
+    [Fact]
+    public async Task RunCleanup_WhenTokensExpired_ShouldCallCleanupExpiredTokensInBatches()
+    {
+        IJwtTokenService jwtTokenService = Substitute.For<IJwtTokenService>();
+        jwtTokenService.CleanupExpiredTokens(Arg.Any<DateTimeOffset>(), 500, Arg.Any<CancellationToken>())
+            .Returns(500, 120);
+
+        var services = new ServiceCollection();
+        services.AddScoped(_ => jwtTokenService);
+        ServiceProvider provider = services.BuildServiceProvider();
+
+        IHostEnvironment environment = Substitute.For<IHostEnvironment>();
+        environment.EnvironmentName.Returns(Environments.Development);
+
+        var sut = new RefreshTokenRetentionWorker(
+            provider.GetRequiredService<IServiceScopeFactory>(),
+            environment,
+            NullLogger<RefreshTokenRetentionWorker>.Instance);
+
+        await using (provider)
+        {
+            var deleted = await sut.RunCleanup(CancellationToken.None);
+            deleted.Should().Be(620);
+        }
+
+        await jwtTokenService.Received(2).CleanupExpiredTokens(Arg.Any<DateTimeOffset>(), 500, Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task RunCleanup_WhenNoExpiredTokens_ShouldCallOnceAndReturnZero()
+    {
+        IJwtTokenService jwtTokenService = Substitute.For<IJwtTokenService>();
+        jwtTokenService.CleanupExpiredTokens(Arg.Any<DateTimeOffset>(), 500, Arg.Any<CancellationToken>())
+            .Returns(0);
+
+        var services = new ServiceCollection();
+        services.AddScoped(_ => jwtTokenService);
+        ServiceProvider provider = services.BuildServiceProvider();
+
+        IHostEnvironment environment = Substitute.For<IHostEnvironment>();
+        environment.EnvironmentName.Returns(Environments.Development);
+
+        var sut = new RefreshTokenRetentionWorker(
+            provider.GetRequiredService<IServiceScopeFactory>(),
+            environment,
+            NullLogger<RefreshTokenRetentionWorker>.Instance);
+
+        await using (provider)
+        {
+            var deleted = await sut.RunCleanup(CancellationToken.None);
+            deleted.Should().Be(0);
+        }
+
+        await jwtTokenService.Received(1).CleanupExpiredTokens(Arg.Any<DateTimeOffset>(), 500, Arg.Any<CancellationToken>());
     }
 }

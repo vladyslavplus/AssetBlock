@@ -1,10 +1,9 @@
-using AssetBlock.Application.Common.Caching;
+﻿using AssetBlock.Application.Common.Caching;
 using AssetBlock.Application.UseCases.Reviews.GetReviews;
 using AssetBlock.Domain.Abstractions.Services;
 using AssetBlock.Domain.Core.Constants;
 using AssetBlock.Domain.Core.Dto.Paging;
 using AssetBlock.Domain.Core.Dto.Reviews;
-using AssetBlock.Domain.Core.Entities;
 using AwesomeAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
 using NSubstitute;
@@ -44,7 +43,7 @@ public class GetReviewsQueryHandlerTests
 
         _cacheMock.Get<PagedResult<ReviewListItem>>(key, Arg.Any<CancellationToken>()).Returns(pagedResult);
 
-        var result = await _handler.Handle(query, CancellationToken.None);
+        Ardalis.Result.Result<PagedResult<ReviewListItem>> result = await _handler.Handle(query, CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
         result.Value.Items.Should().HaveCount(1);
@@ -61,21 +60,16 @@ public class GetReviewsQueryHandlerTests
         var query = new GetReviewsQuery(assetId, request);
         var key = CacheKeys.ReviewsList(assetId, request);
 
-        var items = new List<Review>
+        var items = new List<ReviewListItem>
         {
-            new()
-            {
-                Id = Guid.NewGuid(), AssetId = assetId, UserId = Guid.NewGuid(),
-                Rating = 4, Comment = "Nice", CreatedAt = DateTimeOffset.UtcNow,
-                User = new User { Id = Guid.NewGuid(), Username = "alice", Email = "a@a.com", PasswordHash = "h", Role = AppRoles.USER }
-            }
+            new(Guid.NewGuid(), assetId, Guid.NewGuid(), "alice", 4, "Nice", DateTimeOffset.UtcNow)
         };
-        var pagedResult = new PagedResult<Review>(items, 1, 1, 10);
+        var pagedResult = new PagedResult<ReviewListItem>(items, 1, 1, 10);
 
         _cacheMock.Get<PagedResult<ReviewListItem>>(key, Arg.Any<CancellationToken>()).Returns((PagedResult<ReviewListItem>?)null);
         _reviewStoreMock.GetPaged(assetId, request, Arg.Any<CancellationToken>()).Returns(pagedResult);
 
-        var result = await _handler.Handle(query, CancellationToken.None);
+        Ardalis.Result.Result<PagedResult<ReviewListItem>> result = await _handler.Handle(query, CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
         result.Value.Items.Should().HaveCount(1);

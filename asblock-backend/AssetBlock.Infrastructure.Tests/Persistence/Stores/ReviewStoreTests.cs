@@ -10,7 +10,7 @@ namespace AssetBlock.Infrastructure.Tests.Persistence.Stores;
 public sealed class ReviewStoreTests
 {
     [Fact]
-    public async Task Create_GetById_GetPaged_Exists_Delete()
+    public async Task GetById_GetPaged_Exists_GetAverageRating()
     {
         await using var db = InMemoryDbContextFactory.Create();
         var catId = Guid.NewGuid();
@@ -26,7 +26,7 @@ public sealed class ReviewStoreTests
             Role = AppRoles.USER,
             CreatedAt = DateTimeOffset.UtcNow
         });
-        db.Users.Add(new User
+        var reviewer = new User
         {
             Id = reviewerId,
             Username = "rev",
@@ -34,7 +34,8 @@ public sealed class ReviewStoreTests
             PasswordHash = "h",
             Role = AppRoles.USER,
             CreatedAt = DateTimeOffset.UtcNow
-        });
+        };
+        db.Users.Add(reviewer);
         var assetId = Guid.NewGuid();
         db.Assets.Add(new Asset
         {
@@ -42,34 +43,38 @@ public sealed class ReviewStoreTests
             AuthorId = authorId,
             CategoryId = catId,
             Title = "A",
+            RatingAverage = 5d,
+            RatingCount = 1,
             CreatedAt = DateTimeOffset.UtcNow
         });
+        var reviewId = Guid.NewGuid();
+        var review = new Review
+        {
+            Id = reviewId,
+            AssetId = assetId,
+            UserId = reviewerId,
+            Rating = 5,
+            Comment = "nice",
+            CreatedAt = DateTimeOffset.UtcNow,
+            User = reviewer
+        };
+        db.Reviews.Add(review);
         await db.SaveChangesAsync();
 
         var sut = new ReviewStore(db, NullLogger<ReviewStore>.Instance);
 
-        var now = DateTimeOffset.UtcNow;
-        var creationResult = Review.CreateForPurchase(
-            assetId,
-            authorId,
-            reviewerId,
-            now.AddDays(-1),
-            5,
-            "nice",
-            now);
-        creationResult.IsSuccess.Should().BeTrue();
-        creationResult.Review.Should().NotBeNull();
-
-        var review = await sut.Create(creationResult.Review!);
         (await sut.Exists(reviewerId, assetId)).Should().BeTrue();
 
         var byId = await sut.GetById(review.Id);
-        byId!.User.Should().NotBeNull();
+        byId.Should().NotBeNull();
+        byId.User.Should().NotBeNull();
+        byId.User.Username.Should().Be("rev");
 
         var paged = await sut.GetPaged(assetId, new GetReviewsRequest { Page = 1, PageSize = 10, SortBy = "Rating" });
         paged.Items.Should().Contain(r => r.Id == review.Id);
+        paged.Items[0].Username.Should().Be("rev");
 
-        (await sut.Delete(review.Id)).Should().BeTrue();
-        (await sut.Delete(review.Id)).Should().BeFalse();
+        var avg = await sut.GetAverageRatingForAsset(assetId);
+        avg.Should().Be(5d);
     }
 }

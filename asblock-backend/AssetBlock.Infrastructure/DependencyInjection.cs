@@ -1,7 +1,7 @@
-using AssetBlock.Domain.Abstractions.Services;
-using AssetBlock.Domain.Core.Primitives.AppSettingsOptions;
+﻿using AssetBlock.Domain.Abstractions.Services;
 using AssetBlock.Domain.Core.Dto;
 using AssetBlock.Domain.Core.Enums;
+using AssetBlock.Domain.Core.Primitives.AppSettingsOptions;
 using AssetBlock.Infrastructure.Ai;
 using AssetBlock.Infrastructure.Email;
 using AssetBlock.Infrastructure.HostedServices;
@@ -117,13 +117,13 @@ public static class DependencyInjection
         services.AddSingleton<IValidateOptions<OllamaOptions>, OllamaOptionsValidator>();
         services.AddHttpClient(OpenRouterAiGenerationProvider.HTTP_CLIENT_NAME, (sp, client) =>
         {
-            var options = sp.GetRequiredService<IOptions<OpenRouterOptions>>().Value;
+            OpenRouterOptions options = sp.GetRequiredService<IOptions<OpenRouterOptions>>().Value;
             client.BaseAddress = new Uri(EnsureTrailingSlash(options.BaseUrl));
             client.Timeout = Timeout.InfiniteTimeSpan;
         });
         services.AddHttpClient(OllamaAiGenerationProvider.HTTP_CLIENT_NAME, (sp, client) =>
         {
-            var options = sp.GetRequiredService<IOptions<OllamaOptions>>().Value;
+            OllamaOptions options = sp.GetRequiredService<IOptions<OllamaOptions>>().Value;
             client.BaseAddress = new Uri(EnsureTrailingSlash(options.BaseUrl));
             client.Timeout = Timeout.InfiniteTimeSpan;
         });
@@ -133,6 +133,7 @@ public static class DependencyInjection
 
         services.AddHostedService<StorageOrphanCleanupWorker>();
         services.AddHostedService<CheckoutReservationCleanupWorker>();
+        services.AddHostedService<RefreshTokenRetentionWorker>();
         services.AddHostedService<AnalyticsAggregationWorker>();
         services.AddHostedService<AssetProcessingWorker>();
         services.AddSingleton<IAssetProcessingJobRegistry, AssetProcessingJobRegistry>();

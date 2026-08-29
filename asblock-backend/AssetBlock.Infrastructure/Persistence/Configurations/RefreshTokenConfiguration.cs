@@ -1,4 +1,4 @@
-using AssetBlock.Domain.Core.Entities;
+﻿using AssetBlock.Domain.Core.Entities;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 
@@ -23,5 +23,6 @@ internal sealed class RefreshTokenConfiguration : IEntityTypeConfiguration<Refre
 
         builder.HasIndex(r => r.UserId);
         builder.HasIndex(r => r.TokenHash).IsUnique();
+        builder.HasIndex(r => r.ExpiresAt).HasDatabaseName("IX_refresh_tokens_expires_at");
     }
 }

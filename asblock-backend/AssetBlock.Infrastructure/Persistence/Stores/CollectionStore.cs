@@ -24,10 +24,18 @@ internal sealed class CollectionStore(ApplicationDbContext dbContext) : ICollect
 
     public async Task<Collection?> GetForUpdate(Guid id, CancellationToken cancellationToken = default)
     {
-        return await dbContext.Collections
-            .FromSqlRaw("""SELECT * FROM collections WHERE "Id" = {0} FOR UPDATE""", id)
-            .AsNoTracking()
+        var lockedId = await dbContext.Database
+            .SqlQuery<Guid>($"""SELECT "Id" AS "Value" FROM collections WHERE "Id" = {id} FOR UPDATE""")
             .FirstOrDefaultAsync(cancellationToken);
+
+        if (lockedId == Guid.Empty)
+        {
+            return null;
+        }
+
+        return await dbContext.Collections
+            .AsNoTracking()
+            .FirstOrDefaultAsync(c => c.Id == id, cancellationToken);
     }
 
     public async Task<CollectionDetailDto?> GetPublicDetail(Guid id, CancellationToken cancellationToken = default)
@@ -55,7 +63,7 @@ internal sealed class CollectionStore(ApplicationDbContext dbContext) : ICollect
             return null;
         }
 
-        var items = await dbContext.CollectionItems
+        List<CollectionItemDto> items = await dbContext.CollectionItems
             .AsNoTracking()
             .Where(i => i.CollectionId == id && i.Asset.DeletedAt == null)
             .OrderBy(i => i.Position)
@@ -117,7 +125,7 @@ internal sealed class CollectionStore(ApplicationDbContext dbContext) : ICollect
             return null;
         }
 
-        var items = await dbContext.CollectionItems
+        List<CollectionItemDto> items = await dbContext.CollectionItems
             .AsNoTracking()
             .Where(i => i.CollectionId == id)
             .OrderBy(i => i.Position)
@@ -148,7 +156,7 @@ internal sealed class CollectionStore(ApplicationDbContext dbContext) : ICollect
         ListCollectionsRequest request,
         CancellationToken cancellationToken = default)
     {
-        var query = dbContext.Collections
+        IQueryable<Collection> query = dbContext.Collections
             .AsNoTracking()
             .Where(c => c.Status == CollectionStatus.PUBLISHED)
             .Where(c => c.Items.Any(i => i.Asset.DeletedAt == null));
@@ -184,7 +192,7 @@ internal sealed class CollectionStore(ApplicationDbContext dbContext) : ICollect
         var page = Math.Max(PagedRequest.DEFAULT_PAGE, request.Page);
         var pageSize = Math.Clamp(request.PageSize, PagedRequest.MIN_PAGE_SIZE, PagedRequest.MAX_PAGE_SIZE);
 
-        var items = await query
+        List<CollectionListItemDto> items = await query
             .Skip((page - 1) * pageSize)
             .Take(pageSize)
             .Select(c => new CollectionListItemDto(
@@ -217,7 +225,7 @@ internal sealed class CollectionStore(ApplicationDbContext dbContext) : ICollect
         ListMyCollectionsRequest request,
         CancellationToken cancellationToken = default)
     {
-        var query = dbContext.Collections.AsNoTracking().Where(c => c.SellerId == sellerId);
+        IQueryable<Collection> query = dbContext.Collections.AsNoTracking().Where(c => c.SellerId == sellerId);
 
         if (!string.IsNullOrWhiteSpace(request.Search))
         {
@@ -229,7 +237,7 @@ internal sealed class CollectionStore(ApplicationDbContext dbContext) : ICollect
         }
 
         if (!string.IsNullOrWhiteSpace(request.Status)
-            && Enum.TryParse<CollectionStatus>(request.Status.Trim(), ignoreCase: true, out var status))
+            && Enum.TryParse<CollectionStatus>(request.Status.Trim(), ignoreCase: true, out CollectionStatus status))
         {
             query = query.Where(c => c.Status == status);
         }
@@ -259,7 +267,7 @@ internal sealed class CollectionStore(ApplicationDbContext dbContext) : ICollect
         var page = Math.Max(PagedRequest.DEFAULT_PAGE, request.Page);
         var pageSize = Math.Clamp(request.PageSize, PagedRequest.MIN_PAGE_SIZE, PagedRequest.MAX_PAGE_SIZE);
 
-        var items = await query
+        List<CollectionListItemDto> items = await query
             .Skip((page - 1) * pageSize)
             .Take(pageSize)
             .Select(c => new CollectionListItemDto(
@@ -285,7 +293,7 @@ internal sealed class CollectionStore(ApplicationDbContext dbContext) : ICollect
         string? description,
         CancellationToken cancellationToken = default)
     {
-        var now = DateTimeOffset.UtcNow;
+        DateTimeOffset now = DateTimeOffset.UtcNow;
         var collection = new Collection
         {
             Id = Guid.NewGuid(),
@@ -369,7 +377,7 @@ internal sealed class CollectionStore(ApplicationDbContext dbContext) : ICollect
             return;
         }
 
-        var remaining = await dbContext.CollectionItems
+        List<CollectionItem> remaining = await dbContext.CollectionItems
             .Where(i => i.CollectionId == collectionId)
             .OrderBy(i => i.Position)
             .ThenBy(i => i.AssetId)
@@ -386,7 +394,7 @@ internal sealed class CollectionStore(ApplicationDbContext dbContext) : ICollect
         IReadOnlyList<Guid> orderedAssetIds,
         CancellationToken cancellationToken = default)
     {
-        var items = await dbContext.CollectionItems
+        List<CollectionItem> items = await dbContext.CollectionItems
             .Where(i => i.CollectionId == collectionId)
             .ToListAsync(cancellationToken);
 
@@ -423,7 +431,7 @@ internal sealed class CollectionStore(ApplicationDbContext dbContext) : ICollect
 
         for (var i = 0; i < orderedAssetIds.Count; i++)
         {
-            var assetId = orderedAssetIds[i];
+            Guid assetId = orderedAssetIds[i];
             items.Single(item => item.AssetId == assetId).Position = i + 1;
         }
 

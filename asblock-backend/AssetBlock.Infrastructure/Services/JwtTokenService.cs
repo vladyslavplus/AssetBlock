@@ -1,9 +1,9 @@
-using System.Security.Claims;
+﻿using System.Security.Claims;
 using System.Security.Cryptography;
 using System.Text;
-using AssetBlock.Domain.Core.Dto.Auth;
 using AssetBlock.Domain.Abstractions.Services;
 using AssetBlock.Domain.Core.Constants;
+using AssetBlock.Domain.Core.Dto.Auth;
 using AssetBlock.Domain.Core.Entities;
 using AssetBlock.Domain.Core.Primitives.Api;
 using AssetBlock.Domain.Core.Primitives.AppSettingsOptions;
@@ -23,11 +23,11 @@ internal sealed class JwtTokenService(
     private static readonly TimeSpan _reusedGraceWindow = TimeSpan.FromSeconds(15);
     public TokensResponse GenerateTokenPair(Guid userId, string username, string email, string role)
     {
-        var jwtOptions = options.Value;
+        JwtOptions jwtOptions = options.Value;
         var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtOptions.Key));
         var credentials = new SigningCredentials(key, SecurityAlgorithms.HmacSha256);
-        var accessExpiresAt = DateTime.UtcNow.AddMinutes(jwtOptions.AccessTokenMinutes);
-        var refreshExpiresAt = DateTimeOffset.UtcNow.AddDays(jwtOptions.RefreshTokenDays);
+        DateTime accessExpiresAt = DateTime.UtcNow.AddMinutes(jwtOptions.AccessTokenMinutes);
+        DateTimeOffset refreshExpiresAt = DateTimeOffset.UtcNow.AddDays(jwtOptions.RefreshTokenDays);
 
         var claims = new List<Claim>
         {
@@ -75,7 +75,7 @@ internal sealed class JwtTokenService(
     public async Task<RefreshTokenValidationResult> ValidateRefreshToken(string refreshToken, CancellationToken cancellationToken = default)
     {
         var hash = ComputeSha256Hash(refreshToken);
-        var now = DateTimeOffset.UtcNow;
+        DateTimeOffset now = DateTimeOffset.UtcNow;
         var entity = await dbContext.RefreshTokens
             .AsNoTracking()
             .Where(rt => rt.TokenHash == hash && rt.ExpiresAt > now)
@@ -117,7 +117,7 @@ internal sealed class JwtTokenService(
 
     public async Task<bool> RevokeRefreshToken(Guid tokenId, CancellationToken cancellationToken = default)
     {
-        var now = DateTimeOffset.UtcNow;
+        DateTimeOffset now = DateTimeOffset.UtcNow;
         var affected = await dbContext.RefreshTokens
             .Where(rt => rt.Id == tokenId && rt.RevokedAt == null)
             .ExecuteUpdateAsync(setters => setters.SetProperty(rt => rt.RevokedAt, now), cancellationToken);
@@ -134,11 +134,39 @@ internal sealed class JwtTokenService(
 
     public async Task RevokeAllRefreshTokens(Guid userId, CancellationToken cancellationToken = default)
     {
-        var now = DateTimeOffset.UtcNow;
+        DateTimeOffset now = DateTimeOffset.UtcNow;
         await dbContext.RefreshTokens
             .Where(rt => rt.UserId == userId && rt.RevokedAt == null)
             .ExecuteUpdateAsync(setters => setters.SetProperty(rt => rt.RevokedAt, now), cancellationToken);
         logger.LogDebug("Revoked all active refresh tokens for user {UserId}", userId);
+    }
+
+    public async Task<int> CleanupExpiredTokens(DateTimeOffset now, int batchSize, CancellationToken cancellationToken = default)
+    {
+        if (batchSize <= 0)
+        {
+            return 0;
+        }
+
+        List<Guid> expiredIds = await dbContext.RefreshTokens
+            .AsNoTracking()
+            .Where(r => r.ExpiresAt <= now)
+            .OrderBy(r => r.ExpiresAt)
+            .Select(r => r.Id)
+            .Take(batchSize)
+            .ToListAsync(cancellationToken);
+
+        if (expiredIds.Count == 0)
+        {
+            return 0;
+        }
+
+        var deleted = await dbContext.RefreshTokens
+            .Where(r => expiredIds.Contains(r.Id))
+            .ExecuteDeleteAsync(cancellationToken);
+
+        logger.LogInformation("Cleaned up {DeletedCount} expired refresh tokens", deleted);
+        return deleted;
     }
 
     private static string ComputeSha256Hash(string input)

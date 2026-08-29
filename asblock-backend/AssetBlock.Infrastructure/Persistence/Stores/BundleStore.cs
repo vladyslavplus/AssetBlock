@@ -20,10 +20,18 @@ internal sealed class BundleStore(ApplicationDbContext dbContext) : IBundleStore
 
     public async Task<Bundle?> LockForUpdate(Guid id, CancellationToken cancellationToken = default)
     {
-        return await dbContext.Bundles
-            .FromSqlRaw("""SELECT * FROM bundles WHERE "Id" = {0} FOR UPDATE""", id)
-            .AsNoTracking()
+        var lockedId = await dbContext.Database
+            .SqlQuery<Guid>($"""SELECT "Id" AS "Value" FROM bundles WHERE "Id" = {id} FOR UPDATE""")
             .FirstOrDefaultAsync(cancellationToken);
+
+        if (lockedId == Guid.Empty)
+        {
+            return null;
+        }
+
+        return await dbContext.Bundles
+            .AsNoTracking()
+            .FirstOrDefaultAsync(b => b.Id == id, cancellationToken);
     }
 
     public Task<BundleDetailDto?> GetPublicDetail(Guid id, CancellationToken cancellationToken = default)
@@ -42,7 +50,7 @@ internal sealed class BundleStore(ApplicationDbContext dbContext) : IBundleStore
         bool publicOnly,
         CancellationToken cancellationToken)
     {
-        var query = publicOnly
+        IQueryable<Bundle> query = publicOnly
             ? AvailablePublicBundles().Where(b => b.Id == id)
             : dbContext.Bundles.AsNoTracking().Where(b => b.Id == id);
         if (sellerId is { } sid)
@@ -177,7 +185,7 @@ internal sealed class BundleStore(ApplicationDbContext dbContext) : IBundleStore
         ListBundlesRequest request,
         CancellationToken cancellationToken = default)
     {
-        var query = AvailablePublicBundles();
+        IQueryable<Bundle> query = AvailablePublicBundles();
 
         if (request.SellerId is { } sellerId)
         {
@@ -205,11 +213,11 @@ internal sealed class BundleStore(ApplicationDbContext dbContext) : IBundleStore
         }
 
         var total = await query.CountAsync(cancellationToken);
-        var projected = ProjectList(query, request.SortBy, request.SortDirection, ListBundlesRequest.AllowedSortBy, "CreatedAt");
+        IQueryable<BundleListItemDto> projected = ProjectList(query, request.SortBy, request.SortDirection, ListBundlesRequest.AllowedSortBy, "CreatedAt");
 
         var page = Math.Max(PagedRequest.DEFAULT_PAGE, request.Page);
         var pageSize = Math.Clamp(request.PageSize, PagedRequest.MIN_PAGE_SIZE, PagedRequest.MAX_PAGE_SIZE);
-        var items = await projected.Skip((page - 1) * pageSize).Take(pageSize).ToListAsync(cancellationToken);
+        List<BundleListItemDto> items = await projected.Skip((page - 1) * pageSize).Take(pageSize).ToListAsync(cancellationToken);
         return new PagedResult<BundleListItemDto>(items, total, page, pageSize);
     }
 
@@ -218,7 +226,7 @@ internal sealed class BundleStore(ApplicationDbContext dbContext) : IBundleStore
         ListMyBundlesRequest request,
         CancellationToken cancellationToken = default)
     {
-        var query = dbContext.Bundles.AsNoTracking().Where(b => b.SellerId == sellerId);
+        IQueryable<Bundle> query = dbContext.Bundles.AsNoTracking().Where(b => b.SellerId == sellerId);
 
         if (request.ArchivedOnly == true)
         {
@@ -240,11 +248,11 @@ internal sealed class BundleStore(ApplicationDbContext dbContext) : IBundleStore
         }
 
         var total = await query.CountAsync(cancellationToken);
-        var projected = ProjectList(query, request.SortBy, request.SortDirection, ListMyBundlesRequest.AllowedSortBy, "UpdatedAt");
+        IQueryable<BundleListItemDto> projected = ProjectList(query, request.SortBy, request.SortDirection, ListMyBundlesRequest.AllowedSortBy, "UpdatedAt");
 
         var page = Math.Max(PagedRequest.DEFAULT_PAGE, request.Page);
         var pageSize = Math.Clamp(request.PageSize, PagedRequest.MIN_PAGE_SIZE, PagedRequest.MAX_PAGE_SIZE);
-        var items = await projected.Skip((page - 1) * pageSize).Take(pageSize).ToListAsync(cancellationToken);
+        List<BundleListItemDto> items = await projected.Skip((page - 1) * pageSize).Take(pageSize).ToListAsync(cancellationToken);
         return new PagedResult<BundleListItemDto>(items, total, page, pageSize);
     }
 
@@ -258,7 +266,7 @@ internal sealed class BundleStore(ApplicationDbContext dbContext) : IBundleStore
         IReadOnlyList<BundleRevisionItemDraft> items,
         CancellationToken cancellationToken = default)
     {
-        var now = DateTimeOffset.UtcNow;
+        DateTimeOffset now = DateTimeOffset.UtcNow;
         var bundle = new Bundle
         {
             Id = Guid.NewGuid(),
@@ -281,7 +289,7 @@ internal sealed class BundleStore(ApplicationDbContext dbContext) : IBundleStore
 
         dbContext.Bundles.Add(bundle);
         dbContext.BundleRevisions.Add(revision);
-        foreach (var item in items)
+        foreach (BundleRevisionItemDraft item in items)
         {
             dbContext.BundleRevisionItems.Add(new BundleRevisionItem
             {
@@ -308,7 +316,7 @@ internal sealed class BundleStore(ApplicationDbContext dbContext) : IBundleStore
         IReadOnlyList<BundleRevisionItemDraft> items,
         CancellationToken cancellationToken = default)
     {
-        var locked = await LockForUpdate(bundleId, cancellationToken)
+        Bundle locked = await LockForUpdate(bundleId, cancellationToken)
             ?? throw new InvalidOperationException($"Bundle {bundleId} was not found for revision publish.");
 
         var maxRevision = await dbContext.BundleRevisions
@@ -319,7 +327,7 @@ internal sealed class BundleStore(ApplicationDbContext dbContext) : IBundleStore
             .Where(r => r.BundleId == bundleId && r.IsCurrent)
             .ExecuteUpdateAsync(setters => setters.SetProperty(r => r.IsCurrent, false), cancellationToken);
 
-        var now = DateTimeOffset.UtcNow;
+        DateTimeOffset now = DateTimeOffset.UtcNow;
         var revision = new BundleRevision
         {
             Id = Guid.NewGuid(),
@@ -335,7 +343,7 @@ internal sealed class BundleStore(ApplicationDbContext dbContext) : IBundleStore
         };
 
         dbContext.BundleRevisions.Add(revision);
-        foreach (var item in items)
+        foreach (BundleRevisionItemDraft item in items)
         {
             dbContext.BundleRevisionItems.Add(new BundleRevisionItem
             {
@@ -368,9 +376,101 @@ internal sealed class BundleStore(ApplicationDbContext dbContext) : IBundleStore
         return updated == 1;
     }
 
+    public async Task<BundleCheckoutSnapshot?> GetCheckoutSnapshot(
+        Guid bundleId,
+        CancellationToken cancellationToken = default)
+    {
+        var snapshot = await dbContext.Bundles
+            .AsNoTracking()
+            .Where(b => b.Id == bundleId && b.ArchivedAt == null)
+            .Select(b => new
+            {
+                b.Id,
+                b.SellerId,
+                CurrentRevision = b.Revisions
+                    .Where(r => r.IsCurrent)
+                    .Select(r => new
+                    {
+                        r.Id,
+                        r.Title,
+                        r.Price,
+                        r.Currency,
+                        r.ListPriceTotal,
+                        Items = r.Items
+                            .OrderBy(i => i.Position)
+                            .Select(i => new
+                            {
+                                i.AssetId,
+                                i.Position,
+                                i.AssetTitleSnapshot,
+                                i.ListPriceSnapshot,
+                                Asset = i.Asset == null ? null : new
+                                {
+                                    i.Asset.AuthorId,
+                                    i.Asset.DeletedAt,
+                                    CurrentVersion = i.Asset.Versions
+                                        .Where(v => v.IsCurrent)
+                                        .Select(v => new
+                                        {
+                                            v.Id,
+                                            v.VersionNumber,
+                                            v.LicenseCode,
+                                            v.LicenseTemplateVersion,
+                                            v.LicenseDisplayName,
+                                            v.LicenseTerms
+                                        })
+                                        .FirstOrDefault()
+                                }
+                            })
+                            .ToList()
+                    })
+                    .FirstOrDefault()
+            })
+            .FirstOrDefaultAsync(cancellationToken);
+
+        if (snapshot?.CurrentRevision is null)
+        {
+            return null;
+        }
+
+        var revision = snapshot.CurrentRevision;
+        var items = revision.Items;
+
+        if (items.Count == 0
+            || items.Any(i =>
+                i.AssetId is null
+                || i.Asset is null
+                || i.Asset.DeletedAt != null
+                || i.Asset.AuthorId != snapshot.SellerId
+                || i.Asset.CurrentVersion is null))
+        {
+            return null;
+        }
+
+        return new BundleCheckoutSnapshot(
+            snapshot.Id,
+            revision.Id,
+            snapshot.SellerId,
+            revision.Title,
+            revision.Price,
+            revision.Currency,
+            revision.ListPriceTotal,
+            items.Select(i => new BundleCheckoutItemSnapshot(
+                i.AssetId!.Value,
+                i.Asset!.CurrentVersion!.Id,
+                i.Position,
+                i.AssetTitleSnapshot,
+                i.ListPriceSnapshot,
+                i.Asset.CurrentVersion.VersionNumber,
+                i.Asset.CurrentVersion.LicenseCode,
+                i.Asset.CurrentVersion.LicenseTemplateVersion,
+                i.Asset.CurrentVersion.LicenseDisplayName,
+                i.Asset.CurrentVersion.LicenseTerms)).ToList());
+    }
+
     public async Task<bool> TryRestore(Guid id, Guid sellerId, DateTimeOffset now, CancellationToken cancellationToken = default)
     {
-        var snapshot = await GetCheckoutSnapshot(id, cancellationToken);
+        BundleCheckoutSnapshot? snapshot = await GetCheckoutSnapshot(id, cancellationToken);
         if (snapshot is null)
         {
             // Still allow restore only when current revision assets are valid; archived bundles
@@ -396,95 +496,9 @@ internal sealed class BundleStore(ApplicationDbContext dbContext) : IBundleStore
         return updated == 1;
     }
 
-    public async Task<BundleCheckoutSnapshot?> GetCheckoutSnapshot(Guid bundleId, CancellationToken cancellationToken = default)
-    {
-        var bundle = await dbContext.Bundles
-            .AsNoTracking()
-            .Where(b => b.Id == bundleId && b.ArchivedAt == null)
-            .Select(b => new { b.Id, b.SellerId })
-            .FirstOrDefaultAsync(cancellationToken);
-
-        if (bundle is null)
-        {
-            return null;
-        }
-
-        var revision = await dbContext.BundleRevisions
-            .AsNoTracking()
-            .Where(r => r.BundleId == bundleId && r.IsCurrent)
-            .Select(r => new { r.Id, r.Title, r.Price, r.Currency, r.ListPriceTotal })
-            .FirstOrDefaultAsync(cancellationToken);
-
-        if (revision is null)
-        {
-            return null;
-        }
-
-        var items = await dbContext.BundleRevisionItems
-            .AsNoTracking()
-            .Where(i => i.BundleRevisionId == revision.Id)
-            .OrderBy(i => i.Position)
-            .Select(i => new
-            {
-                i.AssetId,
-                i.Position,
-                i.AssetTitleSnapshot,
-                i.ListPriceSnapshot,
-                Asset = i.Asset == null ? null : new
-                {
-                    i.Asset.AuthorId,
-                    i.Asset.DeletedAt,
-                    CurrentVersion = i.Asset.Versions
-                        .Where(v => v.IsCurrent)
-                        .Select(v => new
-                        {
-                            v.Id,
-                            v.VersionNumber,
-                            v.LicenseCode,
-                            v.LicenseTemplateVersion,
-                            v.LicenseDisplayName,
-                            v.LicenseTerms
-                        })
-                        .FirstOrDefault()
-                }
-            })
-            .ToListAsync(cancellationToken);
-
-        if (items.Count == 0
-            || items.Any(i =>
-                i.AssetId is null
-                || i.Asset is null
-                || i.Asset.DeletedAt != null
-                || i.Asset.AuthorId != bundle.SellerId
-                || i.Asset.CurrentVersion is null))
-        {
-            return null;
-        }
-
-        return new BundleCheckoutSnapshot(
-            bundle.Id,
-            revision.Id,
-            bundle.SellerId,
-            revision.Title,
-            revision.Price,
-            revision.Currency,
-            revision.ListPriceTotal,
-            items.Select(i => new BundleCheckoutItemSnapshot(
-                i.AssetId!.Value,
-                i.Asset!.CurrentVersion!.Id,
-                i.Position,
-                i.AssetTitleSnapshot,
-                i.ListPriceSnapshot,
-                i.Asset.CurrentVersion.VersionNumber,
-                i.Asset.CurrentVersion.LicenseCode,
-                i.Asset.CurrentVersion.LicenseTemplateVersion,
-                i.Asset.CurrentVersion.LicenseDisplayName,
-                i.Asset.CurrentVersion.LicenseTerms)).ToList());
-    }
-
     public async Task LockAssetsInOrder(IReadOnlyList<Guid> assetIds, CancellationToken cancellationToken = default)
     {
-        var distinctIds = assetIds.Distinct().OrderBy(id => id).ToArray();
+        Guid[] distinctIds = assetIds.Distinct().OrderBy(id => id).ToArray();
         if (distinctIds.Length == 0)
         {
             return;

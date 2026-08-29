@@ -154,10 +154,13 @@ function commandRuleCovers(ruleValue, command) {
     return false;
   }
   return ruleTokens.every((pattern, index) => {
+    if (pattern === commandTokens[index]) {
+      return true;
+    }
     try {
       return new RegExp(`^(?:${pattern})$`, "u").test(commandTokens[index]);
     } catch {
-      return pattern === commandTokens[index];
+      return false;
     }
   });
 }

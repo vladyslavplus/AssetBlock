@@ -1080,7 +1080,7 @@ public sealed class SellerAnalyticsPostgresTests(PostgresFixture fixture)
 
 
     [Fact]
-    public async Task GetOverviewSnapshot_FullCoverage_IssuesExactlyNineReaderCommands()
+    public async Task GetOverviewSnapshot_FullCoverage_IssuesExactlySixReaderCommands()
     {
         var interceptor = new OverviewReaderCountingInterceptor();
         await using var db = await fixture.CreateCleanDbContext(b => b.AddInterceptors(interceptor));
@@ -1097,7 +1097,7 @@ public sealed class SellerAnalyticsPostgresTests(PostgresFixture fixture)
         interceptor.Reset();
         await GetSnapshot(store, seller.Id, from, to);
 
-        interceptor.ReaderCommandCount.Should().Be(9);
+        interceptor.ReaderCommandCount.Should().Be(6);
     }
 
     private static AnalyticsEvent CreateAssetView(Guid sellerId, Guid assetId, DateTimeOffset occurredAt) =>
@@ -1115,7 +1115,7 @@ public sealed class SellerAnalyticsPostgresTests(PostgresFixture fixture)
         };
 
     [Fact]
-    public async Task GetOverviewSnapshot_CommerceOnly_IssuesExactlyEightReaderCommands()
+    public async Task GetOverviewSnapshot_CommerceOnly_IssuesExactlyFiveReaderCommands()
     {
         var interceptor = new OverviewReaderCountingInterceptor();
         await using var db = await fixture.CreateCleanDbContext(b => b.AddInterceptors(interceptor));
@@ -1128,7 +1128,7 @@ public sealed class SellerAnalyticsPostgresTests(PostgresFixture fixture)
         interceptor.Reset();
         await GetSnapshot(store, seller.Id, from, to);
 
-        interceptor.ReaderCommandCount.Should().Be(8);
+        interceptor.ReaderCommandCount.Should().Be(5);
     }
 
     private sealed class OverviewReaderCountingInterceptor : DbCommandInterceptor

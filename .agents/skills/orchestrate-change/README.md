@@ -151,6 +151,8 @@ final integration/build/check commands
 final delta review only if verification changed files
 ```
 
+Formatting must stay scoped to changed files or narrow changed roots. For .NET, use `dotnet format ... --include <changed-paths>`; never run solution-wide formatting against a dirty or multi-file repository. If safe scope cannot be expressed, skip explicit formatting and rely on build analyzers plus focused checks.
+
 The adapter rejects unmanifested command attempts, unresolved permission denials, empty changed-file ledgers after mutations, and a `completed` report that includes failed or not-run verification, a human-decision reason, omitted required verification, missing raw command evidence, or same-lane verification made stale by later edits. Raw NDJSON, the copied permission manifest, and Git evidence remain available in the run directory for diagnosis.
 
 ## Troubleshooting

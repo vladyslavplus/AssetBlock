@@ -1,4 +1,4 @@
-using AssetBlock.Domain.Abstractions.Services;
+﻿using AssetBlock.Domain.Abstractions.Services;
 using AssetBlock.Domain.Core.Constants;
 using AssetBlock.Domain.Core.Entities;
 using AssetBlock.Domain.Core.Enums;
@@ -725,6 +725,26 @@ internal sealed class DatabaseMigrationService(
         }
 
         await context.SaveChangesAsync(cancellationToken);
+
+        for (var i = 0; i < assets.Count; i++)
+        {
+            (Guid assetId, _, _, _) = assets[i];
+            var sum = 0;
+            for (var j = 0; j < reviewsPerAsset; j++)
+            {
+                sum += DemoReviewRating(i, j);
+            }
+            var avg = (double)sum / reviewsPerAsset;
+
+            await context.Assets
+                .IgnoreQueryFilters()
+                .Where(a => a.Id == assetId)
+                .ExecuteUpdateAsync(setters => setters
+                    .SetProperty(a => a.RatingCount, reviewsPerAsset)
+                    .SetProperty(a => a.RatingAverage, avg),
+                    cancellationToken);
+        }
+
         logger.LogInformation(
             "Seeded demo purchases and reviews ({ReviewsPerAsset} reviews × {AssetCount} assets).",
             reviewsPerAsset,

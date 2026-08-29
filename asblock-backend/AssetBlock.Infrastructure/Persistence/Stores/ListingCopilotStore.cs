@@ -1,13 +1,15 @@
+﻿using System.Data;
+using System.Text;
+using System.Text.Json;
 using AssetBlock.Domain.Abstractions.Services;
 using AssetBlock.Domain.Core.Constants;
 using AssetBlock.Domain.Core.Dto;
+using AssetBlock.Domain.Core.Entities;
 using AssetBlock.Domain.Core.Enums;
 using AssetBlock.Infrastructure.Persistence.Configurations;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Storage;
 using Npgsql;
-using System.Data;
-using System.Text;
-using System.Text.Json;
 
 namespace AssetBlock.Infrastructure.Persistence.Stores;
 
@@ -77,10 +79,10 @@ internal sealed class ListingCopilotStore(ApplicationDbContext dbContext) : ILis
             AssetProcessingJobType.LISTING_COPILOT,
             new ListingCopilotResult(true, suggestion.ContentHash));
 
-        await using var tx = await dbContext.Database.BeginTransactionAsync(IsolationLevel.ReadCommitted, cancellationToken);
+        await using IDbContextTransaction tx = await dbContext.Database.BeginTransactionAsync(IsolationLevel.ReadCommitted, cancellationToken);
         try
         {
-            var locked = await dbContext.AssetProcessingJobs
+            List<AssetProcessingJob> locked = await dbContext.AssetProcessingJobs
                 .FromSqlInterpolated($"""
                                       SELECT *
                                       FROM asset_processing_jobs
@@ -97,7 +99,7 @@ internal sealed class ListingCopilotStore(ApplicationDbContext dbContext) : ILis
                 return false;
             }
 
-            var job = locked[0];
+            AssetProcessingJob job = locked[0];
             if (job.Id != jobId
                 || job.Type != AssetProcessingJobType.LISTING_COPILOT
                 || job.AssetId != assetId
@@ -187,14 +189,6 @@ internal sealed class ListingCopilotStore(ApplicationDbContext dbContext) : ILis
         Guid ownerUserId,
         CancellationToken cancellationToken = default)
     {
-        var owned = await dbContext.AssetVersions
-            .AsNoTracking()
-            .AnyAsync(v => v.Id == assetVersionId && v.Asset.AuthorId == ownerUserId, cancellationToken);
-        if (!owned)
-        {
-            return null;
-        }
-
         var row = await dbContext.AssetListingSuggestions
             .AsNoTracking()
             .Where(s => s.Job.AssetVersionId == assetVersionId
@@ -222,7 +216,7 @@ internal sealed class ListingCopilotStore(ApplicationDbContext dbContext) : ILis
             return null;
         }
 
-        var tags = JsonSerializer.Deserialize<List<string>>(row.Tags, _tagsJson) ?? [];
+        List<string> tags = JsonSerializer.Deserialize<List<string>>(row.Tags, _tagsJson) ?? [];
         return new ListingCopilotSuggestionDto(
             row.JobId,
             row.AssetVersionId,

@@ -438,6 +438,22 @@ test("inspectPermissionCoverage rejects shorter regex rules for multi-token comm
   assert.deepEqual(coverage.missing_commands, [command]);
 });
 
+test("inspectPermissionCoverage accepts exact command tokens containing regex operators", () => {
+  const command =
+    "dotnet test backend.csproj --filter FullyQualifiedName~Review|FullyQualifiedName~Asset";
+  const coverage = inspectPermissionCoverage(
+    { permissions: { allow: [`command(${command})`] } },
+    {
+      read_paths: [],
+      write_paths: [],
+      allowed_commands: [command],
+      required_verification: [command],
+    },
+  );
+
+  assert.deepEqual(coverage.missing_commands, []);
+});
+
 test("inspectPermissionCoverage reports every exact command and path gap", () => {
   const coverage = inspectPermissionCoverage(
     {

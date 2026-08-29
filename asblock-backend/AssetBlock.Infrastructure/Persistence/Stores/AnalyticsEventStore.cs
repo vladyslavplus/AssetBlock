@@ -1,3 +1,4 @@
+using System.Data;
 using AssetBlock.Domain.Abstractions.Services;
 using AssetBlock.Domain.Core.Constants;
 using AssetBlock.Domain.Core.Dto.Analytics;
@@ -5,7 +6,7 @@ using AssetBlock.Domain.Core.Entities;
 using AssetBlock.Domain.Core.Enums;
 using AssetBlock.Infrastructure.Persistence.Analytics;
 using Microsoft.EntityFrameworkCore;
-using System.Data;
+using Microsoft.EntityFrameworkCore.Storage;
 
 namespace AssetBlock.Infrastructure.Persistence.Stores;
 
@@ -45,76 +46,118 @@ internal sealed class AnalyticsEventStore(ApplicationDbContext dbContext) : IAna
     {
         dbContext.Database.SetCommandTimeout(commandTimeoutSeconds);
 
-        await using var transaction = await dbContext.Database.BeginTransactionAsync(
-            IsolationLevel.RepeatableRead,
-            cancellationToken);
-
-        var lockAcquired = await dbContext.Database
-            .SqlQueryRaw<bool>(
-                $"SELECT pg_try_advisory_xact_lock({AnalyticsAggregationConstants.DAILY_ROLLUP_ADVISORY_LOCK_KEY}) AS \"Value\"")
-            .SingleAsync(cancellationToken);
-
-        if (!lockAcquired)
+        var connection = dbContext.Database.GetDbConnection();
+        var openedConnection = false;
+        if (connection.State != ConnectionState.Open)
         {
-            await transaction.RollbackAsync(cancellationToken);
-            return new AnalyticsDailyRecomputeResult(AnalyticsDailyRecomputeOutcome.SKIPPED, 0, 0, 0, 0);
+            await dbContext.Database.OpenConnectionAsync(cancellationToken);
+            openedConnection = true;
         }
 
-        var sellerRows = 0;
-        var productRows = 0;
-        var collectionRows = 0;
-        var trafficRows = 0;
-
-        foreach (var day in new[] { previousDayUtc, dayUtc })
+        var lockAcquired = false;
+        try
         {
-            var dayStart = ToDayStartUtc(day);
-            var dayEnd = dayStart.AddDays(1);
+            lockAcquired = await dbContext.Database
+                .SqlQueryRaw<bool>(
+                    $"SELECT pg_try_advisory_lock({AnalyticsAggregationConstants.DAILY_ROLLUP_ADVISORY_LOCK_KEY}) AS \"Value\"")
+                .SingleAsync(cancellationToken);
 
-            sellerRows += await dbContext.Database.ExecuteSqlRawAsync(
-                AnalyticsDailyRollupSql.UPSERT_SELLER_DAILY,
-                [dayStart, dayEnd, day, updatedAt],
-                cancellationToken);
-            await dbContext.Database.ExecuteSqlRawAsync(
-                AnalyticsDailyRollupSql.DELETE_STALE_SELLER_DAILY,
-                [dayStart, dayEnd, day],
-                cancellationToken);
+            if (!lockAcquired)
+            {
+                return new AnalyticsDailyRecomputeResult(AnalyticsDailyRecomputeOutcome.SKIPPED, 0, 0, 0, 0);
+            }
 
-            productRows += await dbContext.Database.ExecuteSqlRawAsync(
-                AnalyticsDailyRollupSql.UPSERT_PRODUCT_DAILY,
-                [dayStart, dayEnd, day, updatedAt],
-                cancellationToken);
-            await dbContext.Database.ExecuteSqlRawAsync(
-                AnalyticsDailyRollupSql.DELETE_STALE_PRODUCT_DAILY,
-                [dayStart, dayEnd, day],
-                cancellationToken);
+            var sellerRows = 0;
+            var productRows = 0;
+            var collectionRows = 0;
+            var trafficRows = 0;
 
-            collectionRows += await dbContext.Database.ExecuteSqlRawAsync(
-                AnalyticsDailyRollupSql.UPSERT_COLLECTION_DAILY,
-                [dayStart, dayEnd, day, updatedAt],
-                cancellationToken);
-            await dbContext.Database.ExecuteSqlRawAsync(
-                AnalyticsDailyRollupSql.DELETE_STALE_COLLECTION_DAILY,
-                [dayStart, dayEnd, day],
-                cancellationToken);
+            foreach (DateOnly day in new[] { previousDayUtc, dayUtc })
+            {
+                DateTimeOffset dayStart = ToDayStartUtc(day);
+                DateTimeOffset dayEnd = dayStart.AddDays(1);
 
-            trafficRows += await dbContext.Database.ExecuteSqlRawAsync(
-                AnalyticsDailyRollupSql.UPSERT_TRAFFIC_DAILY,
-                [dayStart, dayEnd, day, updatedAt],
-                cancellationToken);
-            await dbContext.Database.ExecuteSqlRawAsync(
-                AnalyticsDailyRollupSql.DELETE_STALE_TRAFFIC_DAILY,
-                [dayStart, dayEnd, day],
-                cancellationToken);
+                await using (IDbContextTransaction tx = await dbContext.Database.BeginTransactionAsync(IsolationLevel.ReadCommitted, cancellationToken))
+                {
+                    sellerRows += await dbContext.Database.ExecuteSqlRawAsync(
+                        AnalyticsDailyRollupSql.UPSERT_SELLER_DAILY,
+                        [dayStart, dayEnd, day, updatedAt],
+                        cancellationToken);
+                    await dbContext.Database.ExecuteSqlRawAsync(
+                        AnalyticsDailyRollupSql.DELETE_STALE_SELLER_DAILY,
+                        [dayStart, dayEnd, day],
+                        cancellationToken);
+                    await tx.CommitAsync(cancellationToken);
+                }
+
+                await using (IDbContextTransaction tx = await dbContext.Database.BeginTransactionAsync(IsolationLevel.ReadCommitted, cancellationToken))
+                {
+                    productRows += await dbContext.Database.ExecuteSqlRawAsync(
+                        AnalyticsDailyRollupSql.UPSERT_PRODUCT_DAILY,
+                        [dayStart, dayEnd, day, updatedAt],
+                        cancellationToken);
+                    await dbContext.Database.ExecuteSqlRawAsync(
+                        AnalyticsDailyRollupSql.DELETE_STALE_PRODUCT_DAILY,
+                        [dayStart, dayEnd, day],
+                        cancellationToken);
+                    await tx.CommitAsync(cancellationToken);
+                }
+
+                await using (IDbContextTransaction tx = await dbContext.Database.BeginTransactionAsync(IsolationLevel.ReadCommitted, cancellationToken))
+                {
+                    collectionRows += await dbContext.Database.ExecuteSqlRawAsync(
+                        AnalyticsDailyRollupSql.UPSERT_COLLECTION_DAILY,
+                        [dayStart, dayEnd, day, updatedAt],
+                        cancellationToken);
+                    await dbContext.Database.ExecuteSqlRawAsync(
+                        AnalyticsDailyRollupSql.DELETE_STALE_COLLECTION_DAILY,
+                        [dayStart, dayEnd, day],
+                        cancellationToken);
+                    await tx.CommitAsync(cancellationToken);
+                }
+
+                await using (IDbContextTransaction tx = await dbContext.Database.BeginTransactionAsync(IsolationLevel.ReadCommitted, cancellationToken))
+                {
+                    trafficRows += await dbContext.Database.ExecuteSqlRawAsync(
+                        AnalyticsDailyRollupSql.UPSERT_TRAFFIC_DAILY,
+                        [dayStart, dayEnd, day, updatedAt],
+                        cancellationToken);
+                    await dbContext.Database.ExecuteSqlRawAsync(
+                        AnalyticsDailyRollupSql.DELETE_STALE_TRAFFIC_DAILY,
+                        [dayStart, dayEnd, day],
+                        cancellationToken);
+                    await tx.CommitAsync(cancellationToken);
+                }
+            }
+
+            return new AnalyticsDailyRecomputeResult(
+                AnalyticsDailyRecomputeOutcome.COMPLETED,
+                sellerRows,
+                productRows,
+                collectionRows,
+                trafficRows);
         }
+        finally
+        {
+            if (lockAcquired)
+            {
+                try
+                {
+                    await dbContext.Database.ExecuteSqlRawAsync(
+                        $"SELECT pg_advisory_unlock({AnalyticsAggregationConstants.DAILY_ROLLUP_ADVISORY_LOCK_KEY})",
+                        CancellationToken.None);
+                }
+                catch
+                {
+                    // Suppress unlock failure during teardown
+                }
+            }
 
-        await transaction.CommitAsync(cancellationToken);
-
-        return new AnalyticsDailyRecomputeResult(
-            AnalyticsDailyRecomputeOutcome.COMPLETED,
-            sellerRows,
-            productRows,
-            collectionRows,
-            trafficRows);
+            if (openedConnection)
+            {
+                await dbContext.Database.CloseConnectionAsync();
+            }
+        }
     }
 
     public async Task<AnalyticsEventRetentionResult> TryAcquireAndDeleteExpiredEvents(
@@ -126,7 +169,7 @@ internal sealed class AnalyticsEventStore(ApplicationDbContext dbContext) : IAna
     {
         dbContext.Database.SetCommandTimeout(commandTimeoutSeconds);
 
-        await using var transaction = await dbContext.Database.BeginTransactionAsync(
+        await using IDbContextTransaction transaction = await dbContext.Database.BeginTransactionAsync(
             IsolationLevel.RepeatableRead,
             cancellationToken);
 

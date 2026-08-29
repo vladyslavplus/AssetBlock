@@ -26,7 +26,7 @@ internal sealed class AssetStore(ApplicationDbContext dbContext) : IAssetStore
     {
         if (tags.Count > 0)
         {
-            foreach (var tag in tags)
+            foreach (Tag tag in tags)
             {
                 asset.AssetTags.Add(new AssetTag
                 {
@@ -45,7 +45,7 @@ internal sealed class AssetStore(ApplicationDbContext dbContext) : IAssetStore
     {
         if (tags is { Count: > 0 })
         {
-            foreach (var tag in tags)
+            foreach (Tag tag in tags)
             {
                 asset.AssetTags.Add(new AssetTag
                 {
@@ -55,7 +55,7 @@ internal sealed class AssetStore(ApplicationDbContext dbContext) : IAssetStore
             }
         }
 
-        var dbNow = await dbContext.Database.SqlQueryRaw<DateTimeOffset>(
+        DateTimeOffset dbNow = await dbContext.Database.SqlQueryRaw<DateTimeOffset>(
             """SELECT clock_timestamp() AS "Value" """).FirstAsync(cancellationToken);
 
         if (asset.CreatedAt == default)
@@ -81,7 +81,7 @@ internal sealed class AssetStore(ApplicationDbContext dbContext) : IAssetStore
 
     public Task<Asset?> GetById(Guid id, bool includeDeleted, CancellationToken cancellationToken = default)
     {
-        var query = dbContext.Assets.AsNoTracking();
+        IQueryable<Asset> query = dbContext.Assets.AsNoTracking();
         if (includeDeleted)
         {
             query = query.IgnoreQueryFilters();
@@ -100,10 +100,19 @@ internal sealed class AssetStore(ApplicationDbContext dbContext) : IAssetStore
         // FOR UPDATE locks the row for the ambient transaction; AsNoTracking returns a fresh
         // projection without detaching tracked entities (which would drop pending UoW changes).
         // SoftDelete syncs DeletedAt on any local tracker instance after ExecuteUpdate.
-        return await dbContext.Assets
-            .FromSqlRaw("""SELECT * FROM assets WHERE "Id" = {0} FOR UPDATE""", id)
-            .AsNoTracking()
+        var lockedId = await dbContext.Database
+            .SqlQuery<Guid>($"""SELECT "Id" AS "Value" FROM assets WHERE "Id" = {id} FOR UPDATE""")
             .FirstOrDefaultAsync(cancellationToken);
+
+        if (lockedId == Guid.Empty)
+        {
+            return null;
+        }
+
+        return await dbContext.Assets
+            .IgnoreQueryFilters()
+            .AsNoTracking()
+            .FirstOrDefaultAsync(a => a.Id == id, cancellationToken);
     }
 
     public Task<AssetCurrentVersionSnapshot?> GetCurrentVersionSnapshot(Guid assetId, CancellationToken cancellationToken = default)
@@ -208,7 +217,7 @@ internal sealed class AssetStore(ApplicationDbContext dbContext) : IAssetStore
     public async Task<AssetVersion> CreateNextCandidateVersion(Guid assetId, Guid authorId, AssetVersion draft, CancellationToken cancellationToken = default)
     {
         // Row lock to prevent concurrent publishes on the same asset.
-        var asset = await GetForUpdate(assetId, cancellationToken)
+        Asset asset = await GetForUpdate(assetId, cancellationToken)
             ?? throw new Domain.Core.Exceptions.AssetNotFoundException();
 
         if (asset.DeletedAt.HasValue)
@@ -225,7 +234,7 @@ internal sealed class AssetStore(ApplicationDbContext dbContext) : IAssetStore
             .Where(v => v.AssetId == assetId)
             .MaxAsync(v => (int?)v.VersionNumber, cancellationToken) ?? 0;
 
-        var dbNow = await dbContext.Database.SqlQueryRaw<DateTimeOffset>(
+        DateTimeOffset dbNow = await dbContext.Database.SqlQueryRaw<DateTimeOffset>(
             """SELECT clock_timestamp() AS "Value" """).FirstAsync(cancellationToken);
 
         draft.AssetId = assetId;
@@ -277,9 +286,9 @@ internal sealed class AssetStore(ApplicationDbContext dbContext) : IAssetStore
         query = ApplyAssetListFilters(query, request);
         var totalCount = await query.CountAsync(cancellationToken);
         query = ApplyAssetListSort(query, request);
-        var (page, pageSize) = NormalizePaging(request);
+        (int page, int pageSize) = NormalizePaging(request);
 
-        var items = await query
+        List<SellerAssetListItem> items = await query
             .Skip((page - 1) * pageSize)
             .Take(pageSize)
             .Select(a => new
@@ -297,7 +306,7 @@ internal sealed class AssetStore(ApplicationDbContext dbContext) : IAssetStore
                     .Select(at => at.Tag.Name)
                     .OrderBy(n => n)
                     .ToList(),
-                AverageRating = a.Reviews.Average(r => (double?)r.Rating) ?? 0d,
+                AverageRating = a.RatingAverage,
                 LatestVersion = a.Versions
                     .OrderByDescending(v => v.VersionNumber)
                     .Select(v => new
@@ -406,12 +415,12 @@ internal sealed class AssetStore(ApplicationDbContext dbContext) : IAssetStore
         GetAssetsRequest request,
         CancellationToken cancellationToken)
     {
-        var query = ApplyAssetListFilters(baseQuery, request);
+        IQueryable<Asset> query = ApplyAssetListFilters(baseQuery, request);
         var totalCount = await query.CountAsync(cancellationToken);
         query = ApplyAssetListSort(query, request);
-        var (page, pageSize) = NormalizePaging(request);
+        (int page, int pageSize) = NormalizePaging(request);
 
-        var items = await query
+        List<AssetListItem> items = await query
             .Skip((page - 1) * pageSize)
             .Take(pageSize)
             .Select(a => new AssetListItem(
@@ -428,7 +437,7 @@ internal sealed class AssetStore(ApplicationDbContext dbContext) : IAssetStore
                     .Select(at => at.Tag.Name)
                     .OrderBy(n => n)
                     .ToList(),
-                a.Reviews.Average(r => (double?)r.Rating) ?? 0d))
+                a.RatingAverage))
             .ToListAsync(cancellationToken);
 
         return new PagedResult<AssetListItem>(items, totalCount, page, pageSize);
@@ -534,7 +543,7 @@ internal sealed class AssetStore(ApplicationDbContext dbContext) : IAssetStore
                     .SetProperty(a => a.UpdatedAt, deletedAt),
                 cancellationToken);
 
-        var local = dbContext.Assets.Local.FirstOrDefault(a => a.Id == id);
+        Asset? local = dbContext.Assets.Local.FirstOrDefault(a => a.Id == id);
         if (local is not null)
         {
             local.DeletedAt = deletedAt;
@@ -563,7 +572,9 @@ internal sealed class AssetStore(ApplicationDbContext dbContext) : IAssetStore
 
     public Task<bool> HasAssetTag(Guid assetId, Guid tagId, CancellationToken cancellationToken = default)
     {
-        return dbContext.Set<AssetTag>().AnyAsync(at => at.AssetId == assetId && at.TagId == tagId, cancellationToken);
+        return dbContext.Set<AssetTag>()
+            .AsNoTracking()
+            .AnyAsync(at => at.AssetId == assetId && at.TagId == tagId, cancellationToken);
     }
 
     public async Task<bool> RemoveTag(Guid assetId, Guid tagId, CancellationToken cancellationToken = default)
@@ -576,7 +587,7 @@ internal sealed class AssetStore(ApplicationDbContext dbContext) : IAssetStore
 
     public async Task<bool> Update(Guid id, string? title, string? description, decimal? price, Guid? categoryId, CancellationToken cancellationToken = default)
     {
-        var asset = await dbContext.Assets.FirstOrDefaultAsync(a => a.Id == id && a.DeletedAt == null, cancellationToken);
+        Asset? asset = await dbContext.Assets.FirstOrDefaultAsync(a => a.Id == id && a.DeletedAt == null, cancellationToken);
         if (asset is null)
         {
             return false;

@@ -12,48 +12,126 @@ internal sealed class ReviewStore(ApplicationDbContext dbContext, ILogger<Review
 {
     public async Task<double> GetAverageRatingForAsset(Guid assetId, CancellationToken cancellationToken = default)
     {
-        return await dbContext.Reviews
+        return await dbContext.Assets
+            .IgnoreQueryFilters()
             .AsNoTracking()
-            .Where(r => r.AssetId == assetId)
-            .AverageAsync(r => (double?)r.Rating, cancellationToken) ?? 0d;
+            .Where(a => a.Id == assetId)
+            .Select(a => a.RatingAverage)
+            .FirstOrDefaultAsync(cancellationToken);
     }
 
     public async Task<Review> Create(Review review, CancellationToken cancellationToken = default)
     {
-        dbContext.Reviews.Add(review);
+        var hasAmbientTx = dbContext.Database.CurrentTransaction is not null;
+        var tx = hasAmbientTx ? null : await dbContext.Database.BeginTransactionAsync(cancellationToken);
         try
         {
+            await LockAssetForUpdate(review.AssetId, cancellationToken);
+            dbContext.Reviews.Add(review);
             await dbContext.SaveChangesAsync(cancellationToken);
+            await UpdateAssetRatingAggregate(review.AssetId, cancellationToken);
+            if (tx is not null)
+            {
+                await tx.CommitAsync(cancellationToken);
+            }
             logger.LogInformation("Successfully created review {ReviewId}", review.Id);
             return review;
         }
         catch (Exception ex)
         {
+            if (tx is not null)
+            {
+                await tx.RollbackAsync(cancellationToken);
+            }
             logger.LogError(ex, "Database operation failed while creating review {ReviewId}", review.Id);
             throw;
+        }
+        finally
+        {
+            if (tx is not null)
+            {
+                await tx.DisposeAsync();
+            }
         }
     }
 
     public async Task<bool> Delete(Guid id, CancellationToken cancellationToken = default)
     {
-        var review = await dbContext.Reviews.FindAsync([id], cancellationToken);
-        if (review is not null)
+        var hasAmbientTx = dbContext.Database.CurrentTransaction is not null;
+        var tx = hasAmbientTx ? null : await dbContext.Database.BeginTransactionAsync(cancellationToken);
+        try
         {
-            dbContext.Reviews.Remove(review);
-            try
+            Review? review = await dbContext.Reviews.FindAsync([id], cancellationToken);
+            if (review is null)
             {
-                await dbContext.SaveChangesAsync(cancellationToken);
-                logger.LogInformation("Successfully deleted review {ReviewId}", id);
-                return true;
+                if (tx is not null)
+                {
+                    await tx.RollbackAsync(cancellationToken);
+                }
+                logger.LogWarning("Attempted to delete non-existent review {ReviewId}", id);
+                return false;
             }
-            catch (Exception ex)
+
+            Guid assetId = review.AssetId;
+            await LockAssetForUpdate(assetId, cancellationToken);
+            dbContext.Reviews.Remove(review);
+            await dbContext.SaveChangesAsync(cancellationToken);
+            await UpdateAssetRatingAggregate(assetId, cancellationToken);
+            if (tx is not null)
             {
-                logger.LogError(ex, "Database operation failed while deleting review {ReviewId}", id);
-                throw;
+                await tx.CommitAsync(cancellationToken);
+            }
+            logger.LogInformation("Successfully deleted review {ReviewId}", id);
+            return true;
+        }
+        catch (Exception ex)
+        {
+            if (tx is not null)
+            {
+                await tx.RollbackAsync(cancellationToken);
+            }
+            logger.LogError(ex, "Database operation failed while deleting review {ReviewId}", id);
+            throw;
+        }
+        finally
+        {
+            if (tx is not null)
+            {
+                await tx.DisposeAsync();
             }
         }
-        logger.LogWarning("Attempted to delete non-existent review {ReviewId}", id);
-        return false;
+    }
+
+    private async Task LockAssetForUpdate(Guid assetId, CancellationToken cancellationToken)
+    {
+        await dbContext.Database
+            .SqlQuery<Guid>($"""SELECT "Id" AS "Value" FROM assets WHERE "Id" = {assetId} FOR UPDATE""")
+            .FirstOrDefaultAsync(cancellationToken);
+    }
+
+    private async Task UpdateAssetRatingAggregate(Guid assetId, CancellationToken cancellationToken)
+    {
+        var stats = await dbContext.Reviews
+            .AsNoTracking()
+            .Where(r => r.AssetId == assetId)
+            .GroupBy(r => r.AssetId)
+            .Select(g => new
+            {
+                Count = g.Count(),
+                Average = g.Average(r => (double)r.Rating)
+            })
+            .FirstOrDefaultAsync(cancellationToken);
+
+        var count = stats?.Count ?? 0;
+        var average = stats?.Average ?? 0d;
+
+        await dbContext.Assets
+            .IgnoreQueryFilters()
+            .Where(a => a.Id == assetId)
+            .ExecuteUpdateAsync(setters => setters
+                .SetProperty(a => a.RatingCount, count)
+                .SetProperty(a => a.RatingAverage, average),
+                cancellationToken);
     }
 
     public Task<bool> Exists(Guid userId, Guid assetId, CancellationToken cancellationToken = default)
@@ -71,11 +149,10 @@ internal sealed class ReviewStore(ApplicationDbContext dbContext, ILogger<Review
             .FirstOrDefaultAsync(r => r.Id == id, cancellationToken);
     }
 
-    public async Task<PagedResult<Review>> GetPaged(Guid assetId, GetReviewsRequest request, CancellationToken cancellationToken = default)
+    public async Task<PagedResult<ReviewListItem>> GetPaged(Guid assetId, GetReviewsRequest request, CancellationToken cancellationToken = default)
     {
-        var query = dbContext.Reviews
+        IQueryable<Review> query = dbContext.Reviews
             .AsNoTracking()
-            .Include(r => r.User)
             .Where(r => r.AssetId == assetId);
 
         if (!string.IsNullOrWhiteSpace(request.Search))
@@ -93,7 +170,7 @@ internal sealed class ReviewStore(ApplicationDbContext dbContext, ILogger<Review
         var sortBy = string.IsNullOrWhiteSpace(request.SortBy) || !GetReviewsRequest.AllowedSortBy.Contains(request.SortBy)
             ? "CreatedAt"
             : request.SortBy.Trim();
-            
+
         var sortKey = sortBy.ToUpperInvariant();
         var isDesc = request.SortDirection == SortDirection.DESC;
 
@@ -105,11 +182,19 @@ internal sealed class ReviewStore(ApplicationDbContext dbContext, ILogger<Review
 
         var page = Math.Max(PagedRequest.DEFAULT_PAGE, request.Page);
         var pageSize = Math.Clamp(request.PageSize, PagedRequest.MIN_PAGE_SIZE, PagedRequest.MAX_PAGE_SIZE);
-        var items = await query
+        List<ReviewListItem> items = await query
             .Skip((page - 1) * pageSize)
             .Take(pageSize)
+            .Select(r => new ReviewListItem(
+                r.Id,
+                r.AssetId,
+                r.UserId,
+                r.User.Username,
+                r.Rating,
+                r.Comment,
+                r.CreatedAt))
             .ToListAsync(cancellationToken);
 
-        return new PagedResult<Review>(items, total, page, pageSize);
+        return new PagedResult<ReviewListItem>(items, total, page, pageSize);
     }
 }

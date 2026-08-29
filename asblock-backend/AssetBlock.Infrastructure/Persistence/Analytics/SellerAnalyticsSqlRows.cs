@@ -1,4 +1,52 @@
-namespace AssetBlock.Infrastructure.Persistence.Analytics;
+﻿namespace AssetBlock.Infrastructure.Persistence.Analytics;
+
+internal sealed class OverviewFactsAndCommerceContextSqlRow
+{
+    public decimal CurrentGrossRevenue { get; set; }
+    public int CurrentOrders { get; set; }
+    public int CurrentUnits { get; set; }
+    public decimal CurrentDirectRevenue { get; set; }
+    public decimal CurrentBundleRevenue { get; set; }
+    public int CurrentUniqueCustomers { get; set; }
+    public int CurrentNewCustomers { get; set; }
+    public int CurrentRepeatCustomers { get; set; }
+    public decimal ComparisonGrossRevenue { get; set; }
+    public int ComparisonOrders { get; set; }
+    public int ComparisonUnits { get; set; }
+    public decimal ComparisonDirectRevenue { get; set; }
+    public decimal ComparisonBundleRevenue { get; set; }
+    public int ComparisonUniqueCustomers { get; set; }
+    public int ComparisonNewCustomers { get; set; }
+    public int ComparisonRepeatCustomers { get; set; }
+    public double? AverageRating { get; set; }
+    public int CurrentNewReviews { get; set; }
+    public int ComparisonNewReviews { get; set; }
+    public DateTimeOffset? EngagementAvailableFrom { get; set; }
+    public int CheckoutStarts { get; set; }
+    public int StripeSessionsAttached { get; set; }
+    public int CompletedOrders { get; set; }
+    public int CancelledCheckouts { get; set; }
+    public int PendingCheckouts { get; set; }
+    public decimal? TrackedCheckoutCoverage { get; set; }
+}
+
+internal sealed class TopProductsUnionSqlRow
+{
+    public string ProductKind { get; set; } = "";
+    public Guid ProductId { get; set; }
+    public string Title { get; set; } = "";
+    public bool IsDeletedOrArchived { get; set; }
+    public decimal GrossRevenue { get; set; }
+    public decimal DirectRevenue { get; set; }
+    public decimal BundleAllocatedRevenue { get; set; }
+    public int Orders { get; set; }
+    public int UnitsSold { get; set; }
+    public double? AverageRating { get; set; }
+    public int ReviewCount { get; set; }
+    public DateTimeOffset? LatestSaleAt { get; set; }
+    public decimal? CurrentPrice { get; set; }
+    public decimal? ListPriceTotal { get; set; }
+}
 
 internal sealed class CommerceContextSqlRow
 {
