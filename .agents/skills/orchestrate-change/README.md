@@ -27,7 +27,7 @@ On Windows, the adapter checks `agy` on `PATH` and then falls back to:
 Check binary discovery, prompt access, and schema access without starting an agent turn:
 
 ```powershell
-node .agents/skills/orchestrate-change/scripts/run-antigravity.mjs --prompt-file .agents/skills/orchestrate-change/examples/smoke-prompt.md --dry-run
+node .agents/skills/orchestrate-change/scripts/run-antigravity.mjs --prompt-file .agents/skills/orchestrate-change/examples/smoke-prompt.md --permission-manifest .agentflow/runs/<run-id>/permissions.json --dry-run
 ```
 
 ## Recommended Codex UI prompt
@@ -71,13 +71,13 @@ Codex resolves the friendly name to an exact slug available from `agy models`. C
 First execution:
 
 ```powershell
-node .agents/skills/orchestrate-change/scripts/run-antigravity.mjs --prompt-file D:\absolute\path\executor-prompt.md
+node .agents/skills/orchestrate-change/scripts/run-antigravity.mjs --prompt-file .agentflow/runs/<run-id>/executor-prompt.md --permission-manifest .agentflow/runs/<run-id>/permissions.json
 ```
 
 This uses `gemini-3.7-flash-medium`. Override it for the whole run:
 
 ```powershell
-node .agents/skills/orchestrate-change/scripts/run-antigravity.mjs --prompt-file D:\absolute\path\executor-prompt.md --model gemini-3.7-flash-high
+node .agents/skills/orchestrate-change/scripts/run-antigravity.mjs --prompt-file .agentflow/runs/<run-id>/executor-prompt.md --permission-manifest .agentflow/runs/<run-id>/permissions.json --model gemini-3.7-flash-high
 ```
 
 The command sends the prompt through Antigravity's NDJSON stdin protocol, avoiding Windows command-line length limits. It prints JSON containing `run_dir`, `conversation_id`, and the normalized execution report.
@@ -85,7 +85,7 @@ The command sends the prompt through Antigravity's NDJSON stdin protocol, avoidi
 Continue the same Antigravity conversation after review findings:
 
 ```powershell
-node .agents/skills/orchestrate-change/scripts/run-antigravity.mjs --prompt-file D:\absolute\path\fix-prompt.md --run-dir D:\absolute\path\.agentflow\runs\<run-id>
+node .agents/skills/orchestrate-change/scripts/run-antigravity.mjs --prompt-file .agentflow/runs/<run-id>/fix-prompt.md --permission-manifest .agentflow/runs/<run-id>/fix-permissions.json --run-dir .agentflow/runs/<run-id>
 ```
 
 The adapter preserves the run's selected model on continuation. Passing a new `--model` explicitly changes it for that conversation and stores the new choice.
@@ -102,6 +102,8 @@ Optional arguments:
 --model <slug>         Antigravity model override; default gemini-3.7-flash-medium
 --effort <level>       low, medium, or high
 --agent <name>         Antigravity custom agent
+--permission-manifest <path>  Required JSON read/write/command ledger
+--agy-settings <path>  Alternate Antigravity settings.json path
 --dry-run              Validate setup without invoking Antigravity
 ```
 
@@ -111,7 +113,28 @@ Set `AGY_BIN` when Antigravity is installed in a nonstandard location.
 
 Headless Antigravity cannot display approval prompts. Configure narrow allow rules for commands the AssetBlock implementation actually needs. Keep workspace file writes limited to this repository. Do not use `--dangerously-skip-permissions` as a workaround.
 
-The executor prompt includes exact planned command lines and requires one `list_permissions` preflight before edits. If rules are missing, Antigravity must return the complete gap list instead of failing one command per round. Add only those narrow rules, then rerun the same run directory so the conversation continues.
+Codex writes a permission manifest beside each executor/fix/final prompt:
+
+```json
+{
+  "read_paths": ["AGENTS.md"],
+  "write_paths": ["asblock-backend/**"],
+  "allowed_commands": ["dotnet test asblock-backend/Example.Tests/Example.Tests.csproj"],
+  "allowed_command_prefixes": ["git diff"],
+  "allowed_command_patterns": ["Move-Item asblock-backend.* asblock-backend.*"],
+  "required_verification": ["dotnet test asblock-backend/Example.Tests/Example.Tests.csproj"],
+  "required_paths_present": ["asblock-backend/destination.cs"],
+  "required_paths_absent": ["asblock-backend/old.cs"]
+}
+```
+
+All manifest paths are repository-relative and resolved from the active working directory. Never persist a developer-specific drive, home directory, username, or checkout location in the skill, examples, prompts, tests, or run artifacts.
+
+The adapter reads the global Antigravity `settings.json` and checks every path and exact command before spawning `agy`. Missing rules are returned together, before any model turn or edit. This gate is adapter-owned; it does not depend on the executor model calling `list_permissions`.
+
+`required_verification` is phase-specific. `allowed_command_prefixes` and `allowed_command_patterns` are optional and must stay narrowly scoped. Path postconditions are optional but required when acceptance depends on actual creation, relocation, or removal. A completed report is rejected unless each required command has passed raw evidence and every path postcondition holds. Use a new compact manifest for fix and final phases.
+
+Repository source edits should use Antigravity's `replace_file_content` / `multi_replace_file_content`. `write_to_file` targets Antigravity's artifact area and can reject repository paths; do not fall back to shell-writing commands.
 
 Antigravity permission matching may treat argument changes as distinct commands. Prefer stable repository commands such as project-level test scripts. Keep filtered test commands exact when a broad wildcard rule is not supported.
 
@@ -128,7 +151,7 @@ final integration/build/check commands
 final delta review only if verification changed files
 ```
 
-The adapter rejects a `completed` report that includes failed or not-run verification, a human-decision reason, or an unresolved permission denial from that round. Raw NDJSON and Git evidence remain available in the run directory for diagnosis.
+The adapter rejects unmanifested command attempts, unresolved permission denials, empty changed-file ledgers after mutations, and a `completed` report that includes failed or not-run verification, a human-decision reason, omitted required verification, missing raw command evidence, or same-lane verification made stale by later edits. Raw NDJSON, the copied permission manifest, and Git evidence remain available in the run directory for diagnosis.
 
 ## Troubleshooting
 

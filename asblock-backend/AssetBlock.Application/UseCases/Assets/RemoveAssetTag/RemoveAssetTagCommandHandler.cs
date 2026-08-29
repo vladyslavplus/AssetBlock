@@ -64,22 +64,6 @@ internal sealed class RemoveAssetTagCommandHandler(
                     asset.Id.ToString(),
                     new Dictionary<string, object?> { ["tagId"] = tag.Id.ToString() }), ct);
             }, cancellationToken);
-
-            try
-            {
-                await cache.RemoveByPrefix(CacheKeys.ASSETS_LIST_PREFIX, cancellationToken);
-            }
-            catch (OperationCanceledException)
-            {
-                throw;
-            }
-            catch (Exception ex)
-            {
-                logger.LogWarning(ex, "Cache invalidation failed after remove tag {AssetId}", request.AssetId);
-            }
-
-            logger.LogInformation("Removed tag {TagId} from asset: {AssetId}", tag.Id, asset.Id);
-            return Result.Success();
         }
         catch (OperationCanceledException)
         {
@@ -87,8 +71,24 @@ internal sealed class RemoveAssetTagCommandHandler(
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, "Failed to remove tag from asset: {AssetId}", request.AssetId);
-            return Result.Error(ErrorCodes.ERR_INTERNAL);
+            logger.LogError(ex, "Unexpected error removing tag {TagId} from asset {AssetId}", request.TagId, request.AssetId);
+            throw;
         }
+
+        try
+        {
+            await cache.RemoveByPrefix(CacheKeys.ASSETS_LIST_PREFIX, cancellationToken);
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Cache invalidation failed after remove tag {AssetId}", request.AssetId);
+        }
+
+        logger.LogInformation("Removed tag {TagId} from asset: {AssetId}", tag.Id, asset.Id);
+        return Result.Success();
     }
 }

@@ -1,48 +1,37 @@
 using Ardalis.Result;
+using AssetBlock.Application.Common.Caching;
 using AssetBlock.Domain.Abstractions.Services;
 using AssetBlock.Domain.Core.Dto.Tags;
 using AssetBlock.Domain.Core.Constants;
 using AssetBlock.Application.Messaging;
 using Microsoft.Extensions.Logging;
-using System.Text.Json;
 
 namespace AssetBlock.Application.UseCases.Tags.GetTags;
 
 internal sealed class GetTagsQueryHandler(
     ITagStore tagStore,
-    ICacheService cache,
+    ITypedCache cache,
     ILogger<GetTagsQueryHandler> logger) : IRequestHandler<GetTagsQuery, Result<Domain.Core.Dto.Paging.PagedResult<TagDto>>>
 {
     private static readonly TimeSpan _cacheExpiration = CatalogCacheConstants.TAGS_LIST_TTL;
-    private static readonly JsonSerializerOptions _jsonOptions = new() { PropertyNamingPolicy = JsonNamingPolicy.CamelCase };
 
     public async Task<Result<Domain.Core.Dto.Paging.PagedResult<TagDto>>> Handle(GetTagsQuery request, CancellationToken cancellationToken)
     {
         var cacheKey = CacheKeys.TagsList(request.Request);
 
-        var cached = await cache.GetString(cacheKey, cancellationToken);
-        if (cached != null)
+        var cached = await cache.Get<Domain.Core.Dto.Paging.PagedResult<TagDto>>(cacheKey, cancellationToken);
+        if (cached is not null)
         {
-            try
-            {
-                var result = JsonSerializer.Deserialize<Domain.Core.Dto.Paging.PagedResult<TagDto>>(cached, _jsonOptions);
-                if (result != null)
-                {
-                    return Result.Success(result);
-                }
-            }
-            catch (JsonException ex)
-            {
-                logger.LogWarning(ex, "Failed to deserialize cached tags from {Key}", cacheKey);
-                await cache.RemoveByPrefix(CacheKeys.TAGS_LIST_PREFIX, cancellationToken);
-            }
+            logger.LogDebug("Tags list cache hit for key {Key}", cacheKey);
+            return Result.Success(cached);
         }
 
+        logger.LogDebug("Tags list cache miss for key {Key}", cacheKey);
         var tagsPaged = await tagStore.SearchTags(request.Request, cancellationToken);
         var tagDtos = tagsPaged.Items.Select(t => new TagDto(t.Id, t.Name)).ToList();
         var resultPaged = new Domain.Core.Dto.Paging.PagedResult<TagDto>(tagDtos, tagsPaged.TotalCount, tagsPaged.Page, tagsPaged.PageSize);
 
-        await cache.SetString(cacheKey, JsonSerializer.Serialize(resultPaged, _jsonOptions), _cacheExpiration, cancellationToken);
+        await cache.Set(cacheKey, resultPaged, _cacheExpiration, cancellationToken);
         return Result.Success(resultPaged);
     }
 }

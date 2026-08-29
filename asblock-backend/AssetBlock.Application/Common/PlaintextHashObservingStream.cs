@@ -1,9 +1,105 @@
+using System.IO.Pipelines;
 using System.Security.Cryptography;
+using AssetBlock.Domain.Abstractions.Services;
 
 namespace AssetBlock.Application.Common;
 
+public interface IAssetEncryptUploadService
+{
+    Task<string> EncryptAndUpload(
+        Stream plain,
+        string storageKey,
+        long ciphertextLength,
+        CancellationToken cancellationToken);
+}
+
+internal sealed class AssetEncryptUploadService(
+    IEncryptionService encryptionService,
+    IAssetStorageService assetStorageService) : IAssetEncryptUploadService
+{
+    public async Task<string> EncryptAndUpload(
+        Stream plain,
+        string storageKey,
+        long ciphertextLength,
+        CancellationToken cancellationToken)
+    {
+        using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        var combinedToken = linkedCts.Token;
+
+        await using var hashingStream = new PlaintextHashObservingStream(plain);
+
+        var pipe = new Pipe();
+        Exception? encryptError = null;
+        Exception? uploadError = null;
+
+        var encryptTask = Task.Run(async () =>
+        {
+            try
+            {
+                await using var writerStream = pipe.Writer.AsStream(leaveOpen: true);
+                await encryptionService.Encrypt(hashingStream, writerStream, combinedToken).ConfigureAwait(false);
+                hashingStream.FinalizeHash();
+                await pipe.Writer.CompleteAsync().ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                encryptError = ex;
+                await linkedCts.CancelAsync().ConfigureAwait(false);
+                await pipe.Writer.CompleteAsync(ex).ConfigureAwait(false);
+            }
+        }, combinedToken);
+
+        var uploadTask = Task.Run(async () =>
+        {
+            try
+            {
+                await using var readerStream = pipe.Reader.AsStream(leaveOpen: true);
+                await assetStorageService.Upload(storageKey, readerStream, ciphertextLength, combinedToken).ConfigureAwait(false);
+                await pipe.Reader.CompleteAsync().ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                uploadError = ex;
+                await linkedCts.CancelAsync().ConfigureAwait(false);
+                await pipe.Reader.CompleteAsync(ex).ConfigureAwait(false);
+            }
+        }, combinedToken);
+
+        try
+        {
+            await Task.WhenAll(encryptTask, uploadTask).ConfigureAwait(false);
+        }
+        catch when (encryptError is not null || uploadError is not null)
+        {
+        }
+
+        if (encryptError is not null && uploadError is not null)
+        {
+            if (encryptError is not OperationCanceledException)
+            {
+                throw encryptError;
+            }
+
+            throw uploadError;
+        }
+
+        if (encryptError is not null)
+        {
+            throw encryptError;
+        }
+
+        if (uploadError is not null)
+        {
+            throw uploadError;
+        }
+
+        cancellationToken.ThrowIfCancellationRequested();
+        return hashingStream.HashHex;
+    }
+}
+
 /// <summary>
-/// Wraps a plaintext read stream and computes a SHA-256 hash of every byte read.
+/// Wraps a plaintext read stream and computes an SHA-256 hash of every byte read.
 /// After the caller finishes reading (or calls <see cref="FinalizeHash"/>),
 /// <see cref="HashHex"/> contains the lowercase 64-character hex digest.
 /// </summary>

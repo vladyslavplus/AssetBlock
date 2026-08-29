@@ -18,6 +18,7 @@ internal sealed class UpdateAssetCommandHandler(
 {
     public async Task<Result> Handle(UpdateAssetCommand request, CancellationToken cancellationToken)
     {
+        bool updated = false;
         try
         {
             var asset = await assetStore.GetById(request.AssetId, cancellationToken);
@@ -71,7 +72,6 @@ internal sealed class UpdateAssetCommandHandler(
                 changedFields.Add("categoryId");
             }
 
-            bool updated = false;
             await unitOfWork.ExecuteInTransaction(async ct =>
             {
                 updated = await assetStore.Update(
@@ -92,27 +92,6 @@ internal sealed class UpdateAssetCommandHandler(
                         new Dictionary<string, object?> { ["changedFields"] = changedFields }), ct);
                 }
             }, cancellationToken);
-
-            if (!updated)
-            {
-                return Result.NotFound(ErrorCodes.ERR_ASSET_NOT_FOUND);
-            }
-
-            try
-            {
-                await cache.RemoveByPrefix(CacheKeys.ASSETS_LIST_PREFIX, cancellationToken);
-            }
-            catch (OperationCanceledException)
-            {
-                throw;
-            }
-            catch (Exception ex)
-            {
-                logger.LogWarning(ex, "Cache invalidation failed after asset update {AssetId}", request.AssetId);
-            }
-
-            logger.LogInformation("Updated asset: {AssetId}", request.AssetId);
-            return Result.Success();
         }
         catch (OperationCanceledException)
         {
@@ -120,8 +99,29 @@ internal sealed class UpdateAssetCommandHandler(
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, "Failed to update asset: {AssetId}", request.AssetId);
-            return Result.Error(ErrorCodes.ERR_INTERNAL);
+            logger.LogError(ex, "Unexpected error updating asset {AssetId}", request.AssetId);
+            throw;
         }
+
+        if (!updated)
+        {
+            return Result.NotFound(ErrorCodes.ERR_ASSET_NOT_FOUND);
+        }
+
+        try
+        {
+            await cache.RemoveByPrefix(CacheKeys.ASSETS_LIST_PREFIX, cancellationToken);
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Cache invalidation failed after asset update {AssetId}", request.AssetId);
+        }
+
+        logger.LogInformation("Updated asset: {AssetId}", request.AssetId);
+        return Result.Success();
     }
 }

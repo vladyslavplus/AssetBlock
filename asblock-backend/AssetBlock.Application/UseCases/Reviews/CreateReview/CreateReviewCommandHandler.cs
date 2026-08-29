@@ -6,6 +6,7 @@ using AssetBlock.Domain.Core.Constants;
 using AssetBlock.Domain.Core.Dto.Audit;
 using AssetBlock.Domain.Core.Dto.Notifications;
 using AssetBlock.Domain.Core.Dto.Outbox;
+using AssetBlock.Domain.Core.Entities;
 using AssetBlock.Domain.Core.Enums;
 using AssetBlock.Application.Messaging;
 using Microsoft.Extensions.Logging;
@@ -32,20 +33,29 @@ internal sealed class CreateReviewCommandHandler(
             return Result.NotFound(ErrorCodes.ERR_ASSET_NOT_FOUND);
         }
 
-        if (asset.AuthorId == request.UserId)
+        var now = DateTimeOffset.UtcNow;
+        var purchase = await purchaseStore.GetPurchase(request.UserId, request.AssetId, cancellationToken);
+        var creationResult = Review.CreateForPurchase(
+            request.AssetId,
+            asset.AuthorId,
+            request.UserId,
+            purchase?.PurchasedAt ?? now,
+            request.Rating,
+            request.Comment,
+            now);
+
+        if (creationResult is { IsSuccess: false, IsOwnAsset: true })
         {
             return Result.Forbidden(ErrorCodes.ERR_CANNOT_REVIEW_OWN_ASSET);
         }
 
-        var purchase = await purchaseStore.GetPurchase(request.UserId, request.AssetId, cancellationToken);
         if (purchase is null)
         {
             logger.LogWarning("CreateReview failed: user {UserId} has not purchased asset {AssetId}", request.UserId, request.AssetId);
             return ResultError.Error(ErrorCodes.ERR_ASSET_NOT_PURCHASED);
         }
 
-        var daysSincePurchase = (DateTimeOffset.UtcNow - purchase.PurchasedAt).TotalDays;
-        if (daysSincePurchase > BusinessConstants.MAX_REVIEW_DAYS_AFTER_PURCHASE)
+        if (!creationResult.IsSuccess && creationResult.IsPurchaseWindowExpired)
         {
             logger.LogWarning("CreateReview failed: user {UserId} purchase expired for review (Asset {AssetId})", request.UserId, request.AssetId);
             return ResultError.Error(ErrorCodes.ERR_REVIEW_TIME_WINDOW_EXPIRED);
@@ -58,16 +68,13 @@ internal sealed class CreateReviewCommandHandler(
             return Result.Conflict(ErrorCodes.ERR_REVIEW_ALREADY_EXISTS);
         }
 
+        var review = creationResult.Review!;
+
         try
         {
             await unitOfWork.ExecuteInTransaction(async ct =>
             {
-                var review = await reviewStore.Create(
-                    request.AssetId,
-                    request.UserId,
-                    request.Rating,
-                    request.Comment,
-                    ct);
+                await reviewStore.Create(review, ct);
 
                 var metadata = JsonSerializer.Serialize(
                     new ReviewReceivedMessage(asset.Id, asset.Title, request.UserId, request.Rating),

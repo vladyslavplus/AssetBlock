@@ -7,6 +7,7 @@ using AssetBlock.Domain.Core.Enums;
 using AwesomeAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
 using NSubstitute;
+using NSubstitute.ExceptionExtensions;
 
 namespace AssetBlock.Application.Tests.UseCases.Assets;
 
@@ -131,5 +132,87 @@ public class RemoveAssetTagCommandHandlerTests
                 && e.Metadata.ContainsKey("tagId")),
             Arg.Any<CancellationToken>());
         await _cacheMock.Received(1).RemoveByPrefix(CacheKeys.ASSETS_LIST_PREFIX);
+    }
+
+    [Fact]
+    public async Task Handle_WhenExceptionThrown_ShouldLogSafeContextAndRethrow()
+    {
+        var testLogger = new TestLogger<RemoveAssetTagCommandHandler>();
+        var unitOfWorkMock = Substitute.For<IUnitOfWork>();
+        unitOfWorkMock.ExecuteInTransaction(Arg.Any<Func<CancellationToken, Task>>(), Arg.Any<CancellationToken>())
+            .Returns(ci => ci.Arg<Func<CancellationToken, Task>>()(CancellationToken.None));
+        var handler = new RemoveAssetTagCommandHandler(
+            _assetStoreMock,
+            _tagStoreMock,
+            unitOfWorkMock,
+            _auditWriterMock,
+            _cacheMock,
+            testLogger);
+
+        var authorId = Guid.NewGuid();
+        var command = new RemoveAssetTagCommand(Guid.NewGuid(), authorId, Guid.NewGuid());
+        var asset = new Asset { Id = command.AssetId, AuthorId = authorId, CategoryId = Guid.NewGuid(), Title = "t" };
+        var tag = new Tag { Id = command.TagId, Name = "existing" };
+
+        _assetStoreMock.GetById(command.AssetId).Returns(asset);
+        _tagStoreMock.GetById(command.TagId).Returns(tag);
+        _assetStoreMock.HasAssetTag(command.AssetId, command.TagId).Returns(true);
+        _assetStoreMock.RemoveTag(command.AssetId, command.TagId).ThrowsAsync(new InvalidOperationException("db error"));
+
+        var act = () => handler.Handle(command, CancellationToken.None);
+
+        await act.Should().ThrowAsync<InvalidOperationException>().WithMessage("db error");
+        testLogger.Logs.Should().Contain(l =>
+            l.Level == Microsoft.Extensions.Logging.LogLevel.Error
+            && l.Message.Contains(command.AssetId.ToString())
+            && l.Exception is InvalidOperationException);
+    }
+
+    [Fact]
+    public async Task Handle_WhenCancelled_ShouldRethrowWithoutErrorLogging()
+    {
+        var testLogger = new TestLogger<RemoveAssetTagCommandHandler>();
+        var unitOfWorkMock = Substitute.For<IUnitOfWork>();
+        unitOfWorkMock.ExecuteInTransaction(Arg.Any<Func<CancellationToken, Task>>(), Arg.Any<CancellationToken>())
+            .Returns(ci => ci.Arg<Func<CancellationToken, Task>>()(CancellationToken.None));
+        var handler = new RemoveAssetTagCommandHandler(
+            _assetStoreMock,
+            _tagStoreMock,
+            unitOfWorkMock,
+            _auditWriterMock,
+            _cacheMock,
+            testLogger);
+
+        var authorId = Guid.NewGuid();
+        var command = new RemoveAssetTagCommand(Guid.NewGuid(), authorId, Guid.NewGuid());
+        var asset = new Asset { Id = command.AssetId, AuthorId = authorId, CategoryId = Guid.NewGuid(), Title = "t" };
+        var tag = new Tag { Id = command.TagId, Name = "existing" };
+
+        _assetStoreMock.GetById(command.AssetId).Returns(asset);
+        _tagStoreMock.GetById(command.TagId).Returns(tag);
+        _assetStoreMock.HasAssetTag(command.AssetId, command.TagId).Returns(true);
+        _assetStoreMock.RemoveTag(command.AssetId, command.TagId).ThrowsAsync(new OperationCanceledException());
+
+        var act = () => handler.Handle(command, CancellationToken.None);
+
+        await act.Should().ThrowAsync<OperationCanceledException>();
+        testLogger.Logs.Should().NotContain(l => l.Level == Microsoft.Extensions.Logging.LogLevel.Error);
+    }
+
+    private sealed class TestLogger<T> : Microsoft.Extensions.Logging.ILogger<T>
+    {
+        public List<(Microsoft.Extensions.Logging.LogLevel Level, string Message, Exception? Exception)> Logs { get; } = new();
+
+        public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
+        public bool IsEnabled(Microsoft.Extensions.Logging.LogLevel logLevel) => true;
+        public void Log<TState>(
+            Microsoft.Extensions.Logging.LogLevel logLevel,
+            Microsoft.Extensions.Logging.EventId eventId,
+            TState state,
+            Exception? exception,
+            Func<TState, Exception?, string> formatter)
+        {
+            Logs.Add((logLevel, formatter(state, exception), exception));
+        }
     }
 }

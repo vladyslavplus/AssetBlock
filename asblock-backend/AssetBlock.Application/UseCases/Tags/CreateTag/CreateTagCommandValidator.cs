@@ -1,8 +1,7 @@
-using AssetBlock.Application.UseCases.Tags.CreateTag;
 using AssetBlock.Domain.Core.Constants;
 using FluentValidation;
 
-namespace AssetBlock.Application.Validators.Tags;
+namespace AssetBlock.Application.UseCases.Tags.CreateTag;
 
 internal sealed class CreateTagCommandValidator : AbstractValidator<CreateTagCommand>
 {

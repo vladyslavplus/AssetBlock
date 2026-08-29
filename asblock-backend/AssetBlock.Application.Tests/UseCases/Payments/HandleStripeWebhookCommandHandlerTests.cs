@@ -4,6 +4,7 @@ using AssetBlock.Domain.Abstractions.Services;
 using AssetBlock.Domain.Core.Constants;
 using AssetBlock.Domain.Core.Dto.Audit;
 using AssetBlock.Domain.Core.Dto.Email;
+using AssetBlock.Domain.Core.Dto.Outbox;
 using AssetBlock.Domain.Core.Dto.Payments;
 using AssetBlock.Domain.Core.Entities;
 using AssetBlock.Domain.Core.Enums;
@@ -53,8 +54,7 @@ public class HandleStripeWebhookCommandHandlerTests
             Smtp = new EmailSmtpOptions { Host = "localhost", Port = 1025, Security = SmtpSecurityMode.NONE, TimeoutSeconds = 30 }
         }));
 
-        _handler = new HandleStripeWebhookCommandHandler(
-            _paymentServiceMock,
+        var orchestrator = new CheckoutCompletionOrchestrator(
             _assetStoreMock,
             bundleStoreMock,
             _orderStoreMock,
@@ -64,6 +64,11 @@ public class HandleStripeWebhookCommandHandlerTests
             _outboxStoreMock,
             _auditWriterMock,
             composer,
+            NullLogger<CheckoutCompletionOrchestrator>.Instance);
+
+        _handler = new HandleStripeWebhookCommandHandler(
+            _paymentServiceMock,
+            orchestrator,
             NullLogger<HandleStripeWebhookCommandHandler>.Instance);
     }
 
@@ -705,4 +710,28 @@ public class HandleStripeWebhookCommandHandlerTests
         ProcessingUpdatedAt = DateTimeOffset.UtcNow,
         CreatedAt = DateTimeOffset.UtcNow
     };
+
+    [Fact]
+    public async Task Handle_WhenVerified_ShouldDelegateToCheckoutCompletionService()
+    {
+        var mockCompletionService = Substitute.For<ICheckoutCompletionService>();
+        var mockPaymentService = Substitute.For<IPaymentService>();
+        var handler = new HandleStripeWebhookCommandHandler(
+            mockPaymentService,
+            mockCompletionService,
+            NullLogger<HandleStripeWebhookCommandHandler>.Instance);
+
+        var verified = new StripeCheckoutCompleted(Guid.NewGuid(), Guid.NewGuid(), "cs_test_delegate", 10m, "usd");
+        var expectedPayload = new OrderCompletedPayload(Guid.NewGuid(), verified.UserId, Guid.NewGuid(), null, "Title", 1, Guid.NewGuid());
+        mockPaymentService.VerifyCheckoutCompleted("payload", "sig", Arg.Any<CancellationToken>())
+            .Returns(verified);
+        mockCompletionService.CompletePaidCheckout(verified, Arg.Any<CancellationToken>())
+            .Returns(expectedPayload);
+
+        var result = await handler.Handle(new HandleStripeWebhookCommand("payload", "sig"), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.Should().Be(expectedPayload);
+        await mockCompletionService.Received(1).CompletePaidCheckout(verified, Arg.Any<CancellationToken>());
+    }
 }

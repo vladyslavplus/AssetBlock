@@ -269,12 +269,12 @@ public sealed class AssetVersionStorePostgresTests(PostgresFixture fixture)
         var strangerView = await store.ListVersions(asset.Id, requesterUserId: stranger.Id);
         strangerView.Should().NotBeNull();
         strangerView.Should().ContainSingle();
-        strangerView![0].VersionNumber.Should().Be(1);
+        strangerView[0].VersionNumber.Should().Be(1);
 
         var anonView = await store.ListVersions(asset.Id, requesterUserId: null);
         anonView.Should().NotBeNull();
         anonView.Should().ContainSingle();
-        anonView![0].VersionNumber.Should().Be(1);
+        anonView[0].VersionNumber.Should().Be(1);
     }
 
     [Fact]
@@ -382,7 +382,7 @@ public sealed class AssetVersionStorePostgresTests(PostgresFixture fixture)
             .Returns(verified);
 
         await using var db = fixture.CreateDbContext();
-        var handler = CreateWebhookHandler(db, paymentService, CreateEmailComposer());
+        var handler = CreateWebhookHandler(paymentService, CreateCompletionOrchestrator(db, CreateEmailComposer()));
         var first = await handler.Handle(new HandleStripeWebhookCommand("payload", "sig"), CancellationToken.None);
         first.IsSuccess.Should().BeTrue();
 
@@ -432,16 +432,16 @@ public sealed class AssetVersionStorePostgresTests(PostgresFixture fixture)
 
         await using var dbA = fixture.CreateDbContext();
         await using var dbB = fixture.CreateDbContext();
-        var handlerA = CreateWebhookHandler(
+        var completionA = CreateCompletionOrchestrator(
             dbA,
-            paymentService,
             emailComposer,
             new GatedCheckoutIntentStore(new CheckoutIntentStore(dbA), gate, tryCompleteResults));
-        var handlerB = CreateWebhookHandler(
+        var completionB = CreateCompletionOrchestrator(
             dbB,
-            paymentService,
             emailComposer,
             new GatedCheckoutIntentStore(new CheckoutIntentStore(dbB), gate, tryCompleteResults));
+        var handlerA = CreateWebhookHandler(paymentService, completionA);
+        var handlerB = CreateWebhookHandler(paymentService, completionB);
 
         var results = await Task.WhenAll(
             handlerA.Handle(command, CancellationToken.None),
@@ -509,12 +509,15 @@ public sealed class AssetVersionStorePostgresTests(PostgresFixture fixture)
             new CheckoutIntentStore(dbReconcile),
             gate,
             tryCompleteResults);
-        var webhookHandler = CreateWebhookHandler(dbWebhook, paymentService, emailComposer, gatedStoreWebhook);
-        var reconcileCompletion = CreateWebhookHandler(
+        var completionWebhook = CreateCompletionOrchestrator(
+            dbWebhook,
+            emailComposer,
+            gatedStoreWebhook);
+        var reconcileCompletion = CreateCompletionOrchestrator(
             dbReconcile,
-            paymentService,
             emailComposer,
             gatedStoreReconcile);
+        var webhookHandler = CreateWebhookHandler(paymentService, completionWebhook);
 
         var webhookTask = webhookHandler.Handle(
             new HandleStripeWebhookCommand("payload", "sig"),
@@ -585,13 +588,11 @@ public sealed class AssetVersionStorePostgresTests(PostgresFixture fixture)
             Smtp = new EmailSmtpOptions { Host = "localhost", Port = 1025, Security = SmtpSecurityMode.NONE, TimeoutSeconds = 30 }
         }));
 
-    private static HandleStripeWebhookCommandHandler CreateWebhookHandler(
+    private static CheckoutCompletionOrchestrator CreateCompletionOrchestrator(
         ApplicationDbContext db,
-        IPaymentService paymentService,
         TransactionalEmailComposer emailComposer,
         ICheckoutIntentStore? checkoutIntentStore = null) =>
         new(
-            paymentService,
             new AssetStore(db),
             new BundleStore(db),
             new OrderStore(db),
@@ -601,6 +602,14 @@ public sealed class AssetVersionStorePostgresTests(PostgresFixture fixture)
             new OutboxStore(db, NullLogger<OutboxStore>.Instance),
             new AuditWriter(new AuditStore(db), new NullAuditContextAccessor(), NullLogger<AuditWriter>.Instance),
             emailComposer,
+            NullLogger<CheckoutCompletionOrchestrator>.Instance);
+
+    private static HandleStripeWebhookCommandHandler CreateWebhookHandler(
+        IPaymentService paymentService,
+        ICheckoutCompletionService completionService) =>
+        new(
+            paymentService,
+            completionService,
             NullLogger<HandleStripeWebhookCommandHandler>.Instance);
 
     /// <summary>

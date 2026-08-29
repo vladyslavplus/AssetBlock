@@ -1,6 +1,6 @@
+using AssetBlock.Application.Common.Caching;
 using AssetBlock.Application.UseCases.Assets.GetAssets;
 using AssetBlock.Domain.Abstractions.Services;
-using AssetBlock.Domain.Core.Constants;
 using AssetBlock.Domain.Core.Dto.Assets;
 using AssetBlock.Domain.Core.Dto.Paging;
 using AwesomeAssertions;
@@ -12,13 +12,13 @@ namespace AssetBlock.Application.Tests.UseCases.Assets;
 public class GetAssetsQueryHandlerTests
 {
     private readonly IAssetStore _assetStoreMock;
-    private readonly ICacheService _cacheMock;
+    private readonly ITypedCache _cacheMock;
     private readonly GetAssetsQueryHandler _handler;
 
     public GetAssetsQueryHandlerTests()
     {
         _assetStoreMock = Substitute.For<IAssetStore>();
-        _cacheMock = Substitute.For<ICacheService>();
+        _cacheMock = Substitute.For<ITypedCache>();
         _handler = new GetAssetsQueryHandler(
             _assetStoreMock,
             _cacheMock,
@@ -28,17 +28,30 @@ public class GetAssetsQueryHandlerTests
     [Fact]
     public async Task Handle_WhenCacheHit_ShouldReturnCachedResultWithoutCallingStore()
     {
-        // Arrange
-        const string cachedJson = """{"items":[{"id":"00000000-0000-0000-0000-000000000001","title":"Cached Asset","description":null,"price":9.99,"categoryId":"00000000-0000-0000-0000-000000000002","categoryName":"Audio","authorId":"00000000-0000-0000-0000-000000000003","authorUsername":"seller","createdAt":"2024-01-01T00:00:00+00:00","tags":[],"averageRating":0}],"totalCount":1,"page":1,"pageSize":10,"totalPages":1}""";
-        _cacheMock.GetString(Arg.Any<string>(), Arg.Any<CancellationToken>()).Returns(cachedJson);
+        var cachedItems = new List<AssetListItem>
+        {
+            new(
+                Guid.Parse("00000000-0000-0000-0000-000000000001"),
+                "Cached Asset",
+                null,
+                9.99m,
+                Guid.Parse("00000000-0000-0000-0000-000000000002"),
+                "Audio",
+                Guid.Parse("00000000-0000-0000-0000-000000000003"),
+                "seller",
+                DateTimeOffset.Parse("2024-01-01T00:00:00+00:00"),
+                [],
+                0)
+        };
+        var cachedResult = new PagedResult<AssetListItem>(cachedItems, 1, 1, 10);
+        _cacheMock.Get<PagedResult<AssetListItem>>(Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(cachedResult);
 
         var request = new GetAssetsRequest { Page = 1, PageSize = 10 };
         var query = new GetAssetsQuery(request);
 
-        // Act
         var result = await _handler.Handle(query, CancellationToken.None);
 
-        // Assert
         result.IsSuccess.Should().BeTrue();
         result.Value.Items.Should().HaveCount(1);
         result.Value.Items[0].Title.Should().Be("Cached Asset");
@@ -49,8 +62,8 @@ public class GetAssetsQueryHandlerTests
     [Fact]
     public async Task Handle_WhenCacheMiss_ShouldFetchFromStoreAndCacheResult()
     {
-        // Arrange
-        _cacheMock.GetString(Arg.Any<string>(), Arg.Any<CancellationToken>()).Returns((string?)null);
+        _cacheMock.Get<PagedResult<AssetListItem>>(Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns((PagedResult<AssetListItem>?)null);
 
         var categoryId = Guid.NewGuid();
         var authorId = Guid.NewGuid();
@@ -76,78 +89,40 @@ public class GetAssetsQueryHandlerTests
         var request = new GetAssetsRequest { Page = 1, PageSize = 10 };
         var query = new GetAssetsQuery(request);
 
-        // Act
         var result = await _handler.Handle(query, CancellationToken.None);
 
-        // Assert
         result.IsSuccess.Should().BeTrue();
         result.Value.Items.Should().HaveCount(1);
         result.Value.Items[0].Title.Should().Be("Low-Poly Tree");
         result.Value.TotalCount.Should().Be(1);
 
         await _cacheMock.Received(1)
-            .SetString(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<TimeSpan>(), Arg.Any<CancellationToken>());
-    }
-
-    [Fact]
-    public async Task Handle_WhenCacheContainsCorruptJson_ShouldInvalidateCacheAndFetchFromStore()
-    {
-        // Arrange
-        _cacheMock.GetString(Arg.Any<string>(), Arg.Any<CancellationToken>()).Returns("this is NOT valid JSON {{{{");
-
-        var emptyPaged = new PagedResult<AssetListItem>([], 0, 1, 10);
-        _assetStoreMock.GetPaged(Arg.Any<GetAssetsRequest>(), Arg.Any<CancellationToken>()).Returns(emptyPaged);
-
-        var request = new GetAssetsRequest { Page = 1, PageSize = 10 };
-        var query = new GetAssetsQuery(request);
-
-        // Act
-        var result = await _handler.Handle(query, CancellationToken.None);
-
-        // Assert: a corrupt cache should trigger a fallback to store
-        result.IsSuccess.Should().BeTrue();
-        await _assetStoreMock.Received(1).GetPaged(Arg.Any<GetAssetsRequest>(), Arg.Any<CancellationToken>());
-        await _cacheMock.Received(1).RemoveByPrefix(CacheKeys.ASSETS_LIST_PREFIX, Arg.Any<CancellationToken>());
+            .Set(Arg.Any<string>(), Arg.Any<PagedResult<AssetListItem>>(), Arg.Any<TimeSpan>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]
     public async Task Handle_WhenStorageIsEmpty_ShouldReturnEmptyPagedResult()
     {
-        // Arrange
-        _cacheMock.GetString(Arg.Any<string>(), Arg.Any<CancellationToken>()).Returns((string?)null);
+        _cacheMock.Get<PagedResult<AssetListItem>>(Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns((PagedResult<AssetListItem>?)null);
         var emptyPaged = new PagedResult<AssetListItem>([], 0, 1, 10);
         _assetStoreMock.GetPaged(Arg.Any<GetAssetsRequest>(), Arg.Any<CancellationToken>()).Returns(emptyPaged);
 
         var request = new GetAssetsRequest { Page = 1, PageSize = 10 };
         var query = new GetAssetsQuery(request);
 
-        // Act
         var result = await _handler.Handle(query, CancellationToken.None);
 
-        // Assert
         result.IsSuccess.Should().BeTrue();
         result.Value.Items.Should().BeEmpty();
         result.Value.TotalCount.Should().Be(0);
     }
 
     [Fact]
-    public async Task Handle_WhenCacheContainsNullJson_ShouldFetchFromStore()
-    {
-        _cacheMock.GetString(Arg.Any<string>(), Arg.Any<CancellationToken>()).Returns("null");
-        var emptyPaged = new PagedResult<AssetListItem>([], 0, 1, 10);
-        _assetStoreMock.GetPaged(Arg.Any<GetAssetsRequest>(), Arg.Any<CancellationToken>()).Returns(emptyPaged);
-
-        var query = new GetAssetsQuery(new GetAssetsRequest { Page = 1, PageSize = 10 });
-        var result = await _handler.Handle(query, CancellationToken.None);
-
-        result.IsSuccess.Should().BeTrue();
-        await _assetStoreMock.Received(1).GetPaged(Arg.Any<GetAssetsRequest>(), Arg.Any<CancellationToken>());
-    }
-
-    [Fact]
     public async Task Handle_ShouldNormalizeTagListAndWhitespaceDescriptions()
     {
-        _cacheMock.GetString(Arg.Any<string>(), Arg.Any<CancellationToken>()).Returns((string?)null);
+        _cacheMock.Get<PagedResult<AssetListItem>>(Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns((PagedResult<AssetListItem>?)null);
         var categoryId = Guid.NewGuid();
         var authorId = Guid.NewGuid();
         var items = new List<AssetListItem>

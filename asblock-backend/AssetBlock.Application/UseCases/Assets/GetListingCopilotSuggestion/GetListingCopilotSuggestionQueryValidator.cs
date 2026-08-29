@@ -2,7 +2,7 @@ using FluentValidation;
 
 namespace AssetBlock.Application.UseCases.Assets.GetListingCopilotSuggestion;
 
-public sealed class GetListingCopilotSuggestionQueryValidator : AbstractValidator<GetListingCopilotSuggestionQuery>
+internal sealed class GetListingCopilotSuggestionQueryValidator : AbstractValidator<GetListingCopilotSuggestionQuery>
 {
     public GetListingCopilotSuggestionQueryValidator()
     {

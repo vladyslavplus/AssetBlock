@@ -19,21 +19,10 @@ namespace AssetBlock.Application.UseCases.Payments.HandleStripeWebhook;
 
 internal sealed class HandleStripeWebhookCommandHandler(
     IPaymentService paymentService,
-    IAssetStore assetStore,
-    IBundleStore bundleStore,
-    IOrderStore orderStore,
-    ICheckoutIntentStore checkoutIntentStore,
-    IUserStore userStore,
-    IUnitOfWork unitOfWork,
-    IOutboxStore outboxStore,
-    IAuditWriter auditWriter,
-    TransactionalEmailComposer emailComposer,
+    ICheckoutCompletionService checkoutCompletionService,
     ILogger<HandleStripeWebhookCommandHandler> logger)
-    : IRequestHandler<HandleStripeWebhookCommand, Result<OrderCompletedPayload?>>, ICheckoutCompletionService
+    : IRequestHandler<HandleStripeWebhookCommand, Result<OrderCompletedPayload?>>
 {
-    private const int MAX_EMAIL_ITEM_TITLES = 20;
-    private static readonly JsonSerializerOptions _json = new() { PropertyNamingPolicy = JsonNamingPolicy.CamelCase };
-
     public async Task<Result<OrderCompletedPayload?>> Handle(
         HandleStripeWebhookCommand request,
         CancellationToken cancellationToken)
@@ -49,7 +38,7 @@ internal sealed class HandleStripeWebhookCommandHandler(
                 return Result.Success<OrderCompletedPayload?>(null);
             }
 
-            return Result.Success(await CompletePaidCheckout(verified, cancellationToken));
+            return Result.Success(await checkoutCompletionService.CompletePaidCheckout(verified, cancellationToken));
         }
         catch (StripeWebhookInvalidSignatureException)
         {
@@ -70,6 +59,22 @@ internal sealed class HandleStripeWebhookCommandHandler(
             throw;
         }
     }
+}
+
+internal sealed class CheckoutCompletionOrchestrator(
+    IAssetStore assetStore,
+    IBundleStore bundleStore,
+    IOrderStore orderStore,
+    ICheckoutIntentStore checkoutIntentStore,
+    IUserStore userStore,
+    IUnitOfWork unitOfWork,
+    IOutboxStore outboxStore,
+    IAuditWriter auditWriter,
+    TransactionalEmailComposer emailComposer,
+    ILogger<CheckoutCompletionOrchestrator> logger) : ICheckoutCompletionService
+{
+    private const int MAX_EMAIL_ITEM_TITLES = 20;
+    private static readonly JsonSerializerOptions _json = new() { PropertyNamingPolicy = JsonNamingPolicy.CamelCase };
 
     public async Task<OrderCompletedPayload?> CompletePaidCheckout(
         StripeCheckoutCompleted verified,

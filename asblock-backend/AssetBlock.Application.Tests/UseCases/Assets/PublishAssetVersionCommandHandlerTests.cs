@@ -1,4 +1,5 @@
 using Ardalis.Result;
+using AssetBlock.Application.Common;
 using AssetBlock.Application.UseCases.Assets.PublishAssetVersion;
 using AssetBlock.Domain.Abstractions.Services;
 using AssetBlock.Domain.Core.Constants;
@@ -38,6 +39,7 @@ public class PublishAssetVersionCommandHandlerTests
             _assetStoreMock,
             _assetStorageServiceMock,
             _encryptionServiceMock,
+            new AssetEncryptUploadService(_encryptionServiceMock, _assetStorageServiceMock),
             _processingJobStoreMock,
             Microsoft.Extensions.Options.Options.Create(new FileUploadOptions()),
             _unitOfWorkMock,

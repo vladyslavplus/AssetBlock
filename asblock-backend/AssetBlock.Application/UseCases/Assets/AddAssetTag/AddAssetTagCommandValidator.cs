@@ -1,7 +1,6 @@
-using AssetBlock.Application.UseCases.Assets.AddAssetTag;
 using FluentValidation;
 
-namespace AssetBlock.Application.Validators.Assets;
+namespace AssetBlock.Application.UseCases.Assets.AddAssetTag;
 
 internal sealed class AddAssetTagCommandValidator : AbstractValidator<AddAssetTagCommand>
 {

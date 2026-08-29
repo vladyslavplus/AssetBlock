@@ -36,7 +36,21 @@ Create a focused English executor prompt in a temporary ignored path under `.age
 - a requirement to preserve pre-existing changes and avoid commits, branches, worktrees, pushes, resets, and unrelated cleanup;
 - a requirement to return the structured execution report.
 
-Before editing, require Antigravity to call `list_permissions` once and compare the result with every planned location and exact command. If anything is missing, it must stop before edits and return one complete permission-gap list in `needs_human_reason`. Do not discover permissions one command per adapter round.
+Create a JSON permission manifest beside the prompt with these arrays:
+
+- `read_paths`: every planned repository read root/file;
+- `write_paths`: every planned write root/file;
+- `allowed_commands`: all exact commands for focused and final phases;
+- `allowed_command_prefixes`: optional narrow prefixes for harmless variable-tail inspection commands such as `git diff`;
+- `allowed_command_patterns`: optional Antigravity token-regex patterns scoped to repository operations whose exact spelling may vary, such as a move constrained to repository-relative source and destination tokens;
+- `required_verification`: exact commands required in the current turn.
+- `required_paths_present` / `required_paths_absent`: optional actual filesystem postconditions for moves, generated files, and removals that a command ledger cannot prove.
+
+Use repository-relative paths rooted at the active working directory in permission manifests, executor prompts, examples, tests, documentation, and persisted run artifacts. The adapter may resolve them internally for execution, but must not persist developer-specific drives, usernames, home directories, or checkout locations.
+
+The adapter reads Antigravity's global `settings.json` and validates the whole manifest before starting the executor using Antigravity's token-prefix/regex command semantics. Missing rules fail before a conversation turn or edit and are returned as one complete list. Do not rely on the model to call `list_permissions`; tool availability and model compliance are not deterministic enough for a safety gate.
+
+For repository edits, instruct Antigravity to use `replace_file_content` / `multi_replace_file_content` and not `write_to_file`, which is reserved for Antigravity artifact paths. Never authorize shell-writing fallbacks such as `Set-Content`, redirection, or heredocs for source files.
 
 For the initial implementation phase, require Antigravity to:
 
@@ -49,14 +63,14 @@ For the initial implementation phase, require Antigravity to:
 Run from repository root:
 
 ```powershell
-node .agents/skills/orchestrate-change/scripts/run-antigravity.mjs --prompt-file <absolute-prompt-path> --model <model-slug>
+node .agents/skills/orchestrate-change/scripts/run-antigravity.mjs --prompt-file .agentflow/runs/<run-id>/executor-prompt.md --permission-manifest .agentflow/runs/<run-id>/permissions.json --model <model-slug>
 ```
 
 Invoke the dependency-free Node adapter directly. Never route it through `pnpm`, `npm`, `yarn`, or another package manager; package-manager bootstrap and registry checks can block before Antigravity starts.
 
 The adapter defaults to `gemini-3.7-flash-medium`, records the selected model in run state, and reuses it on continuation unless explicitly overridden. It records baseline and post-run Git evidence under ignored `.agentflow/runs/` and returns a run directory plus Antigravity conversation ID. Treat Git state and command output as authoritative; executor summary is supporting context only.
 
-The adapter rejects a `completed` report when it contains failed/not-run verification, still declares a human-decision reason, or follows an unresolved permission denial in that round. Treat such output as invalid, not as success.
+The adapter rejects any report after an unresolved permission denial, any command attempt absent from the current manifest, or an empty changed-file ledger after successful file mutations. It also rejects a `completed` report when required path postconditions fail, verification contains failed/not-run entries, a human-decision reason remains, a required command is omitted, raw command evidence is missing, or later same-lane edits make verification stale. Treat such output as invalid, not as success.
 
 Do not use Antigravity's `--dangerously-skip-permissions`. If a required command is soft-denied, report the exact denial and ask the user to add a narrow Antigravity permission rule.
 
@@ -78,7 +92,7 @@ When verdict is `CHANGES REQUESTED`:
 2. Continue the same Antigravity conversation and run directory:
 
 ```powershell
-node .agents/skills/orchestrate-change/scripts/run-antigravity.mjs --prompt-file <absolute-fix-prompt-path> --run-dir <absolute-run-directory>
+node .agents/skills/orchestrate-change/scripts/run-antigravity.mjs --prompt-file <absolute-fix-prompt-path> --permission-manifest <absolute-fix-manifest-path> --run-dir <absolute-run-directory>
 ```
 
 3. Inspect new Git evidence and executor verification.
@@ -87,10 +101,11 @@ node .agents/skills/orchestrate-change/scripts/run-antigravity.mjs --prompt-file
 When the reviewer returns `APPROVE`, run one final verification phase in the same Antigravity conversation:
 
 1. Send only the final command ledger and current source-approval status.
-2. Require each expensive integration suite/build/check at most once unless it fails or later source edits invalidate it.
-3. Require no formatting or source/test edits in this phase.
-4. If verification fails, send a focused fix prompt, rerun only invalidated checks, then return the changed diff to the same reviewer.
-5. If any file changes during final verification, review that delta before finishing.
+2. Create a final-phase permission manifest whose `required_verification` contains the exact final command ledger.
+3. Require each expensive integration suite/build/check at most once unless it fails or later source edits invalidate it.
+4. Require no formatting or source/test edits in this phase.
+5. If verification fails, send a focused fix prompt, rerun only invalidated checks, then return the changed diff to the same reviewer.
+6. If any file changes during final verification, review that delta before finishing.
 
 Stop with `NEEDS HUMAN` rather than continuing when any condition holds:
 

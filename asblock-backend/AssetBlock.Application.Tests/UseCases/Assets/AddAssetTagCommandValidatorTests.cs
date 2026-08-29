@@ -1,8 +1,7 @@
 using AssetBlock.Application.UseCases.Assets.AddAssetTag;
-using AssetBlock.Application.Validators.Assets;
 using AwesomeAssertions;
 
-namespace AssetBlock.Application.Tests.Validators;
+namespace AssetBlock.Application.Tests.UseCases.Assets;
 
 public class AddAssetTagCommandValidatorTests
 {

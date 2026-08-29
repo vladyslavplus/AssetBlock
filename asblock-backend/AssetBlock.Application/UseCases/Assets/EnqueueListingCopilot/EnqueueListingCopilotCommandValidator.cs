@@ -2,7 +2,7 @@ using FluentValidation;
 
 namespace AssetBlock.Application.UseCases.Assets.EnqueueListingCopilot;
 
-public sealed class EnqueueListingCopilotCommandValidator : AbstractValidator<EnqueueListingCopilotCommand>
+internal sealed class EnqueueListingCopilotCommandValidator : AbstractValidator<EnqueueListingCopilotCommand>
 {
     public EnqueueListingCopilotCommandValidator()
     {

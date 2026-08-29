@@ -1,4 +1,5 @@
 using AssetBlock.Application.Ai;
+using AssetBlock.Application.Common;
 using AssetBlock.Application.Common.Behaviors;
 using AssetBlock.Application.Common.Caching;
 using AssetBlock.Application.Messaging;
@@ -27,10 +28,11 @@ public static class DependencyInjection
         services.AddSingleton<IListingSuggestionOrchestrator, ListingSuggestionOrchestrator>();
         services.AddScoped<CheckoutSessionOrchestrator>();
         services.AddScoped<CheckoutAttributionNormalizer>();
-        services.AddScoped<ICheckoutCompletionService, HandleStripeWebhookCommandHandler>();
+        services.AddScoped<ICheckoutCompletionService, CheckoutCompletionOrchestrator>();
         services.AddSingleton<ITransactionalEmailComposer, TransactionalEmailComposer>();
         services.AddSingleton(sp => (TransactionalEmailComposer)sp.GetRequiredService<ITransactionalEmailComposer>());
         services.AddSingleton<ITypedCache, JsonTypedCache>();
+        services.AddScoped<IAssetEncryptUploadService, AssetEncryptUploadService>();
         return services;
     }
 }

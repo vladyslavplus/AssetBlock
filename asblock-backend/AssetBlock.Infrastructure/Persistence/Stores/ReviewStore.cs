@@ -18,18 +18,8 @@ internal sealed class ReviewStore(ApplicationDbContext dbContext, ILogger<Review
             .AverageAsync(r => (double?)r.Rating, cancellationToken) ?? 0d;
     }
 
-    public async Task<Review> Create(Guid assetId, Guid userId, int rating, string? comment, CancellationToken cancellationToken = default)
+    public async Task<Review> Create(Review review, CancellationToken cancellationToken = default)
     {
-        var review = new Review
-        {
-            Id = Guid.NewGuid(),
-            AssetId = assetId,
-            UserId = userId,
-            Rating = rating,
-            Comment = comment,
-            CreatedAt = DateTimeOffset.UtcNow
-        };
-
         dbContext.Reviews.Add(review);
         try
         {

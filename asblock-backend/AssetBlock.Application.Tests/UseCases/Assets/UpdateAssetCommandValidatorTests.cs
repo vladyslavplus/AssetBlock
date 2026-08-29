@@ -1,8 +1,7 @@
 using AssetBlock.Application.UseCases.Assets.UpdateAsset;
-using AssetBlock.Application.Validators.Assets;
 using AwesomeAssertions;
 
-namespace AssetBlock.Application.Tests.Validators;
+namespace AssetBlock.Application.Tests.UseCases.Assets;
 
 public class UpdateAssetCommandValidatorTests
 {

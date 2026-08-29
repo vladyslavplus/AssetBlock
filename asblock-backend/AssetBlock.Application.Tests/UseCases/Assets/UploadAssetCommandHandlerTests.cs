@@ -1,4 +1,5 @@
 using Ardalis.Result;
+using AssetBlock.Application.Common;
 using AssetBlock.Application.UseCases.Assets.UploadAsset;
 using AssetBlock.Domain.Abstractions.Services;
 using AssetBlock.Domain.Core.Constants;
@@ -48,6 +49,7 @@ public class UploadAssetCommandHandlerTests
             _tagStoreMock,
             _assetStorageServiceMock,
             _encryptionServiceMock,
+            new AssetEncryptUploadService(_encryptionServiceMock, _assetStorageServiceMock),
             processingJobStoreMock,
             Microsoft.Extensions.Options.Options.Create(new FileUploadOptions()),
             _unitOfWorkMock,

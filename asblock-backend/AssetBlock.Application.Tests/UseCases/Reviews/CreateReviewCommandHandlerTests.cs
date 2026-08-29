@@ -141,17 +141,14 @@ public class CreateReviewCommandHandlerTests
             Comment = command.Comment
         };
         _reviewStoreMock.Create(
-                command.AssetId,
-                command.UserId,
-                command.Rating,
-                command.Comment,
+                Arg.Any<Review>(),
                 Arg.Any<CancellationToken>())
             .Returns(review);
 
         var result = await _handler.Handle(command, CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
-        await _reviewStoreMock.Received(1).Create(command.AssetId, command.UserId, command.Rating, command.Comment, Arg.Any<CancellationToken>());
+        await _reviewStoreMock.Received(1).Create(Arg.Is<Review>(r => r.AssetId == command.AssetId && r.UserId == command.UserId && r.Rating == command.Rating), Arg.Any<CancellationToken>());
         await _outboxStoreMock.Received(1).Enqueue(
             OutboxMessageTypes.NOTIFICATION_DISPATCH,
             Arg.Is<NotificationDispatchPayload>(p =>
@@ -164,7 +161,7 @@ public class CreateReviewCommandHandlerTests
                 e.Action == AuditActions.REVIEW_CREATE
                 && e.Outcome == AuditOutcome.SUCCESS
                 && e.ResourceType == AuditResourceTypes.REVIEW
-                && e.ResourceId == review.Id.ToString()
+                && !string.IsNullOrEmpty(e.ResourceId)
                 && e.Metadata != null
                 && !e.Metadata.ContainsKey("comment")),
             Arg.Any<CancellationToken>());
@@ -180,11 +177,63 @@ public class CreateReviewCommandHandlerTests
         var purchase = new Purchase { Id = Guid.NewGuid(), UserId = command.UserId, AssetId = command.AssetId, AssetVersionId = Guid.NewGuid(), OrderLineId = Guid.NewGuid(), PurchasedAt = DateTimeOffset.UtcNow.AddDays(-1) };
         _purchaseStoreMock.GetPurchase(command.UserId, command.AssetId, Arg.Any<CancellationToken>()).Returns(purchase);
         _reviewStoreMock.Exists(command.UserId, command.AssetId, Arg.Any<CancellationToken>()).Returns(false);
-        _reviewStoreMock.Create(command.AssetId, command.UserId, command.Rating, command.Comment, Arg.Any<CancellationToken>()).ThrowsAsync(new Exception("DB Error"));
+        _reviewStoreMock.Create(Arg.Any<Review>(), Arg.Any<CancellationToken>()).ThrowsAsync(new Exception("DB Error"));
 
         var result = await _handler.Handle(command, CancellationToken.None);
 
         result.IsSuccess.Should().BeFalse();
         result.ValidationErrors.Should().Contain(e => e.Identifier == ErrorCodes.ERR_REVIEW_CREATE_FAILED);
+    }
+
+    [Fact]
+    public void Review_CreateForPurchase_WhenReviewingOwnAsset_ReturnsCannotReviewOwnAsset()
+    {
+        var authorId = Guid.NewGuid();
+        var now = DateTimeOffset.UtcNow;
+
+        var result = Review.CreateForPurchase(Guid.NewGuid(), authorId, authorId, now.AddDays(-1), 5, "Comment", now);
+
+        result.IsSuccess.Should().BeFalse();
+        result.IsOwnAsset.Should().BeTrue();
+        result.IsPurchaseWindowExpired.Should().BeFalse();
+        result.Review.Should().BeNull();
+    }
+
+    [Fact]
+    public void Review_CreateForPurchase_WhenPurchaseExpired_ReturnsPurchaseWindowExpired()
+    {
+        var authorId = Guid.NewGuid();
+        var buyerId = Guid.NewGuid();
+        var now = DateTimeOffset.UtcNow;
+        var purchasedAt = now.AddDays(-15);
+
+        var result = Review.CreateForPurchase(Guid.NewGuid(), authorId, buyerId, purchasedAt, 5, "Comment", now);
+
+        result.IsSuccess.Should().BeFalse();
+        result.IsOwnAsset.Should().BeFalse();
+        result.IsPurchaseWindowExpired.Should().BeTrue();
+        result.Review.Should().BeNull();
+    }
+
+    [Fact]
+    public void Review_CreateForPurchase_WhenValid_ReturnsSuccessWithPopulatedReview()
+    {
+        var assetId = Guid.NewGuid();
+        var authorId = Guid.NewGuid();
+        var buyerId = Guid.NewGuid();
+        var now = DateTimeOffset.UtcNow;
+        var purchasedAt = now.AddDays(-1);
+
+        var result = Review.CreateForPurchase(assetId, authorId, buyerId, purchasedAt, 4, "Nice!", now);
+
+        result.IsSuccess.Should().BeTrue();
+        result.IsOwnAsset.Should().BeFalse();
+        result.IsPurchaseWindowExpired.Should().BeFalse();
+        result.Review.Should().NotBeNull();
+        result.Review!.AssetId.Should().Be(assetId);
+        result.Review.UserId.Should().Be(buyerId);
+        result.Review.Rating.Should().Be(4);
+        result.Review.Comment.Should().Be("Nice!");
+        result.Review.CreatedAt.Should().Be(now);
     }
 }

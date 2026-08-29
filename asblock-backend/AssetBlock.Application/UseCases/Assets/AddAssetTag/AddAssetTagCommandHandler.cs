@@ -75,8 +75,8 @@ internal sealed class AddAssetTagCommandHandler(
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, "Failed to add tag to asset: {AssetId}", request.AssetId);
-            return Result.Error(ErrorCodes.ERR_INTERNAL);
+            logger.LogError(ex, "Unexpected error adding tag {TagName} to asset {AssetId}", normalizedName, request.AssetId);
+            throw;
         }
 
         if (outcome is not null)

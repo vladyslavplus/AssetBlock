@@ -1,9 +1,8 @@
 using AssetBlock.Application.Common.Validators;
-using AssetBlock.Application.UseCases.Assets.UpdateAsset;
 using AssetBlock.Domain.Core.Constants;
 using FluentValidation;
 
-namespace AssetBlock.Application.Validators.Assets;
+namespace AssetBlock.Application.UseCases.Assets.UpdateAsset;
 
 internal sealed class UpdateAssetCommandValidator : AbstractValidator<UpdateAssetCommand>
 {

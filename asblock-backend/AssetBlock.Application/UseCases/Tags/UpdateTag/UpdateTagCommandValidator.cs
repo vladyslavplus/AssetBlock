@@ -1,8 +1,7 @@
-using AssetBlock.Application.UseCases.Tags.UpdateTag;
 using AssetBlock.Domain.Core.Constants;
 using FluentValidation;
 
-namespace AssetBlock.Application.Validators.Tags;
+namespace AssetBlock.Application.UseCases.Tags.UpdateTag;
 
 internal sealed class UpdateTagCommandValidator : AbstractValidator<UpdateTagCommand>
 {

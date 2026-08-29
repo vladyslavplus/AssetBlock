@@ -1,7 +1,6 @@
-using AssetBlock.Application.UseCases.Assets.DeleteAsset;
 using FluentValidation;
 
-namespace AssetBlock.Application.Validators.Assets;
+namespace AssetBlock.Application.UseCases.Assets.DeleteAsset;
 
 internal sealed class DeleteAssetCommandValidator : AbstractValidator<DeleteAssetCommand>
 {

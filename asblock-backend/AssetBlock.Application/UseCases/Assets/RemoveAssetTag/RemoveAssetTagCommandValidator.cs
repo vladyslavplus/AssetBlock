@@ -1,7 +1,6 @@
-using AssetBlock.Application.UseCases.Assets.RemoveAssetTag;
 using FluentValidation;
 
-namespace AssetBlock.Application.Validators.Assets;
+namespace AssetBlock.Application.UseCases.Assets.RemoveAssetTag;
 
 internal sealed class RemoveAssetTagCommandValidator : AbstractValidator<RemoveAssetTagCommand>
 {

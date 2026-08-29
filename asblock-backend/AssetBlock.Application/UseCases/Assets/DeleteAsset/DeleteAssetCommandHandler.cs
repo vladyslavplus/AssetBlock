@@ -138,8 +138,8 @@ internal sealed class DeleteAssetCommandHandler(
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, "Failed to delete asset: {AssetId}.", request.Id);
-            return Result.Error(ErrorCodes.ERR_INTERNAL);
+            logger.LogError(ex, "Unexpected error deleting asset {AssetId}", request.Id);
+            throw;
         }
     }
 }

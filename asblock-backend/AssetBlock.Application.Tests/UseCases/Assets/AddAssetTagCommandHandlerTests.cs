@@ -140,8 +140,18 @@ public class AddAssetTagCommandHandlerTests
     }
 
     [Fact]
-    public async Task Handle_WhenAddTagThrows_ShouldReturnError()
+    public async Task Handle_WhenAddTagThrows_ShouldLogSafeContextAndRethrow()
     {
+        var testLogger = new TestLogger<AddAssetTagCommandHandler>();
+        var cacheMock = Substitute.For<ICacheService>();
+        var handler = new AddAssetTagCommandHandler(
+            _assetStoreMock,
+            _tagStoreMock,
+            _unitOfWorkMock,
+            _auditWriterMock,
+            cacheMock,
+            testLogger);
+
         var authorId = Guid.NewGuid();
         var command = new AddAssetTagCommand(Guid.NewGuid(), authorId, "existing");
         var ownership = new AssetOwnershipDto(command.AssetId, authorId, false);
@@ -152,9 +162,58 @@ public class AddAssetTagCommandHandlerTests
         _assetStoreMock.TryAddTag(command.AssetId, tag.Id, Arg.Any<CancellationToken>())
             .ThrowsAsync(new InvalidOperationException("db"));
 
-        var result = await _handler.Handle(command, CancellationToken.None);
+        var act = () => handler.Handle(command, CancellationToken.None);
 
-        result.IsSuccess.Should().BeFalse();
-        result.Status.Should().Be(ResultStatus.Error);
+        await act.Should().ThrowAsync<InvalidOperationException>().WithMessage("db");
+        testLogger.Logs.Should().Contain(l =>
+            l.Level == Microsoft.Extensions.Logging.LogLevel.Error
+            && l.Message.Contains(command.AssetId.ToString())
+            && l.Exception is InvalidOperationException);
+    }
+
+    [Fact]
+    public async Task Handle_WhenCancelled_ShouldRethrowWithoutErrorLogging()
+    {
+        var testLogger = new TestLogger<AddAssetTagCommandHandler>();
+        var cacheMock = Substitute.For<ICacheService>();
+        var handler = new AddAssetTagCommandHandler(
+            _assetStoreMock,
+            _tagStoreMock,
+            _unitOfWorkMock,
+            _auditWriterMock,
+            cacheMock,
+            testLogger);
+
+        var authorId = Guid.NewGuid();
+        var command = new AddAssetTagCommand(Guid.NewGuid(), authorId, "existing");
+        var ownership = new AssetOwnershipDto(command.AssetId, authorId, false);
+        var tag = new Tag { Id = Guid.NewGuid(), Name = "existing" };
+
+        _assetStoreMock.GetOwnership(command.AssetId).Returns(ownership);
+        _tagStoreMock.GetByName("existing").Returns(tag);
+        _assetStoreMock.TryAddTag(command.AssetId, tag.Id, Arg.Any<CancellationToken>())
+            .ThrowsAsync(new OperationCanceledException());
+
+        var act = () => handler.Handle(command, CancellationToken.None);
+
+        await act.Should().ThrowAsync<OperationCanceledException>();
+        testLogger.Logs.Should().NotContain(l => l.Level == Microsoft.Extensions.Logging.LogLevel.Error);
+    }
+
+    private sealed class TestLogger<T> : Microsoft.Extensions.Logging.ILogger<T>
+    {
+        public List<(Microsoft.Extensions.Logging.LogLevel Level, string Message, Exception? Exception)> Logs { get; } = new();
+
+        public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
+        public bool IsEnabled(Microsoft.Extensions.Logging.LogLevel logLevel) => true;
+        public void Log<TState>(
+            Microsoft.Extensions.Logging.LogLevel logLevel,
+            Microsoft.Extensions.Logging.EventId eventId,
+            TState state,
+            Exception? exception,
+            Func<TState, Exception?, string> formatter)
+        {
+            Logs.Add((logLevel, formatter(state, exception), exception));
+        }
     }
 }

@@ -1,4 +1,3 @@
-using System.IO.Pipelines;
 using AssetBlock.Application.Common;
 using AssetBlock.Domain.Abstractions.Services;
 using AssetBlock.Domain.Core.Constants;
@@ -21,6 +20,7 @@ internal sealed class UploadAssetCommandHandler(
     ITagStore tagStore,
     IAssetStorageService assetStorageService,
     IEncryptionService encryptionService,
+    IAssetEncryptUploadService encryptUploadService,
     IAssetProcessingJobStore processingJobStore,
     IOptions<FileUploadOptions> fileUploadOptions,
     IUnitOfWork unitOfWork,
@@ -65,7 +65,7 @@ internal sealed class UploadAssetCommandHandler(
         string sha256Hex;
         try
         {
-            sha256Hex = await EncryptAndUpload(request.FileContent, storageKey, ciphertextLength, cancellationToken);
+            sha256Hex = await encryptUploadService.EncryptAndUpload(request.FileContent, storageKey, ciphertextLength, cancellationToken);
         }
         catch (OperationCanceledException)
         {
@@ -102,7 +102,7 @@ internal sealed class UploadAssetCommandHandler(
             FileName = displayFileName,
             ContentLength = request.FileLength,
             ContentSha256 = sha256Hex,
-            ReleaseNotes = "Initial release",
+            ReleaseNotes = AssetVersionDefaults.INITIAL_RELEASE_NOTES,
             LicenseCode = licenseCode,
             LicenseTemplateVersion = licenseTemplate.TemplateVersion,
             LicenseDisplayName = licenseTemplate.DisplayName,
@@ -177,67 +177,6 @@ internal sealed class UploadAssetCommandHandler(
 
         logger.LogInformation("Asset uploaded successfully {AssetId} by {AuthorId}", assetId, request.AuthorId);
         return Result.Success(assetId);
-    }
-
-    /// <summary>Encrypts and uploads the plain stream; returns the lowercase SHA-256 hex of the plaintext.</summary>
-    private async Task<string> EncryptAndUpload(
-        Stream plain,
-        string storageKey,
-        long ciphertextLength,
-        CancellationToken cancellationToken)
-    {
-        // Wrap the plaintext stream so we observe its bytes for hashing.
-        await using var hashingStream = new PlaintextHashObservingStream(plain);
-
-        var pipe = new Pipe();
-        Exception? encryptError = null;
-        Exception? uploadError = null;
-
-        var encryptTask = Task.Run(async () =>
-        {
-            try
-            {
-                await using var writerStream = pipe.Writer.AsStream(leaveOpen: true);
-                await encryptionService.Encrypt(hashingStream, writerStream, cancellationToken).ConfigureAwait(false);
-                hashingStream.FinalizeHash();
-                await pipe.Writer.CompleteAsync().ConfigureAwait(false);
-            }
-            catch (Exception ex)
-            {
-                encryptError = ex;
-                await pipe.Writer.CompleteAsync(ex).ConfigureAwait(false);
-            }
-        }, CancellationToken.None);
-
-        var uploadTask = Task.Run(async () =>
-        {
-            try
-            {
-                await using var readerStream = pipe.Reader.AsStream(leaveOpen: true);
-                await assetStorageService.Upload(storageKey, readerStream, ciphertextLength, cancellationToken)
-                    .ConfigureAwait(false);
-                await pipe.Reader.CompleteAsync().ConfigureAwait(false);
-            }
-            catch (Exception ex)
-            {
-                uploadError = ex;
-                await pipe.Reader.CompleteAsync(ex).ConfigureAwait(false);
-            }
-        }, CancellationToken.None);
-
-        await Task.WhenAll(encryptTask, uploadTask).ConfigureAwait(false);
-
-        if (encryptError is not null)
-        {
-            throw encryptError;
-        }
-
-        if (uploadError is not null)
-        {
-            throw uploadError;
-        }
-
-        return hashingStream.HashHex;
     }
 
     /// <summary>

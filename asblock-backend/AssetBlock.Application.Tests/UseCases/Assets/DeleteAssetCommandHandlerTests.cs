@@ -182,7 +182,7 @@ public class DeleteAssetCommandHandlerTests
             _outboxStoreMock,
             _auditWriterMock,
             _cacheMock,
-            Microsoft.Extensions.Logging.Abstractions.NullLogger<DeleteAssetCommandHandler>.Instance);
+            NullLogger<DeleteAssetCommandHandler>.Instance);
 
         var result = await handler.Handle(command, CancellationToken.None);
 
@@ -198,8 +198,23 @@ public class DeleteAssetCommandHandlerTests
     }
 
     [Fact]
-    public async Task Handle_WhenTransactionThrows_ShouldReturnError()
+    public async Task Handle_WhenTransactionThrows_ShouldLogSafeContextAndRethrow()
     {
+        var testLogger = new TestLogger<DeleteAssetCommandHandler>();
+        var checkoutIntentStoreMock = Substitute.For<ICheckoutIntentStore>();
+        var unitOfWorkMock = Substitute.For<IUnitOfWork>();
+        unitOfWorkMock.ExecuteInTransaction(Arg.Any<Func<CancellationToken, Task>>(), Arg.Any<CancellationToken>())
+            .Returns(ci => ci.Arg<Func<CancellationToken, Task>>()(CancellationToken.None));
+        var handler = new DeleteAssetCommandHandler(
+            _assetStoreMock,
+            _purchaseStoreMock,
+            checkoutIntentStoreMock,
+            unitOfWorkMock,
+            _outboxStoreMock,
+            _auditWriterMock,
+            _cacheMock,
+            testLogger);
+
         var authorId = Guid.NewGuid();
         var command = new DeleteAssetCommand(Guid.NewGuid(), authorId);
         var asset = new Asset { Id = command.Id, AuthorId = authorId, CategoryId = Guid.NewGuid(), Title = "t" };
@@ -208,9 +223,61 @@ public class DeleteAssetCommandHandlerTests
         _assetStoreMock.Delete(command.Id, Arg.Any<CancellationToken>())
             .ThrowsAsync(new InvalidOperationException("db"));
 
-        var result = await _handler.Handle(command, CancellationToken.None);
+        var act = () => handler.Handle(command, CancellationToken.None);
 
-        result.IsSuccess.Should().BeFalse();
-        result.Status.Should().Be(Ardalis.Result.ResultStatus.Error);
+        await act.Should().ThrowAsync<InvalidOperationException>().WithMessage("db");
+        testLogger.Logs.Should().Contain(l =>
+            l.Level == Microsoft.Extensions.Logging.LogLevel.Error
+            && l.Message.Contains(command.Id.ToString())
+            && l.Exception is InvalidOperationException);
+    }
+
+    [Fact]
+    public async Task Handle_WhenCancelled_ShouldRethrowWithoutErrorLogging()
+    {
+        var testLogger = new TestLogger<DeleteAssetCommandHandler>();
+        var checkoutIntentStoreMock = Substitute.For<ICheckoutIntentStore>();
+        var unitOfWorkMock = Substitute.For<IUnitOfWork>();
+        unitOfWorkMock.ExecuteInTransaction(Arg.Any<Func<CancellationToken, Task>>(), Arg.Any<CancellationToken>())
+            .Returns(ci => ci.Arg<Func<CancellationToken, Task>>()(CancellationToken.None));
+        var handler = new DeleteAssetCommandHandler(
+            _assetStoreMock,
+            _purchaseStoreMock,
+            checkoutIntentStoreMock,
+            unitOfWorkMock,
+            _outboxStoreMock,
+            _auditWriterMock,
+            _cacheMock,
+            testLogger);
+
+        var authorId = Guid.NewGuid();
+        var command = new DeleteAssetCommand(Guid.NewGuid(), authorId);
+        var asset = new Asset { Id = command.Id, AuthorId = authorId, CategoryId = Guid.NewGuid(), Title = "t" };
+        _assetStoreMock.GetById(command.Id).Returns(asset);
+        _assetStoreMock.GetForUpdate(command.Id, Arg.Any<CancellationToken>()).Returns(asset);
+        _assetStoreMock.Delete(command.Id, Arg.Any<CancellationToken>())
+            .ThrowsAsync(new OperationCanceledException());
+
+        var act = () => handler.Handle(command, CancellationToken.None);
+
+        await act.Should().ThrowAsync<OperationCanceledException>();
+        testLogger.Logs.Should().NotContain(l => l.Level == Microsoft.Extensions.Logging.LogLevel.Error);
+    }
+
+    private sealed class TestLogger<T> : Microsoft.Extensions.Logging.ILogger<T>
+    {
+        public List<(Microsoft.Extensions.Logging.LogLevel Level, string Message, Exception? Exception)> Logs { get; } = new();
+
+        public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
+        public bool IsEnabled(Microsoft.Extensions.Logging.LogLevel logLevel) => true;
+        public void Log<TState>(
+            Microsoft.Extensions.Logging.LogLevel logLevel,
+            Microsoft.Extensions.Logging.EventId eventId,
+            TState state,
+            Exception? exception,
+            Func<TState, Exception?, string> formatter)
+        {
+            Logs.Add((logLevel, formatter(state, exception), exception));
+        }
     }
 }

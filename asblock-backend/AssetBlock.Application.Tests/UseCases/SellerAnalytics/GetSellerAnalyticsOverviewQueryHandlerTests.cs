@@ -1,4 +1,5 @@
 using AssetBlock.Application.Common.Caching;
+using AssetBlock.Application.UseCases.SellerAnalytics;
 using AssetBlock.Application.UseCases.SellerAnalytics.GetSellerAnalyticsOverview;
 using AssetBlock.Domain.Abstractions.Services;
 using AssetBlock.Domain.Core.Dto.Analytics;
@@ -390,5 +391,102 @@ public sealed class GetSellerAnalyticsOverviewQueryHandlerTests
         result.Value.EngagementTotals!.ProductViews.Current.Should().Be(0);
         result.Value.TrackedFunnel.Should().NotBeNull();
         result.Value.TrackedFunnel!.ViewSessions.Should().Be(0);
+    }
+}
+
+public sealed class SellerAnalyticsOverviewMapperTests
+{
+    [Fact]
+    public void MapOverview_WhenZeroUniqueCustomers_RepeatCustomerRateIsNull()
+    {
+        var snapshot = new SellerAnalyticsOverviewSnapshot(
+            new SellerAnalyticsRawFacts(0, 0, 0, 0, 0, 0, 0, 0),
+            new SellerAnalyticsRawFacts(0, 0, 0, 0, 0, 0, 0, 0),
+            Array.Empty<AnalyticsDayBucket>(),
+            Array.Empty<AnalyticsAssetProductRow>(),
+            Array.Empty<AnalyticsBundleProductRow>(),
+            new SellerRatingsRaw(null, 0),
+            new SellerRatingsRaw(null, 0),
+            null, null, null, null,
+            new AnalyticsCommerceFunnelRaw(0, 0, 0, 0, 0),
+            null, null,
+            Array.Empty<AnalyticsTrafficSourceRaw>(),
+            Array.Empty<AnalyticsExternalReferrerRaw>());
+
+        var from = new DateOnly(2024, 1, 1);
+        var to = new DateOnly(2024, 1, 10);
+        var dto = SellerAnalyticsOverviewMapper.MapOverview(
+            snapshot, from, to, from.AddDays(-9), from, Domain.Core.Enums.AnalyticsGranularity.DAY);
+
+        dto.RepeatCustomerRate.Current.Should().BeNull();
+        dto.RepeatCustomerRate.Previous.Should().BeNull();
+        dto.RepeatCustomerRate.AbsoluteChange.Should().BeNull();
+        dto.RepeatCustomerRate.PercentageChange.Should().BeNull();
+        dto.ReturningCustomers.Current.Should().Be(0);
+    }
+
+    [Fact]
+    public void MapOverview_WithNonZeroMetrics_CalculatesCorrectPercentagesAndRates()
+    {
+        var curFacts = new SellerAnalyticsRawFacts(
+            GrossRevenue: 1000m,
+            Orders: 10,
+            Units: 15,
+            DirectRevenue: 600m,
+            BundleRevenue: 400m,
+            UniqueCustomers: 8,
+            NewCustomers: 5,
+            RepeatCustomers: 2);
+
+        var prevFacts = new SellerAnalyticsRawFacts(
+            GrossRevenue: 500m,
+            Orders: 5,
+            Units: 8,
+            DirectRevenue: 300m,
+            BundleRevenue: 200m,
+            UniqueCustomers: 4,
+            NewCustomers: 3,
+            RepeatCustomers: 1);
+
+        var snapshot = new SellerAnalyticsOverviewSnapshot(
+            curFacts,
+            prevFacts,
+            Array.Empty<AnalyticsDayBucket>(),
+            Array.Empty<AnalyticsAssetProductRow>(),
+            Array.Empty<AnalyticsBundleProductRow>(),
+            new SellerRatingsRaw(4.5, 3),
+            new SellerRatingsRaw(4.0, 1),
+            null, null, null, null,
+            new AnalyticsCommerceFunnelRaw(10, 8, 5, 2, 1),
+            null, null,
+            Array.Empty<AnalyticsTrafficSourceRaw>(),
+            Array.Empty<AnalyticsExternalReferrerRaw>());
+
+        var from = new DateOnly(2024, 1, 1);
+        var to = new DateOnly(2024, 1, 10);
+        var dto = SellerAnalyticsOverviewMapper.MapOverview(
+            snapshot, from, to, from.AddDays(-9), from, Domain.Core.Enums.AnalyticsGranularity.DAY);
+
+        dto.GrossRevenue.Current.Should().Be(100000L);
+        dto.GrossRevenue.Previous.Should().Be(50000L);
+        dto.GrossRevenue.AbsoluteChange.Should().Be(50000L);
+        dto.GrossRevenue.PercentageChange.Should().Be(100m);
+
+        dto.Orders.Current.Should().Be(10);
+        dto.Orders.Previous.Should().Be(5);
+        dto.Orders.AbsoluteChange.Should().Be(5);
+        dto.Orders.PercentageChange.Should().Be(100m);
+
+        dto.ReturningCustomers.Current.Should().Be(3); // 8 - 5
+        dto.ReturningCustomers.Previous.Should().Be(1); // 4 - 3
+
+        dto.RepeatCustomerRate.Current.Should().Be(0.25m); // 2 / 8
+        dto.RepeatCustomerRate.Previous.Should().Be(0.25m); // 1 / 4
+        dto.RepeatCustomerRate.AbsoluteChange.Should().Be(0.0m);
+        dto.RepeatCustomerRate.PercentageChange.Should().Be(0.0m);
+
+        dto.AverageRating.Should().Be(4.5);
+        dto.NewReviews.Current.Should().Be(3);
+        dto.NewReviews.Previous.Should().Be(1);
     }
 }

@@ -48,7 +48,19 @@ public sealed class ReviewStoreTests
 
         var sut = new ReviewStore(db, NullLogger<ReviewStore>.Instance);
 
-        var review = await sut.Create(assetId, reviewerId, 5, "nice");
+        var now = DateTimeOffset.UtcNow;
+        var creationResult = Review.CreateForPurchase(
+            assetId,
+            authorId,
+            reviewerId,
+            now.AddDays(-1),
+            5,
+            "nice",
+            now);
+        creationResult.IsSuccess.Should().BeTrue();
+        creationResult.Review.Should().NotBeNull();
+
+        var review = await sut.Create(creationResult.Review!);
         (await sut.Exists(reviewerId, assetId)).Should().BeTrue();
 
         var byId = await sut.GetById(review.Id);

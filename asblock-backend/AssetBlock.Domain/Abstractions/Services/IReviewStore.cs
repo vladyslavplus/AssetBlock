@@ -7,7 +7,7 @@ namespace AssetBlock.Domain.Abstractions.Services;
 public interface IReviewStore
 {
     Task<double> GetAverageRatingForAsset(Guid assetId, CancellationToken cancellationToken = default);
-    Task<Review> Create(Guid assetId, Guid userId, int rating, string? comment, CancellationToken cancellationToken = default);
+    Task<Review> Create(Review review, CancellationToken cancellationToken = default);
     Task<bool> Delete(Guid id, CancellationToken cancellationToken = default);
     Task<bool> Exists(Guid userId, Guid assetId, CancellationToken cancellationToken = default);
     Task<Review?> GetById(Guid id, CancellationToken cancellationToken = default);

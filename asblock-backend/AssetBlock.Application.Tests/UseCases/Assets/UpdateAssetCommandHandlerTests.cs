@@ -7,6 +7,7 @@ using AssetBlock.Domain.Core.Enums;
 using AwesomeAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
 using NSubstitute;
+using NSubstitute.ExceptionExtensions;
 
 namespace AssetBlock.Application.Tests.UseCases.Assets;
 
@@ -127,5 +128,178 @@ public class UpdateAssetCommandHandlerTests
 
         result.IsSuccess.Should().BeFalse();
         result.Errors.Should().Contain(ErrorCodes.ERR_ASSET_NOT_FOUND);
+    }
+
+    [Fact]
+    public async Task Handle_WhenExceptionThrown_ShouldLogSafeContextAndRethrow()
+    {
+        var testLogger = new TestLogger<UpdateAssetCommandHandler>();
+        var categoryStoreMock = Substitute.For<ICategoryStore>();
+        var unitOfWorkMock = Substitute.For<IUnitOfWork>();
+        var auditWriterMock = Substitute.For<IAuditWriter>();
+        var cacheMock = Substitute.For<ICacheService>();
+        unitOfWorkMock.ExecuteInTransaction(Arg.Any<Func<CancellationToken, Task>>(), Arg.Any<CancellationToken>())
+            .Returns(ci => ci.Arg<Func<CancellationToken, Task>>()(CancellationToken.None));
+        var handler = new UpdateAssetCommandHandler(
+            _assetStoreMock,
+            categoryStoreMock,
+            unitOfWorkMock,
+            auditWriterMock,
+            cacheMock,
+            testLogger);
+
+        var authorId = Guid.NewGuid();
+        var command = new UpdateAssetCommand(Guid.NewGuid(), authorId, "Title", null, null, null);
+        var asset = new Asset { Id = command.AssetId, AuthorId = authorId, CategoryId = Guid.NewGuid(), Title = "t" };
+
+        _assetStoreMock.GetById(command.AssetId).Returns(asset);
+        _assetStoreMock.Update(Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<decimal?>(), Arg.Any<Guid?>(), Arg.Any<CancellationToken>())
+            .ThrowsAsync(new InvalidOperationException("DB failed"));
+
+        var act = () => handler.Handle(command, CancellationToken.None);
+
+        await act.Should().ThrowAsync<InvalidOperationException>().WithMessage("DB failed");
+        testLogger.Logs.Should().Contain(l =>
+            l.Level == Microsoft.Extensions.Logging.LogLevel.Error
+            && l.Message.Contains(command.AssetId.ToString())
+            && l.Exception is InvalidOperationException);
+    }
+
+    [Fact]
+    public async Task Handle_WhenAssetLookupThrows_ShouldLogSafeContextAndRethrow()
+    {
+        var testLogger = new TestLogger<UpdateAssetCommandHandler>();
+        var categoryStoreMock = Substitute.For<ICategoryStore>();
+        var unitOfWorkMock = Substitute.For<IUnitOfWork>();
+        var auditWriterMock = Substitute.For<IAuditWriter>();
+        var cacheMock = Substitute.For<ICacheService>();
+        var handler = new UpdateAssetCommandHandler(
+            _assetStoreMock,
+            categoryStoreMock,
+            unitOfWorkMock,
+            auditWriterMock,
+            cacheMock,
+            testLogger);
+
+        var command = new UpdateAssetCommand(Guid.NewGuid(), Guid.NewGuid(), "Title", null, null, null);
+        _assetStoreMock.GetById(command.AssetId, Arg.Any<CancellationToken>())
+            .ThrowsAsync(new InvalidOperationException("DB lookup failed"));
+
+        var act = () => handler.Handle(command, CancellationToken.None);
+
+        await act.Should().ThrowAsync<InvalidOperationException>().WithMessage("DB lookup failed");
+        testLogger.Logs.Should().ContainSingle(l =>
+            l.Level == Microsoft.Extensions.Logging.LogLevel.Error
+            && l.Message.Contains(command.AssetId.ToString())
+            && l.Exception is InvalidOperationException);
+    }
+
+    [Fact]
+    public async Task Handle_WhenCategoryLookupThrows_ShouldLogSafeContextAndRethrow()
+    {
+        var testLogger = new TestLogger<UpdateAssetCommandHandler>();
+        var categoryStoreMock = Substitute.For<ICategoryStore>();
+        var unitOfWorkMock = Substitute.For<IUnitOfWork>();
+        var auditWriterMock = Substitute.For<IAuditWriter>();
+        var cacheMock = Substitute.For<ICacheService>();
+        var handler = new UpdateAssetCommandHandler(
+            _assetStoreMock,
+            categoryStoreMock,
+            unitOfWorkMock,
+            auditWriterMock,
+            cacheMock,
+            testLogger);
+
+        var authorId = Guid.NewGuid();
+        var categoryId = Guid.NewGuid();
+        var command = new UpdateAssetCommand(Guid.NewGuid(), authorId, "Title", null, null, categoryId);
+        var asset = new Asset { Id = command.AssetId, AuthorId = authorId, CategoryId = Guid.NewGuid(), Title = "t" };
+
+        _assetStoreMock.GetById(command.AssetId, Arg.Any<CancellationToken>()).Returns(asset);
+        categoryStoreMock.GetById(categoryId, Arg.Any<CancellationToken>())
+            .ThrowsAsync(new InvalidOperationException("Category lookup failed"));
+
+        var act = () => handler.Handle(command, CancellationToken.None);
+
+        await act.Should().ThrowAsync<InvalidOperationException>().WithMessage("Category lookup failed");
+        testLogger.Logs.Should().ContainSingle(l =>
+            l.Level == Microsoft.Extensions.Logging.LogLevel.Error
+            && l.Message.Contains(command.AssetId.ToString())
+            && l.Exception is InvalidOperationException);
+    }
+
+    [Fact]
+    public async Task Handle_WhenAssetLookupCancelled_ShouldRethrowWithoutErrorLogging()
+    {
+        var testLogger = new TestLogger<UpdateAssetCommandHandler>();
+        var categoryStoreMock = Substitute.For<ICategoryStore>();
+        var unitOfWorkMock = Substitute.For<IUnitOfWork>();
+        var auditWriterMock = Substitute.For<IAuditWriter>();
+        var cacheMock = Substitute.For<ICacheService>();
+        var handler = new UpdateAssetCommandHandler(
+            _assetStoreMock,
+            categoryStoreMock,
+            unitOfWorkMock,
+            auditWriterMock,
+            cacheMock,
+            testLogger);
+
+        var command = new UpdateAssetCommand(Guid.NewGuid(), Guid.NewGuid(), "Title", null, null, null);
+        _assetStoreMock.GetById(command.AssetId, Arg.Any<CancellationToken>())
+            .ThrowsAsync(new OperationCanceledException());
+
+        var act = () => handler.Handle(command, CancellationToken.None);
+
+        await act.Should().ThrowAsync<OperationCanceledException>();
+        testLogger.Logs.Should().NotContain(l => l.Level == Microsoft.Extensions.Logging.LogLevel.Error);
+    }
+
+    [Fact]
+    public async Task Handle_WhenCancelled_ShouldRethrowWithoutErrorLogging()
+    {
+        var testLogger = new TestLogger<UpdateAssetCommandHandler>();
+        var categoryStoreMock = Substitute.For<ICategoryStore>();
+        var unitOfWorkMock = Substitute.For<IUnitOfWork>();
+        var auditWriterMock = Substitute.For<IAuditWriter>();
+        var cacheMock = Substitute.For<ICacheService>();
+        unitOfWorkMock.ExecuteInTransaction(Arg.Any<Func<CancellationToken, Task>>(), Arg.Any<CancellationToken>())
+            .Returns(ci => ci.Arg<Func<CancellationToken, Task>>()(CancellationToken.None));
+        var handler = new UpdateAssetCommandHandler(
+            _assetStoreMock,
+            categoryStoreMock,
+            unitOfWorkMock,
+            auditWriterMock,
+            cacheMock,
+            testLogger);
+
+        var authorId = Guid.NewGuid();
+        var command = new UpdateAssetCommand(Guid.NewGuid(), authorId, "Title", null, null, null);
+        var asset = new Asset { Id = command.AssetId, AuthorId = authorId, CategoryId = Guid.NewGuid(), Title = "t" };
+
+        _assetStoreMock.GetById(command.AssetId).Returns(asset);
+        _assetStoreMock.Update(Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<decimal?>(), Arg.Any<Guid?>(), Arg.Any<CancellationToken>())
+            .ThrowsAsync(new OperationCanceledException());
+
+        var act = () => handler.Handle(command, CancellationToken.None);
+
+        await act.Should().ThrowAsync<OperationCanceledException>();
+        testLogger.Logs.Should().NotContain(l => l.Level == Microsoft.Extensions.Logging.LogLevel.Error);
+    }
+
+    private sealed class TestLogger<T> : Microsoft.Extensions.Logging.ILogger<T>
+    {
+        public List<(Microsoft.Extensions.Logging.LogLevel Level, string Message, Exception? Exception)> Logs { get; } = new();
+
+        public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
+        public bool IsEnabled(Microsoft.Extensions.Logging.LogLevel logLevel) => true;
+        public void Log<TState>(
+            Microsoft.Extensions.Logging.LogLevel logLevel,
+            Microsoft.Extensions.Logging.EventId eventId,
+            TState state,
+            Exception? exception,
+            Func<TState, Exception?, string> formatter)
+        {
+            Logs.Add((logLevel, formatter(state, exception), exception));
+        }
     }
 }

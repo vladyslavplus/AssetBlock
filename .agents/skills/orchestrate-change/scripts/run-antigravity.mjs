@@ -27,6 +27,32 @@ export const DEFAULT_MODEL = "gemini-3.7-flash-medium";
 const MAX_UNTRACKED_FILES = 10_000;
 const MAX_UNTRACKED_BYTES = 512 * 1024 * 1024;
 
+function pathPattern(value) {
+  return value
+    .split(/[\\/]+/u)
+    .map((segment) => segment.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&"))
+    .join("(?:\\\\+|/+)");
+}
+
+export function redactMachineLocalPaths(
+  value,
+  workspaceRoot = process.cwd(),
+  userHome = os.homedir(),
+) {
+  let redacted = String(value);
+  for (const [localPath, placeholder] of [
+    [workspaceRoot, "workspace-root"],
+    [userHome, "user-home"],
+  ]) {
+    if (!localPath) continue;
+    redacted = redacted.replace(
+      new RegExp(pathPattern(path.resolve(localPath)), "giu"),
+      placeholder,
+    );
+  }
+  return redacted;
+}
+
 export function parseArgs(argv) {
   const options = {
     timeout: "15m",
@@ -51,6 +77,8 @@ export function parseArgs(argv) {
       ["--model", "model"],
       ["--effort", "effort"],
       ["--agent", "agent"],
+      ["--permission-manifest", "permissionManifest"],
+      ["--agy-settings", "agySettings"],
     ]);
 
     const key = supported.get(argument);
@@ -71,11 +99,174 @@ export function parseArgs(argv) {
     throw new Error("--prompt-file is required");
   }
 
+  if (!options.dryRun && !options.permissionManifest) {
+    throw new Error("--permission-manifest is required for non-dry runs");
+  }
+
   if (options.effort && !["low", "medium", "high"].includes(options.effort)) {
     throw new Error("--effort must be low, medium, or high");
   }
 
   return options;
+}
+
+function normalizeCommand(value) {
+  return value.trim().replace(/\s+/gu, " ");
+}
+
+function stripPathGlob(value) {
+  return value.replace(/[\\/]\*\*$/u, "").replace(/[\\/]\*$/u, "");
+}
+
+function normalizePermissionPath(value) {
+  const normalized = path.resolve(stripPathGlob(value));
+  return process.platform === "win32" ? normalized.toLowerCase() : normalized;
+}
+
+function permissionPathCovers(allowedPath, requiredPath) {
+  const allowed = normalizePermissionPath(allowedPath);
+  const required = normalizePermissionPath(requiredPath);
+  return required === allowed || required.startsWith(`${allowed}${path.sep}`);
+}
+
+function parsePermissionRule(rule) {
+  const match = /^(read_file|write_file|command)\(([\s\S]*)\)$/u.exec(rule);
+  return match ? { kind: match[1], value: match[2] } : null;
+}
+
+function tokenizeCommand(value) {
+  return normalizeCommand(value).match(/"[^"]*"|'[^']*'|\S+/gu) ?? [];
+}
+
+function commandRuleCovers(ruleValue, command) {
+  const ruleTokens = tokenizeCommand(ruleValue);
+  const commandTokens = tokenizeCommand(command);
+  if (ruleTokens.length > commandTokens.length) {
+    return false;
+  }
+  return ruleTokens.every((pattern, index) => {
+    try {
+      return new RegExp(`^(?:${pattern})$`, "u").test(commandTokens[index]);
+    } catch {
+      return pattern === commandTokens[index];
+    }
+  });
+}
+
+function commandPrefixCovers(prefix, command) {
+  const prefixTokens = tokenizeCommand(prefix);
+  const commandTokens = tokenizeCommand(command);
+  return (
+    prefixTokens.length <= commandTokens.length &&
+    prefixTokens.every((token, index) => token === commandTokens[index])
+  );
+}
+
+export function inspectPermissionCoverage(settings, manifest) {
+  const allow = settings?.permissions?.allow;
+  if (!Array.isArray(allow)) {
+    throw new Error("Antigravity settings do not contain permissions.allow");
+  }
+
+  const rules = allow.map(parsePermissionRule).filter(Boolean);
+  const readRules = rules.filter((rule) => rule.kind === "read_file");
+  const writeRules = rules.filter((rule) => rule.kind === "write_file");
+  const commandRules = rules.filter((rule) => rule.kind === "command");
+  const readPaths = manifest.read_paths ?? [];
+  const writePaths = manifest.write_paths ?? [];
+  const allowedCommands = manifest.allowed_commands ?? [];
+  const allowedCommandPrefixes = manifest.allowed_command_prefixes ?? [];
+  const allowedCommandPatterns = manifest.allowed_command_patterns ?? [];
+  const requiredVerification = manifest.required_verification ?? [];
+  const requiredPathsPresent = manifest.required_paths_present ?? [];
+  const requiredPathsAbsent = manifest.required_paths_absent ?? [];
+
+  for (const [name, value] of Object.entries({
+    read_paths: readPaths,
+    write_paths: writePaths,
+    allowed_commands: allowedCommands,
+    allowed_command_prefixes: allowedCommandPrefixes,
+    allowed_command_patterns: allowedCommandPatterns,
+    required_verification: requiredVerification,
+    required_paths_present: requiredPathsPresent,
+    required_paths_absent: requiredPathsAbsent,
+  })) {
+    if (!Array.isArray(value) || value.some((entry) => typeof entry !== "string")) {
+      throw new Error(`Permission manifest field ${name} must be an array of strings`);
+    }
+  }
+
+  const allowedCommandSet = new Set(allowedCommands.map(normalizeCommand));
+  const undeclaredVerification = requiredVerification.filter(
+    (command) => !allowedCommandSet.has(normalizeCommand(command)),
+  );
+  if (undeclaredVerification.length > 0) {
+    throw new Error(
+      `required_verification contains command(s) absent from allowed_commands: ${undeclaredVerification.join("; ")}`,
+    );
+  }
+
+  return {
+    missing_read_paths: readPaths.filter(
+      (required) =>
+        !readRules.some((rule) => permissionPathCovers(rule.value, required)),
+    ),
+    missing_write_paths: writePaths.filter(
+      (required) =>
+        !writeRules.some((rule) => permissionPathCovers(rule.value, required)),
+    ),
+    missing_commands: allowedCommands.filter(
+      (required) =>
+        !commandRules.some((rule) => commandRuleCovers(rule.value, required)),
+    ),
+    missing_command_prefixes: allowedCommandPrefixes.filter(
+      (required) =>
+        !commandRules.some((rule) => commandRuleCovers(rule.value, required)),
+    ),
+    missing_command_patterns: allowedCommandPatterns.filter(
+      (required) =>
+        !commandRules.some(
+          (rule) => normalizeCommand(rule.value) === normalizeCommand(required),
+        ),
+    ),
+  };
+}
+
+export async function inspectPathPostconditions(
+  manifest,
+  exists = pathExists,
+) {
+  const requiredPresent = manifest.required_paths_present ?? [];
+  const requiredAbsent = manifest.required_paths_absent ?? [];
+  const [presentResults, absentResults] = await Promise.all([
+    Promise.all(requiredPresent.map(async (candidate) => [candidate, await exists(candidate)])),
+    Promise.all(requiredAbsent.map(async (candidate) => [candidate, await exists(candidate)])),
+  ]);
+  return {
+    missing_required_paths: presentResults
+      .filter(([, pathIsPresent]) => !pathIsPresent)
+      .map(([candidate]) => candidate),
+    forbidden_paths_still_present: absentResults
+      .filter(([, pathIsPresent]) => pathIsPresent)
+      .map(([candidate]) => candidate),
+  };
+}
+
+function formatPermissionGaps(coverage) {
+  const lines = [];
+  for (const [label, values] of [
+    ["read paths", coverage.missing_read_paths],
+    ["write paths", coverage.missing_write_paths],
+    ["commands", coverage.missing_commands],
+    ["command prefixes", coverage.missing_command_prefixes],
+    ["command patterns", coverage.missing_command_patterns],
+  ]) {
+    if (values.length > 0) {
+      lines.push(`${label}:`);
+      lines.push(...values.map((value) => `- ${value}`));
+    }
+  }
+  return lines.join(os.EOL);
 }
 
 export function resolveSessionOptions(options, state = {}) {
@@ -305,9 +496,21 @@ async function writeGitEvidence(runDir, label, cwd, preserveUntracked = false) {
   ];
 
   const [, , , currentUntracked] = await Promise.all([
-    writeFile(path.join(runDir, `${label}-status.txt`), status, "utf8"),
-    writeFile(path.join(runDir, `${label}-diff.patch`), diff, "utf8"),
-    writeFile(path.join(runDir, `${label}-staged-diff.patch`), stagedDiff, "utf8"),
+    writeFile(
+      path.join(runDir, `${label}-status.txt`),
+      redactMachineLocalPaths(status, cwd),
+      "utf8",
+    ),
+    writeFile(
+      path.join(runDir, `${label}-diff.patch`),
+      redactMachineLocalPaths(diff, cwd),
+      "utf8",
+    ),
+    writeFile(
+      path.join(runDir, `${label}-staged-diff.patch`),
+      redactMachineLocalPaths(stagedDiff, cwd),
+      "utf8",
+    ),
     captureUntrackedFiles(runDir, label, cwd, preserveUntracked),
   ]);
 
@@ -344,7 +547,7 @@ async function writeJsonAtomic(filePath, value) {
   const temporaryPath = `${filePath}.${process.pid}.tmp`;
   await writeFile(
     temporaryPath,
-    `${JSON.stringify(value, null, 2)}${os.EOL}`,
+    `${redactMachineLocalPaths(JSON.stringify(value, null, 2))}${os.EOL}`,
     "utf8",
   );
   await rename(temporaryPath, filePath);
@@ -382,6 +585,8 @@ export function inspectAgyStream(stdout) {
 
   const unresolvedPermissionDenials = new Map();
   const commandRuns = new Map();
+  const commandAttempts = new Map();
+  const successfulMutationPaths = new Set();
   const lastMutationStepIndexByLane = {
     global: null,
     backend: null,
@@ -403,12 +608,26 @@ export function inspectAgyStream(stdout) {
     const tool = step.tool_name ?? step.tool_info?.name ?? "unknown";
     const parameters = step.tool_info?.parameters ?? {};
     const key = `${tool}:${JSON.stringify(parameters)}`;
+    if (tool === "run_command" && parameters.CommandLine) {
+      const command = normalizeCommand(parameters.CommandLine);
+      commandAttempts.set(command, { command, state: step.state });
+    }
     if (step.state === "DONE") {
       unresolvedPermissionDenials.delete(key);
       if (mutatingTools.has(tool)) {
         const lane = classifyRepositoryLane(JSON.stringify(parameters));
         lastMutationStepIndexByLane[lane] =
           step.step_index ?? lastMutationStepIndexByLane[lane];
+        for (const [parameterName, parameterValue] of Object.entries(
+          parameters,
+        )) {
+          if (
+            typeof parameterValue === "string" &&
+            /^(?:AbsolutePath|FilePath|TargetFile)$/iu.test(parameterName)
+          ) {
+            successfulMutationPaths.add(parameterValue);
+          }
+        }
       }
       if (tool === "run_command" && parameters.CommandLine) {
         const command = parameters.CommandLine.trim().replace(/\s+/gu, " ");
@@ -429,7 +648,7 @@ export function inspectAgyStream(stdout) {
           failed,
         });
         if (
-          /\b(?:prettier\b.*--write|eslint\b.*--fix|dotnet\s+format\b)/iu.test(
+          /^(?:Move-Item\b|git\s+mv\b|mv\b)|\b(?:prettier\b.*--write|eslint\b.*--fix|dotnet\s+format\b)/iu.test(
             command,
           )
         ) {
@@ -456,6 +675,8 @@ export function inspectAgyStream(stdout) {
     invalidLines,
     unresolvedPermissionDenials: [...unresolvedPermissionDenials.values()],
     commandRuns: [...commandRuns.values()],
+    commandAttempts: [...commandAttempts.values()],
+    successfulMutationPaths: [...successfulMutationPaths],
     failedVerificationCommands: [...commandRuns.values()].filter(
       (entry) => entry.failed,
     ),
@@ -463,10 +684,49 @@ export function inspectAgyStream(stdout) {
   };
 }
 
-export function validateExecutionReport(report, streamInspection) {
+export function validateExecutionReport(
+  report,
+  streamInspection,
+  requiredVerification = [],
+  allowedCommands = [],
+  allowedCommandPrefixes = [],
+  allowedCommandPatterns = [],
+) {
   const errors = [];
   if (!report || typeof report !== "object") {
     return ["Structured execution report is missing"];
+  }
+
+  const allowedCommandSet = new Set(allowedCommands.map(normalizeCommand));
+  const unauthorizedCommandAttempts = (
+    streamInspection.commandAttempts ?? []
+  ).filter(
+    (entry) =>
+      !allowedCommandSet.has(normalizeCommand(entry.command)) &&
+      !allowedCommandPrefixes.some((prefix) =>
+        commandPrefixCovers(prefix, entry.command),
+      ) &&
+      !allowedCommandPatterns.some((pattern) =>
+        commandRuleCovers(pattern, entry.command),
+      ),
+  );
+  if (unauthorizedCommandAttempts.length > 0) {
+    errors.push(
+      `Executor attempted ${unauthorizedCommandAttempts.length} command(s) absent from permission manifest: ${unauthorizedCommandAttempts.map((entry) => entry.command).join("; ")}`,
+    );
+  }
+
+  if ((streamInspection.unresolvedPermissionDenials ?? []).length > 0) {
+    errors.push(
+      `Execution followed ${streamInspection.unresolvedPermissionDenials.length} unresolved permission denial(s)`,
+    );
+  }
+
+  const successfulMutationPaths = streamInspection.successfulMutationPaths ?? [];
+  if (successfulMutationPaths.length > 0 && (report.files_changed ?? []).length === 0) {
+    errors.push(
+      `Execution report claims no changed files after ${successfulMutationPaths.length} successful file mutation(s)`,
+    );
   }
 
   if (report.status === "completed") {
@@ -481,14 +741,39 @@ export function validateExecutionReport(report, streamInspection) {
     if (report.needs_human_reason) {
       errors.push("Completed report still declares a human-decision reason");
     }
-    if ((streamInspection.unresolvedPermissionDenials ?? []).length > 0) {
-      errors.push(
-        `Completed report followed ${streamInspection.unresolvedPermissionDenials.length} unresolved permission denial(s)`,
-      );
-    }
     if ((streamInspection.failedVerificationCommands ?? []).length > 0) {
       errors.push(
         `Completed report followed ${streamInspection.failedVerificationCommands.length} unresolved failed verification command(s)`,
+      );
+    }
+    const reportedVerification = new Map(
+      (report.verification ?? []).map((entry) => [
+        normalizeCommand(entry.command),
+        entry,
+      ]),
+    );
+    const executedCommands = new Map(
+      (streamInspection.commandRuns ?? []).map((entry) => [
+        normalizeCommand(entry.command),
+        entry,
+      ]),
+    );
+    const missingRequiredReports = requiredVerification.filter((command) => {
+      const entry = reportedVerification.get(normalizeCommand(command));
+      return !entry || entry.status !== "passed";
+    });
+    if (missingRequiredReports.length > 0) {
+      errors.push(
+        `Completed report omits ${missingRequiredReports.length} required passed verification command(s): ${missingRequiredReports.join("; ")}`,
+      );
+    }
+    const missingRequiredExecutions = requiredVerification.filter((command) => {
+      const entry = executedCommands.get(normalizeCommand(command));
+      return !entry || entry.failed;
+    });
+    if (missingRequiredExecutions.length > 0) {
+      errors.push(
+        `Completed report lacks raw successful execution for ${missingRequiredExecutions.length} required verification command(s): ${missingRequiredExecutions.join("; ")}`,
       );
     }
     const mutationSteps = streamInspection.lastMutationStepIndexByLane ?? {
@@ -538,6 +823,13 @@ export function validateExecutionReport(report, streamInspection) {
   return errors;
 }
 
+function defaultAgySettingsPath(environment = process.env) {
+  if (environment.AGY_SETTINGS) {
+    return path.resolve(environment.AGY_SETTINGS);
+  }
+  return path.join(os.homedir(), ".gemini", "antigravity-cli", "settings.json");
+}
+
 export function parseAgyStream(stdout) {
   const inspected = inspectAgyStream(stdout);
   const terminal = inspected.terminal;
@@ -569,7 +861,7 @@ function runProcess(binary, args, cwd, prompt) {
     });
     child.stderr.on("data", (chunk) => {
       stderr += chunk;
-      process.stderr.write(chunk);
+      process.stderr.write(redactMachineLocalPaths(chunk, cwd));
     });
     child.once("error", reject);
     child.once("close", (code, signal) => {
@@ -594,6 +886,36 @@ export async function main(argv = process.argv.slice(2)) {
     throw new Error(`Prompt file is empty: ${promptPath}`);
   }
   await access(schemaPath, fsConstants.R_OK);
+
+  let permissionManifest = null;
+  let permissionManifestPath = null;
+  let agySettingsPath = null;
+  let permissionCoverage = null;
+  if (options.permissionManifest) {
+    permissionManifestPath = path.resolve(options.permissionManifest);
+    permissionManifest = JSON.parse(
+      await readFile(permissionManifestPath, "utf8"),
+    );
+    agySettingsPath = path.resolve(
+      options.agySettings ?? defaultAgySettingsPath(),
+    );
+    const agySettings = JSON.parse(await readFile(agySettingsPath, "utf8"));
+    permissionCoverage = inspectPermissionCoverage(
+      agySettings,
+      permissionManifest,
+    );
+    const permissionGapCount =
+      permissionCoverage.missing_read_paths.length +
+      permissionCoverage.missing_write_paths.length +
+      permissionCoverage.missing_commands.length +
+      permissionCoverage.missing_command_prefixes.length +
+      permissionCoverage.missing_command_patterns.length;
+    if (permissionGapCount > 0) {
+      throw new Error(
+        `Antigravity permission preflight found ${permissionGapCount} missing rule(s). No executor was started.${os.EOL}${formatPermissionGaps(permissionCoverage)}`,
+      );
+    }
+  }
 
   const agyBinary = await resolveAgyBinary(options);
   const runDir = path.resolve(
@@ -639,8 +961,13 @@ export async function main(argv = process.argv.slice(2)) {
       model: sessionOptions.model,
       effort: sessionOptions.effort,
       agent: sessionOptions.agent,
+      permission_manifest: permissionManifestPath,
+      agy_settings: agySettingsPath,
+      permission_preflight: permissionCoverage,
     };
-    process.stdout.write(`${JSON.stringify(result, null, 2)}${os.EOL}`);
+    process.stdout.write(
+      `${redactMachineLocalPaths(JSON.stringify(result, null, 2), cwd)}${os.EOL}`,
+    );
     return result;
   }
 
@@ -656,7 +983,12 @@ export async function main(argv = process.argv.slice(2)) {
   }
   await writeFile(
     path.join(runDir, `${roundLabel}-prompt.md`),
-    `${prompt}${os.EOL}`,
+    `${redactMachineLocalPaths(prompt, cwd)}${os.EOL}`,
+    "utf8",
+  );
+  await writeFile(
+    path.join(runDir, `${roundLabel}-permission-manifest.json`),
+    `${redactMachineLocalPaths(JSON.stringify(permissionManifest, null, 2), cwd)}${os.EOL}`,
     "utf8",
   );
 
@@ -664,6 +996,7 @@ export async function main(argv = process.argv.slice(2)) {
     round,
     started_at: new Date().toISOString(),
     prompt_file: path.relative(cwd, promptPath),
+    permission_manifest: path.relative(cwd, permissionManifestPath),
     status: "running",
   };
   const runningState = {
@@ -729,12 +1062,12 @@ export async function main(argv = process.argv.slice(2)) {
     await Promise.all([
       writeFile(
         path.join(runDir, `${roundLabel}-stdout.json`),
-        processResult.stdout,
+        redactMachineLocalPaths(processResult.stdout, cwd),
         "utf8",
       ),
       writeFile(
         path.join(runDir, `${roundLabel}-stderr.log`),
-        processResult.stderr,
+        redactMachineLocalPaths(processResult.stderr, cwd),
         "utf8",
       ),
       writeGitEvidence(runDir, `${roundLabel}-after`, cwd),
@@ -773,7 +1106,25 @@ export async function main(argv = process.argv.slice(2)) {
   const reportValidationErrors = validateExecutionReport(
     normalized.report,
     streamInspection,
+    permissionManifest.required_verification,
+    permissionManifest.allowed_commands,
+    permissionManifest.allowed_command_prefixes,
+    permissionManifest.allowed_command_patterns,
   );
+  if (normalized.report.status === "completed") {
+    const postconditions = await inspectPathPostconditions(permissionManifest);
+    runningRound.path_postconditions = postconditions;
+    if (postconditions.missing_required_paths.length > 0) {
+      reportValidationErrors.push(
+        `Completed report is missing ${postconditions.missing_required_paths.length} required path(s): ${postconditions.missing_required_paths.join("; ")}`,
+      );
+    }
+    if (postconditions.forbidden_paths_still_present.length > 0) {
+      reportValidationErrors.push(
+        `Completed report left ${postconditions.forbidden_paths_still_present.length} required-absent path(s): ${postconditions.forbidden_paths_still_present.join("; ")}`,
+      );
+    }
+  }
   if (reportValidationErrors.length > 0) {
     runningRound.status = "invalid_report";
     runningRound.report_validation_errors = reportValidationErrors;
@@ -788,7 +1139,7 @@ export async function main(argv = process.argv.slice(2)) {
 
   const result = {
     ok: true,
-    run_dir: runDir,
+    run_dir: path.relative(cwd, runDir),
     conversation_id: runningState.conversation_id,
     model: sessionOptions.model,
     effort: sessionOptions.effort,
@@ -796,13 +1147,17 @@ export async function main(argv = process.argv.slice(2)) {
     round,
     report: normalized.report,
   };
-  process.stdout.write(`${JSON.stringify(result, null, 2)}${os.EOL}`);
+  process.stdout.write(
+    `${redactMachineLocalPaths(JSON.stringify(result, null, 2), cwd)}${os.EOL}`,
+  );
   return result;
 }
 
 if (path.resolve(process.argv[1] ?? "") === SCRIPT_PATH) {
   main().catch((error) => {
-    process.stderr.write(`agentflow: ${error.message}${os.EOL}`);
+    process.stderr.write(
+      `agentflow: ${redactMachineLocalPaths(error.message)}${os.EOL}`,
+    );
     process.exitCode = 1;
   });
 }
