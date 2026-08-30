@@ -31,7 +31,7 @@ internal sealed class UploadAssetCommandHandler(
     public async Task<Result<Guid>> Handle(UploadAssetCommand request, CancellationToken cancellationToken)
     {
         var uploadOpts = fileUploadOptions.Value;
-        var displayFileName = Path.GetFileName(request.FileName);
+        var displayFileName = uploadOpts.NormalizeDisplayFileName(request.FileName);
         uploadOpts.TryMatchAllowedExtension(displayFileName, out var matchedExtension);
         AssetLicenseCatalog.TryParseCode(request.Request.LicenseCode, out var licenseCode);
         var licenseTemplate = AssetLicenseCatalog.Get(licenseCode);

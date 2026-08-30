@@ -58,4 +58,93 @@ public sealed class FileUploadOptions
         matchedExtension = best.ToLowerInvariant();
         return true;
     }
+
+    /// <summary>
+    /// Normalizes a client-supplied filename into a safe, conservative ASCII display filename.
+    /// Strips directory paths, non-ASCII/control/header/quote characters, preserves matched allowed extension,
+    /// falls back to a deterministic safe name, and caps base length.
+    /// </summary>
+    public string NormalizeDisplayFileName(string? rawFileName, string fallbackBaseName = "asset")
+    {
+        var safeFallback = string.IsNullOrWhiteSpace(fallbackBaseName) ? "asset" : fallbackBaseName.Trim();
+        if (string.IsNullOrWhiteSpace(rawFileName))
+        {
+            return $"{safeFallback}.zip";
+        }
+
+        // 1. Strip path components
+        var stripped = rawFileName.Trim().Replace('\\', '/');
+        var slashIdx = stripped.LastIndexOf('/');
+        if (slashIdx >= 0)
+        {
+            stripped = stripped[(slashIdx + 1)..];
+        }
+
+        if (string.IsNullOrWhiteSpace(stripped))
+        {
+            return $"{safeFallback}.zip";
+        }
+
+        // 2. Match allowed extension
+        var hasAllowedExt = TryMatchAllowedExtension(stripped, out var matchedExt);
+        var ext = hasAllowedExt ? matchedExt : ".zip";
+        var baseName = hasAllowedExt && stripped.Length > ext.Length
+            ? stripped[..^ext.Length]
+            : stripped;
+
+        // 3. Normalize base name to conservative ASCII [a-zA-Z0-9._-]
+        var sb = new System.Text.StringBuilder(baseName.Length);
+        foreach (var c in baseName)
+        {
+            if (c is >= 'a' and <= 'z' or >= 'A' and <= 'Z' or >= '0' and <= '9' or '-' or '_' or '.')
+            {
+                sb.Append(c);
+            }
+            else if (char.IsWhiteSpace(c))
+            {
+                sb.Append('_');
+            }
+        }
+
+        var cleaned = sb.ToString().Trim('.', '_', '-');
+
+        // Collapse multiple dots to prevent traversal/hidden file semantics
+        while (cleaned.Contains(".."))
+        {
+            cleaned = cleaned.Replace("..", ".");
+        }
+
+        // 4. Fallback if empty or all invalid
+        if (string.IsNullOrWhiteSpace(cleaned))
+        {
+            cleaned = safeFallback;
+        }
+
+        // 5. Cap base name length (max 100 chars)
+        if (cleaned.Length > 100)
+        {
+            cleaned = cleaned[..100].TrimEnd('.', '_', '-');
+            if (string.IsNullOrWhiteSpace(cleaned))
+            {
+                cleaned = safeFallback;
+            }
+        }
+
+        // 6. Defensively ensure matched extension contains only safe ASCII alphanumeric and dot characters
+        var extSb = new System.Text.StringBuilder(ext.Length);
+        foreach (var c in ext)
+        {
+            if (c is >= 'a' and <= 'z' or >= 'A' and <= 'Z' or >= '0' and <= '9' or '.')
+            {
+                extSb.Append(char.ToLowerInvariant(c));
+            }
+        }
+        var safeExt = extSb.ToString();
+        if (string.IsNullOrWhiteSpace(safeExt) || !safeExt.StartsWith('.'))
+        {
+            safeExt = ".zip";
+        }
+
+        return $"{cleaned}{safeExt}";
+    }
 }

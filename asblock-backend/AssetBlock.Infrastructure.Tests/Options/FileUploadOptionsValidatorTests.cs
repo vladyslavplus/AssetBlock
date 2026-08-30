@@ -34,4 +34,45 @@ public sealed class FileUploadOptionsValidatorTests
         var result = _sut.Validate(null, new FileUploadOptions { AllowedExtensions = [".zip", ".rar"] });
         result.Failed.Should().BeTrue();
     }
+
+    [Theory]
+    [InlineData(".tar.gz")]
+    [InlineData(".unitypackage")]
+    [InlineData(".ZIP")]
+    [InlineData(".7zip")]
+    public void Validate_WhenValidMultipartOrAlphanumericExtensions_ShouldSucceed(string validExt)
+    {
+        var result = _sut.Validate(null, new FileUploadOptions { AllowedExtensions = [validExt] });
+        result.Succeeded.Should().BeTrue();
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("   ")]
+    [InlineData(".")]
+    [InlineData("..")]
+    [InlineData(".tar..gz")]
+    [InlineData(".tar.gz.")]
+    [InlineData(".tar/gz")]
+    [InlineData(".tar\\gz")]
+    [InlineData(".zip\"")]
+    [InlineData(".zip'")]
+    [InlineData(".zip`")]
+    [InlineData(".zip\0")]
+    [InlineData(".кириллица")]
+    [InlineData(".zip space")]
+    public void Validate_WhenInvalidExtensionGrammar_ShouldFail(string invalidExt)
+    {
+        var result = _sut.Validate(null, new FileUploadOptions { AllowedExtensions = [invalidExt] });
+        result.Failed.Should().BeTrue();
+    }
+
+    [Fact]
+    public void Validate_WhenExtensionOversized_ShouldFail()
+    {
+        var longExt = "." + new string('a', 33);
+        var result = _sut.Validate(null, new FileUploadOptions { AllowedExtensions = [longExt] });
+        result.Failed.Should().BeTrue();
+        result.FailureMessage.Should().Contain("exceeds maximum length");
+    }
 }

@@ -207,6 +207,18 @@ public abstract class AssetStorageContractTests(StorageProviderFixture fixture)
     private IAssetStorageService CreateStorageForBucket(string bucket) =>
         fixture.CreateStorageForBucket(bucket);
 
+    private static async Task<List<Domain.Core.Primitives.Storage.StorageObjectInfo>> ToList(
+        IAsyncEnumerable<Domain.Core.Primitives.Storage.StorageObjectInfo> source,
+        CancellationToken cancellationToken = default)
+    {
+        var list = new List<Domain.Core.Primitives.Storage.StorageObjectInfo>();
+        await foreach (var item in source.WithCancellation(cancellationToken))
+        {
+            list.Add(item);
+        }
+        return list;
+    }
+
     [Fact]
     public async Task EnsureBucket_WhenCalledRepeatedly_ShouldBeIdempotent()
     {
@@ -229,7 +241,7 @@ public abstract class AssetStorageContractTests(StorageProviderFixture fixture)
         var key = Key("after-race.bin");
         var payload = "ok"u8.ToArray();
         await storages[0].Upload(key, new MemoryStream(payload), payload.Length);
-        var listed = await storages[0].ListObjects(_keyPrefix);
+        var listed = await ToList(storages[0].ListObjects(_keyPrefix));
         listed.Should().Contain(o => o.Key == key);
     }
 
@@ -251,7 +263,7 @@ public abstract class AssetStorageContractTests(StorageProviderFixture fixture)
 
         read.Should().Equal(payload);
 
-        var listed = await Storage.ListObjects(_keyPrefix);
+        var listed = await ToList(Storage.ListObjects(_keyPrefix));
         var info = listed.Should().ContainSingle(o => o.Key == key).Subject;
         info.Size.Should().Be(payload.Length);
         info.LastModified.Should().NotBeNull();
@@ -264,7 +276,7 @@ public abstract class AssetStorageContractTests(StorageProviderFixture fixture)
         var payload = "nested-payload"u8.ToArray();
         await Storage.Upload(key, new MemoryStream(payload), payload.Length);
 
-        var listed = await Storage.ListObjects(_keyPrefix + "nested/");
+        var listed = await ToList(Storage.ListObjects(_keyPrefix + "nested/"));
         var info = listed.Should().ContainSingle(o => o.Key == key).Subject;
         info.Size.Should().Be(payload.Length);
         info.LastModified.Should().NotBeNull();
@@ -279,7 +291,7 @@ public abstract class AssetStorageContractTests(StorageProviderFixture fixture)
         await Storage.Delete(key);
         await Storage.Delete(key);
 
-        var listed = await Storage.ListObjects(_keyPrefix);
+        var listed = await ToList(Storage.ListObjects(_keyPrefix));
         listed.Should().NotContain(o => o.Key == key);
     }
 
@@ -297,7 +309,7 @@ public abstract class AssetStorageContractTests(StorageProviderFixture fixture)
             .Should().ThrowAsync<OperationCanceledException>();
         await FluentActions.Awaiting(() => Storage.Delete(Key("missing"), cts.Token))
             .Should().ThrowAsync<OperationCanceledException>();
-        await FluentActions.Awaiting(() => Storage.ListObjects(_keyPrefix, cts.Token))
+        await FluentActions.Awaiting(() => ToList(Storage.ListObjects(_keyPrefix, cts.Token), cts.Token))
             .Should().ThrowAsync<OperationCanceledException>();
     }
 
@@ -310,7 +322,7 @@ public abstract class AssetStorageContractTests(StorageProviderFixture fixture)
         await FluentActions.Awaiting(() => Storage.Upload(key, throwing, objectSize: 8 * 1024 * 1024))
             .Should().ThrowAsync<Exception>();
 
-        var listed = await Storage.ListObjects(_keyPrefix);
+        var listed = await ToList(Storage.ListObjects(_keyPrefix));
         listed.Should().NotContain(o => o.Key == key);
     }
 
@@ -325,7 +337,7 @@ public abstract class AssetStorageContractTests(StorageProviderFixture fixture)
             .Should().ThrowAsync<OperationCanceledException>();
 
         // Verification must not reuse the cancelled token from the aborted upload.
-        var listed = await Storage.ListObjects(_keyPrefix);
+        var listed = await ToList(Storage.ListObjects(_keyPrefix));
         listed.Should().NotContain(o => o.Key == key);
     }
 
@@ -359,7 +371,7 @@ public abstract class AssetStorageContractTests(StorageProviderFixture fixture)
         length.Should().Be(size);
         actualHash.Should().Be(expectedHash);
 
-        var listed = await Storage.ListObjects(_keyPrefix);
+        var listed = await ToList(Storage.ListObjects(_keyPrefix));
         listed.Should().Contain(o => o.Key == key && o.Size == size && o.LastModified != null);
     }
 

@@ -57,4 +57,65 @@ public sealed class UserStoreTests
 
         (await sut.ReplaceUserSocialLinks(Guid.NewGuid(), [])).Should().BeFalse();
     }
+
+    [Fact]
+    public async Task UpdatePasswordHashIfMatches_WhenHashMatches_UpdatesPasswordHashAndLeavesOtherFieldsUntouched()
+    {
+        await using var holder = new SqliteDbContextHolder();
+        var db = holder.Context;
+        var user = new User
+        {
+            Id = Guid.NewGuid(),
+            Username = "target_user",
+            Email = "target@test.com",
+            PasswordHash = "old_hash",
+            Bio = "unchanged_bio",
+            Role = AppRoles.ADMIN,
+            CreatedAt = DateTimeOffset.UtcNow.AddDays(-10),
+            UpdatedAt = null
+        };
+        db.Users.Add(user);
+        await db.SaveChangesAsync();
+
+        var sut = new UserStore(db);
+        var updated = await sut.UpdatePasswordHashIfMatches(user.Id, "old_hash", "new_hash");
+
+        updated.Should().BeTrue();
+
+        // Reload fresh from DB
+        var reloaded = await db.Users.AsNoTracking().FirstOrDefaultAsync(u => u.Id == user.Id);
+        reloaded.Should().NotBeNull();
+        reloaded.PasswordHash.Should().Be("new_hash");
+        reloaded.UpdatedAt.Should().NotBeNull();
+        reloaded.Username.Should().Be("target_user");
+        reloaded.Email.Should().Be("target@test.com");
+        reloaded.Bio.Should().Be("unchanged_bio");
+        reloaded.Role.Should().Be(AppRoles.ADMIN);
+    }
+
+    [Fact]
+    public async Task UpdatePasswordHashIfMatches_WhenHashMismatch_ReturnsFalseAndDoesNotModifyPasswordHash()
+    {
+        await using var holder = new SqliteDbContextHolder();
+        var db = holder.Context;
+        var user = new User
+        {
+            Id = Guid.NewGuid(),
+            Username = "mismatch_user",
+            Email = "mismatch@test.com",
+            PasswordHash = "current_db_hash",
+            Role = AppRoles.USER,
+            CreatedAt = DateTimeOffset.UtcNow
+        };
+        db.Users.Add(user);
+        await db.SaveChangesAsync();
+
+        var sut = new UserStore(db);
+        var updated = await sut.UpdatePasswordHashIfMatches(user.Id, "stale_hash", "new_hash");
+
+        updated.Should().BeFalse();
+
+        var reloaded = await db.Users.AsNoTracking().FirstOrDefaultAsync(u => u.Id == user.Id);
+        reloaded!.PasswordHash.Should().Be("current_db_hash");
+    }
 }

@@ -34,6 +34,6 @@ internal sealed class SeaweedFsAssetStorageService : IAssetStorageService
     public Task Delete(string key, CancellationToken cancellationToken = default) =>
         _store.Delete(key, cancellationToken);
 
-    public Task<IReadOnlyList<StorageObjectInfo>> ListObjects(string? prefix = null, CancellationToken cancellationToken = default) =>
+    public IAsyncEnumerable<StorageObjectInfo> ListObjects(string? prefix = null, CancellationToken cancellationToken = default) =>
         _store.ListObjects(prefix, cancellationToken);
 }

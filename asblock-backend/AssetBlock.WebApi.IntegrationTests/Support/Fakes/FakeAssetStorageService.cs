@@ -35,13 +35,20 @@ public sealed class FakeAssetStorageService : IAssetStorageService
         return Task.CompletedTask;
     }
 
-    public Task<IReadOnlyList<StorageObjectInfo>> ListObjects(string? prefix = null, CancellationToken cancellationToken = default)
+    public async IAsyncEnumerable<StorageObjectInfo> ListObjects(
+        string? prefix = null,
+        [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
-        IReadOnlyList<StorageObjectInfo> result = _objects.Keys
-            .Where(k => prefix is null || k.StartsWith(prefix, StringComparison.Ordinal))
-            .Select(k => new StorageObjectInfo(k, DateTimeOffset.UtcNow, _objects[k].LongLength))
-            .ToArray();
-        return Task.FromResult(result);
+        foreach (var key in _objects.Keys)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            if (prefix is null || key.StartsWith(prefix, StringComparison.Ordinal))
+            {
+                yield return new StorageObjectInfo(key, DateTimeOffset.UtcNow, _objects[key].LongLength);
+            }
+        }
+
+        await Task.CompletedTask;
     }
 
     /// <summary>Test helper: seeds a pre-encrypted object directly (bypassing Upload's stream copy).</summary>

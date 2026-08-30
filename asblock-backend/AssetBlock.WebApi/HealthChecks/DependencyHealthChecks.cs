@@ -46,7 +46,8 @@ internal sealed class StorageHealthCheck(IServiceScopeFactory scopeFactory) : IH
         {
             await using var scope = scopeFactory.CreateAsyncScope();
             var storage = scope.ServiceProvider.GetRequiredService<IAssetStorageService>();
-            _ = await storage.ListObjects(READINESS_PREFIX, cancellationToken);
+            await using var enumerator = storage.ListObjects(READINESS_PREFIX, cancellationToken).GetAsyncEnumerator(cancellationToken);
+            _ = await enumerator.MoveNextAsync();
             return HealthCheckResult.Healthy();
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)

@@ -249,7 +249,7 @@ public class UploadAssetCommandHandlerTests
                 a.Title == "Title" &&
                 a.DownloadLimitPerHour == 10),
             Arg.Is<AssetVersion>(v =>
-                v.FileName == "MyArchive.TAR.GZ" &&
+                v.FileName == "MyArchive.tar.gz" &&
                 v.StorageKey.Contains(result.Value.ToString()) &&
                 v.StorageKey.EndsWith(".tar.gz")),
             Arg.Any<List<Tag>?>(),
@@ -266,6 +266,25 @@ public class UploadAssetCommandHandlerTests
             Arg.Any<CancellationToken>());
 
         await _cacheMock.Received(1).RemoveByPrefix(CacheKeys.ASSETS_LIST_PREFIX, Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Handle_WhenMaliciousOrNonAsciiFileName_ShouldPersistSafeNormalizedDisplayFileName()
+    {
+        var request = new UploadAssetRequest("Title", "Desc", 100m, Guid.NewGuid(), "PERSONAL", 10);
+        var command = CreateCommand(request, fileName: @"..\..\..\etc\кириллица_""test"".zip");
+        var category = new Category { Id = request.CategoryId, Name = "Cat", Slug = "cat" };
+
+        _categoryStoreMock.GetById(request.CategoryId, Arg.Any<CancellationToken>()).Returns(category);
+
+        var result = await _handler.Handle(command, CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        await _assetStoreMock.Received(1).AddWithVersion(
+            Arg.Any<Asset>(),
+            Arg.Is<AssetVersion>(v => v.FileName == "test.zip"),
+            Arg.Any<List<Tag>?>(),
+            Arg.Any<CancellationToken>());
     }
 
     [Fact]

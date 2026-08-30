@@ -14,13 +14,13 @@ public sealed class StorageHealthCheckTests
     {
         var storage = Substitute.For<IAssetStorageService>();
         storage.ListObjects(Arg.Any<string?>(), Arg.Any<CancellationToken>())
-            .Returns(Array.Empty<Domain.Core.Primitives.Storage.StorageObjectInfo>());
+            .Returns(ToAsyncEnumerable(Array.Empty<Domain.Core.Primitives.Storage.StorageObjectInfo>()));
 
         var sut = CreateSut(storage);
         var result = await sut.CheckHealthAsync(new HealthCheckContext());
 
         result.Status.Should().Be(HealthStatus.Healthy);
-        await storage.Received(1).ListObjects("__health__/", Arg.Any<CancellationToken>());
+        storage.Received(1).ListObjects("__health__/", Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -28,8 +28,7 @@ public sealed class StorageHealthCheckTests
     {
         var storage = Substitute.For<IAssetStorageService>();
         storage.ListObjects(Arg.Any<string?>(), Arg.Any<CancellationToken>())
-            .Returns<Task<IReadOnlyList<Domain.Core.Primitives.Storage.StorageObjectInfo>>>(_ =>
-                throw new InvalidOperationException("down"));
+            .Returns(ThrowingAsyncEnumerable<Domain.Core.Primitives.Storage.StorageObjectInfo>(new InvalidOperationException("down")));
 
         var sut = CreateSut(storage);
         var result = await sut.CheckHealthAsync(new HealthCheckContext());
@@ -43,5 +42,24 @@ public sealed class StorageHealthCheckTests
         var services = new ServiceCollection();
         services.AddSingleton(storage);
         return new StorageHealthCheck(services.BuildServiceProvider().GetRequiredService<IServiceScopeFactory>());
+    }
+
+    private static async IAsyncEnumerable<T> ToAsyncEnumerable<T>(IEnumerable<T> items)
+    {
+        foreach (var item in items)
+        {
+            yield return item;
+        }
+        await Task.CompletedTask;
+    }
+
+    private static async IAsyncEnumerable<T> ThrowingAsyncEnumerable<T>(Exception ex)
+    {
+        await Task.Yield();
+        if (ex is not null)
+        {
+            throw ex;
+        }
+        yield break;
     }
 }

@@ -78,13 +78,10 @@ internal sealed class StorageOrphanCleanupWorker(
 
         try
         {
-            var objects = await storage.ListObjects(ASSETS_PREFIX, cancellationToken);
             var cutoff = DateTimeOffset.UtcNow - _orphanAge;
 
-            foreach (var obj in objects)
+            await foreach (var obj in storage.ListObjects(ASSETS_PREFIX, cancellationToken))
             {
-                cancellationToken.ThrowIfCancellationRequested();
-
                 if (obj.LastModified is null || obj.LastModified > cutoff)
                 {
                     continue;

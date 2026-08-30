@@ -102,6 +102,19 @@ internal sealed class UserStore(ApplicationDbContext dbContext) : IUserStore
         }
     }
 
+    public async Task<bool> UpdatePasswordHashIfMatches(Guid userId, string currentHash, string newHash, CancellationToken cancellationToken = default)
+    {
+        var now = DateTimeOffset.UtcNow;
+        var affected = await dbContext.Users
+            .Where(u => u.Id == userId && u.PasswordHash == currentHash)
+            .ExecuteUpdateAsync(s => s
+                .SetProperty(u => u.PasswordHash, newHash)
+                .SetProperty(u => u.UpdatedAt, now),
+                cancellationToken);
+
+        return affected > 0;
+    }
+
     private static void ThrowForUserUniqueViolation(PostgresException postgresEx)
     {
         if (postgresEx.ConstraintName == CONSTRAINT_USERS_EMAIL)

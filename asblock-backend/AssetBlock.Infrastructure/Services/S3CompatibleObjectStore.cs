@@ -93,9 +93,10 @@ internal sealed class S3CompatibleObjectStore(
         logger.LogDebug("Deleted object {Key} from bucket {Bucket}", key, bucket);
     }
 
-    public async Task<IReadOnlyList<StorageObjectInfo>> ListObjects(string? prefix = null, CancellationToken cancellationToken = default)
+    public async IAsyncEnumerable<StorageObjectInfo> ListObjects(
+        string? prefix = null,
+        [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
-        var results = new List<StorageObjectInfo>();
         var listArgs = new ListObjectsArgs()
             .WithBucket(bucket)
             .WithRecursive(true);
@@ -119,10 +120,8 @@ internal sealed class S3CompatibleObjectStore(
                 lastModified = parsed;
             }
 
-            results.Add(new StorageObjectInfo(item.Key, lastModified, (long)item.Size));
+            yield return new StorageObjectInfo(item.Key, lastModified, (long)item.Size);
         }
-
-        return results;
     }
 
     private static bool IsBucketAlreadyExists(Exception ex)

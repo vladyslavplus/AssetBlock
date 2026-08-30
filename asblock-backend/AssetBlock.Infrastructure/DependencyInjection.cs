@@ -1,4 +1,4 @@
-﻿using AssetBlock.Domain.Abstractions.Services;
+using AssetBlock.Domain.Abstractions.Services;
 using AssetBlock.Domain.Core.Dto;
 using AssetBlock.Domain.Core.Enums;
 using AssetBlock.Domain.Core.Primitives.AppSettingsOptions;
@@ -119,13 +119,13 @@ public static class DependencyInjection
         {
             OpenRouterOptions options = sp.GetRequiredService<IOptions<OpenRouterOptions>>().Value;
             client.BaseAddress = new Uri(EnsureTrailingSlash(options.BaseUrl));
-            client.Timeout = Timeout.InfiniteTimeSpan;
+            client.Timeout = TimeSpan.FromMinutes(5);
         });
         services.AddHttpClient(OllamaAiGenerationProvider.HTTP_CLIENT_NAME, (sp, client) =>
         {
             OllamaOptions options = sp.GetRequiredService<IOptions<OllamaOptions>>().Value;
             client.BaseAddress = new Uri(EnsureTrailingSlash(options.BaseUrl));
-            client.Timeout = Timeout.InfiniteTimeSpan;
+            client.Timeout = TimeSpan.FromMinutes(5);
         });
         services.AddSingleton<IAiGenerationProvider, OpenRouterAiGenerationProvider>();
         services.AddSingleton<IAiGenerationProvider, OllamaAiGenerationProvider>();

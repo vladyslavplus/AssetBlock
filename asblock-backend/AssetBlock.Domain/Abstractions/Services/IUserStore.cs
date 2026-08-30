@@ -13,6 +13,7 @@ public interface IUserStore
     Task<EmailRecipient?> GetEmailRecipientById(Guid id, CancellationToken cancellationToken = default);
     Task<User> Create(string username, string email, string passwordHash, CancellationToken cancellationToken = default);
     Task<User> Update(User user, CancellationToken cancellationToken = default);
+    Task<bool> UpdatePasswordHashIfMatches(Guid userId, string currentHash, string newHash, CancellationToken cancellationToken = default);
     Task<bool> ReplaceUserSocialLinks(Guid userId, IReadOnlyList<(Guid PlatformId, string Url)> links, CancellationToken cancellationToken = default);
     Task Delete(Guid userId, CancellationToken cancellationToken = default);
 }

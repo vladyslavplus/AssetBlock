@@ -52,6 +52,13 @@ public sealed class DependencyInjectionTests
         sp.GetRequiredService<IListingCopilotStore>().Should().NotBeNull();
         sp.GetRequiredService<IOptions<AiOptions>>().Value.Enabled.Should().BeFalse();
         sp.GetRequiredService<IOptions<OpenRouterOptions>>().Value.Models.Should().BeEmpty();
+
+        var clientFactory = sp.GetRequiredService<IHttpClientFactory>();
+        var openRouterClient = clientFactory.CreateClient(AssetBlock.Infrastructure.Ai.OpenRouterAiGenerationProvider.HTTP_CLIENT_NAME);
+        openRouterClient.Timeout.Should().Be(TimeSpan.FromMinutes(5));
+
+        var ollamaClient = clientFactory.CreateClient(AssetBlock.Infrastructure.Ai.OllamaAiGenerationProvider.HTTP_CLIENT_NAME);
+        ollamaClient.Timeout.Should().Be(TimeSpan.FromMinutes(5));
     }
 
     [Fact]

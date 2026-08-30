@@ -8,5 +8,5 @@ public interface IAssetStorageService
     Task Upload(string key, Stream content, long objectSize, CancellationToken cancellationToken = default);
     Task OpenRead(string key, Func<Stream, CancellationToken, Task> consumer, CancellationToken cancellationToken = default);
     Task Delete(string key, CancellationToken cancellationToken = default);
-    Task<IReadOnlyList<StorageObjectInfo>> ListObjects(string? prefix = null, CancellationToken cancellationToken = default);
+    IAsyncEnumerable<StorageObjectInfo> ListObjects(string? prefix = null, CancellationToken cancellationToken = default);
 }

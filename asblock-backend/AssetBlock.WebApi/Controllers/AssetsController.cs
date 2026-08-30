@@ -102,10 +102,9 @@ public sealed class AssetsController(
         var permit = auth.Permit!;
         Response.ContentType = "application/octet-stream";
         Response.Headers.AcceptRanges = "none";
-        Response.Headers.ContentDisposition = new ContentDispositionHeaderValue("attachment")
-        {
-            FileName = permit.FileName
-        }.ToString();
+        var contentDisposition = new ContentDispositionHeaderValue("attachment");
+        contentDisposition.SetHttpFileName(permit.FileName);
+        Response.Headers.ContentDisposition = contentDisposition.ToString();
 
         await downloadService.CopyDecrypted(permit.StorageKey, Response.Body, cancellationToken);
         return new EmptyResult();
@@ -149,7 +148,7 @@ public sealed class AssetsController(
             return ProblemFromCode(StatusCodes.Status400BadRequest, ErrorCodes.ERR_FILE_TOO_LARGE);
         }
 
-        logger.LogInformation("Upload started for user {UserId}, file {FileName}", userId, file.FileName);
+        logger.LogInformation("Upload started for user {UserId}, length {Length} bytes", userId, file.Length);
         var request = new UploadAssetRequest(form.Title, form.Description, form.Price, form.CategoryId, form.LicenseCode, form.DownloadLimitPerHour)
         {
             Tags = form.Tags
@@ -323,10 +322,9 @@ public sealed class AssetsController(
         var permit = auth.Permit!;
         Response.ContentType = "application/octet-stream";
         Response.Headers.AcceptRanges = "none";
-        Response.Headers.ContentDisposition = new ContentDispositionHeaderValue("attachment")
-        {
-            FileName = permit.FileName
-        }.ToString();
+        var contentDisposition = new ContentDispositionHeaderValue("attachment");
+        contentDisposition.SetHttpFileName(permit.FileName);
+        Response.Headers.ContentDisposition = contentDisposition.ToString();
 
         await downloadService.CopyDecrypted(permit.StorageKey, Response.Body, cancellationToken);
         return new EmptyResult();

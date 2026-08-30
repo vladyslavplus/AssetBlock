@@ -128,6 +128,21 @@ public class PublishAssetVersionCommandHandlerTests
     }
 
     [Fact]
+    public async Task Handle_WhenMaliciousOrNonAsciiFileName_ShouldPersistSafeNormalizedDisplayFileName()
+    {
+        StubOwnedAsset();
+
+        var result = await _handler.Handle(CreateCommand(fileName: @"..\..\..\etc\кириллица_""v2"".zip"), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        await _assetStoreMock.Received(1).CreateNextCandidateVersion(
+            _assetId,
+            _authorId,
+            Arg.Is<AssetVersion>(v => v.FileName == "v2.zip"),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
     public async Task Handle_WhenDbPublishFails_ShouldNotDeleteStorageAndThrow()
     {
         StubOwnedAsset();

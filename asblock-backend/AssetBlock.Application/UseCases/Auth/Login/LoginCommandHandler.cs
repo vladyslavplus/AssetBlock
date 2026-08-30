@@ -45,9 +45,17 @@ internal sealed class LoginCommandHandler(
             return ResultError.Error<TokensResponse>(ErrorCodes.ERR_AUTH_INVALID_CREDENTIALS);
         }
 
+        var needsRehash = passwordHasher.NeedsRehash(user.PasswordHash);
+        var newPasswordHash = needsRehash ? passwordHasher.Hash(request.Password) : null;
+
         var tokens = jwtTokenService.GenerateTokenPair(user.Id, user.Username, user.Email, user.Role);
         await unitOfWork.ExecuteInTransaction(async ct =>
         {
+            if (newPasswordHash is not null)
+            {
+                await userStore.UpdatePasswordHashIfMatches(user.Id, user.PasswordHash, newPasswordHash, ct);
+            }
+
             await jwtTokenService.StoreRefreshToken(user.Id, tokens.RefreshToken, tokens.RefreshExpiresAt, ct);
             await auditWriter.Write(new AuditEvent(
                 AuditActions.AUTH_LOGIN,

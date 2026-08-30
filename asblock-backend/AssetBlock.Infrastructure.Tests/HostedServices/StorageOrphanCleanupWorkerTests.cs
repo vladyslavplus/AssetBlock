@@ -5,7 +5,6 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging.Abstractions;
 using NSubstitute;
-using NSubstitute.ExceptionExtensions;
 using System.Diagnostics.Metrics;
 
 namespace AssetBlock.Infrastructure.Tests.HostedServices;
@@ -21,7 +20,7 @@ public sealed class StorageOrphanCleanupWorkerTests
         var old = DateTimeOffset.UtcNow - TimeSpan.FromHours(25);
 
         storage.ListObjects("assets/", Arg.Any<CancellationToken>())
-            .Returns(Task.FromResult<IReadOnlyList<StorageObjectInfo>>(
+            .Returns(ToAsyncEnumerable(
             [
                 new StorageObjectInfo("assets/orphan.zip", old, 10),
                 new StorageObjectInfo("assets/soft-deleted.zip", old, 10),
@@ -57,7 +56,7 @@ public sealed class StorageOrphanCleanupWorkerTests
         var assetStore = Substitute.For<IAssetStore>();
 
         storage.ListObjects("assets/", Arg.Any<CancellationToken>())
-            .ThrowsAsync(new InvalidOperationException("storage offline"));
+            .Returns(ThrowingAsyncEnumerable<StorageObjectInfo>(new InvalidOperationException("storage offline")));
 
         var services = new ServiceCollection();
         services.AddScoped(_ => storage);
@@ -106,5 +105,24 @@ public sealed class StorageOrphanCleanupWorkerTests
 
         recordedOutcomes.Should().ContainSingle().Which.Should().Be("failure");
         recordedFailures.Should().ContainSingle().Which.Should().Be(1L);
+    }
+
+    private static async IAsyncEnumerable<T> ToAsyncEnumerable<T>(IEnumerable<T> items)
+    {
+        foreach (var item in items)
+        {
+            yield return item;
+        }
+        await Task.CompletedTask;
+    }
+
+    private static async IAsyncEnumerable<T> ThrowingAsyncEnumerable<T>(Exception ex)
+    {
+        await Task.Yield();
+        if (ex is not null)
+        {
+            throw ex;
+        }
+        yield break;
     }
 }

@@ -1,4 +1,4 @@
-﻿using Ardalis.Result;
+using Ardalis.Result;
 using AssetBlock.Application.UseCases.Assets.AddAssetTag;
 using AssetBlock.Application.UseCases.Assets.DeleteAsset;
 using AssetBlock.Application.UseCases.Assets.GetAssetById;
@@ -149,6 +149,47 @@ public sealed class AssetsControllerTests : ControllerTestBase
         result.Should().BeOfType<EmptyResult>();
         await _downloadService.Received(1).CopyDecrypted("assets/k", Arg.Any<Stream>(), Arg.Any<CancellationToken>());
         controller.Response.Headers.AcceptRanges.ToString().Should().Be("none");
+        controller.Response.Headers.ContentDisposition.ToString().Should().Contain("filename=a.zip");
+    }
+
+    [Fact]
+    public async Task Download_WhenNonAsciiFileName_ShouldSetRfc5987ContentDisposition()
+    {
+        _downloadService.AuthorizeDownload(Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<Guid?>(), Arg.Any<CancellationToken>())
+            .Returns(new DownloadAuthorization(
+                AssetDownloadStatus.SUCCESS,
+                new DownloadPermit("assets/k", "тест.zip")));
+        _downloadService.CopyDecrypted(Arg.Any<string>(), Arg.Any<Stream>(), Arg.Any<CancellationToken>())
+            .Returns(Task.CompletedTask);
+
+        var controller = CreateController();
+        SetupUser(_userId, controller);
+        var result = await controller.Download(Guid.NewGuid(), CancellationToken.None);
+
+        result.Should().BeOfType<EmptyResult>();
+        var cd = controller.Response.Headers.ContentDisposition.ToString();
+        cd.Should().Contain("attachment");
+        cd.Should().Contain("filename*=");
+    }
+
+    [Fact]
+    public async Task DownloadVersion_WhenSuccess_ShouldStreamBodyAndSetAttachmentHeader()
+    {
+        var versionId = Guid.NewGuid();
+        _downloadService.AuthorizeDownload(Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Is<Guid?>(v => v == versionId), Arg.Any<CancellationToken>())
+            .Returns(new DownloadAuthorization(
+                AssetDownloadStatus.SUCCESS,
+                new DownloadPermit("assets/k2", "v2.zip")));
+        _downloadService.CopyDecrypted(Arg.Any<string>(), Arg.Any<Stream>(), Arg.Any<CancellationToken>())
+            .Returns(Task.CompletedTask);
+
+        var controller = CreateController();
+        SetupUser(_userId, controller);
+        var result = await controller.DownloadVersion(Guid.NewGuid(), versionId, CancellationToken.None);
+
+        result.Should().BeOfType<EmptyResult>();
+        await _downloadService.Received(1).CopyDecrypted("assets/k2", Arg.Any<Stream>(), Arg.Any<CancellationToken>());
+        controller.Response.Headers.ContentDisposition.ToString().Should().Contain("filename=v2.zip");
     }
 
     [Fact]
