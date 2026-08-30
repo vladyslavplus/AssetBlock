@@ -17,8 +17,8 @@ public static class StripeCheckout
 
         return !OptionsValidation.IsMissingOrPlaceholder(options.SecretKey)
             && !OptionsValidation.IsMissingOrPlaceholder(options.WebhookSecret)
-            && OptionsValidation.IsAbsoluteHttpUri(options.DefaultSuccessUrl)
-            && OptionsValidation.IsAbsoluteHttpUri(options.DefaultCancelUrl);
+            && OptionsValidation.IsAbsoluteHttpUri(options.SuccessUrl)
+            && OptionsValidation.IsAbsoluteHttpUri(options.CancelUrl);
     }
 
     /// <summary>
@@ -30,7 +30,7 @@ public static class StripeCheckout
 
         return !OptionsValidation.IsMissingOrPlaceholder(options.SecretKey)
             || !OptionsValidation.IsMissingOrPlaceholder(options.WebhookSecret)
-            || !OptionsValidation.IsMissingOrPlaceholder(options.DefaultSuccessUrl)
-            || !OptionsValidation.IsMissingOrPlaceholder(options.DefaultCancelUrl);
+            || !OptionsValidation.IsMissingOrPlaceholder(options.SuccessUrl)
+            || !OptionsValidation.IsMissingOrPlaceholder(options.CancelUrl);
     }
 }

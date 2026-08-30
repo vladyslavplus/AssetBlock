@@ -33,22 +33,22 @@ internal sealed class StripeOptionsValidator : IValidateOptions<StripeOptions>
             failures.Add("Stripe:WebhookSecret is required when any Stripe setting is configured.");
         }
 
-        if (OptionsValidation.IsMissingOrPlaceholder(options.DefaultSuccessUrl))
+        if (OptionsValidation.IsMissingOrPlaceholder(options.SuccessUrl))
         {
-            failures.Add("Stripe:DefaultSuccessUrl is required when any Stripe setting is configured.");
+            failures.Add("Stripe:SuccessUrl is required when any Stripe setting is configured.");
         }
-        else if (!OptionsValidation.IsAbsoluteHttpUri(options.DefaultSuccessUrl))
+        else if (!OptionsValidation.IsAbsoluteHttpUri(options.SuccessUrl))
         {
-            failures.Add("Stripe:DefaultSuccessUrl must be an absolute http or https URI.");
+            failures.Add("Stripe:SuccessUrl must be an absolute http or https URI.");
         }
 
-        if (OptionsValidation.IsMissingOrPlaceholder(options.DefaultCancelUrl))
+        if (OptionsValidation.IsMissingOrPlaceholder(options.CancelUrl))
         {
-            failures.Add("Stripe:DefaultCancelUrl is required when any Stripe setting is configured.");
+            failures.Add("Stripe:CancelUrl is required when any Stripe setting is configured.");
         }
-        else if (!OptionsValidation.IsAbsoluteHttpUri(options.DefaultCancelUrl))
+        else if (!OptionsValidation.IsAbsoluteHttpUri(options.CancelUrl))
         {
-            failures.Add("Stripe:DefaultCancelUrl must be an absolute http or https URI.");
+            failures.Add("Stripe:CancelUrl must be an absolute http or https URI.");
         }
 
         return ValidateOptionsResult.Fail(failures);

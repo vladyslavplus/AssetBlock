@@ -1,15 +1,5 @@
 import type { FieldValues, Path, UseFormSetError } from 'react-hook-form'
 
-/** Error entry returned by legacy AssetBlock `{ errors: [{ identifier, message }] }` bodies. */
-export interface ApiErrorItem {
-  identifier?: string
-  message?: string
-}
-
-export interface ApiErrorsArrayBody {
-  errors?: ApiErrorItem[]
-}
-
 const GENERIC_VALIDATION_DETAIL = 'One or more validation errors occurred.'
 const TYPE_PREFIX = 'urn:assetblock:error:'
 
@@ -18,7 +8,6 @@ const FRIENDLY_ERROR_MESSAGES: Record<string, string> = {
   ERR_EMAIL_NOT_VERIFIED:
     'Email verification is required to perform this action. Verify your email on the Account page.',
   ERR_AI_DISABLED: 'AI listing suggestions are not available right now.',
-  AI_DISABLED: 'AI listing suggestions are not available right now.',
 }
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
@@ -86,28 +75,6 @@ function collectFromValidationDictionary(
   }
 }
 
-function collectFromErrorsArray(errors: unknown[], allMessages: string[]): void {
-  for (const item of errors) {
-    if (item && typeof item === 'object' && 'message' in item) {
-      const m = (item as { message: unknown }).message
-      if (typeof m === 'string' && m.trim()) {
-        allMessages.push(m.trim())
-        continue
-      }
-    }
-    if (item && typeof item === 'object' && 'identifier' in item) {
-      const id = (item as { identifier: unknown }).identifier
-      if (typeof id === 'string' && id.trim()) {
-        allMessages.push(id.trim())
-        continue
-      }
-    }
-    if (typeof item === 'string' && item.trim()) {
-      allMessages.push(item.trim())
-    }
-  }
-}
-
 function readStringProp(o: Record<string, unknown>, key: string): string | undefined {
   const v = o[key]
   return typeof v === 'string' && v.trim() ? v.trim() : undefined
@@ -131,7 +98,7 @@ function extractCodeFromType(type: string | undefined): string | undefined {
 }
 
 /**
- * Parses AssetBlock RFC 7807 ProblemDetails + validation dictionary + legacy `{ errors: [...] }` bodies.
+ * Parses AssetBlock RFC 7807 ProblemDetails + validation dictionary bodies.
  */
 export function parseApiErrorBody(body: unknown): ParsedApiError | undefined {
   if (!isPlainObject(body)) {
@@ -147,14 +114,6 @@ export function parseApiErrorBody(body: unknown): ParsedApiError | undefined {
 
   if (errorsVal && typeof errorsVal === 'object' && !Array.isArray(errorsVal)) {
     collectFromValidationDictionary(errorsVal as Record<string, unknown>, fieldErrors, allMessages)
-  }
-
-  if (Array.isArray(errorsVal) && errorsVal.length > 0) {
-    collectFromErrorsArray(errorsVal, allMessages)
-  }
-
-  if (typeof o.error === 'string' && o.error.trim()) {
-    allMessages.push(o.error.trim())
   }
 
   const unique = [...new Set(allMessages)]
@@ -192,15 +151,6 @@ export function parseApiErrorBody(body: unknown): ParsedApiError | undefined {
     ...(code ? { code } : {}),
     ...(traceId ? { traceId } : {}),
   }
-}
-
-export function isApiErrorsBody(value: unknown): value is ApiErrorsArrayBody {
-  return (
-    typeof value === 'object' &&
-    value !== null &&
-    'errors' in value &&
-    Array.isArray((value as ApiErrorsArrayBody).errors)
-  )
 }
 
 /**

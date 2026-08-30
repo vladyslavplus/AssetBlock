@@ -41,7 +41,6 @@ Create a JSON permission manifest beside the prompt with these arrays:
 - `read_paths`: every planned repository read root/file;
 - `write_paths`: every planned write root/file;
 - `allowed_commands`: all exact commands for focused and final phases;
-- `allowed_command_prefixes`: legacy adapter ledger support only; avoid it for new manifests because Antigravity permission rules do not authorize arbitrary token tails;
 - `allowed_command_patterns`: optional Antigravity token-regex patterns with the same token count as the command, scoped to repository operations whose token values may vary;
 - `required_verification`: exact commands required in the current turn.
 - `required_paths_present` / `required_paths_absent`: optional actual filesystem postconditions for moves, generated files, and removals that a command ledger cannot prove.

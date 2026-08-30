@@ -8,7 +8,11 @@ public sealed class AesGcmEncryptionServiceTests
     private static AesGcmEncryptionService CreateService()
     {
         var key = Convert.ToBase64String(RandomNumberGenerator.GetBytes(32));
-        return new AesGcmEncryptionService(Microsoft.Extensions.Options.Options.Create(new EncryptionOptions { KeyBase64 = key }));
+        return new AesGcmEncryptionService(Microsoft.Extensions.Options.Options.Create(new EncryptionOptions
+        {
+            CurrentKeyId = "k1",
+            Keys = new Dictionary<string, string> { ["k1"] = key }
+        }));
     }
 
     [Fact]
@@ -118,10 +122,41 @@ public sealed class AesGcmEncryptionServiceTests
     }
 
     [Fact]
-    public void GetKey_throws_when_missing()
+    public void Constructor_throws_when_keys_missing()
     {
-        var act = () => new AesGcmEncryptionService(Microsoft.Extensions.Options.Options.Create(new EncryptionOptions { KeyBase64 = "" }));
-        act.Should().Throw<InvalidOperationException>();
+        var act = () => new AesGcmEncryptionService(Microsoft.Extensions.Options.Options.Create(new EncryptionOptions
+        {
+            CurrentKeyId = "k1",
+            Keys = new Dictionary<string, string>()
+        }));
+        act.Should().Throw<InvalidOperationException>()
+            .WithMessage("*at least one configured encryption key*");
+    }
+
+    [Fact]
+    public void Constructor_throws_when_current_key_id_missing()
+    {
+        var key = Convert.ToBase64String(RandomNumberGenerator.GetBytes(32));
+        var act = () => new AesGcmEncryptionService(Microsoft.Extensions.Options.Options.Create(new EncryptionOptions
+        {
+            CurrentKeyId = "",
+            Keys = new Dictionary<string, string> { ["k1"] = key }
+        }));
+        act.Should().Throw<InvalidOperationException>()
+            .WithMessage("*CurrentKeyId must be specified*");
+    }
+
+    [Fact]
+    public void Constructor_throws_when_current_key_id_not_in_keys()
+    {
+        var key = Convert.ToBase64String(RandomNumberGenerator.GetBytes(32));
+        var act = () => new AesGcmEncryptionService(Microsoft.Extensions.Options.Options.Create(new EncryptionOptions
+        {
+            CurrentKeyId = "k2",
+            Keys = new Dictionary<string, string> { ["k1"] = key }
+        }));
+        act.Should().Throw<InvalidOperationException>()
+            .WithMessage("*CurrentKeyId 'k2' was not found in Encryption:Keys*");
     }
 
     [Theory]
@@ -132,59 +167,42 @@ public sealed class AesGcmEncryptionServiceTests
     {
         var act = () => new AesGcmEncryptionService(Microsoft.Extensions.Options.Options.Create(new EncryptionOptions
         {
-            KeyBase64 = Convert.ToBase64String(new byte[keyBytesLength])
+            CurrentKeyId = "k1",
+            Keys = new Dictionary<string, string>
+            {
+                ["k1"] = Convert.ToBase64String(new byte[keyBytesLength])
+            }
         }));
         act.Should().Throw<InvalidOperationException>()
             .WithMessage("*32 bytes*");
     }
 
     [Fact]
-    public async Task Decrypt_LegacyCiphertextWithoutHeader_DecryptsSuccessfully()
+    public void Constructor_rejects_key_id_exceeding_max_bytes()
     {
-        // Produce legacy ciphertext independently (headerless: [4-byte len][12-byte nonce][16-byte tag][ciphertext][4-byte EOS])
-        var keyBytes = RandomNumberGenerator.GetBytes(32);
-        var keyBase64 = Convert.ToBase64String(keyBytes);
-        var originalPlaintext = "Legacy encrypted content for AssetBlock marketplace"u8.ToArray();
-
-        using var legacyCipher = new MemoryStream();
-        using (var aes = new AesGcm(keyBytes, 16))
+        var key = Convert.ToBase64String(RandomNumberGenerator.GetBytes(32));
+        var longKeyId = new string('k', 65);
+        var act = () => new AesGcmEncryptionService(Microsoft.Extensions.Options.Options.Create(new EncryptionOptions
         {
-            var nonce = RandomNumberGenerator.GetBytes(12);
-            var tag = new byte[16];
-            var cipherChunk = new byte[originalPlaintext.Length];
-            var aad = BitConverter.GetBytes(0L); // chunk index 0
-            aes.Encrypt(nonce, originalPlaintext, cipherChunk, tag, aad);
-
-            legacyCipher.Write(BitConverter.GetBytes((uint)originalPlaintext.Length));
-            legacyCipher.Write(nonce);
-            legacyCipher.Write(tag);
-            legacyCipher.Write(cipherChunk);
-            legacyCipher.Write(BitConverter.GetBytes(uint.MaxValue)); // EOS
-        }
-
-        legacyCipher.Position = 0;
-
-        var sut = new AesGcmEncryptionService(Microsoft.Extensions.Options.Options.Create(new EncryptionOptions
-        {
-            KeyBase64 = keyBase64
+            CurrentKeyId = longKeyId,
+            Keys = new Dictionary<string, string>
+            {
+                [longKeyId] = key
+            }
         }));
-
-        using var decrypted = new MemoryStream();
-        await sut.Decrypt(legacyCipher, decrypted);
-
-        decrypted.ToArray().Should().Equal(originalPlaintext);
+        act.Should().Throw<InvalidOperationException>()
+            .WithMessage("*exceeds maximum length of 64 bytes*");
     }
 
     [Fact]
-    public async Task Decrypt_LegacyCiphertext_WhenActiveKeyRotatedAndLegacyKeyIdConfigured_DecryptsSuccessfully()
+    public async Task Decrypt_WhenHeaderlessOrInvalidMagic_ThrowsCryptographicException()
     {
-        var legacyKeyBytes = RandomNumberGenerator.GetBytes(32);
-        var activeKeyBytes = RandomNumberGenerator.GetBytes(32);
-        var originalPlaintext = "Legacy ciphertext produced before rotation"u8.ToArray();
+        // Produce headerless unversioned ciphertext: [4-byte len][12-byte nonce][16-byte tag][ciphertext][4-byte EOS]
+        var keyBytes = RandomNumberGenerator.GetBytes(32);
+        var originalPlaintext = "Headerless unversioned encrypted content without ABE1 header"u8.ToArray();
 
-        // Produce legacy ciphertext independently with legacy key (k1)
-        using var legacyCipher = new MemoryStream();
-        using (var aes = new AesGcm(legacyKeyBytes, 16))
+        using var headerlessCipher = new MemoryStream();
+        using (var aes = new AesGcm(keyBytes, 16))
         {
             var nonce = RandomNumberGenerator.GetBytes(12);
             var tag = new byte[16];
@@ -192,49 +210,29 @@ public sealed class AesGcmEncryptionServiceTests
             var aad = BitConverter.GetBytes(0L);
             aes.Encrypt(nonce, originalPlaintext, cipherChunk, tag, aad);
 
-            legacyCipher.Write(BitConverter.GetBytes((uint)originalPlaintext.Length));
-            legacyCipher.Write(nonce);
-            legacyCipher.Write(tag);
-            legacyCipher.Write(cipherChunk);
-            legacyCipher.Write(BitConverter.GetBytes(uint.MaxValue)); // EOS
+            headerlessCipher.Write(BitConverter.GetBytes((uint)originalPlaintext.Length));
+            headerlessCipher.Write(nonce);
+            headerlessCipher.Write(tag);
+            headerlessCipher.Write(cipherChunk);
+            headerlessCipher.Write(BitConverter.GetBytes(uint.MaxValue)); // EOS
         }
 
-        legacyCipher.Position = 0;
+        headerlessCipher.Position = 0;
 
-        // SUT with active key k2 and LegacyKeyId k1
         var sut = new AesGcmEncryptionService(Microsoft.Extensions.Options.Options.Create(new EncryptionOptions
         {
-            CurrentKeyId = "k2",
-            LegacyKeyId = "k1",
+            CurrentKeyId = "k1",
             Keys = new Dictionary<string, string>
             {
-                ["k1"] = Convert.ToBase64String(legacyKeyBytes),
-                ["k2"] = Convert.ToBase64String(activeKeyBytes)
+                ["k1"] = Convert.ToBase64String(keyBytes)
             }
         }));
 
         using var decrypted = new MemoryStream();
-        await sut.Decrypt(legacyCipher, decrypted);
+        var act = () => sut.Decrypt(headerlessCipher, decrypted);
 
-        decrypted.ToArray().Should().Equal(originalPlaintext);
-    }
-
-    [Fact]
-    public void Constructor_WhenConfiguredLegacyKeyIdMissingFromKeyring_ThrowsInvalidOperationException()
-    {
-        var key = Convert.ToBase64String(RandomNumberGenerator.GetBytes(32));
-        var act = () => new AesGcmEncryptionService(Microsoft.Extensions.Options.Options.Create(new EncryptionOptions
-        {
-            CurrentKeyId = "k1",
-            LegacyKeyId = "missing-legacy-key",
-            Keys = new Dictionary<string, string>
-            {
-                ["k1"] = key
-            }
-        }));
-
-        act.Should().Throw<InvalidOperationException>()
-            .WithMessage("*Encryption:LegacyKeyId 'missing-legacy-key' was not found in Encryption:Keys.*");
+        await act.Should().ThrowAsync<CryptographicException>()
+            .WithMessage("*missing ABE1 header*");
     }
 
     [Fact]
@@ -247,7 +245,6 @@ public sealed class AesGcmEncryptionServiceTests
         var sut = new AesGcmEncryptionService(Microsoft.Extensions.Options.Options.Create(new EncryptionOptions
         {
             CurrentKeyId = "k2",
-            LegacyKeyId = "k1",
             Keys = new Dictionary<string, string>
             {
                 ["k1"] = Convert.ToBase64String(key1Bytes),

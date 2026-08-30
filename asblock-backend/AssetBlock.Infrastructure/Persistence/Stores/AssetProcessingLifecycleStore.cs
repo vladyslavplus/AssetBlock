@@ -726,8 +726,8 @@ public sealed partial class AssetProcessingLifecycleStore(
             _jsonOptions);
 
         await dbContext.Database.ExecuteSqlInterpolatedAsync($"""
-            INSERT INTO outbox_messages ("Id", "Type", "Payload", "OccurredAt", "AttemptCount")
-            VALUES ({outboxId}, {OutboxMessageTypes.NOTIFICATION_DISPATCH}, {payload}, {occurredAt}, 0)
+            INSERT INTO outbox_messages ("Id", "Type", "Payload", "OccurredAt", "Status", "AttemptCount", "ReplayCount")
+            VALUES ({outboxId}, {OutboxMessageTypes.NOTIFICATION_DISPATCH}, {payload}, {occurredAt}, {(int)OutboxMessageStatus.PENDING}, 0, 0)
             """, cancellationToken);
 
         var kindName = kind.ToString();

@@ -37,8 +37,7 @@ export function ListingCopilotPanel({
   const copilotJob = (jobsQuery.data ?? []).find((job) => job.type === 'LISTING_COPILOT')
   const suggestion = suggestionQuery.data ?? null
   const disabled =
-    enqueue.error instanceof ListingCopilotRequestError &&
-    (enqueue.error.code === 'ERR_AI_DISABLED' || enqueue.error.code === 'AI_DISABLED')
+    enqueue.error instanceof ListingCopilotRequestError && enqueue.error.code === 'ERR_AI_DISABLED'
   const jobPending = copilotJob != null && isNonTerminalStatus(copilotJob.status)
   const jobFailed = copilotJob?.status === 'FAILED' || copilotJob?.status === 'CANCELLED'
   const pendingLabel =

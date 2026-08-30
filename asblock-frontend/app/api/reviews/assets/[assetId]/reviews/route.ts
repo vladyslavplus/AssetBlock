@@ -1,7 +1,11 @@
-import { NextResponse } from 'next/server'
 import { cookies } from 'next/headers'
 import { fetchBackendAuthorized } from '@/lib/server/backend-authorized'
-import { assertSameOrigin, forwardBackendResponse } from '@/lib/server/bff-http'
+import {
+  assertSameOrigin,
+  forwardBackendResponse,
+  invalidJsonResponse,
+  zodValidationProblemResponse,
+} from '@/lib/server/bff-http'
 import { leaveReviewFormSchema } from '@/lib/reviews/review-schemas'
 
 export async function POST(request: Request, context: { params: Promise<{ assetId: string }> }) {
@@ -13,22 +17,12 @@ export async function POST(request: Request, context: { params: Promise<{ assetI
   try {
     bodyJson = JSON.parse(bodyText)
   } catch {
-    return NextResponse.json(
-      { error: 'ERR_VALIDATION', message: 'Invalid JSON payload' },
-      { status: 400 },
-    )
+    return invalidJsonResponse()
   }
 
   const parsed = leaveReviewFormSchema.safeParse(bodyJson)
   if (!parsed.success) {
-    return NextResponse.json(
-      {
-        error: 'ERR_VALIDATION',
-        message: 'Invalid review payload',
-        details: parsed.error.format(),
-      },
-      { status: 400 },
-    )
+    return zodValidationProblemResponse(parsed.error)
   }
 
   const { assetId } = await context.params

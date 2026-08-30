@@ -43,11 +43,3 @@ playwright/.cache/
 
 # TypeScript
 *.tsbuildinfo
-
-# Misc (legacy v0 / tooling)
-__v0_runtime_loader.js
-__v0_devtools.tsx
-__v0_jsx-dev-runtime.ts
-.snowflake/
-.v0-trash/
-next.user-config.*

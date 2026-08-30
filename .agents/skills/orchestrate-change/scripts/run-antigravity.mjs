@@ -165,15 +165,6 @@ function commandRuleCovers(ruleValue, command) {
   });
 }
 
-function commandPrefixCovers(prefix, command) {
-  const prefixTokens = tokenizeCommand(prefix);
-  const commandTokens = tokenizeCommand(command);
-  return (
-    prefixTokens.length <= commandTokens.length &&
-    prefixTokens.every((token, index) => token === commandTokens[index])
-  );
-}
-
 export function inspectPermissionCoverage(settings, manifest) {
   const allow = settings?.permissions?.allow;
   if (!Array.isArray(allow)) {
@@ -187,7 +178,6 @@ export function inspectPermissionCoverage(settings, manifest) {
   const readPaths = manifest.read_paths ?? [];
   const writePaths = manifest.write_paths ?? [];
   const allowedCommands = manifest.allowed_commands ?? [];
-  const allowedCommandPrefixes = manifest.allowed_command_prefixes ?? [];
   const allowedCommandPatterns = manifest.allowed_command_patterns ?? [];
   const requiredVerification = manifest.required_verification ?? [];
   const requiredPathsPresent = manifest.required_paths_present ?? [];
@@ -197,7 +187,6 @@ export function inspectPermissionCoverage(settings, manifest) {
     read_paths: readPaths,
     write_paths: writePaths,
     allowed_commands: allowedCommands,
-    allowed_command_prefixes: allowedCommandPrefixes,
     allowed_command_patterns: allowedCommandPatterns,
     required_verification: requiredVerification,
     required_paths_present: requiredPathsPresent,
@@ -228,10 +217,6 @@ export function inspectPermissionCoverage(settings, manifest) {
         !writeRules.some((rule) => permissionPathCovers(rule.value, required)),
     ),
     missing_commands: allowedCommands.filter(
-      (required) =>
-        !commandRules.some((rule) => commandRuleCovers(rule.value, required)),
-    ),
-    missing_command_prefixes: allowedCommandPrefixes.filter(
       (required) =>
         !commandRules.some((rule) => commandRuleCovers(rule.value, required)),
     ),
@@ -270,7 +255,6 @@ function formatPermissionGaps(coverage) {
     ["read paths", coverage.missing_read_paths],
     ["write paths", coverage.missing_write_paths],
     ["commands", coverage.missing_commands],
-    ["command prefixes", coverage.missing_command_prefixes],
     ["command patterns", coverage.missing_command_patterns],
   ]) {
     if (values.length > 0) {
@@ -701,7 +685,6 @@ export function validateExecutionReport(
   streamInspection,
   requiredVerification = [],
   allowedCommands = [],
-  allowedCommandPrefixes = [],
   allowedCommandPatterns = [],
 ) {
   const errors = [];
@@ -715,9 +698,6 @@ export function validateExecutionReport(
   ).filter(
     (entry) =>
       !allowedCommandSet.has(normalizeCommand(entry.command)) &&
-      !allowedCommandPrefixes.some((prefix) =>
-        commandPrefixCovers(prefix, entry.command),
-      ) &&
       !allowedCommandPatterns.some((pattern) =>
         commandRuleCovers(pattern, entry.command),
       ),
@@ -920,7 +900,6 @@ export async function main(argv = process.argv.slice(2)) {
       permissionCoverage.missing_read_paths.length +
       permissionCoverage.missing_write_paths.length +
       permissionCoverage.missing_commands.length +
-      permissionCoverage.missing_command_prefixes.length +
       permissionCoverage.missing_command_patterns.length;
     if (permissionGapCount > 0) {
       throw new Error(
@@ -1125,7 +1104,6 @@ export async function main(argv = process.argv.slice(2)) {
     streamInspection,
     permissionManifest.required_verification,
     permissionManifest.allowed_commands,
-    permissionManifest.allowed_command_prefixes,
     permissionManifest.allowed_command_patterns,
   );
   if (normalized.report.status === "completed") {

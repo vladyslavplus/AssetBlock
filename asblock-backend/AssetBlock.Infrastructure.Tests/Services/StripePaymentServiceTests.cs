@@ -17,8 +17,8 @@ public sealed class StripePaymentServiceTests
         var opts = Microsoft.Extensions.Options.Options.Create(new StripeOptions
         {
             SecretKey = "stripe_test_secret_key_not_real",
-            DefaultSuccessUrl = "",
-            DefaultCancelUrl = ""
+            SuccessUrl = "",
+            CancelUrl = ""
         });
         var resilience = Substitute.For<ResiliencePipelineProvider<string>>();
         resilience.GetPipeline(Arg.Any<string>())
@@ -41,8 +41,8 @@ public sealed class StripePaymentServiceTests
         var opts = Microsoft.Extensions.Options.Options.Create(new StripeOptions
         {
             SecretKey = "stripe_test_secret_key_not_real",
-            DefaultSuccessUrl = "https://example.com/success",
-            DefaultCancelUrl = "https://example.com/cancel"
+            SuccessUrl = "https://example.com/checkout/success",
+            CancelUrl = "https://example.com/checkout/cancel"
         });
 
         var resilience = Substitute.For<ResiliencePipelineProvider<string>>();

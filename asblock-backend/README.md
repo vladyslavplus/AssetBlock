@@ -25,7 +25,8 @@ dotnet user-secrets set "SeaweedFs:Bucket" "assets" --project AssetBlock.WebApi
 dotnet user-secrets set "SeaweedFs:AccessKey" "assetblock" --project AssetBlock.WebApi
 dotnet user-secrets set "SeaweedFs:SecretKey" "dev_seaweedfs_secret" --project AssetBlock.WebApi
 dotnet user-secrets set "SeaweedFs:UseSsl" "false" --project AssetBlock.WebApi
-dotnet user-secrets set "Encryption:KeyBase64" "<base64-encoded-32-byte-aes-key>" --project AssetBlock.WebApi
+dotnet user-secrets set "Encryption:CurrentKeyId" "k1" --project AssetBlock.WebApi
+dotnet user-secrets set "Encryption:Keys:k1" "<base64-encoded-32-byte-aes-key>" --project AssetBlock.WebApi
 ```
 
 MinIO compatibility provider (after `docker compose --profile minio up -d`):
@@ -46,8 +47,8 @@ Optional Stripe (omit all Stripe keys to run with payments inactive):
 ```bash
 dotnet user-secrets set "Stripe:SecretKey" "<stripe-secret-key>" --project AssetBlock.WebApi
 dotnet user-secrets set "Stripe:WebhookSecret" "<stripe-webhook-secret>" --project AssetBlock.WebApi
-dotnet user-secrets set "Stripe:DefaultSuccessUrl" "http://localhost:3000/payment/success" --project AssetBlock.WebApi
-dotnet user-secrets set "Stripe:DefaultCancelUrl" "http://localhost:3000/payment/cancel" --project AssetBlock.WebApi
+dotnet user-secrets set "Stripe:SuccessUrl" "http://localhost:3000/checkout/success" --project AssetBlock.WebApi
+dotnet user-secrets set "Stripe:CancelUrl" "http://localhost:3000/checkout/cancel" --project AssetBlock.WebApi
 ```
 
 For local webhook forwarding, start the API on its checked-in HTTP profile (`http://localhost:5088`), then run:
@@ -67,7 +68,7 @@ Set `Stripe:WebhookSecret` to the `whsec_...` printed by that active listener an
 
 Direct asset and bundle payments share one commerce model:
 
-1. `POST /api/payments/checkout` with `{ assetId }` (backward compatible) or `POST /api/payments/checkout/bundles` with `{ bundleId }`.
+1. `POST /api/payments/checkout` with `{ assetId }` or `POST /api/payments/checkout/bundles` with `{ bundleId }`.
 2. Server creates a durable `CheckoutIntent` + immutable `CheckoutIntentItem` rows + `CheckoutReservation` rows `(UserId, AssetId)` in a short DB transaction (no Stripe/network calls inside).
 3. Stripe Checkout Session is created after commit; metadata contains only `checkoutIntentId` and `userId`; idempotency key = checkout intent id.
 4. Browser success redirect never creates entitlements. Stripe webhook `checkout.session.completed` is the only payment-completion authority: it verifies signature/amount/currency/session, then atomically creates `Order` + `OrderLine`s + per-asset `Purchase` entitlements, one buyer receipt/order-ready notification, and one seller sale email/notification.
@@ -103,8 +104,8 @@ openssl rand -base64 32
 | `Minio:Bucket` | When Minio | e.g. `assets` |
 | `Minio:AccessKey` / `Minio:SecretKey` | When Minio | No code fallbacks |
 | `Minio:UseSsl` | When Minio | `false` for local HTTP MinIO |
-| `Encryption:KeyBase64` | Yes | Base64 of exactly 32 bytes |
-| `Stripe:*` | No | If **any** Stripe field is set, all of `SecretKey`, `WebhookSecret`, `DefaultSuccessUrl`, `DefaultCancelUrl` are required |
+| `Encryption:CurrentKeyId` / `Encryption:Keys:*` | Yes | Non-empty current key ID present in keyring; each key Base64 of exactly 32 bytes |
+| `Stripe:*` | No | If **any** Stripe field is set, all of `SecretKey`, `WebhookSecret`, `SuccessUrl`, `CancelUrl` are required |
 | `Email:Provider` | Yes | Must be `Smtp` (case-insensitive) |
 | `Email:FromName` / `Email:FromAddress` | Yes | From mailbox for transactional mail |
 | `Email:PublicAppBaseUrl` | Yes | Absolute `http`/`https` SPA origin for fixed template links |
@@ -125,9 +126,9 @@ openssl rand -base64 32
 
 If Stripe secret or webhook keys were ever committed or shared, **rotate/revoke them in the Stripe Dashboard** yourself. This repository cannot revoke remote keys.
 
-### 5. AES key rotation (local data)
+### 5. AES key rotation (keyring)
 
-After changing `Encryption:KeyBase64`, previously encrypted storage objects cannot be decrypted with the new key. Clearing local storage buckets and/or the dev database is a **manual** step after you confirm there is nothing valuable to keep (take a backup first if unsure). Agents must not wipe Docker volumes or databases for you. Switching `Storage:Provider` also does not migrate blobs between SeaweedFS and MinIO.
+To rotate AES encryption keys, add the new 32-byte Base64 key under `Encryption:Keys:<newId>` and set `Encryption:CurrentKeyId` to `<newId>`. Retain previous keys in `Encryption:Keys` so previously encrypted objects can continue to be decrypted. If an old key is removed, any objects encrypted with it can no longer be decrypted. Clearing local storage buckets and/or the dev database is a **manual** step after you confirm there is nothing valuable to keep (take a backup first if unsure). Agents must not wipe Docker volumes or databases for you. Switching `Storage:Provider` also does not migrate blobs between SeaweedFS and MinIO.
 
 ## Typical commands
 

@@ -137,24 +137,7 @@ public static class ErrorCodesToErrorMessages
         { ErrorCodes.ERR_AI_ERROR, "AI generation failed." },
         { ErrorCodes.ERR_AI_VERSION_NOT_READY, "This version is not ready for AI listing suggestions." },
         { ErrorCodes.ERR_AI_ARCHIVE_ANALYSIS_MISSING, "Archive analysis is not available for this version." },
-        { ErrorCodes.ERR_AI_ALLOWLIST_OVERFLOW, "The catalog is too large for AI listing suggestions." },
-        { "AI_DISABLED", "AI generation is disabled." },
-        { "AI_PROVIDER_UNAVAILABLE", "The AI provider is temporarily unavailable." },
-        { "AI_RATE_LIMITED", "The AI provider rate limit was reached. Try again later." },
-        { "AI_TIMEOUT", "The AI provider timed out." },
-        { "AI_UNAUTHORIZED", "The AI provider rejected the credentials." },
-        { "AI_PAYMENT_REQUIRED", "The AI provider requires billing or quota." },
-        { "AI_FORBIDDEN", "The AI provider denied the request." },
-        { "AI_INVALID_REQUEST", "The AI request was rejected." },
-        { "AI_INVALID_RESPONSE", "The AI provider returned an invalid response." },
-        { "AI_MODEL_NOT_ALLOWED", "The configured AI model is not approved by policy." },
-        { "AI_CATEGORY_NOT_ALLOWED", "The suggested category is not in the allowed list." },
-        { "AI_TAGS_NOT_ALLOWED", "One or more suggested tags are not in the allowed list." },
-        { "AI_INPUT_TOO_LARGE", "The listing context exceeds the AI input limit." },
-        { "AI_ERROR", "AI generation failed." },
-        { "AI_VERSION_NOT_READY", "This version is not ready for AI listing suggestions." },
-        { "AI_ARCHIVE_ANALYSIS_MISSING", "Archive analysis is not available for this version." },
-        { "AI_ALLOWLIST_OVERFLOW", "The catalog is too large for AI listing suggestions." }
+        { ErrorCodes.ERR_AI_ALLOWLIST_OVERFLOW, "The catalog is too large for AI listing suggestions." }
     };
 
     public static string GetMessage(string code) =>

@@ -30,8 +30,8 @@ public sealed class PaymentsControllerTests : ControllerTestBase
             {
                 SecretKey = "",
                 WebhookSecret = "",
-                DefaultSuccessUrl = "",
-                DefaultCancelUrl = ""
+                SuccessUrl = "",
+                CancelUrl = ""
             });
         var result = controller.GetCapabilities(opts);
         var body = result.Should().BeOfType<OkObjectResult>().Which.Value;
@@ -47,8 +47,8 @@ public sealed class PaymentsControllerTests : ControllerTestBase
             {
                 SecretKey = "<stripe-secret-key>",
                 WebhookSecret = "<stripe-webhook-secret>",
-                DefaultSuccessUrl = "<default-success-url>",
-                DefaultCancelUrl = "<default-cancel-url>"
+                SuccessUrl = "<default-success-url>",
+                CancelUrl = "<default-cancel-url>"
             });
         var result = controller.GetCapabilities(opts);
         var body = result.Should().BeOfType<OkObjectResult>().Which.Value;
@@ -64,8 +64,8 @@ public sealed class PaymentsControllerTests : ControllerTestBase
             {
                 SecretKey = "stripe_test_secret_key_not_real",
                 WebhookSecret = "stripe_test_webhook_secret_not_real",
-                DefaultSuccessUrl = "http://localhost/success",
-                DefaultCancelUrl = "http://localhost/cancel"
+                SuccessUrl = "http://localhost/checkout/success",
+                CancelUrl = "http://localhost/checkout/cancel"
             });
         var result = controller.GetCapabilities(opts);
         var body = result.Should().BeOfType<OkObjectResult>().Which.Value;

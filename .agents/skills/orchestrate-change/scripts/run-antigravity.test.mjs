@@ -12,6 +12,7 @@ import {
   inspectPermissionCoverage,
   inspectPathPostconditions,
   inspectAgyStream,
+  main,
   normalizeAgyResult,
   parseAgyStream,
   parseArgs,
@@ -272,26 +273,6 @@ test("validateExecutionReport rejects commands absent from manifest", () => {
   assert.match(errors.join("\n"), /absent from permission manifest/);
 });
 
-test("validateExecutionReport accepts declared read-only command prefix", () => {
-  const errors = validateExecutionReport(
-    {
-      status: "blocked",
-      needs_human_reason: "Need input",
-      files_changed: [],
-      verification: [],
-    },
-    {
-      unresolvedPermissionDenials: [],
-      commandAttempts: [{ command: "git diff src/file.cs", state: "DONE" }],
-    },
-    [],
-    [],
-    ["git diff"],
-  );
-
-  assert.deepEqual(errors, []);
-});
-
 test("validateExecutionReport rejects empty file ledger after mutations", () => {
   const errors = validateExecutionReport(
     {
@@ -390,17 +371,15 @@ test("inspectPermissionCoverage accepts ancestor file rules and exact commands",
     missing_read_paths: [],
     missing_write_paths: [],
     missing_commands: [],
-    missing_command_prefixes: [],
     missing_command_patterns: [],
   });
 });
 
-test("inspectPermissionCoverage requires executable rules for commands and declared prefixes", () => {
+test("inspectPermissionCoverage requires executable rules for commands", () => {
   const coverage = inspectPermissionCoverage(
     {
       permissions: {
         allow: [
-          "command(git diff)",
           "command(git diff -- src/file.cs)",
         ],
       },
@@ -409,7 +388,6 @@ test("inspectPermissionCoverage requires executable rules for commands and decla
       read_paths: [],
       write_paths: [],
       allowed_commands: ["git diff -- src/file.cs"],
-      allowed_command_prefixes: ["git diff"],
       required_verification: [],
     },
   );
@@ -418,7 +396,6 @@ test("inspectPermissionCoverage requires executable rules for commands and decla
     missing_read_paths: [],
     missing_write_paths: [],
     missing_commands: [],
-    missing_command_prefixes: [],
     missing_command_patterns: [],
   });
 });
@@ -475,7 +452,6 @@ test("inspectPermissionCoverage reports every exact command and path gap", () =>
       "workspace-root/backend/**",
     ],
     missing_commands: ["dotnet test one.csproj", "git diff --check"],
-    missing_command_prefixes: [],
     missing_command_patterns: [],
   });
 });
@@ -510,7 +486,6 @@ test("validateExecutionReport accepts declared scoped command pattern", () => {
       unresolvedPermissionDenials: [],
       commandAttempts: [{ command, state: "DONE" }],
     },
-    [],
     [],
     [],
     ["Move-Item asblock-backend.* asblock-backend.*"],
@@ -671,3 +646,64 @@ test(
     }
   },
 );
+
+test("main in dry-run mode completes successfully with valid manifest and coverage", async () => {
+  const temporaryRoot = await mkdtemp(path.join(os.tmpdir(), "agy-main-dry-run-"));
+  try {
+    const promptPath = path.join(temporaryRoot, "prompt.md");
+    const manifestPath = path.join(temporaryRoot, "manifest.json");
+    const schemaPath = path.join(temporaryRoot, "schema.json");
+    const settingsPath = path.join(temporaryRoot, "settings.json");
+    const binPath = path.join(temporaryRoot, "fake-agy.exe");
+
+    await writeFile(promptPath, "Test prompt", "utf8");
+    await writeFile(schemaPath, JSON.stringify({ type: "object" }), "utf8");
+    await copyFile(process.execPath, binPath);
+
+    const manifest = {
+      read_paths: ["workspace-root/AGENTS.md"],
+      write_paths: ["workspace-root/src/**"],
+      allowed_commands: ["dotnet test"],
+      allowed_command_patterns: ["Move-Item src.* src.*"],
+      required_verification: ["dotnet test"],
+    };
+    await writeFile(manifestPath, JSON.stringify(manifest), "utf8");
+
+    const settings = {
+      permissions: {
+        allow: [
+          "read_file(workspace-root)",
+          "write_file(workspace-root)",
+          "command(dotnet test)",
+          "command(Move-Item src.* src.*)",
+        ],
+      },
+    };
+    await writeFile(settingsPath, JSON.stringify(settings), "utf8");
+
+    const result = await main([
+      "--prompt-file",
+      promptPath,
+      "--permission-manifest",
+      manifestPath,
+      "--schema",
+      schemaPath,
+      "--agy-settings",
+      settingsPath,
+      "--agy-bin",
+      binPath,
+      "--dry-run",
+    ]);
+
+    assert.equal(result.ok, true);
+    assert.equal(result.dry_run, true);
+    assert.deepEqual(result.permission_preflight, {
+      missing_read_paths: [],
+      missing_write_paths: [],
+      missing_commands: [],
+      missing_command_patterns: [],
+    });
+  } finally {
+    await rm(temporaryRoot, { recursive: true, force: true });
+  }
+});

@@ -82,7 +82,7 @@ describe('auth BFF routes', () => {
     expect(cookieStore.snapshot()[AUTH_COOKIE_REFRESH]).toBe('refresh-secret')
   })
 
-  it('clears cookies on failed refresh and returns 401 without tokens', async () => {
+  it('clears cookies on failed refresh and returns 401 ProblemDetails without tokens', async () => {
     cookieStore.set(AUTH_COOKIE_ACCESS, 'old-access')
     cookieStore.set(AUTH_COOKIE_REFRESH, 'old-refresh')
     vi.stubGlobal(
@@ -96,8 +96,14 @@ describe('auth BFF routes', () => {
       }),
     )
     expect(res.status).toBe(401)
+    expect(res.headers.get('Content-Type')).toBe('application/problem+json')
     const body = await res.json()
-    expect(body).toEqual({ ok: false })
+    expect(body.type).toBe('urn:assetblock:error:ERR_UNAUTHORIZED')
+    expect(body.code).toBe('ERR_UNAUTHORIZED')
+    expect(body.status).toBe(401)
+    expect(body.title).toBe('Unauthorized')
+    expect(body.detail).toBe('Unauthorized')
+    expect(body.traceId).toBeDefined()
     expect(JSON.stringify(body)).not.toContain('old-refresh')
     expect(cookieStore.snapshot()[AUTH_COOKIE_ACCESS]).toBeUndefined()
     expect(cookieStore.snapshot()[AUTH_COOKIE_REFRESH]).toBeUndefined()

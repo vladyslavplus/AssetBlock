@@ -158,6 +158,10 @@ public sealed class DownloadServiceTests
     private static AesGcmEncryptionService CreateEncryption()
     {
         var key = Convert.ToBase64String(RandomNumberGenerator.GetBytes(32));
-        return new AesGcmEncryptionService(Microsoft.Extensions.Options.Options.Create(new EncryptionOptions { KeyBase64 = key }));
+        return new AesGcmEncryptionService(Microsoft.Extensions.Options.Options.Create(new EncryptionOptions
+        {
+            CurrentKeyId = "k1",
+            Keys = new Dictionary<string, string> { ["k1"] = key }
+        }));
     }
 }

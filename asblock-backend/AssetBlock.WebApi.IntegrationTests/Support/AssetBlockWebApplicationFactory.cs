@@ -51,12 +51,12 @@ public sealed class AssetBlockWebApplicationFactory(string connectionString) : W
         builder.UseSetting("SeaweedFs:Bucket", "assets");
         builder.UseSetting("SeaweedFs:AccessKey", "unused");
         builder.UseSetting("SeaweedFs:SecretKey", "unused");
-        builder.UseSetting("SeaweedFs:UseSsl", "false");
-        builder.UseSetting("Encryption:KeyBase64", TEST_ENCRYPTION_KEY_BASE64);
+        builder.UseSetting("Encryption:CurrentKeyId", "k1");
+        builder.UseSetting("Encryption:Keys:k1", TEST_ENCRYPTION_KEY_BASE64);
         builder.UseSetting("Stripe:SecretKey", "stripe_integration_secret_key_not_real");
         builder.UseSetting("Stripe:WebhookSecret", "stripe_integration_webhook_secret_not_real");
-        builder.UseSetting("Stripe:DefaultSuccessUrl", "http://localhost/success");
-        builder.UseSetting("Stripe:DefaultCancelUrl", "http://localhost/cancel");
+        builder.UseSetting("Stripe:SuccessUrl", "http://localhost/checkout/success");
+        builder.UseSetting("Stripe:CancelUrl", "http://localhost/checkout/cancel");
         builder.UseSetting("Email:Provider", "Smtp");
         builder.UseSetting("Email:FromName", "AssetBlock");
         builder.UseSetting("Email:FromAddress", "noreply@localhost");

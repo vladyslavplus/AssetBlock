@@ -1,7 +1,11 @@
-import { NextResponse } from 'next/server'
 import { cookies } from 'next/headers'
 import { fetchBackendAuthorized } from '@/lib/server/backend-authorized'
-import { assertSameOrigin, forwardBackendResponse } from '@/lib/server/bff-http'
+import {
+  assertSameOrigin,
+  forwardBackendResponse,
+  invalidJsonResponse,
+  zodValidationProblemResponse,
+} from '@/lib/server/bff-http'
 import { assetTagAddSchema } from '@/lib/seller/seller-schemas'
 
 export async function POST(request: Request, context: { params: Promise<{ id: string }> }) {
@@ -13,18 +17,12 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
   try {
     bodyJson = JSON.parse(bodyText)
   } catch {
-    return NextResponse.json(
-      { error: 'ERR_VALIDATION', message: 'Invalid JSON payload' },
-      { status: 400 },
-    )
+    return invalidJsonResponse()
   }
 
   const parsed = assetTagAddSchema.safeParse(bodyJson)
   if (!parsed.success) {
-    return NextResponse.json(
-      { error: 'ERR_VALIDATION', message: 'Invalid tag payload', details: parsed.error.format() },
-      { status: 400 },
-    )
+    return zodValidationProblemResponse(parsed.error)
   }
 
   const { id } = await context.params

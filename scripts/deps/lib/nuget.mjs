@@ -112,9 +112,9 @@ function parseNuspecMetadata(nuspecXml) {
       const url = licenseUrlMatch[1].trim();
       license = /deprecateLicenseUrl/i.test(url) ? null : normalizeLicenseToken(url);
     } else {
-      const legacyLicenseMatch = nuspecXml.match(/<license>([^<]+)<\/license>/i);
-      if (legacyLicenseMatch) {
-        license = normalizeLicenseToken(legacyLicenseMatch[1]);
+      const untypedLicenseMatch = nuspecXml.match(/<license>([^<]+)<\/license>/i);
+      if (untypedLicenseMatch) {
+        license = normalizeLicenseToken(untypedLicenseMatch[1]);
       }
     }
   }

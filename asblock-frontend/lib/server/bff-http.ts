@@ -13,7 +13,7 @@ export function problemResponse(
   const body = {
     type: `urn:assetblock:error:${code}`,
     status,
-    title: status === 403 ? 'Forbidden' : 'Request failed',
+    title: status === 401 ? 'Unauthorized' : status === 403 ? 'Forbidden' : 'Request failed',
     detail,
     code,
     traceId: crypto.randomUUID(),

@@ -777,6 +777,30 @@ public sealed class AssetProcessingLifecycleStorePostgresTests(PostgresFixture f
         (await ctx.Db.UserNotifications.AsNoTracking().CountAsync()).Should().Be(1);
     }
 
+    [Fact]
+    public async Task TransitionProcessingFailed_WhenTerminalFailure_CreatesOutboxMessageWithPendingStatus()
+    {
+        var ctx = await SetupRunningJob(AssetProcessingJobType.MALWARE_SCAN);
+
+        var transitioned = await ctx.LifecycleStore.TransitionMalwareScanFailed(
+            ctx.ClaimedJob.JobId,
+            ctx.ClaimedJob.LeaseToken,
+            ctx.Asset.Id,
+            ctx.Version.Id,
+            ErrorCodes.MALWARE_DETECTED,
+            "Malware detected during security scan");
+
+        transitioned.Should().BeTrue();
+
+        var notification = await ctx.Db.UserNotifications.AsNoTracking().SingleAsync();
+        notification.SourceOutboxMessageId.Should().NotBeNull();
+
+        var outbox = await ctx.Db.OutboxMessages.AsNoTracking().SingleAsync(m => m.Id == notification.SourceOutboxMessageId!.Value);
+        outbox.Status.Should().Be(OutboxMessageStatus.PENDING);
+        outbox.AttemptCount.Should().Be(0);
+        outbox.Type.Should().Be(OutboxMessageTypes.NOTIFICATION_DISPATCH);
+    }
+
     private static async Task AssertSingleTerminalNotification(
         ApplicationDbContext db,
         Guid recipientUserId,
@@ -800,5 +824,8 @@ public sealed class AssetProcessingLifecycleStorePostgresTests(PostgresFixture f
         var outbox = await db.OutboxMessages.AsNoTracking()
             .SingleAsync(m => m.Type == OutboxMessageTypes.NOTIFICATION_DISPATCH);
         outbox.Id.Should().Be(notification.SourceOutboxMessageId!.Value);
+        outbox.Status.Should().Be(OutboxMessageStatus.PENDING);
+        outbox.AttemptCount.Should().Be(0);
+        outbox.ReplayCount.Should().Be(0);
     }
 }

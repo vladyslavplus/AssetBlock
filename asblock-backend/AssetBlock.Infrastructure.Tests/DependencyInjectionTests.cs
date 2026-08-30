@@ -123,7 +123,7 @@ public sealed class DependencyInjectionTests
         {
             ConnectionStrings = new { DefaultConnection = "Host=127.0.0.1;Port=5432;Database=test;Username=u;Password=p" },
             Jwt = new { Key = new string('k', 32), Issuer = "iss", Audience = "aud", AccessTokenMinutes = 15, RefreshTokenDays = 7 },
-            Encryption = new { KeyBase64 = "not-valid-base64!!" },
+            Encryption = new { CurrentKeyId = "k1", Keys = new Dictionary<string, string> { ["k1"] = "not-valid-base64!!" } },
             Storage = new { Provider = "Minio" },
             Minio = new { Endpoint = "http://localhost:9000", Bucket = "assets", AccessKey = "local-access", SecretKey = "local-secret", UseSsl = false },
             SeaweedFs = new { Endpoint = "<seaweedfs-endpoint>:8333", Bucket = "<bucket-name>", AccessKey = "<k>", SecretKey = "<s>", UseSsl = true },
@@ -131,8 +131,8 @@ public sealed class DependencyInjectionTests
             {
                 SecretKey = "stripe_test_secret_key_not_real",
                 WebhookSecret = "stripe_test_webhook_secret_not_real",
-                DefaultSuccessUrl = "http://localhost:3000/payment/success",
-                DefaultCancelUrl = "http://localhost:3000/payment/cancel"
+                SuccessUrl = "http://localhost:3000/checkout/success",
+                CancelUrl = "http://localhost:3000/checkout/cancel"
             },
             FileUpload = new { MaxFileBytes = 262144000L, AllowedExtensions = new[] { ".zip", ".tar", ".tar.gz", ".tgz" } },
             Email = new
@@ -241,7 +241,7 @@ public sealed class DependencyInjectionTests
                 Redis = includeRedis ? "localhost:6379" : null
             },
             Jwt = new { Key = new string('k', 32), Issuer = "iss", Audience = "aud", AccessTokenMinutes = 15, RefreshTokenDays = 7 },
-            Encryption = new { KeyBase64 = key },
+            Encryption = new { CurrentKeyId = "k1", Keys = new Dictionary<string, string> { ["k1"] = key } },
             Storage = new { Provider = "Minio" },
             Minio = new { Endpoint = "http://localhost:9000", Bucket = "assets", AccessKey = "local-access", SecretKey = "local-secret", UseSsl = false },
             SeaweedFs = new { Endpoint = "<seaweedfs-endpoint>:8333", Bucket = "<bucket-name>", AccessKey = "<k>", SecretKey = "<s>", UseSsl = true },
@@ -249,8 +249,8 @@ public sealed class DependencyInjectionTests
             {
                 SecretKey = "stripe_test_secret_key_not_real",
                 WebhookSecret = "stripe_test_webhook_secret_not_real",
-                DefaultSuccessUrl = "http://localhost:3000/payment/success",
-                DefaultCancelUrl = "http://localhost:3000/payment/cancel"
+                SuccessUrl = "http://localhost:3000/checkout/success",
+                CancelUrl = "http://localhost:3000/checkout/cancel"
             },
             FileUpload = new { MaxFileBytes = 262144000L, AllowedExtensions = new[] { ".zip", ".tar", ".tar.gz", ".tgz" } },
             Email = new
@@ -307,7 +307,7 @@ public sealed class DependencyInjectionTests
                 Redis = includeRedis ? "localhost:6379" : null
             },
             AnalyticsRateLimiting = new { BffSigningSecret = new string('s', 32) },
-            Encryption = new { KeyBase64 = key },
+            Encryption = new { CurrentKeyId = "k1", Keys = new Dictionary<string, string> { ["k1"] = key } },
             Jwt = new { Key = new string('k', 32), Issuer = "iss", Audience = "aud", AccessTokenMinutes = 15, RefreshTokenDays = 7 },
             Storage = new { Provider = "Minio" },
             Minio = new { Endpoint = "http://localhost:9000", Bucket = "assets", AccessKey = "local-access", SecretKey = "local-secret", UseSsl = false },
@@ -316,8 +316,8 @@ public sealed class DependencyInjectionTests
             {
                 SecretKey = "stripe_test_secret_key_not_real",
                 WebhookSecret = "stripe_test_webhook_secret_not_real",
-                DefaultSuccessUrl = "http://localhost:3000/payment/success",
-                DefaultCancelUrl = "http://localhost:3000/payment/cancel"
+                SuccessUrl = "http://localhost:3000/checkout/success",
+                CancelUrl = "http://localhost:3000/checkout/cancel"
             },
             Email = new
             {

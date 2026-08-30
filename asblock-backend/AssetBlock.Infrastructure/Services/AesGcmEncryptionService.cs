@@ -23,57 +23,46 @@ internal sealed class AesGcmEncryptionService : IEncryptionService, IDisposable
 
     private readonly Dictionary<string, KeyEntry> _keyRing = new(StringComparer.OrdinalIgnoreCase);
     private readonly KeyEntry _activeKeyEntry;
-    private readonly KeyEntry _legacyKeyEntry;
     private readonly byte[] _activeKeyIdBytes;
     private bool _disposed;
 
     public AesGcmEncryptionService(IOptions<EncryptionOptions> options)
     {
         var opt = options.Value;
-        if (opt.Keys is { Count: > 0 })
+        if (opt.Keys is null || opt.Keys.Count == 0)
         {
-            var activeId = string.IsNullOrWhiteSpace(opt.CurrentKeyId) ? EncryptionOptions.DEFAULT_KEY_ID : opt.CurrentKeyId;
-            var legacyId = string.IsNullOrWhiteSpace(opt.LegacyKeyId) ? activeId : opt.LegacyKeyId;
-
-            foreach (var (keyId, keyBase64) in opt.Keys)
-            {
-                var entry = CreateKeyEntry(keyId, keyBase64);
-                _keyRing[keyId] = entry;
-            }
-
-            if (!_keyRing.TryGetValue(activeId, out var activeEntry))
-            {
-                throw new InvalidOperationException($"Encryption:CurrentKeyId '{activeId}' was not found in Encryption:Keys.");
-            }
-
-            if (!_keyRing.TryGetValue(legacyId, out var legacyEntry))
-            {
-                throw new InvalidOperationException($"Encryption:LegacyKeyId '{legacyId}' was not found in Encryption:Keys.");
-            }
-
-            _activeKeyEntry = activeEntry;
-            _legacyKeyEntry = legacyEntry;
-            _activeKeyIdBytes = Encoding.UTF8.GetBytes(activeId);
-        }
-        else
-        {
-            var activeId = string.IsNullOrWhiteSpace(opt.CurrentKeyId) ? EncryptionOptions.DEFAULT_KEY_ID : opt.CurrentKeyId;
-            if (string.IsNullOrWhiteSpace(opt.KeyBase64))
-            {
-                throw new InvalidOperationException("Encryption:KeyBase64 is not configured.");
-            }
-
-            var entry = CreateKeyEntry(activeId, opt.KeyBase64);
-            _keyRing[activeId] = entry;
-            _activeKeyEntry = entry;
-            _legacyKeyEntry = entry;
-            _activeKeyIdBytes = Encoding.UTF8.GetBytes(activeId);
+            throw new InvalidOperationException("Encryption:Keys must contain at least one configured encryption key.");
         }
 
-        if (_activeKeyIdBytes.Length > MAX_KEY_ID_BYTES)
+        if (string.IsNullOrWhiteSpace(opt.CurrentKeyId))
         {
-            throw new InvalidOperationException($"Active encryption key ID exceeds maximum length of {MAX_KEY_ID_BYTES} bytes.");
+            throw new InvalidOperationException("Encryption:CurrentKeyId must be specified.");
         }
+
+        foreach (var (keyId, keyBase64) in opt.Keys)
+        {
+            if (string.IsNullOrWhiteSpace(keyId))
+            {
+                throw new InvalidOperationException("Encryption:Keys contains an empty key identifier.");
+            }
+
+            var keyIdByteCount = Encoding.UTF8.GetByteCount(keyId);
+            if (keyIdByteCount > MAX_KEY_ID_BYTES)
+            {
+                throw new InvalidOperationException($"Encryption key ID '{keyId}' exceeds maximum length of {MAX_KEY_ID_BYTES} bytes.");
+            }
+
+            var entry = CreateKeyEntry(keyId, keyBase64);
+            _keyRing[keyId] = entry;
+        }
+
+        if (!_keyRing.TryGetValue(opt.CurrentKeyId, out var activeEntry))
+        {
+            throw new InvalidOperationException($"Encryption:CurrentKeyId '{opt.CurrentKeyId}' was not found in Encryption:Keys.");
+        }
+
+        _activeKeyEntry = activeEntry;
+        _activeKeyIdBytes = Encoding.UTF8.GetBytes(opt.CurrentKeyId);
     }
 
     // Wire format v1:
@@ -151,55 +140,43 @@ internal sealed class AesGcmEncryptionService : IEncryptionService, IDisposable
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
 
-        var headerMagicOrLength = new byte[CHUNK_LENGTH_FIELD];
-        var initialRead = await ReadExact(cipher, headerMagicOrLength, cancellationToken);
+        var headerMagic = new byte[_magic.Length];
+        var initialRead = await ReadExact(cipher, headerMagic, cancellationToken);
         if (initialRead == 0)
         {
             throw new CryptographicException("Cipher stream was truncated: missing end-of-stream marker.");
         }
 
-        if (initialRead < CHUNK_LENGTH_FIELD)
+        if (initialRead < _magic.Length || !headerMagic.AsSpan().SequenceEqual(_magic))
         {
-            throw new CryptographicException("Cipher stream is corrupt: partial header/length field.");
+            throw new CryptographicException("Cipher stream is corrupt or unsupported: missing ABE1 header.");
         }
 
-        if (headerMagicOrLength.AsSpan().SequenceEqual(_magic))
+        var keyIdLenByte = new byte[1];
+        await ReadExactOrThrow(cipher, keyIdLenByte, cancellationToken);
+        var keyIdLen = keyIdLenByte[0];
+        if (keyIdLen is 0 or > MAX_KEY_ID_BYTES)
         {
-            // V1 format with header
-            var keyIdLenByte = new byte[1];
-            await ReadExactOrThrow(cipher, keyIdLenByte, cancellationToken);
-            var keyIdLen = keyIdLenByte[0];
-            if (keyIdLen is 0 or > MAX_KEY_ID_BYTES)
-            {
-                throw new CryptographicException("Cipher stream is corrupt: invalid key identifier length.");
-            }
-
-            var keyIdBytes = new byte[keyIdLen];
-            await ReadExactOrThrow(cipher, keyIdBytes, cancellationToken);
-            var keyId = Encoding.UTF8.GetString(keyIdBytes);
-
-            if (!_keyRing.TryGetValue(keyId, out var keyEntry))
-            {
-                throw new CryptographicException($"Unknown encryption key ID '{keyId}'.");
-            }
-
-            using var aesGcm = new AesGcm(keyEntry.KeyBytes, TAG_SIZE);
-            await DecryptChunks(cipher, plain, aesGcm, initialChunkLength: null, cancellationToken);
+            throw new CryptographicException("Cipher stream is corrupt: invalid key identifier length.");
         }
-        else
+
+        var keyIdBytes = new byte[keyIdLen];
+        await ReadExactOrThrow(cipher, keyIdBytes, cancellationToken);
+        var keyId = Encoding.UTF8.GetString(keyIdBytes);
+
+        if (!_keyRing.TryGetValue(keyId, out var keyEntry))
         {
-            // Legacy headerless format: first 4 bytes are the first chunk length
-            var firstChunkLength = BitConverter.ToUInt32(headerMagicOrLength);
-            using var aesGcm = new AesGcm(_legacyKeyEntry.KeyBytes, TAG_SIZE);
-            await DecryptChunks(cipher, plain, aesGcm, firstChunkLength, cancellationToken);
+            throw new CryptographicException($"Unknown encryption key ID '{keyId}'.");
         }
+
+        using var aesGcm = new AesGcm(keyEntry.KeyBytes, TAG_SIZE);
+        await DecryptChunks(cipher, plain, aesGcm, cancellationToken);
     }
 
     private static async Task DecryptChunks(
         Stream cipher,
         Stream plain,
         AesGcm aesGcm,
-        uint? initialChunkLength,
         CancellationToken cancellationToken)
     {
         var cipherBuffer = ArrayPool<byte>.Shared.Rent(CHUNK_SIZE);
@@ -212,20 +189,9 @@ internal sealed class AesGcmEncryptionService : IEncryptionService, IDisposable
 
         try
         {
-            var isFirstChunk = true;
             while (true)
             {
-                uint chunkLength;
-                if (isFirstChunk && initialChunkLength.HasValue)
-                {
-                    chunkLength = initialChunkLength.Value;
-                }
-                else
-                {
-                    chunkLength = await ReadChunkLengthOrThrow(cipher, lengthBuffer, cancellationToken);
-                }
-
-                isFirstChunk = false;
+                var chunkLength = await ReadChunkLengthOrThrow(cipher, lengthBuffer, cancellationToken);
 
                 if (chunkLength == END_OF_STREAM_MARKER)
                 {

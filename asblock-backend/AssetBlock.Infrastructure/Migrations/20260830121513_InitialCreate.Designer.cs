@@ -13,8 +13,8 @@ using NpgsqlTypes;
 namespace AssetBlock.Infrastructure.Migrations
 {
     [DbContext(typeof(ApplicationDbContext))]
-    [Migration("20260829081511_OptimizePersistenceQueriesBatch7")]
-    partial class OptimizePersistenceQueriesBatch7
+    [Migration("20260830121513_InitialCreate")]
+    partial class InitialCreate
     {
         /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)
@@ -153,6 +153,16 @@ namespace AssetBlock.Infrastructure.Migrations
                     b.Property<decimal>("Price")
                         .HasPrecision(18, 2)
                         .HasColumnType("numeric(18,2)");
+
+                    b.Property<double>("RatingAverage")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("double precision")
+                        .HasDefaultValue(0.0);
+
+                    b.Property<int>("RatingCount")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0);
 
                     b.Property<NpgsqlTsVector>("SearchVector")
                         .ValueGeneratedOnAddOrUpdate()
@@ -1683,6 +1693,9 @@ namespace AssetBlock.Infrastructure.Migrations
                         .HasColumnType("uuid");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("ExpiresAt")
+                        .HasDatabaseName("IX_refresh_tokens_expires_at");
 
                     b.HasIndex("TokenHash")
                         .IsUnique();

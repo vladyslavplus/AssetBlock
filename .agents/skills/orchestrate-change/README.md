@@ -120,7 +120,6 @@ Codex writes a permission manifest beside each executor/fix/final prompt:
   "read_paths": ["AGENTS.md"],
   "write_paths": ["asblock-backend/**"],
   "allowed_commands": ["dotnet test asblock-backend/Example.Tests/Example.Tests.csproj"],
-  "allowed_command_prefixes": ["git diff"],
   "allowed_command_patterns": ["Move-Item asblock-backend.* asblock-backend.*"],
   "required_verification": ["dotnet test asblock-backend/Example.Tests/Example.Tests.csproj"],
   "required_paths_present": ["asblock-backend/destination.cs"],
@@ -132,7 +131,7 @@ All manifest paths are repository-relative and resolved from the active working 
 
 The adapter reads the global Antigravity `settings.json` and checks every path and exact command before spawning `agy`. Missing rules are returned together, before any model turn or edit. This gate is adapter-owned; it does not depend on the executor model calling `list_permissions`.
 
-`required_verification` is phase-specific. Prefer exact commands. Antigravity regex rules have fixed token arity: `.*` matches one token, not an arbitrary command tail. Keep `allowed_command_patterns` narrowly scoped and token-count compatible; avoid legacy `allowed_command_prefixes` in new manifests. Path postconditions are optional but required when acceptance depends on actual creation, relocation, or removal. A completed report is rejected unless each required command has passed raw evidence and every path postcondition holds. Use a new compact manifest for fix and final phases.
+`required_verification` is phase-specific. Prefer exact commands. Antigravity regex rules have fixed token arity: `.*` matches one token, not an arbitrary command tail. Keep `allowed_command_patterns` narrowly scoped and token-count compatible. Path postconditions are optional but required when acceptance depends on actual creation, relocation, or removal. A completed report is rejected unless each required command has passed raw evidence and every path postcondition holds. Use a new compact manifest for fix and final phases.
 
 Repository source edits should use Antigravity's `replace_file_content` / `multi_replace_file_content`. `write_to_file` targets Antigravity's artifact area and can reject repository paths; do not fall back to shell-writing commands.
 
@@ -173,7 +172,7 @@ Complete sign-in and trust the workspace, then exit and retry from Codex UI.
 
 ### The command is retrying requests to `registry.npmjs.org`
 
-Stop that command. It used the obsolete package-manager wrapper and has not started Antigravity. Retry with the direct `node .agents/skills/orchestrate-change/scripts/run-antigravity.mjs ...` command shown above. No npm registry access is required by the adapter.
+Stop that command. It used the unsupported package-manager wrapper and has not started Antigravity. Retry with the direct `node .agents/skills/orchestrate-change/scripts/run-antigravity.mjs ...` command shown above. No npm registry access is required by the adapter.
 
 ### Review does not approve after repeated fixes
 

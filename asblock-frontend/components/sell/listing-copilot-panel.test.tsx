@@ -44,7 +44,7 @@ function copilotJob(status: AssetProcessingJobDto['status']): AssetProcessingJob
     availableAt: '2026-08-25T12:00:00Z',
     startedAt: status === 'QUEUED' ? null : '2026-08-25T12:00:01Z',
     completedAt: null,
-    errorCode: status === 'FAILED' ? 'AI_ERROR' : null,
+    errorCode: status === 'FAILED' ? 'ERR_AI_ERROR' : null,
     errorSummary: status === 'FAILED' ? 'The AI request failed.' : null,
     createdAt: '2026-08-25T12:00:00Z',
     updatedAt: '2026-08-25T12:00:01Z',
@@ -183,7 +183,7 @@ describe('ListingCopilotPanel', () => {
     await waitFor(() => expect(fetch).toHaveBeenCalled())
   })
 
-  it('treats AI_DISABLED and ERR_AI_DISABLED as unavailable and does not render provider internals', async () => {
+  it('treats ERR_AI_DISABLED as unavailable and does not render provider internals', async () => {
     const user = userEvent.setup()
     mockFetch({
       jobs: [],

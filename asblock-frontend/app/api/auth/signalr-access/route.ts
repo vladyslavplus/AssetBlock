@@ -1,6 +1,7 @@
 import { cookies } from 'next/headers'
 import { NextResponse } from 'next/server'
 import { AUTH_COOKIE_ACCESS } from '@/lib/auth/constants'
+import { problemResponse } from '@/lib/server/bff-http'
 import { tryRefreshFromCookies } from '@/lib/server/refresh-session'
 
 /**
@@ -17,10 +18,7 @@ export async function GET() {
     access = rotated?.accessToken ?? null
   }
   if (!access) {
-    return NextResponse.json(
-      { errors: [{ identifier: 'auth', message: 'Unauthorized' }] },
-      { status: 401 },
-    )
+    return problemResponse(401, 'ERR_UNAUTHORIZED', 'Unauthorized')
   }
   return NextResponse.json(
     { accessToken: access },

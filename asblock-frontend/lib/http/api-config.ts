@@ -14,16 +14,13 @@ export function getPublicApiBaseUrl(): string {
 
 /**
  * Base URL for server-side BFF calls to AssetBlock Web API (Route Handlers, Server Actions).
- * Prefer `ASSETBLOCK_API_BASE_URL` when the public URL uses HTTPS with a dev cert Node cannot validate
- * (e.g. use `http://localhost:5088` here while the browser still uses `https://localhost:7000`).
+ * Configured via ASSETBLOCK_API_BASE_URL (e.g. `http://localhost:5088` in local dev).
  */
 export function getServerApiBaseUrl(): string {
-  const serverFirst = process.env.ASSETBLOCK_API_BASE_URL?.trim()
-  const publicFallback = process.env.NEXT_PUBLIC_API_BASE_URL?.trim()
-  const base = serverFirst || publicFallback
+  const base = process.env.ASSETBLOCK_API_BASE_URL?.trim()
   if (!base) {
     throw new Error(
-      'Set ASSETBLOCK_API_BASE_URL or NEXT_PUBLIC_API_BASE_URL for server-side API calls (see .env.example).',
+      'ASSETBLOCK_API_BASE_URL is not set for server-side API calls. Copy .env.example to .env.local and set ASSETBLOCK_API_BASE_URL.',
     )
   }
   return base.replace(/\/+$/, '')

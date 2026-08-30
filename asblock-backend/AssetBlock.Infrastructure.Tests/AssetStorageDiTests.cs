@@ -110,7 +110,7 @@ public sealed class AssetStorageDiTests
         {
             ConnectionStrings = new { DefaultConnection = "Host=127.0.0.1;Port=5432;Database=test;Username=u;Password=p" },
             Jwt = new { Key = new string('k', 32), Issuer = "iss", Audience = "aud", AccessTokenMinutes = 15, RefreshTokenDays = 7 },
-            Encryption = new { KeyBase64 = key },
+            Encryption = new { CurrentKeyId = "k1", Keys = new Dictionary<string, string> { ["k1"] = key } },
             Storage = new { Provider = provider },
             SeaweedFs = new
             {
@@ -132,8 +132,8 @@ public sealed class AssetStorageDiTests
             {
                 SecretKey = "stripe_test_secret_key_not_real",
                 WebhookSecret = "stripe_test_webhook_secret_not_real",
-                DefaultSuccessUrl = "http://localhost:3000/payment/success",
-                DefaultCancelUrl = "http://localhost:3000/payment/cancel"
+                SuccessUrl = "http://localhost:3000/checkout/success",
+                CancelUrl = "http://localhost:3000/checkout/cancel"
             },
             FileUpload = new { MaxFileBytes = 262144000L, AllowedExtensions = new[] { ".zip" } },
             Email = new

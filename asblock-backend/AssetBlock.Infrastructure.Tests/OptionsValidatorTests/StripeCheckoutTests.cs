@@ -12,8 +12,8 @@ public sealed class StripeCheckoutTests
         {
             SecretKey = "<stripe-secret-key>",
             WebhookSecret = "<stripe-webhook-secret>",
-            DefaultSuccessUrl = "<default-success-url>",
-            DefaultCancelUrl = "<default-cancel-url>"
+            SuccessUrl = "<default-success-url>",
+            CancelUrl = "<default-cancel-url>"
         };
 
         StripeCheckout.IsConfigured(options).Should().BeFalse();
@@ -33,8 +33,8 @@ public sealed class StripeCheckoutTests
         {
             SecretKey = "stripe_test_secret_key_not_real",
             WebhookSecret = "stripe_test_webhook_secret_not_real",
-            DefaultSuccessUrl = "http://localhost:3000/payment/success",
-            DefaultCancelUrl = "http://localhost:3000/payment/cancel"
+            SuccessUrl = "http://localhost:3000/checkout/success",
+            CancelUrl = "http://localhost:3000/checkout/cancel"
         };
 
         StripeCheckout.IsConfigured(options).Should().BeTrue();
@@ -47,8 +47,8 @@ public sealed class StripeCheckoutTests
         {
             SecretKey = "stripe_test_secret_key_not_real",
             WebhookSecret = "stripe_test_webhook_secret_not_real",
-            DefaultSuccessUrl = "/payment/success",
-            DefaultCancelUrl = "/payment/cancel"
+            SuccessUrl = "/checkout/success",
+            CancelUrl = "/checkout/cancel"
         };
 
         StripeCheckout.IsConfigured(options).Should().BeFalse();

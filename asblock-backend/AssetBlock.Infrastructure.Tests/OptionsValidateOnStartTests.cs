@@ -3,7 +3,6 @@ using System.Text;
 using System.Text.Json;
 using AssetBlock.Domain.Abstractions.Services;
 using AssetBlock.Domain.Core.Primitives.AppSettingsOptions;
-using AssetBlock.Infrastructure;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -21,7 +20,39 @@ public sealed class OptionsValidateOnStartTests
     {
         var services = BuildInfrastructureServices(
             new TestHostEnvironment { EnvironmentName = Environments.Development },
-            encryptionKeyBase64: "not-valid-base64!!");
+            encryptionKey: "not-valid-base64!!");
+
+        var act = () =>
+        {
+            using var sp = services.BuildServiceProvider();
+            _ = sp.GetRequiredService<IOptions<EncryptionOptions>>().Value;
+        };
+
+        act.Should().Throw<OptionsValidationException>();
+    }
+
+    [Fact]
+    public void BuildServiceProvider_WhenCurrentKeyIdMissing_ShouldThrowOptionsValidationException()
+    {
+        var services = BuildInfrastructureServices(
+            new TestHostEnvironment { EnvironmentName = Environments.Development },
+            encryptionCurrentKeyId: null);
+
+        var act = () =>
+        {
+            using var sp = services.BuildServiceProvider();
+            _ = sp.GetRequiredService<IOptions<EncryptionOptions>>().Value;
+        };
+
+        act.Should().Throw<OptionsValidationException>();
+    }
+
+    [Fact]
+    public void BuildServiceProvider_WhenCurrentKeyIdExplicitlyEmpty_ShouldThrowOptionsValidationException()
+    {
+        var services = BuildInfrastructureServices(
+            new TestHostEnvironment { EnvironmentName = Environments.Development },
+            encryptionCurrentKeyId: "");
 
         var act = () =>
         {
@@ -73,16 +104,20 @@ public sealed class OptionsValidateOnStartTests
 
     private static ServiceCollection BuildInfrastructureServices(
         IHostEnvironment environment,
-        string? encryptionKeyBase64 = null,
+        string? encryptionKey = null,
+        string? encryptionCurrentKeyId = "k1",
         string? analyticsSigningSecret = null)
     {
-        var key = encryptionKeyBase64 ?? Convert.ToBase64String(RandomNumberGenerator.GetBytes(32));
+        var key = encryptionKey ?? Convert.ToBase64String(RandomNumberGenerator.GetBytes(32));
+        var encryptionSection = encryptionCurrentKeyId is not null
+            ? (object)new { CurrentKeyId = encryptionCurrentKeyId, Keys = new Dictionary<string, string> { ["k1"] = key } }
+            : (object)new { Keys = new Dictionary<string, string> { ["k1"] = key } };
         var tempKeysPath = Path.Combine(Path.GetTempPath(), "assetblock-dp-tests", Guid.NewGuid().ToString("N"));
         var json = JsonSerializer.Serialize(new
         {
             ConnectionStrings = new { DefaultConnection = "Host=127.0.0.1;Port=5432;Database=test;Username=u;Password=p" },
             Jwt = new { Key = new string('k', 32), Issuer = "iss", Audience = "aud", AccessTokenMinutes = 15, RefreshTokenDays = 7 },
-            Encryption = new { KeyBase64 = key },
+            Encryption = encryptionSection,
             Storage = new { Provider = "Minio" },
             Minio = new { Endpoint = "http://localhost:9000", Bucket = "assets", AccessKey = "local-access", SecretKey = "local-secret", UseSsl = false },
             SeaweedFs = new { Endpoint = "<seaweedfs-endpoint>:8333", Bucket = "<bucket-name>", AccessKey = "<k>", SecretKey = "<s>", UseSsl = true },
@@ -90,8 +125,8 @@ public sealed class OptionsValidateOnStartTests
             {
                 SecretKey = "stripe_test_secret_key_not_real",
                 WebhookSecret = "stripe_test_webhook_secret_not_real",
-                DefaultSuccessUrl = "http://localhost:3000/payment/success",
-                DefaultCancelUrl = "http://localhost:3000/payment/cancel"
+                SuccessUrl = "http://localhost:3000/checkout/success",
+                CancelUrl = "http://localhost:3000/checkout/cancel"
             },
             FileUpload = new { MaxFileBytes = 262144000L, AllowedExtensions = new[] { ".zip" } },
             Email = new

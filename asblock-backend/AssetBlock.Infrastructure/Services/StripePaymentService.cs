@@ -24,8 +24,8 @@ internal sealed class StripePaymentService(
         CancellationToken cancellationToken = default)
     {
         var opts = options.Value;
-        var resolvedSuccessUrl = opts.DefaultSuccessUrl;
-        var resolvedCancelUrl = opts.DefaultCancelUrl;
+        var resolvedSuccessUrl = opts.SuccessUrl;
+        var resolvedCancelUrl = opts.CancelUrl;
 
         if (string.IsNullOrWhiteSpace(resolvedSuccessUrl) || string.IsNullOrWhiteSpace(resolvedCancelUrl))
         {

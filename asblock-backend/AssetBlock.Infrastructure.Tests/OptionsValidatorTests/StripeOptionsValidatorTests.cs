@@ -31,8 +31,8 @@ public sealed class StripeOptionsValidatorTests
 
         result.Failed.Should().BeTrue();
         result.Failures.Should().Contain(m => m.Contains("WebhookSecret"));
-        result.Failures.Should().Contain(m => m.Contains("DefaultSuccessUrl"));
-        result.Failures.Should().Contain(m => m.Contains("DefaultCancelUrl"));
+        result.Failures.Should().Contain(m => m.Contains("SuccessUrl"));
+        result.Failures.Should().Contain(m => m.Contains("CancelUrl"));
     }
 
     [Fact]
@@ -42,8 +42,8 @@ public sealed class StripeOptionsValidatorTests
         {
             SecretKey = "<stripe-secret-key>",
             WebhookSecret = "<stripe-webhook-secret>",
-            DefaultSuccessUrl = "<default-success-url>",
-            DefaultCancelUrl = "<default-cancel-url>"
+            SuccessUrl = "<default-success-url>",
+            CancelUrl = "<default-cancel-url>"
         });
 
         result.Succeeded.Should().BeTrue();
@@ -53,21 +53,21 @@ public sealed class StripeOptionsValidatorTests
     public void Validate_WhenRedirectUrlsInvalid_ShouldFail()
     {
         var options = CreateValid();
-        options.DefaultSuccessUrl = "not-a-url";
-        options.DefaultCancelUrl = "/relative/cancel";
+        options.SuccessUrl = "not-a-url";
+        options.CancelUrl = "/relative/cancel";
 
         var result = _sut.Validate(null, options);
 
         result.Failed.Should().BeTrue();
-        result.Failures.Should().Contain(m => m.Contains("DefaultSuccessUrl"));
-        result.Failures.Should().Contain(m => m.Contains("DefaultCancelUrl"));
+        result.Failures.Should().Contain(m => m.Contains("SuccessUrl"));
+        result.Failures.Should().Contain(m => m.Contains("CancelUrl"));
     }
 
     private static StripeOptions CreateValid() => new()
     {
         SecretKey = "stripe_test_secret_key_not_real",
         WebhookSecret = "stripe_test_webhook_secret_not_real",
-        DefaultSuccessUrl = "http://localhost:3000/payment/success",
-        DefaultCancelUrl = "http://localhost:3000/payment/cancel"
+        SuccessUrl = "http://localhost:3000/checkout/success",
+        CancelUrl = "http://localhost:3000/checkout/cancel"
     };
 }

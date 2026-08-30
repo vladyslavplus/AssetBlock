@@ -6,55 +6,50 @@ namespace AssetBlock.Infrastructure.Options;
 internal sealed class EncryptionOptionsValidator : IValidateOptions<EncryptionOptions>
 {
     internal const int AES_256_KEY_LENGTH_BYTES = 32;
+    private const int MAX_KEY_ID_BYTES = 64;
 
     public ValidateOptionsResult Validate(string? name, EncryptionOptions options)
     {
-        if (options.Keys is { Count: > 0 })
+        if (options.Keys.Count == 0)
         {
-            if (string.IsNullOrWhiteSpace(options.CurrentKeyId))
-            {
-                return ValidateOptionsResult.Fail("Encryption:CurrentKeyId must be specified when Encryption:Keys is configured.");
-            }
-
-            if (!options.Keys.ContainsKey(options.CurrentKeyId))
-            {
-                return ValidateOptionsResult.Fail($"Encryption:CurrentKeyId '{options.CurrentKeyId}' was not found in Encryption:Keys.");
-            }
-
-            if (!string.IsNullOrWhiteSpace(options.LegacyKeyId) && !options.Keys.ContainsKey(options.LegacyKeyId))
-            {
-                return ValidateOptionsResult.Fail($"Encryption:LegacyKeyId '{options.LegacyKeyId}' was not found in Encryption:Keys.");
-            }
-
-            foreach (var (keyId, keyBase64) in options.Keys)
-            {
-                if (string.IsNullOrWhiteSpace(keyId))
-                {
-                    return ValidateOptionsResult.Fail("Encryption:Keys contains an empty key identifier.");
-                }
-
-                if (OptionsValidation.IsMissingOrPlaceholder(keyBase64))
-                {
-                    return ValidateOptionsResult.Fail($"Encryption:Keys['{keyId}'] must be non-empty.");
-                }
-
-                var error = ValidateKeyBase64(keyBase64, $"Encryption:Keys['{keyId}']");
-                if (error is not null)
-                {
-                    return ValidateOptionsResult.Fail(error);
-                }
-            }
-
-            return ValidateOptionsResult.Success;
+            return ValidateOptionsResult.Fail("Encryption:Keys must contain at least one configured encryption key.");
         }
 
-        if (OptionsValidation.IsMissingOrPlaceholder(options.KeyBase64))
+        if (string.IsNullOrWhiteSpace(options.CurrentKeyId))
         {
-            return ValidateOptionsResult.Fail("Encryption:KeyBase64 must be non-empty.");
+            return ValidateOptionsResult.Fail("Encryption:CurrentKeyId must be specified.");
         }
 
-        var keyError = ValidateKeyBase64(options.KeyBase64, "Encryption:KeyBase64");
-        return keyError is not null ? ValidateOptionsResult.Fail(keyError) : ValidateOptionsResult.Success;
+        if (!options.Keys.ContainsKey(options.CurrentKeyId))
+        {
+            return ValidateOptionsResult.Fail($"Encryption:CurrentKeyId '{options.CurrentKeyId}' was not found in Encryption:Keys.");
+        }
+
+        foreach (var (keyId, keyBase64) in options.Keys)
+        {
+            if (string.IsNullOrWhiteSpace(keyId))
+            {
+                return ValidateOptionsResult.Fail("Encryption:Keys contains an empty key identifier.");
+            }
+
+            if (System.Text.Encoding.UTF8.GetByteCount(keyId) > MAX_KEY_ID_BYTES)
+            {
+                return ValidateOptionsResult.Fail($"Encryption:Keys['{keyId}'] key identifier exceeds maximum length of {MAX_KEY_ID_BYTES} bytes.");
+            }
+
+            if (OptionsValidation.IsMissingOrPlaceholder(keyBase64))
+            {
+                return ValidateOptionsResult.Fail($"Encryption:Keys['{keyId}'] must be non-empty.");
+            }
+
+            var error = ValidateKeyBase64(keyBase64, $"Encryption:Keys['{keyId}']");
+            if (error is not null)
+            {
+                return ValidateOptionsResult.Fail(error);
+            }
+        }
+
+        return ValidateOptionsResult.Success;
     }
 
     private static string? ValidateKeyBase64(string keyBase64, string fieldName)

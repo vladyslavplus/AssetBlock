@@ -27,7 +27,7 @@ export function describeServerFetchError(error: unknown): string {
   const base = apiBaseUrlForLogs()
 
   if (!(error instanceof Error)) {
-    return `Could not reach the API (${base}). Check ASSETBLOCK_API_BASE_URL or NEXT_PUBLIC_API_BASE_URL.`
+    return `Could not reach the API (${base}). Check ASSETBLOCK_API_BASE_URL.`
   }
 
   const cause = error.cause
@@ -48,7 +48,7 @@ export function describeServerFetchError(error: unknown): string {
   }
 
   if (causeCode === 'ENOTFOUND') {
-    return `API host could not be resolved. Check ASSETBLOCK_API_BASE_URL or NEXT_PUBLIC_API_BASE_URL (${base}).`
+    return `API host could not be resolved. Check ASSETBLOCK_API_BASE_URL (${base}).`
   }
 
   if (causeCode === 'ETIMEDOUT' || causeCode === 'UND_ERR_CONNECT_TIMEOUT') {

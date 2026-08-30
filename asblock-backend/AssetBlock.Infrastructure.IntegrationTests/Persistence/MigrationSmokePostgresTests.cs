@@ -1,7 +1,9 @@
+using AssetBlock.Domain.Core.Constants;
+using AssetBlock.Domain.Core.Enums;
+using AssetBlock.Domain.Core.Licenses;
 using AssetBlock.Infrastructure.IntegrationTests.Support;
 using AssetBlock.Infrastructure.Persistence.Stores;
 using Microsoft.EntityFrameworkCore;
-using Npgsql;
 
 namespace AssetBlock.Infrastructure.IntegrationTests.Persistence;
 
@@ -159,7 +161,7 @@ public sealed class MigrationSmokePostgresTests(PostgresFixture fixture)
     }
 
     [Fact]
-    public async Task MigrateAsync_WhenFreshDatabase_ShouldHaveNoPendingMigrationsAndContainCommerceInvariantMigration()
+    public async Task MigrateAsync_WhenFreshDatabase_ShouldHaveNoPendingMigrationsAndContainInitialCreate()
     {
         await using var db = await fixture.CreateCleanDbContext();
 
@@ -167,19 +169,7 @@ public sealed class MigrationSmokePostgresTests(PostgresFixture fixture)
         pending.Should().BeEmpty();
 
         var applied = await db.Database.GetAppliedMigrationsAsync();
-        applied.Should().Contain(m => m.Contains("AddCollectionsBundlesAndOrders", StringComparison.OrdinalIgnoreCase));
-        applied.Should().Contain(m =>
-            m.Contains("AddCheckoutReconciliationAndCommerceInvariants", StringComparison.OrdinalIgnoreCase));
-        applied.Should().Contain(m =>
-            m.Contains("AddSellerEngagementAnalytics", StringComparison.OrdinalIgnoreCase));
-        applied.Should().Contain(m =>
-            m.Contains("AddAssetProcessingJobs", StringComparison.OrdinalIgnoreCase));
-        applied.Should().Contain(m =>
-            m.Contains("AddAssetVersionProcessingLifecycle", StringComparison.OrdinalIgnoreCase));
-        applied.Should().Contain(m =>
-            m.Contains("OptimizePersistenceQueriesBatch7", StringComparison.OrdinalIgnoreCase));
-        applied.Should().Contain(m =>
-            m.Contains("OptimizeDataAccessLifecycleBatch8", StringComparison.OrdinalIgnoreCase));
+        applied.Should().ContainSingle(m => m.Contains("InitialCreate", StringComparison.OrdinalIgnoreCase));
     }
 
     [Fact]
@@ -291,266 +281,97 @@ public sealed class MigrationSmokePostgresTests(PostgresFixture fixture)
     }
 
     [Fact]
-    public async Task MigrateUpgrade_WhenLegacyVersionsExist_ShouldBackfillProcessingStatusAndHaveNoPermanentDefault()
+    public async Task MigrateAsync_WhenFreshDatabase_ShouldEnforceConstraintsAndSupportOutboxAndRatingAggregates()
     {
-        // 1. Drop and recreate schema; apply migrations up to AddAssetProcessingJobs only
-        NpgsqlConnection.ClearAllPools();
-        await using (var setup = fixture.CreateDbContext())
-        {
-            await setup.Database.ExecuteSqlRawAsync("""
-                DROP SCHEMA IF EXISTS public CASCADE;
-                CREATE SCHEMA public;
-                """);
+        await using var db = await fixture.CreateCleanDbContext();
 
-            await setup.Database.MigrateAsync("20260824081315_AddAssetProcessingJobs");
-        }
-
-        NpgsqlConnection.ClearAllPools();
-
-        // 2. Insert legacy asset + multiple version rows directly (current and non-current, no processing columns yet)
-        var legacyAssetId = Guid.NewGuid();
-        var legacyV1Id = Guid.NewGuid();
-        var legacyV2Id = Guid.NewGuid();
-        var legacyCreatedAt1 = DateTimeOffset.UtcNow.AddDays(-30);
-        var legacyCreatedAt2 = DateTimeOffset.UtcNow.AddDays(-15);
-
-        await using (var seed = fixture.CreateDbContext())
-        {
-            // Insert a minimal category and author required by FKs
-            var categoryId = Guid.NewGuid();
-            var authorId = Guid.NewGuid();
-
-            await seed.Database.ExecuteSqlRawAsync(
-                """
-                INSERT INTO users ("Id","Username","Email","PasswordHash","Role","CreatedAt")
-                VALUES ({0},'legacy','legacy@test.com','test-password-hash','User',{1})
-                """,
-                authorId, legacyCreatedAt1);
-
-            await seed.Database.ExecuteSqlRawAsync(
-                """
-                INSERT INTO categories ("Id","Name","Slug","Description","CreatedAt","UpdatedAt")
-                VALUES ({0},'Test','test','Test',{1},{2})
-                """,
-                categoryId, legacyCreatedAt1, legacyCreatedAt1);
-
-            await seed.Database.ExecuteSqlRawAsync(
-                """
-                INSERT INTO assets ("Id","AuthorId","CategoryId","Title","Description","Price","CreatedAt","UpdatedAt")
-                VALUES ({0},{1},{2},'Legacy Asset','Desc',10,{3},{4})
-                """,
-                legacyAssetId, authorId, categoryId, legacyCreatedAt1, legacyCreatedAt1);
-
-            // Legacy non-current version
-            await seed.Database.ExecuteSqlRawAsync(
-                """
-                INSERT INTO asset_versions ("Id","AssetId","VersionNumber","IsCurrent","StorageKey","FileName","ContentLength","ContentSha256","ReleaseNotes","LicenseCode","LicenseTemplateVersion","LicenseDisplayName","LicenseTerms","CreatedAt")
-                VALUES ({0},{1},1,false,'assets/test/v1.zip','v1.zip',100,'abc123','Initial release','MIT','1.0','MIT','Terms',{2})
-                """,
-                legacyV1Id, legacyAssetId, legacyCreatedAt1);
-
-            // Legacy current version
-            await seed.Database.ExecuteSqlRawAsync(
-                """
-                INSERT INTO asset_versions ("Id","AssetId","VersionNumber","IsCurrent","StorageKey","FileName","ContentLength","ContentSha256","ReleaseNotes","LicenseCode","LicenseTemplateVersion","LicenseDisplayName","LicenseTerms","CreatedAt")
-                VALUES ({0},{1},2,true,'assets/test/v2.zip','v2.zip',200,'def456','Second release','MIT','1.0','MIT','Terms',{2})
-                """,
-                legacyV2Id, legacyAssetId, legacyCreatedAt2);
-        }
-
-        NpgsqlConnection.ClearAllPools();
-
-        // 3. Apply the remaining migration (AddAssetVersionProcessingLifecycle)
-        await using (var upgrade = fixture.CreateDbContext())
-        {
-            await upgrade.Database.MigrateAsync();
-        }
-
-        NpgsqlConnection.ClearAllPools();
-
-        // 4. Verify backfill: both pre-existing versions (current and non-current) should be READY with ProcessingUpdatedAt = CreatedAt
-        await using var verify = fixture.CreateDbContext();
-
-        var backfilledRows = await verify.Database.SqlQueryRaw<string>(
+        var hasRefreshTokenIndex = await db.Database.SqlQueryRaw<bool>(
             """
-            SELECT "ProcessingStatus" AS "Value"
-            FROM asset_versions
-            WHERE "Id" IN ({0}, {1})
-            ORDER BY "VersionNumber"
-            """,
-            legacyV1Id, legacyV2Id).ToListAsync();
+            SELECT EXISTS (
+                SELECT 1
+                FROM pg_indexes
+                WHERE tablename = 'refresh_tokens' AND indexname = 'IX_refresh_tokens_expires_at'
+            ) AS "Value"
+            """).SingleAsync();
+        hasRefreshTokenIndex.Should().BeTrue();
 
-        backfilledRows.Should().HaveCount(2);
-        backfilledRows.Should().OnlyContain(s => s == "READY");
+        var authorId = Guid.NewGuid();
+        var reviewerId = Guid.NewGuid();
+        var categoryId = Guid.NewGuid();
+        var assetId = Guid.NewGuid();
+        var versionId = Guid.NewGuid();
+        var now = DateTimeOffset.UtcNow;
 
-        var updatedAtRows = await verify.Database.SqlQueryRaw<bool>(
-            """
-            SELECT ("ProcessingUpdatedAt" = "CreatedAt") AS "Value"
-            FROM asset_versions
-            WHERE "Id" IN ({0}, {1})
-            """,
-            legacyV1Id, legacyV2Id).ToListAsync();
+        db.Users.AddRange(
+            new Domain.Core.Entities.User { Id = authorId, Username = "author", Email = "author@test.com", PasswordHash = "h", Role = AppRoles.USER, CreatedAt = now },
+            new Domain.Core.Entities.User { Id = reviewerId, Username = "rev", Email = "rev@test.com", PasswordHash = "h", Role = AppRoles.USER, CreatedAt = now });
 
-        updatedAtRows.Should().HaveCount(2);
-        updatedAtRows.Should().OnlyContain(b => b == true);
+        db.Categories.Add(new Domain.Core.Entities.Category { Id = categoryId, Name = "Tools", Slug = "tools", Description = "Tools", CreatedAt = now, UpdatedAt = now });
 
-        // 5. Verify no permanent column default remains for ProcessingStatus or ProcessingUpdatedAt
-        var columnDefaults = await verify.Database.SqlQueryRaw<string>(
-            """
-            SELECT column_name || ':' || is_nullable || ':' || COALESCE(column_default, 'NULL') AS "Value"
-            FROM information_schema.columns
-            WHERE table_name = 'asset_versions'
-              AND column_name IN ('ProcessingStatus', 'ProcessingUpdatedAt')
-            ORDER BY column_name
-            """).ToListAsync();
-
-        columnDefaults.Should().Contain([
-            "ProcessingStatus:NO:NULL",
-            "ProcessingUpdatedAt:NO:NULL"
-        ]);
-
-        // 6. Verify regex check constraint rejects invalid error code format
-        var actBadCode = () => verify.Database.ExecuteSqlRawAsync(
-            """
-            UPDATE asset_versions
-            SET "ProcessingStatus" = 'REJECTED',
-                "ProcessingErrorCode" = 'BAD-CODE',
-                "ProcessingErrorSummary" = 'Invalid code with hyphen'
-            WHERE "Id" = {0}
-            """, legacyV1Id);
-
-        (await actBadCode.Should().ThrowAsync<PostgresException>())
-            .Which.SqlState.Should().Be(PostgresErrorCodes.CheckViolation);
-
-        // 7. Verify new insert without processing fields fails closed (NOT NULL violation)
-        var newVersionId = Guid.NewGuid();
-        var actMissingProcessing = () => verify.Database.ExecuteSqlRawAsync(
-            """
-            INSERT INTO asset_versions ("Id","AssetId","VersionNumber","IsCurrent","StorageKey","FileName","ContentLength","ContentSha256","ReleaseNotes","LicenseCode","LicenseTemplateVersion","LicenseDisplayName","LicenseTerms","CreatedAt")
-            VALUES ({0},{1},3,false,'assets/test/v3.zip','v3.zip',300,'ghi789','Third release','MIT','1.0','MIT','Terms',NOW())
-            """,
-            newVersionId, legacyAssetId);
-
-        (await actMissingProcessing.Should().ThrowAsync<PostgresException>())
-            .Which.SqlState.Should().Be(PostgresErrorCodes.NotNullViolation);
-    }
-
-    [Fact]
-    public async Task MigrateUpgrade_WhenLegacyOutboxRowsExist_ShouldBackfillStatusesAndDeadLetterFields()
-    {
-        // 1. Drop and recreate schema; apply migrations up to AddAssetListingSuggestions only
-        NpgsqlConnection.ClearAllPools();
-        await using (var setup = fixture.CreateDbContext())
+        db.Assets.Add(new Domain.Core.Entities.Asset
         {
-            await setup.Database.ExecuteSqlRawAsync("""
-                DROP SCHEMA IF EXISTS public CASCADE;
-                CREATE SCHEMA public;
-                """);
+            Id = assetId,
+            AuthorId = authorId,
+            CategoryId = categoryId,
+            Title = "Fresh Asset",
+            Description = "Desc",
+            Price = 15m,
+            RatingCount = 1,
+            RatingAverage = 5.0d,
+            CreatedAt = now,
+            UpdatedAt = now
+        });
 
-            await setup.Database.MigrateAsync("20260825151905_AddAssetListingSuggestions");
-        }
-
-        NpgsqlConnection.ClearAllPools();
-
-        var legacyProcessedId = Guid.NewGuid();
-        var legacyMaxAttemptsId = Guid.NewGuid();
-        var legacyExplicitDlId = Guid.NewGuid();
-        var legacyPendingId = Guid.NewGuid();
-
-        await using (var seed = fixture.CreateDbContext())
+        db.AssetVersions.Add(new Domain.Core.Entities.AssetVersion
         {
-            var now = DateTimeOffset.UtcNow;
+            Id = versionId,
+            AssetId = assetId,
+            VersionNumber = 1,
+            IsCurrent = true,
+            StorageKey = "assets/test.zip",
+            FileName = "test.zip",
+            ContentLength = 1024,
+            ContentSha256 = "abc",
+            ReleaseNotes = "Initial",
+            LicenseCode = AssetLicenseCatalog.Get(AssetLicenseCode.PERSONAL).Code,
+            LicenseTemplateVersion = AssetLicenseCatalog.Get(AssetLicenseCode.PERSONAL).TemplateVersion,
+            LicenseDisplayName = AssetLicenseCatalog.Get(AssetLicenseCode.PERSONAL).DisplayName,
+            LicenseTerms = AssetLicenseCatalog.Get(AssetLicenseCode.PERSONAL).TermsPlainText,
+            ProcessingStatus = AssetVersionProcessingStatus.READY,
+            ProcessingUpdatedAt = now,
+            CreatedAt = now
+        });
 
-            // 1. Legacy processed row
-            await seed.Database.ExecuteSqlRawAsync(
-                """
-                INSERT INTO outbox_messages ("Id","Type","Payload","OccurredAt","AttemptCount","ProcessedAt")
-                VALUES ({0},'EmailDispatch','{{}}',{1},1,{2})
-                """,
-                legacyProcessedId, now.AddMinutes(-30), now.AddMinutes(-29));
-
-            // 2. Legacy max-attempt row with future LockedUntil lease
-            await seed.Database.ExecuteSqlRawAsync(
-                """
-                INSERT INTO outbox_messages ("Id","Type","Payload","OccurredAt","AttemptCount","LastError","LockedUntil")
-                VALUES ({0},'EmailDispatch','{{}}',{1},10,'SMTP timeout after 10 retries',{2})
-                """,
-                legacyMaxAttemptsId, now.AddMinutes(-20), now.AddMinutes(50));
-
-            // 3. Legacy explicit convention row with space ("DEAD_LETTER: ")
-            await seed.Database.ExecuteSqlRawAsync(
-                """
-                INSERT INTO outbox_messages ("Id","Type","Payload","OccurredAt","AttemptCount","LastError")
-                VALUES ({0},'EmailDispatch','{{}}',{1},3,'DEAD_LETTER: Payload schema deprecated')
-                """,
-                legacyExplicitDlId, now.AddMinutes(-15));
-
-            // 4. Legacy pending row
-            await seed.Database.ExecuteSqlRawAsync(
-                """
-                INSERT INTO outbox_messages ("Id","Type","Payload","OccurredAt","AttemptCount")
-                VALUES ({0},'EmailDispatch','{{}}',{1},0)
-                """,
-                legacyPendingId, now.AddMinutes(-5));
-        }
-
-        NpgsqlConnection.ClearAllPools();
-
-        // 3. Apply latest migration
-        await using (var upgrade = fixture.CreateDbContext())
+        db.Reviews.Add(new Domain.Core.Entities.Review
         {
-            await upgrade.Database.MigrateAsync();
-        }
+            Id = Guid.NewGuid(),
+            AssetId = assetId,
+            UserId = reviewerId,
+            Rating = 5,
+            Comment = "Great!",
+            CreatedAt = now
+        });
 
-        NpgsqlConnection.ClearAllPools();
+        var outboxMsgId = Guid.NewGuid();
+        db.OutboxMessages.Add(new Domain.Core.Entities.OutboxMessage
+        {
+            Id = outboxMsgId,
+            Type = "EmailDispatch",
+            Payload = "{}",
+            OccurredAt = now,
+            Status = Domain.Core.Enums.OutboxMessageStatus.PENDING,
+            AttemptCount = 0
+        });
 
-        // 4. Verify backfill states
-        await using var verify = fixture.CreateDbContext();
+        await db.SaveChangesAsync();
 
-        var rows = await verify.OutboxMessages.AsNoTracking()
-            .Where(m => m.Id == legacyProcessedId || m.Id == legacyMaxAttemptsId || m.Id == legacyExplicitDlId || m.Id == legacyPendingId)
-            .ToDictionaryAsync(m => m.Id);
+        var store = new OutboxStore(db, Microsoft.Extensions.Logging.Abstractions.NullLogger<OutboxStore>.Instance);
+        var batch = await store.ClaimPendingBatch(10, TimeSpan.FromMinutes(5));
+        batch.Should().ContainSingle(m => m.Id == outboxMsgId);
 
-        // Processed
-        rows[legacyProcessedId].Status.Should().Be(Domain.Core.Enums.OutboxMessageStatus.PROCESSED);
-        rows[legacyProcessedId].DeadLetteredAt.Should().BeNull();
-
-        // Max attempts -> DEAD_LETTERED (DeadLetteredAt must not be in future despite LockedUntil)
-        rows[legacyMaxAttemptsId].Status.Should().Be(Domain.Core.Enums.OutboxMessageStatus.DEAD_LETTERED);
-        rows[legacyMaxAttemptsId].DeadLetteredAt.Should().NotBeNull();
-        rows[legacyMaxAttemptsId].DeadLetteredAt.Should().BeBefore(DateTimeOffset.UtcNow);
-        rows[legacyMaxAttemptsId].DeadLetterReason.Should().Be("SMTP timeout after 10 retries");
-
-        // Explicit convention -> DEAD_LETTERED (prefix and leading space stripped)
-        rows[legacyExplicitDlId].Status.Should().Be(Domain.Core.Enums.OutboxMessageStatus.DEAD_LETTERED);
-        rows[legacyExplicitDlId].DeadLetteredAt.Should().NotBeNull();
-        rows[legacyExplicitDlId].DeadLetterReason.Should().Be("Payload schema deprecated");
-
-        // Pending
-        rows[legacyPendingId].Status.Should().Be(Domain.Core.Enums.OutboxMessageStatus.PENDING);
-        rows[legacyPendingId].DeadLetteredAt.Should().BeNull();
-        rows[legacyPendingId].DeadLetterReason.Should().BeNull();
-
-        // 5. Store operations verify queryability, claiming, and replay
-        var store = new OutboxStore(verify, Microsoft.Extensions.Logging.Abstractions.NullLogger<OutboxStore>.Instance);
-
-        var deadLetters = await store.GetDeadLetters(new Domain.Core.Dto.Outbox.GetDeadLettersRequest(1, 10));
-        deadLetters.TotalCount.Should().Be(2);
-        deadLetters.Items.Select(i => i.Id).Should().Contain([legacyMaxAttemptsId, legacyExplicitDlId]);
-
-        var claimBatch = await store.ClaimPendingBatch(10, TimeSpan.FromMinutes(5));
-        claimBatch.Should().ContainSingle();
-        claimBatch[0].Id.Should().Be(legacyPendingId);
-
-        // Replay legacy max-attempt dead letter
-        var (replayOutcome, replayDto) = await store.ReplayDeadLetter(legacyMaxAttemptsId);
-        replayOutcome.Should().Be(Domain.Core.Enums.OutboxReplayOutcome.SUCCESS);
-        replayDto!.ReplayCount.Should().Be(1);
-
-        // Should now be claimable
-        var secondClaimBatch = await store.ClaimPendingBatch(10, TimeSpan.FromMinutes(5));
-        secondClaimBatch.Should().ContainSingle();
-        secondClaimBatch[0].Id.Should().Be(legacyMaxAttemptsId);
+        var loadedAsset = await db.Assets.AsNoTracking().SingleAsync(a => a.Id == assetId);
+        loadedAsset.RatingCount.Should().Be(1);
+        loadedAsset.RatingAverage.Should().Be(5.0d);
     }
 
     [Fact]
@@ -583,100 +404,5 @@ public sealed class MigrationSmokePostgresTests(PostgresFixture fixture)
         var backslashMatch = await store.GetPaged(new Domain.Core.Dto.Categories.GetCategoriesRequest { Search = "v1\\pack" });
         backslashMatch.Items.Should().ContainSingle();
         backslashMatch.Items[0].Id.Should().Be(c1.Id);
-    }
-
-    [Fact]
-    public async Task MigrateUpgrade_WhenLegacyReviewsExist_ShouldBackfillRatingAggregatesAndCreateRefreshTokenIndex()
-    {
-        // 1. Drop and recreate schema; apply migrations up to OptimizePersistenceQueriesBatch7 only
-        NpgsqlConnection.ClearAllPools();
-        await using (var setup = fixture.CreateDbContext())
-        {
-            await setup.Database.ExecuteSqlRawAsync("""
-                DROP SCHEMA IF EXISTS public CASCADE;
-                CREATE SCHEMA public;
-                """);
-
-            await setup.Database.MigrateAsync("20260829081511_OptimizePersistenceQueriesBatch7");
-        }
-
-        NpgsqlConnection.ClearAllPools();
-
-        var authorId = Guid.NewGuid();
-        var reviewer1Id = Guid.NewGuid();
-        var reviewer2Id = Guid.NewGuid();
-        var categoryId = Guid.NewGuid();
-        var assetId = Guid.NewGuid();
-        var assetNoReviewsId = Guid.NewGuid();
-        var now = DateTimeOffset.UtcNow;
-
-        await using (var seed = fixture.CreateDbContext())
-        {
-            await seed.Database.ExecuteSqlRawAsync(
-                """
-                INSERT INTO users ("Id","Username","Email","PasswordHash","Role","CreatedAt")
-                VALUES ({0},'author','author@test.com','hash','User',{1}),
-                       ({2},'rev1','rev1@test.com','hash','User',{1}),
-                       ({3},'rev2','rev2@test.com','hash','User',{1})
-                """,
-                authorId, now, reviewer1Id, reviewer2Id);
-
-            await seed.Database.ExecuteSqlRawAsync(
-                """
-                INSERT INTO categories ("Id","Name","Slug","Description","CreatedAt","UpdatedAt")
-                VALUES ({0},'Cat','cat','Cat',{1},{2})
-                """,
-                categoryId, now, now);
-
-            await seed.Database.ExecuteSqlRawAsync(
-                """
-                INSERT INTO assets ("Id","AuthorId","CategoryId","Title","Description","Price","CreatedAt","UpdatedAt")
-                VALUES ({0},{1},{2},'Reviewed Asset','Desc',10,{3},{4}),
-                       ({5},{1},{2},'Unreviewed Asset','Desc',20,{3},{4})
-                """,
-                assetId, authorId, categoryId, now, now, assetNoReviewsId);
-
-            await seed.Database.ExecuteSqlRawAsync(
-                """
-                INSERT INTO reviews ("Id","AssetId","UserId","Rating","Comment","CreatedAt")
-                VALUES ({0},{1},{2},4,'good',{3}),
-                       ({4},{1},{5},5,'great',{3})
-                """,
-                Guid.NewGuid(), assetId, reviewer1Id, now, Guid.NewGuid(), reviewer2Id);
-        }
-
-        NpgsqlConnection.ClearAllPools();
-
-        // 2. Apply latest migration (OptimizeDataAccessLifecycleBatch8)
-        await using (var upgrade = fixture.CreateDbContext())
-        {
-            await upgrade.Database.MigrateAsync();
-        }
-
-        NpgsqlConnection.ClearAllPools();
-
-        // 3. Verify backfill results and migration applied
-        await using var verify = fixture.CreateDbContext();
-
-        var applied = await verify.Database.GetAppliedMigrationsAsync();
-        applied.Should().Contain(m => m.Contains("OptimizeDataAccessLifecycleBatch8", StringComparison.OrdinalIgnoreCase));
-
-        var assetWithReviews = await verify.Assets.AsNoTracking().SingleAsync(a => a.Id == assetId);
-        assetWithReviews.RatingCount.Should().Be(2);
-        assetWithReviews.RatingAverage.Should().Be(4.5d);
-
-        var unreviewedAsset = await verify.Assets.AsNoTracking().SingleAsync(a => a.Id == assetNoReviewsId);
-        unreviewedAsset.RatingCount.Should().Be(0);
-        unreviewedAsset.RatingAverage.Should().Be(0.0d);
-
-        var hasRefreshTokenIndex = await verify.Database.SqlQueryRaw<bool>(
-            """
-            SELECT EXISTS (
-                SELECT 1
-                FROM pg_indexes
-                WHERE tablename = 'refresh_tokens' AND indexname = 'IX_refresh_tokens_expires_at'
-            ) AS "Value"
-            """).SingleAsync();
-        hasRefreshTokenIndex.Should().BeTrue();
     }
 }

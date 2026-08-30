@@ -1,7 +1,7 @@
 import { cookies } from 'next/headers'
 import { NextResponse } from 'next/server'
 import { clearAuthCookies } from '@/lib/server/auth-cookies'
-import { assertSameOrigin } from '@/lib/server/bff-http'
+import { assertSameOrigin, problemResponse } from '@/lib/server/bff-http'
 import { tryRefreshFromCookies } from '@/lib/server/refresh-session'
 
 /**
@@ -15,7 +15,7 @@ export async function POST(request: Request) {
   const tokens = await tryRefreshFromCookies(store)
   if (!tokens) {
     clearAuthCookies(store)
-    return NextResponse.json({ ok: false }, { status: 401 })
+    return problemResponse(401, 'ERR_UNAUTHORIZED', 'Unauthorized')
   }
   return NextResponse.json({ ok: true })
 }
