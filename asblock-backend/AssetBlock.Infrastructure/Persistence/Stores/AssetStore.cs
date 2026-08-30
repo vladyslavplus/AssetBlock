@@ -415,14 +415,137 @@ internal sealed class AssetStore(ApplicationDbContext dbContext) : IAssetStore
         GetAssetsRequest request,
         CancellationToken cancellationToken)
     {
-        IQueryable<Asset> query = ApplyAssetListFilters(baseQuery, request);
-        var totalCount = await query.CountAsync(cancellationToken);
-        query = ApplyAssetListSort(query, request);
         (int page, int pageSize) = NormalizePaging(request);
+        IQueryable<Asset> filteredBase = ApplyNonSearchFilters(baseQuery, request);
 
-        List<AssetListItem> items = await query
-            .Skip((page - 1) * pageSize)
-            .Take(pageSize)
+        if (string.IsNullOrWhiteSpace(request.Search))
+        {
+            var totalCount = await filteredBase.CountAsync(cancellationToken);
+            if (totalCount == 0 || (page - 1) * pageSize >= totalCount)
+            {
+                return new PagedResult<AssetListItem>([], totalCount, page, pageSize);
+            }
+
+            IQueryable<Asset> sortedQuery = ApplyAssetListSort(filteredBase, request);
+            List<AssetListItem> items = await sortedQuery
+                .Skip((page - 1) * pageSize)
+                .Take(pageSize)
+                .Select(a => new AssetListItem(
+                    a.Id,
+                    a.Title,
+                    a.Description,
+                    a.Price,
+                    a.CategoryId,
+                    a.Category.Name,
+                    a.AuthorId,
+                    a.Author.Username,
+                    a.CreatedAt,
+                    a.AssetTags
+                        .Select(at => at.Tag.Name)
+                        .OrderBy(n => n)
+                        .ToList(),
+                    a.RatingAverage))
+                .ToListAsync(cancellationToken);
+
+            return new PagedResult<AssetListItem>(items, totalCount, page, pageSize);
+        }
+
+        return await QueryPagedSearchedCatalog(filteredBase, request, page, pageSize, cancellationToken);
+    }
+
+    private static async Task<PagedResult<AssetListItem>> QueryPagedSearchedCatalog(
+        IQueryable<Asset> filteredBase,
+        GetAssetsRequest request,
+        int page,
+        int pageSize,
+        CancellationToken cancellationToken)
+    {
+        var searchText = request.Search!.Trim();
+        var exactTitlePattern = EscapeLikePattern(searchText);
+        var likePattern = $"%{exactTitlePattern}%";
+        var isLongEnoughForTrigram = searchText.Length >= MIN_TRIGRAM_QUERY_LENGTH;
+        var candidateLimit = page * pageSize;
+
+        IQueryable<Guid> ftsMatchingIds = filteredBase
+            .Where(a => EF.Property<NpgsqlTsVector>(a, AssetConfiguration.SEARCH_VECTOR_PROPERTY)
+                .Matches(EF.Functions.WebSearchToTsQuery("simple", searchText)))
+            .Select(a => a.Id);
+
+        IQueryable<Guid> titleIlikeMatchingIds = filteredBase
+            .Where(a => EF.Functions.ILike(a.Title, likePattern, LIKE_ESCAPE))
+            .Select(a => a.Id);
+
+        IQueryable<Guid> descIlikeMatchingIds = filteredBase
+            .Where(a => a.Description != null && EF.Functions.ILike(a.Description, likePattern, LIKE_ESCAPE))
+            .Select(a => a.Id);
+
+        IQueryable<Guid> allMatchingIds = ftsMatchingIds
+            .Union(titleIlikeMatchingIds)
+            .Union(descIlikeMatchingIds);
+
+        if (isLongEnoughForTrigram)
+        {
+            IQueryable<Guid> titleTrgmMatchingIds = filteredBase
+                .Where(a => EF.Functions.TrigramsAreSimilar(a.Title, searchText)
+                    && PostgresDbFunctions.TrigramsSimilarity(a.Title, searchText) >= TRIGRAM_SIMILARITY_THRESHOLD)
+                .Select(a => a.Id);
+
+            IQueryable<Guid> descTrgmMatchingIds = filteredBase
+                .Where(a => a.Description != null
+                    && EF.Functions.TrigramsAreSimilar(a.Description, searchText)
+                    && PostgresDbFunctions.TrigramsSimilarity(a.Description, searchText) >= TRIGRAM_SIMILARITY_THRESHOLD)
+                .Select(a => a.Id);
+
+            allMatchingIds = allMatchingIds
+                .Union(titleTrgmMatchingIds)
+                .Union(descTrgmMatchingIds);
+        }
+
+        var totalCount = await allMatchingIds.CountAsync(cancellationToken);
+        if (totalCount == 0 || (page - 1) * pageSize >= totalCount)
+        {
+            return new PagedResult<AssetListItem>([], totalCount, page, pageSize);
+        }
+
+        var hasExplicitSort = !string.IsNullOrWhiteSpace(request.SortBy)
+            && GetAssetsRequest.AllowedSortBy.Contains(request.SortBy);
+
+        List<Guid> pageAssetIds;
+
+        if (hasExplicitSort)
+        {
+            pageAssetIds = await FetchExplicitSortedPageAssetIds(
+                filteredBase,
+                request,
+                searchText,
+                likePattern,
+                isLongEnoughForTrigram,
+                candidateLimit,
+                page,
+                pageSize,
+                cancellationToken);
+        }
+        else
+        {
+            pageAssetIds = await FetchRelevanceRankedPageAssetIds(
+                filteredBase,
+                searchText,
+                exactTitlePattern,
+                likePattern,
+                isLongEnoughForTrigram,
+                candidateLimit,
+                page,
+                pageSize,
+                cancellationToken);
+        }
+
+        if (pageAssetIds.Count == 0)
+        {
+            return new PagedResult<AssetListItem>([], totalCount, page, pageSize);
+        }
+
+        List<AssetListItem> items = await filteredBase
+            .Where(a => pageAssetIds.Contains(a.Id))
             .Select(a => new AssetListItem(
                 a.Id,
                 a.Title,
@@ -440,37 +563,238 @@ internal sealed class AssetStore(ApplicationDbContext dbContext) : IAssetStore
                 a.RatingAverage))
             .ToListAsync(cancellationToken);
 
+        var orderMap = pageAssetIds.Select((id, index) => (id, index)).ToDictionary(x => x.id, x => x.index);
+        items.Sort((a, b) => orderMap[a.Id].CompareTo(orderMap[b.Id]));
+
         return new PagedResult<AssetListItem>(items, totalCount, page, pageSize);
     }
 
-    private static IQueryable<Asset> ApplyAssetListFilters(IQueryable<Asset> query, GetAssetsRequest request)
+    private static async Task<List<Guid>> FetchRelevanceRankedPageAssetIds(
+        IQueryable<Asset> filteredBase,
+        string searchText,
+        string exactTitlePattern,
+        string likePattern,
+        bool isLongEnoughForTrigram,
+        int candidateLimit,
+        int page,
+        int pageSize,
+        CancellationToken cancellationToken)
     {
-        if (!string.IsNullOrWhiteSpace(request.Search))
-        {
-            var searchText = request.Search.Trim();
-            var likePattern = $"%{EscapeLikePattern(searchText)}%";
+        var ftsBranch = filteredBase
+            .Where(a => EF.Property<NpgsqlTsVector>(a, AssetConfiguration.SEARCH_VECTOR_PROPERTY)
+                .Matches(EF.Functions.WebSearchToTsQuery("simple", searchText)))
+            .Select(a => new
+            {
+                a.Id,
+                a.CreatedAt,
+                Score = 100.0f
+                    + (EF.Functions.ILike(a.Title, exactTitlePattern, LIKE_ESCAPE) ? 50.0f : (EF.Functions.ILike(a.Title, likePattern, LIKE_ESCAPE) ? 20.0f : 0.0f))
+                    + (EF.Property<NpgsqlTsVector>(a, AssetConfiguration.SEARCH_VECTOR_PROPERTY).Rank(EF.Functions.WebSearchToTsQuery("simple", searchText)) * 10.0f)
+            })
+            .OrderByDescending(x => x.Score)
+            .ThenByDescending(x => x.CreatedAt)
+            .ThenBy(x => x.Id)
+            .Take(candidateLimit);
 
-            if (searchText.Length >= MIN_TRIGRAM_QUERY_LENGTH)
+        var titleIlikeBranch = filteredBase
+            .Where(a => EF.Functions.ILike(a.Title, likePattern, LIKE_ESCAPE))
+            .Select(a => new
             {
-                query = query.Where(a =>
-                    EF.Property<NpgsqlTsVector>(a, AssetConfiguration.SEARCH_VECTOR_PROPERTY)
-                        .Matches(EF.Functions.WebSearchToTsQuery("simple", searchText))
-                    || EF.Functions.ILike(a.Title, likePattern, LIKE_ESCAPE)
-                    || (a.Description != null && EF.Functions.ILike(a.Description, likePattern, LIKE_ESCAPE))
-                    || PostgresDbFunctions.TrigramsSimilarity(a.Title, searchText) >= TRIGRAM_SIMILARITY_THRESHOLD
-                    || (a.Description != null
-                        && PostgresDbFunctions.TrigramsSimilarity(a.Description, searchText) >= TRIGRAM_SIMILARITY_THRESHOLD));
-            }
-            else
+                a.Id,
+                a.CreatedAt,
+                Score = 40.0f
+                    + (EF.Functions.ILike(a.Title, exactTitlePattern, LIKE_ESCAPE) ? 30.0f : 0.0f)
+                    + (isLongEnoughForTrigram ? PostgresDbFunctions.TrigramsSimilarity(a.Title, searchText) * 10.0f : 0.0f)
+            })
+            .OrderByDescending(x => x.Score)
+            .ThenByDescending(x => x.CreatedAt)
+            .ThenBy(x => x.Id)
+            .Take(candidateLimit);
+
+        var descIlikeBranch = filteredBase
+            .Where(a => a.Description != null && EF.Functions.ILike(a.Description, likePattern, LIKE_ESCAPE))
+            .Select(a => new
             {
-                query = query.Where(a =>
-                    EF.Property<NpgsqlTsVector>(a, AssetConfiguration.SEARCH_VECTOR_PROPERTY)
-                        .Matches(EF.Functions.WebSearchToTsQuery("simple", searchText))
-                    || EF.Functions.ILike(a.Title, likePattern, LIKE_ESCAPE)
-                    || (a.Description != null && EF.Functions.ILike(a.Description, likePattern, LIKE_ESCAPE)));
-            }
+                a.Id,
+                a.CreatedAt,
+                Score = 15.0f
+                    + (isLongEnoughForTrigram ? PostgresDbFunctions.TrigramsSimilarity(a.Description!, searchText) * 5.0f : 0.0f)
+            })
+            .OrderByDescending(x => x.Score)
+            .ThenByDescending(x => x.CreatedAt)
+            .ThenBy(x => x.Id)
+            .Take(candidateLimit);
+
+        var allCandidates = ftsBranch
+            .Concat(titleIlikeBranch)
+            .Concat(descIlikeBranch);
+
+        if (isLongEnoughForTrigram)
+        {
+            var titleTrgmBranch = filteredBase
+                .Where(a => EF.Functions.TrigramsAreSimilar(a.Title, searchText)
+                    && PostgresDbFunctions.TrigramsSimilarity(a.Title, searchText) >= TRIGRAM_SIMILARITY_THRESHOLD)
+                .Select(a => new
+                {
+                    a.Id,
+                    a.CreatedAt,
+                    Score = 5.0f + (PostgresDbFunctions.TrigramsSimilarity(a.Title, searchText) * 20.0f)
+                })
+                .OrderByDescending(x => x.Score)
+                .ThenByDescending(x => x.CreatedAt)
+                .ThenBy(x => x.Id)
+                .Take(candidateLimit);
+
+            var descTrgmBranch = filteredBase
+                .Where(a => a.Description != null
+                    && EF.Functions.TrigramsAreSimilar(a.Description, searchText)
+                    && PostgresDbFunctions.TrigramsSimilarity(a.Description, searchText) >= TRIGRAM_SIMILARITY_THRESHOLD)
+                .Select(a => new
+                {
+                    a.Id,
+                    a.CreatedAt,
+                    Score = 1.0f + (PostgresDbFunctions.TrigramsSimilarity(a.Description!, searchText) * 5.0f)
+                })
+                .OrderByDescending(x => x.Score)
+                .ThenByDescending(x => x.CreatedAt)
+                .ThenBy(x => x.Id)
+                .Take(candidateLimit);
+
+            allCandidates = allCandidates
+                .Concat(titleTrgmBranch)
+                .Concat(descTrgmBranch);
         }
 
+        var deduplicated = allCandidates
+            .GroupBy(x => new { x.Id, x.CreatedAt })
+            .Select(g => new
+            {
+                g.Key.Id,
+                g.Key.CreatedAt,
+                Score = g.Max(x => x.Score)
+            });
+
+        return await deduplicated
+            .OrderByDescending(x => x.Score)
+            .ThenByDescending(x => x.CreatedAt)
+            .ThenBy(x => x.Id)
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
+            .Select(x => x.Id)
+            .ToListAsync(cancellationToken);
+    }
+
+    private static async Task<List<Guid>> FetchExplicitSortedPageAssetIds(
+        IQueryable<Asset> filteredBase,
+        GetAssetsRequest request,
+        string searchText,
+        string likePattern,
+        bool isLongEnoughForTrigram,
+        int candidateLimit,
+        int page,
+        int pageSize,
+        CancellationToken cancellationToken)
+    {
+        var sortBy = request.SortBy!.Trim().ToUpperInvariant();
+        var isDesc = request.SortDirection == SortDirection.DESC;
+
+        var ftsBranch = BoundSortedBranch(
+            filteredBase.Where(a => EF.Property<NpgsqlTsVector>(a, AssetConfiguration.SEARCH_VECTOR_PROPERTY)
+                .Matches(EF.Functions.WebSearchToTsQuery("simple", searchText))),
+            sortBy,
+            isDesc,
+            candidateLimit);
+
+        var titleIlikeBranch = BoundSortedBranch(
+            filteredBase.Where(a => EF.Functions.ILike(a.Title, likePattern, LIKE_ESCAPE)),
+            sortBy,
+            isDesc,
+            candidateLimit);
+
+        var descIlikeBranch = BoundSortedBranch(
+            filteredBase.Where(a => a.Description != null && EF.Functions.ILike(a.Description, likePattern, LIKE_ESCAPE)),
+            sortBy,
+            isDesc,
+            candidateLimit);
+
+        var mergedCandidateIds = ftsBranch
+            .Union(titleIlikeBranch)
+            .Union(descIlikeBranch);
+
+        if (isLongEnoughForTrigram)
+        {
+            var titleTrgmBranch = BoundSortedBranch(
+                filteredBase.Where(a => EF.Functions.TrigramsAreSimilar(a.Title, searchText)
+                    && PostgresDbFunctions.TrigramsSimilarity(a.Title, searchText) >= TRIGRAM_SIMILARITY_THRESHOLD),
+                sortBy,
+                isDesc,
+                candidateLimit);
+
+            var descTrgmBranch = BoundSortedBranch(
+                filteredBase.Where(a => a.Description != null
+                    && EF.Functions.TrigramsAreSimilar(a.Description, searchText)
+                    && PostgresDbFunctions.TrigramsSimilarity(a.Description, searchText) >= TRIGRAM_SIMILARITY_THRESHOLD),
+                sortBy,
+                isDesc,
+                candidateLimit);
+
+            mergedCandidateIds = mergedCandidateIds
+                .Union(titleTrgmBranch)
+                .Union(descTrgmBranch);
+        }
+
+        var candidateAssets = filteredBase.Where(a => mergedCandidateIds.Contains(a.Id));
+
+        IQueryable<Asset> sorted = sortBy switch
+        {
+            "TITLE" => isDesc
+                ? candidateAssets.OrderByDescending(a => a.Title).ThenBy(a => a.Id)
+                : candidateAssets.OrderBy(a => a.Title).ThenBy(a => a.Id),
+            "PRICE" => isDesc
+                ? candidateAssets.OrderByDescending(a => a.Price).ThenBy(a => a.Id)
+                : candidateAssets.OrderBy(a => a.Price).ThenBy(a => a.Id),
+            "ID" => isDesc
+                ? candidateAssets.OrderByDescending(a => a.Id)
+                : candidateAssets.OrderBy(a => a.Id),
+            _ => isDesc
+                ? candidateAssets.OrderByDescending(a => a.CreatedAt).ThenBy(a => a.Id)
+                : candidateAssets.OrderBy(a => a.CreatedAt).ThenBy(a => a.Id)
+        };
+
+        return await sorted
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
+            .Select(a => a.Id)
+            .ToListAsync(cancellationToken);
+    }
+
+    private static IQueryable<Guid> BoundSortedBranch(
+        IQueryable<Asset> branch,
+        string sortBy,
+        bool isDesc,
+        int candidateLimit)
+    {
+        IQueryable<Asset> sorted = sortBy switch
+        {
+            "TITLE" => isDesc
+                ? branch.OrderByDescending(a => a.Title).ThenBy(a => a.Id)
+                : branch.OrderBy(a => a.Title).ThenBy(a => a.Id),
+            "PRICE" => isDesc
+                ? branch.OrderByDescending(a => a.Price).ThenBy(a => a.Id)
+                : branch.OrderBy(a => a.Price).ThenBy(a => a.Id),
+            "ID" => isDesc
+                ? branch.OrderByDescending(a => a.Id)
+                : branch.OrderBy(a => a.Id),
+            _ => isDesc
+                ? branch.OrderByDescending(a => a.CreatedAt).ThenBy(a => a.Id)
+                : branch.OrderBy(a => a.CreatedAt).ThenBy(a => a.Id)
+        };
+
+        return sorted.Take(candidateLimit).Select(a => a.Id);
+    }
+
+    private static IQueryable<Asset> ApplyNonSearchFilters(IQueryable<Asset> query, GetAssetsRequest request)
+    {
         if (request.CategoryId is { } categoryId)
         {
             query = query.Where(a => a.CategoryId == categoryId);
@@ -497,6 +821,41 @@ internal sealed class AssetStore(ApplicationDbContext dbContext) : IAssetStore
             {
                 var tagName = tag;
                 query = query.Where(a => a.AssetTags.Any(at => at.Tag.Name == tagName));
+            }
+        }
+
+        return query;
+    }
+
+    private static IQueryable<Asset> ApplyAssetListFilters(IQueryable<Asset> query, GetAssetsRequest request)
+    {
+        query = ApplyNonSearchFilters(query, request);
+
+        if (!string.IsNullOrWhiteSpace(request.Search))
+        {
+            var searchText = request.Search.Trim();
+            var likePattern = $"%{EscapeLikePattern(searchText)}%";
+
+            if (searchText.Length >= MIN_TRIGRAM_QUERY_LENGTH)
+            {
+                query = query.Where(a =>
+                    EF.Property<NpgsqlTsVector>(a, AssetConfiguration.SEARCH_VECTOR_PROPERTY)
+                        .Matches(EF.Functions.WebSearchToTsQuery("simple", searchText))
+                    || EF.Functions.ILike(a.Title, likePattern, LIKE_ESCAPE)
+                    || (a.Description != null && EF.Functions.ILike(a.Description, likePattern, LIKE_ESCAPE))
+                    || (EF.Functions.TrigramsAreSimilar(a.Title, searchText)
+                        && PostgresDbFunctions.TrigramsSimilarity(a.Title, searchText) >= TRIGRAM_SIMILARITY_THRESHOLD)
+                    || (a.Description != null
+                        && EF.Functions.TrigramsAreSimilar(a.Description, searchText)
+                        && PostgresDbFunctions.TrigramsSimilarity(a.Description, searchText) >= TRIGRAM_SIMILARITY_THRESHOLD));
+            }
+            else
+            {
+                query = query.Where(a =>
+                    EF.Property<NpgsqlTsVector>(a, AssetConfiguration.SEARCH_VECTOR_PROPERTY)
+                        .Matches(EF.Functions.WebSearchToTsQuery("simple", searchText))
+                    || EF.Functions.ILike(a.Title, likePattern, LIKE_ESCAPE)
+                    || (a.Description != null && EF.Functions.ILike(a.Description, likePattern, LIKE_ESCAPE)));
             }
         }
 

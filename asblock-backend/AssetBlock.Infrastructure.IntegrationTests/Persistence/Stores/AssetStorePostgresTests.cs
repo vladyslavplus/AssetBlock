@@ -674,4 +674,266 @@ public sealed class AssetStorePostgresTests(PostgresFixture fixture)
         sellerItem.Id.Should().Be(asset.Id);
         sellerItem.AverageRating.Should().Be(4.75d);
     }
+
+    [Fact]
+    public async Task GetPaged_WhenSearchWithoutSort_ShouldOrderRelevanceFirstTitleOverDescriptionAndFuzzy()
+    {
+        await using ApplicationDbContext db = await fixture.CreateCleanDbContext();
+        (User author, Category category) = await TestData.SeedAuthorAndCategory(db);
+        var store = new AssetStore(db);
+        DateTimeOffset t0 = DateTimeOffset.UtcNow.AddMinutes(-30);
+
+        Asset exactTitle = TestData.CreateAsset(author.Id, category.Id, title: "Dungeon", createdAt: t0);
+        Asset partialTitle = TestData.CreateAsset(author.Id, category.Id, title: "Dungeon Props", createdAt: t0.AddMinutes(1));
+        Asset descMatch = TestData.CreateAsset(author.Id, category.Id, title: "Modular Castle", description: "Contains a complete dungeon interior", createdAt: t0.AddMinutes(2));
+        Asset typoMatch = TestData.CreateAsset(author.Id, category.Id, title: "Dungon Kit", createdAt: t0.AddMinutes(3));
+
+        await AddWithReadyVersion(store, exactTitle);
+        await AddWithReadyVersion(store, partialTitle);
+        await AddWithReadyVersion(store, descMatch);
+        await AddWithReadyVersion(store, typoMatch);
+
+        PagedResult<AssetListItem> paged = await store.GetPaged(new GetAssetsRequest
+        {
+            Page = 1,
+            PageSize = 10,
+            Search = "Dungeon"
+        });
+
+        paged.TotalCount.Should().Be(4);
+        paged.Items.Select(a => a.Title).Should().Equal(
+            "Dungeon",
+            "Dungeon Props",
+            "Modular Castle",
+            "Dungon Kit");
+    }
+
+    [Fact]
+    public async Task GetPaged_WhenAssetMatchesMultipleBranches_ShouldDeduplicateAndCountOnce()
+    {
+        await using ApplicationDbContext db = await fixture.CreateCleanDbContext();
+        (User author, Category category) = await TestData.SeedAuthorAndCategory(db);
+        var store = new AssetStore(db);
+
+        Asset multiMatch = TestData.CreateAsset(
+            author.Id,
+            category.Id,
+            title: "Knight Hero Armor",
+            description: "Knight hero armor model with textures");
+        await AddWithReadyVersion(store, multiMatch);
+
+        PagedResult<AssetListItem> paged = await store.GetPaged(new GetAssetsRequest
+        {
+            Page = 1,
+            PageSize = 10,
+            Search = "Knight"
+        });
+
+        paged.TotalCount.Should().Be(1);
+        paged.Items.Should().ContainSingle(a => a.Id == multiMatch.Id);
+    }
+
+    [Fact]
+    public async Task GetPaged_WhenOverlappingBranchesAndPaging_ShouldReturnExactTotalCountAndFullPages()
+    {
+        await using ApplicationDbContext db = await fixture.CreateCleanDbContext();
+        (User author, Category category) = await TestData.SeedAuthorAndCategory(db);
+        var store = new AssetStore(db);
+        DateTimeOffset t0 = DateTimeOffset.UtcNow.AddMinutes(-50);
+
+        Asset a1 = TestData.CreateAsset(author.Id, category.Id, title: "Space Fighter Alpha", createdAt: t0);
+        Asset a2 = TestData.CreateAsset(author.Id, category.Id, title: "Space Fighter Beta", createdAt: t0.AddMinutes(1));
+        Asset a3 = TestData.CreateAsset(author.Id, category.Id, title: "Space Shuttle", description: "fighter ship", createdAt: t0.AddMinutes(2));
+        Asset a4 = TestData.CreateAsset(author.Id, category.Id, title: "Spce Fighter Delta", createdAt: t0.AddMinutes(3));
+        Asset a5 = TestData.CreateAsset(author.Id, category.Id, title: "Deep Space Station", description: "docking for fighter", createdAt: t0.AddMinutes(4));
+
+        await AddWithReadyVersion(store, a1);
+        await AddWithReadyVersion(store, a2);
+        await AddWithReadyVersion(store, a3);
+        await AddWithReadyVersion(store, a4);
+        await AddWithReadyVersion(store, a5);
+
+        PagedResult<AssetListItem> p1 = await store.GetPaged(new GetAssetsRequest
+        {
+            Page = 1,
+            PageSize = 2,
+            Search = "Space Fighter"
+        });
+
+        PagedResult<AssetListItem> p2 = await store.GetPaged(new GetAssetsRequest
+        {
+            Page = 2,
+            PageSize = 2,
+            Search = "Space Fighter"
+        });
+
+        PagedResult<AssetListItem> p3 = await store.GetPaged(new GetAssetsRequest
+        {
+            Page = 3,
+            PageSize = 2,
+            Search = "Space Fighter"
+        });
+
+        p1.TotalCount.Should().Be(5);
+        p1.Items.Should().HaveCount(2);
+
+        p2.TotalCount.Should().Be(5);
+        p2.Items.Should().HaveCount(2);
+
+        p3.TotalCount.Should().Be(5);
+        p3.Items.Should().HaveCount(1);
+
+        var allFetchedIds = p1.Items.Concat(p2.Items).Concat(p3.Items).Select(x => x.Id).ToList();
+        allFetchedIds.Should().HaveCount(5);
+        allFetchedIds.Distinct().Should().HaveCount(5);
+    }
+
+    [Fact]
+    public async Task GetPaged_WhenSearchWithExplicitSortBy_ShouldOverrideRelevanceOrder()
+    {
+        await using ApplicationDbContext db = await fixture.CreateCleanDbContext();
+        (User author, Category category) = await TestData.SeedAuthorAndCategory(db);
+        var store = new AssetStore(db);
+
+        Asset a1 = TestData.CreateAsset(author.Id, category.Id, title: "Gold Coin", price: 50m);
+        Asset a2 = TestData.CreateAsset(author.Id, category.Id, title: "Gold Ingot", price: 10m);
+        Asset a3 = TestData.CreateAsset(author.Id, category.Id, title: "Gold Chest", price: 30m);
+
+        await AddWithReadyVersion(store, a1);
+        await AddWithReadyVersion(store, a2);
+        await AddWithReadyVersion(store, a3);
+
+        PagedResult<AssetListItem> paged = await store.GetPaged(new GetAssetsRequest
+        {
+            Page = 1,
+            PageSize = 10,
+            Search = "Gold",
+            SortBy = "Price",
+            SortDirection = SortDirection.ASC
+        });
+
+        paged.TotalCount.Should().Be(3);
+        paged.Items.Select(a => a.Title).Should().Equal("Gold Ingot", "Gold Chest", "Gold Coin");
+    }
+
+    [Fact]
+    public async Task GetPaged_WhenSearchContainsEscapedWildcards_ShouldMatchExactCharacters()
+    {
+        await using ApplicationDbContext db = await fixture.CreateCleanDbContext();
+        (User author, Category category) = await TestData.SeedAuthorAndCategory(db);
+        var store = new AssetStore(db);
+
+        Asset percentMatch = TestData.CreateAsset(author.Id, category.Id, title: "100% Procedural");
+        Asset percentNonMatch = TestData.CreateAsset(author.Id, category.Id, title: "1000 Procedural");
+        Asset underscoreMatch = TestData.CreateAsset(author.Id, category.Id, title: "Shader_Pack_V1");
+        Asset underscoreNonMatch = TestData.CreateAsset(author.Id, category.Id, title: "ShaderXPackXV1");
+
+        await AddWithReadyVersion(store, percentMatch);
+        await AddWithReadyVersion(store, percentNonMatch);
+        await AddWithReadyVersion(store, underscoreMatch);
+        await AddWithReadyVersion(store, underscoreNonMatch);
+
+        PagedResult<AssetListItem> percentResult = await store.GetPaged(new GetAssetsRequest
+        {
+            Page = 1,
+            PageSize = 10,
+            Search = "100%"
+        });
+        percentResult.Items.Should().ContainSingle(a => a.Title == "100% Procedural");
+
+        PagedResult<AssetListItem> underscoreResult = await store.GetPaged(new GetAssetsRequest
+        {
+            Page = 1,
+            PageSize = 10,
+            Search = "Pack_V1"
+        });
+        underscoreResult.Items.Should().ContainSingle(a => a.Title == "Shader_Pack_V1");
+    }
+
+    [Fact]
+    public async Task GetPaged_WhenSearchContainsBackslashesAndWildcards_ShouldMatchLiterallyWithoutThrowing()
+    {
+        await using ApplicationDbContext db = await fixture.CreateCleanDbContext();
+        (User author, Category category) = await TestData.SeedAuthorAndCategory(db);
+        var store = new AssetStore(db);
+
+        Asset trailingSlash = TestData.CreateAsset(author.Id, category.Id, title: @"Tools\Bin\");
+        Asset interiorSlash = TestData.CreateAsset(author.Id, category.Id, title: @"Shader\Core\V1");
+        Asset underscore = TestData.CreateAsset(author.Id, category.Id, title: "My_Custom_Asset");
+        Asset underscoreMismatch = TestData.CreateAsset(author.Id, category.Id, title: "MyXCustomXAsset");
+        Asset percentExact = TestData.CreateAsset(author.Id, category.Id, title: "50% Discount Pack");
+        Asset percentPartial = TestData.CreateAsset(author.Id, category.Id, title: "Special 50% Discount Pack Bundle");
+
+        await AddWithReadyVersion(store, trailingSlash);
+        await AddWithReadyVersion(store, interiorSlash);
+        await AddWithReadyVersion(store, underscore);
+        await AddWithReadyVersion(store, underscoreMismatch);
+        await AddWithReadyVersion(store, percentExact);
+        await AddWithReadyVersion(store, percentPartial);
+
+        // Trailing backslash search: must not throw SQL escape error
+        PagedResult<AssetListItem> trailingResult = await store.GetPaged(new GetAssetsRequest
+        {
+            Page = 1,
+            PageSize = 10,
+            Search = @"Tools\Bin\"
+        });
+        trailingResult.Items.Should().ContainSingle(a => a.Title == @"Tools\Bin\");
+
+        // Interior backslash search
+        PagedResult<AssetListItem> interiorResult = await store.GetPaged(new GetAssetsRequest
+        {
+            Page = 1,
+            PageSize = 10,
+            Search = @"Shader\Core\V1"
+        });
+        interiorResult.Items.Should().ContainSingle(a => a.Title == @"Shader\Core\V1");
+
+        // Underscore search: should match underscore literally, not as single-character wildcard
+        PagedResult<AssetListItem> underscoreResult = await store.GetPaged(new GetAssetsRequest
+        {
+            Page = 1,
+            PageSize = 10,
+            Search = "My_Custom"
+        });
+        underscoreResult.Items.Should().ContainSingle(a => a.Title == "My_Custom_Asset");
+
+        // Exact-title relevance with percent: exact title "50% Discount Pack" outranks "Special 50% Discount Pack Bundle"
+        PagedResult<AssetListItem> percentResult = await store.GetPaged(new GetAssetsRequest
+        {
+            Page = 1,
+            PageSize = 10,
+            Search = "50% Discount Pack"
+        });
+        percentResult.Items.Select(a => a.Title).Should().Equal(
+            "50% Discount Pack",
+            "Special 50% Discount Pack Bundle");
+    }
+
+    [Fact]
+    public async Task GetPaged_WhenAssetHasNoReadyVersionOrIsSoftDeleted_ShouldEnforceVisibilityInFinalProjection()
+    {
+        await using ApplicationDbContext db = await fixture.CreateCleanDbContext();
+        (User author, Category category) = await TestData.SeedAuthorAndCategory(db);
+        var store = new AssetStore(db);
+
+        Asset readyAsset = TestData.CreateAsset(author.Id, category.Id, title: "Visible Searchable Item");
+        Asset pendingAsset = TestData.CreateAsset(author.Id, category.Id, title: "Pending Searchable Item");
+        Asset deletedAsset = TestData.CreateAsset(author.Id, category.Id, title: "Deleted Searchable Item");
+
+        await AddWithReadyVersion(store, readyAsset);
+        await store.AddWithVersion(pendingAsset, TestData.CreateAssetVersion(pendingAsset.Id, isCurrent: false, processingStatus: AssetVersionProcessingStatus.PENDING_INSPECTION), null);
+        await AddWithReadyVersion(store, deletedAsset);
+        await store.SoftDelete(deletedAsset.Id, DateTimeOffset.UtcNow);
+
+        PagedResult<AssetListItem> result = await store.GetPaged(new GetAssetsRequest
+        {
+            Page = 1,
+            PageSize = 10,
+            Search = "Searchable Item"
+        });
+
+        result.TotalCount.Should().Be(1);
+        result.Items.Should().ContainSingle(a => a.Title == "Visible Searchable Item");
+    }
 }
