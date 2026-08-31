@@ -13,7 +13,7 @@ namespace AssetBlock.Infrastructure.IntegrationTests.Email;
 /// <summary>Real SMTP delivery against pinned Mailpit; isolated from PostgreSQL fixture.</summary>
 public sealed class SmtpEmailSenderMailpitTests : IAsyncLifetime, IDisposable
 {
-    private const string MAILPIT_IMAGE = "axllent/mailpit:v1.30.0";
+    private const string MAILPIT_IMAGE = "axllent/mailpit:v1.30.0@sha256:0059ef81e492a7192af3816281eed6859eb078bd7bdc58b76757c13e10e53a7d";
     private const string MESSAGE_ID_DOMAIN = "mail.integration.test";
     private static readonly TimeSpan _startTimeout = TimeSpan.FromMinutes(2);
 

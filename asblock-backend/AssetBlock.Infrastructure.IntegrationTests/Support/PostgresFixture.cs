@@ -12,7 +12,7 @@ public sealed class PostgresFixture : IAsyncLifetime
 {
     private static readonly TimeSpan _startTimeout = TimeSpan.FromMinutes(2);
 
-    private readonly PostgreSqlContainer _postgres = new PostgreSqlBuilder("postgres:16.14-alpine3.24").Build();
+    private readonly PostgreSqlContainer _postgres = new PostgreSqlBuilder("postgres:16.14-alpine3.24@sha256:57c72fd2a128e416c7fcc499958864df5301e940bca0a56f58fddf30ffc07777").Build();
 
     private string ConnectionString => _postgres.GetConnectionString();
 

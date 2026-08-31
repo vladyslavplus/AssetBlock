@@ -19,7 +19,7 @@ public sealed class RedisAnalyticsDistributedRateLimitIntegrationTests : IAsyncL
 
     public async Task InitializeAsync()
     {
-        _redis = new RedisBuilder("valkey/valkey:9.1.1").Build();
+        _redis = new RedisBuilder("valkey/valkey:9.1.1@sha256:64e361b630ecf18dff7ca4df6a88e6eafc193687eb48cff2c7e0a293ab67d29a").Build();
         using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(60));
         await _redis.StartAsync(cts.Token);
         _connectionString = _redis.GetConnectionString();

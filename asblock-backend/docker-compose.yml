@@ -13,7 +13,7 @@
 services:
   # Uncomment when postgres is needed
   # postgres:
-  #   image: postgres:16.14-alpine3.24
+  #   image: postgres:16.14-alpine3.24@sha256:57c72fd2a128e416c7fcc499958864df5301e940bca0a56f58fddf30ffc07777
   #   container_name: assetblock-postgres
   #   ports:
   #     - "${POSTGRES_PORT:-5432}:5432"
@@ -30,7 +30,7 @@ services:
   #     retries: 5
 
   seaweedfs:
-    image: chrislusf/seaweedfs:4.42
+    image: chrislusf/seaweedfs:4.42@sha256:f7cbc8bdbbf60a1aaba7d61784a3bdff3ec1e0657f6ad0b26d5b6ab2cd9d0dc6
     container_name: assetblock-seaweedfs
     ports:
       - "127.0.0.1:${SEAWEEDFS_S3_PORT:-8333}:8333"
@@ -38,11 +38,13 @@ services:
       AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-assetblock}
       AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-dev_seaweedfs_secret}
       S3_BUCKET: ${S3_BUCKET:-assets}
-    command: ["mini", "-ip=0.0.0.0", "-ip.bind=0.0.0.0", "-dir=/data", "-s3.port=8333"]
+    command:
+      ["mini", "-ip=0.0.0.0", "-ip.bind=0.0.0.0", "-dir=/data", "-s3.port=8333"]
     volumes:
       - seaweedfs_data:/data
     healthcheck:
-      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:8333/ || exit 1"]
+      test:
+        ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:8333/ || exit 1"]
       interval: 5s
       timeout: 5s
       retries: 10
@@ -51,7 +53,7 @@ services:
   # Compatibility profile: keep pinned MinIO for local A/B against SeaweedFS.
   minio:
     profiles: ["minio"]
-    image: minio/minio:RELEASE.2025-09-07T16-13-09Z
+    image: minio/minio:RELEASE.2025-09-07T16-13-09Z@sha256:14cea493d9a34af32f524e538b8346cf79f3321eff8e708c1e2960462bd8936e
     container_name: assetblock-minio
     ports:
       - "127.0.0.1:${MINIO_API_PORT:-9000}:9000"
@@ -70,7 +72,7 @@ services:
       start_period: 5s
 
   redis:
-    image: valkey/valkey:9.1.1
+    image: valkey/valkey:9.1.1@sha256:64e361b630ecf18dff7ca4df6a88e6eafc193687eb48cff2c7e0a293ab67d29a
     container_name: assetblock-redis
     ports:
       - "127.0.0.1:${REDIS_PORT:-6379}:6379"
@@ -84,7 +86,7 @@ services:
 
   # Local SMTP catcher + inbox UI only. Never use Mailpit as a production email endpoint.
   mailpit:
-    image: axllent/mailpit:v1.30.0
+    image: axllent/mailpit:v1.30.0@sha256:0059ef81e492a7192af3816281eed6859eb078bd7bdc58b76757c13e10e53a7d
     container_name: assetblock-mailpit
     ports:
       - "127.0.0.1:${MAILPIT_UI_PORT:-8025}:8025"
@@ -93,7 +95,7 @@ services:
       MP_MAX_MESSAGES: "1000"
 
   aspire-dashboard:
-    image: mcr.microsoft.com/dotnet/aspire-dashboard:9.0.0
+    image: mcr.microsoft.com/dotnet/aspire-dashboard:9.0.0@sha256:d595645ca7f5c075174db998302d8fb09e040516b14dfcb06dd02996659e1c77
     container_name: assetblock-aspire-dashboard
     ports:
       - "127.0.0.1:18888:18888" # Dashboard UI
@@ -103,7 +105,7 @@ services:
       DOTNET_DASHBOARD_UNSECURED_ALLOW_ANONYMOUS: "true"
 
   clamav:
-    image: clamav/clamav:1.4.6
+    image: clamav/clamav:1.4.6@sha256:b25d9199257ae7ef45e0cc4c7eaa60ce7e5447796f0090d5ff311d1a30980cc3
     container_name: assetblock-clamav
     ports:
       - "127.0.0.1:${CLAMAV_PORT:-3310}:3310"

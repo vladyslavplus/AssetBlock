@@ -114,7 +114,7 @@ public abstract class StorageProviderFixture : IAsyncLifetime
 
 public sealed class MinioStorageFixture : StorageProviderFixture
 {
-    protected override string Image => "minio/minio:RELEASE.2025-09-07T16-13-09Z";
+    protected override string Image => "minio/minio:RELEASE.2025-09-07T16-13-09Z@sha256:14cea493d9a34af32f524e538b8346cf79f3321eff8e708c1e2960462bd8936e";
     protected override int ContainerPort => 9000;
     protected override string AccessKey => "assetblock";
     protected override string SecretKey => "dev_minio_secret";
@@ -155,7 +155,7 @@ public sealed class MinioStorageFixture : StorageProviderFixture
 
 public sealed class SeaweedFsStorageFixture : StorageProviderFixture
 {
-    protected override string Image => "chrislusf/seaweedfs:4.42";
+    protected override string Image => "chrislusf/seaweedfs:4.42@sha256:f7cbc8bdbbf60a1aaba7d61784a3bdff3ec1e0657f6ad0b26d5b6ab2cd9d0dc6";
     protected override int ContainerPort => 8333;
     protected override string AccessKey => "assetblock";
     protected override string SecretKey => "dev_seaweedfs_secret";
