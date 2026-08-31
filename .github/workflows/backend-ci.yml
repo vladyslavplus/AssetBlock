@@ -7,7 +7,6 @@ on:
 
 permissions:
   contents: read
-  pull-requests: write
 
 concurrency:
   group: backend-ci-${{ github.ref }}
@@ -19,13 +18,13 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - uses: actions/setup-dotnet@v6
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
         with:
           dotnet-version: "10.0.x"
 
-      - uses: actions/cache@v6
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ~/.nuget/packages
           key: nuget-${{ hashFiles('asblock-backend/**/*.csproj', 'asblock-backend/Directory.Build.props', 'asblock-backend/Directory.Packages.props', 'asblock-backend/NuGet.config', 'asblock-backend/**/packages.lock.json', 'asblock-backend/global.json', 'asblock-backend/.config/dotnet-tools.json') }}
@@ -96,7 +95,7 @@ jobs:
 
       - name: Upload test results (TRX)
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: backend-trx-results
           path: asblock-backend/artifacts/test-results/**/*.trx
@@ -104,7 +103,7 @@ jobs:
 
       - name: Upload coverage
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: backend-coverage
           path: |
@@ -115,16 +114,39 @@ jobs:
       # Summary/comment only after every test project succeeded and merge produced a single report.
       - name: Code Coverage Summary Report
         if: success()
-        uses: irongut/CodeCoverageSummary@v1.3.0
+        uses: irongut/CodeCoverageSummary@51cc3a756ddcd398d447c044c02cb6aa83fdae95 # v1.3.0
         with:
           filename: "asblock-backend/artifacts/coverage-merged/Cobertura.xml"
           badge: true
           format: markdown
           output: both
 
-      - name: Add PR Coverage Comment
+      - name: Upload PR coverage comment artifact
         if: success() && github.event_name == 'pull_request'
-        uses: marocchino/sticky-pull-request-comment@v3
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: backend-coverage-comment
+          path: code-coverage-results.md
+          if-no-files-found: error
+          retention-days: 1
+
+  coverage-comment:
+    name: PR Coverage Comment
+    needs: test
+    if: success() && github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+
+    steps:
+      - name: Download PR coverage comment artifact
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: backend-coverage-comment
+
+      - name: Add PR Coverage Comment
+        uses: marocchino/sticky-pull-request-comment@5770ad5eb8f42dd2c4f34da00c94c5381e49af88 # v3.0.5
         with:
           recreate: true
           path: code-coverage-results.md
