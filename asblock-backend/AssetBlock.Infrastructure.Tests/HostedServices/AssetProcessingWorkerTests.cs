@@ -126,10 +126,8 @@ public sealed class AssetProcessingWorkerTests
         AssetProcessingOptions options = CreateDefaultOptions(enabled: false);
         AssetProcessingWorker worker = CreateWorker(options);
 
-        using var cts = new CancellationTokenSource(TimeSpan.FromMilliseconds(100));
-
-        await worker.StartAsync(cts.Token);
-        await Task.Delay(50, cts.Token);
+        await worker.StartAsync(CancellationToken.None);
+        await Task.Delay(50);
         await worker.StopAsync(CancellationToken.None);
 
         await _store.DidNotReceive().ClaimPendingBatch(
@@ -181,13 +179,23 @@ public sealed class AssetProcessingWorkerTests
                 return Task.FromResult<IReadOnlyList<ClaimedAssetProcessingJob>>([]);
             });
 
+        var transitionTcs = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
         _lifecycleStore.TransitionProcessingFailed(jobId, leaseToken, claimedJob.AssetId, claimedJob.AssetVersionId, AssetProcessingJobType.ARCHIVE_INSPECTION, "INVALID_JOB_RESULT", Arg.Any<string>(), Arg.Any<CancellationToken>())
-            .Returns(Task.FromResult(true));
+            .Returns(_ =>
+            {
+                transitionTcs.TrySetResult(true);
+                return Task.FromResult(true);
+            });
 
-        using var cts = new CancellationTokenSource(TimeSpan.FromMilliseconds(200));
-        await worker.StartAsync(cts.Token);
-        await Task.Delay(100, cts.Token);
-        await worker.StopAsync(CancellationToken.None);
+        await worker.StartAsync(CancellationToken.None);
+        try
+        {
+            await transitionTcs.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        }
+        finally
+        {
+            await worker.StopAsync(CancellationToken.None);
+        }
 
         await _lifecycleStore.Received(1).TransitionProcessingFailed(
             jobId,
@@ -249,13 +257,24 @@ public sealed class AssetProcessingWorkerTests
                 return Task.FromResult<IReadOnlyList<ClaimedAssetProcessingJob>>([]);
             });
 
+        var dbErrorTcs = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
         _store.MarkSucceeded(jobId, leaseToken, Arg.Any<AssetProcessingResult>(), Arg.Any<CancellationToken>())
-            .Returns<bool>(_ => throw new InvalidOperationException("PostgreSQL connection severed"));
+            .Returns<bool>(_ =>
+            {
+                dbErrorTcs.TrySetResult(true);
+                throw new InvalidOperationException("PostgreSQL connection severed");
+            });
 
-        using var cts = new CancellationTokenSource(TimeSpan.FromMilliseconds(200));
-        await worker.StartAsync(cts.Token);
-        await Task.Delay(100, cts.Token);
-        await worker.StopAsync(CancellationToken.None);
+        await worker.StartAsync(CancellationToken.None);
+        try
+        {
+            await dbErrorTcs.Task.WaitAsync(TimeSpan.FromSeconds(5));
+            await Task.Delay(50);
+        }
+        finally
+        {
+            await worker.StopAsync(CancellationToken.None);
+        }
 
         worker.ActiveJobsCount.Should().Be(0);
 
@@ -340,13 +359,26 @@ public sealed class AssetProcessingWorkerTests
             .Returns(Task.FromResult<AssetProcessingJobRealtimeState?>(realtimeState));
 
         var publishedMessages = new List<AssetProcessingUpdateMessage>();
-        _publisher.PublishJobUpdated(ownerUserId, Arg.Do<AssetProcessingUpdateMessage>(publishedMessages.Add), Arg.Any<CancellationToken>())
+        var publishedTcs = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        _publisher.PublishJobUpdated(ownerUserId, Arg.Do<AssetProcessingUpdateMessage>(msg =>
+        {
+            publishedMessages.Add(msg);
+            if (publishedMessages.Count >= 2)
+            {
+                publishedTcs.TrySetResult(true);
+            }
+        }), Arg.Any<CancellationToken>())
             .Returns(Task.CompletedTask);
 
-        using var cts = new CancellationTokenSource(TimeSpan.FromMilliseconds(200));
-        await worker.StartAsync(cts.Token);
-        await Task.Delay(100, cts.Token);
-        await worker.StopAsync(CancellationToken.None);
+        await worker.StartAsync(CancellationToken.None);
+        try
+        {
+            await publishedTcs.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        }
+        finally
+        {
+            await worker.StopAsync(CancellationToken.None);
+        }
 
         publishedMessages.Should().HaveCount(2);
         publishedMessages[0].Status.Should().Be(AssetProcessingJobStatus.RUNNING);
@@ -487,6 +519,7 @@ public sealed class AssetProcessingWorkerTests
                 return Task.FromResult<IReadOnlyList<ClaimedAssetProcessingJob>>([]);
             });
 
+        var retryableTcs = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
         _store.MarkFailedRetryable(
                 jobId,
                 leaseToken,
@@ -494,12 +527,21 @@ public sealed class AssetProcessingWorkerTests
                 Arg.Any<string>(),
                 Arg.Any<TimeSpan>(),
                 Arg.Any<CancellationToken>())
-            .Returns(Task.FromResult(true));
+            .Returns(_ =>
+            {
+                retryableTcs.TrySetResult(true);
+                return Task.FromResult(true);
+            });
 
-        using var cts = new CancellationTokenSource(TimeSpan.FromMilliseconds(250));
-        await worker.StartAsync(cts.Token);
-        await Task.Delay(120, cts.Token);
-        await worker.StopAsync(CancellationToken.None);
+        await worker.StartAsync(CancellationToken.None);
+        try
+        {
+            await retryableTcs.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        }
+        finally
+        {
+            await worker.StopAsync(CancellationToken.None);
+        }
 
         await _store.Received(1).MarkFailedRetryable(
             jobId,
@@ -563,6 +605,7 @@ public sealed class AssetProcessingWorkerTests
                 return Task.FromResult<IReadOnlyList<ClaimedAssetProcessingJob>>([]);
             });
 
+        var retryableTcs = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
         _store.MarkFailedRetryable(
                 jobId,
                 leaseToken,
@@ -570,12 +613,21 @@ public sealed class AssetProcessingWorkerTests
                 Arg.Any<string>(),
                 Arg.Any<TimeSpan>(),
                 Arg.Any<CancellationToken>())
-            .Returns(Task.FromResult(true));
+            .Returns(_ =>
+            {
+                retryableTcs.TrySetResult(true);
+                return Task.FromResult(true);
+            });
 
-        using var cts = new CancellationTokenSource(TimeSpan.FromMilliseconds(250));
-        await worker.StartAsync(cts.Token);
-        await Task.Delay(120, cts.Token);
-        await worker.StopAsync(CancellationToken.None);
+        await worker.StartAsync(CancellationToken.None);
+        try
+        {
+            await retryableTcs.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        }
+        finally
+        {
+            await worker.StopAsync(CancellationToken.None);
+        }
 
         await _store.Received(1).MarkFailedRetryable(
             jobId,
@@ -639,6 +691,7 @@ public sealed class AssetProcessingWorkerTests
                 return Task.FromResult<IReadOnlyList<ClaimedAssetProcessingJob>>([]);
             });
 
+        var failedTcs = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
         _lifecycleStore.TransitionProcessingFailed(
                 jobId,
                 leaseToken,
@@ -648,12 +701,21 @@ public sealed class AssetProcessingWorkerTests
                 ErrorCodes.SCANNER_UNAVAILABLE,
                 Arg.Any<string>(),
                 Arg.Any<CancellationToken>())
-            .Returns(Task.FromResult(true));
+            .Returns(_ =>
+            {
+                failedTcs.TrySetResult(true);
+                return Task.FromResult(true);
+            });
 
-        using var cts = new CancellationTokenSource(TimeSpan.FromMilliseconds(400));
-        await worker.StartAsync(cts.Token);
-        await Task.Delay(180, cts.Token);
-        await worker.StopAsync(CancellationToken.None);
+        await worker.StartAsync(CancellationToken.None);
+        try
+        {
+            await failedTcs.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        }
+        finally
+        {
+            await worker.StopAsync(CancellationToken.None);
+        }
 
         await _lifecycleStore.Received(1).TransitionProcessingFailed(
             jobId,
@@ -832,13 +894,23 @@ public sealed class AssetProcessingWorkerTests
                 return Task.FromResult<IReadOnlyList<ClaimedAssetProcessingJob>>([]);
             });
 
+        var terminalTcs = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
         _store.MarkFailedTerminal(jobId, leaseToken, ErrorCodes.MISSING_HANDLER, Arg.Any<string>(), Arg.Any<CancellationToken>())
-            .Returns(Task.FromResult(true));
+            .Returns(_ =>
+            {
+                terminalTcs.TrySetResult(true);
+                return Task.FromResult(true);
+            });
 
-        using var cts = new CancellationTokenSource(TimeSpan.FromMilliseconds(250));
-        await worker.StartAsync(cts.Token);
-        await Task.Delay(120, cts.Token);
-        await worker.StopAsync(CancellationToken.None);
+        await worker.StartAsync(CancellationToken.None);
+        try
+        {
+            await terminalTcs.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        }
+        finally
+        {
+            await worker.StopAsync(CancellationToken.None);
+        }
 
         await _store.Received(1).MarkFailedTerminal(
             jobId,
@@ -898,13 +970,23 @@ public sealed class AssetProcessingWorkerTests
                 return Task.FromResult<IReadOnlyList<ClaimedAssetProcessingJob>>([]);
             });
 
+        var terminalTcs = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
         _store.MarkFailedTerminal(jobId, leaseToken, ErrorCodes.PROCESSING_EXCEPTION, Arg.Any<string>(), Arg.Any<CancellationToken>())
-            .Returns(Task.FromResult(true));
+            .Returns(_ =>
+            {
+                terminalTcs.TrySetResult(true);
+                return Task.FromResult(true);
+            });
 
-        using var cts = new CancellationTokenSource(TimeSpan.FromMilliseconds(250));
-        await worker.StartAsync(cts.Token);
-        await Task.Delay(120, cts.Token);
-        await worker.StopAsync(CancellationToken.None);
+        await worker.StartAsync(CancellationToken.None);
+        try
+        {
+            await terminalTcs.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        }
+        finally
+        {
+            await worker.StopAsync(CancellationToken.None);
+        }
 
         await _store.Received(1).MarkFailedTerminal(
             jobId,
@@ -958,7 +1040,7 @@ public sealed class AssetProcessingWorkerTests
             DateTimeOffset.UtcNow,
             DateTimeOffset.UtcNow);
 
-        var adapterCancelled = false;
+        var adapterCancelledTcs = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
         IAssetProcessingJobHandlerAdapter adapter = Substitute.For<IAssetProcessingJobHandlerAdapter>();
         adapter.Execute(Arg.Any<IServiceProvider>(), Arg.Any<ClaimedAssetProcessingJob>(), Arg.Any<CancellationToken>())
             .Returns<Task<AssetProcessingJobOutcome>>(async info =>
@@ -966,12 +1048,12 @@ public sealed class AssetProcessingWorkerTests
                 CancellationToken ct = info.Arg<CancellationToken>();
                 try
                 {
-                    await Task.Delay(TimeSpan.FromSeconds(5), ct);
+                    await Task.Delay(TimeSpan.FromSeconds(30), ct);
                     return AssetProcessingJobOutcome.Succeeded(new ArchiveInspectionResult(1, 1));
                 }
                 catch (OperationCanceledException)
                 {
-                    adapterCancelled = true;
+                    adapterCancelledTcs.TrySetResult(true);
                     throw;
                 }
             });
@@ -992,16 +1074,20 @@ public sealed class AssetProcessingWorkerTests
         _store.RenewLease(jobId, leaseToken, Arg.Any<TimeSpan>(), Arg.Any<CancellationToken>())
             .Returns(Task.FromResult(false));
 
-        using var cts = new CancellationTokenSource(TimeSpan.FromMilliseconds(600));
-        await worker.StartAsync(cts.Token);
-        await Task.Delay(300, cts.Token);
-        await worker.StopAsync(CancellationToken.None);
-
-        adapterCancelled.Should().BeTrue();
-        await _store.DidNotReceive().MarkSucceeded(Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<AssetProcessingResult?>(), Arg.Any<CancellationToken>());
-        await _store.DidNotReceive().MarkFailedTerminal(Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>());
-        await _store.DidNotReceive().MarkFailedRetryable(Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<TimeSpan>(), Arg.Any<CancellationToken>());
-        await _lifecycleStore.DidNotReceive().TransitionProcessingFailed(Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<AssetProcessingJobType>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>());
+        await worker.StartAsync(CancellationToken.None);
+        try
+        {
+            var cancelled = await adapterCancelledTcs.Task.WaitAsync(TimeSpan.FromSeconds(10));
+            cancelled.Should().BeTrue();
+            await _store.DidNotReceive().MarkSucceeded(Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<AssetProcessingResult?>(), Arg.Any<CancellationToken>());
+            await _store.DidNotReceive().MarkFailedTerminal(Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>());
+            await _store.DidNotReceive().MarkFailedRetryable(Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<TimeSpan>(), Arg.Any<CancellationToken>());
+            await _lifecycleStore.DidNotReceive().TransitionProcessingFailed(Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<AssetProcessingJobType>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>());
+        }
+        finally
+        {
+            await worker.StopAsync(CancellationToken.None);
+        }
     }
 
     [Fact]
@@ -1039,7 +1125,7 @@ public sealed class AssetProcessingWorkerTests
             DateTimeOffset.UtcNow,
             DateTimeOffset.UtcNow);
 
-        var adapterCancelled = false;
+        var adapterCancelledTcs = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
         IAssetProcessingJobHandlerAdapter adapter = Substitute.For<IAssetProcessingJobHandlerAdapter>();
         adapter.Execute(Arg.Any<IServiceProvider>(), Arg.Any<ClaimedAssetProcessingJob>(), Arg.Any<CancellationToken>())
             .Returns<Task<AssetProcessingJobOutcome>>(async info =>
@@ -1047,12 +1133,12 @@ public sealed class AssetProcessingWorkerTests
                 CancellationToken ct = info.Arg<CancellationToken>();
                 try
                 {
-                    await Task.Delay(TimeSpan.FromSeconds(5), ct);
+                    await Task.Delay(TimeSpan.FromSeconds(30), ct);
                     return AssetProcessingJobOutcome.Succeeded(new ArchiveInspectionResult(1, 1));
                 }
                 catch (OperationCanceledException)
                 {
-                    adapterCancelled = true;
+                    adapterCancelledTcs.TrySetResult(true);
                     throw;
                 }
             });
@@ -1073,16 +1159,20 @@ public sealed class AssetProcessingWorkerTests
         _store.RenewLease(jobId, leaseToken, Arg.Any<TimeSpan>(), Arg.Any<CancellationToken>())
             .Returns<Task<bool>>(_ => throw new InvalidOperationException("DB connection dropped"));
 
-        using var cts = new CancellationTokenSource(TimeSpan.FromMilliseconds(300));
-        await worker.StartAsync(cts.Token);
-        await Task.Delay(150, cts.Token);
-        await worker.StopAsync(CancellationToken.None);
-
-        adapterCancelled.Should().BeTrue();
-        await _store.DidNotReceive().MarkSucceeded(Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<AssetProcessingResult?>(), Arg.Any<CancellationToken>());
-        await _store.DidNotReceive().MarkFailedTerminal(Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>());
-        await _store.DidNotReceive().MarkFailedRetryable(Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<TimeSpan>(), Arg.Any<CancellationToken>());
-        await _lifecycleStore.DidNotReceive().TransitionProcessingFailed(Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<AssetProcessingJobType>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>());
+        await worker.StartAsync(CancellationToken.None);
+        try
+        {
+            var cancelled = await adapterCancelledTcs.Task.WaitAsync(TimeSpan.FromSeconds(10));
+            cancelled.Should().BeTrue();
+            await _store.DidNotReceive().MarkSucceeded(Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<AssetProcessingResult?>(), Arg.Any<CancellationToken>());
+            await _store.DidNotReceive().MarkFailedTerminal(Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>());
+            await _store.DidNotReceive().MarkFailedRetryable(Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<TimeSpan>(), Arg.Any<CancellationToken>());
+            await _lifecycleStore.DidNotReceive().TransitionProcessingFailed(Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<AssetProcessingJobType>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>());
+        }
+        finally
+        {
+            await worker.StopAsync(CancellationToken.None);
+        }
     }
 
     [Fact]
@@ -1120,12 +1210,14 @@ public sealed class AssetProcessingWorkerTests
             DateTimeOffset.UtcNow,
             DateTimeOffset.UtcNow);
 
+        var adapterExecutedTcs = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
         IAssetProcessingJobHandlerAdapter adapter = Substitute.For<IAssetProcessingJobHandlerAdapter>();
         adapter.Execute(Arg.Any<IServiceProvider>(), Arg.Any<ClaimedAssetProcessingJob>(), Arg.Any<CancellationToken>())
             .Returns<Task<AssetProcessingJobOutcome>>(async _ =>
             {
                 // Ignores cancellation and returns Success after delay
                 await Task.Delay(80);
+                adapterExecutedTcs.TrySetResult(true);
                 return AssetProcessingJobOutcome.Succeeded(new ArchiveInspectionResult(1, 1));
             });
         _registry.GetHandler(AssetProcessingJobType.ARCHIVE_INSPECTION).Returns(adapter);
@@ -1145,15 +1237,20 @@ public sealed class AssetProcessingWorkerTests
         _store.RenewLease(jobId, leaseToken, Arg.Any<TimeSpan>(), Arg.Any<CancellationToken>())
             .Returns(Task.FromResult(false));
 
-        using var cts = new CancellationTokenSource(TimeSpan.FromMilliseconds(300));
-        await worker.StartAsync(cts.Token);
-        await Task.Delay(150, cts.Token);
-        await worker.StopAsync(CancellationToken.None);
-
-        await _store.DidNotReceive().MarkSucceeded(Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<AssetProcessingResult?>(), Arg.Any<CancellationToken>());
-        await _store.DidNotReceive().MarkFailedTerminal(Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>());
-        await _store.DidNotReceive().MarkFailedRetryable(Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<TimeSpan>(), Arg.Any<CancellationToken>());
-        await _lifecycleStore.DidNotReceive().TransitionProcessingFailed(Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<AssetProcessingJobType>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>());
+        await worker.StartAsync(CancellationToken.None);
+        try
+        {
+            await adapterExecutedTcs.Task.WaitAsync(TimeSpan.FromSeconds(10));
+            await Task.Delay(50);
+            await _store.DidNotReceive().MarkSucceeded(Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<AssetProcessingResult?>(), Arg.Any<CancellationToken>());
+            await _store.DidNotReceive().MarkFailedTerminal(Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>());
+            await _store.DidNotReceive().MarkFailedRetryable(Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<TimeSpan>(), Arg.Any<CancellationToken>());
+            await _lifecycleStore.DidNotReceive().TransitionProcessingFailed(Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<AssetProcessingJobType>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>());
+        }
+        finally
+        {
+            await worker.StopAsync(CancellationToken.None);
+        }
     }
 
     [Fact]
@@ -1191,6 +1288,7 @@ public sealed class AssetProcessingWorkerTests
             DateTimeOffset.UtcNow,
             DateTimeOffset.UtcNow);
 
+        var adapterFailedTcs = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
         IAssetProcessingJobHandlerAdapter adapter = Substitute.For<IAssetProcessingJobHandlerAdapter>();
         adapter.Execute(Arg.Any<IServiceProvider>(), Arg.Any<ClaimedAssetProcessingJob>(), Arg.Any<CancellationToken>())
             .Returns<Task<AssetProcessingJobOutcome>>(async info =>
@@ -1198,11 +1296,12 @@ public sealed class AssetProcessingWorkerTests
                 CancellationToken ct = info.Arg<CancellationToken>();
                 try
                 {
-                    await Task.Delay(TimeSpan.FromSeconds(5), ct);
+                    await Task.Delay(TimeSpan.FromSeconds(30), ct);
                     return AssetProcessingJobOutcome.Succeeded(new ArchiveInspectionResult(1, 1));
                 }
                 catch (OperationCanceledException)
                 {
+                    adapterFailedTcs.TrySetResult(true);
                     // Throws non-OCE upon cancellation
                     throw new InvalidOperationException("External service failed during cancellation");
                 }
@@ -1224,15 +1323,20 @@ public sealed class AssetProcessingWorkerTests
         _store.RenewLease(jobId, leaseToken, Arg.Any<TimeSpan>(), Arg.Any<CancellationToken>())
             .Returns(Task.FromResult(false));
 
-        using var cts = new CancellationTokenSource(TimeSpan.FromMilliseconds(300));
-        await worker.StartAsync(cts.Token);
-        await Task.Delay(150, cts.Token);
-        await worker.StopAsync(CancellationToken.None);
-
-        await _store.DidNotReceive().MarkSucceeded(Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<AssetProcessingResult?>(), Arg.Any<CancellationToken>());
-        await _store.DidNotReceive().MarkFailedTerminal(Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>());
-        await _store.DidNotReceive().MarkFailedRetryable(Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<TimeSpan>(), Arg.Any<CancellationToken>());
-        await _lifecycleStore.DidNotReceive().TransitionProcessingFailed(Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<AssetProcessingJobType>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>());
+        await worker.StartAsync(CancellationToken.None);
+        try
+        {
+            await adapterFailedTcs.Task.WaitAsync(TimeSpan.FromSeconds(10));
+            await Task.Delay(50);
+            await _store.DidNotReceive().MarkSucceeded(Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<AssetProcessingResult?>(), Arg.Any<CancellationToken>());
+            await _store.DidNotReceive().MarkFailedTerminal(Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>());
+            await _store.DidNotReceive().MarkFailedRetryable(Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<TimeSpan>(), Arg.Any<CancellationToken>());
+            await _lifecycleStore.DidNotReceive().TransitionProcessingFailed(Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<AssetProcessingJobType>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>());
+        }
+        finally
+        {
+            await worker.StopAsync(CancellationToken.None);
+        }
     }
 
     [Fact]
