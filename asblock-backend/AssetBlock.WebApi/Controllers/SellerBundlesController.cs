@@ -1,4 +1,3 @@
-using System.Security.Claims;
 using AssetBlock.Application.UseCases.Bundles.ArchiveBundle;
 using AssetBlock.Application.UseCases.Bundles.CreateBundle;
 using AssetBlock.Application.UseCases.Bundles.GetMyBundle;
@@ -8,6 +7,7 @@ using AssetBlock.Application.UseCases.Bundles.ReviseBundle;
 using AssetBlock.Domain.Core.Constants;
 using AssetBlock.Domain.Core.Dto.Bundles;
 using AssetBlock.WebApi.Constants;
+using AssetBlock.WebApi.Extensions;
 using AssetBlock.WebApi.ProblemDetails;
 using AssetBlock.Application.Messaging;
 using Microsoft.AspNetCore.Authorization;
@@ -34,14 +34,13 @@ public sealed class SellerBundlesController(ISender sender) : ControllerBase
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
     public async Task<IActionResult> List([FromQuery] ListMyBundlesRequest? request, CancellationToken cancellationToken)
     {
-        var userId = GetUserId();
-        if (userId is null)
+        if (!User.TryGetUserId(out var userId))
         {
             return UnauthorizedProblem();
         }
 
         request ??= new ListMyBundlesRequest();
-        var result = await sender.Send(new GetMyBundlesQuery(userId.Value, request), cancellationToken);
+        var result = await sender.Send(new GetMyBundlesQuery(userId, request), cancellationToken);
         return ResultProblemDetailsMapper.Map(HttpContext, result);
     }
 
@@ -55,13 +54,12 @@ public sealed class SellerBundlesController(ISender sender) : ControllerBase
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> GetById(Guid id, CancellationToken cancellationToken)
     {
-        var userId = GetUserId();
-        if (userId is null)
+        if (!User.TryGetUserId(out var userId))
         {
             return UnauthorizedProblem();
         }
 
-        var result = await sender.Send(new GetMyBundleQuery(id, userId.Value), cancellationToken);
+        var result = await sender.Send(new GetMyBundleQuery(id, userId), cancellationToken);
         return ResultProblemDetailsMapper.Map(HttpContext, result);
     }
 
@@ -76,14 +74,13 @@ public sealed class SellerBundlesController(ISender sender) : ControllerBase
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
     public async Task<IActionResult> Create([FromBody] CreateBundleRequest request, CancellationToken cancellationToken)
     {
-        var userId = GetUserId();
-        if (userId is null)
+        if (!User.TryGetUserId(out var userId))
         {
             return UnauthorizedProblem();
         }
 
         var command = new CreateBundleCommand(
-            userId.Value,
+            userId,
             request.Title,
             request.Description,
             request.Price,
@@ -107,15 +104,14 @@ public sealed class SellerBundlesController(ISender sender) : ControllerBase
     [ProducesResponseType(StatusCodes.Status409Conflict)]
     public async Task<IActionResult> Revise(Guid id, [FromBody] ReviseBundleRequest request, CancellationToken cancellationToken)
     {
-        var userId = GetUserId();
-        if (userId is null)
+        if (!User.TryGetUserId(out var userId))
         {
             return UnauthorizedProblem();
         }
 
         var command = new ReviseBundleCommand(
             id,
-            userId.Value,
+            userId,
             request.Title,
             request.Description,
             request.Price,
@@ -136,13 +132,12 @@ public sealed class SellerBundlesController(ISender sender) : ControllerBase
     [ProducesResponseType(StatusCodes.Status409Conflict)]
     public async Task<IActionResult> Archive(Guid id, CancellationToken cancellationToken)
     {
-        var userId = GetUserId();
-        if (userId is null)
+        if (!User.TryGetUserId(out var userId))
         {
             return UnauthorizedProblem();
         }
 
-        var result = await sender.Send(new ArchiveBundleCommand(id, userId.Value), cancellationToken);
+        var result = await sender.Send(new ArchiveBundleCommand(id, userId), cancellationToken);
         return ResultProblemDetailsMapper.Map(HttpContext, result);
     }
 
@@ -158,20 +153,13 @@ public sealed class SellerBundlesController(ISender sender) : ControllerBase
     [ProducesResponseType(StatusCodes.Status409Conflict)]
     public async Task<IActionResult> Restore(Guid id, CancellationToken cancellationToken)
     {
-        var userId = GetUserId();
-        if (userId is null)
+        if (!User.TryGetUserId(out var userId))
         {
             return UnauthorizedProblem();
         }
 
-        var result = await sender.Send(new RestoreBundleCommand(id, userId.Value), cancellationToken);
+        var result = await sender.Send(new RestoreBundleCommand(id, userId), cancellationToken);
         return ResultProblemDetailsMapper.Map(HttpContext, result);
-    }
-
-    private Guid? GetUserId()
-    {
-        var value = User.FindFirstValue(ClaimTypes.NameIdentifier);
-        return Guid.TryParse(value, out var id) ? id : null;
     }
 
     private IActionResult UnauthorizedProblem() =>

@@ -1,4 +1,3 @@
-using System.Security.Claims;
 using Ardalis.Result;
 using AssetBlock.Domain.Core.Constants;
 using AssetBlock.WebApi.ProblemDetails;
@@ -13,13 +12,6 @@ namespace AssetBlock.WebApi.Controllers;
 public abstract class ApiControllerBase(ISender sender) : ControllerBase
 {
     protected ISender Sender => sender;
-
-    protected Guid? GetUserId()
-    {
-        var value = User.FindFirstValue(ClaimTypes.NameIdentifier)
-            ?? User.FindFirstValue(JwtClaimTypes.SUB);
-        return Guid.TryParse(value, out var id) ? id : null;
-    }
 
     protected IActionResult MapResultToActionResult<T>(Result<T> result) =>
         ResultProblemDetailsMapper.Map(HttpContext, result);

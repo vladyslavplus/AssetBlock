@@ -2,6 +2,7 @@ using AssetBlock.Application.UseCases.Analytics.IngestAnalyticsEvent;
 using AssetBlock.Domain.Core.Constants;
 using AssetBlock.Domain.Core.Dto.Analytics;
 using AssetBlock.WebApi.Constants;
+using AssetBlock.WebApi.Extensions;
 using AssetBlock.Application.Messaging;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -33,7 +34,7 @@ public sealed class AnalyticsController(ISender sender) : ApiControllerBase(send
         [FromBody] IngestAnalyticsEventRequest request,
         CancellationToken cancellationToken)
     {
-        var command = new IngestAnalyticsEventCommand(request, GetUserId());
+        var command = new IngestAnalyticsEventCommand(request, User.GetUserIdOrNull());
         var result = await Sender.Send(command, cancellationToken);
         return result.IsSuccess ? Accepted() : MapResultToActionResult(result);
     }

@@ -1,4 +1,3 @@
-using AssetBlock.Application.UseCases.SellerAnalytics.ExportSellerAnalyticsSales;
 using AssetBlock.Application.UseCases.SellerAnalytics.GetSellerAnalyticsAssetDetail;
 using AssetBlock.Application.UseCases.SellerAnalytics.GetSellerAnalyticsBundleDetail;
 using AssetBlock.Application.UseCases.SellerAnalytics.GetSellerAnalyticsCollections;
@@ -9,6 +8,7 @@ using AssetBlock.Domain.Core.Constants;
 using AssetBlock.Domain.Core.Dto.Analytics;
 using AssetBlock.Domain.Core.Enums;
 using AssetBlock.WebApi.Constants;
+using AssetBlock.WebApi.Extensions;
 using AssetBlock.WebApi.Results;
 using AssetBlock.Application.Messaging;
 using Microsoft.AspNetCore.Authorization;
@@ -38,8 +38,7 @@ public sealed class SellerAnalyticsController(ISender sender) : ApiControllerBas
         [FromQuery] DateOnly? to,
         CancellationToken cancellationToken)
     {
-        var userId = GetUserId();
-        if (userId is null)
+        if (!User.TryGetUserId(out var userId))
         {
             return UnauthorizedProblem();
         }
@@ -47,7 +46,7 @@ public sealed class SellerAnalyticsController(ISender sender) : ApiControllerBas
         var (resolvedFrom, resolvedTo) = ResolveDateRange(from, to);
 
         var result = await Sender.Send(
-            new GetSellerAnalyticsOverviewQuery(userId.Value, resolvedFrom, resolvedTo),
+            new GetSellerAnalyticsOverviewQuery(userId, resolvedFrom, resolvedTo),
             cancellationToken);
 
         return MapResultToActionResult(result);
@@ -71,8 +70,7 @@ public sealed class SellerAnalyticsController(ISender sender) : ApiControllerBas
         [FromQuery] int pageSize = AnalyticsConstants.DEFAULT_PRODUCTS_PAGE_SIZE,
         CancellationToken cancellationToken = default)
     {
-        var userId = GetUserId();
-        if (userId is null)
+        if (!User.TryGetUserId(out var userId))
         {
             return UnauthorizedProblem();
         }
@@ -81,7 +79,7 @@ public sealed class SellerAnalyticsController(ISender sender) : ApiControllerBas
 
         var request = new AnalyticsProductsRequest(resolvedFrom, resolvedTo, productType, sort, direction, page, pageSize);
         var result = await Sender.Send(
-            new GetSellerAnalyticsProductsQuery(userId.Value, request),
+            new GetSellerAnalyticsProductsQuery(userId, request),
             cancellationToken);
 
         return MapResultToActionResult(result);
@@ -102,15 +100,14 @@ public sealed class SellerAnalyticsController(ISender sender) : ApiControllerBas
         [FromQuery] DateOnly? to,
         CancellationToken cancellationToken = default)
     {
-        var userId = GetUserId();
-        if (userId is null)
+        if (!User.TryGetUserId(out var userId))
         {
             return UnauthorizedProblem();
         }
 
         var (resolvedFrom, resolvedTo) = ResolveDateRange(from, to);
         var result = await Sender.Send(
-            new GetSellerAnalyticsAssetDetailQuery(userId.Value, id, resolvedFrom, resolvedTo),
+            new GetSellerAnalyticsAssetDetailQuery(userId, id, resolvedFrom, resolvedTo),
             cancellationToken);
 
         return MapResultToActionResult(result);
@@ -131,15 +128,14 @@ public sealed class SellerAnalyticsController(ISender sender) : ApiControllerBas
         [FromQuery] DateOnly? to,
         CancellationToken cancellationToken = default)
     {
-        var userId = GetUserId();
-        if (userId is null)
+        if (!User.TryGetUserId(out var userId))
         {
             return UnauthorizedProblem();
         }
 
         var (resolvedFrom, resolvedTo) = ResolveDateRange(from, to);
         var result = await Sender.Send(
-            new GetSellerAnalyticsBundleDetailQuery(userId.Value, id, resolvedFrom, resolvedTo),
+            new GetSellerAnalyticsBundleDetailQuery(userId, id, resolvedFrom, resolvedTo),
             cancellationToken);
 
         return MapResultToActionResult(result);
@@ -162,8 +158,7 @@ public sealed class SellerAnalyticsController(ISender sender) : ApiControllerBas
         [FromQuery] int pageSize = AnalyticsConstants.DEFAULT_COLLECTIONS_PAGE_SIZE,
         CancellationToken cancellationToken = default)
     {
-        var userId = GetUserId();
-        if (userId is null)
+        if (!User.TryGetUserId(out var userId))
         {
             return UnauthorizedProblem();
         }
@@ -171,7 +166,7 @@ public sealed class SellerAnalyticsController(ISender sender) : ApiControllerBas
         var (resolvedFrom, resolvedTo) = ResolveDateRange(from, to);
         var request = new AnalyticsCollectionsRequest(resolvedFrom, resolvedTo, sort, direction, page, pageSize);
         var result = await Sender.Send(
-            new GetSellerAnalyticsCollectionsQuery(userId.Value, request),
+            new GetSellerAnalyticsCollectionsQuery(userId, request),
             cancellationToken);
 
         return MapResultToActionResult(result);
@@ -193,8 +188,7 @@ public sealed class SellerAnalyticsController(ISender sender) : ApiControllerBas
         [FromQuery] int pageSize = AnalyticsConstants.DEFAULT_SALES_PAGE_SIZE,
         CancellationToken cancellationToken = default)
     {
-        var userId = GetUserId();
-        if (userId is null)
+        if (!User.TryGetUserId(out var userId))
         {
             return UnauthorizedProblem();
         }
@@ -203,7 +197,7 @@ public sealed class SellerAnalyticsController(ISender sender) : ApiControllerBas
 
         var request = new AnalyticsSalesRequest(resolvedFrom, resolvedTo, productType, cursor, pageSize);
         var result = await Sender.Send(
-            new GetSellerAnalyticsSalesQuery(userId.Value, request),
+            new GetSellerAnalyticsSalesQuery(userId, request),
             cancellationToken);
 
         return MapResultToActionResult(result);
@@ -226,14 +220,13 @@ public sealed class SellerAnalyticsController(ISender sender) : ApiControllerBas
         [FromQuery] AnalyticsProductTypeFilter productType = AnalyticsProductTypeFilter.ALL,
         CancellationToken cancellationToken = default)
     {
-        var userId = GetUserId();
-        if (userId is null)
+        if (!User.TryGetUserId(out var userId))
         {
             return UnauthorizedProblem();
         }
 
         return new SellerAnalyticsSalesCsvExportResult(
-            userId.Value,
+            userId,
             from,
             to,
             productType,

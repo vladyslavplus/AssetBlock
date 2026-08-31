@@ -1,7 +1,7 @@
-using System.Security.Claims;
 using AssetBlock.Domain.Abstractions.Services;
 using AssetBlock.Domain.Core.Constants;
 using AssetBlock.WebApi.Constants;
+using AssetBlock.WebApi.Extensions;
 using AssetBlock.WebApi.ProblemDetails;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -29,8 +29,7 @@ public sealed class SignalrTokenController(IJwtTokenService jwtTokenService) : C
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public IActionResult GetHubToken()
     {
-        var userId = GetUserId();
-        if (userId is null)
+        if (!User.TryGetUserId(out var userId))
         {
             var problem = AssetBlockProblemDetails.Create(
                 HttpContext,
@@ -39,14 +38,7 @@ public sealed class SignalrTokenController(IJwtTokenService jwtTokenService) : C
             return AssetBlockProblemDetails.ToActionResult(problem);
         }
 
-        var response = jwtTokenService.GenerateHubToken(userId.Value);
+        var response = jwtTokenService.GenerateHubToken(userId);
         return Ok(new { hubToken = response.HubToken, expiresAt = response.ExpiresAt });
-    }
-
-    private Guid? GetUserId()
-    {
-        var value = User.FindFirstValue(ClaimTypes.NameIdentifier)
-            ?? User.FindFirstValue(JwtClaimTypes.SUB);
-        return Guid.TryParse(value, out var id) ? id : null;
     }
 }

@@ -13,6 +13,7 @@ using AssetBlock.Domain.Core.Dto.Assets;
 using AssetBlock.Domain.Core.Primitives.Api;
 using AssetBlock.Domain.Core.Primitives.AppSettingsOptions;
 using AssetBlock.WebApi.Constants;
+using AssetBlock.WebApi.Extensions;
 using AssetBlock.WebApi.Models;
 using AssetBlock.Application.Messaging;
 using Microsoft.AspNetCore.Authorization;
@@ -71,8 +72,7 @@ public sealed class AssetsController(
     [ProducesResponseType(StatusCodes.Status429TooManyRequests)]
     public async Task<IActionResult> Download(Guid id, CancellationToken cancellationToken)
     {
-        var userId = GetUserId();
-        if (userId is null)
+        if (!User.TryGetUserId(out var userId))
         {
             return UnauthorizedProblem();
         }
@@ -83,7 +83,7 @@ public sealed class AssetsController(
             return StatusCode(StatusCodes.Status416RangeNotSatisfiable);
         }
 
-        var auth = await downloadService.AuthorizeDownload(id, userId.Value, null, cancellationToken);
+        var auth = await downloadService.AuthorizeDownload(id, userId, null, cancellationToken);
         if (auth.Status == AssetDownloadStatus.NOT_FOUND)
         {
             return ProblemFromCode(StatusCodes.Status404NotFound, ErrorCodes.ERR_ASSET_NOT_FOUND);
@@ -127,8 +127,7 @@ public sealed class AssetsController(
         [FromForm] UploadAssetFormWithFile form,
         CancellationToken cancellationToken)
     {
-        var userId = GetUserId();
-        if (userId is null)
+        if (!User.TryGetUserId(out var userId))
         {
             logger.LogWarning("Upload rejected: no authenticated user (missing or invalid Bearer token)");
             return UnauthorizedProblem();
@@ -154,7 +153,7 @@ public sealed class AssetsController(
             Tags = form.Tags
         };
         await using var stream = file.OpenReadStream();
-        var command = new UploadAssetCommand(userId.Value, request, stream, file.FileName, file.Length);
+        var command = new UploadAssetCommand(userId, request, stream, file.FileName, file.Length);
         var result = await Sender.Send(command, cancellationToken);
 
         if (result.IsSuccess)
@@ -180,13 +179,12 @@ public sealed class AssetsController(
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> Update(Guid id, [FromBody] UpdateAssetRequest request, CancellationToken cancellationToken)
     {
-        var userId = GetUserId();
-        if (userId is null)
+        if (!User.TryGetUserId(out var userId))
         {
             return UnauthorizedProblem();
         }
 
-        var command = new UpdateAssetCommand(id, userId.Value, request.Title, request.Description, request.Price, request.CategoryId);
+        var command = new UpdateAssetCommand(id, userId, request.Title, request.Description, request.Price, request.CategoryId);
         var result = await Sender.Send(command, cancellationToken);
 
         return result.IsSuccess ? Ok() : MapResultToActionResult(result);
@@ -203,13 +201,12 @@ public sealed class AssetsController(
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> Delete(Guid id, CancellationToken cancellationToken)
     {
-        var userId = GetUserId();
-        if (userId is null)
+        if (!User.TryGetUserId(out var userId))
         {
             return UnauthorizedProblem();
         }
 
-        var command = new DeleteAssetCommand(id, userId.Value);
+        var command = new DeleteAssetCommand(id, userId);
         var result = await Sender.Send(command, cancellationToken);
 
         return result.IsSuccess ? Ok() : MapResultToActionResult(result);
@@ -224,7 +221,7 @@ public sealed class AssetsController(
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> ListVersions(Guid id, CancellationToken cancellationToken)
     {
-        var result = await Sender.Send(new GetAssetVersionsQuery(id, GetUserId()), cancellationToken);
+        var result = await Sender.Send(new GetAssetVersionsQuery(id, User.GetUserIdOrNull()), cancellationToken);
         return MapResultToActionResult(result);
     }
 
@@ -246,8 +243,7 @@ public sealed class AssetsController(
         [FromForm] PublishAssetVersionFormWithFile form,
         CancellationToken cancellationToken)
     {
-        var userId = GetUserId();
-        if (userId is null)
+        if (!User.TryGetUserId(out var userId))
         {
             return UnauthorizedProblem();
         }
@@ -266,7 +262,7 @@ public sealed class AssetsController(
 
         var request = new PublishAssetVersionRequest(form.LicenseCode, form.ReleaseNotes);
         await using var stream = file.OpenReadStream();
-        var command = new PublishAssetVersionCommand(id, userId.Value, request, stream, file.FileName, file.Length);
+        var command = new PublishAssetVersionCommand(id, userId, request, stream, file.FileName, file.Length);
         var result = await Sender.Send(command, cancellationToken);
 
         if (result.IsSuccess)
@@ -291,8 +287,7 @@ public sealed class AssetsController(
     [ProducesResponseType(StatusCodes.Status429TooManyRequests)]
     public async Task<IActionResult> DownloadVersion(Guid id, Guid versionId, CancellationToken cancellationToken)
     {
-        var userId = GetUserId();
-        if (userId is null)
+        if (!User.TryGetUserId(out var userId))
         {
             return UnauthorizedProblem();
         }
@@ -303,7 +298,7 @@ public sealed class AssetsController(
             return StatusCode(StatusCodes.Status416RangeNotSatisfiable);
         }
 
-        var auth = await downloadService.AuthorizeDownload(id, userId.Value, versionId, cancellationToken);
+        var auth = await downloadService.AuthorizeDownload(id, userId, versionId, cancellationToken);
         if (auth.Status == AssetDownloadStatus.NOT_FOUND)
         {
             return ProblemFromCode(StatusCodes.Status404NotFound, ErrorCodes.ERR_ASSET_NOT_FOUND);
@@ -343,13 +338,12 @@ public sealed class AssetsController(
     [ProducesResponseType(StatusCodes.Status409Conflict)]
     public async Task<IActionResult> AddTag(Guid id, [FromBody] AddAssetTagRequest request, CancellationToken cancellationToken)
     {
-        var userId = GetUserId();
-        if (userId is null)
+        if (!User.TryGetUserId(out var userId))
         {
             return UnauthorizedProblem();
         }
 
-        var command = new AddAssetTagCommand(id, userId.Value, request.Name);
+        var command = new AddAssetTagCommand(id, userId, request.Name);
         var result = await Sender.Send(command, cancellationToken);
 
         return result.IsSuccess ? Ok(result.Value) : MapResultToActionResult(result);
@@ -367,13 +361,12 @@ public sealed class AssetsController(
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> RemoveTag(Guid id, Guid tagId, CancellationToken cancellationToken)
     {
-        var userId = GetUserId();
-        if (userId is null)
+        if (!User.TryGetUserId(out var userId))
         {
             return UnauthorizedProblem();
         }
 
-        var command = new RemoveAssetTagCommand(id, userId.Value, tagId);
+        var command = new RemoveAssetTagCommand(id, userId, tagId);
         var result = await Sender.Send(command, cancellationToken);
 
         return result.IsSuccess ? Ok() : MapResultToActionResult(result);

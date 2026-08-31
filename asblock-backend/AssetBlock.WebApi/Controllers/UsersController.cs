@@ -23,6 +23,7 @@ using AssetBlock.Domain.Core.Dto.Paging;
 using AssetBlock.Domain.Core.Dto.Assets;
 using AssetBlock.Domain.Core.Dto.Users;
 using AssetBlock.WebApi.Constants;
+using AssetBlock.WebApi.Extensions;
 using AssetBlock.Application.Messaging;
 using AssetBlock.Domain.Core.Dto;
 using Microsoft.AspNetCore.Authorization;
@@ -58,13 +59,12 @@ public sealed class UsersController(ISender sender) : ApiControllerBase(sender)
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> ListMyPurchases([FromQuery] ListMyPurchasesRequest request, CancellationToken cancellationToken)
     {
-        var userId = GetUserId();
-        if (userId is null)
+        if (!User.TryGetUserId(out var userId))
         {
             return UnauthorizedProblem();
         }
 
-        var result = await Sender.Send(new GetMyPurchasesQuery(userId.Value, request), cancellationToken);
+        var result = await Sender.Send(new GetMyPurchasesQuery(userId, request), cancellationToken);
         return MapResultToActionResult(result);
     }
 
@@ -78,13 +78,12 @@ public sealed class UsersController(ISender sender) : ApiControllerBase(sender)
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> ListMyAssets([FromQuery] GetAssetsRequest request, CancellationToken cancellationToken)
     {
-        var userId = GetUserId();
-        if (userId is null)
+        if (!User.TryGetUserId(out var userId))
         {
             return UnauthorizedProblem();
         }
 
-        var result = await Sender.Send(new GetMyListingsQuery(userId.Value, request), cancellationToken);
+        var result = await Sender.Send(new GetMyListingsQuery(userId, request), cancellationToken);
         return MapResultToActionResult(result);
     }
 
@@ -100,13 +99,12 @@ public sealed class UsersController(ISender sender) : ApiControllerBase(sender)
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> GetMyAsset([FromRoute] Guid assetId, CancellationToken cancellationToken)
     {
-        var userId = GetUserId();
-        if (userId is null)
+        if (!User.TryGetUserId(out var userId))
         {
             return UnauthorizedProblem();
         }
 
-        var result = await Sender.Send(new GetSellerAssetDetailQuery(assetId, userId.Value), cancellationToken);
+        var result = await Sender.Send(new GetSellerAssetDetailQuery(assetId, userId), cancellationToken);
         return MapResultToActionResult(result);
     }
 
@@ -120,13 +118,12 @@ public sealed class UsersController(ISender sender) : ApiControllerBase(sender)
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> ListMyNotifications([FromQuery] GetNotificationsRequest request, CancellationToken cancellationToken)
     {
-        var userId = GetUserId();
-        if (userId is null)
+        if (!User.TryGetUserId(out var userId))
         {
             return UnauthorizedProblem();
         }
 
-        var result = await Sender.Send(new GetNotificationsQuery(userId.Value, request), cancellationToken);
+        var result = await Sender.Send(new GetNotificationsQuery(userId, request), cancellationToken);
         return MapResultToActionResult(result);
     }
 
@@ -139,13 +136,12 @@ public sealed class UsersController(ISender sender) : ApiControllerBase(sender)
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> MarkAllMyNotificationsRead(CancellationToken cancellationToken)
     {
-        var userId = GetUserId();
-        if (userId is null)
+        if (!User.TryGetUserId(out var userId))
         {
             return UnauthorizedProblem();
         }
 
-        var result = await Sender.Send(new MarkAllNotificationsReadCommand(userId.Value), cancellationToken);
+        var result = await Sender.Send(new MarkAllNotificationsReadCommand(userId), cancellationToken);
         return MapResultToActionResult(result);
     }
 
@@ -159,13 +155,12 @@ public sealed class UsersController(ISender sender) : ApiControllerBase(sender)
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> MarkMyNotificationRead(Guid id, CancellationToken cancellationToken)
     {
-        var userId = GetUserId();
-        if (userId is null)
+        if (!User.TryGetUserId(out var userId))
         {
             return UnauthorizedProblem();
         }
 
-        var result = await Sender.Send(new MarkNotificationReadCommand(userId.Value, id), cancellationToken);
+        var result = await Sender.Send(new MarkNotificationReadCommand(userId, id), cancellationToken);
         return MapResultToActionResult(result);
     }
 
@@ -179,13 +174,12 @@ public sealed class UsersController(ISender sender) : ApiControllerBase(sender)
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> MarkMyNotificationUnread(Guid id, CancellationToken cancellationToken)
     {
-        var userId = GetUserId();
-        if (userId is null)
+        if (!User.TryGetUserId(out var userId))
         {
             return UnauthorizedProblem();
         }
 
-        var result = await Sender.Send(new MarkNotificationUnreadCommand(userId.Value, id), cancellationToken);
+        var result = await Sender.Send(new MarkNotificationUnreadCommand(userId, id), cancellationToken);
         return MapResultToActionResult(result);
     }
 
@@ -199,8 +193,7 @@ public sealed class UsersController(ISender sender) : ApiControllerBase(sender)
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> GetMe(CancellationToken cancellationToken)
     {
-        var userId = GetUserId();
-        if (userId is null)
+        if (!User.TryGetUserId(out var userId))
         {
             return UnauthorizedProblem();
         }
@@ -223,14 +216,13 @@ public sealed class UsersController(ISender sender) : ApiControllerBase(sender)
     [ProducesResponseType(StatusCodes.Status409Conflict)]
     public async Task<IActionResult> UpdateMe([FromBody] UpdateUserProfileRequest request, CancellationToken cancellationToken)
     {
-        var userId = GetUserId();
-        if (userId is null)
+        if (!User.TryGetUserId(out var userId))
         {
             return UnauthorizedProblem();
         }
 
         var command = new UpdateUserProfileCommand(
-            userId.Value,
+            userId,
             request.Username,
             request.AvatarUrl,
             request.Bio,
@@ -251,13 +243,12 @@ public sealed class UsersController(ISender sender) : ApiControllerBase(sender)
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> ChangePassword([FromBody] ChangePasswordRequest request, CancellationToken cancellationToken)
     {
-        var userId = GetUserId();
-        if (userId is null)
+        if (!User.TryGetUserId(out var userId))
         {
             return UnauthorizedProblem();
         }
 
-        var command = new ChangePasswordCommand(userId.Value, request.CurrentPassword, request.NewPassword);
+        var command = new ChangePasswordCommand(userId, request.CurrentPassword, request.NewPassword);
         var result = await Sender.Send(command, cancellationToken);
         return MapResultToActionResult(result);
     }
@@ -274,13 +265,12 @@ public sealed class UsersController(ISender sender) : ApiControllerBase(sender)
     [ProducesResponseType(StatusCodes.Status429TooManyRequests)]
     public async Task<IActionResult> ResendEmailVerification(CancellationToken cancellationToken)
     {
-        var userId = GetUserId();
-        if (userId is null)
+        if (!User.TryGetUserId(out var userId))
         {
             return UnauthorizedProblem();
         }
 
-        var result = await Sender.Send(new ResendEmailVerificationCommand(userId.Value), cancellationToken);
+        var result = await Sender.Send(new ResendEmailVerificationCommand(userId), cancellationToken);
         return result.IsSuccess ? Ok() : MapResultToActionResult(result);
     }
 
@@ -299,14 +289,13 @@ public sealed class UsersController(ISender sender) : ApiControllerBase(sender)
         [FromBody] RequestEmailChangeRequest request,
         CancellationToken cancellationToken)
     {
-        var userId = GetUserId();
-        if (userId is null)
+        if (!User.TryGetUserId(out var userId))
         {
             return UnauthorizedProblem();
         }
 
         var result = await Sender.Send(
-            new RequestEmailChangeCommand(userId.Value, request.NewEmail, request.CurrentPassword),
+            new RequestEmailChangeCommand(userId, request.NewEmail, request.CurrentPassword),
             cancellationToken);
         return result.IsSuccess ? Ok() : MapResultToActionResult(result);
     }
@@ -324,13 +313,12 @@ public sealed class UsersController(ISender sender) : ApiControllerBase(sender)
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> UpdateSocials([FromBody] UpdateUserSocialLinksRequest request, CancellationToken cancellationToken)
     {
-        var userId = GetUserId();
-        if (userId is null)
+        if (!User.TryGetUserId(out var userId))
         {
             return UnauthorizedProblem();
         }
 
-        var command = new UpdateUserSocialLinksCommand(userId.Value, request.Links);
+        var command = new UpdateUserSocialLinksCommand(userId, request.Links);
         var result = await Sender.Send(command, cancellationToken);
         return MapResultToActionResult(result);
     }
@@ -344,7 +332,7 @@ public sealed class UsersController(ISender sender) : ApiControllerBase(sender)
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> GetByUsername(string username, CancellationToken cancellationToken)
     {
-        var currentUserId = GetUserId();
+        var currentUserId = User.GetUserIdOrNull();
         var result = await Sender.Send(new GetUserProfileQuery(username, currentUserId), cancellationToken);
         return MapResultToActionResult(result);
     }
@@ -360,13 +348,12 @@ public sealed class UsersController(ISender sender) : ApiControllerBase(sender)
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> GetMyAssetProcessingJobs([FromRoute] Guid assetId, CancellationToken cancellationToken)
     {
-        var userId = GetUserId();
-        if (userId is null)
+        if (!User.TryGetUserId(out var userId))
         {
             return UnauthorizedProblem();
         }
 
-        var result = await Sender.Send(new GetMyAssetProcessingJobsQuery(assetId, userId.Value), cancellationToken);
+        var result = await Sender.Send(new GetMyAssetProcessingJobsQuery(assetId, userId), cancellationToken);
         return MapResultToActionResult(result);
     }
 
@@ -381,13 +368,12 @@ public sealed class UsersController(ISender sender) : ApiControllerBase(sender)
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> GetMyAssetVersionProcessingJobs([FromRoute] Guid assetVersionId, CancellationToken cancellationToken)
     {
-        var userId = GetUserId();
-        if (userId is null)
+        if (!User.TryGetUserId(out var userId))
         {
             return UnauthorizedProblem();
         }
 
-        var result = await Sender.Send(new GetMyAssetVersionProcessingJobsQuery(assetVersionId, userId.Value), cancellationToken);
+        var result = await Sender.Send(new GetMyAssetVersionProcessingJobsQuery(assetVersionId, userId), cancellationToken);
         return MapResultToActionResult(result);
     }
 
@@ -403,13 +389,12 @@ public sealed class UsersController(ISender sender) : ApiControllerBase(sender)
     [ProducesResponseType(StatusCodes.Status429TooManyRequests)]
     public async Task<IActionResult> EnqueueListingCopilot([FromRoute] Guid assetVersionId, CancellationToken cancellationToken)
     {
-        var userId = GetUserId();
-        if (userId is null)
+        if (!User.TryGetUserId(out var userId))
         {
             return UnauthorizedProblem();
         }
 
-        var result = await Sender.Send(new EnqueueListingCopilotCommand(assetVersionId, userId.Value), cancellationToken);
+        var result = await Sender.Send(new EnqueueListingCopilotCommand(assetVersionId, userId), cancellationToken);
         return result.IsSuccess ? Accepted(result.Value) : MapResultToActionResult(result);
     }
 
@@ -421,13 +406,12 @@ public sealed class UsersController(ISender sender) : ApiControllerBase(sender)
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> GetListingCopilotSuggestion([FromRoute] Guid assetVersionId, CancellationToken cancellationToken)
     {
-        var userId = GetUserId();
-        if (userId is null)
+        if (!User.TryGetUserId(out var userId))
         {
             return UnauthorizedProblem();
         }
 
-        var result = await Sender.Send(new GetListingCopilotSuggestionQuery(assetVersionId, userId.Value), cancellationToken);
+        var result = await Sender.Send(new GetListingCopilotSuggestionQuery(assetVersionId, userId), cancellationToken);
         return MapResultToActionResult(result);
     }
 }

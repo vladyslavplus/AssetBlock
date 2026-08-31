@@ -5,6 +5,7 @@ using AssetBlock.Application.UseCases.Payments.HandleStripeWebhook;
 using AssetBlock.Domain.Core.Constants;
 using AssetBlock.Domain.Core.Dto.Payments;
 using AssetBlock.WebApi.Constants;
+using AssetBlock.WebApi.Extensions;
 using AssetBlock.Domain.Core.Primitives.AppSettingsOptions;
 using AssetBlock.Infrastructure.Options;
 using AssetBlock.Application.Messaging;
@@ -42,15 +43,14 @@ public sealed class PaymentsController(ISender sender) : ApiControllerBase(sende
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
     public async Task<IActionResult> CreateCheckout([FromBody] CreateCheckoutRequest request, CancellationToken cancellationToken)
     {
-        var userId = GetUserId();
-        if (userId is null)
+        if (!User.TryGetUserId(out var userId))
         {
             return UnauthorizedProblem();
         }
 
         var command = new CreateCheckoutSessionCommand(
             request.AssetId,
-            userId.Value,
+            userId,
             request.Attribution,
             request.AnalyticsVisitorId,
             request.AnalyticsSessionId);
@@ -73,15 +73,14 @@ public sealed class PaymentsController(ISender sender) : ApiControllerBase(sende
         [FromBody] CreateBundleCheckoutRequest request,
         CancellationToken cancellationToken)
     {
-        var userId = GetUserId();
-        if (userId is null)
+        if (!User.TryGetUserId(out var userId))
         {
             return UnauthorizedProblem();
         }
 
         var command = new CreateBundleCheckoutSessionCommand(
             request.BundleId,
-            userId.Value,
+            userId,
             request.Attribution,
             request.AnalyticsVisitorId,
             request.AnalyticsSessionId);
@@ -99,13 +98,12 @@ public sealed class PaymentsController(ISender sender) : ApiControllerBase(sende
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> GetCheckoutStatus(Guid checkoutIntentId, CancellationToken cancellationToken)
     {
-        var userId = GetUserId();
-        if (userId is null)
+        if (!User.TryGetUserId(out var userId))
         {
             return UnauthorizedProblem();
         }
 
-        var result = await Sender.Send(new GetCheckoutStatusQuery(checkoutIntentId, userId.Value), cancellationToken);
+        var result = await Sender.Send(new GetCheckoutStatusQuery(checkoutIntentId, userId), cancellationToken);
         return MapResultToActionResult(result);
     }
 

@@ -5,6 +5,7 @@ using AssetBlock.Application.UseCases.Reviews.GetReviews;
 using AssetBlock.Domain.Core.Constants;
 using AssetBlock.Domain.Core.Dto.Reviews;
 using AssetBlock.WebApi.Constants;
+using AssetBlock.WebApi.Extensions;
 using AssetBlock.Application.Messaging;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -25,13 +26,12 @@ public class ReviewsController(ISender sender) : ApiControllerBase(sender)
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
     public async Task<IActionResult> CreateReview(Guid assetId, [FromBody] CreateReviewRequest request, CancellationToken cancellationToken)
     {
-        var userId = GetUserId();
-        if (userId is null)
+        if (!User.TryGetUserId(out var userId))
         {
             return UnauthorizedProblem();
         }
 
-        var command = new CreateReviewCommand(assetId, userId.Value, request.Rating, request.Comment);
+        var command = new CreateReviewCommand(assetId, userId, request.Rating, request.Comment);
 
         var result = await Sender.Send(command, cancellationToken);
         return result.IsSuccess ? Ok() : MapResultToActionResult(result);
