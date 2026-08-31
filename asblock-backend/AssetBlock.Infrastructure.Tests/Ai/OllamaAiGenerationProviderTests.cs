@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using System.Net;
 using System.Text.Json;
 using AssetBlock.Domain.Core.Constants;
@@ -212,34 +211,45 @@ public sealed class OllamaAiGenerationProviderTests
     public async Task Generate_WhenTagsNearlyExhaustBudgetAndChatHangs_ShouldStayWithinOneTimeout()
     {
         var timeout = TimeSpan.FromMilliseconds(400);
-        var tagsDelay = TimeSpan.FromMilliseconds(250);
-        var handler = new RecordingHttpMessageHandler
-        {
-            Responder = async (request, ct) =>
-            {
-                if (request.Method == HttpMethod.Get)
-                {
-                    await Task.Delay(tagsDelay, ct);
-                    return AiProviderTestFactory.Json(HttpStatusCode.OK, AiProviderTestFactory.OllamaTagsBody());
-                }
+        var tagsElapsedSimulated = TimeSpan.FromMilliseconds(250);
+        var recordedTimeouts = new List<TimeSpan>();
+        var handler = new RecordingHttpMessageHandler();
 
-                return new HttpResponseMessage(HttpStatusCode.OK)
+        var timedSender = new TimedHttpSender((_, request, reqTimeout, _,  _) =>
+        {
+            recordedTimeouts.Add(reqTimeout);
+            if (request.RequestUri?.ToString().Contains("api/tags") == true || request.Method == HttpMethod.Get)
+            {
+                // Simulate tag lookup time consumption
+                Thread.Sleep(tagsElapsedSimulated);
+                return Task.FromResult(new AiTimedHttpResult
                 {
-                    Content = new StreamContent(new HangingReadStream())
-                };
+                    Response = new HttpResponseMessage(HttpStatusCode.OK),
+                    Body = AiProviderTestFactory.OllamaTagsBody()
+                });
             }
-        };
-        var sut = CreateSut(handler, timeout: timeout);
-        var elapsed = Stopwatch.StartNew();
+
+            // Chat request receives the remaining timeout budget and times out
+            return Task.FromResult(new AiTimedHttpResult
+            {
+                TimedOut = true
+            });
+        });
+
+        var sut = CreateSut(handler, timeout: timeout, timedSender: timedSender);
 
         var result = await sut.Generate(AiProviderTestFactory.OllamaRequest(), CancellationToken.None);
 
-        elapsed.Stop();
+        result.Outcome.Should().Be(AiGenerationOutcomeKind.RETRYABLE_FAILURE);
         result.ErrorCode.Should().Be(ErrorCodes.ERR_AI_TIMEOUT);
         result.IsRetryable.Should().BeTrue();
-        elapsed.Elapsed.Should().BeGreaterThan(tagsDelay);
-        // Shared remaining budget ~400ms. A fresh chat Timeout would be ~650ms+.
-        elapsed.Elapsed.Should().BeLessThan(TimeSpan.FromMilliseconds(520));
+
+        recordedTimeouts.Should().HaveCount(2);
+        recordedTimeouts[0].Should().BeGreaterThan(TimeSpan.Zero);
+        recordedTimeouts[0].Should().BeLessThanOrEqualTo(timeout);
+        // The second call (chat) must receive the shared remaining budget (<= timeout - tagsElapsed), NOT a fresh timeout!
+        recordedTimeouts[1].Should().BeLessThan(timeout);
+        recordedTimeouts[1].Should().BeLessThanOrEqualTo(timeout - tagsElapsedSimulated);
     }
 
     private static OllamaAiGenerationProvider CreateSut(
@@ -247,7 +257,8 @@ public sealed class OllamaAiGenerationProviderTests
         string model = "fixture-ollama-test",
         string? digest = null,
         CollectingLogger<OllamaAiGenerationProvider>? logger = null,
-        TimeSpan? timeout = null)
+        TimeSpan? timeout = null,
+        TimedHttpSender? timedSender = null)
     {
         var options = Microsoft.Extensions.Options.Options.Create(new OllamaOptions
         {
@@ -265,6 +276,7 @@ public sealed class OllamaAiGenerationProviderTests
         return new OllamaAiGenerationProvider(
             factory,
             options,
-            logger ?? new CollectingLogger<OllamaAiGenerationProvider>());
+            logger ?? new CollectingLogger<OllamaAiGenerationProvider>(),
+            timedSender ?? AiTimedHttp.Send);
     }
 }

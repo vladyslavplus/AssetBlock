@@ -13,25 +13,47 @@ using System.Text.Json.Nodes;
 
 namespace AssetBlock.Infrastructure.Ai;
 
-internal sealed class OllamaAiGenerationProvider(
-    IHttpClientFactory httpClientFactory,
-    IOptions<OllamaOptions> optionsAccessor,
-    ILogger<OllamaAiGenerationProvider> logger) : IAiGenerationProvider
+internal sealed class OllamaAiGenerationProvider : IAiGenerationProvider
 {
     public const string HTTP_CLIENT_NAME = "Ollama";
 
+    private readonly IHttpClientFactory _httpClientFactory;
+    private readonly IOptions<OllamaOptions> _optionsAccessor;
+    private readonly ILogger<OllamaAiGenerationProvider> _logger;
+    private readonly TimedHttpSender _timedSender;
+
+    public OllamaAiGenerationProvider(
+        IHttpClientFactory httpClientFactory,
+        IOptions<OllamaOptions> optionsAccessor,
+        ILogger<OllamaAiGenerationProvider> logger)
+        : this(httpClientFactory, optionsAccessor, logger, AiTimedHttp.Send)
+    {
+    }
+
+    internal OllamaAiGenerationProvider(
+        IHttpClientFactory httpClientFactory,
+        IOptions<OllamaOptions> optionsAccessor,
+        ILogger<OllamaAiGenerationProvider> logger,
+        TimedHttpSender timedSender)
+    {
+        _httpClientFactory = httpClientFactory;
+        _optionsAccessor = optionsAccessor;
+        _logger = logger;
+        _timedSender = timedSender;
+    }
+
     public AiProviderKind Kind => AiProviderKind.OLLAMA;
-    public int MaxInputChars => optionsAccessor.Value.MaxInputChars;
-    public int MaxOutputTokens => optionsAccessor.Value.MaxOutputTokens;
+    public int MaxInputChars => _optionsAccessor.Value.MaxInputChars;
+    public int MaxOutputTokens => _optionsAccessor.Value.MaxOutputTokens;
     public IReadOnlyList<string> OrderedModelIds =>
-        string.IsNullOrWhiteSpace(optionsAccessor.Value.Model) ? [] : [optionsAccessor.Value.Model];
+        string.IsNullOrWhiteSpace(_optionsAccessor.Value.Model) ? [] : [_optionsAccessor.Value.Model];
 
     public async Task<AiGenerationProviderResult> Generate(
         AiGenerationRequest request,
         CancellationToken cancellationToken)
     {
         var started = Stopwatch.GetTimestamp();
-        var options = optionsAccessor.Value;
+        var options = _optionsAccessor.Value;
         var modelId = options.Model;
         var expectedDigest = options.Digest;
         if (!AiConfigurationRules.IsModelId(modelId) || !AiConfigurationRules.IsSha256Digest(expectedDigest))
@@ -49,7 +71,7 @@ internal sealed class OllamaAiGenerationProvider(
             return Terminal(ErrorCodes.ERR_AI_INVALID_REQUEST, started);
         }
 
-        var client = httpClientFactory.CreateClient(HTTP_CLIENT_NAME);
+        var client = _httpClientFactory.CreateClient(HTTP_CLIENT_NAME);
         var budget = Stopwatch.StartNew();
         var digestCheck = await VerifyInstalledModel(
             client,
@@ -67,7 +89,7 @@ internal sealed class OllamaAiGenerationProvider(
         using var httpRequest = new HttpRequestMessage(HttpMethod.Post, "api/chat");
         httpRequest.Content = new StringContent(BuildPayload(request, modelId), Encoding.UTF8, "application/json");
 
-        using var timed = await AiTimedHttp.Send(
+        using var timed = await _timedSender(
             client,
             httpRequest,
             AiTimeoutBudget.Remaining(options.Timeout, budget.Elapsed),
@@ -75,18 +97,18 @@ internal sealed class OllamaAiGenerationProvider(
             cancellationToken);
         if (timed.TimedOut)
         {
-            logger.LogWarning("Ollama generation timed out");
+            _logger.LogWarning("Ollama generation timed out");
             return Retryable(ErrorCodes.ERR_AI_TIMEOUT, started);
         }
 
         if (timed.NetworkFailure)
         {
-            logger.LogWarning("Ollama generation failed due to a network error");
+            _logger.LogWarning("Ollama generation failed due to a network error");
             return Retryable(ErrorCodes.ERR_AI_PROVIDER_UNAVAILABLE, started);
         }
 
         var response = timed.Response!;
-        logger.LogInformation("Ollama generation completed with HTTP {StatusCode}", (int)response.StatusCode);
+        _logger.LogInformation("Ollama generation completed with HTTP {StatusCode}", (int)response.StatusCode);
 
         if ((int)response.StatusCode >= 500 || response.StatusCode == HttpStatusCode.RequestTimeout)
         {
@@ -116,7 +138,7 @@ internal sealed class OllamaAiGenerationProvider(
         Stopwatch budget)
     {
         using var tagsRequest = new HttpRequestMessage(HttpMethod.Get, "api/tags");
-        using var timed = await AiTimedHttp.Send(
+        using var timed = await _timedSender(
             client,
             tagsRequest,
             AiTimeoutBudget.Remaining(options.Timeout, budget.Elapsed),
@@ -124,13 +146,13 @@ internal sealed class OllamaAiGenerationProvider(
             cancellationToken);
         if (timed.TimedOut)
         {
-            logger.LogWarning("Ollama model tag lookup timed out");
+            _logger.LogWarning("Ollama model tag lookup timed out");
             return Retryable(ErrorCodes.ERR_AI_TIMEOUT, started);
         }
 
         if (timed.NetworkFailure)
         {
-            logger.LogWarning("Ollama model tag lookup failed due to a network error");
+            _logger.LogWarning("Ollama model tag lookup failed due to a network error");
             return Retryable(ErrorCodes.ERR_AI_PROVIDER_UNAVAILABLE, started);
         }
 

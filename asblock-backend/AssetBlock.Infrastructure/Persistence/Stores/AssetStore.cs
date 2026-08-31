@@ -82,9 +82,9 @@ internal sealed class AssetStore(ApplicationDbContext dbContext) : IAssetStore
     public Task<Asset?> GetById(Guid id, bool includeDeleted, CancellationToken cancellationToken = default)
     {
         IQueryable<Asset> query = dbContext.Assets.AsNoTracking();
-        if (includeDeleted)
+        if (!includeDeleted)
         {
-            query = query.IgnoreQueryFilters();
+            query = query.Where(a => a.DeletedAt == null);
         }
 
         return query
@@ -110,7 +110,6 @@ internal sealed class AssetStore(ApplicationDbContext dbContext) : IAssetStore
         }
 
         return await dbContext.Assets
-            .IgnoreQueryFilters()
             .AsNoTracking()
             .FirstOrDefaultAsync(a => a.Id == id, cancellationToken);
     }
@@ -118,7 +117,6 @@ internal sealed class AssetStore(ApplicationDbContext dbContext) : IAssetStore
     public Task<AssetCurrentVersionSnapshot?> GetCurrentVersionSnapshot(Guid assetId, CancellationToken cancellationToken = default)
     {
         return dbContext.AssetVersions
-            .IgnoreQueryFilters()
             .AsNoTracking()
             .Where(v => v.AssetId == assetId && v.IsCurrent && v.ProcessingStatus == AssetVersionProcessingStatus.READY)
             .Select(v => new AssetCurrentVersionSnapshot(
@@ -145,7 +143,6 @@ internal sealed class AssetStore(ApplicationDbContext dbContext) : IAssetStore
     public Task<AssetVersion?> GetVersion(Guid assetId, Guid versionId, CancellationToken cancellationToken = default)
     {
         return dbContext.AssetVersions
-            .IgnoreQueryFilters()
             .AsNoTracking()
             .FirstOrDefaultAsync(v => v.AssetId == assetId && v.Id == versionId, cancellationToken);
     }
@@ -153,7 +150,6 @@ internal sealed class AssetStore(ApplicationDbContext dbContext) : IAssetStore
     public async Task<AssetOwnershipDto?> GetOwnership(Guid assetId, CancellationToken cancellationToken = default)
     {
         return await dbContext.Assets
-            .IgnoreQueryFilters()
             .AsNoTracking()
             .Where(a => a.Id == assetId)
             .Select(a => new AssetOwnershipDto(a.Id, a.AuthorId, a.DeletedAt != null))
@@ -166,7 +162,6 @@ internal sealed class AssetStore(ApplicationDbContext dbContext) : IAssetStore
         CancellationToken cancellationToken = default)
     {
         var result = await dbContext.Assets
-            .IgnoreQueryFilters()
             .AsNoTracking()
             .Where(a => a.Id == assetId)
             .Select(a => new
@@ -912,7 +907,7 @@ internal sealed class AssetStore(ApplicationDbContext dbContext) : IAssetStore
 
     public async Task Delete(Guid id, CancellationToken cancellationToken = default)
     {
-        await dbContext.Assets.IgnoreQueryFilters().Where(a => a.Id == id).ExecuteDeleteAsync(cancellationToken);
+        await dbContext.Assets.Where(a => a.Id == id).ExecuteDeleteAsync(cancellationToken);
     }
 
     public async Task AddTag(Guid assetId, Guid tagId, CancellationToken cancellationToken = default)
@@ -990,7 +985,6 @@ internal sealed class AssetStore(ApplicationDbContext dbContext) : IAssetStore
         CancellationToken cancellationToken = default)
     {
         return dbContext.Assets
-            .IgnoreQueryFilters()
             .AsNoTracking()
             .Where(a => a.Id == assetId
                 && a.AuthorId != actorUserId

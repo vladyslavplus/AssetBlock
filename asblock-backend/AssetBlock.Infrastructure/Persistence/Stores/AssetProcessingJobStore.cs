@@ -570,7 +570,7 @@ internal sealed partial class AssetProcessingJobStore(ApplicationDbContext dbCon
     {
         var assetExists = await dbContext.Assets
             .AsNoTracking()
-            .AnyAsync(a => a.Id == assetId && a.AuthorId == ownerUserId, cancellationToken);
+            .AnyAsync(a => a.Id == assetId && a.AuthorId == ownerUserId && a.DeletedAt == null, cancellationToken);
 
         if (!assetExists)
         {
@@ -579,7 +579,7 @@ internal sealed partial class AssetProcessingJobStore(ApplicationDbContext dbCon
 
         return await dbContext.AssetProcessingJobs
             .AsNoTracking()
-            .Where(j => j.AssetId == assetId && j.Asset.AuthorId == ownerUserId)
+            .Where(j => j.AssetId == assetId && j.Asset.AuthorId == ownerUserId && j.Asset.DeletedAt == null)
             .OrderByDescending(j => j.CreatedAt)
             .ThenByDescending(j => j.Id)
             .Select(j => new AssetProcessingJobDto(
@@ -611,7 +611,7 @@ internal sealed partial class AssetProcessingJobStore(ApplicationDbContext dbCon
     {
         var versionExists = await dbContext.AssetVersions
             .AsNoTracking()
-            .AnyAsync(v => v.Id == assetVersionId && v.Asset.AuthorId == ownerUserId, cancellationToken);
+            .AnyAsync(v => v.Id == assetVersionId && v.Asset.AuthorId == ownerUserId && v.Asset.DeletedAt == null, cancellationToken);
 
         if (!versionExists)
         {
@@ -620,7 +620,7 @@ internal sealed partial class AssetProcessingJobStore(ApplicationDbContext dbCon
 
         return await dbContext.AssetProcessingJobs
             .AsNoTracking()
-            .Where(j => j.AssetVersionId == assetVersionId && j.Asset.AuthorId == ownerUserId)
+            .Where(j => j.AssetVersionId == assetVersionId && j.Asset.AuthorId == ownerUserId && j.Asset.DeletedAt == null)
             .OrderByDescending(j => j.CreatedAt)
             .ThenByDescending(j => j.Id)
             .Select(j => new AssetProcessingJobDto(

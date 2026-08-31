@@ -136,4 +136,50 @@ public sealed class AssetStoreTests
         var loaded = await sut.GetById(asset.Id);
         loaded!.AssetTags.Should().HaveCount(1);
     }
+
+    [Fact]
+    public async Task GetById_WhenAssetSoftDeleted_HidesByDefaultAndRespectsIncludeDeleted()
+    {
+        await using var holder = new SqliteDbContextHolder();
+        var db = holder.Context;
+        var catId = Guid.NewGuid();
+        db.Categories.Add(new Category { Id = catId, Name = "C", Slug = "c", CreatedAt = DateTimeOffset.UtcNow });
+        var authorId = Guid.NewGuid();
+        db.Users.Add(new User
+        {
+            Id = authorId,
+            Username = "a",
+            Email = "a@a.com",
+            PasswordHash = "h",
+            Role = AppRoles.USER,
+            CreatedAt = DateTimeOffset.UtcNow
+        });
+        var asset = new Asset
+        {
+            Id = Guid.NewGuid(),
+            AuthorId = authorId,
+            CategoryId = catId,
+            Title = "SoftDeleted",
+            CreatedAt = DateTimeOffset.UtcNow,
+            DeletedAt = DateTimeOffset.UtcNow
+        };
+        db.Assets.Add(asset);
+        await db.SaveChangesAsync();
+
+        var sut = new AssetStore(db);
+
+        var defaultGet = await sut.GetById(asset.Id);
+        defaultGet.Should().BeNull();
+
+        var explicitExclude = await sut.GetById(asset.Id, includeDeleted: false);
+        explicitExclude.Should().BeNull();
+
+        var explicitInclude = await sut.GetById(asset.Id, includeDeleted: true);
+        explicitInclude.Should().NotBeNull();
+        explicitInclude.Id.Should().Be(asset.Id);
+
+        var ownership = await sut.GetOwnership(asset.Id);
+        ownership.Should().NotBeNull();
+        ownership.IsDeleted.Should().BeTrue();
+    }
 }

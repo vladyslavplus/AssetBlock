@@ -56,3 +56,39 @@ public sealed class AssetListingSuggestionConfigurationTests
             .GetAnnotations().First(a => a.Name == "Relational:ColumnType").Value.Should().Be("jsonb");
     }
 }
+
+public sealed class AssetConfigurationTests
+{
+    [Fact]
+    public void AssetConfiguration_ShouldNotDefineGlobalQueryFilter()
+    {
+        var options = new DbContextOptionsBuilder<ApplicationDbContext>()
+            .UseInMemoryDatabase(databaseName: Guid.NewGuid().ToString())
+            .Options;
+
+        using var dbContext = new ApplicationDbContext(options);
+        var model = dbContext.GetService<IDesignTimeModel>().Model;
+        var entityType = model.FindEntityType(typeof(Asset));
+        entityType.Should().NotBeNull();
+        entityType.GetDeclaredQueryFilters().Should().BeEmpty();
+    }
+
+    [Fact]
+    public void Model_ShouldNotEmitQueryFilterWarningOnRequiredNavigations()
+    {
+        var options = new DbContextOptionsBuilder<ApplicationDbContext>()
+            .UseInMemoryDatabase(databaseName: Guid.NewGuid().ToString())
+            .ConfigureWarnings(w => w.Throw(Microsoft.EntityFrameworkCore.Diagnostics.CoreEventId.PossibleIncorrectRequiredNavigationWithQueryFilterInteractionWarning))
+            .Options;
+
+        using var dbContext = new ApplicationDbContext(options);
+        var act = () =>
+        {
+            _ = dbContext.AssetVersions.Include(v => v.Asset).ToList();
+            _ = dbContext.Purchases.Include(p => p.Asset).ToList();
+            _ = dbContext.AssetProcessingJobs.Include(j => j.Asset).ToList();
+        };
+
+        act.Should().NotThrow();
+    }
+}

@@ -13,7 +13,6 @@ internal sealed class ReviewStore(ApplicationDbContext dbContext, ILogger<Review
     public async Task<double> GetAverageRatingForAsset(Guid assetId, CancellationToken cancellationToken = default)
     {
         return await dbContext.Assets
-            .IgnoreQueryFilters()
             .AsNoTracking()
             .Where(a => a.Id == assetId)
             .Select(a => a.RatingAverage)
@@ -126,7 +125,6 @@ internal sealed class ReviewStore(ApplicationDbContext dbContext, ILogger<Review
         var average = stats?.Average ?? 0d;
 
         await dbContext.Assets
-            .IgnoreQueryFilters()
             .Where(a => a.Id == assetId)
             .ExecuteUpdateAsync(setters => setters
                 .SetProperty(a => a.RatingCount, count)

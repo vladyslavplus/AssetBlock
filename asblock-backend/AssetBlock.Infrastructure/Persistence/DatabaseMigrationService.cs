@@ -1,4 +1,4 @@
-﻿using AssetBlock.Domain.Abstractions.Services;
+using AssetBlock.Domain.Abstractions.Services;
 using AssetBlock.Domain.Core.Constants;
 using AssetBlock.Domain.Core.Entities;
 using AssetBlock.Domain.Core.Enums;
@@ -737,7 +737,6 @@ internal sealed class DatabaseMigrationService(
             var avg = (double)sum / reviewsPerAsset;
 
             await context.Assets
-                .IgnoreQueryFilters()
                 .Where(a => a.Id == assetId)
                 .ExecuteUpdateAsync(setters => setters
                     .SetProperty(a => a.RatingCount, reviewsPerAsset)

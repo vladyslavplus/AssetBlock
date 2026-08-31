@@ -1,4 +1,4 @@
-﻿using System.Data;
+using System.Data;
 using System.Text;
 using System.Text.Json;
 using AssetBlock.Domain.Abstractions.Services;
@@ -24,7 +24,7 @@ internal sealed class ListingCopilotStore(ApplicationDbContext dbContext) : ILis
     {
         return await dbContext.AssetVersions
             .AsNoTracking()
-            .Where(v => v.Id == assetVersionId && v.Asset.AuthorId == ownerUserId)
+            .Where(v => v.Id == assetVersionId && v.Asset.AuthorId == ownerUserId && v.Asset.DeletedAt == null)
             .Select(v => new ListingCopilotOwnedVersion(
                 v.AssetId,
                 v.Id,
@@ -193,6 +193,7 @@ internal sealed class ListingCopilotStore(ApplicationDbContext dbContext) : ILis
             .AsNoTracking()
             .Where(s => s.Job.AssetVersionId == assetVersionId
                 && s.Job.Asset.AuthorId == ownerUserId
+                && s.Job.Asset.DeletedAt == null
                 && s.Job.Type == AssetProcessingJobType.LISTING_COPILOT)
             .OrderByDescending(s => s.CreatedAt)
             .Select(s => new

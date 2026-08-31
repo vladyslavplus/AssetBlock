@@ -99,6 +99,13 @@ internal static class AiTimeoutBudget
     }
 }
 
+internal delegate Task<AiTimedHttpResult> TimedHttpSender(
+    HttpClient client,
+    HttpRequestMessage request,
+    TimeSpan timeout,
+    int maxResponseBytes,
+    CancellationToken callerToken);
+
 internal static class AiTimedHttp
 {
     public static async Task<AiTimedHttpResult> Send(

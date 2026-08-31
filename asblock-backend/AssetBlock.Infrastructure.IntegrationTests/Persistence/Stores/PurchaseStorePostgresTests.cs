@@ -244,7 +244,7 @@ public sealed class PurchaseStorePostgresTests(PostgresFixture fixture)
         var assetStore = new AssetStore(db);
         await assetStore.SoftDelete(asset.Id, DateTimeOffset.UtcNow);
 
-        // Verify public lookup returns null due to global query filter
+        // Verify public lookup returns null for delisted asset
         var publicLookup = await assetStore.GetById(asset.Id);
         publicLookup.Should().BeNull();
 

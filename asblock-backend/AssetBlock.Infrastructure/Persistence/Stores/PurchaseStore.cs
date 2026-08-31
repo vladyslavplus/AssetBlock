@@ -86,7 +86,7 @@ internal sealed class PurchaseStore(ApplicationDbContext dbContext) : IPurchaseS
         ListMyPurchasesRequest request,
         CancellationToken cancellationToken = default)
     {
-        var query = dbContext.Purchases.IgnoreQueryFilters().AsNoTracking().Where(p => p.UserId == userId);
+        var query = dbContext.Purchases.AsNoTracking().Where(p => p.UserId == userId);
         var total = await query.CountAsync(cancellationToken);
 
         var sortBy = string.IsNullOrWhiteSpace(request.SortBy) || !ListMyPurchasesRequest.AllowedSortBy.Contains(request.SortBy)
