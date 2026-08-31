@@ -101,15 +101,19 @@ public sealed class AssetProcessingWorkerTests
         AssetProcessingOptions options = CreateDefaultOptions();
         AssetProcessingWorker worker = CreateWorker(options);
 
+        var recoveredTcs = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+
         _store.ClaimPendingBatch(Arg.Any<int>(), Arg.Any<TimeSpan>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
             .Returns(Task.FromResult<IReadOnlyList<ClaimedAssetProcessingJob>>([]));
         _store.RecoverExpiredLeases(Arg.Any<CancellationToken>()).Returns(0);
-        _lifecycleStore.RecoverExpiredExhaustedSecurityJobs(Arg.Any<CancellationToken>()).Returns(0);
+        _lifecycleStore.RecoverExpiredExhaustedSecurityJobs(Arg.Any<CancellationToken>()).Returns(_ =>
+        {
+            recoveredTcs.TrySetResult(true);
+            return Task.FromResult(0);
+        });
 
-        using var cts = new CancellationTokenSource(TimeSpan.FromMilliseconds(200));
-
-        await worker.StartAsync(cts.Token);
-        await Task.Delay(80, cts.Token);
+        await worker.StartAsync(CancellationToken.None);
+        await recoveredTcs.Task.WaitAsync(TimeSpan.FromSeconds(5));
         await worker.StopAsync(CancellationToken.None);
 
         await _store.Received().RecoverExpiredLeases(Arg.Any<CancellationToken>());
