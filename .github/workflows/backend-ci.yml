@@ -118,8 +118,10 @@ jobs:
         with:
           filename: "asblock-backend/artifacts/coverage-merged/Cobertura.xml"
           badge: true
+          fail_below_min: true
           format: markdown
           output: both
+          thresholds: "55 70"
 
       - name: Upload PR coverage comment artifact
         if: success() && github.event_name == 'pull_request'
