@@ -1,4 +1,4 @@
-﻿namespace AssetBlock.Infrastructure.Persistence.Analytics;
+namespace AssetBlock.Infrastructure.Persistence.Analytics;
 
 internal sealed class OverviewFactsAndCommerceContextSqlRow
 {

@@ -414,7 +414,7 @@ internal sealed class DatabaseMigrationService(
             cancellationToken);
         if (adminForReviews is not null)
         {
-            reviewers = [..reviewers, adminForReviews];
+            reviewers = [.. reviewers, adminForReviews];
         }
 
         await SeedDemoPurchasesAndReviews(context, inserted, reviewers, now, cancellationToken);

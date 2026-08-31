@@ -11,7 +11,7 @@ internal sealed class ReviewConfiguration : IEntityTypeConfiguration<Review>
         builder.ToTable("reviews");
 
         builder.HasKey(r => r.Id);
-        
+
         builder.Property(r => r.Rating).IsRequired();
         builder.Property(r => r.Comment).HasMaxLength(1000);
         builder.Property(r => r.CreatedAt).IsRequired();

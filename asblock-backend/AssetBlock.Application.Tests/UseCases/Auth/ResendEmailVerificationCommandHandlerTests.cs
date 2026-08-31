@@ -67,9 +67,13 @@ public sealed class ResendEmailVerificationCommandHandlerTests
         var command = new ResendEmailVerificationCommand(user.Id);
         var existingAction = new EmailAction
         {
-            Id = Guid.NewGuid(), UserId = user.Id, Purpose = EmailActionPurpose.EMAIL_VERIFICATION,
-            TargetEmail = user.Email, Version = Guid.NewGuid(),
-            CreatedAt = DateTimeOffset.UtcNow, ExpiresAt = DateTimeOffset.UtcNow.AddHours(24),
+            Id = Guid.NewGuid(),
+            UserId = user.Id,
+            Purpose = EmailActionPurpose.EMAIL_VERIFICATION,
+            TargetEmail = user.Email,
+            Version = Guid.NewGuid(),
+            CreatedAt = DateTimeOffset.UtcNow,
+            ExpiresAt = DateTimeOffset.UtcNow.AddHours(24),
             LastSentAt = DateTimeOffset.UtcNow.AddSeconds(-10)
         };
 
@@ -92,9 +96,13 @@ public sealed class ResendEmailVerificationCommandHandlerTests
         var command = new ResendEmailVerificationCommand(user.Id);
         var newAction = new EmailAction
         {
-            Id = Guid.NewGuid(), UserId = user.Id, Purpose = EmailActionPurpose.EMAIL_VERIFICATION,
-            TargetEmail = user.Email, Version = Guid.NewGuid(),
-            CreatedAt = DateTimeOffset.UtcNow, ExpiresAt = DateTimeOffset.UtcNow.AddHours(24)
+            Id = Guid.NewGuid(),
+            UserId = user.Id,
+            Purpose = EmailActionPurpose.EMAIL_VERIFICATION,
+            TargetEmail = user.Email,
+            Version = Guid.NewGuid(),
+            CreatedAt = DateTimeOffset.UtcNow,
+            ExpiresAt = DateTimeOffset.UtcNow.AddHours(24)
         };
 
         _userStore.GetByIdForUpdate(Arg.Any<Guid>(), Arg.Any<CancellationToken>()).Returns(user);

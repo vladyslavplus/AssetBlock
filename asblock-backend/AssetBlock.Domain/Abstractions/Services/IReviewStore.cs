@@ -1,4 +1,4 @@
-﻿using AssetBlock.Domain.Core.Dto.Paging;
+using AssetBlock.Domain.Core.Dto.Paging;
 using AssetBlock.Domain.Core.Dto.Reviews;
 using AssetBlock.Domain.Core.Entities;
 

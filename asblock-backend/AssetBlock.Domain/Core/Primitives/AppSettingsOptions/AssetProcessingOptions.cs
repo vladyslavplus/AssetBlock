@@ -10,7 +10,7 @@ public sealed class AssetProcessingOptions
     public const int MAX_CONCURRENCY = 200;
     public const int MIN_MAX_ATTEMPTS = 1;
     public const int MAX_MAX_ATTEMPTS = 10;
-    
+
     public bool Enabled { get; init; }
     public TimeSpan PollInterval { get; init; } = TimeSpan.FromSeconds(10);
     public int BatchSize { get; init; } = 10;

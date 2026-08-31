@@ -1,4 +1,4 @@
-﻿using AssetBlock.Domain.Core.Primitives.BaseEntities;
+using AssetBlock.Domain.Core.Primitives.BaseEntities;
 
 namespace AssetBlock.Domain.Core.Entities;
 

@@ -86,7 +86,9 @@ public sealed class AdminOutboxControllerTests : ControllerTestBase
         Sender.Send(Arg.Any<ReplayDeadLetterCommand>(), Arg.Any<CancellationToken>())
             .Returns(Task.FromResult(Result<ReplayDeadLetterResponseDto>.NotFound(ErrorCodes.ERR_OUTBOX_MESSAGE_NOT_FOUND)));
 
-        var controller = new AdminOutboxController(Sender) { ControllerContext = new ControllerContext
+        var controller = new AdminOutboxController(Sender)
+        {
+            ControllerContext = new ControllerContext
             {
                 HttpContext = new DefaultHttpContext { Response = { Body = new MemoryStream() } }
             }
@@ -106,7 +108,9 @@ public sealed class AdminOutboxControllerTests : ControllerTestBase
         Sender.Send(Arg.Any<ReplayDeadLetterCommand>(), Arg.Any<CancellationToken>())
             .Returns(Task.FromResult(Result<ReplayDeadLetterResponseDto>.Conflict(ErrorCodes.ERR_OUTBOX_NOT_DEAD_LETTERED)));
 
-        var controller = new AdminOutboxController(Sender) { ControllerContext = new ControllerContext
+        var controller = new AdminOutboxController(Sender)
+        {
+            ControllerContext = new ControllerContext
             {
                 HttpContext = new DefaultHttpContext { Response = { Body = new MemoryStream() } }
             }

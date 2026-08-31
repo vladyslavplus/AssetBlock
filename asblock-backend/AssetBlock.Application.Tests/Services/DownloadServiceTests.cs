@@ -386,14 +386,14 @@ public class DownloadServiceTests
         Guid userId,
         Guid assetId,
         Guid assetVersionId) => new()
-    {
-        Id = Guid.NewGuid(),
-        UserId = userId,
-        AssetId = assetId,
-        AssetVersionId = assetVersionId,
-        OrderLineId = Guid.NewGuid(),
-        PurchasedAt = DateTimeOffset.UtcNow
-    };
+        {
+            Id = Guid.NewGuid(),
+            UserId = userId,
+            AssetId = assetId,
+            AssetVersionId = assetVersionId,
+            OrderLineId = Guid.NewGuid(),
+            PurchasedAt = DateTimeOffset.UtcNow
+        };
 
     private static AssetCurrentVersionSnapshot MakeSnapshot(
         Guid versionId,
@@ -425,22 +425,22 @@ public class DownloadServiceTests
         string storageKey,
         string fileName,
         AssetVersionProcessingStatus processingStatus = AssetVersionProcessingStatus.READY) => new()
-    {
-        Id = id,
-        AssetId = _assetId,
-        VersionNumber = versionNumber,
-        IsCurrent = false,
-        StorageKey = storageKey,
-        FileName = fileName,
-        ContentLength = 1,
-        ContentSha256 = new string('a', 64),
-        ReleaseNotes = "Initial release",
-        LicenseCode = AssetLicenseCode.PERSONAL,
-        LicenseTemplateVersion = "1.0",
-        LicenseDisplayName = "Personal use",
-        LicenseTerms = "terms",
-        ProcessingStatus = processingStatus,
-        ProcessingUpdatedAt = DateTimeOffset.UtcNow,
-        CreatedAt = DateTimeOffset.UtcNow
-    };
+        {
+            Id = id,
+            AssetId = _assetId,
+            VersionNumber = versionNumber,
+            IsCurrent = false,
+            StorageKey = storageKey,
+            FileName = fileName,
+            ContentLength = 1,
+            ContentSha256 = new string('a', 64),
+            ReleaseNotes = "Initial release",
+            LicenseCode = AssetLicenseCode.PERSONAL,
+            LicenseTemplateVersion = "1.0",
+            LicenseDisplayName = "Personal use",
+            LicenseTerms = "terms",
+            ProcessingStatus = processingStatus,
+            ProcessingUpdatedAt = DateTimeOffset.UtcNow,
+            CreatedAt = DateTimeOffset.UtcNow
+        };
 }

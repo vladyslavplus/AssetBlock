@@ -132,7 +132,8 @@ public sealed class CheckoutReservationPostgresTests(PostgresFixture fixture)
     }
 
     [Fact]
-    public async Task CleanupExpiredUnattachedPendingBatch_WhenIntentHasStripeSession_ShouldNotCancel()    {
+    public async Task CleanupExpiredUnattachedPendingBatch_WhenIntentHasStripeSession_ShouldNotCancel()
+    {
         await using ApplicationDbContext db = await fixture.CreateCleanDbContext();
         (User author, Category category) = await TestData.SeedAuthorAndCategory(db);
         User buyer = TestData.CreateUser("attached-buyer", "attached-buyer@example.test");

@@ -1,4 +1,4 @@
-﻿using AssetBlock.Domain.Abstractions.Services;
+using AssetBlock.Domain.Abstractions.Services;
 using AssetBlock.Domain.Core.Constants;
 using AssetBlock.Domain.Core.Entities;
 using Microsoft.EntityFrameworkCore;

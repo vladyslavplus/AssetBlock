@@ -203,7 +203,7 @@ public sealed class OpenRouterAndOllamaOptionsValidatorTests
     {
         BaseUrl = "http://127.0.0.1:11434",
         Model = "fixture-ollama-test",
-        Digest = AiTestDigests.FixtureDigest,
+        Digest = AiTestDigests.FIXTURE_DIGEST,
         Timeout = TimeSpan.FromMinutes(2),
         MaxInputChars = 12000,
         MaxOutputTokens = 1000

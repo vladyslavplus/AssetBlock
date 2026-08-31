@@ -1,4 +1,4 @@
-﻿using AssetBlock.Domain.Core.Constants;
+using AssetBlock.Domain.Core.Constants;
 using AssetBlock.Domain.Core.Entities;
 using AssetBlock.Infrastructure.Persistence;
 using AssetBlock.Infrastructure.Persistence.Stores;

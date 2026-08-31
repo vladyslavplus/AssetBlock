@@ -125,7 +125,8 @@ public sealed class PaymentsControllerTests : ControllerTestBase
         var bytes = "{}"u8.ToArray();
         var httpContext = new DefaultHttpContext
         {
-            Response = { Body = new MemoryStream() }, Request = { Body = new MemoryStream(bytes), Headers =
+            Response = { Body = new MemoryStream() },
+            Request = { Body = new MemoryStream(bytes), Headers =
             {
                 ["Stripe-Signature"] = "sig"
             } }

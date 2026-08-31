@@ -28,7 +28,7 @@ internal sealed class RecordingHttpMessageHandler : HttpMessageHandler
 
 internal static class AiTestDigests
 {
-    public const string FixtureDigest = "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+    public const string FIXTURE_DIGEST = "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
 }
 
 internal sealed class CollectingLogger<T> : ILogger<T>
@@ -128,7 +128,7 @@ internal static class AiProviderTestFactory
         {
             models = new[]
             {
-                new { name = model, digest = digest ?? AiTestDigests.FixtureDigest }
+                new { name = model, digest = digest ?? AiTestDigests.FIXTURE_DIGEST }
             }
         });
 }

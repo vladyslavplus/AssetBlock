@@ -82,9 +82,13 @@ public sealed class ConfirmEmailVerificationCommandHandlerTests
         var claims = new EmailActionLinkClaims(actionId, version, EmailActionPurpose.EMAIL_VERIFICATION, DateTimeOffset.UtcNow.AddHours(1));
         var action = new EmailAction
         {
-            Id = actionId, UserId = user.Id, Purpose = EmailActionPurpose.EMAIL_VERIFICATION,
-            TargetEmail = user.Email, Version = version,
-            CreatedAt = DateTimeOffset.UtcNow, ExpiresAt = DateTimeOffset.UtcNow.AddHours(24)
+            Id = actionId,
+            UserId = user.Id,
+            Purpose = EmailActionPurpose.EMAIL_VERIFICATION,
+            TargetEmail = user.Email,
+            Version = version,
+            CreatedAt = DateTimeOffset.UtcNow,
+            ExpiresAt = DateTimeOffset.UtcNow.AddHours(24)
         };
 
         _linkProtector
@@ -117,9 +121,13 @@ public sealed class ConfirmEmailVerificationCommandHandlerTests
         var claims = new EmailActionLinkClaims(actionId, version, EmailActionPurpose.EMAIL_VERIFICATION, DateTimeOffset.UtcNow.AddHours(1));
         var action = new EmailAction
         {
-            Id = actionId, UserId = user.Id, Purpose = EmailActionPurpose.EMAIL_VERIFICATION,
-            TargetEmail = user.Email, Version = version,
-            CreatedAt = DateTimeOffset.UtcNow, ExpiresAt = DateTimeOffset.UtcNow.AddHours(24)
+            Id = actionId,
+            UserId = user.Id,
+            Purpose = EmailActionPurpose.EMAIL_VERIFICATION,
+            TargetEmail = user.Email,
+            Version = version,
+            CreatedAt = DateTimeOffset.UtcNow,
+            ExpiresAt = DateTimeOffset.UtcNow.AddHours(24)
         };
 
         _linkProtector

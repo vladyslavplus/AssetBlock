@@ -27,7 +27,7 @@ internal sealed class TagStore(ApplicationDbContext dbContext) : ITagStore
         var sortBy = string.IsNullOrWhiteSpace(request.SortBy) || !GetTagsRequest.AllowedSortBy.Contains(request.SortBy.ToLowerInvariant())
             ? "name"
             : request.SortBy.ToLowerInvariant();
-            
+
         var isDesc = request.SortDirection == SortDirection.DESC;
 
         query = sortBy switch

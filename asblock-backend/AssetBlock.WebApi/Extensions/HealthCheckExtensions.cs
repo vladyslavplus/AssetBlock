@@ -51,17 +51,17 @@ public static class HealthCheckExtensions
     public static IEndpointRouteBuilder MapAssetBlockHealthChecks(this IEndpointRouteBuilder endpoints)
     {
         endpoints.MapHealthChecks("/health/live", new HealthCheckOptions
-            {
-                Predicate = registration => registration.Tags.Contains(LIVE_TAG),
-                ResponseWriter = WriteResponse
-            })
+        {
+            Predicate = registration => registration.Tags.Contains(LIVE_TAG),
+            ResponseWriter = WriteResponse
+        })
             .AllowAnonymous();
 
         endpoints.MapHealthChecks("/health/ready", new HealthCheckOptions
-            {
-                Predicate = registration => registration.Tags.Contains(READY_TAG),
-                ResponseWriter = WriteResponse
-            })
+        {
+            Predicate = registration => registration.Tags.Contains(READY_TAG),
+            ResponseWriter = WriteResponse
+        })
             .AllowAnonymous();
 
         return endpoints;

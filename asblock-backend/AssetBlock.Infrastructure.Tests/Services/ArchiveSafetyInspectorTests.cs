@@ -92,7 +92,8 @@ public sealed class ArchiveSafetyInspectorTests
     public async Task Inspect_WhenEmptyArchive_ShouldRejectWithSpecificCode()
     {
         await using var ms = new MemoryStream();
-        await using (new ZipArchive(ms, ZipArchiveMode.Create, leaveOpen: true)) { }
+        await using (new ZipArchive(ms, ZipArchiveMode.Create, leaveOpen: true))
+        { }
         ms.Position = 0;
 
         ArchiveSafetyResult result = await _sut.Inspect(ms, "empty.zip");

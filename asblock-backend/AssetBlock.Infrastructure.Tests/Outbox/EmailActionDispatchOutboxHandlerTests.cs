@@ -369,14 +369,14 @@ public sealed class EmailActionDispatchOutboxHandlerTests
         bool consumed = false,
         DateTimeOffset? expiresAt = null,
         string targetEmail = "test@example.test") => new()
-    {
-        Id = payload.EmailActionId,
-        UserId = payload.RecipientUserId,
-        Purpose = EmailActionPurpose.EMAIL_VERIFICATION,
-        TargetEmail = targetEmail,
-        Version = payload.ActionVersion,
-        CreatedAt = DateTimeOffset.UtcNow,
-        ExpiresAt = expiresAt ?? DateTimeOffset.UtcNow.AddHours(24),
-        ConsumedAt = consumed ? DateTimeOffset.UtcNow : null
-    };
+        {
+            Id = payload.EmailActionId,
+            UserId = payload.RecipientUserId,
+            Purpose = EmailActionPurpose.EMAIL_VERIFICATION,
+            TargetEmail = targetEmail,
+            Version = payload.ActionVersion,
+            CreatedAt = DateTimeOffset.UtcNow,
+            ExpiresAt = expiresAt ?? DateTimeOffset.UtcNow.AddHours(24),
+            ConsumedAt = consumed ? DateTimeOffset.UtcNow : null
+        };
 }

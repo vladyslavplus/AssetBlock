@@ -16,14 +16,14 @@ internal static class AnalyticsFixedWindowTestGuard
     /// Sized for ~120 HTTP probes under CI coverage/load after hosts are already running.
     /// Worst-case wait is just under this value (about 45s when the window is nearly over).
     /// </summary>
-    public const int MinRemainingSecondsForFullBurst = 45;
+    private const int MIN_REMAINING_SECONDS_FOR_FULL_BURST = 45;
 
     public static async Task EnsureWindowHasRemainingAsync(
-        int minRemainingSeconds = MinRemainingSecondsForFullBurst,
+        int minRemainingSeconds = MIN_REMAINING_SECONDS_FOR_FULL_BURST,
         CancellationToken cancellationToken = default)
     {
-        var windowSeconds = RateLimitingConstants.Windows.ANALYTICS_EVENTS_PERIOD_SECONDS;
-        if (minRemainingSeconds <= 0 || minRemainingSeconds >= windowSeconds)
+        const int windowSeconds = RateLimitingConstants.Windows.ANALYTICS_EVENTS_PERIOD_SECONDS;
+        if (minRemainingSeconds is <= 0 or >= windowSeconds)
         {
             throw new ArgumentOutOfRangeException(
                 nameof(minRemainingSeconds),

@@ -101,9 +101,13 @@ public sealed class RequestEmailChangeCommandHandlerTests
         var command = new RequestEmailChangeCommand(userId, newEmail, "pass");
         var action = new EmailAction
         {
-            Id = Guid.NewGuid(), UserId = userId, Purpose = EmailActionPurpose.EMAIL_CHANGE,
-            TargetEmail = newEmail, Version = Guid.NewGuid(),
-            CreatedAt = DateTimeOffset.UtcNow, ExpiresAt = DateTimeOffset.UtcNow.AddMinutes(30)
+            Id = Guid.NewGuid(),
+            UserId = userId,
+            Purpose = EmailActionPurpose.EMAIL_CHANGE,
+            TargetEmail = newEmail,
+            Version = Guid.NewGuid(),
+            CreatedAt = DateTimeOffset.UtcNow,
+            ExpiresAt = DateTimeOffset.UtcNow.AddMinutes(30)
         };
 
         _userStore.GetByIdForUpdate(Arg.Any<Guid>(), Arg.Any<CancellationToken>()).Returns(user);

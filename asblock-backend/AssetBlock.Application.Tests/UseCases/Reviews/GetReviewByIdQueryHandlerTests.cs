@@ -35,7 +35,7 @@ public class GetReviewByIdQueryHandlerTests
         // Arrange
         var query = new GetReviewByIdQuery(Guid.NewGuid());
         var key = CacheKeys.ReviewItem(query.Id);
-        
+
         var cachedItem = new ReviewDetailItem(query.Id, Guid.NewGuid(), Guid.NewGuid(), "testuser", 5, "Great", DateTimeOffset.UtcNow);
         var cachedJson = JsonSerializer.Serialize(cachedItem, _jsonOptions);
 
@@ -48,7 +48,7 @@ public class GetReviewByIdQueryHandlerTests
         result.IsSuccess.Should().BeTrue();
         result.Value.Id.Should().Be(query.Id);
         result.Value.Username.Should().Be("testuser");
-        
+
         await _reviewStoreMock.DidNotReceive().GetById(Arg.Any<Guid>(), Arg.Any<CancellationToken>());
     }
 
@@ -78,8 +78,12 @@ public class GetReviewByIdQueryHandlerTests
 
         var review = new Review
         {
-            Id = query.Id, AssetId = Guid.NewGuid(), UserId = Guid.NewGuid(),
-            Rating = 5, Comment = "Awesome", CreatedAt = DateTimeOffset.UtcNow,
+            Id = query.Id,
+            AssetId = Guid.NewGuid(),
+            UserId = Guid.NewGuid(),
+            Rating = 5,
+            Comment = "Awesome",
+            CreatedAt = DateTimeOffset.UtcNow,
             User = new User { Id = Guid.NewGuid(), Username = "user123", Email = "a@a.com", PasswordHash = "h", Role = AppRoles.USER }
         };
 
@@ -95,9 +99,9 @@ public class GetReviewByIdQueryHandlerTests
         result.Value.Username.Should().Be("user123");
 
         await _cacheMock.Received(1).SetString(
-            key, 
-            Arg.Is<string>(s => s.Contains("user123")), 
-            Arg.Any<TimeSpan?>(), 
+            key,
+            Arg.Is<string>(s => s.Contains("user123")),
+            Arg.Any<TimeSpan?>(),
             Arg.Any<CancellationToken>());
     }
 
@@ -110,8 +114,12 @@ public class GetReviewByIdQueryHandlerTests
 
         var review = new Review
         {
-            Id = query.Id, AssetId = Guid.NewGuid(), UserId = Guid.NewGuid(),
-            Rating = 5, Comment = "Awesome", CreatedAt = DateTimeOffset.UtcNow,
+            Id = query.Id,
+            AssetId = Guid.NewGuid(),
+            UserId = Guid.NewGuid(),
+            Rating = 5,
+            Comment = "Awesome",
+            CreatedAt = DateTimeOffset.UtcNow,
             User = new User { Id = Guid.NewGuid(), Username = "user123", Email = "a@a.com", PasswordHash = "h", Role = AppRoles.USER }
         };
 

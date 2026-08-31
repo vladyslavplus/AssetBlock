@@ -87,4 +87,9 @@ pnpm deps:check      # licenses, exceptions, High/Critical vulns, notices freshn
 
 Policy: `DEPENDENCY-POLICY.md` and `dependency-policy.json`. Reviewed exceptions: `dependency-exceptions.json`. CI workflow: `.github/workflows/dependency-ci.yml` (same `pnpm deps:check` command; CycloneDX SBOMs uploaded as artifacts).
 
-**Frontend pre-commit (repo root):** after cloning, run `pnpm install` once at the monorepo root. Husky installs a git `pre-commit` hook that, whenever staged files include `asblock-frontend/`, runs `eslint --fix` and Prettier on those files (works whether you commit from the root or from a subdirectory). Backend-only commits skip the hook work.
+**Pre-commit hooks (repo root):** after cloning, run `pnpm install` once at the monorepo root to install Husky. The pre-commit hook runs `lint-staged` automatically whenever you commit from root or any subdirectory:
+
+- Staged frontend JS/TS files receive `eslint --fix` and Prettier.
+- Staged frontend markup, style, config, and markdown files receive Prettier.
+- Staged non-generated backend `.cs` files receive `dotnet format` (requires a prior locked restore; generated EF migrations and model snapshot are excluded).
+- The hook formats staged files only and does not run backend tests or network restores.

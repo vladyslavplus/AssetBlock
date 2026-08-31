@@ -41,7 +41,7 @@ public sealed class OllamaAiGenerationProviderTests
         result.Outcome.Should().Be(AiGenerationOutcomeKind.SUCCESS);
         result.ActualModel.Should().Be("fixture-ollama-test");
         result.UpstreamProvider.Should().BeNull();
-        result.ModelRevision.Should().Be(AiTestDigests.FixtureDigest);
+        result.ModelRevision.Should().Be(AiTestDigests.FIXTURE_DIGEST);
         result.InputTokens.Should().Be(9);
         result.OutputTokens.Should().Be(4);
         handler.LastRequest!.Headers.Authorization.Should().BeNull();
@@ -217,7 +217,7 @@ public sealed class OllamaAiGenerationProviderTests
         var recordedTimeouts = new List<TimeSpan>();
         var handler = new RecordingHttpMessageHandler();
 
-        var timedSender = new TimedHttpSender((_, request, reqTimeout, _,  _) =>
+        var timedSender = new TimedHttpSender((_, request, reqTimeout, _, _) =>
         {
             recordedTimeouts.Add(reqTimeout);
             if (request.RequestUri?.ToString().Contains("api/tags") == true || request.Method == HttpMethod.Get)
@@ -266,7 +266,7 @@ public sealed class OllamaAiGenerationProviderTests
         {
             BaseUrl = "http://127.0.0.1:11434",
             Model = model,
-            Digest = digest ?? AiTestDigests.FixtureDigest,
+            Digest = digest ?? AiTestDigests.FIXTURE_DIGEST,
             Timeout = timeout ?? TimeSpan.FromSeconds(5),
             MaxInputChars = 12000,
             MaxOutputTokens = 1000

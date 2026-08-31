@@ -212,11 +212,11 @@ public sealed class BundleStorePostgresTests(PostgresFixture fixture)
         // seller1: cheap bundle ($5) and expensive bundle ($50)
         Asset cheapA = TestData.CreateAsset(seller1.Id, category.Id, title: "CheapA", price: 3m);
         Asset cheapB = TestData.CreateAsset(seller1.Id, category.Id, title: "CheapB", price: 4m);
-        Asset expA   = TestData.CreateAsset(seller1.Id, category.Id, title: "ExpA", price: 30m);
-        Asset expB   = TestData.CreateAsset(seller1.Id, category.Id, title: "ExpB", price: 40m);
+        Asset expA = TestData.CreateAsset(seller1.Id, category.Id, title: "ExpA", price: 30m);
+        Asset expB = TestData.CreateAsset(seller1.Id, category.Id, title: "ExpB", price: 40m);
         // seller2: mid bundle ($20)
-        Asset midA   = TestData.CreateAsset(seller2.Id, category.Id, title: "MidA", price: 10m);
-        Asset midB   = TestData.CreateAsset(seller2.Id, category.Id, title: "MidB", price: 15m);
+        Asset midA = TestData.CreateAsset(seller2.Id, category.Id, title: "MidA", price: 10m);
+        Asset midB = TestData.CreateAsset(seller2.Id, category.Id, title: "MidB", price: 15m);
         db.Assets.AddRange(cheapA, cheapB, expA, expB, midA, midB);
         await db.SaveChangesAsync();
         db.AssetVersions.AddRange(

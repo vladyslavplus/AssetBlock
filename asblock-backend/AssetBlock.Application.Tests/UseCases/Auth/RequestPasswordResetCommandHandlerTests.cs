@@ -57,9 +57,13 @@ public sealed class RequestPasswordResetCommandHandlerTests
         var command = new RequestPasswordResetCommand(user.Email);
         var existingAction = new EmailAction
         {
-            Id = Guid.NewGuid(), UserId = user.Id, Purpose = EmailActionPurpose.PASSWORD_RESET,
-            TargetEmail = user.Email, Version = Guid.NewGuid(),
-            CreatedAt = DateTimeOffset.UtcNow, ExpiresAt = DateTimeOffset.UtcNow.AddMinutes(30),
+            Id = Guid.NewGuid(),
+            UserId = user.Id,
+            Purpose = EmailActionPurpose.PASSWORD_RESET,
+            TargetEmail = user.Email,
+            Version = Guid.NewGuid(),
+            CreatedAt = DateTimeOffset.UtcNow,
+            ExpiresAt = DateTimeOffset.UtcNow.AddMinutes(30),
             LastSentAt = DateTimeOffset.UtcNow.AddSeconds(-10)
         };
 
@@ -82,9 +86,13 @@ public sealed class RequestPasswordResetCommandHandlerTests
         var command = new RequestPasswordResetCommand(user.Email);
         var action = new EmailAction
         {
-            Id = Guid.NewGuid(), UserId = user.Id, Purpose = EmailActionPurpose.PASSWORD_RESET,
-            TargetEmail = user.Email, Version = Guid.NewGuid(),
-            CreatedAt = DateTimeOffset.UtcNow, ExpiresAt = DateTimeOffset.UtcNow.AddMinutes(30)
+            Id = Guid.NewGuid(),
+            UserId = user.Id,
+            Purpose = EmailActionPurpose.PASSWORD_RESET,
+            TargetEmail = user.Email,
+            Version = Guid.NewGuid(),
+            CreatedAt = DateTimeOffset.UtcNow,
+            ExpiresAt = DateTimeOffset.UtcNow.AddMinutes(30)
         };
 
         _userStore.GetByEmail(Arg.Any<string>(), Arg.Any<CancellationToken>()).Returns(user);

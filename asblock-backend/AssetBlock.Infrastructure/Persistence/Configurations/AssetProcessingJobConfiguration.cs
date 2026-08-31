@@ -17,17 +17,17 @@ internal sealed class AssetProcessingJobConfiguration : IEntityTypeConfiguration
             table.HasCheckConstraint("CK_asset_processing_jobs_type", "\"Type\" IN ('ARCHIVE_INSPECTION', 'MALWARE_SCAN', 'LISTING_COPILOT')");
             table.HasCheckConstraint("CK_asset_processing_jobs_status", "\"Status\" IN ('QUEUED', 'RUNNING', 'RETRY_SCHEDULED', 'SUCCEEDED', 'FAILED', 'CANCELLED')");
             table.HasCheckConstraint("CK_asset_processing_jobs_error_code", "\"ErrorCode\" IS NULL OR \"ErrorCode\" ~ '^[A-Z0-9_]{1,64}$'");
-            
+
             // RUNNING requires lease fields; non-RUNNING must not have active lease
-            table.HasCheckConstraint("CK_asset_processing_jobs_running_lease", 
+            table.HasCheckConstraint("CK_asset_processing_jobs_running_lease",
                 "(\"Status\" = 'RUNNING' AND \"LeaseOwner\" IS NOT NULL AND \"LeaseToken\" IS NOT NULL AND \"LeaseExpiresAt\" IS NOT NULL) OR " +
                 "(\"Status\" != 'RUNNING' AND \"LeaseOwner\" IS NULL AND \"LeaseToken\" IS NULL AND \"LeaseExpiresAt\" IS NULL)");
-                
+
             // Terminal status requires CompletedAt; non-terminal must not have it
-            table.HasCheckConstraint("CK_asset_processing_jobs_terminal_completed_at", 
+            table.HasCheckConstraint("CK_asset_processing_jobs_terminal_completed_at",
                 "(\"Status\" IN ('SUCCEEDED', 'FAILED', 'CANCELLED') AND \"CompletedAt\" IS NOT NULL) OR " +
                 "(\"Status\" NOT IN ('SUCCEEDED', 'FAILED', 'CANCELLED') AND \"CompletedAt\" IS NULL)");
-                
+
             // Payload must be a JSON object and under 4000 bytes
             table.HasCheckConstraint("CK_asset_processing_jobs_payload_type", "jsonb_typeof(\"Payload\") = 'object'");
             table.HasCheckConstraint("CK_asset_processing_jobs_payload_size", "octet_length(CAST(\"Payload\" AS text)) <= 4000");
@@ -38,43 +38,43 @@ internal sealed class AssetProcessingJobConfiguration : IEntityTypeConfiguration
         });
 
         builder.HasKey(j => j.Id);
-        
+
         builder.Property(j => j.AssetId).IsRequired();
         builder.Property(j => j.AssetVersionId).IsRequired();
-        
+
         builder.Property(j => j.Type)
             .IsRequired()
             .HasMaxLength(64)
             .HasConversion(
                 t => t.ToString(),
                 s => Enum.Parse<AssetProcessingJobType>(s));
-                
+
         builder.Property(j => j.DefinitionVersion).IsRequired();
-        
+
         builder.Property(j => j.Status)
             .IsRequired()
             .HasMaxLength(64)
             .HasConversion(
                 s => s.ToString(),
                 s => Enum.Parse<AssetProcessingJobStatus>(s));
-                
+
         builder.Property(j => j.Stage).IsRequired().HasMaxLength(64);
         builder.Property(j => j.AttemptCount).IsRequired();
         builder.Property(j => j.MaxAttempts).IsRequired();
         builder.Property(j => j.AvailableAt).IsRequired();
-        
+
         builder.Property(j => j.LeaseOwner).HasMaxLength(128);
         builder.Property(j => j.LeaseToken);
         builder.Property(j => j.LeaseExpiresAt);
         builder.Property(j => j.StartedAt);
         builder.Property(j => j.CompletedAt);
-        
+
         builder.Property(j => j.ErrorCode).HasMaxLength(64);
         builder.Property(j => j.ErrorSummary).HasMaxLength(2000);
         builder.Property(j => j.Payload).HasColumnType("jsonb").IsRequired();
         builder.Property(j => j.Result).HasColumnType("jsonb");
         builder.Property(j => j.TraceParent).HasMaxLength(128);
-        
+
         builder.Property(j => j.CreatedAt).IsRequired();
         builder.Property(j => j.UpdatedAt);
 

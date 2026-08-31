@@ -1,4 +1,4 @@
-﻿namespace AssetBlock.Infrastructure.Persistence.Analytics;
+namespace AssetBlock.Infrastructure.Persistence.Analytics;
 
 /// <summary>Combined overview queries to reduce PostgreSQL round-trips.</summary>
 internal static class AnalyticsOverviewBatchSql
