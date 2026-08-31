@@ -2,10 +2,12 @@ import { cookies } from 'next/headers'
 import { fetchBackendAuthorized } from '@/lib/server/backend-authorized'
 import {
   assertSameOrigin,
-  forwardBackendResponse,
+  forwardAuthenticatedBackendResponse,
   problemResponse,
   zodValidationProblemResponse,
 } from '@/lib/server/bff-http'
+import { parseUuidParam } from '@/lib/server/bff-params'
+import { LONG_RUNNING_BACKEND_TIMEOUT_MS } from '@/lib/server/fetch-backend'
 import {
   buildPublishVersionForwardForm,
   parsePublishVersionMultipart,
@@ -20,6 +22,11 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
   if (originError) return originError
 
   const { id } = await context.params
+  const parsedId = parseUuidParam('id', id)
+  if (!parsedId.ok) {
+    return parsedId.response
+  }
+
   const incoming = await request.formData()
   const { parsed, file, fileError } = parsePublishVersionMultipart(incoming)
 
@@ -36,11 +43,13 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
   const forwardBody = buildPublishVersionForwardForm(parsed.data, file)
   const res = await fetchBackendAuthorized(
     store,
-    `/api/assets/${encodeURIComponent(id)}/versions`,
+    `/api/assets/${encodeURIComponent(parsedId.value)}/versions`,
     {
       method: 'POST',
       body: forwardBody,
+      signal: request.signal,
     },
+    { timeoutMs: LONG_RUNNING_BACKEND_TIMEOUT_MS },
   )
-  return forwardBackendResponse(res)
+  return forwardAuthenticatedBackendResponse(res)
 }

@@ -110,13 +110,13 @@ public sealed class OptionsValidateOnStartTests
     {
         var key = encryptionKey ?? Convert.ToBase64String(RandomNumberGenerator.GetBytes(32));
         var encryptionSection = encryptionCurrentKeyId is not null
-            ? (object)new { CurrentKeyId = encryptionCurrentKeyId, Keys = new Dictionary<string, string> { ["k1"] = key } }
+            ? new { CurrentKeyId = encryptionCurrentKeyId, Keys = new Dictionary<string, string> { ["k1"] = key } }
             : (object)new { Keys = new Dictionary<string, string> { ["k1"] = key } };
         var tempKeysPath = Path.Combine(Path.GetTempPath(), "assetblock-dp-tests", Guid.NewGuid().ToString("N"));
         var json = JsonSerializer.Serialize(new
         {
             ConnectionStrings = new { DefaultConnection = "Host=127.0.0.1;Port=5432;Database=test;Username=u;Password=p" },
-            Jwt = new { Key = new string('k', 32), Issuer = "iss", Audience = "aud", AccessTokenMinutes = 15, RefreshTokenDays = 7 },
+            Jwt = new { Key = new string('k', 32), Issuer = "iss", Audience = "aud", AccessTokenMinutes = 15, RefreshTokenDays = 7, HubAudience = "hub", HubTokenSeconds = 90 },
             Encryption = encryptionSection,
             Storage = new { Provider = "Minio" },
             Minio = new { Endpoint = "http://localhost:9000", Bucket = "assets", AccessKey = "local-access", SecretKey = "local-secret", UseSsl = false },

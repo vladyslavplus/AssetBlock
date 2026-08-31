@@ -73,6 +73,11 @@ export function ListingCopilotPanel({
         AI listing suggestion
       </div>
 
+      <p className="text-[11px] text-muted-foreground">
+        Archive metadata and a sanitized README excerpt are processed by AI to generate suggestions.
+        README content is sent to remote AI providers only when zero-data-retention is enabled.
+      </p>
+
       {disabled ? (
         <p className="text-xs text-muted-foreground">
           AI listing suggestions are not available right now.

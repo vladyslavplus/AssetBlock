@@ -2,10 +2,11 @@ import { cookies } from 'next/headers'
 import { fetchBackendAuthorized } from '@/lib/server/backend-authorized'
 import {
   assertSameOrigin,
-  forwardBackendResponse,
+  forwardAuthenticatedBackendResponse,
   problemResponse,
   zodValidationProblemResponse,
 } from '@/lib/server/bff-http'
+import { LONG_RUNNING_BACKEND_TIMEOUT_MS } from '@/lib/server/fetch-backend'
 import {
   buildAssetUploadForwardForm,
   parseAssetUploadMultipart,
@@ -33,9 +34,15 @@ export async function POST(request: Request) {
 
   const store = await cookies()
   const forwardBody = buildAssetUploadForwardForm(parsed.data, file)
-  const res = await fetchBackendAuthorized(store, '/api/assets/upload', {
-    method: 'POST',
-    body: forwardBody,
-  })
-  return forwardBackendResponse(res)
+  const res = await fetchBackendAuthorized(
+    store,
+    '/api/assets/upload',
+    {
+      method: 'POST',
+      body: forwardBody,
+      signal: request.signal,
+    },
+    { timeoutMs: LONG_RUNNING_BACKEND_TIMEOUT_MS },
+  )
+  return forwardAuthenticatedBackendResponse(res)
 }

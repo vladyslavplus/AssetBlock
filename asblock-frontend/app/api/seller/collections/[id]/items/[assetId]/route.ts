@@ -1,6 +1,7 @@
 import { cookies } from 'next/headers'
 import { fetchBackendAuthorized } from '@/lib/server/backend-authorized'
-import { assertSameOrigin, forwardBackendResponse } from '@/lib/server/bff-http'
+import { assertSameOrigin, forwardAuthenticatedBackendResponse } from '@/lib/server/bff-http'
+import { parseUuidParam } from '@/lib/server/bff-params'
 
 export async function DELETE(
   request: Request,
@@ -10,11 +11,23 @@ export async function DELETE(
   if (originError) return originError
 
   const { id, assetId } = await context.params
+  const parsedId = parseUuidParam('id', id)
+  if (!parsedId.ok) {
+    return parsedId.response
+  }
+  const parsedAssetId = parseUuidParam('assetId', assetId)
+  if (!parsedAssetId.ok) {
+    return parsedAssetId.response
+  }
+
   const store = await cookies()
   const res = await fetchBackendAuthorized(
     store,
-    `/api/seller/collections/${encodeURIComponent(id)}/items/${encodeURIComponent(assetId)}`,
-    { method: 'DELETE' },
+    `/api/seller/collections/${encodeURIComponent(parsedId.value)}/items/${encodeURIComponent(parsedAssetId.value)}`,
+    {
+      method: 'DELETE',
+      signal: request.signal,
+    },
   )
-  return forwardBackendResponse(res)
+  return forwardAuthenticatedBackendResponse(res)
 }

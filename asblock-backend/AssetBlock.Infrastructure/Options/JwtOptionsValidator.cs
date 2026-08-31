@@ -40,6 +40,20 @@ internal sealed class JwtOptionsValidator : IValidateOptions<JwtOptions>
             failures.Add("Jwt:RefreshTokenDays must be a positive integer.");
         }
 
+        if (OptionsValidation.IsMissingOrPlaceholder(options.HubAudience))
+        {
+            failures.Add("Jwt:HubAudience must be non-empty.");
+        }
+        else if (string.Equals(options.HubAudience, options.Audience, StringComparison.Ordinal))
+        {
+            failures.Add("Jwt:HubAudience must differ from Jwt:Audience to enforce scheme separation.");
+        }
+
+        if (options.HubTokenSeconds is < 60 or > 120)
+        {
+            failures.Add("Jwt:HubTokenSeconds must be in the range [60, 120].");
+        }
+
         return failures.Count > 0
             ? ValidateOptionsResult.Fail(failures)
             : ValidateOptionsResult.Success;

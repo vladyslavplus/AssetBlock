@@ -2,28 +2,41 @@ import { cookies } from 'next/headers'
 import { fetchBackendAuthorized } from '@/lib/server/backend-authorized'
 import {
   assertSameOrigin,
-  forwardBackendResponse,
+  forwardAuthenticatedBackendResponse,
   invalidJsonResponse,
   zodValidationProblemResponse,
 } from '@/lib/server/bff-http'
+import { parseUuidParam } from '@/lib/server/bff-params'
 import { sellerAssetPatchSchema } from '@/lib/seller/seller-schemas'
 
-export async function GET(_request: Request, context: { params: Promise<{ id: string }> }) {
+export async function GET(request: Request, context: { params: Promise<{ id: string }> }) {
   const { id } = await context.params
+  const parsedId = parseUuidParam('id', id)
+  if (!parsedId.ok) {
+    return parsedId.response
+  }
+
   const store = await cookies()
   const res = await fetchBackendAuthorized(
     store,
-    `/api/users/me/assets/${encodeURIComponent(id)}`,
+    `/api/users/me/assets/${encodeURIComponent(parsedId.value)}`,
     {
       method: 'GET',
+      signal: request.signal,
     },
   )
-  return forwardBackendResponse(res)
+  return forwardAuthenticatedBackendResponse(res)
 }
 
 export async function PATCH(request: Request, context: { params: Promise<{ id: string }> }) {
   const originError = assertSameOrigin(request)
   if (originError) return originError
+
+  const { id } = await context.params
+  const parsedId = parseUuidParam('id', id)
+  if (!parsedId.ok) {
+    return parsedId.response
+  }
 
   const bodyText = await request.text()
   let bodyJson: unknown
@@ -38,14 +51,18 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
     return zodValidationProblemResponse(parsed.error)
   }
 
-  const { id } = await context.params
   const store = await cookies()
-  const res = await fetchBackendAuthorized(store, `/api/assets/${encodeURIComponent(id)}`, {
-    method: 'PATCH',
-    body: JSON.stringify(parsed.data),
-    headers: { 'Content-Type': 'application/json' },
-  })
-  return forwardBackendResponse(res)
+  const res = await fetchBackendAuthorized(
+    store,
+    `/api/assets/${encodeURIComponent(parsedId.value)}`,
+    {
+      method: 'PATCH',
+      body: JSON.stringify(parsed.data),
+      headers: { 'Content-Type': 'application/json' },
+      signal: request.signal,
+    },
+  )
+  return forwardAuthenticatedBackendResponse(res)
 }
 
 export async function DELETE(request: Request, context: { params: Promise<{ id: string }> }) {
@@ -53,9 +70,19 @@ export async function DELETE(request: Request, context: { params: Promise<{ id: 
   if (originError) return originError
 
   const { id } = await context.params
+  const parsedId = parseUuidParam('id', id)
+  if (!parsedId.ok) {
+    return parsedId.response
+  }
+
   const store = await cookies()
-  const res = await fetchBackendAuthorized(store, `/api/assets/${encodeURIComponent(id)}`, {
-    method: 'DELETE',
-  })
-  return forwardBackendResponse(res)
+  const res = await fetchBackendAuthorized(
+    store,
+    `/api/assets/${encodeURIComponent(parsedId.value)}`,
+    {
+      method: 'DELETE',
+      signal: request.signal,
+    },
+  )
+  return forwardAuthenticatedBackendResponse(res)
 }

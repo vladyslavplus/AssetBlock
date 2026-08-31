@@ -1,4 +1,5 @@
 using AssetBlock.Domain.Core.Constants;
+using AssetBlock.WebApi.Constants;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.SignalR;
 
@@ -6,8 +7,9 @@ namespace AssetBlock.WebApi.Hubs;
 
 /// <summary>
 /// User-scoped real-time notifications; the authenticated user id claim must match SignalR Clients.User routing.
+/// Accepts only hub-only tokens (hub bearer scheme). Session access tokens are rejected.
 /// </summary>
-[Authorize]
+[Authorize(AuthenticationSchemes = JwtAuthenticationSchemes.HUB)]
 public sealed class NotificationsHub : Hub
 {
     public const string ORDER_READY = NotificationHubMethods.ORDER_READY;

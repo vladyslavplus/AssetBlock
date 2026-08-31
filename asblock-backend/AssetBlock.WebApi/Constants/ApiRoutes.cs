@@ -7,6 +7,7 @@ public static class ApiRoutes
 {
     public static class Auth
     {
+        public const string BASE = "api/auth";
         public const string LOGIN = "login";
         public const string REFRESH = "refresh";
         public const string LOGOUT = "logout";
@@ -15,6 +16,8 @@ public static class ApiRoutes
         public const string PASSWORD_RESET_CONFIRM = "password-reset/confirm";
         public const string EMAIL_VERIFICATION_CONFIRM = "email-verification/confirm";
         public const string EMAIL_CHANGE_CONFIRM = "email-change/confirm";
+        /// <summary>Issues a short-lived hub-only JWT for SignalR WebSocket authentication.</summary>
+        public const string SIGNALR_TOKEN = "signalr-token";
     }
 
     public static class Categories

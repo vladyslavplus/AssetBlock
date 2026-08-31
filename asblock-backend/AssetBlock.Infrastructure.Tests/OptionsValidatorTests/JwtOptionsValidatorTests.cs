@@ -70,12 +70,52 @@ public sealed class JwtOptionsValidatorTests
         result.Failures.Should().Contain(m => m.Contains("RefreshTokenDays"));
     }
 
+    [Fact]
+    public void Validate_WhenHubAudienceMissing_ShouldFail()
+    {
+        var options = CreateValid();
+        options.HubAudience = "";
+
+        var result = _sut.Validate(null, options);
+
+        result.Failed.Should().BeTrue();
+        result.Failures.Should().Contain(m => m.Contains("HubAudience"));
+    }
+
+    [Fact]
+    public void Validate_WhenHubAudienceSameAsRestAudience_ShouldFail()
+    {
+        var options = CreateValid();
+        options.HubAudience = options.Audience;
+
+        var result = _sut.Validate(null, options);
+
+        result.Failed.Should().BeTrue();
+        result.Failures.Should().Contain(m => m.Contains("HubAudience"));
+    }
+
+    [Theory]
+    [InlineData(59)]
+    [InlineData(121)]
+    public void Validate_WhenHubTokenSecondsOutOfRange_ShouldFail(int seconds)
+    {
+        var options = CreateValid();
+        options.HubTokenSeconds = seconds;
+
+        var result = _sut.Validate(null, options);
+
+        result.Failed.Should().BeTrue();
+        result.Failures.Should().Contain(m => m.Contains("HubTokenSeconds"));
+    }
+
     private static JwtOptions CreateValid() => new()
     {
         Issuer = "AssetBlock",
         Audience = "AssetBlock.Api",
         Key = new string('k', JwtOptionsValidator.MIN_SIGNING_KEY_LENGTH),
         AccessTokenMinutes = 15,
-        RefreshTokenDays = 7
+        RefreshTokenDays = 7,
+        HubAudience = "AssetBlock.Hub",
+        HubTokenSeconds = 90
     };
 }

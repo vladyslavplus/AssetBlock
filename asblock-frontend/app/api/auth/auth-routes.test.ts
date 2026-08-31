@@ -82,12 +82,22 @@ describe('auth BFF routes', () => {
     expect(cookieStore.snapshot()[AUTH_COOKIE_REFRESH]).toBe('refresh-secret')
   })
 
-  it('clears cookies on failed refresh and returns 401 ProblemDetails without tokens', async () => {
+  it('clears cookies on confirmed ERR_AUTH_TOKEN_INVALID and returns 401 ProblemDetails', async () => {
     cookieStore.set(AUTH_COOKIE_ACCESS, 'old-access')
     cookieStore.set(AUTH_COOKIE_REFRESH, 'old-refresh')
     vi.stubGlobal(
       'fetch',
-      vi.fn(async () => new Response(JSON.stringify({ title: 'Unauthorized' }), { status: 401 })),
+      vi.fn(
+        async () =>
+          new Response(
+            JSON.stringify({
+              code: 'ERR_AUTH_TOKEN_INVALID',
+              title: 'Unauthorized',
+              type: 'urn:assetblock:error:ERR_AUTH_TOKEN_INVALID',
+            }),
+            { status: 400, headers: { 'Content-Type': 'application/problem+json' } },
+          ),
+      ),
     )
     const res = await refreshPost(
       new Request('http://localhost:3000/api/auth/refresh', {
@@ -107,6 +117,125 @@ describe('auth BFF routes', () => {
     expect(JSON.stringify(body)).not.toContain('old-refresh')
     expect(cookieStore.snapshot()[AUTH_COOKIE_ACCESS]).toBeUndefined()
     expect(cookieStore.snapshot()[AUTH_COOKIE_REFRESH]).toBeUndefined()
+  })
+
+  it('preserves cookies and Retry-After header on 429 rate limit', async () => {
+    cookieStore.set(AUTH_COOKIE_ACCESS, 'old-access')
+    cookieStore.set(AUTH_COOKIE_REFRESH, 'old-refresh')
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(
+        async () =>
+          new Response(
+            JSON.stringify({
+              code: 'ERR_RATE_LIMIT_EXCEEDED',
+              title: 'Too Many Requests',
+            }),
+            {
+              status: 429,
+              headers: {
+                'Content-Type': 'application/problem+json',
+                'Retry-After': '120',
+              },
+            },
+          ),
+      ),
+    )
+    const res = await refreshPost(
+      new Request('http://localhost:3000/api/auth/refresh', {
+        method: 'POST',
+        headers: { Origin: 'http://localhost:3000' },
+      }),
+    )
+    expect(res.status).toBe(429)
+    expect(res.headers.get('Retry-After')).toBe('120')
+    const body = await res.json()
+    expect(body.code).toBe('ERR_RATE_LIMIT_EXCEEDED')
+    expect(cookieStore.snapshot()[AUTH_COOKIE_REFRESH]).toBe('old-refresh')
+  })
+
+  it('preserves cookies on malformed 200 payload and returns 502', async () => {
+    cookieStore.set(AUTH_COOKIE_ACCESS, 'old-access')
+    cookieStore.set(AUTH_COOKIE_REFRESH, 'old-refresh')
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(
+        async () =>
+          new Response(JSON.stringify({ malformed: true }), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          }),
+      ),
+    )
+    const res = await refreshPost(
+      new Request('http://localhost:3000/api/auth/refresh', {
+        method: 'POST',
+        headers: { Origin: 'http://localhost:3000' },
+      }),
+    )
+    expect(res.status).toBe(502)
+    const body = await res.json()
+    expect(body.code).toBe('ERR_GATEWAY_ERROR')
+    expect(cookieStore.snapshot()[AUTH_COOKIE_REFRESH]).toBe('old-refresh')
+  })
+
+  it('preserves cookies on 403 ERR_FORBIDDEN and does not wipe session', async () => {
+    cookieStore.set(AUTH_COOKIE_ACCESS, 'old-access')
+    cookieStore.set(AUTH_COOKIE_REFRESH, 'old-refresh')
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(
+        async () =>
+          new Response(
+            JSON.stringify({
+              code: 'ERR_FORBIDDEN',
+              title: 'Forbidden',
+            }),
+            { status: 403, headers: { 'Content-Type': 'application/problem+json' } },
+          ),
+      ),
+    )
+    const res = await refreshPost(
+      new Request('http://localhost:3000/api/auth/refresh', {
+        method: 'POST',
+        headers: { Origin: 'http://localhost:3000' },
+      }),
+    )
+    // 403 without ERR_AUTH_TOKEN_INVALID must not wipe cookies
+    expect(res.status).toBe(403)
+    expect(cookieStore.snapshot()[AUTH_COOKIE_REFRESH]).toBe('old-refresh')
+  })
+
+  it('does not leak untrusted upstream error detail to the browser on 500/400 errors', async () => {
+    cookieStore.set(AUTH_COOKIE_ACCESS, 'old-access')
+    cookieStore.set(AUTH_COOKIE_REFRESH, 'old-refresh')
+    const secretDetail = 'Sensitive DB password connection failed at 10.0.0.1:5432'
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(
+        async () =>
+          new Response(
+            JSON.stringify({
+              code: 'ERR_INTERNAL_SERVER_ERROR',
+              title: 'Internal Server Error',
+              detail: secretDetail,
+            }),
+            { status: 500, headers: { 'Content-Type': 'application/problem+json' } },
+          ),
+      ),
+    )
+    const res = await refreshPost(
+      new Request('http://localhost:3000/api/auth/refresh', {
+        method: 'POST',
+        headers: { Origin: 'http://localhost:3000' },
+      }),
+    )
+    expect(res.status).toBe(502)
+    const body = await res.json()
+    expect(body.code).toBe('ERR_GATEWAY_ERROR')
+    expect(body.detail).toBe('The service response was invalid.')
+    expect(JSON.stringify(body)).not.toContain(secretDetail)
+    expect(cookieStore.snapshot()[AUTH_COOKIE_REFRESH]).toBe('old-refresh')
   })
 
   it('logout clears auth cookies and returns ok', async () => {

@@ -1,4 +1,4 @@
-﻿using AssetBlock.Domain.Core.Dto.Auth;
+using AssetBlock.Domain.Core.Dto.Auth;
 using AssetBlock.Domain.Core.Primitives.Api;
 
 namespace AssetBlock.Domain.Abstractions.Services;
@@ -6,6 +6,8 @@ namespace AssetBlock.Domain.Abstractions.Services;
 public interface IJwtTokenService
 {
     TokensResponse GenerateTokenPair(Guid userId, string username, string email, string role);
+    /// <summary>Generates a short-lived hub-only JWT. Never persisted. Accepted only by the SignalR hub bearer scheme.</summary>
+    HubTokenResponse GenerateHubToken(Guid userId);
     Task StoreRefreshToken(Guid userId, string refreshToken, DateTimeOffset expiresAt, CancellationToken cancellationToken = default);
     Task<RefreshTokenValidationResult> ValidateRefreshToken(string refreshToken, CancellationToken cancellationToken = default);
     /// <summary>Revokes a single refresh token atomically. Returns true if the token was actively revoked, false if not found or already revoked.</summary>

@@ -1,4 +1,4 @@
-﻿using AssetBlock.Domain.Core.Constants;
+using AssetBlock.Domain.Core.Constants;
 using AssetBlock.Domain.Core.Dto.Auth;
 using AssetBlock.Domain.Core.Entities;
 using AssetBlock.Domain.Core.Primitives.Api;
@@ -174,7 +174,7 @@ public sealed class JwtTokenServicePostgresTests(PostgresFixture fixture)
         remaining.Should().Contain(r => r.ExpiresAt > now);
     }
 
-    private static JwtTokenService CreateSut(AssetBlock.Infrastructure.Persistence.ApplicationDbContext db)
+    private static JwtTokenService CreateSut(ApplicationDbContext db)
     {
         IOptions<JwtOptions> opts = Microsoft.Extensions.Options.Options.Create(new JwtOptions
         {
@@ -182,7 +182,9 @@ public sealed class JwtTokenServicePostgresTests(PostgresFixture fixture)
             Issuer = "iss",
             Audience = "aud",
             AccessTokenMinutes = 15,
-            RefreshTokenDays = 7
+            RefreshTokenDays = 7,
+            HubAudience = "hub-aud",
+            HubTokenSeconds = 90
         });
         return new JwtTokenService(db, opts, NullLogger<JwtTokenService>.Instance);
     }

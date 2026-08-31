@@ -1,22 +1,24 @@
 import { cookies } from 'next/headers'
 import { fetchBackendAuthorized } from '@/lib/server/backend-authorized'
-import { forwardBackendResponse } from '@/lib/server/bff-http'
+import { forwardAuthenticatedBackendResponse } from '@/lib/server/bff-http'
+import { parseUuidParam } from '@/lib/server/bff-params'
 
 interface RouteContext {
   params: Promise<{ checkoutIntentId: string }>
 }
 
-export async function GET(_request: Request, context: RouteContext) {
+export async function GET(request: Request, context: RouteContext) {
   const { checkoutIntentId } = await context.params
-  if (!checkoutIntentId?.trim()) {
-    return Response.json({ title: 'Not Found', status: 404 }, { status: 404 })
+  const parsedId = parseUuidParam('checkoutIntentId', checkoutIntentId)
+  if (!parsedId.ok) {
+    return parsedId.response
   }
 
   const store = await cookies()
   const res = await fetchBackendAuthorized(
     store,
-    `/api/payments/checkout/${encodeURIComponent(checkoutIntentId)}/status`,
-    { method: 'GET' },
+    `/api/payments/checkout/${encodeURIComponent(parsedId.value)}/status`,
+    { method: 'GET', signal: request.signal },
   )
-  return forwardBackendResponse(res)
+  return forwardAuthenticatedBackendResponse(res)
 }

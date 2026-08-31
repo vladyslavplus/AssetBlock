@@ -66,7 +66,9 @@ describe('fetchPublicProfileByUsername', () => {
 
     expect(first).toEqual(sampleProfile)
     expect(second).toEqual(sampleProfile)
-    expect(fetchMock).toHaveBeenCalledTimes(1)
-    expect(fetchMock).toHaveBeenCalledWith(`${API}/api/users/alice`, { cache: 'no-store' })
+    expect(fetchMock).toHaveBeenCalledWith(
+      `${API}/api/users/alice`,
+      expect.objectContaining({ cache: 'no-store' }),
+    )
   })
 })

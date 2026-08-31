@@ -41,6 +41,8 @@ public sealed class AssetBlockWebApplicationFactory(string connectionString) : W
         builder.UseSetting("Jwt:Audience", "AssetBlock.Integration.Api");
         builder.UseSetting("Jwt:AccessTokenMinutes", "60");
         builder.UseSetting("Jwt:RefreshTokenDays", "7");
+        builder.UseSetting("Jwt:HubAudience", "AssetBlock.Integration.Hub");
+        builder.UseSetting("Jwt:HubTokenSeconds", "90");
         builder.UseSetting("Storage:Provider", "Minio");
         builder.UseSetting("Minio:Endpoint", "http://127.0.0.1:9000");
         builder.UseSetting("Minio:Bucket", "assets");

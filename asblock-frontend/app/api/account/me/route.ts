@@ -2,16 +2,19 @@ import { cookies } from 'next/headers'
 import { fetchBackendAuthorized } from '@/lib/server/backend-authorized'
 import {
   assertSameOrigin,
-  forwardBackendResponse,
+  forwardAuthenticatedBackendResponse,
   invalidJsonResponse,
   zodValidationProblemResponse,
 } from '@/lib/server/bff-http'
 import { accountProfileUpdateSchema } from '@/lib/account/account-schemas'
 
-export async function GET() {
+export async function GET(request: Request) {
   const store = await cookies()
-  const res = await fetchBackendAuthorized(store, '/api/users/me', { method: 'GET' })
-  return forwardBackendResponse(res)
+  const res = await fetchBackendAuthorized(store, '/api/users/me', {
+    method: 'GET',
+    signal: request?.signal,
+  })
+  return forwardAuthenticatedBackendResponse(res)
 }
 
 export async function PATCH(request: Request) {
@@ -36,6 +39,7 @@ export async function PATCH(request: Request) {
     method: 'PATCH',
     body: JSON.stringify(parsed.data),
     headers: { 'Content-Type': 'application/json' },
+    signal: request.signal,
   })
-  return forwardBackendResponse(res)
+  return forwardAuthenticatedBackendResponse(res)
 }

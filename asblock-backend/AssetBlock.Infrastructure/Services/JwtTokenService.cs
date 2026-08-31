@@ -1,4 +1,4 @@
-﻿using System.Security.Claims;
+using System.Security.Claims;
 using System.Security.Cryptography;
 using System.Text;
 using AssetBlock.Domain.Abstractions.Services;
@@ -54,6 +54,39 @@ internal sealed class JwtTokenService(
 
         logger.LogDebug("Generated token pair for user {UserId}", userId);
         return new TokensResponse(accessToken, refreshToken, accessExpiresAt, refreshExpiresAt);
+    }
+
+    public HubTokenResponse GenerateHubToken(Guid userId)
+    {
+        JwtOptions jwtOptions = options.Value;
+        var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtOptions.Key));
+        var credentials = new SigningCredentials(key, SecurityAlgorithms.HmacSha256);
+        DateTimeOffset expiresAt = DateTimeOffset.UtcNow.AddSeconds(jwtOptions.HubTokenSeconds);
+
+        // Intentionally minimal claims: no email, role, or name.
+        // The distinct hub audience and token_use claim prevent this token from
+        // authorising any REST endpoint that validates audience or token_use.
+        var claims = new List<Claim>
+        {
+            new(ClaimTypes.NameIdentifier, userId.ToString()),
+            new(JwtClaimTypes.SUB, userId.ToString()),
+            new(JwtClaimTypes.JTI, Guid.NewGuid().ToString()),
+            new(JwtClaimTypes.TOKEN_USE, JwtClaimValues.TOKEN_USE_SIGNALR)
+        };
+
+        var tokenDescriptor = new SecurityTokenDescriptor
+        {
+            Subject = new ClaimsIdentity(claims),
+            Expires = expiresAt.UtcDateTime,
+            Issuer = jwtOptions.Issuer,
+            Audience = jwtOptions.HubAudience,
+            SigningCredentials = credentials
+        };
+
+        var handler = new Microsoft.IdentityModel.JsonWebTokens.JsonWebTokenHandler();
+        var hubToken = handler.CreateToken(tokenDescriptor);
+        logger.LogDebug("Generated hub token for user {UserId}", userId);
+        return new HubTokenResponse(hubToken, expiresAt);
     }
 
     public async Task StoreRefreshToken(Guid userId, string refreshToken, DateTimeOffset expiresAt, CancellationToken cancellationToken = default)

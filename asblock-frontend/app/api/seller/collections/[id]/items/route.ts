@@ -3,16 +3,22 @@ import { addCollectionItemSchema } from '@/lib/collections/collection-schemas'
 import { fetchBackendAuthorized } from '@/lib/server/backend-authorized'
 import {
   assertSameOrigin,
-  forwardBackendResponse,
+  forwardAuthenticatedBackendResponse,
   invalidJsonResponse,
   zodValidationProblemResponse,
 } from '@/lib/server/bff-http'
+import { parseUuidParam } from '@/lib/server/bff-params'
 
 export async function POST(request: Request, context: { params: Promise<{ id: string }> }) {
   const originError = assertSameOrigin(request)
   if (originError) return originError
 
   const { id } = await context.params
+  const parsedId = parseUuidParam('id', id)
+  if (!parsedId.ok) {
+    return parsedId.response
+  }
+
   let json: unknown
   try {
     json = await request.json()
@@ -27,12 +33,13 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
   const store = await cookies()
   const res = await fetchBackendAuthorized(
     store,
-    `/api/seller/collections/${encodeURIComponent(id)}/items`,
+    `/api/seller/collections/${encodeURIComponent(parsedId.value)}/items`,
     {
       method: 'POST',
       body: JSON.stringify(parsed.data),
       headers: { 'Content-Type': 'application/json' },
+      signal: request.signal,
     },
   )
-  return forwardBackendResponse(res)
+  return forwardAuthenticatedBackendResponse(res)
 }

@@ -108,6 +108,7 @@ internal static class RateLimitingExtensions
                 AddNoOpPolicy(RateLimitingConstants.Policies.AUTH_REFRESH);
                 AddNoOpPolicy(RateLimitingConstants.Policies.AUTH_PASSWORD_RESET_REQUEST);
                 AddNoOpPolicy(RateLimitingConstants.Policies.AUTH_EMAIL_ACTION_CONFIRM);
+                AddNoOpPolicy(RateLimitingConstants.Policies.AUTH_SIGNALR_TOKEN);
                 AddNoOpPolicy(RateLimitingConstants.Policies.USERS_EMAIL_VERIFICATION_RESEND);
                 AddNoOpPolicy(RateLimitingConstants.Policies.USERS_EMAIL_CHANGE_REQUEST);
                 AddNoOpPolicy(RateLimitingConstants.Policies.USERS_PASSWORD_CHANGE);
@@ -177,6 +178,16 @@ internal static class RateLimitingExtensions
                 {
                     Window = TimeSpan.FromSeconds(RateLimitingConstants.Windows.AUTH_EMAIL_ACTION_CONFIRM_PERIOD_SECONDS),
                     PermitLimit = RateLimitingConstants.Windows.AUTH_EMAIL_ACTION_CONFIRM_LIMIT,
+                    QueueProcessingOrder = QueueProcessingOrder.OldestFirst
+                }));
+
+        opts.AddPolicy(RateLimitingConstants.Policies.AUTH_SIGNALR_TOKEN, httpContext =>
+            RateLimitPartition.GetFixedWindowLimiter(
+                partitionKey: GetUserPartitionKey(httpContext),
+                factory: _ => new FixedWindowRateLimiterOptions
+                {
+                    Window = TimeSpan.FromSeconds(RateLimitingConstants.Windows.AUTH_SIGNALR_TOKEN_PERIOD_SECONDS),
+                    PermitLimit = RateLimitingConstants.Windows.AUTH_SIGNALR_TOKEN_LIMIT,
                     QueueProcessingOrder = QueueProcessingOrder.OldestFirst
                 }));
     }

@@ -160,11 +160,11 @@ function buildConnection(): signalR.HubConnection {
         if (!res.ok) {
           throw new Error('SignalR token unavailable')
         }
-        const data = (await res.json()) as { accessToken?: string }
-        if (!data.accessToken) {
-          throw new Error('SignalR token missing')
+        const data = (await res.json()) as { hubToken?: string }
+        if (!data.hubToken) {
+          throw new Error('SignalR hub token missing')
         }
-        return data.accessToken
+        return data.hubToken
       },
       transport:
         signalR.HttpTransportType.WebSockets |

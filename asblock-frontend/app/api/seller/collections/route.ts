@@ -1,20 +1,48 @@
 import { cookies } from 'next/headers'
+import { z } from 'zod'
 import { createCollectionSchema } from '@/lib/collections/collection-schemas'
 import { fetchBackendAuthorized } from '@/lib/server/backend-authorized'
 import {
   assertSameOrigin,
-  forwardBackendResponse,
+  forwardAuthenticatedBackendResponse,
   invalidJsonResponse,
   zodValidationProblemResponse,
 } from '@/lib/server/bff-http'
 
+const sellerCollectionsQuerySchema = z.object({
+  page: z.coerce.number().int().min(1).optional(),
+  pageSize: z.coerce.number().int().min(1).max(100).optional(),
+  sortBy: z.enum(['UpdatedAt', 'CreatedAt', 'Title', 'Status']).optional(),
+  sortDirection: z.enum(['ASC', 'DESC']).optional(),
+  status: z.enum(['DRAFT', 'PUBLISHED', 'ARCHIVED']).optional(),
+  search: z.string().trim().max(200).optional(),
+})
+
 export async function GET(request: Request) {
-  const store = await cookies()
   const url = new URL(request.url)
-  const qs = url.searchParams.toString()
-  const backendPath = `/api/seller/collections${qs ? `?${qs}` : ''}`
-  const res = await fetchBackendAuthorized(store, backendPath, { method: 'GET' })
-  return forwardBackendResponse(res)
+  const queryResult = sellerCollectionsQuerySchema.safeParse(
+    Object.fromEntries(url.searchParams.entries()),
+  )
+  if (!queryResult.success) {
+    return zodValidationProblemResponse(queryResult.error)
+  }
+
+  const { page, pageSize, sortBy, sortDirection, status, search } = queryResult.data
+  const qs = new URLSearchParams()
+  if (page !== undefined) qs.set('page', String(page))
+  if (pageSize !== undefined) qs.set('pageSize', String(pageSize))
+  if (sortDirection) qs.set('sortDirection', sortDirection)
+  if (sortBy) qs.set('sortBy', sortBy)
+  if (status) qs.set('status', status)
+  if (search) qs.set('search', search)
+
+  const store = await cookies()
+  const backendPath = qs.size > 0 ? `/api/seller/collections?${qs.toString()}` : '/api/seller/collections'
+  const res = await fetchBackendAuthorized(store, backendPath, {
+    method: 'GET',
+    signal: request.signal,
+  })
+  return forwardAuthenticatedBackendResponse(res)
 }
 
 export async function POST(request: Request) {
@@ -40,6 +68,7 @@ export async function POST(request: Request) {
       description: parsed.data.description?.trim() ? parsed.data.description.trim() : null,
     }),
     headers: { 'Content-Type': 'application/json' },
+    signal: request.signal,
   })
-  return forwardBackendResponse(res)
+  return forwardAuthenticatedBackendResponse(res)
 }

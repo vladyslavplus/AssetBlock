@@ -122,7 +122,7 @@ public sealed class DependencyInjectionTests
         var json = JsonSerializer.Serialize(new
         {
             ConnectionStrings = new { DefaultConnection = "Host=127.0.0.1;Port=5432;Database=test;Username=u;Password=p" },
-            Jwt = new { Key = new string('k', 32), Issuer = "iss", Audience = "aud", AccessTokenMinutes = 15, RefreshTokenDays = 7 },
+            Jwt = new { Key = new string('k', 32), Issuer = "iss", Audience = "aud", AccessTokenMinutes = 15, RefreshTokenDays = 7, HubAudience = "hub", HubTokenSeconds = 90 },
             Encryption = new { CurrentKeyId = "k1", Keys = new Dictionary<string, string> { ["k1"] = "not-valid-base64!!" } },
             Storage = new { Provider = "Minio" },
             Minio = new { Endpoint = "http://localhost:9000", Bucket = "assets", AccessKey = "local-access", SecretKey = "local-secret", UseSsl = false },
@@ -240,7 +240,7 @@ public sealed class DependencyInjectionTests
                 DefaultConnection = "Host=127.0.0.1;Port=5432;Database=test;Username=u;Password=p",
                 Redis = includeRedis ? "localhost:6379" : null
             },
-            Jwt = new { Key = new string('k', 32), Issuer = "iss", Audience = "aud", AccessTokenMinutes = 15, RefreshTokenDays = 7 },
+            Jwt = new { Key = new string('k', 32), Issuer = "iss", Audience = "aud", AccessTokenMinutes = 15, RefreshTokenDays = 7, HubAudience = "hub", HubTokenSeconds = 90 },
             Encryption = new { CurrentKeyId = "k1", Keys = new Dictionary<string, string> { ["k1"] = key } },
             Storage = new { Provider = "Minio" },
             Minio = new { Endpoint = "http://localhost:9000", Bucket = "assets", AccessKey = "local-access", SecretKey = "local-secret", UseSsl = false },
@@ -308,7 +308,7 @@ public sealed class DependencyInjectionTests
             },
             AnalyticsRateLimiting = new { BffSigningSecret = new string('s', 32) },
             Encryption = new { CurrentKeyId = "k1", Keys = new Dictionary<string, string> { ["k1"] = key } },
-            Jwt = new { Key = new string('k', 32), Issuer = "iss", Audience = "aud", AccessTokenMinutes = 15, RefreshTokenDays = 7 },
+            Jwt = new { Key = new string('k', 32), Issuer = "iss", Audience = "aud", AccessTokenMinutes = 15, RefreshTokenDays = 7, HubAudience = "hub", HubTokenSeconds = 90 },
             Storage = new { Provider = "Minio" },
             Minio = new { Endpoint = "http://localhost:9000", Bucket = "assets", AccessKey = "local-access", SecretKey = "local-secret", UseSsl = false },
             SeaweedFs = new { Endpoint = "<seaweedfs-endpoint>:8333", Bucket = "<bucket-name>", AccessKey = "<k>", SecretKey = "<s>", UseSsl = true },

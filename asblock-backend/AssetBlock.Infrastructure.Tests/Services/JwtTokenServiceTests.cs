@@ -30,7 +30,7 @@ public sealed class JwtTokenServiceTests
         await sut.StoreRefreshToken(userId, tokens.RefreshToken, DateTimeOffset.UtcNow.AddDays(1));
 
         var validated = await sut.ValidateRefreshToken(tokens.RefreshToken);
-        validated.Status.Should().Be(AssetBlock.Domain.Core.Dto.Auth.RefreshTokenValidationStatus.VALID);
+        validated.Status.Should().Be(Domain.Core.Dto.Auth.RefreshTokenValidationStatus.VALID);
         validated.UserId.Should().Be(userId);
         validated.Username.Should().Be("tester");
     }
@@ -55,7 +55,36 @@ public sealed class JwtTokenServiceTests
         var tokens = sut.GenerateTokenPair(userId, "tester", "t@test.com", AppRoles.USER);
         await sut.StoreRefreshToken(userId, tokens.RefreshToken, DateTimeOffset.UtcNow.AddDays(-1));
 
-        (await sut.ValidateRefreshToken(tokens.RefreshToken)).Status.Should().Be(AssetBlock.Domain.Core.Dto.Auth.RefreshTokenValidationStatus.NOT_FOUND_OR_EXPIRED);
+        (await sut.ValidateRefreshToken(tokens.RefreshToken)).Status.Should().Be(Domain.Core.Dto.Auth.RefreshTokenValidationStatus.NOT_FOUND_OR_EXPIRED);
+    }
+
+    [Fact]
+    public void GenerateHubToken_ShouldReturnShortLivedTokenWithHubAudience()
+    {
+        using var db = InMemoryDbContextFactory.Create();
+        var sut = CreateSut(db);
+        var userId = Guid.NewGuid();
+
+        var result = sut.GenerateHubToken(userId);
+
+        result.HubToken.Should().NotBeNullOrWhiteSpace();
+        result.ExpiresAt.Should().BeCloseTo(DateTimeOffset.UtcNow.AddSeconds(90), TimeSpan.FromSeconds(5));
+
+        // Decode claims from the JWT payload without signature verification.
+        var parts = result.HubToken.Split('.');
+        parts.Should().HaveCount(3, "JWT must have three dot-separated parts");
+        var payloadJson = System.Text.Encoding.UTF8.GetString(
+            Convert.FromBase64String(PadBase64(parts[1])));
+        payloadJson.Should().Contain("\"aud\":\"hub-aud\"");
+        payloadJson.Should().Contain("\"token_use\":\"signalr\"");
+        payloadJson.Should().NotContain("\"email\"");
+        payloadJson.Should().NotContain("\"role\"");
+    }
+
+    private static string PadBase64(string base64Url)
+    {
+        var s = base64Url.Replace('-', '+').Replace('_', '/');
+        return s.PadRight(s.Length + (4 - s.Length % 4) % 4, '=');
     }
 
     private static JwtTokenService CreateSut(ApplicationDbContext db)
@@ -66,7 +95,9 @@ public sealed class JwtTokenServiceTests
             Issuer = "iss",
             Audience = "aud",
             AccessTokenMinutes = 15,
-            RefreshTokenDays = 7
+            RefreshTokenDays = 7,
+            HubAudience = "hub-aud",
+            HubTokenSeconds = 90
         });
         return new JwtTokenService(db, opts, NullLogger<JwtTokenService>.Instance);
     }

@@ -109,7 +109,7 @@ public sealed class AssetStorageDiTests
         var json = JsonSerializer.Serialize(new
         {
             ConnectionStrings = new { DefaultConnection = "Host=127.0.0.1;Port=5432;Database=test;Username=u;Password=p" },
-            Jwt = new { Key = new string('k', 32), Issuer = "iss", Audience = "aud", AccessTokenMinutes = 15, RefreshTokenDays = 7 },
+            Jwt = new { Key = new string('k', 32), Issuer = "iss", Audience = "aud", AccessTokenMinutes = 15, RefreshTokenDays = 7, HubAudience = "hub", HubTokenSeconds = 90 },
             Encryption = new { CurrentKeyId = "k1", Keys = new Dictionary<string, string> { ["k1"] = key } },
             Storage = new { Provider = provider },
             SeaweedFs = new

@@ -2,7 +2,7 @@ import { cookies } from 'next/headers'
 
 import { analyticsSalesBackendQuery } from '@/lib/server/analytics-bff-params'
 import { fetchBackendAuthorized } from '@/lib/server/backend-authorized'
-import { forwardBackendResponse } from '@/lib/server/bff-http'
+import { forwardAuthenticatedBackendResponse } from '@/lib/server/bff-http'
 
 /** Proxies GET /api/seller/analytics/sales with session cookies. */
 export async function GET(request: Request) {
@@ -11,6 +11,9 @@ export async function GET(request: Request) {
 
   const store = await cookies()
   const backendPath = `/api/seller/analytics/sales${query.qs}`
-  const res = await fetchBackendAuthorized(store, backendPath, { method: 'GET' })
-  return forwardBackendResponse(res)
+  const res = await fetchBackendAuthorized(store, backendPath, {
+    method: 'GET',
+    signal: request.signal,
+  })
+  return forwardAuthenticatedBackendResponse(res)
 }

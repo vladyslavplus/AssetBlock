@@ -1,10 +1,10 @@
 import { cache } from 'react'
 import { CATALOG_ASSETS_PAGE_SIZE } from '@/lib/catalog/catalog-filters'
-import { getServerApiBaseUrl } from '@/lib/http/api-config'
 import type { PagedResultDto, AssetListItemApi } from '@/lib/catalog/assets-api'
 import { mapApiAssetToListItem } from '@/lib/catalog/assets-api'
 import type { AssetListItem } from '@/lib/catalog/asset-types'
 import type { UserProfilePublic } from '@/lib/profile/public-profile-types'
+import { fetchBackendPublic } from '@/lib/server/fetch-backend'
 
 export const fetchPublicProfileByUsername = cache(
   async (username: string): Promise<UserProfilePublic | null> => {
@@ -12,17 +12,11 @@ export const fetchPublicProfileByUsername = cache(
     if (!trimmed) {
       return null
     }
-    const base = getServerApiBaseUrl()
-    const res = await fetch(`${base}/api/users/${encodeURIComponent(trimmed)}`, {
-      cache: 'no-store',
-    })
-    if (res.status === 404) {
+    const res = await fetchBackendPublic(`/api/users/${encodeURIComponent(trimmed)}`)
+    if (res.status === 404 || !res.ok) {
       return null
     }
-    if (!res.ok) {
-      return null
-    }
-    return (await res.json()) as UserProfilePublic
+    return (await res.json().catch(() => null)) as UserProfilePublic | null
   },
 )
 
@@ -46,8 +40,7 @@ export async function fetchAuthorAssetsPage(
     sortDirection: 'DESC',
     authorId,
   })
-  const base = getServerApiBaseUrl()
-  const res = await fetch(`${base}/api/assets?${qs.toString()}`, { cache: 'no-store' })
+  const res = await fetchBackendPublic(`/api/assets?${qs.toString()}`)
   if (!res.ok) {
     return {
       items: [],
@@ -57,14 +50,14 @@ export async function fetchAuthorAssetsPage(
       totalPages: 0,
     }
   }
-  const data = (await res.json()) as PagedResultDto<AssetListItemApi>
-  const totalCount = data.totalCount ?? 0
+  const data = (await res.json().catch(() => null)) as PagedResultDto<AssetListItemApi> | null
+  const totalCount = data?.totalCount ?? 0
   const totalPages =
     CATALOG_ASSETS_PAGE_SIZE > 0 ? Math.ceil(totalCount / CATALOG_ASSETS_PAGE_SIZE) : 0
   return {
-    items: (data.items ?? []).map(mapApiAssetToListItem),
+    items: (data?.items ?? []).map(mapApiAssetToListItem),
     totalCount,
-    page: data.page ?? safePage,
+    page: data?.page ?? safePage,
     pageSize: CATALOG_ASSETS_PAGE_SIZE,
     totalPages,
   }

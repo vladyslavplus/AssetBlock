@@ -2,10 +2,11 @@ import { cookies } from 'next/headers'
 import { fetchBackendAuthorized } from '@/lib/server/backend-authorized'
 import {
   assertSameOrigin,
-  forwardBackendResponse,
+  forwardAuthenticatedBackendResponse,
   invalidJsonResponse,
   zodValidationProblemResponse,
 } from '@/lib/server/bff-http'
+import { parseUuidParam } from '@/lib/server/bff-params'
 import { adminCategoryUpdateSchema } from '@/lib/admin/admin-schemas'
 
 export async function PUT(request: Request, context: { params: Promise<{ id: string }> }) {
@@ -13,6 +14,11 @@ export async function PUT(request: Request, context: { params: Promise<{ id: str
   if (originError) return originError
 
   const { id } = await context.params
+  const parsedId = parseUuidParam('id', id)
+  if (!parsedId.ok) {
+    return parsedId.response
+  }
+
   const bodyText = await request.text()
   let bodyJson: unknown
   try {
@@ -27,12 +33,17 @@ export async function PUT(request: Request, context: { params: Promise<{ id: str
   }
 
   const store = await cookies()
-  const res = await fetchBackendAuthorized(store, `/api/categories/${encodeURIComponent(id)}`, {
-    method: 'PUT',
-    body: JSON.stringify(parsed.data),
-    headers: { 'Content-Type': 'application/json' },
-  })
-  return forwardBackendResponse(res)
+  const res = await fetchBackendAuthorized(
+    store,
+    `/api/categories/${encodeURIComponent(parsedId.value)}`,
+    {
+      method: 'PUT',
+      body: JSON.stringify(parsed.data),
+      headers: { 'Content-Type': 'application/json' },
+      signal: request.signal,
+    },
+  )
+  return forwardAuthenticatedBackendResponse(res)
 }
 
 export async function DELETE(request: Request, context: { params: Promise<{ id: string }> }) {
@@ -40,9 +51,19 @@ export async function DELETE(request: Request, context: { params: Promise<{ id: 
   if (originError) return originError
 
   const { id } = await context.params
+  const parsedId = parseUuidParam('id', id)
+  if (!parsedId.ok) {
+    return parsedId.response
+  }
+
   const store = await cookies()
-  const res = await fetchBackendAuthorized(store, `/api/categories/${encodeURIComponent(id)}`, {
-    method: 'DELETE',
-  })
-  return forwardBackendResponse(res)
+  const res = await fetchBackendAuthorized(
+    store,
+    `/api/categories/${encodeURIComponent(parsedId.value)}`,
+    {
+      method: 'DELETE',
+      signal: request.signal,
+    },
+  )
+  return forwardAuthenticatedBackendResponse(res)
 }

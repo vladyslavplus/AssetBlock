@@ -35,41 +35,97 @@ describe('GET /api/auth/signalr-access', () => {
     })
   })
 
-  it('returns access token from cookie when authenticated', async () => {
-    const token = makeJwt(Math.floor(Date.now() / 1000) + 3600)
-    cookieStore.set(AUTH_COOKIE_ACCESS, token)
+  it('calls backend signalr-token endpoint and returns hubToken when authenticated', async () => {
+    const sessionToken = makeJwt(Math.floor(Date.now() / 1000) + 3600)
+    cookieStore.set(AUTH_COOKIE_ACCESS, sessionToken)
+
+    const hubToken = 'hub.jwt.token'
+    const expiresAt = new Date(Date.now() + 90_000).toISOString()
+
+    const fetchMock = vi.fn(
+      async (url: RequestInfo | URL, init?: RequestInit) => {
+        expect(String(url)).toContain('/api/auth/signalr-token')
+        expect(init?.method).toBe('POST')
+        expect(init?.headers).toBeDefined()
+        const headers = new Headers(init?.headers)
+        expect(headers.get('Authorization')).toBe(`Bearer ${sessionToken}`)
+        return new Response(JSON.stringify({ hubToken, expiresAt }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        })
+      },
+    )
+    vi.stubGlobal('fetch', fetchMock)
 
     const res = await GET()
     expect(res.status).toBe(200)
     expect(res.headers.get('Cache-Control')).toContain('no-store')
 
     const body = await res.json()
-    expect(body).toEqual({ accessToken: token })
+    expect(body).toEqual({ hubToken, expiresAt })
+    expect(body).not.toHaveProperty('accessToken')
   })
 
-  it('attempts session refresh and returns refreshed access token', async () => {
-    const rotated = makeJwt(Math.floor(Date.now() / 1000) + 3600)
-    cookieStore.set(AUTH_COOKIE_REFRESH, 'valid-refresh-token')
+  it('preserves 429 status and Retry-After header when rate limited by backend', async () => {
+    const sessionToken = makeJwt(Math.floor(Date.now() / 1000) + 3600)
+    cookieStore.set(AUTH_COOKIE_ACCESS, sessionToken)
 
     vi.stubGlobal(
       'fetch',
       vi.fn(
         async () =>
-          new Response(
-            JSON.stringify({
-              accessToken: rotated,
-              refreshToken: 'new-refresh-token',
-              accessExpiresAt: new Date(Date.now() + 3600_000).toISOString(),
-              refreshExpiresAt: new Date(Date.now() + 86400_000).toISOString(),
-            }),
-            { status: 200, headers: { 'Content-Type': 'application/json' } },
-          ),
+          new Response(JSON.stringify({ error: 'rate limited' }), {
+            status: 429,
+            headers: {
+              'Content-Type': 'application/json',
+              'Retry-After': '30',
+            },
+          }),
       ),
     )
 
     const res = await GET()
-    expect(res.status).toBe(200)
+    expect(res.status).toBe(429)
+    expect(res.headers.get('Retry-After')).toBe('30')
     const body = await res.json()
-    expect(body).toEqual({ accessToken: rotated })
+    expect(body.code).toBe('ERR_RATE_LIMIT_EXCEEDED')
+  })
+
+  it('preserves 504 status when backend request times out', async () => {
+    const sessionToken = makeJwt(Math.floor(Date.now() / 1000) + 3600)
+    cookieStore.set(AUTH_COOKIE_ACCESS, sessionToken)
+
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(
+        async () =>
+          new Response(JSON.stringify({ error: 'gateway timeout' }), {
+            status: 504,
+            headers: { 'Content-Type': 'application/problem+json' },
+          }),
+      ),
+    )
+
+    const res = await GET()
+    expect(res.status).toBe(504)
+    const body = await res.json()
+    expect(body.code).toBe('ERR_GATEWAY_TIMEOUT')
+  })
+
+  it('returns 502 ProblemDetails on network failure', async () => {
+    const sessionToken = makeJwt(Math.floor(Date.now() / 1000) + 3600)
+    cookieStore.set(AUTH_COOKIE_ACCESS, sessionToken)
+
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => {
+        throw new Error('Network error')
+      }),
+    )
+
+    const res = await GET()
+    expect(res.status).toBe(502)
+    const body = await res.json()
+    expect(body.code).toBe('ERR_GATEWAY_ERROR')
   })
 })

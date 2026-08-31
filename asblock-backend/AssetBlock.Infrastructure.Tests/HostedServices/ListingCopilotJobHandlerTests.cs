@@ -6,6 +6,7 @@ using AssetBlock.Domain.Core.Enums;
 using AssetBlock.Infrastructure.HostedServices.AssetProcessing.Handlers;
 using Microsoft.Extensions.Logging.Abstractions;
 using NSubstitute;
+using AssetBlock.Domain.Core.Primitives.AppSettingsOptions;
 
 namespace AssetBlock.Infrastructure.Tests.HostedServices;
 
@@ -15,6 +16,8 @@ public sealed class ListingCopilotJobHandlerTests
     private readonly IAssetArchiveAnalysisStore _analysisStore = Substitute.For<IAssetArchiveAnalysisStore>();
     private readonly IListingCopilotStore _copilotStore = Substitute.For<IListingCopilotStore>();
     private readonly IListingSuggestionOrchestrator _orchestrator = Substitute.For<IListingSuggestionOrchestrator>();
+    private readonly AiOptions _aiOptions = new() { Enabled = true, Provider = "OpenRouter" };
+    private readonly OpenRouterOptions _openRouterOptions = new() { ZeroDataRetention = true };
     private readonly ListingCopilotJobHandler _sut;
 
     public ListingCopilotJobHandlerTests()
@@ -26,6 +29,8 @@ public sealed class ListingCopilotJobHandlerTests
             _analysisStore,
             _copilotStore,
             _orchestrator,
+            Microsoft.Extensions.Options.Options.Create(_aiOptions),
+            Microsoft.Extensions.Options.Options.Create(_openRouterOptions),
             NullLogger<ListingCopilotJobHandler>.Instance);
     }
 
@@ -290,4 +295,62 @@ public sealed class ListingCopilotJobHandlerTests
             "gen-1",
             null,
             null);
+
+    [Fact]
+    public async Task Process_WhenOpenRouterAndZeroDataRetentionFalse_ShouldOmitReadme()
+    {
+        var aiOptions = Microsoft.Extensions.Options.Options.Create(new AiOptions { Enabled = true, Provider = "OpenRouter" });
+        var openRouterOptions = Microsoft.Extensions.Options.Options.Create(new OpenRouterOptions { ZeroDataRetention = false });
+        var sut = new ListingCopilotJobHandler(
+            _assetStore,
+            _analysisStore,
+            _copilotStore,
+            _orchestrator,
+            aiOptions,
+            openRouterOptions,
+            NullLogger<ListingCopilotJobHandler>.Instance);
+
+        var context = CreateContext();
+        _assetStore.GetVersion(context.AssetId, context.AssetVersionId, Arg.Any<CancellationToken>())
+            .Returns(CreateVersion(context));
+        _analysisStore.GetByVersionId(context.AssetVersionId, Arg.Any<CancellationToken>())
+            .Returns(CreateAnalysis(context.AssetVersionId));
+        _orchestrator.Generate(Arg.Any<ListingSuggestionGenerationRequest>(), Arg.Any<CancellationToken>())
+            .Returns(SuccessResult());
+
+        await sut.Process(context, CancellationToken.None);
+
+        await _orchestrator.Received(1).Generate(
+            Arg.Is<ListingSuggestionGenerationRequest>(r => r.Readme == null),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Process_WhenOpenRouterAndZeroDataRetentionTrue_ShouldIncludeSanitizedReadme()
+    {
+        var context = CreateContext();
+        _assetStore.GetVersion(context.AssetId, context.AssetVersionId, Arg.Any<CancellationToken>())
+            .Returns(CreateVersion(context));
+        _analysisStore.GetByVersionId(context.AssetVersionId, Arg.Any<CancellationToken>())
+            .Returns(new AssetArchiveAnalysis
+            {
+                AssetVersionId = context.AssetVersionId,
+                FileCount = 2,
+                TotalExpandedBytes = 40,
+                ReadmeContent = "# Title\nAPI_KEY=12345\nhttps://malicious.url\nClean description here.",
+                CreatedAt = DateTimeOffset.UtcNow
+            });
+        _orchestrator.Generate(Arg.Any<ListingSuggestionGenerationRequest>(), Arg.Any<CancellationToken>())
+            .Returns(SuccessResult());
+
+        await _sut.Process(context, CancellationToken.None);
+
+        await _orchestrator.Received(1).Generate(
+            Arg.Is<ListingSuggestionGenerationRequest>(r =>
+                r.Readme != null &&
+                !r.Readme.Text.Contains("API_KEY") &&
+                !r.Readme.Text.Contains("https://malicious.url") &&
+                r.Readme.Text.Contains("Clean description here.")),
+            Arg.Any<CancellationToken>());
+    }
 }

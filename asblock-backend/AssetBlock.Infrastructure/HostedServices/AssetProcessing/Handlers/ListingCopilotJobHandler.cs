@@ -3,8 +3,10 @@ using AssetBlock.Domain.Core;
 using AssetBlock.Domain.Core.Constants;
 using AssetBlock.Domain.Core.Dto;
 using AssetBlock.Domain.Core.Enums;
+using AssetBlock.Domain.Core.Primitives.AppSettingsOptions;
 using AssetBlock.Infrastructure.Persistence.Stores;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 
 namespace AssetBlock.Infrastructure.HostedServices.AssetProcessing.Handlers;
 
@@ -13,6 +15,8 @@ internal sealed class ListingCopilotJobHandler(
     IAssetArchiveAnalysisStore analysisStore,
     IListingCopilotStore listingCopilotStore,
     IListingSuggestionOrchestrator orchestrator,
+    IOptions<AiOptions> aiOptions,
+    IOptions<OpenRouterOptions> openRouterOptions,
     ILogger<ListingCopilotJobHandler> logger) : IAssetProcessingJobHandler<ListingCopilotPayload, ListingCopilotResult>
 {
     public async Task<AssetProcessingJobOutcome> Process(
@@ -70,9 +74,29 @@ internal sealed class ListingCopilotJobHandler(
                 ErrorCodesToErrorMessages.GetMessage(ErrorCodes.ERR_AI_ALLOWLIST_OVERFLOW));
         }
 
-        SafeReadmeExcerpt? readme = string.IsNullOrWhiteSpace(analysis.ReadmeContent)
-            ? null
-            : new SafeReadmeExcerpt(ListingSuggestionBounds.README_LABEL, analysis.ReadmeContent);
+        // Raw README content must never reach any AI provider without redaction.
+        var sanitizedReadme = ReadmeSanitizer.Sanitize(analysis.ReadmeContent);
+
+        // When the provider is OpenRouter and zero-data-retention is not enabled,
+        // omit the README entirely to prevent seller-uploaded content from crossing
+        // the remote provider boundary without ZDR guarantees.
+        SafeReadmeExcerpt? readme = null;
+        if (sanitizedReadme is not null)
+        {
+            var options = aiOptions.Value;
+            if (AiProviderParser.TryParse(options.Provider, out var parsedProvider)
+                && parsedProvider == AiProviderKind.OPENROUTER
+                && !openRouterOptions.Value.ZeroDataRetention)
+            {
+                logger.LogInformation(
+                    "README omitted from listing copilot prompt for job {JobId}: OpenRouter ZeroDataRetention is not enabled.",
+                    context.JobId);
+            }
+            else
+            {
+                readme = new SafeReadmeExcerpt(ListingSuggestionBounds.README_LABEL, sanitizedReadme);
+            }
+        }
 
         var request = new ListingSuggestionGenerationRequest(
             AiPromptPolicies.LISTING_COPILOT_V1,

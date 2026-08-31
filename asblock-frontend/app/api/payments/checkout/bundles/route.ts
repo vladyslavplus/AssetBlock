@@ -4,7 +4,7 @@ import { prepareCheckoutAnalyticsContext } from '@/lib/server/checkout-analytics
 import { fetchBackendAuthorized } from '@/lib/server/backend-authorized'
 import {
   assertSameOrigin,
-  forwardBackendResponse,
+  forwardAuthenticatedBackendResponse,
   invalidJsonResponse,
   zodValidationProblemResponse,
 } from '@/lib/server/bff-http'
@@ -47,6 +47,7 @@ export async function POST(request: Request) {
     method: 'POST',
     body: JSON.stringify(backendBody),
     headers: { 'Content-Type': 'application/json' },
+    signal: request.signal,
   })
-  return forwardBackendResponse(res)
+  return forwardAuthenticatedBackendResponse(res)
 }

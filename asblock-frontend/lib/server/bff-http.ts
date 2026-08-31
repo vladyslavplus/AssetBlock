@@ -9,6 +9,7 @@ export function problemResponse(
   code: string,
   detail: string,
   errors?: Record<string, string[]>,
+  extraHeaders?: Record<string, string>,
 ): Response {
   const body = {
     type: `urn:assetblock:error:${code}`,
@@ -22,7 +23,11 @@ export function problemResponse(
 
   return new Response(JSON.stringify(body), {
     status,
-    headers: { 'Content-Type': 'application/problem+json' },
+    headers: {
+      'Content-Type': 'application/problem+json',
+      ...(status === 401 || status === 403 ? { 'Cache-Control': 'no-store' } : {}),
+      ...(extraHeaders ?? {}),
+    },
   })
 }
 
@@ -90,6 +95,24 @@ export function forwardBackendDownloadResponse(response: Response): Response {
     }
   }
   headers.set('Cache-Control', 'no-store')
+
+  return new Response(BODYLESS_STATUSES.has(response.status) ? null : response.body, {
+    status: response.status,
+    headers,
+  })
+}
+
+/** Streams an authenticated backend response; forwards Content-Type/Disposition and sets Cache-Control: private, no-store, Vary: Cookie. */
+export function forwardAuthenticatedBackendResponse(response: Response): Response {
+  const headers = new Headers()
+  for (const name of SAFE_BACKEND_RESPONSE_HEADERS) {
+    const value = response.headers.get(name)
+    if (value) {
+      headers.set(name, value)
+    }
+  }
+  headers.set('Cache-Control', 'private, no-store')
+  headers.set('Vary', 'Cookie')
 
   return new Response(BODYLESS_STATUSES.has(response.status) ? null : response.body, {
     status: response.status,

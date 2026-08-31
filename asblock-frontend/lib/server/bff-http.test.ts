@@ -2,9 +2,11 @@ import { describe, expect, it } from 'vitest'
 
 import {
   assertSameOrigin,
+  forwardAuthenticatedBackendResponse,
   forwardBackendDownloadResponse,
   forwardBackendResponse,
   invalidJsonResponse,
+  problemResponse,
 } from '@/lib/server/bff-http'
 
 describe('BFF same-origin and response forwarding', () => {
@@ -84,5 +86,31 @@ describe('BFF same-origin and response forwarding', () => {
     expect(forwarded.headers.get('Content-Disposition')).toBe('attachment; filename="sales.csv"')
     expect(forwarded.headers.get('Cache-Control')).toBe('no-store')
     expect(forwarded.headers.get('Set-Cookie')).toBeNull()
+  })
+
+  it('sets Cache-Control: private, no-store and Vary: Cookie on authenticated responses', async () => {
+    const backend = new Response(JSON.stringify({ me: 'user' }), {
+      status: 200,
+      headers: {
+        'Content-Type': 'application/json',
+        'Set-Cookie': 'session=leaked',
+      },
+    })
+    const forwarded = forwardAuthenticatedBackendResponse(backend)
+    expect(forwarded.headers.get('Content-Type')).toBe('application/json')
+    expect(forwarded.headers.get('Cache-Control')).toBe('private, no-store')
+    expect(forwarded.headers.get('Vary')).toBe('Cookie')
+    expect(forwarded.headers.get('Set-Cookie')).toBeNull()
+  })
+
+  it('sets Cache-Control: no-store on 401 and 403 problem responses', () => {
+    const unauth = problemResponse(401, 'ERR_UNAUTHORIZED', 'Unauthorized')
+    expect(unauth.headers.get('Cache-Control')).toBe('no-store')
+
+    const forbidden = problemResponse(403, 'ERR_FORBIDDEN', 'Forbidden')
+    expect(forbidden.headers.get('Cache-Control')).toBe('no-store')
+
+    const badRequest = problemResponse(400, 'ERR_VALIDATION_FAILED', 'Bad request')
+    expect(badRequest.headers.get('Cache-Control')).toBeNull()
   })
 })

@@ -10,4 +10,6 @@ public static class JwtClaimTypes
     public const string JTI = "jti";
     public const string EMAIL = "email";
     public const string ROLE = "role";
+    /// <summary>Identifies the intended use of the token (e.g. "signalr" for hub-only tokens).</summary>
+    public const string TOKEN_USE = "token_use";
 }

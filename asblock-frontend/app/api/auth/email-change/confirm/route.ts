@@ -1,7 +1,4 @@
 import { z } from 'zod'
-import { getServerApiBaseUrl } from '@/lib/http/api-config'
-import { readApiResponseBody } from '@/lib/http/api-errors'
-import { transportErrorBody } from '@/lib/server/transport-error-body'
 import {
   assertSameOrigin,
   forwardBackendResponse,
@@ -9,6 +6,7 @@ import {
   zodValidationProblemResponse,
 } from '@/lib/server/bff-http'
 import { enforceBffRateLimit, getVerifiedClientIp } from '@/lib/server/bff-rate-limit'
+import { fetchBackendPublic } from '@/lib/server/fetch-backend'
 
 const MAX_PROTECTED_TOKEN_LENGTH = 4096
 
@@ -42,30 +40,12 @@ export async function POST(request: Request) {
     return zodValidationProblemResponse(parsed.error)
   }
 
-  const base = getServerApiBaseUrl()
-  let res: Response
-  try {
-    res = await fetch(`${base}/api/auth/email-change/confirm`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ token: parsed.data.token }),
-      cache: 'no-store',
-    })
-  } catch (e) {
-    const body = transportErrorBody(e)
-    return new Response(JSON.stringify(body), {
-      status: 502,
-      headers: { 'Content-Type': 'application/problem+json' },
-    })
-  }
-
-  if (!res.ok) {
-    const data = await readApiResponseBody(res)
-    return new Response(JSON.stringify(data), {
-      status: res.status,
-      headers: { 'Content-Type': 'application/problem+json' },
-    })
-  }
+  const res = await fetchBackendPublic('/api/auth/email-change/confirm', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ token: parsed.data.token }),
+    signal: request.signal,
+  })
 
   return forwardBackendResponse(res)
 }

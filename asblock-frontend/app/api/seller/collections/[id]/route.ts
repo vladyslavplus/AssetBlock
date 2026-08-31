@@ -3,20 +3,26 @@ import { updateCollectionSchema } from '@/lib/collections/collection-schemas'
 import { fetchBackendAuthorized } from '@/lib/server/backend-authorized'
 import {
   assertSameOrigin,
-  forwardBackendResponse,
+  forwardAuthenticatedBackendResponse,
   invalidJsonResponse,
   zodValidationProblemResponse,
 } from '@/lib/server/bff-http'
+import { parseUuidParam } from '@/lib/server/bff-params'
 
-export async function GET(_request: Request, context: { params: Promise<{ id: string }> }) {
+export async function GET(request: Request, context: { params: Promise<{ id: string }> }) {
   const { id } = await context.params
+  const parsedId = parseUuidParam('id', id)
+  if (!parsedId.ok) {
+    return parsedId.response
+  }
+
   const store = await cookies()
   const res = await fetchBackendAuthorized(
     store,
-    `/api/seller/collections/${encodeURIComponent(id)}`,
-    { method: 'GET' },
+    `/api/seller/collections/${encodeURIComponent(parsedId.value)}`,
+    { method: 'GET', signal: request.signal },
   )
-  return forwardBackendResponse(res)
+  return forwardAuthenticatedBackendResponse(res)
 }
 
 export async function PATCH(request: Request, context: { params: Promise<{ id: string }> }) {
@@ -24,6 +30,11 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
   if (originError) return originError
 
   const { id } = await context.params
+  const parsedId = parseUuidParam('id', id)
+  if (!parsedId.ok) {
+    return parsedId.response
+  }
+
   let json: unknown
   try {
     json = await request.json()
@@ -38,7 +49,7 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
   const store = await cookies()
   const res = await fetchBackendAuthorized(
     store,
-    `/api/seller/collections/${encodeURIComponent(id)}`,
+    `/api/seller/collections/${encodeURIComponent(parsedId.value)}`,
     {
       method: 'PATCH',
       body: JSON.stringify({
@@ -46,7 +57,8 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
         description: parsed.data.description?.trim() ? parsed.data.description.trim() : null,
       }),
       headers: { 'Content-Type': 'application/json' },
+      signal: request.signal,
     },
   )
-  return forwardBackendResponse(res)
+  return forwardAuthenticatedBackendResponse(res)
 }

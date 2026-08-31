@@ -3,7 +3,7 @@ import { z } from 'zod'
 import { fetchBackendAuthorized } from '@/lib/server/backend-authorized'
 import {
   assertSameOrigin,
-  forwardBackendResponse,
+  forwardAuthenticatedBackendResponse,
   invalidJsonResponse,
   zodValidationProblemResponse,
 } from '@/lib/server/bff-http'
@@ -36,7 +36,8 @@ export async function POST(request: Request) {
       newEmail: parsed.data.newEmail,
       currentPassword: parsed.data.currentPassword,
     }),
+    signal: request.signal,
   })
 
-  return forwardBackendResponse(res)
+  return forwardAuthenticatedBackendResponse(res)
 }

@@ -1,3 +1,4 @@
+using System.Security.Claims;
 using System.Text;
 using AssetBlock.Domain.Core.Constants;
 using AssetBlock.Domain.Core.Primitives.AppSettingsOptions;
@@ -19,8 +20,10 @@ internal static class JwtAuthenticationExtensions
             throw new InvalidOperationException("JWT signing key (Jwt:Key) is not configured.");
         }
 
+        var signingKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwt.Key));
+
         services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
-            .AddJwtBearer(options =>
+            .AddJwtBearer(JwtAuthenticationSchemes.API, options =>
             {
                 options.MapInboundClaims = false; // keep "role" as "role", not mapped to long SOAP URI
                 options.TokenValidationParameters = new TokenValidationParameters
@@ -32,22 +35,27 @@ internal static class JwtAuthenticationExtensions
                     ValidAlgorithms = [SecurityAlgorithms.HmacSha256],
                     RequireSignedTokens = true,
                     ValidIssuer = jwt.Issuer,
-                    ValidAudience = jwt.Audience,
-                    IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwt.Key)),
+                    ValidAudience = jwt.Audience,    // REST audience only — hub audience intentionally excluded
+                    IssuerSigningKey = signingKey,
                     ClockSkew = TimeSpan.FromMinutes(1),
                     RoleClaimType = JwtClaimTypes.ROLE
                 };
 
                 options.Events = new JwtBearerEvents
                 {
-                    OnMessageReceived = ctx =>
+                    OnTokenValidated = ctx =>
                     {
-                        // WebSockets cannot set Authorization; SignalR clients pass access_token in the query string.
-                        var accessToken = ctx.Request.Query["access_token"];
-                        if (!string.IsNullOrEmpty(accessToken) &&
-                            ctx.Request.Path.StartsWithSegments(ApiRoutes.Hubs.NOTIFICATIONS))
+                        // Reject hub-only tokens even if audience accidentally matches a future config change.
+                        var tokenUse = ctx.Principal?.FindFirstValue(JwtClaimTypes.TOKEN_USE);
+                        if (tokenUse == JwtClaimValues.TOKEN_USE_SIGNALR)
                         {
-                            ctx.Token = accessToken;
+                            ctx.Fail("Hub tokens are not accepted by the REST API scheme.");
+                        }
+                        else
+                        {
+                            var logger = ctx.HttpContext.RequestServices.GetRequiredService<ILogger<JwtBearerEvents>>();
+                            var sub = ctx.Principal?.FindFirstValue(ClaimTypes.NameIdentifier);
+                            logger.LogDebug("JWT validated for subject {Subject}", sub);
                         }
 
                         return Task.CompletedTask;
@@ -57,13 +65,6 @@ internal static class JwtAuthenticationExtensions
                         var logger = ctx.HttpContext.RequestServices.GetRequiredService<ILogger<JwtBearerEvents>>();
                         var reason = ResolveJwtFailureReason(ctx.Exception);
                         logger.LogDebug("JWT authentication failed: {Reason}", reason);
-                        return Task.CompletedTask;
-                    },
-                    OnTokenValidated = ctx =>
-                    {
-                        var logger = ctx.HttpContext.RequestServices.GetRequiredService<ILogger<JwtBearerEvents>>();
-                        var sub = ctx.Principal?.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
-                        logger.LogDebug("JWT validated for subject {Subject}", sub);
                         return Task.CompletedTask;
                     },
                     OnChallenge = async ctx =>
@@ -97,7 +98,80 @@ internal static class JwtAuthenticationExtensions
                         await AssetBlockProblemDetails.Write(ctx.HttpContext, problem);
                     }
                 };
+            })
+
+            .AddJwtBearer(JwtAuthenticationSchemes.HUB, options =>
+            {
+                options.MapInboundClaims = false;
+                options.TokenValidationParameters = new TokenValidationParameters
+                {
+                    ValidateIssuer = true,
+                    ValidateAudience = true,
+                    ValidateLifetime = true,
+                    ValidateIssuerSigningKey = true,
+                    ValidAlgorithms = [SecurityAlgorithms.HmacSha256],
+                    RequireSignedTokens = true,
+                    ValidIssuer = jwt.Issuer,
+                    ValidAudience = jwt.HubAudience,  // hub audience only — REST audience excluded
+                    IssuerSigningKey = signingKey,
+                    ClockSkew = TimeSpan.FromSeconds(10),
+                    RoleClaimType = JwtClaimTypes.ROLE
+                };
+
+                options.Events = new JwtBearerEvents
+                {
+                    OnMessageReceived = ctx =>
+                    {
+                        // WebSockets cannot set Authorization; SignalR clients pass access_token in the query string.
+                        // Accept the query-string token ONLY on the notifications hub path.
+                        var accessToken = ctx.Request.Query["access_token"];
+                        if (!string.IsNullOrEmpty(accessToken) &&
+                            ctx.Request.Path.StartsWithSegments(ApiRoutes.Hubs.NOTIFICATIONS))
+                        {
+                            ctx.Token = accessToken;
+                        }
+
+                        return Task.CompletedTask;
+                    },
+                    OnTokenValidated = ctx =>
+                    {
+                        // Require the token_use=signalr claim to reject any future session token
+                        // that might accidentally share the hub audience via misconfiguration.
+                        var tokenUse = ctx.Principal?.FindFirstValue(JwtClaimTypes.TOKEN_USE);
+                        if (tokenUse != JwtClaimValues.TOKEN_USE_SIGNALR)
+                        {
+                            ctx.Fail("Only hub tokens (token_use=signalr) are accepted by the hub scheme.");
+                        }
+
+                        return Task.CompletedTask;
+                    },
+                    OnAuthenticationFailed = ctx =>
+                    {
+                        var logger = ctx.HttpContext.RequestServices.GetRequiredService<ILogger<JwtBearerEvents>>();
+                        var reason = ResolveJwtFailureReason(ctx.Exception);
+                        logger.LogDebug("Hub JWT authentication failed: {Reason}", reason);
+                        return Task.CompletedTask;
+                    },
+                    OnChallenge = async ctx =>
+                    {
+                        ctx.HandleResponse();
+                        var problem = AssetBlockProblemDetails.Create(
+                            ctx.HttpContext,
+                            StatusCodes.Status401Unauthorized,
+                            ErrorCodes.ERR_AUTH_TOKEN_INVALID);
+                        await AssetBlockProblemDetails.Write(ctx.HttpContext, problem);
+                    },
+                    OnForbidden = async ctx =>
+                    {
+                        var problem = AssetBlockProblemDetails.Create(
+                            ctx.HttpContext,
+                            StatusCodes.Status403Forbidden,
+                            ErrorCodes.ERR_FORBIDDEN);
+                        await AssetBlockProblemDetails.Write(ctx.HttpContext, problem);
+                    }
+                };
             });
+
         return services;
     }
 
