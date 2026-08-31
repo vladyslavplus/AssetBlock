@@ -102,22 +102,14 @@ export async function fetchBackendPublic(
     })
   } catch (error: unknown) {
     if (timeoutCtx.isTimeout()) {
-      return problemResponse(
-        504,
-        'ERR_GATEWAY_TIMEOUT',
-        'The backend request timed out.',
-      )
+      return problemResponse(504, 'ERR_GATEWAY_TIMEOUT', 'The backend request timed out.')
     }
 
     if (init.signal?.aborted) {
       throw error
     }
 
-    return problemResponse(
-      502,
-      'ERR_GATEWAY_ERROR',
-      'The service is temporarily unavailable.',
-    )
+    return problemResponse(502, 'ERR_GATEWAY_ERROR', 'The service is temporarily unavailable.')
   } finally {
     timeoutCtx.cleanup()
   }
@@ -245,11 +237,7 @@ export async function fetchBackend(
     return res
   } catch (error: unknown) {
     if (timeoutCtx.isTimeout()) {
-      return problemResponse(
-        504,
-        'ERR_GATEWAY_TIMEOUT',
-        'The backend request timed out.',
-      )
+      return problemResponse(504, 'ERR_GATEWAY_TIMEOUT', 'The backend request timed out.')
     }
 
     // If caller explicitly aborted the request, propagate the abort
@@ -257,11 +245,7 @@ export async function fetchBackend(
       throw error
     }
 
-    return problemResponse(
-      502,
-      'ERR_GATEWAY_ERROR',
-      'The service is temporarily unavailable.',
-    )
+    return problemResponse(502, 'ERR_GATEWAY_ERROR', 'The service is temporarily unavailable.')
   } finally {
     timeoutCtx.cleanup()
   }

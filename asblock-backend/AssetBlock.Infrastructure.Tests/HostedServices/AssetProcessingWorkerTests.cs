@@ -109,7 +109,7 @@ public sealed class AssetProcessingWorkerTests
         using var cts = new CancellationTokenSource(TimeSpan.FromMilliseconds(200));
 
         await worker.StartAsync(cts.Token);
-        await Task.Delay(80);
+        await Task.Delay(80, cts.Token);
         await worker.StopAsync(CancellationToken.None);
 
         await _store.Received().RecoverExpiredLeases(Arg.Any<CancellationToken>());
@@ -406,14 +406,30 @@ public sealed class AssetProcessingWorkerTests
         _store.GetRealtimeState(jobId, Arg.Any<CancellationToken>())
             .Returns(Task.FromResult<AssetProcessingJobRealtimeState?>(realtimeState));
 
+        var finalPublishCompleted = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
         var publishedMessages = new List<AssetProcessingUpdateMessage>();
-        _publisher.PublishJobUpdated(ownerUserId, Arg.Do<AssetProcessingUpdateMessage>(publishedMessages.Add), Arg.Any<CancellationToken>())
+        _publisher.PublishJobUpdated(
+                ownerUserId,
+                Arg.Do<AssetProcessingUpdateMessage>(message =>
+                {
+                    publishedMessages.Add(message);
+                    if (message.Status == AssetProcessingJobStatus.SUCCEEDED)
+                    {
+                        finalPublishCompleted.TrySetResult(true);
+                    }
+                }),
+                Arg.Any<CancellationToken>())
             .Returns(Task.CompletedTask);
 
-        using var cts = new CancellationTokenSource(TimeSpan.FromMilliseconds(200));
-        await worker.StartAsync(cts.Token);
-        await Task.Delay(100, cts.Token);
-        await worker.StopAsync(CancellationToken.None);
+        await worker.StartAsync(CancellationToken.None);
+        try
+        {
+            await finalPublishCompleted.Task.WaitAsync(TimeSpan.FromSeconds(10));
+        }
+        finally
+        {
+            await worker.StopAsync(CancellationToken.None);
+        }
 
         await _store.DidNotReceive().MarkSucceeded(
             Arg.Any<Guid>(),
@@ -730,6 +746,7 @@ public sealed class AssetProcessingWorkerTests
                 return Task.FromResult<IReadOnlyList<ClaimedAssetProcessingJob>>([]);
             });
 
+        var transitionCompleted = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
         _lifecycleStore.TransitionProcessingFailed(
                 jobId,
                 leaseToken,
@@ -739,12 +756,21 @@ public sealed class AssetProcessingWorkerTests
                 Arg.Any<string>(),
                 Arg.Any<string>(),
                 Arg.Any<CancellationToken>())
-            .Returns(Task.FromResult(true));
+            .Returns(_ =>
+            {
+                transitionCompleted.TrySetResult(true);
+                return Task.FromResult(true);
+            });
 
-        using var cts = new CancellationTokenSource(TimeSpan.FromMilliseconds(400));
-        await worker.StartAsync(cts.Token);
-        await Task.Delay(200, cts.Token);
-        await worker.StopAsync(CancellationToken.None);
+        await worker.StartAsync(CancellationToken.None);
+        try
+        {
+            await transitionCompleted.Task.WaitAsync(TimeSpan.FromSeconds(10));
+        }
+        finally
+        {
+            await worker.StopAsync(CancellationToken.None);
+        }
 
         await _lifecycleStore.Received().TransitionProcessingFailed(
             jobId,

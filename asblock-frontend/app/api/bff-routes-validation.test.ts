@@ -186,7 +186,9 @@ describe('BFF Mutating Routes Zod Validation (E3)', () => {
     vi.stubGlobal('fetch', fetchSpy)
     const validAssetId = '123e4567-e89b-12d3-a456-426614174000'
     const res = await reviewsPost(
-      makeReq(`http://localhost:3000/api/reviews/assets/${validAssetId}/reviews`, 'POST', { rating: 6 }),
+      makeReq(`http://localhost:3000/api/reviews/assets/${validAssetId}/reviews`, 'POST', {
+        rating: 6,
+      }),
       { params: Promise.resolve({ assetId: validAssetId }) },
     )
     expect(res.status).toBe(400)

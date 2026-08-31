@@ -14,9 +14,7 @@ const libraryQuerySchema = z.object({
 
 export async function GET(request: Request) {
   const url = new URL(request.url)
-  const queryResult = libraryQuerySchema.safeParse(
-    Object.fromEntries(url.searchParams.entries()),
-  )
+  const queryResult = libraryQuerySchema.safeParse(Object.fromEntries(url.searchParams.entries()))
   if (!queryResult.success) {
     return zodValidationProblemResponse(queryResult.error)
   }
@@ -29,10 +27,9 @@ export async function GET(request: Request) {
   })
 
   const store = await cookies()
-  const res = await fetchBackendAuthorized(
-    store,
-    `/api/users/me/purchases?${qs.toString()}`,
-    { method: 'GET', signal: request.signal },
-  )
+  const res = await fetchBackendAuthorized(store, `/api/users/me/purchases?${qs.toString()}`, {
+    method: 'GET',
+    signal: request.signal,
+  })
   return forwardAuthenticatedBackendResponse(res)
 }

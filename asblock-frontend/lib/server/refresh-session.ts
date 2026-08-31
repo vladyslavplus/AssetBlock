@@ -168,8 +168,7 @@ export async function exchangeRefreshToken(
           : ''
 
     const isTokenInvalid =
-      errorCode === 'ERR_AUTH_TOKEN_INVALID' ||
-      errorCode.endsWith(':ERR_AUTH_TOKEN_INVALID')
+      errorCode === 'ERR_AUTH_TOKEN_INVALID' || errorCode.endsWith(':ERR_AUTH_TOKEN_INVALID')
 
     if (isTokenInvalid) {
       return { kind: 'rejected', status, problem: data }

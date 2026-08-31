@@ -4,9 +4,7 @@ import { problemResponse } from '@/lib/server/bff-http'
 
 const uuidSchema = z.string().uuid()
 
-export type ParsedUuidResult =
-  | { ok: true; value: string }
-  | { ok: false; response: Response }
+export type ParsedUuidResult = { ok: true; value: string } | { ok: false; response: Response }
 
 export type ParsedOptionalUuidResult =
   | { ok: true; value: string | null }
@@ -20,9 +18,14 @@ export function parseUuidParam(name: string, value: string | null | undefined): 
   if (value == null || value.trim() === '') {
     return {
       ok: false,
-      response: problemResponse(400, 'ERR_VALIDATION_FAILED', `The parameter '${name}' is required.`, {
-        [name]: [`The parameter '${name}' is required.`],
-      }),
+      response: problemResponse(
+        400,
+        'ERR_VALIDATION_FAILED',
+        `The parameter '${name}' is required.`,
+        {
+          [name]: [`The parameter '${name}' is required.`],
+        },
+      ),
     }
   }
 
@@ -30,9 +33,14 @@ export function parseUuidParam(name: string, value: string | null | undefined): 
   if (!result.success) {
     return {
       ok: false,
-      response: problemResponse(400, 'ERR_VALIDATION_FAILED', `The parameter '${name}' must be a valid UUID.`, {
-        [name]: [`The parameter '${name}' must be a valid UUID.`],
-      }),
+      response: problemResponse(
+        400,
+        'ERR_VALIDATION_FAILED',
+        `The parameter '${name}' must be a valid UUID.`,
+        {
+          [name]: [`The parameter '${name}' must be a valid UUID.`],
+        },
+      ),
     }
   }
 
@@ -54,9 +62,14 @@ export function parseOptionalUuidParam(
   if (!result.success) {
     return {
       ok: false,
-      response: problemResponse(400, 'ERR_VALIDATION_FAILED', `The parameter '${name}' must be a valid UUID.`, {
-        [name]: [`The parameter '${name}' must be a valid UUID.`],
-      }),
+      response: problemResponse(
+        400,
+        'ERR_VALIDATION_FAILED',
+        `The parameter '${name}' must be a valid UUID.`,
+        {
+          [name]: [`The parameter '${name}' must be a valid UUID.`],
+        },
+      ),
     }
   }
 

@@ -42,19 +42,17 @@ describe('GET /api/auth/signalr-access', () => {
     const hubToken = 'hub.jwt.token'
     const expiresAt = new Date(Date.now() + 90_000).toISOString()
 
-    const fetchMock = vi.fn(
-      async (url: RequestInfo | URL, init?: RequestInit) => {
-        expect(String(url)).toContain('/api/auth/signalr-token')
-        expect(init?.method).toBe('POST')
-        expect(init?.headers).toBeDefined()
-        const headers = new Headers(init?.headers)
-        expect(headers.get('Authorization')).toBe(`Bearer ${sessionToken}`)
-        return new Response(JSON.stringify({ hubToken, expiresAt }), {
-          status: 200,
-          headers: { 'Content-Type': 'application/json' },
-        })
-      },
-    )
+    const fetchMock = vi.fn(async (url: RequestInfo | URL, init?: RequestInit) => {
+      expect(String(url)).toContain('/api/auth/signalr-token')
+      expect(init?.method).toBe('POST')
+      expect(init?.headers).toBeDefined()
+      const headers = new Headers(init?.headers)
+      expect(headers.get('Authorization')).toBe(`Bearer ${sessionToken}`)
+      return new Response(JSON.stringify({ hubToken, expiresAt }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      })
+    })
     vi.stubGlobal('fetch', fetchMock)
 
     const res = await GET()

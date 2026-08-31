@@ -29,7 +29,9 @@ describe('GET /api/assets/[id]/download', () => {
 
   it('returns 400 ProblemDetails when versionId query param is not a valid UUID', async () => {
     const validAssetId = '123e4567-e89b-12d3-a456-426614174000'
-    const request = new Request(`http://localhost:3000/api/assets/${validAssetId}/download?versionId=not-a-uuid`)
+    const request = new Request(
+      `http://localhost:3000/api/assets/${validAssetId}/download?versionId=not-a-uuid`,
+    )
     const res = await GET(request, { params: Promise.resolve({ id: validAssetId }) })
 
     expect(res.status).toBe(400)
@@ -71,7 +73,9 @@ describe('GET /api/assets/[id]/download', () => {
     cookieStore.set(AUTH_COOKIE_ACCESS, token)
 
     const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
-      expect(String(input)).toContain(`/api/assets/${validAssetId}/versions/${validVersionId}/download`)
+      expect(String(input)).toContain(
+        `/api/assets/${validAssetId}/versions/${validVersionId}/download`,
+      )
       return new Response('version-file', {
         status: 200,
         headers: {
@@ -82,7 +86,9 @@ describe('GET /api/assets/[id]/download', () => {
     })
     vi.stubGlobal('fetch', fetchMock)
 
-    const request = new Request(`http://localhost:3000/api/assets/${validAssetId}/download?versionId=${validVersionId}`)
+    const request = new Request(
+      `http://localhost:3000/api/assets/${validAssetId}/download?versionId=${validVersionId}`,
+    )
     const res = await GET(request, { params: Promise.resolve({ id: validAssetId }) })
 
     expect(res.status).toBe(200)

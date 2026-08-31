@@ -26,13 +26,12 @@ describe('listing-copilot BFF route', () => {
 
   it('forwards GET to the owner listing-copilot endpoint', async () => {
     fetchBackendAuthorized.mockResolvedValue(new Response('{}', { status: 200 }))
-    const request = new Request(`http://localhost:3000/api/seller/asset-versions/${validVersionId}/listing-copilot`)
-    const res = await GET(
-      request,
-      {
-        params: Promise.resolve({ id: validVersionId }),
-      },
+    const request = new Request(
+      `http://localhost:3000/api/seller/asset-versions/${validVersionId}/listing-copilot`,
     )
+    const res = await GET(request, {
+      params: Promise.resolve({ id: validVersionId }),
+    })
     expect(res.status).toBe(200)
     expect(fetchBackendAuthorized).toHaveBeenCalledWith(
       cookieStore,
@@ -43,11 +42,14 @@ describe('listing-copilot BFF route', () => {
 
   it('rejects cross-origin POST', async () => {
     const res = await POST(
-      new Request(`http://localhost:3000/api/seller/asset-versions/${validVersionId}/listing-copilot`, {
-        method: 'POST',
-        headers: { Origin: 'https://evil.test' },
-      }),
-      { params: Promise.resolve({ id: validVersionId }), },
+      new Request(
+        `http://localhost:3000/api/seller/asset-versions/${validVersionId}/listing-copilot`,
+        {
+          method: 'POST',
+          headers: { Origin: 'https://evil.test' },
+        },
+      ),
+      { params: Promise.resolve({ id: validVersionId }) },
     )
     expect(res.status).toBe(403)
     expect(fetchBackendAuthorized).not.toHaveBeenCalled()
@@ -55,14 +57,14 @@ describe('listing-copilot BFF route', () => {
 
   it('forwards same-origin POST without a browser token', async () => {
     fetchBackendAuthorized.mockResolvedValue(new Response('{"jobId":"1"}', { status: 202 }))
-    const request = new Request(`http://localhost:3000/api/seller/asset-versions/${validVersionId}/listing-copilot`, {
-      method: 'POST',
-      headers: { Origin: 'http://localhost:3000' },
-    })
-    const res = await POST(
-      request,
-      { params: Promise.resolve({ id: validVersionId }) },
+    const request = new Request(
+      `http://localhost:3000/api/seller/asset-versions/${validVersionId}/listing-copilot`,
+      {
+        method: 'POST',
+        headers: { Origin: 'http://localhost:3000' },
+      },
     )
+    const res = await POST(request, { params: Promise.resolve({ id: validVersionId }) })
     expect(res.status).toBe(202)
     const [, path, init] = fetchBackendAuthorized.mock.calls[0] as [
       unknown,

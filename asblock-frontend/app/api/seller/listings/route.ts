@@ -18,9 +18,7 @@ const sellerListingsQuerySchema = z
   })
   .refine(
     (data) =>
-      data.minPrice === undefined ||
-      data.maxPrice === undefined ||
-      data.minPrice <= data.maxPrice,
+      data.minPrice === undefined || data.maxPrice === undefined || data.minPrice <= data.maxPrice,
     {
       message: 'minPrice must be less than or equal to maxPrice.',
       path: ['minPrice'],
@@ -39,8 +37,7 @@ export async function GET(request: Request) {
     return zodValidationProblemResponse(queryResult.error)
   }
 
-  const { page, pageSize, sortBy, sortDirection, search, minPrice, maxPrice } =
-    queryResult.data
+  const { page, pageSize, sortBy, sortDirection, search, minPrice, maxPrice } = queryResult.data
 
   const qs = new URLSearchParams()
   if (page !== undefined) qs.set('page', String(page))

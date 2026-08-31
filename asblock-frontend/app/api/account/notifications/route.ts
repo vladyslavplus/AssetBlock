@@ -35,7 +35,8 @@ export async function GET(request: Request) {
   if (unreadOnly !== undefined) qs.set('unreadOnly', String(unreadOnly))
 
   const store = await cookies()
-  const path = qs.size > 0 ? `/api/users/me/notifications?${qs.toString()}` : '/api/users/me/notifications'
+  const path =
+    qs.size > 0 ? `/api/users/me/notifications?${qs.toString()}` : '/api/users/me/notifications'
   const res = await fetchBackendAuthorized(store, path, {
     method: 'GET',
     signal: request.signal,

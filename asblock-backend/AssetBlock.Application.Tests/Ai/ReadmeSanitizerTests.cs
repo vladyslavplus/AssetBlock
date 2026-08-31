@@ -149,12 +149,12 @@ public sealed class ReadmeSanitizerTests
     {
         const string input = """
                              # Config info
-                             API_KEY=sk-test-123456789
-                             My password is: hunter2
-                             Here is the private key: ABCDEF
-                             token = abcdef123456
-                             license-key: XXXX-YYYY
-                             bearer_token: secret-bearer
+                             API_KEY=111
+                             My password is: 222
+                             Here is the private key: 333
+                             token = 444
+                             license-key: 555
+                             bearer_token: 666
                              Normal description line.
                              """;
 
@@ -162,10 +162,10 @@ public sealed class ReadmeSanitizerTests
 
         result.Should().NotBeNull();
         result.Should().NotContain("API_KEY");
-        result.Should().NotContain("sk-test-123456789");
-        result.Should().NotContain("hunter2");
+        result.Should().NotContain("111");
+        result.Should().NotContain("222");
         result.Should().NotContain("private key");
-        result.Should().NotContain("abcdef123456");
+        result.Should().NotContain("444");
         result.Should().NotContain("license-key");
         result.Should().NotContain("bearer_token");
         result.Should().Contain("# Config info");
@@ -192,9 +192,9 @@ public sealed class ReadmeSanitizerTests
     {
         const string input = """
                              # Setup Guide
-                             GITHUB_TOKEN=ghp_abcdef123456
-                             AWS_SECRET_ACCESS_KEY=wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY
-                             MY_PASSWORD=mySuperSecretPassword123
+                             GITHUB_TOKEN=111
+                             AWS_SECRET_ACCESS_KEY=222
+                             MY_PASSWORD=333
                              Valid descriptive sentence for asset listing.
                              """;
 
@@ -202,11 +202,11 @@ public sealed class ReadmeSanitizerTests
 
         result.Should().NotBeNull();
         result.Should().NotContain("GITHUB_TOKEN");
-        result.Should().NotContain("ghp_abcdef123456");
+        result.Should().NotContain("111");
         result.Should().NotContain("AWS_SECRET_ACCESS_KEY");
-        result.Should().NotContain("wJalrXUtnFEMI");
+        result.Should().NotContain("222");
         result.Should().NotContain("MY_PASSWORD");
-        result.Should().NotContain("mySuperSecretPassword123");
+        result.Should().NotContain("333");
         result.Should().Contain("# Setup Guide");
         result.Should().Contain("Valid descriptive sentence for asset listing.");
     }

@@ -37,7 +37,8 @@ export async function GET(request: Request) {
   if (search) qs.set('search', search)
 
   const store = await cookies()
-  const backendPath = qs.size > 0 ? `/api/seller/collections?${qs.toString()}` : '/api/seller/collections'
+  const backendPath =
+    qs.size > 0 ? `/api/seller/collections?${qs.toString()}` : '/api/seller/collections'
   const res = await fetchBackendAuthorized(store, backendPath, {
     method: 'GET',
     signal: request.signal,

@@ -291,13 +291,9 @@ describe('fetchBackend session refresh', () => {
       return jsonResponse({ ok: true })
     })
 
-    const res = await fetchBackend(
-      store,
-      '/api/seller/listings',
-      { method: 'GET' },
-      'required',
-      { timeoutMs: 50 },
-    )
+    const res = await fetchBackend(store, '/api/seller/listings', { method: 'GET' }, 'required', {
+      timeoutMs: 50,
+    })
     expect(res.status).toBe(504)
     const body = await res.json()
     expect(body.code).toBe('ERR_GATEWAY_TIMEOUT')
@@ -331,13 +327,9 @@ describe('fetchBackend session refresh', () => {
       return jsonResponse({ ok: true })
     })
 
-    const res = await fetchBackend(
-      store,
-      '/api/seller/listings',
-      { method: 'GET' },
-      'required',
-      { timeoutMs: 50 },
-    )
+    const res = await fetchBackend(store, '/api/seller/listings', { method: 'GET' }, 'required', {
+      timeoutMs: 50,
+    })
     expect(res.status).toBe(504)
     const body = await res.json()
     expect(body.code).toBe('ERR_GATEWAY_TIMEOUT')
@@ -522,12 +514,7 @@ describe('fetchBackend session refresh', () => {
     await expect(promiseA).rejects.toThrow()
 
     // 3. Caller B starts immediately while A's aborted underlying promise is still settling
-    const promiseB = fetchBackend(
-      storeB,
-      '/api/seller/listings',
-      { method: 'GET' },
-      'required',
-    )
+    const promiseB = fetchBackend(storeB, '/api/seller/listings', { method: 'GET' }, 'required')
     await new Promise((r) => setTimeout(r, 5))
     expect(refreshCalls).toBe(2)
 
@@ -538,12 +525,7 @@ describe('fetchBackend session refresh', () => {
     await new Promise((r) => setTimeout(r, 10))
 
     // 5. Caller C arrives after A settled. Because of identity guard, B is NOT deleted, so C joins B!
-    const promiseC = fetchBackend(
-      storeC,
-      '/api/seller/listings',
-      { method: 'GET' },
-      'required',
-    )
+    const promiseC = fetchBackend(storeC, '/api/seller/listings', { method: 'GET' }, 'required')
 
     const [resB, resC] = await Promise.all([promiseB, promiseC])
     expect(resB.status).toBe(200)
@@ -565,20 +547,12 @@ describe('fetchBackend session refresh', () => {
     vi.stubGlobal('fetch', async (input: RequestInfo | URL) => {
       const url = String(input)
       if (url === `${API}/api/auth/refresh`) {
-        return jsonResponse(
-          { code: 'ERR_GENERIC_BAD_REQUEST', detail: 'Invalid parameters' },
-          400,
-        )
+        return jsonResponse({ code: 'ERR_GENERIC_BAD_REQUEST', detail: 'Invalid parameters' }, 400)
       }
       return jsonResponse({ ok: true })
     })
 
-    const res = await fetchBackend(
-      store,
-      '/api/seller/listings',
-      { method: 'GET' },
-      'required',
-    )
+    const res = await fetchBackend(store, '/api/seller/listings', { method: 'GET' }, 'required')
     expect(res.status).toBe(502)
     const body = await res.json()
     expect(body.code).toBe('ERR_GATEWAY_ERROR')
@@ -605,12 +579,7 @@ describe('fetchBackend session refresh', () => {
       return jsonResponse({ ok: true })
     })
 
-    const res = await fetchBackend(
-      store,
-      '/api/seller/listings',
-      { method: 'GET' },
-      'required',
-    )
+    const res = await fetchBackend(store, '/api/seller/listings', { method: 'GET' }, 'required')
     expect(res.status).toBe(429)
     expect(res.headers.get('Retry-After')).toBe('60')
     const body = await res.json()
@@ -642,12 +611,7 @@ describe('fetchBackend session refresh', () => {
       return jsonResponse({ ok: true })
     })
 
-    const res = await fetchBackend(
-      store,
-      '/api/seller/listings',
-      { method: 'GET' },
-      'required',
-    )
+    const res = await fetchBackend(store, '/api/seller/listings', { method: 'GET' }, 'required')
     expect(res.status).toBe(429)
     expect(res.headers.get('Retry-After')).toBe('45')
     const body = await res.json()
@@ -670,12 +634,7 @@ describe('fetchBackend session refresh', () => {
       return jsonResponse({ ok: true })
     })
 
-    const res = await fetchBackend(
-      store,
-      '/api/seller/listings',
-      { method: 'GET' },
-      'required',
-    )
+    const res = await fetchBackend(store, '/api/seller/listings', { method: 'GET' }, 'required')
     expect(res.status).toBe(502)
     const body = await res.json()
     expect(body.code).toBe('ERR_GATEWAY_ERROR')
@@ -702,12 +661,7 @@ describe('fetchBackend session refresh', () => {
       return jsonResponse({ ok: true })
     })
 
-    const res = await fetchBackend(
-      store,
-      '/api/seller/listings',
-      { method: 'GET' },
-      'required',
-    )
+    const res = await fetchBackend(store, '/api/seller/listings', { method: 'GET' }, 'required')
     expect(res.status).toBe(502)
     const body = await res.json()
     expect(body.code).toBe('ERR_GATEWAY_ERROR')
@@ -767,13 +721,9 @@ describe('fetchBackend session refresh', () => {
       })
     })
 
-    const res = await fetchBackend(
-      store,
-      '/api/seller/listings',
-      { method: 'GET' },
-      'required',
-      { timeoutMs: 50 },
-    )
+    const res = await fetchBackend(store, '/api/seller/listings', { method: 'GET' }, 'required', {
+      timeoutMs: 50,
+    })
     expect(res.status).toBe(504)
     expect(res.headers.get('Content-Type')).toBe('application/problem+json')
     const body = await res.json()
@@ -822,12 +772,7 @@ describe('fetchBackend session refresh', () => {
       throw new Error('ECONNREFUSED')
     })
 
-    const res = await fetchBackend(
-      store,
-      '/api/seller/listings',
-      { method: 'GET' },
-      'required',
-    )
+    const res = await fetchBackend(store, '/api/seller/listings', { method: 'GET' }, 'required')
     expect(res.status).toBe(502)
     const body = await res.json()
     expect(body.code).toBe('ERR_GATEWAY_ERROR')

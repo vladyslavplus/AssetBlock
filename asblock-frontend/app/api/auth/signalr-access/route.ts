@@ -47,7 +47,11 @@ export async function GET(request?: Request) {
       )
     }
     if (res.status === 504) {
-      return problemResponse(504, 'ERR_GATEWAY_TIMEOUT', 'The authentication service request timed out.')
+      return problemResponse(
+        504,
+        'ERR_GATEWAY_TIMEOUT',
+        'The authentication service request timed out.',
+      )
     }
     return problemResponse(502, 'ERR_GATEWAY_ERROR', 'Failed to obtain hub token.')
   }
@@ -56,7 +60,11 @@ export async function GET(request?: Request) {
   try {
     data = await res.json()
   } catch {
-    return problemResponse(502, 'ERR_GATEWAY_ERROR', 'Unexpected response from authentication service.')
+    return problemResponse(
+      502,
+      'ERR_GATEWAY_ERROR',
+      'Unexpected response from authentication service.',
+    )
   }
 
   if (!data.hubToken) {
