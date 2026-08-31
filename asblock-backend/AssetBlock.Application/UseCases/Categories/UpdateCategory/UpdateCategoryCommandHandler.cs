@@ -1,9 +1,10 @@
 using Ardalis.Result;
+using AssetBlock.Application.Messaging;
 using AssetBlock.Domain.Abstractions.Services;
 using AssetBlock.Domain.Core.Constants;
 using AssetBlock.Domain.Core.Dto.Audit;
+using AssetBlock.Domain.Core.Entities;
 using AssetBlock.Domain.Core.Enums;
-using AssetBlock.Application.Messaging;
 using AssetBlock.Domain.Core.Exceptions;
 using Microsoft.Extensions.Logging;
 
@@ -21,7 +22,7 @@ internal sealed class UpdateCategoryCommandHandler(
     {
         try
         {
-            var category = await categoryStore.GetById(request.Id, cancellationToken);
+            Category? category = await categoryStore.GetById(request.Id, cancellationToken);
             if (category is null)
             {
                 return Result.NotFound(ErrorCodes.ERR_CATEGORY_NOT_FOUND);

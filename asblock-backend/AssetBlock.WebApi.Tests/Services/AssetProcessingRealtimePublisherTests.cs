@@ -24,17 +24,17 @@ public sealed class AssetProcessingRealtimePublisherTests
             "RUNNING",
             DateTimeOffset.UtcNow);
 
-        var clientProxy = Substitute.For<IClientProxy>();
+        IClientProxy clientProxy = Substitute.For<IClientProxy>();
         clientProxy.SendCoreAsync(
                 NotificationsHub.ASSET_PROCESSING_UPDATED,
                 Arg.Is<object?[]>(args => args.Length == 1 && Equals(args[0], message)),
                 Arg.Any<CancellationToken>())
             .Returns(Task.CompletedTask);
 
-        var clients = Substitute.For<IHubClients>();
+        IHubClients clients = Substitute.For<IHubClients>();
         clients.User(ownerUserId.ToString()).Returns(clientProxy);
 
-        var hubContext = Substitute.For<IHubContext<NotificationsHub>>();
+        IHubContext<NotificationsHub> hubContext = Substitute.For<IHubContext<NotificationsHub>>();
         hubContext.Clients.Returns(clients);
 
         var publisher = new AssetProcessingRealtimePublisher(
@@ -62,24 +62,24 @@ public sealed class AssetProcessingRealtimePublisherTests
             "RUNNING",
             DateTimeOffset.UtcNow);
 
-        var clientProxy = Substitute.For<IClientProxy>();
+        IClientProxy clientProxy = Substitute.For<IClientProxy>();
         clientProxy.SendCoreAsync(
                 Arg.Any<string>(),
                 Arg.Any<object?[]>(),
                 Arg.Any<CancellationToken>())
             .Returns(_ => throw new InvalidOperationException("SignalR network failure"));
 
-        var clients = Substitute.For<IHubClients>();
+        IHubClients clients = Substitute.For<IHubClients>();
         clients.User(ownerUserId.ToString()).Returns(clientProxy);
 
-        var hubContext = Substitute.For<IHubContext<NotificationsHub>>();
+        IHubContext<NotificationsHub> hubContext = Substitute.For<IHubContext<NotificationsHub>>();
         hubContext.Clients.Returns(clients);
 
         var publisher = new AssetProcessingRealtimePublisher(
             hubContext,
             NullLogger<AssetProcessingRealtimePublisher>.Instance);
 
-        var act = () => publisher.PublishJobUpdated(ownerUserId, message, CancellationToken.None);
+        Func<Task> act = () => publisher.PublishJobUpdated(ownerUserId, message, CancellationToken.None);
 
         await act.Should().NotThrowAsync();
     }

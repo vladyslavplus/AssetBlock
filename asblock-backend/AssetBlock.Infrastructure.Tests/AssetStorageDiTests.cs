@@ -23,13 +23,13 @@ public sealed class AssetStorageDiTests
     [InlineData("MINIO", typeof(MinioAssetStorageService))]
     public void AddInfrastructure_WhenProviderSelected_ShouldRegisterExactlyOneStorageAdapter(string provider, Type expectedType)
     {
-        var services = BuildServices(provider);
-        using var sp = services.BuildServiceProvider();
+        ServiceCollection services = BuildServices(provider);
+        using ServiceProvider sp = services.BuildServiceProvider();
 
         services.Count(d => d.ServiceType == typeof(IAssetStorageService)).Should().Be(1);
         services.Count(d => d.ServiceType == typeof(IMinioClient)).Should().Be(1);
 
-        var storage = sp.GetRequiredService<IAssetStorageService>();
+        IAssetStorageService storage = sp.GetRequiredService<IAssetStorageService>();
         storage.Should().BeOfType(expectedType);
         sp.GetRequiredService<IMinioClient>().Should().NotBeNull();
     }
@@ -37,21 +37,21 @@ public sealed class AssetStorageDiTests
     [Fact]
     public void AddInfrastructure_WhenProviderUnknown_ShouldFailFast()
     {
-        var act = () => BuildServices("AzureBlob");
+        Func<ServiceCollection> act = () => BuildServices("AzureBlob");
         act.Should().Throw<InvalidOperationException>().WithMessage("*unknown*");
     }
 
     [Fact]
     public void AddInfrastructure_WhenProviderMissing_ShouldFailFast()
     {
-        var act = () => BuildServices(provider: null);
+        Func<ServiceCollection> act = () => BuildServices(provider: null);
         act.Should().Throw<InvalidOperationException>().WithMessage("*required*");
     }
 
     [Fact]
     public void AddInfrastructure_WhenSeaweedFsSelected_ShouldIgnoreInvalidMinioPlaceholders()
     {
-        var services = BuildServices(
+        ServiceCollection services = BuildServices(
             "SeaweedFs",
             seaweedEndpoint: "http://127.0.0.1:8333",
             seaweedAccess: "ak",
@@ -60,8 +60,8 @@ public sealed class AssetStorageDiTests
             minioAccess: "<minio-access-key>",
             minioSecret: "<minio-secret-key>");
 
-        using var sp = services.BuildServiceProvider();
-        var act = () =>
+        using ServiceProvider sp = services.BuildServiceProvider();
+        Action act = () =>
         {
             _ = sp.GetRequiredService<IOptions<StorageOptions>>().Value;
             _ = sp.GetRequiredService<IOptions<SeaweedFsOptions>>().Value;
@@ -75,7 +75,7 @@ public sealed class AssetStorageDiTests
     [Fact]
     public void AddInfrastructure_WhenMinioSelected_ShouldValidateMinioAndIgnoreSeaweedPlaceholders()
     {
-        var services = BuildServices(
+        ServiceCollection services = BuildServices(
             "Minio",
             seaweedEndpoint: "<seaweedfs-endpoint>:8333",
             seaweedAccess: "<seaweedfs-access-key>",
@@ -84,8 +84,8 @@ public sealed class AssetStorageDiTests
             minioAccess: "ak",
             minioSecret: "sk");
 
-        using var sp = services.BuildServiceProvider();
-        var act = () =>
+        using ServiceProvider sp = services.BuildServiceProvider();
+        Action act = () =>
         {
             _ = sp.GetRequiredService<IOptions<MinioOptions>>().Value;
             _ = sp.GetRequiredService<IOptions<SeaweedFsOptions>>().Value;
@@ -149,7 +149,7 @@ public sealed class AssetStorageDiTests
             AnalyticsRateLimiting = new { BffSigningSecret = new string('s', 32) }
         });
 
-        var config = new ConfigurationBuilder()
+        IConfigurationRoot config = new ConfigurationBuilder()
             .AddJsonStream(new MemoryStream(Encoding.UTF8.GetBytes(json)))
             .Build();
 

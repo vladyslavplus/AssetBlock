@@ -14,7 +14,7 @@ public sealed class PurchaseStoreTests
     [Fact]
     public async Task Add_Exists_GetPurchase()
     {
-        await using var db = InMemoryDbContextFactory.Create();
+        await using ApplicationDbContext db = InMemoryDbContextFactory.Create();
         var catId = Guid.NewGuid();
         db.Categories.Add(new Category { Id = catId, Name = "C", Slug = "c", CreatedAt = DateTimeOffset.UtcNow });
         var userId = Guid.NewGuid();
@@ -69,12 +69,12 @@ public sealed class PurchaseStoreTests
     [Fact]
     public async Task ListForUser_sets_HasUserReviewed_from_reviews()
     {
-        await using var db = InMemoryDbContextFactory.Create();
+        await using ApplicationDbContext db = InMemoryDbContextFactory.Create();
         var catId = Guid.NewGuid();
         db.Categories.Add(new Category { Id = catId, Name = "C", Slug = "c", CreatedAt = DateTimeOffset.UtcNow });
         var authorId = Guid.NewGuid();
         var buyerId = Guid.NewGuid();
-        foreach (var u in new[] { (authorId, "author", "a@a.com"), (buyerId, "buyer", "b@b.com") })
+        foreach ((Guid, string, string) u in new[] { (authorId, "author", "a@a.com"), (buyerId, "buyer", "b@b.com") })
         {
             db.Users.Add(new User
             {
@@ -89,7 +89,7 @@ public sealed class PurchaseStoreTests
 
         var assetReviewedId = Guid.NewGuid();
         var assetBareId = Guid.NewGuid();
-        foreach (var aid in new[] { assetReviewedId, assetBareId })
+        foreach (Guid aid in new[] { assetReviewedId, assetBareId })
         {
             db.Assets.Add(new Asset
             {
@@ -121,7 +121,7 @@ public sealed class PurchaseStoreTests
 
         var sut = new PurchaseStore(db);
         var request = new ListMyPurchasesRequest { Page = 1, PageSize = 20, SortDirection = SortDirection.DESC };
-        var page = await sut.ListForUser(buyerId, request);
+        PagedResult<PurchaseLibraryItemDto> page = await sut.ListForUser(buyerId, request);
 
         page.Items.Should().HaveCount(2);
         page.Items.Single(i => i.AssetId == assetReviewedId).HasUserReviewed.Should().BeTrue();
@@ -131,7 +131,7 @@ public sealed class PurchaseStoreTests
     [Fact]
     public async Task HasPurchasesForAsset_reflects_rows()
     {
-        await using var db = InMemoryDbContextFactory.Create();
+        await using ApplicationDbContext db = InMemoryDbContextFactory.Create();
         var catId = Guid.NewGuid();
         db.Categories.Add(new Category { Id = catId, Name = "C", Slug = "c", CreatedAt = DateTimeOffset.UtcNow });
         var authorId = Guid.NewGuid();
@@ -196,7 +196,7 @@ public sealed class PurchaseStoreTests
         var intentId = Guid.NewGuid();
         var orderId = Guid.NewGuid();
         var lineId = Guid.NewGuid();
-        var now = DateTimeOffset.UtcNow;
+        DateTimeOffset now = DateTimeOffset.UtcNow;
         db.CheckoutIntents.Add(new CheckoutIntent
         {
             Id = intentId,

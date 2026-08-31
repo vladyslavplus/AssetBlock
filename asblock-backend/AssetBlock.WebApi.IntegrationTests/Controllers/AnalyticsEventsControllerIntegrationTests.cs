@@ -20,9 +20,9 @@ public sealed class AnalyticsEventsControllerIntegrationTests(IntegrationTestFix
     [Fact]
     public async Task IngestEvent_WhenTargetDoesNotMatchEventType_Returns400()
     {
-        var client = fixture.Factory.CreateClient();
+        HttpClient client = fixture.Factory.CreateClient();
 
-        var response = await PostEventAsync(client, Payload(assetId: null));
+        HttpResponseMessage response = await PostEventAsync(client, Payload(assetId: null));
 
         response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
         (await response.Content.ReadAsStringAsync()).Should().Contain(ErrorCodes.ERR_ANALYTICS_EVENT_INVALID);
@@ -31,10 +31,10 @@ public sealed class AnalyticsEventsControllerIntegrationTests(IntegrationTestFix
     [Fact]
     public async Task IngestEvent_WhenVisitorIdIsMissing_Returns400()
     {
-        var client = fixture.Factory.CreateClient();
-        var payload = Payload(assetId: Guid.NewGuid()) with { VisitorId = Guid.Empty };
+        HttpClient client = fixture.Factory.CreateClient();
+        AnalyticsEventPayload payload = Payload(assetId: Guid.NewGuid()) with { VisitorId = Guid.Empty };
 
-        var response = await PostEventAsync(client, payload);
+        HttpResponseMessage response = await PostEventAsync(client, payload);
 
         response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
     }
@@ -42,17 +42,17 @@ public sealed class AnalyticsEventsControllerIntegrationTests(IntegrationTestFix
     [Fact]
     public async Task IngestEvent_WhenAnonymousAndAssetIsPublic_Returns202AndStoresEvent()
     {
-        var client = fixture.Factory.CreateClient();
-        var assetId = await AssetCatalogSeed.EnsureSampleAssetAsync(
+        HttpClient client = fixture.Factory.CreateClient();
+        Guid assetId = await AssetCatalogSeed.EnsureSampleAssetAsync(
             fixture.Factory.Services.GetRequiredService<IServiceScopeFactory>());
-        var payload = Payload(assetId);
+        AnalyticsEventPayload payload = Payload(assetId);
 
-        var response = await PostEventAsync(client, payload);
+        HttpResponseMessage response = await PostEventAsync(client, payload);
 
         response.StatusCode.Should().Be(HttpStatusCode.Accepted);
         (await response.Content.ReadAsStringAsync()).Should().BeEmpty();
 
-        var stored = await GetStoredEvent(payload.EventId);
+        AnalyticsEvent? stored = await GetStoredEvent(payload.EventId);
         stored.Should().NotBeNull();
         stored.AssetId.Should().Be(assetId);
         stored.ActorUserId.Should().BeNull();
@@ -61,10 +61,10 @@ public sealed class AnalyticsEventsControllerIntegrationTests(IntegrationTestFix
     [Fact]
     public async Task IngestEvent_WhenAssetDoesNotExist_Returns202WithoutStoringEvent()
     {
-        var client = fixture.Factory.CreateClient();
-        var payload = Payload(assetId: Guid.NewGuid());
+        HttpClient client = fixture.Factory.CreateClient();
+        AnalyticsEventPayload payload = Payload(assetId: Guid.NewGuid());
 
-        var response = await PostEventAsync(client, payload);
+        HttpResponseMessage response = await PostEventAsync(client, payload);
 
         response.StatusCode.Should().Be(HttpStatusCode.Accepted);
         (await GetStoredEvent(payload.EventId)).Should().BeNull();
@@ -73,11 +73,11 @@ public sealed class AnalyticsEventsControllerIntegrationTests(IntegrationTestFix
     [Fact]
     public async Task IngestEvent_WhenSellerViewsOwnAsset_Returns202WithoutStoringEvent()
     {
-        var (client, username) = await IntegrationTestAuth.RegisterVerifiedAndAuthenticateAsync(fixture.Factory);
-        var assetId = await SeedAssetForAuthor(username);
-        var payload = Payload(assetId);
+        (HttpClient? client, var username) = await IntegrationTestAuth.RegisterVerifiedAndAuthenticateAsync(fixture.Factory);
+        Guid assetId = await SeedAssetForAuthor(username);
+        AnalyticsEventPayload payload = Payload(assetId);
 
-        var response = await PostEventAsync(client, payload);
+        HttpResponseMessage response = await PostEventAsync(client, payload);
 
         response.StatusCode.Should().Be(HttpStatusCode.Accepted);
         (await GetStoredEvent(payload.EventId)).Should().BeNull();
@@ -86,15 +86,15 @@ public sealed class AnalyticsEventsControllerIntegrationTests(IntegrationTestFix
     [Fact]
     public async Task IngestEvent_WhenAuthenticatedVisitorIsNotTheSeller_Returns202AndRecordsActor()
     {
-        var (client, username) = await IntegrationTestAuth.RegisterVerifiedAndAuthenticateAsync(fixture.Factory);
-        var assetId = await AssetCatalogSeed.EnsureSampleAssetAsync(
+        (HttpClient? client, var username) = await IntegrationTestAuth.RegisterVerifiedAndAuthenticateAsync(fixture.Factory);
+        Guid assetId = await AssetCatalogSeed.EnsureSampleAssetAsync(
             fixture.Factory.Services.GetRequiredService<IServiceScopeFactory>());
-        var payload = Payload(assetId);
+        AnalyticsEventPayload payload = Payload(assetId);
 
-        var response = await PostEventAsync(client, payload);
+        HttpResponseMessage response = await PostEventAsync(client, payload);
 
         response.StatusCode.Should().Be(HttpStatusCode.Accepted);
-        var stored = await GetStoredEvent(payload.EventId);
+        AnalyticsEvent? stored = await GetStoredEvent(payload.EventId);
         stored.Should().NotBeNull();
         stored.ActorUserId.Should().Be(await GetUserId(username));
     }
@@ -102,36 +102,36 @@ public sealed class AnalyticsEventsControllerIntegrationTests(IntegrationTestFix
     [Fact]
     public async Task IngestEvent_WhenReplayed_Returns202AndKeepsOneRow()
     {
-        var client = fixture.Factory.CreateClient();
-        var assetId = await AssetCatalogSeed.EnsureSampleAssetAsync(
+        HttpClient client = fixture.Factory.CreateClient();
+        Guid assetId = await AssetCatalogSeed.EnsureSampleAssetAsync(
             fixture.Factory.Services.GetRequiredService<IServiceScopeFactory>());
-        var payload = Payload(assetId);
+        AnalyticsEventPayload payload = Payload(assetId);
 
-        var first = await PostEventAsync(client, payload);
-        var replay = await PostEventAsync(client, payload);
+        HttpResponseMessage first = await PostEventAsync(client, payload);
+        HttpResponseMessage replay = await PostEventAsync(client, payload);
 
         first.StatusCode.Should().Be(HttpStatusCode.Accepted);
         replay.StatusCode.Should().Be(HttpStatusCode.Accepted);
 
-        await using var scope = fixture.Factory.Services.CreateAsyncScope();
-        var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+        await using AsyncServiceScope scope = fixture.Factory.Services.CreateAsyncScope();
+        ApplicationDbContext db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
         (await db.AnalyticsEvents.AsNoTracking().CountAsync(e => e.Id == payload.EventId)).Should().Be(1);
     }
 
     [Fact]
     public async Task IngestEvent_WhenDownloadIsNotEntitled_Returns202WithoutStoringEvent()
     {
-        var (client, _) = await IntegrationTestAuth.RegisterVerifiedAndAuthenticateAsync(fixture.Factory);
-        var assetId = await AssetCatalogSeed.EnsureSampleAssetAsync(
+        (HttpClient? client, var _) = await IntegrationTestAuth.RegisterVerifiedAndAuthenticateAsync(fixture.Factory);
+        Guid assetId = await AssetCatalogSeed.EnsureSampleAssetAsync(
             fixture.Factory.Services.GetRequiredService<IServiceScopeFactory>());
-        var versionId = await GetCurrentVersionId(assetId);
-        var payload = Payload(assetId) with
+        Guid versionId = await GetCurrentVersionId(assetId);
+        AnalyticsEventPayload payload = Payload(assetId) with
         {
             EventType = nameof(AnalyticsEventType.DOWNLOAD_REQUESTED),
             AssetVersionId = versionId
         };
 
-        var response = await PostEventAsync(client, payload);
+        HttpResponseMessage response = await PostEventAsync(client, payload);
 
         response.StatusCode.Should().Be(HttpStatusCode.Accepted);
         (await GetStoredEvent(payload.EventId)).Should().BeNull();
@@ -140,16 +140,16 @@ public sealed class AnalyticsEventsControllerIntegrationTests(IntegrationTestFix
     [Fact]
     public async Task IngestEvent_WhenExternalReferrerIsAUrl_ShouldStoreOnlyTheHost()
     {
-        var client = fixture.Factory.CreateClient();
-        var assetId = await AssetCatalogSeed.EnsureSampleAssetAsync(
+        HttpClient client = fixture.Factory.CreateClient();
+        Guid assetId = await AssetCatalogSeed.EnsureSampleAssetAsync(
             fixture.Factory.Services.GetRequiredService<IServiceScopeFactory>());
-        var payload = Payload(assetId) with
+        AnalyticsEventPayload payload = Payload(assetId) with
         {
             Source = nameof(AnalyticsTrafficSource.EXTERNAL),
             ReferrerHost = "https://Referring.Example.com/landing?utm_campaign=secret"
         };
 
-        var response = await PostEventAsync(client, payload);
+        HttpResponseMessage response = await PostEventAsync(client, payload);
 
         response.StatusCode.Should().Be(HttpStatusCode.Accepted);
         (await GetStoredEvent(payload.EventId))!.ReferrerHost.Should().Be("referring.example.com");
@@ -160,7 +160,7 @@ public sealed class AnalyticsEventsControllerIntegrationTests(IntegrationTestFix
         using var request = new HttpRequestMessage(HttpMethod.Post, _eventsUri);
         request.Content = JsonContent.Create(payload);
 
-        foreach (var (key, value) in AnalyticsRateLimitTestHost.CreateSignedHeaders(
+        foreach ((var key, var value) in AnalyticsRateLimitTestHost.CreateSignedHeaders(
                      TEST_CLIENT_IP,
                      AssetBlockWebApplicationFactory.TEST_ANALYTICS_BFF_SIGNING_SECRET))
         {
@@ -172,22 +172,22 @@ public sealed class AnalyticsEventsControllerIntegrationTests(IntegrationTestFix
 
     private async Task<AnalyticsEvent?> GetStoredEvent(Guid eventId)
     {
-        await using var scope = fixture.Factory.Services.CreateAsyncScope();
-        var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+        await using AsyncServiceScope scope = fixture.Factory.Services.CreateAsyncScope();
+        ApplicationDbContext db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
         return await db.AnalyticsEvents.AsNoTracking().SingleOrDefaultAsync(e => e.Id == eventId);
     }
 
     private async Task<Guid> GetUserId(string username)
     {
-        await using var scope = fixture.Factory.Services.CreateAsyncScope();
-        var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+        await using AsyncServiceScope scope = fixture.Factory.Services.CreateAsyncScope();
+        ApplicationDbContext db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
         return await db.Users.AsNoTracking().Where(u => u.Username == username).Select(u => u.Id).SingleAsync();
     }
 
     private async Task<Guid> GetCurrentVersionId(Guid assetId)
     {
-        await using var scope = fixture.Factory.Services.CreateAsyncScope();
-        var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+        await using AsyncServiceScope scope = fixture.Factory.Services.CreateAsyncScope();
+        ApplicationDbContext db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
         return await db.AssetVersions.AsNoTracking()
             .Where(v => v.AssetId == assetId && v.IsCurrent)
             .Select(v => v.Id)
@@ -196,13 +196,13 @@ public sealed class AnalyticsEventsControllerIntegrationTests(IntegrationTestFix
 
     private async Task<Guid> SeedAssetForAuthor(string username)
     {
-        await using var scope = fixture.Factory.Services.CreateAsyncScope();
-        var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
-        var authorId = await db.Users.AsNoTracking()
+        await using AsyncServiceScope scope = fixture.Factory.Services.CreateAsyncScope();
+        ApplicationDbContext db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+        Guid authorId = await db.Users.AsNoTracking()
             .Where(u => u.Username == username)
             .Select(u => u.Id)
             .SingleAsync();
-        var categoryId = await db.Categories.AsNoTracking().Select(c => c.Id).FirstAsync();
+        Guid categoryId = await db.Categories.AsNoTracking().Select(c => c.Id).FirstAsync();
 
         var asset = new Asset
         {

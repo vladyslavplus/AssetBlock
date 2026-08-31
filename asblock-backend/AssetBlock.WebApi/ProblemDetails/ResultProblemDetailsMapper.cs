@@ -49,8 +49,8 @@ internal static class ResultProblemDetailsMapper
         IEnumerable<ValidationError> validationErrors,
         IEnumerable<string> errors)
     {
-        var validationList = validationErrors as IList<ValidationError> ?? validationErrors.ToList();
-        var errorList = errors as IList<string> ?? errors.ToList();
+        IList<ValidationError> validationList = validationErrors as IList<ValidationError> ?? validationErrors.ToList();
+        IList<string> errorList = errors as IList<string> ?? errors.ToList();
 
         return status switch
         {

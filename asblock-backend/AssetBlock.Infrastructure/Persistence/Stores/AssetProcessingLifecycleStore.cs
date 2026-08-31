@@ -7,9 +7,11 @@ using AssetBlock.Domain.Core.Constants;
 using AssetBlock.Domain.Core.Dto;
 using AssetBlock.Domain.Core.Dto.Notifications;
 using AssetBlock.Domain.Core.Dto.Outbox;
+using AssetBlock.Domain.Core.Entities;
 using AssetBlock.Domain.Core.Enums;
 using AssetBlock.Domain.Core.Primitives.AppSettingsOptions;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Storage;
 using Microsoft.Extensions.Options;
 
 namespace AssetBlock.Infrastructure.Persistence.Stores;
@@ -71,10 +73,10 @@ public sealed partial class AssetProcessingLifecycleStore(
 
         var serializedResult = AssetProcessingSerializer.SerializeResult(AssetProcessingJobType.ARCHIVE_INSPECTION, result);
 
-        await using var tx = await dbContext.Database.BeginTransactionAsync(IsolationLevel.ReadCommitted, cancellationToken);
+        await using IDbContextTransaction tx = await dbContext.Database.BeginTransactionAsync(IsolationLevel.ReadCommitted, cancellationToken);
 
         // 1. Lock job row and retrieve state
-        var jobs = await dbContext.Database.SqlQueryRaw<JobValidationRecord>(
+        List<JobValidationRecord> jobs = await dbContext.Database.SqlQueryRaw<JobValidationRecord>(
             """
             SELECT "Id", "AssetId", "AssetVersionId", "Type", "Status", "LeaseToken", "LeaseExpiresAt"
             FROM asset_processing_jobs
@@ -87,10 +89,10 @@ public sealed partial class AssetProcessingLifecycleStore(
             return false;
         }
 
-        var job = jobs[0];
+        JobValidationRecord job = jobs[0];
 
         // 2. Capture DB clock timestamp once after lock acquisition
-        var dbNow = await dbContext.Database.SqlQueryRaw<DateTimeOffset>(
+        DateTimeOffset dbNow = await dbContext.Database.SqlQueryRaw<DateTimeOffset>(
             """SELECT clock_timestamp() AS "Value" """).FirstAsync(cancellationToken);
 
         // 3. Revalidate fencing & job target
@@ -238,10 +240,10 @@ public sealed partial class AssetProcessingLifecycleStore(
 
         var serializedResult = AssetProcessingSerializer.SerializeResult(AssetProcessingJobType.MALWARE_SCAN, result);
 
-        await using var tx = await dbContext.Database.BeginTransactionAsync(IsolationLevel.ReadCommitted, cancellationToken);
+        await using IDbContextTransaction tx = await dbContext.Database.BeginTransactionAsync(IsolationLevel.ReadCommitted, cancellationToken);
 
         // 1. Lock job row and retrieve state
-        var jobs = await dbContext.Database.SqlQueryRaw<JobValidationRecord>(
+        List<JobValidationRecord> jobs = await dbContext.Database.SqlQueryRaw<JobValidationRecord>(
             """
             SELECT "Id", "AssetId", "AssetVersionId", "Type", "Status", "LeaseToken", "LeaseExpiresAt"
             FROM asset_processing_jobs
@@ -254,10 +256,10 @@ public sealed partial class AssetProcessingLifecycleStore(
             return false;
         }
 
-        var job = jobs[0];
+        JobValidationRecord job = jobs[0];
 
         // 2. Capture DB clock timestamp once after lock acquisition
-        var dbNow = await dbContext.Database.SqlQueryRaw<DateTimeOffset>(
+        DateTimeOffset dbNow = await dbContext.Database.SqlQueryRaw<DateTimeOffset>(
             """SELECT clock_timestamp() AS "Value" """).FirstAsync(cancellationToken);
 
         // 3. Revalidate fencing & job target
@@ -284,7 +286,7 @@ public sealed partial class AssetProcessingLifecycleStore(
             $"""SELECT "Id" FROM assets WHERE "Id" = {assetId} FOR UPDATE""", cancellationToken);
 
         // Get candidate version number
-        var candidateVersionNumbers = await dbContext.Database.SqlQueryRaw<int>(
+        List<int> candidateVersionNumbers = await dbContext.Database.SqlQueryRaw<int>(
             """
             SELECT "VersionNumber" AS "Value"
             FROM asset_versions
@@ -299,7 +301,7 @@ public sealed partial class AssetProcessingLifecycleStore(
         var candidateVersionNumber = candidateVersionNumbers[0];
 
         // Get current version number if exists
-        var currentVersionNumbers = await dbContext.Database.SqlQueryRaw<int>(
+        List<int> currentVersionNumbers = await dbContext.Database.SqlQueryRaw<int>(
             """
             SELECT "VersionNumber" AS "Value"
             FROM asset_versions
@@ -462,10 +464,10 @@ public sealed partial class AssetProcessingLifecycleStore(
             ? "PENDING_INSPECTION"
             : "PENDING_MALWARE_SCAN";
 
-        await using var tx = await dbContext.Database.BeginTransactionAsync(IsolationLevel.ReadCommitted, cancellationToken);
+        await using IDbContextTransaction tx = await dbContext.Database.BeginTransactionAsync(IsolationLevel.ReadCommitted, cancellationToken);
 
         // 1. Lock job row and retrieve state
-        var jobs = await dbContext.Database.SqlQueryRaw<JobValidationRecord>(
+        List<JobValidationRecord> jobs = await dbContext.Database.SqlQueryRaw<JobValidationRecord>(
             """
             SELECT "Id", "AssetId", "AssetVersionId", "Type", "Status", "LeaseToken", "LeaseExpiresAt"
             FROM asset_processing_jobs
@@ -478,10 +480,10 @@ public sealed partial class AssetProcessingLifecycleStore(
             return false;
         }
 
-        var job = jobs[0];
+        JobValidationRecord job = jobs[0];
 
         // 2. Capture DB clock timestamp once after lock acquisition
-        var dbNow = await dbContext.Database.SqlQueryRaw<DateTimeOffset>(
+        DateTimeOffset dbNow = await dbContext.Database.SqlQueryRaw<DateTimeOffset>(
             """SELECT clock_timestamp() AS "Value" """).FirstAsync(cancellationToken);
 
         // 3. Revalidate fencing & job target
@@ -591,9 +593,9 @@ public sealed partial class AssetProcessingLifecycleStore(
         var boundedSummary = AssetProcessingJobStore.BoundErrorSummary(
             ErrorCodesToErrorMessages.GetMessage(ErrorCodes.LEASE_EXPIRED));
 
-        await using var tx = await dbContext.Database.BeginTransactionAsync(IsolationLevel.ReadCommitted, cancellationToken);
+        await using IDbContextTransaction tx = await dbContext.Database.BeginTransactionAsync(IsolationLevel.ReadCommitted, cancellationToken);
 
-        var jobs = await dbContext.AssetProcessingJobs
+        List<AssetProcessingJob> jobs = await dbContext.AssetProcessingJobs
             .FromSqlInterpolated($"""
                 SELECT *
                 FROM asset_processing_jobs AS j
@@ -614,13 +616,13 @@ public sealed partial class AssetProcessingLifecycleStore(
             return false;
         }
 
-        var job = jobs[0];
+        AssetProcessingJob job = jobs[0];
         var expectedSourceStatus = job.Type == AssetProcessingJobType.ARCHIVE_INSPECTION
             ? nameof(AssetVersionProcessingStatus.PENDING_INSPECTION)
             : nameof(AssetVersionProcessingStatus.PENDING_MALWARE_SCAN);
         var failedStatus = nameof(AssetVersionProcessingStatus.PROCESSING_FAILED);
 
-        var dbNow = await dbContext.Database.SqlQueryRaw<DateTimeOffset>(
+        DateTimeOffset dbNow = await dbContext.Database.SqlQueryRaw<DateTimeOffset>(
             """SELECT clock_timestamp() AS "Value" """).FirstAsync(cancellationToken);
 
         var versionRowsUpdated = await dbContext.Database.ExecuteSqlInterpolatedAsync($"""
@@ -692,7 +694,7 @@ public sealed partial class AssetProcessingLifecycleStore(
                 "Only terminal security statuses enqueue notifications.")
         };
 
-        var owners = await dbContext.Database.SqlQueryRaw<AssetOwnerRow>(
+        List<AssetOwnerRow> owners = await dbContext.Database.SqlQueryRaw<AssetOwnerRow>(
             """
             SELECT "AuthorId", "Title"
             FROM assets
@@ -704,7 +706,7 @@ public sealed partial class AssetProcessingLifecycleStore(
             return;
         }
 
-        var owner = owners[0];
+        AssetOwnerRow owner = owners[0];
         var notificationId = Guid.NewGuid();
         var outboxId = Guid.NewGuid();
         var metadata = JsonSerializer.Serialize(

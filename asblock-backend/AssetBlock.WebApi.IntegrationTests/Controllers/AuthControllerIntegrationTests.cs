@@ -12,8 +12,8 @@ public sealed class AuthControllerIntegrationTests(IntegrationTestFixture fixtur
     [Fact]
     public async Task Login_WithUnknownEmail_ShouldReturnBadRequest()
     {
-        var client = fixture.Factory.CreateClient();
-        var response = await client.PostAsJsonAsync(
+        HttpClient client = fixture.Factory.CreateClient();
+        HttpResponseMessage response = await client.PostAsJsonAsync(
             new Uri("/api/auth/login", UriKind.Relative),
             new LoginRequest("nonexistent-integ@test.local", "Password1!"));
 
@@ -25,35 +25,35 @@ public sealed class AuthControllerIntegrationTests(IntegrationTestFixture fixtur
     [Fact]
     public async Task RegisterThenLogin_ShouldReturnOkWithTokens()
     {
-        var client = fixture.Factory.CreateClient();
+        HttpClient client = fixture.Factory.CreateClient();
         var suffix = Guid.NewGuid().ToString("N");
         var email = $"integ-{suffix}@test.local";
         const string password = "Password1!";
 
-        var registerResponse = await client.PostAsJsonAsync(
+        HttpResponseMessage registerResponse = await client.PostAsJsonAsync(
             new Uri("/api/auth/register", UriKind.Relative),
             new RegisterRequest($"user_{suffix}", email, password));
 
         registerResponse.StatusCode.Should().Be(HttpStatusCode.OK);
-        var registerTokens = await registerResponse.Content.ReadFromJsonAsync<IntegrationTestAuth.TokensResponseDto>(IntegrationTestAuth.JsonOptions);
+        IntegrationTestAuth.TokensResponseDto? registerTokens = await registerResponse.Content.ReadFromJsonAsync<IntegrationTestAuth.TokensResponseDto>(IntegrationTestAuth.JsonOptions);
         registerTokens.Should().NotBeNull();
         registerTokens.AccessToken.Should().NotBeNullOrWhiteSpace();
         registerTokens.RefreshToken.Should().NotBeNullOrWhiteSpace();
 
         client.DefaultRequestHeaders.Authorization =
             new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", registerTokens.AccessToken);
-        var meResponse = await client.GetAsync(new Uri("/api/users/me", UriKind.Relative));
+        HttpResponseMessage meResponse = await client.GetAsync(new Uri("/api/users/me", UriKind.Relative));
         meResponse.StatusCode.Should().Be(HttpStatusCode.OK);
         var meJson = await meResponse.Content.ReadAsStringAsync();
         meJson.Should().Contain("\"emailVerifiedAt\":null");
 
         client.DefaultRequestHeaders.Authorization = null;
-        var loginResponse = await client.PostAsJsonAsync(
+        HttpResponseMessage loginResponse = await client.PostAsJsonAsync(
             new Uri("/api/auth/login", UriKind.Relative),
             new LoginRequest(email, password));
 
         loginResponse.StatusCode.Should().Be(HttpStatusCode.OK);
-        var loginTokens = await loginResponse.Content.ReadFromJsonAsync<IntegrationTestAuth.TokensResponseDto>(IntegrationTestAuth.JsonOptions);
+        IntegrationTestAuth.TokensResponseDto? loginTokens = await loginResponse.Content.ReadFromJsonAsync<IntegrationTestAuth.TokensResponseDto>(IntegrationTestAuth.JsonOptions);
         loginTokens.Should().NotBeNull();
         loginTokens.AccessToken.Should().NotBeNullOrWhiteSpace();
     }
@@ -61,20 +61,20 @@ public sealed class AuthControllerIntegrationTests(IntegrationTestFixture fixtur
     [Fact]
     public async Task PasswordResetRequest_ForKnownAndUnknownEmail_ShouldReturnAcceptedIndistinguishably()
     {
-        var client = fixture.Factory.CreateClient();
+        HttpClient client = fixture.Factory.CreateClient();
         var suffix = Guid.NewGuid().ToString("N");
         var knownEmail = $"reset-known-{suffix}@test.local";
         const string password = "Password1!";
 
-        var registerResponse = await client.PostAsJsonAsync(
+        HttpResponseMessage registerResponse = await client.PostAsJsonAsync(
             new Uri("/api/auth/register", UriKind.Relative),
             new RegisterRequest($"reset_{suffix}", knownEmail, password));
         registerResponse.StatusCode.Should().Be(HttpStatusCode.OK);
 
-        var knownResponse = await client.PostAsJsonAsync(
+        HttpResponseMessage knownResponse = await client.PostAsJsonAsync(
             new Uri("/api/auth/password-reset/request", UriKind.Relative),
             new RequestPasswordResetRequest(knownEmail));
-        var unknownResponse = await client.PostAsJsonAsync(
+        HttpResponseMessage unknownResponse = await client.PostAsJsonAsync(
             new Uri("/api/auth/password-reset/request", UriKind.Relative),
             new RequestPasswordResetRequest($"reset-unknown-{suffix}@test.local"));
 
@@ -89,8 +89,8 @@ public sealed class AuthControllerIntegrationTests(IntegrationTestFixture fixtur
     [Fact]
     public async Task ConfirmEmailVerification_WithGarbageToken_ShouldReturnGenericInvalid()
     {
-        var client = fixture.Factory.CreateClient();
-        var response = await client.PostAsJsonAsync(
+        HttpClient client = fixture.Factory.CreateClient();
+        HttpResponseMessage response = await client.PostAsJsonAsync(
             new Uri("/api/auth/email-verification/confirm", UriKind.Relative),
             new ConfirmEmailActionRequest("not-a-real-token"));
 
@@ -103,9 +103,9 @@ public sealed class AuthControllerIntegrationTests(IntegrationTestFixture fixtur
     [Fact]
     public async Task Register_WithWeakPassword_ShouldReturnBadRequest()
     {
-        var client = fixture.Factory.CreateClient();
+        HttpClient client = fixture.Factory.CreateClient();
         var suffix = Guid.NewGuid().ToString("N");
-        var response = await client.PostAsJsonAsync(
+        HttpResponseMessage response = await client.PostAsJsonAsync(
             new Uri("/api/auth/register", UriKind.Relative),
             new RegisterRequest($"weak_{suffix}", $"weak-{suffix}@test.local", "short"));
 

@@ -75,12 +75,12 @@ internal sealed class OrderStore(ApplicationDbContext dbContext) : IOrderStore
 
     private void DetachGraph(Order order, IReadOnlyList<OrderLine> lines, IReadOnlyList<Purchase> purchases)
     {
-        foreach (var purchase in purchases)
+        foreach (Purchase purchase in purchases)
         {
             dbContext.Entry(purchase).State = EntityState.Detached;
         }
 
-        foreach (var line in lines)
+        foreach (OrderLine line in lines)
         {
             dbContext.Entry(line).State = EntityState.Detached;
         }

@@ -2,11 +2,11 @@ using System.Net;
 using AssetBlock.Domain.Core.Constants;
 using AssetBlock.Infrastructure;
 using AssetBlock.WebApi.Extensions;
-using Microsoft.Extensions.Hosting;
 using AssetBlock.WebApi.Services;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.TestHost;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
 
 namespace AssetBlock.WebApi.IntegrationTests.Support;
 
@@ -18,7 +18,7 @@ internal static class AnalyticsRateLimitTestHost
 
     internal static async Task<WebApplication> StartAsync(string? signingSecret = TEST_SIGNING_SECRET)
     {
-        var builder = WebApplication.CreateBuilder();
+        WebApplicationBuilder builder = WebApplication.CreateBuilder();
         builder.WebHost.UseTestServer();
         builder.Services.AddRouting();
 
@@ -34,7 +34,7 @@ internal static class AnalyticsRateLimitTestHost
         builder.Services.AddAnalyticsBffSignatureValidation();
         builder.Services.AddApiRateLimiting();
 
-        var app = builder.Build();
+        WebApplication app = builder.Build();
 
         app.Use(async (context, next) =>
         {
@@ -85,7 +85,7 @@ internal static class AnalyticsRateLimitTestHost
 
         if (headers is not null)
         {
-            foreach (var (name, value) in headers)
+            foreach ((var name, var value) in headers)
             {
                 if (value is not null)
                 {

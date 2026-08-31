@@ -1,5 +1,6 @@
 using AssetBlock.Domain.Core.Constants;
 using AssetBlock.Domain.Core.Entities;
+using AssetBlock.Infrastructure.Persistence;
 using AssetBlock.Infrastructure.Persistence.Stores;
 using AssetBlock.Infrastructure.Tests.Infrastructure;
 using Microsoft.EntityFrameworkCore;
@@ -11,15 +12,15 @@ public sealed class UserStoreTests
     [Fact]
     public async Task Create_GetByEmail_GetByIdForUpdate_Update_Delete()
     {
-        await using var db = InMemoryDbContextFactory.Create();
+        await using ApplicationDbContext db = InMemoryDbContextFactory.Create();
         var sut = new UserStore(db);
 
-        var user = await sut.Create("  User1  ", "  EMAIL@test.com  ", "hash");
+        User user = await sut.Create("  User1  ", "  EMAIL@test.com  ", "hash");
         user.Email.Should().Be("email@test.com");
 
         (await sut.GetByEmail("EMAIL@test.com"))!.Id.Should().Be(user.Id);
 
-        var forUpdate = await sut.GetByIdForUpdate(user.Id);
+        User? forUpdate = await sut.GetByIdForUpdate(user.Id);
         forUpdate!.Bio = "bio";
         await sut.Update(forUpdate);
 
@@ -33,7 +34,7 @@ public sealed class UserStoreTests
     public async Task ReplaceUserSocialLinks_and_GetByIdWithLinks()
     {
         await using var holder = new SqliteDbContextHolder();
-        var db = holder.Context;
+        ApplicationDbContext db = holder.Context;
         var user = new User
         {
             Id = Guid.NewGuid(),
@@ -46,12 +47,12 @@ public sealed class UserStoreTests
         db.Users.Add(user);
         await db.SaveChangesAsync();
 
-        var platformId = await db.Set<SocialPlatform>().Select(p => p.Id).FirstAsync();
+        Guid platformId = await db.Set<SocialPlatform>().Select(p => p.Id).FirstAsync();
 
         var sut = new UserStore(db);
         (await sut.ReplaceUserSocialLinks(user.Id, [(platformId, "  https://x.com/a  ")])).Should().BeTrue();
 
-        var withLinks = await sut.GetByIdWithLinks(user.Id);
+        User? withLinks = await sut.GetByIdWithLinks(user.Id);
         withLinks!.SocialLinks.Should().HaveCount(1);
         withLinks.SocialLinks.First().Url.Should().Be("https://x.com/a");
 
@@ -62,7 +63,7 @@ public sealed class UserStoreTests
     public async Task UpdatePasswordHashIfMatches_WhenHashMatches_UpdatesPasswordHashAndLeavesOtherFieldsUntouched()
     {
         await using var holder = new SqliteDbContextHolder();
-        var db = holder.Context;
+        ApplicationDbContext db = holder.Context;
         var user = new User
         {
             Id = Guid.NewGuid(),
@@ -83,7 +84,7 @@ public sealed class UserStoreTests
         updated.Should().BeTrue();
 
         // Reload fresh from DB
-        var reloaded = await db.Users.AsNoTracking().FirstOrDefaultAsync(u => u.Id == user.Id);
+        User? reloaded = await db.Users.AsNoTracking().FirstOrDefaultAsync(u => u.Id == user.Id);
         reloaded.Should().NotBeNull();
         reloaded.PasswordHash.Should().Be("new_hash");
         reloaded.UpdatedAt.Should().NotBeNull();
@@ -97,7 +98,7 @@ public sealed class UserStoreTests
     public async Task UpdatePasswordHashIfMatches_WhenHashMismatch_ReturnsFalseAndDoesNotModifyPasswordHash()
     {
         await using var holder = new SqliteDbContextHolder();
-        var db = holder.Context;
+        ApplicationDbContext db = holder.Context;
         var user = new User
         {
             Id = Guid.NewGuid(),
@@ -115,7 +116,7 @@ public sealed class UserStoreTests
 
         updated.Should().BeFalse();
 
-        var reloaded = await db.Users.AsNoTracking().FirstOrDefaultAsync(u => u.Id == user.Id);
+        User? reloaded = await db.Users.AsNoTracking().FirstOrDefaultAsync(u => u.Id == user.Id);
         reloaded!.PasswordHash.Should().Be("current_db_hash");
     }
 }

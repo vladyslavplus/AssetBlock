@@ -1,7 +1,7 @@
+using System.Diagnostics;
 using AssetBlock.Domain.Abstractions.Services;
 using AssetBlock.Domain.Core.Enums;
 using AssetBlock.Infrastructure.Observability;
-using System.Diagnostics;
 
 namespace AssetBlock.Infrastructure.Ai;
 

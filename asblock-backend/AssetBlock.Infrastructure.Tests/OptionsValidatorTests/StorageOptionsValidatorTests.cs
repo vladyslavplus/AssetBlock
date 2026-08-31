@@ -1,5 +1,6 @@
 using AssetBlock.Domain.Core.Primitives.AppSettingsOptions;
 using AssetBlock.Infrastructure.Options;
+using Microsoft.Extensions.Options;
 
 namespace AssetBlock.Infrastructure.Tests.OptionsValidatorTests;
 
@@ -14,7 +15,7 @@ public sealed class StorageOptionsValidatorTests
     [InlineData("MINIO")]
     public void Validate_WhenKnownProvider_ShouldSucceed(string provider)
     {
-        var result = _sut.Validate(null, new StorageOptions { Provider = provider });
+        ValidateOptionsResult result = _sut.Validate(null, new StorageOptions { Provider = provider });
         result.Succeeded.Should().BeTrue();
     }
 
@@ -24,7 +25,7 @@ public sealed class StorageOptionsValidatorTests
     [InlineData("   ")]
     public void Validate_WhenMissingProvider_ShouldFail(string? provider)
     {
-        var result = _sut.Validate(null, new StorageOptions { Provider = provider! });
+        ValidateOptionsResult result = _sut.Validate(null, new StorageOptions { Provider = provider! });
         result.Failed.Should().BeTrue();
         result.Failures.Should().Contain(m => m.Contains("Storage:Provider"));
     }
@@ -32,7 +33,7 @@ public sealed class StorageOptionsValidatorTests
     [Fact]
     public void Validate_WhenUnknownProvider_ShouldFail()
     {
-        var result = _sut.Validate(null, new StorageOptions { Provider = "AzureBlob" });
+        ValidateOptionsResult result = _sut.Validate(null, new StorageOptions { Provider = "AzureBlob" });
         result.Failed.Should().BeTrue();
         result.Failures.Should().Contain(m => m.Contains("unknown"));
     }

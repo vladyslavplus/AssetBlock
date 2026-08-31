@@ -1,9 +1,9 @@
+using System.Text.RegularExpressions;
 using AssetBlock.Domain.Core;
 using AssetBlock.Domain.Core.Constants;
 using AssetBlock.Domain.Core.Enums;
 using AssetBlock.Domain.Core.Primitives.AppSettingsOptions;
 using Microsoft.Extensions.Configuration;
-using System.Text.RegularExpressions;
 
 namespace AssetBlock.Infrastructure.Ai;
 
@@ -24,7 +24,7 @@ internal static partial class AiConfigurationRules
             return false;
         }
 
-        return AiProviderParser.TryParse(configuration[$"{AiOptions.SECTION_NAME}:Provider"], out var parsed)
+        return AiProviderParser.TryParse(configuration[$"{AiOptions.SECTION_NAME}:Provider"], out AiProviderKind parsed)
             && parsed == kind;
     }
 
@@ -49,7 +49,7 @@ internal static partial class AiConfigurationRules
     public static bool IsAbsoluteHttpOrHttps(string? value, bool allowHttps, bool requireLoopback)
     {
         if (string.IsNullOrWhiteSpace(value)
-            || !Uri.TryCreate(value, UriKind.Absolute, out var uri)
+            || !Uri.TryCreate(value, UriKind.Absolute, out Uri? uri)
             || !string.IsNullOrEmpty(uri.UserInfo))
         {
             return false;

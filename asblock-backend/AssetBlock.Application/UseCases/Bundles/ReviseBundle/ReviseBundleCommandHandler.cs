@@ -1,11 +1,12 @@
 using Ardalis.Result;
 using AssetBlock.Application.Common;
+using AssetBlock.Application.Messaging;
 using AssetBlock.Domain.Abstractions.Services;
 using AssetBlock.Domain.Core.Constants;
 using AssetBlock.Domain.Core.Dto.Audit;
 using AssetBlock.Domain.Core.Dto.Bundles;
+using AssetBlock.Domain.Core.Entities;
 using AssetBlock.Domain.Core.Enums;
-using AssetBlock.Application.Messaging;
 using Microsoft.Extensions.Logging;
 
 namespace AssetBlock.Application.UseCases.Bundles.ReviseBundle;
@@ -28,7 +29,7 @@ internal sealed class ReviseBundleCommandHandler(
 
         await unitOfWork.ExecuteInTransaction(async ct =>
         {
-            var bundle = await bundleStore.LockForUpdate(request.BundleId, ct);
+            Bundle? bundle = await bundleStore.LockForUpdate(request.BundleId, ct);
             if (bundle is null)
             {
                 failure = Result.NotFound(ErrorCodes.ERR_BUNDLE_NOT_FOUND);
@@ -52,7 +53,7 @@ internal sealed class ReviseBundleCommandHandler(
                 return;
             }
 
-            var prepared = await BundleRevisionDraftBuilder.Build(
+            Result<(decimal ListPriceTotal, IReadOnlyList<BundleRevisionItemDraft> Items)> prepared = await BundleRevisionDraftBuilder.Build(
                 bundleStore,
                 assetStore,
                 request.SellerId,
@@ -68,8 +69,8 @@ internal sealed class ReviseBundleCommandHandler(
                 return;
             }
 
-            var (listPriceTotal, items) = prepared.Value;
-            var revision = await bundleStore.PublishNextRevision(
+            (var listPriceTotal, IReadOnlyList<BundleRevisionItemDraft>? items) = prepared.Value;
+            BundleRevision revision = await bundleStore.PublishNextRevision(
                 request.BundleId,
                 title,
                 description,

@@ -1,5 +1,6 @@
 using AssetBlock.Application.UseCases.Assets.DeleteAsset;
 using AwesomeAssertions;
+using FluentValidation.Results;
 
 namespace AssetBlock.Application.Tests.UseCases.Assets;
 
@@ -11,7 +12,7 @@ public class DeleteAssetCommandValidatorTests
     public async Task Validate_WhenIdsEmpty_ShouldFail()
     {
         var cmd = new DeleteAssetCommand(Guid.Empty, Guid.Empty);
-        var result = await _validator.ValidateAsync(cmd);
+        ValidationResult result = await _validator.ValidateAsync(cmd);
         result.IsValid.Should().BeFalse();
     }
 
@@ -19,7 +20,7 @@ public class DeleteAssetCommandValidatorTests
     public async Task Validate_WhenValid_ShouldPass()
     {
         var cmd = new DeleteAssetCommand(Guid.NewGuid(), Guid.NewGuid());
-        var result = await _validator.ValidateAsync(cmd);
+        ValidationResult result = await _validator.ValidateAsync(cmd);
         result.IsValid.Should().BeTrue();
     }
 }

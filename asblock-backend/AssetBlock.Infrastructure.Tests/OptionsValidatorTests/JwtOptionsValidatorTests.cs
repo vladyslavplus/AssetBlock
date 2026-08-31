@@ -1,5 +1,6 @@
 using AssetBlock.Domain.Core.Primitives.AppSettingsOptions;
 using AssetBlock.Infrastructure.Options;
+using Microsoft.Extensions.Options;
 
 namespace AssetBlock.Infrastructure.Tests.OptionsValidatorTests;
 
@@ -10,14 +11,14 @@ public sealed class JwtOptionsValidatorTests
     [Fact]
     public void Validate_WhenConfigValid_ShouldSucceed()
     {
-        var result = _sut.Validate(null, CreateValid());
+        ValidateOptionsResult result = _sut.Validate(null, CreateValid());
         result.Succeeded.Should().BeTrue();
     }
 
     [Fact]
     public void Validate_WhenRequiredFieldsEmpty_ShouldFail()
     {
-        var result = _sut.Validate(null, new JwtOptions
+        ValidateOptionsResult result = _sut.Validate(null, new JwtOptions
         {
             Issuer = "",
             Audience = " ",
@@ -35,10 +36,10 @@ public sealed class JwtOptionsValidatorTests
     [Fact]
     public void Validate_WhenSigningKeyTooShort_ShouldFail()
     {
-        var options = CreateValid();
+        JwtOptions options = CreateValid();
         options.Key = new string('k', JwtOptionsValidator.MIN_SIGNING_KEY_LENGTH - 1);
 
-        var result = _sut.Validate(null, options);
+        ValidateOptionsResult result = _sut.Validate(null, options);
 
         result.Failed.Should().BeTrue();
         result.Failures.Should().Contain(m => m.Contains("at least"));
@@ -47,10 +48,10 @@ public sealed class JwtOptionsValidatorTests
     [Fact]
     public void Validate_WhenKeyIsPlaceholder_ShouldFail()
     {
-        var options = CreateValid();
+        JwtOptions options = CreateValid();
         options.Key = "<dev-secret-key-min-32-characters-long-for-hmac>";
 
-        var result = _sut.Validate(null, options);
+        ValidateOptionsResult result = _sut.Validate(null, options);
 
         result.Failed.Should().BeTrue();
         result.Failures.Should().Contain(m => m.Contains("Key"));
@@ -59,11 +60,11 @@ public sealed class JwtOptionsValidatorTests
     [Fact]
     public void Validate_WhenTokenLifetimesInvalid_ShouldFail()
     {
-        var options = CreateValid();
+        JwtOptions options = CreateValid();
         options.AccessTokenMinutes = 0;
         options.RefreshTokenDays = -1;
 
-        var result = _sut.Validate(null, options);
+        ValidateOptionsResult result = _sut.Validate(null, options);
 
         result.Failed.Should().BeTrue();
         result.Failures.Should().Contain(m => m.Contains("AccessTokenMinutes"));
@@ -73,10 +74,10 @@ public sealed class JwtOptionsValidatorTests
     [Fact]
     public void Validate_WhenHubAudienceMissing_ShouldFail()
     {
-        var options = CreateValid();
+        JwtOptions options = CreateValid();
         options.HubAudience = "";
 
-        var result = _sut.Validate(null, options);
+        ValidateOptionsResult result = _sut.Validate(null, options);
 
         result.Failed.Should().BeTrue();
         result.Failures.Should().Contain(m => m.Contains("HubAudience"));
@@ -85,10 +86,10 @@ public sealed class JwtOptionsValidatorTests
     [Fact]
     public void Validate_WhenHubAudienceSameAsRestAudience_ShouldFail()
     {
-        var options = CreateValid();
+        JwtOptions options = CreateValid();
         options.HubAudience = options.Audience;
 
-        var result = _sut.Validate(null, options);
+        ValidateOptionsResult result = _sut.Validate(null, options);
 
         result.Failed.Should().BeTrue();
         result.Failures.Should().Contain(m => m.Contains("HubAudience"));
@@ -99,10 +100,10 @@ public sealed class JwtOptionsValidatorTests
     [InlineData(121)]
     public void Validate_WhenHubTokenSecondsOutOfRange_ShouldFail(int seconds)
     {
-        var options = CreateValid();
+        JwtOptions options = CreateValid();
         options.HubTokenSeconds = seconds;
 
-        var result = _sut.Validate(null, options);
+        ValidateOptionsResult result = _sut.Validate(null, options);
 
         result.Failed.Should().BeTrue();
         result.Failures.Should().Contain(m => m.Contains("HubTokenSeconds"));

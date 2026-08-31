@@ -1,8 +1,9 @@
 using Ardalis.Result;
+using AssetBlock.Application.Messaging;
 using AssetBlock.Domain.Abstractions.Services;
 using AssetBlock.Domain.Core.Constants;
 using AssetBlock.Domain.Core.Dto.Categories;
-using AssetBlock.Application.Messaging;
+using AssetBlock.Domain.Core.Entities;
 using Microsoft.Extensions.Logging;
 
 namespace AssetBlock.Application.UseCases.Categories.GetCategoryById;
@@ -16,7 +17,7 @@ internal sealed class GetCategoryByIdQueryHandler(
     {
         try
         {
-            var category = await categoryStore.GetById(request.Id, cancellationToken);
+            Category? category = await categoryStore.GetById(request.Id, cancellationToken);
             return category is null ? Result.NotFound(ErrorCodes.ERR_CATEGORY_NOT_FOUND) : Result.Success(new CategoryResponse(category.Id, category.Name, category.Slug, category.Description));
         }
         catch (OperationCanceledException)

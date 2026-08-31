@@ -1,7 +1,9 @@
+using System.Globalization;
 using AssetBlock.Domain.Abstractions.Services;
+using AssetBlock.Domain.Core.Dto.Assets;
+using AssetBlock.Domain.Core.Entities;
 using AssetBlock.Domain.Core.Enums;
 using AssetBlock.Domain.Core.Primitives.Api;
-using System.Globalization;
 
 namespace AssetBlock.Infrastructure.Services;
 
@@ -20,7 +22,7 @@ internal sealed class DownloadService(
         CancellationToken cancellationToken = default)
     {
         // Load the asset for ownership check and download-rate-limit value.
-        var asset = await assetStore.GetById(assetId, includeDeleted: true, cancellationToken);
+        Asset? asset = await assetStore.GetById(assetId, includeDeleted: true, cancellationToken);
         if (asset is null)
         {
             return new DownloadAuthorization(AssetDownloadStatus.NOT_FOUND);
@@ -30,14 +32,14 @@ internal sealed class DownloadService(
 
         if (!isAuthor)
         {
-            var purchase = await purchaseStore.GetPurchase(userId, assetId, cancellationToken);
+            Purchase? purchase = await purchaseStore.GetPurchase(userId, assetId, cancellationToken);
             if (purchase is null)
             {
                 return new DownloadAuthorization(AssetDownloadStatus.FORBIDDEN);
             }
 
             // Resolve the version to serve. Purchasers may access their purchased version and all higher versions.
-            var targetVersion = await ResolveEntitledVersion(assetId, versionId, purchase, cancellationToken);
+            VersionResolution? targetVersion = await ResolveEntitledVersion(assetId, versionId, purchase, cancellationToken);
             if (targetVersion is null)
             {
                 return new DownloadAuthorization(AssetDownloadStatus.NOT_FOUND);
@@ -58,7 +60,7 @@ internal sealed class DownloadService(
         }
 
         // Authors may download any version.
-        var authorVersion = await ResolveAuthorVersion(assetId, versionId, cancellationToken);
+        (string StorageKey, string FileName)? authorVersion = await ResolveAuthorVersion(assetId, versionId, cancellationToken);
         if (authorVersion is null)
         {
             return new DownloadAuthorization(AssetDownloadStatus.NOT_FOUND);
@@ -80,11 +82,11 @@ internal sealed class DownloadService(
     {
         if (versionId.HasValue)
         {
-            var v = await assetStore.GetVersion(assetId, versionId.Value, cancellationToken);
+            AssetVersion? v = await assetStore.GetVersion(assetId, versionId.Value, cancellationToken);
             return v is null ? null : (v.StorageKey, v.FileName);
         }
 
-        var snapshot = await assetStore.GetCurrentVersionSnapshot(assetId, cancellationToken);
+        AssetCurrentVersionSnapshot? snapshot = await assetStore.GetCurrentVersionSnapshot(assetId, cancellationToken);
         return snapshot is null ? null : (snapshot.StorageKey, snapshot.FileName);
     }
 
@@ -94,7 +96,7 @@ internal sealed class DownloadService(
         Domain.Core.Entities.Purchase purchase,
         CancellationToken cancellationToken)
     {
-        var purchasedVersion = await assetStore.GetVersion(assetId, purchase.AssetVersionId, cancellationToken);
+        AssetVersion? purchasedVersion = await assetStore.GetVersion(assetId, purchase.AssetVersionId, cancellationToken);
         if (purchasedVersion is null)
         {
             return null;
@@ -104,7 +106,7 @@ internal sealed class DownloadService(
 
         if (versionId.HasValue)
         {
-            var requested = await assetStore.GetVersion(assetId, versionId.Value, cancellationToken);
+            AssetVersion? requested = await assetStore.GetVersion(assetId, versionId.Value, cancellationToken);
             if (requested is null)
             {
                 return null;
@@ -124,7 +126,7 @@ internal sealed class DownloadService(
         }
 
         // Default — serve current version if entitled.
-        var snapshot = await assetStore.GetCurrentVersionSnapshot(assetId, cancellationToken);
+        AssetCurrentVersionSnapshot? snapshot = await assetStore.GetCurrentVersionSnapshot(assetId, cancellationToken);
         if (snapshot is null)
         {
             return null;
@@ -162,9 +164,9 @@ internal sealed class DownloadService(
 
     private async Task<bool> IsRateLimited(Guid assetId, Guid userId, int limit, CancellationToken cancellationToken)
     {
-        var now = DateTimeOffset.UtcNow;
+        DateTimeOffset now = DateTimeOffset.UtcNow;
         var windowKey = now.ToString(DOWNLOAD_WINDOW_KEY_FORMAT, CultureInfo.InvariantCulture);
-        var expiresIn = _downloadWindow
+        TimeSpan expiresIn = _downloadWindow
             - TimeSpan.FromMinutes(now.Minute)
             - TimeSpan.FromSeconds(now.Second)
             - TimeSpan.FromMilliseconds(now.Millisecond);

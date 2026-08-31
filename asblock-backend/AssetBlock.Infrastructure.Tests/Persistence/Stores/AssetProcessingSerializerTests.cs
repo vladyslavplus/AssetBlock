@@ -15,7 +15,7 @@ public class AssetProcessingSerializerTests
         var payload = new ArchiveInspectionPayload();
 
         var json = AssetProcessingSerializer.SerializePayload(AssetProcessingJobType.ARCHIVE_INSPECTION, payload);
-        var restored = Assert.IsType<ArchiveInspectionPayload>(AssetProcessingSerializer.DeserializePayload(AssetProcessingJobType.ARCHIVE_INSPECTION, json));
+        ArchiveInspectionPayload restored = Assert.IsType<ArchiveInspectionPayload>(AssetProcessingSerializer.DeserializePayload(AssetProcessingJobType.ARCHIVE_INSPECTION, json));
 
         restored.Should().Be(payload);
     }
@@ -28,7 +28,7 @@ public class AssetProcessingSerializerTests
         var payload = new MalwareScanPayload(policyVersion);
 
         var json = AssetProcessingSerializer.SerializePayload(AssetProcessingJobType.MALWARE_SCAN, payload);
-        var restored = Assert.IsType<MalwareScanPayload>(AssetProcessingSerializer.DeserializePayload(AssetProcessingJobType.MALWARE_SCAN, json));
+        MalwareScanPayload restored = Assert.IsType<MalwareScanPayload>(AssetProcessingSerializer.DeserializePayload(AssetProcessingJobType.MALWARE_SCAN, json));
 
         restored.PolicyVersion.Should().Be(policyVersion);
     }
@@ -39,7 +39,7 @@ public class AssetProcessingSerializerTests
         var payload = new ListingCopilotPayload("policy-v2");
 
         var json = AssetProcessingSerializer.SerializePayload(AssetProcessingJobType.LISTING_COPILOT, payload);
-        var restored = Assert.IsType<ListingCopilotPayload>(AssetProcessingSerializer.DeserializePayload(AssetProcessingJobType.LISTING_COPILOT, json));
+        ListingCopilotPayload restored = Assert.IsType<ListingCopilotPayload>(AssetProcessingSerializer.DeserializePayload(AssetProcessingJobType.LISTING_COPILOT, json));
 
         restored.PolicyVersion.Should().Be("policy-v2");
     }
@@ -52,7 +52,7 @@ public class AssetProcessingSerializerTests
         var result = new ArchiveInspectionResult(fileCount, totalSize);
 
         var json = AssetProcessingSerializer.SerializeResult(AssetProcessingJobType.ARCHIVE_INSPECTION, result);
-        var restored = Assert.IsType<ArchiveInspectionResult>(AssetProcessingSerializer.DeserializeResult(AssetProcessingJobType.ARCHIVE_INSPECTION, json));
+        ArchiveInspectionResult restored = Assert.IsType<ArchiveInspectionResult>(AssetProcessingSerializer.DeserializeResult(AssetProcessingJobType.ARCHIVE_INSPECTION, json));
 
         restored.FileCount.Should().Be(fileCount);
         restored.TotalSizeUncompressed.Should().Be(totalSize);
@@ -66,7 +66,7 @@ public class AssetProcessingSerializerTests
         var result = new MalwareScanResult(isClean);
 
         var json = AssetProcessingSerializer.SerializeResult(AssetProcessingJobType.MALWARE_SCAN, result);
-        var restored = Assert.IsType<MalwareScanResult>(AssetProcessingSerializer.DeserializeResult(AssetProcessingJobType.MALWARE_SCAN, json));
+        MalwareScanResult restored = Assert.IsType<MalwareScanResult>(AssetProcessingSerializer.DeserializeResult(AssetProcessingJobType.MALWARE_SCAN, json));
 
         restored.IsClean.Should().Be(isClean);
     }
@@ -77,7 +77,7 @@ public class AssetProcessingSerializerTests
         var result = new ListingCopilotResult(true, VALID_SHA256);
 
         var json = AssetProcessingSerializer.SerializeResult(AssetProcessingJobType.LISTING_COPILOT, result);
-        var restored = Assert.IsType<ListingCopilotResult>(AssetProcessingSerializer.DeserializeResult(AssetProcessingJobType.LISTING_COPILOT, json));
+        ListingCopilotResult restored = Assert.IsType<ListingCopilotResult>(AssetProcessingSerializer.DeserializeResult(AssetProcessingJobType.LISTING_COPILOT, json));
 
         restored.Success.Should().BeTrue();
         restored.ContentHash.Should().Be(VALID_SHA256);
@@ -88,14 +88,14 @@ public class AssetProcessingSerializerTests
     [Fact]
     public void SerializePayload_WithWrongDtoForType_ThrowsControlledException()
     {
-        var act = () => AssetProcessingSerializer.SerializePayload(AssetProcessingJobType.MALWARE_SCAN, new ArchiveInspectionPayload());
+        Func<string> act = () => AssetProcessingSerializer.SerializePayload(AssetProcessingJobType.MALWARE_SCAN, new ArchiveInspectionPayload());
         act.Should().Throw<AssetProcessingSerializerException>().WithMessage("*Expected MalwareScanPayload*").And.InnerException.Should().BeNull();
     }
 
     [Fact]
     public void SerializeResult_WithWrongDtoForType_ThrowsControlledException()
     {
-        var act = () => AssetProcessingSerializer.SerializeResult(AssetProcessingJobType.ARCHIVE_INSPECTION, new MalwareScanResult(true));
+        Func<string> act = () => AssetProcessingSerializer.SerializeResult(AssetProcessingJobType.ARCHIVE_INSPECTION, new MalwareScanResult(true));
         act.Should().Throw<AssetProcessingSerializerException>();
     }
 
@@ -107,7 +107,7 @@ public class AssetProcessingSerializerTests
     public void SerializeMalwareScanPayload_WithInvalidPolicyVersion_FailsClosed(string? policy)
     {
         var payload = new MalwareScanPayload(policy!);
-        var act = () => AssetProcessingSerializer.SerializePayload(AssetProcessingJobType.MALWARE_SCAN, payload);
+        Func<string> act = () => AssetProcessingSerializer.SerializePayload(AssetProcessingJobType.MALWARE_SCAN, payload);
         act.Should().Throw<AssetProcessingSerializerException>().WithMessage("*PolicyVersion*");
     }
 
@@ -116,10 +116,10 @@ public class AssetProcessingSerializerTests
     {
         const string json = """{"$type":"AssetBlock.Domain.Core.Dto.MalwareScanPayload, AssetBlock.Domain","policyVersion":"v1"}""";
 
-        var payloadAct = () => AssetProcessingSerializer.DeserializePayload(AssetProcessingJobType.MALWARE_SCAN, json);
+        Func<AssetProcessingPayload> payloadAct = () => AssetProcessingSerializer.DeserializePayload(AssetProcessingJobType.MALWARE_SCAN, json);
         payloadAct.Should().Throw<AssetProcessingSerializerException>().WithMessage("*Polymorphic type metadata*");
 
-        var resultAct = () => AssetProcessingSerializer.DeserializeResult(AssetProcessingJobType.MALWARE_SCAN, json);
+        Func<AssetProcessingResult> resultAct = () => AssetProcessingSerializer.DeserializeResult(AssetProcessingJobType.MALWARE_SCAN, json);
         resultAct.Should().Throw<AssetProcessingSerializerException>();
     }
 
@@ -128,7 +128,7 @@ public class AssetProcessingSerializerTests
     [InlineData("   ")]
     public void Deserialize_WhenEmptyOrWhitespace_ThrowsControlledException(string json)
     {
-        var act = () => AssetProcessingSerializer.DeserializePayload(AssetProcessingJobType.MALWARE_SCAN, json);
+        Func<AssetProcessingPayload> act = () => AssetProcessingSerializer.DeserializePayload(AssetProcessingJobType.MALWARE_SCAN, json);
         act.Should().Throw<AssetProcessingSerializerException>().WithMessage("*non-empty*");
     }
 
@@ -136,17 +136,17 @@ public class AssetProcessingSerializerTests
     public void Deserialize_WhenOversizeInput_ThrowsControlledExceptionBeforeParsing()
     {
         var json = "{\"policyVersion\":\"" + new string('v', 5000) + "\"}";
-        var act = () => AssetProcessingSerializer.DeserializePayload(AssetProcessingJobType.MALWARE_SCAN, json);
+        Func<AssetProcessingPayload> act = () => AssetProcessingSerializer.DeserializePayload(AssetProcessingJobType.MALWARE_SCAN, json);
         act.Should().Throw<AssetProcessingSerializerException>().WithMessage("*exceeds 4000 bytes*");
     }
 
     [Fact]
     public void Deserialize_WhenJsonNullLiteral_ThrowsControlledException()
     {
-        var payloadAct = () => AssetProcessingSerializer.DeserializePayload(AssetProcessingJobType.MALWARE_SCAN, "null");
+        Func<AssetProcessingPayload> payloadAct = () => AssetProcessingSerializer.DeserializePayload(AssetProcessingJobType.MALWARE_SCAN, "null");
         payloadAct.Should().Throw<AssetProcessingSerializerException>().WithMessage("*must not be null*");
 
-        var resultAct = () => AssetProcessingSerializer.DeserializeResult(AssetProcessingJobType.ARCHIVE_INSPECTION, "null");
+        Func<AssetProcessingResult> resultAct = () => AssetProcessingSerializer.DeserializeResult(AssetProcessingJobType.ARCHIVE_INSPECTION, "null");
         resultAct.Should().Throw<AssetProcessingSerializerException>();
     }
 
@@ -158,10 +158,10 @@ public class AssetProcessingSerializerTests
     [InlineData("{}{}")]
     public void Deserialize_WhenWrongShapeOrMalformed_ThrowsControlledException(string json)
     {
-        var payloadAct = () => AssetProcessingSerializer.DeserializePayload(AssetProcessingJobType.LISTING_COPILOT, json);
+        Func<AssetProcessingPayload> payloadAct = () => AssetProcessingSerializer.DeserializePayload(AssetProcessingJobType.LISTING_COPILOT, json);
         payloadAct.Should().Throw<AssetProcessingSerializerException>();
 
-        var resultAct = () => AssetProcessingSerializer.DeserializeResult(AssetProcessingJobType.LISTING_COPILOT, json);
+        Func<AssetProcessingResult> resultAct = () => AssetProcessingSerializer.DeserializeResult(AssetProcessingJobType.LISTING_COPILOT, json);
         resultAct.Should().Throw<AssetProcessingSerializerException>();
     }
 
@@ -170,7 +170,7 @@ public class AssetProcessingSerializerTests
     {
         const string json = """{"policyVersion":"v1","unexpected":true}""";
 
-        var act = () => AssetProcessingSerializer.DeserializePayload(AssetProcessingJobType.MALWARE_SCAN, json);
+        Func<AssetProcessingPayload> act = () => AssetProcessingSerializer.DeserializePayload(AssetProcessingJobType.MALWARE_SCAN, json);
         act.Should().Throw<AssetProcessingSerializerException>().WithMessage("*unknown fields*");
     }
 
@@ -179,10 +179,10 @@ public class AssetProcessingSerializerTests
     {
         const string json = "{}";
 
-        var payloadAct = () => AssetProcessingSerializer.DeserializePayload(AssetProcessingJobType.MALWARE_SCAN, json);
+        Func<AssetProcessingPayload> payloadAct = () => AssetProcessingSerializer.DeserializePayload(AssetProcessingJobType.MALWARE_SCAN, json);
         payloadAct.Should().Throw<AssetProcessingSerializerException>().WithMessage("*PolicyVersion*");
 
-        var resultAct = () => AssetProcessingSerializer.DeserializeResult(AssetProcessingJobType.LISTING_COPILOT, json);
+        Func<AssetProcessingResult> resultAct = () => AssetProcessingSerializer.DeserializeResult(AssetProcessingJobType.LISTING_COPILOT, json);
         resultAct.Should().Throw<AssetProcessingSerializerException>().WithMessage("*ContentHash*");
     }
 
@@ -190,7 +190,7 @@ public class AssetProcessingSerializerTests
     public void Deserialize_WhenNullFieldValueForNonNullableProperty_ThrowsControlledException()
     {
         const string json = """{"policyVersion":null}""";
-        var act = () => AssetProcessingSerializer.DeserializePayload(AssetProcessingJobType.MALWARE_SCAN, json);
+        Func<AssetProcessingPayload> act = () => AssetProcessingSerializer.DeserializePayload(AssetProcessingJobType.MALWARE_SCAN, json);
         act.Should().Throw<AssetProcessingSerializerException>();
     }
 
@@ -198,7 +198,7 @@ public class AssetProcessingSerializerTests
     public void Deserialize_WhenNumericOverflow_ThrowsControlledException()
     {
         const string json = """{"fileCount":99999999999999999999,"totalSizeUncompressed":0}""";
-        var act = () => AssetProcessingSerializer.DeserializeResult(AssetProcessingJobType.ARCHIVE_INSPECTION, json);
+        Func<AssetProcessingResult> act = () => AssetProcessingSerializer.DeserializeResult(AssetProcessingJobType.ARCHIVE_INSPECTION, json);
         act.Should().Throw<AssetProcessingSerializerException>();
     }
 
@@ -206,7 +206,7 @@ public class AssetProcessingSerializerTests
     public void Deserialize_WhenDeeplyNestedJson_ThrowsControlledException()
     {
         const string json = """{"a":{"a":{"a":{"a":{"a":{"a":1}}}}}}""";
-        var act = () => AssetProcessingSerializer.DeserializePayload(AssetProcessingJobType.ARCHIVE_INSPECTION, json);
+        Func<AssetProcessingPayload> act = () => AssetProcessingSerializer.DeserializePayload(AssetProcessingJobType.ARCHIVE_INSPECTION, json);
         act.Should().Throw<AssetProcessingSerializerException>();
     }
 
@@ -214,7 +214,7 @@ public class AssetProcessingSerializerTests
     public void Deserialize_WhenArchiveResultHasNegativeFileCount_ThrowsControlledException()
     {
         const string json = """{"fileCount":-1,"totalSizeUncompressed":0}""";
-        var act = () => AssetProcessingSerializer.DeserializeResult(AssetProcessingJobType.ARCHIVE_INSPECTION, json);
+        Func<AssetProcessingResult> act = () => AssetProcessingSerializer.DeserializeResult(AssetProcessingJobType.ARCHIVE_INSPECTION, json);
         act.Should().Throw<AssetProcessingSerializerException>().WithMessage("*negative*");
     }
 
@@ -222,7 +222,7 @@ public class AssetProcessingSerializerTests
     public void Deserialize_WhenListingCopilotResultHasInvalidHash_ThrowsControlledException()
     {
         const string json = """{"success":true,"contentHash":"not-a-hash"}""";
-        var act = () => AssetProcessingSerializer.DeserializeResult(AssetProcessingJobType.LISTING_COPILOT, json);
+        Func<AssetProcessingResult> act = () => AssetProcessingSerializer.DeserializeResult(AssetProcessingJobType.LISTING_COPILOT, json);
         act.Should().Throw<AssetProcessingSerializerException>().WithMessage("*SHA-256*");
     }
 
@@ -234,7 +234,7 @@ public class AssetProcessingSerializerTests
         var json = JsonSerializer.Serialize(
             new { policyVersion },
             new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase });
-        var act = () => AssetProcessingSerializer.DeserializePayload(AssetProcessingJobType.LISTING_COPILOT, json);
+        Func<AssetProcessingPayload> act = () => AssetProcessingSerializer.DeserializePayload(AssetProcessingJobType.LISTING_COPILOT, json);
         act.Should().Throw<AssetProcessingSerializerException>().WithMessage("*PolicyVersion*");
     }
 }

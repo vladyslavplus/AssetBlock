@@ -15,8 +15,8 @@ internal static class DataProtectionExtensions
         IConfiguration configuration,
         IHostEnvironment environment)
     {
-        var section = configuration.GetSection(DpOptions.SECTION_NAME);
-        var options = section.Get<DpOptions>() ?? new DpOptions();
+        IConfigurationSection section = configuration.GetSection(DpOptions.SECTION_NAME);
+        DpOptions options = section.Get<DpOptions>() ?? new DpOptions();
 
         if (string.IsNullOrWhiteSpace(options.KeysPath) || options.KeysPath.StartsWith('<'))
         {
@@ -24,10 +24,10 @@ internal static class DataProtectionExtensions
                 "DataProtection:KeysPath must be configured to a writable directory outside source control.");
         }
 
-        var keysDirectory = EnsureDedicatedKeyRingDirectory(options.KeysPath);
+        DirectoryInfo keysDirectory = EnsureDedicatedKeyRingDirectory(options.KeysPath);
         var mode = ResolveProtectionMode(options.ProtectionMode, environment);
 
-        var builder = services.AddDataProtection()
+        IDataProtectionBuilder builder = services.AddDataProtection()
             .SetApplicationName("AssetBlock")
             .PersistKeysToFileSystem(keysDirectory);
 
@@ -141,7 +141,7 @@ internal static class DataProtectionExtensions
 
         if (mode.Equals(DpOptions.MODE_CERTIFICATE, StringComparison.OrdinalIgnoreCase))
         {
-            var certificate = LoadCertificate(options);
+            X509Certificate2 certificate = LoadCertificate(options);
             builder.ProtectKeysWithCertificate(certificate);
             return;
         }
@@ -189,7 +189,7 @@ internal static class DataProtectionExtensions
         {
             using var store = new X509Store(StoreName.My, StoreLocation.CurrentUser);
             store.Open(OpenFlags.ReadOnly);
-            var found = store.Certificates.Find(
+            X509Certificate2Collection found = store.Certificates.Find(
                 X509FindType.FindByThumbprint,
                 options.CertificateThumbprint.Replace(" ", string.Empty, StringComparison.Ordinal),
                 validOnly: false);

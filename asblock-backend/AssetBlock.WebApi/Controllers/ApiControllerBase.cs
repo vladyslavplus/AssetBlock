@@ -1,7 +1,7 @@
 using Ardalis.Result;
+using AssetBlock.Application.Messaging;
 using AssetBlock.Domain.Core.Constants;
 using AssetBlock.WebApi.ProblemDetails;
-using AssetBlock.Application.Messaging;
 using Microsoft.AspNetCore.Mvc;
 
 namespace AssetBlock.WebApi.Controllers;

@@ -50,11 +50,11 @@ internal static class AssetStorageServiceCollectionExtensions
         {
             if (provider == StorageProvider.MINIO)
             {
-                var opts = sp.GetRequiredService<IOptions<MinioOptions>>().Value;
+                MinioOptions opts = sp.GetRequiredService<IOptions<MinioOptions>>().Value;
                 return S3CompatibleClientFactory.Create(opts.Endpoint, opts.AccessKey, opts.SecretKey, opts.UseSsl);
             }
 
-            var seaweed = sp.GetRequiredService<IOptions<SeaweedFsOptions>>().Value;
+            SeaweedFsOptions seaweed = sp.GetRequiredService<IOptions<SeaweedFsOptions>>().Value;
             return S3CompatibleClientFactory.Create(
                 seaweed.Endpoint,
                 seaweed.AccessKey,

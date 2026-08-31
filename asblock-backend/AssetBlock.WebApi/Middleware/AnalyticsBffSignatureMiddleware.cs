@@ -15,7 +15,7 @@ internal sealed class AnalyticsBffSignatureMiddleware(RequestDelegate next, IAna
             return;
         }
 
-        var result = validator.Validate(context);
+        AnalyticsBffSignatureValidationResult result = validator.Validate(context);
         switch (result.Outcome)
         {
             case AnalyticsBffSignatureValidationOutcome.NO_HEADERS:
@@ -35,7 +35,7 @@ internal sealed class AnalyticsBffSignatureMiddleware(RequestDelegate next, IAna
                 await next(context);
                 return;
             default:
-                var problem = AssetBlockProblemDetails.Create(
+                Microsoft.AspNetCore.Mvc.ProblemDetails problem = AssetBlockProblemDetails.Create(
                     context,
                     StatusCodes.Status403Forbidden,
                     ErrorCodes.ERR_ANALYTICS_BFF_SIGNATURE_INVALID);
@@ -51,7 +51,7 @@ internal sealed class AnalyticsBffSignatureMiddleware(RequestDelegate next, IAna
             return false;
         }
 
-        var path = context.Request.Path;
+        PathString path = context.Request.Path;
         if (!path.HasValue)
         {
             return false;

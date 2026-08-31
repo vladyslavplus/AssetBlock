@@ -1,6 +1,7 @@
 using AssetBlock.Application.UseCases.Categories.GetCategories;
 using AssetBlock.Domain.Core.Dto.Categories;
 using AwesomeAssertions;
+using FluentValidation.Results;
 
 namespace AssetBlock.Application.Tests.Validators;
 
@@ -12,7 +13,7 @@ public class GetCategoriesQueryValidatorTests
     public async Task Validate_WhenSortByInvalid_ShouldFail()
     {
         var query = new GetCategoriesQuery(new GetCategoriesRequest { SortBy = "Nope" });
-        var result = await _validator.ValidateAsync(query);
+        ValidationResult result = await _validator.ValidateAsync(query);
         result.IsValid.Should().BeFalse();
     }
 
@@ -20,7 +21,7 @@ public class GetCategoriesQueryValidatorTests
     public async Task Validate_WhenValid_ShouldPass()
     {
         var query = new GetCategoriesQuery(new GetCategoriesRequest { SortBy = "Name" });
-        var result = await _validator.ValidateAsync(query);
+        ValidationResult result = await _validator.ValidateAsync(query);
         result.IsValid.Should().BeTrue();
     }
 }

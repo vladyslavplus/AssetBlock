@@ -1,9 +1,9 @@
 using Ardalis.Result;
 using AssetBlock.Application.Common;
+using AssetBlock.Application.Messaging;
 using AssetBlock.Domain.Abstractions.Services;
 using AssetBlock.Domain.Core.Constants;
 using FluentValidation;
-using AssetBlock.Application.Messaging;
 
 namespace AssetBlock.Application.UseCases.SellerAnalytics.ExportSellerAnalyticsSales;
 
@@ -31,10 +31,10 @@ internal sealed class PrepareSellerAnalyticsSalesExportQueryHandler(
         PrepareSellerAnalyticsSalesExportQuery request,
         CancellationToken cancellationToken)
     {
-        var fromDto = AnalyticsRange.ToUtcStart(request.From);
-        var toDto = AnalyticsRange.ToUtcStart(request.To);
+        DateTimeOffset fromDto = AnalyticsRange.ToUtcStart(request.From);
+        DateTimeOffset toDto = AnalyticsRange.ToUtcStart(request.To);
 
-        var session = await analyticsStore.OpenSalesExportSession(
+        ISellerAnalyticsSalesExportSession session = await analyticsStore.OpenSalesExportSession(
             request.SellerId,
             fromDto,
             toDto,

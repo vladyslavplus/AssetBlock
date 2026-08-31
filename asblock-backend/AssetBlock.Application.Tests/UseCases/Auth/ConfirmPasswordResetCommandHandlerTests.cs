@@ -1,3 +1,4 @@
+using Ardalis.Result;
 using AssetBlock.Application.UseCases.Auth.ConfirmPasswordReset;
 using AssetBlock.Domain.Abstractions.Services;
 using AssetBlock.Domain.Core.Constants;
@@ -56,10 +57,10 @@ public sealed class ConfirmPasswordResetCommandHandlerTests
     [Fact]
     public async Task Handle_WhenUnverifiedUserResetsPassword_ShouldSetEmailVerifiedAt()
     {
-        var user = CreateUser(emailVerifiedAt: null);
+        User user = CreateUser(emailVerifiedAt: null);
         SetupSuccessfulConsume(user);
 
-        var result = await _handler.Handle(
+        Result result = await _handler.Handle(
             new ConfirmPasswordResetCommand("token", "NewPassword1!"),
             CancellationToken.None);
 
@@ -79,10 +80,10 @@ public sealed class ConfirmPasswordResetCommandHandlerTests
     public async Task Handle_WhenAlreadyVerified_ShouldKeepEmailVerifiedAtAndOmitResetFlag()
     {
         var verifiedAt = DateTimeOffset.Parse("2026-01-15T12:00:00Z");
-        var user = CreateUser(emailVerifiedAt: verifiedAt);
+        User user = CreateUser(emailVerifiedAt: verifiedAt);
         SetupSuccessfulConsume(user);
 
-        var result = await _handler.Handle(
+        Result result = await _handler.Handle(
             new ConfirmPasswordResetCommand("token", "NewPassword1!"),
             CancellationToken.None);
 

@@ -17,16 +17,16 @@ internal static class MessagingServiceCollectionExtensions
 
     private static void RegisterRequestHandlers(IServiceCollection services, Assembly assembly)
     {
-        var handlerInterface = typeof(IRequestHandler<,>);
+        Type handlerInterface = typeof(IRequestHandler<,>);
 
-        foreach (var type in assembly.GetTypes())
+        foreach (Type type in assembly.GetTypes())
         {
             if (!type.IsClass || type.IsAbstract || type.ContainsGenericParameters)
             {
                 continue;
             }
 
-            foreach (var implementedInterface in type.GetInterfaces())
+            foreach (Type implementedInterface in type.GetInterfaces())
             {
                 if (!implementedInterface.IsGenericType
                     || implementedInterface.GetGenericTypeDefinition() != handlerInterface)

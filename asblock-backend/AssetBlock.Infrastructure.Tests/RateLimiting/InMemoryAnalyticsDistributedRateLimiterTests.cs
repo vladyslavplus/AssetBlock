@@ -12,7 +12,7 @@ public sealed class InMemoryAnalyticsDistributedRateLimiterTests
         var time = new FakeTimeProvider(new DateTimeOffset(2024, 1, 1, 12, 0, 0, TimeSpan.Zero));
         var limiter = new InMemoryAnalyticsDistributedRateLimiter(time);
 
-        var result = await limiter.Acquire(
+        AnalyticsRateLimitAcquireResult result = await limiter.Acquire(
             AnalyticsRateLimitPolicy.ANALYTICS_EVENTS,
             "partition-a");
 
@@ -32,7 +32,7 @@ public sealed class InMemoryAnalyticsDistributedRateLimiterTests
                 .Status.Should().Be(AnalyticsRateLimitAcquireStatus.ACQUIRED);
         }
 
-        var denied = await limiter.Acquire(AnalyticsRateLimitPolicy.ANALYTICS_EVENTS, "partition-a");
+        AnalyticsRateLimitAcquireResult denied = await limiter.Acquire(AnalyticsRateLimitPolicy.ANALYTICS_EVENTS, "partition-a");
         denied.Status.Should().Be(AnalyticsRateLimitAcquireStatus.DENIED);
         denied.RetryAfter.Should().NotBeNull();
         denied.RetryAfter!.Value.Should().BeGreaterThan(TimeSpan.Zero);
@@ -107,7 +107,7 @@ public sealed class InMemoryAnalyticsDistributedRateLimiterTests
     {
         var limiter = new InMemoryAnalyticsDistributedRateLimiter(TimeProvider.System);
 
-        var act = () => limiter.AcquireBlocking((AnalyticsRateLimitPolicy)999, "partition");
+        Func<AnalyticsRateLimitAcquireResult> act = () => limiter.AcquireBlocking((AnalyticsRateLimitPolicy)999, "partition");
 
         act.Should().Throw<ArgumentOutOfRangeException>();
     }

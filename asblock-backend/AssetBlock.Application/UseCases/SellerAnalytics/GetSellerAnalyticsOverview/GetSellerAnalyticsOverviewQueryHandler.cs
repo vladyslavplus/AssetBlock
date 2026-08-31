@@ -1,9 +1,10 @@
 using Ardalis.Result;
 using AssetBlock.Application.Common.Caching;
+using AssetBlock.Application.Messaging;
 using AssetBlock.Domain.Abstractions.Services;
 using AssetBlock.Domain.Core.Constants;
 using AssetBlock.Domain.Core.Dto.Analytics;
-using AssetBlock.Application.Messaging;
+using AssetBlock.Domain.Core.Enums;
 using Microsoft.Extensions.Logging;
 
 namespace AssetBlock.Application.UseCases.SellerAnalytics.GetSellerAnalyticsOverview;
@@ -23,23 +24,23 @@ internal sealed class GetSellerAnalyticsOverviewQueryHandler(
     {
         var cacheKey = CacheKeys.SellerAnalyticsOverview(request.SellerId, request.From, request.To);
 
-        var cached = await cache.Get<SellerAnalyticsOverviewDto>(cacheKey, cancellationToken);
+        SellerAnalyticsOverviewDto? cached = await cache.Get<SellerAnalyticsOverviewDto>(cacheKey, cancellationToken);
         if (cached is not null)
         {
             logger.LogDebug("Seller analytics overview cache hit: {Key}", cacheKey);
             return Result.Success(cached);
         }
 
-        var fromDto = AnalyticsRange.ToUtcStart(request.From);
-        var toDto = AnalyticsRange.ToUtcStart(request.To);
+        DateTimeOffset fromDto = AnalyticsRange.ToUtcStart(request.From);
+        DateTimeOffset toDto = AnalyticsRange.ToUtcStart(request.To);
 
         (DateOnly compFrom, DateOnly compTo) = AnalyticsRange.ComparisonPeriod(request.From, request.To);
-        var compFromDto = AnalyticsRange.ToUtcStart(compFrom);
-        var compToDto = AnalyticsRange.ToUtcStart(compTo);
+        DateTimeOffset compFromDto = AnalyticsRange.ToUtcStart(compFrom);
+        DateTimeOffset compToDto = AnalyticsRange.ToUtcStart(compTo);
 
-        var granularity = AnalyticsRange.Granularity(request.From, request.To);
+        AnalyticsGranularity granularity = AnalyticsRange.Granularity(request.From, request.To);
 
-        var snapshot = await analyticsStore.GetOverviewSnapshot(
+        SellerAnalyticsOverviewSnapshot snapshot = await analyticsStore.GetOverviewSnapshot(
             request.SellerId,
             fromDto,
             toDto,
@@ -49,7 +50,7 @@ internal sealed class GetSellerAnalyticsOverviewQueryHandler(
             granularity,
             cancellationToken);
 
-        var overviewDto = SellerAnalyticsOverviewMapper.MapOverview(
+        SellerAnalyticsOverviewDto overviewDto = SellerAnalyticsOverviewMapper.MapOverview(
             snapshot,
             request.From,
             request.To,

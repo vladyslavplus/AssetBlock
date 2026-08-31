@@ -57,7 +57,7 @@ public class GetMyListingsQueryHandlerTests
             Tags = ["tag1, TAG2 ", "tag1"]
         });
 
-        var result = await _handler.Handle(query, CancellationToken.None);
+        Ardalis.Result.Result<PagedResult<SellerAssetListItem>> result = await _handler.Handle(query, CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
         result.Value.Items.Should().HaveCount(1);

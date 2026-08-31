@@ -1,3 +1,4 @@
+using Ardalis.Result;
 using AssetBlock.Application.UseCases.Assets.UpdateAsset;
 using AssetBlock.Domain.Abstractions.Services;
 using AssetBlock.Domain.Core.Constants;
@@ -23,7 +24,7 @@ public class UpdateAssetCommandHandlerTests
     {
         _assetStoreMock = Substitute.For<IAssetStore>();
         _categoryStoreMock = Substitute.For<ICategoryStore>();
-        var unitOfWorkMock = Substitute.For<IUnitOfWork>();
+        IUnitOfWork unitOfWorkMock = Substitute.For<IUnitOfWork>();
         _auditWriterMock = Substitute.For<IAuditWriter>();
         _cacheMock = Substitute.For<ICacheService>();
 
@@ -45,7 +46,7 @@ public class UpdateAssetCommandHandlerTests
         var command = new UpdateAssetCommand(Guid.NewGuid(), Guid.NewGuid(), "New Title", null, null, null);
         _assetStoreMock.GetById(command.AssetId).Returns((Asset?)null);
 
-        var result = await _handler.Handle(command, CancellationToken.None);
+        Result result = await _handler.Handle(command, CancellationToken.None);
 
         result.IsSuccess.Should().BeFalse();
         result.Errors.Should().Contain(ErrorCodes.ERR_ASSET_NOT_FOUND);
@@ -59,7 +60,7 @@ public class UpdateAssetCommandHandlerTests
         var asset = new Asset { Id = command.AssetId, AuthorId = Guid.NewGuid(), CategoryId = Guid.NewGuid(), Title = "t" };
         _assetStoreMock.GetById(command.AssetId).Returns(asset);
 
-        var result = await _handler.Handle(command, CancellationToken.None);
+        Result result = await _handler.Handle(command, CancellationToken.None);
 
         result.IsSuccess.Should().BeFalse();
         result.Errors.Should().Contain(ErrorCodes.ERR_FORBIDDEN);
@@ -83,7 +84,7 @@ public class UpdateAssetCommandHandlerTests
         _assetStoreMock.GetById(command.AssetId).Returns(asset);
         _categoryStoreMock.GetById(categoryId).Returns((Category?)null);
 
-        var result = await _handler.Handle(command, CancellationToken.None);
+        Result result = await _handler.Handle(command, CancellationToken.None);
 
         result.IsSuccess.Should().BeFalse();
         result.Errors.Should().Contain(ErrorCodes.ERR_CATEGORY_NOT_FOUND);
@@ -100,7 +101,7 @@ public class UpdateAssetCommandHandlerTests
         _assetStoreMock.GetById(command.AssetId).Returns(asset);
         _assetStoreMock.Update(command.AssetId, "Updated Title", null, null, null, Arg.Any<CancellationToken>()).Returns(true);
 
-        var result = await _handler.Handle(command, CancellationToken.None);
+        Result result = await _handler.Handle(command, CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
         await _assetStoreMock.Received(1).Update(command.AssetId, "Updated Title", null, null, null, Arg.Any<CancellationToken>());
@@ -124,7 +125,7 @@ public class UpdateAssetCommandHandlerTests
         _assetStoreMock.GetById(command.AssetId).Returns(asset);
         _assetStoreMock.Update(Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<decimal?>(), Arg.Any<Guid?>(), Arg.Any<CancellationToken>()).Returns(false);
 
-        var result = await _handler.Handle(command, CancellationToken.None);
+        Result result = await _handler.Handle(command, CancellationToken.None);
 
         result.IsSuccess.Should().BeFalse();
         result.Errors.Should().Contain(ErrorCodes.ERR_ASSET_NOT_FOUND);
@@ -134,10 +135,10 @@ public class UpdateAssetCommandHandlerTests
     public async Task Handle_WhenExceptionThrown_ShouldLogSafeContextAndRethrow()
     {
         var testLogger = new TestLogger<UpdateAssetCommandHandler>();
-        var categoryStoreMock = Substitute.For<ICategoryStore>();
-        var unitOfWorkMock = Substitute.For<IUnitOfWork>();
-        var auditWriterMock = Substitute.For<IAuditWriter>();
-        var cacheMock = Substitute.For<ICacheService>();
+        ICategoryStore categoryStoreMock = Substitute.For<ICategoryStore>();
+        IUnitOfWork unitOfWorkMock = Substitute.For<IUnitOfWork>();
+        IAuditWriter auditWriterMock = Substitute.For<IAuditWriter>();
+        ICacheService cacheMock = Substitute.For<ICacheService>();
         unitOfWorkMock.ExecuteInTransaction(Arg.Any<Func<CancellationToken, Task>>(), Arg.Any<CancellationToken>())
             .Returns(ci => ci.Arg<Func<CancellationToken, Task>>()(CancellationToken.None));
         var handler = new UpdateAssetCommandHandler(
@@ -156,7 +157,7 @@ public class UpdateAssetCommandHandlerTests
         _assetStoreMock.Update(Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<decimal?>(), Arg.Any<Guid?>(), Arg.Any<CancellationToken>())
             .ThrowsAsync(new InvalidOperationException("DB failed"));
 
-        var act = () => handler.Handle(command, CancellationToken.None);
+        Func<Task<Result>> act = () => handler.Handle(command, CancellationToken.None);
 
         await act.Should().ThrowAsync<InvalidOperationException>().WithMessage("DB failed");
         testLogger.Logs.Should().Contain(l =>
@@ -169,10 +170,10 @@ public class UpdateAssetCommandHandlerTests
     public async Task Handle_WhenAssetLookupThrows_ShouldLogSafeContextAndRethrow()
     {
         var testLogger = new TestLogger<UpdateAssetCommandHandler>();
-        var categoryStoreMock = Substitute.For<ICategoryStore>();
-        var unitOfWorkMock = Substitute.For<IUnitOfWork>();
-        var auditWriterMock = Substitute.For<IAuditWriter>();
-        var cacheMock = Substitute.For<ICacheService>();
+        ICategoryStore categoryStoreMock = Substitute.For<ICategoryStore>();
+        IUnitOfWork unitOfWorkMock = Substitute.For<IUnitOfWork>();
+        IAuditWriter auditWriterMock = Substitute.For<IAuditWriter>();
+        ICacheService cacheMock = Substitute.For<ICacheService>();
         var handler = new UpdateAssetCommandHandler(
             _assetStoreMock,
             categoryStoreMock,
@@ -185,7 +186,7 @@ public class UpdateAssetCommandHandlerTests
         _assetStoreMock.GetById(command.AssetId, Arg.Any<CancellationToken>())
             .ThrowsAsync(new InvalidOperationException("DB lookup failed"));
 
-        var act = () => handler.Handle(command, CancellationToken.None);
+        Func<Task<Result>> act = () => handler.Handle(command, CancellationToken.None);
 
         await act.Should().ThrowAsync<InvalidOperationException>().WithMessage("DB lookup failed");
         testLogger.Logs.Should().ContainSingle(l =>
@@ -198,10 +199,10 @@ public class UpdateAssetCommandHandlerTests
     public async Task Handle_WhenCategoryLookupThrows_ShouldLogSafeContextAndRethrow()
     {
         var testLogger = new TestLogger<UpdateAssetCommandHandler>();
-        var categoryStoreMock = Substitute.For<ICategoryStore>();
-        var unitOfWorkMock = Substitute.For<IUnitOfWork>();
-        var auditWriterMock = Substitute.For<IAuditWriter>();
-        var cacheMock = Substitute.For<ICacheService>();
+        ICategoryStore categoryStoreMock = Substitute.For<ICategoryStore>();
+        IUnitOfWork unitOfWorkMock = Substitute.For<IUnitOfWork>();
+        IAuditWriter auditWriterMock = Substitute.For<IAuditWriter>();
+        ICacheService cacheMock = Substitute.For<ICacheService>();
         var handler = new UpdateAssetCommandHandler(
             _assetStoreMock,
             categoryStoreMock,
@@ -219,7 +220,7 @@ public class UpdateAssetCommandHandlerTests
         categoryStoreMock.GetById(categoryId, Arg.Any<CancellationToken>())
             .ThrowsAsync(new InvalidOperationException("Category lookup failed"));
 
-        var act = () => handler.Handle(command, CancellationToken.None);
+        Func<Task<Result>> act = () => handler.Handle(command, CancellationToken.None);
 
         await act.Should().ThrowAsync<InvalidOperationException>().WithMessage("Category lookup failed");
         testLogger.Logs.Should().ContainSingle(l =>
@@ -232,10 +233,10 @@ public class UpdateAssetCommandHandlerTests
     public async Task Handle_WhenAssetLookupCancelled_ShouldRethrowWithoutErrorLogging()
     {
         var testLogger = new TestLogger<UpdateAssetCommandHandler>();
-        var categoryStoreMock = Substitute.For<ICategoryStore>();
-        var unitOfWorkMock = Substitute.For<IUnitOfWork>();
-        var auditWriterMock = Substitute.For<IAuditWriter>();
-        var cacheMock = Substitute.For<ICacheService>();
+        ICategoryStore categoryStoreMock = Substitute.For<ICategoryStore>();
+        IUnitOfWork unitOfWorkMock = Substitute.For<IUnitOfWork>();
+        IAuditWriter auditWriterMock = Substitute.For<IAuditWriter>();
+        ICacheService cacheMock = Substitute.For<ICacheService>();
         var handler = new UpdateAssetCommandHandler(
             _assetStoreMock,
             categoryStoreMock,
@@ -248,7 +249,7 @@ public class UpdateAssetCommandHandlerTests
         _assetStoreMock.GetById(command.AssetId, Arg.Any<CancellationToken>())
             .ThrowsAsync(new OperationCanceledException());
 
-        var act = () => handler.Handle(command, CancellationToken.None);
+        Func<Task<Result>> act = () => handler.Handle(command, CancellationToken.None);
 
         await act.Should().ThrowAsync<OperationCanceledException>();
         testLogger.Logs.Should().NotContain(l => l.Level == Microsoft.Extensions.Logging.LogLevel.Error);
@@ -258,10 +259,10 @@ public class UpdateAssetCommandHandlerTests
     public async Task Handle_WhenCancelled_ShouldRethrowWithoutErrorLogging()
     {
         var testLogger = new TestLogger<UpdateAssetCommandHandler>();
-        var categoryStoreMock = Substitute.For<ICategoryStore>();
-        var unitOfWorkMock = Substitute.For<IUnitOfWork>();
-        var auditWriterMock = Substitute.For<IAuditWriter>();
-        var cacheMock = Substitute.For<ICacheService>();
+        ICategoryStore categoryStoreMock = Substitute.For<ICategoryStore>();
+        IUnitOfWork unitOfWorkMock = Substitute.For<IUnitOfWork>();
+        IAuditWriter auditWriterMock = Substitute.For<IAuditWriter>();
+        ICacheService cacheMock = Substitute.For<ICacheService>();
         unitOfWorkMock.ExecuteInTransaction(Arg.Any<Func<CancellationToken, Task>>(), Arg.Any<CancellationToken>())
             .Returns(ci => ci.Arg<Func<CancellationToken, Task>>()(CancellationToken.None));
         var handler = new UpdateAssetCommandHandler(
@@ -280,7 +281,7 @@ public class UpdateAssetCommandHandlerTests
         _assetStoreMock.Update(Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<decimal?>(), Arg.Any<Guid?>(), Arg.Any<CancellationToken>())
             .ThrowsAsync(new OperationCanceledException());
 
-        var act = () => handler.Handle(command, CancellationToken.None);
+        Func<Task<Result>> act = () => handler.Handle(command, CancellationToken.None);
 
         await act.Should().ThrowAsync<OperationCanceledException>();
         testLogger.Logs.Should().NotContain(l => l.Level == Microsoft.Extensions.Logging.LogLevel.Error);

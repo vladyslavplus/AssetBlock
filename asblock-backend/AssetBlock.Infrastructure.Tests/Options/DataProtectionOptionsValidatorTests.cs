@@ -1,5 +1,6 @@
 using AssetBlock.Domain.Core.Primitives.AppSettingsOptions;
 using AssetBlock.Infrastructure.Options;
+using Microsoft.Extensions.Options;
 
 namespace AssetBlock.Infrastructure.Tests.Options;
 
@@ -10,7 +11,7 @@ public sealed class DataProtectionOptionsValidatorTests
     [Fact]
     public void Validate_WhenCertificateModeWithoutCert_ShouldFail()
     {
-        var result = _sut.Validate(null, new DataProtectionOptions
+        ValidateOptionsResult result = _sut.Validate(null, new DataProtectionOptions
         {
             KeysPath = "dataprotection-keys",
             ProtectionMode = DataProtectionOptions.MODE_CERTIFICATE
@@ -23,7 +24,7 @@ public sealed class DataProtectionOptionsValidatorTests
     [Fact]
     public void Validate_WhenKmsModeWithoutKeyId_ShouldFail()
     {
-        var result = _sut.Validate(null, new DataProtectionOptions
+        ValidateOptionsResult result = _sut.Validate(null, new DataProtectionOptions
         {
             KeysPath = "dataprotection-keys",
             ProtectionMode = DataProtectionOptions.MODE_KMS
@@ -36,7 +37,7 @@ public sealed class DataProtectionOptionsValidatorTests
     [Fact]
     public void Validate_WhenValidKeysPathAndEmptyMode_ShouldSucceed()
     {
-        var result = _sut.Validate(null, new DataProtectionOptions
+        ValidateOptionsResult result = _sut.Validate(null, new DataProtectionOptions
         {
             KeysPath = "dataprotection-keys",
             ProtectionMode = string.Empty

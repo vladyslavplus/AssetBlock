@@ -67,7 +67,9 @@
 
 ## Code style
 
-- Follow `.editorconfig`, nullable reference types, file-scoped namespaces, and nearby primary-constructor usage.
+- Follow `.editorconfig` as the source of truth for formatting, analyzers, and naming.
+- Use `var` for built-in types and when the type is apparent from the initializer; use explicit local types when the initializer does not make the type apparent.
+- Follow nullable reference types, file-scoped namespaces, and nearby primary-constructor usage.
 - Use braces for all control flow and early returns to limit nesting.
 - Private fields use `_camelCase`; `const` fields and Domain enum members use `ALL_UPPER_SNAKE_CASE`; enum type names remain PascalCase.
 - Do not add redundant `Async` suffixes to project methods. Keep framework method names unchanged.

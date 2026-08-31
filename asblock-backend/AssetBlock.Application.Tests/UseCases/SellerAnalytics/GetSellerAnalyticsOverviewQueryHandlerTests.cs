@@ -1,3 +1,4 @@
+using Ardalis.Result;
 using AssetBlock.Application.Common.Caching;
 using AssetBlock.Application.UseCases.SellerAnalytics;
 using AssetBlock.Application.UseCases.SellerAnalytics.GetSellerAnalyticsOverview;
@@ -92,7 +93,7 @@ public sealed class GetSellerAnalyticsOverviewQueryHandlerTests
         _cache.Get<SellerAnalyticsOverviewDto>(Arg.Any<string>(), Arg.Any<CancellationToken>())
             .Returns(cachedDto);
 
-        var result = await _handler.Handle(new GetSellerAnalyticsOverviewQuery(_sellerId, _from, _to), CancellationToken.None);
+        Result<SellerAnalyticsOverviewDto> result = await _handler.Handle(new GetSellerAnalyticsOverviewQuery(_sellerId, _from, _to), CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
         await _store.DidNotReceiveWithAnyArgs().GetOverviewSnapshot(
@@ -129,7 +130,7 @@ public sealed class GetSellerAnalyticsOverviewQueryHandlerTests
                 Array.Empty<AnalyticsTrafficSourceRaw>(),
                 Array.Empty<AnalyticsExternalReferrerRaw>()));
 
-        var result = await _handler.Handle(new GetSellerAnalyticsOverviewQuery(_sellerId, _from, _to), CancellationToken.None);
+        Result<SellerAnalyticsOverviewDto> result = await _handler.Handle(new GetSellerAnalyticsOverviewQuery(_sellerId, _from, _to), CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
         result.Value.AverageOrderValue.Current.Should().Be(1050L);
@@ -165,7 +166,7 @@ public sealed class GetSellerAnalyticsOverviewQueryHandlerTests
                 Array.Empty<AnalyticsTrafficSourceRaw>(),
                 Array.Empty<AnalyticsExternalReferrerRaw>()));
 
-        var result = await _handler.Handle(new GetSellerAnalyticsOverviewQuery(_sellerId, _from, _to), CancellationToken.None);
+        Result<SellerAnalyticsOverviewDto> result = await _handler.Handle(new GetSellerAnalyticsOverviewQuery(_sellerId, _from, _to), CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
         result.Value.AverageOrderValue.Current.Should().Be(1001L);
@@ -201,7 +202,7 @@ public sealed class GetSellerAnalyticsOverviewQueryHandlerTests
                 Array.Empty<AnalyticsTrafficSourceRaw>(),
                 Array.Empty<AnalyticsExternalReferrerRaw>()));
 
-        var result = await _handler.Handle(new GetSellerAnalyticsOverviewQuery(_sellerId, _from, _to), CancellationToken.None);
+        Result<SellerAnalyticsOverviewDto> result = await _handler.Handle(new GetSellerAnalyticsOverviewQuery(_sellerId, _from, _to), CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
         result.Value.GrossRevenue.PercentageChange.Should().BeNull();
@@ -237,7 +238,7 @@ public sealed class GetSellerAnalyticsOverviewQueryHandlerTests
                 Array.Empty<AnalyticsTrafficSourceRaw>(),
                 Array.Empty<AnalyticsExternalReferrerRaw>()));
 
-        var result = await _handler.Handle(new GetSellerAnalyticsOverviewQuery(_sellerId, _from, _to), CancellationToken.None);
+        Result<SellerAnalyticsOverviewDto> result = await _handler.Handle(new GetSellerAnalyticsOverviewQuery(_sellerId, _from, _to), CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
         result.Value.GrossRevenue.PercentageChange.Should().Be(100m);
@@ -246,7 +247,7 @@ public sealed class GetSellerAnalyticsOverviewQueryHandlerTests
     [Fact]
     public async Task Handle_ComparisonPeriod_IsCorrectPrecedingWindow()
     {
-        var result = await _handler.Handle(new GetSellerAnalyticsOverviewQuery(_sellerId, _from, _to), CancellationToken.None);
+        Result<SellerAnalyticsOverviewDto> result = await _handler.Handle(new GetSellerAnalyticsOverviewQuery(_sellerId, _from, _to), CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
         result.Value.ComparisonFrom.Should().Be(new DateOnly(2023, 12, 22));
@@ -283,7 +284,7 @@ public sealed class GetSellerAnalyticsOverviewQueryHandlerTests
                 Array.Empty<AnalyticsTrafficSourceRaw>(),
                 Array.Empty<AnalyticsExternalReferrerRaw>()));
 
-        var result = await _handler.Handle(new GetSellerAnalyticsOverviewQuery(_sellerId, _from, _to), CancellationToken.None);
+        Result<SellerAnalyticsOverviewDto> result = await _handler.Handle(new GetSellerAnalyticsOverviewQuery(_sellerId, _from, _to), CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
         result.Value.UniqueCustomers.Current.Should().Be(5);
@@ -295,7 +296,7 @@ public sealed class GetSellerAnalyticsOverviewQueryHandlerTests
     [Fact]
     public async Task Handle_GranularityDay_ForShortRange()
     {
-        var result = await _handler.Handle(new GetSellerAnalyticsOverviewQuery(_sellerId, _from, _to), CancellationToken.None);
+        Result<SellerAnalyticsOverviewDto> result = await _handler.Handle(new GetSellerAnalyticsOverviewQuery(_sellerId, _from, _to), CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
         result.Value.Granularity.Should().Be(Domain.Core.Enums.AnalyticsGranularity.DAY);
@@ -306,7 +307,7 @@ public sealed class GetSellerAnalyticsOverviewQueryHandlerTests
     {
         var from = new DateOnly(2024, 1, 1);
         var to = new DateOnly(2024, 3, 1);
-        var result = await _handler.Handle(new GetSellerAnalyticsOverviewQuery(_sellerId, from, to), CancellationToken.None);
+        Result<SellerAnalyticsOverviewDto> result = await _handler.Handle(new GetSellerAnalyticsOverviewQuery(_sellerId, from, to), CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
         result.Value.Granularity.Should().Be(Domain.Core.Enums.AnalyticsGranularity.WEEK);
@@ -318,7 +319,7 @@ public sealed class GetSellerAnalyticsOverviewQueryHandlerTests
         var from = new DateOnly(2024, 1, 1);
         var to = new DateOnly(2024, 1, 6);
 
-        var result = await _handler.Handle(new GetSellerAnalyticsOverviewQuery(_sellerId, from, to), CancellationToken.None);
+        Result<SellerAnalyticsOverviewDto> result = await _handler.Handle(new GetSellerAnalyticsOverviewQuery(_sellerId, from, to), CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
         result.Value.Series.Should().HaveCount(5);
@@ -335,7 +336,7 @@ public sealed class GetSellerAnalyticsOverviewQueryHandlerTests
                 Arg.Any<CancellationToken>())
             .Returns(_ => throw new OperationCanceledException());
 
-        var act = () => _handler.Handle(new GetSellerAnalyticsOverviewQuery(_sellerId, _from, _to), CancellationToken.None);
+        Func<Task<Result<SellerAnalyticsOverviewDto>>> act = () => _handler.Handle(new GetSellerAnalyticsOverviewQuery(_sellerId, _from, _to), CancellationToken.None);
 
         await act.Should().ThrowAsync<OperationCanceledException>();
     }
@@ -343,7 +344,7 @@ public sealed class GetSellerAnalyticsOverviewQueryHandlerTests
     [Fact]
     public async Task Handle_WhenEngagementUnavailable_ShouldReturnNullEngagementBlocks()
     {
-        var result = await _handler.Handle(new GetSellerAnalyticsOverviewQuery(_sellerId, _from, _to), CancellationToken.None);
+        Result<SellerAnalyticsOverviewDto> result = await _handler.Handle(new GetSellerAnalyticsOverviewQuery(_sellerId, _from, _to), CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
         result.Value.EngagementAvailableFrom.Should().BeNull();
@@ -383,7 +384,7 @@ public sealed class GetSellerAnalyticsOverviewQueryHandlerTests
                 TrafficSources: Array.Empty<AnalyticsTrafficSourceRaw>(),
                 ExternalReferrers: Array.Empty<AnalyticsExternalReferrerRaw>()));
 
-        var result = await _handler.Handle(new GetSellerAnalyticsOverviewQuery(_sellerId, _from, _to), CancellationToken.None);
+        Result<SellerAnalyticsOverviewDto> result = await _handler.Handle(new GetSellerAnalyticsOverviewQuery(_sellerId, _from, _to), CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
         result.Value.EngagementAvailableFrom.Should().NotBeNull();
@@ -415,7 +416,7 @@ public sealed class SellerAnalyticsOverviewMapperTests
 
         var from = new DateOnly(2024, 1, 1);
         var to = new DateOnly(2024, 1, 10);
-        var dto = SellerAnalyticsOverviewMapper.MapOverview(
+        SellerAnalyticsOverviewDto dto = SellerAnalyticsOverviewMapper.MapOverview(
             snapshot, from, to, from.AddDays(-9), from, Domain.Core.Enums.AnalyticsGranularity.DAY);
 
         dto.RepeatCustomerRate.Current.Should().BeNull();
@@ -464,7 +465,7 @@ public sealed class SellerAnalyticsOverviewMapperTests
 
         var from = new DateOnly(2024, 1, 1);
         var to = new DateOnly(2024, 1, 10);
-        var dto = SellerAnalyticsOverviewMapper.MapOverview(
+        SellerAnalyticsOverviewDto dto = SellerAnalyticsOverviewMapper.MapOverview(
             snapshot, from, to, from.AddDays(-9), from, Domain.Core.Enums.AnalyticsGranularity.DAY);
 
         dto.GrossRevenue.Current.Should().Be(100000L);

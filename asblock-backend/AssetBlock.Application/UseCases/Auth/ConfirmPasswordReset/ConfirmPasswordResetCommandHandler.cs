@@ -1,10 +1,12 @@
 using Ardalis.Result;
 using AssetBlock.Application.Common;
+using AssetBlock.Application.Messaging;
 using AssetBlock.Domain.Abstractions.Services;
 using AssetBlock.Domain.Core.Constants;
 using AssetBlock.Domain.Core.Dto.Audit;
+using AssetBlock.Domain.Core.Dto.Email;
+using AssetBlock.Domain.Core.Entities;
 using AssetBlock.Domain.Core.Enums;
-using AssetBlock.Application.Messaging;
 using Microsoft.Extensions.Logging;
 
 namespace AssetBlock.Application.UseCases.Auth.ConfirmPasswordReset;
@@ -23,7 +25,7 @@ internal sealed class ConfirmPasswordResetCommandHandler(
 {
     public async Task<Result> Handle(ConfirmPasswordResetCommand request, CancellationToken cancellationToken)
     {
-        if (!linkProtector.TryUnprotect(request.ProtectedToken, EmailActionPurpose.PASSWORD_RESET, out var claims))
+        if (!linkProtector.TryUnprotect(request.ProtectedToken, EmailActionPurpose.PASSWORD_RESET, out EmailActionLinkClaims? claims))
         {
             logger.LogDebug("ConfirmPasswordReset: token unprotect failed");
             await auditWriter.WriteBestEffort(new AuditEvent(
@@ -35,7 +37,7 @@ internal sealed class ConfirmPasswordResetCommandHandler(
             return ResultError.Error(ErrorCodes.ERR_EMAIL_ACTION_INVALID_OR_EXPIRED);
         }
 
-        var action = await emailActionStore.GetById(claims.ActionId, cancellationToken);
+        EmailAction? action = await emailActionStore.GetById(claims.ActionId, cancellationToken);
         if (action is null || action.Purpose != EmailActionPurpose.PASSWORD_RESET)
         {
             logger.LogDebug("ConfirmPasswordReset: action {ActionId} not found or wrong purpose", claims.ActionId);
@@ -48,7 +50,7 @@ internal sealed class ConfirmPasswordResetCommandHandler(
             return ResultError.Error(ErrorCodes.ERR_EMAIL_ACTION_INVALID_OR_EXPIRED);
         }
 
-        var user = await userStore.GetByIdForUpdate(action.UserId, cancellationToken);
+        User? user = await userStore.GetByIdForUpdate(action.UserId, cancellationToken);
         if (user is null || !string.Equals(user.Email, action.TargetEmail, StringComparison.OrdinalIgnoreCase))
         {
             logger.LogDebug("ConfirmPasswordReset: user/email mismatch for action {ActionId}", claims.ActionId);
@@ -62,7 +64,7 @@ internal sealed class ConfirmPasswordResetCommandHandler(
             return ResultError.Error(ErrorCodes.ERR_EMAIL_ACTION_INVALID_OR_EXPIRED);
         }
 
-        bool consumed = false;
+        var consumed = false;
         await unitOfWork.ExecuteInTransaction(async ct =>
         {
             consumed = await emailActionStore.TryConsume(
@@ -84,7 +86,7 @@ internal sealed class ConfirmPasswordResetCommandHandler(
 
                 await userStore.Update(user, ct);
                 await jwtTokenService.RevokeAllRefreshTokens(user.Id, ct);
-                var notice = emailComposer.CreatePasswordChangedNotice(user.Email, user.Id);
+                EmailDispatchPayload notice = emailComposer.CreatePasswordChangedNotice(user.Email, user.Id);
                 await outboxStore.Enqueue(OutboxMessageTypes.EMAIL_DISPATCH, notice, ct);
                 await auditWriter.Write(new AuditEvent(
                     AuditActions.AUTH_PASSWORD_RESET_CONFIRM,

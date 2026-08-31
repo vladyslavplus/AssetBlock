@@ -25,7 +25,7 @@ public sealed class TagsControllerTests : ControllerTestBase
             .Returns(Task.FromResult(NoValueResult.Success(new DomainPaging.PagedResult<TagDto>([], 0, 1, 10))));
 
         var controller = new TagsController(Sender);
-        var result = await controller.SearchTags(new GetTagsRequest(), CancellationToken.None);
+        IActionResult result = await controller.SearchTags(new GetTagsRequest(), CancellationToken.None);
 
         result.Should().BeOfType<OkObjectResult>();
     }
@@ -38,7 +38,7 @@ public sealed class TagsControllerTests : ControllerTestBase
             .Returns(Task.FromResult(NoValueResult.Success(tag)));
 
         var controller = new TagsController(Sender);
-        var result = await controller.GetById(tag.Id, CancellationToken.None);
+        IActionResult result = await controller.GetById(tag.Id, CancellationToken.None);
 
         result.Should().BeOfType<OkObjectResult>();
     }
@@ -51,7 +51,7 @@ public sealed class TagsControllerTests : ControllerTestBase
             .Returns(Task.FromResult(NoValueResult.Success(tag)));
 
         var controller = new TagsController(Sender);
-        var result = await controller.Create(new CreateTagCommand("new"), CancellationToken.None);
+        IActionResult result = await controller.Create(new CreateTagCommand("new"), CancellationToken.None);
 
         result.Should().BeOfType<CreatedAtActionResult>();
     }
@@ -64,7 +64,7 @@ public sealed class TagsControllerTests : ControllerTestBase
 
         var controller = new TagsController(Sender);
         SetupAnonymous(controller);
-        var result = await controller.Create(new CreateTagCommand("x"), CancellationToken.None);
+        IActionResult result = await controller.Create(new CreateTagCommand("x"), CancellationToken.None);
 
         await AssertStatusCodeAsync(controller, result, StatusCodes.Status409Conflict);
     }
@@ -77,7 +77,7 @@ public sealed class TagsControllerTests : ControllerTestBase
             .Returns(Task.FromResult(NoValueResult.Success(tag)));
 
         var controller = new TagsController(Sender);
-        var result = await controller.Update(tag.Id, new UpdateTagRequest("u"), CancellationToken.None);
+        IActionResult result = await controller.Update(tag.Id, new UpdateTagRequest("u"), CancellationToken.None);
 
         result.Should().BeOfType<OkObjectResult>();
     }
@@ -89,7 +89,7 @@ public sealed class TagsControllerTests : ControllerTestBase
             .Returns(Task.FromResult(NoValueResult.Success()));
 
         var controller = new TagsController(Sender);
-        var result = await controller.Delete(Guid.NewGuid(), CancellationToken.None);
+        IActionResult result = await controller.Delete(Guid.NewGuid(), CancellationToken.None);
 
         result.Should().BeOfType<OkResult>();
     }
@@ -102,7 +102,7 @@ public sealed class TagsControllerTests : ControllerTestBase
 
         var controller = new TagsController(Sender);
         SetupAnonymous(controller);
-        var result = await controller.Delete(Guid.NewGuid(), CancellationToken.None);
+        IActionResult result = await controller.Delete(Guid.NewGuid(), CancellationToken.None);
 
         await AssertStatusCodeAsync(controller, result, StatusCodes.Status404NotFound);
     }

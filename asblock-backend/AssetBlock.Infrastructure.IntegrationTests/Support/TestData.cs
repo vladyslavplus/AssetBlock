@@ -69,10 +69,10 @@ internal static class TestData
         Guid? id = null,
         AssetVersionProcessingStatus? processingStatus = null)
     {
-        var license = AssetLicenseCatalog.Get(AssetLicenseCode.PERSONAL);
+        AssetLicenseTemplate license = AssetLicenseCatalog.Get(AssetLicenseCode.PERSONAL);
         var key = storageKey ?? $"assets/{assetId:N}/v{versionNumber}.bin";
-        var status = processingStatus ?? (isCurrent ? AssetVersionProcessingStatus.READY : AssetVersionProcessingStatus.PENDING_INSPECTION);
-        var now = DateTimeOffset.UtcNow;
+        AssetVersionProcessingStatus status = processingStatus ?? (isCurrent ? AssetVersionProcessingStatus.READY : AssetVersionProcessingStatus.PENDING_INSPECTION);
+        DateTimeOffset now = DateTimeOffset.UtcNow;
         return new AssetVersion
         {
             Id = id ?? Guid.NewGuid(),
@@ -136,10 +136,10 @@ internal static class TestData
         string currency = "usd",
         string? stripeSessionId = null)
     {
-        var now = purchase.PurchasedAt;
+        DateTimeOffset now = purchase.PurchasedAt;
         var intentId = Guid.NewGuid();
         var orderId = Guid.NewGuid();
-        var orderLineId = purchase.OrderLineId;
+        Guid orderLineId = purchase.OrderLineId;
         var sessionId = stripeSessionId ?? $"test-stripe-{Guid.NewGuid():N}";
 
         db.CheckoutIntents.Add(new CheckoutIntent
@@ -242,8 +242,8 @@ internal static class TestData
         ApplicationDbContext db,
         CancellationToken cancellationToken = default)
     {
-        var author = CreateUser();
-        var category = CreateCategory();
+        User author = CreateUser();
+        Category category = CreateCategory();
         db.Users.Add(author);
         db.Categories.Add(category);
         await db.SaveChangesAsync(cancellationToken);
@@ -256,7 +256,7 @@ internal static class TestData
         CollectionStatus status = CollectionStatus.DRAFT,
         Guid? id = null)
     {
-        var now = DateTimeOffset.UtcNow;
+        DateTimeOffset now = DateTimeOffset.UtcNow;
         return new Collection
         {
             Id = id ?? Guid.NewGuid(),
@@ -286,7 +286,7 @@ internal static class TestData
         DateTimeOffset? expiresAt = null,
         DateTimeOffset? createdAt = null)
     {
-        var created = createdAt ?? DateTimeOffset.UtcNow;
+        DateTimeOffset created = createdAt ?? DateTimeOffset.UtcNow;
         return new CheckoutReservation
         {
             Id = Guid.NewGuid(),

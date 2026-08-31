@@ -1,4 +1,5 @@
 using System.Data;
+using System.Data.Common;
 using AssetBlock.Domain.Abstractions.Services;
 using AssetBlock.Domain.Core.Constants;
 using AssetBlock.Domain.Core.Dto.Analytics;
@@ -46,7 +47,7 @@ internal sealed class AnalyticsEventStore(ApplicationDbContext dbContext) : IAna
     {
         dbContext.Database.SetCommandTimeout(commandTimeoutSeconds);
 
-        var connection = dbContext.Database.GetDbConnection();
+        DbConnection connection = dbContext.Database.GetDbConnection();
         var openedConnection = false;
         if (connection.State != ConnectionState.Open)
         {

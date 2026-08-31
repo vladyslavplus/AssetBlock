@@ -39,7 +39,7 @@ internal sealed class NotificationStore(ApplicationDbContext dbContext, ILogger<
 
     public async Task<PagedResult<UserNotification>> GetPaged(Guid recipientUserId, GetNotificationsRequest request, CancellationToken cancellationToken = default)
     {
-        var query = dbContext.UserNotifications.AsNoTracking().Where(n => n.RecipientUserId == recipientUserId);
+        IQueryable<UserNotification> query = dbContext.UserNotifications.AsNoTracking().Where(n => n.RecipientUserId == recipientUserId);
 
         if (request.UnreadOnly == true)
         {
@@ -63,7 +63,7 @@ internal sealed class NotificationStore(ApplicationDbContext dbContext, ILogger<
 
         var page = Math.Max(PagedRequest.DEFAULT_PAGE, request.Page);
         var pageSize = Math.Clamp(request.PageSize, PagedRequest.MIN_PAGE_SIZE, PagedRequest.MAX_PAGE_SIZE);
-        var items = await query
+        List<UserNotification> items = await query
             .Skip((page - 1) * pageSize)
             .Take(pageSize)
             .ToListAsync(cancellationToken);
@@ -73,7 +73,7 @@ internal sealed class NotificationStore(ApplicationDbContext dbContext, ILogger<
 
     public async Task<bool> MarkRead(Guid recipientUserId, Guid notificationId, CancellationToken cancellationToken = default)
     {
-        var row = await dbContext.UserNotifications
+        UserNotification? row = await dbContext.UserNotifications
             .FirstOrDefaultAsync(n => n.Id == notificationId && n.RecipientUserId == recipientUserId, cancellationToken);
         if (row is null)
         {
@@ -100,7 +100,7 @@ internal sealed class NotificationStore(ApplicationDbContext dbContext, ILogger<
 
     public async Task<bool> MarkUnread(Guid recipientUserId, Guid notificationId, CancellationToken cancellationToken = default)
     {
-        var row = await dbContext.UserNotifications
+        UserNotification? row = await dbContext.UserNotifications
             .FirstOrDefaultAsync(n => n.Id == notificationId && n.RecipientUserId == recipientUserId, cancellationToken);
         if (row is null)
         {
@@ -127,7 +127,7 @@ internal sealed class NotificationStore(ApplicationDbContext dbContext, ILogger<
 
     public async Task<int> MarkAllRead(Guid recipientUserId, CancellationToken cancellationToken = default)
     {
-        var now = DateTimeOffset.UtcNow;
+        DateTimeOffset now = DateTimeOffset.UtcNow;
         try
         {
             var affected = await dbContext.UserNotifications

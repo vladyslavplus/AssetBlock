@@ -22,7 +22,7 @@ public sealed class CategoriesControllerTests : ControllerTestBase
             .Returns(Task.FromResult(NoValueResult.Success(new DomainPaging.PagedResult<CategoryListItem>([], 0, 1, 10))));
 
         var controller = new CategoriesController(Sender);
-        var result = await controller.Get(null, CancellationToken.None);
+        IActionResult result = await controller.Get(null, CancellationToken.None);
 
         result.Should().BeOfType<OkObjectResult>();
     }
@@ -35,7 +35,7 @@ public sealed class CategoriesControllerTests : ControllerTestBase
             .Returns(Task.FromResult(NoValueResult.Success(item)));
 
         var controller = new CategoriesController(Sender);
-        var result = await controller.GetById(item.Id, CancellationToken.None);
+        IActionResult result = await controller.GetById(item.Id, CancellationToken.None);
 
         result.Should().BeOfType<OkObjectResult>();
     }
@@ -48,7 +48,7 @@ public sealed class CategoriesControllerTests : ControllerTestBase
             .Returns(Task.FromResult(NoValueResult.Success(created)));
 
         var controller = new CategoriesController(Sender);
-        var result = await controller.Create(new CreateCategoryRequest("n", null, "slug"), CancellationToken.None);
+        IActionResult result = await controller.Create(new CreateCategoryRequest("n", null, "slug"), CancellationToken.None);
 
         result.Should().BeOfType<CreatedAtActionResult>();
     }
@@ -61,7 +61,7 @@ public sealed class CategoriesControllerTests : ControllerTestBase
 
         var controller = new CategoriesController(Sender);
         var id = Guid.NewGuid();
-        var result = await controller.Update(id, new UpdateCategoryRequest("n", null, "s"), CancellationToken.None);
+        IActionResult result = await controller.Update(id, new UpdateCategoryRequest("n", null, "s"), CancellationToken.None);
 
         result.Should().BeOfType<OkResult>();
     }
@@ -73,7 +73,7 @@ public sealed class CategoriesControllerTests : ControllerTestBase
             .Returns(Task.FromResult(NoValueResult.Success()));
 
         var controller = new CategoriesController(Sender);
-        var result = await controller.Delete(Guid.NewGuid(), CancellationToken.None);
+        IActionResult result = await controller.Delete(Guid.NewGuid(), CancellationToken.None);
 
         result.Should().BeOfType<OkResult>();
     }

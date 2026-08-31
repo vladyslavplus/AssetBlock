@@ -3,6 +3,7 @@ using System.Net.Http.Json;
 using System.Text.Json;
 using AssetBlock.Domain.Core.Constants;
 using AssetBlock.Domain.Core.Dto.Auth;
+using AssetBlock.Domain.Core.Entities;
 using AssetBlock.Infrastructure.Persistence;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.EntityFrameworkCore;
@@ -26,18 +27,18 @@ internal static class IntegrationTestAuth
     public static async Task<(HttpClient Client, string Username)> RegisterAndAuthenticateAsync(
         WebApplicationFactory<Program> factory)
     {
-        var client = factory.CreateClient();
+        HttpClient client = factory.CreateClient();
         var suffix = Guid.NewGuid().ToString("N");
         var username = $"ig_{suffix}";
         var email = $"ig-{suffix}@test.local";
         const string password = "Password1!";
 
-        var registerResponse = await client.PostAsJsonAsync(
+        HttpResponseMessage registerResponse = await client.PostAsJsonAsync(
             new Uri("/api/auth/register", UriKind.Relative),
             new RegisterRequest(username, email, password));
 
         registerResponse.EnsureSuccessStatusCode();
-        var tokens = await registerResponse.Content.ReadFromJsonAsync<TokensResponseDto>(JsonOptions);
+        TokensResponseDto? tokens = await registerResponse.Content.ReadFromJsonAsync<TokensResponseDto>(JsonOptions);
         client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", tokens!.AccessToken);
         return (client, username);
     }
@@ -48,24 +49,24 @@ internal static class IntegrationTestAuth
     public static async Task<(HttpClient Client, string Username)> RegisterAdminAndAuthenticateAsync(
         WebApplicationFactory<Program> factory)
     {
-        var (_, username) = await RegisterAndAuthenticateAsync(factory);
+        (HttpClient _, var username) = await RegisterAndAuthenticateAsync(factory);
 
-        await using (var scope = factory.Services.CreateAsyncScope())
+        await using (AsyncServiceScope scope = factory.Services.CreateAsyncScope())
         {
-            var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
-            var user = await db.Users.SingleAsync(u => u.Username == username);
+            ApplicationDbContext db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+            User user = await db.Users.SingleAsync(u => u.Username == username);
             user.Role = AppRoles.ADMIN;
             user.EmailVerifiedAt = DateTimeOffset.UtcNow;
             await db.SaveChangesAsync();
         }
 
-        var client = factory.CreateClient();
+        HttpClient client = factory.CreateClient();
         var email = await FindEmailAsync(factory, username);
-        var loginResponse = await client.PostAsJsonAsync(
+        HttpResponseMessage loginResponse = await client.PostAsJsonAsync(
             new Uri("/api/auth/login", UriKind.Relative),
             new LoginRequest(email, "Password1!"));
         loginResponse.EnsureSuccessStatusCode();
-        var tokens = await loginResponse.Content.ReadFromJsonAsync<TokensResponseDto>(JsonOptions);
+        TokensResponseDto? tokens = await loginResponse.Content.ReadFromJsonAsync<TokensResponseDto>(JsonOptions);
         client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", tokens!.AccessToken);
         return (client, username);
     }
@@ -76,25 +77,25 @@ internal static class IntegrationTestAuth
     public static async Task<(HttpClient Client, string Username)> RegisterVerifiedAndAuthenticateAsync(
         WebApplicationFactory<Program> factory)
     {
-        var (client, username) = await RegisterAndAuthenticateAsync(factory);
+        (HttpClient? client, var username) = await RegisterAndAuthenticateAsync(factory);
         await MarkEmailVerifiedAsync(factory, username);
         return (client, username);
     }
 
     public static async Task MarkEmailVerifiedAsync(WebApplicationFactory<Program> factory, string username)
     {
-        await using var scope = factory.Services.CreateAsyncScope();
-        var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
-        var user = await db.Users.SingleAsync(u => u.Username == username);
+        await using AsyncServiceScope scope = factory.Services.CreateAsyncScope();
+        ApplicationDbContext db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+        User user = await db.Users.SingleAsync(u => u.Username == username);
         user.EmailVerifiedAt = DateTimeOffset.UtcNow;
         await db.SaveChangesAsync();
     }
 
     private static async Task<string> FindEmailAsync(WebApplicationFactory<Program> factory, string username)
     {
-        await using var scope = factory.Services.CreateAsyncScope();
-        var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
-        var user = await db.Users.AsNoTracking().SingleAsync(u => u.Username == username);
+        await using AsyncServiceScope scope = factory.Services.CreateAsyncScope();
+        ApplicationDbContext db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+        User user = await db.Users.AsNoTracking().SingleAsync(u => u.Username == username);
         return user.Email;
     }
 }

@@ -1,6 +1,6 @@
+using System.Diagnostics;
 using AssetBlock.Application.Messaging;
 using Microsoft.Extensions.Logging;
-using System.Diagnostics;
 
 namespace AssetBlock.Application.Common.Behaviors;
 
@@ -15,7 +15,7 @@ internal sealed class LoggingBehavior<TRequest, TResponse>(ILogger<LoggingBehavi
         var stopwatch = Stopwatch.StartNew();
         try
         {
-            var response = await next(cancellationToken);
+            TResponse? response = await next(cancellationToken);
             stopwatch.Stop();
             logger.LogDebug("Handled {RequestName} in {ElapsedMs} ms", requestName, stopwatch.ElapsedMilliseconds);
             return response;

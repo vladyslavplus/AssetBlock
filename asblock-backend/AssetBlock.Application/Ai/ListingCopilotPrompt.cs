@@ -1,7 +1,7 @@
-using AssetBlock.Domain.Core.Constants;
-using AssetBlock.Domain.Core.Dto;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using AssetBlock.Domain.Core.Constants;
+using AssetBlock.Domain.Core.Dto;
 
 namespace AssetBlock.Application.Ai;
 

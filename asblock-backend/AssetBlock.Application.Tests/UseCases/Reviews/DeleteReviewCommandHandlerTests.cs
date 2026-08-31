@@ -1,3 +1,4 @@
+using Ardalis.Result;
 using AssetBlock.Application.UseCases.Reviews.DeleteReview;
 using AssetBlock.Domain.Abstractions.Services;
 using AssetBlock.Domain.Core.Constants;
@@ -43,7 +44,7 @@ public class DeleteReviewCommandHandlerTests
         var command = new DeleteReviewCommand(Guid.NewGuid());
         _reviewStoreMock.GetById(command.Id, Arg.Any<CancellationToken>()).Returns((Review?)null);
 
-        var result = await _handler.Handle(command, CancellationToken.None);
+        Result result = await _handler.Handle(command, CancellationToken.None);
 
         result.IsSuccess.Should().BeFalse();
         result.Status.Should().Be(Ardalis.Result.ResultStatus.NotFound);
@@ -65,7 +66,7 @@ public class DeleteReviewCommandHandlerTests
         _reviewStoreMock.GetById(command.Id, Arg.Any<CancellationToken>()).Returns(review);
         _reviewStoreMock.Delete(command.Id, Arg.Any<CancellationToken>()).Returns(false);
 
-        var result = await _handler.Handle(command, CancellationToken.None);
+        Result result = await _handler.Handle(command, CancellationToken.None);
 
         result.Status.Should().Be(Ardalis.Result.ResultStatus.NotFound);
         result.Errors.Should().Contain(ErrorCodes.ERR_REVIEW_NOT_FOUND);
@@ -85,7 +86,7 @@ public class DeleteReviewCommandHandlerTests
         _reviewStoreMock.GetById(command.Id, Arg.Any<CancellationToken>()).Returns(review);
         _reviewStoreMock.Delete(command.Id, Arg.Any<CancellationToken>()).Returns(true);
 
-        var result = await _handler.Handle(command, CancellationToken.None);
+        Result result = await _handler.Handle(command, CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
         await _unitOfWorkMock.Received(1).ExecuteInTransaction(Arg.Any<Func<CancellationToken, Task>>(), Arg.Any<CancellationToken>());
@@ -103,7 +104,7 @@ public class DeleteReviewCommandHandlerTests
     public async Task Handle_WhenExceptionThrown_ShouldLogSafeContextAndRethrow()
     {
         var testLogger = new TestLogger<DeleteReviewCommandHandler>();
-        var unitOfWorkMock = Substitute.For<IUnitOfWork>();
+        IUnitOfWork unitOfWorkMock = Substitute.For<IUnitOfWork>();
         unitOfWorkMock.ExecuteInTransaction(Arg.Any<Func<CancellationToken, Task>>(), Arg.Any<CancellationToken>())
             .Returns(ci => ci.Arg<Func<CancellationToken, Task>>()(CancellationToken.None));
         var handler = new DeleteReviewCommandHandler(
@@ -118,7 +119,7 @@ public class DeleteReviewCommandHandlerTests
         _reviewStoreMock.GetById(command.Id, Arg.Any<CancellationToken>()).Returns(review);
         _reviewStoreMock.Delete(command.Id, Arg.Any<CancellationToken>()).ThrowsAsync(new InvalidOperationException("DB Error"));
 
-        var act = () => handler.Handle(command, CancellationToken.None);
+        Func<Task<Result>> act = () => handler.Handle(command, CancellationToken.None);
 
         await act.Should().ThrowAsync<InvalidOperationException>().WithMessage("DB Error");
         testLogger.Logs.Should().Contain(l =>
@@ -131,7 +132,7 @@ public class DeleteReviewCommandHandlerTests
     public async Task Handle_WhenReviewLookupThrows_ShouldLogSafeContextAndRethrow()
     {
         var testLogger = new TestLogger<DeleteReviewCommandHandler>();
-        var unitOfWorkMock = Substitute.For<IUnitOfWork>();
+        IUnitOfWork unitOfWorkMock = Substitute.For<IUnitOfWork>();
         var handler = new DeleteReviewCommandHandler(
             _reviewStoreMock,
             unitOfWorkMock,
@@ -143,7 +144,7 @@ public class DeleteReviewCommandHandlerTests
         _reviewStoreMock.GetById(command.Id, Arg.Any<CancellationToken>())
             .ThrowsAsync(new InvalidOperationException("DB Error on lookup"));
 
-        var act = () => handler.Handle(command, CancellationToken.None);
+        Func<Task<Result>> act = () => handler.Handle(command, CancellationToken.None);
 
         await act.Should().ThrowAsync<InvalidOperationException>().WithMessage("DB Error on lookup");
         testLogger.Logs.Should().ContainSingle(l =>
@@ -156,7 +157,7 @@ public class DeleteReviewCommandHandlerTests
     public async Task Handle_WhenReviewLookupCancelled_ShouldRethrowWithoutErrorLogging()
     {
         var testLogger = new TestLogger<DeleteReviewCommandHandler>();
-        var unitOfWorkMock = Substitute.For<IUnitOfWork>();
+        IUnitOfWork unitOfWorkMock = Substitute.For<IUnitOfWork>();
         var handler = new DeleteReviewCommandHandler(
             _reviewStoreMock,
             unitOfWorkMock,
@@ -168,7 +169,7 @@ public class DeleteReviewCommandHandlerTests
         _reviewStoreMock.GetById(command.Id, Arg.Any<CancellationToken>())
             .ThrowsAsync(new OperationCanceledException());
 
-        var act = () => handler.Handle(command, CancellationToken.None);
+        Func<Task<Result>> act = () => handler.Handle(command, CancellationToken.None);
 
         await act.Should().ThrowAsync<OperationCanceledException>();
         testLogger.Logs.Should().NotContain(l => l.Level == Microsoft.Extensions.Logging.LogLevel.Error);
@@ -178,7 +179,7 @@ public class DeleteReviewCommandHandlerTests
     public async Task Handle_WhenCancelled_ShouldRethrowWithoutErrorLogging()
     {
         var testLogger = new TestLogger<DeleteReviewCommandHandler>();
-        var unitOfWorkMock = Substitute.For<IUnitOfWork>();
+        IUnitOfWork unitOfWorkMock = Substitute.For<IUnitOfWork>();
         unitOfWorkMock.ExecuteInTransaction(Arg.Any<Func<CancellationToken, Task>>(), Arg.Any<CancellationToken>())
             .Returns(ci => ci.Arg<Func<CancellationToken, Task>>()(CancellationToken.None));
         var handler = new DeleteReviewCommandHandler(
@@ -193,7 +194,7 @@ public class DeleteReviewCommandHandlerTests
         _reviewStoreMock.GetById(command.Id, Arg.Any<CancellationToken>()).Returns(review);
         _reviewStoreMock.Delete(command.Id, Arg.Any<CancellationToken>()).ThrowsAsync(new OperationCanceledException());
 
-        var act = () => handler.Handle(command, CancellationToken.None);
+        Func<Task<Result>> act = () => handler.Handle(command, CancellationToken.None);
 
         await act.Should().ThrowAsync<OperationCanceledException>();
         testLogger.Logs.Should().NotContain(l => l.Level == Microsoft.Extensions.Logging.LogLevel.Error);

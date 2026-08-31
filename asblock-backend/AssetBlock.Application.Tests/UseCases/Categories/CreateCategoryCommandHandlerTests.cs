@@ -3,6 +3,7 @@ using AssetBlock.Application.UseCases.Categories.CreateCategory;
 using AssetBlock.Domain.Abstractions.Services;
 using AssetBlock.Domain.Core.Constants;
 using AssetBlock.Domain.Core.Dto.Audit;
+using AssetBlock.Domain.Core.Dto.Categories;
 using AssetBlock.Domain.Core.Entities;
 using AssetBlock.Domain.Core.Enums;
 using AssetBlock.Domain.Core.Exceptions;
@@ -42,7 +43,7 @@ public class CreateCategoryCommandHandlerTests
         var command = new CreateCategoryCommand("Test", "Desc", "test-slug");
         _categoryStoreMock.SlugExists(command.Slug, null, Arg.Any<CancellationToken>()).Returns(true);
 
-        var result = await _handler.Handle(command, CancellationToken.None);
+        Result<CreateCategoryResponse> result = await _handler.Handle(command, CancellationToken.None);
 
         result.IsSuccess.Should().BeFalse();
         result.Status.Should().Be(ResultStatus.Conflict);
@@ -58,7 +59,7 @@ public class CreateCategoryCommandHandlerTests
         _categoryStoreMock.Create(command.Name, command.Description, command.Slug, Arg.Any<CancellationToken>())
             .ThrowsAsync(new DuplicateSlugException());
 
-        var result = await _handler.Handle(command, CancellationToken.None);
+        Result<CreateCategoryResponse> result = await _handler.Handle(command, CancellationToken.None);
 
         result.IsSuccess.Should().BeFalse();
         result.Status.Should().Be(ResultStatus.Conflict);
@@ -76,7 +77,7 @@ public class CreateCategoryCommandHandlerTests
         _categoryStoreMock.Create(command.Name, command.Description, command.Slug, Arg.Any<CancellationToken>())
             .Returns(category);
 
-        var result = await _handler.Handle(command, CancellationToken.None);
+        Result<CreateCategoryResponse> result = await _handler.Handle(command, CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
         result.Value.Id.Should().Be(categoryId);

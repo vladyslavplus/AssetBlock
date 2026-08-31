@@ -1,10 +1,12 @@
 using Ardalis.Result;
 using AssetBlock.Application.Common;
+using AssetBlock.Application.Messaging;
 using AssetBlock.Domain.Abstractions.Services;
 using AssetBlock.Domain.Core.Constants;
 using AssetBlock.Domain.Core.Dto.Audit;
+using AssetBlock.Domain.Core.Dto.Email;
+using AssetBlock.Domain.Core.Entities;
 using AssetBlock.Domain.Core.Enums;
-using AssetBlock.Application.Messaging;
 using Microsoft.Extensions.Logging;
 
 namespace AssetBlock.Application.UseCases.Users.ChangePassword;
@@ -21,7 +23,7 @@ internal sealed class ChangePasswordCommandHandler(
 {
     public async Task<Result> Handle(ChangePasswordCommand request, CancellationToken cancellationToken)
     {
-        var user = await userStore.GetByIdForUpdate(request.UserId, cancellationToken);
+        User? user = await userStore.GetByIdForUpdate(request.UserId, cancellationToken);
         if (user is null)
         {
             return Result.NotFound(ErrorCodes.ERR_USER_NOT_FOUND);
@@ -41,14 +43,14 @@ internal sealed class ChangePasswordCommandHandler(
 
         var newHash = passwordHasher.Hash(request.NewPassword);
         var userEmail = user.Email;
-        var userId = user.Id;
+        Guid userId = user.Id;
 
         user.PasswordHash = newHash;
         await unitOfWork.ExecuteInTransaction(async ct =>
         {
             await userStore.Update(user, ct);
             await jwtTokenService.RevokeAllRefreshTokens(userId, ct);
-            var notice = emailComposer.CreatePasswordChangedNotice(userEmail, userId);
+            EmailDispatchPayload notice = emailComposer.CreatePasswordChangedNotice(userEmail, userId);
             await outboxStore.Enqueue(OutboxMessageTypes.EMAIL_DISPATCH, notice, ct);
             await auditWriter.Write(new AuditEvent(
                 AuditActions.USER_PASSWORD_CHANGE,

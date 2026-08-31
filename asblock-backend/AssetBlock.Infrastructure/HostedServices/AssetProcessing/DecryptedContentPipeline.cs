@@ -27,12 +27,12 @@ internal static class DecryptedContentPipeline
             useSynchronizationContext: false));
 
         using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-        var producer = Produce(encryptedStream, encryptionService, pipe.Writer, linkedCts.Token);
+        Task producer = Produce(encryptedStream, encryptionService, pipe.Writer, linkedCts.Token);
 
         try
         {
-            await using var readerStream = pipe.Reader.AsStream(leaveOpen: true);
-            var result = await consume(readerStream, linkedCts.Token).ConfigureAwait(false);
+            await using Stream readerStream = pipe.Reader.AsStream(leaveOpen: true);
+            T? result = await consume(readerStream, linkedCts.Token).ConfigureAwait(false);
             await linkedCts.CancelAsync();
             await pipe.Reader.CompleteAsync().ConfigureAwait(false);
             await WaitProducer(producer, ignoreNonCancelFaults: true).ConfigureAwait(false);
@@ -63,7 +63,7 @@ internal static class DecryptedContentPipeline
     {
         try
         {
-            await using var writerStream = writer.AsStream(leaveOpen: true);
+            await using Stream writerStream = writer.AsStream(leaveOpen: true);
             await encryptionService.Decrypt(encryptedStream, writerStream, cancellationToken).ConfigureAwait(false);
             await writer.CompleteAsync().ConfigureAwait(false);
         }

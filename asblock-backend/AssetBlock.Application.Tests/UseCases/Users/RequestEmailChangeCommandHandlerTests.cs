@@ -42,12 +42,12 @@ public sealed class RequestEmailChangeCommandHandlerTests
     [Fact]
     public async Task Handle_WhenCurrentPasswordInvalid_ShouldReturnInvalidError()
     {
-        var user = CreateUser();
+        User user = CreateUser();
         var command = new RequestEmailChangeCommand(user.Id, "new@example.test", "wrong-pass");
         _userStore.GetByIdForUpdate(user.Id, Arg.Any<CancellationToken>()).Returns(user);
         _passwordHasher.Verify(command.CurrentPassword, user.PasswordHash).Returns(false);
 
-        var result = await _handler.Handle(command, CancellationToken.None);
+        Result result = await _handler.Handle(command, CancellationToken.None);
 
         result.Status.Should().Be(ResultStatus.Invalid);
         result.ValidationErrors.Should().Contain(e => e.Identifier == ErrorCodes.ERR_AUTH_CURRENT_PASSWORD_INVALID);
@@ -63,13 +63,13 @@ public sealed class RequestEmailChangeCommandHandlerTests
     [Fact]
     public async Task Handle_WhenNewEmailSameAsCurrent_ShouldReturnSameEmailError()
     {
-        var user = CreateUser();
+        User user = CreateUser();
         var command = new RequestEmailChangeCommand(user.Id, user.Email.ToUpper(), "pass");
         _userStore.GetByIdForUpdate(user.Id, Arg.Any<CancellationToken>()).Returns(user);
         _passwordHasher.Verify(command.CurrentPassword, user.PasswordHash).Returns(true);
         _userStore.GetByEmail(user.Email, Arg.Any<CancellationToken>()).Returns(user);
 
-        var result = await _handler.Handle(command, CancellationToken.None);
+        Result result = await _handler.Handle(command, CancellationToken.None);
 
         result.Status.Should().Be(ResultStatus.Invalid);
         result.ValidationErrors.Should().Contain(e => e.Identifier == ErrorCodes.ERR_EMAIL_CHANGE_SAME_AS_CURRENT);
@@ -79,14 +79,14 @@ public sealed class RequestEmailChangeCommandHandlerTests
     [Fact]
     public async Task Handle_WhenNewEmailTakenByOtherUser_ShouldReturnConflict()
     {
-        var user = CreateUser();
-        var otherUser = CreateUser("other", "other@example.test");
+        User user = CreateUser();
+        User otherUser = CreateUser("other", "other@example.test");
         var command = new RequestEmailChangeCommand(user.Id, "other@example.test", "pass");
         _userStore.GetByIdForUpdate(Arg.Any<Guid>(), Arg.Any<CancellationToken>()).Returns(user);
         _passwordHasher.Verify(Arg.Any<string>(), Arg.Any<string>()).Returns(true);
         _userStore.GetByEmail(Arg.Is<string>(e => e == "other@example.test"), Arg.Any<CancellationToken>()).Returns(otherUser);
 
-        var result = await _handler.Handle(command, CancellationToken.None);
+        Result result = await _handler.Handle(command, CancellationToken.None);
 
         result.Status.Should().Be(ResultStatus.Conflict);
         result.Errors.Should().Contain(ErrorCodes.ERR_EMAIL_CHANGE_TARGET_TAKEN);
@@ -95,9 +95,9 @@ public sealed class RequestEmailChangeCommandHandlerTests
     [Fact]
     public async Task Handle_WhenValid_ShouldIssueEmailChangeActionAndEnqueueOutbox()
     {
-        var user = CreateUser();
+        User user = CreateUser();
         const string newEmail = "newemail@example.test";
-        var userId = user.Id;
+        Guid userId = user.Id;
         var command = new RequestEmailChangeCommand(userId, newEmail, "pass");
         var action = new EmailAction
         {
@@ -115,7 +115,7 @@ public sealed class RequestEmailChangeCommandHandlerTests
         _emailActionStore.IssueOrReplace(Arg.Any<Guid>(), Arg.Any<EmailActionPurpose>(), Arg.Any<string>(), Arg.Any<TimeSpan>(), Arg.Any<CancellationToken>())
             .Returns(action);
 
-        var result = await _handler.Handle(command, CancellationToken.None);
+        Result result = await _handler.Handle(command, CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
         user.Email.Should().Be("user@example.test", because: "Email must NOT be updated until confirmation");

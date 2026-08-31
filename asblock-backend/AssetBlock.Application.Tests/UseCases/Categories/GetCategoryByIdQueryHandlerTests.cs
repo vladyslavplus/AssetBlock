@@ -2,6 +2,7 @@ using Ardalis.Result;
 using AssetBlock.Application.UseCases.Categories.GetCategoryById;
 using AssetBlock.Domain.Abstractions.Services;
 using AssetBlock.Domain.Core.Constants;
+using AssetBlock.Domain.Core.Dto.Categories;
 using AssetBlock.Domain.Core.Entities;
 using AwesomeAssertions;
 using Microsoft.Extensions.Logging;
@@ -32,7 +33,7 @@ public class GetCategoryByIdQueryHandlerTests
         _categoryStoreMock.GetById(query.Id, Arg.Any<CancellationToken>()).Returns((Category?)null);
 
         // Act
-        var result = await _handler.Handle(query, CancellationToken.None);
+        Result<CategoryResponse> result = await _handler.Handle(query, CancellationToken.None);
 
         result.Status.Should().Be(ResultStatus.NotFound);
         result.Errors.Should().Contain(ErrorCodes.ERR_CATEGORY_NOT_FOUND);
@@ -48,7 +49,7 @@ public class GetCategoryByIdQueryHandlerTests
         _categoryStoreMock.GetById(query.Id, Arg.Any<CancellationToken>()).Returns(category);
 
         // Act
-        var result = await _handler.Handle(query, CancellationToken.None);
+        Result<CategoryResponse> result = await _handler.Handle(query, CancellationToken.None);
 
         // Assert
         result.IsSuccess.Should().BeTrue();
@@ -66,7 +67,7 @@ public class GetCategoryByIdQueryHandlerTests
         _categoryStoreMock.GetById(query.Id, Arg.Any<CancellationToken>())
             .ThrowsAsync(new InvalidOperationException("db"));
 
-        var act = () => _handler.Handle(query, CancellationToken.None);
+        Func<Task<Result<CategoryResponse>>> act = () => _handler.Handle(query, CancellationToken.None);
 
         await act.Should().ThrowAsync<InvalidOperationException>();
     }

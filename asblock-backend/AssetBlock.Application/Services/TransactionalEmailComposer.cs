@@ -120,7 +120,7 @@ public sealed class TransactionalEmailComposer(IOptions<EmailOptions> emailOptio
         var when = FormatTimestamp(purchasedAt);
         var amount = FormatAmount(amountTotal, currency);
         var libraryUrl = BuildFixedAppUrl(LIBRARY_PATH);
-        var itemLines = FormatItemTitleLines(itemTitles);
+        (string Text, string Html) itemLines = FormatItemTitleLines(itemTitles);
 
         var subject = NormalizeSubject($"Order receipt: {title}");
         var text = new StringBuilder()
@@ -176,7 +176,7 @@ public sealed class TransactionalEmailComposer(IOptions<EmailOptions> emailOptio
         var when = FormatTimestamp(purchasedAt);
         var amount = FormatAmount(amountTotal, currency);
         var sellUrl = BuildFixedAppUrl(SELLER_LISTINGS_PATH);
-        var itemLines = FormatItemTitleLines(itemTitles);
+        (string Text, string Html) itemLines = FormatItemTitleLines(itemTitles);
 
         var subject = NormalizeSubject($"Order sold: {title}");
         var text = new StringBuilder()
@@ -368,7 +368,7 @@ public sealed class TransactionalEmailComposer(IOptions<EmailOptions> emailOptio
     private static void ValidateActionUrl(string actionUrl)
     {
         if (string.IsNullOrWhiteSpace(actionUrl)
-            || !Uri.TryCreate(actionUrl, UriKind.Absolute, out var uri)
+            || !Uri.TryCreate(actionUrl, UriKind.Absolute, out Uri? uri)
             || (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps))
         {
             throw new ArgumentException("Action URL must be an absolute http(s) URL.", nameof(actionUrl));
@@ -465,7 +465,7 @@ public sealed class TransactionalEmailComposer(IOptions<EmailOptions> emailOptio
     private string BuildFixedAppUrl(string absolutePath)
     {
         var configured = _options.PublicAppBaseUrl.Trim();
-        if (!Uri.TryCreate(configured, UriKind.Absolute, out var uri)
+        if (!Uri.TryCreate(configured, UriKind.Absolute, out Uri? uri)
             || (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps)
             || !string.IsNullOrEmpty(uri.UserInfo)
             || !string.IsNullOrEmpty(uri.Query)

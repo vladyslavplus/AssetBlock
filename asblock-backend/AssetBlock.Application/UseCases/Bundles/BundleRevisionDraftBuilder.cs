@@ -1,8 +1,9 @@
+using Ardalis.Result;
 using AssetBlock.Application.Common;
 using AssetBlock.Domain.Abstractions.Services;
 using AssetBlock.Domain.Core.Constants;
+using AssetBlock.Domain.Core.Dto.Assets;
 using AssetBlock.Domain.Core.Payments;
-using Ardalis.Result;
 
 namespace AssetBlock.Application.UseCases.Bundles;
 
@@ -20,7 +21,7 @@ internal static class BundleRevisionDraftBuilder
         decimal bundlePrice,
         CancellationToken cancellationToken)
     {
-        var sortedIds = assetIds.OrderBy(id => id).ToArray();
+        Guid[] sortedIds = assetIds.OrderBy(id => id).ToArray();
         await bundleStore.LockAssetsInOrder(sortedIds, cancellationToken);
 
         var items = new List<BundleRevisionItemDraft>(assetIds.Count);
@@ -28,8 +29,8 @@ internal static class BundleRevisionDraftBuilder
 
         for (var i = 0; i < assetIds.Count; i++)
         {
-            var assetId = assetIds[i];
-            var snapshot = await assetStore.GetCurrentVersionSnapshot(assetId, cancellationToken);
+            Guid assetId = assetIds[i];
+            AssetCurrentVersionSnapshot? snapshot = await assetStore.GetCurrentVersionSnapshot(assetId, cancellationToken);
             if (snapshot is null
                 || snapshot.DeletedAt.HasValue
                 || snapshot.AuthorId != sellerId

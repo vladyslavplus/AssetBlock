@@ -1,8 +1,9 @@
 using Ardalis.Result;
+using AssetBlock.Application.Messaging;
 using AssetBlock.Domain.Abstractions.Services;
 using AssetBlock.Domain.Core.Constants;
 using AssetBlock.Domain.Core.Dto.Collections;
-using AssetBlock.Application.Messaging;
+using AssetBlock.Domain.Core.Entities;
 
 namespace AssetBlock.Application.UseCases.Collections.GetMyCollection;
 
@@ -11,7 +12,7 @@ internal sealed class GetMyCollectionQueryHandler(ICollectionStore collectionSto
 {
     public async Task<Result<CollectionDetailDto>> Handle(GetMyCollectionQuery request, CancellationToken cancellationToken)
     {
-        var collection = await collectionStore.GetById(request.Id, cancellationToken);
+        Collection? collection = await collectionStore.GetById(request.Id, cancellationToken);
         if (collection is null)
         {
             return Result.NotFound(ErrorCodes.ERR_COLLECTION_NOT_FOUND);
@@ -22,7 +23,7 @@ internal sealed class GetMyCollectionQueryHandler(ICollectionStore collectionSto
             return Result.Forbidden(ErrorCodes.ERR_FORBIDDEN);
         }
 
-        var detail = await collectionStore.GetSellerDetail(request.Id, request.SellerId, cancellationToken);
+        CollectionDetailDto? detail = await collectionStore.GetSellerDetail(request.Id, request.SellerId, cancellationToken);
         if (detail is null)
         {
             return Result.NotFound(ErrorCodes.ERR_COLLECTION_NOT_FOUND);

@@ -19,15 +19,15 @@ public sealed class AnalyticsAggregationWorkerTests
         AnalyticsAggregationOptions? options = null,
         DateOnly? lastRetentionDayUtc = null)
     {
-        var store = Substitute.For<IAnalyticsEventStore>();
+        IAnalyticsEventStore store = Substitute.For<IAnalyticsEventStore>();
         var services = new ServiceCollection();
         services.AddScoped(_ => store);
-        var provider = services.BuildServiceProvider();
+        ServiceProvider provider = services.BuildServiceProvider();
 
-        var environment = Substitute.For<IHostEnvironment>();
+        IHostEnvironment environment = Substitute.For<IHostEnvironment>();
         environment.EnvironmentName.Returns(Environments.Development);
 
-        var timeProvider = Substitute.For<TimeProvider>();
+        TimeProvider timeProvider = Substitute.For<TimeProvider>();
         timeProvider.GetUtcNow().Returns(_fixedNow);
 
         var worker = new AnalyticsAggregationWorker(
@@ -50,10 +50,10 @@ public sealed class AnalyticsAggregationWorkerTests
     [Fact]
     public async Task RunIteration_WhenLockAcquired_ShouldRecomputeCurrentAndPreviousUtcDays()
     {
-        var store = Substitute.For<IAnalyticsEventStore>();
+        IAnalyticsEventStore store = Substitute.For<IAnalyticsEventStore>();
         var services = new ServiceCollection();
         services.AddScoped(_ => store);
-        var provider = services.BuildServiceProvider();
+        ServiceProvider provider = services.BuildServiceProvider();
 
         store.TryAcquireAndRecomputeDaily(
                 Arg.Any<DateOnly>(),
@@ -70,9 +70,9 @@ public sealed class AnalyticsAggregationWorkerTests
                 Arg.Any<CancellationToken>())
             .Returns(new AnalyticsEventRetentionResult(0, false));
 
-        var environment = Substitute.For<IHostEnvironment>();
+        IHostEnvironment environment = Substitute.For<IHostEnvironment>();
         environment.EnvironmentName.Returns(Environments.Development);
-        var timeProvider = Substitute.For<TimeProvider>();
+        TimeProvider timeProvider = Substitute.For<TimeProvider>();
         timeProvider.GetUtcNow().Returns(_fixedNow);
 
         var worker = new AnalyticsAggregationWorker(
@@ -144,7 +144,7 @@ public sealed class AnalyticsAggregationWorkerTests
             await worker.RunIteration(CancellationToken.None);
         }
 
-        var expectedCutoff = _fixedNow - TimeSpan.FromDays(AnalyticsAggregationConstants.RAW_EVENT_RETENTION_DAYS);
+        DateTimeOffset expectedCutoff = _fixedNow - TimeSpan.FromDays(AnalyticsAggregationConstants.RAW_EVENT_RETENTION_DAYS);
         await store.Received(1).TryAcquireAndDeleteExpiredEvents(
             expectedCutoff,
             10_000,

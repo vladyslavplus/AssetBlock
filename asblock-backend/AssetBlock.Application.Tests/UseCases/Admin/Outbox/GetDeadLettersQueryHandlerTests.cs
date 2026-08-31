@@ -31,7 +31,7 @@ public sealed class GetDeadLettersQueryHandlerTests
         _outboxStore.GetDeadLetters(request, Arg.Any<CancellationToken>())
             .Returns(expectedPagedResult);
 
-        var result = await _handler.Handle(query, CancellationToken.None);
+        Ardalis.Result.Result<PagedResult<DeadLetterOutboxListItemDto>> result = await _handler.Handle(query, CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
         result.Value.Should().BeSameAs(expectedPagedResult);

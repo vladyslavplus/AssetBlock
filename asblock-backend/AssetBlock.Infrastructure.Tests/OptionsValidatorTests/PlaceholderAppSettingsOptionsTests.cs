@@ -10,16 +10,16 @@ public sealed class PlaceholderAppSettingsOptionsTests
     public void TrackedAppSettingsPlaceholders_ShouldFailActiveStorageAndKeepInactiveOptional()
     {
         var path = FindTrackedAppSettings();
-        var config = new ConfigurationBuilder()
+        IConfigurationRoot config = new ConfigurationBuilder()
             .AddJsonFile(path, optional: false, reloadOnChange: false)
             .Build();
 
-        var jwt = config.GetSection(JwtOptions.SECTION_NAME).Get<JwtOptions>()!;
-        var encryption = config.GetSection(EncryptionOptions.SECTION_NAME).Get<EncryptionOptions>()!;
-        var storage = config.GetSection(StorageOptions.SECTION_NAME).Get<StorageOptions>()!;
-        var seaweed = config.GetSection(SeaweedFsOptions.SECTION_NAME).Get<SeaweedFsOptions>()!;
-        var minio = config.GetSection(MinioOptions.SECTION_NAME).Get<MinioOptions>()!;
-        var stripe = config.GetSection(StripeOptions.SECTION_NAME).Get<StripeOptions>()!;
+        JwtOptions jwt = config.GetSection(JwtOptions.SECTION_NAME).Get<JwtOptions>()!;
+        EncryptionOptions encryption = config.GetSection(EncryptionOptions.SECTION_NAME).Get<EncryptionOptions>()!;
+        StorageOptions storage = config.GetSection(StorageOptions.SECTION_NAME).Get<StorageOptions>()!;
+        SeaweedFsOptions seaweed = config.GetSection(SeaweedFsOptions.SECTION_NAME).Get<SeaweedFsOptions>()!;
+        MinioOptions minio = config.GetSection(MinioOptions.SECTION_NAME).Get<MinioOptions>()!;
+        StripeOptions stripe = config.GetSection(StripeOptions.SECTION_NAME).Get<StripeOptions>()!;
 
         new JwtOptionsValidator().Validate(null, jwt).Failed.Should().BeTrue();
         new EncryptionOptionsValidator().Validate(null, encryption).Failed.Should().BeTrue();

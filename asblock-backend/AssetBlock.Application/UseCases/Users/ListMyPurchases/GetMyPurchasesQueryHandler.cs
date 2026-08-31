@@ -1,9 +1,9 @@
 using Ardalis.Result;
 using AssetBlock.Application.Common;
+using AssetBlock.Application.Messaging;
 using AssetBlock.Domain.Abstractions.Services;
 using AssetBlock.Domain.Core.Constants;
 using AssetBlock.Domain.Core.Dto.Users;
-using AssetBlock.Application.Messaging;
 using Microsoft.Extensions.Logging;
 
 namespace AssetBlock.Application.UseCases.Users.ListMyPurchases;
@@ -17,7 +17,7 @@ internal sealed class GetMyPurchasesQueryHandler(
     {
         try
         {
-            var paged = await purchaseStore.ListForUser(request.UserId, request.Request, cancellationToken);
+            Domain.Core.Dto.Paging.PagedResult<PurchaseLibraryItemDto> paged = await purchaseStore.ListForUser(request.UserId, request.Request, cancellationToken);
             logger.LogDebug(
                 "Listed {Count} purchases for user {UserId} (page {Page})",
                 paged.Items.Count,

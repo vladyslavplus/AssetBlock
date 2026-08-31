@@ -1,3 +1,4 @@
+using Ardalis.Result;
 using AssetBlock.Application.UseCases.SellerAnalytics.ExportSellerAnalyticsSales;
 using AssetBlock.Domain.Abstractions.Services;
 using AssetBlock.Domain.Core.Constants;
@@ -30,7 +31,7 @@ public sealed class PrepareSellerAnalyticsSalesExportQueryHandlerTests
                 Arg.Any<CancellationToken>())
             .Returns(session);
 
-        var result = await _handler.Handle(
+        Result<PreparedSellerAnalyticsSalesExport> result = await _handler.Handle(
             new PrepareSellerAnalyticsSalesExportQuery(
                 Guid.NewGuid(),
                 new DateOnly(2024, 1, 1),
@@ -55,7 +56,7 @@ public sealed class PrepareSellerAnalyticsSalesExportQueryHandlerTests
                 Arg.Any<CancellationToken>())
             .Returns(session);
 
-        var result = await _handler.Handle(
+        Result<PreparedSellerAnalyticsSalesExport> result = await _handler.Handle(
             new PrepareSellerAnalyticsSalesExportQuery(
                 Guid.NewGuid(),
                 new DateOnly(2024, 1, 1),

@@ -1,3 +1,4 @@
+using Ardalis.Result;
 using AssetBlock.Application.UseCases.Assets.DeleteAsset;
 using AssetBlock.Domain.Abstractions.Services;
 using AssetBlock.Domain.Core.Constants;
@@ -24,8 +25,8 @@ public class DeleteAssetCommandHandlerTests
     {
         _assetStoreMock = Substitute.For<IAssetStore>();
         _purchaseStoreMock = Substitute.For<IPurchaseStore>();
-        var checkoutIntentStoreMock = Substitute.For<ICheckoutIntentStore>();
-        var unitOfWorkMock = Substitute.For<IUnitOfWork>();
+        ICheckoutIntentStore checkoutIntentStoreMock = Substitute.For<ICheckoutIntentStore>();
+        IUnitOfWork unitOfWorkMock = Substitute.For<IUnitOfWork>();
         _outboxStoreMock = Substitute.For<IOutboxStore>();
         _auditWriterMock = Substitute.For<IAuditWriter>();
         _cacheMock = Substitute.For<ICacheService>();
@@ -52,7 +53,7 @@ public class DeleteAssetCommandHandlerTests
         var command = new DeleteAssetCommand(Guid.NewGuid(), Guid.NewGuid());
         _assetStoreMock.GetById(command.Id).Returns((Asset?)null);
 
-        var result = await _handler.Handle(command, CancellationToken.None);
+        Result result = await _handler.Handle(command, CancellationToken.None);
 
         result.IsSuccess.Should().BeFalse();
         result.Errors.Should().Contain(ErrorCodes.ERR_ASSET_NOT_FOUND);
@@ -65,7 +66,7 @@ public class DeleteAssetCommandHandlerTests
         var asset = new Asset { Id = command.Id, AuthorId = Guid.NewGuid(), CategoryId = Guid.NewGuid(), Title = "t" };
         _assetStoreMock.GetById(command.Id).Returns(asset);
 
-        var result = await _handler.Handle(command, CancellationToken.None);
+        Result result = await _handler.Handle(command, CancellationToken.None);
 
         result.IsSuccess.Should().BeFalse();
         result.Errors.Should().Contain(ErrorCodes.ERR_FORBIDDEN);
@@ -89,7 +90,7 @@ public class DeleteAssetCommandHandlerTests
         _assetStoreMock.GetAllStorageKeys(command.Id, Arg.Any<CancellationToken>())
             .Returns(["key"]);
 
-        var result = await _handler.Handle(command, CancellationToken.None);
+        Result result = await _handler.Handle(command, CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
         await _purchaseStoreMock.Received(1).HasPurchasesForAsset(command.Id, Arg.Any<CancellationToken>());
@@ -118,7 +119,7 @@ public class DeleteAssetCommandHandlerTests
         _assetStoreMock.GetForUpdate(command.Id, Arg.Any<CancellationToken>()).Returns(asset);
         _purchaseStoreMock.HasPurchasesForAsset(command.Id, Arg.Any<CancellationToken>()).Returns(true);
 
-        var result = await _handler.Handle(command, CancellationToken.None);
+        Result result = await _handler.Handle(command, CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
         await _assetStoreMock.Received(1).SoftDelete(command.Id, Arg.Any<DateTimeOffset>(), Arg.Any<CancellationToken>());
@@ -148,7 +149,7 @@ public class DeleteAssetCommandHandlerTests
         _assetStoreMock.GetById(command.Id).Returns(asset);
         _assetStoreMock.GetForUpdate(command.Id, Arg.Any<CancellationToken>()).Returns(asset);
 
-        var result = await _handler.Handle(command, CancellationToken.None);
+        Result result = await _handler.Handle(command, CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
         await _purchaseStoreMock.DidNotReceive().HasPurchasesForAsset(Arg.Any<Guid>(), Arg.Any<CancellationToken>());
@@ -169,9 +170,9 @@ public class DeleteAssetCommandHandlerTests
         _purchaseStoreMock.HasPurchasesForAsset(command.Id, Arg.Any<CancellationToken>()).Returns(false);
 
         // Active checkout present (purchases are absent)
-        var checkoutIntentStoreMock = Substitute.For<ICheckoutIntentStore>();
+        ICheckoutIntentStore checkoutIntentStoreMock = Substitute.For<ICheckoutIntentStore>();
         checkoutIntentStoreMock.HasActiveForAsset(command.Id, Arg.Any<DateTimeOffset>(), Arg.Any<CancellationToken>()).Returns(true);
-        var unitOfWorkMock = Substitute.For<IUnitOfWork>();
+        IUnitOfWork unitOfWorkMock = Substitute.For<IUnitOfWork>();
         unitOfWorkMock.ExecuteInTransaction(Arg.Any<Func<CancellationToken, Task>>(), Arg.Any<CancellationToken>())
             .Returns(ci => ci.Arg<Func<CancellationToken, Task>>()(CancellationToken.None));
         var handler = new DeleteAssetCommandHandler(
@@ -184,7 +185,7 @@ public class DeleteAssetCommandHandlerTests
             _cacheMock,
             NullLogger<DeleteAssetCommandHandler>.Instance);
 
-        var result = await handler.Handle(command, CancellationToken.None);
+        Result result = await handler.Handle(command, CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
         await _assetStoreMock.Received(1).SoftDelete(command.Id, Arg.Any<DateTimeOffset>(), Arg.Any<CancellationToken>());
@@ -201,8 +202,8 @@ public class DeleteAssetCommandHandlerTests
     public async Task Handle_WhenTransactionThrows_ShouldLogSafeContextAndRethrow()
     {
         var testLogger = new TestLogger<DeleteAssetCommandHandler>();
-        var checkoutIntentStoreMock = Substitute.For<ICheckoutIntentStore>();
-        var unitOfWorkMock = Substitute.For<IUnitOfWork>();
+        ICheckoutIntentStore checkoutIntentStoreMock = Substitute.For<ICheckoutIntentStore>();
+        IUnitOfWork unitOfWorkMock = Substitute.For<IUnitOfWork>();
         unitOfWorkMock.ExecuteInTransaction(Arg.Any<Func<CancellationToken, Task>>(), Arg.Any<CancellationToken>())
             .Returns(ci => ci.Arg<Func<CancellationToken, Task>>()(CancellationToken.None));
         var handler = new DeleteAssetCommandHandler(
@@ -223,7 +224,7 @@ public class DeleteAssetCommandHandlerTests
         _assetStoreMock.Delete(command.Id, Arg.Any<CancellationToken>())
             .ThrowsAsync(new InvalidOperationException("db"));
 
-        var act = () => handler.Handle(command, CancellationToken.None);
+        Func<Task<Result>> act = () => handler.Handle(command, CancellationToken.None);
 
         await act.Should().ThrowAsync<InvalidOperationException>().WithMessage("db");
         testLogger.Logs.Should().Contain(l =>
@@ -236,8 +237,8 @@ public class DeleteAssetCommandHandlerTests
     public async Task Handle_WhenCancelled_ShouldRethrowWithoutErrorLogging()
     {
         var testLogger = new TestLogger<DeleteAssetCommandHandler>();
-        var checkoutIntentStoreMock = Substitute.For<ICheckoutIntentStore>();
-        var unitOfWorkMock = Substitute.For<IUnitOfWork>();
+        ICheckoutIntentStore checkoutIntentStoreMock = Substitute.For<ICheckoutIntentStore>();
+        IUnitOfWork unitOfWorkMock = Substitute.For<IUnitOfWork>();
         unitOfWorkMock.ExecuteInTransaction(Arg.Any<Func<CancellationToken, Task>>(), Arg.Any<CancellationToken>())
             .Returns(ci => ci.Arg<Func<CancellationToken, Task>>()(CancellationToken.None));
         var handler = new DeleteAssetCommandHandler(
@@ -258,7 +259,7 @@ public class DeleteAssetCommandHandlerTests
         _assetStoreMock.Delete(command.Id, Arg.Any<CancellationToken>())
             .ThrowsAsync(new OperationCanceledException());
 
-        var act = () => handler.Handle(command, CancellationToken.None);
+        Func<Task<Result>> act = () => handler.Handle(command, CancellationToken.None);
 
         await act.Should().ThrowAsync<OperationCanceledException>();
         testLogger.Logs.Should().NotContain(l => l.Level == Microsoft.Extensions.Logging.LogLevel.Error);

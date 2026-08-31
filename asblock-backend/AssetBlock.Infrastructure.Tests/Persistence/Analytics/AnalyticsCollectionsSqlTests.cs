@@ -40,7 +40,7 @@ public sealed class AnalyticsCollectionsSqlTests
     public void BuildOrderBy_WhenEngagementSortHasInvalidDirection_ShouldThrow(
         AnalyticsCollectionSort sort)
     {
-        var act = () => AnalyticsCollectionsSql.BuildOrderBy(sort, (AnalyticsSortDirection)999);
+        Func<string> act = () => AnalyticsCollectionsSql.BuildOrderBy(sort, (AnalyticsSortDirection)999);
 
         act.Should().Throw<ArgumentOutOfRangeException>();
     }
@@ -48,7 +48,7 @@ public sealed class AnalyticsCollectionsSqlTests
     [Fact]
     public void BuildOrderBy_WhenSortIsInvalid_ShouldThrow()
     {
-        var act = () => AnalyticsCollectionsSql.BuildOrderBy(
+        Func<string> act = () => AnalyticsCollectionsSql.BuildOrderBy(
             (AnalyticsCollectionSort)999,
             AnalyticsSortDirection.DESC);
 

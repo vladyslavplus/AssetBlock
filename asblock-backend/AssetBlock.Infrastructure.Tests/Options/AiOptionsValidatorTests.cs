@@ -2,6 +2,7 @@ using AssetBlock.Domain.Core.Primitives.AppSettingsOptions;
 using AssetBlock.Infrastructure.Options;
 using AssetBlock.Infrastructure.Tests.Ai;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Options;
 
 namespace AssetBlock.Infrastructure.Tests.Options;
 
@@ -10,7 +11,7 @@ public sealed class AiOptionsValidatorTests
     [Fact]
     public void Validate_WhenDisabled_ShouldAllowUnknownProviderAndEmptySecrets()
     {
-        var result = new AiOptionsValidator().Validate(null, new AiOptions
+        ValidateOptionsResult result = new AiOptionsValidator().Validate(null, new AiOptions
         {
             Enabled = false,
             Provider = "NotAProvider",
@@ -23,7 +24,7 @@ public sealed class AiOptionsValidatorTests
     [Fact]
     public void Validate_WhenEnabledWithUnknownProvider_ShouldFail()
     {
-        var result = new AiOptionsValidator().Validate(null, new AiOptions
+        ValidateOptionsResult result = new AiOptionsValidator().Validate(null, new AiOptions
         {
             Enabled = true,
             Provider = "SemanticKernel",
@@ -37,7 +38,7 @@ public sealed class AiOptionsValidatorTests
     [Fact]
     public void Validate_WhenEnabledWithKnownProvider_ShouldSucceed()
     {
-        var result = new AiOptionsValidator().Validate(null, new AiOptions
+        ValidateOptionsResult result = new AiOptionsValidator().Validate(null, new AiOptions
         {
             Enabled = true,
             Provider = "OpenRouter",
@@ -55,7 +56,7 @@ public sealed class OpenRouterAndOllamaOptionsValidatorTests
     {
         var sut = new OpenRouterOptionsValidator(DisabledConfig());
 
-        var result = sut.Validate(null, new OpenRouterOptions { ApiKey = "", Models = [] });
+        ValidateOptionsResult result = sut.Validate(null, new OpenRouterOptions { ApiKey = "", Models = [] });
 
         result.Succeeded.Should().BeTrue();
     }
@@ -65,7 +66,7 @@ public sealed class OpenRouterAndOllamaOptionsValidatorTests
     {
         var sut = new OpenRouterOptionsValidator(EnabledConfig("Ollama"));
 
-        var result = sut.Validate(null, new OpenRouterOptions { ApiKey = "", Models = ["placeholder/not-validated"] });
+        ValidateOptionsResult result = sut.Validate(null, new OpenRouterOptions { ApiKey = "", Models = ["placeholder/not-validated"] });
 
         result.Succeeded.Should().BeTrue();
     }
@@ -75,7 +76,7 @@ public sealed class OpenRouterAndOllamaOptionsValidatorTests
     {
         var sut = new OpenRouterOptionsValidator(EnabledConfig("OpenRouter"));
 
-        var result = sut.Validate(null, ValidOpenRouterOptions());
+        ValidateOptionsResult result = sut.Validate(null, ValidOpenRouterOptions());
 
         result.Succeeded.Should().BeTrue();
     }
@@ -84,10 +85,10 @@ public sealed class OpenRouterAndOllamaOptionsValidatorTests
     public void OpenRouter_WhenModelsAreEmpty_ShouldFail()
     {
         var sut = new OpenRouterOptionsValidator(EnabledConfig("OpenRouter"));
-        var options = ValidOpenRouterOptions();
+        OpenRouterOptions options = ValidOpenRouterOptions();
         options.Models = [];
 
-        var result = sut.Validate(null, options);
+        ValidateOptionsResult result = sut.Validate(null, options);
 
         result.Failed.Should().BeTrue();
         result.FailureMessage.Should().Contain("Models");
@@ -97,10 +98,10 @@ public sealed class OpenRouterAndOllamaOptionsValidatorTests
     public void OpenRouter_WhenModelsAreDuplicated_ShouldFail()
     {
         var sut = new OpenRouterOptionsValidator(EnabledConfig("OpenRouter"));
-        var options = ValidOpenRouterOptions();
+        OpenRouterOptions options = ValidOpenRouterOptions();
         options.Models = ["fixture/openrouter-test", "fixture/openrouter-test"];
 
-        var result = sut.Validate(null, options);
+        ValidateOptionsResult result = sut.Validate(null, options);
 
         result.Failed.Should().BeTrue();
         result.FailureMessage.Should().Contain("distinct");
@@ -110,10 +111,10 @@ public sealed class OpenRouterAndOllamaOptionsValidatorTests
     public void OpenRouter_WhenModelIdIsOversized_ShouldFail()
     {
         var sut = new OpenRouterOptionsValidator(EnabledConfig("OpenRouter"));
-        var options = ValidOpenRouterOptions();
+        OpenRouterOptions options = ValidOpenRouterOptions();
         options.Models = [new string('a', 201)];
 
-        var result = sut.Validate(null, options);
+        ValidateOptionsResult result = sut.Validate(null, options);
 
         result.Failed.Should().BeTrue();
         result.FailureMessage.Should().Contain("bounded");
@@ -123,10 +124,10 @@ public sealed class OpenRouterAndOllamaOptionsValidatorTests
     public void OpenRouter_WhenTooManyModels_ShouldFail()
     {
         var sut = new OpenRouterOptionsValidator(EnabledConfig("OpenRouter"));
-        var options = ValidOpenRouterOptions();
+        OpenRouterOptions options = ValidOpenRouterOptions();
         options.Models = Enumerable.Range(0, 17).Select(i => $"model-{i}").ToList();
 
-        var result = sut.Validate(null, options);
+        ValidateOptionsResult result = sut.Validate(null, options);
 
         result.Failed.Should().BeTrue();
         result.FailureMessage.Should().Contain("16");
@@ -137,7 +138,7 @@ public sealed class OpenRouterAndOllamaOptionsValidatorTests
     {
         var sut = new OllamaOptionsValidator(EnabledConfig("OpenRouter"));
 
-        var result = sut.Validate(null, new OllamaOptions
+        ValidateOptionsResult result = sut.Validate(null, new OllamaOptions
         {
             BaseUrl = "http://example.invalid:11434",
             Model = "",
@@ -152,10 +153,10 @@ public sealed class OpenRouterAndOllamaOptionsValidatorTests
     {
         var sut = new OllamaOptionsValidator(EnabledConfig("Ollama"));
 
-        var options = ValidOllamaOptions();
+        OllamaOptions options = ValidOllamaOptions();
         options.BaseUrl = "http://ollama.example:11434";
 
-        var result = sut.Validate(null, options);
+        ValidateOptionsResult result = sut.Validate(null, options);
 
         result.Failed.Should().BeTrue();
         result.FailureMessage.Should().Contain("loopback");
@@ -166,10 +167,10 @@ public sealed class OpenRouterAndOllamaOptionsValidatorTests
     {
         var sut = new OllamaOptionsValidator(EnabledConfig("Ollama"));
 
-        var options = ValidOllamaOptions();
+        OllamaOptions options = ValidOllamaOptions();
         options.Digest = "";
 
-        var result = sut.Validate(null, options);
+        ValidateOptionsResult result = sut.Validate(null, options);
 
         result.Failed.Should().BeTrue();
         result.FailureMessage.Should().Contain("Digest");
@@ -180,7 +181,7 @@ public sealed class OpenRouterAndOllamaOptionsValidatorTests
     {
         var sut = new OllamaOptionsValidator(EnabledConfig("Ollama"));
 
-        var result = sut.Validate(null, ValidOllamaOptions());
+        ValidateOptionsResult result = sut.Validate(null, ValidOllamaOptions());
 
         result.Succeeded.Should().BeTrue();
     }

@@ -1,4 +1,5 @@
 using AssetBlock.Domain.Abstractions.Services;
+using Microsoft.EntityFrameworkCore.Storage;
 
 namespace AssetBlock.Infrastructure.Persistence;
 
@@ -12,7 +13,7 @@ internal sealed class EfUnitOfWork(ApplicationDbContext dbContext) : IUnitOfWork
             return;
         }
 
-        await using var tx = await dbContext.Database.BeginTransactionAsync(cancellationToken);
+        await using IDbContextTransaction tx = await dbContext.Database.BeginTransactionAsync(cancellationToken);
         try
         {
             await action(cancellationToken);

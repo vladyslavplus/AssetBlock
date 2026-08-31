@@ -1,5 +1,6 @@
 using AssetBlock.Domain.Core.Primitives.AppSettingsOptions;
 using AssetBlock.Infrastructure.Options;
+using Microsoft.Extensions.Options;
 
 namespace AssetBlock.Infrastructure.Tests.OptionsValidatorTests;
 
@@ -10,7 +11,7 @@ public sealed class DatabaseOptionsValidatorTests
     [Fact]
     public void Validate_WhenBothAutoMigrateAndEnsureCreated_ReturnsFail()
     {
-        var result = _sut.Validate(null, new DatabaseOptions { AutoMigrate = true, EnsureCreated = true });
+        ValidateOptionsResult result = _sut.Validate(null, new DatabaseOptions { AutoMigrate = true, EnsureCreated = true });
         result.Failed.Should().BeTrue();
         result.FailureMessage.Should().Contain("AutoMigrate");
     }

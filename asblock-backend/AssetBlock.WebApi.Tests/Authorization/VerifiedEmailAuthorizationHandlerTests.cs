@@ -23,7 +23,7 @@ public sealed class VerifiedEmailAuthorizationHandlerTests
     {
         var userId = Guid.NewGuid();
         _store.IsEmailVerified(userId, Arg.Any<CancellationToken>()).Returns(true);
-        var context = CreateContext(userId.ToString());
+        AuthorizationHandlerContext context = CreateContext(userId.ToString());
 
         await _handler.HandleAsync(context);
 
@@ -35,7 +35,7 @@ public sealed class VerifiedEmailAuthorizationHandlerTests
     {
         var userId = Guid.NewGuid();
         _store.IsEmailVerified(userId, Arg.Any<CancellationToken>()).Returns(false);
-        var context = CreateContext(userId.ToString());
+        AuthorizationHandlerContext context = CreateContext(userId.ToString());
 
         await _handler.HandleAsync(context);
 
@@ -47,7 +47,7 @@ public sealed class VerifiedEmailAuthorizationHandlerTests
     {
         var identity = new ClaimsIdentity("Test");
         identity.AddClaim(new Claim(ClaimTypes.Name, "no-sub"));
-        var context = CreateContext(identity);
+        AuthorizationHandlerContext context = CreateContext(identity);
 
         await _handler.HandleAsync(context);
 
@@ -58,7 +58,7 @@ public sealed class VerifiedEmailAuthorizationHandlerTests
     [Fact]
     public async Task Handle_WhenSubjectInvalid_ShouldNotSucceed()
     {
-        var context = CreateContext("not-a-guid");
+        AuthorizationHandlerContext context = CreateContext("not-a-guid");
 
         await _handler.HandleAsync(context);
 

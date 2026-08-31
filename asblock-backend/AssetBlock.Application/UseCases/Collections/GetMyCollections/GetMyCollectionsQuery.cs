@@ -1,6 +1,6 @@
 using Ardalis.Result;
-using AssetBlock.Domain.Core.Dto.Collections;
 using AssetBlock.Application.Messaging;
+using AssetBlock.Domain.Core.Dto.Collections;
 
 namespace AssetBlock.Application.UseCases.Collections.GetMyCollections;
 

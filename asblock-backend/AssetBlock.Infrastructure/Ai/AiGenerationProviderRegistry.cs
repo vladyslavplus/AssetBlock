@@ -1,6 +1,6 @@
+using System.Diagnostics.CodeAnalysis;
 using AssetBlock.Domain.Abstractions.Services;
 using AssetBlock.Domain.Core.Enums;
-using System.Diagnostics.CodeAnalysis;
 
 namespace AssetBlock.Infrastructure.Ai;
 
@@ -10,7 +10,7 @@ internal sealed class AiGenerationProviderRegistry : IAiGenerationProviderRegist
 
     public AiGenerationProviderRegistry(IEnumerable<IAiGenerationProvider> providers)
     {
-        foreach (var provider in providers)
+        foreach (IAiGenerationProvider provider in providers)
         {
             if (!_providers.TryAdd(provider.Kind, provider))
             {

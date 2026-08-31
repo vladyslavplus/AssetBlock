@@ -24,7 +24,7 @@ internal sealed class VerifiedEmailAuthorizationMiddlewareResultHandler : IAutho
             && failure.FailedRequirements.OfType<VerifiedEmailRequirement>().Any()
             && !failure.FailedRequirements.OfType<RolesAuthorizationRequirement>().Any())
         {
-            var problem = AssetBlockProblemDetails.Create(
+            Microsoft.AspNetCore.Mvc.ProblemDetails problem = AssetBlockProblemDetails.Create(
                 context,
                 StatusCodes.Status403Forbidden,
                 ErrorCodes.ERR_EMAIL_NOT_VERIFIED);

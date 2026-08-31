@@ -14,16 +14,16 @@ public sealed class OrderStorePostgresTests(PostgresFixture fixture)
     [Fact]
     public async Task CreateWithLinesAndPurchases_WhenBundleOrder_ShouldPersistLinesSummingToAmountPaid()
     {
-        await using var db = await fixture.CreateCleanDbContext();
+        await using ApplicationDbContext db = await fixture.CreateCleanDbContext();
         (User author, Category category) = await TestData.SeedAuthorAndCategory(db);
-        var buyer = TestData.CreateUser("order-buyer", "order-buyer@example.test");
+        User buyer = TestData.CreateUser("order-buyer", "order-buyer@example.test");
         db.Users.Add(buyer);
-        var assetA = TestData.CreateAsset(author.Id, category.Id, title: "A", price: 10m);
-        var assetB = TestData.CreateAsset(author.Id, category.Id, title: "B", price: 30m);
+        Asset assetA = TestData.CreateAsset(author.Id, category.Id, title: "A", price: 10m);
+        Asset assetB = TestData.CreateAsset(author.Id, category.Id, title: "B", price: 30m);
         db.Assets.AddRange(assetA, assetB);
         await db.SaveChangesAsync();
-        var versionA = TestData.CreateAssetVersion(assetA.Id);
-        var versionB = TestData.CreateAssetVersion(assetB.Id);
+        AssetVersion versionA = TestData.CreateAssetVersion(assetA.Id);
+        AssetVersion versionB = TestData.CreateAssetVersion(assetB.Id);
         db.AssetVersions.AddRange(versionA, versionB);
         await db.SaveChangesAsync();
 
@@ -40,7 +40,7 @@ public sealed class OrderStorePostgresTests(PostgresFixture fixture)
                 new(assetB.Id, 2, assetB.Title, assetB.Price)
             ]);
 
-        var now = DateTimeOffset.UtcNow;
+        DateTimeOffset now = DateTimeOffset.UtcNow;
         var intentId = Guid.NewGuid();
         db.CheckoutIntents.Add(new CheckoutIntent
         {
@@ -92,9 +92,9 @@ public sealed class OrderStorePostgresTests(PostgresFixture fixture)
 
         await new OrderStore(db).CreateWithLinesAndPurchases(order, lines, purchases);
 
-        await using var verify = fixture.CreateDbContext();
-        var savedOrder = await verify.Orders.AsNoTracking().SingleAsync(o => o.Id == orderId);
-        var savedLines = await verify.OrderLines.AsNoTracking().Where(l => l.OrderId == orderId).ToListAsync();
+        await using ApplicationDbContext verify = fixture.CreateDbContext();
+        Order savedOrder = await verify.Orders.AsNoTracking().SingleAsync(o => o.Id == orderId);
+        List<OrderLine> savedLines = await verify.OrderLines.AsNoTracking().Where(l => l.OrderId == orderId).ToListAsync();
         savedLines.Sum(l => l.PricePaid).Should().Be(savedOrder.AmountPaid);
         (await verify.Purchases.CountAsync(p => p.UserId == buyer.Id)).Should().Be(2);
     }
@@ -102,22 +102,22 @@ public sealed class OrderStorePostgresTests(PostgresFixture fixture)
     [Fact]
     public async Task CreateWithLinesAndPurchases_WhenDuplicateStripeSession_ShouldThrowAndLeaveNoPartialRows()
     {
-        await using var db = await fixture.CreateCleanDbContext();
+        await using ApplicationDbContext db = await fixture.CreateCleanDbContext();
         (User author, Category category) = await TestData.SeedAuthorAndCategory(db);
-        var buyer = TestData.CreateUser("dup-order-buyer", "dup-order-buyer@example.test");
+        User buyer = TestData.CreateUser("dup-order-buyer", "dup-order-buyer@example.test");
         db.Users.Add(buyer);
-        var asset = TestData.CreateAsset(author.Id, category.Id, title: "Solo", price: 9.99m);
+        Asset asset = TestData.CreateAsset(author.Id, category.Id, title: "Solo", price: 9.99m);
         db.Assets.Add(asset);
         await db.SaveChangesAsync();
-        var version = TestData.CreateAssetVersion(asset.Id);
+        AssetVersion version = TestData.CreateAssetVersion(asset.Id);
         db.AssetVersions.Add(version);
         await db.SaveChangesAsync();
 
-        var first = TestData.CreatePurchase(buyer.Id, asset.Id, version.Id);
+        Purchase first = TestData.CreatePurchase(buyer.Id, asset.Id, version.Id);
         TestData.AddCompletedPurchase(db, first, asset.Title, author.Id, stripeSessionId: "cs_dup_session");
         await db.SaveChangesAsync();
 
-        var now = DateTimeOffset.UtcNow;
+        DateTimeOffset now = DateTimeOffset.UtcNow;
         var intentId = Guid.NewGuid();
         var orderId = Guid.NewGuid();
         var lineId = Guid.NewGuid();
@@ -153,22 +153,22 @@ public sealed class OrderStorePostgresTests(PostgresFixture fixture)
             PurchasedAt = now,
             CreatedAt = now
         };
-        var conflictLine = BuildOrderLine(lineId, orderId, asset.Id, version.Id, author.Id, asset.Title, 9.99m, 9.99m, 1);
+        OrderLine conflictLine = BuildOrderLine(lineId, orderId, asset.Id, version.Id, author.Id, asset.Title, 9.99m, 9.99m, 1);
         // Different buyer so the failure is the Stripe session unique index (not user/asset purchase).
-        var otherBuyer = TestData.CreateUser("dup-order-buyer-2", "dup-order-buyer-2@example.test");
+        User otherBuyer = TestData.CreateUser("dup-order-buyer-2", "dup-order-buyer-2@example.test");
         db.Users.Add(otherBuyer);
         await db.SaveChangesAsync();
         conflictOrder.UserId = otherBuyer.Id;
-        var conflictPurchase = TestData.CreatePurchase(otherBuyer.Id, asset.Id, version.Id, orderLineId: lineId);
+        Purchase conflictPurchase = TestData.CreatePurchase(otherBuyer.Id, asset.Id, version.Id, orderLineId: lineId);
 
-        var act = () => new OrderStore(db).CreateWithLinesAndPurchases(
+        Func<Task<Order>> act = () => new OrderStore(db).CreateWithLinesAndPurchases(
             conflictOrder,
             [conflictLine],
             [conflictPurchase]);
 
         await act.Should().ThrowAsync<DuplicateOrderException>();
 
-        await using var verify = fixture.CreateDbContext();
+        await using ApplicationDbContext verify = fixture.CreateDbContext();
         (await verify.Orders.CountAsync(o => o.StripeSessionId == "cs_dup_session")).Should().Be(1);
         (await verify.OrderLines.CountAsync(l => l.Id == lineId)).Should().Be(0);
         (await verify.Purchases.CountAsync(p => p.OrderLineId == lineId)).Should().Be(0);
@@ -177,18 +177,18 @@ public sealed class OrderStorePostgresTests(PostgresFixture fixture)
     [Fact]
     public async Task ExecuteInTransaction_WhenOrderCreateThrows_ShouldRollBackOrderLinesAndPurchases()
     {
-        await using var db = await fixture.CreateCleanDbContext();
+        await using ApplicationDbContext db = await fixture.CreateCleanDbContext();
         (User author, Category category) = await TestData.SeedAuthorAndCategory(db);
-        var buyer = TestData.CreateUser("tx-order-buyer", "tx-order-buyer@example.test");
+        User buyer = TestData.CreateUser("tx-order-buyer", "tx-order-buyer@example.test");
         db.Users.Add(buyer);
-        var asset = TestData.CreateAsset(author.Id, category.Id, title: "Tx", price: 7m);
+        Asset asset = TestData.CreateAsset(author.Id, category.Id, title: "Tx", price: 7m);
         db.Assets.Add(asset);
         await db.SaveChangesAsync();
-        var version = TestData.CreateAssetVersion(asset.Id);
+        AssetVersion version = TestData.CreateAssetVersion(asset.Id);
         db.AssetVersions.Add(version);
         await db.SaveChangesAsync();
 
-        var now = DateTimeOffset.UtcNow;
+        DateTimeOffset now = DateTimeOffset.UtcNow;
         var intentId = Guid.NewGuid();
         db.CheckoutIntents.Add(new CheckoutIntent
         {
@@ -211,7 +211,7 @@ public sealed class OrderStorePostgresTests(PostgresFixture fixture)
         var orderId = Guid.NewGuid();
         var lineId = Guid.NewGuid();
 
-        var act = async () => await unitOfWork.ExecuteInTransaction(async ct =>
+        Func<Task> act = async () => await unitOfWork.ExecuteInTransaction(async ct =>
         {
             await new OrderStore(db).CreateWithLinesAndPurchases(
                 new Order
@@ -235,7 +235,7 @@ public sealed class OrderStorePostgresTests(PostgresFixture fixture)
 
         await act.Should().ThrowAsync<InvalidOperationException>();
 
-        await using var verify = fixture.CreateDbContext();
+        await using ApplicationDbContext verify = fixture.CreateDbContext();
         (await verify.Orders.CountAsync(o => o.Id == orderId)).Should().Be(0);
         (await verify.OrderLines.CountAsync(l => l.Id == lineId)).Should().Be(0);
         (await verify.Purchases.CountAsync(p => p.OrderLineId == lineId)).Should().Be(0);

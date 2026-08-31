@@ -30,7 +30,7 @@ internal static class OptionsValidation
             return false;
         }
 
-        return Uri.TryCreate(value, UriKind.Absolute, out var uri)
+        return Uri.TryCreate(value, UriKind.Absolute, out Uri? uri)
             && (uri.Scheme == Uri.UriSchemeHttp || uri.Scheme == Uri.UriSchemeHttps);
     }
 
@@ -44,7 +44,7 @@ internal static class OptionsValidation
             return false;
         }
 
-        if (!Uri.TryCreate(value, UriKind.Absolute, out var uri)
+        if (!Uri.TryCreate(value, UriKind.Absolute, out Uri? uri)
             || (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps))
         {
             return false;
@@ -84,7 +84,7 @@ internal static class OptionsValidation
             return false;
         }
 
-        if (Uri.TryCreate(endpoint, UriKind.Absolute, out var absolute)
+        if (Uri.TryCreate(endpoint, UriKind.Absolute, out Uri? absolute)
             && (absolute.Scheme == Uri.UriSchemeHttp || absolute.Scheme == Uri.UriSchemeHttps))
         {
             if (!TryRejectEndpointExtras(absolute, configPrefix, out error))
@@ -116,7 +116,7 @@ internal static class OptionsValidation
             return false;
         }
 
-        if (!Uri.TryCreate($"http://{endpoint}", UriKind.Absolute, out var hostPortUri)
+        if (!Uri.TryCreate($"http://{endpoint}", UriKind.Absolute, out Uri? hostPortUri)
             || string.IsNullOrWhiteSpace(hostPortUri.Host)
             || hostPortUri.Host.Contains(' ', StringComparison.Ordinal))
         {

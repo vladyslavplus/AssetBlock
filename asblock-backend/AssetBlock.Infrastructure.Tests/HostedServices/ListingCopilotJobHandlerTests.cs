@@ -3,10 +3,11 @@ using AssetBlock.Domain.Core.Constants;
 using AssetBlock.Domain.Core.Dto;
 using AssetBlock.Domain.Core.Entities;
 using AssetBlock.Domain.Core.Enums;
+using AssetBlock.Domain.Core.Primitives.AppSettingsOptions;
 using AssetBlock.Infrastructure.HostedServices.AssetProcessing.Handlers;
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Options;
 using NSubstitute;
-using AssetBlock.Domain.Core.Primitives.AppSettingsOptions;
 
 namespace AssetBlock.Infrastructure.Tests.HostedServices;
 
@@ -40,7 +41,7 @@ public sealed class ListingCopilotJobHandlerTests
         using var cts = new CancellationTokenSource();
         await cts.CancelAsync();
 
-        var act = async () => await _sut.Process(CreateContext(cts.Token), cts.Token);
+        Func<Task<AssetProcessingJobOutcome>> act = async () => await _sut.Process(CreateContext(cts.Token), cts.Token);
 
         await act.Should().ThrowAsync<OperationCanceledException>();
         await _orchestrator.DidNotReceive().Generate(Arg.Any<ListingSuggestionGenerationRequest>(), Arg.Any<CancellationToken>());
@@ -49,15 +50,15 @@ public sealed class ListingCopilotJobHandlerTests
     [Fact]
     public async Task Process_WhenMetadataMalformed_ShouldBeTerminal()
     {
-        var context = CreateContext();
+        AssetProcessingJobContext<ListingCopilotPayload> context = CreateContext();
         _assetStore.GetVersion(context.AssetId, context.AssetVersionId, Arg.Any<CancellationToken>())
             .Returns(CreateVersion(context));
         _analysisStore.GetByVersionId(context.AssetVersionId, Arg.Any<CancellationToken>())
             .Returns(CreateAnalysis(context.AssetVersionId, manifestJson: "{bad"));
 
-        var outcome = await _sut.Process(context, CancellationToken.None);
+        AssetProcessingJobOutcome outcome = await _sut.Process(context, CancellationToken.None);
 
-        var terminal = outcome.Should().BeOfType<AssetProcessingJobOutcome.TerminalFailure>().Subject;
+        AssetProcessingJobOutcome.TerminalFailure terminal = outcome.Should().BeOfType<AssetProcessingJobOutcome.TerminalFailure>().Subject;
         terminal.ErrorCode.Should().Be(ErrorCodes.INVALID_JOB_PAYLOAD);
         await _orchestrator.DidNotReceive().Generate(Arg.Any<ListingSuggestionGenerationRequest>(), Arg.Any<CancellationToken>());
     }
@@ -65,7 +66,7 @@ public sealed class ListingCopilotJobHandlerTests
     [Fact]
     public async Task Process_WhenAllowlistOverflows_ShouldBeTerminalWithoutCallingProvider()
     {
-        var context = CreateContext();
+        AssetProcessingJobContext<ListingCopilotPayload> context = CreateContext();
         _assetStore.GetVersion(context.AssetId, context.AssetVersionId, Arg.Any<CancellationToken>())
             .Returns(CreateVersion(context));
         _analysisStore.GetByVersionId(context.AssetVersionId, Arg.Any<CancellationToken>())
@@ -75,9 +76,9 @@ public sealed class ListingCopilotJobHandlerTests
                 .Select(i => $"cat-{i}")
                 .ToArray());
 
-        var outcome = await _sut.Process(context, CancellationToken.None);
+        AssetProcessingJobOutcome outcome = await _sut.Process(context, CancellationToken.None);
 
-        var terminal = outcome.Should().BeOfType<AssetProcessingJobOutcome.TerminalFailure>().Subject;
+        AssetProcessingJobOutcome.TerminalFailure terminal = outcome.Should().BeOfType<AssetProcessingJobOutcome.TerminalFailure>().Subject;
         terminal.ErrorCode.Should().Be(ErrorCodes.ERR_AI_ALLOWLIST_OVERFLOW);
         await _orchestrator.DidNotReceive().Generate(Arg.Any<ListingSuggestionGenerationRequest>(), Arg.Any<CancellationToken>());
     }
@@ -85,7 +86,7 @@ public sealed class ListingCopilotJobHandlerTests
     [Fact]
     public async Task Process_WhenSuccess_ShouldSendOnlyBoundedMetadataAndCommit()
     {
-        var context = CreateContext();
+        AssetProcessingJobContext<ListingCopilotPayload> context = CreateContext();
         _assetStore.GetVersion(context.AssetId, context.AssetVersionId, Arg.Any<CancellationToken>())
             .Returns(CreateVersion(context));
         _analysisStore.GetByVersionId(context.AssetVersionId, Arg.Any<CancellationToken>())
@@ -105,7 +106,7 @@ public sealed class ListingCopilotJobHandlerTests
             Arg.Any<ListingCopilotSuggestionWrite>(),
             Arg.Any<CancellationToken>()).Returns(true);
 
-        var outcome = await _sut.Process(context, CancellationToken.None);
+        AssetProcessingJobOutcome outcome = await _sut.Process(context, CancellationToken.None);
 
         outcome.Should().BeOfType<AssetProcessingJobOutcome.AtomicCommitted>();
         captured.Should().NotBeNull();
@@ -119,7 +120,7 @@ public sealed class ListingCopilotJobHandlerTests
     [Fact]
     public async Task Process_WhenProviderRetryable_ShouldPreserveRetryAfter()
     {
-        var context = CreateContext();
+        AssetProcessingJobContext<ListingCopilotPayload> context = CreateContext();
         _assetStore.GetVersion(context.AssetId, context.AssetVersionId, Arg.Any<CancellationToken>())
             .Returns(CreateVersion(context));
         _analysisStore.GetByVersionId(context.AssetVersionId, Arg.Any<CancellationToken>())
@@ -139,9 +140,9 @@ public sealed class ListingCopilotJobHandlerTests
                 TimeSpan.FromSeconds(9),
                 ErrorCodes.ERR_AI_RATE_LIMITED));
 
-        var outcome = await _sut.Process(context, CancellationToken.None);
+        AssetProcessingJobOutcome outcome = await _sut.Process(context, CancellationToken.None);
 
-        var retryable = outcome.Should().BeOfType<AssetProcessingJobOutcome.RetryableFailure>().Subject;
+        AssetProcessingJobOutcome.RetryableFailure retryable = outcome.Should().BeOfType<AssetProcessingJobOutcome.RetryableFailure>().Subject;
         retryable.ErrorCode.Should().Be(ErrorCodes.ERR_AI_RATE_LIMITED);
         retryable.RetryAfter.Should().Be(TimeSpan.FromSeconds(9));
     }
@@ -149,7 +150,7 @@ public sealed class ListingCopilotJobHandlerTests
     [Fact]
     public async Task Process_WhenLeaseLost_ShouldBeRetryable()
     {
-        var context = CreateContext();
+        AssetProcessingJobContext<ListingCopilotPayload> context = CreateContext();
         _assetStore.GetVersion(context.AssetId, context.AssetVersionId, Arg.Any<CancellationToken>())
             .Returns(CreateVersion(context));
         _analysisStore.GetByVersionId(context.AssetVersionId, Arg.Any<CancellationToken>())
@@ -164,16 +165,16 @@ public sealed class ListingCopilotJobHandlerTests
             Arg.Any<ListingCopilotSuggestionWrite>(),
             Arg.Any<CancellationToken>()).Returns(false);
 
-        var outcome = await _sut.Process(context, CancellationToken.None);
+        AssetProcessingJobOutcome outcome = await _sut.Process(context, CancellationToken.None);
 
-        var retryable = outcome.Should().BeOfType<AssetProcessingJobOutcome.RetryableFailure>().Subject;
+        AssetProcessingJobOutcome.RetryableFailure retryable = outcome.Should().BeOfType<AssetProcessingJobOutcome.RetryableFailure>().Subject;
         retryable.ErrorCode.Should().Be(ErrorCodes.LEASE_LOST);
     }
 
     [Fact]
     public async Task Process_WhenDisabled_ShouldBeTerminalAiDisabled()
     {
-        var context = CreateContext();
+        AssetProcessingJobContext<ListingCopilotPayload> context = CreateContext();
         _assetStore.GetVersion(context.AssetId, context.AssetVersionId, Arg.Any<CancellationToken>())
             .Returns(CreateVersion(context));
         _analysisStore.GetByVersionId(context.AssetVersionId, Arg.Any<CancellationToken>())
@@ -193,9 +194,9 @@ public sealed class ListingCopilotJobHandlerTests
                 null,
                 ErrorCodes.ERR_AI_DISABLED));
 
-        var outcome = await _sut.Process(context, CancellationToken.None);
+        AssetProcessingJobOutcome outcome = await _sut.Process(context, CancellationToken.None);
 
-        var terminal = outcome.Should().BeOfType<AssetProcessingJobOutcome.TerminalFailure>().Subject;
+        AssetProcessingJobOutcome.TerminalFailure terminal = outcome.Should().BeOfType<AssetProcessingJobOutcome.TerminalFailure>().Subject;
         terminal.ErrorCode.Should().Be(ErrorCodes.ERR_AI_DISABLED);
         await _copilotStore.DidNotReceive().TryCommitSucceeded(
             Arg.Any<Guid>(),
@@ -209,7 +210,7 @@ public sealed class ListingCopilotJobHandlerTests
     [Fact]
     public async Task Process_WhenProviderTerminal_ShouldBeTerminal()
     {
-        var context = CreateContext();
+        AssetProcessingJobContext<ListingCopilotPayload> context = CreateContext();
         _assetStore.GetVersion(context.AssetId, context.AssetVersionId, Arg.Any<CancellationToken>())
             .Returns(CreateVersion(context));
         _analysisStore.GetByVersionId(context.AssetVersionId, Arg.Any<CancellationToken>())
@@ -229,9 +230,9 @@ public sealed class ListingCopilotJobHandlerTests
                 null,
                 ErrorCodes.ERR_AI_INVALID_RESPONSE));
 
-        var outcome = await _sut.Process(context, CancellationToken.None);
+        AssetProcessingJobOutcome outcome = await _sut.Process(context, CancellationToken.None);
 
-        var terminal = outcome.Should().BeOfType<AssetProcessingJobOutcome.TerminalFailure>().Subject;
+        AssetProcessingJobOutcome.TerminalFailure terminal = outcome.Should().BeOfType<AssetProcessingJobOutcome.TerminalFailure>().Subject;
         terminal.ErrorCode.Should().Be(ErrorCodes.ERR_AI_INVALID_RESPONSE);
     }
 
@@ -299,8 +300,8 @@ public sealed class ListingCopilotJobHandlerTests
     [Fact]
     public async Task Process_WhenOpenRouterAndZeroDataRetentionFalse_ShouldOmitReadme()
     {
-        var aiOptions = Microsoft.Extensions.Options.Options.Create(new AiOptions { Enabled = true, Provider = "OpenRouter" });
-        var openRouterOptions = Microsoft.Extensions.Options.Options.Create(new OpenRouterOptions { ZeroDataRetention = false });
+        IOptions<AiOptions> aiOptions = Microsoft.Extensions.Options.Options.Create(new AiOptions { Enabled = true, Provider = "OpenRouter" });
+        IOptions<OpenRouterOptions> openRouterOptions = Microsoft.Extensions.Options.Options.Create(new OpenRouterOptions { ZeroDataRetention = false });
         var sut = new ListingCopilotJobHandler(
             _assetStore,
             _analysisStore,
@@ -310,7 +311,7 @@ public sealed class ListingCopilotJobHandlerTests
             openRouterOptions,
             NullLogger<ListingCopilotJobHandler>.Instance);
 
-        var context = CreateContext();
+        AssetProcessingJobContext<ListingCopilotPayload> context = CreateContext();
         _assetStore.GetVersion(context.AssetId, context.AssetVersionId, Arg.Any<CancellationToken>())
             .Returns(CreateVersion(context));
         _analysisStore.GetByVersionId(context.AssetVersionId, Arg.Any<CancellationToken>())
@@ -328,7 +329,7 @@ public sealed class ListingCopilotJobHandlerTests
     [Fact]
     public async Task Process_WhenOpenRouterAndZeroDataRetentionTrue_ShouldIncludeSanitizedReadme()
     {
-        var context = CreateContext();
+        AssetProcessingJobContext<ListingCopilotPayload> context = CreateContext();
         _assetStore.GetVersion(context.AssetId, context.AssetVersionId, Arg.Any<CancellationToken>())
             .Returns(CreateVersion(context));
         _analysisStore.GetByVersionId(context.AssetVersionId, Arg.Any<CancellationToken>())

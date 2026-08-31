@@ -47,7 +47,7 @@ public sealed class EnqueueListingCopilotCommandHandlerTests
         _copilotStore.GetOwnedVersion(versionId, ownerId, Arg.Any<CancellationToken>())
             .Returns((ListingCopilotOwnedVersion?)null);
 
-        var result = await _handler.Handle(new EnqueueListingCopilotCommand(versionId, ownerId), CancellationToken.None);
+        Result<ListingCopilotEnqueueResponse> result = await _handler.Handle(new EnqueueListingCopilotCommand(versionId, ownerId), CancellationToken.None);
 
         result.Status.Should().Be(ResultStatus.NotFound);
         result.Errors.Should().Contain(ErrorCodes.ERR_ASSET_NOT_FOUND);
@@ -70,11 +70,11 @@ public sealed class EnqueueListingCopilotCommandHandlerTests
             _jobStore,
             _registry,
             Microsoft.Extensions.Options.Options.Create(new AiOptions { Enabled = false, Provider = "OpenRouter" }));
-        var owned = Owned(AssetVersionProcessingStatus.READY, true);
+        ListingCopilotOwnedVersion owned = Owned(AssetVersionProcessingStatus.READY, true);
         _copilotStore.GetOwnedVersion(owned.AssetVersionId, Arg.Any<Guid>(), Arg.Any<CancellationToken>())
             .Returns(owned);
 
-        var result = await handler.Handle(
+        Result<ListingCopilotEnqueueResponse> result = await handler.Handle(
             new EnqueueListingCopilotCommand(owned.AssetVersionId, Guid.NewGuid()),
             CancellationToken.None);
 
@@ -94,11 +94,11 @@ public sealed class EnqueueListingCopilotCommandHandlerTests
     [Fact]
     public async Task Handle_WhenVersionNotReady_ShouldConflict()
     {
-        var owned = Owned(AssetVersionProcessingStatus.PENDING_MALWARE_SCAN, true);
+        ListingCopilotOwnedVersion owned = Owned(AssetVersionProcessingStatus.PENDING_MALWARE_SCAN, true);
         _copilotStore.GetOwnedVersion(owned.AssetVersionId, Arg.Any<Guid>(), Arg.Any<CancellationToken>())
             .Returns(owned);
 
-        var result = await _handler.Handle(
+        Result<ListingCopilotEnqueueResponse> result = await _handler.Handle(
             new EnqueueListingCopilotCommand(owned.AssetVersionId, Guid.NewGuid()),
             CancellationToken.None);
 
@@ -109,11 +109,11 @@ public sealed class EnqueueListingCopilotCommandHandlerTests
     [Fact]
     public async Task Handle_WhenAnalysisMissing_ShouldConflict()
     {
-        var owned = Owned(AssetVersionProcessingStatus.READY, false);
+        ListingCopilotOwnedVersion owned = Owned(AssetVersionProcessingStatus.READY, false);
         _copilotStore.GetOwnedVersion(owned.AssetVersionId, Arg.Any<Guid>(), Arg.Any<CancellationToken>())
             .Returns(owned);
 
-        var result = await _handler.Handle(
+        Result<ListingCopilotEnqueueResponse> result = await _handler.Handle(
             new EnqueueListingCopilotCommand(owned.AssetVersionId, Guid.NewGuid()),
             CancellationToken.None);
 
@@ -134,11 +134,11 @@ public sealed class EnqueueListingCopilotCommandHandlerTests
                 Provider = "not-a-provider",
                 PromptPolicyVersion = AiPromptPolicies.LISTING_COPILOT_V1
             }));
-        var owned = Owned(AssetVersionProcessingStatus.READY, true);
+        ListingCopilotOwnedVersion owned = Owned(AssetVersionProcessingStatus.READY, true);
         _copilotStore.GetOwnedVersion(owned.AssetVersionId, Arg.Any<Guid>(), Arg.Any<CancellationToken>())
             .Returns(owned);
 
-        var result = await handler.Handle(
+        Result<ListingCopilotEnqueueResponse> result = await handler.Handle(
             new EnqueueListingCopilotCommand(owned.AssetVersionId, Guid.NewGuid()),
             CancellationToken.None);
 
@@ -157,7 +157,7 @@ public sealed class EnqueueListingCopilotCommandHandlerTests
     [Fact]
     public async Task Handle_WhenEligibleTwice_ShouldReturnSameJobId()
     {
-        var owned = Owned(AssetVersionProcessingStatus.READY, true);
+        ListingCopilotOwnedVersion owned = Owned(AssetVersionProcessingStatus.READY, true);
         var jobId = Guid.NewGuid();
         _copilotStore.GetOwnedVersion(owned.AssetVersionId, Arg.Any<Guid>(), Arg.Any<CancellationToken>())
             .Returns(owned);
@@ -172,8 +172,8 @@ public sealed class EnqueueListingCopilotCommandHandlerTests
             Arg.Any<CancellationToken>()).Returns(jobId);
 
         var command = new EnqueueListingCopilotCommand(owned.AssetVersionId, Guid.NewGuid());
-        var first = await _handler.Handle(command, CancellationToken.None);
-        var second = await _handler.Handle(command, CancellationToken.None);
+        Result<ListingCopilotEnqueueResponse> first = await _handler.Handle(command, CancellationToken.None);
+        Result<ListingCopilotEnqueueResponse> second = await _handler.Handle(command, CancellationToken.None);
 
         first.Value.JobId.Should().Be(jobId);
         second.Value.JobId.Should().Be(jobId);
@@ -182,7 +182,7 @@ public sealed class EnqueueListingCopilotCommandHandlerTests
     [Fact]
     public async Task Handle_WhenCalledConcurrently_ShouldReturnSameJobId()
     {
-        var owned = Owned(AssetVersionProcessingStatus.READY, true);
+        ListingCopilotOwnedVersion owned = Owned(AssetVersionProcessingStatus.READY, true);
         var jobId = Guid.NewGuid();
         _copilotStore.GetOwnedVersion(owned.AssetVersionId, Arg.Any<Guid>(), Arg.Any<CancellationToken>())
             .Returns(owned);
@@ -198,7 +198,7 @@ public sealed class EnqueueListingCopilotCommandHandlerTests
             .Returns(jobId);
 
         var command = new EnqueueListingCopilotCommand(owned.AssetVersionId, Guid.NewGuid());
-        var results = await Task.WhenAll(
+        Result<ListingCopilotEnqueueResponse>[] results = await Task.WhenAll(
             _handler.Handle(command, CancellationToken.None),
             _handler.Handle(command, CancellationToken.None));
 

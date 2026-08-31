@@ -10,6 +10,7 @@ using AssetBlock.Domain.Core.Enums;
 using AwesomeAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
 using NSubstitute;
+using NSubstitute.Core;
 using NSubstitute.ExceptionExtensions;
 
 namespace AssetBlock.Application.Tests.UseCases.Payments;
@@ -30,7 +31,7 @@ public class CreateCheckoutSessionCommandHandlerTests
         _purchaseStoreMock = Substitute.For<IPurchaseStore>();
         _checkoutIntentStoreMock = Substitute.For<ICheckoutIntentStore>();
         _collectionStoreMock = Substitute.For<ICollectionStore>();
-        var unitOfWorkMock = Substitute.For<IUnitOfWork>();
+        IUnitOfWork unitOfWorkMock = Substitute.For<IUnitOfWork>();
         _purchaseStoreMock.GetPurchase(Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<CancellationToken>())
             .Returns((Purchase?)null);
         _checkoutIntentStoreMock.GetPendingForAsset(Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<CancellationToken>())
@@ -72,7 +73,7 @@ public class CreateCheckoutSessionCommandHandlerTests
         _assetStoreMock.GetCurrentVersionSnapshot(command.AssetId, Arg.Any<CancellationToken>())
             .Returns((AssetCurrentVersionSnapshot?)null);
 
-        var result = await _handler.Handle(command, CancellationToken.None);
+        Result<CreateCheckoutSessionResponse> result = await _handler.Handle(command, CancellationToken.None);
 
         result.IsSuccess.Should().BeFalse();
         result.Status.Should().Be(ResultStatus.NotFound);
@@ -84,11 +85,11 @@ public class CreateCheckoutSessionCommandHandlerTests
     {
         var userId = Guid.NewGuid();
         var command = new CreateCheckoutSessionCommand(Guid.NewGuid(), userId);
-        var snapshot = CreateSnapshot(command.AssetId, Guid.NewGuid(), deletedAt: DateTimeOffset.UtcNow);
+        AssetCurrentVersionSnapshot snapshot = CreateSnapshot(command.AssetId, Guid.NewGuid(), deletedAt: DateTimeOffset.UtcNow);
         _assetStoreMock.GetCurrentVersionSnapshot(command.AssetId, Arg.Any<CancellationToken>())
             .Returns(snapshot);
 
-        var result = await _handler.Handle(command, CancellationToken.None);
+        Result<CreateCheckoutSessionResponse> result = await _handler.Handle(command, CancellationToken.None);
 
         result.IsSuccess.Should().BeFalse();
         result.Status.Should().Be(ResultStatus.NotFound);
@@ -100,11 +101,11 @@ public class CreateCheckoutSessionCommandHandlerTests
     {
         var userId = Guid.NewGuid();
         var command = new CreateCheckoutSessionCommand(Guid.NewGuid(), userId);
-        var snapshot = CreateSnapshot(command.AssetId, authorId: userId);
+        AssetCurrentVersionSnapshot snapshot = CreateSnapshot(command.AssetId, authorId: userId);
         _assetStoreMock.GetCurrentVersionSnapshot(command.AssetId, Arg.Any<CancellationToken>())
             .Returns(snapshot);
 
-        var result = await _handler.Handle(command, CancellationToken.None);
+        Result<CreateCheckoutSessionResponse> result = await _handler.Handle(command, CancellationToken.None);
 
         result.IsSuccess.Should().BeFalse();
         result.Status.Should().Be(ResultStatus.Forbidden);
@@ -116,7 +117,7 @@ public class CreateCheckoutSessionCommandHandlerTests
     {
         var userId = Guid.NewGuid();
         var command = new CreateCheckoutSessionCommand(Guid.NewGuid(), userId);
-        var snapshot = CreateSnapshot(command.AssetId, Guid.NewGuid());
+        AssetCurrentVersionSnapshot snapshot = CreateSnapshot(command.AssetId, Guid.NewGuid());
         _assetStoreMock.GetCurrentVersionSnapshot(command.AssetId, Arg.Any<CancellationToken>())
             .Returns(snapshot);
         var purchase = new Purchase
@@ -130,7 +131,7 @@ public class CreateCheckoutSessionCommandHandlerTests
         };
         _purchaseStoreMock.GetPurchase(userId, command.AssetId, Arg.Any<CancellationToken>()).Returns(purchase);
 
-        var result = await _handler.Handle(command, CancellationToken.None);
+        Result<CreateCheckoutSessionResponse> result = await _handler.Handle(command, CancellationToken.None);
 
         result.IsSuccess.Should().BeFalse();
         result.Status.Should().Be(ResultStatus.Conflict);
@@ -143,14 +144,14 @@ public class CreateCheckoutSessionCommandHandlerTests
     public async Task Handle_WhenPaymentServiceThrows_ShouldReturnPaymentError()
     {
         var command = new CreateCheckoutSessionCommand(Guid.NewGuid(), Guid.NewGuid());
-        var snapshot = CreateSnapshot(command.AssetId, Guid.NewGuid());
+        AssetCurrentVersionSnapshot snapshot = CreateSnapshot(command.AssetId, Guid.NewGuid());
         _assetStoreMock.GetCurrentVersionSnapshot(command.AssetId, Arg.Any<CancellationToken>())
             .Returns(snapshot);
         _paymentServiceMock.CreateCheckoutSession(
                 Arg.Any<CheckoutSessionDraft>(), Arg.Any<CancellationToken>())
             .ThrowsAsync(new Exception("Stripe unavailable"));
 
-        var result = await _handler.Handle(command, CancellationToken.None);
+        Result<CreateCheckoutSessionResponse> result = await _handler.Handle(command, CancellationToken.None);
 
         result.IsSuccess.Should().BeFalse();
         result.ValidationErrors.Should().Contain(e => e.Identifier == ErrorCodes.ERR_PAYMENT_FAILED);
@@ -161,14 +162,14 @@ public class CreateCheckoutSessionCommandHandlerTests
     {
         const string sessionUrl = "https://checkout.stripe.com/pay/session_123";
         var command = new CreateCheckoutSessionCommand(Guid.NewGuid(), Guid.NewGuid());
-        var snapshot = CreateSnapshot(command.AssetId, Guid.NewGuid(), price: 29.99m);
+        AssetCurrentVersionSnapshot snapshot = CreateSnapshot(command.AssetId, Guid.NewGuid(), price: 29.99m);
         _assetStoreMock.GetCurrentVersionSnapshot(command.AssetId, Arg.Any<CancellationToken>())
             .Returns(snapshot);
         _paymentServiceMock.CreateCheckoutSession(
                 Arg.Any<CheckoutSessionDraft>(), Arg.Any<CancellationToken>())
             .Returns(new StripeCheckoutSession("cs_test_123", sessionUrl));
 
-        var result = await _handler.Handle(command, CancellationToken.None);
+        Result<CreateCheckoutSessionResponse> result = await _handler.Handle(command, CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
         result.Value.CheckoutUrl.Should().Be(sessionUrl);
@@ -179,8 +180,8 @@ public class CreateCheckoutSessionCommandHandlerTests
     {
         const string sessionUrl = "https://checkout.stripe.com/pay/resumed";
         var command = new CreateCheckoutSessionCommand(Guid.NewGuid(), Guid.NewGuid());
-        var snapshot = CreateSnapshot(command.AssetId, Guid.NewGuid());
-        var pendingIntent = CreatePendingIntent(command.UserId, snapshot);
+        AssetCurrentVersionSnapshot snapshot = CreateSnapshot(command.AssetId, Guid.NewGuid());
+        CheckoutIntent pendingIntent = CreatePendingIntent(command.UserId, snapshot);
         _assetStoreMock.GetCurrentVersionSnapshot(command.AssetId, Arg.Any<CancellationToken>())
             .Returns(snapshot);
         _checkoutIntentStoreMock.GetPendingForAsset(command.UserId, command.AssetId, Arg.Any<CancellationToken>())
@@ -190,7 +191,7 @@ public class CreateCheckoutSessionCommandHandlerTests
                 Arg.Any<CancellationToken>())
             .Returns(new StripeCheckoutSession("cs_test_resumed", sessionUrl));
 
-        var result = await _handler.Handle(command, CancellationToken.None);
+        Result<CreateCheckoutSessionResponse> result = await _handler.Handle(command, CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
         result.Value.CheckoutUrl.Should().Be(sessionUrl);
@@ -206,8 +207,8 @@ public class CreateCheckoutSessionCommandHandlerTests
     {
         const string sessionUrl = "https://checkout.stripe.com/pay/existing";
         var command = new CreateCheckoutSessionCommand(Guid.NewGuid(), Guid.NewGuid());
-        var snapshot = CreateSnapshot(command.AssetId, Guid.NewGuid());
-        var pendingIntent = CreatePendingIntent(command.UserId, snapshot);
+        AssetCurrentVersionSnapshot snapshot = CreateSnapshot(command.AssetId, Guid.NewGuid());
+        CheckoutIntent pendingIntent = CreatePendingIntent(command.UserId, snapshot);
         pendingIntent.StripeSessionId = "cs_test_existing";
         _assetStoreMock.GetCurrentVersionSnapshot(command.AssetId, Arg.Any<CancellationToken>())
             .Returns(snapshot);
@@ -219,7 +220,7 @@ public class CreateCheckoutSessionCommandHandlerTests
                 StripeConstants.CheckoutSessionStatuses.OPEN,
                 sessionUrl));
 
-        var result = await _handler.Handle(command, CancellationToken.None);
+        Result<CreateCheckoutSessionResponse> result = await _handler.Handle(command, CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
         result.Value.CheckoutUrl.Should().Be(sessionUrl);
@@ -244,10 +245,10 @@ public class CreateCheckoutSessionCommandHandlerTests
             sessionId);
         ArrangeNewCheckoutSession(command.AssetId);
 
-        var result = await _handler.Handle(command, CancellationToken.None);
+        Result<CreateCheckoutSessionResponse> result = await _handler.Handle(command, CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
-        var intent = CapturedCreatedIntent();
+        CheckoutIntent intent = CapturedCreatedIntent();
         intent.AttributionSource.Should().Be(AnalyticsTrafficSource.EXTERNAL);
         intent.AttributionReferrerHost.Should().Be("blog.example.com");
         intent.AttributionCollectionId.Should().BeNull();
@@ -269,10 +270,10 @@ public class CreateCheckoutSessionCommandHandlerTests
             .GetPublishedMemberSellerId(collectionId, command.AssetId, Arg.Any<CancellationToken>())
             .Returns(authorId);
 
-        var result = await _handler.Handle(command, CancellationToken.None);
+        Result<CreateCheckoutSessionResponse> result = await _handler.Handle(command, CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
-        var intent = CapturedCreatedIntent();
+        CheckoutIntent intent = CapturedCreatedIntent();
         intent.AttributionSource.Should().Be(AnalyticsTrafficSource.COLLECTION);
         intent.AttributionCollectionId.Should().Be(collectionId);
         intent.AttributionReferrerHost.Should().BeNull();
@@ -291,10 +292,10 @@ public class CreateCheckoutSessionCommandHandlerTests
             .GetPublishedMemberSellerId(collectionId, command.AssetId, Arg.Any<CancellationToken>())
             .Returns(Guid.NewGuid());
 
-        var result = await _handler.Handle(command, CancellationToken.None);
+        Result<CreateCheckoutSessionResponse> result = await _handler.Handle(command, CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
-        var intent = CapturedCreatedIntent();
+        CheckoutIntent intent = CapturedCreatedIntent();
         intent.AttributionSource.Should().BeNull();
         intent.AttributionCollectionId.Should().BeNull();
         intent.AttributionReferrerHost.Should().BeNull();
@@ -317,10 +318,10 @@ public class CreateCheckoutSessionCommandHandlerTests
             .GetPublishedMemberSellerId(collectionId, command.AssetId, Arg.Any<CancellationToken>())
             .Returns(Guid.NewGuid());
 
-        var result = await _handler.Handle(command, CancellationToken.None);
+        Result<CreateCheckoutSessionResponse> result = await _handler.Handle(command, CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
-        var intent = CapturedCreatedIntent();
+        CheckoutIntent intent = CapturedCreatedIntent();
         intent.AttributionSource.Should().BeNull();
         intent.AnalyticsVisitorId.Should().BeNull();
         intent.AnalyticsSessionId.Should().BeNull();
@@ -333,8 +334,8 @@ public class CreateCheckoutSessionCommandHandlerTests
             Guid.NewGuid(),
             Guid.NewGuid(),
             new CheckoutAttributionRequest(AnalyticsTrafficSource.SEARCH, CollectionId: null, ReferrerHost: null));
-        var snapshot = CreateSnapshot(command.AssetId, Guid.NewGuid());
-        var pendingIntent = CreatePendingIntent(command.UserId, snapshot);
+        AssetCurrentVersionSnapshot snapshot = CreateSnapshot(command.AssetId, Guid.NewGuid());
+        CheckoutIntent pendingIntent = CreatePendingIntent(command.UserId, snapshot);
         pendingIntent.AttributionSource = AnalyticsTrafficSource.CATALOG;
         _assetStoreMock.GetCurrentVersionSnapshot(command.AssetId, Arg.Any<CancellationToken>())
             .Returns(snapshot);
@@ -345,7 +346,7 @@ public class CreateCheckoutSessionCommandHandlerTests
                 Arg.Any<CancellationToken>())
             .Returns(new StripeCheckoutSession("cs_test_resumed", "https://checkout.stripe.com/pay/resumed"));
 
-        var result = await _handler.Handle(command, CancellationToken.None);
+        Result<CreateCheckoutSessionResponse> result = await _handler.Handle(command, CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
         pendingIntent.AttributionSource.Should().Be(AnalyticsTrafficSource.CATALOG);
@@ -368,14 +369,14 @@ public class CreateCheckoutSessionCommandHandlerTests
 
     private CheckoutIntent CapturedCreatedIntent()
     {
-        var call = _checkoutIntentStoreMock.ReceivedCalls()
+        ICall call = _checkoutIntentStoreMock.ReceivedCalls()
             .Single(c => c.GetMethodInfo().Name == nameof(ICheckoutIntentStore.CreateWithItemsAndReservations));
         return (CheckoutIntent)call.GetArguments()[0]!;
     }
 
     private static CheckoutIntent CreatePendingIntent(Guid userId, AssetCurrentVersionSnapshot snapshot)
     {
-        var now = DateTimeOffset.UtcNow;
+        DateTimeOffset now = DateTimeOffset.UtcNow;
         var intentId = Guid.NewGuid();
         return new CheckoutIntent
         {

@@ -12,12 +12,12 @@ public sealed class StorageHealthCheckTests
     [Fact]
     public async Task CheckHealthAsync_WhenListObjectsSucceeds_ShouldBeHealthy()
     {
-        var storage = Substitute.For<IAssetStorageService>();
+        IAssetStorageService storage = Substitute.For<IAssetStorageService>();
         storage.ListObjects(Arg.Any<string?>(), Arg.Any<CancellationToken>())
             .Returns(ToAsyncEnumerable(Array.Empty<Domain.Core.Primitives.Storage.StorageObjectInfo>()));
 
-        var sut = CreateSut(storage);
-        var result = await sut.CheckHealthAsync(new HealthCheckContext());
+        StorageHealthCheck sut = CreateSut(storage);
+        HealthCheckResult result = await sut.CheckHealthAsync(new HealthCheckContext());
 
         result.Status.Should().Be(HealthStatus.Healthy);
         storage.Received(1).ListObjects("__health__/", Arg.Any<CancellationToken>());
@@ -26,12 +26,12 @@ public sealed class StorageHealthCheckTests
     [Fact]
     public async Task CheckHealthAsync_WhenListObjectsFails_ShouldBeUnhealthy()
     {
-        var storage = Substitute.For<IAssetStorageService>();
+        IAssetStorageService storage = Substitute.For<IAssetStorageService>();
         storage.ListObjects(Arg.Any<string?>(), Arg.Any<CancellationToken>())
             .Returns(ThrowingAsyncEnumerable<Domain.Core.Primitives.Storage.StorageObjectInfo>(new InvalidOperationException("down")));
 
-        var sut = CreateSut(storage);
-        var result = await sut.CheckHealthAsync(new HealthCheckContext());
+        StorageHealthCheck sut = CreateSut(storage);
+        HealthCheckResult result = await sut.CheckHealthAsync(new HealthCheckContext());
 
         result.Status.Should().Be(HealthStatus.Unhealthy);
         result.Description.Should().Contain("storage provider");
@@ -46,7 +46,7 @@ public sealed class StorageHealthCheckTests
 
     private static async IAsyncEnumerable<T> ToAsyncEnumerable<T>(IEnumerable<T> items)
     {
-        foreach (var item in items)
+        foreach (T? item in items)
         {
             yield return item;
         }

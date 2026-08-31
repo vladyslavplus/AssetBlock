@@ -50,7 +50,7 @@ public class GetAssetsQueryHandlerTests
         var request = new GetAssetsRequest { Page = 1, PageSize = 10 };
         var query = new GetAssetsQuery(request);
 
-        var result = await _handler.Handle(query, CancellationToken.None);
+        Ardalis.Result.Result<PagedResult<AssetListItem>> result = await _handler.Handle(query, CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
         result.Value.Items.Should().HaveCount(1);
@@ -89,7 +89,7 @@ public class GetAssetsQueryHandlerTests
         var request = new GetAssetsRequest { Page = 1, PageSize = 10 };
         var query = new GetAssetsQuery(request);
 
-        var result = await _handler.Handle(query, CancellationToken.None);
+        Ardalis.Result.Result<PagedResult<AssetListItem>> result = await _handler.Handle(query, CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
         result.Value.Items.Should().HaveCount(1);
@@ -111,7 +111,7 @@ public class GetAssetsQueryHandlerTests
         var request = new GetAssetsRequest { Page = 1, PageSize = 10 };
         var query = new GetAssetsQuery(request);
 
-        var result = await _handler.Handle(query, CancellationToken.None);
+        Ardalis.Result.Result<PagedResult<AssetListItem>> result = await _handler.Handle(query, CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
         result.Value.Items.Should().BeEmpty();
@@ -150,7 +150,7 @@ public class GetAssetsQueryHandlerTests
             Tags = ["alpha, Beta ", "alpha"]
         });
 
-        var result = await _handler.Handle(query, CancellationToken.None);
+        Ardalis.Result.Result<PagedResult<AssetListItem>> result = await _handler.Handle(query, CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
         result.Value.Items[0].Description.Should().BeNull();

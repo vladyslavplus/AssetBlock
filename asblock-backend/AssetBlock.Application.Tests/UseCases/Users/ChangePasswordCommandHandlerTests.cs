@@ -45,11 +45,11 @@ public sealed class ChangePasswordCommandHandlerTests
     public async Task Handle_WhenCurrentPasswordIsInvalid_ShouldWriteBestEffortFailure()
     {
         var command = new ChangePasswordCommand(Guid.NewGuid(), "wrong", "new-password");
-        var user = CreateUser(command.UserId);
+        User user = CreateUser(command.UserId);
         _userStore.GetByIdForUpdate(command.UserId, Arg.Any<CancellationToken>()).Returns(user);
         _passwordHasher.Verify(command.CurrentPassword, user.PasswordHash).Returns(false);
 
-        var result = await _handler.Handle(command, CancellationToken.None);
+        Result result = await _handler.Handle(command, CancellationToken.None);
 
         result.Status.Should().Be(ResultStatus.Invalid);
         result.ValidationErrors.Should().Contain(e =>
@@ -71,7 +71,7 @@ public sealed class ChangePasswordCommandHandlerTests
     public async Task Handle_WhenValid_ShouldUpdatePasswordRevokesTokensEnqueuesEmailAndWritesAudit()
     {
         var command = new ChangePasswordCommand(Guid.NewGuid(), "current", "new-password");
-        var user = CreateUser(command.UserId);
+        User user = CreateUser(command.UserId);
         var notice = new EmailDispatchPayload(user.Email, user.Id, EmailTemplateKind.PASSWORD_CHANGED_NOTICE, "Password changed", "text", "<p>html</p>");
 
         _userStore.GetByIdForUpdate(command.UserId, Arg.Any<CancellationToken>()).Returns(user);
@@ -79,7 +79,7 @@ public sealed class ChangePasswordCommandHandlerTests
         _passwordHasher.Hash(command.NewPassword).Returns("new-hash");
         _emailComposer.CreatePasswordChangedNotice(user.Email, user.Id).Returns(notice);
 
-        var result = await _handler.Handle(command, CancellationToken.None);
+        Result result = await _handler.Handle(command, CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
         user.PasswordHash.Should().Be("new-hash");

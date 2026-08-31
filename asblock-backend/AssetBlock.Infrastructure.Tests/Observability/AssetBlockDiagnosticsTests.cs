@@ -1,7 +1,7 @@
-using AssetBlock.Domain.Core.Enums;
-using AssetBlock.Infrastructure.Observability;
 using System.Diagnostics.Metrics;
 using System.Globalization;
+using AssetBlock.Domain.Core.Enums;
+using AssetBlock.Infrastructure.Observability;
 
 namespace AssetBlock.Infrastructure.Tests.Observability;
 
@@ -236,7 +236,7 @@ public sealed class AssetBlockDiagnosticsTests : IDisposable
     {
         var clock = new ControllableTimeProvider(new DateTimeOffset(2026, 8, 25, 12, 0, 0, TimeSpan.Zero));
         AssetBlockDiagnostics.TimeProvider = clock;
-        var builtAt = clock.GetUtcNow().AddHours(-3);
+        DateTimeOffset builtAt = clock.GetUtcNow().AddHours(-3);
         AssetBlockDiagnostics.ObserveSignatureDatabase(builtAt);
 
         var first = GetMeasurements("assetblock.scan.signature_age").ToList();

@@ -1,11 +1,13 @@
 using Ardalis.Result;
 using AssetBlock.Application.Common;
+using AssetBlock.Application.Messaging;
 using AssetBlock.Domain.Abstractions.Services;
 using AssetBlock.Domain.Core.Constants;
 using AssetBlock.Domain.Core.Dto.Audit;
+using AssetBlock.Domain.Core.Dto.Email;
+using AssetBlock.Domain.Core.Entities;
 using AssetBlock.Domain.Core.Enums;
 using AssetBlock.Domain.Core.Exceptions;
-using AssetBlock.Application.Messaging;
 using Microsoft.Extensions.Logging;
 
 namespace AssetBlock.Application.UseCases.Auth.ConfirmEmailChange;
@@ -23,7 +25,7 @@ internal sealed class ConfirmEmailChangeCommandHandler(
 {
     public async Task<Result> Handle(ConfirmEmailChangeCommand request, CancellationToken cancellationToken)
     {
-        if (!linkProtector.TryUnprotect(request.ProtectedToken, EmailActionPurpose.EMAIL_CHANGE, out var claims))
+        if (!linkProtector.TryUnprotect(request.ProtectedToken, EmailActionPurpose.EMAIL_CHANGE, out EmailActionLinkClaims? claims))
         {
             logger.LogDebug("ConfirmEmailChange: token unprotect failed");
             await auditWriter.WriteBestEffort(new AuditEvent(
@@ -35,7 +37,7 @@ internal sealed class ConfirmEmailChangeCommandHandler(
             return ResultError.Error(ErrorCodes.ERR_EMAIL_ACTION_INVALID_OR_EXPIRED);
         }
 
-        var action = await emailActionStore.GetById(claims.ActionId, cancellationToken);
+        EmailAction? action = await emailActionStore.GetById(claims.ActionId, cancellationToken);
         if (action is null || action.Purpose != EmailActionPurpose.EMAIL_CHANGE)
         {
             logger.LogDebug("ConfirmEmailChange: action {ActionId} not found or wrong purpose", claims.ActionId);
@@ -48,7 +50,7 @@ internal sealed class ConfirmEmailChangeCommandHandler(
             return ResultError.Error(ErrorCodes.ERR_EMAIL_ACTION_INVALID_OR_EXPIRED);
         }
 
-        var user = await userStore.GetByIdForUpdate(action.UserId, cancellationToken);
+        User? user = await userStore.GetByIdForUpdate(action.UserId, cancellationToken);
         if (user is null)
         {
             logger.LogDebug("ConfirmEmailChange: user {UserId} not found", action.UserId);
@@ -77,7 +79,7 @@ internal sealed class ConfirmEmailChangeCommandHandler(
             return ResultError.Error(ErrorCodes.ERR_EMAIL_ACTION_INVALID_OR_EXPIRED);
         }
 
-        bool consumed = false;
+        var consumed = false;
         try
         {
             await unitOfWork.ExecuteInTransaction(async ct =>
@@ -95,7 +97,7 @@ internal sealed class ConfirmEmailChangeCommandHandler(
                     user.EmailVerifiedAt = DateTimeOffset.UtcNow;
                     await userStore.Update(user, ct);
                     await jwtTokenService.RevokeAllRefreshTokens(user.Id, ct);
-                    var notice = emailComposer.CreateEmailChangedNotice(oldEmail, user.Id);
+                    EmailDispatchPayload notice = emailComposer.CreateEmailChangedNotice(oldEmail, user.Id);
                     await outboxStore.Enqueue(OutboxMessageTypes.EMAIL_DISPATCH, notice, ct);
                     await auditWriter.Write(new AuditEvent(
                         AuditActions.AUTH_EMAIL_CHANGE_CONFIRM,

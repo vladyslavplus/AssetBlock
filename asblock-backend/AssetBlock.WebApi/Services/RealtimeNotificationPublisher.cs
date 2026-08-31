@@ -94,7 +94,7 @@ public sealed class RealtimeNotificationPublisher(
         string metadataJson,
         CancellationToken cancellationToken = default)
     {
-        var existing = await notificationStore.GetBySourceOutboxMessageId(sourceOutboxMessageId, cancellationToken);
+        UserNotification? existing = await notificationStore.GetBySourceOutboxMessageId(sourceOutboxMessageId, cancellationToken);
         if (existing is null && metadataJson.Length <= NotificationConstraints.MAX_METADATA_JSON_LENGTH)
         {
             var row = new UserNotification

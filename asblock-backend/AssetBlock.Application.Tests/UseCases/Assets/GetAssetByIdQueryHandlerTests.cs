@@ -17,7 +17,7 @@ public class GetAssetByIdQueryHandlerTests
     public GetAssetByIdQueryHandlerTests()
     {
         _assetStoreMock = Substitute.For<IAssetStore>();
-        var reviewStoreMock = Substitute.For<IReviewStore>();
+        IReviewStore reviewStoreMock = Substitute.For<IReviewStore>();
         reviewStoreMock.GetAverageRatingForAsset(Arg.Any<Guid>(), Arg.Any<CancellationToken>()).Returns(0.0);
         _handler = new GetAssetByIdQueryHandler(_assetStoreMock, reviewStoreMock);
     }
@@ -30,7 +30,7 @@ public class GetAssetByIdQueryHandlerTests
         _assetStoreMock.GetById(query.Id, Arg.Any<CancellationToken>()).Returns((Asset?)null);
 
         // Act
-        var result = await _handler.Handle(query, CancellationToken.None);
+        Result<AssetDetailItem> result = await _handler.Handle(query, CancellationToken.None);
 
         result.Status.Should().Be(ResultStatus.NotFound);
         result.Errors.Should().Contain(ErrorCodes.ERR_ASSET_NOT_FOUND);
@@ -50,7 +50,7 @@ public class GetAssetByIdQueryHandlerTests
         };
         _assetStoreMock.GetById(assetId, Arg.Any<CancellationToken>()).Returns(asset);
 
-        var result = await _handler.Handle(new GetAssetByIdQuery(assetId), CancellationToken.None);
+        Result<AssetDetailItem> result = await _handler.Handle(new GetAssetByIdQuery(assetId), CancellationToken.None);
 
         result.Status.Should().Be(ResultStatus.NotFound);
         result.Errors.Should().Contain(ErrorCodes.ERR_ASSET_NOT_FOUND);
@@ -80,7 +80,7 @@ public class GetAssetByIdQueryHandlerTests
         _assetStoreMock.GetCurrentVersionSnapshot(assetId, Arg.Any<CancellationToken>())
             .Returns((AssetCurrentVersionSnapshot?)null);
 
-        var result = await _handler.Handle(new GetAssetByIdQuery(assetId), CancellationToken.None);
+        Result<AssetDetailItem> result = await _handler.Handle(new GetAssetByIdQuery(assetId), CancellationToken.None);
 
         result.Status.Should().Be(ResultStatus.NotFound);
         result.Errors.Should().Contain(ErrorCodes.ERR_ASSET_NOT_FOUND);
@@ -93,7 +93,7 @@ public class GetAssetByIdQueryHandlerTests
         var authorId = Guid.NewGuid();
         var categoryId = Guid.NewGuid();
         var assetId = Guid.NewGuid();
-        var now = DateTimeOffset.UtcNow;
+        DateTimeOffset now = DateTimeOffset.UtcNow;
 
         var category = new Category { Id = categoryId, Name = "Audio", Slug = "audio" };
         var author = new User
@@ -142,7 +142,7 @@ public class GetAssetByIdQueryHandlerTests
         _assetStoreMock.GetCurrentVersionSnapshot(assetId, Arg.Any<CancellationToken>()).Returns(snapshot);
 
         // Act
-        var result = await _handler.Handle(query, CancellationToken.None);
+        Result<AssetDetailItem> result = await _handler.Handle(query, CancellationToken.None);
 
         // Assert
         result.IsSuccess.Should().BeTrue();

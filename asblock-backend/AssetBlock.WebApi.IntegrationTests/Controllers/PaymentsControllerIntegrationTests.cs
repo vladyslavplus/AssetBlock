@@ -17,8 +17,8 @@ public sealed class PaymentsControllerIntegrationTests(IntegrationTestFixture fi
     [Fact]
     public async Task CreateCheckout_WithoutAuth_ShouldReturn401()
     {
-        var client = fixture.Factory.CreateClient();
-        var response = await client.PostAsJsonAsync(
+        HttpClient client = fixture.Factory.CreateClient();
+        HttpResponseMessage response = await client.PostAsJsonAsync(
             new Uri("/api/payments/checkout", UriKind.Relative),
             new CreateCheckoutRequest(Guid.NewGuid()));
 
@@ -29,7 +29,7 @@ public sealed class PaymentsControllerIntegrationTests(IntegrationTestFixture fi
     public async Task CreateCheckout_WithAuth_WhenAssetMissing_ShouldReturnNotFound()
     {
         (HttpClient client, _) = await IntegrationTestAuth.RegisterVerifiedAndAuthenticateAsync(fixture.Factory);
-        var response = await client.PostAsJsonAsync(
+        HttpResponseMessage response = await client.PostAsJsonAsync(
             new Uri("/api/payments/checkout", UriKind.Relative),
             new CreateCheckoutRequest(Guid.Parse("d4e5f6a7-b8c9-0123-def0-456789abcdef")));
 
@@ -43,8 +43,8 @@ public sealed class PaymentsControllerIntegrationTests(IntegrationTestFixture fi
     [Fact]
     public async Task Webhook_WithInvalidPayload_ShouldReturnBadRequest()
     {
-        var client = fixture.Factory.CreateClient();
-        var response = await client.PostAsync(
+        HttpClient client = fixture.Factory.CreateClient();
+        HttpResponseMessage response = await client.PostAsync(
             new Uri("/api/payments/webhook", UriKind.Relative),
             new StringContent("{}", System.Text.Encoding.UTF8, "application/json"));
 
@@ -57,10 +57,10 @@ public sealed class PaymentsControllerIntegrationTests(IntegrationTestFixture fi
     [Fact]
     public async Task GetCheckoutStatus_WithoutAuth_ShouldReturn401()
     {
-        var client = fixture.Factory.CreateClient();
+        HttpClient client = fixture.Factory.CreateClient();
         var intentId = Guid.NewGuid();
 
-        var response = await client.GetAsync(
+        HttpResponseMessage response = await client.GetAsync(
             new Uri($"/api/payments/checkout/{intentId}/status", UriKind.Relative));
 
         response.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
@@ -69,16 +69,16 @@ public sealed class PaymentsControllerIntegrationTests(IntegrationTestFixture fi
     [Fact]
     public async Task GetCheckoutStatus_WhenForeignIntent_ShouldReturn404()
     {
-        (HttpClient _, string user1Username) = await IntegrationTestAuth.RegisterVerifiedAndAuthenticateAsync(fixture.Factory);
+        (HttpClient _, var user1Username) = await IntegrationTestAuth.RegisterVerifiedAndAuthenticateAsync(fixture.Factory);
         (HttpClient user2Client, _) = await IntegrationTestAuth.RegisterVerifiedAndAuthenticateAsync(fixture.Factory);
-        var scopeFactory = fixture.Factory.Services.GetRequiredService<IServiceScopeFactory>();
-        var user1Id = await AssetVersionsSeed.GetUserIdAsync(scopeFactory, user1Username);
-        var (assetId, _) = await AssetVersionsSeed.SeedAssetWithVersionsAsync(scopeFactory, user1Id, price: 9.99m);
+        IServiceScopeFactory scopeFactory = fixture.Factory.Services.GetRequiredService<IServiceScopeFactory>();
+        Guid user1Id = await AssetVersionsSeed.GetUserIdAsync(scopeFactory, user1Username);
+        (Guid assetId, List<Guid> _) = await AssetVersionsSeed.SeedAssetWithVersionsAsync(scopeFactory, user1Id, price: 9.99m);
         var intentId = Guid.NewGuid();
 
-        await using (var scope = fixture.Factory.Services.CreateAsyncScope())
+        await using (AsyncServiceScope scope = fixture.Factory.Services.CreateAsyncScope())
         {
-            var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+            ApplicationDbContext db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
             db.CheckoutIntents.Add(new CheckoutIntent
             {
                 Id = intentId,
@@ -94,7 +94,7 @@ public sealed class PaymentsControllerIntegrationTests(IntegrationTestFixture fi
             await db.SaveChangesAsync();
         }
 
-        var response = await user2Client.GetAsync(
+        HttpResponseMessage response = await user2Client.GetAsync(
             new Uri($"/api/payments/checkout/{intentId}/status", UriKind.Relative));
 
         response.StatusCode.Should().Be(HttpStatusCode.NotFound);
@@ -103,15 +103,15 @@ public sealed class PaymentsControllerIntegrationTests(IntegrationTestFixture fi
     [Fact]
     public async Task GetCheckoutStatus_WhenPendingIntent_ShouldReturnPending()
     {
-        (HttpClient client, string username) = await IntegrationTestAuth.RegisterVerifiedAndAuthenticateAsync(fixture.Factory);
-        var scopeFactory = fixture.Factory.Services.GetRequiredService<IServiceScopeFactory>();
-        var userId = await AssetVersionsSeed.GetUserIdAsync(scopeFactory, username);
-        var (assetId, _) = await AssetVersionsSeed.SeedAssetWithVersionsAsync(scopeFactory, userId, price: 5m);
+        (HttpClient client, var username) = await IntegrationTestAuth.RegisterVerifiedAndAuthenticateAsync(fixture.Factory);
+        IServiceScopeFactory scopeFactory = fixture.Factory.Services.GetRequiredService<IServiceScopeFactory>();
+        Guid userId = await AssetVersionsSeed.GetUserIdAsync(scopeFactory, username);
+        (Guid assetId, List<Guid> _) = await AssetVersionsSeed.SeedAssetWithVersionsAsync(scopeFactory, userId, price: 5m);
         var intentId = Guid.NewGuid();
 
-        await using (var scope = fixture.Factory.Services.CreateAsyncScope())
+        await using (AsyncServiceScope scope = fixture.Factory.Services.CreateAsyncScope())
         {
-            var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+            ApplicationDbContext db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
             db.CheckoutIntents.Add(new CheckoutIntent
             {
                 Id = intentId,
@@ -127,11 +127,11 @@ public sealed class PaymentsControllerIntegrationTests(IntegrationTestFixture fi
             await db.SaveChangesAsync();
         }
 
-        var response = await client.GetAsync(
+        HttpResponseMessage response = await client.GetAsync(
             new Uri($"/api/payments/checkout/{intentId}/status", UriKind.Relative));
 
         response.StatusCode.Should().Be(HttpStatusCode.OK);
-        var body = await response.Content.ReadFromJsonAsync<GetCheckoutStatusResponse>(IntegrationTestAuth.JsonOptions);
+        GetCheckoutStatusResponse? body = await response.Content.ReadFromJsonAsync<GetCheckoutStatusResponse>(IntegrationTestAuth.JsonOptions);
         body.Should().NotBeNull();
         body.Status.Should().Be("pending");
         body.CheckoutIntentId.Should().Be(intentId);
@@ -141,15 +141,15 @@ public sealed class PaymentsControllerIntegrationTests(IntegrationTestFixture fi
     [Fact]
     public async Task GetCheckoutStatus_WhenCancelledIntent_ShouldReturnCancelled()
     {
-        (HttpClient client, string username) = await IntegrationTestAuth.RegisterVerifiedAndAuthenticateAsync(fixture.Factory);
-        var scopeFactory = fixture.Factory.Services.GetRequiredService<IServiceScopeFactory>();
-        var userId = await AssetVersionsSeed.GetUserIdAsync(scopeFactory, username);
-        var (assetId, _) = await AssetVersionsSeed.SeedAssetWithVersionsAsync(scopeFactory, userId, price: 8m);
+        (HttpClient client, var username) = await IntegrationTestAuth.RegisterVerifiedAndAuthenticateAsync(fixture.Factory);
+        IServiceScopeFactory scopeFactory = fixture.Factory.Services.GetRequiredService<IServiceScopeFactory>();
+        Guid userId = await AssetVersionsSeed.GetUserIdAsync(scopeFactory, username);
+        (Guid assetId, List<Guid> _) = await AssetVersionsSeed.SeedAssetWithVersionsAsync(scopeFactory, userId, price: 8m);
         var intentId = Guid.NewGuid();
 
-        await using (var scope = fixture.Factory.Services.CreateAsyncScope())
+        await using (AsyncServiceScope scope = fixture.Factory.Services.CreateAsyncScope())
         {
-            var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+            ApplicationDbContext db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
             db.CheckoutIntents.Add(new CheckoutIntent
             {
                 Id = intentId,
@@ -165,11 +165,11 @@ public sealed class PaymentsControllerIntegrationTests(IntegrationTestFixture fi
             await db.SaveChangesAsync();
         }
 
-        var response = await client.GetAsync(
+        HttpResponseMessage response = await client.GetAsync(
             new Uri($"/api/payments/checkout/{intentId}/status", UriKind.Relative));
 
         response.StatusCode.Should().Be(HttpStatusCode.OK);
-        var body = await response.Content.ReadFromJsonAsync<GetCheckoutStatusResponse>(IntegrationTestAuth.JsonOptions);
+        GetCheckoutStatusResponse? body = await response.Content.ReadFromJsonAsync<GetCheckoutStatusResponse>(IntegrationTestAuth.JsonOptions);
         body.Should().NotBeNull();
         body.Status.Should().Be("cancelled");
         body.CheckoutIntentId.Should().Be(intentId);

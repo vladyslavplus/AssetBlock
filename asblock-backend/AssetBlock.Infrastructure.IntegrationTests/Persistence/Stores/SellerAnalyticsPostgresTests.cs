@@ -17,18 +17,18 @@ public sealed class SellerAnalyticsPostgresTests(PostgresFixture fixture)
     private static async Task<(User Seller, User Buyer, Category Category, Asset Asset1, AssetVersion Version1)>
         SeedSellerBuyerAsset(ApplicationDbContext db, string suffix = "")
     {
-        var seller = TestData.CreateUser($"seller{suffix}", $"seller{suffix}@test.local");
-        var buyer = TestData.CreateUser($"buyer{suffix}", $"buyer{suffix}@test.local");
-        var category = TestData.CreateCategory($"cat{suffix}", $"cat{suffix}");
+        User seller = TestData.CreateUser($"seller{suffix}", $"seller{suffix}@test.local");
+        User buyer = TestData.CreateUser($"buyer{suffix}", $"buyer{suffix}@test.local");
+        Category category = TestData.CreateCategory($"cat{suffix}", $"cat{suffix}");
         db.Users.AddRange(seller, buyer);
         db.Categories.Add(category);
         await db.SaveChangesAsync();
 
-        var asset = TestData.CreateAsset(seller.Id, category.Id, title: $"Asset {suffix}", price: 10m);
+        Asset asset = TestData.CreateAsset(seller.Id, category.Id, title: $"Asset {suffix}", price: 10m);
         db.Assets.Add(asset);
         await db.SaveChangesAsync();
 
-        var version = TestData.CreateAssetVersion(asset.Id);
+        AssetVersion version = TestData.CreateAssetVersion(asset.Id);
         db.AssetVersions.Add(version);
         await db.SaveChangesAsync();
 
@@ -120,7 +120,7 @@ public sealed class SellerAnalyticsPostgresTests(PostgresFixture fixture)
         DateTimeOffset purchasedAt)
     {
         var bundleStore = new BundleStore(db);
-        var (bundle, revision) = await bundleStore.CreateWithRevision(
+        (Bundle? bundle, BundleRevision? revision) = await bundleStore.CreateWithRevision(
             sellerId,
             $"Bundle-{Guid.NewGuid():N}",
             null,
@@ -216,7 +216,7 @@ public sealed class SellerAnalyticsPostgresTests(PostgresFixture fixture)
         DateTimeOffset from,
         DateTimeOffset to)
     {
-        var compFrom = from.AddDays(-(to - from).TotalDays);
+        DateTimeOffset compFrom = from.AddDays(-(to - from).TotalDays);
         return await store.GetOverviewSnapshot(
             sellerId, from, to, compFrom, from, 5, AnalyticsGranularity.DAY);
     }
@@ -225,14 +225,14 @@ public sealed class SellerAnalyticsPostgresTests(PostgresFixture fixture)
     [Fact]
     public async Task GetOverviewSnapshot_EmptySeller_ReturnsAllZeros()
     {
-        await using var db = await fixture.CreateCleanDbContext();
-        var (seller, _, _, _, _) = await SeedSellerBuyerAsset(db, "empty");
+        await using ApplicationDbContext db = await fixture.CreateCleanDbContext();
+        (User? seller, User _, Category _, Asset _, AssetVersion _) = await SeedSellerBuyerAsset(db, "empty");
 
         var store = new SellerAnalyticsStore(db);
         var from = new DateTimeOffset(2024, 1, 1, 0, 0, 0, TimeSpan.Zero);
         var to = new DateTimeOffset(2024, 1, 11, 0, 0, 0, TimeSpan.Zero);
 
-        var snapshot = await GetSnapshot(store, seller.Id, from, to);
+        SellerAnalyticsOverviewSnapshot snapshot = await GetSnapshot(store, seller.Id, from, to);
 
         snapshot.CurrentFacts.GrossRevenue.Should().Be(0);
         snapshot.CurrentFacts.Orders.Should().Be(0);
@@ -243,8 +243,8 @@ public sealed class SellerAnalyticsPostgresTests(PostgresFixture fixture)
     [Fact]
     public async Task GetOverviewSnapshot_SingleDirectOrder_ReturnsCorrectRevenue()
     {
-        await using var db = await fixture.CreateCleanDbContext();
-        var (seller, buyer, _, asset, version) = await SeedSellerBuyerAsset(db, "direct");
+        await using ApplicationDbContext db = await fixture.CreateCleanDbContext();
+        (User? seller, User? buyer, Category _, Asset? asset, AssetVersion? version) = await SeedSellerBuyerAsset(db, "direct");
 
         var purchasedAt = new DateTimeOffset(2024, 3, 15, 10, 0, 0, TimeSpan.Zero);
         AddDirectOrder(db, buyer.Id, asset, version, seller.Id, 9.99m, purchasedAt);
@@ -254,8 +254,8 @@ public sealed class SellerAnalyticsPostgresTests(PostgresFixture fixture)
         var from = new DateTimeOffset(2024, 3, 1, 0, 0, 0, TimeSpan.Zero);
         var to = new DateTimeOffset(2024, 4, 1, 0, 0, 0, TimeSpan.Zero);
 
-        var snapshot = await GetSnapshot(store, seller.Id, from, to);
-        var facts = snapshot.CurrentFacts;
+        SellerAnalyticsOverviewSnapshot snapshot = await GetSnapshot(store, seller.Id, from, to);
+        SellerAnalyticsRawFacts facts = snapshot.CurrentFacts;
 
         facts.GrossRevenue.Should().Be(9.99m);
         facts.Orders.Should().Be(1);
@@ -268,21 +268,21 @@ public sealed class SellerAnalyticsPostgresTests(PostgresFixture fixture)
     [Fact]
     public async Task GetOverviewSnapshot_BundleOrder2Assets_Counts1Order2Units()
     {
-        await using var db = await fixture.CreateCleanDbContext();
-        var seller = TestData.CreateUser("bseller", "bseller@test.local");
-        var buyer = TestData.CreateUser("bbuyer", "bbuyer@test.local");
-        var category = TestData.CreateCategory("bcat", "bcat");
+        await using ApplicationDbContext db = await fixture.CreateCleanDbContext();
+        User seller = TestData.CreateUser("bseller", "bseller@test.local");
+        User buyer = TestData.CreateUser("bbuyer", "bbuyer@test.local");
+        Category category = TestData.CreateCategory("bcat", "bcat");
         db.Users.AddRange(seller, buyer);
         db.Categories.Add(category);
         await db.SaveChangesAsync();
 
-        var a1 = TestData.CreateAsset(seller.Id, category.Id, "BundleA1", 5m);
-        var a2 = TestData.CreateAsset(seller.Id, category.Id, "BundleA2", 5m);
+        Asset a1 = TestData.CreateAsset(seller.Id, category.Id, "BundleA1", 5m);
+        Asset a2 = TestData.CreateAsset(seller.Id, category.Id, "BundleA2", 5m);
         db.Assets.AddRange(a1, a2);
         await db.SaveChangesAsync();
 
-        var v1 = TestData.CreateAssetVersion(a1.Id);
-        var v2 = TestData.CreateAssetVersion(a2.Id);
+        AssetVersion v1 = TestData.CreateAssetVersion(a1.Id);
+        AssetVersion v2 = TestData.CreateAssetVersion(a2.Id);
         db.AssetVersions.AddRange(v1, v2);
         await db.SaveChangesAsync();
 
@@ -296,7 +296,7 @@ public sealed class SellerAnalyticsPostgresTests(PostgresFixture fixture)
         var from = new DateTimeOffset(2024, 5, 1, 0, 0, 0, TimeSpan.Zero);
         var to = new DateTimeOffset(2024, 6, 1, 0, 0, 0, TimeSpan.Zero);
 
-        var facts = (await GetSnapshot(store, seller.Id, from, to)).CurrentFacts;
+        SellerAnalyticsRawFacts facts = (await GetSnapshot(store, seller.Id, from, to)).CurrentFacts;
 
         facts.Orders.Should().Be(1);
         facts.Units.Should().Be(2);
@@ -308,9 +308,9 @@ public sealed class SellerAnalyticsPostgresTests(PostgresFixture fixture)
     [Fact]
     public async Task GetOverviewSnapshot_OtherSellerOrder_NotCounted()
     {
-        await using var db = await fixture.CreateCleanDbContext();
-        var (sellerA, buyer, _, assetA, versionA) = await SeedSellerBuyerAsset(db, "isol-a");
-        var (sellerB, _, _, assetB, versionB) = await SeedSellerBuyerAsset(db, "isol-b");
+        await using ApplicationDbContext db = await fixture.CreateCleanDbContext();
+        (User? sellerA, User? buyer, Category _, Asset? assetA, AssetVersion? versionA) = await SeedSellerBuyerAsset(db, "isol-a");
+        (User? sellerB, User _, Category _, Asset? assetB, AssetVersion? versionB) = await SeedSellerBuyerAsset(db, "isol-b");
 
         var purchasedAt = new DateTimeOffset(2024, 2, 1, 0, 0, 0, TimeSpan.Zero);
         AddDirectOrder(db, buyer.Id, assetA, versionA, sellerA.Id, 15m, purchasedAt);
@@ -321,8 +321,8 @@ public sealed class SellerAnalyticsPostgresTests(PostgresFixture fixture)
         var from = new DateTimeOffset(2024, 2, 1, 0, 0, 0, TimeSpan.Zero);
         var to = new DateTimeOffset(2024, 3, 1, 0, 0, 0, TimeSpan.Zero);
 
-        var factsA = (await GetSnapshot(store, sellerA.Id, from, to)).CurrentFacts;
-        var factsB = (await GetSnapshot(store, sellerB.Id, from, to)).CurrentFacts;
+        SellerAnalyticsRawFacts factsA = (await GetSnapshot(store, sellerA.Id, from, to)).CurrentFacts;
+        SellerAnalyticsRawFacts factsB = (await GetSnapshot(store, sellerB.Id, from, to)).CurrentFacts;
 
         factsA.GrossRevenue.Should().Be(15m);
         factsA.Orders.Should().Be(1);
@@ -334,17 +334,17 @@ public sealed class SellerAnalyticsPostgresTests(PostgresFixture fixture)
     [Fact]
     public async Task GetOverviewSnapshot_CustomerMetrics_ComputedCorrectly()
     {
-        await using var db = await fixture.CreateCleanDbContext();
-        var (seller, _, _, asset, version) = await SeedSellerBuyerAsset(db, "cust");
+        await using ApplicationDbContext db = await fixture.CreateCleanDbContext();
+        (User? seller, User _, Category _, Asset? asset, AssetVersion? version) = await SeedSellerBuyerAsset(db, "cust");
 
-        var buyer1 = TestData.CreateUser("buyer1-c", "buyer1@cust.test");
-        var buyer2 = TestData.CreateUser("buyer2-c", "buyer2@cust.test");
-        var buyer3 = TestData.CreateUser("buyer3-c", "buyer3@cust.test");
+        User buyer1 = TestData.CreateUser("buyer1-c", "buyer1@cust.test");
+        User buyer2 = TestData.CreateUser("buyer2-c", "buyer2@cust.test");
+        User buyer3 = TestData.CreateUser("buyer3-c", "buyer3@cust.test");
         db.Users.AddRange(buyer1, buyer2, buyer3);
         await db.SaveChangesAsync();
 
         var periodStart = new DateTimeOffset(2024, 6, 1, 0, 0, 0, TimeSpan.Zero);
-        var beforePeriod = periodStart.AddDays(-10);
+        DateTimeOffset beforePeriod = periodStart.AddDays(-10);
 
         AddDirectOrder(db, buyer1.Id, asset, version, seller.Id, 10m, beforePeriod);
         await db.SaveChangesAsync();
@@ -358,7 +358,7 @@ public sealed class SellerAnalyticsPostgresTests(PostgresFixture fixture)
         await db.SaveChangesAsync();
 
         var store = new SellerAnalyticsStore(db);
-        var facts = (await GetSnapshot(store, seller.Id, periodStart, periodStart.AddDays(30))).CurrentFacts;
+        SellerAnalyticsRawFacts facts = (await GetSnapshot(store, seller.Id, periodStart, periodStart.AddDays(30))).CurrentFacts;
 
         facts.UniqueCustomers.Should().Be(3);
         facts.NewCustomers.Should().Be(2);
@@ -369,8 +369,8 @@ public sealed class SellerAnalyticsPostgresTests(PostgresFixture fixture)
     [Fact]
     public async Task GetOverviewSnapshot_DaySeries_OrdersGroupedByUtcDay()
     {
-        await using var db = await fixture.CreateCleanDbContext();
-        var (seller, buyer, _, asset, version) = await SeedSellerBuyerAsset(db, "series");
+        await using ApplicationDbContext db = await fixture.CreateCleanDbContext();
+        (User? seller, User? buyer, Category _, Asset? asset, AssetVersion? version) = await SeedSellerBuyerAsset(db, "series");
 
         var day1Start = new DateTimeOffset(2024, 4, 10, 5, 0, 0, TimeSpan.Zero);
         var day1End = new DateTimeOffset(2024, 4, 10, 23, 59, 59, TimeSpan.Zero);
@@ -383,7 +383,7 @@ public sealed class SellerAnalyticsPostgresTests(PostgresFixture fixture)
         var from = new DateTimeOffset(2024, 4, 10, 0, 0, 0, TimeSpan.Zero);
         var to = new DateTimeOffset(2024, 4, 11, 0, 0, 0, TimeSpan.Zero);
 
-        var series = (await GetSnapshot(store, seller.Id, from, to)).DaySeries;
+        IReadOnlyList<AnalyticsDayBucket> series = (await GetSnapshot(store, seller.Id, from, to)).DaySeries;
 
         series.Should().HaveCount(1);
         series[0].Date.Should().Be(new DateOnly(2024, 4, 10));
@@ -395,8 +395,8 @@ public sealed class SellerAnalyticsPostgresTests(PostgresFixture fixture)
     [Fact]
     public async Task GetProductsPage_DeletedAsset_ReturnsHistoricalDataWithUnavailableFlag()
     {
-        await using var db = await fixture.CreateCleanDbContext();
-        var (seller, buyer, _, asset, version) = await SeedSellerBuyerAsset(db, "softdel");
+        await using ApplicationDbContext db = await fixture.CreateCleanDbContext();
+        (User? seller, User? buyer, Category _, Asset? asset, AssetVersion? version) = await SeedSellerBuyerAsset(db, "softdel");
 
         var purchasedAt = new DateTimeOffset(2024, 7, 1, 0, 0, 0, TimeSpan.Zero);
         AddDirectOrder(db, buyer.Id, asset, version, seller.Id, 15m, purchasedAt);
@@ -406,7 +406,7 @@ public sealed class SellerAnalyticsPostgresTests(PostgresFixture fixture)
         await db.SaveChangesAsync();
 
         var store = new SellerAnalyticsStore(db);
-        var (items, _) = await store.GetProductsPage(
+        (IReadOnlyList<AnalyticsProductRow>? items, var _) = await store.GetProductsPage(
             seller.Id,
             new DateTimeOffset(2024, 7, 1, 0, 0, 0, TimeSpan.Zero),
             new DateTimeOffset(2024, 8, 1, 0, 0, 0, TimeSpan.Zero),
@@ -423,30 +423,30 @@ public sealed class SellerAnalyticsPostgresTests(PostgresFixture fixture)
     [Fact]
     public async Task GetProductsPage_ArchivedBundle_ReturnsHistoricalDataWithArchivedFlag()
     {
-        await using var db = await fixture.CreateCleanDbContext();
-        var seller = TestData.CreateUser("arcseller", "arcseller@test.local");
-        var buyer = TestData.CreateUser("arcbuyer", "arcbuyer@test.local");
-        var category = TestData.CreateCategory("arccat", "arccat");
+        await using ApplicationDbContext db = await fixture.CreateCleanDbContext();
+        User seller = TestData.CreateUser("arcseller", "arcseller@test.local");
+        User buyer = TestData.CreateUser("arcbuyer", "arcbuyer@test.local");
+        Category category = TestData.CreateCategory("arccat", "arccat");
         db.Users.AddRange(seller, buyer);
         db.Categories.Add(category);
         await db.SaveChangesAsync();
 
-        var a1 = TestData.CreateAsset(seller.Id, category.Id, "ArcA1", 6m);
+        Asset a1 = TestData.CreateAsset(seller.Id, category.Id, "ArcA1", 6m);
         db.Assets.Add(a1);
         await db.SaveChangesAsync();
-        var v1 = TestData.CreateAssetVersion(a1.Id);
+        AssetVersion v1 = TestData.CreateAssetVersion(a1.Id);
         db.AssetVersions.Add(v1);
         await db.SaveChangesAsync();
 
         var purchasedAt = new DateTimeOffset(2024, 8, 1, 0, 0, 0, TimeSpan.Zero);
         await AddBundleOrder(db, buyer.Id, seller.Id, [(a1, v1, 5m)], 5m, purchasedAt);
 
-        var bundle = await db.Bundles.SingleAsync(b => b.SellerId == seller.Id);
+        Bundle bundle = await db.Bundles.SingleAsync(b => b.SellerId == seller.Id);
         bundle.ArchivedAt = DateTimeOffset.UtcNow;
         await db.SaveChangesAsync();
 
         var store = new SellerAnalyticsStore(db);
-        var (items, _) = await store.GetProductsPage(
+        (IReadOnlyList<AnalyticsProductRow>? items, var _) = await store.GetProductsPage(
             seller.Id,
             new DateTimeOffset(2024, 8, 1, 0, 0, 0, TimeSpan.Zero),
             new DateTimeOffset(2024, 9, 1, 0, 0, 0, TimeSpan.Zero),
@@ -463,20 +463,20 @@ public sealed class SellerAnalyticsPostgresTests(PostgresFixture fixture)
     [Fact]
     public async Task GetProductsPage_BundleRevenue_IsSumOfOrderAmountPaidAndUnitsSoldIsLineCount()
     {
-        await using var db = await fixture.CreateCleanDbContext();
-        var seller = TestData.CreateUser("brevseller", "brevseller@test.local");
-        var buyer = TestData.CreateUser("brevbuyer", "brevbuyer@test.local");
-        var category = TestData.CreateCategory("brevcat", "brevcat");
+        await using ApplicationDbContext db = await fixture.CreateCleanDbContext();
+        User seller = TestData.CreateUser("brevseller", "brevseller@test.local");
+        User buyer = TestData.CreateUser("brevbuyer", "brevbuyer@test.local");
+        Category category = TestData.CreateCategory("brevcat", "brevcat");
         db.Users.AddRange(seller, buyer);
         db.Categories.Add(category);
         await db.SaveChangesAsync();
 
-        var a1 = TestData.CreateAsset(seller.Id, category.Id, "BrevA1", 10m);
-        var a2 = TestData.CreateAsset(seller.Id, category.Id, "BrevA2", 10m);
+        Asset a1 = TestData.CreateAsset(seller.Id, category.Id, "BrevA1", 10m);
+        Asset a2 = TestData.CreateAsset(seller.Id, category.Id, "BrevA2", 10m);
         db.Assets.AddRange(a1, a2);
         await db.SaveChangesAsync();
-        var v1 = TestData.CreateAssetVersion(a1.Id);
-        var v2 = TestData.CreateAssetVersion(a2.Id);
+        AssetVersion v1 = TestData.CreateAssetVersion(a1.Id);
+        AssetVersion v2 = TestData.CreateAssetVersion(a2.Id);
         db.AssetVersions.AddRange(v1, v2);
         await db.SaveChangesAsync();
 
@@ -487,7 +487,7 @@ public sealed class SellerAnalyticsPostgresTests(PostgresFixture fixture)
             purchasedAt);
 
         var store = new SellerAnalyticsStore(db);
-        var (items, _) = await store.GetProductsPage(
+        (IReadOnlyList<AnalyticsProductRow>? items, var _) = await store.GetProductsPage(
             seller.Id,
             new DateTimeOffset(2024, 9, 1, 0, 0, 0, TimeSpan.Zero),
             new DateTimeOffset(2024, 10, 1, 0, 0, 0, TimeSpan.Zero),
@@ -505,14 +505,14 @@ public sealed class SellerAnalyticsPostgresTests(PostgresFixture fixture)
     [Fact]
     public async Task GetProductsPage_NoSales_ReturnsZeroMetricsWithPositiveTotalCount()
     {
-        await using var db = await fixture.CreateCleanDbContext();
-        var (seller, _, _, _, _) = await SeedSellerBuyerAsset(db, "nosales");
+        await using ApplicationDbContext db = await fixture.CreateCleanDbContext();
+        (User? seller, User _, Category _, Asset _, AssetVersion _) = await SeedSellerBuyerAsset(db, "nosales");
 
         var store = new SellerAnalyticsStore(db);
         var from = new DateTimeOffset(2024, 1, 1, 0, 0, 0, TimeSpan.Zero);
         var to = new DateTimeOffset(2024, 2, 1, 0, 0, 0, TimeSpan.Zero);
 
-        var (items, total) = await store.GetProductsPage(
+        (IReadOnlyList<AnalyticsProductRow>? items, var total) = await store.GetProductsPage(
             seller.Id, from, to, AnalyticsProductTypeFilter.ASSET,
             1, 20, AnalyticsProductSort.REVENUE, AnalyticsSortDirection.DESC);
 
@@ -527,10 +527,10 @@ public sealed class SellerAnalyticsPostgresTests(PostgresFixture fixture)
     [Fact]
     public async Task GetProductsPage_AllType_GlobalPaginationWorks()
     {
-        await using var db = await fixture.CreateCleanDbContext();
-        var seller = TestData.CreateUser("pagesel", "pagesel@test.local");
-        var buyer = TestData.CreateUser("pagebuy", "pagebuy@test.local");
-        var category = TestData.CreateCategory("pagecat", "pagecat");
+        await using ApplicationDbContext db = await fixture.CreateCleanDbContext();
+        User seller = TestData.CreateUser("pagesel", "pagesel@test.local");
+        User buyer = TestData.CreateUser("pagebuy", "pagebuy@test.local");
+        Category category = TestData.CreateCategory("pagecat", "pagecat");
         db.Users.AddRange(seller, buyer);
         db.Categories.Add(category);
         await db.SaveChangesAsync();
@@ -538,10 +538,10 @@ public sealed class SellerAnalyticsPostgresTests(PostgresFixture fixture)
         var assets = new List<(Asset Asset, AssetVersion Version)>();
         for (var i = 0; i < 3; i++)
         {
-            var asset = TestData.CreateAsset(seller.Id, category.Id, $"PageAsset{i}", 5m);
+            Asset asset = TestData.CreateAsset(seller.Id, category.Id, $"PageAsset{i}", 5m);
             db.Assets.Add(asset);
             await db.SaveChangesAsync();
-            var version = TestData.CreateAssetVersion(asset.Id);
+            AssetVersion version = TestData.CreateAssetVersion(asset.Id);
             db.AssetVersions.Add(version);
             await db.SaveChangesAsync();
             assets.Add((asset, version));
@@ -559,7 +559,7 @@ public sealed class SellerAnalyticsPostgresTests(PostgresFixture fixture)
         var from = new DateTimeOffset(2024, 10, 1, 0, 0, 0, TimeSpan.Zero);
         var to = new DateTimeOffset(2024, 11, 1, 0, 0, 0, TimeSpan.Zero);
 
-        var (page1, total) = await store.GetProductsPage(
+        (IReadOnlyList<AnalyticsProductRow>? page1, var total) = await store.GetProductsPage(
             seller.Id, from, to, AnalyticsProductTypeFilter.ALL,
             1, 2, AnalyticsProductSort.REVENUE, AnalyticsSortDirection.DESC);
 
@@ -568,7 +568,7 @@ public sealed class SellerAnalyticsPostgresTests(PostgresFixture fixture)
         page1[0].GrossRevenue.Should().Be(30m);
         page1[1].GrossRevenue.Should().Be(20m);
 
-        var (page2, _) = await store.GetProductsPage(
+        (IReadOnlyList<AnalyticsProductRow>? page2, var _) = await store.GetProductsPage(
             seller.Id, from, to, AnalyticsProductTypeFilter.ALL,
             2, 2, AnalyticsProductSort.REVENUE, AnalyticsSortDirection.DESC);
 
@@ -580,20 +580,20 @@ public sealed class SellerAnalyticsPostgresTests(PostgresFixture fixture)
     [Fact]
     public async Task GetProductsPage_TieBreak_SortsByProductKindThenId()
     {
-        await using var db = await fixture.CreateCleanDbContext();
-        var seller = TestData.CreateUser("tiesel", "tiesel@test.local");
-        var buyer = TestData.CreateUser("tiebuy", "tiebuy@test.local");
-        var category = TestData.CreateCategory("tiecat", "tiecat");
+        await using ApplicationDbContext db = await fixture.CreateCleanDbContext();
+        User seller = TestData.CreateUser("tiesel", "tiesel@test.local");
+        User buyer = TestData.CreateUser("tiebuy", "tiebuy@test.local");
+        Category category = TestData.CreateCategory("tiecat", "tiecat");
         db.Users.AddRange(seller, buyer);
         db.Categories.Add(category);
         await db.SaveChangesAsync();
 
-        var assetA = TestData.CreateAsset(seller.Id, category.Id, "TieA", 5m);
-        var assetB = TestData.CreateAsset(seller.Id, category.Id, "TieB", 5m);
+        Asset assetA = TestData.CreateAsset(seller.Id, category.Id, "TieA", 5m);
+        Asset assetB = TestData.CreateAsset(seller.Id, category.Id, "TieB", 5m);
         db.Assets.AddRange(assetA, assetB);
         await db.SaveChangesAsync();
-        var vA = TestData.CreateAssetVersion(assetA.Id);
-        var vB = TestData.CreateAssetVersion(assetB.Id);
+        AssetVersion vA = TestData.CreateAssetVersion(assetA.Id);
+        AssetVersion vB = TestData.CreateAssetVersion(assetB.Id);
         db.AssetVersions.AddRange(vA, vB);
         await db.SaveChangesAsync();
 
@@ -607,7 +607,7 @@ public sealed class SellerAnalyticsPostgresTests(PostgresFixture fixture)
         var from = new DateTimeOffset(2024, 11, 1, 0, 0, 0, TimeSpan.Zero);
         var to = new DateTimeOffset(2024, 12, 1, 0, 0, 0, TimeSpan.Zero);
 
-        var (items, _) = await store.GetProductsPage(
+        (IReadOnlyList<AnalyticsProductRow>? items, var _) = await store.GetProductsPage(
             seller.Id, from, to, AnalyticsProductTypeFilter.ASSET,
             1, 10, AnalyticsProductSort.REVENUE, AnalyticsSortDirection.DESC);
 
@@ -619,20 +619,20 @@ public sealed class SellerAnalyticsPostgresTests(PostgresFixture fixture)
     [Fact]
     public async Task GetProductsPage_RecentSort_PutsNullLatestSaleLast()
     {
-        await using var db = await fixture.CreateCleanDbContext();
-        var seller = TestData.CreateUser("recsel", "recsel@test.local");
-        var buyer = TestData.CreateUser("recbuy", "recbuy@test.local");
-        var category = TestData.CreateCategory("reccat", "reccat");
+        await using ApplicationDbContext db = await fixture.CreateCleanDbContext();
+        User seller = TestData.CreateUser("recsel", "recsel@test.local");
+        User buyer = TestData.CreateUser("recbuy", "recbuy@test.local");
+        Category category = TestData.CreateCategory("reccat", "reccat");
         db.Users.AddRange(seller, buyer);
         db.Categories.Add(category);
         await db.SaveChangesAsync();
 
-        var sold = TestData.CreateAsset(seller.Id, category.Id, "Sold", 5m);
-        var unsold = TestData.CreateAsset(seller.Id, category.Id, "Unsold", 5m);
+        Asset sold = TestData.CreateAsset(seller.Id, category.Id, "Sold", 5m);
+        Asset unsold = TestData.CreateAsset(seller.Id, category.Id, "Unsold", 5m);
         db.Assets.AddRange(sold, unsold);
         await db.SaveChangesAsync();
-        var vSold = TestData.CreateAssetVersion(sold.Id);
-        var vUnsold = TestData.CreateAssetVersion(unsold.Id);
+        AssetVersion vSold = TestData.CreateAssetVersion(sold.Id);
+        AssetVersion vUnsold = TestData.CreateAssetVersion(unsold.Id);
         db.AssetVersions.AddRange(vSold, vUnsold);
         await db.SaveChangesAsync();
 
@@ -644,7 +644,7 @@ public sealed class SellerAnalyticsPostgresTests(PostgresFixture fixture)
         var from = new DateTimeOffset(2024, 12, 1, 0, 0, 0, TimeSpan.Zero);
         var to = new DateTimeOffset(2025, 1, 1, 0, 0, 0, TimeSpan.Zero);
 
-        var (items, _) = await store.GetProductsPage(
+        (IReadOnlyList<AnalyticsProductRow>? items, var _) = await store.GetProductsPage(
             seller.Id, from, to, AnalyticsProductTypeFilter.ASSET,
             1, 10, AnalyticsProductSort.RECENT, AnalyticsSortDirection.DESC);
 
@@ -657,20 +657,20 @@ public sealed class SellerAnalyticsPostgresTests(PostgresFixture fixture)
     [Fact]
     public async Task GetProductsPage_RatingSort_PutsNullRatingsLast()
     {
-        await using var db = await fixture.CreateCleanDbContext();
-        var seller = TestData.CreateUser("ratsel", "ratsel@test.local");
-        var buyer = TestData.CreateUser("ratbuy", "ratbuy@test.local");
-        var category = TestData.CreateCategory("ratcat", "ratcat");
+        await using ApplicationDbContext db = await fixture.CreateCleanDbContext();
+        User seller = TestData.CreateUser("ratsel", "ratsel@test.local");
+        User buyer = TestData.CreateUser("ratbuy", "ratbuy@test.local");
+        Category category = TestData.CreateCategory("ratcat", "ratcat");
         db.Users.AddRange(seller, buyer);
         db.Categories.Add(category);
         await db.SaveChangesAsync();
 
-        var rated = TestData.CreateAsset(seller.Id, category.Id, "Rated", 5m);
-        var unrated = TestData.CreateAsset(seller.Id, category.Id, "Unrated", 5m);
+        Asset rated = TestData.CreateAsset(seller.Id, category.Id, "Rated", 5m);
+        Asset unrated = TestData.CreateAsset(seller.Id, category.Id, "Unrated", 5m);
         db.Assets.AddRange(rated, unrated);
         await db.SaveChangesAsync();
-        var vRated = TestData.CreateAssetVersion(rated.Id);
-        var vUnrated = TestData.CreateAssetVersion(unrated.Id);
+        AssetVersion vRated = TestData.CreateAssetVersion(rated.Id);
+        AssetVersion vUnrated = TestData.CreateAssetVersion(unrated.Id);
         db.AssetVersions.AddRange(vRated, vUnrated);
         await db.SaveChangesAsync();
 
@@ -681,13 +681,13 @@ public sealed class SellerAnalyticsPostgresTests(PostgresFixture fixture)
         var from = new DateTimeOffset(2024, 1, 1, 0, 0, 0, TimeSpan.Zero);
         var to = new DateTimeOffset(2025, 1, 1, 0, 0, 0, TimeSpan.Zero);
 
-        var (ascItems, _) = await store.GetProductsPage(
+        (IReadOnlyList<AnalyticsProductRow>? ascItems, var _) = await store.GetProductsPage(
             seller.Id, from, to, AnalyticsProductTypeFilter.ASSET,
             1, 10, AnalyticsProductSort.RATING, AnalyticsSortDirection.ASC);
 
         ascItems[^1].AverageRating.Should().BeNull();
 
-        var (descItems, _) = await store.GetProductsPage(
+        (IReadOnlyList<AnalyticsProductRow>? descItems, var _) = await store.GetProductsPage(
             seller.Id, from, to, AnalyticsProductTypeFilter.ASSET,
             1, 10, AnalyticsProductSort.RATING, AnalyticsSortDirection.DESC);
 
@@ -698,18 +698,18 @@ public sealed class SellerAnalyticsPostgresTests(PostgresFixture fixture)
     [Fact]
     public async Task GetProductsPage_BundlePurchase_CountsAsAllocatedRevenue()
     {
-        await using var db = await fixture.CreateCleanDbContext();
-        var seller = TestData.CreateUser("splitsel", "splitsel@test.local");
-        var buyer = TestData.CreateUser("splitbuy", "splitbuy@test.local");
-        var category = TestData.CreateCategory("splitcat", "splitcat");
+        await using ApplicationDbContext db = await fixture.CreateCleanDbContext();
+        User seller = TestData.CreateUser("splitsel", "splitsel@test.local");
+        User buyer = TestData.CreateUser("splitbuy", "splitbuy@test.local");
+        Category category = TestData.CreateCategory("splitcat", "splitcat");
         db.Users.AddRange(seller, buyer);
         db.Categories.Add(category);
         await db.SaveChangesAsync();
 
-        var a1 = TestData.CreateAsset(seller.Id, category.Id, "SplitA1", 10m);
+        Asset a1 = TestData.CreateAsset(seller.Id, category.Id, "SplitA1", 10m);
         db.Assets.Add(a1);
         await db.SaveChangesAsync();
-        var v1 = TestData.CreateAssetVersion(a1.Id);
+        AssetVersion v1 = TestData.CreateAssetVersion(a1.Id);
         db.AssetVersions.Add(v1);
         await db.SaveChangesAsync();
 
@@ -720,7 +720,7 @@ public sealed class SellerAnalyticsPostgresTests(PostgresFixture fixture)
             new DateTimeOffset(2024, 11, 5, 0, 0, 0, TimeSpan.Zero));
 
         var store = new SellerAnalyticsStore(db);
-        var (items, _) = await store.GetProductsPage(
+        (IReadOnlyList<AnalyticsProductRow>? items, var _) = await store.GetProductsPage(
             seller.Id,
             new DateTimeOffset(2024, 11, 1, 0, 0, 0, TimeSpan.Zero),
             new DateTimeOffset(2024, 12, 1, 0, 0, 0, TimeSpan.Zero),
@@ -738,8 +738,8 @@ public sealed class SellerAnalyticsPostgresTests(PostgresFixture fixture)
     [Fact]
     public async Task GetSalesPage_KeysetPagination_ReturnsCorrectPage()
     {
-        await using var db = await fixture.CreateCleanDbContext();
-        var (seller, buyer, _, asset, version) = await SeedSellerBuyerAsset(db, "keyset");
+        await using ApplicationDbContext db = await fixture.CreateCleanDbContext();
+        (User? seller, User? buyer, Category _, Asset? asset, AssetVersion? version) = await SeedSellerBuyerAsset(db, "keyset");
 
         var t1 = new DateTimeOffset(2024, 10, 1, 1, 0, 0, TimeSpan.Zero);
         var t2 = new DateTimeOffset(2024, 10, 1, 2, 0, 0, TimeSpan.Zero);
@@ -756,14 +756,14 @@ public sealed class SellerAnalyticsPostgresTests(PostgresFixture fixture)
         var from = new DateTimeOffset(2024, 10, 1, 0, 0, 0, TimeSpan.Zero);
         var to = new DateTimeOffset(2024, 11, 1, 0, 0, 0, TimeSpan.Zero);
 
-        var (page1, hasMore1) = await store.GetSalesPage(
+        (IReadOnlyList<AnalyticsSaleRow>? page1, var hasMore1) = await store.GetSalesPage(
             seller.Id, from, to, AnalyticsProductTypeFilter.ALL, null, null, 2);
         hasMore1.Should().BeTrue();
         page1.Should().HaveCount(2);
         page1[0].PurchasedAt.Should().Be(t3);
         page1[1].PurchasedAt.Should().Be(t2);
 
-        var (page2, hasMore2) = await store.GetSalesPage(
+        (IReadOnlyList<AnalyticsSaleRow>? page2, var hasMore2) = await store.GetSalesPage(
             seller.Id, from, to, AnalyticsProductTypeFilter.ALL,
             page1[^1].PurchasedAt, page1[^1].OrderId, 2);
         hasMore2.Should().BeFalse();
@@ -775,8 +775,8 @@ public sealed class SellerAnalyticsPostgresTests(PostgresFixture fixture)
     [Fact]
     public async Task GetSalesPage_SamePurchasedAt_UsesOrderIdTieBreak()
     {
-        await using var db = await fixture.CreateCleanDbContext();
-        var (seller, buyer, _, asset, version) = await SeedSellerBuyerAsset(db, "sametime");
+        await using ApplicationDbContext db = await fixture.CreateCleanDbContext();
+        (User? seller, User? buyer, Category _, Asset? asset, AssetVersion? version) = await SeedSellerBuyerAsset(db, "sametime");
 
         var sameTime = new DateTimeOffset(2024, 10, 5, 12, 0, 0, TimeSpan.Zero);
         AddDirectOrder(db, buyer.Id, asset, version, seller.Id, 10m, sameTime);
@@ -788,12 +788,12 @@ public sealed class SellerAnalyticsPostgresTests(PostgresFixture fixture)
         var from = new DateTimeOffset(2024, 10, 1, 0, 0, 0, TimeSpan.Zero);
         var to = new DateTimeOffset(2024, 11, 1, 0, 0, 0, TimeSpan.Zero);
 
-        var (page1, hasMore1) = await store.GetSalesPage(
+        (IReadOnlyList<AnalyticsSaleRow>? page1, var hasMore1) = await store.GetSalesPage(
             seller.Id, from, to, AnalyticsProductTypeFilter.ALL, null, null, 1);
         hasMore1.Should().BeTrue();
         page1.Should().HaveCount(1);
 
-        var (page2, hasMore2) = await store.GetSalesPage(
+        (IReadOnlyList<AnalyticsSaleRow>? page2, var hasMore2) = await store.GetSalesPage(
             seller.Id, from, to, AnalyticsProductTypeFilter.ALL,
             page1[0].PurchasedAt, page1[0].OrderId, 1);
         hasMore2.Should().BeFalse();
@@ -805,14 +805,14 @@ public sealed class SellerAnalyticsPostgresTests(PostgresFixture fixture)
     [Fact]
     public async Task GetSalesPage_DoesNotExposeStripeSessionOrUserId()
     {
-        await using var db = await fixture.CreateCleanDbContext();
-        var (seller, buyer, _, asset, version) = await SeedSellerBuyerAsset(db, "nosensitive");
+        await using ApplicationDbContext db = await fixture.CreateCleanDbContext();
+        (User? seller, User? buyer, Category _, Asset? asset, AssetVersion? version) = await SeedSellerBuyerAsset(db, "nosensitive");
 
         AddDirectOrder(db, buyer.Id, asset, version, seller.Id, 10m, DateTimeOffset.UtcNow);
         await db.SaveChangesAsync();
 
         var store = new SellerAnalyticsStore(db);
-        var (items, _) = await store.GetSalesPage(
+        (IReadOnlyList<AnalyticsSaleRow>? items, var _) = await store.GetSalesPage(
             seller.Id,
             DateTimeOffset.UtcNow.AddDays(-1),
             DateTimeOffset.UtcNow.AddDays(1),
@@ -820,7 +820,7 @@ public sealed class SellerAnalyticsPostgresTests(PostgresFixture fixture)
             null, null, 10);
 
         items.Should().HaveCount(1);
-        var item = items[0];
+        AnalyticsSaleRow item = items[0];
         item.ProductKind.Should().Be(AnalyticsProductKind.ASSET);
         item.ProductId.Should().Be(asset.Id);
         item.Units.Should().Be(1);
@@ -831,19 +831,19 @@ public sealed class SellerAnalyticsPostgresTests(PostgresFixture fixture)
     [Fact]
     public async Task GetOverviewSnapshot_Ratings_WithReviews_ReturnsAverageAndNewCount()
     {
-        await using var db = await fixture.CreateCleanDbContext();
-        var (seller, buyer, _, asset, _) = await SeedSellerBuyerAsset(db, "rating");
+        await using ApplicationDbContext db = await fixture.CreateCleanDbContext();
+        (User? seller, User? buyer, Category _, Asset? asset, AssetVersion _) = await SeedSellerBuyerAsset(db, "rating");
 
-        var oldReview = TestData.CreateReview(buyer.Id, asset.Id, 4);
+        Review oldReview = TestData.CreateReview(buyer.Id, asset.Id, 4);
         oldReview.CreatedAt = new DateTimeOffset(2023, 1, 1, 0, 0, 0, TimeSpan.Zero);
         db.Reviews.Add(oldReview);
         await db.SaveChangesAsync();
 
-        var buyer2 = TestData.CreateUser("buyer2-rating", "buyer2-rating@test.local");
+        User buyer2 = TestData.CreateUser("buyer2-rating", "buyer2-rating@test.local");
         db.Users.Add(buyer2);
         await db.SaveChangesAsync();
 
-        var newReview = TestData.CreateReview(buyer2.Id, asset.Id);
+        Review newReview = TestData.CreateReview(buyer2.Id, asset.Id);
         newReview.CreatedAt = new DateTimeOffset(2024, 6, 15, 0, 0, 0, TimeSpan.Zero);
         db.Reviews.Add(newReview);
         await db.SaveChangesAsync();
@@ -852,7 +852,7 @@ public sealed class SellerAnalyticsPostgresTests(PostgresFixture fixture)
         var from = new DateTimeOffset(2024, 6, 1, 0, 0, 0, TimeSpan.Zero);
         var to = new DateTimeOffset(2024, 7, 1, 0, 0, 0, TimeSpan.Zero);
 
-        var ratings = (await GetSnapshot(store, seller.Id, from, to)).CurrentRatings;
+        SellerRatingsRaw ratings = (await GetSnapshot(store, seller.Id, from, to)).CurrentRatings;
 
         ratings.AverageRating.Should().BeApproximately(4.5, 0.001);
         ratings.NewReviews.Should().Be(1);
@@ -862,8 +862,8 @@ public sealed class SellerAnalyticsPostgresTests(PostgresFixture fixture)
     [Fact]
     public async Task GetSalesPage_ProductTypeFilter_AssetBundleAll()
     {
-        await using var db = await fixture.CreateCleanDbContext();
-        var (seller, buyer, _, asset, version) = await SeedSellerBuyerAsset(db, "salestype");
+        await using ApplicationDbContext db = await fixture.CreateCleanDbContext();
+        (User? seller, User? buyer, Category _, Asset? asset, AssetVersion? version) = await SeedSellerBuyerAsset(db, "salestype");
 
         var from = new DateTimeOffset(2024, 8, 1, 0, 0, 0, TimeSpan.Zero);
         var to = new DateTimeOffset(2024, 9, 1, 0, 0, 0, TimeSpan.Zero);
@@ -876,17 +876,17 @@ public sealed class SellerAnalyticsPostgresTests(PostgresFixture fixture)
 
         var store = new SellerAnalyticsStore(db);
 
-        var (assets, _) = await store.GetSalesPage(
+        (IReadOnlyList<AnalyticsSaleRow>? assets, var _) = await store.GetSalesPage(
             seller.Id, from, to, AnalyticsProductTypeFilter.ASSET, null, null, 10);
         assets.Should().HaveCount(1);
         assets[0].ProductKind.Should().Be(AnalyticsProductKind.ASSET);
 
-        var (bundles, _) = await store.GetSalesPage(
+        (IReadOnlyList<AnalyticsSaleRow>? bundles, var _) = await store.GetSalesPage(
             seller.Id, from, to, AnalyticsProductTypeFilter.BUNDLE, null, null, 10);
         bundles.Should().HaveCount(1);
         bundles[0].ProductKind.Should().Be(AnalyticsProductKind.BUNDLE);
 
-        var (all, _) = await store.GetSalesPage(
+        (IReadOnlyList<AnalyticsSaleRow>? all, var _) = await store.GetSalesPage(
             seller.Id, from, to, AnalyticsProductTypeFilter.ALL, null, null, 10);
         all.Should().HaveCount(2);
     }
@@ -894,8 +894,8 @@ public sealed class SellerAnalyticsPostgresTests(PostgresFixture fixture)
     [Fact]
     public async Task OpenSalesExportSession_OrdersByPurchasedAtDescThenOrderIdDesc()
     {
-        await using var db = await fixture.CreateCleanDbContext();
-        var (seller, buyer, _, asset, version) = await SeedSellerBuyerAsset(db, "exportorder");
+        await using ApplicationDbContext db = await fixture.CreateCleanDbContext();
+        (User? seller, User? buyer, Category _, Asset? asset, AssetVersion? version) = await SeedSellerBuyerAsset(db, "exportorder");
 
         var t1 = new DateTimeOffset(2024, 9, 1, 1, 0, 0, TimeSpan.Zero);
         var t2 = new DateTimeOffset(2024, 9, 1, 2, 0, 0, TimeSpan.Zero);
@@ -908,7 +908,7 @@ public sealed class SellerAnalyticsPostgresTests(PostgresFixture fixture)
         var from = new DateTimeOffset(2024, 9, 1, 0, 0, 0, TimeSpan.Zero);
         var to = new DateTimeOffset(2024, 10, 1, 0, 0, 0, TimeSpan.Zero);
 
-        var rows = await CollectExportRows(store, seller.Id, from, to, AnalyticsProductTypeFilter.ALL);
+        List<AnalyticsSalesExportRow> rows = await CollectExportRows(store, seller.Id, from, to, AnalyticsProductTypeFilter.ALL);
 
         rows.Should().HaveCount(2);
         rows[0].PurchasedAt.Should().Be(t2);
@@ -919,8 +919,8 @@ public sealed class SellerAnalyticsPostgresTests(PostgresFixture fixture)
     [Fact]
     public async Task OpenSalesExportSession_ProductTypeFilter_RespectsAssetBundleAll()
     {
-        await using var db = await fixture.CreateCleanDbContext();
-        var (seller, buyer, _, asset, version) = await SeedSellerBuyerAsset(db, "exportfilter");
+        await using ApplicationDbContext db = await fixture.CreateCleanDbContext();
+        (User? seller, User? buyer, Category _, Asset? asset, AssetVersion? version) = await SeedSellerBuyerAsset(db, "exportfilter");
 
         var from = new DateTimeOffset(2024, 10, 1, 0, 0, 0, TimeSpan.Zero);
         var to = new DateTimeOffset(2024, 11, 1, 0, 0, 0, TimeSpan.Zero);
@@ -933,24 +933,24 @@ public sealed class SellerAnalyticsPostgresTests(PostgresFixture fixture)
 
         var store = new SellerAnalyticsStore(db);
 
-        var assets = await CollectExportRows(store, seller.Id, from, to, AnalyticsProductTypeFilter.ASSET);
+        List<AnalyticsSalesExportRow> assets = await CollectExportRows(store, seller.Id, from, to, AnalyticsProductTypeFilter.ASSET);
         assets.Should().HaveCount(1);
         assets[0].ProductType.Should().Be("ASSET");
 
-        var bundles = await CollectExportRows(store, seller.Id, from, to, AnalyticsProductTypeFilter.BUNDLE);
+        List<AnalyticsSalesExportRow> bundles = await CollectExportRows(store, seller.Id, from, to, AnalyticsProductTypeFilter.BUNDLE);
         bundles.Should().HaveCount(1);
         bundles[0].ProductType.Should().Be("BUNDLE");
 
-        var all = await CollectExportRows(store, seller.Id, from, to, AnalyticsProductTypeFilter.ALL);
+        List<AnalyticsSalesExportRow> all = await CollectExportRows(store, seller.Id, from, to, AnalyticsProductTypeFilter.ALL);
         all.Should().HaveCount(2);
     }
 
     [Fact]
     public async Task OpenSalesExportSession_SellerIsolation_ExcludesOtherSellerOrders()
     {
-        await using var db = await fixture.CreateCleanDbContext();
-        var (sellerA, buyer, _, assetA, versionA) = await SeedSellerBuyerAsset(db, "exportisoA");
-        var sellerB = TestData.CreateUser("sellerexportisoB", "sellerexportisoB@test.local");
+        await using ApplicationDbContext db = await fixture.CreateCleanDbContext();
+        (User? sellerA, User? buyer, Category _, Asset? assetA, AssetVersion? versionA) = await SeedSellerBuyerAsset(db, "exportisoA");
+        User sellerB = TestData.CreateUser("sellerexportisoB", "sellerexportisoB@test.local");
         db.Users.Add(sellerB);
         await db.SaveChangesAsync();
 
@@ -961,21 +961,21 @@ public sealed class SellerAnalyticsPostgresTests(PostgresFixture fixture)
         await db.SaveChangesAsync();
 
         var store = new SellerAnalyticsStore(db);
-        var rowsB = await CollectExportRows(store, sellerB.Id, from, to, AnalyticsProductTypeFilter.ALL);
+        List<AnalyticsSalesExportRow> rowsB = await CollectExportRows(store, sellerB.Id, from, to, AnalyticsProductTypeFilter.ALL);
         rowsB.Should().BeEmpty();
     }
 
     [Fact]
     public async Task OpenSalesExportSession_WhenWithinLimit_ExceedsMaxIsFalse()
     {
-        await using var db = await fixture.CreateCleanDbContext();
-        var (seller, buyer, _, asset, version) = await SeedSellerBuyerAsset(db, "exportcapok");
+        await using ApplicationDbContext db = await fixture.CreateCleanDbContext();
+        (User? seller, User? buyer, Category _, Asset? asset, AssetVersion? version) = await SeedSellerBuyerAsset(db, "exportcapok");
 
         AddDirectOrder(db, buyer.Id, asset, version, seller.Id, 10m, DateTimeOffset.UtcNow);
         await db.SaveChangesAsync();
 
         var store = new SellerAnalyticsStore(db);
-        await using var session = await store.OpenSalesExportSession(
+        await using ISellerAnalyticsSalesExportSession session = await store.OpenSalesExportSession(
             seller.Id,
             DateTimeOffset.UtcNow.AddDays(-1),
             DateTimeOffset.UtcNow.AddDays(1),
@@ -991,11 +991,11 @@ public sealed class SellerAnalyticsPostgresTests(PostgresFixture fixture)
         DateTimeOffset to,
         AnalyticsProductTypeFilter productType)
     {
-        await using var session = await store.OpenSalesExportSession(sellerId, from, to, productType);
+        await using ISellerAnalyticsSalesExportSession session = await store.OpenSalesExportSession(sellerId, from, to, productType);
         session.ExceedsMax.Should().BeFalse();
 
         var rows = new List<AnalyticsSalesExportRow>();
-        await foreach (var row in session.ReadRows())
+        await foreach (AnalyticsSalesExportRow row in session.ReadRows())
         {
             rows.Add(row);
         }
@@ -1007,8 +1007,8 @@ public sealed class SellerAnalyticsPostgresTests(PostgresFixture fixture)
     [Fact]
     public async Task GetOverviewSnapshot_UtcBoundary_FromInclusiveToExclusive()
     {
-        await using var db = await fixture.CreateCleanDbContext();
-        var (seller, buyer, _, asset, version) = await SeedSellerBuyerAsset(db, "boundary");
+        await using ApplicationDbContext db = await fixture.CreateCleanDbContext();
+        (User? seller, User? buyer, Category _, Asset? asset, AssetVersion? version) = await SeedSellerBuyerAsset(db, "boundary");
 
         var from = new DateTimeOffset(2024, 5, 1, 0, 0, 0, TimeSpan.Zero);
         var to = new DateTimeOffset(2024, 5, 2, 0, 0, 0, TimeSpan.Zero);
@@ -1019,7 +1019,7 @@ public sealed class SellerAnalyticsPostgresTests(PostgresFixture fixture)
         await db.SaveChangesAsync();
 
         var store = new SellerAnalyticsStore(db);
-        var facts = (await GetSnapshot(store, seller.Id, from, to)).CurrentFacts;
+        SellerAnalyticsRawFacts facts = (await GetSnapshot(store, seller.Id, from, to)).CurrentFacts;
 
         facts.Orders.Should().Be(1);
         facts.GrossRevenue.Should().Be(10m);
@@ -1029,19 +1029,19 @@ public sealed class SellerAnalyticsPostgresTests(PostgresFixture fixture)
     [Fact]
     public async Task GetOverviewSnapshot_Ratings_CurrentAndComparisonFilters()
     {
-        await using var db = await fixture.CreateCleanDbContext();
-        var (seller, buyer, _, asset, _) = await SeedSellerBuyerAsset(db, "dualrate");
+        await using ApplicationDbContext db = await fixture.CreateCleanDbContext();
+        (User? seller, User? buyer, Category _, Asset? asset, AssetVersion _) = await SeedSellerBuyerAsset(db, "dualrate");
 
-        var comparisonReview = TestData.CreateReview(buyer.Id, asset.Id, 3);
+        Review comparisonReview = TestData.CreateReview(buyer.Id, asset.Id, 3);
         comparisonReview.CreatedAt = new DateTimeOffset(2024, 5, 15, 0, 0, 0, TimeSpan.Zero);
         db.Reviews.Add(comparisonReview);
         await db.SaveChangesAsync();
 
-        var buyer2 = TestData.CreateUser("buyer2-dualrate", "buyer2-dualrate@test.local");
+        User buyer2 = TestData.CreateUser("buyer2-dualrate", "buyer2-dualrate@test.local");
         db.Users.Add(buyer2);
         await db.SaveChangesAsync();
 
-        var currentReview = TestData.CreateReview(buyer2.Id, asset.Id);
+        Review currentReview = TestData.CreateReview(buyer2.Id, asset.Id);
         currentReview.CreatedAt = new DateTimeOffset(2024, 6, 15, 0, 0, 0, TimeSpan.Zero);
         db.Reviews.Add(currentReview);
         await db.SaveChangesAsync();
@@ -1049,7 +1049,7 @@ public sealed class SellerAnalyticsPostgresTests(PostgresFixture fixture)
         var store = new SellerAnalyticsStore(db);
         var from = new DateTimeOffset(2024, 6, 1, 0, 0, 0, TimeSpan.Zero);
         var to = new DateTimeOffset(2024, 7, 1, 0, 0, 0, TimeSpan.Zero);
-        var snapshot = await GetSnapshot(store, seller.Id, from, to);
+        SellerAnalyticsOverviewSnapshot snapshot = await GetSnapshot(store, seller.Id, from, to);
 
         snapshot.CurrentRatings.AverageRating.Should().BeApproximately(4.0, 0.001);
         snapshot.CurrentRatings.NewReviews.Should().Be(1);
@@ -1061,11 +1061,11 @@ public sealed class SellerAnalyticsPostgresTests(PostgresFixture fixture)
     [Fact]
     public async Task GetProductsPage_InvalidProductType_Throws()
     {
-        await using var db = await fixture.CreateCleanDbContext();
-        var (seller, _, _, _, _) = await SeedSellerBuyerAsset(db, "badtype");
+        await using ApplicationDbContext db = await fixture.CreateCleanDbContext();
+        (User? seller, User _, Category _, Asset _, AssetVersion _) = await SeedSellerBuyerAsset(db, "badtype");
         var store = new SellerAnalyticsStore(db);
 
-        var act = () => store.GetProductsPage(
+        Func<Task<(IReadOnlyList<AnalyticsProductRow> Items, int TotalCount)>> act = () => store.GetProductsPage(
             seller.Id,
             new DateTimeOffset(2024, 1, 1, 0, 0, 0, TimeSpan.Zero),
             new DateTimeOffset(2024, 2, 1, 0, 0, 0, TimeSpan.Zero),
@@ -1083,8 +1083,8 @@ public sealed class SellerAnalyticsPostgresTests(PostgresFixture fixture)
     public async Task GetOverviewSnapshot_FullCoverage_IssuesExactlySixReaderCommands()
     {
         var interceptor = new OverviewReaderCountingInterceptor();
-        await using var db = await fixture.CreateCleanDbContext(b => b.AddInterceptors(interceptor));
-        var (seller, _, _, asset, _) = await SeedSellerBuyerAsset(db, "overview-rt");
+        await using ApplicationDbContext db = await fixture.CreateCleanDbContext(b => b.AddInterceptors(interceptor));
+        (User? seller, User _, Category _, Asset? asset, AssetVersion _) = await SeedSellerBuyerAsset(db, "overview-rt");
 
         var eventStore = new AnalyticsEventStore(db);
         var occurredAt = new DateTimeOffset(2024, 1, 5, 12, 0, 0, TimeSpan.Zero);
@@ -1118,8 +1118,8 @@ public sealed class SellerAnalyticsPostgresTests(PostgresFixture fixture)
     public async Task GetOverviewSnapshot_CommerceOnly_IssuesExactlyFiveReaderCommands()
     {
         var interceptor = new OverviewReaderCountingInterceptor();
-        await using var db = await fixture.CreateCleanDbContext(b => b.AddInterceptors(interceptor));
-        var (seller, _, _, _, _) = await SeedSellerBuyerAsset(db, "qcount");
+        await using ApplicationDbContext db = await fixture.CreateCleanDbContext(b => b.AddInterceptors(interceptor));
+        (User? seller, User _, Category _, Asset _, AssetVersion _) = await SeedSellerBuyerAsset(db, "qcount");
 
         var store = new SellerAnalyticsStore(db);
         var from = new DateTimeOffset(2024, 1, 1, 0, 0, 0, TimeSpan.Zero);

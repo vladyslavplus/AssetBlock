@@ -23,7 +23,7 @@ internal sealed class SqliteDbContextHolder : IAsyncDisposable
         _connection.Open();
         _connection.CreateFunction("jsonb_typeof", (string _) => "object");
         _connection.CreateFunction("octet_length", (string _) => 1);
-        var options = new DbContextOptionsBuilder<ApplicationDbContext>()
+        DbContextOptions<ApplicationDbContext> options = new DbContextOptionsBuilder<ApplicationDbContext>()
             .UseSqlite(_connection)
             .ReplaceService<IMigrationsSqlGenerator, SqliteTestMigrationsSqlGenerator>()
             .Options;
@@ -51,7 +51,7 @@ internal sealed class SqliteTestMigrationsSqlGenerator(
     {
         if (operation.Name == "asset_processing_jobs")
         {
-            var targetConstraint = operation.CheckConstraints
+            AddCheckConstraintOperation? targetConstraint = operation.CheckConstraints
                 .FirstOrDefault(c => c.Name == "CK_asset_processing_jobs_error_code");
 
             if (targetConstraint is not null)
@@ -62,7 +62,7 @@ internal sealed class SqliteTestMigrationsSqlGenerator(
 
         if (operation.Name == "asset_versions")
         {
-            var targetConstraint = operation.CheckConstraints
+            AddCheckConstraintOperation? targetConstraint = operation.CheckConstraints
                 .FirstOrDefault(c => c.Name == "CK_asset_versions_processing_error_code");
 
             if (targetConstraint is not null)
@@ -81,7 +81,7 @@ internal sealed class SqliteTestMigrationsSqlGenerator(
                     or AssetListingSuggestionConfiguration.CK_TAGS_SIZE)
                 .ToList();
 
-            foreach (var constraint in targetConstraints)
+            foreach (AddCheckConstraintOperation? constraint in targetConstraints)
             {
                 operation.CheckConstraints.Remove(constraint);
             }

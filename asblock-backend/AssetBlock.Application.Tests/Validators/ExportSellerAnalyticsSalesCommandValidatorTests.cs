@@ -3,6 +3,7 @@ using AssetBlock.Domain.Abstractions.Services;
 using AssetBlock.Domain.Core.Constants;
 using AssetBlock.Domain.Core.Enums;
 using AwesomeAssertions;
+using FluentValidation.Results;
 using NSubstitute;
 
 namespace AssetBlock.Application.Tests.Validators;
@@ -16,7 +17,7 @@ public sealed class ExportSellerAnalyticsSalesCommandValidatorTests
     [Fact]
     public async Task Validate_WhenValidCommand_ShouldPass()
     {
-        var session = Substitute.For<ISellerAnalyticsSalesExportSession>();
+        ISellerAnalyticsSalesExportSession session = Substitute.For<ISellerAnalyticsSalesExportSession>();
         using var stream = new MemoryStream();
         var cmd = new ExportSellerAnalyticsSalesCommand(
             Guid.NewGuid(),
@@ -26,14 +27,14 @@ public sealed class ExportSellerAnalyticsSalesCommandValidatorTests
             stream,
             session);
 
-        var result = await _validator.ValidateAsync(cmd);
+        ValidationResult result = await _validator.ValidateAsync(cmd);
         result.IsValid.Should().BeTrue();
     }
 
     [Fact]
     public async Task Validate_WhenSellerIdEmpty_ShouldFail()
     {
-        var session = Substitute.For<ISellerAnalyticsSalesExportSession>();
+        ISellerAnalyticsSalesExportSession session = Substitute.For<ISellerAnalyticsSalesExportSession>();
         using var stream = new MemoryStream();
         var cmd = new ExportSellerAnalyticsSalesCommand(
             Guid.Empty,
@@ -43,7 +44,7 @@ public sealed class ExportSellerAnalyticsSalesCommandValidatorTests
             stream,
             session);
 
-        var result = await _validator.ValidateAsync(cmd);
+        ValidationResult result = await _validator.ValidateAsync(cmd);
         result.IsValid.Should().BeFalse();
         result.Errors.Should().Contain(e => e.PropertyName == nameof(cmd.SellerId));
     }
@@ -51,7 +52,7 @@ public sealed class ExportSellerAnalyticsSalesCommandValidatorTests
     [Fact]
     public async Task Validate_WhenInvalidDateRange_ShouldFail()
     {
-        var session = Substitute.For<ISellerAnalyticsSalesExportSession>();
+        ISellerAnalyticsSalesExportSession session = Substitute.For<ISellerAnalyticsSalesExportSession>();
         using var stream = new MemoryStream();
         var cmd = new ExportSellerAnalyticsSalesCommand(
             Guid.NewGuid(),
@@ -61,7 +62,7 @@ public sealed class ExportSellerAnalyticsSalesCommandValidatorTests
             stream,
             session);
 
-        var result = await _validator.ValidateAsync(cmd);
+        ValidationResult result = await _validator.ValidateAsync(cmd);
         result.IsValid.Should().BeFalse();
         result.Errors.Should().Contain(e => e.ErrorMessage.Contains(ErrorCodes.ERR_ANALYTICS_INVALID_RANGE));
     }
@@ -69,7 +70,7 @@ public sealed class ExportSellerAnalyticsSalesCommandValidatorTests
     [Fact]
     public async Task Validate_WhenOutputStreamNull_ShouldFail()
     {
-        var session = Substitute.For<ISellerAnalyticsSalesExportSession>();
+        ISellerAnalyticsSalesExportSession session = Substitute.For<ISellerAnalyticsSalesExportSession>();
         var cmd = new ExportSellerAnalyticsSalesCommand(
             Guid.NewGuid(),
             _validFrom,
@@ -78,7 +79,7 @@ public sealed class ExportSellerAnalyticsSalesCommandValidatorTests
             null!,
             session);
 
-        var result = await _validator.ValidateAsync(cmd);
+        ValidationResult result = await _validator.ValidateAsync(cmd);
         result.IsValid.Should().BeFalse();
         result.Errors.Should().Contain(e => e.PropertyName == nameof(cmd.OutputStream));
     }
@@ -95,7 +96,7 @@ public sealed class ExportSellerAnalyticsSalesCommandValidatorTests
             stream,
             null!);
 
-        var result = await _validator.ValidateAsync(cmd);
+        ValidationResult result = await _validator.ValidateAsync(cmd);
         result.IsValid.Should().BeFalse();
         result.Errors.Should().Contain(e => e.PropertyName == nameof(cmd.Session));
     }

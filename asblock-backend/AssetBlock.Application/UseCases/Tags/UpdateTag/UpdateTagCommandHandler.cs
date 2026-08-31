@@ -1,11 +1,12 @@
 using Ardalis.Result;
+using AssetBlock.Application.Messaging;
 using AssetBlock.Domain.Abstractions.Services;
 using AssetBlock.Domain.Core.Constants;
 using AssetBlock.Domain.Core.Dto.Audit;
 using AssetBlock.Domain.Core.Dto.Tags;
+using AssetBlock.Domain.Core.Entities;
 using AssetBlock.Domain.Core.Enums;
 using AssetBlock.Domain.Core.Exceptions;
-using AssetBlock.Application.Messaging;
 using Microsoft.Extensions.Logging;
 
 namespace AssetBlock.Application.UseCases.Tags.UpdateTag;
@@ -19,7 +20,7 @@ internal sealed class UpdateTagCommandHandler(
 {
     public async Task<Result<TagDto>> Handle(UpdateTagCommand request, CancellationToken cancellationToken)
     {
-        var tag = await tagStore.GetById(request.Id, cancellationToken);
+        Tag? tag = await tagStore.GetById(request.Id, cancellationToken);
         if (tag is null)
         {
             return Result.NotFound(ErrorCodes.ERR_TAG_NOT_FOUND);
@@ -31,7 +32,7 @@ internal sealed class UpdateTagCommandHandler(
             return Result.Success(new TagDto(tag.Id, tag.Name));
         }
 
-        var existing = await tagStore.GetByName(normalizedName, cancellationToken);
+        Tag? existing = await tagStore.GetByName(normalizedName, cancellationToken);
         if (existing is not null)
         {
             return Result.Conflict(ErrorCodes.ERR_TAG_ALREADY_EXISTS);

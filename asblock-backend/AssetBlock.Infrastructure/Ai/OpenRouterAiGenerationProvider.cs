@@ -1,3 +1,9 @@
+using System.Diagnostics;
+using System.Net;
+using System.Net.Http.Headers;
+using System.Text;
+using System.Text.Json;
+using System.Text.Json.Nodes;
 using AssetBlock.Domain.Abstractions.Services;
 using AssetBlock.Domain.Core.Constants;
 using AssetBlock.Domain.Core.Dto;
@@ -5,12 +11,6 @@ using AssetBlock.Domain.Core.Enums;
 using AssetBlock.Domain.Core.Primitives.AppSettingsOptions;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
-using System.Diagnostics;
-using System.Net;
-using System.Net.Http.Headers;
-using System.Text;
-using System.Text.Json;
-using System.Text.Json.Nodes;
 
 namespace AssetBlock.Infrastructure.Ai;
 
@@ -31,8 +31,8 @@ internal sealed class OpenRouterAiGenerationProvider(
         CancellationToken cancellationToken)
     {
         var started = Stopwatch.GetTimestamp();
-        var options = optionsAccessor.Value;
-        var models = options.Models;
+        OpenRouterOptions options = optionsAccessor.Value;
+        List<string> models = options.Models;
         if (models.Count == 0 || models.Any(model => !AiConfigurationRules.IsModelId(model)))
         {
             return Terminal(ErrorCodes.ERR_AI_MODEL_NOT_ALLOWED, started);
@@ -49,7 +49,7 @@ internal sealed class OpenRouterAiGenerationProvider(
             return Terminal(ErrorCodes.ERR_AI_INVALID_REQUEST, started);
         }
 
-        var client = httpClientFactory.CreateClient(HTTP_CLIENT_NAME);
+        HttpClient client = httpClientFactory.CreateClient(HTTP_CLIENT_NAME);
         using var httpRequest = new HttpRequestMessage(HttpMethod.Post, "chat/completions");
         httpRequest.Content = new StringContent(BuildPayload(request, options), Encoding.UTF8, "application/json");
         httpRequest.Headers.Authorization = new AuthenticationHeaderValue("Bearer", options.ApiKey);
@@ -64,7 +64,7 @@ internal sealed class OpenRouterAiGenerationProvider(
             httpRequest.Headers.TryAddWithoutValidation("X-OpenRouter-Title", options.AppName);
         }
 
-        using var timed = await AiTimedHttp.Send(
+        using AiTimedHttpResult timed = await AiTimedHttp.Send(
             client,
             httpRequest,
             options.Timeout,
@@ -82,8 +82,8 @@ internal sealed class OpenRouterAiGenerationProvider(
             return Retryable(ErrorCodes.ERR_AI_PROVIDER_UNAVAILABLE, started, retryAfter: null);
         }
 
-        var response = timed.Response!;
-        var retryAfter = RetryAfterParser.Parse(response.Headers, options.MaxRetryAfter);
+        HttpResponseMessage response = timed.Response!;
+        TimeSpan? retryAfter = RetryAfterParser.Parse(response.Headers, options.MaxRetryAfter);
         logger.LogInformation("OpenRouter generation completed with HTTP {StatusCode}", (int)response.StatusCode);
 
         if (IsRetryableStatus(response.StatusCode))
@@ -134,21 +134,21 @@ internal sealed class OpenRouterAiGenerationProvider(
         try
         {
             using var document = JsonDocument.Parse(body);
-            var root = document.RootElement;
-            var actualModel = root.TryGetProperty("model", out var modelEl) ? modelEl.GetString() : null;
-            var requestId = root.TryGetProperty("id", out var idEl) ? Truncate(idEl.GetString()) : null;
+            JsonElement root = document.RootElement;
+            var actualModel = root.TryGetProperty("model", out JsonElement modelEl) ? modelEl.GetString() : null;
+            var requestId = root.TryGetProperty("id", out JsonElement idEl) ? Truncate(idEl.GetString()) : null;
             var upstream = ReadUpstreamProvider(root);
 
             int? inputTokens = null;
             int? outputTokens = null;
-            if (root.TryGetProperty("usage", out var usage) && usage.ValueKind == JsonValueKind.Object)
+            if (root.TryGetProperty("usage", out JsonElement usage) && usage.ValueKind == JsonValueKind.Object)
             {
-                if (usage.TryGetProperty("prompt_tokens", out var prompt) && prompt.TryGetInt32(out var promptTokens))
+                if (usage.TryGetProperty("prompt_tokens", out JsonElement prompt) && prompt.TryGetInt32(out var promptTokens))
                 {
                     inputTokens = promptTokens;
                 }
 
-                if (usage.TryGetProperty("completion_tokens", out var completion) && completion.TryGetInt32(out var completionTokens))
+                if (usage.TryGetProperty("completion_tokens", out JsonElement completion) && completion.TryGetInt32(out var completionTokens))
                 {
                     outputTokens = completionTokens;
                 }
@@ -202,20 +202,20 @@ internal sealed class OpenRouterAiGenerationProvider(
 
     private static string? ReadUpstreamProvider(JsonElement root)
     {
-        if (!root.TryGetProperty("openrouter_metadata", out var metadata)
+        if (!root.TryGetProperty("openrouter_metadata", out JsonElement metadata)
             || metadata.ValueKind != JsonValueKind.Object
-            || !metadata.TryGetProperty("endpoints", out var endpoints)
+            || !metadata.TryGetProperty("endpoints", out JsonElement endpoints)
             || endpoints.ValueKind != JsonValueKind.Object
-            || !endpoints.TryGetProperty("available", out var available)
+            || !endpoints.TryGetProperty("available", out JsonElement available)
             || available.ValueKind != JsonValueKind.Array)
         {
             return null;
         }
 
-        foreach (var candidate in available.EnumerateArray())
+        foreach (JsonElement candidate in available.EnumerateArray())
         {
             if (candidate.ValueKind != JsonValueKind.Object
-                || !candidate.TryGetProperty("selected", out var selected)
+                || !candidate.TryGetProperty("selected", out JsonElement selected)
                 || selected.ValueKind != JsonValueKind.True)
             {
                 continue;
@@ -229,7 +229,7 @@ internal sealed class OpenRouterAiGenerationProvider(
 
     private static string? ReadEndpointName(JsonElement endpoint)
     {
-        if (endpoint.TryGetProperty("provider", out var providerEl))
+        if (endpoint.TryGetProperty("provider", out JsonElement providerEl))
         {
             if (providerEl.ValueKind == JsonValueKind.String)
             {
@@ -237,13 +237,13 @@ internal sealed class OpenRouterAiGenerationProvider(
             }
 
             if (providerEl.ValueKind == JsonValueKind.Object
-                && providerEl.TryGetProperty("name", out var nestedName))
+                && providerEl.TryGetProperty("name", out JsonElement nestedName))
             {
                 return Truncate(nestedName.GetString());
             }
         }
 
-        return endpoint.TryGetProperty("name", out var nameEl)
+        return endpoint.TryGetProperty("name", out JsonElement nameEl)
             ? Truncate(nameEl.GetString())
             : null;
     }
@@ -251,13 +251,13 @@ internal sealed class OpenRouterAiGenerationProvider(
     private static bool TryReadContent(JsonElement root, out string structuredJson)
     {
         structuredJson = string.Empty;
-        if (!root.TryGetProperty("choices", out var choices) || choices.ValueKind != JsonValueKind.Array || choices.GetArrayLength() == 0)
+        if (!root.TryGetProperty("choices", out JsonElement choices) || choices.ValueKind != JsonValueKind.Array || choices.GetArrayLength() == 0)
         {
             return false;
         }
 
-        var first = choices[0];
-        if (!first.TryGetProperty("message", out var message) || !message.TryGetProperty("content", out var content))
+        JsonElement first = choices[0];
+        if (!first.TryGetProperty("message", out JsonElement message) || !message.TryGetProperty("content", out JsonElement content))
         {
             return false;
         }

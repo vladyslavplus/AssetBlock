@@ -47,10 +47,10 @@ internal sealed class EmailDispatchOutboxHandler(
         var smtpTimeoutSeconds = Math.Max(emailOptions.Value.Smtp?.TimeoutSeconds ?? 30, 5);
         var sendDeadline = TimeSpan.FromSeconds(smtpTimeoutSeconds);
         var claimSafetyMargin = TimeSpan.FromSeconds(Math.Max(smtpTimeoutSeconds, 30));
-        var claimDuration = sendDeadline + claimSafetyMargin;
+        TimeSpan claimDuration = sendDeadline + claimSafetyMargin;
 
         var messageId = BuildMessageId(message.Id, emailOptions.Value.MessageIdDomain);
-        var (claimStatus, claimToken) = await emailDeliveryStore.TryClaimDelivery(
+        (DeliveryClaimStatus claimStatus, Guid? claimToken) = await emailDeliveryStore.TryClaimDelivery(
             message.Id,
             messageId,
             payload.RecipientAddress.Trim(),
@@ -95,7 +95,7 @@ internal sealed class EmailDispatchOutboxHandler(
             payload.RecipientUserId);
 
         var stopwatch = Stopwatch.StartNew();
-        var outcome = DiagnosticsOutcome.SUCCESS;
+        DiagnosticsOutcome outcome = DiagnosticsOutcome.SUCCESS;
         var transportSucceeded = false;
         bool deliveryConfirmed;
 

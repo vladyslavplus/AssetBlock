@@ -1,9 +1,10 @@
 using Ardalis.Result;
+using AssetBlock.Application.Messaging;
 using AssetBlock.Domain.Abstractions.Services;
 using AssetBlock.Domain.Core.Constants;
 using AssetBlock.Domain.Core.Dto.Audit;
+using AssetBlock.Domain.Core.Entities;
 using AssetBlock.Domain.Core.Enums;
-using AssetBlock.Application.Messaging;
 using Microsoft.Extensions.Logging;
 
 namespace AssetBlock.Application.UseCases.Tags.DeleteTag;
@@ -17,7 +18,7 @@ internal sealed class DeleteTagCommandHandler(
 {
     public async Task<Result> Handle(DeleteTagCommand request, CancellationToken cancellationToken)
     {
-        var tag = await tagStore.GetById(request.Id, cancellationToken);
+        Tag? tag = await tagStore.GetById(request.Id, cancellationToken);
         if (tag is null)
         {
             return Result.NotFound(ErrorCodes.ERR_TAG_NOT_FOUND);

@@ -1,4 +1,6 @@
 using AssetBlock.Domain.Abstractions.Services;
+using AssetBlock.Domain.Core.Dto;
+using AssetBlock.Domain.Core.Primitives.Storage;
 using AssetBlock.Infrastructure.Persistence;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
 using StackExchange.Redis;
@@ -13,8 +15,8 @@ internal sealed class PostgreSqlHealthCheck(IServiceScopeFactory scopeFactory) :
     {
         try
         {
-            await using var scope = scopeFactory.CreateAsyncScope();
-            var dbContext = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+            await using AsyncServiceScope scope = scopeFactory.CreateAsyncScope();
+            ApplicationDbContext dbContext = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
             return await dbContext.Database.CanConnectAsync(cancellationToken)
                 ? HealthCheckResult.Healthy()
                 : HealthCheckResult.Unhealthy("PostgreSQL is unreachable.");
@@ -44,9 +46,9 @@ internal sealed class StorageHealthCheck(IServiceScopeFactory scopeFactory) : IH
     {
         try
         {
-            await using var scope = scopeFactory.CreateAsyncScope();
-            var storage = scope.ServiceProvider.GetRequiredService<IAssetStorageService>();
-            await using var enumerator = storage.ListObjects(READINESS_PREFIX, cancellationToken).GetAsyncEnumerator(cancellationToken);
+            await using AsyncServiceScope scope = scopeFactory.CreateAsyncScope();
+            IAssetStorageService storage = scope.ServiceProvider.GetRequiredService<IAssetStorageService>();
+            await using IAsyncEnumerator<StorageObjectInfo> enumerator = storage.ListObjects(READINESS_PREFIX, cancellationToken).GetAsyncEnumerator(cancellationToken);
             _ = await enumerator.MoveNextAsync();
             return HealthCheckResult.Healthy();
         }
@@ -91,7 +93,7 @@ internal sealed class ClamAvHealthCheck(IContentMalwareScanner scanner) : IHealt
     {
         try
         {
-            var state = await scanner.GetSignatureState(cancellationToken);
+            MalwareScannerSignatureState state = await scanner.GetSignatureState(cancellationToken);
             if (!state.IsAvailable)
             {
                 return HealthCheckResult.Unhealthy("Malware scanner readiness check failed.");

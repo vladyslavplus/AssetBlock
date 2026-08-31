@@ -66,7 +66,7 @@ public sealed class UsdAmountTests
     [InlineData(0.0001)]
     public void FromDollarsExact_WithSubCentPrecision_ShouldThrowArgumentException(decimal subCentDollars)
     {
-        var act = () => UsdAmount.FromDollarsExact(subCentDollars);
+        Func<UsdAmount> act = () => UsdAmount.FromDollarsExact(subCentDollars);
 
         act.Should().Throw<ArgumentException>()
             .WithMessage("*at most two decimal places*");
@@ -76,7 +76,7 @@ public sealed class UsdAmountTests
     public void FromDollarsExact_DoesNotPerformRounding()
     {
         // 1.004m would round to 1.00m if rounded, but exact must reject it.
-        var act = () => UsdAmount.FromDollarsExact(1.004m);
+        Func<UsdAmount> act = () => UsdAmount.FromDollarsExact(1.004m);
 
         act.Should().Throw<ArgumentException>();
     }
@@ -112,7 +112,7 @@ public sealed class UsdAmountTests
     [Fact]
     public void FromCents_WithNegativeCents_ShouldThrowArgumentOutOfRangeException()
     {
-        var act = () => UsdAmount.FromCents(-1);
+        Func<UsdAmount> act = () => UsdAmount.FromCents(-1);
 
         act.Should().Throw<ArgumentOutOfRangeException>()
             .WithMessage("*negative*");
@@ -121,7 +121,7 @@ public sealed class UsdAmountTests
     [Fact]
     public void FromDollarsExact_WithNegativeDollars_ShouldThrowArgumentOutOfRangeException()
     {
-        var act = () => UsdAmount.FromDollarsExact(-0.01m);
+        Func<UsdAmount> act = () => UsdAmount.FromDollarsExact(-0.01m);
 
         act.Should().Throw<ArgumentOutOfRangeException>()
             .WithMessage("*negative*");
@@ -130,7 +130,7 @@ public sealed class UsdAmountTests
     [Fact]
     public void FromDollarsRounded_WithNegativeDollars_ShouldThrowArgumentOutOfRangeException()
     {
-        var act = () => UsdAmount.FromDollarsRounded(-0.005m, MidpointRounding.AwayFromZero);
+        Func<UsdAmount> act = () => UsdAmount.FromDollarsRounded(-0.005m, MidpointRounding.AwayFromZero);
 
         act.Should().Throw<ArgumentOutOfRangeException>()
             .WithMessage("*negative*");
@@ -150,7 +150,7 @@ public sealed class UsdAmountTests
     public void FromDollarsExact_BeyondSafeBoundary_ShouldThrowArgumentOutOfRangeExceptionWithoutRawOverflow()
     {
         const decimal beyondMaxDollars = 92233720368547758.08m;
-        var act = () => UsdAmount.FromDollarsExact(beyondMaxDollars);
+        Func<UsdAmount> act = () => UsdAmount.FromDollarsExact(beyondMaxDollars);
 
         act.Should().Throw<ArgumentOutOfRangeException>()
             .WithMessage("*exceeds the maximum supported value*");
@@ -159,7 +159,7 @@ public sealed class UsdAmountTests
     [Fact]
     public void FromDollarsExact_WithDecimalMaxValue_ShouldThrowArgumentOutOfRangeExceptionWithoutRawOverflow()
     {
-        var act = () => UsdAmount.FromDollarsExact(decimal.MaxValue);
+        Func<UsdAmount> act = () => UsdAmount.FromDollarsExact(decimal.MaxValue);
 
         act.Should().Throw<ArgumentOutOfRangeException>()
             .WithMessage("*exceeds the maximum supported value*");
@@ -169,7 +169,7 @@ public sealed class UsdAmountTests
     public void FromDollarsRounded_BeyondSafeBoundary_ShouldThrowArgumentOutOfRangeExceptionWithoutRawOverflow()
     {
         const decimal beyondMaxDollars = 92233720368547758.08m;
-        var act = () => UsdAmount.FromDollarsRounded(beyondMaxDollars, MidpointRounding.AwayFromZero);
+        Func<UsdAmount> act = () => UsdAmount.FromDollarsRounded(beyondMaxDollars, MidpointRounding.AwayFromZero);
 
         act.Should().Throw<ArgumentOutOfRangeException>()
             .WithMessage("*exceeds the maximum supported value*");

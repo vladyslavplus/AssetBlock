@@ -1,3 +1,4 @@
+using Ardalis.Result;
 using AssetBlock.Application.Common.Caching;
 using AssetBlock.Application.UseCases.SellerAnalytics.GetSellerAnalyticsProducts;
 using AssetBlock.Domain.Abstractions.Services;
@@ -63,7 +64,7 @@ public sealed class GetSellerAnalyticsProductsQueryHandlerTests
                 1));
 
         var req = new AnalyticsProductsRequest(new DateOnly(2024, 1, 1), new DateOnly(2024, 2, 1));
-        var result = await _handler.Handle(new GetSellerAnalyticsProductsQuery(Guid.NewGuid(), req), CancellationToken.None);
+        Result<AnalyticsProductsResult> result = await _handler.Handle(new GetSellerAnalyticsProductsQuery(Guid.NewGuid(), req), CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
         result.Value.Items.Should().HaveCount(1);

@@ -3,6 +3,7 @@ using AssetBlock.Domain.Core.Dto.Users;
 using AssetBlock.Domain.Core.Entities;
 using AssetBlock.Domain.Core.Exceptions;
 using AssetBlock.Infrastructure.IntegrationTests.Support;
+using AssetBlock.Infrastructure.Persistence;
 using AssetBlock.Infrastructure.Persistence.Stores;
 
 namespace AssetBlock.Infrastructure.IntegrationTests.Persistence.Stores;
@@ -13,22 +14,22 @@ public sealed class PurchaseStorePostgresTests(PostgresFixture fixture)
     [Fact]
     public async Task ListForUser_WhenPurchasesExist_ShouldProjectLibraryFieldsAndReviewState()
     {
-        await using var db = await fixture.CreateCleanDbContext();
+        await using ApplicationDbContext db = await fixture.CreateCleanDbContext();
         (User author, Category category) = await TestData.SeedAuthorAndCategory(db);
-        var buyer = TestData.CreateUser("buyer", "buyer@example.test");
+        User buyer = TestData.CreateUser("buyer", "buyer@example.test");
         db.Users.Add(buyer);
         await db.SaveChangesAsync();
 
-        var reviewedAsset = TestData.CreateAsset(author.Id, category.Id, title: "Reviewed Pack", price: 12.50m);
-        var plainAsset = TestData.CreateAsset(author.Id, category.Id, title: "Plain Pack", price: 3.00m);
+        Asset reviewedAsset = TestData.CreateAsset(author.Id, category.Id, title: "Reviewed Pack", price: 12.50m);
+        Asset plainAsset = TestData.CreateAsset(author.Id, category.Id, title: "Plain Pack", price: 3.00m);
         db.Assets.AddRange(reviewedAsset, plainAsset);
-        var reviewedVersion = TestData.CreateAssetVersion(reviewedAsset.Id);
-        var plainVersion = TestData.CreateAssetVersion(plainAsset.Id);
+        AssetVersion reviewedVersion = TestData.CreateAssetVersion(reviewedAsset.Id);
+        AssetVersion plainVersion = TestData.CreateAssetVersion(plainAsset.Id);
         db.AssetVersions.AddRange(reviewedVersion, plainVersion);
         await db.SaveChangesAsync();
 
-        var older = DateTimeOffset.UtcNow.AddDays(-2);
-        var newer = DateTimeOffset.UtcNow.AddDays(-1);
+        DateTimeOffset older = DateTimeOffset.UtcNow.AddDays(-2);
+        DateTimeOffset newer = DateTimeOffset.UtcNow.AddDays(-1);
         TestData.AddCompletedPurchase(
             db,
             TestData.CreatePurchase(buyer.Id, reviewedAsset.Id, reviewedVersion.Id, purchasedAt: older),
@@ -45,7 +46,7 @@ public sealed class PurchaseStorePostgresTests(PostgresFixture fixture)
         await db.SaveChangesAsync();
 
         var store = new PurchaseStore(db);
-        var result = await store.ListForUser(buyer.Id, new ListMyPurchasesRequest
+        PagedResult<PurchaseLibraryItemDto> result = await store.ListForUser(buyer.Id, new ListMyPurchasesRequest
         {
             Page = 1,
             PageSize = 10,
@@ -68,19 +69,19 @@ public sealed class PurchaseStorePostgresTests(PostgresFixture fixture)
     [Fact]
     public async Task ListForUser_WhenPagingByPurchasedAt_ShouldReturnStablePages()
     {
-        await using var db = await fixture.CreateCleanDbContext();
+        await using ApplicationDbContext db = await fixture.CreateCleanDbContext();
         (User author, Category category) = await TestData.SeedAuthorAndCategory(db);
-        var buyer = TestData.CreateUser("buyer2", "buyer2@example.test");
+        User buyer = TestData.CreateUser("buyer2", "buyer2@example.test");
         db.Users.Add(buyer);
         await db.SaveChangesAsync();
 
-        var baseTime = DateTimeOffset.UtcNow.AddHours(-10);
+        DateTimeOffset baseTime = DateTimeOffset.UtcNow.AddHours(-10);
         for (var i = 0; i < 5; i++)
         {
-            var asset = TestData.CreateAsset(author.Id, category.Id, title: $"Asset {i}");
+            Asset asset = TestData.CreateAsset(author.Id, category.Id, title: $"Asset {i}");
             db.Assets.Add(asset);
             await db.SaveChangesAsync();
-            var version = TestData.CreateAssetVersion(asset.Id);
+            AssetVersion version = TestData.CreateAssetVersion(asset.Id);
             db.AssetVersions.Add(version);
             await db.SaveChangesAsync();
             TestData.AddCompletedPurchase(
@@ -92,14 +93,14 @@ public sealed class PurchaseStorePostgresTests(PostgresFixture fixture)
         }
 
         var store = new PurchaseStore(db);
-        var page1 = await store.ListForUser(buyer.Id, new ListMyPurchasesRequest
+        PagedResult<PurchaseLibraryItemDto> page1 = await store.ListForUser(buyer.Id, new ListMyPurchasesRequest
         {
             Page = 1,
             PageSize = 2,
             SortBy = "PurchasedAt",
             SortDirection = SortDirection.ASC
         });
-        var page2 = await store.ListForUser(buyer.Id, new ListMyPurchasesRequest
+        PagedResult<PurchaseLibraryItemDto> page2 = await store.ListForUser(buyer.Id, new ListMyPurchasesRequest
         {
             Page = 2,
             PageSize = 2,
@@ -115,21 +116,21 @@ public sealed class PurchaseStorePostgresTests(PostgresFixture fixture)
     [Fact]
     public async Task ListForUser_WhenPurchasedAtTies_ShouldOrderByIdAsTieBreaker()
     {
-        await using var db = await fixture.CreateCleanDbContext();
+        await using ApplicationDbContext db = await fixture.CreateCleanDbContext();
         (User author, Category category) = await TestData.SeedAuthorAndCategory(db);
-        var buyer = TestData.CreateUser("buyer3", "buyer3@example.test");
+        User buyer = TestData.CreateUser("buyer3", "buyer3@example.test");
         db.Users.Add(buyer);
         await db.SaveChangesAsync();
 
-        var sharedTime = DateTimeOffset.UtcNow.AddHours(-1);
+        DateTimeOffset sharedTime = DateTimeOffset.UtcNow.AddHours(-1);
         var idLow = Guid.Parse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa");
         var idHigh = Guid.Parse("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb");
 
-        var assetA = TestData.CreateAsset(author.Id, category.Id, title: "A");
-        var assetB = TestData.CreateAsset(author.Id, category.Id, title: "B");
+        Asset assetA = TestData.CreateAsset(author.Id, category.Id, title: "A");
+        Asset assetB = TestData.CreateAsset(author.Id, category.Id, title: "B");
         db.Assets.AddRange(assetA, assetB);
-        var versionA = TestData.CreateAssetVersion(assetA.Id);
-        var versionB = TestData.CreateAssetVersion(assetB.Id);
+        AssetVersion versionA = TestData.CreateAssetVersion(assetA.Id);
+        AssetVersion versionB = TestData.CreateAssetVersion(assetB.Id);
         db.AssetVersions.AddRange(versionA, versionB);
         await db.SaveChangesAsync();
 
@@ -146,7 +147,7 @@ public sealed class PurchaseStorePostgresTests(PostgresFixture fixture)
         await db.SaveChangesAsync();
 
         var store = new PurchaseStore(db);
-        var page = await store.ListForUser(buyer.Id, new ListMyPurchasesRequest
+        PagedResult<PurchaseLibraryItemDto> page = await store.ListForUser(buyer.Id, new ListMyPurchasesRequest
         {
             Page = 1,
             PageSize = 10,
@@ -160,26 +161,26 @@ public sealed class PurchaseStorePostgresTests(PostgresFixture fixture)
     [Fact]
     public async Task Add_WhenOrderLineIdDuplicates_ShouldThrowDuplicateEntitlementException()
     {
-        await using var db = await fixture.CreateCleanDbContext();
+        await using ApplicationDbContext db = await fixture.CreateCleanDbContext();
         (User author, Category category) = await TestData.SeedAuthorAndCategory(db);
-        var buyerA = TestData.CreateUser("dup-line-a", "dup-line-a@example.test");
-        var buyerB = TestData.CreateUser("dup-line-b", "dup-line-b@example.test");
+        User buyerA = TestData.CreateUser("dup-line-a", "dup-line-a@example.test");
+        User buyerB = TestData.CreateUser("dup-line-b", "dup-line-b@example.test");
         db.Users.AddRange(buyerA, buyerB);
-        var assetA = TestData.CreateAsset(author.Id, category.Id, title: "Line Dup A");
-        var assetB = TestData.CreateAsset(author.Id, category.Id, title: "Line Dup B");
+        Asset assetA = TestData.CreateAsset(author.Id, category.Id, title: "Line Dup A");
+        Asset assetB = TestData.CreateAsset(author.Id, category.Id, title: "Line Dup B");
         db.Assets.AddRange(assetA, assetB);
-        var versionA = TestData.CreateAssetVersion(assetA.Id);
-        var versionB = TestData.CreateAssetVersion(assetB.Id);
+        AssetVersion versionA = TestData.CreateAssetVersion(assetA.Id);
+        AssetVersion versionB = TestData.CreateAssetVersion(assetB.Id);
         db.AssetVersions.AddRange(versionA, versionB);
         await db.SaveChangesAsync();
 
-        var first = TestData.CreatePurchase(buyerA.Id, assetA.Id, versionA.Id);
+        Purchase first = TestData.CreatePurchase(buyerA.Id, assetA.Id, versionA.Id);
         TestData.AddCompletedPurchase(db, first, assetA.Title, author.Id);
         await db.SaveChangesAsync();
         db.ChangeTracker.Clear();
 
-        var duplicate = TestData.CreatePurchase(buyerB.Id, assetB.Id, versionB.Id, orderLineId: first.OrderLineId);
-        var act = () => new PurchaseStore(db).Add(duplicate);
+        Purchase duplicate = TestData.CreatePurchase(buyerB.Id, assetB.Id, versionB.Id, orderLineId: first.OrderLineId);
+        Func<Task<Purchase>> act = () => new PurchaseStore(db).Add(duplicate);
 
         await act.Should().ThrowAsync<DuplicateEntitlementException>();
     }
@@ -187,21 +188,21 @@ public sealed class PurchaseStorePostgresTests(PostgresFixture fixture)
     [Fact]
     public async Task Add_WhenUserIdAssetIdDuplicatesWithNewOrderLine_ShouldThrowDuplicateEntitlementException()
     {
-        await using var db = await fixture.CreateCleanDbContext();
+        await using ApplicationDbContext db = await fixture.CreateCleanDbContext();
         (User author, Category category) = await TestData.SeedAuthorAndCategory(db);
-        var buyer = TestData.CreateUser("dup-user-asset", "dup-user-asset@example.test");
+        User buyer = TestData.CreateUser("dup-user-asset", "dup-user-asset@example.test");
         db.Users.Add(buyer);
-        var asset = TestData.CreateAsset(author.Id, category.Id, title: "User Asset Dup");
+        Asset asset = TestData.CreateAsset(author.Id, category.Id, title: "User Asset Dup");
         db.Assets.Add(asset);
-        var version = TestData.CreateAssetVersion(asset.Id);
+        AssetVersion version = TestData.CreateAssetVersion(asset.Id);
         db.AssetVersions.Add(version);
         await db.SaveChangesAsync();
 
-        var first = TestData.CreatePurchase(buyer.Id, asset.Id, version.Id);
+        Purchase first = TestData.CreatePurchase(buyer.Id, asset.Id, version.Id);
         TestData.AddCompletedPurchase(db, first, asset.Title, author.Id, stripeSessionId: "cs_user_asset_first");
         await db.SaveChangesAsync();
 
-        var conflict = TestData.CreatePurchase(buyer.Id, asset.Id, version.Id);
+        Purchase conflict = TestData.CreatePurchase(buyer.Id, asset.Id, version.Id);
         TestData.AddCompletedCheckoutIntent(
             db,
             conflict,
@@ -212,7 +213,7 @@ public sealed class PurchaseStorePostgresTests(PostgresFixture fixture)
         db.ChangeTracker.Clear();
 
         var store = new PurchaseStore(db);
-        var act = () => store.Add(conflict);
+        Func<Task<Purchase>> act = () => store.Add(conflict);
 
         await act.Should().ThrowAsync<DuplicateEntitlementException>();
     }
@@ -220,15 +221,15 @@ public sealed class PurchaseStorePostgresTests(PostgresFixture fixture)
     [Fact]
     public async Task ListForUser_WhenAssetIsSoftDeleted_ShouldStillReturnPurchaseAndPreserveLibraryEntitlement()
     {
-        await using var db = await fixture.CreateCleanDbContext();
+        await using ApplicationDbContext db = await fixture.CreateCleanDbContext();
         (User author, Category category) = await TestData.SeedAuthorAndCategory(db);
-        var buyer = TestData.CreateUser("library-buyer", "library-buyer@example.test");
+        User buyer = TestData.CreateUser("library-buyer", "library-buyer@example.test");
         db.Users.Add(buyer);
         await db.SaveChangesAsync();
 
-        var asset = TestData.CreateAsset(author.Id, category.Id, title: "Soft Deleted Pack", price: 19.99m);
+        Asset asset = TestData.CreateAsset(author.Id, category.Id, title: "Soft Deleted Pack", price: 19.99m);
         db.Assets.Add(asset);
-        var version = TestData.CreateAssetVersion(asset.Id);
+        AssetVersion version = TestData.CreateAssetVersion(asset.Id);
         db.AssetVersions.Add(version);
         await db.SaveChangesAsync();
 
@@ -245,12 +246,12 @@ public sealed class PurchaseStorePostgresTests(PostgresFixture fixture)
         await assetStore.SoftDelete(asset.Id, DateTimeOffset.UtcNow);
 
         // Verify public lookup returns null for delisted asset
-        var publicLookup = await assetStore.GetById(asset.Id);
+        Asset? publicLookup = await assetStore.GetById(asset.Id);
         publicLookup.Should().BeNull();
 
         // Verify purchaser library query still includes the soft-deleted asset with matching total count
         var store = new PurchaseStore(db);
-        var result = await store.ListForUser(buyer.Id, new ListMyPurchasesRequest
+        PagedResult<PurchaseLibraryItemDto> result = await store.ListForUser(buyer.Id, new ListMyPurchasesRequest
         {
             Page = 1,
             PageSize = 10,

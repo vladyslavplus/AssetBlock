@@ -11,7 +11,7 @@ internal sealed class UploadAssetCommandValidator : AbstractValidator<UploadAsse
 {
     public UploadAssetCommandValidator(IOptions<FileUploadOptions> fileUploadOptions)
     {
-        var uploadOpts = fileUploadOptions.Value;
+        FileUploadOptions uploadOpts = fileUploadOptions.Value;
 
         RuleFor(c => c.AuthorId)
             .NotEmpty().WithMessage("AuthorId is required.");

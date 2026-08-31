@@ -25,7 +25,7 @@ internal sealed class EncryptionOptionsValidator : IValidateOptions<EncryptionOp
             return ValidateOptionsResult.Fail($"Encryption:CurrentKeyId '{options.CurrentKeyId}' was not found in Encryption:Keys.");
         }
 
-        foreach (var (keyId, keyBase64) in options.Keys)
+        foreach ((var keyId, var keyBase64) in options.Keys)
         {
             if (string.IsNullOrWhiteSpace(keyId))
             {

@@ -1,6 +1,7 @@
 using AssetBlock.Application.UseCases.Collections.CreateCollection;
 using AssetBlock.Domain.Core.Constants;
 using AwesomeAssertions;
+using FluentValidation.Results;
 
 namespace AssetBlock.Application.Tests.Validators;
 
@@ -17,7 +18,7 @@ public sealed class CreateCollectionCommandValidatorTests
     [InlineData("   ")]
     public async Task Validate_WhenTitleMissing_ShouldFail(string? title)
     {
-        var result = await _validator.ValidateAsync(Valid(title!));
+        ValidationResult result = await _validator.ValidateAsync(Valid(title!));
 
         result.IsValid.Should().BeFalse();
         result.Errors.Should().Contain(e => e.PropertyName == nameof(CreateCollectionCommand.Title));
@@ -27,7 +28,7 @@ public sealed class CreateCollectionCommandValidatorTests
     public async Task Validate_WhenTitleExceedsMaxLength_ShouldFail()
     {
         var title = new string('a', CollectionConstants.TITLE_MAX_LENGTH + 1);
-        var result = await _validator.ValidateAsync(Valid(title));
+        ValidationResult result = await _validator.ValidateAsync(Valid(title));
 
         result.IsValid.Should().BeFalse();
         result.Errors.Should().Contain(e =>
@@ -39,7 +40,7 @@ public sealed class CreateCollectionCommandValidatorTests
     public async Task Validate_WhenTitleAtMaxLength_ShouldPass()
     {
         var title = new string('a', CollectionConstants.TITLE_MAX_LENGTH);
-        var result = await _validator.ValidateAsync(Valid(title));
+        ValidationResult result = await _validator.ValidateAsync(Valid(title));
 
         result.IsValid.Should().BeTrue();
     }
@@ -48,7 +49,7 @@ public sealed class CreateCollectionCommandValidatorTests
     public async Task Validate_WhenDescriptionExceedsMaxLength_ShouldFail()
     {
         var description = new string('b', CollectionConstants.DESCRIPTION_MAX_LENGTH + 1);
-        var result = await _validator.ValidateAsync(Valid(description: description));
+        ValidationResult result = await _validator.ValidateAsync(Valid(description: description));
 
         result.IsValid.Should().BeFalse();
         result.Errors.Should().Contain(e => e.PropertyName == nameof(CreateCollectionCommand.Description));
@@ -57,7 +58,7 @@ public sealed class CreateCollectionCommandValidatorTests
     [Fact]
     public async Task Validate_WhenSellerIdEmpty_ShouldFail()
     {
-        var result = await _validator.ValidateAsync(new CreateCollectionCommand(Guid.Empty, "Title", null));
+        ValidationResult result = await _validator.ValidateAsync(new CreateCollectionCommand(Guid.Empty, "Title", null));
 
         result.IsValid.Should().BeFalse();
         result.Errors.Should().Contain(e => e.PropertyName == nameof(CreateCollectionCommand.SellerId));

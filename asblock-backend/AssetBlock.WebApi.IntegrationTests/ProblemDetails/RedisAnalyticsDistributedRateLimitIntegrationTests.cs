@@ -36,20 +36,20 @@ public sealed class RedisAnalyticsDistributedRateLimitIntegrationTests : IAsyncL
     [Fact]
     public async Task RedisLimiter_WhenSharedAcrossHosts_ShouldEnforceSinglePartition()
     {
-        await using var appA = await StartHostAsync();
-        await using var appB = await StartHostAsync();
-        var clientA = appA.GetTestClient();
-        var clientB = appB.GetTestClient();
+        await using WebApplication appA = await StartHostAsync();
+        await using WebApplication appB = await StartHostAsync();
+        HttpClient clientA = appA.GetTestClient();
+        HttpClient clientB = appB.GetTestClient();
         const string ip = "203.0.113.77";
 
         await AnalyticsFixedWindowTestGuard.EnsureWindowHasRemainingAsync();
         for (var i = 0; i < RateLimitingConstants.Windows.ANALYTICS_EVENTS_LIMIT; i++)
         {
-            var ok = await AnalyticsRateLimitTestHost.PostProbeAsync(clientA, ip);
+            HttpResponseMessage ok = await AnalyticsRateLimitTestHost.PostProbeAsync(clientA, ip);
             ok.StatusCode.Should().Be(HttpStatusCode.Accepted, $"request {i + 1} on host A");
         }
 
-        var limitedOnB = await AnalyticsRateLimitTestHost.PostProbeAsync(clientB, ip);
+        HttpResponseMessage limitedOnB = await AnalyticsRateLimitTestHost.PostProbeAsync(clientB, ip);
         limitedOnB.StatusCode.Should().Be(HttpStatusCode.TooManyRequests);
         limitedOnB.Headers.RetryAfter.Should().NotBeNull();
     }
@@ -57,8 +57,8 @@ public sealed class RedisAnalyticsDistributedRateLimitIntegrationTests : IAsyncL
     [Fact]
     public async Task RedisLimiter_WhenAtLimit_ShouldReturn429On121stRequest()
     {
-        await using var app = await StartHostAsync();
-        var client = app.GetTestClient();
+        await using WebApplication app = await StartHostAsync();
+        HttpClient client = app.GetTestClient();
         const string ip = "203.0.113.78";
 
         await AnalyticsFixedWindowTestGuard.EnsureWindowHasRemainingAsync();
@@ -67,17 +67,17 @@ public sealed class RedisAnalyticsDistributedRateLimitIntegrationTests : IAsyncL
             (await AnalyticsRateLimitTestHost.PostProbeAsync(client, ip)).StatusCode.Should().Be(HttpStatusCode.Accepted);
         }
 
-        var limited = await AnalyticsRateLimitTestHost.PostProbeAsync(client, ip);
+        HttpResponseMessage limited = await AnalyticsRateLimitTestHost.PostProbeAsync(client, ip);
         limited.StatusCode.Should().Be(HttpStatusCode.TooManyRequests);
     }
 
     [Fact]
     public async Task RedisLimiter_WhenTwoHostsSharePartition_ShouldLimitTogether()
     {
-        await using var appA = await StartHostAsync();
-        await using var appB = await StartHostAsync();
-        var clientA = appA.GetTestClient();
-        var clientB = appB.GetTestClient();
+        await using WebApplication appA = await StartHostAsync();
+        await using WebApplication appB = await StartHostAsync();
+        HttpClient clientA = appA.GetTestClient();
+        HttpClient clientB = appB.GetTestClient();
         const string ip = "203.0.113.79";
 
         await AnalyticsFixedWindowTestGuard.EnsureWindowHasRemainingAsync();
@@ -93,31 +93,31 @@ public sealed class RedisAnalyticsDistributedRateLimitIntegrationTests : IAsyncL
     [Fact]
     public async Task RedisLimiter_WhenUnavailable_ShouldReturn202ForAnalyticsEvents()
     {
-        await using var app = await StartHostAsync("127.0.0.1:1,abortConnect=false,connectTimeout=50");
-        var client = app.GetTestClient();
-        var response = await AnalyticsRateLimitTestHost.PostProbeAsync(client, "203.0.113.88");
+        await using WebApplication app = await StartHostAsync("127.0.0.1:1,abortConnect=false,connectTimeout=50");
+        HttpClient client = app.GetTestClient();
+        HttpResponseMessage response = await AnalyticsRateLimitTestHost.PostProbeAsync(client, "203.0.113.88");
         response.StatusCode.Should().Be(HttpStatusCode.Accepted);
     }
 
     [Fact]
     public async Task RedisLimiter_WhenBffAndDirectPartitionsDiffer_ShouldRateLimitIndependently()
     {
-        await using var app = await StartHostAsync();
-        var client = app.GetTestClient();
+        await using WebApplication app = await StartHostAsync();
+        HttpClient client = app.GetTestClient();
         const string remoteIp = "203.0.113.90";
         const string clientIp = "198.51.100.10";
 
         await AnalyticsFixedWindowTestGuard.EnsureWindowHasRemainingAsync();
         for (var i = 0; i < RateLimitingConstants.Windows.ANALYTICS_EVENTS_LIMIT; i++)
         {
-            var headers = AnalyticsRateLimitTestHost.CreateSignedHeaders(
+            Dictionary<string, string?> headers = AnalyticsRateLimitTestHost.CreateSignedHeaders(
                 clientIp,
                 AnalyticsRateLimitTestHost.TEST_SIGNING_SECRET);
             (await AnalyticsRateLimitTestHost.PostProbeAsync(client, remoteIp, headers))
                 .StatusCode.Should().Be(HttpStatusCode.Accepted);
         }
 
-        var limitedBff = await AnalyticsRateLimitTestHost.PostProbeAsync(
+        HttpResponseMessage limitedBff = await AnalyticsRateLimitTestHost.PostProbeAsync(
             client,
             remoteIp,
             AnalyticsRateLimitTestHost.CreateSignedHeaders(clientIp, AnalyticsRateLimitTestHost.TEST_SIGNING_SECRET));
@@ -129,7 +129,7 @@ public sealed class RedisAnalyticsDistributedRateLimitIntegrationTests : IAsyncL
 
     private async Task<WebApplication> StartHostAsync(string? redisConnectionString = null)
     {
-        var builder = WebApplication.CreateBuilder();
+        WebApplicationBuilder builder = WebApplication.CreateBuilder();
         builder.WebHost.UseTestServer();
         builder.Services.AddRouting();
         builder.Configuration["AnalyticsRateLimiting:BffSigningSecret"] =
@@ -142,7 +142,7 @@ public sealed class RedisAnalyticsDistributedRateLimitIntegrationTests : IAsyncL
         builder.Services.AddAnalyticsBffSignatureValidation();
         builder.Services.AddApiRateLimiting();
 
-        var app = builder.Build();
+        WebApplication app = builder.Build();
         app.Use(async (context, next) =>
         {
             var ipHeader = context.Request.Headers["X-Test-Remote-Ip"].ToString();

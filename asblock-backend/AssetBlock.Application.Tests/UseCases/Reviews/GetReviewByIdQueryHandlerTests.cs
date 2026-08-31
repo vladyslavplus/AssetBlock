@@ -3,8 +3,8 @@ using Ardalis.Result;
 using AssetBlock.Application.UseCases.Reviews.GetReviewById;
 using AssetBlock.Domain.Abstractions.Services;
 using AssetBlock.Domain.Core.Constants;
-using AssetBlock.Domain.Core.Entities;
 using AssetBlock.Domain.Core.Dto.Reviews;
+using AssetBlock.Domain.Core.Entities;
 using AwesomeAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
 using NSubstitute;
@@ -42,7 +42,7 @@ public class GetReviewByIdQueryHandlerTests
         _cacheMock.GetString(key, Arg.Any<CancellationToken>()).Returns(cachedJson);
 
         // Act
-        var result = await _handler.Handle(query, CancellationToken.None);
+        Result<ReviewDetailItem> result = await _handler.Handle(query, CancellationToken.None);
 
         // Assert
         result.IsSuccess.Should().BeTrue();
@@ -63,7 +63,7 @@ public class GetReviewByIdQueryHandlerTests
         _reviewStoreMock.GetById(query.Id, Arg.Any<CancellationToken>()).Returns((Review?)null);
 
         // Act
-        var result = await _handler.Handle(query, CancellationToken.None);
+        Result<ReviewDetailItem> result = await _handler.Handle(query, CancellationToken.None);
 
         result.Status.Should().Be(ResultStatus.NotFound);
         result.Errors.Should().Contain(ErrorCodes.ERR_REVIEW_NOT_FOUND);
@@ -87,7 +87,7 @@ public class GetReviewByIdQueryHandlerTests
         _reviewStoreMock.GetById(query.Id, Arg.Any<CancellationToken>()).Returns(review);
 
         // Act
-        var result = await _handler.Handle(query, CancellationToken.None);
+        Result<ReviewDetailItem> result = await _handler.Handle(query, CancellationToken.None);
 
         // Assert
         result.IsSuccess.Should().BeTrue();
@@ -119,7 +119,7 @@ public class GetReviewByIdQueryHandlerTests
         _reviewStoreMock.GetById(query.Id, Arg.Any<CancellationToken>()).Returns(review);
 
         // Act
-        var result = await _handler.Handle(query, CancellationToken.None);
+        Result<ReviewDetailItem> result = await _handler.Handle(query, CancellationToken.None);
 
         // Assert
         result.IsSuccess.Should().BeTrue();
@@ -145,7 +145,7 @@ public class GetReviewByIdQueryHandlerTests
         };
         _reviewStoreMock.GetById(query.Id, Arg.Any<CancellationToken>()).Returns(review);
 
-        var result = await _handler.Handle(query, CancellationToken.None);
+        Result<ReviewDetailItem> result = await _handler.Handle(query, CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
         result.Value.Username.Should().Be("u");

@@ -22,12 +22,12 @@ public class ObservabilityExtensionsTests
     [Fact]
     public void AddAssetBlockObservability_WhenDisabled_ShouldNotRegisterOpenTelemetry()
     {
-        var configBuilder = new ConfigurationBuilder()
+        IConfigurationBuilder configBuilder = new ConfigurationBuilder()
             .AddInMemoryCollection(new Dictionary<string, string?>
             {
                 { "Observability:Enabled", "false" }
             });
-        var config = configBuilder.Build();
+        IConfigurationRoot config = configBuilder.Build();
 
         _services.AddAssetBlockObservability(config, _environment);
 
@@ -37,14 +37,14 @@ public class ObservabilityExtensionsTests
     [Fact]
     public void AddAssetBlockObservability_WhenEnabled_ShouldRegisterOpenTelemetry()
     {
-        var configBuilder = new ConfigurationBuilder()
+        IConfigurationBuilder configBuilder = new ConfigurationBuilder()
             .AddInMemoryCollection(new Dictionary<string, string?>
             {
                 { "Observability:Enabled", "true" },
                 { "Observability:ServiceName", "TestService" },
                 { "Observability:OtlpEndpoint", "http://127.0.0.1:4317" }
             });
-        var config = configBuilder.Build();
+        IConfigurationRoot config = configBuilder.Build();
 
         _services.AddAssetBlockObservability(config, _environment);
 

@@ -1,10 +1,10 @@
 using Ardalis.Result;
+using AssetBlock.Application.Messaging;
 using AssetBlock.Domain.Abstractions.Services;
 using AssetBlock.Domain.Core.Analytics;
 using AssetBlock.Domain.Core.Dto.Analytics;
 using AssetBlock.Domain.Core.Entities;
 using AssetBlock.Domain.Core.Enums;
-using AssetBlock.Application.Messaging;
 using Microsoft.Extensions.Logging;
 
 namespace AssetBlock.Application.UseCases.Analytics.IngestAnalyticsEvent;
@@ -27,7 +27,7 @@ internal sealed class IngestAnalyticsEventCommandHandler(
     {
         try
         {
-            var sellerId = await ResolveSellerId(request, cancellationToken);
+            Guid? sellerId = await ResolveSellerId(request, cancellationToken);
             if (sellerId is null || sellerId == request.ActorUserId)
             {
                 return Result.Success();
@@ -55,7 +55,7 @@ internal sealed class IngestAnalyticsEventCommandHandler(
     /// <summary>Returns the owning seller when the target is countable for this actor, otherwise null.</summary>
     private async Task<Guid?> ResolveSellerId(IngestAnalyticsEventCommand command, CancellationToken cancellationToken)
     {
-        var request = command.Request;
+        IngestAnalyticsEventRequest request = command.Request;
 
         switch (request.EventType)
         {
@@ -91,7 +91,7 @@ internal sealed class IngestAnalyticsEventCommandHandler(
             return Task.FromResult<Guid?>(null);
         }
 
-        var request = command.Request;
+        IngestAnalyticsEventRequest request = command.Request;
         return assetStore.ResolveDownloadAnalyticsSellerId(
             request.AssetId!.Value,
             request.AssetVersionId!.Value,

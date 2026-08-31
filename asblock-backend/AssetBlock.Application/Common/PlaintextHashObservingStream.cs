@@ -24,7 +24,7 @@ internal sealed class AssetEncryptUploadService(
         CancellationToken cancellationToken)
     {
         using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-        var combinedToken = linkedCts.Token;
+        CancellationToken combinedToken = linkedCts.Token;
 
         await using var hashingStream = new PlaintextHashObservingStream(plain);
 
@@ -36,7 +36,7 @@ internal sealed class AssetEncryptUploadService(
         {
             try
             {
-                await using var writerStream = pipe.Writer.AsStream(leaveOpen: true);
+                await using Stream writerStream = pipe.Writer.AsStream(leaveOpen: true);
                 await encryptionService.Encrypt(hashingStream, writerStream, combinedToken).ConfigureAwait(false);
                 hashingStream.FinalizeHash();
                 await pipe.Writer.CompleteAsync().ConfigureAwait(false);
@@ -53,7 +53,7 @@ internal sealed class AssetEncryptUploadService(
         {
             try
             {
-                await using var readerStream = pipe.Reader.AsStream(leaveOpen: true);
+                await using Stream readerStream = pipe.Reader.AsStream(leaveOpen: true);
                 await assetStorageService.Upload(storageKey, readerStream, ciphertextLength, combinedToken).ConfigureAwait(false);
                 await pipe.Reader.CompleteAsync().ConfigureAwait(false);
             }

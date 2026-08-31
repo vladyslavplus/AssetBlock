@@ -23,7 +23,7 @@ public sealed class EmailActionLinkProtectorTests : IDisposable
         var services = new ServiceCollection();
         services.AddLogging();
         services.AddDataProtection().PersistKeysToFileSystem(new DirectoryInfo(_tempKeysPath));
-        var sp = services.BuildServiceProvider();
+        ServiceProvider sp = services.BuildServiceProvider();
 
         IOptionsEmail emailOptions = OptionsHelper.Create(new EmailOptions
         {
@@ -35,7 +35,7 @@ public sealed class EmailActionLinkProtectorTests : IDisposable
             Smtp = new EmailSmtpOptions { Host = "localhost", Port = 1025, Security = SmtpSecurityMode.NONE, TimeoutSeconds = 30 }
         });
 
-        var dataProtectionProvider = sp.GetRequiredService<IDataProtectionProvider>();
+        IDataProtectionProvider dataProtectionProvider = sp.GetRequiredService<IDataProtectionProvider>();
         _sut = new EmailActionLinkProtector(
             dataProtectionProvider,
             emailOptions,
@@ -62,7 +62,7 @@ public sealed class EmailActionLinkProtectorTests : IDisposable
         var token = _sut.Protect(claims);
 
         token.Should().NotBeNullOrWhiteSpace();
-        var success = _sut.TryUnprotect(token, EmailActionPurpose.EMAIL_VERIFICATION, out var decoded);
+        var success = _sut.TryUnprotect(token, EmailActionPurpose.EMAIL_VERIFICATION, out EmailActionLinkClaims? decoded);
 
         success.Should().BeTrue();
         decoded.ActionId.Should().Be(claims.ActionId);
@@ -134,7 +134,7 @@ public sealed class EmailActionLinkProtectorTests : IDisposable
             EmailActionPurpose.EMAIL_VERIFICATION,
             DateTimeOffset.UtcNow.AddSeconds(-1));
 
-        var act = () => _sut.Protect(claims);
+        Func<string> act = () => _sut.Protect(claims);
         act.Should().Throw<InvalidOperationException>()
             .WithMessage("*expired*");
     }
@@ -154,15 +154,15 @@ public sealed class EmailActionLinkProtectorTests : IDisposable
                 DateTimeOffset.UtcNow.AddMinutes(30));
 
             string token;
-            using (var first = BuildProtectorProvider(keysPath))
+            using (ServiceProvider first = BuildProtectorProvider(keysPath))
             {
-                var protector = CreateProtector(first);
+                EmailActionLinkProtector protector = CreateProtector(first);
                 token = protector.Protect(claims);
             }
 
-            using var second = BuildProtectorProvider(keysPath);
-            var restarted = CreateProtector(second);
-            var success = restarted.TryUnprotect(token, EmailActionPurpose.PASSWORD_RESET, out var decoded);
+            using ServiceProvider second = BuildProtectorProvider(keysPath);
+            EmailActionLinkProtector restarted = CreateProtector(second);
+            var success = restarted.TryUnprotect(token, EmailActionPurpose.PASSWORD_RESET, out EmailActionLinkClaims? decoded);
 
             success.Should().BeTrue();
             decoded.ActionId.Should().Be(claims.ActionId);

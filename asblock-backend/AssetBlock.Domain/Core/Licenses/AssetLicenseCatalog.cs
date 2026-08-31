@@ -63,7 +63,7 @@ public static class AssetLicenseCatalog
         _templates.TryGetValue(code, out template!);
 
     public static AssetLicenseTemplate Get(AssetLicenseCode code) =>
-        _templates.TryGetValue(code, out var template)
+        _templates.TryGetValue(code, out AssetLicenseTemplate? template)
             ? template
             : throw new ArgumentOutOfRangeException(nameof(code), code, "Unknown license code.");
 

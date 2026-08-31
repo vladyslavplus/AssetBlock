@@ -1,11 +1,12 @@
 using Ardalis.Result;
+using AssetBlock.Application.Messaging;
 using AssetBlock.Domain.Abstractions.Services;
 using AssetBlock.Domain.Core.Constants;
 using AssetBlock.Domain.Core.Dto.Audit;
+using AssetBlock.Domain.Core.Dto.Collections;
+using AssetBlock.Domain.Core.Entities;
 using AssetBlock.Domain.Core.Enums;
 using AssetBlock.Domain.Core.Exceptions;
-using AssetBlock.Application.Messaging;
-using AssetBlock.Domain.Core.Entities;
 using Microsoft.Extensions.Logging;
 
 namespace AssetBlock.Application.UseCases.Collections.ReorderCollectionItems;
@@ -38,7 +39,7 @@ internal sealed class ReorderCollectionItemsCommandHandler(
                     return;
                 }
 
-                var detail = await collectionStore.GetSellerDetail(request.CollectionId, request.SellerId, ct);
+                CollectionDetailDto? detail = await collectionStore.GetSellerDetail(request.CollectionId, request.SellerId, ct);
                 if (detail is null)
                 {
                     outcome = Result.NotFound(ErrorCodes.ERR_COLLECTION_NOT_FOUND);

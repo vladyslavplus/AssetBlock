@@ -39,7 +39,7 @@ public sealed class AnalyticsRangeTests
     public void Granularity_ByDayCount_ReturnsCorrectGranularity(int days, AnalyticsGranularity expected)
     {
         var from = new DateOnly(2024, 1, 1);
-        var to = from.AddDays(days);
+        DateOnly to = from.AddDays(days);
         AnalyticsRange.Granularity(from, to).Should().Be(expected);
     }
 
@@ -93,9 +93,9 @@ public sealed class AnalyticsRangeTests
     {
         var from = new DateOnly(2024, 1, 1);
         var to = new DateOnly(2024, 1, 4); // 3 days: Jan 1, 2, 3
-        var buckets = new[] { new AnalyticsDayBucket(new DateOnly(2024, 1, 2), 50m, 1, 1) };
+        AnalyticsDayBucket[] buckets = new[] { new AnalyticsDayBucket(new DateOnly(2024, 1, 2), 50m, 1, 1) };
 
-        var series = AnalyticsRange.BuildSeries(buckets, from, to, AnalyticsGranularity.DAY, engagementAvailableFrom: null);
+        IReadOnlyList<AnalyticsSeriesPoint> series = AnalyticsRange.BuildSeries(buckets, from, to, AnalyticsGranularity.DAY, engagementAvailableFrom: null);
 
         series.Should().HaveCount(3);
         series[0].GrossRevenueCents.Should().Be(0);   // Jan 1 - no data
@@ -108,7 +108,7 @@ public sealed class AnalyticsRangeTests
     {
         var from = new DateOnly(2024, 6, 15);
         var to = new DateOnly(2024, 6, 16);
-        var series = AnalyticsRange.BuildSeries([], from, to, AnalyticsGranularity.DAY, engagementAvailableFrom: null);
+        IReadOnlyList<AnalyticsSeriesPoint> series = AnalyticsRange.BuildSeries([], from, to, AnalyticsGranularity.DAY, engagementAvailableFrom: null);
 
         series.Should().HaveCount(1);
         series[0].BucketStart.Should().Be(new DateTimeOffset(2024, 6, 15, 0, 0, 0, TimeSpan.Zero));
@@ -119,7 +119,7 @@ public sealed class AnalyticsRangeTests
     {
         var from = new DateOnly(2024, 1, 1); // Monday
         var to = new DateOnly(2024, 1, 15);  // 14 days = 2 weeks
-        var series = AnalyticsRange.BuildSeries([], from, to, AnalyticsGranularity.WEEK, engagementAvailableFrom: null);
+        IReadOnlyList<AnalyticsSeriesPoint> series = AnalyticsRange.BuildSeries([], from, to, AnalyticsGranularity.WEEK, engagementAvailableFrom: null);
 
         series.Should().HaveCount(2);
         series[0].BucketStart.DayOfWeek.Should().Be(DayOfWeek.Monday);
@@ -132,13 +132,13 @@ public sealed class AnalyticsRangeTests
         var from = new DateOnly(2024, 1, 1);
         var to = new DateOnly(2024, 1, 8);
         // Jan 1 = Monday, Jan 2 = Tuesday — both in same week
-        var buckets = new[]
+        AnalyticsDayBucket[] buckets = new[]
         {
             new AnalyticsDayBucket(new DateOnly(2024, 1, 1), 100m, 1, 1),
             new AnalyticsDayBucket(new DateOnly(2024, 1, 2), 200m, 2, 2)
         };
 
-        var series = AnalyticsRange.BuildSeries(buckets, from, to, AnalyticsGranularity.WEEK, engagementAvailableFrom: null);
+        IReadOnlyList<AnalyticsSeriesPoint> series = AnalyticsRange.BuildSeries(buckets, from, to, AnalyticsGranularity.WEEK, engagementAvailableFrom: null);
 
         series.Should().HaveCount(1);
         series[0].GrossRevenueCents.Should().Be(30000); // $300
@@ -151,14 +151,14 @@ public sealed class AnalyticsRangeTests
     {
         var from = new DateOnly(2024, 1, 1);
         var to = new DateOnly(2024, 3, 1); // Jan + Feb
-        var buckets = new[]
+        AnalyticsDayBucket[] buckets = new[]
         {
             new AnalyticsDayBucket(new DateOnly(2024, 1, 10), 100m, 1, 1),
             new AnalyticsDayBucket(new DateOnly(2024, 1, 20), 50m, 1, 1),
             new AnalyticsDayBucket(new DateOnly(2024, 2, 5), 75m, 1, 1)
         };
 
-        var series = AnalyticsRange.BuildSeries(buckets, from, to, AnalyticsGranularity.MONTH, engagementAvailableFrom: null);
+        IReadOnlyList<AnalyticsSeriesPoint> series = AnalyticsRange.BuildSeries(buckets, from, to, AnalyticsGranularity.MONTH, engagementAvailableFrom: null);
 
         series.Should().HaveCount(2);
         series[0].GrossRevenueCents.Should().Be(15000);
@@ -170,12 +170,12 @@ public sealed class AnalyticsRangeTests
     {
         var from = new DateOnly(2024, 1, 1);
         var to = new DateOnly(2024, 1, 3);
-        var engagementBuckets = new[]
+        AnalyticsEngagementDayBucket[] engagementBuckets = new[]
         {
             new AnalyticsEngagementDayBucket(from, 5, 2, 1, 1, 0)
         };
 
-        var series = AnalyticsRange.BuildSeries(
+        IReadOnlyList<AnalyticsSeriesPoint> series = AnalyticsRange.BuildSeries(
             [],
             from,
             to,
@@ -196,13 +196,13 @@ public sealed class AnalyticsRangeTests
         var from = new DateOnly(2024, 1, 1);
         var to = new DateOnly(2024, 1, 4);
         var availableFrom = new DateTimeOffset(2024, 1, 3, 0, 0, 0, TimeSpan.Zero);
-        var engagementBuckets = new[]
+        AnalyticsEngagementDayBucket[] engagementBuckets = new[]
         {
             new AnalyticsEngagementDayBucket(new DateOnly(2024, 1, 1), 1, 1, 0, 0, 0),
             new AnalyticsEngagementDayBucket(new DateOnly(2024, 1, 3), 2, 1, 0, 0, 0),
         };
 
-        var series = AnalyticsRange.BuildSeries(
+        IReadOnlyList<AnalyticsSeriesPoint> series = AnalyticsRange.BuildSeries(
             [],
             from,
             to,

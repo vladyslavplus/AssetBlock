@@ -1,3 +1,4 @@
+using Ardalis.Result;
 using AssetBlock.Application.Common;
 using AssetBlock.Application.UseCases.Payments.CreateCheckoutSession;
 using AssetBlock.Domain.Abstractions.Services;
@@ -6,7 +7,6 @@ using AssetBlock.Domain.Core.Dto.Payments;
 using AssetBlock.Domain.Core.Entities;
 using AssetBlock.Domain.Core.Enums;
 using AssetBlock.Domain.Core.Exceptions;
-using Ardalis.Result;
 using Microsoft.Extensions.Logging;
 
 namespace AssetBlock.Application.UseCases.Payments.Checkout;
@@ -31,11 +31,11 @@ internal sealed class CheckoutSessionOrchestrator(
         Func<CancellationToken, Task<CheckoutIntent?>> getPending,
         CancellationToken cancellationToken)
     {
-        var now = DateTimeOffset.UtcNow;
-        var pendingIntent = await getPending(cancellationToken);
+        DateTimeOffset now = DateTimeOffset.UtcNow;
+        CheckoutIntent? pendingIntent = await getPending(cancellationToken);
         if (pendingIntent is not null)
         {
-            var resumed = await TryResumeCheckout(pendingIntent, now, cancellationToken);
+            Result<CreateCheckoutSessionResponse>? resumed = await TryResumeCheckout(pendingIntent, now, cancellationToken);
             if (resumed is not null)
             {
                 return resumed;
@@ -49,16 +49,16 @@ internal sealed class CheckoutSessionOrchestrator(
         {
             await unitOfWork.ExecuteInTransaction(async ct =>
             {
-                var draftResult = await prepareDraftInTransaction(ct);
+                Result<CheckoutDraft> draftResult = await prepareDraftInTransaction(ct);
                 if (!draftResult.IsSuccess)
                 {
                     prepareFailure = MapPrepareFailure(draftResult);
                     return;
                 }
 
-                var draft = draftResult.Value;
+                CheckoutDraft draft = draftResult.Value;
                 var intentId = Guid.NewGuid();
-                var expiresAt = DateTimeOffset.UtcNow.Add(_checkoutIntentLifetime);
+                DateTimeOffset expiresAt = DateTimeOffset.UtcNow.Add(_checkoutIntentLifetime);
                 var items = draft.Items
                     .OrderBy(i => i.Position)
                     .Select(i => new CheckoutIntentItem
@@ -113,7 +113,7 @@ internal sealed class CheckoutSessionOrchestrator(
                     AttributionReferrerHost = draft.Attribution?.ReferrerHost
                 };
 
-                var assetIds = items.Select(i => i.AssetId).ToArray();
+                Guid[] assetIds = items.Select(i => i.AssetId).ToArray();
                 await checkoutIntentStore.ReleaseExpiredReservations(draft.UserId, assetIds, DateTimeOffset.UtcNow, ct);
                 await checkoutIntentStore.CreateWithItemsAndReservations(intent, items, reservations, ct);
                 createdIntent = intent;
@@ -277,7 +277,7 @@ internal sealed class CheckoutSessionOrchestrator(
 
         try
         {
-            var session = await paymentService.CreateCheckoutSession(draft, cancellationToken);
+            StripeCheckoutSession session = await paymentService.CreateCheckoutSession(draft, cancellationToken);
             var sessionStored = await checkoutIntentStore.TrySetStripeSessionId(
                 intent.Id,
                 session.Id,

@@ -100,7 +100,7 @@ internal sealed class AssetStore(ApplicationDbContext dbContext) : IAssetStore
         // FOR UPDATE locks the row for the ambient transaction; AsNoTracking returns a fresh
         // projection without detaching tracked entities (which would drop pending UoW changes).
         // SoftDelete syncs DeletedAt on any local tracker instance after ExecuteUpdate.
-        var lockedId = await dbContext.Database
+        Guid lockedId = await dbContext.Database
             .SqlQuery<Guid>($"""SELECT "Id" AS "Value" FROM assets WHERE "Id" = {id} FOR UPDATE""")
             .FirstOrDefaultAsync(cancellationToken);
 
@@ -281,7 +281,7 @@ internal sealed class AssetStore(ApplicationDbContext dbContext) : IAssetStore
         query = ApplyAssetListFilters(query, request);
         var totalCount = await query.CountAsync(cancellationToken);
         query = ApplyAssetListSort(query, request);
-        (int page, int pageSize) = NormalizePaging(request);
+        (var page, var pageSize) = NormalizePaging(request);
 
         List<SellerAssetListItem> items = await query
             .Skip((page - 1) * pageSize)
@@ -410,7 +410,7 @@ internal sealed class AssetStore(ApplicationDbContext dbContext) : IAssetStore
         GetAssetsRequest request,
         CancellationToken cancellationToken)
     {
-        (int page, int pageSize) = NormalizePaging(request);
+        (var page, var pageSize) = NormalizePaging(request);
         IQueryable<Asset> filteredBase = ApplyNonSearchFilters(baseQuery, request);
 
         if (string.IsNullOrWhiteSpace(request.Search))
@@ -693,39 +693,39 @@ internal sealed class AssetStore(ApplicationDbContext dbContext) : IAssetStore
         var sortBy = request.SortBy!.Trim().ToUpperInvariant();
         var isDesc = request.SortDirection == SortDirection.DESC;
 
-        var ftsBranch = BoundSortedBranch(
+        IQueryable<Guid> ftsBranch = BoundSortedBranch(
             filteredBase.Where(a => EF.Property<NpgsqlTsVector>(a, AssetConfiguration.SEARCH_VECTOR_PROPERTY)
                 .Matches(EF.Functions.WebSearchToTsQuery("simple", searchText))),
             sortBy,
             isDesc,
             candidateLimit);
 
-        var titleIlikeBranch = BoundSortedBranch(
+        IQueryable<Guid> titleIlikeBranch = BoundSortedBranch(
             filteredBase.Where(a => EF.Functions.ILike(a.Title, likePattern, LIKE_ESCAPE)),
             sortBy,
             isDesc,
             candidateLimit);
 
-        var descIlikeBranch = BoundSortedBranch(
+        IQueryable<Guid> descIlikeBranch = BoundSortedBranch(
             filteredBase.Where(a => a.Description != null && EF.Functions.ILike(a.Description, likePattern, LIKE_ESCAPE)),
             sortBy,
             isDesc,
             candidateLimit);
 
-        var mergedCandidateIds = ftsBranch
+        IQueryable<Guid> mergedCandidateIds = ftsBranch
             .Union(titleIlikeBranch)
             .Union(descIlikeBranch);
 
         if (isLongEnoughForTrigram)
         {
-            var titleTrgmBranch = BoundSortedBranch(
+            IQueryable<Guid> titleTrgmBranch = BoundSortedBranch(
                 filteredBase.Where(a => EF.Functions.TrigramsAreSimilar(a.Title, searchText)
                     && PostgresDbFunctions.TrigramsSimilarity(a.Title, searchText) >= TRIGRAM_SIMILARITY_THRESHOLD),
                 sortBy,
                 isDesc,
                 candidateLimit);
 
-            var descTrgmBranch = BoundSortedBranch(
+            IQueryable<Guid> descTrgmBranch = BoundSortedBranch(
                 filteredBase.Where(a => a.Description != null
                     && EF.Functions.TrigramsAreSimilar(a.Description, searchText)
                     && PostgresDbFunctions.TrigramsSimilarity(a.Description, searchText) >= TRIGRAM_SIMILARITY_THRESHOLD),
@@ -738,7 +738,7 @@ internal sealed class AssetStore(ApplicationDbContext dbContext) : IAssetStore
                 .Union(descTrgmBranch);
         }
 
-        var candidateAssets = filteredBase.Where(a => mergedCandidateIds.Contains(a.Id));
+        IQueryable<Asset> candidateAssets = filteredBase.Where(a => mergedCandidateIds.Contains(a.Id));
 
         IQueryable<Asset> sorted = sortBy switch
         {

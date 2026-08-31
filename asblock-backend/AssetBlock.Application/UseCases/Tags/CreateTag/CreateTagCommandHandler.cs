@@ -1,4 +1,5 @@
 using Ardalis.Result;
+using AssetBlock.Application.Messaging;
 using AssetBlock.Domain.Abstractions.Services;
 using AssetBlock.Domain.Core.Constants;
 using AssetBlock.Domain.Core.Dto.Audit;
@@ -6,7 +7,6 @@ using AssetBlock.Domain.Core.Dto.Tags;
 using AssetBlock.Domain.Core.Entities;
 using AssetBlock.Domain.Core.Enums;
 using AssetBlock.Domain.Core.Exceptions;
-using AssetBlock.Application.Messaging;
 using Microsoft.Extensions.Logging;
 
 namespace AssetBlock.Application.UseCases.Tags.CreateTag;
@@ -22,7 +22,7 @@ internal sealed class CreateTagCommandHandler(
     {
         var normalizedName = request.Name.Trim().ToLowerInvariant();
 
-        var existing = await tagStore.GetByName(normalizedName, cancellationToken);
+        Tag? existing = await tagStore.GetByName(normalizedName, cancellationToken);
         if (existing is not null)
         {
             return Result.Conflict(ErrorCodes.ERR_TAG_ALREADY_EXISTS);

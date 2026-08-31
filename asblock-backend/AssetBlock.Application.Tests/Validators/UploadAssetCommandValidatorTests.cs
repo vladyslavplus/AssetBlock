@@ -3,6 +3,7 @@ using AssetBlock.Domain.Core.Dto.Assets;
 using AssetBlock.Domain.Core.Payments;
 using AssetBlock.Domain.Core.Primitives.AppSettingsOptions;
 using AwesomeAssertions;
+using FluentValidation.Results;
 
 namespace AssetBlock.Application.Tests.Validators;
 
@@ -35,7 +36,7 @@ public class UploadAssetCommandValidatorTests
             "file.zip",
             1);
 
-        var result = await _validator.ValidateAsync(command);
+        ValidationResult result = await _validator.ValidateAsync(command);
 
         result.IsValid.Should().BeFalse();
         result.Errors.Should().Contain(e => e.PropertyName.Contains("AuthorId"));
@@ -44,7 +45,7 @@ public class UploadAssetCommandValidatorTests
     [Fact]
     public async Task Validate_WhenTitleIsEmpty_ShouldFail()
     {
-        var result = await _validator.ValidateAsync(ValidCommand(title: ""));
+        ValidationResult result = await _validator.ValidateAsync(ValidCommand(title: ""));
         result.IsValid.Should().BeFalse();
         result.Errors.Should().Contain(e => e.PropertyName.Contains("Title"));
     }
@@ -52,7 +53,7 @@ public class UploadAssetCommandValidatorTests
     [Fact]
     public async Task Validate_WhenTitleExceeds500Chars_ShouldFail()
     {
-        var result = await _validator.ValidateAsync(ValidCommand(title: new string('A', 501)));
+        ValidationResult result = await _validator.ValidateAsync(ValidCommand(title: new string('A', 501)));
         result.IsValid.Should().BeFalse();
         result.Errors.Should().Contain(e => e.PropertyName.Contains("Title"));
     }
@@ -63,7 +64,7 @@ public class UploadAssetCommandValidatorTests
     [InlineData(-100)]
     public async Task Validate_WhenPriceIsNotPositive_ShouldFail(decimal price)
     {
-        var result = await _validator.ValidateAsync(ValidCommand(price: price));
+        ValidationResult result = await _validator.ValidateAsync(ValidCommand(price: price));
         result.IsValid.Should().BeFalse();
         result.Errors.Should().Contain(e => e.PropertyName.Contains("Price"));
     }
@@ -71,7 +72,7 @@ public class UploadAssetCommandValidatorTests
     [Fact]
     public async Task Validate_WhenPriceIsPositive_ShouldPass()
     {
-        var result = await _validator.ValidateAsync(ValidCommand(price: 0.01m));
+        ValidationResult result = await _validator.ValidateAsync(ValidCommand(price: 0.01m));
         result.Errors.Should().NotContain(e => e.PropertyName.Contains("Price"));
     }
 
@@ -80,7 +81,7 @@ public class UploadAssetCommandValidatorTests
     [InlineData(-5)]
     public async Task Validate_WhenDownloadLimitIsZeroOrNegative_ShouldFail(int limit)
     {
-        var result = await _validator.ValidateAsync(ValidCommand(downloadLimitPerHour: limit));
+        ValidationResult result = await _validator.ValidateAsync(ValidCommand(downloadLimitPerHour: limit));
         result.IsValid.Should().BeFalse();
         result.Errors.Should().Contain(e => e.PropertyName.Contains("DownloadLimitPerHour"));
     }
@@ -88,21 +89,21 @@ public class UploadAssetCommandValidatorTests
     [Fact]
     public async Task Validate_WhenDownloadLimitIsNull_ShouldPass()
     {
-        var result = await _validator.ValidateAsync(ValidCommand(downloadLimitPerHour: null));
+        ValidationResult result = await _validator.ValidateAsync(ValidCommand(downloadLimitPerHour: null));
         result.Errors.Should().NotContain(e => e.PropertyName.Contains("DownloadLimitPerHour"));
     }
 
     [Fact]
     public async Task Validate_WhenDownloadLimitIsPositive_ShouldPass()
     {
-        var result = await _validator.ValidateAsync(ValidCommand(downloadLimitPerHour: 10));
+        ValidationResult result = await _validator.ValidateAsync(ValidCommand(downloadLimitPerHour: 10));
         result.Errors.Should().NotContain(e => e.PropertyName.Contains("DownloadLimitPerHour"));
     }
 
     [Fact]
     public async Task Validate_WhenFileNameIsEmpty_ShouldFail()
     {
-        var result = await _validator.ValidateAsync(ValidCommand(fileName: ""));
+        ValidationResult result = await _validator.ValidateAsync(ValidCommand(fileName: ""));
         result.IsValid.Should().BeFalse();
         result.Errors.Should().Contain(e => e.PropertyName.Contains("FileName"));
     }
@@ -110,14 +111,14 @@ public class UploadAssetCommandValidatorTests
     [Fact]
     public async Task Validate_WhenCommandIsValid_ShouldPass()
     {
-        var result = await _validator.ValidateAsync(ValidCommand());
+        ValidationResult result = await _validator.ValidateAsync(ValidCommand());
         result.IsValid.Should().BeTrue();
     }
 
     [Fact]
     public async Task Validate_WhenPriceOverMaxAmount_ShouldFail()
     {
-        var result = await _validator.ValidateAsync(ValidCommand(price: BundlePriceAllocator.MAX_AMOUNT + 0.01m));
+        ValidationResult result = await _validator.ValidateAsync(ValidCommand(price: BundlePriceAllocator.MAX_AMOUNT + 0.01m));
         result.IsValid.Should().BeFalse();
         result.Errors.Should().Contain(e => e.PropertyName.Contains("Price"));
     }
@@ -133,7 +134,7 @@ public class UploadAssetCommandValidatorTests
             "file.zip",
             1);
 
-        var result = await _validator.ValidateAsync(command);
+        ValidationResult result = await _validator.ValidateAsync(command);
 
         result.IsValid.Should().BeFalse();
         result.Errors.Should().Contain(e => e.PropertyName.Contains("Description"));
@@ -142,7 +143,7 @@ public class UploadAssetCommandValidatorTests
     [Fact]
     public async Task Validate_WhenFileLengthExceedsMaxBytes_ShouldFail()
     {
-        var result = await _validator.ValidateAsync(ValidCommand(fileLength: 250L * 1024 * 1024 + 1));
+        ValidationResult result = await _validator.ValidateAsync(ValidCommand(fileLength: 250L * 1024 * 1024 + 1));
         result.IsValid.Should().BeFalse();
         result.Errors.Should().Contain(e => e.PropertyName.Contains("FileLength"));
     }
@@ -150,7 +151,7 @@ public class UploadAssetCommandValidatorTests
     [Fact]
     public async Task Validate_WhenExtensionNotAllowed_ShouldFail()
     {
-        var result = await _validator.ValidateAsync(ValidCommand(fileName: "image.png"));
+        ValidationResult result = await _validator.ValidateAsync(ValidCommand(fileName: "image.png"));
         result.IsValid.Should().BeFalse();
         result.Errors.Should().Contain(e => e.PropertyName.Contains("FileName"));
     }
@@ -165,7 +166,7 @@ public class UploadAssetCommandValidatorTests
             "file.zip",
             1);
 
-        var result = await _validator.ValidateAsync(command);
+        ValidationResult result = await _validator.ValidateAsync(command);
         result.IsValid.Should().BeFalse();
         result.Errors.Should().Contain(e => e.PropertyName.Contains("LicenseCode"));
     }

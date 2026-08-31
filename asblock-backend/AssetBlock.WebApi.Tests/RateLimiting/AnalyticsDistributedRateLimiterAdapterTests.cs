@@ -1,3 +1,4 @@
+using System.Threading.RateLimiting;
 using AssetBlock.Domain.Abstractions.Services;
 using AssetBlock.WebApi.RateLimiting;
 using AwesomeAssertions;
@@ -10,7 +11,7 @@ public sealed class AnalyticsDistributedRateLimiterAdapterTests
     [Fact]
     public void IdleDuration_WhenInactive_ShouldGrow()
     {
-        var limiter = Substitute.For<IAnalyticsDistributedRateLimiter>();
+        IAnalyticsDistributedRateLimiter limiter = Substitute.For<IAnalyticsDistributedRateLimiter>();
         limiter.AcquireBlocking(Arg.Any<AnalyticsRateLimitPolicy>(), Arg.Any<string>())
             .Returns(new AnalyticsRateLimitAcquireResult(AnalyticsRateLimitAcquireStatus.ACQUIRED));
 
@@ -29,7 +30,7 @@ public sealed class AnalyticsDistributedRateLimiterAdapterTests
     [Fact]
     public void AttemptAcquire_WhenSuccessful_ShouldResetIdle()
     {
-        var limiter = Substitute.For<IAnalyticsDistributedRateLimiter>();
+        IAnalyticsDistributedRateLimiter limiter = Substitute.For<IAnalyticsDistributedRateLimiter>();
         limiter.AcquireBlocking(Arg.Any<AnalyticsRateLimitPolicy>(), Arg.Any<string>())
             .Returns(new AnalyticsRateLimitAcquireResult(AnalyticsRateLimitAcquireStatus.ACQUIRED));
 
@@ -41,14 +42,14 @@ public sealed class AnalyticsDistributedRateLimiterAdapterTests
             time);
 
         time.Advance(TimeSpan.FromMilliseconds(40));
-        _ = adapter.AttemptAcquire(1);
+        _ = adapter.AttemptAcquire();
         adapter.IdleDuration!.Value.Should().BeLessThan(TimeSpan.FromMilliseconds(5));
     }
 
     [Fact]
     public void Dispose_WhenCalledTwice_ShouldBeIdempotent()
     {
-        var limiter = Substitute.For<IAnalyticsDistributedRateLimiter>();
+        IAnalyticsDistributedRateLimiter limiter = Substitute.For<IAnalyticsDistributedRateLimiter>();
         var adapter = new AnalyticsDistributedRateLimiterAdapter(
             limiter,
             AnalyticsRateLimitPolicy.ANALYTICS_EVENTS,
@@ -56,7 +57,7 @@ public sealed class AnalyticsDistributedRateLimiterAdapterTests
             TimeProvider.System);
 
         adapter.Dispose();
-        var act = adapter.Dispose;
+        Action act = adapter.Dispose;
 
         act.Should().NotThrow();
     }
@@ -64,14 +65,14 @@ public sealed class AnalyticsDistributedRateLimiterAdapterTests
     [Fact]
     public void AttemptAcquire_WhenPermitCountNotOne_ShouldThrow()
     {
-        var limiter = Substitute.For<IAnalyticsDistributedRateLimiter>();
+        IAnalyticsDistributedRateLimiter limiter = Substitute.For<IAnalyticsDistributedRateLimiter>();
         using var adapter = new AnalyticsDistributedRateLimiterAdapter(
             limiter,
             AnalyticsRateLimitPolicy.ANALYTICS_EVENTS,
             "partition",
             TimeProvider.System);
 
-        var act = () => adapter.AttemptAcquire(2);
+        Func<RateLimitLease> act = () => adapter.AttemptAcquire(2);
 
         act.Should().Throw<ArgumentOutOfRangeException>();
         limiter.DidNotReceive().AcquireBlocking(Arg.Any<AnalyticsRateLimitPolicy>(), Arg.Any<string>());

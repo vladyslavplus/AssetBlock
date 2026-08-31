@@ -14,7 +14,7 @@ public sealed class FileUploadExtensionsTests
     public void AddFileUploadLimits_ShouldAllowConfiguredFileSizePlusMultipartOverhead()
     {
         const long maxFileBytes = 100;
-        var configuration = new ConfigurationBuilder()
+        IConfigurationRoot configuration = new ConfigurationBuilder()
             .AddInMemoryCollection(new Dictionary<string, string?>
             {
                 ["FileUpload:MaxFileBytes"] = maxFileBytes.ToString()
@@ -23,7 +23,7 @@ public sealed class FileUploadExtensionsTests
         var services = new ServiceCollection();
 
         services.AddFileUploadLimits(configuration);
-        using var provider = services.BuildServiceProvider();
+        using ServiceProvider provider = services.BuildServiceProvider();
 
         var expectedRequestBytes = maxFileBytes + FileUploadExtensions.MULTIPART_OVERHEAD_BYTES;
         provider.GetRequiredService<IOptions<FormOptions>>().Value.MultipartBodyLengthLimit

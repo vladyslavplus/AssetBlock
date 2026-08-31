@@ -1,5 +1,6 @@
 using AssetBlock.Domain.Core.Primitives.AppSettingsOptions;
 using AssetBlock.Infrastructure.Options;
+using Microsoft.Extensions.Options;
 
 namespace AssetBlock.Infrastructure.Tests.Options;
 
@@ -10,28 +11,28 @@ public sealed class FileUploadOptionsValidatorTests
     [Fact]
     public void Validate_WhenDefaults_ShouldSucceed()
     {
-        var result = _sut.Validate(null, new FileUploadOptions());
+        ValidateOptionsResult result = _sut.Validate(null, new FileUploadOptions());
         result.Succeeded.Should().BeTrue();
     }
 
     [Fact]
     public void Validate_WhenMaxFileBytesInvalid_ShouldFail()
     {
-        var result = _sut.Validate(null, new FileUploadOptions { MaxFileBytes = 0 });
+        ValidateOptionsResult result = _sut.Validate(null, new FileUploadOptions { MaxFileBytes = 0 });
         result.Failed.Should().BeTrue();
     }
 
     [Fact]
     public void Validate_WhenExtensionMissingDot_ShouldFail()
     {
-        var result = _sut.Validate(null, new FileUploadOptions { AllowedExtensions = ["zip"] });
+        ValidateOptionsResult result = _sut.Validate(null, new FileUploadOptions { AllowedExtensions = ["zip"] });
         result.Failed.Should().BeTrue();
     }
 
     [Fact]
     public void Validate_WhenRarIsAllowed_ShouldFail()
     {
-        var result = _sut.Validate(null, new FileUploadOptions { AllowedExtensions = [".zip", ".rar"] });
+        ValidateOptionsResult result = _sut.Validate(null, new FileUploadOptions { AllowedExtensions = [".zip", ".rar"] });
         result.Failed.Should().BeTrue();
     }
 
@@ -42,7 +43,7 @@ public sealed class FileUploadOptionsValidatorTests
     [InlineData(".7zip")]
     public void Validate_WhenValidMultipartOrAlphanumericExtensions_ShouldSucceed(string validExt)
     {
-        var result = _sut.Validate(null, new FileUploadOptions { AllowedExtensions = [validExt] });
+        ValidateOptionsResult result = _sut.Validate(null, new FileUploadOptions { AllowedExtensions = [validExt] });
         result.Succeeded.Should().BeTrue();
     }
 
@@ -63,7 +64,7 @@ public sealed class FileUploadOptionsValidatorTests
     [InlineData(".zip space")]
     public void Validate_WhenInvalidExtensionGrammar_ShouldFail(string invalidExt)
     {
-        var result = _sut.Validate(null, new FileUploadOptions { AllowedExtensions = [invalidExt] });
+        ValidateOptionsResult result = _sut.Validate(null, new FileUploadOptions { AllowedExtensions = [invalidExt] });
         result.Failed.Should().BeTrue();
     }
 
@@ -71,7 +72,7 @@ public sealed class FileUploadOptionsValidatorTests
     public void Validate_WhenExtensionOversized_ShouldFail()
     {
         var longExt = "." + new string('a', 33);
-        var result = _sut.Validate(null, new FileUploadOptions { AllowedExtensions = [longExt] });
+        ValidateOptionsResult result = _sut.Validate(null, new FileUploadOptions { AllowedExtensions = [longExt] });
         result.Failed.Should().BeTrue();
         result.FailureMessage.Should().Contain("exceeds maximum length");
     }

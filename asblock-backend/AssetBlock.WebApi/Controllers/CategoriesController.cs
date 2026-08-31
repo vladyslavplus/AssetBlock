@@ -1,3 +1,5 @@
+using Ardalis.Result;
+using AssetBlock.Application.Messaging;
 using AssetBlock.Application.UseCases.Categories.CreateCategory;
 using AssetBlock.Application.UseCases.Categories.DeleteCategory;
 using AssetBlock.Application.UseCases.Categories.GetCategories;
@@ -6,7 +8,6 @@ using AssetBlock.Application.UseCases.Categories.UpdateCategory;
 using AssetBlock.Domain.Core.Constants;
 using AssetBlock.Domain.Core.Dto.Categories;
 using AssetBlock.WebApi.Constants;
-using AssetBlock.Application.Messaging;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
@@ -27,7 +28,7 @@ public sealed class CategoriesController(ISender sender) : ApiControllerBase(sen
     public async Task<IActionResult> Get([FromQuery] GetCategoriesRequest? request, CancellationToken cancellationToken)
     {
         request ??= new GetCategoriesRequest();
-        var result = await Sender.Send(new GetCategoriesQuery(request), cancellationToken);
+        Result<Domain.Core.Dto.Paging.PagedResult<CategoryListItem>> result = await Sender.Send(new GetCategoriesQuery(request), cancellationToken);
         return MapResultToActionResult(result);
     }
 
@@ -40,7 +41,7 @@ public sealed class CategoriesController(ISender sender) : ApiControllerBase(sen
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> GetById(Guid id, CancellationToken cancellationToken)
     {
-        var result = await Sender.Send(new GetCategoryByIdQuery(id), cancellationToken);
+        Result<CategoryResponse> result = await Sender.Send(new GetCategoryByIdQuery(id), cancellationToken);
         return MapResultToActionResult(result);
     }
 
@@ -57,7 +58,7 @@ public sealed class CategoriesController(ISender sender) : ApiControllerBase(sen
     public async Task<IActionResult> Create([FromBody] CreateCategoryRequest request, CancellationToken cancellationToken)
     {
         var command = new CreateCategoryCommand(request.Name, request.Description, request.Slug);
-        var result = await Sender.Send(command, cancellationToken);
+        Result<CreateCategoryResponse> result = await Sender.Send(command, cancellationToken);
         return result.IsSuccess ? CreatedAtAction(nameof(GetById), new { id = result.Value.Id }, result.Value) : MapResultToActionResult(result);
     }
 
@@ -75,7 +76,7 @@ public sealed class CategoriesController(ISender sender) : ApiControllerBase(sen
     public async Task<IActionResult> Update(Guid id, [FromBody] UpdateCategoryRequest request, CancellationToken cancellationToken)
     {
         var command = new UpdateCategoryCommand(id, request.Name, request.Description, request.Slug);
-        var result = await Sender.Send(command, cancellationToken);
+        Result result = await Sender.Send(command, cancellationToken);
         return MapResultToActionResult(result);
     }
 
@@ -92,7 +93,7 @@ public sealed class CategoriesController(ISender sender) : ApiControllerBase(sen
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
     public async Task<IActionResult> Delete(Guid id, CancellationToken cancellationToken)
     {
-        var result = await Sender.Send(new DeleteCategoryCommand(id), cancellationToken);
+        Result result = await Sender.Send(new DeleteCategoryCommand(id), cancellationToken);
         return MapResultToActionResult(result);
     }
 }

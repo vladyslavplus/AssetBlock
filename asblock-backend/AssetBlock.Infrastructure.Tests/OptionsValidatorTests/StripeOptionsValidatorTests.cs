@@ -1,5 +1,6 @@
 using AssetBlock.Domain.Core.Primitives.AppSettingsOptions;
 using AssetBlock.Infrastructure.Options;
+using Microsoft.Extensions.Options;
 
 namespace AssetBlock.Infrastructure.Tests.OptionsValidatorTests;
 
@@ -10,21 +11,21 @@ public sealed class StripeOptionsValidatorTests
     [Fact]
     public void Validate_WhenAllFieldsEmpty_ShouldSucceed()
     {
-        var result = _sut.Validate(null, new StripeOptions());
+        ValidateOptionsResult result = _sut.Validate(null, new StripeOptions());
         result.Succeeded.Should().BeTrue();
     }
 
     [Fact]
     public void Validate_WhenFullyConfigured_ShouldSucceed()
     {
-        var result = _sut.Validate(null, CreateValid());
+        ValidateOptionsResult result = _sut.Validate(null, CreateValid());
         result.Succeeded.Should().BeTrue();
     }
 
     [Fact]
     public void Validate_WhenPartiallyConfigured_ShouldFail()
     {
-        var result = _sut.Validate(null, new StripeOptions
+        ValidateOptionsResult result = _sut.Validate(null, new StripeOptions
         {
             SecretKey = "stripe_test_secret_key_not_real"
         });
@@ -38,7 +39,7 @@ public sealed class StripeOptionsValidatorTests
     [Fact]
     public void Validate_WhenAllFieldsArePlaceholders_ShouldSucceed()
     {
-        var result = _sut.Validate(null, new StripeOptions
+        ValidateOptionsResult result = _sut.Validate(null, new StripeOptions
         {
             SecretKey = "<stripe-secret-key>",
             WebhookSecret = "<stripe-webhook-secret>",
@@ -52,11 +53,11 @@ public sealed class StripeOptionsValidatorTests
     [Fact]
     public void Validate_WhenRedirectUrlsInvalid_ShouldFail()
     {
-        var options = CreateValid();
+        StripeOptions options = CreateValid();
         options.SuccessUrl = "not-a-url";
         options.CancelUrl = "/relative/cancel";
 
-        var result = _sut.Validate(null, options);
+        ValidateOptionsResult result = _sut.Validate(null, options);
 
         result.Failed.Should().BeTrue();
         result.Failures.Should().Contain(m => m.Contains("SuccessUrl"));

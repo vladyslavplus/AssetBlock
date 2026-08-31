@@ -1,9 +1,10 @@
 using Ardalis.Result;
 using AssetBlock.Application.Common.Caching;
-using AssetBlock.Domain.Abstractions.Services;
-using AssetBlock.Domain.Core.Dto.Tags;
-using AssetBlock.Domain.Core.Constants;
 using AssetBlock.Application.Messaging;
+using AssetBlock.Domain.Abstractions.Services;
+using AssetBlock.Domain.Core.Constants;
+using AssetBlock.Domain.Core.Dto.Tags;
+using AssetBlock.Domain.Core.Entities;
 using Microsoft.Extensions.Logging;
 
 namespace AssetBlock.Application.UseCases.Tags.GetTags;
@@ -19,7 +20,7 @@ internal sealed class GetTagsQueryHandler(
     {
         var cacheKey = CacheKeys.TagsList(request.Request);
 
-        var cached = await cache.Get<Domain.Core.Dto.Paging.PagedResult<TagDto>>(cacheKey, cancellationToken);
+        Domain.Core.Dto.Paging.PagedResult<TagDto>? cached = await cache.Get<Domain.Core.Dto.Paging.PagedResult<TagDto>>(cacheKey, cancellationToken);
         if (cached is not null)
         {
             logger.LogDebug("Tags list cache hit for key {Key}", cacheKey);
@@ -27,7 +28,7 @@ internal sealed class GetTagsQueryHandler(
         }
 
         logger.LogDebug("Tags list cache miss for key {Key}", cacheKey);
-        var tagsPaged = await tagStore.SearchTags(request.Request, cancellationToken);
+        Domain.Core.Dto.Paging.PagedResult<Tag> tagsPaged = await tagStore.SearchTags(request.Request, cancellationToken);
         var tagDtos = tagsPaged.Items.Select(t => new TagDto(t.Id, t.Name)).ToList();
         var resultPaged = new Domain.Core.Dto.Paging.PagedResult<TagDto>(tagDtos, tagsPaged.TotalCount, tagsPaged.Page, tagsPaged.PageSize);
 

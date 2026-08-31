@@ -18,8 +18,8 @@ internal static class AssetCatalogSeed
 
     public static async Task<Guid> EnsureSampleAssetAsync(IServiceScopeFactory scopeFactory)
     {
-        using var scope = scopeFactory.CreateScope();
-        var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+        using IServiceScope scope = scopeFactory.CreateScope();
+        ApplicationDbContext db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
 
         var existing = await db.Assets.AsNoTracking()
             .Where(a => a.Id == _sampleAssetId || a.Title == SAMPLE_TITLE)
@@ -31,9 +31,9 @@ internal static class AssetCatalogSeed
             return existing.Id;
         }
 
-        var category = await db.Categories.AsNoTracking().FirstAsync();
+        Category category = await db.Categories.AsNoTracking().FirstAsync();
 
-        var user = await db.Users.FirstOrDefaultAsync(u => u.Email == "integration.asset@test.local");
+        User? user = await db.Users.FirstOrDefaultAsync(u => u.Email == "integration.asset@test.local");
         if (user is null)
         {
             user = new User
@@ -50,8 +50,8 @@ internal static class AssetCatalogSeed
         var versionId = Guid.NewGuid();
         const string storageKey = "integration/seed/asset.bin";
         const string fileName = "asset.bin";
-        var license = AssetLicenseCatalog.Get(AssetLicenseCode.PERSONAL);
-        var now = DateTimeOffset.UtcNow;
+        AssetLicenseTemplate license = AssetLicenseCatalog.Get(AssetLicenseCode.PERSONAL);
+        DateTimeOffset now = DateTimeOffset.UtcNow;
         var asset = new Asset
         {
             Id = _sampleAssetId,

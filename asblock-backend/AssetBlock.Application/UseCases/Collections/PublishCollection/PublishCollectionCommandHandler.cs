@@ -1,9 +1,9 @@
 using Ardalis.Result;
+using AssetBlock.Application.Messaging;
 using AssetBlock.Domain.Abstractions.Services;
 using AssetBlock.Domain.Core.Constants;
 using AssetBlock.Domain.Core.Dto.Audit;
 using AssetBlock.Domain.Core.Enums;
-using AssetBlock.Application.Messaging;
 using Microsoft.Extensions.Logging;
 
 namespace AssetBlock.Application.UseCases.Collections.PublishCollection;
@@ -19,7 +19,7 @@ internal sealed class PublishCollectionCommandHandler(
     {
         Result? outcome = null;
         var published = false;
-        var now = DateTimeOffset.UtcNow;
+        DateTimeOffset now = DateTimeOffset.UtcNow;
         try
         {
             await unitOfWork.ExecuteInTransaction(async ct =>

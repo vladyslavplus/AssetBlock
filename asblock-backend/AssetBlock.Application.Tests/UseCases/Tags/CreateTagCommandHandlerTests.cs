@@ -3,6 +3,7 @@ using AssetBlock.Application.UseCases.Tags.CreateTag;
 using AssetBlock.Domain.Abstractions.Services;
 using AssetBlock.Domain.Core.Constants;
 using AssetBlock.Domain.Core.Dto.Audit;
+using AssetBlock.Domain.Core.Dto.Tags;
 using AssetBlock.Domain.Core.Entities;
 using AssetBlock.Domain.Core.Enums;
 using AssetBlock.Domain.Core.Exceptions;
@@ -40,7 +41,7 @@ public class CreateTagCommandHandlerTests
         var command = new CreateTagCommand("new-tag");
         _tagStoreMock.GetByName("new-tag", Arg.Any<CancellationToken>()).Returns((Tag?)null);
 
-        var result = await _handler.Handle(command, CancellationToken.None);
+        Result<TagDto> result = await _handler.Handle(command, CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
         result.Value.Name.Should().Be("new-tag");
@@ -60,7 +61,7 @@ public class CreateTagCommandHandlerTests
         var command = new CreateTagCommand("existing-tag");
         _tagStoreMock.GetByName("existing-tag", Arg.Any<CancellationToken>()).Returns(new Tag { Id = Guid.NewGuid(), Name = "existing-tag" });
 
-        var result = await _handler.Handle(command, CancellationToken.None);
+        Result<TagDto> result = await _handler.Handle(command, CancellationToken.None);
 
         result.IsSuccess.Should().BeFalse();
         result.Status.Should().Be(ResultStatus.Conflict);
@@ -75,7 +76,7 @@ public class CreateTagCommandHandlerTests
         _tagStoreMock.Add(Arg.Any<Tag>(), Arg.Any<CancellationToken>())
             .ThrowsAsync(new DuplicateTagNameException());
 
-        var result = await _handler.Handle(command, CancellationToken.None);
+        Result<TagDto> result = await _handler.Handle(command, CancellationToken.None);
 
         result.IsSuccess.Should().BeFalse();
         result.Status.Should().Be(ResultStatus.Conflict);

@@ -41,8 +41,8 @@ public static class CorsExtensions
         IConfiguration configuration,
         IHostEnvironment environment)
     {
-        var section = configuration.GetSection(CorsOptions.SECTION_NAME);
-        var cors = section.Get<CorsOptions>() ?? new CorsOptions();
+        IConfigurationSection section = configuration.GetSection(CorsOptions.SECTION_NAME);
+        CorsOptions cors = section.Get<CorsOptions>() ?? new CorsOptions();
         var origins = cors.AllowedOrigins.Where(static o => !string.IsNullOrWhiteSpace(o))
             .Select(static o => o.Trim().TrimEnd('/'))
             .Distinct(StringComparer.OrdinalIgnoreCase)

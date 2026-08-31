@@ -12,7 +12,7 @@ internal sealed class GetDeadLettersQueryHandler(
         GetDeadLettersQuery request,
         CancellationToken cancellationToken)
     {
-        var result = await outboxStore.GetDeadLetters(request.Request, cancellationToken);
+        Domain.Core.Dto.Paging.PagedResult<DeadLetterOutboxListItemDto> result = await outboxStore.GetDeadLetters(request.Request, cancellationToken);
         return Result.Success(result);
     }
 }

@@ -1,6 +1,7 @@
 using System.Text.Json;
 using Ardalis.Result;
 using AssetBlock.Application.Common;
+using AssetBlock.Application.Messaging;
 using AssetBlock.Domain.Abstractions.Services;
 using AssetBlock.Domain.Core.Constants;
 using AssetBlock.Domain.Core.Dto.Audit;
@@ -8,7 +9,6 @@ using AssetBlock.Domain.Core.Dto.Notifications;
 using AssetBlock.Domain.Core.Dto.Outbox;
 using AssetBlock.Domain.Core.Entities;
 using AssetBlock.Domain.Core.Enums;
-using AssetBlock.Application.Messaging;
 using Microsoft.Extensions.Logging;
 
 namespace AssetBlock.Application.UseCases.Reviews.CreateReview;
@@ -27,15 +27,15 @@ internal sealed class CreateReviewCommandHandler(
 
     public async Task<Result> Handle(CreateReviewCommand request, CancellationToken cancellationToken)
     {
-        var asset = await assetStore.GetById(request.AssetId, cancellationToken);
+        Asset? asset = await assetStore.GetById(request.AssetId, cancellationToken);
         if (asset is null)
         {
             return Result.NotFound(ErrorCodes.ERR_ASSET_NOT_FOUND);
         }
 
-        var now = DateTimeOffset.UtcNow;
-        var purchase = await purchaseStore.GetPurchase(request.UserId, request.AssetId, cancellationToken);
-        var creationResult = Review.CreateForPurchase(
+        DateTimeOffset now = DateTimeOffset.UtcNow;
+        Purchase? purchase = await purchaseStore.GetPurchase(request.UserId, request.AssetId, cancellationToken);
+        ReviewCreationResult creationResult = Review.CreateForPurchase(
             request.AssetId,
             asset.AuthorId,
             request.UserId,
@@ -68,7 +68,7 @@ internal sealed class CreateReviewCommandHandler(
             return Result.Conflict(ErrorCodes.ERR_REVIEW_ALREADY_EXISTS);
         }
 
-        var review = creationResult.Review!;
+        Review review = creationResult.Review!;
 
         try
         {

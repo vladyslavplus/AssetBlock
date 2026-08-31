@@ -2,6 +2,7 @@ using AssetBlock.Application.UseCases.Assets.PublishAssetVersion;
 using AssetBlock.Domain.Core.Dto.Assets;
 using AssetBlock.Domain.Core.Primitives.AppSettingsOptions;
 using AwesomeAssertions;
+using FluentValidation.Results;
 
 namespace AssetBlock.Application.Tests.Validators;
 
@@ -29,7 +30,7 @@ public sealed class PublishAssetVersionCommandValidatorTests
     [InlineData("\t\n")]
     public async Task Validate_WhenReleaseNotesNullOrWhitespace_ShouldFail(string? releaseNotes)
     {
-        var result = await _validator.ValidateAsync(ValidCommand(releaseNotes));
+        ValidationResult result = await _validator.ValidateAsync(ValidCommand(releaseNotes));
 
         result.IsValid.Should().BeFalse();
         result.Errors.Should().Contain(e => e.PropertyName.Contains("ReleaseNotes"));
@@ -39,7 +40,7 @@ public sealed class PublishAssetVersionCommandValidatorTests
     public async Task Validate_WhenReleaseNotesExactly4000TrimmedChars_ShouldPass()
     {
         var notes = $"  {new string('a', 4000)}  ";
-        var result = await _validator.ValidateAsync(ValidCommand(notes));
+        ValidationResult result = await _validator.ValidateAsync(ValidCommand(notes));
 
         result.Errors.Should().NotContain(e => e.PropertyName.Contains("ReleaseNotes"));
     }
@@ -48,7 +49,7 @@ public sealed class PublishAssetVersionCommandValidatorTests
     public async Task Validate_WhenReleaseNotesExceeds4000TrimmedChars_ShouldFail()
     {
         var notes = $"  {new string('a', 4001)}  ";
-        var result = await _validator.ValidateAsync(ValidCommand(notes));
+        ValidationResult result = await _validator.ValidateAsync(ValidCommand(notes));
 
         result.IsValid.Should().BeFalse();
         result.Errors.Should().Contain(e =>
@@ -59,7 +60,7 @@ public sealed class PublishAssetVersionCommandValidatorTests
     [Fact]
     public async Task Validate_WhenFileLengthExceedsMaxBytes_ShouldFail()
     {
-        var result = await _validator.ValidateAsync(ValidCommand(fileLength: 250L * 1024 * 1024 + 1));
+        ValidationResult result = await _validator.ValidateAsync(ValidCommand(fileLength: 250L * 1024 * 1024 + 1));
         result.IsValid.Should().BeFalse();
         result.Errors.Should().Contain(e => e.PropertyName.Contains("FileLength"));
     }
@@ -67,7 +68,7 @@ public sealed class PublishAssetVersionCommandValidatorTests
     [Fact]
     public async Task Validate_WhenExtensionNotAllowed_ShouldFail()
     {
-        var result = await _validator.ValidateAsync(ValidCommand(fileName: "image.png"));
+        ValidationResult result = await _validator.ValidateAsync(ValidCommand(fileName: "image.png"));
         result.IsValid.Should().BeFalse();
         result.Errors.Should().Contain(e => e.PropertyName.Contains("FileName"));
     }
@@ -75,7 +76,7 @@ public sealed class PublishAssetVersionCommandValidatorTests
     [Fact]
     public async Task Validate_WhenLicenseCodeIsInvalid_ShouldFail()
     {
-        var result = await _validator.ValidateAsync(ValidCommand(licenseCode: "INVALID"));
+        ValidationResult result = await _validator.ValidateAsync(ValidCommand(licenseCode: "INVALID"));
         result.IsValid.Should().BeFalse();
         result.Errors.Should().Contain(e => e.PropertyName.Contains("LicenseCode"));
     }

@@ -1,5 +1,6 @@
 using AssetBlock.Application.UseCases.Admin.Outbox.ReplayDeadLetter;
 using AwesomeAssertions;
+using FluentValidation.Results;
 
 namespace AssetBlock.Application.Tests.Validators;
 
@@ -11,7 +12,7 @@ public sealed class ReplayDeadLetterCommandValidatorTests
     public void Validate_WhenIdValid_ShouldNotHaveErrors()
     {
         var command = new ReplayDeadLetterCommand(Guid.NewGuid());
-        var result = _validator.Validate(command);
+        ValidationResult result = _validator.Validate(command);
         result.IsValid.Should().BeTrue();
     }
 
@@ -19,7 +20,7 @@ public sealed class ReplayDeadLetterCommandValidatorTests
     public void Validate_WhenIdEmpty_ShouldHaveError()
     {
         var command = new ReplayDeadLetterCommand(Guid.Empty);
-        var result = _validator.Validate(command);
+        ValidationResult result = _validator.Validate(command);
         result.IsValid.Should().BeFalse();
         result.Errors.Should().Contain(e => e.PropertyName == "Id");
     }

@@ -3,6 +3,7 @@ using System.Net.Http.Json;
 using System.Text.Json;
 using AssetBlock.Domain.Core.Constants;
 using AssetBlock.Domain.Core.Dto.Categories;
+using AssetBlock.Domain.Core.Entities;
 using AssetBlock.Infrastructure.Persistence;
 using AssetBlock.WebApi.IntegrationTests.Support;
 using AwesomeAssertions;
@@ -22,8 +23,8 @@ public sealed class AuditLogsControllerIntegrationTests(IntegrationTestFixture f
     [Fact]
     public async Task Get_WithoutAuth_ShouldReturn401()
     {
-        var client = fixture.Factory.CreateClient();
-        var response = await client.GetAsync(new Uri("/api/admin/audit-logs?page=1&pageSize=20", UriKind.Relative));
+        HttpClient client = fixture.Factory.CreateClient();
+        HttpResponseMessage response = await client.GetAsync(new Uri("/api/admin/audit-logs?page=1&pageSize=20", UriKind.Relative));
         response.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
     }
 
@@ -31,7 +32,7 @@ public sealed class AuditLogsControllerIntegrationTests(IntegrationTestFixture f
     public async Task Get_WhenNonAdmin_ShouldReturn403()
     {
         (HttpClient client, _) = await IntegrationTestAuth.RegisterAndAuthenticateAsync(fixture.Factory);
-        var response = await client.GetAsync(new Uri("/api/admin/audit-logs?page=1&pageSize=20", UriKind.Relative));
+        HttpResponseMessage response = await client.GetAsync(new Uri("/api/admin/audit-logs?page=1&pageSize=20", UriKind.Relative));
         response.StatusCode.Should().Be(HttpStatusCode.Forbidden);
     }
 
@@ -39,11 +40,11 @@ public sealed class AuditLogsControllerIntegrationTests(IntegrationTestFixture f
     public async Task Get_WhenAdmin_ShouldReturn200WithPagedShape()
     {
         (HttpClient client, _) = await IntegrationTestAuth.RegisterAdminAndAuthenticateAsync(fixture.Factory);
-        var response = await client.GetAsync(new Uri("/api/admin/audit-logs?page=1&pageSize=20", UriKind.Relative));
+        HttpResponseMessage response = await client.GetAsync(new Uri("/api/admin/audit-logs?page=1&pageSize=20", UriKind.Relative));
 
         response.StatusCode.Should().Be(HttpStatusCode.OK);
         response.Content.Headers.ContentType!.MediaType.Should().Be("application/json");
-        var page = await response.Content.ReadFromJsonAsync<PagedAuditLogsResponse>(_jsonOptions);
+        PagedAuditLogsResponse? page = await response.Content.ReadFromJsonAsync<PagedAuditLogsResponse>(_jsonOptions);
         page.Should().NotBeNull();
         page.Page.Should().Be(1);
         page.PageSize.Should().Be(20);
@@ -54,10 +55,10 @@ public sealed class AuditLogsControllerIntegrationTests(IntegrationTestFixture f
     [Fact]
     public async Task Get_WhenInvalidDateRange_ShouldReturnProblemDetails()
     {
-        var (client, _) = await IntegrationTestAuth.RegisterAdminAndAuthenticateAsync(fixture.Factory);
+        (HttpClient? client, var _) = await IntegrationTestAuth.RegisterAdminAndAuthenticateAsync(fixture.Factory);
         var from = Uri.EscapeDataString("2026-07-15T00:00:00Z");
         var to = Uri.EscapeDataString("2026-07-01T00:00:00Z");
-        var response = await client.GetAsync(
+        HttpResponseMessage response = await client.GetAsync(
             new Uri($"/api/admin/audit-logs?page=1&pageSize=20&from={from}&to={to}", UriKind.Relative));
 
         response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
@@ -70,23 +71,23 @@ public sealed class AuditLogsControllerIntegrationTests(IntegrationTestFixture f
     {
         (HttpClient client, _) = await IntegrationTestAuth.RegisterAdminAndAuthenticateAsync(fixture.Factory);
         var slug = $"audit-cat-{Guid.NewGuid():N}"[..24];
-        var createResponse = await client.PostAsJsonAsync(
+        HttpResponseMessage createResponse = await client.PostAsJsonAsync(
             new Uri("/api/categories", UriKind.Relative),
             new CreateCategoryRequest($"Audit Category {slug}", "audit test", slug));
 
         createResponse.StatusCode.Should().Be(HttpStatusCode.Created);
-        var created = await createResponse.Content.ReadFromJsonAsync<CreateCategoryResponseDto>(_jsonOptions);
+        CreateCategoryResponseDto? created = await createResponse.Content.ReadFromJsonAsync<CreateCategoryResponseDto>(_jsonOptions);
         created.Should().NotBeNull();
 
-        var listResponse = await client.GetAsync(
+        HttpResponseMessage listResponse = await client.GetAsync(
             new Uri(
                 $"/api/admin/audit-logs?page=1&pageSize=20&action={Uri.EscapeDataString(AuditActions.CATEGORY_CREATE)}&resourceId={created.Id}",
                 UriKind.Relative));
         listResponse.StatusCode.Should().Be(HttpStatusCode.OK);
-        var page = await listResponse.Content.ReadFromJsonAsync<PagedAuditLogsResponse>(_jsonOptions);
+        PagedAuditLogsResponse? page = await listResponse.Content.ReadFromJsonAsync<PagedAuditLogsResponse>(_jsonOptions);
         page.Should().NotBeNull();
         page.Items.Should().ContainSingle();
-        var item = page.Items[0];
+        AuditLogListItemDto item = page.Items[0];
         item.Action.Should().Be(AuditActions.CATEGORY_CREATE);
         item.Outcome.Should().Be("SUCCESS");
         item.ResourceType.Should().Be(AuditResourceTypes.CATEGORY);
@@ -97,9 +98,9 @@ public sealed class AuditLogsControllerIntegrationTests(IntegrationTestFixture f
         var raw = await listResponse.Content.ReadAsStringAsync();
         raw.Should().NotContain("MetadataJson");
 
-        await using var scope = fixture.Factory.Services.CreateAsyncScope();
-        var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
-        var row = await db.AuditLogs.AsNoTracking()
+        await using AsyncServiceScope scope = fixture.Factory.Services.CreateAsyncScope();
+        ApplicationDbContext db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+        AuditLog row = await db.AuditLogs.AsNoTracking()
             .SingleAsync(a => a.Action == AuditActions.CATEGORY_CREATE && a.ResourceId == created.Id.ToString());
         row.TraceId.Should().Be(item.TraceId);
     }

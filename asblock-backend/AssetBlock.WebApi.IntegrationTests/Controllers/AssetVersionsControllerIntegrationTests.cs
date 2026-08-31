@@ -22,17 +22,17 @@ public sealed class AssetVersionsControllerIntegrationTests(IntegrationTestFixtu
     [Fact]
     public async Task ListVersions_WhenAssetActive_AsAnonymous_ShouldReturnOk()
     {
-        var (_, authorUsername) = await IntegrationTestAuth.RegisterVerifiedAndAuthenticateAsync(fixture.Factory);
-        var authorId = await AssetVersionsSeed.GetUserIdAsync(ScopeFactory, authorUsername);
+        (HttpClient _, var authorUsername) = await IntegrationTestAuth.RegisterVerifiedAndAuthenticateAsync(fixture.Factory);
+        Guid authorId = await AssetVersionsSeed.GetUserIdAsync(ScopeFactory, authorUsername);
         (Guid assetId, List<Guid> versionIds) = await AssetVersionsSeed.SeedAssetWithVersionsAsync(ScopeFactory, authorId, versionCount: 2);
 
-        var client = fixture.Factory.CreateClient();
-        var response = await client.GetAsync(new Uri($"/api/assets/{assetId}/versions", UriKind.Relative));
+        HttpClient client = fixture.Factory.CreateClient();
+        HttpResponseMessage response = await client.GetAsync(new Uri($"/api/assets/{assetId}/versions", UriKind.Relative));
 
         response.StatusCode.Should().Be(HttpStatusCode.OK);
         var raw = await response.Content.ReadAsStringAsync();
         raw.ToLowerInvariant().Should().NotContain("storagekey");
-        var versions = await response.Content.ReadFromJsonAsync<List<AssetVersionSummaryResponse>>();
+        List<AssetVersionSummaryResponse>? versions = await response.Content.ReadFromJsonAsync<List<AssetVersionSummaryResponse>>();
         versions.Should().NotBeNull();
         versions.Select(v => v.Id).Should().BeEquivalentTo(versionIds);
         versions.Should().OnlyContain(v =>
@@ -47,8 +47,8 @@ public sealed class AssetVersionsControllerIntegrationTests(IntegrationTestFixtu
     [Fact]
     public async Task ListVersions_WhenAssetMissing_ShouldReturn404()
     {
-        var client = fixture.Factory.CreateClient();
-        var response = await client.GetAsync(new Uri($"/api/assets/{Guid.NewGuid()}/versions", UriKind.Relative));
+        HttpClient client = fixture.Factory.CreateClient();
+        HttpResponseMessage response = await client.GetAsync(new Uri($"/api/assets/{Guid.NewGuid()}/versions", UriKind.Relative));
 
         response.StatusCode.Should().Be(HttpStatusCode.NotFound);
         var body = await response.Content.ReadAsStringAsync();
@@ -58,12 +58,12 @@ public sealed class AssetVersionsControllerIntegrationTests(IntegrationTestFixtu
     [Fact]
     public async Task ListVersions_WhenAssetSoftDeleted_AsAnonymous_ShouldReturn404()
     {
-        var (_, authorUsername) = await IntegrationTestAuth.RegisterVerifiedAndAuthenticateAsync(fixture.Factory);
-        var authorId = await AssetVersionsSeed.GetUserIdAsync(ScopeFactory, authorUsername);
-        var (assetId, _) = await AssetVersionsSeed.SeedAssetWithVersionsAsync(ScopeFactory, authorId, versionCount: 1, deleted: true);
+        (HttpClient _, var authorUsername) = await IntegrationTestAuth.RegisterVerifiedAndAuthenticateAsync(fixture.Factory);
+        Guid authorId = await AssetVersionsSeed.GetUserIdAsync(ScopeFactory, authorUsername);
+        (Guid assetId, List<Guid> _) = await AssetVersionsSeed.SeedAssetWithVersionsAsync(ScopeFactory, authorId, versionCount: 1, deleted: true);
 
-        var client = fixture.Factory.CreateClient();
-        var response = await client.GetAsync(new Uri($"/api/assets/{assetId}/versions", UriKind.Relative));
+        HttpClient client = fixture.Factory.CreateClient();
+        HttpResponseMessage response = await client.GetAsync(new Uri($"/api/assets/{assetId}/versions", UriKind.Relative));
 
         response.StatusCode.Should().Be(HttpStatusCode.NotFound);
     }
@@ -71,12 +71,12 @@ public sealed class AssetVersionsControllerIntegrationTests(IntegrationTestFixtu
     [Fact]
     public async Task ListVersions_WhenAssetSoftDeleted_AsUnrelatedUser_ShouldReturn404()
     {
-        var (_, authorUsername) = await IntegrationTestAuth.RegisterVerifiedAndAuthenticateAsync(fixture.Factory);
-        var authorId = await AssetVersionsSeed.GetUserIdAsync(ScopeFactory, authorUsername);
+        (HttpClient _, var authorUsername) = await IntegrationTestAuth.RegisterVerifiedAndAuthenticateAsync(fixture.Factory);
+        Guid authorId = await AssetVersionsSeed.GetUserIdAsync(ScopeFactory, authorUsername);
         (Guid assetId, _) = await AssetVersionsSeed.SeedAssetWithVersionsAsync(ScopeFactory, authorId, versionCount: 1, deleted: true);
 
         (HttpClient stranger, _) = await IntegrationTestAuth.RegisterAndAuthenticateAsync(fixture.Factory);
-        var response = await stranger.GetAsync(new Uri($"/api/assets/{assetId}/versions", UriKind.Relative));
+        HttpResponseMessage response = await stranger.GetAsync(new Uri($"/api/assets/{assetId}/versions", UriKind.Relative));
 
         response.StatusCode.Should().Be(HttpStatusCode.NotFound);
     }
@@ -84,18 +84,18 @@ public sealed class AssetVersionsControllerIntegrationTests(IntegrationTestFixtu
     [Fact]
     public async Task ListVersions_WhenAssetSoftDeleted_AsBuyer_ShouldReturnOk()
     {
-        var (_, authorUsername) = await IntegrationTestAuth.RegisterVerifiedAndAuthenticateAsync(fixture.Factory);
-        var authorId = await AssetVersionsSeed.GetUserIdAsync(ScopeFactory, authorUsername);
+        (HttpClient _, var authorUsername) = await IntegrationTestAuth.RegisterVerifiedAndAuthenticateAsync(fixture.Factory);
+        Guid authorId = await AssetVersionsSeed.GetUserIdAsync(ScopeFactory, authorUsername);
         (Guid assetId, List<Guid> versionIds) = await AssetVersionsSeed.SeedAssetWithVersionsAsync(ScopeFactory, authorId, versionCount: 1, deleted: true);
 
         (HttpClient buyer, var buyerUsername) = await IntegrationTestAuth.RegisterAndAuthenticateAsync(fixture.Factory);
-        var buyerId = await AssetVersionsSeed.GetUserIdAsync(ScopeFactory, buyerUsername);
+        Guid buyerId = await AssetVersionsSeed.GetUserIdAsync(ScopeFactory, buyerUsername);
         await AssetVersionsSeed.SeedPurchaseAsync(ScopeFactory, buyerId, assetId, versionIds[0]);
 
-        var response = await buyer.GetAsync(new Uri($"/api/assets/{assetId}/versions", UriKind.Relative));
+        HttpResponseMessage response = await buyer.GetAsync(new Uri($"/api/assets/{assetId}/versions", UriKind.Relative));
 
         response.StatusCode.Should().Be(HttpStatusCode.OK);
-        var versions = await response.Content.ReadFromJsonAsync<List<AssetVersionSummaryResponse>>();
+        List<AssetVersionSummaryResponse>? versions = await response.Content.ReadFromJsonAsync<List<AssetVersionSummaryResponse>>();
         versions.Should().NotBeNull();
         versions.Should().ContainSingle(v => v.Id == versionIds[0]);
     }
@@ -104,13 +104,13 @@ public sealed class AssetVersionsControllerIntegrationTests(IntegrationTestFixtu
     public async Task ListVersions_WhenAssetSoftDeleted_AsAuthor_ShouldReturnOk()
     {
         (HttpClient author, var authorUsername) = await IntegrationTestAuth.RegisterVerifiedAndAuthenticateAsync(fixture.Factory);
-        var authorId = await AssetVersionsSeed.GetUserIdAsync(ScopeFactory, authorUsername);
+        Guid authorId = await AssetVersionsSeed.GetUserIdAsync(ScopeFactory, authorUsername);
         (Guid assetId, List<Guid> versionIds) = await AssetVersionsSeed.SeedAssetWithVersionsAsync(ScopeFactory, authorId, versionCount: 1, deleted: true);
 
-        var response = await author.GetAsync(new Uri($"/api/assets/{assetId}/versions", UriKind.Relative));
+        HttpResponseMessage response = await author.GetAsync(new Uri($"/api/assets/{assetId}/versions", UriKind.Relative));
 
         response.StatusCode.Should().Be(HttpStatusCode.OK);
-        var versions = await response.Content.ReadFromJsonAsync<List<AssetVersionSummaryResponse>>();
+        List<AssetVersionSummaryResponse>? versions = await response.Content.ReadFromJsonAsync<List<AssetVersionSummaryResponse>>();
         versions.Should().NotBeNull();
         versions.Should().ContainSingle(v => v.Id == versionIds[0]);
     }
@@ -118,8 +118,8 @@ public sealed class AssetVersionsControllerIntegrationTests(IntegrationTestFixtu
     [Fact]
     public async Task PublishVersion_WhenUnauthenticated_ShouldReturn401()
     {
-        var client = fixture.Factory.CreateClient();
-        var response = await client.PostAsync(
+        HttpClient client = fixture.Factory.CreateClient();
+        HttpResponseMessage response = await client.PostAsync(
             new Uri($"/api/assets/{Guid.NewGuid()}/versions", UriKind.Relative),
             BuildPublishForm(CreateZipArchive("plain"), "PERSONAL", "notes"));
 
@@ -130,10 +130,10 @@ public sealed class AssetVersionsControllerIntegrationTests(IntegrationTestFixtu
     public async Task PublishVersion_WhenAuthorUnverified_ShouldReturn403EmailNotVerified()
     {
         (HttpClient author, var authorUsername) = await IntegrationTestAuth.RegisterAndAuthenticateAsync(fixture.Factory);
-        var authorId = await AssetVersionsSeed.GetUserIdAsync(ScopeFactory, authorUsername);
+        Guid authorId = await AssetVersionsSeed.GetUserIdAsync(ScopeFactory, authorUsername);
         (Guid assetId, _) = await AssetVersionsSeed.SeedAssetWithVersionsAsync(ScopeFactory, authorId, versionCount: 1);
 
-        var response = await author.PostAsync(
+        HttpResponseMessage response = await author.PostAsync(
             new Uri($"/api/assets/{assetId}/versions", UriKind.Relative),
             BuildPublishForm(CreateZipArchive("plain"), "PERSONAL", "notes"));
 
@@ -146,11 +146,11 @@ public sealed class AssetVersionsControllerIntegrationTests(IntegrationTestFixtu
     public async Task PublishVersion_WhenNonAuthorVerified_ShouldReturn403()
     {
         (HttpClient _, var ownerUsername) = await IntegrationTestAuth.RegisterVerifiedAndAuthenticateAsync(fixture.Factory);
-        var ownerId = await AssetVersionsSeed.GetUserIdAsync(ScopeFactory, ownerUsername);
+        Guid ownerId = await AssetVersionsSeed.GetUserIdAsync(ScopeFactory, ownerUsername);
         (Guid assetId, _) = await AssetVersionsSeed.SeedAssetWithVersionsAsync(ScopeFactory, ownerId, versionCount: 1);
 
         (HttpClient intruder, _) = await IntegrationTestAuth.RegisterVerifiedAndAuthenticateAsync(fixture.Factory);
-        var response = await intruder.PostAsync(
+        HttpResponseMessage response = await intruder.PostAsync(
             new Uri($"/api/assets/{assetId}/versions", UriKind.Relative),
             BuildPublishForm(CreateZipArchive("plain"), "PERSONAL", "notes"));
 
@@ -163,10 +163,10 @@ public sealed class AssetVersionsControllerIntegrationTests(IntegrationTestFixtu
     public async Task PublishVersion_WhenAssetSoftDeleted_ShouldReturn404()
     {
         (HttpClient author, var authorUsername) = await IntegrationTestAuth.RegisterVerifiedAndAuthenticateAsync(fixture.Factory);
-        var authorId = await AssetVersionsSeed.GetUserIdAsync(ScopeFactory, authorUsername);
+        Guid authorId = await AssetVersionsSeed.GetUserIdAsync(ScopeFactory, authorUsername);
         (Guid assetId, _) = await AssetVersionsSeed.SeedAssetWithVersionsAsync(ScopeFactory, authorId, versionCount: 1, deleted: true);
 
-        var response = await author.PostAsync(
+        HttpResponseMessage response = await author.PostAsync(
             new Uri($"/api/assets/{assetId}/versions", UriKind.Relative),
             BuildPublishForm(CreateZipArchive("plain"), "PERSONAL", "notes"));
 
@@ -179,14 +179,14 @@ public sealed class AssetVersionsControllerIntegrationTests(IntegrationTestFixtu
     public async Task PublishVersion_WhenAuthorVerified_ShouldReturn201AndAppendNextVersion()
     {
         (HttpClient author, var authorUsername) = await IntegrationTestAuth.RegisterVerifiedAndAuthenticateAsync(fixture.Factory);
-        var authorId = await AssetVersionsSeed.GetUserIdAsync(ScopeFactory, authorUsername);
+        Guid authorId = await AssetVersionsSeed.GetUserIdAsync(ScopeFactory, authorUsername);
         (Guid assetId, List<Guid> versionIds) = await AssetVersionsSeed.SeedAssetWithVersionsAsync(ScopeFactory, authorId, versionCount: 1);
 
         var zipBytes = CreateZipArchive("v2 payload");
         var expectedSha256 = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(zipBytes)).ToLowerInvariant();
         const string releaseNotesRaw = "  Second release  ";
 
-        var response = await author.PostAsync(
+        HttpResponseMessage response = await author.PostAsync(
             new Uri($"/api/assets/{assetId}/versions", UriKind.Relative),
             BuildPublishForm(zipBytes, "COMMERCIAL", releaseNotesRaw));
 
@@ -197,13 +197,13 @@ public sealed class AssetVersionsControllerIntegrationTests(IntegrationTestFixtu
             : response.Headers.Location.OriginalString;
         locationPath.Equals($"/api/assets/{assetId}/versions", StringComparison.OrdinalIgnoreCase).Should().BeTrue();
 
-        var listResponse = await author.GetAsync(new Uri($"/api/assets/{assetId}/versions", UriKind.Relative));
+        HttpResponseMessage listResponse = await author.GetAsync(new Uri($"/api/assets/{assetId}/versions", UriKind.Relative));
         listResponse.StatusCode.Should().Be(HttpStatusCode.OK);
-        var versions = await listResponse.Content.ReadFromJsonAsync<List<AssetVersionSummaryResponse>>();
+        List<AssetVersionSummaryResponse>? versions = await listResponse.Content.ReadFromJsonAsync<List<AssetVersionSummaryResponse>>();
         versions.Should().NotBeNull();
         versions.Should().HaveCount(2);
         versions.Should().ContainSingle(v => v.Id == versionIds[0] && v.IsCurrent);
-        var v2 = versions.Should()
+        AssetVersionSummaryResponse v2 = versions.Should()
             .ContainSingle(v => v.VersionNumber == 2 && !v.IsCurrent && v.License.Code == "COMMERCIAL")
             .Which;
         v2.ContentSha256.Should().Be(expectedSha256);
@@ -214,8 +214,8 @@ public sealed class AssetVersionsControllerIntegrationTests(IntegrationTestFixtu
     [Fact]
     public async Task Download_WhenUnauthenticated_ShouldReturn401()
     {
-        var client = fixture.Factory.CreateClient();
-        var response = await client.GetAsync(new Uri($"/api/assets/{Guid.NewGuid()}/download", UriKind.Relative));
+        HttpClient client = fixture.Factory.CreateClient();
+        HttpResponseMessage response = await client.GetAsync(new Uri($"/api/assets/{Guid.NewGuid()}/download", UriKind.Relative));
 
         response.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
     }
@@ -224,7 +224,7 @@ public sealed class AssetVersionsControllerIntegrationTests(IntegrationTestFixtu
     public async Task Download_WhenAssetMissing_ShouldReturn404()
     {
         (HttpClient client, _) = await IntegrationTestAuth.RegisterAndAuthenticateAsync(fixture.Factory);
-        var response = await client.GetAsync(new Uri($"/api/assets/{Guid.NewGuid()}/download", UriKind.Relative));
+        HttpResponseMessage response = await client.GetAsync(new Uri($"/api/assets/{Guid.NewGuid()}/download", UriKind.Relative));
 
         response.StatusCode.Should().Be(HttpStatusCode.NotFound);
         var body = await response.Content.ReadAsStringAsync();
@@ -234,12 +234,12 @@ public sealed class AssetVersionsControllerIntegrationTests(IntegrationTestFixtu
     [Fact]
     public async Task Download_WhenAuthenticatedButNotEntitled_ShouldReturn403()
     {
-        var (_, authorUsername) = await IntegrationTestAuth.RegisterVerifiedAndAuthenticateAsync(fixture.Factory);
-        var authorId = await AssetVersionsSeed.GetUserIdAsync(ScopeFactory, authorUsername);
+        (HttpClient _, var authorUsername) = await IntegrationTestAuth.RegisterVerifiedAndAuthenticateAsync(fixture.Factory);
+        Guid authorId = await AssetVersionsSeed.GetUserIdAsync(ScopeFactory, authorUsername);
         (Guid assetId, _) = await AssetVersionsSeed.SeedAssetWithVersionsAsync(ScopeFactory, authorId, versionCount: 1);
 
         (HttpClient stranger, _) = await IntegrationTestAuth.RegisterAndAuthenticateAsync(fixture.Factory);
-        var response = await stranger.GetAsync(new Uri($"/api/assets/{assetId}/download", UriKind.Relative));
+        HttpResponseMessage response = await stranger.GetAsync(new Uri($"/api/assets/{assetId}/download", UriKind.Relative));
 
         response.StatusCode.Should().Be(HttpStatusCode.Forbidden);
         var body = await response.Content.ReadAsStringAsync();
@@ -250,13 +250,13 @@ public sealed class AssetVersionsControllerIntegrationTests(IntegrationTestFixtu
     public async Task Download_WhenAuthor_ShouldReturn200WithDecryptedContent()
     {
         (HttpClient author, var authorUsername) = await IntegrationTestAuth.RegisterVerifiedAndAuthenticateAsync(fixture.Factory);
-        var authorId = await AssetVersionsSeed.GetUserIdAsync(ScopeFactory, authorUsername);
+        Guid authorId = await AssetVersionsSeed.GetUserIdAsync(ScopeFactory, authorUsername);
         (Guid assetId, List<Guid> versionIds) = await AssetVersionsSeed.SeedAssetWithVersionsAsync(ScopeFactory, authorId, versionCount: 1);
 
         var plaintext = "author-owned content"u8.ToArray();
         await SeedVersionContentAsync(versionIds[0], plaintext);
 
-        var response = await author.GetAsync(new Uri($"/api/assets/{assetId}/download", UriKind.Relative));
+        HttpResponseMessage response = await author.GetAsync(new Uri($"/api/assets/{assetId}/download", UriKind.Relative));
 
         response.StatusCode.Should().Be(HttpStatusCode.OK);
         var bytes = await response.Content.ReadAsByteArrayAsync();
@@ -266,18 +266,18 @@ public sealed class AssetVersionsControllerIntegrationTests(IntegrationTestFixtu
     [Fact]
     public async Task Download_WhenPurchaser_ShouldReturn200WithDecryptedContent()
     {
-        var (_, authorUsername) = await IntegrationTestAuth.RegisterVerifiedAndAuthenticateAsync(fixture.Factory);
-        var authorId = await AssetVersionsSeed.GetUserIdAsync(ScopeFactory, authorUsername);
+        (HttpClient _, var authorUsername) = await IntegrationTestAuth.RegisterVerifiedAndAuthenticateAsync(fixture.Factory);
+        Guid authorId = await AssetVersionsSeed.GetUserIdAsync(ScopeFactory, authorUsername);
         (Guid assetId, List<Guid> versionIds) = await AssetVersionsSeed.SeedAssetWithVersionsAsync(ScopeFactory, authorId, versionCount: 1);
 
         var plaintext = "purchaser entitled content"u8.ToArray();
         await SeedVersionContentAsync(versionIds[0], plaintext);
 
         (HttpClient buyer, var buyerUsername) = await IntegrationTestAuth.RegisterAndAuthenticateAsync(fixture.Factory);
-        var buyerId = await AssetVersionsSeed.GetUserIdAsync(ScopeFactory, buyerUsername);
+        Guid buyerId = await AssetVersionsSeed.GetUserIdAsync(ScopeFactory, buyerUsername);
         await AssetVersionsSeed.SeedPurchaseAsync(ScopeFactory, buyerId, assetId, versionIds[0]);
 
-        var response = await buyer.GetAsync(new Uri($"/api/assets/{assetId}/download", UriKind.Relative));
+        HttpResponseMessage response = await buyer.GetAsync(new Uri($"/api/assets/{assetId}/download", UriKind.Relative));
 
         response.StatusCode.Should().Be(HttpStatusCode.OK);
         var bytes = await response.Content.ReadAsByteArrayAsync();
@@ -287,16 +287,16 @@ public sealed class AssetVersionsControllerIntegrationTests(IntegrationTestFixtu
     [Fact]
     public async Task DownloadVersion_WhenPurchaserRequestsVersionOlderThanPurchased_ShouldReturn403()
     {
-        var (_, authorUsername) = await IntegrationTestAuth.RegisterVerifiedAndAuthenticateAsync(fixture.Factory);
-        var authorId = await AssetVersionsSeed.GetUserIdAsync(ScopeFactory, authorUsername);
+        (HttpClient _, var authorUsername) = await IntegrationTestAuth.RegisterVerifiedAndAuthenticateAsync(fixture.Factory);
+        Guid authorId = await AssetVersionsSeed.GetUserIdAsync(ScopeFactory, authorUsername);
         (Guid assetId, List<Guid> versionIds) = await AssetVersionsSeed.SeedAssetWithVersionsAsync(ScopeFactory, authorId, versionCount: 2);
 
         (HttpClient buyer, var buyerUsername) = await IntegrationTestAuth.RegisterAndAuthenticateAsync(fixture.Factory);
-        var buyerId = await AssetVersionsSeed.GetUserIdAsync(ScopeFactory, buyerUsername);
+        Guid buyerId = await AssetVersionsSeed.GetUserIdAsync(ScopeFactory, buyerUsername);
         // Buyer purchased version 2 (index 1); requesting version 1 (an older, pre-purchase version) must be denied.
         await AssetVersionsSeed.SeedPurchaseAsync(ScopeFactory, buyerId, assetId, versionIds[1]);
 
-        var response = await buyer.GetAsync(
+        HttpResponseMessage response = await buyer.GetAsync(
             new Uri($"/api/assets/{assetId}/versions/{versionIds[0]}/download", UriKind.Relative));
 
         response.StatusCode.Should().Be(HttpStatusCode.Forbidden);
@@ -307,19 +307,19 @@ public sealed class AssetVersionsControllerIntegrationTests(IntegrationTestFixtu
     [Fact]
     public async Task DownloadVersion_WhenPurchaserRequestsNewerEntitledVersion_ShouldReturn200()
     {
-        var (_, authorUsername) = await IntegrationTestAuth.RegisterVerifiedAndAuthenticateAsync(fixture.Factory);
-        var authorId = await AssetVersionsSeed.GetUserIdAsync(ScopeFactory, authorUsername);
+        (HttpClient _, var authorUsername) = await IntegrationTestAuth.RegisterVerifiedAndAuthenticateAsync(fixture.Factory);
+        Guid authorId = await AssetVersionsSeed.GetUserIdAsync(ScopeFactory, authorUsername);
         (Guid assetId, List<Guid> versionIds) = await AssetVersionsSeed.SeedAssetWithVersionsAsync(ScopeFactory, authorId, versionCount: 2);
 
         var plaintext = "newer entitled version content"u8.ToArray();
         await SeedVersionContentAsync(versionIds[1], plaintext);
 
         (HttpClient buyer, var buyerUsername) = await IntegrationTestAuth.RegisterAndAuthenticateAsync(fixture.Factory);
-        var buyerId = await AssetVersionsSeed.GetUserIdAsync(ScopeFactory, buyerUsername);
+        Guid buyerId = await AssetVersionsSeed.GetUserIdAsync(ScopeFactory, buyerUsername);
         // Buyer purchased version 1 (index 0); later versions of the same asset remain entitled.
         await AssetVersionsSeed.SeedPurchaseAsync(ScopeFactory, buyerId, assetId, versionIds[0]);
 
-        var response = await buyer.GetAsync(
+        HttpResponseMessage response = await buyer.GetAsync(
             new Uri($"/api/assets/{assetId}/versions/{versionIds[1]}/download", UriKind.Relative));
 
         response.StatusCode.Should().Be(HttpStatusCode.OK);
@@ -331,12 +331,12 @@ public sealed class AssetVersionsControllerIntegrationTests(IntegrationTestFixtu
     public async Task Download_WhenRangeHeaderPresent_ShouldReturn416()
     {
         (HttpClient author, var authorUsername) = await IntegrationTestAuth.RegisterVerifiedAndAuthenticateAsync(fixture.Factory);
-        var authorId = await AssetVersionsSeed.GetUserIdAsync(ScopeFactory, authorUsername);
+        Guid authorId = await AssetVersionsSeed.GetUserIdAsync(ScopeFactory, authorUsername);
         (Guid assetId, _) = await AssetVersionsSeed.SeedAssetWithVersionsAsync(ScopeFactory, authorId, versionCount: 1);
 
         using var request = new HttpRequestMessage(HttpMethod.Get, $"/api/assets/{assetId}/download");
         request.Headers.Range = new RangeHeaderValue(0, 10);
-        var response = await author.SendAsync(request);
+        HttpResponseMessage response = await author.SendAsync(request);
 
         response.StatusCode.Should().Be(HttpStatusCode.RequestedRangeNotSatisfiable);
         response.Headers.AcceptRanges.Should().Contain("none");
@@ -346,14 +346,14 @@ public sealed class AssetVersionsControllerIntegrationTests(IntegrationTestFixtu
     public async Task DownloadVersion_WhenRangeHeaderPresent_ShouldReturn416()
     {
         (HttpClient author, var authorUsername) = await IntegrationTestAuth.RegisterVerifiedAndAuthenticateAsync(fixture.Factory);
-        var authorId = await AssetVersionsSeed.GetUserIdAsync(ScopeFactory, authorUsername);
+        Guid authorId = await AssetVersionsSeed.GetUserIdAsync(ScopeFactory, authorUsername);
         (Guid assetId, List<Guid> versionIds) = await AssetVersionsSeed.SeedAssetWithVersionsAsync(ScopeFactory, authorId, versionCount: 1);
 
         using var request = new HttpRequestMessage(
             HttpMethod.Get,
             $"/api/assets/{assetId}/versions/{versionIds[0]}/download");
         request.Headers.Range = new RangeHeaderValue(0, 10);
-        var response = await author.SendAsync(request);
+        HttpResponseMessage response = await author.SendAsync(request);
 
         response.StatusCode.Should().Be(HttpStatusCode.RequestedRangeNotSatisfiable);
         response.Headers.AcceptRanges.Should().Contain("none");
@@ -361,8 +361,8 @@ public sealed class AssetVersionsControllerIntegrationTests(IntegrationTestFixtu
 
     private async Task SeedVersionContentAsync(Guid versionId, byte[] plaintext)
     {
-        await using var scope = fixture.Factory.Services.CreateAsyncScope();
-        var encryptionService = scope.ServiceProvider.GetRequiredService<IEncryptionService>();
+        await using AsyncServiceScope scope = fixture.Factory.Services.CreateAsyncScope();
+        IEncryptionService encryptionService = scope.ServiceProvider.GetRequiredService<IEncryptionService>();
 
         // Version storage keys are immutable after insert — seed fake MinIO under the existing key.
         var storageKey = await AssetVersionsSeed.GetVersionStorageKeyAsync(ScopeFactory, versionId);
@@ -378,7 +378,7 @@ public sealed class AssetVersionsControllerIntegrationTests(IntegrationTestFixtu
         using var output = new MemoryStream();
         using (var archive = new ZipArchive(output, ZipArchiveMode.Create, leaveOpen: true))
         {
-            var entry = archive.CreateEntry("payload.txt", CompressionLevel.Fastest);
+            ZipArchiveEntry entry = archive.CreateEntry("payload.txt", CompressionLevel.Fastest);
             using var writer = new StreamWriter(entry.Open());
             writer.Write(entryContent);
         }

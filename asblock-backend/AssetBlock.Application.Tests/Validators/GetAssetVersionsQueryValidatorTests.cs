@@ -1,5 +1,6 @@
 using AssetBlock.Application.UseCases.Assets.GetAssetVersions;
 using AwesomeAssertions;
+using FluentValidation.Results;
 
 namespace AssetBlock.Application.Tests.Validators;
 
@@ -11,7 +12,7 @@ public sealed class GetAssetVersionsQueryValidatorTests
     public async Task Validate_WhenValidQuery_ShouldPass()
     {
         var query = new GetAssetVersionsQuery(Guid.NewGuid(), Guid.NewGuid());
-        var result = await _validator.ValidateAsync(query);
+        ValidationResult result = await _validator.ValidateAsync(query);
         result.IsValid.Should().BeTrue();
     }
 
@@ -19,7 +20,7 @@ public sealed class GetAssetVersionsQueryValidatorTests
     public async Task Validate_WhenRequesterUserIdNull_ShouldPass()
     {
         var query = new GetAssetVersionsQuery(Guid.NewGuid(), null);
-        var result = await _validator.ValidateAsync(query);
+        ValidationResult result = await _validator.ValidateAsync(query);
         result.IsValid.Should().BeTrue();
     }
 
@@ -27,7 +28,7 @@ public sealed class GetAssetVersionsQueryValidatorTests
     public async Task Validate_WhenAssetIdEmpty_ShouldFail()
     {
         var query = new GetAssetVersionsQuery(Guid.Empty, null);
-        var result = await _validator.ValidateAsync(query);
+        ValidationResult result = await _validator.ValidateAsync(query);
         result.IsValid.Should().BeFalse();
         result.Errors.Should().Contain(e => e.PropertyName == nameof(query.AssetId));
     }
@@ -36,7 +37,7 @@ public sealed class GetAssetVersionsQueryValidatorTests
     public async Task Validate_WhenRequesterUserIdEmpty_ShouldFail()
     {
         var query = new GetAssetVersionsQuery(Guid.NewGuid(), Guid.Empty);
-        var result = await _validator.ValidateAsync(query);
+        ValidationResult result = await _validator.ValidateAsync(query);
         result.IsValid.Should().BeFalse();
         result.Errors.Should().Contain(e => e.PropertyName == nameof(query.RequesterUserId));
     }

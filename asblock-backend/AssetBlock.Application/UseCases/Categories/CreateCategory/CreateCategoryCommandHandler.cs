@@ -1,10 +1,11 @@
 using Ardalis.Result;
+using AssetBlock.Application.Messaging;
 using AssetBlock.Domain.Abstractions.Services;
 using AssetBlock.Domain.Core.Constants;
 using AssetBlock.Domain.Core.Dto.Audit;
 using AssetBlock.Domain.Core.Dto.Categories;
+using AssetBlock.Domain.Core.Entities;
 using AssetBlock.Domain.Core.Enums;
-using AssetBlock.Application.Messaging;
 using AssetBlock.Domain.Core.Exceptions;
 using Microsoft.Extensions.Logging;
 
@@ -31,7 +32,7 @@ internal sealed class CreateCategoryCommandHandler(
         {
             await unitOfWork.ExecuteInTransaction(async ct =>
             {
-                var category = await categoryStore.Create(request.Name, request.Description, request.Slug, ct);
+                Category category = await categoryStore.Create(request.Name, request.Description, request.Slug, ct);
                 categoryId = category.Id;
                 await auditWriter.Write(new AuditEvent(
                     AuditActions.CATEGORY_CREATE,

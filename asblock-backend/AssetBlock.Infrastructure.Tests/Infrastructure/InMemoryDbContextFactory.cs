@@ -7,7 +7,7 @@ internal static class InMemoryDbContextFactory
 {
     public static ApplicationDbContext Create()
     {
-        var options = new DbContextOptionsBuilder<ApplicationDbContext>()
+        DbContextOptions<ApplicationDbContext> options = new DbContextOptionsBuilder<ApplicationDbContext>()
             .UseInMemoryDatabase($"infra_tests_{Guid.NewGuid():N}")
             .Options;
         var ctx = new ApplicationDbContext(options);

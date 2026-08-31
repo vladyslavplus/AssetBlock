@@ -1,14 +1,15 @@
-using AssetBlock.WebApi.Conventions;
-using AssetBlock.WebApi.Extensions;
-using AssetBlock.WebApi.Services;
-using AssetBlock.WebApi.Constants;
-using AssetBlock.Domain.Abstractions.Services;
 using AssetBlock.Application;
+using AssetBlock.Domain.Abstractions.Services;
 using AssetBlock.Infrastructure;
 using AssetBlock.Infrastructure.Outbox;
+using AssetBlock.WebApi.Constants;
+using AssetBlock.WebApi.Conventions;
+using AssetBlock.WebApi.Extensions;
 using AssetBlock.WebApi.Outbox;
+using AssetBlock.WebApi.Services;
+using Microsoft.AspNetCore.Mvc;
 
-var builder = WebApplication.CreateBuilder(args);
+WebApplicationBuilder builder = WebApplication.CreateBuilder(args);
 
 builder.Host.UseSerilogConfiguration();
 builder.Logging.AddAssetBlockOpenTelemetryLogging(builder.Configuration, builder.Environment);
@@ -35,7 +36,7 @@ builder.Services.AddControllers(options => options.Conventions.Add(new Lowercase
                     e => e.Value!.Errors
                         .Select(err => string.IsNullOrWhiteSpace(err.ErrorMessage) ? "Invalid value." : err.ErrorMessage)
                         .ToArray());
-            var problem = AssetBlock.WebApi.ProblemDetails.AssetBlockProblemDetails.CreateValidation(
+            ValidationProblemDetails problem = AssetBlock.WebApi.ProblemDetails.AssetBlockProblemDetails.CreateValidation(
                 context.HttpContext,
                 errors);
             return AssetBlock.WebApi.ProblemDetails.AssetBlockProblemDetails.ToActionResult(problem);
@@ -61,7 +62,7 @@ else
     builder.Services.AddApiRateLimiting();
 }
 
-var app = builder.Build();
+WebApplication app = builder.Build();
 
 app.UseSerilogRequestLoggingConfiguration();
 app.UseValidationExceptionHandler();

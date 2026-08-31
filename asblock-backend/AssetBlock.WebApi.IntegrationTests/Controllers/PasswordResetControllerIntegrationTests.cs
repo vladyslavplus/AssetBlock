@@ -16,9 +16,9 @@ public sealed class PasswordResetControllerIntegrationTests(IntegrationTestFixtu
     [Fact]
     public async Task RequestPasswordReset_WhenEmailUnknown_ShouldReturn202()
     {
-        var client = fixture.Factory.CreateClient();
+        HttpClient client = fixture.Factory.CreateClient();
 
-        var response = await client.PostAsJsonAsync(
+        HttpResponseMessage response = await client.PostAsJsonAsync(
             new Uri("/api/auth/password-reset/request", UriKind.Relative),
             new RequestPasswordResetRequest($"unknown-{Guid.NewGuid():N}@nowhere.test"));
 
@@ -28,17 +28,17 @@ public sealed class PasswordResetControllerIntegrationTests(IntegrationTestFixtu
     [Fact]
     public async Task RequestPasswordReset_WhenEmailKnown_ShouldReturn202()
     {
-        var client = fixture.Factory.CreateClient();
+        HttpClient client = fixture.Factory.CreateClient();
         var suffix = Guid.NewGuid().ToString("N");
         var email = $"pwreset-{suffix}@test.local";
         const string password = "Password1!";
 
-        var registerResponse = await client.PostAsJsonAsync(
+        HttpResponseMessage registerResponse = await client.PostAsJsonAsync(
             new Uri("/api/auth/register", UriKind.Relative),
             new RegisterRequest($"pwreset_{suffix}", email, password));
         registerResponse.StatusCode.Should().Be(HttpStatusCode.OK);
 
-        var resetResponse = await client.PostAsJsonAsync(
+        HttpResponseMessage resetResponse = await client.PostAsJsonAsync(
             new Uri("/api/auth/password-reset/request", UriKind.Relative),
             new RequestPasswordResetRequest(email));
 
@@ -48,7 +48,7 @@ public sealed class PasswordResetControllerIntegrationTests(IntegrationTestFixtu
     [Fact]
     public async Task RequestPasswordReset_ShouldReturnSameStatusForKnownAndUnknown()
     {
-        var client = fixture.Factory.CreateClient();
+        HttpClient client = fixture.Factory.CreateClient();
         var suffix = Guid.NewGuid().ToString("N");
         var email = $"pwreset2-{suffix}@test.local";
         const string password = "Password1!";
@@ -57,11 +57,11 @@ public sealed class PasswordResetControllerIntegrationTests(IntegrationTestFixtu
             new Uri("/api/auth/register", UriKind.Relative),
             new RegisterRequest($"pwreset2_{suffix}", email, password));
 
-        var knownResponse = await client.PostAsJsonAsync(
+        HttpResponseMessage knownResponse = await client.PostAsJsonAsync(
             new Uri("/api/auth/password-reset/request", UriKind.Relative),
             new RequestPasswordResetRequest(email));
 
-        var unknownResponse = await client.PostAsJsonAsync(
+        HttpResponseMessage unknownResponse = await client.PostAsJsonAsync(
             new Uri("/api/auth/password-reset/request", UriKind.Relative),
             new RequestPasswordResetRequest($"unknown-{Guid.NewGuid():N}@nowhere.test"));
 

@@ -8,7 +8,7 @@ public sealed class AssetProcessingJobStoreTests
     [Fact]
     public void BoundErrorSummary_WhenNull_ThrowsArgumentNullException()
     {
-        var act = () => AssetProcessingJobStore.BoundErrorSummary(null!);
+        Func<string> act = () => AssetProcessingJobStore.BoundErrorSummary(null!);
         act.Should().Throw<ArgumentNullException>();
     }
 

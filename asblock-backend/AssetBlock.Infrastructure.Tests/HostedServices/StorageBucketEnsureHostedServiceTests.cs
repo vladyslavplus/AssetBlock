@@ -12,11 +12,11 @@ public sealed class StorageBucketEnsureHostedServiceTests
     [Fact]
     public async Task ExecuteAsync_WhenEnsureBucketSucceeds_ShouldStopAfterOneAttempt()
     {
-        var storage = Substitute.For<IAssetStorageService>();
+        IAssetStorageService storage = Substitute.For<IAssetStorageService>();
         storage.EnsureBucket(Arg.Any<CancellationToken>()).Returns(Task.CompletedTask);
 
-        await using var provider = BuildProvider(storage);
-        var sut = CreateSut(provider);
+        await using ServiceProvider provider = BuildProvider(storage);
+        StorageBucketEnsureHostedService sut = CreateSut(provider);
 
         await sut.StartAsync(CancellationToken.None);
         await WaitForIdle(sut);
@@ -28,13 +28,13 @@ public sealed class StorageBucketEnsureHostedServiceTests
     [Fact]
     public async Task ExecuteAsync_WhenEnsureBucketAlwaysFails_ShouldNotPropagateAndKeepRetryingUntilStopped()
     {
-        var storage = Substitute.For<IAssetStorageService>();
+        IAssetStorageService storage = Substitute.For<IAssetStorageService>();
         storage.EnsureBucket(Arg.Any<CancellationToken>())
             .Returns(_ => Task.FromException(new InvalidOperationException("boom")));
 
-        await using var provider = BuildProvider(storage);
+        await using ServiceProvider provider = BuildProvider(storage);
         using var cts = new CancellationTokenSource();
-        var sut = CreateSut(provider);
+        StorageBucketEnsureHostedService sut = CreateSut(provider);
 
         await sut.StartAsync(cts.Token);
         await Task.Delay(200, cts.Token);
@@ -48,7 +48,7 @@ public sealed class StorageBucketEnsureHostedServiceTests
     [Fact]
     public async Task ExecuteAsync_WhenStorageRecoversAfterFastAttempts_ShouldEventuallySucceed()
     {
-        var storage = Substitute.For<IAssetStorageService>();
+        IAssetStorageService storage = Substitute.For<IAssetStorageService>();
         var calls = 0;
         storage.EnsureBucket(Arg.Any<CancellationToken>())
             .Returns(_ =>
@@ -62,8 +62,8 @@ public sealed class StorageBucketEnsureHostedServiceTests
                 return Task.CompletedTask;
             });
 
-        await using var provider = BuildProvider(storage);
-        var sut = CreateSut(provider);
+        await using ServiceProvider provider = BuildProvider(storage);
+        StorageBucketEnsureHostedService sut = CreateSut(provider);
 
         await sut.StartAsync(CancellationToken.None);
         await WaitForIdle(sut, timeout: TimeSpan.FromSeconds(5));
@@ -90,7 +90,7 @@ public sealed class StorageBucketEnsureHostedServiceTests
 
     private static async Task WaitForIdle(BackgroundService sut, TimeSpan? timeout = null)
     {
-        var execute = sut.ExecuteTask;
+        Task? execute = sut.ExecuteTask;
         if (execute is null)
         {
             return;

@@ -21,7 +21,7 @@ internal sealed class EmailActionLinkProtector(
 
     public string Protect(EmailActionLinkClaims claims)
     {
-        var lifetime = claims.ExpiresAt - DateTimeOffset.UtcNow;
+        TimeSpan lifetime = claims.ExpiresAt - DateTimeOffset.UtcNow;
         if (lifetime <= TimeSpan.Zero)
         {
             throw new InvalidOperationException("Email action link is already expired.");
@@ -49,7 +49,7 @@ internal sealed class EmailActionLinkProtector(
         {
             var protectedBytes = WebEncoders.Base64UrlDecode(protectedToken.Trim());
             var bytes = _protector.Unprotect(protectedBytes, out _);
-            if (!TryDecode(bytes, out var decoded) || decoded.Purpose != expectedPurpose)
+            if (!TryDecode(bytes, out EmailActionLinkClaims? decoded) || decoded.Purpose != expectedPurpose)
             {
                 return false;
             }
@@ -90,7 +90,7 @@ internal sealed class EmailActionLinkProtector(
     private string GetOrigin()
     {
         var configured = emailOptions.Value.PublicAppBaseUrl.Trim();
-        if (!Uri.TryCreate(configured, UriKind.Absolute, out var uri)
+        if (!Uri.TryCreate(configured, UriKind.Absolute, out Uri? uri)
             || (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps))
         {
             throw new InvalidOperationException("Email:PublicAppBaseUrl must be a configured absolute http(s) origin.");

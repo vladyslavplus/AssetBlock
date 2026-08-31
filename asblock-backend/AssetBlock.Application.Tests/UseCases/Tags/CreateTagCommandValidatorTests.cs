@@ -1,5 +1,6 @@
 using AssetBlock.Application.UseCases.Tags.CreateTag;
 using AwesomeAssertions;
+using FluentValidation.Results;
 
 namespace AssetBlock.Application.Tests.UseCases.Tags;
 
@@ -11,7 +12,7 @@ public class CreateTagCommandValidatorTests
     public async Task Validate_WhenNameInvalid_ShouldFail()
     {
         var cmd = new CreateTagCommand("Invalid_Name");
-        var result = await _validator.ValidateAsync(cmd);
+        ValidationResult result = await _validator.ValidateAsync(cmd);
         result.IsValid.Should().BeFalse();
     }
 
@@ -19,7 +20,7 @@ public class CreateTagCommandValidatorTests
     public async Task Validate_WhenValid_ShouldPass()
     {
         var cmd = new CreateTagCommand("game-assets");
-        var result = await _validator.ValidateAsync(cmd);
+        ValidationResult result = await _validator.ValidateAsync(cmd);
         result.IsValid.Should().BeTrue();
     }
 }

@@ -40,7 +40,7 @@ public sealed class ResendEmailVerificationCommandHandlerTests
         var command = new ResendEmailVerificationCommand(Guid.NewGuid());
         _userStore.GetByIdForUpdate(command.UserId, Arg.Any<CancellationToken>()).Returns((User?)null);
 
-        var result = await _handler.Handle(command, CancellationToken.None);
+        Result result = await _handler.Handle(command, CancellationToken.None);
 
         result.Status.Should().Be(ResultStatus.NotFound);
         await _emailActionStore.DidNotReceiveWithAnyArgs().IssueOrReplace(Guid.Empty, default, null!, TimeSpan.Zero, CancellationToken.None);
@@ -49,11 +49,11 @@ public sealed class ResendEmailVerificationCommandHandlerTests
     [Fact]
     public async Task Handle_WhenAlreadyVerified_ShouldReturnSuccessWithoutAction()
     {
-        var user = CreateUser(emailVerifiedAt: DateTimeOffset.UtcNow);
+        User user = CreateUser(emailVerifiedAt: DateTimeOffset.UtcNow);
         var command = new ResendEmailVerificationCommand(user.Id);
         _userStore.GetByIdForUpdate(command.UserId, Arg.Any<CancellationToken>()).Returns(user);
 
-        var result = await _handler.Handle(command, CancellationToken.None);
+        Result result = await _handler.Handle(command, CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
         await _emailActionStore.DidNotReceiveWithAnyArgs().IssueOrReplace(Guid.Empty, default, null!, TimeSpan.Zero, CancellationToken.None);
@@ -63,7 +63,7 @@ public sealed class ResendEmailVerificationCommandHandlerTests
     [Fact]
     public async Task Handle_WhenInCooldown_ShouldReturnCooldownError()
     {
-        var user = CreateUser();
+        User user = CreateUser();
         var command = new ResendEmailVerificationCommand(user.Id);
         var existingAction = new EmailAction
         {
@@ -78,7 +78,7 @@ public sealed class ResendEmailVerificationCommandHandlerTests
             .Returns(existingAction);
         _emailActionStore.IsInCooldown(Arg.Any<EmailAction?>(), Arg.Any<TimeSpan>(), Arg.Any<DateTimeOffset>()).Returns(true);
 
-        var result = await _handler.Handle(command, CancellationToken.None);
+        Result result = await _handler.Handle(command, CancellationToken.None);
 
         result.Status.Should().Be(ResultStatus.Invalid);
         result.ValidationErrors.Should().Contain(e => e.Identifier == ErrorCodes.ERR_EMAIL_ACTION_COOLDOWN);
@@ -88,7 +88,7 @@ public sealed class ResendEmailVerificationCommandHandlerTests
     [Fact]
     public async Task Handle_WhenAllowed_ShouldReissueActionAndEnqueueOutbox()
     {
-        var user = CreateUser();
+        User user = CreateUser();
         var command = new ResendEmailVerificationCommand(user.Id);
         var newAction = new EmailAction
         {
@@ -104,7 +104,7 @@ public sealed class ResendEmailVerificationCommandHandlerTests
         _emailActionStore.IssueOrReplace(Arg.Any<Guid>(), Arg.Any<EmailActionPurpose>(), Arg.Any<string>(), Arg.Any<TimeSpan>(), Arg.Any<CancellationToken>())
             .Returns(newAction);
 
-        var result = await _handler.Handle(command, CancellationToken.None);
+        Result result = await _handler.Handle(command, CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
         await _emailActionStore.Received(1).IssueOrReplace(

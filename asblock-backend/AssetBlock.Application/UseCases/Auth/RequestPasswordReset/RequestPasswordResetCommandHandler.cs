@@ -1,10 +1,11 @@
 using Ardalis.Result;
+using AssetBlock.Application.Messaging;
 using AssetBlock.Domain.Abstractions.Services;
 using AssetBlock.Domain.Core.Constants;
 using AssetBlock.Domain.Core.Dto.Audit;
 using AssetBlock.Domain.Core.Dto.Email;
+using AssetBlock.Domain.Core.Entities;
 using AssetBlock.Domain.Core.Enums;
-using AssetBlock.Application.Messaging;
 using Microsoft.Extensions.Logging;
 
 namespace AssetBlock.Application.UseCases.Auth.RequestPasswordReset;
@@ -19,19 +20,19 @@ internal sealed class RequestPasswordResetCommandHandler(
 {
     public async Task<Result> Handle(RequestPasswordResetCommand request, CancellationToken cancellationToken)
     {
-        var user = await userStore.GetByEmail(request.Email.Trim(), cancellationToken);
+        User? user = await userStore.GetByEmail(request.Email.Trim(), cancellationToken);
         if (user is null)
         {
             // Always succeed to prevent email enumeration
             return Result.Success();
         }
 
-        var existing = await emailActionStore.GetCurrent(
+        EmailAction? existing = await emailActionStore.GetCurrent(
             user.Id,
             EmailActionPurpose.PASSWORD_RESET,
             cancellationToken);
 
-        var now = DateTimeOffset.UtcNow;
+        DateTimeOffset now = DateTimeOffset.UtcNow;
         if (emailActionStore.IsInCooldown(existing, EmailActionConstants.ResendCooldown, now))
         {
             logger.LogDebug("RequestPasswordReset: cooldown active for user {UserId}", user.Id);
@@ -41,7 +42,7 @@ internal sealed class RequestPasswordResetCommandHandler(
 
         await unitOfWork.ExecuteInTransaction(async ct =>
         {
-            var action = await emailActionStore.IssueOrReplace(
+            EmailAction action = await emailActionStore.IssueOrReplace(
                 user.Id,
                 EmailActionPurpose.PASSWORD_RESET,
                 user.Email,

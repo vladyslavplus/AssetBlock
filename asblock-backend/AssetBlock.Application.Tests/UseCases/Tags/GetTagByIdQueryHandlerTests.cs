@@ -2,6 +2,7 @@ using Ardalis.Result;
 using AssetBlock.Application.UseCases.Tags.GetTagById;
 using AssetBlock.Domain.Abstractions.Services;
 using AssetBlock.Domain.Core.Constants;
+using AssetBlock.Domain.Core.Dto.Tags;
 using AssetBlock.Domain.Core.Entities;
 using AwesomeAssertions;
 using NSubstitute;
@@ -29,7 +30,7 @@ public class GetTagByIdQueryHandlerTests
         _tagStoreMock.GetById(tagId, Arg.Any<CancellationToken>()).Returns(new Tag { Id = tagId, Name = "my-tag" });
 
         // Act
-        var result = await _handler.Handle(query, CancellationToken.None);
+        Result<TagDto> result = await _handler.Handle(query, CancellationToken.None);
 
         // Assert: Return the correct DTO mapped from entity
         result.IsSuccess.Should().BeTrue();
@@ -47,7 +48,7 @@ public class GetTagByIdQueryHandlerTests
         _tagStoreMock.GetById(tagId, Arg.Any<CancellationToken>()).Returns((Tag?)null);
 
         // Act
-        var result = await _handler.Handle(query, CancellationToken.None);
+        Result<TagDto> result = await _handler.Handle(query, CancellationToken.None);
 
         result.Status.Should().Be(ResultStatus.NotFound);
         result.Errors.Should().Contain(ErrorCodes.ERR_TAG_NOT_FOUND);

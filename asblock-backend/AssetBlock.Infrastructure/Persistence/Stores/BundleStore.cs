@@ -20,7 +20,7 @@ internal sealed class BundleStore(ApplicationDbContext dbContext) : IBundleStore
 
     public async Task<Bundle?> LockForUpdate(Guid id, CancellationToken cancellationToken = default)
     {
-        var lockedId = await dbContext.Database
+        Guid lockedId = await dbContext.Database
             .SqlQuery<Guid>($"""SELECT "Id" AS "Value" FROM bundles WHERE "Id" = {id} FOR UPDATE""")
             .FirstOrDefaultAsync(cancellationToken);
 

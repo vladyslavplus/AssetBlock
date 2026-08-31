@@ -2,6 +2,7 @@ using System.Buffers;
 using System.Formats.Tar;
 using System.IO.Compression;
 using System.Text;
+using System.Text.Json;
 using System.Text.RegularExpressions;
 using AssetBlock.Domain.Abstractions.Services;
 using AssetBlock.Domain.Core.Constants;
@@ -10,6 +11,7 @@ using AssetBlock.Domain.Core.Primitives.AppSettingsOptions;
 using AssetBlock.Infrastructure.Persistence.Stores;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using SharpCompress.Common;
 using SharpCompress.Readers;
 
 namespace AssetBlock.Infrastructure.Services;
@@ -56,7 +58,7 @@ internal sealed partial class ArchiveSafetyInspector(
             {
                 if (LooksLikeZip(prefix))
                 {
-                    using var reader = ReaderFactory.OpenReader(combined, new ReaderOptions { LeaveStreamOpen = true });
+                    using IReader reader = ReaderFactory.OpenReader(combined, new ReaderOptions { LeaveStreamOpen = true });
                     return await InspectZipEntries(reader, cancellationToken).ConfigureAwait(false);
                 }
 
@@ -65,7 +67,7 @@ internal sealed partial class ArchiveSafetyInspector(
                     var compressed = new CountingReadStream(combined);
                     await using var gzip = new GZipStream(compressed, CompressionMode.Decompress, leaveOpen: true);
                     var limited = new GzipRatioLimitingStream(gzip, compressed, _options.MaxCompressionRatio);
-                    var result = await InspectTarEntries(limited, cancellationToken).ConfigureAwait(false);
+                    ArchiveSafetyResult result = await InspectTarEntries(limited, cancellationToken).ConfigureAwait(false);
                     limited.ThrowIfRatioExceeded();
                     return result;
                 }
@@ -101,7 +103,7 @@ internal sealed partial class ArchiveSafetyInspector(
         while (reader.MoveToNextEntry())
         {
             cancellationToken.ThrowIfCancellationRequested();
-            var entry = reader.Entry;
+            IEntry entry = reader.Entry;
 
             if (!TryCanonicalizePath(entry.Key, _options.MaxPathLength, _options.MaxPathDepth, out var canonical, out var pathError))
             {
@@ -128,7 +130,7 @@ internal sealed partial class ArchiveSafetyInspector(
                 continue;
             }
 
-            await using var entryStream = reader.OpenEntryStream();
+            await using EntryStream entryStream = reader.OpenEntryStream();
             await ConsumeCountedFile(acc, canonical, entryStream, entry.CompressedSize, cancellationToken)
                 .ConfigureAwait(false);
         }
@@ -171,7 +173,7 @@ internal sealed partial class ArchiveSafetyInspector(
                 continue;
             }
 
-            var entryStream = entry.DataStream ?? Stream.Null;
+            Stream entryStream = entry.DataStream ?? Stream.Null;
             await ConsumeCountedFile(acc, canonical, entryStream, compressedSize: 0, cancellationToken)
                 .ConfigureAwait(false);
         }
@@ -221,7 +223,7 @@ internal sealed partial class ArchiveSafetyInspector(
             _options.MaxEntryExpandedBytes,
             remainingTotal,
             ratioCap);
-        var (entryBytes, captured) = await ReadBounded(
+        (var entryBytes, var captured) = await ReadBounded(
             entryStream,
             readCap,
             captureLimit,
@@ -250,7 +252,7 @@ internal sealed partial class ArchiveSafetyInspector(
         }
         else if (captureManifest && captured is { Length: > 0 })
         {
-            var parsed = TryParseManifest(canonical, baseName, captured);
+            RecognizedManifestItem? parsed = TryParseManifest(canonical, baseName, captured);
             if (parsed is not null)
             {
                 acc.Manifests.Add(parsed);
@@ -584,16 +586,16 @@ internal sealed partial class ArchiveSafetyInspector(
     {
         try
         {
-            using var doc = System.Text.Json.JsonDocument.Parse(jsonText);
+            using var doc = JsonDocument.Parse(jsonText);
             foreach (var section in new[] { "dependencies", "devDependencies" })
             {
-                if (!doc.RootElement.TryGetProperty(section, out var deps)
-                    || deps.ValueKind != System.Text.Json.JsonValueKind.Object)
+                if (!doc.RootElement.TryGetProperty(section, out JsonElement deps)
+                    || deps.ValueKind != JsonValueKind.Object)
                 {
                     continue;
                 }
 
-                foreach (var prop in deps.EnumerateObject())
+                foreach (JsonProperty prop in deps.EnumerateObject())
                 {
                     if (dependencies.Count >= 32)
                     {

@@ -78,7 +78,7 @@ public class PublishAssetVersionCommandHandlerTests
     {
         _assetStoreMock.GetById(_assetId, Arg.Any<CancellationToken>()).Returns((Asset?)null);
 
-        var result = await _handler.Handle(CreateCommand(), CancellationToken.None);
+        Result<Guid> result = await _handler.Handle(CreateCommand(), CancellationToken.None);
 
         result.Status.Should().Be(ResultStatus.NotFound);
         result.Errors.Should().Contain(ErrorCodes.ERR_ASSET_NOT_FOUND);
@@ -89,7 +89,7 @@ public class PublishAssetVersionCommandHandlerTests
     {
         StubOwnedAsset(DateTimeOffset.UtcNow);
 
-        var result = await _handler.Handle(CreateCommand(), CancellationToken.None);
+        Result<Guid> result = await _handler.Handle(CreateCommand(), CancellationToken.None);
 
         result.Status.Should().Be(ResultStatus.NotFound);
         await _assetStorageServiceMock.DidNotReceiveWithAnyArgs()
@@ -101,7 +101,7 @@ public class PublishAssetVersionCommandHandlerTests
     {
         StubOwnedAsset();
 
-        var result = await _handler.Handle(CreateCommand(authorId: Guid.NewGuid()), CancellationToken.None);
+        Result<Guid> result = await _handler.Handle(CreateCommand(authorId: Guid.NewGuid()), CancellationToken.None);
 
         result.Status.Should().Be(ResultStatus.Forbidden);
         result.Errors.Should().Contain(ErrorCodes.ERR_FORBIDDEN);
@@ -113,7 +113,7 @@ public class PublishAssetVersionCommandHandlerTests
     {
         StubOwnedAsset();
 
-        var result = await _handler.Handle(CreateCommand(), CancellationToken.None);
+        Result<Guid> result = await _handler.Handle(CreateCommand(), CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
         await _assetStoreMock.Received(1).CreateNextCandidateVersion(
@@ -132,7 +132,7 @@ public class PublishAssetVersionCommandHandlerTests
     {
         StubOwnedAsset();
 
-        var result = await _handler.Handle(CreateCommand(fileName: @"..\..\..\etc\кириллица_""v2"".zip"), CancellationToken.None);
+        Result<Guid> result = await _handler.Handle(CreateCommand(fileName: @"..\..\..\etc\кириллица_""v2"".zip"), CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
         await _assetStoreMock.Received(1).CreateNextCandidateVersion(
@@ -149,7 +149,7 @@ public class PublishAssetVersionCommandHandlerTests
         _unitOfWorkMock.ExecuteInTransaction(Arg.Any<Func<CancellationToken, Task>>(), Arg.Any<CancellationToken>())
             .ThrowsAsync(new Exception("DB fail"));
 
-        var act = () => _handler.Handle(CreateCommand(), CancellationToken.None);
+        Func<Task<Result<Guid>>> act = () => _handler.Handle(CreateCommand(), CancellationToken.None);
 
         await act.Should().ThrowAsync<Exception>().WithMessage("DB fail");
         await _assetStorageServiceMock.DidNotReceive()
@@ -163,7 +163,7 @@ public class PublishAssetVersionCommandHandlerTests
         _unitOfWorkMock.ExecuteInTransaction(Arg.Any<Func<CancellationToken, Task>>(), Arg.Any<CancellationToken>())
             .ThrowsAsync(new OperationCanceledException());
 
-        var act = () => _handler.Handle(CreateCommand(), CancellationToken.None);
+        Func<Task<Result<Guid>>> act = () => _handler.Handle(CreateCommand(), CancellationToken.None);
 
         await act.Should().ThrowAsync<OperationCanceledException>();
         await _assetStorageServiceMock.DidNotReceive()
@@ -177,7 +177,7 @@ public class PublishAssetVersionCommandHandlerTests
         _encryptionServiceMock.Encrypt(Arg.Any<Stream>(), Arg.Any<Stream>(), Arg.Any<CancellationToken>())
             .ThrowsAsync(new Exception("encrypt failed"));
 
-        var result = await _handler.Handle(CreateCommand(), CancellationToken.None);
+        Result<Guid> result = await _handler.Handle(CreateCommand(), CancellationToken.None);
 
         result.IsSuccess.Should().BeFalse();
         result.ValidationErrors.Should().Contain(e => e.Identifier == ErrorCodes.ERR_ASSET_UPLOAD_FAILED);
@@ -191,7 +191,7 @@ public class PublishAssetVersionCommandHandlerTests
         _assetStorageServiceMock.Upload(Arg.Any<string>(), Arg.Any<Stream>(), Arg.Any<long>(), Arg.Any<CancellationToken>())
             .ThrowsAsync(new Exception("upload failed"));
 
-        var result = await _handler.Handle(CreateCommand(), CancellationToken.None);
+        Result<Guid> result = await _handler.Handle(CreateCommand(), CancellationToken.None);
 
         result.IsSuccess.Should().BeFalse();
         result.ValidationErrors.Should().Contain(e => e.Identifier == ErrorCodes.ERR_ASSET_UPLOAD_FAILED);
@@ -205,7 +205,7 @@ public class PublishAssetVersionCommandHandlerTests
         _encryptionServiceMock.Encrypt(Arg.Any<Stream>(), Arg.Any<Stream>(), Arg.Any<CancellationToken>())
             .ThrowsAsync(new OperationCanceledException());
 
-        var act = () => _handler.Handle(CreateCommand(), new CancellationToken(canceled: true));
+        Func<Task<Result<Guid>>> act = () => _handler.Handle(CreateCommand(), new CancellationToken(canceled: true));
 
         await act.Should().ThrowAsync<OperationCanceledException>();
         await _assetStorageServiceMock.Received(1).Delete(Arg.Any<string>(), Arg.Any<CancellationToken>());

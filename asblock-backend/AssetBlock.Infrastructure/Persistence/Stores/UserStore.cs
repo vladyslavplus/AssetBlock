@@ -4,6 +4,7 @@ using AssetBlock.Domain.Core.Dto.Email;
 using AssetBlock.Domain.Core.Entities;
 using AssetBlock.Domain.Core.Exceptions;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.ChangeTracking;
 using Npgsql;
 
 namespace AssetBlock.Infrastructure.Persistence.Stores;
@@ -54,7 +55,7 @@ internal sealed class UserStore(ApplicationDbContext dbContext) : IUserStore
 
     public async Task<User> Create(string username, string email, string passwordHash, CancellationToken cancellationToken = default)
     {
-        var now = DateTimeOffset.UtcNow;
+        DateTimeOffset now = DateTimeOffset.UtcNow;
         var user = new User
         {
             Id = Guid.NewGuid(),
@@ -85,7 +86,7 @@ internal sealed class UserStore(ApplicationDbContext dbContext) : IUserStore
         try
         {
             user.UpdatedAt = DateTimeOffset.UtcNow;
-            var entry = dbContext.Entry(user);
+            EntityEntry<User> entry = dbContext.Entry(user);
             if (entry.State == EntityState.Detached)
             {
                 dbContext.Users.Update(user);
@@ -104,7 +105,7 @@ internal sealed class UserStore(ApplicationDbContext dbContext) : IUserStore
 
     public async Task<bool> UpdatePasswordHashIfMatches(Guid userId, string currentHash, string newHash, CancellationToken cancellationToken = default)
     {
-        var now = DateTimeOffset.UtcNow;
+        DateTimeOffset now = DateTimeOffset.UtcNow;
         var affected = await dbContext.Users
             .Where(u => u.Id == userId && u.PasswordHash == currentHash)
             .ExecuteUpdateAsync(s => s
@@ -140,8 +141,8 @@ internal sealed class UserStore(ApplicationDbContext dbContext) : IUserStore
             .Where(x => x.UserId == userId)
             .ExecuteDeleteAsync(cancellationToken);
 
-        var now = DateTimeOffset.UtcNow;
-        foreach (var (platformId, url) in links)
+        DateTimeOffset now = DateTimeOffset.UtcNow;
+        foreach ((Guid platformId, var url) in links)
         {
             dbContext.Set<UserSocialLink>().Add(new UserSocialLink
             {
@@ -159,7 +160,7 @@ internal sealed class UserStore(ApplicationDbContext dbContext) : IUserStore
 
     public async Task Delete(Guid userId, CancellationToken cancellationToken = default)
     {
-        var user = await dbContext.Users.FirstOrDefaultAsync(u => u.Id == userId, cancellationToken);
+        User? user = await dbContext.Users.FirstOrDefaultAsync(u => u.Id == userId, cancellationToken);
         if (user is null)
         {
             return;

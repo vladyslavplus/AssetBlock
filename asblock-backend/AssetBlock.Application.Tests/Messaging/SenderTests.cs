@@ -13,7 +13,7 @@ public class SenderTests
     {
         var pingHandler = new RecordingHandler<Ping, string>(request => request.Value);
         var otherHandler = new RecordingHandler<OtherPing, string>(_ => "other");
-        var sender = CreateSender(services =>
+        ISender sender = CreateSender(services =>
         {
             services.AddSingleton<IRequestHandler<Ping, string>>(pingHandler);
             services.AddSingleton<IRequestHandler<OtherPing, string>>(otherHandler);
@@ -29,7 +29,7 @@ public class SenderTests
     [Fact]
     public async Task Send_WhenHandlerSucceeds_ShouldReturnResponse()
     {
-        var sender = CreateSender(services =>
+        ISender sender = CreateSender(services =>
         {
             services.AddSingleton<IRequestHandler<Ping, string>>(
                 new RecordingHandler<Ping, string>(request => request.Value.ToUpperInvariant()));
@@ -44,7 +44,7 @@ public class SenderTests
     public async Task Send_WhenBehaviorsAreRegistered_ShouldRunInRegistrationOrderThenHandler()
     {
         var trace = new List<string>();
-        var sender = CreateSender(services =>
+        ISender sender = CreateSender(services =>
         {
             services.AddSingleton<IRequestHandler<Ping, string>>(
                 new RecordingHandler<Ping, string>(_ =>
@@ -71,14 +71,14 @@ public class SenderTests
     public async Task Send_WhenValidationFails_ShouldShortCircuitHandler()
     {
         var handler = new RecordingHandler<Ping, string>(_ => "should-not-run");
-        var sender = CreateSender(services =>
+        ISender sender = CreateSender(services =>
         {
             services.AddSingleton<IRequestHandler<Ping, string>>(handler);
             services.AddSingleton<IValidator<Ping>, FailingPingValidator>();
             services.AddTransient(typeof(IPipelineBehavior<,>), typeof(ValidationBehavior<,>));
         });
 
-        var act = () => sender.Send(new Ping("ok"));
+        Func<Task<string>> act = () => sender.Send(new Ping("ok"));
 
         await act.Should().ThrowAsync<ValidationException>();
         handler.Calls.Should().Be(0);
@@ -88,7 +88,7 @@ public class SenderTests
     public async Task Send_WhenValidationFails_ShouldNotResolveHandler()
     {
         var factoryCalls = 0;
-        var sender = CreateSender(services =>
+        ISender sender = CreateSender(services =>
         {
             services.AddTransient<IRequestHandler<Ping, string>>(_ =>
             {
@@ -99,7 +99,7 @@ public class SenderTests
             services.AddTransient(typeof(IPipelineBehavior<,>), typeof(ValidationBehavior<,>));
         });
 
-        var act = () => sender.Send(new Ping("ok"));
+        Func<Task<string>> act = () => sender.Send(new Ping("ok"));
 
         await act.Should().ThrowAsync<ValidationException>();
         factoryCalls.Should().Be(0);
@@ -108,13 +108,13 @@ public class SenderTests
     [Fact]
     public async Task Send_WhenHandlerThrows_ShouldPropagateException()
     {
-        var sender = CreateSender(services =>
+        ISender sender = CreateSender(services =>
         {
             services.AddSingleton<IRequestHandler<Ping, string>>(
                 new RecordingHandler<Ping, string>(_ => throw new InvalidOperationException("boom")));
         });
 
-        var act = () => sender.Send(new Ping("ok"));
+        Func<Task<string>> act = () => sender.Send(new Ping("ok"));
 
         await act.Should().ThrowAsync<InvalidOperationException>().WithMessage("boom");
     }
@@ -125,7 +125,7 @@ public class SenderTests
         using var cts = new CancellationTokenSource();
         await cts.CancelAsync();
         CancellationToken observed = CancellationToken.None;
-        var sender = CreateSender(services =>
+        ISender sender = CreateSender(services =>
         {
             services.AddSingleton<IRequestHandler<Ping, string>>(
                 new RecordingHandler<Ping, string>((_, cancellationToken) =>
@@ -136,7 +136,7 @@ public class SenderTests
                 }));
         });
 
-        var act = () => sender.Send(new Ping("ok"), cts.Token);
+        Func<Task<string>> act = () => sender.Send(new Ping("ok"), cts.Token);
 
         await act.Should().ThrowAsync<OperationCanceledException>();
         observed.Should().Be(cts.Token);
@@ -146,9 +146,9 @@ public class SenderTests
     [Fact]
     public async Task Send_WhenHandlerIsMissing_ShouldThrow()
     {
-        var sender = CreateSender(_ => { });
+        ISender sender = CreateSender(_ => { });
 
-        var act = () => sender.Send(new Ping("ok"));
+        Func<Task<string>> act = () => sender.Send(new Ping("ok"));
 
         await act.Should().ThrowAsync<InvalidOperationException>()
             .WithMessage($"*{typeof(Ping).FullName}*");
@@ -157,7 +157,7 @@ public class SenderTests
     [Fact]
     public async Task Send_WhenDuplicateHandlersAreRegistered_ShouldThrow()
     {
-        var sender = CreateSender(services =>
+        ISender sender = CreateSender(services =>
         {
             services.AddSingleton<IRequestHandler<Ping, string>>(
                 new RecordingHandler<Ping, string>(_ => "first"));
@@ -165,7 +165,7 @@ public class SenderTests
                 new RecordingHandler<Ping, string>(_ => "second"));
         });
 
-        var act = () => sender.Send(new Ping("ok"));
+        Func<Task<string>> act = () => sender.Send(new Ping("ok"));
 
         await act.Should().ThrowAsync<InvalidOperationException>()
             .WithMessage($"*{typeof(Ping).FullName}*");
@@ -176,7 +176,7 @@ public class SenderTests
         var services = new ServiceCollection();
         services.AddTransient<ISender, Sender>();
         configure(services);
-        var provider = services.BuildServiceProvider();
+        ServiceProvider provider = services.BuildServiceProvider();
         return provider.GetRequiredService<ISender>();
     }
 
@@ -202,7 +202,7 @@ public class SenderTests
             CancellationToken cancellationToken)
         {
             trace.Add($"{name}:before");
-            var response = await next(cancellationToken);
+            TResponse? response = await next(cancellationToken);
             trace.Add($"{name}:after");
             return response;
         }

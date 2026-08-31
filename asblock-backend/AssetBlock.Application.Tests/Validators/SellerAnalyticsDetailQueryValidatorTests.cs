@@ -5,6 +5,7 @@ using AssetBlock.Domain.Core.Constants;
 using AssetBlock.Domain.Core.Dto.Analytics;
 using AssetBlock.Domain.Core.Enums;
 using AwesomeAssertions;
+using FluentValidation.Results;
 
 namespace AssetBlock.Application.Tests.Validators;
 
@@ -21,7 +22,7 @@ public sealed class SellerAnalyticsDetailQueryValidatorTests
     [Fact]
     public void Validate_WhenAssetDetailRangeValid_ShouldPass()
     {
-        var result = _assetValidator.Validate(
+        ValidationResult result = _assetValidator.Validate(
             new GetSellerAnalyticsAssetDetailQuery(_sellerId, Guid.NewGuid(), _validFrom, _validTo));
 
         result.IsValid.Should().BeTrue();
@@ -30,7 +31,7 @@ public sealed class SellerAnalyticsDetailQueryValidatorTests
     [Fact]
     public void Validate_WhenBundleDetailRangeInvalid_ShouldFail()
     {
-        var result = _bundleValidator.Validate(
+        ValidationResult result = _bundleValidator.Validate(
             new GetSellerAnalyticsBundleDetailQuery(_sellerId, Guid.NewGuid(), _validTo, _validFrom));
 
         result.IsValid.Should().BeFalse();
@@ -41,7 +42,7 @@ public sealed class SellerAnalyticsDetailQueryValidatorTests
     public void Validate_WhenCollectionsRangeInvalid_ShouldFail()
     {
         var request = new AnalyticsCollectionsRequest(_validTo, _validFrom);
-        var result = _collectionsValidator.Validate(new GetSellerAnalyticsCollectionsQuery(_sellerId, request));
+        ValidationResult result = _collectionsValidator.Validate(new GetSellerAnalyticsCollectionsQuery(_sellerId, request));
 
         result.IsValid.Should().BeFalse();
         result.Errors.Should().Contain(e => e.ErrorMessage.Contains(ErrorCodes.ERR_ANALYTICS_INVALID_RANGE));
@@ -55,7 +56,7 @@ public sealed class SellerAnalyticsDetailQueryValidatorTests
             _validTo,
             PageSize: AnalyticsConstants.MAX_COLLECTIONS_PAGE_SIZE + 1);
 
-        var result = _collectionsValidator.Validate(new GetSellerAnalyticsCollectionsQuery(_sellerId, request));
+        ValidationResult result = _collectionsValidator.Validate(new GetSellerAnalyticsCollectionsQuery(_sellerId, request));
 
         result.IsValid.Should().BeFalse();
     }
@@ -66,7 +67,7 @@ public sealed class SellerAnalyticsDetailQueryValidatorTests
         var request = new AnalyticsCollectionsRequest(_validFrom, _validTo);
         var query = new GetSellerAnalyticsCollectionsQuery(_sellerId, request with { Sort = (AnalyticsCollectionSort)999 });
 
-        var result = _collectionsValidator.Validate(query);
+        ValidationResult result = _collectionsValidator.Validate(query);
 
         result.IsValid.Should().BeFalse();
         result.Errors.Should().Contain(e => e.ErrorMessage.Contains(ErrorCodes.ERR_ANALYTICS_INVALID_FILTER));

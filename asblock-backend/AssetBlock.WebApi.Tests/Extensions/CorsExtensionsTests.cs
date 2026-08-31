@@ -23,15 +23,15 @@ public sealed class CorsExtensionsTests
     [InlineData("OPTIONS")]
     public async Task Preflight_WhenAllowedMethod_ShouldAllow(string method)
     {
-        await using var app = CreateApp([ALLOWED_ORIGIN]);
+        await using WebApplication app = CreateApp([ALLOWED_ORIGIN]);
         await app.StartAsync();
-        var client = app.GetTestClient();
+        HttpClient client = app.GetTestClient();
 
         var request = new HttpRequestMessage(HttpMethod.Options, "/api/test");
         request.Headers.Add("Origin", ALLOWED_ORIGIN);
         request.Headers.Add("Access-Control-Request-Method", method);
 
-        var response = await client.SendAsync(request);
+        HttpResponseMessage response = await client.SendAsync(request);
 
         response.StatusCode.Should().Be(HttpStatusCode.NoContent);
         response.Headers.Contains("Access-Control-Allow-Origin").Should().BeTrue();
@@ -52,16 +52,16 @@ public sealed class CorsExtensionsTests
     [InlineData(AnalyticsBffRateLimitHeaders.SIGNATURE)]
     public async Task Preflight_WhenAllowedHeader_ShouldAllow(string header)
     {
-        await using var app = CreateApp([ALLOWED_ORIGIN]);
+        await using WebApplication app = CreateApp([ALLOWED_ORIGIN]);
         await app.StartAsync();
-        var client = app.GetTestClient();
+        HttpClient client = app.GetTestClient();
 
         var request = new HttpRequestMessage(HttpMethod.Options, "/api/test");
         request.Headers.Add("Origin", ALLOWED_ORIGIN);
         request.Headers.Add("Access-Control-Request-Method", "POST");
         request.Headers.Add("Access-Control-Request-Headers", header);
 
-        var response = await client.SendAsync(request);
+        HttpResponseMessage response = await client.SendAsync(request);
 
         response.StatusCode.Should().Be(HttpStatusCode.NoContent);
         response.Headers.Contains("Access-Control-Allow-Origin").Should().BeTrue();
@@ -71,18 +71,18 @@ public sealed class CorsExtensionsTests
     [Fact]
     public async Task Preflight_WhenUnknownMethod_ShouldReject()
     {
-        await using var app = CreateApp([ALLOWED_ORIGIN]);
+        await using WebApplication app = CreateApp([ALLOWED_ORIGIN]);
         await app.StartAsync();
-        var client = app.GetTestClient();
+        HttpClient client = app.GetTestClient();
 
         var request = new HttpRequestMessage(HttpMethod.Options, "/api/test");
         request.Headers.Add("Origin", ALLOWED_ORIGIN);
         request.Headers.Add("Access-Control-Request-Method", "TRACE");
 
-        var response = await client.SendAsync(request);
+        HttpResponseMessage response = await client.SendAsync(request);
 
         // Kestrel/ASP.NET Core CORS middleware does not return Access-Control-Allow-Methods for disallowed methods on preflight
-        if (response.Headers.TryGetValues("Access-Control-Allow-Methods", out var allowedMethods))
+        if (response.Headers.TryGetValues("Access-Control-Allow-Methods", out IEnumerable<string>? allowedMethods))
         {
             allowedMethods.Should().NotContain(m => m.Contains("TRACE"));
         }
@@ -95,19 +95,19 @@ public sealed class CorsExtensionsTests
     [Fact]
     public async Task Preflight_WhenUnknownHeader_ShouldReject()
     {
-        await using var app = CreateApp([ALLOWED_ORIGIN]);
+        await using WebApplication app = CreateApp([ALLOWED_ORIGIN]);
         await app.StartAsync();
-        var client = app.GetTestClient();
+        HttpClient client = app.GetTestClient();
 
         var request = new HttpRequestMessage(HttpMethod.Options, "/api/test");
         request.Headers.Add("Origin", ALLOWED_ORIGIN);
         request.Headers.Add("Access-Control-Request-Method", "POST");
         request.Headers.Add("Access-Control-Request-Headers", "X-Unknown-Malicious-Header");
 
-        var response = await client.SendAsync(request);
+        HttpResponseMessage response = await client.SendAsync(request);
 
         // Kestrel/ASP.NET Core CORS middleware does not permit the unknown header in Access-Control-Allow-Headers
-        if (response.Headers.TryGetValues("Access-Control-Allow-Headers", out var allowedHeaders))
+        if (response.Headers.TryGetValues("Access-Control-Allow-Headers", out IEnumerable<string>? allowedHeaders))
         {
             allowedHeaders.Should().NotContain(h => h.Contains("X-Unknown-Malicious-Header", StringComparison.OrdinalIgnoreCase));
         }
@@ -115,7 +115,7 @@ public sealed class CorsExtensionsTests
 
     private static WebApplication CreateApp(string[] allowedOrigins)
     {
-        var builder = WebApplication.CreateBuilder(new WebApplicationOptions
+        WebApplicationBuilder builder = WebApplication.CreateBuilder(new WebApplicationOptions
         {
             EnvironmentName = Environments.Development
         });
@@ -130,7 +130,7 @@ public sealed class CorsExtensionsTests
         builder.Configuration.AddInMemoryCollection(configData);
         builder.Services.AddAssetBlockCors(builder.Configuration, builder.Environment);
 
-        var app = builder.Build();
+        WebApplication app = builder.Build();
         app.UseAssetBlockCors();
         app.MapPost("/api/test", () => Microsoft.AspNetCore.Http.Results.Ok());
 

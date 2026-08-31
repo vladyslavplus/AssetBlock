@@ -1,11 +1,11 @@
 using System.Globalization;
+using System.Security.Claims;
+using System.Threading.RateLimiting;
 using AssetBlock.Domain.Abstractions.Services;
 using AssetBlock.Domain.Core.Constants;
 using AssetBlock.WebApi.ProblemDetails;
 using AssetBlock.WebApi.RateLimiting;
 using Microsoft.AspNetCore.RateLimiting;
-using System.Security.Claims;
-using System.Threading.RateLimiting;
 
 namespace AssetBlock.WebApi.Extensions;
 
@@ -34,13 +34,13 @@ internal static class RateLimitingExtensions
 
             if (context.Lease.TryGetMetadata(
                     AnalyticsRateLimitMetadataNames.RetryAfter,
-                    out var retryAfter))
+                    out TimeSpan retryAfter))
             {
                 var retrySeconds = Math.Max(1, (int)Math.Ceiling(retryAfter.TotalSeconds));
                 context.HttpContext.Response.Headers.RetryAfter = retrySeconds.ToString(CultureInfo.InvariantCulture);
             }
 
-            var problem = AssetBlockProblemDetails.Create(
+            Microsoft.AspNetCore.Mvc.ProblemDetails problem = AssetBlockProblemDetails.Create(
                 context.HttpContext,
                 StatusCodes.Status429TooManyRequests,
                 ErrorCodes.ERR_RATE_LIMITED);
@@ -50,7 +50,7 @@ internal static class RateLimitingExtensions
 
     private static async Task HandleUnavailableRateLimitAsync(OnRejectedContext context)
     {
-        var endpoint = context.HttpContext.GetEndpoint();
+        Endpoint? endpoint = context.HttpContext.GetEndpoint();
         var policyName = endpoint?.Metadata.GetMetadata<EnableRateLimitingAttribute>()?.PolicyName;
 
         if (string.Equals(
@@ -67,7 +67,7 @@ internal static class RateLimitingExtensions
                 RateLimitingConstants.Policies.SELLER_ANALYTICS_SALES_EXPORT,
                 StringComparison.Ordinal))
         {
-            var problem = AssetBlockProblemDetails.Create(
+            Microsoft.AspNetCore.Mvc.ProblemDetails problem = AssetBlockProblemDetails.Create(
                 context.HttpContext,
                 StatusCodes.Status503ServiceUnavailable,
                 ErrorCodes.ERR_ANALYTICS_RATE_LIMIT_UNAVAILABLE);
@@ -75,7 +75,7 @@ internal static class RateLimitingExtensions
             return;
         }
 
-        var fallback = AssetBlockProblemDetails.Create(
+        Microsoft.AspNetCore.Mvc.ProblemDetails fallback = AssetBlockProblemDetails.Create(
             context.HttpContext,
             StatusCodes.Status503ServiceUnavailable,
             ErrorCodes.ERR_ANALYTICS_RATE_LIMIT_UNAVAILABLE);
@@ -313,8 +313,8 @@ internal static class RateLimitingExtensions
     {
         opts.AddPolicy(RateLimitingConstants.Policies.ANALYTICS_EVENTS, httpContext =>
         {
-            var distributedLimiter = httpContext.RequestServices.GetRequiredService<IAnalyticsDistributedRateLimiter>();
-            var timeProvider = httpContext.RequestServices.GetService<TimeProvider>() ?? TimeProvider.System;
+            IAnalyticsDistributedRateLimiter distributedLimiter = httpContext.RequestServices.GetRequiredService<IAnalyticsDistributedRateLimiter>();
+            TimeProvider timeProvider = httpContext.RequestServices.GetService<TimeProvider>() ?? TimeProvider.System;
             return RateLimitPartition.Get(
                 GetAnalyticsEventsPartitionKey(httpContext),
                 partitionKey => new AnalyticsDistributedRateLimiterAdapter(
@@ -340,8 +340,8 @@ internal static class RateLimitingExtensions
                         : "seller-analytics-export:anon:" + connectionId);
             }
 
-            var distributedLimiter = httpContext.RequestServices.GetRequiredService<IAnalyticsDistributedRateLimiter>();
-            var timeProvider = httpContext.RequestServices.GetService<TimeProvider>() ?? TimeProvider.System;
+            IAnalyticsDistributedRateLimiter distributedLimiter = httpContext.RequestServices.GetRequiredService<IAnalyticsDistributedRateLimiter>();
+            TimeProvider timeProvider = httpContext.RequestServices.GetService<TimeProvider>() ?? TimeProvider.System;
             return RateLimitPartition.Get(
                 userId,
                 partitionKey => new AnalyticsDistributedRateLimiterAdapter(

@@ -19,7 +19,7 @@ public class ValidationBehaviorTests
         var expected = Result.Success(new TokensResponse("a", "b", DateTimeOffset.UtcNow, DateTimeOffset.UtcNow));
         var invoked = false;
 
-        var result = await behavior.Handle(
+        Result<TokensResponse> result = await behavior.Handle(
             request,
             _ =>
             {
@@ -41,7 +41,7 @@ public class ValidationBehaviorTests
         var behavior = new ValidationBehavior<LoginCommand, Result<TokensResponse>>(
             [validator]);
 
-        var act = () => behavior.Handle(
+        Func<Task<Result<TokensResponse>>> act = () => behavior.Handle(
             new LoginCommand("a@b.com", "pwd"),
             _ => Task.FromResult(Result.Success(new TokensResponse("a", "b", DateTimeOffset.UtcNow, DateTimeOffset.UtcNow))),
             CancellationToken.None);
@@ -59,7 +59,7 @@ public class ValidationBehaviorTests
             [validator]);
 
         var expected = Result.Success(new TokensResponse("a", "b", DateTimeOffset.UtcNow, DateTimeOffset.UtcNow));
-        var result = await behavior.Handle(
+        Result<TokensResponse> result = await behavior.Handle(
             new LoginCommand("a@b.com", "pwd"),
             _ => Task.FromResult(expected),
             CancellationToken.None);

@@ -4,6 +4,7 @@ using AssetBlock.Domain.Core.Enums;
 using AssetBlock.Domain.Core.Primitives.AppSettingsOptions;
 using AssetBlock.Infrastructure.Email;
 using AwesomeAssertions;
+using AwesomeAssertions.Specialized;
 using MailKit.Net.Smtp;
 using MailKit.Security;
 using Microsoft.Extensions.Logging;
@@ -63,7 +64,7 @@ public sealed class SmtpEmailSenderTests
             EmailTemplateKind.PURCHASE_RECEIPT,
             $"<{outboxId:N}@mail.localhost>");
 
-        var mime = sut.BuildMimeMessage(message);
+        MimeMessage mime = sut.BuildMimeMessage(message);
 
         mime.From.Mailboxes.Single().Address.Should().Be("noreply@localhost");
         mime.To.Mailboxes.Single().Address.Should().Be("buyer@example.com");
@@ -142,9 +143,9 @@ public sealed class SmtpEmailSenderTests
             _logger,
             () => _mockSmtpClient);
 
-        var act = () => sut.Send(CreateSampleMessage(), CancellationToken.None);
+        Func<Task> act = () => sut.Send(CreateSampleMessage(), CancellationToken.None);
 
-        var thrown = await act.Should().ThrowAsync<InvalidOperationException>();
+        ExceptionAssertions<InvalidOperationException> thrown = await act.Should().ThrowAsync<InvalidOperationException>();
         thrown.Which.Should().BeSameAs(primaryException);
     }
 
@@ -160,7 +161,7 @@ public sealed class SmtpEmailSenderTests
             _logger,
             () => _mockSmtpClient);
 
-        var message = CreateSampleMessage();
+        EmailMessage message = CreateSampleMessage();
         await sut.Send(message, CancellationToken.None);
 
         _logger.Logs.Should().Contain(l =>

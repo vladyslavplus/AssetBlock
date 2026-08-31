@@ -1,6 +1,6 @@
 using Ardalis.Result;
-using AssetBlock.Domain.Core.Dto.Payments;
 using AssetBlock.Application.Messaging;
+using AssetBlock.Domain.Core.Dto.Payments;
 
 namespace AssetBlock.Application.UseCases.Payments.CreateCheckoutSession;
 

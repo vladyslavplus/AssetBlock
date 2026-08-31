@@ -1,21 +1,23 @@
 using System.Net;
 using System.Security.Claims;
 using System.Text;
+using AssetBlock.Application.Messaging;
 using AssetBlock.Domain.Abstractions.Services;
 using AssetBlock.Domain.Core.Constants;
-using AssetBlock.Infrastructure.Persistence;
+using AssetBlock.Domain.Core.Entities;
 using AssetBlock.Infrastructure;
+using AssetBlock.Infrastructure.Persistence;
 using AssetBlock.WebApi.Extensions;
-using Microsoft.Extensions.Hosting;
 using AssetBlock.WebApi.IntegrationTests.Support;
 using AssetBlock.WebApi.IntegrationTests.Support.Fakes;
 using AwesomeAssertions;
-using AssetBlock.Application.Messaging;
 using Microsoft.AspNetCore.Builder;
+using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.AspNetCore.TestHost;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using Microsoft.Extensions.Hosting;
 
 namespace AssetBlock.WebApi.IntegrationTests.Controllers;
 
@@ -25,8 +27,8 @@ public sealed class SellerAnalyticsExportControllerIntegrationTests(IntegrationT
     [Fact]
     public async Task ExportSales_Anonymous_Returns401()
     {
-        var client = fixture.Factory.CreateClient();
-        var response = await client.GetAsync(
+        HttpClient client = fixture.Factory.CreateClient();
+        HttpResponseMessage response = await client.GetAsync(
             new Uri("/api/seller/analytics/sales/export?from=2024-01-01&to=2024-01-11", UriKind.Relative));
         response.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
     }
@@ -34,8 +36,8 @@ public sealed class SellerAnalyticsExportControllerIntegrationTests(IntegrationT
     [Fact]
     public async Task ExportSales_UnverifiedUser_Returns403WithEmailNotVerified()
     {
-        var (client, _) = await IntegrationTestAuth.RegisterAndAuthenticateAsync(fixture.Factory);
-        var response = await client.GetAsync(
+        (HttpClient? client, var _) = await IntegrationTestAuth.RegisterAndAuthenticateAsync(fixture.Factory);
+        HttpResponseMessage response = await client.GetAsync(
             new Uri("/api/seller/analytics/sales/export?from=2024-01-01&to=2024-01-11", UriKind.Relative));
         response.StatusCode.Should().Be(HttpStatusCode.Forbidden);
         (await response.Content.ReadAsStringAsync()).Should().Contain(ErrorCodes.ERR_EMAIL_NOT_VERIFIED);
@@ -44,11 +46,11 @@ public sealed class SellerAnalyticsExportControllerIntegrationTests(IntegrationT
     [Fact]
     public async Task ExportSales_VerifiedUserNoSales_ReturnsCsvWithHeaderOnly()
     {
-        var (client, _) = await IntegrationTestAuth.RegisterVerifiedAndAuthenticateAsync(fixture.Factory);
+        (HttpClient? client, var _) = await IntegrationTestAuth.RegisterVerifiedAndAuthenticateAsync(fixture.Factory);
         var from = DateTime.UtcNow.AddDays(-7).ToString("yyyy-MM-dd");
         var to = DateTime.UtcNow.AddDays(1).ToString("yyyy-MM-dd");
 
-        var response = await client.GetAsync(
+        HttpResponseMessage response = await client.GetAsync(
             new Uri($"/api/seller/analytics/sales/export?from={from}&to={to}", UriKind.Relative));
 
         response.StatusCode.Should().Be(HttpStatusCode.OK);
@@ -71,8 +73,8 @@ public sealed class SellerAnalyticsExportControllerIntegrationTests(IntegrationT
     [Fact]
     public async Task ExportSales_InvalidRange_ReturnsProblemDetails()
     {
-        var (client, _) = await IntegrationTestAuth.RegisterVerifiedAndAuthenticateAsync(fixture.Factory);
-        var response = await client.GetAsync(
+        (HttpClient? client, var _) = await IntegrationTestAuth.RegisterVerifiedAndAuthenticateAsync(fixture.Factory);
+        HttpResponseMessage response = await client.GetAsync(
             new Uri("/api/seller/analytics/sales/export?from=2024-06-01&to=2024-01-01", UriKind.Relative));
 
         response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
@@ -83,7 +85,7 @@ public sealed class SellerAnalyticsExportControllerIntegrationTests(IntegrationT
     [Fact]
     public async Task ExportSales_WhenCapExceeded_ReturnsExportTooLarge()
     {
-        var factory = fixture.Factory.WithWebHostBuilder(builder =>
+        WebApplicationFactory<Program> factory = fixture.Factory.WithWebHostBuilder(builder =>
         {
             builder.ConfigureTestServices(services =>
             {
@@ -92,8 +94,8 @@ public sealed class SellerAnalyticsExportControllerIntegrationTests(IntegrationT
             });
         });
 
-        var (client, _) = await IntegrationTestAuth.RegisterVerifiedAndAuthenticateAsync(factory);
-        var response = await client.GetAsync(
+        (HttpClient? client, var _) = await IntegrationTestAuth.RegisterVerifiedAndAuthenticateAsync(factory);
+        HttpResponseMessage response = await client.GetAsync(
             new Uri("/api/seller/analytics/sales/export?from=2024-01-01&to=2024-02-01", UriKind.Relative));
 
         response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
@@ -104,18 +106,18 @@ public sealed class SellerAnalyticsExportControllerIntegrationTests(IntegrationT
     [Fact]
     public async Task ExportSales_WhenSuccessful_WritesAuditOnce()
     {
-        var (client, username) = await IntegrationTestAuth.RegisterVerifiedAndAuthenticateAsync(fixture.Factory);
+        (HttpClient? client, var username) = await IntegrationTestAuth.RegisterVerifiedAndAuthenticateAsync(fixture.Factory);
         var from = DateTime.UtcNow.AddDays(-7).ToString("yyyy-MM-dd");
         var to = DateTime.UtcNow.AddDays(1).ToString("yyyy-MM-dd");
 
-        var response = await client.GetAsync(
+        HttpResponseMessage response = await client.GetAsync(
             new Uri($"/api/seller/analytics/sales/export?from={from}&to={to}", UriKind.Relative));
         response.EnsureSuccessStatusCode();
 
-        await using var scope = fixture.Factory.Services.CreateAsyncScope();
-        var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
-        var seller = await db.Users.SingleAsync(u => u.Username == username);
-        var audits = await db.AuditLogs
+        await using AsyncServiceScope scope = fixture.Factory.Services.CreateAsyncScope();
+        ApplicationDbContext db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+        User seller = await db.Users.SingleAsync(u => u.Username == username);
+        List<AuditLog> audits = await db.AuditLogs
             .Where(a => a.Action == AuditActions.SELLER_ANALYTICS_EXPORTED && a.ActorUserId == seller.Id)
             .ToListAsync();
 
@@ -128,7 +130,7 @@ public sealed class SellerAnalyticsExportControllerIntegrationTests(IntegrationT
     [Fact]
     public async Task ExportSales_WhenCapExceeded_DoesNotWriteAudit()
     {
-        var factory = fixture.Factory.WithWebHostBuilder(builder =>
+        WebApplicationFactory<Program> factory = fixture.Factory.WithWebHostBuilder(builder =>
         {
             builder.ConfigureTestServices(services =>
             {
@@ -137,15 +139,15 @@ public sealed class SellerAnalyticsExportControllerIntegrationTests(IntegrationT
             });
         });
 
-        var (client, username) = await IntegrationTestAuth.RegisterVerifiedAndAuthenticateAsync(factory);
-        var response = await client.GetAsync(
+        (HttpClient? client, var username) = await IntegrationTestAuth.RegisterVerifiedAndAuthenticateAsync(factory);
+        HttpResponseMessage response = await client.GetAsync(
             new Uri("/api/seller/analytics/sales/export?from=2024-01-01&to=2024-02-01", UriKind.Relative));
         response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
 
-        await using var scope = factory.Services.CreateAsyncScope();
-        var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
-        var seller = await db.Users.SingleAsync(u => u.Username == username);
-        var audits = await db.AuditLogs
+        await using AsyncServiceScope scope = factory.Services.CreateAsyncScope();
+        ApplicationDbContext db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+        User seller = await db.Users.SingleAsync(u => u.Username == username);
+        List<AuditLog> audits = await db.AuditLogs
             .Where(a => a.Action == AuditActions.SELLER_ANALYTICS_EXPORTED && a.ActorUserId == seller.Id)
             .ToListAsync();
         audits.Should().BeEmpty();
@@ -157,12 +159,12 @@ public sealed class SellerAnalyticsExportRateLimitIntegrationTests
     [Fact]
     public async Task ExportSales_WhenRedisUnavailable_ShouldReturn503BeforeHandler()
     {
-        await using var app = await SellerAnalyticsExportRateLimitTestHost.StartAsync(
+        await using WebApplication app = await SellerAnalyticsExportRateLimitTestHost.StartAsync(
             "127.0.0.1:1,abortConnect=false,connectTimeout=50");
-        var client = app.GetTestClient();
+        HttpClient client = app.GetTestClient();
         const string userId = "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb";
 
-        var response = await SellerAnalyticsExportRateLimitTestHost.GetProbeAsync(client, userId);
+        HttpResponseMessage response = await SellerAnalyticsExportRateLimitTestHost.GetProbeAsync(client, userId);
 
         response.StatusCode.Should().Be(HttpStatusCode.ServiceUnavailable);
         response.Content.Headers.ContentType!.MediaType.Should().Be("application/problem+json");
@@ -172,17 +174,17 @@ public sealed class SellerAnalyticsExportRateLimitIntegrationTests
     [Fact]
     public async Task ExportSales_WhenSameUserExceedsLimit_ShouldReturn429()
     {
-        await using var app = await SellerAnalyticsExportRateLimitTestHost.StartAsync();
-        var client = app.GetTestClient();
+        await using WebApplication app = await SellerAnalyticsExportRateLimitTestHost.StartAsync();
+        HttpClient client = app.GetTestClient();
         const string userId = "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee";
 
         for (var i = 0; i < RateLimitingConstants.Windows.SELLER_ANALYTICS_SALES_EXPORT_LIMIT; i++)
         {
-            var ok = await SellerAnalyticsExportRateLimitTestHost.GetProbeAsync(client, userId);
+            HttpResponseMessage ok = await SellerAnalyticsExportRateLimitTestHost.GetProbeAsync(client, userId);
             ok.StatusCode.Should().Be(HttpStatusCode.OK, $"export request {i + 1}");
         }
 
-        var limited = await SellerAnalyticsExportRateLimitTestHost.GetProbeAsync(client, userId);
+        HttpResponseMessage limited = await SellerAnalyticsExportRateLimitTestHost.GetProbeAsync(client, userId);
         limited.StatusCode.Should().Be(HttpStatusCode.TooManyRequests);
         (await limited.Content.ReadAsStringAsync()).Should().Contain(ErrorCodes.ERR_RATE_LIMITED);
     }
@@ -195,7 +197,7 @@ internal static class SellerAnalyticsExportRateLimitTestHost
 
     internal static async Task<WebApplication> StartAsync(string? redisConnectionString = null)
     {
-        var builder = WebApplication.CreateBuilder();
+        WebApplicationBuilder builder = WebApplication.CreateBuilder();
         builder.WebHost.UseTestServer();
         builder.Services.AddRouting();
         builder.Configuration["AnalyticsRateLimiting:BffSigningSecret"] =
@@ -208,7 +210,7 @@ internal static class SellerAnalyticsExportRateLimitTestHost
         builder.Services.AddSingleton<ISellerAnalyticsStore, CapExceededSellerAnalyticsStore>();
         builder.Services.AddSingleton<ISender>(_ => throw new NotSupportedException());
 
-        var app = builder.Build();
+        WebApplication app = builder.Build();
 
         app.Use(async (context, next) =>
         {

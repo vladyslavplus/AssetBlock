@@ -44,7 +44,7 @@ public sealed class PostgresFixture : IAsyncLifetime
     public ApplicationDbContext CreateDbContext(
         Action<DbContextOptionsBuilder<ApplicationDbContext>>? configure = null)
     {
-        var optionsBuilder = new DbContextOptionsBuilder<ApplicationDbContext>()
+        DbContextOptionsBuilder<ApplicationDbContext> optionsBuilder = new DbContextOptionsBuilder<ApplicationDbContext>()
             .UseNpgsql(ConnectionString);
         configure?.Invoke(optionsBuilder);
         return new ApplicationDbContext(optionsBuilder.Options);
@@ -59,7 +59,7 @@ public sealed class PostgresFixture : IAsyncLifetime
     {
         NpgsqlConnection.ClearAllPools();
 
-        await using (var setup = CreateDbContext())
+        await using (ApplicationDbContext setup = CreateDbContext())
         {
             await setup.Database.ExecuteSqlRawAsync(
                 """

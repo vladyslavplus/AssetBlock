@@ -20,12 +20,12 @@ internal sealed class EmailDeliveryStore(
         TimeSpan leaseDuration,
         CancellationToken cancellationToken = default)
     {
-        var now = DateTimeOffset.UtcNow;
+        DateTimeOffset now = DateTimeOffset.UtcNow;
         var claimToken = Guid.NewGuid();
-        var claimedUntil = now.Add(leaseDuration);
+        DateTimeOffset claimedUntil = now.Add(leaseDuration);
 
         // 1. Check if record exists
-        var existing = await dbContext.OutboxEmailDeliveries
+        OutboxEmailDelivery? existing = await dbContext.OutboxEmailDeliveries
             .AsNoTracking()
             .FirstOrDefaultAsync(d => d.OutboxMessageId == outboxMessageId, cancellationToken);
 
@@ -59,7 +59,7 @@ internal sealed class EmailDeliveryStore(
             }
 
             // Lost race on update
-            var reloaded = await dbContext.OutboxEmailDeliveries
+            OutboxEmailDelivery? reloaded = await dbContext.OutboxEmailDeliveries
                 .AsNoTracking()
                 .FirstOrDefaultAsync(d => d.OutboxMessageId == outboxMessageId, cancellationToken);
             if (reloaded?.DeliveredAt is not null)
@@ -94,7 +94,7 @@ internal sealed class EmailDeliveryStore(
             ex.InnerException is PostgresException { SqlState: PostgresErrorCodes.UniqueViolation })
         {
             dbContext.Entry(newRecord).State = EntityState.Detached;
-            var current = await dbContext.OutboxEmailDeliveries
+            OutboxEmailDelivery? current = await dbContext.OutboxEmailDeliveries
                 .AsNoTracking()
                 .FirstOrDefaultAsync(d => d.OutboxMessageId == outboxMessageId, cancellationToken);
 

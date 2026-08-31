@@ -1,10 +1,13 @@
 using AssetBlock.Domain.Core.Constants;
+using AssetBlock.Domain.Core.Dto.Auth;
 using AssetBlock.Domain.Core.Entities;
+using AssetBlock.Domain.Core.Primitives.Api;
 using AssetBlock.Domain.Core.Primitives.AppSettingsOptions;
 using AssetBlock.Infrastructure.Persistence;
 using AssetBlock.Infrastructure.Services;
 using AssetBlock.Infrastructure.Tests.Infrastructure;
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Options;
 namespace AssetBlock.Infrastructure.Tests.Services;
 
 public sealed class JwtTokenServiceTests
@@ -12,7 +15,7 @@ public sealed class JwtTokenServiceTests
     [Fact]
     public async Task StoreRefreshToken_ValidateRefreshToken_roundtrip()
     {
-        await using var db = InMemoryDbContextFactory.Create();
+        await using ApplicationDbContext db = InMemoryDbContextFactory.Create();
         var userId = Guid.NewGuid();
         db.Users.Add(new User
         {
@@ -25,11 +28,11 @@ public sealed class JwtTokenServiceTests
         });
         await db.SaveChangesAsync();
 
-        var sut = CreateSut(db);
-        var tokens = sut.GenerateTokenPair(userId, "tester", "t@test.com", AppRoles.USER);
+        JwtTokenService sut = CreateSut(db);
+        TokensResponse tokens = sut.GenerateTokenPair(userId, "tester", "t@test.com", AppRoles.USER);
         await sut.StoreRefreshToken(userId, tokens.RefreshToken, DateTimeOffset.UtcNow.AddDays(1));
 
-        var validated = await sut.ValidateRefreshToken(tokens.RefreshToken);
+        RefreshTokenValidationResult validated = await sut.ValidateRefreshToken(tokens.RefreshToken);
         validated.Status.Should().Be(Domain.Core.Dto.Auth.RefreshTokenValidationStatus.VALID);
         validated.UserId.Should().Be(userId);
         validated.Username.Should().Be("tester");
@@ -38,7 +41,7 @@ public sealed class JwtTokenServiceTests
     [Fact]
     public async Task ValidateRefreshToken_returnsNull_whenExpired()
     {
-        await using var db = InMemoryDbContextFactory.Create();
+        await using ApplicationDbContext db = InMemoryDbContextFactory.Create();
         var userId = Guid.NewGuid();
         db.Users.Add(new User
         {
@@ -51,8 +54,8 @@ public sealed class JwtTokenServiceTests
         });
         await db.SaveChangesAsync();
 
-        var sut = CreateSut(db);
-        var tokens = sut.GenerateTokenPair(userId, "tester", "t@test.com", AppRoles.USER);
+        JwtTokenService sut = CreateSut(db);
+        TokensResponse tokens = sut.GenerateTokenPair(userId, "tester", "t@test.com", AppRoles.USER);
         await sut.StoreRefreshToken(userId, tokens.RefreshToken, DateTimeOffset.UtcNow.AddDays(-1));
 
         (await sut.ValidateRefreshToken(tokens.RefreshToken)).Status.Should().Be(Domain.Core.Dto.Auth.RefreshTokenValidationStatus.NOT_FOUND_OR_EXPIRED);
@@ -61,11 +64,11 @@ public sealed class JwtTokenServiceTests
     [Fact]
     public void GenerateHubToken_ShouldReturnShortLivedTokenWithHubAudience()
     {
-        using var db = InMemoryDbContextFactory.Create();
-        var sut = CreateSut(db);
+        using ApplicationDbContext db = InMemoryDbContextFactory.Create();
+        JwtTokenService sut = CreateSut(db);
         var userId = Guid.NewGuid();
 
-        var result = sut.GenerateHubToken(userId);
+        HubTokenResponse result = sut.GenerateHubToken(userId);
 
         result.HubToken.Should().NotBeNullOrWhiteSpace();
         result.ExpiresAt.Should().BeCloseTo(DateTimeOffset.UtcNow.AddSeconds(90), TimeSpan.FromSeconds(5));
@@ -89,7 +92,7 @@ public sealed class JwtTokenServiceTests
 
     private static JwtTokenService CreateSut(ApplicationDbContext db)
     {
-        var opts = Microsoft.Extensions.Options.Options.Create(new JwtOptions
+        IOptions<JwtOptions> opts = Microsoft.Extensions.Options.Options.Create(new JwtOptions
         {
             Key = new string('k', 32),
             Issuer = "iss",

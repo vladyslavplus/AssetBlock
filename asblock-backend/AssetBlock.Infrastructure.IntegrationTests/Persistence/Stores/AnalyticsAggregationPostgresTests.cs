@@ -18,7 +18,7 @@ public sealed class AnalyticsAggregationPostgresTests(PostgresFixture fixture)
     [Fact]
     public async Task TryAcquireAndRecomputeDaily_WhenEventsSeeded_ShouldMatchRawCountsAndBeIdempotentOnRerun()
     {
-        await using var db = await fixture.CreateCleanDbContext();
+        await using ApplicationDbContext db = await fixture.CreateCleanDbContext();
         var sellerId = Guid.NewGuid();
         var assetId = Guid.NewGuid();
         var store = new AnalyticsEventStore(db);
@@ -26,32 +26,32 @@ public sealed class AnalyticsAggregationPostgresTests(PostgresFixture fixture)
         await SeedAssetViewBurst(store, sellerId, assetId, _dayOne, eventCount: 120);
         await SeedAssetViewBurst(store, sellerId, assetId, _dayTwo, eventCount: 80);
 
-        var updatedAt = DateTimeOffset.UtcNow;
-        var first = await store.TryAcquireAndRecomputeDaily(
+        DateTimeOffset updatedAt = DateTimeOffset.UtcNow;
+        AnalyticsDailyRecomputeResult first = await store.TryAcquireAndRecomputeDaily(
             _dayTwo, _dayOne, updatedAt, COMMAND_TIMEOUT_SECONDS);
         first.Outcome.Should().Be(AnalyticsDailyRecomputeOutcome.COMPLETED);
 
-        var dayOneRow = await db.SellerAnalyticsDaily.AsNoTracking()
+        SellerAnalyticsDaily dayOneRow = await db.SellerAnalyticsDaily.AsNoTracking()
             .SingleAsync(r => r.SellerId == sellerId && r.DayUtc == _dayOne);
         dayOneRow.AssetViews.Should().Be(120);
         dayOneRow.UniqueVisitors.Should().Be(120);
 
-        var dayTwoRow = await db.SellerAnalyticsDaily.AsNoTracking()
+        SellerAnalyticsDaily dayTwoRow = await db.SellerAnalyticsDaily.AsNoTracking()
             .SingleAsync(r => r.SellerId == sellerId && r.DayUtc == _dayTwo);
         dayTwoRow.AssetViews.Should().Be(80);
         dayTwoRow.UniqueVisitors.Should().Be(80);
 
-        var productRows = await db.ProductAnalyticsDaily.AsNoTracking()
+        List<ProductAnalyticsDaily> productRows = await db.ProductAnalyticsDaily.AsNoTracking()
             .Where(r => r.SellerId == sellerId)
             .ToListAsync();
         productRows.Should().HaveCount(2);
         productRows.Sum(r => r.Views).Should().Be(200);
 
-        var second = await store.TryAcquireAndRecomputeDaily(
+        AnalyticsDailyRecomputeResult second = await store.TryAcquireAndRecomputeDaily(
             _dayTwo, _dayOne, updatedAt.AddMinutes(1), COMMAND_TIMEOUT_SECONDS);
         second.Outcome.Should().Be(AnalyticsDailyRecomputeOutcome.COMPLETED);
 
-        var dayOneAfterRerun = await db.SellerAnalyticsDaily.AsNoTracking()
+        SellerAnalyticsDaily dayOneAfterRerun = await db.SellerAnalyticsDaily.AsNoTracking()
             .SingleAsync(r => r.SellerId == sellerId && r.DayUtc == _dayOne);
         dayOneAfterRerun.AssetViews.Should().Be(dayOneRow.AssetViews);
         dayOneAfterRerun.UniqueVisitors.Should().Be(dayOneRow.UniqueVisitors);
@@ -61,7 +61,7 @@ public sealed class AnalyticsAggregationPostgresTests(PostgresFixture fixture)
     [Fact]
     public async Task TryAcquireAndRecomputeDaily_WhenEventsDeleted_ShouldRemoveStaleDailyGroups()
     {
-        await using var db = await fixture.CreateCleanDbContext();
+        await using ApplicationDbContext db = await fixture.CreateCleanDbContext();
         var sellerId = Guid.NewGuid();
         var assetId = Guid.NewGuid();
         var store = new AnalyticsEventStore(db);
@@ -77,8 +77,8 @@ public sealed class AnalyticsAggregationPostgresTests(PostgresFixture fixture)
             $"""
             DELETE FROM analytics_events
             WHERE "SellerId" = {sellerId}
-              AND "OccurredAt" >= {_dayStart(_dayOne)}
-              AND "OccurredAt" < {_dayStart(_dayOne.AddDays(1))}
+              AND "OccurredAt" >= {DayStart(_dayOne)}
+              AND "OccurredAt" < {DayStart(_dayOne.AddDays(1))}
             """);
 
         await store.TryAcquireAndRecomputeDaily(
@@ -91,7 +91,7 @@ public sealed class AnalyticsAggregationPostgresTests(PostgresFixture fixture)
     [Fact]
     public async Task TryAcquireAndRecomputeDaily_WhenTwoWorkersRunConcurrently_ShouldSkipOne()
     {
-        await using var setupDb = await fixture.CreateCleanDbContext();
+        await using ApplicationDbContext setupDb = await fixture.CreateCleanDbContext();
         var sellerId = Guid.NewGuid();
         var assetId = Guid.NewGuid();
         var store = new AnalyticsEventStore(setupDb);
@@ -100,9 +100,9 @@ public sealed class AnalyticsAggregationPostgresTests(PostgresFixture fixture)
         var gate = new Barrier(2);
         var results = new AnalyticsDailyRecomputeResult[2];
 
-        var tasks = Enumerable.Range(0, 2).Select(i => Task.Run(async () =>
+        Task[] tasks = Enumerable.Range(0, 2).Select(i => Task.Run(async () =>
         {
-            await using var db = fixture.CreateDbContext();
+            await using ApplicationDbContext db = fixture.CreateDbContext();
             var workerStore = new AnalyticsEventStore(db);
             gate.SignalAndWait();
             results[i] = await workerStore.TryAcquireAndRecomputeDaily(
@@ -121,7 +121,7 @@ public sealed class AnalyticsAggregationPostgresTests(PostgresFixture fixture)
     [Fact]
     public async Task DeleteExpiredEvents_WhenCutoffApplied_ShouldDeleteOlderRowsAndRetainDailyRollups()
     {
-        await using var db = await fixture.CreateCleanDbContext();
+        await using ApplicationDbContext db = await fixture.CreateCleanDbContext();
         var sellerId = Guid.NewGuid();
         var assetId = Guid.NewGuid();
         var store = new AnalyticsEventStore(db);
@@ -137,14 +137,14 @@ public sealed class AnalyticsAggregationPostgresTests(PostgresFixture fixture)
             DateTimeOffset.UtcNow,
             COMMAND_TIMEOUT_SECONDS);
 
-        var retention = await store.TryAcquireAndDeleteExpiredEvents(
+        AnalyticsEventRetentionResult retention = await store.TryAcquireAndDeleteExpiredEvents(
             cutoff, batchSize: 100, maxBatches: 5, COMMAND_TIMEOUT_SECONDS);
 
         retention.DeletedCount.Should().Be(1);
         (await db.AnalyticsEvents.AsNoTracking().CountAsync()).Should().Be(2);
         (await db.SellerAnalyticsDaily.AsNoTracking().CountAsync()).Should().BeGreaterThan(0);
 
-        var atCutoff = await db.AnalyticsEvents.AsNoTracking()
+        AnalyticsEvent atCutoff = await db.AnalyticsEvents.AsNoTracking()
             .SingleAsync(e => e.OccurredAt == cutoff);
         atCutoff.Should().NotBeNull();
     }
@@ -152,23 +152,23 @@ public sealed class AnalyticsAggregationPostgresTests(PostgresFixture fixture)
     [Fact]
     public async Task EngagementOverview_ExactRangeUniqueVisitors_ShouldNotEqualSumOfDailyUniqueVisitors()
     {
-        await using var db = await fixture.CreateCleanDbContext();
-        var seller = TestData.CreateUser("overlap-seller", "overlap-seller@test.local");
-        var category = TestData.CreateCategory("overlap-cat", "overlap-cat");
+        await using ApplicationDbContext db = await fixture.CreateCleanDbContext();
+        User seller = TestData.CreateUser("overlap-seller", "overlap-seller@test.local");
+        Category category = TestData.CreateCategory("overlap-cat", "overlap-cat");
         db.Users.Add(seller);
         db.Categories.Add(category);
         await db.SaveChangesAsync();
 
-        var asset = TestData.CreateAsset(seller.Id, category.Id, "Overlap Asset", 5m);
+        Asset asset = TestData.CreateAsset(seller.Id, category.Id, "Overlap Asset", 5m);
         db.Assets.Add(asset);
         await db.SaveChangesAsync();
 
         var sharedVisitor = Guid.NewGuid();
         var store = new AnalyticsEventStore(db);
         await store.TryInsert(CreateAssetView(
-            seller.Id, asset.Id, _dayStart(_dayOne), sharedVisitor));
+            seller.Id, asset.Id, DayStart(_dayOne), sharedVisitor));
         await store.TryInsert(CreateAssetView(
-            seller.Id, asset.Id, _dayStart(_dayTwo), sharedVisitor));
+            seller.Id, asset.Id, DayStart(_dayTwo), sharedVisitor));
 
         await store.TryAcquireAndRecomputeDaily(
             _dayTwo, _dayOne, DateTimeOffset.UtcNow, COMMAND_TIMEOUT_SECONDS);
@@ -179,9 +179,9 @@ public sealed class AnalyticsAggregationPostgresTests(PostgresFixture fixture)
         dailySum.Should().Be(2);
 
         var analyticsStore = new SellerAnalyticsStore(db);
-        var from = _dayStart(_dayOne);
-        var to = _dayStart(_dayTwo.AddDays(1));
-        var snapshot = await analyticsStore.GetOverviewSnapshot(
+        DateTimeOffset from = DayStart(_dayOne);
+        DateTimeOffset to = DayStart(_dayTwo.AddDays(1));
+        SellerAnalyticsOverviewSnapshot snapshot = await analyticsStore.GetOverviewSnapshot(
             seller.Id, from, to, from.AddDays(-2), from, topN: 5, AnalyticsGranularity.DAY);
 
         snapshot.CurrentEngagement!.UniqueVisitors.Should().Be(1);
@@ -191,15 +191,15 @@ public sealed class AnalyticsAggregationPostgresTests(PostgresFixture fixture)
     [Fact]
     public async Task TryAcquireAndRecomputeDaily_WhenDownloadOnlyVisitorExists_ShouldCountViewVisitorsOnlyInUniqueVisitors()
     {
-        await using var db = await fixture.CreateCleanDbContext();
-        var seller = TestData.CreateUser("uv-roll", "uv-roll@test.local");
-        var category = TestData.CreateCategory("uv-roll-cat", "uv-roll-cat");
+        await using ApplicationDbContext db = await fixture.CreateCleanDbContext();
+        User seller = TestData.CreateUser("uv-roll", "uv-roll@test.local");
+        Category category = TestData.CreateCategory("uv-roll-cat", "uv-roll-cat");
         db.Users.Add(seller);
         db.Categories.Add(category);
         await db.SaveChangesAsync();
 
-        var asset = TestData.CreateAsset(seller.Id, category.Id, "UV Roll Asset", 10m);
-        var version = TestData.CreateAssetVersion(asset.Id);
+        Asset asset = TestData.CreateAsset(seller.Id, category.Id, "UV Roll Asset", 10m);
+        AssetVersion version = TestData.CreateAssetVersion(asset.Id);
         db.Assets.Add(asset);
         db.AssetVersions.Add(version);
         await db.SaveChangesAsync();
@@ -208,12 +208,12 @@ public sealed class AnalyticsAggregationPostgresTests(PostgresFixture fixture)
         var viewVisitor = Guid.NewGuid();
         var downloadVisitor = Guid.NewGuid();
 
-        await store.TryInsert(CreateAssetView(seller.Id, asset.Id, _dayStart(_dayOne), viewVisitor));
+        await store.TryInsert(CreateAssetView(seller.Id, asset.Id, DayStart(_dayOne), viewVisitor));
         await store.TryInsert(new AnalyticsEvent
         {
             Id = Guid.NewGuid(),
             EventType = AnalyticsEventType.DOWNLOAD_REQUESTED,
-            OccurredAt = _dayStart(_dayOne).AddHours(2),
+            OccurredAt = DayStart(_dayOne).AddHours(2),
             SellerId = seller.Id,
             VisitorId = downloadVisitor,
             SessionId = Guid.NewGuid(),
@@ -226,16 +226,16 @@ public sealed class AnalyticsAggregationPostgresTests(PostgresFixture fixture)
         await store.TryAcquireAndRecomputeDaily(
             _dayOne, _dayOne.AddDays(-1), DateTimeOffset.UtcNow, COMMAND_TIMEOUT_SECONDS);
 
-        var row = await db.SellerAnalyticsDaily.AsNoTracking()
+        SellerAnalyticsDaily row = await db.SellerAnalyticsDaily.AsNoTracking()
             .SingleAsync(r => r.SellerId == seller.Id && r.DayUtc == _dayOne);
         row.UniqueVisitors.Should().Be(1);
         row.DownloadRequests.Should().Be(1);
         row.AssetViews.Should().Be(1);
 
         var analyticsStore = new SellerAnalyticsStore(db);
-        var from = _dayStart(_dayOne);
-        var to = _dayStart(_dayOne.AddDays(1));
-        var snapshot = await analyticsStore.GetOverviewSnapshot(
+        DateTimeOffset from = DayStart(_dayOne);
+        DateTimeOffset to = DayStart(_dayOne.AddDays(1));
+        SellerAnalyticsOverviewSnapshot snapshot = await analyticsStore.GetOverviewSnapshot(
             seller.Id, from, to, from.AddDays(-1), from, topN: 5, AnalyticsGranularity.DAY);
 
         snapshot.CurrentEngagement!.UniqueVisitors.Should().Be(1);
@@ -244,14 +244,14 @@ public sealed class AnalyticsAggregationPostgresTests(PostgresFixture fixture)
     [Fact]
     public async Task GetOverviewSnapshot_TrackedFunnel_ShouldBeMonotonic()
     {
-        await using var db = await fixture.CreateCleanDbContext();
-        var (seller, buyer, _, asset, version) = await SeedSellerAsset(db);
+        await using ApplicationDbContext db = await fixture.CreateCleanDbContext();
+        (User? seller, User? buyer, Category _, Asset? asset, AssetVersion? version) = await SeedSellerAsset(db);
 
         var sessionViewOnly = Guid.NewGuid();
         var sessionCheckoutOnly = Guid.NewGuid();
         var sessionCompleted = Guid.NewGuid();
-        var from = _dayStart(_dayOne);
-        var to = _dayStart(_dayOne.AddDays(1));
+        DateTimeOffset from = DayStart(_dayOne);
+        DateTimeOffset to = DayStart(_dayOne.AddDays(1));
 
         var eventStore = new AnalyticsEventStore(db);
         await eventStore.TryInsert(CreateAssetView(
@@ -270,11 +270,11 @@ public sealed class AnalyticsAggregationPostgresTests(PostgresFixture fixture)
         await db.SaveChangesAsync();
 
         var store = new SellerAnalyticsStore(db);
-        var snapshot = await store.GetOverviewSnapshot(
+        SellerAnalyticsOverviewSnapshot snapshot = await store.GetOverviewSnapshot(
             seller.Id, from, to, from.AddDays(-10), from, topN: 5, AnalyticsGranularity.DAY);
 
         snapshot.TrackedFunnel.Should().NotBeNull();
-        var funnel = snapshot.TrackedFunnel!;
+        AnalyticsTrackedFunnelRaw funnel = snapshot.TrackedFunnel!;
         funnel.ViewSessions.Should().BeGreaterThanOrEqualTo(funnel.CheckoutSessions);
         funnel.CheckoutSessions.Should().BeGreaterThanOrEqualTo(funnel.CompletedSessions);
         funnel.ViewSessions.Should().Be(2);
@@ -285,15 +285,15 @@ public sealed class AnalyticsAggregationPostgresTests(PostgresFixture fixture)
     [Fact]
     public async Task Explain_SellerEngagementQuery_ShouldReferenceExpectedAnalyticsIndexes()
     {
-        await using var db = await fixture.CreateCleanDbContext();
+        await using ApplicationDbContext db = await fixture.CreateCleanDbContext();
         var sellerId = Guid.NewGuid();
         var assetId = Guid.NewGuid();
         var store = new AnalyticsEventStore(db);
         await SeedAssetViewBurst(store, sellerId, assetId, _dayOne, eventCount: 800);
 
-        var from = _dayStart(_dayOne);
-        var to = _dayStart(_dayOne.AddDays(1));
-        var plan = await db.Database.SqlQueryRaw<string>(
+        DateTimeOffset from = DayStart(_dayOne);
+        DateTimeOffset to = DayStart(_dayOne.AddDays(1));
+        List<string> plan = await db.Database.SqlQueryRaw<string>(
                 """
                 EXPLAIN SELECT COUNT(*)::bigint
                 FROM analytics_events ae
@@ -317,10 +317,10 @@ public sealed class AnalyticsAggregationPostgresTests(PostgresFixture fixture)
         DateOnly day,
         int eventCount)
     {
-        var dayStart = _dayStart(day);
+        DateTimeOffset dayStart = DayStart(day);
         for (var i = 0; i < eventCount; i++)
         {
-            var occurredAt = dayStart.AddMinutes(i % 720);
+            DateTimeOffset occurredAt = dayStart.AddMinutes(i % 720);
             await store.TryInsert(CreateAssetView(
                 sellerId,
                 assetId,
@@ -351,24 +351,24 @@ public sealed class AnalyticsAggregationPostgresTests(PostgresFixture fixture)
             DeviceClass = AnalyticsDeviceClass.DESKTOP
         };
 
-    private static DateTimeOffset _dayStart(DateOnly day) =>
+    private static DateTimeOffset DayStart(DateOnly day) =>
         new(day.ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc));
 
     private static async Task<(User Seller, User Buyer, Category Category, Asset Asset, AssetVersion Version)>
         SeedSellerAsset(ApplicationDbContext db)
     {
-        var seller = TestData.CreateUser("funnel-seller", "funnel-seller@test.local");
-        var buyer = TestData.CreateUser("funnel-buyer", "funnel-buyer@test.local");
-        var category = TestData.CreateCategory("funnel-cat", "funnel-cat");
+        User seller = TestData.CreateUser("funnel-seller", "funnel-seller@test.local");
+        User buyer = TestData.CreateUser("funnel-buyer", "funnel-buyer@test.local");
+        Category category = TestData.CreateCategory("funnel-cat", "funnel-cat");
         db.Users.AddRange(seller, buyer);
         db.Categories.Add(category);
         await db.SaveChangesAsync();
 
-        var asset = TestData.CreateAsset(seller.Id, category.Id, "Funnel Asset", 12m);
+        Asset asset = TestData.CreateAsset(seller.Id, category.Id, "Funnel Asset", 12m);
         db.Assets.Add(asset);
         await db.SaveChangesAsync();
 
-        var version = TestData.CreateAssetVersion(asset.Id);
+        AssetVersion version = TestData.CreateAssetVersion(asset.Id);
         db.AssetVersions.Add(version);
         await db.SaveChangesAsync();
 

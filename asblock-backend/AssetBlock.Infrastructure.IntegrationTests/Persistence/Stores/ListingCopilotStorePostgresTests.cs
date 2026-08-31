@@ -8,6 +8,7 @@ using AssetBlock.Infrastructure.IntegrationTests.Support;
 using AssetBlock.Infrastructure.Persistence;
 using AssetBlock.Infrastructure.Persistence.Configurations;
 using AssetBlock.Infrastructure.Persistence.Stores;
+using AwesomeAssertions.Specialized;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
 using Npgsql;
@@ -25,8 +26,8 @@ public sealed class ListingCopilotStorePostgresTests(PostgresFixture fixture)
     [Fact]
     public async Task TryCommitSucceeded_WhenLeaseValid_ShouldPersistSuggestionAndSucceedJob()
     {
-        var seed = await SeedClaimedJob();
-        var suggestion = SampleWrite(seed.JobId, seed.Version.Id);
+        Seed seed = await SeedClaimedJob();
+        ListingCopilotSuggestionWrite suggestion = SampleWrite(seed.JobId, seed.Version.Id);
 
         var committed = await seed.CopilotStore.TryCommitSucceeded(
             seed.JobId,
@@ -36,11 +37,11 @@ public sealed class ListingCopilotStorePostgresTests(PostgresFixture fixture)
             suggestion);
 
         committed.Should().BeTrue();
-        var stored = await seed.CopilotStore.GetSuggestionForOwner(seed.Version.Id, seed.Author.Id);
+        ListingCopilotSuggestionDto? stored = await seed.CopilotStore.GetSuggestionForOwner(seed.Version.Id, seed.Author.Id);
         stored.Should().NotBeNull();
         stored.Title.Should().Be("Chair");
         stored.ActualModel.Should().Be("fixture/openrouter-test");
-        var job = await seed.Db.AssetProcessingJobs.AsNoTracking().SingleAsync(j => j.Id == seed.JobId);
+        AssetProcessingJob job = await seed.Db.AssetProcessingJobs.AsNoTracking().SingleAsync(j => j.Id == seed.JobId);
         job.Status.Should().Be(AssetProcessingJobStatus.SUCCEEDED);
         job.LeaseToken.Should().BeNull();
     }
@@ -48,7 +49,7 @@ public sealed class ListingCopilotStorePostgresTests(PostgresFixture fixture)
     [Fact]
     public async Task TryCommitSucceeded_WhenLeaseExpired_ShouldReturnFalseAndKeepRunning()
     {
-        var seed = await SeedClaimedJob();
+        Seed seed = await SeedClaimedJob();
         await seed.Db.Database.ExecuteSqlInterpolatedAsync(
             $"""UPDATE asset_processing_jobs SET "LeaseExpiresAt" = clock_timestamp() - INTERVAL '10 seconds' WHERE "Id" = {seed.JobId}""");
 
@@ -61,14 +62,14 @@ public sealed class ListingCopilotStorePostgresTests(PostgresFixture fixture)
 
         committed.Should().BeFalse();
         (await seed.Db.AssetListingSuggestions.CountAsync()).Should().Be(0);
-        var job = await seed.Db.AssetProcessingJobs.AsNoTracking().SingleAsync(j => j.Id == seed.JobId);
+        AssetProcessingJob job = await seed.Db.AssetProcessingJobs.AsNoTracking().SingleAsync(j => j.Id == seed.JobId);
         job.Status.Should().Be(AssetProcessingJobStatus.RUNNING);
     }
 
     [Fact]
     public async Task TryCommitSucceeded_WhenLeaseTokenMismatches_ShouldReturnFalseAndKeepRunning()
     {
-        var seed = await SeedClaimedJob();
+        Seed seed = await SeedClaimedJob();
 
         var committed = await seed.CopilotStore.TryCommitSucceeded(
             seed.JobId,
@@ -79,7 +80,7 @@ public sealed class ListingCopilotStorePostgresTests(PostgresFixture fixture)
 
         committed.Should().BeFalse();
         (await seed.Db.AssetListingSuggestions.CountAsync()).Should().Be(0);
-        var job = await seed.Db.AssetProcessingJobs.AsNoTracking().SingleAsync(j => j.Id == seed.JobId);
+        AssetProcessingJob job = await seed.Db.AssetProcessingJobs.AsNoTracking().SingleAsync(j => j.Id == seed.JobId);
         job.Status.Should().Be(AssetProcessingJobStatus.RUNNING);
         job.LeaseToken.Should().Be(seed.LeaseToken);
     }
@@ -87,7 +88,7 @@ public sealed class ListingCopilotStorePostgresTests(PostgresFixture fixture)
     [Fact]
     public async Task GetSuggestionForOwner_WhenForeignUser_ShouldReturnNull()
     {
-        var seed = await SeedClaimedJob();
+        Seed seed = await SeedClaimedJob();
         (await seed.CopilotStore.TryCommitSucceeded(
             seed.JobId,
             seed.LeaseToken,
@@ -95,17 +96,17 @@ public sealed class ListingCopilotStorePostgresTests(PostgresFixture fixture)
             seed.Version.Id,
             SampleWrite(seed.JobId, seed.Version.Id))).Should().BeTrue();
 
-        var other = await seed.CopilotStore.GetSuggestionForOwner(seed.Version.Id, Guid.NewGuid());
+        ListingCopilotSuggestionDto? other = await seed.CopilotStore.GetSuggestionForOwner(seed.Version.Id, Guid.NewGuid());
         other.Should().BeNull();
     }
 
     [Fact]
     public async Task Constraints_WhenContentHashInvalid_ShouldReject()
     {
-        var seed = await SeedClaimedJob();
-        var write = SampleWrite(seed.JobId, seed.Version.Id) with { ContentHash = "not-a-hash" };
+        Seed seed = await SeedClaimedJob();
+        ListingCopilotSuggestionWrite write = SampleWrite(seed.JobId, seed.Version.Id) with { ContentHash = "not-a-hash" };
 
-        var act = async () => await seed.CopilotStore.TryCommitSucceeded(
+        Func<Task<bool>> act = async () => await seed.CopilotStore.TryCommitSucceeded(
             seed.JobId,
             seed.LeaseToken,
             seed.Asset.Id,
@@ -118,12 +119,12 @@ public sealed class ListingCopilotStorePostgresTests(PostgresFixture fixture)
     [Fact]
     public async Task Constraints_WhenElevenTags_ShouldReject()
     {
-        var seed = await SeedClaimedJob();
+        Seed seed = await SeedClaimedJob();
         var tags = string.Join(",", Enumerable.Range(0, 11).Select(i => $"\"t{i}\""));
 
-        var act = async () => await InsertSuggestionRaw(seed, $"[{tags}]");
+        Func<Task> act = async () => await InsertSuggestionRaw(seed, $"[{tags}]");
 
-        var ex = await act.Should().ThrowAsync<PostgresException>();
+        ExceptionAssertions<PostgresException> ex = await act.Should().ThrowAsync<PostgresException>();
         ex.Which.SqlState.Should().Be("23514");
         ex.Which.ConstraintName.Should().Be(AssetListingSuggestionConfiguration.CK_TAGS_LENGTH);
     }
@@ -131,11 +132,11 @@ public sealed class ListingCopilotStorePostgresTests(PostgresFixture fixture)
     [Fact]
     public async Task Constraints_WhenTagElementIsNotString_ShouldReject()
     {
-        var seed = await SeedClaimedJob();
+        Seed seed = await SeedClaimedJob();
 
-        var act = async () => await InsertSuggestionRaw(seed, """["ok", 123]""");
+        Func<Task> act = async () => await InsertSuggestionRaw(seed, """["ok", 123]""");
 
-        var ex = await act.Should().ThrowAsync<PostgresException>();
+        ExceptionAssertions<PostgresException> ex = await act.Should().ThrowAsync<PostgresException>();
         ex.Which.SqlState.Should().Be("23514");
         ex.Which.ConstraintName.Should().Be(AssetListingSuggestionConfiguration.CK_TAGS_ITEMS);
     }
@@ -170,12 +171,12 @@ public sealed class ListingCopilotStorePostgresTests(PostgresFixture fixture)
 
     private async Task<Seed> SeedClaimedJob()
     {
-        var db = await fixture.CreateCleanDbContext();
+        ApplicationDbContext db = await fixture.CreateCleanDbContext();
         (User author, Category category) = await TestData.SeedAuthorAndCategory(db);
-        var asset = TestData.CreateAsset(author.Id, category.Id);
+        Asset asset = TestData.CreateAsset(author.Id, category.Id);
         db.Assets.Add(asset);
         await db.SaveChangesAsync();
-        var version = TestData.CreateAssetVersion(asset.Id, fileName: "pack.zip");
+        AssetVersion version = TestData.CreateAssetVersion(asset.Id, fileName: "pack.zip");
         db.AssetVersions.Add(version);
         await db.SaveChangesAsync();
         db.AssetArchiveAnalyses.Add(new AssetArchiveAnalysis
@@ -188,7 +189,7 @@ public sealed class ListingCopilotStorePostgresTests(PostgresFixture fixture)
         });
         await db.SaveChangesAsync();
 
-        var jobStore = CreateJobStore(db);
+        AssetProcessingJobStore jobStore = CreateJobStore(db);
         await jobStore.Enqueue(
             asset.Id,
             version.Id,
@@ -196,7 +197,7 @@ public sealed class ListingCopilotStorePostgresTests(PostgresFixture fixture)
             AiPromptPolicies.LISTING_COPILOT_DEFINITION_VERSION,
             TimeSpan.Zero,
             new ListingCopilotPayload(AiPromptPolicies.LISTING_COPILOT_V1));
-        var claimed = await jobStore.ClaimPendingBatch(1, TimeSpan.FromMinutes(1), "test-worker");
+        IReadOnlyList<ClaimedAssetProcessingJob> claimed = await jobStore.ClaimPendingBatch(1, TimeSpan.FromMinutes(1), "test-worker");
         claimed.Should().HaveCount(1);
 
         return new Seed(db, author, asset, version, CreateCopilotStore(db), claimed[0].JobId, claimed[0].LeaseToken);

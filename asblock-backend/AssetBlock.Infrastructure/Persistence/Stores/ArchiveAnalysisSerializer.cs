@@ -92,7 +92,7 @@ public static class ArchiveAnalysisSerializer
             throw new ArchiveAnalysisSerializerException($"Manifest count exceeds maximum of {MAX_MANIFEST_COUNT}.");
         }
 
-        foreach (var item in metadata.Manifests)
+        foreach (RecognizedManifestItem item in metadata.Manifests)
         {
             if (string.IsNullOrWhiteSpace(item.FileName))
             {

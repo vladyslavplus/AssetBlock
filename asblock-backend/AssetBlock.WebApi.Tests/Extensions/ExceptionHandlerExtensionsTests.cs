@@ -21,11 +21,11 @@ public sealed class ExceptionHandlerExtensionsTests
     {
         const string traceId = "test-trace-id";
         var logger = new RecordingLogger<ExceptionHandlerLog>();
-        await using var app = CreateApp(logger, traceId, new InvalidOperationException("boom"));
+        await using WebApplication app = CreateApp(logger, traceId, new InvalidOperationException("boom"));
 
         await app.StartAsync();
-        var client = app.GetTestClient();
-        var response = await client.GetAsync(new Uri("/boom", UriKind.Relative));
+        HttpClient client = app.GetTestClient();
+        HttpResponseMessage response = await client.GetAsync(new Uri("/boom", UriKind.Relative));
 
         response.StatusCode.Should().Be(HttpStatusCode.InternalServerError);
         await AssertInternalProblemAsync(response, traceId);
@@ -43,11 +43,11 @@ public sealed class ExceptionHandlerExtensionsTests
         var validationException = new ValidationException([
             new ValidationFailure("password", "Password is too short.")
         ]);
-        await using var app = CreateApp(logger, "validation-trace", validationException);
+        await using WebApplication app = CreateApp(logger, "validation-trace", validationException);
 
         await app.StartAsync();
-        var client = app.GetTestClient();
-        var response = await client.GetAsync(new Uri("/boom", UriKind.Relative));
+        HttpClient client = app.GetTestClient();
+        HttpResponseMessage response = await client.GetAsync(new Uri("/boom", UriKind.Relative));
 
         response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
         logger.Entries.Should().NotContain(e => e.Level == LogLevel.Error);
@@ -58,14 +58,14 @@ public sealed class ExceptionHandlerExtensionsTests
         string traceId,
         Exception exceptionToThrow)
     {
-        var builder = WebApplication.CreateBuilder(new WebApplicationOptions
+        WebApplicationBuilder builder = WebApplication.CreateBuilder(new WebApplicationOptions
         {
             EnvironmentName = Environments.Development,
         });
         builder.WebHost.UseTestServer();
         builder.Services.AddSingleton<ILogger<ExceptionHandlerLog>>(logger);
 
-        var app = builder.Build();
+        WebApplication app = builder.Build();
         app.Use(async (context, next) =>
         {
             context.TraceIdentifier = traceId;
@@ -81,9 +81,9 @@ public sealed class ExceptionHandlerExtensionsTests
     {
         response.Content.Headers.ContentType!.MediaType.Should().Be("application/problem+json");
 
-        await using var stream = await response.Content.ReadAsStreamAsync();
-        using var doc = await JsonDocument.ParseAsync(stream);
-        var root = doc.RootElement;
+        await using Stream stream = await response.Content.ReadAsStreamAsync();
+        using JsonDocument doc = await JsonDocument.ParseAsync(stream);
+        JsonElement root = doc.RootElement;
         root.GetProperty("status").GetInt32().Should().Be(StatusCodes.Status500InternalServerError);
         root.GetProperty("type").GetString().Should().Be($"urn:assetblock:error:{ErrorCodes.ERR_INTERNAL}");
         root.GetProperty("code").GetString().Should().Be(ErrorCodes.ERR_INTERNAL);

@@ -1,9 +1,12 @@
+using Ardalis.Result;
+using AssetBlock.Application.Messaging;
 using AssetBlock.Application.UseCases.Payments.Checkout;
 using AssetBlock.Domain.Abstractions.Services;
 using AssetBlock.Domain.Core.Constants;
+using AssetBlock.Domain.Core.Dto.Assets;
+using AssetBlock.Domain.Core.Entities;
+using AssetBlock.Domain.Core.Enums;
 using AssetBlock.Domain.Core.Licenses;
-using Ardalis.Result;
-using AssetBlock.Application.Messaging;
 
 namespace AssetBlock.Application.UseCases.Payments.CreateCheckoutSession;
 
@@ -29,13 +32,13 @@ internal sealed class CreateCheckoutSessionCommandHandler(
         CreateCheckoutSessionCommand request,
         CancellationToken cancellationToken)
     {
-        var locked = await assetStore.GetForUpdate(request.AssetId, cancellationToken);
+        Asset? locked = await assetStore.GetForUpdate(request.AssetId, cancellationToken);
         if (locked is null || locked.DeletedAt.HasValue)
         {
             return Result.NotFound(ErrorCodes.ERR_ASSET_NOT_FOUND);
         }
 
-        var snapshot = await assetStore.GetCurrentVersionSnapshot(request.AssetId, cancellationToken);
+        AssetCurrentVersionSnapshot? snapshot = await assetStore.GetCurrentVersionSnapshot(request.AssetId, cancellationToken);
         if (snapshot is null || snapshot.DeletedAt.HasValue)
         {
             return Result.NotFound(ErrorCodes.ERR_ASSET_NOT_FOUND);
@@ -46,18 +49,18 @@ internal sealed class CreateCheckoutSessionCommandHandler(
             return Result.Forbidden(ErrorCodes.ERR_CANNOT_PURCHASE_OWN_ASSET);
         }
 
-        var existingPurchase = await purchaseStore.GetPurchase(request.UserId, request.AssetId, cancellationToken);
+        Purchase? existingPurchase = await purchaseStore.GetPurchase(request.UserId, request.AssetId, cancellationToken);
         if (existingPurchase is not null)
         {
             return Result.Conflict(ErrorCodes.ERR_ASSET_ALREADY_PURCHASED);
         }
 
-        if (!AssetLicenseCatalog.TryParseCode(snapshot.LicenseCode, out var licenseCode))
+        if (!AssetLicenseCatalog.TryParseCode(snapshot.LicenseCode, out AssetLicenseCode licenseCode))
         {
             return Result.NotFound(ErrorCodes.ERR_ASSET_NOT_FOUND);
         }
 
-        var attribution = await attributionNormalizer.TryNormalize(
+        CheckoutAttributionSnapshot? attribution = await attributionNormalizer.TryNormalize(
             request.Attribution,
             snapshot.AssetId,
             snapshot.AuthorId,

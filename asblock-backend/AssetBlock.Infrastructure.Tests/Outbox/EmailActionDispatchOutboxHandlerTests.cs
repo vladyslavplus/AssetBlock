@@ -6,6 +6,7 @@ using AssetBlock.Domain.Core.Entities;
 using AssetBlock.Domain.Core.Enums;
 using AssetBlock.Domain.Core.Primitives.AppSettingsOptions;
 using AssetBlock.Infrastructure.Outbox;
+using AwesomeAssertions.Specialized;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using NSubstitute;
@@ -69,9 +70,9 @@ public sealed class EmailActionDispatchOutboxHandlerTests
     [Fact]
     public async Task Handle_WhenAlreadyDelivered_ShouldSkipSendingAndReturn()
     {
-        var (payload, message) = BuildValidPayload();
+        (EmailActionDispatchPayload? payload, OutboxMessage? message) = BuildValidPayload();
         var recipientEmail = "verify@example.test";
-        var action = BuildAction(payload, targetEmail: recipientEmail);
+        EmailAction action = BuildAction(payload, targetEmail: recipientEmail);
         var recipient = new EmailRecipient(payload.RecipientUserId, recipientEmail);
         var composedEmail = new EmailMessage(recipientEmail, payload.RecipientUserId, "Subject", "text", "<p>html</p>", EmailTemplateKind.EMAIL_VERIFICATION, "msgid@mail.localhost");
 
@@ -104,9 +105,9 @@ public sealed class EmailActionDispatchOutboxHandlerTests
     [Fact]
     public async Task Handle_WhenConcurrentConflict_ShouldThrowWithoutSending()
     {
-        var (payload, message) = BuildValidPayload();
+        (EmailActionDispatchPayload? payload, OutboxMessage? message) = BuildValidPayload();
         var recipientEmail = "verify@example.test";
-        var action = BuildAction(payload, targetEmail: recipientEmail);
+        EmailAction action = BuildAction(payload, targetEmail: recipientEmail);
         var recipient = new EmailRecipient(payload.RecipientUserId, recipientEmail);
         var composedEmail = new EmailMessage(recipientEmail, payload.RecipientUserId, "Subject", "text", "<p>html</p>", EmailTemplateKind.EMAIL_VERIFICATION, "msgid@mail.localhost");
 
@@ -126,7 +127,7 @@ public sealed class EmailActionDispatchOutboxHandlerTests
             Arg.Any<CancellationToken>())
             .Returns((DeliveryClaimStatus.CONCURRENT_CONFLICT, (Guid?)null));
 
-        var act = () => _sut.Handle(message, CancellationToken.None);
+        Func<Task> act = () => _sut.Handle(message, CancellationToken.None);
 
         await act.Should().ThrowAsync<InvalidOperationException>()
             .WithMessage("*locked by another worker*");
@@ -136,9 +137,9 @@ public sealed class EmailActionDispatchOutboxHandlerTests
     [Fact]
     public async Task Handle_WhenConfirmDeliveryReturnsFalse_ShouldThrowClaimLostException()
     {
-        var (payload, message) = BuildValidPayload();
+        (EmailActionDispatchPayload? payload, OutboxMessage? message) = BuildValidPayload();
         var recipientEmail = "verify@example.test";
-        var action = BuildAction(payload, targetEmail: recipientEmail);
+        EmailAction action = BuildAction(payload, targetEmail: recipientEmail);
         var recipient = new EmailRecipient(payload.RecipientUserId, recipientEmail);
         var composedEmail = new EmailMessage(recipientEmail, payload.RecipientUserId, "Subject", "text", "<p>html</p>", EmailTemplateKind.EMAIL_VERIFICATION, "msgid@mail.localhost");
 
@@ -155,7 +156,7 @@ public sealed class EmailActionDispatchOutboxHandlerTests
             Arg.Any<CancellationToken>())
             .Returns(false);
 
-        var act = () => _sut.Handle(message, CancellationToken.None);
+        Func<Task> act = () => _sut.Handle(message, CancellationToken.None);
 
         await act.Should().ThrowAsync<InvalidOperationException>()
             .WithMessage("Email delivery claim was lost before confirmation.");
@@ -167,9 +168,9 @@ public sealed class EmailActionDispatchOutboxHandlerTests
     [Fact]
     public async Task Handle_WhenSenderSucceedsAndConfirmationThrows_ShouldNotReleaseClaimAndShouldThrowSafeException()
     {
-        var (payload, message) = BuildValidPayload();
+        (EmailActionDispatchPayload? payload, OutboxMessage? message) = BuildValidPayload();
         var recipientEmail = "verify@example.test";
-        var action = BuildAction(payload, targetEmail: recipientEmail);
+        EmailAction action = BuildAction(payload, targetEmail: recipientEmail);
         var recipient = new EmailRecipient(payload.RecipientUserId, recipientEmail);
         var composedEmail = new EmailMessage(recipientEmail, payload.RecipientUserId, "Subject", "text", "<p>html</p>", EmailTemplateKind.EMAIL_VERIFICATION, "msgid@mail.localhost");
 
@@ -186,9 +187,9 @@ public sealed class EmailActionDispatchOutboxHandlerTests
             Arg.Any<CancellationToken>())
             .ThrowsAsync(new InvalidOperationException("DB error during confirm"));
 
-        var act = () => _sut.Handle(message, CancellationToken.None);
+        Func<Task> act = () => _sut.Handle(message, CancellationToken.None);
 
-        var ex = await act.Should().ThrowAsync<InvalidOperationException>();
+        ExceptionAssertions<InvalidOperationException> ex = await act.Should().ThrowAsync<InvalidOperationException>();
         ex.Which.Message.Should().Be("Email transport failed.");
 
         // Must NOT release claim after successful SMTP send
@@ -198,9 +199,9 @@ public sealed class EmailActionDispatchOutboxHandlerTests
     [Fact]
     public async Task Handle_WhenSenderSucceedsAndCallerTokenCancels_ShouldStillConfirmWithBoundedTokenAndSucceed()
     {
-        var (payload, message) = BuildValidPayload();
+        (EmailActionDispatchPayload? payload, OutboxMessage? message) = BuildValidPayload();
         var recipientEmail = "verify@example.test";
-        var action = BuildAction(payload, targetEmail: recipientEmail);
+        EmailAction action = BuildAction(payload, targetEmail: recipientEmail);
         var recipient = new EmailRecipient(payload.RecipientUserId, recipientEmail);
         var composedEmail = new EmailMessage(recipientEmail, payload.RecipientUserId, "Subject", "text", "<p>html</p>", EmailTemplateKind.EMAIL_VERIFICATION, "msgid@mail.localhost");
 
@@ -232,9 +233,9 @@ public sealed class EmailActionDispatchOutboxHandlerTests
     [Fact]
     public async Task Handle_WhenValid_ShouldSendAndConfirmDelivery()
     {
-        var (payload, message) = BuildValidPayload();
+        (EmailActionDispatchPayload? payload, OutboxMessage? message) = BuildValidPayload();
         var recipientEmail = "verify@example.test";
-        var action = BuildAction(payload, targetEmail: recipientEmail);
+        EmailAction action = BuildAction(payload, targetEmail: recipientEmail);
         var recipient = new EmailRecipient(payload.RecipientUserId, recipientEmail);
         var composedEmail = new EmailMessage(recipientEmail, payload.RecipientUserId, "Subject", "text", "<p>html</p>", EmailTemplateKind.EMAIL_VERIFICATION, "msgid@mail.localhost");
 
@@ -263,8 +264,8 @@ public sealed class EmailActionDispatchOutboxHandlerTests
     [Fact]
     public async Task Handle_WhenActionVersionMismatch_ShouldSkipWithoutSending()
     {
-        var (payload, message) = BuildValidPayload();
-        var action = BuildAction(payload, targetEmail: "verify@example.test");
+        (EmailActionDispatchPayload? payload, OutboxMessage? message) = BuildValidPayload();
+        EmailAction action = BuildAction(payload, targetEmail: "verify@example.test");
         action.Version = Guid.NewGuid();
 
         _emailActionStore.GetById(payload.EmailActionId, Arg.Any<CancellationToken>()).Returns(action);
@@ -277,9 +278,9 @@ public sealed class EmailActionDispatchOutboxHandlerTests
     [Fact]
     public async Task Handle_WhenSenderFails_ShouldReleaseClaimAndThrowSafeException()
     {
-        var (payload, message) = BuildValidPayload();
+        (EmailActionDispatchPayload? payload, OutboxMessage? message) = BuildValidPayload();
         var recipientEmail = "verify@example.test";
-        var action = BuildAction(payload, targetEmail: recipientEmail);
+        EmailAction action = BuildAction(payload, targetEmail: recipientEmail);
         var recipient = new EmailRecipient(payload.RecipientUserId, recipientEmail);
         var composedEmail = new EmailMessage(recipientEmail, payload.RecipientUserId, "Subject", "text", "<p>html</p>", EmailTemplateKind.EMAIL_VERIFICATION, "msgid@mail.localhost");
 
@@ -291,8 +292,8 @@ public sealed class EmailActionDispatchOutboxHandlerTests
         _emailSender.Send(Arg.Any<EmailMessage>(), Arg.Any<CancellationToken>())
             .ThrowsAsync(new InvalidOperationException("SMTP inner detail that must not leak"));
 
-        var act = () => _sut.Handle(message, CancellationToken.None);
-        var exception = await act.Should().ThrowAsync<InvalidOperationException>();
+        Func<Task> act = () => _sut.Handle(message, CancellationToken.None);
+        ExceptionAssertions<InvalidOperationException> exception = await act.Should().ThrowAsync<InvalidOperationException>();
         exception.Which.Message.Should().Be("Email transport failed.");
         exception.Which.Message.Should().NotContain("SMTP inner detail");
 
@@ -303,9 +304,9 @@ public sealed class EmailActionDispatchOutboxHandlerTests
     [Fact]
     public async Task Handle_WhenSenderFailsAndReleaseClaimAlsoFails_ShouldPreserveOriginalSafeException()
     {
-        var (payload, message) = BuildValidPayload();
+        (EmailActionDispatchPayload? payload, OutboxMessage? message) = BuildValidPayload();
         var recipientEmail = "verify@example.test";
-        var action = BuildAction(payload, targetEmail: recipientEmail);
+        EmailAction action = BuildAction(payload, targetEmail: recipientEmail);
         var recipient = new EmailRecipient(payload.RecipientUserId, recipientEmail);
         var composedEmail = new EmailMessage(recipientEmail, payload.RecipientUserId, "Subject", "text", "<p>html</p>", EmailTemplateKind.EMAIL_VERIFICATION, "msgid@mail.localhost");
 
@@ -319,8 +320,8 @@ public sealed class EmailActionDispatchOutboxHandlerTests
         _emailDeliveryStore.ReleaseClaim(Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<CancellationToken>())
             .ThrowsAsync(new InvalidOperationException("DB fail"));
 
-        var act = () => _sut.Handle(message, CancellationToken.None);
-        var exception = await act.Should().ThrowAsync<InvalidOperationException>();
+        Func<Task> act = () => _sut.Handle(message, CancellationToken.None);
+        ExceptionAssertions<InvalidOperationException> exception = await act.Should().ThrowAsync<InvalidOperationException>();
         exception.Which.Message.Should().Be("Email transport failed.");
     }
 
@@ -351,7 +352,7 @@ public sealed class EmailActionDispatchOutboxHandlerTests
     {
         var outboxId = Guid.NewGuid();
         var payload = new EmailActionDispatchPayload(Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), kind);
-        var message = BuildMessage(JsonSerializer.Serialize(payload, _json), outboxId);
+        OutboxMessage message = BuildMessage(JsonSerializer.Serialize(payload, _json), outboxId);
         return (payload, message);
     }
 

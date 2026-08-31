@@ -28,7 +28,7 @@ public sealed class GetMyAssetProcessingJobsQueryHandlerTests
         _jobStoreMock.GetJobsForAsset(assetId, ownerUserId, Arg.Any<CancellationToken>())
             .Returns((IReadOnlyList<AssetProcessingJobDto>?)null);
 
-        var result = await _handler.Handle(query, CancellationToken.None);
+        Result<IReadOnlyList<AssetProcessingJobDto>> result = await _handler.Handle(query, CancellationToken.None);
 
         result.Status.Should().Be(ResultStatus.NotFound);
     }
@@ -43,7 +43,7 @@ public sealed class GetMyAssetProcessingJobsQueryHandlerTests
         _jobStoreMock.GetJobsForAsset(assetId, ownerUserId, Arg.Any<CancellationToken>())
             .Returns(new List<AssetProcessingJobDto>());
 
-        var result = await _handler.Handle(query, CancellationToken.None);
+        Result<IReadOnlyList<AssetProcessingJobDto>> result = await _handler.Handle(query, CancellationToken.None);
 
         result.Status.Should().Be(ResultStatus.Ok);
         result.Value.Should().BeEmpty();
@@ -81,7 +81,7 @@ public sealed class GetMyAssetProcessingJobsQueryHandlerTests
         _jobStoreMock.GetJobsForAsset(assetId, ownerUserId, Arg.Any<CancellationToken>())
             .Returns(expectedJobs);
 
-        var result = await _handler.Handle(query, CancellationToken.None);
+        Result<IReadOnlyList<AssetProcessingJobDto>> result = await _handler.Handle(query, CancellationToken.None);
 
         result.Status.Should().Be(ResultStatus.Ok);
         result.Value.Should().HaveCount(1);

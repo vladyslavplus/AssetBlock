@@ -1,9 +1,11 @@
+using AssetBlock.Domain.Abstractions.Services;
 using AssetBlock.Domain.Core.Dto.Payments;
 using AssetBlock.Domain.Core.Exceptions;
 using AssetBlock.Domain.Core.Payments;
 using AssetBlock.Domain.Core.Primitives.AppSettingsOptions;
 using AssetBlock.Infrastructure.Services;
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Options;
 using NSubstitute;
 using Polly;
 using Polly.Registry;
@@ -15,13 +17,13 @@ public sealed class StripePaymentServiceTests
     [Fact]
     public async Task CreateCheckoutSession_throws_whenSuccessAndCancelUrlsMissing()
     {
-        var opts = Microsoft.Extensions.Options.Options.Create(new StripeOptions
+        IOptions<StripeOptions> opts = Microsoft.Extensions.Options.Options.Create(new StripeOptions
         {
             SecretKey = "stripe_test_secret_key_not_real",
             SuccessUrl = "",
             CancelUrl = ""
         });
-        var resilience = Substitute.For<ResiliencePipelineProvider<string>>();
+        ResiliencePipelineProvider<string> resilience = Substitute.For<ResiliencePipelineProvider<string>>();
         resilience.GetPipeline(Arg.Any<string>())
             .Returns(_ => new ResiliencePipelineBuilder().Build());
 
@@ -30,8 +32,8 @@ public sealed class StripePaymentServiceTests
             resilience,
             NullLogger<StripePaymentService>.Instance);
 
-        var draft = CreateDraft();
-        var act = async () => await sut.CreateCheckoutSession(draft);
+        CheckoutSessionDraft draft = CreateDraft();
+        Func<Task<StripeCheckoutSession>> act = async () => await sut.CreateCheckoutSession(draft);
 
         await act.Should().ThrowAsync<InvalidOperationException>();
     }
@@ -39,14 +41,14 @@ public sealed class StripePaymentServiceTests
     [Fact]
     public async Task CreateCheckoutSession_failsFast_whenStripeApiUnreachable()
     {
-        var opts = Microsoft.Extensions.Options.Options.Create(new StripeOptions
+        IOptions<StripeOptions> opts = Microsoft.Extensions.Options.Options.Create(new StripeOptions
         {
             SecretKey = "stripe_test_secret_key_not_real",
             SuccessUrl = "https://example.com/checkout/success",
             CancelUrl = "https://example.com/checkout/cancel"
         });
 
-        var resilience = Substitute.For<ResiliencePipelineProvider<string>>();
+        ResiliencePipelineProvider<string> resilience = Substitute.For<ResiliencePipelineProvider<string>>();
         resilience.GetPipeline(Arg.Any<string>())
             .Returns(_ => new ResiliencePipelineBuilder().Build());
 
@@ -55,8 +57,8 @@ public sealed class StripePaymentServiceTests
             resilience,
             NullLogger<StripePaymentService>.Instance);
 
-        var draft = CreateDraft();
-        var act = async () => await sut.CreateCheckoutSession(draft);
+        CheckoutSessionDraft draft = CreateDraft();
+        Func<Task<StripeCheckoutSession>> act = async () => await sut.CreateCheckoutSession(draft);
 
         await act.Should().ThrowAsync<Exception>();
     }
@@ -64,7 +66,7 @@ public sealed class StripePaymentServiceTests
     [Fact]
     public async Task CreateCheckoutSession_throws_whenLineAmountHasSubCentPrecision()
     {
-        var sut = CreateSut(webhookSecret: "whsec_test");
+        StripePaymentService sut = CreateSut(webhookSecret: "whsec_test");
         var draft = new CheckoutSessionDraft(
             Guid.NewGuid(),
             Guid.NewGuid(),
@@ -72,7 +74,7 @@ public sealed class StripePaymentServiceTests
             "usd",
             [new CheckoutSessionDraftLine("Test Asset", 9.999m, "usd")]);
 
-        var act = async () => await sut.CreateCheckoutSession(draft);
+        Func<Task<StripeCheckoutSession>> act = async () => await sut.CreateCheckoutSession(draft);
 
         await act.Should().ThrowAsync<ArgumentException>()
             .WithMessage("*at most two decimal places*");
@@ -81,7 +83,7 @@ public sealed class StripePaymentServiceTests
     [Fact]
     public async Task CreateCheckoutSession_throws_whenLineAmountIsZero()
     {
-        var sut = CreateSut(webhookSecret: "whsec_test");
+        StripePaymentService sut = CreateSut(webhookSecret: "whsec_test");
         var draft = new CheckoutSessionDraft(
             Guid.NewGuid(),
             Guid.NewGuid(),
@@ -89,7 +91,7 @@ public sealed class StripePaymentServiceTests
             "usd",
             [new CheckoutSessionDraftLine("Test Asset", 0m, "usd")]);
 
-        var act = async () => await sut.CreateCheckoutSession(draft);
+        Func<Task<StripeCheckoutSession>> act = async () => await sut.CreateCheckoutSession(draft);
 
         await act.Should().ThrowAsync<InvalidOperationException>();
     }
@@ -97,7 +99,7 @@ public sealed class StripePaymentServiceTests
     [Fact]
     public async Task CreateCheckoutSession_throws_whenLineAmountExceedsMaxAmount()
     {
-        var sut = CreateSut(webhookSecret: "whsec_test");
+        StripePaymentService sut = CreateSut(webhookSecret: "whsec_test");
         var draft = new CheckoutSessionDraft(
             Guid.NewGuid(),
             Guid.NewGuid(),
@@ -105,7 +107,7 @@ public sealed class StripePaymentServiceTests
             "usd",
             [new CheckoutSessionDraftLine("Test Asset", 1_000_000.00m, "usd")]);
 
-        var act = async () => await sut.CreateCheckoutSession(draft);
+        Func<Task<StripeCheckoutSession>> act = async () => await sut.CreateCheckoutSession(draft);
 
         await act.Should().ThrowAsync<InvalidOperationException>()
             .WithMessage($"*{BundlePriceAllocator.MAX_AMOUNT_CENTS}*");
@@ -114,16 +116,16 @@ public sealed class StripePaymentServiceTests
     [Fact]
     public async Task VerifyCheckoutCompleted_throws_whenWebhookSecretMissing()
     {
-        var sut = CreateSut(webhookSecret: "");
-        var act = async () => await sut.VerifyCheckoutCompleted("{}", "sig");
+        StripePaymentService sut = CreateSut(webhookSecret: "");
+        Func<Task<StripeCheckoutCompleted?>> act = async () => await sut.VerifyCheckoutCompleted("{}", "sig");
         await act.Should().ThrowAsync<InvalidOperationException>();
     }
 
     [Fact]
     public async Task VerifyCheckoutCompleted_throwsInvalidSignature_whenPayloadInvalid()
     {
-        var sut = CreateSut(webhookSecret: "stripe_test_webhook_secret_not_real");
-        var act = async () => await sut.VerifyCheckoutCompleted("not-json", "bad_sig");
+        StripePaymentService sut = CreateSut(webhookSecret: "stripe_test_webhook_secret_not_real");
+        Func<Task<StripeCheckoutCompleted?>> act = async () => await sut.VerifyCheckoutCompleted("not-json", "bad_sig");
         await act.Should().ThrowAsync<StripeWebhookInvalidSignatureException>();
     }
 
@@ -137,14 +139,14 @@ public sealed class StripePaymentServiceTests
 
     private static StripePaymentService CreateSut(string webhookSecret)
     {
-        var opts = Microsoft.Extensions.Options.Options.Create(new StripeOptions
+        IOptions<StripeOptions> opts = Microsoft.Extensions.Options.Options.Create(new StripeOptions
         {
             SecretKey = "stripe_test_secret_key_not_real",
             WebhookSecret = webhookSecret,
             SuccessUrl = "https://example.com/checkout/success",
             CancelUrl = "https://example.com/checkout/cancel"
         });
-        var resilience = Substitute.For<ResiliencePipelineProvider<string>>();
+        ResiliencePipelineProvider<string> resilience = Substitute.For<ResiliencePipelineProvider<string>>();
         resilience.GetPipeline(Arg.Any<string>())
             .Returns(_ => new ResiliencePipelineBuilder().Build());
         return new StripePaymentService(opts, resilience, NullLogger<StripePaymentService>.Instance);

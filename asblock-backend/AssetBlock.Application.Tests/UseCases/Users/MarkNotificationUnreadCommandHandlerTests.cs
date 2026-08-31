@@ -26,7 +26,7 @@ public sealed class MarkNotificationUnreadCommandHandlerTests
         var id = Guid.NewGuid();
         _storeMock.MarkUnread(userId, id, Arg.Any<CancellationToken>()).Returns(false);
 
-        var result = await _handler.Handle(new MarkNotificationUnreadCommand(userId, id), CancellationToken.None);
+        Result result = await _handler.Handle(new MarkNotificationUnreadCommand(userId, id), CancellationToken.None);
 
         result.IsSuccess.Should().BeFalse();
         result.Status.Should().Be(ResultStatus.NotFound);
@@ -40,7 +40,7 @@ public sealed class MarkNotificationUnreadCommandHandlerTests
         var id = Guid.NewGuid();
         _storeMock.MarkUnread(userId, id, Arg.Any<CancellationToken>()).Returns(true);
 
-        var result = await _handler.Handle(new MarkNotificationUnreadCommand(userId, id), CancellationToken.None);
+        Result result = await _handler.Handle(new MarkNotificationUnreadCommand(userId, id), CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
     }

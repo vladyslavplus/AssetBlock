@@ -13,7 +13,7 @@ internal sealed class GetSellerAssetDetailQueryHandler(IAssetStore assetStore)
         GetSellerAssetDetailQuery request,
         CancellationToken cancellationToken)
     {
-        var item = await assetStore.GetOwnedSellerDetail(request.AssetId, request.OwnerUserId, cancellationToken);
+        SellerAssetDetailItem? item = await assetStore.GetOwnedSellerDetail(request.AssetId, request.OwnerUserId, cancellationToken);
         if (item is null)
         {
             return Result.NotFound(ErrorCodes.ERR_ASSET_NOT_FOUND);

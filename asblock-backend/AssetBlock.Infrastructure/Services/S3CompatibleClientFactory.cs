@@ -8,7 +8,7 @@ internal static class S3CompatibleClientFactory
     public static IMinioClient Create(string endpoint, string accessKey, string secretKey, bool useSsl)
     {
         var builder = new MinioClient();
-        if (Uri.TryCreate(endpoint, UriKind.Absolute, out var uri)
+        if (Uri.TryCreate(endpoint, UriKind.Absolute, out Uri? uri)
             && (uri.Scheme == Uri.UriSchemeHttp || uri.Scheme == Uri.UriSchemeHttps))
         {
             return builder

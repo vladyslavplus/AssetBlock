@@ -16,7 +16,7 @@ internal sealed class NotificationDispatchOutboxHandler(
 
     public async Task Handle(OutboxMessage message, CancellationToken cancellationToken)
     {
-        var payload = JsonSerializer.Deserialize<NotificationDispatchPayload>(message.Payload, _json)
+        NotificationDispatchPayload payload = JsonSerializer.Deserialize<NotificationDispatchPayload>(message.Payload, _json)
             ?? throw new InvalidOperationException("Invalid NotificationDispatch payload.");
 
         await realtimeNotifications.DeliverPersistedNotification(

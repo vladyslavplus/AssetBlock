@@ -9,7 +9,7 @@ internal sealed class PublishAssetVersionCommandValidator : AbstractValidator<Pu
 {
     public PublishAssetVersionCommandValidator(IOptions<FileUploadOptions> fileUploadOptions)
     {
-        var uploadOpts = fileUploadOptions.Value;
+        FileUploadOptions uploadOpts = fileUploadOptions.Value;
 
         RuleFor(c => c.AssetId).NotEmpty().WithMessage("AssetId is required.");
         RuleFor(c => c.AuthorId).NotEmpty().WithMessage("AuthorId is required.");

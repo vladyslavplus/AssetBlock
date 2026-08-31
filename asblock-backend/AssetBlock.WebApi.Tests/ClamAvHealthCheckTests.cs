@@ -16,7 +16,7 @@ public sealed class ClamAvHealthCheckTests
     [Fact]
     public async Task CheckHealthAsync_WhenSignaturesAreFresh_ShouldBeHealthy()
     {
-        var scanner = Substitute.For<IContentMalwareScanner>();
+        IContentMalwareScanner scanner = Substitute.For<IContentMalwareScanner>();
         scanner.GetSignatureState(Arg.Any<CancellationToken>()).Returns(
             MalwareScannerSignatureState.FromBuiltAt(
                 DateTimeOffset.UtcNow.AddHours(-2),
@@ -24,7 +24,7 @@ public sealed class ClamAvHealthCheckTests
                 DateTimeOffset.UtcNow));
         var sut = new ClamAvHealthCheck(scanner);
 
-        var result = await sut.CheckHealthAsync(new HealthCheckContext());
+        HealthCheckResult result = await sut.CheckHealthAsync(new HealthCheckContext());
 
         result.Status.Should().Be(HealthStatus.Healthy);
     }
@@ -32,11 +32,11 @@ public sealed class ClamAvHealthCheckTests
     [Fact]
     public async Task CheckHealthAsync_WhenDaemonUnavailable_ShouldBeUnhealthyWithoutHostDetails()
     {
-        var scanner = Substitute.For<IContentMalwareScanner>();
+        IContentMalwareScanner scanner = Substitute.For<IContentMalwareScanner>();
         scanner.GetSignatureState(Arg.Any<CancellationToken>()).Returns(MalwareScannerSignatureState.Unavailable());
         var sut = new ClamAvHealthCheck(scanner);
 
-        var result = await sut.CheckHealthAsync(new HealthCheckContext());
+        HealthCheckResult result = await sut.CheckHealthAsync(new HealthCheckContext());
 
         result.Status.Should().Be(HealthStatus.Unhealthy);
         result.Description.Should().NotBeNull();
@@ -48,7 +48,7 @@ public sealed class ClamAvHealthCheckTests
     [Fact]
     public async Task CheckHealthAsync_WhenSignaturesAreStale_ShouldBeUnhealthy()
     {
-        var scanner = Substitute.For<IContentMalwareScanner>();
+        IContentMalwareScanner scanner = Substitute.For<IContentMalwareScanner>();
         scanner.GetSignatureState(Arg.Any<CancellationToken>()).Returns(
             MalwareScannerSignatureState.FromBuiltAt(
                 DateTimeOffset.UtcNow.AddDays(-5),
@@ -56,7 +56,7 @@ public sealed class ClamAvHealthCheckTests
                 DateTimeOffset.UtcNow));
         var sut = new ClamAvHealthCheck(scanner);
 
-        var result = await sut.CheckHealthAsync(new HealthCheckContext());
+        HealthCheckResult result = await sut.CheckHealthAsync(new HealthCheckContext());
 
         result.Status.Should().Be(HealthStatus.Unhealthy);
         result.Description.Should().Be("Malware scanner signatures are stale.");
@@ -66,7 +66,7 @@ public sealed class ClamAvHealthCheckTests
     [Fact]
     public void AddAssetBlockHealthChecks_WhenProcessingDisabled_ShouldNotRegisterClamAv()
     {
-        var configuration = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
+        IConfigurationRoot configuration = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
         {
             ["AssetProcessing:Enabled"] = "false"
         }).Build();
@@ -74,7 +74,7 @@ public sealed class ClamAvHealthCheckTests
 
         services.AddAssetBlockHealthChecks(configuration);
         services.AddLogging();
-        var registrations = services.BuildServiceProvider()
+        ICollection<HealthCheckRegistration> registrations = services.BuildServiceProvider()
             .GetRequiredService<IOptions<HealthCheckServiceOptions>>()
             .Value.Registrations;
 
@@ -84,7 +84,7 @@ public sealed class ClamAvHealthCheckTests
     [Fact]
     public void AddAssetBlockHealthChecks_WhenProcessingEnabled_ShouldRegisterClamAvOnReadyOnly()
     {
-        var configuration = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
+        IConfigurationRoot configuration = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
         {
             ["AssetProcessing:Enabled"] = "true"
         }).Build();
@@ -92,7 +92,7 @@ public sealed class ClamAvHealthCheckTests
 
         services.AddAssetBlockHealthChecks(configuration);
         services.AddLogging();
-        var registrations = services.BuildServiceProvider()
+        ICollection<HealthCheckRegistration> registrations = services.BuildServiceProvider()
             .GetRequiredService<IOptions<HealthCheckServiceOptions>>()
             .Value.Registrations;
 

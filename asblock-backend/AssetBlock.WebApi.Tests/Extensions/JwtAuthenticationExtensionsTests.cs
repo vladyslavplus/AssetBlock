@@ -24,27 +24,27 @@ public sealed class JwtAuthenticationExtensionsTests
     public async Task Authenticate_WhenInvalidToken_ShouldLogReasonAtDebugAndReturn401()
     {
         var recordingLogger = new RecordingLogger<JwtBearerEvents>();
-        await using var app = CreateApp(recordingLogger);
+        await using WebApplication app = CreateApp(recordingLogger);
         await app.StartAsync();
-        var client = app.GetTestClient();
+        HttpClient client = app.GetTestClient();
 
         var request = new HttpRequestMessage(HttpMethod.Get, "/api/protected");
         request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", "invalid.garbage.token");
 
-        var response = await client.SendAsync(request);
+        HttpResponseMessage response = await client.SendAsync(request);
 
         response.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
         response.Content.Headers.ContentType!.MediaType.Should().Be("application/problem+json");
 
-        await using var stream = await response.Content.ReadAsStreamAsync();
-        using var doc = await JsonDocument.ParseAsync(stream);
-        var root = doc.RootElement;
+        await using Stream stream = await response.Content.ReadAsStreamAsync();
+        using JsonDocument doc = await JsonDocument.ParseAsync(stream);
+        JsonElement root = doc.RootElement;
         root.GetProperty("code").GetString().Should().Be(ErrorCodes.ERR_AUTH_TOKEN_INVALID);
 
         // Assert exactly one log entry was created
         recordingLogger.Entries.Should().HaveCount(1);
 
-        var entry = recordingLogger.Entries.Single();
+        (LogLevel Level, Exception? Exception, string Message) entry = recordingLogger.Entries.Single();
         entry.Level.Should().Be(LogLevel.Debug);
         entry.Exception.Should().BeNull();
         entry.Message.Should().NotContain("invalid.garbage.token");
@@ -55,19 +55,19 @@ public sealed class JwtAuthenticationExtensionsTests
     public async Task Authenticate_WhenNoToken_ShouldLogSingleChallengeAtDebugAndReturn401()
     {
         var recordingLogger = new RecordingLogger<JwtBearerEvents>();
-        await using var app = CreateApp(recordingLogger);
+        await using WebApplication app = CreateApp(recordingLogger);
         await app.StartAsync();
-        var client = app.GetTestClient();
+        HttpClient client = app.GetTestClient();
 
         var request = new HttpRequestMessage(HttpMethod.Get, "/api/protected");
-        var response = await client.SendAsync(request);
+        HttpResponseMessage response = await client.SendAsync(request);
 
         response.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
 
         // Assert exactly one log entry was created for missing token challenge
         recordingLogger.Entries.Should().HaveCount(1);
 
-        var entry = recordingLogger.Entries.Single();
+        (LogLevel Level, Exception? Exception, string Message) entry = recordingLogger.Entries.Single();
         entry.Level.Should().Be(LogLevel.Debug);
         entry.Exception.Should().BeNull();
         entry.Message.Should().Contain("Reason=missing_token");
@@ -75,7 +75,7 @@ public sealed class JwtAuthenticationExtensionsTests
 
     private static WebApplication CreateApp(ILogger<JwtBearerEvents> logger)
     {
-        var builder = WebApplication.CreateBuilder(new WebApplicationOptions
+        WebApplicationBuilder builder = WebApplication.CreateBuilder(new WebApplicationOptions
         {
             EnvironmentName = Environments.Development
         });
@@ -92,7 +92,7 @@ public sealed class JwtAuthenticationExtensionsTests
         builder.Services.AddJwtAuthentication(builder.Configuration);
         builder.Services.AddAuthorization();
 
-        var app = builder.Build();
+        WebApplication app = builder.Build();
         app.UseAuthentication();
         app.UseAuthorization();
         app.MapGet("/api/protected", () => Microsoft.AspNetCore.Http.Results.Ok()).RequireAuthorization();

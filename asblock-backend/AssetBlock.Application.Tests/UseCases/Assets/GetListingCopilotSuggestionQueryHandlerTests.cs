@@ -1,3 +1,4 @@
+using Ardalis.Result;
 using AssetBlock.Application.UseCases.Assets.GetListingCopilotSuggestion;
 using AssetBlock.Domain.Abstractions.Services;
 using AssetBlock.Domain.Core.Constants;
@@ -26,7 +27,7 @@ public sealed class GetListingCopilotSuggestionQueryHandlerTests
         _store.GetOwnedVersion(versionId, ownerId, Arg.Any<CancellationToken>())
             .Returns((ListingCopilotOwnedVersion?)null);
 
-        var result = await _handler.Handle(new GetListingCopilotSuggestionQuery(versionId, ownerId), CancellationToken.None);
+        Result<ListingCopilotSuggestionDto> result = await _handler.Handle(new GetListingCopilotSuggestionQuery(versionId, ownerId), CancellationToken.None);
 
         result.Status.Should().Be(Ardalis.Result.ResultStatus.NotFound);
         result.Errors.Should().Contain(ErrorCodes.ERR_ASSET_NOT_FOUND);
@@ -46,7 +47,7 @@ public sealed class GetListingCopilotSuggestionQueryHandlerTests
         _store.GetSuggestionForOwner(owned.AssetVersionId, Arg.Any<Guid>(), Arg.Any<CancellationToken>())
             .Returns((ListingCopilotSuggestionDto?)null);
 
-        var result = await _handler.Handle(
+        Result<ListingCopilotSuggestionDto> result = await _handler.Handle(
             new GetListingCopilotSuggestionQuery(owned.AssetVersionId, Guid.NewGuid()),
             CancellationToken.None);
 
@@ -80,7 +81,7 @@ public sealed class GetListingCopilotSuggestionQueryHandlerTests
         _store.GetSuggestionForOwner(owned.AssetVersionId, Arg.Any<Guid>(), Arg.Any<CancellationToken>())
             .Returns(dto);
 
-        var result = await _handler.Handle(
+        Result<ListingCopilotSuggestionDto> result = await _handler.Handle(
             new GetListingCopilotSuggestionQuery(owned.AssetVersionId, Guid.NewGuid()),
             CancellationToken.None);
 

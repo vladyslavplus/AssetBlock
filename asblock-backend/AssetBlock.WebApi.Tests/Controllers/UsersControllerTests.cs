@@ -31,7 +31,7 @@ public sealed class UsersControllerTests : ControllerTestBase
             .Returns(Task.FromResult(NoValueResult.Success(new List<SocialPlatformListItemDto>())));
 
         var controller = new UsersController(Sender);
-        var result = await controller.ListSocialPlatforms(CancellationToken.None);
+        IActionResult result = await controller.ListSocialPlatforms(CancellationToken.None);
 
         result.Should().BeOfType<OkObjectResult>();
     }
@@ -41,7 +41,7 @@ public sealed class UsersControllerTests : ControllerTestBase
     {
         var controller = new UsersController(Sender);
         SetupAnonymous(controller);
-        var result = await controller.ListMyNotifications(new GetNotificationsRequest(), CancellationToken.None);
+        IActionResult result = await controller.ListMyNotifications(new GetNotificationsRequest(), CancellationToken.None);
 
         await AssertStatusCodeAsync(controller, result, StatusCodes.Status401Unauthorized);
     }
@@ -54,7 +54,7 @@ public sealed class UsersControllerTests : ControllerTestBase
 
         var controller = new UsersController(Sender);
         SetupUser(_userId, controller);
-        var action = await controller.ListMyNotifications(new GetNotificationsRequest(), CancellationToken.None);
+        IActionResult action = await controller.ListMyNotifications(new GetNotificationsRequest(), CancellationToken.None);
 
         action.Should().BeOfType<OkObjectResult>();
     }
@@ -64,7 +64,7 @@ public sealed class UsersControllerTests : ControllerTestBase
     {
         var controller = new UsersController(Sender);
         SetupAnonymous(controller);
-        var result = await controller.ListMyAssets(new GetAssetsRequest(), CancellationToken.None);
+        IActionResult result = await controller.ListMyAssets(new GetAssetsRequest(), CancellationToken.None);
 
         await AssertStatusCodeAsync(controller, result, StatusCodes.Status401Unauthorized);
     }
@@ -77,7 +77,7 @@ public sealed class UsersControllerTests : ControllerTestBase
 
         var controller = new UsersController(Sender);
         SetupUser(_userId, controller);
-        var action = await controller.ListMyAssets(new GetAssetsRequest(), CancellationToken.None);
+        IActionResult action = await controller.ListMyAssets(new GetAssetsRequest(), CancellationToken.None);
 
         action.Should().BeOfType<OkObjectResult>();
     }
@@ -87,7 +87,7 @@ public sealed class UsersControllerTests : ControllerTestBase
     {
         var controller = new UsersController(Sender);
         SetupAnonymous(controller);
-        var result = await controller.MarkMyNotificationRead(Guid.NewGuid(), CancellationToken.None);
+        IActionResult result = await controller.MarkMyNotificationRead(Guid.NewGuid(), CancellationToken.None);
 
         await AssertStatusCodeAsync(controller, result, StatusCodes.Status401Unauthorized);
     }
@@ -100,7 +100,7 @@ public sealed class UsersControllerTests : ControllerTestBase
 
         var controller = new UsersController(Sender);
         SetupUser(_userId, controller);
-        var action = await controller.MarkMyNotificationRead(Guid.NewGuid(), CancellationToken.None);
+        IActionResult action = await controller.MarkMyNotificationRead(Guid.NewGuid(), CancellationToken.None);
 
         action.Should().BeOfType<OkResult>();
     }
@@ -110,7 +110,7 @@ public sealed class UsersControllerTests : ControllerTestBase
     {
         var controller = new UsersController(Sender);
         SetupAnonymous(controller);
-        var result = await controller.GetMe(CancellationToken.None);
+        IActionResult result = await controller.GetMe(CancellationToken.None);
 
         await AssertStatusCodeAsync(controller, result, StatusCodes.Status401Unauthorized);
     }
@@ -134,7 +134,7 @@ public sealed class UsersControllerTests : ControllerTestBase
 
         var controller = new UsersController(Sender);
         SetupUser(_userId, controller);
-        var action = await controller.GetMe(CancellationToken.None);
+        IActionResult action = await controller.GetMe(CancellationToken.None);
 
         action.Should().BeOfType<OkObjectResult>();
     }
@@ -144,7 +144,7 @@ public sealed class UsersControllerTests : ControllerTestBase
     {
         var controller = new UsersController(Sender);
         SetupAnonymous(controller);
-        var result = await controller.UpdateMe(new UpdateUserProfileRequest(), CancellationToken.None);
+        IActionResult result = await controller.UpdateMe(new UpdateUserProfileRequest(), CancellationToken.None);
 
         await AssertStatusCodeAsync(controller, result, StatusCodes.Status401Unauthorized);
     }
@@ -157,7 +157,7 @@ public sealed class UsersControllerTests : ControllerTestBase
 
         var controller = new UsersController(Sender);
         SetupUser(_userId, controller);
-        var action = await controller.UpdateMe(new UpdateUserProfileRequest { Username = "x" }, CancellationToken.None);
+        IActionResult action = await controller.UpdateMe(new UpdateUserProfileRequest { Username = "x" }, CancellationToken.None);
 
         action.Should().BeOfType<OkObjectResult>();
     }
@@ -168,7 +168,7 @@ public sealed class UsersControllerTests : ControllerTestBase
         var controller = new UsersController(Sender);
         SetupAnonymous(controller);
         var pid = Guid.NewGuid();
-        var result = await controller.UpdateSocials(new UpdateUserSocialLinksRequest
+        IActionResult result = await controller.UpdateSocials(new UpdateUserSocialLinksRequest
         {
             Links = [new SocialLinkInput { PlatformId = pid, Url = "https://x.com" }]
         }, CancellationToken.None);
@@ -185,7 +185,7 @@ public sealed class UsersControllerTests : ControllerTestBase
         var controller = new UsersController(Sender);
         SetupUser(_userId, controller);
         var pid = Guid.NewGuid();
-        var action = await controller.UpdateSocials(new UpdateUserSocialLinksRequest
+        IActionResult action = await controller.UpdateSocials(new UpdateUserSocialLinksRequest
         {
             Links = [new SocialLinkInput { PlatformId = pid, Url = "https://x.com" }]
         }, CancellationToken.None);
@@ -212,7 +212,7 @@ public sealed class UsersControllerTests : ControllerTestBase
 
         var controller = new UsersController(Sender);
         SetupAnonymous(controller);
-        var result = await controller.GetByUsername("name", CancellationToken.None);
+        IActionResult result = await controller.GetByUsername("name", CancellationToken.None);
 
         result.Should().BeOfType<OkObjectResult>();
     }
@@ -222,7 +222,7 @@ public sealed class UsersControllerTests : ControllerTestBase
     {
         var controller = new UsersController(Sender);
         SetupAnonymous(controller);
-        var result = await controller.GetMyAsset(Guid.NewGuid(), CancellationToken.None);
+        IActionResult result = await controller.GetMyAsset(Guid.NewGuid(), CancellationToken.None);
 
         await AssertStatusCodeAsync(controller, result, StatusCodes.Status401Unauthorized);
     }
@@ -235,7 +235,7 @@ public sealed class UsersControllerTests : ControllerTestBase
 
         var controller = new UsersController(Sender);
         SetupUser(_userId, controller);
-        var result = await controller.GetMyAsset(Guid.NewGuid(), CancellationToken.None);
+        IActionResult result = await controller.GetMyAsset(Guid.NewGuid(), CancellationToken.None);
 
         await AssertStatusCodeAsync(controller, result, StatusCodes.Status404NotFound);
     }
@@ -244,7 +244,7 @@ public sealed class UsersControllerTests : ControllerTestBase
     public async Task GetMyAsset_WhenAuthenticated_ShouldReturnOk()
     {
         var assetId = Guid.NewGuid();
-        var now = DateTimeOffset.UtcNow;
+        DateTimeOffset now = DateTimeOffset.UtcNow;
         var detail = new SellerAssetDetailItem(
             assetId,
             "Pending Pack",
@@ -270,7 +270,7 @@ public sealed class UsersControllerTests : ControllerTestBase
 
         var controller = new UsersController(Sender);
         SetupUser(_userId, controller);
-        var action = await controller.GetMyAsset(assetId, CancellationToken.None);
+        IActionResult action = await controller.GetMyAsset(assetId, CancellationToken.None);
 
         action.Should().BeOfType<OkObjectResult>();
     }

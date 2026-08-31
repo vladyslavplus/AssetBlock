@@ -1,5 +1,6 @@
-using FluentValidation;
 using AssetBlock.Application.Messaging;
+using FluentValidation;
+using FluentValidation.Results;
 
 namespace AssetBlock.Application.Common.Behaviors;
 
@@ -9,14 +10,14 @@ internal sealed class ValidationBehavior<TRequest, TResponse>(IEnumerable<IValid
 {
     public async Task<TResponse> Handle(TRequest request, RequestHandlerDelegate<TResponse> next, CancellationToken cancellationToken)
     {
-        var validatorArray = validators as IValidator<TRequest>[] ?? validators.ToArray();
+        IValidator<TRequest>[] validatorArray = validators as IValidator<TRequest>[] ?? validators.ToArray();
         if (validatorArray.Length == 0)
         {
             return await next(cancellationToken);
         }
 
         var context = new ValidationContext<TRequest>(request);
-        var results = await Task.WhenAll(validatorArray.Select(v => v.ValidateAsync(context, cancellationToken)));
+        ValidationResult[] results = await Task.WhenAll(validatorArray.Select(v => v.ValidateAsync(context, cancellationToken)));
         var failures = results.SelectMany(r => r.Errors).Where(f => f != null).ToList();
 
         if (failures.Count == 0)

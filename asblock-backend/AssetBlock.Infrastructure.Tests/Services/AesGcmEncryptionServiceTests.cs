@@ -18,7 +18,7 @@ public sealed class AesGcmEncryptionServiceTests
     [Fact]
     public async Task EncryptDecrypt_roundtrip_empty_plain()
     {
-        var sut = CreateService();
+        AesGcmEncryptionService sut = CreateService();
         await using var plain = new MemoryStream();
         await using var cipher = new MemoryStream();
         await sut.Encrypt(plain, cipher);
@@ -31,7 +31,7 @@ public sealed class AesGcmEncryptionServiceTests
     [Fact]
     public async Task EncryptDecrypt_roundtrip_multi_chunk()
     {
-        var sut = CreateService();
+        AesGcmEncryptionService sut = CreateService();
         var data = new byte[1024 * 1024 + 100];
         RandomNumberGenerator.Fill(data);
         await using var plain = new MemoryStream(data);
@@ -46,7 +46,7 @@ public sealed class AesGcmEncryptionServiceTests
     [Fact]
     public async Task EncryptDecrypt_roundtrip_non_seekable_plain_stream()
     {
-        var sut = CreateService();
+        AesGcmEncryptionService sut = CreateService();
         var data = RandomNumberGenerator.GetBytes(1024 * 1024 + 100);
         await using var plain = new NonSeekableReadStream(data);
         await using var cipher = new MemoryStream();
@@ -62,13 +62,13 @@ public sealed class AesGcmEncryptionServiceTests
     [Fact]
     public async Task Encrypt_when_cancelled_propagates_cancellation()
     {
-        var sut = CreateService();
+        AesGcmEncryptionService sut = CreateService();
         await using var plain = new MemoryStream(new byte[1024]);
         await using var cipher = new MemoryStream();
         using var cancellation = new CancellationTokenSource();
         await cancellation.CancelAsync();
 
-        var act = () => sut.Encrypt(plain, cipher, cancellation.Token);
+        Func<Task> act = () => sut.Encrypt(plain, cipher, cancellation.Token);
 
         await act.Should().ThrowAsync<OperationCanceledException>();
     }
@@ -80,7 +80,7 @@ public sealed class AesGcmEncryptionServiceTests
     [InlineData(1024 * 1024 + 100)]
     public async Task ComputeCiphertextLength_matches_actual_encrypt_output(int plaintextLength)
     {
-        var sut = CreateService();
+        AesGcmEncryptionService sut = CreateService();
         var data = new byte[plaintextLength];
         if (plaintextLength > 0)
         {
@@ -97,7 +97,7 @@ public sealed class AesGcmEncryptionServiceTests
     [Fact]
     public async Task ComputeCiphertextLength_matches_output_when_stream_returns_short_reads()
     {
-        var sut = CreateService();
+        AesGcmEncryptionService sut = CreateService();
         var data = new byte[2 * 1024 * 1024 + 100];
         RandomNumberGenerator.Fill(data);
 
@@ -116,15 +116,15 @@ public sealed class AesGcmEncryptionServiceTests
     [Fact]
     public void ComputeCiphertextLength_rejects_negative()
     {
-        var sut = CreateService();
-        var act = () => sut.ComputeCiphertextLength(-1);
+        AesGcmEncryptionService sut = CreateService();
+        Func<long> act = () => sut.ComputeCiphertextLength(-1);
         act.Should().Throw<ArgumentOutOfRangeException>();
     }
 
     [Fact]
     public void Constructor_throws_when_keys_missing()
     {
-        var act = () => new AesGcmEncryptionService(Microsoft.Extensions.Options.Options.Create(new EncryptionOptions
+        Func<AesGcmEncryptionService> act = () => new AesGcmEncryptionService(Microsoft.Extensions.Options.Options.Create(new EncryptionOptions
         {
             CurrentKeyId = "k1",
             Keys = new Dictionary<string, string>()
@@ -137,7 +137,7 @@ public sealed class AesGcmEncryptionServiceTests
     public void Constructor_throws_when_current_key_id_missing()
     {
         var key = Convert.ToBase64String(RandomNumberGenerator.GetBytes(32));
-        var act = () => new AesGcmEncryptionService(Microsoft.Extensions.Options.Options.Create(new EncryptionOptions
+        Func<AesGcmEncryptionService> act = () => new AesGcmEncryptionService(Microsoft.Extensions.Options.Options.Create(new EncryptionOptions
         {
             CurrentKeyId = "",
             Keys = new Dictionary<string, string> { ["k1"] = key }
@@ -150,7 +150,7 @@ public sealed class AesGcmEncryptionServiceTests
     public void Constructor_throws_when_current_key_id_not_in_keys()
     {
         var key = Convert.ToBase64String(RandomNumberGenerator.GetBytes(32));
-        var act = () => new AesGcmEncryptionService(Microsoft.Extensions.Options.Options.Create(new EncryptionOptions
+        Func<AesGcmEncryptionService> act = () => new AesGcmEncryptionService(Microsoft.Extensions.Options.Options.Create(new EncryptionOptions
         {
             CurrentKeyId = "k2",
             Keys = new Dictionary<string, string> { ["k1"] = key }
@@ -165,7 +165,7 @@ public sealed class AesGcmEncryptionServiceTests
     [InlineData(5)]  // Bad size
     public void Constructor_rejects_non_32_byte_keys(int keyBytesLength)
     {
-        var act = () => new AesGcmEncryptionService(Microsoft.Extensions.Options.Options.Create(new EncryptionOptions
+        Func<AesGcmEncryptionService> act = () => new AesGcmEncryptionService(Microsoft.Extensions.Options.Options.Create(new EncryptionOptions
         {
             CurrentKeyId = "k1",
             Keys = new Dictionary<string, string>
@@ -182,7 +182,7 @@ public sealed class AesGcmEncryptionServiceTests
     {
         var key = Convert.ToBase64String(RandomNumberGenerator.GetBytes(32));
         var longKeyId = new string('k', 65);
-        var act = () => new AesGcmEncryptionService(Microsoft.Extensions.Options.Options.Create(new EncryptionOptions
+        Func<AesGcmEncryptionService> act = () => new AesGcmEncryptionService(Microsoft.Extensions.Options.Options.Create(new EncryptionOptions
         {
             CurrentKeyId = longKeyId,
             Keys = new Dictionary<string, string>
@@ -229,7 +229,7 @@ public sealed class AesGcmEncryptionServiceTests
         }));
 
         using var decrypted = new MemoryStream();
-        var act = () => sut.Decrypt(headerlessCipher, decrypted);
+        Func<Task> act = () => sut.Decrypt(headerlessCipher, decrypted);
 
         await act.Should().ThrowAsync<CryptographicException>()
             .WithMessage("*missing ABE1 header*");
@@ -254,7 +254,7 @@ public sealed class AesGcmEncryptionServiceTests
         }));
 
         const int concurrency = 10;
-        var tasks = Enumerable.Range(0, concurrency).Select(async i =>
+        Task[] tasks = Enumerable.Range(0, concurrency).Select(async i =>
         {
             // Plaintext spanning multiple chunks (e.g. 2.5 MB)
             var size = (2 * 1024 * 1024) + (i * 100 * 1024) + 1234;
@@ -358,7 +358,7 @@ public sealed class AesGcmEncryptionServiceTests
         }));
 
         using var decrypted = new MemoryStream();
-        var act = () => consumerSut.Decrypt(cipher, decrypted);
+        Func<Task> act = () => consumerSut.Decrypt(cipher, decrypted);
 
         await act.Should().ThrowAsync<CryptographicException>()
             .WithMessage("*Unknown encryption key ID*");
@@ -367,14 +367,14 @@ public sealed class AesGcmEncryptionServiceTests
     [Fact]
     public async Task Decrypt_WhenTruncatedStream_ThrowsCryptographicException()
     {
-        var sut = CreateService();
+        AesGcmEncryptionService sut = CreateService();
         using var cipher = new MemoryStream();
         await sut.Encrypt(new MemoryStream("test data"u8.ToArray()), cipher);
 
         // Truncate stream before EOS marker
         var truncated = new MemoryStream(cipher.ToArray()[..^4]);
         using var decrypted = new MemoryStream();
-        var act = () => sut.Decrypt(truncated, decrypted);
+        Func<Task> act = () => sut.Decrypt(truncated, decrypted);
 
         await act.Should().ThrowAsync<CryptographicException>();
     }
@@ -382,10 +382,10 @@ public sealed class AesGcmEncryptionServiceTests
     [Fact]
     public async Task Dispose_DisposesServiceAndThrowsOnSubsequentUse()
     {
-        var sut = CreateService();
+        AesGcmEncryptionService sut = CreateService();
         sut.Dispose();
 
-        var act = () => sut.Encrypt(new MemoryStream([1, 2, 3]), new MemoryStream());
+        Func<Task> act = () => sut.Encrypt(new MemoryStream([1, 2, 3]), new MemoryStream());
         await act.Should().ThrowAsync<ObjectDisposedException>();
     }
 
@@ -393,7 +393,7 @@ public sealed class AesGcmEncryptionServiceTests
     {
         public override ValueTask<int> ReadAsync(Memory<byte> buffer, CancellationToken cancellationToken = default)
         {
-            var boundedBuffer = buffer[..Math.Min(buffer.Length, maxReadBytes)];
+            Memory<byte> boundedBuffer = buffer[..Math.Min(buffer.Length, maxReadBytes)];
             return base.ReadAsync(boundedBuffer, cancellationToken);
         }
     }

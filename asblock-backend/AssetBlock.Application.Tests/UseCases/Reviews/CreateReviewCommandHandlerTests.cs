@@ -28,7 +28,7 @@ public class CreateReviewCommandHandlerTests
         _reviewStoreMock = Substitute.For<IReviewStore>();
         _purchaseStoreMock = Substitute.For<IPurchaseStore>();
         _assetStoreMock = Substitute.For<IAssetStore>();
-        var unitOfWorkMock = Substitute.For<IUnitOfWork>();
+        IUnitOfWork unitOfWorkMock = Substitute.For<IUnitOfWork>();
         _outboxStoreMock = Substitute.For<IOutboxStore>();
         _auditWriterMock = Substitute.For<IAuditWriter>();
         _cacheMock = Substitute.For<ICacheService>();
@@ -53,7 +53,7 @@ public class CreateReviewCommandHandlerTests
         var command = new CreateReviewCommand(Guid.NewGuid(), Guid.NewGuid(), 5, "Great");
         _assetStoreMock.GetById(command.AssetId, Arg.Any<CancellationToken>()).Returns((Asset?)null);
 
-        var result = await _handler.Handle(command, CancellationToken.None);
+        Result result = await _handler.Handle(command, CancellationToken.None);
 
         result.IsSuccess.Should().BeFalse();
         result.Status.Should().Be(ResultStatus.NotFound);
@@ -69,7 +69,7 @@ public class CreateReviewCommandHandlerTests
         var asset = new Asset { Id = command.AssetId, AuthorId = userId, CategoryId = Guid.NewGuid(), Title = "A" };
         _assetStoreMock.GetById(command.AssetId, Arg.Any<CancellationToken>()).Returns(asset);
 
-        var result = await _handler.Handle(command, CancellationToken.None);
+        Result result = await _handler.Handle(command, CancellationToken.None);
 
         result.IsSuccess.Should().BeFalse();
         result.Status.Should().Be(ResultStatus.Forbidden);
@@ -84,7 +84,7 @@ public class CreateReviewCommandHandlerTests
         _assetStoreMock.GetById(command.AssetId, Arg.Any<CancellationToken>()).Returns(asset);
         _purchaseStoreMock.GetPurchase(command.UserId, command.AssetId, Arg.Any<CancellationToken>()).Returns((Purchase?)null);
 
-        var result = await _handler.Handle(command, CancellationToken.None);
+        Result result = await _handler.Handle(command, CancellationToken.None);
 
         result.IsSuccess.Should().BeFalse();
         result.ValidationErrors.Should().Contain(e => e.Identifier == ErrorCodes.ERR_ASSET_NOT_PURCHASED);
@@ -100,7 +100,7 @@ public class CreateReviewCommandHandlerTests
         var purchase = new Purchase { Id = Guid.NewGuid(), UserId = command.UserId, AssetId = command.AssetId, AssetVersionId = Guid.NewGuid(), OrderLineId = Guid.NewGuid(), PurchasedAt = DateTimeOffset.UtcNow.AddDays(-15) };
         _purchaseStoreMock.GetPurchase(command.UserId, command.AssetId, Arg.Any<CancellationToken>()).Returns(purchase);
 
-        var result = await _handler.Handle(command, CancellationToken.None);
+        Result result = await _handler.Handle(command, CancellationToken.None);
 
         result.IsSuccess.Should().BeFalse();
         result.ValidationErrors.Should().Contain(e => e.Identifier == ErrorCodes.ERR_REVIEW_TIME_WINDOW_EXPIRED);
@@ -116,7 +116,7 @@ public class CreateReviewCommandHandlerTests
         _purchaseStoreMock.GetPurchase(command.UserId, command.AssetId, Arg.Any<CancellationToken>()).Returns(purchase);
         _reviewStoreMock.Exists(command.UserId, command.AssetId, Arg.Any<CancellationToken>()).Returns(true);
 
-        var result = await _handler.Handle(command, CancellationToken.None);
+        Result result = await _handler.Handle(command, CancellationToken.None);
 
         result.IsSuccess.Should().BeFalse();
         result.Status.Should().Be(ResultStatus.Conflict);
@@ -145,7 +145,7 @@ public class CreateReviewCommandHandlerTests
                 Arg.Any<CancellationToken>())
             .Returns(review);
 
-        var result = await _handler.Handle(command, CancellationToken.None);
+        Result result = await _handler.Handle(command, CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
         await _reviewStoreMock.Received(1).Create(Arg.Is<Review>(r => r.AssetId == command.AssetId && r.UserId == command.UserId && r.Rating == command.Rating), Arg.Any<CancellationToken>());
@@ -179,7 +179,7 @@ public class CreateReviewCommandHandlerTests
         _reviewStoreMock.Exists(command.UserId, command.AssetId, Arg.Any<CancellationToken>()).Returns(false);
         _reviewStoreMock.Create(Arg.Any<Review>(), Arg.Any<CancellationToken>()).ThrowsAsync(new Exception("DB Error"));
 
-        var result = await _handler.Handle(command, CancellationToken.None);
+        Result result = await _handler.Handle(command, CancellationToken.None);
 
         result.IsSuccess.Should().BeFalse();
         result.ValidationErrors.Should().Contain(e => e.Identifier == ErrorCodes.ERR_REVIEW_CREATE_FAILED);
@@ -189,9 +189,9 @@ public class CreateReviewCommandHandlerTests
     public void Review_CreateForPurchase_WhenReviewingOwnAsset_ReturnsCannotReviewOwnAsset()
     {
         var authorId = Guid.NewGuid();
-        var now = DateTimeOffset.UtcNow;
+        DateTimeOffset now = DateTimeOffset.UtcNow;
 
-        var result = Review.CreateForPurchase(Guid.NewGuid(), authorId, authorId, now.AddDays(-1), 5, "Comment", now);
+        ReviewCreationResult result = Review.CreateForPurchase(Guid.NewGuid(), authorId, authorId, now.AddDays(-1), 5, "Comment", now);
 
         result.IsSuccess.Should().BeFalse();
         result.IsOwnAsset.Should().BeTrue();
@@ -204,10 +204,10 @@ public class CreateReviewCommandHandlerTests
     {
         var authorId = Guid.NewGuid();
         var buyerId = Guid.NewGuid();
-        var now = DateTimeOffset.UtcNow;
-        var purchasedAt = now.AddDays(-15);
+        DateTimeOffset now = DateTimeOffset.UtcNow;
+        DateTimeOffset purchasedAt = now.AddDays(-15);
 
-        var result = Review.CreateForPurchase(Guid.NewGuid(), authorId, buyerId, purchasedAt, 5, "Comment", now);
+        ReviewCreationResult result = Review.CreateForPurchase(Guid.NewGuid(), authorId, buyerId, purchasedAt, 5, "Comment", now);
 
         result.IsSuccess.Should().BeFalse();
         result.IsOwnAsset.Should().BeFalse();
@@ -221,10 +221,10 @@ public class CreateReviewCommandHandlerTests
         var assetId = Guid.NewGuid();
         var authorId = Guid.NewGuid();
         var buyerId = Guid.NewGuid();
-        var now = DateTimeOffset.UtcNow;
-        var purchasedAt = now.AddDays(-1);
+        DateTimeOffset now = DateTimeOffset.UtcNow;
+        DateTimeOffset purchasedAt = now.AddDays(-1);
 
-        var result = Review.CreateForPurchase(assetId, authorId, buyerId, purchasedAt, 4, "Nice!", now);
+        ReviewCreationResult result = Review.CreateForPurchase(assetId, authorId, buyerId, purchasedAt, 4, "Nice!", now);
 
         result.IsSuccess.Should().BeTrue();
         result.IsOwnAsset.Should().BeFalse();

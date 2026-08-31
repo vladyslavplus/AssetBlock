@@ -1,5 +1,5 @@
-using AssetBlock.Domain.Core.Enums;
 using System.Diagnostics.CodeAnalysis;
+using AssetBlock.Domain.Core.Enums;
 
 namespace AssetBlock.Domain.Abstractions.Services;
 

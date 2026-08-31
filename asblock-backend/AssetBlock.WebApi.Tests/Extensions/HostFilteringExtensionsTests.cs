@@ -17,10 +17,10 @@ public sealed class HostFilteringExtensionsTests
     public void AddAssetBlockHostFiltering_WhenDevelopment_ShouldAllowAnyAllowedHosts(string? allowedHosts)
     {
         var services = new ServiceCollection();
-        var config = BuildConfiguration(allowedHosts);
-        var env = CreateEnvironment(Environments.Development);
+        IConfiguration config = BuildConfiguration(allowedHosts);
+        IHostEnvironment env = CreateEnvironment(Environments.Development);
 
-        var act = () => services.AddAssetBlockHostFiltering(config, env);
+        Func<IServiceCollection> act = () => services.AddAssetBlockHostFiltering(config, env);
 
         act.Should().NotThrow();
     }
@@ -31,10 +31,10 @@ public sealed class HostFilteringExtensionsTests
     public void AddAssetBlockHostFiltering_WhenIntegrationTesting_ShouldAllowMissingOrWildcard(string? allowedHosts)
     {
         var services = new ServiceCollection();
-        var config = BuildConfiguration(allowedHosts);
-        var env = CreateEnvironment("IntegrationTesting");
+        IConfiguration config = BuildConfiguration(allowedHosts);
+        IHostEnvironment env = CreateEnvironment("IntegrationTesting");
 
-        var act = () => services.AddAssetBlockHostFiltering(config, env);
+        Func<IServiceCollection> act = () => services.AddAssetBlockHostFiltering(config, env);
 
         act.Should().NotThrow();
     }
@@ -46,10 +46,10 @@ public sealed class HostFilteringExtensionsTests
     public void AddAssetBlockHostFiltering_WhenProductionAndMissingOrEmpty_ShouldThrow(string? allowedHosts)
     {
         var services = new ServiceCollection();
-        var config = BuildConfiguration(allowedHosts);
-        var env = CreateEnvironment(Environments.Production);
+        IConfiguration config = BuildConfiguration(allowedHosts);
+        IHostEnvironment env = CreateEnvironment(Environments.Production);
 
-        var act = () => services.AddAssetBlockHostFiltering(config, env);
+        Func<IServiceCollection> act = () => services.AddAssetBlockHostFiltering(config, env);
 
         act.Should().Throw<InvalidOperationException>()
             .WithMessage("*'AllowedHosts' must be explicitly configured*");
@@ -66,10 +66,10 @@ public sealed class HostFilteringExtensionsTests
     public void AddAssetBlockHostFiltering_WhenProductionAndContainsWildcard_ShouldThrow(string allowedHosts)
     {
         var services = new ServiceCollection();
-        var config = BuildConfiguration(allowedHosts);
-        var env = CreateEnvironment(Environments.Production);
+        IConfiguration config = BuildConfiguration(allowedHosts);
+        IHostEnvironment env = CreateEnvironment(Environments.Production);
 
-        var act = () => services.AddAssetBlockHostFiltering(config, env);
+        Func<IServiceCollection> act = () => services.AddAssetBlockHostFiltering(config, env);
 
         act.Should().Throw<InvalidOperationException>()
             .WithMessage("*'AllowedHosts' must not contain wildcard ('*')*");
@@ -82,10 +82,10 @@ public sealed class HostFilteringExtensionsTests
     public void AddAssetBlockHostFiltering_WhenProductionAndExplicitHosts_ShouldSucceed(string allowedHosts)
     {
         var services = new ServiceCollection();
-        var config = BuildConfiguration(allowedHosts);
-        var env = CreateEnvironment(Environments.Production);
+        IConfiguration config = BuildConfiguration(allowedHosts);
+        IHostEnvironment env = CreateEnvironment(Environments.Production);
 
-        var act = () => services.AddAssetBlockHostFiltering(config, env);
+        Func<IServiceCollection> act = () => services.AddAssetBlockHostFiltering(config, env);
 
         act.Should().NotThrow();
     }
@@ -105,7 +105,7 @@ public sealed class HostFilteringExtensionsTests
 
     private static IHostEnvironment CreateEnvironment(string environmentName)
     {
-        var env = Substitute.For<IHostEnvironment>();
+        IHostEnvironment env = Substitute.For<IHostEnvironment>();
         env.EnvironmentName.Returns(environmentName);
         return env;
     }

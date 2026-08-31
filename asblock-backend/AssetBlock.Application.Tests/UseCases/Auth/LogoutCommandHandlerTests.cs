@@ -1,3 +1,4 @@
+using Ardalis.Result;
 using AssetBlock.Application.UseCases.Auth.Logout;
 using AssetBlock.Domain.Abstractions.Services;
 using AssetBlock.Domain.Core.Constants;
@@ -29,7 +30,7 @@ public class LogoutCommandHandlerTests
         _jwtTokenServiceMock.ValidateRefreshToken(command.RefreshToken, Arg.Any<CancellationToken>())
             .Returns(new RefreshTokenValidationResult(RefreshTokenValidationStatus.VALID, userId, "testuser", "test@example.com", AppRoles.USER, tokenId));
 
-        var result = await _handler.Handle(command, CancellationToken.None);
+        Result result = await _handler.Handle(command, CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
         await _jwtTokenServiceMock.Received(1).RevokeRefreshToken(tokenId, Arg.Any<CancellationToken>());
@@ -43,7 +44,7 @@ public class LogoutCommandHandlerTests
         _jwtTokenServiceMock.ValidateRefreshToken(command.RefreshToken, Arg.Any<CancellationToken>())
             .Returns(new RefreshTokenValidationResult(RefreshTokenValidationStatus.NOT_FOUND_OR_EXPIRED));
 
-        var result = await _handler.Handle(command, CancellationToken.None);
+        Result result = await _handler.Handle(command, CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
         await _jwtTokenServiceMock.DidNotReceive().RevokeRefreshToken(Arg.Any<Guid>(), Arg.Any<CancellationToken>());
@@ -57,7 +58,7 @@ public class LogoutCommandHandlerTests
         _jwtTokenServiceMock.ValidateRefreshToken(command.RefreshToken, Arg.Any<CancellationToken>())
             .Returns(new RefreshTokenValidationResult(RefreshTokenValidationStatus.NOT_FOUND_OR_EXPIRED));
 
-        var result = await _handler.Handle(command, CancellationToken.None);
+        Result result = await _handler.Handle(command, CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
         await _jwtTokenServiceMock.DidNotReceive().RevokeRefreshToken(Arg.Any<Guid>(), Arg.Any<CancellationToken>());

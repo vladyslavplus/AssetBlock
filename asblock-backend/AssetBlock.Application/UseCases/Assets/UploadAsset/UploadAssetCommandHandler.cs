@@ -1,4 +1,6 @@
+using Ardalis.Result;
 using AssetBlock.Application.Common;
+using AssetBlock.Application.Messaging;
 using AssetBlock.Domain.Abstractions.Services;
 using AssetBlock.Domain.Core.Constants;
 using AssetBlock.Domain.Core.Dto;
@@ -7,8 +9,6 @@ using AssetBlock.Domain.Core.Entities;
 using AssetBlock.Domain.Core.Enums;
 using AssetBlock.Domain.Core.Licenses;
 using AssetBlock.Domain.Core.Primitives.AppSettingsOptions;
-using Ardalis.Result;
-using AssetBlock.Application.Messaging;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
@@ -30,13 +30,13 @@ internal sealed class UploadAssetCommandHandler(
 {
     public async Task<Result<Guid>> Handle(UploadAssetCommand request, CancellationToken cancellationToken)
     {
-        var uploadOpts = fileUploadOptions.Value;
+        FileUploadOptions uploadOpts = fileUploadOptions.Value;
         var displayFileName = uploadOpts.NormalizeDisplayFileName(request.FileName);
         _ = uploadOpts.TryMatchAllowedExtension(displayFileName, out var matchedExtension);
-        _ = AssetLicenseCatalog.TryParseCode(request.Request.LicenseCode, out var licenseCode);
-        var licenseTemplate = AssetLicenseCatalog.Get(licenseCode);
+        _ = AssetLicenseCatalog.TryParseCode(request.Request.LicenseCode, out AssetLicenseCode licenseCode);
+        AssetLicenseTemplate licenseTemplate = AssetLicenseCatalog.Get(licenseCode);
 
-        var category = await categoryStore.GetById(request.Request.CategoryId, cancellationToken);
+        Category? category = await categoryStore.GetById(request.Request.CategoryId, cancellationToken);
         if (category is null)
         {
             logger.LogDebug("Upload failed: category not found {CategoryId}", request.Request.CategoryId);
@@ -79,7 +79,7 @@ internal sealed class UploadAssetCommandHandler(
             return ResultError.Error<Guid>(ErrorCodes.ERR_ASSET_UPLOAD_FAILED);
         }
 
-        var now = DateTimeOffset.UtcNow;
+        DateTimeOffset now = DateTimeOffset.UtcNow;
         var asset = new Asset
         {
             Id = assetId,

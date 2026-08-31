@@ -26,7 +26,7 @@ public class MarkNotificationReadCommandHandlerTests
         var id = Guid.NewGuid();
         _storeMock.MarkRead(userId, id, Arg.Any<CancellationToken>()).Returns(false);
 
-        var result = await _handler.Handle(new MarkNotificationReadCommand(userId, id), CancellationToken.None);
+        Result result = await _handler.Handle(new MarkNotificationReadCommand(userId, id), CancellationToken.None);
 
         result.IsSuccess.Should().BeFalse();
         result.Status.Should().Be(ResultStatus.NotFound);
@@ -40,7 +40,7 @@ public class MarkNotificationReadCommandHandlerTests
         var id = Guid.NewGuid();
         _storeMock.MarkRead(userId, id, Arg.Any<CancellationToken>()).Returns(true);
 
-        var result = await _handler.Handle(new MarkNotificationReadCommand(userId, id), CancellationToken.None);
+        Result result = await _handler.Handle(new MarkNotificationReadCommand(userId, id), CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
     }

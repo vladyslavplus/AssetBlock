@@ -13,7 +13,7 @@ internal sealed class MemoryCacheService : ICacheService
 
     public Task<string?> GetString(string key, CancellationToken cancellationToken = default)
     {
-        if (_store.TryGetValue(key, out var entry) && (entry.ExpiresAt is null || entry.ExpiresAt > DateTime.UtcNow))
+        if (_store.TryGetValue(key, out (string Value, DateTime? ExpiresAt) entry) && (entry.ExpiresAt is null || entry.ExpiresAt > DateTime.UtcNow))
         {
             return Task.FromResult<string?>(entry.Value);
         }
@@ -24,7 +24,7 @@ internal sealed class MemoryCacheService : ICacheService
 
     public Task SetString(string key, string value, TimeSpan? expiration = null, CancellationToken cancellationToken = default)
     {
-        var expiresAt = expiration is null ? (DateTime?)null : DateTime.UtcNow.Add(expiration.Value);
+        DateTime? expiresAt = expiration is null ? (DateTime?)null : DateTime.UtcNow.Add(expiration.Value);
         _store[key] = (value, expiresAt);
         return Task.CompletedTask;
     }
@@ -47,8 +47,8 @@ internal sealed class MemoryCacheService : ICacheService
 
     public Task<long> Increment(string key, TimeSpan expiry, CancellationToken cancellationToken = default)
     {
-        var now = DateTime.UtcNow;
-        var result = _counters.AddOrUpdate(
+        DateTime now = DateTime.UtcNow;
+        (long Count, DateTime ExpiresAt) result = _counters.AddOrUpdate(
             key,
             _ => (1L, now.Add(expiry)),
             (_, old) => old.ExpiresAt <= now ? (1L, now.Add(expiry)) : (old.Count + 1, old.ExpiresAt));

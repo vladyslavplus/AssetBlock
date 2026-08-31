@@ -1,9 +1,10 @@
+using System.Diagnostics;
 using AssetBlock.Domain.Abstractions.Services;
+using AssetBlock.Domain.Core.Primitives.Storage;
+using AssetBlock.Infrastructure.Observability;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
-using System.Diagnostics;
-using AssetBlock.Infrastructure.Observability;
 
 namespace AssetBlock.Infrastructure.HostedServices;
 
@@ -67,20 +68,20 @@ internal sealed class StorageOrphanCleanupWorker(
 
     internal async Task RunCleanup(CancellationToken cancellationToken)
     {
-        await using var scope = scopeFactory.CreateAsyncScope();
-        var storage = scope.ServiceProvider.GetRequiredService<IAssetStorageService>();
-        var assetStore = scope.ServiceProvider.GetRequiredService<IAssetStore>();
+        await using AsyncServiceScope scope = scopeFactory.CreateAsyncScope();
+        IAssetStorageService storage = scope.ServiceProvider.GetRequiredService<IAssetStorageService>();
+        IAssetStore assetStore = scope.ServiceProvider.GetRequiredService<IAssetStore>();
 
         var stopwatch = Stopwatch.StartNew();
         var deletedCount = 0;
         var failedCount = 0;
-        var outcome = DiagnosticsOutcome.SUCCESS;
+        DiagnosticsOutcome outcome = DiagnosticsOutcome.SUCCESS;
 
         try
         {
-            var cutoff = DateTimeOffset.UtcNow - _orphanAge;
+            DateTimeOffset cutoff = DateTimeOffset.UtcNow - _orphanAge;
 
-            await foreach (var obj in storage.ListObjects(ASSETS_PREFIX, cancellationToken))
+            await foreach (StorageObjectInfo obj in storage.ListObjects(ASSETS_PREFIX, cancellationToken))
             {
                 if (obj.LastModified is null || obj.LastModified > cutoff)
                 {

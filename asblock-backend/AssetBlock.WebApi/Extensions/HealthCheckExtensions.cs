@@ -14,7 +14,7 @@ public static class HealthCheckExtensions
         this IServiceCollection services,
         IConfiguration configuration)
     {
-        var builder = services.AddHealthChecks()
+        IHealthChecksBuilder builder = services.AddHealthChecks()
             .AddCheck("self", () => HealthCheckResult.Healthy(), tags: [LIVE_TAG])
             .AddCheck<PostgreSqlHealthCheck>(
                 "postgresql",

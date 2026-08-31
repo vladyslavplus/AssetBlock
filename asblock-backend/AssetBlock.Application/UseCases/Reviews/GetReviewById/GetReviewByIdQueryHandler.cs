@@ -1,9 +1,10 @@
 using System.Text.Json;
 using Ardalis.Result;
+using AssetBlock.Application.Messaging;
 using AssetBlock.Domain.Abstractions.Services;
 using AssetBlock.Domain.Core.Constants;
 using AssetBlock.Domain.Core.Dto.Reviews;
-using AssetBlock.Application.Messaging;
+using AssetBlock.Domain.Core.Entities;
 using Microsoft.Extensions.Logging;
 
 namespace AssetBlock.Application.UseCases.Reviews.GetReviewById;
@@ -25,7 +26,7 @@ internal sealed class GetReviewByIdQueryHandler(
         {
             try
             {
-                var cachedResult = JsonSerializer.Deserialize<ReviewDetailItem>(cached, _jsonOptions);
+                ReviewDetailItem? cachedResult = JsonSerializer.Deserialize<ReviewDetailItem>(cached, _jsonOptions);
                 if (cachedResult is not null)
                 {
                     logger.LogDebug("Review profile cache hit for key {Key}", key);
@@ -43,7 +44,7 @@ internal sealed class GetReviewByIdQueryHandler(
             logger.LogDebug("Review item cache miss for key {Key}", key);
         }
 
-        var review = await reviewStore.GetById(request.Id, cancellationToken);
+        Review? review = await reviewStore.GetById(request.Id, cancellationToken);
         if (review is null)
         {
             return Result.NotFound(ErrorCodes.ERR_REVIEW_NOT_FOUND);

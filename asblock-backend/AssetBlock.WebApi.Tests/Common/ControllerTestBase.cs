@@ -1,6 +1,6 @@
 using System.Security.Claims;
-using AwesomeAssertions;
 using AssetBlock.Application.Messaging;
+using AwesomeAssertions;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using NSubstitute;

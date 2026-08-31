@@ -1,12 +1,12 @@
+using System.IO.Compression;
+using System.Security.Cryptography;
+using System.Text;
 using AssetBlock.Domain.Abstractions.Services;
 using AssetBlock.Domain.Core.Constants;
 using AssetBlock.Domain.Core.Entities;
 using AssetBlock.Domain.Core.Enums;
 using AssetBlock.Domain.Core.Licenses;
 using AssetBlock.Domain.Core.Primitives.AppSettingsOptions;
-using System.IO.Compression;
-using System.Security.Cryptography;
-using System.Text;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -101,14 +101,14 @@ internal sealed class DatabaseMigrationService(
 
     public async Task StartAsync(CancellationToken cancellationToken)
     {
-        var dbOptions = options.Value;
+        DatabaseOptions dbOptions = options.Value;
         if (dbOptions is { AutoMigrate: false, EnsureCreated: false })
         {
             return;
         }
 
-        using var scope = scopeFactory.CreateScope();
-        var context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+        using IServiceScope scope = scopeFactory.CreateScope();
+        ApplicationDbContext context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
 
         try
         {
@@ -122,7 +122,7 @@ internal sealed class DatabaseMigrationService(
             }
             else if (dbOptions.AutoMigrate)
             {
-                var pending = await context.Database.GetPendingMigrationsAsync(cancellationToken);
+                IEnumerable<string> pending = await context.Database.GetPendingMigrationsAsync(cancellationToken);
                 if (pending.Any())
                 {
                     await context.Database.MigrateAsync(cancellationToken);
@@ -135,7 +135,7 @@ internal sealed class DatabaseMigrationService(
 
             if (environment.IsDevelopment())
             {
-                var passwordHasher = scope.ServiceProvider.GetRequiredService<IPasswordHasher>();
+                IPasswordHasher passwordHasher = scope.ServiceProvider.GetRequiredService<IPasswordHasher>();
                 await SeedDevAdminIfNeeded(context, passwordHasher, cancellationToken);
 
                 if (dbOptions.SeedDemoAssets)
@@ -163,8 +163,8 @@ internal sealed class DatabaseMigrationService(
             return;
         }
 
-        var now = DateTimeOffset.UtcNow;
-        foreach (var (name, slug, description) in _defaultCategories)
+        DateTimeOffset now = DateTimeOffset.UtcNow;
+        foreach ((var name, var slug, var description) in _defaultCategories)
         {
             context.Categories.Add(new Category
             {
@@ -216,7 +216,7 @@ internal sealed class DatabaseMigrationService(
 
     private async Task SeedDevAdminIfNeeded(ApplicationDbContext context, IPasswordHasher passwordHasher, CancellationToken cancellationToken)
     {
-        var existingAdmin = await context.Users
+        User? existingAdmin = await context.Users
             .FirstOrDefaultAsync(u => u.Role == AppRoles.ADMIN, cancellationToken);
         if (existingAdmin is not null)
         {
@@ -229,7 +229,7 @@ internal sealed class DatabaseMigrationService(
             return;
         }
 
-        var now = DateTimeOffset.UtcNow;
+        DateTimeOffset now = DateTimeOffset.UtcNow;
         var admin = new User
         {
             Id = Guid.NewGuid(),
@@ -269,22 +269,22 @@ internal sealed class DatabaseMigrationService(
             return;
         }
 
-        var categories = await context.Categories.AsNoTracking().OrderBy(c => c.Name).ToListAsync(cancellationToken);
+        List<Category> categories = await context.Categories.AsNoTracking().OrderBy(c => c.Name).ToListAsync(cancellationToken);
         if (categories.Count == 0)
         {
             logger.LogWarning("Demo catalog seed skipped: no categories in database.");
             return;
         }
 
-        var tagRows = await context.Tags.AsNoTracking().OrderBy(t => t.Name).ToListAsync(cancellationToken);
+        List<Tag> tagRows = await context.Tags.AsNoTracking().OrderBy(t => t.Name).ToListAsync(cancellationToken);
         if (tagRows.Count == 0)
         {
             logger.LogWarning("Demo catalog seed skipped: no tags in database.");
             return;
         }
 
-        var now = DateTimeOffset.UtcNow;
-        var author = await context.Users.FirstOrDefaultAsync(
+        DateTimeOffset now = DateTimeOffset.UtcNow;
+        User? author = await context.Users.FirstOrDefaultAsync(
             u => u.Username == DEMO_VENDOR_USERNAME,
             cancellationToken);
         if (author is null)
@@ -323,18 +323,18 @@ internal sealed class DatabaseMigrationService(
 
         var inserted = new List<(Guid AssetId, Guid VersionId, string Title, decimal Price)>(DEMO_ASSET_COUNT);
         var uploadedStorageKeys = new List<string>(DEMO_ASSET_COUNT);
-        var personalLicense = AssetLicenseCatalog.Get(AssetLicenseCode.PERSONAL);
+        AssetLicenseTemplate personalLicense = AssetLicenseCatalog.Get(AssetLicenseCode.PERSONAL);
         try
         {
             for (var i = 0; i < DEMO_ASSET_COUNT; i++)
             {
-                var category = categories[i % categories.Count];
-                var (title, description, price) = _demoAssetBlueprints[i];
+                Category category = categories[i % categories.Count];
+                (var title, var description, var price) = _demoAssetBlueprints[i];
                 var assetId = Guid.NewGuid();
                 var versionId = Guid.NewGuid();
                 var storageKey = $"dev/seed/{assetId:N}/{versionId:N}.zip";
                 var fileName = $"test-asset-{i + 1}.zip";
-                var createdAt = now.AddMinutes(-i);
+                DateTimeOffset createdAt = now.AddMinutes(-i);
                 var archive = CreateDemoArchive(title);
                 var contentSha256 = await EncryptAndUploadDemoArchive(
                     archive,
@@ -376,8 +376,8 @@ internal sealed class DatabaseMigrationService(
                 inserted.Add((assetId, versionId, title, price));
 
                 // Two tags per asset, rotate through seeded tags.
-                var t0 = tagRows[(i * 2) % tagRows.Count];
-                var t1 = tagRows[(i * 2 + 1) % tagRows.Count];
+                Tag t0 = tagRows[(i * 2) % tagRows.Count];
+                Tag t1 = tagRows[(i * 2 + 1) % tagRows.Count];
                 context.AssetTags.Add(new AssetTag { AssetId = assetId, TagId = t0.Id });
                 context.AssetTags.Add(new AssetTag { AssetId = assetId, TagId = t1.Id });
             }
@@ -407,9 +407,9 @@ internal sealed class DatabaseMigrationService(
 
         logger.LogInformation("Seeded {Count} demo assets with v1 versions (titles prefixed with [TEST]).", DEMO_ASSET_COUNT);
 
-        var reviewers = await EnsureDemoReviewers(context, passwordHasher, now, cancellationToken);
+        List<User> reviewers = await EnsureDemoReviewers(context, passwordHasher, now, cancellationToken);
         // Include dev admin so seeded catalog gets purchases/reviews from that account too (not only demo-buyer-*).
-        var adminForReviews = await context.Users.FirstOrDefaultAsync(
+        User? adminForReviews = await context.Users.FirstOrDefaultAsync(
             u => u.Username == DEV_ADMIN_USERNAME,
             cancellationToken);
         if (adminForReviews is not null)
@@ -500,7 +500,7 @@ internal sealed class DatabaseMigrationService(
 
             for (var i = 0; i < bundleAssets.Count; i++)
             {
-                var asset = bundleAssets[i];
+                (Guid AssetId, Guid VersionId, string Title, decimal Price) asset = bundleAssets[i];
                 context.BundleRevisionItems.Add(new BundleRevisionItem
                 {
                     Id = Guid.NewGuid(),
@@ -525,9 +525,9 @@ internal sealed class DatabaseMigrationService(
         CancellationToken cancellationToken)
     {
         var reviewers = new List<User>(capacity: _demoReviewerAccounts.Count);
-        foreach (var (username, email) in _demoReviewerAccounts)
+        foreach ((var username, var email) in _demoReviewerAccounts)
         {
-            var user = await context.Users.FirstOrDefaultAsync(u => u.Username == username, cancellationToken);
+            User? user = await context.Users.FirstOrDefaultAsync(u => u.Username == username, cancellationToken);
             if (user is not null)
             {
                 if (user.EmailVerifiedAt is null)
@@ -577,7 +577,7 @@ internal sealed class DatabaseMigrationService(
         using var output = new MemoryStream();
         using (var archive = new ZipArchive(output, ZipArchiveMode.Create, leaveOpen: true))
         {
-            var entry = archive.CreateEntry("README.txt", CompressionLevel.SmallestSize);
+            ZipArchiveEntry entry = archive.CreateEntry("README.txt", CompressionLevel.SmallestSize);
             using var writer = new StreamWriter(entry.Open(), Encoding.UTF8, leaveOpen: false);
             writer.WriteLine("AssetBlock development seed archive.");
             writer.WriteLine(title);
@@ -619,8 +619,8 @@ internal sealed class DatabaseMigrationService(
             return;
         }
 
-        var personalLicense = AssetLicenseCatalog.Get(AssetLicenseCode.PERSONAL);
-        var sellerByAsset = await context.Assets
+        AssetLicenseTemplate personalLicense = AssetLicenseCatalog.Get(AssetLicenseCode.PERSONAL);
+        Dictionary<Guid, Guid> sellerByAsset = await context.Assets
             .AsNoTracking()
             .Where(a => assets.Select(x => x.AssetId).Contains(a.Id))
             .ToDictionaryAsync(a => a.Id, a => a.AuthorId, cancellationToken);
@@ -628,13 +628,13 @@ internal sealed class DatabaseMigrationService(
         const int reviewsPerAsset = 3;
         for (var i = 0; i < assets.Count; i++)
         {
-            var (assetId, versionId, title, price) = assets[i];
-            var sellerId = sellerByAsset[assetId];
+            (Guid assetId, Guid versionId, var title, var price) = assets[i];
+            Guid sellerId = sellerByAsset[assetId];
             for (var j = 0; j < reviewsPerAsset; j++)
             {
-                var buyer = reviewers[(i + j) % reviewers.Count];
+                User buyer = reviewers[(i + j) % reviewers.Count];
                 var purchaseId = Guid.NewGuid();
-                var purchasedAt = now.AddDays(-3).AddHours(-j * 2);
+                DateTimeOffset purchasedAt = now.AddDays(-3).AddHours(-j * 2);
                 var stripeSessionId = $"seed-demo-{assetId:N}-slot{j}";
                 var checkoutIntentId = Guid.NewGuid();
                 var intentItemId = Guid.NewGuid();

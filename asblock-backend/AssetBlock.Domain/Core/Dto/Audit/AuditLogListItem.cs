@@ -1,5 +1,5 @@
-using AssetBlock.Domain.Core.Enums;
 using System.Text.Json;
+using AssetBlock.Domain.Core.Enums;
 
 namespace AssetBlock.Domain.Core.Dto.Audit;
 

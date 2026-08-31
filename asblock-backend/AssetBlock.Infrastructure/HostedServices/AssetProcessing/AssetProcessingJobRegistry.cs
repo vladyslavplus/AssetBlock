@@ -40,9 +40,9 @@ public sealed class AssetProcessingJobHandlerAdapter<THandler, TPayload, TResult
         ClaimedAssetProcessingJob claimedJob,
         CancellationToken cancellationToken)
     {
-        var handler = serviceProvider.GetRequiredService<THandler>();
+        THandler handler = serviceProvider.GetRequiredService<THandler>();
 
-        var rawPayload = AssetProcessingSerializer.DeserializePayload(JobType, claimedJob.Payload);
+        AssetProcessingPayload rawPayload = AssetProcessingSerializer.DeserializePayload(JobType, claimedJob.Payload);
         if (rawPayload is not TPayload typedPayload)
         {
             throw new AssetProcessingSerializerException(
@@ -61,7 +61,7 @@ public sealed class AssetProcessingJobHandlerAdapter<THandler, TPayload, TResult
             claimedJob.TraceParent,
             cancellationToken);
 
-        var outcome = await handler.Process(context, cancellationToken);
+        AssetProcessingJobOutcome? outcome = await handler.Process(context, cancellationToken);
 
         if (outcome is null)
         {

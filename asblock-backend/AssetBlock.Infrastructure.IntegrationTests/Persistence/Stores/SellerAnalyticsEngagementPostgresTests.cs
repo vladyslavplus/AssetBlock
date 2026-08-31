@@ -1,5 +1,6 @@
 using AssetBlock.Application.UseCases.SellerAnalytics;
 using AssetBlock.Domain.Abstractions.Services;
+using AssetBlock.Domain.Core.Dto.Analytics;
 using AssetBlock.Domain.Core.Entities;
 using AssetBlock.Domain.Core.Enums;
 using AssetBlock.Infrastructure.IntegrationTests.Support;
@@ -17,30 +18,30 @@ public sealed class SellerAnalyticsEngagementPostgresTests(PostgresFixture fixtu
     [Fact]
     public async Task GetOverviewSnapshot_WhenOtherSellerHasEvents_ShouldNotIncludeTheirEngagement()
     {
-        await using var db = await fixture.CreateCleanDbContext();
-        var sellerA = TestData.CreateUser("iso-a", "iso-a@test.local");
-        var sellerB = TestData.CreateUser("iso-b", "iso-b@test.local");
-        var category = TestData.CreateCategory("iso-cat", "iso-cat");
+        await using ApplicationDbContext db = await fixture.CreateCleanDbContext();
+        User sellerA = TestData.CreateUser("iso-a", "iso-a@test.local");
+        User sellerB = TestData.CreateUser("iso-b", "iso-b@test.local");
+        Category category = TestData.CreateCategory("iso-cat", "iso-cat");
         db.Users.AddRange(sellerA, sellerB);
         db.Categories.Add(category);
         await db.SaveChangesAsync();
 
-        var assetA = TestData.CreateAsset(sellerA.Id, category.Id, "A Asset", 10m);
-        var assetB = TestData.CreateAsset(sellerB.Id, category.Id, "B Asset", 10m);
+        Asset assetA = TestData.CreateAsset(sellerA.Id, category.Id, "A Asset", 10m);
+        Asset assetB = TestData.CreateAsset(sellerB.Id, category.Id, "B Asset", 10m);
         db.Assets.AddRange(assetA, assetB);
         await db.SaveChangesAsync();
 
         var eventStore = new AnalyticsEventStore(db);
-        await eventStore.TryInsert(CreateAssetView(sellerA.Id, assetA.Id, _dayStart(_fromDay)));
-        await eventStore.TryInsert(CreateAssetView(sellerB.Id, assetB.Id, _dayStart(_fromDay)));
+        await eventStore.TryInsert(CreateAssetView(sellerA.Id, assetA.Id, DayStart(_fromDay)));
+        await eventStore.TryInsert(CreateAssetView(sellerB.Id, assetB.Id, DayStart(_fromDay)));
 
         var store = new SellerAnalyticsStore(db);
-        var from = _dayStart(_fromDay);
-        var to = _dayStart(_toDay);
+        DateTimeOffset from = DayStart(_fromDay);
+        DateTimeOffset to = DayStart(_toDay);
 
-        var snapshotA = await store.GetOverviewSnapshot(
+        SellerAnalyticsOverviewSnapshot snapshotA = await store.GetOverviewSnapshot(
             sellerA.Id, from, to, from.AddDays(-10), from, topN: 5, AnalyticsGranularity.DAY);
-        var snapshotB = await store.GetOverviewSnapshot(
+        SellerAnalyticsOverviewSnapshot snapshotB = await store.GetOverviewSnapshot(
             sellerB.Id, from, to, from.AddDays(-10), from, topN: 5, AnalyticsGranularity.DAY);
 
         snapshotA.CurrentEngagement!.ProductViews.Should().Be(1);
@@ -50,46 +51,46 @@ public sealed class SellerAnalyticsEngagementPostgresTests(PostgresFixture fixtu
     [Fact]
     public async Task GetAssetDetail_WhenAssetBelongsToAnotherSeller_ShouldReturnNull()
     {
-        await using var db = await fixture.CreateCleanDbContext();
-        var sellerA = TestData.CreateUser("detail-a", "detail-a@test.local");
-        var sellerB = TestData.CreateUser("detail-b", "detail-b@test.local");
-        var category = TestData.CreateCategory("detail-cat", "detail-cat");
+        await using ApplicationDbContext db = await fixture.CreateCleanDbContext();
+        User sellerA = TestData.CreateUser("detail-a", "detail-a@test.local");
+        User sellerB = TestData.CreateUser("detail-b", "detail-b@test.local");
+        Category category = TestData.CreateCategory("detail-cat", "detail-cat");
         db.Users.AddRange(sellerA, sellerB);
         db.Categories.Add(category);
         await db.SaveChangesAsync();
 
-        var asset = TestData.CreateAsset(sellerA.Id, category.Id, "Owned By A", 10m);
+        Asset asset = TestData.CreateAsset(sellerA.Id, category.Id, "Owned By A", 10m);
         db.Assets.Add(asset);
         await db.SaveChangesAsync();
 
         var store = new SellerAnalyticsStore(db);
-        var from = _dayStart(_fromDay);
-        var to = _dayStart(_toDay);
+        DateTimeOffset from = DayStart(_fromDay);
+        DateTimeOffset to = DayStart(_toDay);
 
-        var detail = await store.GetAssetDetail(sellerB.Id, asset.Id, from, to, AnalyticsGranularity.DAY);
+        AnalyticsAssetDetailSnapshot? detail = await store.GetAssetDetail(sellerB.Id, asset.Id, from, to, AnalyticsGranularity.DAY);
         detail.Should().BeNull();
     }
 
     [Fact]
     public async Task GetBundleDetail_WhenBundleBelongsToAnotherSeller_ShouldReturnNull()
     {
-        await using var db = await fixture.CreateCleanDbContext();
-        var sellerA = TestData.CreateUser("bundle-a", "bundle-a@test.local");
-        var sellerB = TestData.CreateUser("bundle-b", "bundle-b@test.local");
-        var category = TestData.CreateCategory("bundle-cat", "bundle-cat");
+        await using ApplicationDbContext db = await fixture.CreateCleanDbContext();
+        User sellerA = TestData.CreateUser("bundle-a", "bundle-a@test.local");
+        User sellerB = TestData.CreateUser("bundle-b", "bundle-b@test.local");
+        Category category = TestData.CreateCategory("bundle-cat", "bundle-cat");
         db.Users.AddRange(sellerA, sellerB);
         db.Categories.Add(category);
         await db.SaveChangesAsync();
 
-        var asset = TestData.CreateAsset(sellerA.Id, category.Id, "Bundle Asset", 10m);
+        Asset asset = TestData.CreateAsset(sellerA.Id, category.Id, "Bundle Asset", 10m);
         db.Assets.Add(asset);
         await db.SaveChangesAsync();
-        var version = TestData.CreateAssetVersion(asset.Id);
+        AssetVersion version = TestData.CreateAssetVersion(asset.Id);
         db.AssetVersions.Add(version);
         await db.SaveChangesAsync();
 
         var bundleStore = new BundleStore(db);
-        var (bundle, _) = await bundleStore.CreateWithRevision(
+        (Bundle? bundle, BundleRevision _) = await bundleStore.CreateWithRevision(
             sellerA.Id,
             "Seller A Bundle",
             null,
@@ -99,20 +100,20 @@ public sealed class SellerAnalyticsEngagementPostgresTests(PostgresFixture fixtu
             [new BundleRevisionItemDraft(asset.Id, 1, asset.Title, asset.Price)]);
 
         var store = new SellerAnalyticsStore(db);
-        var from = _dayStart(_fromDay);
-        var to = _dayStart(_toDay);
+        DateTimeOffset from = DayStart(_fromDay);
+        DateTimeOffset to = DayStart(_toDay);
 
-        var detail = await store.GetBundleDetail(sellerB.Id, bundle.Id, from, to, AnalyticsGranularity.DAY);
+        AnalyticsBundleDetailSnapshot? detail = await store.GetBundleDetail(sellerB.Id, bundle.Id, from, to, AnalyticsGranularity.DAY);
         detail.Should().BeNull();
     }
 
     [Fact]
     public async Task GetCollectionsPage_WhenAttributedOrderExists_ShouldCountRevenueFromDurableOrderOnly()
     {
-        await using var db = await fixture.CreateCleanDbContext();
-        var (seller, buyer, collection, asset, version) = await SeedSellerCollectionAsset(db);
-        var from = _dayStart(_fromDay);
-        var to = _dayStart(_toDay);
+        await using ApplicationDbContext db = await fixture.CreateCleanDbContext();
+        (User? seller, User? buyer, Collection? collection, Asset? asset, AssetVersion? version) = await SeedSellerCollectionAsset(db);
+        DateTimeOffset from = DayStart(_fromDay);
+        DateTimeOffset to = DayStart(_toDay);
 
         AddCollectionAttributedOrder(
             db, buyer.Id, seller.Id, collection.Id, asset, version, from.AddDays(1), completeOrder: true, pricePaid: 25m);
@@ -121,7 +122,7 @@ public sealed class SellerAnalyticsEngagementPostgresTests(PostgresFixture fixtu
         await db.SaveChangesAsync();
 
         var store = new SellerAnalyticsStore(db);
-        var (items, total, _) = await store.GetCollectionsPage(
+        (IReadOnlyList<AnalyticsCollectionItem>? items, var total, DateTimeOffset? _) = await store.GetCollectionsPage(
             seller.Id, from, to, page: 1, pageSize: 20,
             AnalyticsCollectionSort.ATTRIBUTED_REVENUE, AnalyticsSortDirection.DESC);
 
@@ -135,33 +136,33 @@ public sealed class SellerAnalyticsEngagementPostgresTests(PostgresFixture fixtu
     [Fact]
     public async Task GetCollectionsPage_WhenUnrelatedSellerOrderReferencesCollection_ShouldNotAttributeRevenue()
     {
-        await using var db = await fixture.CreateCleanDbContext();
-        var sellerA = TestData.CreateUser("coll-a", "coll-a@test.local");
-        var sellerB = TestData.CreateUser("coll-b", "coll-b@test.local");
-        var buyer = TestData.CreateUser("coll-buyer", "coll-buyer@test.local");
-        var category = TestData.CreateCategory("coll-cat", "coll-cat");
+        await using ApplicationDbContext db = await fixture.CreateCleanDbContext();
+        User sellerA = TestData.CreateUser("coll-a", "coll-a@test.local");
+        User sellerB = TestData.CreateUser("coll-b", "coll-b@test.local");
+        User buyer = TestData.CreateUser("coll-buyer", "coll-buyer@test.local");
+        Category category = TestData.CreateCategory("coll-cat", "coll-cat");
         db.Users.AddRange(sellerA, sellerB, buyer);
         db.Categories.Add(category);
         await db.SaveChangesAsync();
 
-        var assetA = TestData.CreateAsset(sellerA.Id, category.Id, "A Asset", 10m);
-        var assetB = TestData.CreateAsset(sellerB.Id, category.Id, "B Asset", 20m);
+        Asset assetA = TestData.CreateAsset(sellerA.Id, category.Id, "A Asset", 10m);
+        Asset assetB = TestData.CreateAsset(sellerB.Id, category.Id, "B Asset", 20m);
         db.Assets.AddRange(assetA, assetB);
         await db.SaveChangesAsync();
 
-        var versionA = TestData.CreateAssetVersion(assetA.Id);
-        var versionB = TestData.CreateAssetVersion(assetB.Id);
+        AssetVersion versionA = TestData.CreateAssetVersion(assetA.Id);
+        AssetVersion versionB = TestData.CreateAssetVersion(assetB.Id);
         db.AssetVersions.AddRange(versionA, versionB);
         await db.SaveChangesAsync();
 
-        var collection = TestData.CreateCollection(sellerA.Id, "Seller A Collection", CollectionStatus.PUBLISHED);
+        Collection collection = TestData.CreateCollection(sellerA.Id, "Seller A Collection", CollectionStatus.PUBLISHED);
         collection.UpdatedAt = DateTimeOffset.UtcNow;
         db.Collections.Add(collection);
         db.CollectionItems.Add(TestData.CreateCollectionItem(collection.Id, assetA.Id, 1));
         await db.SaveChangesAsync();
 
-        var from = _dayStart(_fromDay);
-        var to = _dayStart(_toDay);
+        DateTimeOffset from = DayStart(_fromDay);
+        DateTimeOffset to = DayStart(_toDay);
 
         AddCollectionAttributedOrder(
             db, buyer.Id, sellerB.Id, collection.Id, assetB, versionB, from.AddDays(1),
@@ -169,10 +170,10 @@ public sealed class SellerAnalyticsEngagementPostgresTests(PostgresFixture fixtu
         await db.SaveChangesAsync();
 
         var store = new SellerAnalyticsStore(db);
-        var (itemsA, _, _) = await store.GetCollectionsPage(
+        (IReadOnlyList<AnalyticsCollectionItem>? itemsA, var _, DateTimeOffset? _) = await store.GetCollectionsPage(
             sellerA.Id, from, to, page: 1, pageSize: 20,
             AnalyticsCollectionSort.ATTRIBUTED_REVENUE, AnalyticsSortDirection.DESC);
-        var (itemsB, _, _) = await store.GetCollectionsPage(
+        (IReadOnlyList<AnalyticsCollectionItem>? itemsB, var _, DateTimeOffset? _) = await store.GetCollectionsPage(
             sellerB.Id, from, to, page: 1, pageSize: 20,
             AnalyticsCollectionSort.ATTRIBUTED_REVENUE, AnalyticsSortDirection.DESC);
 
@@ -186,22 +187,22 @@ public sealed class SellerAnalyticsEngagementPostgresTests(PostgresFixture fixtu
     private static async Task<(User Seller, User Buyer, Collection Collection, Asset Asset, AssetVersion Version)>
         SeedSellerCollectionAsset(ApplicationDbContext db)
     {
-        var seller = TestData.CreateUser("attr-seller", "attr-seller@test.local");
-        var buyer = TestData.CreateUser("attr-buyer", "attr-buyer@test.local");
-        var category = TestData.CreateCategory("attr-cat", "attr-cat");
+        User seller = TestData.CreateUser("attr-seller", "attr-seller@test.local");
+        User buyer = TestData.CreateUser("attr-buyer", "attr-buyer@test.local");
+        Category category = TestData.CreateCategory("attr-cat", "attr-cat");
         db.Users.AddRange(seller, buyer);
         db.Categories.Add(category);
         await db.SaveChangesAsync();
 
-        var asset = TestData.CreateAsset(seller.Id, category.Id, "Collection Asset", 10m);
+        Asset asset = TestData.CreateAsset(seller.Id, category.Id, "Collection Asset", 10m);
         db.Assets.Add(asset);
         await db.SaveChangesAsync();
 
-        var version = TestData.CreateAssetVersion(asset.Id);
+        AssetVersion version = TestData.CreateAssetVersion(asset.Id);
         db.AssetVersions.Add(version);
         await db.SaveChangesAsync();
 
-        var collection = TestData.CreateCollection(seller.Id, "Featured", CollectionStatus.PUBLISHED);
+        Collection collection = TestData.CreateCollection(seller.Id, "Featured", CollectionStatus.PUBLISHED);
         collection.UpdatedAt = DateTimeOffset.UtcNow;
         db.Collections.Add(collection);
         db.CollectionItems.Add(TestData.CreateCollectionItem(collection.Id, asset.Id, 1));
@@ -302,10 +303,10 @@ public sealed class SellerAnalyticsEngagementPostgresTests(PostgresFixture fixtu
     [Fact]
     public async Task GetOverviewSnapshot_WhenNoTelemetryButCompletedCheckout_ShouldReturnCommerceFunnel()
     {
-        await using var db = await fixture.CreateCleanDbContext();
-        var (seller, buyer, collection, asset, version) = await SeedSellerCollectionAsset(db);
-        var from = _dayStart(_fromDay);
-        var to = _dayStart(_toDay);
+        await using ApplicationDbContext db = await fixture.CreateCleanDbContext();
+        (User? seller, User? buyer, Collection? collection, Asset? asset, AssetVersion? version) = await SeedSellerCollectionAsset(db);
+        DateTimeOffset from = DayStart(_fromDay);
+        DateTimeOffset to = DayStart(_toDay);
 
         AddCollectionAttributedOrder(
             db, buyer.Id, seller.Id, collection.Id, asset, version, from.AddDays(1),
@@ -313,7 +314,7 @@ public sealed class SellerAnalyticsEngagementPostgresTests(PostgresFixture fixtu
         await db.SaveChangesAsync();
 
         var store = new SellerAnalyticsStore(db);
-        var snapshot = await store.GetOverviewSnapshot(
+        SellerAnalyticsOverviewSnapshot snapshot = await store.GetOverviewSnapshot(
             seller.Id, from, to, from.AddDays(-10), from, topN: 5, AnalyticsGranularity.DAY);
 
         snapshot.EngagementAvailableFrom.Should().BeNull();
@@ -326,10 +327,10 @@ public sealed class SellerAnalyticsEngagementPostgresTests(PostgresFixture fixtu
     [Fact]
     public async Task GetOverviewSnapshot_WhenBundleIntentHasMultipleItems_ShouldAttributeRevenueOnce()
     {
-        await using var db = await fixture.CreateCleanDbContext();
-        var seller = TestData.CreateUser("bundle-rev", "bundle-rev@test.local");
-        var buyer = TestData.CreateUser("bundle-buyer", "bundle-buyer@test.local");
-        var category = TestData.CreateCategory("bundle-rev-cat", "bundle-rev-cat");
+        await using ApplicationDbContext db = await fixture.CreateCleanDbContext();
+        User seller = TestData.CreateUser("bundle-rev", "bundle-rev@test.local");
+        User buyer = TestData.CreateUser("bundle-buyer", "bundle-buyer@test.local");
+        Category category = TestData.CreateCategory("bundle-rev-cat", "bundle-rev-cat");
         db.Users.AddRange(seller, buyer);
         db.Categories.Add(category);
         await db.SaveChangesAsync();
@@ -337,17 +338,17 @@ public sealed class SellerAnalyticsEngagementPostgresTests(PostgresFixture fixtu
         var assets = new List<(Asset Asset, AssetVersion Version)>();
         for (var i = 0; i < 3; i++)
         {
-            var asset = TestData.CreateAsset(seller.Id, category.Id, $"Bundle Asset {i}", 10m);
+            Asset asset = TestData.CreateAsset(seller.Id, category.Id, $"Bundle Asset {i}", 10m);
             db.Assets.Add(asset);
             await db.SaveChangesAsync();
-            var version = TestData.CreateAssetVersion(asset.Id);
+            AssetVersion version = TestData.CreateAssetVersion(asset.Id);
             db.AssetVersions.Add(version);
             await db.SaveChangesAsync();
             assets.Add((asset, version));
         }
 
         var bundleStore = new BundleStore(db);
-        var (bundle, revision) = await bundleStore.CreateWithRevision(
+        (Bundle? bundle, BundleRevision? revision) = await bundleStore.CreateWithRevision(
             seller.Id,
             "Three Item Bundle",
             null,
@@ -357,8 +358,8 @@ public sealed class SellerAnalyticsEngagementPostgresTests(PostgresFixture fixtu
             assets.Select((a, index) => new BundleRevisionItemDraft(
                 a.Asset.Id, index + 1, a.Asset.Title, a.Asset.Price)).ToList());
 
-        var from = _dayStart(_fromDay);
-        var purchasedAt = from.AddDays(1);
+        DateTimeOffset from = DayStart(_fromDay);
+        DateTimeOffset purchasedAt = from.AddDays(1);
         var intentId = Guid.NewGuid();
         var orderId = Guid.NewGuid();
         var stripeSessionId = $"test-stripe-{Guid.NewGuid():N}";
@@ -440,11 +441,11 @@ public sealed class SellerAnalyticsEngagementPostgresTests(PostgresFixture fixtu
         await db.SaveChangesAsync();
 
         var store = new SellerAnalyticsStore(db);
-        var to = _dayStart(_toDay);
-        var snapshot = await store.GetOverviewSnapshot(
+        DateTimeOffset to = DayStart(_toDay);
+        SellerAnalyticsOverviewSnapshot snapshot = await store.GetOverviewSnapshot(
             seller.Id, from, to, from.AddDays(-10), from, topN: 5, AnalyticsGranularity.DAY);
 
-        var bundleSource = snapshot.TrafficSources!
+        AnalyticsTrafficSourceRaw bundleSource = snapshot.TrafficSources!
             .Single(s => s.Source == AnalyticsTrafficSource.BUNDLE_PAGE);
         bundleSource.AttributedGrossRevenue.Should().Be(24.99m);
         bundleSource.CompletedOrders.Should().Be(1);
@@ -453,14 +454,14 @@ public sealed class SellerAnalyticsEngagementPostgresTests(PostgresFixture fixtu
     [Fact]
     public async Task GetOverviewSnapshot_WhenSameVisitorViewsTwoDaysInWeek_ShouldCountOneUniqueVisitor()
     {
-        await using var db = await fixture.CreateCleanDbContext();
-        var seller = TestData.CreateUser("week-uv", "week-uv@test.local");
-        var category = TestData.CreateCategory("week-uv-cat", "week-uv-cat");
+        await using ApplicationDbContext db = await fixture.CreateCleanDbContext();
+        User seller = TestData.CreateUser("week-uv", "week-uv@test.local");
+        Category category = TestData.CreateCategory("week-uv-cat", "week-uv-cat");
         db.Users.Add(seller);
         db.Categories.Add(category);
         await db.SaveChangesAsync();
 
-        var asset = TestData.CreateAsset(seller.Id, category.Id, "Week UV Asset", 10m);
+        Asset asset = TestData.CreateAsset(seller.Id, category.Id, "Week UV Asset", 10m);
         db.Assets.Add(asset);
         await db.SaveChangesAsync();
 
@@ -469,40 +470,40 @@ public sealed class SellerAnalyticsEngagementPostgresTests(PostgresFixture fixtu
         var wednesday = new DateOnly(2024, 7, 10);
         var eventStore = new AnalyticsEventStore(db);
         await eventStore.TryInsert(CreateAssetView(
-            seller.Id, asset.Id, _dayStart(monday).AddHours(10), visitorId: visitorId));
+            seller.Id, asset.Id, DayStart(monday).AddHours(10), visitorId: visitorId));
         await eventStore.TryInsert(CreateAssetView(
-            seller.Id, asset.Id, _dayStart(monday.AddDays(1)).AddHours(11), visitorId: visitorId));
+            seller.Id, asset.Id, DayStart(monday.AddDays(1)).AddHours(11), visitorId: visitorId));
 
-        var from = _dayStart(monday);
-        var to = _dayStart(wednesday);
+        DateTimeOffset from = DayStart(monday);
+        DateTimeOffset to = DayStart(wednesday);
         var store = new SellerAnalyticsStore(db);
-        var snapshot = await store.GetOverviewSnapshot(
+        SellerAnalyticsOverviewSnapshot snapshot = await store.GetOverviewSnapshot(
             seller.Id, from, to, from.AddDays(-7), from, topN: 5, AnalyticsGranularity.WEEK);
 
-        var weekBucket = snapshot.EngagementDaySeries!.Single(b => b.Date == monday);
+        AnalyticsEngagementDayBucket weekBucket = snapshot.EngagementDaySeries!.Single(b => b.Date == monday);
         weekBucket.UniqueVisitors.Should().Be(1);
     }
 
     [Fact]
     public async Task GetAssetDetail_WhenDownloadOnlyVisitorExists_ShouldCountViewVisitorsOnly()
     {
-        await using var db = await fixture.CreateCleanDbContext();
-        var seller = TestData.CreateUser("uv-view", "uv-view@test.local");
-        var category = TestData.CreateCategory("uv-view-cat", "uv-view-cat");
+        await using ApplicationDbContext db = await fixture.CreateCleanDbContext();
+        User seller = TestData.CreateUser("uv-view", "uv-view@test.local");
+        Category category = TestData.CreateCategory("uv-view-cat", "uv-view-cat");
         db.Users.Add(seller);
         db.Categories.Add(category);
         await db.SaveChangesAsync();
 
-        var asset = TestData.CreateAsset(seller.Id, category.Id, "UV Asset", 10m);
-        var version = TestData.CreateAssetVersion(asset.Id);
+        Asset asset = TestData.CreateAsset(seller.Id, category.Id, "UV Asset", 10m);
+        AssetVersion version = TestData.CreateAssetVersion(asset.Id);
         db.Assets.Add(asset);
         db.AssetVersions.Add(version);
         await db.SaveChangesAsync();
 
         var viewVisitor = Guid.NewGuid();
         var downloadVisitor = Guid.NewGuid();
-        var from = _dayStart(_fromDay);
-        var to = _dayStart(_toDay);
+        DateTimeOffset from = DayStart(_fromDay);
+        DateTimeOffset to = DayStart(_toDay);
         var eventStore = new AnalyticsEventStore(db);
         await eventStore.TryInsert(CreateAssetView(
             seller.Id, asset.Id, from, visitorId: viewVisitor));
@@ -521,7 +522,7 @@ public sealed class SellerAnalyticsEngagementPostgresTests(PostgresFixture fixtu
         });
 
         var store = new SellerAnalyticsStore(db);
-        var detail = await store.GetAssetDetail(
+        AnalyticsAssetDetailSnapshot? detail = await store.GetAssetDetail(
             seller.Id, asset.Id, from, to, AnalyticsGranularity.DAY);
 
         detail.Should().NotBeNull();
@@ -531,14 +532,14 @@ public sealed class SellerAnalyticsEngagementPostgresTests(PostgresFixture fixtu
     [Fact]
     public async Task GetOverviewSnapshot_WhenWeekHasRollupMondayAndRawTuesday_ShouldSumBothDaysInWeekSeries()
     {
-        await using var db = await fixture.CreateCleanDbContext();
-        var seller = TestData.CreateUser("week-mix", "week-mix@test.local");
-        var category = TestData.CreateCategory("week-mix-cat", "week-mix-cat");
+        await using ApplicationDbContext db = await fixture.CreateCleanDbContext();
+        User seller = TestData.CreateUser("week-mix", "week-mix@test.local");
+        Category category = TestData.CreateCategory("week-mix-cat", "week-mix-cat");
         db.Users.Add(seller);
         db.Categories.Add(category);
         await db.SaveChangesAsync();
 
-        var asset = TestData.CreateAsset(seller.Id, category.Id, "Week Mix Asset", 10m);
+        Asset asset = TestData.CreateAsset(seller.Id, category.Id, "Week Mix Asset", 10m);
         db.Assets.Add(asset);
         await db.SaveChangesAsync();
 
@@ -548,7 +549,7 @@ public sealed class SellerAnalyticsEngagementPostgresTests(PostgresFixture fixtu
         for (var i = 0; i < 4; i++)
         {
             await eventStore.TryInsert(CreateAssetView(
-                seller.Id, asset.Id, _dayStart(monday).AddHours(i + 1)));
+                seller.Id, asset.Id, DayStart(monday).AddHours(i + 1)));
         }
 
         await eventStore.TryAcquireAndRecomputeDaily(
@@ -557,30 +558,30 @@ public sealed class SellerAnalyticsEngagementPostgresTests(PostgresFixture fixtu
         for (var i = 0; i < 3; i++)
         {
             await eventStore.TryInsert(CreateAssetView(
-                seller.Id, asset.Id, _dayStart(tuesday).AddHours(i + 1)));
+                seller.Id, asset.Id, DayStart(tuesday).AddHours(i + 1)));
         }
 
-        var from = _dayStart(monday);
-        var to = _dayStart(tuesday.AddDays(1));
+        DateTimeOffset from = DayStart(monday);
+        DateTimeOffset to = DayStart(tuesday.AddDays(1));
         var store = new SellerAnalyticsStore(db);
-        var snapshot = await store.GetOverviewSnapshot(
+        SellerAnalyticsOverviewSnapshot snapshot = await store.GetOverviewSnapshot(
             seller.Id, from, to, from.AddDays(-7), from, topN: 5, AnalyticsGranularity.WEEK);
 
-        var weekBucket = snapshot.EngagementDaySeries!.Single(b => b.Date == monday);
+        AnalyticsEngagementDayBucket weekBucket = snapshot.EngagementDaySeries!.Single(b => b.Date == monday);
         weekBucket.ProductViews.Should().Be(7);
     }
 
     [Fact]
     public async Task GetOverviewSnapshot_WhenMonthHasMixedRollupAndRawDays_ShouldNotLoseOrDuplicateViews()
     {
-        await using var db = await fixture.CreateCleanDbContext();
-        var seller = TestData.CreateUser("month-mix", "month-mix@test.local");
-        var category = TestData.CreateCategory("month-mix-cat", "month-mix-cat");
+        await using ApplicationDbContext db = await fixture.CreateCleanDbContext();
+        User seller = TestData.CreateUser("month-mix", "month-mix@test.local");
+        Category category = TestData.CreateCategory("month-mix-cat", "month-mix-cat");
         db.Users.Add(seller);
         db.Categories.Add(category);
         await db.SaveChangesAsync();
 
-        var asset = TestData.CreateAsset(seller.Id, category.Id, "Month Mix Asset", 10m);
+        Asset asset = TestData.CreateAsset(seller.Id, category.Id, "Month Mix Asset", 10m);
         db.Assets.Add(asset);
         await db.SaveChangesAsync();
 
@@ -590,7 +591,7 @@ public sealed class SellerAnalyticsEngagementPostgresTests(PostgresFixture fixtu
         for (var i = 0; i < 10; i++)
         {
             await eventStore.TryInsert(CreateAssetView(
-                seller.Id, asset.Id, _dayStart(rollupDay).AddHours(i + 1)));
+                seller.Id, asset.Id, DayStart(rollupDay).AddHours(i + 1)));
         }
 
         await eventStore.TryAcquireAndRecomputeDaily(
@@ -599,53 +600,53 @@ public sealed class SellerAnalyticsEngagementPostgresTests(PostgresFixture fixtu
         for (var i = 0; i < 5; i++)
         {
             await eventStore.TryInsert(CreateAssetView(
-                seller.Id, asset.Id, _dayStart(rawDay).AddHours(i + 1)));
+                seller.Id, asset.Id, DayStart(rawDay).AddHours(i + 1)));
         }
 
-        var from = _dayStart(new DateOnly(2024, 6, 1));
-        var to = _dayStart(new DateOnly(2024, 7, 1));
+        DateTimeOffset from = DayStart(new DateOnly(2024, 6, 1));
+        DateTimeOffset to = DayStart(new DateOnly(2024, 7, 1));
         var store = new SellerAnalyticsStore(db);
-        var snapshot = await store.GetOverviewSnapshot(
+        SellerAnalyticsOverviewSnapshot snapshot = await store.GetOverviewSnapshot(
             seller.Id, from, to, from.AddMonths(-1), from, topN: 5, AnalyticsGranularity.MONTH);
 
-        var monthBucket = snapshot.EngagementDaySeries!.Single(b => b.Date == new DateOnly(2024, 6, 1));
+        AnalyticsEngagementDayBucket monthBucket = snapshot.EngagementDaySeries!.Single(b => b.Date == new DateOnly(2024, 6, 1));
         monthBucket.ProductViews.Should().Be(15);
     }
 
     [Fact]
     public async Task GetOverviewSnapshot_WhenComparisonBeforeAvailability_ShouldReturnCurrentEngagementWithoutComparison()
     {
-        await using var db = await fixture.CreateCleanDbContext();
-        var seller = TestData.CreateUser("comp-avail", "comp-avail@test.local");
-        var category = TestData.CreateCategory("comp-avail-cat", "comp-avail-cat");
+        await using ApplicationDbContext db = await fixture.CreateCleanDbContext();
+        User seller = TestData.CreateUser("comp-avail", "comp-avail@test.local");
+        Category category = TestData.CreateCategory("comp-avail-cat", "comp-avail-cat");
         db.Users.Add(seller);
         db.Categories.Add(category);
         await db.SaveChangesAsync();
 
-        var asset = TestData.CreateAsset(seller.Id, category.Id, "Comp Avail Asset", 10m);
+        Asset asset = TestData.CreateAsset(seller.Id, category.Id, "Comp Avail Asset", 10m);
         db.Assets.Add(asset);
         await db.SaveChangesAsync();
 
         var firstDay = new DateOnly(2024, 7, 5);
         var eventStore = new AnalyticsEventStore(db);
-        await eventStore.TryInsert(CreateAssetView(seller.Id, asset.Id, _dayStart(firstDay)));
+        await eventStore.TryInsert(CreateAssetView(seller.Id, asset.Id, DayStart(firstDay)));
         await eventStore.TryInsert(CreateAssetView(
-            seller.Id, asset.Id, _dayStart(firstDay.AddDays(3))));
+            seller.Id, asset.Id, DayStart(firstDay.AddDays(3))));
 
-        var from = _dayStart(firstDay);
-        var to = _dayStart(new DateOnly(2024, 7, 11));
-        var comparisonFrom = _dayStart(new DateOnly(2024, 6, 28));
-        var comparisonTo = from;
+        DateTimeOffset from = DayStart(firstDay);
+        DateTimeOffset to = DayStart(new DateOnly(2024, 7, 11));
+        DateTimeOffset comparisonFrom = DayStart(new DateOnly(2024, 6, 28));
+        DateTimeOffset comparisonTo = from;
 
         var store = new SellerAnalyticsStore(db);
-        var snapshot = await store.GetOverviewSnapshot(
+        SellerAnalyticsOverviewSnapshot snapshot = await store.GetOverviewSnapshot(
             seller.Id, from, to, comparisonFrom, comparisonTo, topN: 5, AnalyticsGranularity.DAY);
 
         snapshot.CurrentEngagement.Should().NotBeNull();
         snapshot.CurrentEngagement!.ProductViews.Should().Be(2);
         snapshot.ComparisonEngagement.Should().BeNull();
 
-        var totals = AnalyticsEngagementMapper.MapEngagementTotals(
+        AnalyticsEngagementTotals? totals = AnalyticsEngagementMapper.MapEngagementTotals(
             snapshot.CurrentEngagement, snapshot.ComparisonEngagement);
         totals.Should().NotBeNull();
         totals.ProductViews.Current.Should().Be(2);
@@ -657,14 +658,14 @@ public sealed class SellerAnalyticsEngagementPostgresTests(PostgresFixture fixtu
     [Fact]
     public async Task GetOverviewSnapshot_WhenRangeStartsBeforeAvailability_ShouldNullTotalsAndPartialSeries()
     {
-        await using var db = await fixture.CreateCleanDbContext();
-        var seller = TestData.CreateUser("pre-avail", "pre-avail@test.local");
-        var category = TestData.CreateCategory("pre-avail-cat", "pre-avail-cat");
+        await using ApplicationDbContext db = await fixture.CreateCleanDbContext();
+        User seller = TestData.CreateUser("pre-avail", "pre-avail@test.local");
+        Category category = TestData.CreateCategory("pre-avail-cat", "pre-avail-cat");
         db.Users.Add(seller);
         db.Categories.Add(category);
         await db.SaveChangesAsync();
 
-        var asset = TestData.CreateAsset(seller.Id, category.Id, "Pre Avail Asset", 10m);
+        Asset asset = TestData.CreateAsset(seller.Id, category.Id, "Pre Avail Asset", 10m);
         db.Assets.Add(asset);
         await db.SaveChangesAsync();
 
@@ -672,22 +673,22 @@ public sealed class SellerAnalyticsEngagementPostgresTests(PostgresFixture fixtu
         var rangeFrom = new DateOnly(2024, 7, 1);
         var rangeTo = new DateOnly(2024, 7, 11);
         var eventStore = new AnalyticsEventStore(db);
-        await eventStore.TryInsert(CreateAssetView(seller.Id, asset.Id, _dayStart(availableDay)));
+        await eventStore.TryInsert(CreateAssetView(seller.Id, asset.Id, DayStart(availableDay)));
 
         var store = new SellerAnalyticsStore(db);
-        var snapshot = await store.GetOverviewSnapshot(
+        SellerAnalyticsOverviewSnapshot snapshot = await store.GetOverviewSnapshot(
             seller.Id,
-            _dayStart(rangeFrom),
-            _dayStart(rangeTo),
-            _dayStart(rangeFrom.AddDays(-10)),
-            _dayStart(rangeFrom),
+            DayStart(rangeFrom),
+            DayStart(rangeTo),
+            DayStart(rangeFrom.AddDays(-10)),
+            DayStart(rangeFrom),
             topN: 5,
             AnalyticsGranularity.DAY);
 
         snapshot.CurrentEngagement.Should().BeNull();
         snapshot.EngagementAvailableFrom.Should().NotBeNull();
 
-        var series = AnalyticsRange.BuildSeries(
+        IReadOnlyList<AnalyticsSeriesPoint> series = AnalyticsRange.BuildSeries(
             snapshot.DaySeries,
             rangeFrom,
             rangeTo,
@@ -695,41 +696,41 @@ public sealed class SellerAnalyticsEngagementPostgresTests(PostgresFixture fixtu
             snapshot.EngagementAvailableFrom,
             snapshot.EngagementDaySeries);
 
-        series.Single(p => p.BucketStart == _dayStart(new DateOnly(2024, 7, 1))).ProductViews.Should().BeNull();
-        series.Single(p => p.BucketStart == _dayStart(availableDay)).ProductViews.Should().Be(1);
+        series.Single(p => p.BucketStart == DayStart(new DateOnly(2024, 7, 1))).ProductViews.Should().BeNull();
+        series.Single(p => p.BucketStart == DayStart(availableDay)).ProductViews.Should().Be(1);
     }
 
     [Fact]
     public async Task GetCollectionsPage_WhenIncompleteCoverageAndViewsSort_ShouldOrderByAttributedRevenueDesc()
     {
-        await using var db = await fixture.CreateCleanDbContext();
-        var seller = TestData.CreateUser("cov-sort", "cov-sort@test.local");
-        var buyer = TestData.CreateUser("cov-buyer", "cov-buyer@test.local");
-        var category = TestData.CreateCategory("cov-sort-cat", "cov-sort-cat");
+        await using ApplicationDbContext db = await fixture.CreateCleanDbContext();
+        User seller = TestData.CreateUser("cov-sort", "cov-sort@test.local");
+        User buyer = TestData.CreateUser("cov-buyer", "cov-buyer@test.local");
+        Category category = TestData.CreateCategory("cov-sort-cat", "cov-sort-cat");
         db.Users.AddRange(seller, buyer);
         db.Categories.Add(category);
         await db.SaveChangesAsync();
 
-        var assetHighViews = TestData.CreateAsset(seller.Id, category.Id, "High Views Asset", 10m);
-        var assetHighRevenue = TestData.CreateAsset(seller.Id, category.Id, "High Revenue Asset", 10m);
+        Asset assetHighViews = TestData.CreateAsset(seller.Id, category.Id, "High Views Asset", 10m);
+        Asset assetHighRevenue = TestData.CreateAsset(seller.Id, category.Id, "High Revenue Asset", 10m);
         db.Assets.AddRange(assetHighViews, assetHighRevenue);
         await db.SaveChangesAsync();
 
-        var versionHighViews = TestData.CreateAssetVersion(assetHighViews.Id);
-        var versionHighRevenue = TestData.CreateAssetVersion(assetHighRevenue.Id);
+        AssetVersion versionHighViews = TestData.CreateAssetVersion(assetHighViews.Id);
+        AssetVersion versionHighRevenue = TestData.CreateAssetVersion(assetHighRevenue.Id);
         db.AssetVersions.AddRange(versionHighViews, versionHighRevenue);
         await db.SaveChangesAsync();
 
-        var highViews = TestData.CreateCollection(seller.Id, "High Views", CollectionStatus.PUBLISHED);
-        var highRevenue = TestData.CreateCollection(seller.Id, "High Revenue", CollectionStatus.PUBLISHED);
+        Collection highViews = TestData.CreateCollection(seller.Id, "High Views", CollectionStatus.PUBLISHED);
+        Collection highRevenue = TestData.CreateCollection(seller.Id, "High Revenue", CollectionStatus.PUBLISHED);
         db.Collections.AddRange(highViews, highRevenue);
         db.CollectionItems.AddRange(
             TestData.CreateCollectionItem(highViews.Id, assetHighViews.Id, 1),
             TestData.CreateCollectionItem(highRevenue.Id, assetHighRevenue.Id, 1));
         await db.SaveChangesAsync();
 
-        var from = _dayStart(_fromDay);
-        var to = _dayStart(_toDay);
+        DateTimeOffset from = DayStart(_fromDay);
+        DateTimeOffset to = DayStart(_toDay);
 
         // Telemetry starts mid-range → incomplete coverage for [from, to).
         var eventStore = new AnalyticsEventStore(db);
@@ -758,7 +759,7 @@ public sealed class SellerAnalyticsEngagementPostgresTests(PostgresFixture fixtu
         await db.SaveChangesAsync();
 
         var store = new SellerAnalyticsStore(db);
-        var (items, _, engagementAvailableFrom) = await store.GetCollectionsPage(
+        (IReadOnlyList<AnalyticsCollectionItem>? items, var _, DateTimeOffset? engagementAvailableFrom) = await store.GetCollectionsPage(
             seller.Id, from, to, page: 1, pageSize: 20,
             AnalyticsCollectionSort.VIEWS, AnalyticsSortDirection.DESC);
 
@@ -772,30 +773,30 @@ public sealed class SellerAnalyticsEngagementPostgresTests(PostgresFixture fixtu
     [Fact]
     public async Task GetCollectionsPage_WhenRecentSortRequested_ShouldOrderByLatestEventNotUpdatedAt()
     {
-        await using var db = await fixture.CreateCleanDbContext();
-        var seller = TestData.CreateUser("recent-sort", "recent-sort@test.local");
-        var category = TestData.CreateCategory("recent-sort-cat", "recent-sort-cat");
+        await using ApplicationDbContext db = await fixture.CreateCleanDbContext();
+        User seller = TestData.CreateUser("recent-sort", "recent-sort@test.local");
+        Category category = TestData.CreateCategory("recent-sort-cat", "recent-sort-cat");
         db.Users.Add(seller);
         db.Categories.Add(category);
         await db.SaveChangesAsync();
 
-        var assetA = TestData.CreateAsset(seller.Id, category.Id, "Asset A", 10m);
-        var assetB = TestData.CreateAsset(seller.Id, category.Id, "Asset B", 10m);
+        Asset assetA = TestData.CreateAsset(seller.Id, category.Id, "Asset A", 10m);
+        Asset assetB = TestData.CreateAsset(seller.Id, category.Id, "Asset B", 10m);
         db.Assets.AddRange(assetA, assetB);
         await db.SaveChangesAsync();
 
-        var staleUpdated = TestData.CreateCollection(seller.Id, "Stale UpdatedAt", CollectionStatus.PUBLISHED);
+        Collection staleUpdated = TestData.CreateCollection(seller.Id, "Stale UpdatedAt", CollectionStatus.PUBLISHED);
         staleUpdated.UpdatedAt = DateTimeOffset.UtcNow;
-        var freshEvent = TestData.CreateCollection(seller.Id, "Fresh Event", CollectionStatus.PUBLISHED);
-        freshEvent.UpdatedAt = _dayStart(_fromDay);
+        Collection freshEvent = TestData.CreateCollection(seller.Id, "Fresh Event", CollectionStatus.PUBLISHED);
+        freshEvent.UpdatedAt = DayStart(_fromDay);
         db.Collections.AddRange(staleUpdated, freshEvent);
         db.CollectionItems.AddRange(
             TestData.CreateCollectionItem(staleUpdated.Id, assetA.Id, 1),
             TestData.CreateCollectionItem(freshEvent.Id, assetB.Id, 1));
         await db.SaveChangesAsync();
 
-        var from = _dayStart(_fromDay);
-        var to = _dayStart(_toDay);
+        DateTimeOffset from = DayStart(_fromDay);
+        DateTimeOffset to = DayStart(_toDay);
         var eventStore = new AnalyticsEventStore(db);
         await eventStore.TryInsert(new AnalyticsEvent
         {
@@ -823,7 +824,7 @@ public sealed class SellerAnalyticsEngagementPostgresTests(PostgresFixture fixtu
         });
 
         var store = new SellerAnalyticsStore(db);
-        var (items, _, _) = await store.GetCollectionsPage(
+        (IReadOnlyList<AnalyticsCollectionItem>? items, var _, DateTimeOffset? _) = await store.GetCollectionsPage(
             seller.Id, from, to, page: 1, pageSize: 20,
             AnalyticsCollectionSort.RECENT, AnalyticsSortDirection.DESC);
 
@@ -850,6 +851,6 @@ public sealed class SellerAnalyticsEngagementPostgresTests(PostgresFixture fixtu
             DeviceClass = AnalyticsDeviceClass.DESKTOP
         };
 
-    private static DateTimeOffset _dayStart(DateOnly day) =>
+    private static DateTimeOffset DayStart(DateOnly day) =>
         new(day.ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc));
 }

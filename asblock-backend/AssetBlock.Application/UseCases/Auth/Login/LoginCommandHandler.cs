@@ -1,11 +1,12 @@
+using Ardalis.Result;
 using AssetBlock.Application.Common;
+using AssetBlock.Application.Messaging;
 using AssetBlock.Domain.Abstractions.Services;
 using AssetBlock.Domain.Core.Constants;
-using Ardalis.Result;
-using AssetBlock.Domain.Core.Primitives.Api;
 using AssetBlock.Domain.Core.Dto.Audit;
+using AssetBlock.Domain.Core.Entities;
 using AssetBlock.Domain.Core.Enums;
-using AssetBlock.Application.Messaging;
+using AssetBlock.Domain.Core.Primitives.Api;
 using Microsoft.Extensions.Logging;
 
 namespace AssetBlock.Application.UseCases.Auth.Login;
@@ -20,7 +21,7 @@ internal sealed class LoginCommandHandler(
 {
     public async Task<Result<TokensResponse>> Handle(LoginCommand request, CancellationToken cancellationToken)
     {
-        var user = await userStore.GetByEmail(request.Email, cancellationToken);
+        User? user = await userStore.GetByEmail(request.Email, cancellationToken);
         if (user is null)
         {
             logger.LogWarning("Login failed: invalid credentials");
@@ -48,7 +49,7 @@ internal sealed class LoginCommandHandler(
         var needsRehash = passwordHasher.NeedsRehash(user.PasswordHash);
         var newPasswordHash = needsRehash ? passwordHasher.Hash(request.Password) : null;
 
-        var tokens = jwtTokenService.GenerateTokenPair(user.Id, user.Username, user.Email, user.Role);
+        TokensResponse tokens = jwtTokenService.GenerateTokenPair(user.Id, user.Username, user.Email, user.Role);
         await unitOfWork.ExecuteInTransaction(async ct =>
         {
             if (newPasswordHash is not null)

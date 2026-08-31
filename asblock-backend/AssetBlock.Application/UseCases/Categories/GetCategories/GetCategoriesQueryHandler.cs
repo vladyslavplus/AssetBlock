@@ -1,9 +1,10 @@
+using Ardalis.Result;
 using AssetBlock.Application.Common.Caching;
+using AssetBlock.Application.Messaging;
 using AssetBlock.Domain.Abstractions.Services;
 using AssetBlock.Domain.Core.Constants;
-using Ardalis.Result;
 using AssetBlock.Domain.Core.Dto.Categories;
-using AssetBlock.Application.Messaging;
+using AssetBlock.Domain.Core.Entities;
 using Microsoft.Extensions.Logging;
 
 namespace AssetBlock.Application.UseCases.Categories.GetCategories;
@@ -19,7 +20,7 @@ internal sealed class GetCategoriesQueryHandler(
     public async Task<Result<Domain.Core.Dto.Paging.PagedResult<CategoryListItem>>> Handle(GetCategoriesQuery request, CancellationToken cancellationToken)
     {
         var key = CacheKeys.CategoriesList(request.Request);
-        var cached = await cache.Get<Domain.Core.Dto.Paging.PagedResult<CategoryListItem>>(key, cancellationToken);
+        Domain.Core.Dto.Paging.PagedResult<CategoryListItem>? cached = await cache.Get<Domain.Core.Dto.Paging.PagedResult<CategoryListItem>>(key, cancellationToken);
         if (cached is not null)
         {
             logger.LogDebug("Categories list cache hit for key {Key}", key);
@@ -27,7 +28,7 @@ internal sealed class GetCategoriesQueryHandler(
         }
 
         logger.LogDebug("Categories list cache miss for key {Key}", key);
-        var paged = await categoryStore.GetPaged(request.Request, cancellationToken);
+        Domain.Core.Dto.Paging.PagedResult<Category> paged = await categoryStore.GetPaged(request.Request, cancellationToken);
         var items = paged.Items
             .Select(c => new CategoryListItem(c.Id, c.Name, c.Slug, c.Description))
             .ToList();

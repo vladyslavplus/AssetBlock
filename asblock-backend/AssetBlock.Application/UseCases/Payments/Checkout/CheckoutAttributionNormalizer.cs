@@ -53,13 +53,13 @@ internal sealed class CheckoutAttributionNormalizer(
                     return null;
                 }
 
-                var collectionId = NormalizeGuid(rawCollectionId);
+                Guid? collectionId = NormalizeGuid(rawCollectionId);
                 if (collectionId is not { } verifiedCollectionId)
                 {
                     return null;
                 }
 
-                var collectionSellerId = await collectionStore.GetPublishedMemberSellerId(
+                Guid? collectionSellerId = await collectionStore.GetPublishedMemberSellerId(
                     verifiedCollectionId,
                     attributedAssetId,
                     cancellationToken);

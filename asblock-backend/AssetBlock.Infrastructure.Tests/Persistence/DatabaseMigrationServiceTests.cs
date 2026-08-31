@@ -16,14 +16,14 @@ public sealed class DatabaseMigrationServiceTests
     [Fact]
     public async Task StartAsync_withEnsureCreated_seedsCategoriesTagsAndDevAdmin_inDevelopment()
     {
-        await using var db = InMemoryDbContextFactory.Create();
+        await using ApplicationDbContext db = InMemoryDbContextFactory.Create();
 
         var services = new ServiceCollection();
         services.AddSingleton(_ => db);
         services.AddSingleton<IPasswordHasher, PasswordHasher>();
-        var provider = services.BuildServiceProvider();
+        ServiceProvider provider = services.BuildServiceProvider();
 
-        var env = Substitute.For<IHostEnvironment>();
+        IHostEnvironment env = Substitute.For<IHostEnvironment>();
         env.EnvironmentName.Returns(Environments.Development);
 
         var sut = new DatabaseMigrationService(
@@ -42,12 +42,12 @@ public sealed class DatabaseMigrationServiceTests
     [Fact]
     public async Task StartAsync_whenBothFlagsFalse_doesNothing()
     {
-        await using var db = InMemoryDbContextFactory.Create();
+        await using ApplicationDbContext db = InMemoryDbContextFactory.Create();
 
         var services = new ServiceCollection();
         services.AddSingleton(_ => db);
         services.AddSingleton<IPasswordHasher, PasswordHasher>();
-        var provider = services.BuildServiceProvider();
+        ServiceProvider provider = services.BuildServiceProvider();
 
         var sut = new DatabaseMigrationService(
             provider.GetRequiredService<IServiceScopeFactory>(),

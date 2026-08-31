@@ -17,8 +17,8 @@ public static class AnalyticsRange
     public static (DateOnly From, DateOnly To) ComparisonPeriod(DateOnly from, DateOnly to)
     {
         var days = to.DayNumber - from.DayNumber;
-        var compTo = from;
-        var compFrom = from.AddDays(-days);
+        DateOnly compTo = from;
+        DateOnly compFrom = from.AddDays(-days);
         return (compFrom, compTo);
     }
 
@@ -91,15 +91,15 @@ public static class AnalyticsRange
         var byDate = dayBuckets.ToDictionary(b => b.Date);
         var engagementByDate = engagementBuckets?.ToDictionary(b => b.Date);
         var result = new List<AnalyticsSeriesPoint>();
-        for (var d = from; d < to; d = d.AddDays(1))
+        for (DateOnly d = from; d < to; d = d.AddDays(1))
         {
             AnalyticsEngagementDayBucket? engagement = null;
-            if (engagementByDate?.TryGetValue(d, out var found) == true)
+            if (engagementByDate?.TryGetValue(d, out AnalyticsEngagementDayBucket? found) == true)
             {
                 engagement = found;
             }
 
-            if (byDate.TryGetValue(d, out var commerce))
+            if (byDate.TryGetValue(d, out AnalyticsDayBucket? commerce))
             {
                 result.Add(CreateSeriesPoint(d, d.AddDays(1), commerce, engagement, engagementAvailableFrom));
             }
@@ -120,10 +120,10 @@ public static class AnalyticsRange
         IReadOnlyList<AnalyticsEngagementDayBucket>? engagementBuckets)
     {
         var weekly = new Dictionary<DateOnly, (decimal Revenue, int Orders, int Units)>();
-        foreach (var b in dayBuckets)
+        foreach (AnalyticsDayBucket b in dayBuckets)
         {
-            var monday = GetMondayOfWeek(b.Date);
-            if (!weekly.TryGetValue(monday, out var existing))
+            DateOnly monday = GetMondayOfWeek(b.Date);
+            if (!weekly.TryGetValue(monday, out (decimal Revenue, int Orders, int Units) existing))
             {
                 weekly[monday] = (b.GrossRevenue, b.Orders, b.Units);
             }
@@ -137,14 +137,14 @@ public static class AnalyticsRange
 
         var engagementByWeek = engagementBuckets?.ToDictionary(b => b.Date);
         var result = new List<AnalyticsSeriesPoint>();
-        var weekStart = GetMondayOfWeek(from);
+        DateOnly weekStart = GetMondayOfWeek(from);
         while (weekStart < to)
         {
-            AnalyticsDayBucket? commerceBucket = weekly.TryGetValue(weekStart, out var commerce)
+            AnalyticsDayBucket? commerceBucket = weekly.TryGetValue(weekStart, out (decimal Revenue, int Orders, int Units) commerce)
                 ? new AnalyticsDayBucket(weekStart, commerce.Revenue, commerce.Orders, commerce.Units)
                 : null;
             AnalyticsEngagementDayBucket? engagement = null;
-            if (engagementByWeek?.TryGetValue(weekStart, out var found) == true)
+            if (engagementByWeek?.TryGetValue(weekStart, out AnalyticsEngagementDayBucket? found) == true)
             {
                 engagement = found;
             }
@@ -170,10 +170,10 @@ public static class AnalyticsRange
         IReadOnlyList<AnalyticsEngagementDayBucket>? engagementBuckets)
     {
         var monthly = new Dictionary<(int Year, int Month), (decimal Revenue, int Orders, int Units)>();
-        foreach (var b in dayBuckets)
+        foreach (AnalyticsDayBucket b in dayBuckets)
         {
-            var key = (b.Date.Year, b.Date.Month);
-            if (!monthly.TryGetValue(key, out var existing))
+            (int Year, int Month) key = (b.Date.Year, b.Date.Month);
+            if (!monthly.TryGetValue(key, out (decimal Revenue, int Orders, int Units) existing))
             {
                 monthly[key] = (b.GrossRevenue, b.Orders, b.Units);
             }
@@ -190,10 +190,10 @@ public static class AnalyticsRange
         var monthStart = new DateOnly(from.Year, from.Month, 1);
         while (monthStart < to)
         {
-            var key = (monthStart.Year, monthStart.Month);
-            monthly.TryGetValue(key, out var commerce);
+            (int Year, int Month) key = (monthStart.Year, monthStart.Month);
+            monthly.TryGetValue(key, out (decimal Revenue, int Orders, int Units) commerce);
             AnalyticsEngagementDayBucket? engagement = null;
-            if (engagementByMonth?.TryGetValue(key, out var found) == true)
+            if (engagementByMonth?.TryGetValue(key, out AnalyticsEngagementDayBucket? found) == true)
             {
                 engagement = found;
             }

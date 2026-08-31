@@ -19,16 +19,16 @@ public sealed class CollectionsBundlesCheckoutIntegrationTests(IntegrationTestFi
     [Fact]
     public async Task GetCollection_WhenDraft_ShouldReturn404()
     {
-        (_, string sellerUsername) =
+        (HttpClient _, var sellerUsername) =
             await IntegrationTestAuth.RegisterVerifiedAndAuthenticateAsync(fixture.Factory);
-        var scopeFactory = fixture.Factory.Services.GetRequiredService<IServiceScopeFactory>();
-        var sellerId = await AssetVersionsSeed.GetUserIdAsync(scopeFactory, sellerUsername);
+        IServiceScopeFactory scopeFactory = fixture.Factory.Services.GetRequiredService<IServiceScopeFactory>();
+        Guid sellerId = await AssetVersionsSeed.GetUserIdAsync(scopeFactory, sellerUsername);
         (Guid assetId, _) = await AssetVersionsSeed.SeedAssetWithVersionsAsync(scopeFactory, sellerId);
 
         var collectionId = Guid.NewGuid();
-        await using (var scope = fixture.Factory.Services.CreateAsyncScope())
+        await using (AsyncServiceScope scope = fixture.Factory.Services.CreateAsyncScope())
         {
-            var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+            ApplicationDbContext db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
             db.Collections.Add(new Collection
             {
                 Id = collectionId,
@@ -47,8 +47,8 @@ public sealed class CollectionsBundlesCheckoutIntegrationTests(IntegrationTestFi
             await db.SaveChangesAsync();
         }
 
-        var anonymous = fixture.Factory.CreateClient();
-        var response = await anonymous.GetAsync(new Uri($"/api/collections/{collectionId}", UriKind.Relative));
+        HttpClient anonymous = fixture.Factory.CreateClient();
+        HttpResponseMessage response = await anonymous.GetAsync(new Uri($"/api/collections/{collectionId}", UriKind.Relative));
 
         response.StatusCode.Should().Be(HttpStatusCode.NotFound);
     }
@@ -56,21 +56,21 @@ public sealed class CollectionsBundlesCheckoutIntegrationTests(IntegrationTestFi
     [Fact]
     public async Task GetBundle_WhenArchived_ShouldReturn404()
     {
-        (_, string sellerUsername) =
+        (HttpClient _, var sellerUsername) =
             await IntegrationTestAuth.RegisterVerifiedAndAuthenticateAsync(fixture.Factory);
-        var scopeFactory = fixture.Factory.Services.GetRequiredService<IServiceScopeFactory>();
-        var sellerId = await AssetVersionsSeed.GetUserIdAsync(scopeFactory, sellerUsername);
+        IServiceScopeFactory scopeFactory = fixture.Factory.Services.GetRequiredService<IServiceScopeFactory>();
+        Guid sellerId = await AssetVersionsSeed.GetUserIdAsync(scopeFactory, sellerUsername);
         (Guid assetA, _) = await AssetVersionsSeed.SeedAssetWithVersionsAsync(scopeFactory, sellerId, price: 10m);
         (Guid assetB, _) = await AssetVersionsSeed.SeedAssetWithVersionsAsync(scopeFactory, sellerId, price: 20m);
 
         Guid bundleId;
-        await using (var scope = fixture.Factory.Services.CreateAsyncScope())
+        await using (AsyncServiceScope scope = fixture.Factory.Services.CreateAsyncScope())
         {
-            var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
-            var assetRows = await db.Assets.AsNoTracking()
+            ApplicationDbContext db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+            Dictionary<Guid, Asset> assetRows = await db.Assets.AsNoTracking()
                 .Where(a => a.Id == assetA || a.Id == assetB)
                 .ToDictionaryAsync(a => a.Id);
-            var now = DateTimeOffset.UtcNow;
+            DateTimeOffset now = DateTimeOffset.UtcNow;
             bundleId = Guid.NewGuid();
             var revisionId = Guid.NewGuid();
             db.Bundles.Add(new Bundle
@@ -114,8 +114,8 @@ public sealed class CollectionsBundlesCheckoutIntegrationTests(IntegrationTestFi
             await db.SaveChangesAsync();
         }
 
-        var anonymous = fixture.Factory.CreateClient();
-        var response = await anonymous.GetAsync(new Uri($"/api/bundles/{bundleId}", UriKind.Relative));
+        HttpClient anonymous = fixture.Factory.CreateClient();
+        HttpResponseMessage response = await anonymous.GetAsync(new Uri($"/api/bundles/{bundleId}", UriKind.Relative));
 
         response.StatusCode.Should().Be(HttpStatusCode.NotFound);
     }
@@ -123,21 +123,21 @@ public sealed class CollectionsBundlesCheckoutIntegrationTests(IntegrationTestFi
     [Fact]
     public async Task GetBundle_WhenAvailable_ShouldSerializeLicenseCodeAsStringOrNull()
     {
-        (_, string sellerUsername) =
+        (HttpClient _, var sellerUsername) =
             await IntegrationTestAuth.RegisterVerifiedAndAuthenticateAsync(fixture.Factory);
-        var scopeFactory = fixture.Factory.Services.GetRequiredService<IServiceScopeFactory>();
-        var sellerId = await AssetVersionsSeed.GetUserIdAsync(scopeFactory, sellerUsername);
+        IServiceScopeFactory scopeFactory = fixture.Factory.Services.GetRequiredService<IServiceScopeFactory>();
+        Guid sellerId = await AssetVersionsSeed.GetUserIdAsync(scopeFactory, sellerUsername);
         (Guid assetA, _) = await AssetVersionsSeed.SeedAssetWithVersionsAsync(scopeFactory, sellerId, price: 10m);
         (Guid assetB, _) = await AssetVersionsSeed.SeedAssetWithVersionsAsync(scopeFactory, sellerId, price: 20m);
 
         Guid bundleId;
-        await using (var scope = fixture.Factory.Services.CreateAsyncScope())
+        await using (AsyncServiceScope scope = fixture.Factory.Services.CreateAsyncScope())
         {
-            var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
-            var assetRows = await db.Assets.AsNoTracking()
+            ApplicationDbContext db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+            Dictionary<Guid, Asset> assetRows = await db.Assets.AsNoTracking()
                 .Where(a => a.Id == assetA || a.Id == assetB)
                 .ToDictionaryAsync(a => a.Id);
-            var now = DateTimeOffset.UtcNow;
+            DateTimeOffset now = DateTimeOffset.UtcNow;
             bundleId = Guid.NewGuid();
             var revisionId = Guid.NewGuid();
             db.Bundles.Add(new Bundle
@@ -180,16 +180,16 @@ public sealed class CollectionsBundlesCheckoutIntegrationTests(IntegrationTestFi
             await db.SaveChangesAsync();
         }
 
-        var anonymous = fixture.Factory.CreateClient();
-        var response = await anonymous.GetAsync(new Uri($"/api/bundles/{bundleId}", UriKind.Relative));
+        HttpClient anonymous = fixture.Factory.CreateClient();
+        HttpResponseMessage response = await anonymous.GetAsync(new Uri($"/api/bundles/{bundleId}", UriKind.Relative));
 
         response.StatusCode.Should().Be(HttpStatusCode.OK);
         using var doc = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
-        var items = doc.RootElement.GetProperty("items");
+        JsonElement items = doc.RootElement.GetProperty("items");
         items.GetArrayLength().Should().Be(2);
-        foreach (var item in items.EnumerateArray())
+        foreach (JsonElement item in items.EnumerateArray())
         {
-            var license = item.GetProperty("licenseCode");
+            JsonElement license = item.GetProperty("licenseCode");
             license.ValueKind.Should().BeOneOf(JsonValueKind.String, JsonValueKind.Null);
             if (license.ValueKind == JsonValueKind.String)
             {
@@ -201,21 +201,21 @@ public sealed class CollectionsBundlesCheckoutIntegrationTests(IntegrationTestFi
     [Fact]
     public async Task CreateCheckout_WithFakeStripe_WhenAssetAvailable_ShouldReturnCheckoutUrl()
     {
-        (_, string sellerUsername) =
+        (HttpClient _, var sellerUsername) =
             await IntegrationTestAuth.RegisterVerifiedAndAuthenticateAsync(fixture.Factory);
-        var scopeFactory = fixture.Factory.Services.GetRequiredService<IServiceScopeFactory>();
-        var sellerId = await AssetVersionsSeed.GetUserIdAsync(scopeFactory, sellerUsername);
+        IServiceScopeFactory scopeFactory = fixture.Factory.Services.GetRequiredService<IServiceScopeFactory>();
+        Guid sellerId = await AssetVersionsSeed.GetUserIdAsync(scopeFactory, sellerUsername);
         (Guid assetId, _) = await AssetVersionsSeed.SeedAssetWithVersionsAsync(scopeFactory, sellerId, price: 12.50m);
 
         (HttpClient buyerClient, _) =
             await IntegrationTestAuth.RegisterVerifiedAndAuthenticateAsync(fixture.Factory);
 
-        var response = await buyerClient.PostAsJsonAsync(
+        HttpResponseMessage response = await buyerClient.PostAsJsonAsync(
             new Uri("/api/payments/checkout", UriKind.Relative),
             new CreateCheckoutRequest(assetId));
 
         response.StatusCode.Should().Be(HttpStatusCode.OK);
-        var body = await response.Content.ReadFromJsonAsync<CreateCheckoutSessionResponse>(
+        CreateCheckoutSessionResponse? body = await response.Content.ReadFromJsonAsync<CreateCheckoutSessionResponse>(
             IntegrationTestAuth.JsonOptions);
         body.Should().NotBeNull();
         body.CheckoutUrl.Should().StartWith("https://checkout.test/");
@@ -224,21 +224,21 @@ public sealed class CollectionsBundlesCheckoutIntegrationTests(IntegrationTestFi
     [Fact]
     public async Task CreateBundleCheckout_WhenAssetAlreadyReserved_ShouldReturnConflictCode()
     {
-        (_, string sellerUsername) =
+        (HttpClient _, var sellerUsername) =
             await IntegrationTestAuth.RegisterVerifiedAndAuthenticateAsync(fixture.Factory);
-        var scopeFactory = fixture.Factory.Services.GetRequiredService<IServiceScopeFactory>();
-        var sellerId = await AssetVersionsSeed.GetUserIdAsync(scopeFactory, sellerUsername);
+        IServiceScopeFactory scopeFactory = fixture.Factory.Services.GetRequiredService<IServiceScopeFactory>();
+        Guid sellerId = await AssetVersionsSeed.GetUserIdAsync(scopeFactory, sellerUsername);
         (Guid assetA, _) = await AssetVersionsSeed.SeedAssetWithVersionsAsync(scopeFactory, sellerId, price: 10m);
         (Guid assetB, _) = await AssetVersionsSeed.SeedAssetWithVersionsAsync(scopeFactory, sellerId, price: 20m);
 
         Guid bundleId;
-        await using (var scope = fixture.Factory.Services.CreateAsyncScope())
+        await using (AsyncServiceScope scope = fixture.Factory.Services.CreateAsyncScope())
         {
-            var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
-            var assetRows = await db.Assets.AsNoTracking()
+            ApplicationDbContext db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+            Dictionary<Guid, Asset> assetRows = await db.Assets.AsNoTracking()
                 .Where(a => a.Id == assetA || a.Id == assetB)
                 .ToDictionaryAsync(a => a.Id);
-            var now = DateTimeOffset.UtcNow;
+            DateTimeOffset now = DateTimeOffset.UtcNow;
             bundleId = Guid.NewGuid();
             var revisionId = Guid.NewGuid();
             db.Bundles.Add(new Bundle
@@ -284,12 +284,12 @@ public sealed class CollectionsBundlesCheckoutIntegrationTests(IntegrationTestFi
         (HttpClient buyerClient, _) =
             await IntegrationTestAuth.RegisterVerifiedAndAuthenticateAsync(fixture.Factory);
 
-        var assetCheckout = await buyerClient.PostAsJsonAsync(
+        HttpResponseMessage assetCheckout = await buyerClient.PostAsJsonAsync(
             new Uri("/api/payments/checkout", UriKind.Relative),
             new CreateCheckoutRequest(assetA));
         assetCheckout.StatusCode.Should().Be(HttpStatusCode.OK);
 
-        var bundleCheckout = await buyerClient.PostAsJsonAsync(
+        HttpResponseMessage bundleCheckout = await buyerClient.PostAsJsonAsync(
             new Uri("/api/payments/checkout/bundles", UriKind.Relative),
             new CreateBundleCheckoutRequest(bundleId));
 
@@ -301,22 +301,22 @@ public sealed class CollectionsBundlesCheckoutIntegrationTests(IntegrationTestFi
     [Fact]
     public async Task CreateBundleCheckout_WhenAvailable_ShouldPersistExactCentAllocations()
     {
-        (_, string sellerUsername) =
+        (HttpClient _, var sellerUsername) =
             await IntegrationTestAuth.RegisterVerifiedAndAuthenticateAsync(fixture.Factory);
-        var scopeFactory = fixture.Factory.Services.GetRequiredService<IServiceScopeFactory>();
-        var sellerId = await AssetVersionsSeed.GetUserIdAsync(scopeFactory, sellerUsername);
+        IServiceScopeFactory scopeFactory = fixture.Factory.Services.GetRequiredService<IServiceScopeFactory>();
+        Guid sellerId = await AssetVersionsSeed.GetUserIdAsync(scopeFactory, sellerUsername);
         (Guid assetA, _) = await AssetVersionsSeed.SeedAssetWithVersionsAsync(scopeFactory, sellerId, price: 10.00m);
         (Guid assetB, _) = await AssetVersionsSeed.SeedAssetWithVersionsAsync(scopeFactory, sellerId, price: 30.00m);
 
         Guid bundleId;
         const decimal bundlePrice = 25.00m;
-        await using (var scope = fixture.Factory.Services.CreateAsyncScope())
+        await using (AsyncServiceScope scope = fixture.Factory.Services.CreateAsyncScope())
         {
-            var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
-            var assetRows = await db.Assets.AsNoTracking()
+            ApplicationDbContext db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+            Dictionary<Guid, Asset> assetRows = await db.Assets.AsNoTracking()
                 .Where(a => a.Id == assetA || a.Id == assetB)
                 .ToDictionaryAsync(a => a.Id);
-            var now = DateTimeOffset.UtcNow;
+            DateTimeOffset now = DateTimeOffset.UtcNow;
             bundleId = Guid.NewGuid();
             var revisionId = Guid.NewGuid();
             db.Bundles.Add(new Bundle
@@ -362,20 +362,20 @@ public sealed class CollectionsBundlesCheckoutIntegrationTests(IntegrationTestFi
         (HttpClient buyerClient, _) =
             await IntegrationTestAuth.RegisterVerifiedAndAuthenticateAsync(fixture.Factory);
 
-        var response = await buyerClient.PostAsJsonAsync(
+        HttpResponseMessage response = await buyerClient.PostAsJsonAsync(
             new Uri("/api/payments/checkout/bundles", UriKind.Relative),
             new CreateBundleCheckoutRequest(bundleId));
 
         response.StatusCode.Should().Be(HttpStatusCode.OK);
-        var result = await response.Content.ReadFromJsonAsync<CreateCheckoutSessionResponse>(
+        CreateCheckoutSessionResponse? result = await response.Content.ReadFromJsonAsync<CreateCheckoutSessionResponse>(
             IntegrationTestAuth.JsonOptions);
         result.Should().NotBeNull();
         result.CheckoutUrl.Should().StartWith("https://checkout.test/");
 
-        await using (var scope = fixture.Factory.Services.CreateAsyncScope())
+        await using (AsyncServiceScope scope = fixture.Factory.Services.CreateAsyncScope())
         {
-            var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
-            var intent = await db.CheckoutIntents
+            ApplicationDbContext db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+            CheckoutIntent? intent = await db.CheckoutIntents
                 .Include(ci => ci.Items)
                 .SingleOrDefaultAsync(ci => ci.BundleId == bundleId);
 

@@ -1,3 +1,4 @@
+using Ardalis.Result;
 using AssetBlock.Application.UseCases.Tags.DeleteTag;
 using AssetBlock.Domain.Abstractions.Services;
 using AssetBlock.Domain.Core.Constants;
@@ -39,7 +40,7 @@ public class DeleteTagCommandHandlerTests
         var existingTag = new Tag { Id = tagId, Name = "to-delete" };
         _tagStoreMock.GetById(tagId, Arg.Any<CancellationToken>()).Returns(existingTag);
 
-        var result = await _handler.Handle(command, CancellationToken.None);
+        Result result = await _handler.Handle(command, CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
         await _tagStoreMock.Received(1).Delete(existingTag, Arg.Any<CancellationToken>());
@@ -61,7 +62,7 @@ public class DeleteTagCommandHandlerTests
         var command = new DeleteTagCommand(tagId);
         _tagStoreMock.GetById(tagId, Arg.Any<CancellationToken>()).Returns((Tag?)null);
 
-        var result = await _handler.Handle(command, CancellationToken.None);
+        Result result = await _handler.Handle(command, CancellationToken.None);
 
         result.IsSuccess.Should().BeFalse();
         result.Status.Should().Be(Ardalis.Result.ResultStatus.NotFound);

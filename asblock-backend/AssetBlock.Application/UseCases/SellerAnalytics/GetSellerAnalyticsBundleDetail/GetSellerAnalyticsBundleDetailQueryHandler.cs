@@ -1,11 +1,11 @@
 using Ardalis.Result;
 using AssetBlock.Application.Common.Caching;
+using AssetBlock.Application.Messaging;
 using AssetBlock.Domain.Abstractions.Services;
 using AssetBlock.Domain.Core.Constants;
 using AssetBlock.Domain.Core.Dto.Analytics;
 using AssetBlock.Domain.Core.Enums;
 using AssetBlock.Domain.Core.Payments;
-using AssetBlock.Application.Messaging;
 using Microsoft.Extensions.Logging;
 
 namespace AssetBlock.Application.UseCases.SellerAnalytics.GetSellerAnalyticsBundleDetail;
@@ -29,17 +29,17 @@ internal sealed class GetSellerAnalyticsBundleDetailQueryHandler(
             request.From,
             request.To);
 
-        var cached = await cache.Get<AnalyticsBundleDetailDto>(cacheKey, cancellationToken);
+        AnalyticsBundleDetailDto? cached = await cache.Get<AnalyticsBundleDetailDto>(cacheKey, cancellationToken);
         if (cached is not null)
         {
             logger.LogDebug("Seller analytics bundle detail cache hit: {Key}", cacheKey);
             return Result.Success(cached);
         }
 
-        var fromUtc = AnalyticsRange.ToUtcStart(request.From);
-        var toUtc = AnalyticsRange.ToUtcStart(request.To);
-        var granularity = AnalyticsRange.Granularity(request.From, request.To);
-        var snapshot = await analyticsStore.GetBundleDetail(
+        DateTimeOffset fromUtc = AnalyticsRange.ToUtcStart(request.From);
+        DateTimeOffset toUtc = AnalyticsRange.ToUtcStart(request.To);
+        AnalyticsGranularity granularity = AnalyticsRange.Granularity(request.From, request.To);
+        AnalyticsBundleDetailSnapshot? snapshot = await analyticsStore.GetBundleDetail(
             request.SellerId,
             request.BundleId,
             fromUtc,
@@ -52,7 +52,7 @@ internal sealed class GetSellerAnalyticsBundleDetailQueryHandler(
             return Result.NotFound();
         }
 
-        var series = AnalyticsRange.BuildSeries(
+        IReadOnlyList<AnalyticsSeriesPoint> series = AnalyticsRange.BuildSeries(
             snapshot.CommerceDaySeries,
             request.From,
             request.To,
@@ -60,7 +60,7 @@ internal sealed class GetSellerAnalyticsBundleDetailQueryHandler(
             snapshot.EngagementAvailableFrom,
             snapshot.EngagementDaySeries);
 
-        var (currentPriceCents, listPriceCents, discountPercent) =
+        (var currentPriceCents, var listPriceCents, var discountPercent) =
             AnalyticsProductMapper.MapBundlePricingPublic(snapshot.CurrentPrice, snapshot.ListPriceTotal);
 
         var dto = new AnalyticsBundleDetailDto(

@@ -1,3 +1,4 @@
+using Ardalis.Result;
 using AssetBlock.Application.UseCases.Analytics.IngestAnalyticsEvent;
 using AssetBlock.Domain.Abstractions.Services;
 using AssetBlock.Domain.Core.Dto.Analytics;
@@ -6,6 +7,7 @@ using AssetBlock.Domain.Core.Enums;
 using AwesomeAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
 using NSubstitute;
+using NSubstitute.Core;
 using NSubstitute.ExceptionExtensions;
 
 namespace AssetBlock.Application.Tests.UseCases.Analytics;
@@ -35,12 +37,12 @@ public class IngestAnalyticsEventCommandHandlerTests
         var assetId = Guid.NewGuid();
         var authorId = Guid.NewGuid();
         _assetStoreMock.GetPublicAnalyticsSellerId(assetId, Arg.Any<CancellationToken>()).Returns(authorId);
-        var command = Command(AnalyticsEventType.ASSET_VIEW, assetId: assetId);
+        IngestAnalyticsEventCommand command = Command(AnalyticsEventType.ASSET_VIEW, assetId: assetId);
 
-        var result = await _handler.Handle(command, CancellationToken.None);
+        Result result = await _handler.Handle(command, CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
-        var inserted = CapturedEvent();
+        AnalyticsEvent inserted = CapturedEvent();
         inserted.SellerId.Should().Be(authorId);
         inserted.AssetId.Should().Be(assetId);
         inserted.OccurredAt.Should().BeCloseTo(DateTimeOffset.UtcNow, TimeSpan.FromMinutes(1));
@@ -99,7 +101,7 @@ public class IngestAnalyticsEventCommandHandlerTests
         var sellerId = Guid.NewGuid();
         _collectionStoreMock.GetPublishedSellerId(collectionId, Arg.Any<CancellationToken>()).Returns(sellerId);
 
-        var result = await _handler.Handle(
+        Result result = await _handler.Handle(
             Command(AnalyticsEventType.COLLECTION_VIEW, collectionId: collectionId),
             CancellationToken.None);
 
@@ -125,7 +127,7 @@ public class IngestAnalyticsEventCommandHandlerTests
     [Fact]
     public async Task Handle_WhenDownloadHasNoAuthenticatedActor_ShouldSucceedWithoutInsert()
     {
-        var command = Command(
+        IngestAnalyticsEventCommand command = Command(
             AnalyticsEventType.DOWNLOAD_REQUESTED,
             assetId: Guid.NewGuid(),
             assetVersionId: Guid.NewGuid());
@@ -183,7 +185,7 @@ public class IngestAnalyticsEventCommandHandlerTests
             .ResolveDownloadAnalyticsSellerId(assetId, versionId, buyerId, Arg.Any<CancellationToken>())
             .Returns(authorId);
 
-        var result = await _handler.Handle(
+        Result result = await _handler.Handle(
             Command(
                 AnalyticsEventType.DOWNLOAD_REQUESTED,
                 assetId: assetId,
@@ -192,7 +194,7 @@ public class IngestAnalyticsEventCommandHandlerTests
             CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
-        var inserted = CapturedEvent();
+        AnalyticsEvent inserted = CapturedEvent();
         inserted.SellerId.Should().Be(authorId);
         inserted.ActorUserId.Should().Be(buyerId);
         inserted.AssetVersionId.Should().Be(versionId);
@@ -205,7 +207,7 @@ public class IngestAnalyticsEventCommandHandlerTests
         _assetStoreMock.GetPublicAnalyticsSellerId(assetId, Arg.Any<CancellationToken>()).Returns(Guid.NewGuid());
         _analyticsEventStoreMock.TryInsert(Arg.Any<AnalyticsEvent>(), Arg.Any<CancellationToken>()).Returns(false);
 
-        var result = await _handler.Handle(
+        Result result = await _handler.Handle(
             Command(AnalyticsEventType.ASSET_VIEW, assetId: assetId),
             CancellationToken.None);
 
@@ -220,7 +222,7 @@ public class IngestAnalyticsEventCommandHandlerTests
         _analyticsEventStoreMock.TryInsert(Arg.Any<AnalyticsEvent>(), Arg.Any<CancellationToken>())
             .ThrowsAsync(new InvalidOperationException("telemetry storage unavailable"));
 
-        var result = await _handler.Handle(
+        Result result = await _handler.Handle(
             Command(AnalyticsEventType.ASSET_VIEW, assetId: assetId),
             CancellationToken.None);
 
@@ -283,7 +285,7 @@ public class IngestAnalyticsEventCommandHandlerTests
 
     private async Task ShouldSucceedWithoutInsert(IngestAnalyticsEventCommand command)
     {
-        var result = await _handler.Handle(command, CancellationToken.None);
+        Result result = await _handler.Handle(command, CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
         await _analyticsEventStoreMock.DidNotReceiveWithAnyArgs().TryInsert(
@@ -293,7 +295,7 @@ public class IngestAnalyticsEventCommandHandlerTests
 
     private AnalyticsEvent CapturedEvent()
     {
-        var call = _analyticsEventStoreMock.ReceivedCalls()
+        ICall call = _analyticsEventStoreMock.ReceivedCalls()
             .Single(c => c.GetMethodInfo().Name == nameof(IAnalyticsEventStore.TryInsert));
         return (AnalyticsEvent)call.GetArguments()[0]!;
     }

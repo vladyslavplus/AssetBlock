@@ -20,6 +20,6 @@ internal static class ClaimsPrincipalExtensions
         }
 
         public Guid? GetUserIdOrNull() =>
-            principal.TryGetUserId(out var userId) ? userId : null;
+            principal.TryGetUserId(out Guid userId) ? userId : null;
     }
 }

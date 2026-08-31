@@ -1,5 +1,6 @@
 using AssetBlock.Application.UseCases.Auth.Register;
 using AwesomeAssertions;
+using FluentValidation.Results;
 
 namespace AssetBlock.Application.Tests.Validators;
 
@@ -15,7 +16,7 @@ public class RegisterCommandValidatorTests
     public async Task Validate_WhenEmailIsEmpty_ShouldFail(string email)
     {
         var command = new RegisterCommand("username", email, "password123");
-        var result = await _validator.ValidateAsync(command);
+        ValidationResult result = await _validator.ValidateAsync(command);
 
         result.IsValid.Should().BeFalse();
         result.Errors.Should().Contain(e => e.PropertyName == "Email");
@@ -28,7 +29,7 @@ public class RegisterCommandValidatorTests
     public async Task Validate_WhenEmailIsInvalid_ShouldFail(string email)
     {
         var command = new RegisterCommand("username", email, "password123");
-        var result = await _validator.ValidateAsync(command);
+        ValidationResult result = await _validator.ValidateAsync(command);
 
         result.IsValid.Should().BeFalse();
         result.Errors.Should().Contain(e => e.PropertyName == "Email" && e.ErrorMessage.Contains("format"));
@@ -39,7 +40,7 @@ public class RegisterCommandValidatorTests
     {
         var email = new string('a', 250) + "@example.com";
         var command = new RegisterCommand("username", email, "password123");
-        var result = await _validator.ValidateAsync(command);
+        ValidationResult result = await _validator.ValidateAsync(command);
 
         result.IsValid.Should().BeFalse();
         result.Errors.Should().Contain(e => e.PropertyName == "Email" && e.ErrorMessage.Contains("exceed 256 characters"));
@@ -51,7 +52,7 @@ public class RegisterCommandValidatorTests
     public async Task Validate_WhenPasswordIsEmpty_ShouldFail(string password)
     {
         var command = new RegisterCommand("username", "test@example.com", password);
-        var result = await _validator.ValidateAsync(command);
+        ValidationResult result = await _validator.ValidateAsync(command);
 
         result.IsValid.Should().BeFalse();
         result.Errors.Should().Contain(e => e.PropertyName == "Password");
@@ -61,7 +62,7 @@ public class RegisterCommandValidatorTests
     public async Task Validate_WhenPasswordIsTooShort_ShouldFail()
     {
         var command = new RegisterCommand("username", "test@example.com", "short");
-        var result = await _validator.ValidateAsync(command);
+        ValidationResult result = await _validator.ValidateAsync(command);
 
         result.IsValid.Should().BeFalse();
         result.Errors.Should().Contain(e => e.PropertyName == "Password" && e.ErrorMessage.Contains("at least 8 characters"));
@@ -72,7 +73,7 @@ public class RegisterCommandValidatorTests
     {
         var password = new string('a', 501);
         var command = new RegisterCommand("username", "test@example.com", password);
-        var result = await _validator.ValidateAsync(command);
+        ValidationResult result = await _validator.ValidateAsync(command);
 
         result.IsValid.Should().BeFalse();
         result.Errors.Should().Contain(e => e.PropertyName == "Password" && e.ErrorMessage.Contains("exceed 500 characters"));
@@ -82,7 +83,7 @@ public class RegisterCommandValidatorTests
     public async Task Validate_WhenValid_ShouldPass()
     {
         var command = new RegisterCommand("username", "test@example.com", "valid_password!");
-        var result = await _validator.ValidateAsync(command);
+        ValidationResult result = await _validator.ValidateAsync(command);
 
         result.IsValid.Should().BeTrue();
     }
@@ -93,7 +94,7 @@ public class RegisterCommandValidatorTests
     public async Task Validate_WhenUsernameIsEmpty_ShouldFail(string username)
     {
         var command = new RegisterCommand(username, "test@example.com", "password123");
-        var result = await _validator.ValidateAsync(command);
+        ValidationResult result = await _validator.ValidateAsync(command);
 
         result.IsValid.Should().BeFalse();
         result.Errors.Should().Contain(e => e.PropertyName == "Username");
@@ -104,7 +105,7 @@ public class RegisterCommandValidatorTests
     {
         var username = new string('a', TOO_LONG_USERNAME_LENGTH);
         var command = new RegisterCommand(username, "test@example.com", "password123");
-        var result = await _validator.ValidateAsync(command);
+        ValidationResult result = await _validator.ValidateAsync(command);
 
         result.IsValid.Should().BeFalse();
         result.Errors.Should().Contain(e => e.PropertyName == "Username");
