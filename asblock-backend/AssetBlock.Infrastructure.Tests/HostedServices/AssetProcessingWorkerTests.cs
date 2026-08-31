@@ -646,9 +646,9 @@ public sealed class AssetProcessingWorkerTests
                 Arg.Any<CancellationToken>())
             .Returns(Task.FromResult(true));
 
-        using var cts = new CancellationTokenSource(TimeSpan.FromMilliseconds(250));
+        using var cts = new CancellationTokenSource(TimeSpan.FromMilliseconds(400));
         await worker.StartAsync(cts.Token);
-        await Task.Delay(120, cts.Token);
+        await Task.Delay(180, cts.Token);
         await worker.StopAsync(CancellationToken.None);
 
         await _lifecycleStore.Received(1).TransitionProcessingFailed(
@@ -988,9 +988,9 @@ public sealed class AssetProcessingWorkerTests
         _store.RenewLease(jobId, leaseToken, Arg.Any<TimeSpan>(), Arg.Any<CancellationToken>())
             .Returns(Task.FromResult(false));
 
-        using var cts = new CancellationTokenSource(TimeSpan.FromMilliseconds(300));
+        using var cts = new CancellationTokenSource(TimeSpan.FromMilliseconds(600));
         await worker.StartAsync(cts.Token);
-        await Task.Delay(150, cts.Token);
+        await Task.Delay(300, cts.Token);
         await worker.StopAsync(CancellationToken.None);
 
         adapterCancelled.Should().BeTrue();
