@@ -339,8 +339,8 @@ public abstract class AssetStorageContractTests(StorageProviderFixture fixture)
         await FluentActions.Awaiting(() => Storage.Upload(key, slow, objectSize: 8 * 1024 * 1024, cts.Token))
             .Should().ThrowAsync<OperationCanceledException>();
 
-        // Verification must not reuse the cancelled token from the aborted upload.
-        List<StorageObjectInfo> listed = await ToList(Storage.ListObjects(_keyPrefix, cts.Token), cts.Token);
+        // Verification must not reuse the canceled token from the aborted upload.
+        List<StorageObjectInfo> listed = await ToList(Storage.ListObjects(_keyPrefix));
         listed.Should().NotContain(o => o.Key == key);
     }
 
