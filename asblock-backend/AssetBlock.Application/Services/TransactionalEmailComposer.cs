@@ -35,10 +35,10 @@ public sealed class TransactionalEmailComposer(IOptions<EmailOptions> emailOptio
         var text = new StringBuilder()
             .AppendLine("Thanks for your purchase on AssetBlock.")
             .AppendLine()
-            .AppendLine($"Asset: {title}")
-            .AppendLine($"Purchased at (UTC): {when}")
+            .AppendLine(CultureInfo.InvariantCulture, $"Asset: {title}")
+            .AppendLine(CultureInfo.InvariantCulture, $"Purchased at (UTC): {when}")
             .AppendLine()
-            .AppendLine($"Open your library: {libraryUrl}")
+            .AppendLine(CultureInfo.InvariantCulture, $"Open your library: {libraryUrl}")
             .ToString();
 
         var safeTitle = HtmlEncoder.Default.Encode(title);
@@ -78,10 +78,10 @@ public sealed class TransactionalEmailComposer(IOptions<EmailOptions> emailOptio
         var text = new StringBuilder()
             .AppendLine("One of your assets was purchased on AssetBlock.")
             .AppendLine()
-            .AppendLine($"Asset: {title}")
-            .AppendLine($"Sold at (UTC): {when}")
+            .AppendLine(CultureInfo.InvariantCulture, $"Asset: {title}")
+            .AppendLine(CultureInfo.InvariantCulture, $"Sold at (UTC): {when}")
             .AppendLine()
-            .AppendLine($"Open your listings: {sellUrl}")
+            .AppendLine(CultureInfo.InvariantCulture, $"Open your listings: {sellUrl}")
             .ToString();
 
         var safeTitle = HtmlEncoder.Default.Encode(title);
@@ -126,14 +126,14 @@ public sealed class TransactionalEmailComposer(IOptions<EmailOptions> emailOptio
         var text = new StringBuilder()
             .AppendLine("Thanks for your purchase on AssetBlock.")
             .AppendLine()
-            .AppendLine($"Product: {title}")
-            .AppendLine($"Amount: {amount}")
-            .AppendLine($"Purchased at (UTC): {when}")
+            .AppendLine(CultureInfo.InvariantCulture, $"Product: {title}")
+            .AppendLine(CultureInfo.InvariantCulture, $"Amount: {amount}")
+            .AppendLine(CultureInfo.InvariantCulture, $"Purchased at (UTC): {when}")
             .AppendLine()
             .AppendLine("Items:")
             .Append(itemLines.Text)
             .AppendLine()
-            .AppendLine($"Open your library: {libraryUrl}")
+            .AppendLine(CultureInfo.InvariantCulture, $"Open your library: {libraryUrl}")
             .ToString();
 
         var safeTitle = HtmlEncoder.Default.Encode(title);
@@ -182,14 +182,14 @@ public sealed class TransactionalEmailComposer(IOptions<EmailOptions> emailOptio
         var text = new StringBuilder()
             .AppendLine("One of your listings was purchased on AssetBlock.")
             .AppendLine()
-            .AppendLine($"Product: {title}")
-            .AppendLine($"Amount: {amount}")
-            .AppendLine($"Sold at (UTC): {when}")
+            .AppendLine(CultureInfo.InvariantCulture, $"Product: {title}")
+            .AppendLine(CultureInfo.InvariantCulture, $"Amount: {amount}")
+            .AppendLine(CultureInfo.InvariantCulture, $"Sold at (UTC): {when}")
             .AppendLine()
             .AppendLine("Items:")
             .Append(itemLines.Text)
             .AppendLine()
-            .AppendLine($"Open your listings: {sellUrl}")
+            .AppendLine(CultureInfo.InvariantCulture, $"Open your listings: {sellUrl}")
             .ToString();
 
         var safeTitle = HtmlEncoder.Default.Encode(title);
@@ -281,7 +281,7 @@ public sealed class TransactionalEmailComposer(IOptions<EmailOptions> emailOptio
         var text = new StringBuilder()
             .AppendLine("Confirm your email address for AssetBlock.")
             .AppendLine()
-            .AppendLine($"Open this link to verify: {actionUrl}")
+            .AppendLine(CultureInfo.InvariantCulture, $"Open this link to verify: {actionUrl}")
             .AppendLine()
             .AppendLine("If you did not create an account, you can ignore this email.")
             .ToString();
@@ -312,7 +312,7 @@ public sealed class TransactionalEmailComposer(IOptions<EmailOptions> emailOptio
         var text = new StringBuilder()
             .AppendLine("We received a request to reset your AssetBlock password.")
             .AppendLine()
-            .AppendLine($"Open this link to choose a new password: {actionUrl}")
+            .AppendLine(CultureInfo.InvariantCulture, $"Open this link to choose a new password: {actionUrl}")
             .AppendLine()
             .AppendLine("If you did not request a reset, you can ignore this email.")
             .ToString();
@@ -343,7 +343,7 @@ public sealed class TransactionalEmailComposer(IOptions<EmailOptions> emailOptio
         var text = new StringBuilder()
             .AppendLine("Confirm this email address for your AssetBlock account.")
             .AppendLine()
-            .AppendLine($"Open this link to confirm: {actionUrl}")
+            .AppendLine(CultureInfo.InvariantCulture, $"Open this link to confirm: {actionUrl}")
             .AppendLine()
             .AppendLine("If you did not request an email change, you can ignore this email.")
             .ToString();
@@ -440,7 +440,7 @@ public sealed class TransactionalEmailComposer(IOptions<EmailOptions> emailOptio
         for (var i = 0; i < count; i++)
         {
             var raw = string.IsNullOrWhiteSpace(itemTitles[i]) ? "(untitled)" : itemTitles[i].Trim();
-            text.AppendLine($"- {raw}");
+            text.AppendLine(CultureInfo.InvariantCulture, $"- {raw}");
             html.Append("<li>").Append(HtmlEncoder.Default.Encode(raw)).Append("</li>");
         }
 

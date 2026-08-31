@@ -2,7 +2,7 @@ using Testcontainers.PostgreSql;
 
 namespace AssetBlock.WebApi.IntegrationTests.Support;
 
-public sealed class IntegrationTestFixture : IAsyncLifetime
+public sealed class IntegrationTestFixture : IAsyncLifetime, IDisposable
 {
     private static readonly TimeSpan _startTimeout = TimeSpan.FromMinutes(2);
 
@@ -41,5 +41,10 @@ public sealed class IntegrationTestFixture : IAsyncLifetime
         }
 
         await _postgres.DisposeAsync();
+    }
+
+    public void Dispose()
+    {
+        _factory?.Dispose();
     }
 }

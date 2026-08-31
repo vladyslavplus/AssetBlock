@@ -99,7 +99,7 @@ internal sealed class PurchaseStore(ApplicationDbContext dbContext) : IPurchaseS
             "PURCHASEDAT" => isDesc
                 ? query.OrderByDescending(p => p.PurchasedAt).ThenBy(p => p.Id)
                 : query.OrderBy(p => p.PurchasedAt).ThenBy(p => p.Id),
-            _ => throw new ArgumentOutOfRangeException(nameof(request.SortBy), sortBy, $"Unexpected sort key after validation: {sortBy}.")
+            _ => throw new ArgumentOutOfRangeException(nameof(request), sortBy, $"Unexpected sort key after validation: {sortBy}.")
         };
 
         var page = Math.Max(PagedRequest.DEFAULT_PAGE, request.Page);

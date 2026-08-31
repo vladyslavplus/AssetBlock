@@ -446,7 +446,7 @@ public abstract class AssetStorageContractTests(StorageProviderFixture fixture)
         public override void SetLength(long value) => throw new NotSupportedException();
         public override void Write(byte[] buffer, int offset, int count) => throw new NotSupportedException();
 
-        public override async Task<int> ReadAsync(byte[] buffer, int offset, int count, CancellationToken cancellationToken)
+        public override async ValueTask<int> ReadAsync(Memory<byte> buffer, CancellationToken cancellationToken = default)
         {
             if (_read >= cancelAfterBytes)
             {
@@ -459,11 +459,16 @@ public abstract class AssetStorageContractTests(StorageProviderFixture fixture)
                 return 0;
             }
 
-            var n = Math.Min(count, totalBytes - _read);
-            Array.Fill(buffer, (byte)0xCD, offset, n);
+            var n = Math.Min(buffer.Length, totalBytes - _read);
+            buffer.Span[..n].Fill(0xCD);
             _read += n;
             await Task.Delay(1, cancellationToken);
             return n;
+        }
+
+        public override async Task<int> ReadAsync(byte[] buffer, int offset, int count, CancellationToken cancellationToken)
+        {
+            return await ReadAsync(buffer.AsMemory(offset, count), cancellationToken);
         }
 
         public override int Read(byte[] buffer, int offset, int count) =>

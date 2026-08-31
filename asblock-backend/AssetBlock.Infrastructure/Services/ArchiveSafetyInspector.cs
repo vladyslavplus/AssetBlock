@@ -687,11 +687,6 @@ internal sealed partial class ArchiveSafetyInspector(
         public override void SetLength(long value) => throw new NotSupportedException();
 
         public override void Write(byte[] buffer, int offset, int count) => throw new NotSupportedException();
-
-        protected override void Dispose(bool disposing)
-        {
-            // Remainder is owned by the caller.
-        }
     }
 
     private sealed class RejectedArchiveException(string errorCode, long expandedBytes = 0) : Exception
@@ -751,11 +746,6 @@ internal sealed partial class ArchiveSafetyInspector(
         public override void SetLength(long value) => throw new NotSupportedException();
 
         public override void Write(byte[] buffer, int offset, int count) => throw new NotSupportedException();
-
-        protected override void Dispose(bool disposing)
-        {
-            // Inner stream is owned by the caller.
-        }
     }
 
     private sealed class GzipRatioLimitingStream(Stream expandedSource, CountingReadStream compressed, double maxRatio)
@@ -845,10 +835,5 @@ internal sealed partial class ArchiveSafetyInspector(
         public override void SetLength(long value) => throw new NotSupportedException();
 
         public override void Write(byte[] buffer, int offset, int count) => throw new NotSupportedException();
-
-        protected override void Dispose(bool disposing)
-        {
-            // Expanded source is owned by the caller.
-        }
     }
 }

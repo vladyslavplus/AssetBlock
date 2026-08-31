@@ -161,8 +161,7 @@ internal sealed class StripePaymentService(
             return Task.FromResult<StripeCheckoutCompleted?>(null);
         }
 
-        var session = stripeEvent.Data.Object as Session;
-        return Task.FromResult(session is null ? null : MapPaidCheckout(session));
+        return Task.FromResult(stripeEvent.Data.Object is Session session ? MapPaidCheckout(session) : null);
     }
 
     private static StripeCheckoutCompleted? MapPaidCheckout(Session session)

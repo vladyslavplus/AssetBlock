@@ -1,6 +1,7 @@
 using AssetBlock.Domain.Core.Enums;
 using AssetBlock.Infrastructure.Observability;
 using System.Diagnostics.Metrics;
+using System.Globalization;
 
 namespace AssetBlock.Infrastructure.Tests.Observability;
 
@@ -248,8 +249,8 @@ public sealed class AssetBlockDiagnosticsTests : IDisposable
 
         var second = GetMeasurements("assetblock.scan.signature_age").ToList();
         second.Should().HaveCount(2);
-        Convert.ToDouble(second[1].Measurement).Should().Be(TimeSpan.FromHours(4).TotalSeconds);
-        Convert.ToDouble(second[1].Measurement).Should().BeGreaterThan(Convert.ToDouble(second[0].Measurement));
+        Convert.ToDouble(second[1].Measurement, CultureInfo.InvariantCulture).Should().Be(TimeSpan.FromHours(4).TotalSeconds);
+        Convert.ToDouble(second[1].Measurement, CultureInfo.InvariantCulture).Should().BeGreaterThan(Convert.ToDouble(second[0].Measurement, CultureInfo.InvariantCulture));
     }
 
     [Fact]

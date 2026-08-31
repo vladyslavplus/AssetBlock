@@ -32,8 +32,8 @@ internal sealed class UploadAssetCommandHandler(
     {
         var uploadOpts = fileUploadOptions.Value;
         var displayFileName = uploadOpts.NormalizeDisplayFileName(request.FileName);
-        uploadOpts.TryMatchAllowedExtension(displayFileName, out var matchedExtension);
-        AssetLicenseCatalog.TryParseCode(request.Request.LicenseCode, out var licenseCode);
+        _ = uploadOpts.TryMatchAllowedExtension(displayFileName, out var matchedExtension);
+        _ = AssetLicenseCatalog.TryParseCode(request.Request.LicenseCode, out var licenseCode);
         var licenseTemplate = AssetLicenseCatalog.Get(licenseCode);
 
         var category = await categoryStore.GetById(request.Request.CategoryId, cancellationToken);

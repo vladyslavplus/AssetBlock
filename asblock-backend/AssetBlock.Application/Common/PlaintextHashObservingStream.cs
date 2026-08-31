@@ -162,7 +162,7 @@ internal sealed class PlaintextHashObservingStream : Stream
 
     public override async Task<int> ReadAsync(byte[] buffer, int offset, int count, CancellationToken cancellationToken)
     {
-        var read = await _inner.ReadAsync(buffer, offset, count, cancellationToken).ConfigureAwait(false);
+        var read = await _inner.ReadAsync(buffer.AsMemory(offset, count), cancellationToken).ConfigureAwait(false);
         if (read > 0)
         {
             _hash.AppendData(buffer, offset, read);

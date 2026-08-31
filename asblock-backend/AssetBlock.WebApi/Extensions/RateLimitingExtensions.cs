@@ -1,3 +1,4 @@
+using System.Globalization;
 using AssetBlock.Domain.Abstractions.Services;
 using AssetBlock.Domain.Core.Constants;
 using AssetBlock.WebApi.ProblemDetails;
@@ -36,7 +37,7 @@ internal static class RateLimitingExtensions
                     out var retryAfter))
             {
                 var retrySeconds = Math.Max(1, (int)Math.Ceiling(retryAfter.TotalSeconds));
-                context.HttpContext.Response.Headers.RetryAfter = retrySeconds.ToString();
+                context.HttpContext.Response.Headers.RetryAfter = retrySeconds.ToString(CultureInfo.InvariantCulture);
             }
 
             var problem = AssetBlockProblemDetails.Create(

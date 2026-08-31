@@ -235,10 +235,7 @@ internal sealed class AesGcmEncryptionService : IEncryptionService, IDisposable
     /// </remarks>
     public long ComputeCiphertextLength(long plaintextLength)
     {
-        if (plaintextLength < 0)
-        {
-            throw new ArgumentOutOfRangeException(nameof(plaintextLength));
-        }
+        ArgumentOutOfRangeException.ThrowIfNegative(plaintextLength);
 
         var headerLength = _magic.Length + 1 + _activeKeyIdBytes.Length;
         const int overheadPerChunk = CHUNK_LENGTH_FIELD + NONCE_SIZE + TAG_SIZE;

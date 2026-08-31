@@ -58,7 +58,7 @@ internal sealed class NotificationStore(ApplicationDbContext dbContext, ILogger<
         {
             "CREATEDAT" => isDesc ? query.OrderByDescending(n => n.CreatedAt).ThenBy(n => n.Id) : query.OrderBy(n => n.CreatedAt).ThenBy(n => n.Id),
             "READAT" => isDesc ? query.OrderByDescending(n => n.ReadAt).ThenBy(n => n.Id) : query.OrderBy(n => n.ReadAt).ThenBy(n => n.Id),
-            _ => throw new ArgumentOutOfRangeException(nameof(request.SortBy), sortBy, $"Unexpected sort key after validation: {sortBy}.")
+            _ => throw new ArgumentOutOfRangeException(nameof(request), sortBy, $"Unexpected sort key after validation: {sortBy}.")
         };
 
         var page = Math.Max(PagedRequest.DEFAULT_PAGE, request.Page);

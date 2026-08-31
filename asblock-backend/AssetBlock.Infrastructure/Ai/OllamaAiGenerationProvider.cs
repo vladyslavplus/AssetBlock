@@ -78,9 +78,9 @@ internal sealed class OllamaAiGenerationProvider : IAiGenerationProvider
             options,
             modelId,
             expectedDigest,
-            cancellationToken,
             started,
-            budget);
+            budget,
+            cancellationToken);
         if (digestCheck is not null)
         {
             return digestCheck;
@@ -133,9 +133,9 @@ internal sealed class OllamaAiGenerationProvider : IAiGenerationProvider
         OllamaOptions options,
         string modelId,
         string expectedDigest,
-        CancellationToken cancellationToken,
         long started,
-        Stopwatch budget)
+        Stopwatch budget,
+        CancellationToken cancellationToken)
     {
         using var tagsRequest = new HttpRequestMessage(HttpMethod.Get, "api/tags");
         using var timed = await _timedSender(

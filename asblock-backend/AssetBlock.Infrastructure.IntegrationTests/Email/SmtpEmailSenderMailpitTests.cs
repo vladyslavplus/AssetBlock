@@ -10,7 +10,7 @@ using DotNet.Testcontainers.Containers;
 namespace AssetBlock.Infrastructure.IntegrationTests.Email;
 
 /// <summary>Real SMTP delivery against pinned Mailpit; isolated from PostgreSQL fixture.</summary>
-public sealed class SmtpEmailSenderMailpitTests : IAsyncLifetime
+public sealed class SmtpEmailSenderMailpitTests : IAsyncLifetime, IDisposable
 {
     private const string MAILPIT_IMAGE = "axllent/mailpit:v1.30.0";
     private const string MESSAGE_ID_DOMAIN = "mail.integration.test";
@@ -18,6 +18,11 @@ public sealed class SmtpEmailSenderMailpitTests : IAsyncLifetime
 
     private IContainer? _mailpit;
     private HttpClient? _http;
+
+    public void Dispose()
+    {
+        _http?.Dispose();
+    }
 
     public async Task InitializeAsync()
     {

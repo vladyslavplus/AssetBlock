@@ -22,7 +22,7 @@ internal sealed class AnalyticsDistributedRateLimiterAdapter(
     {
         get
         {
-            var elapsed = timeProvider.GetElapsedTime(Interlocked.Read(ref _lastAcquireTimestamp));
+            TimeSpan elapsed = timeProvider.GetElapsedTime(Interlocked.Read(ref _lastAcquireTimestamp));
             return elapsed;
         }
     }
@@ -31,22 +31,16 @@ internal sealed class AnalyticsDistributedRateLimiterAdapter(
 
     protected override RateLimitLease AttemptAcquireCore(int permitCount)
     {
-        if (permitCount != 1)
-        {
-            throw new ArgumentOutOfRangeException(nameof(permitCount));
-        }
+        ArgumentOutOfRangeException.ThrowIfNotEqual(permitCount, 1);
 
         Interlocked.Exchange(ref _lastAcquireTimestamp, timeProvider.GetTimestamp());
-        var result = limiter.AcquireBlocking(policy, partitionMaterial);
+        AnalyticsRateLimitAcquireResult result = limiter.AcquireBlocking(policy, partitionMaterial);
         return MapResult(result);
     }
 
     protected override ValueTask<RateLimitLease> AcquireAsyncCore(int permitCount, CancellationToken cancellationToken)
     {
-        if (permitCount != 1)
-        {
-            throw new ArgumentOutOfRangeException(nameof(permitCount));
-        }
+        ArgumentOutOfRangeException.ThrowIfNotEqual(permitCount, 1);
 
         return AcquireInternal(cancellationToken);
     }
@@ -54,7 +48,7 @@ internal sealed class AnalyticsDistributedRateLimiterAdapter(
     private async ValueTask<RateLimitLease> AcquireInternal(CancellationToken cancellationToken)
     {
         Interlocked.Exchange(ref _lastAcquireTimestamp, timeProvider.GetTimestamp());
-        var result = await limiter.Acquire(policy, partitionMaterial, cancellationToken);
+        AnalyticsRateLimitAcquireResult result = await limiter.Acquire(policy, partitionMaterial, cancellationToken);
         return MapResult(result);
     }
 
@@ -73,14 +67,10 @@ internal sealed class AnalyticsDistributedRateLimiterAdapter(
             _ => throw new InvalidOperationException($"Unknown rate limit status: {result.Status}")
         };
 
-    protected override ValueTask DisposeAsyncCore()
-    {
-        return default;
-    }
-
     protected override void Dispose(bool disposing)
     {
         Interlocked.Exchange(ref _disposed, 1);
+        base.Dispose(disposing);
     }
 
     private sealed class AcquiredAnalyticsRateLimitLease : RateLimitLease

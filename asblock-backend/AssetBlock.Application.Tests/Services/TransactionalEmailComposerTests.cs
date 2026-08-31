@@ -116,9 +116,13 @@ public sealed class TransactionalEmailComposerTests
         payload.TemplateKind.Should().Be(EmailTemplateKind.ORDER_RECEIPT);
         payload.Subject.Should().Contain("Order receipt");
         payload.TextBody.Should().Contain("19.99 USD");
+        payload.TextBody.Should().Contain("Purchased at (UTC):");
+        payload.TextBody.Should().NotContain("Sold at (UTC):");
         payload.TextBody.Should().Contain("- Alpha");
         payload.TextBody.Should().Contain("- Beta <script>");
         payload.TextBody.Should().Contain("http://localhost:3000/library");
+        payload.HtmlBody.Should().Contain("Purchased at (UTC):");
+        payload.HtmlBody.Should().NotContain("Sold at (UTC):");
         payload.HtmlBody.Should().Contain("Bundle &lt;b&gt;Deal&lt;/b&gt;");
         payload.HtmlBody.Should().Contain("Beta &lt;script&gt;");
         payload.HtmlBody.Should().NotContain("<script>");

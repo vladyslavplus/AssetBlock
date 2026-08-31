@@ -1,5 +1,7 @@
 using System.Data;
+using System.Data.Common;
 using System.Diagnostics;
+using System.Text;
 using System.Text.RegularExpressions;
 using AssetBlock.Domain.Abstractions.Services;
 using AssetBlock.Domain.Core.Constants;
@@ -28,7 +30,7 @@ internal sealed partial class AssetProcessingJobStore(ApplicationDbContext dbCon
         var runeCount = 0;
         var utf16CharCount = 0;
 
-        foreach (var rune in errorSummary.EnumerateRunes())
+        foreach (Rune rune in errorSummary.EnumerateRunes())
         {
             if (runeCount >= MAX_ERROR_SUMMARY_RUNES)
             {
@@ -67,13 +69,13 @@ internal sealed partial class AssetProcessingJobStore(ApplicationDbContext dbCon
         var typeString = type.ToString();
         var maxAttempts = _options.MaxAttempts;
 
-        var connection = dbContext.Database.GetDbConnection();
+        DbConnection connection = dbContext.Database.GetDbConnection();
         if (connection.State != ConnectionState.Open)
         {
             await connection.OpenAsync(cancellationToken);
         }
 
-        await using var cmd = connection.CreateCommand();
+        await using DbCommand cmd = connection.CreateCommand();
         cmd.Transaction = dbContext.Database.CurrentTransaction?.GetDbTransaction();
         cmd.CommandText = """
             WITH inserted AS (
@@ -120,47 +122,47 @@ internal sealed partial class AssetProcessingJobStore(ApplicationDbContext dbCon
             LIMIT 1;
             """;
 
-        var pId = cmd.CreateParameter();
+        DbParameter pId = cmd.CreateParameter();
         pId.ParameterName = "@id";
         pId.Value = newId;
         cmd.Parameters.Add(pId);
 
-        var pAssetId = cmd.CreateParameter();
+        DbParameter pAssetId = cmd.CreateParameter();
         pAssetId.ParameterName = "@assetId";
         pAssetId.Value = assetId;
         cmd.Parameters.Add(pAssetId);
 
-        var pVersionId = cmd.CreateParameter();
+        DbParameter pVersionId = cmd.CreateParameter();
         pVersionId.ParameterName = "@assetVersionId";
         pVersionId.Value = assetVersionId;
         cmd.Parameters.Add(pVersionId);
 
-        var pType = cmd.CreateParameter();
+        DbParameter pType = cmd.CreateParameter();
         pType.ParameterName = "@type";
         pType.Value = typeString;
         cmd.Parameters.Add(pType);
 
-        var pDefVer = cmd.CreateParameter();
+        DbParameter pDefVer = cmd.CreateParameter();
         pDefVer.ParameterName = "@defVer";
         pDefVer.Value = definitionVersion;
         cmd.Parameters.Add(pDefVer);
 
-        var pMaxAttempts = cmd.CreateParameter();
+        DbParameter pMaxAttempts = cmd.CreateParameter();
         pMaxAttempts.ParameterName = "@maxAttempts";
         pMaxAttempts.Value = maxAttempts;
         cmd.Parameters.Add(pMaxAttempts);
 
-        var pDelay = cmd.CreateParameter();
+        DbParameter pDelay = cmd.CreateParameter();
         pDelay.ParameterName = "@initialDelay";
         pDelay.Value = initialDelay;
         cmd.Parameters.Add(pDelay);
 
-        var pPayload = cmd.CreateParameter();
+        DbParameter pPayload = cmd.CreateParameter();
         pPayload.ParameterName = "@payload";
         pPayload.Value = serializedPayload;
         cmd.Parameters.Add(pPayload);
 
-        var pTrace = cmd.CreateParameter();
+        DbParameter pTrace = cmd.CreateParameter();
         pTrace.ParameterName = "@traceParent";
         pTrace.Value = (object?)traceParent ?? DBNull.Value;
         cmd.Parameters.Add(pTrace);
@@ -191,14 +193,11 @@ internal sealed partial class AssetProcessingJobStore(ApplicationDbContext dbCon
         string leaseOwner,
         CancellationToken cancellationToken = default)
     {
-        if (batchSize < 1)
-        {
-            throw new ArgumentOutOfRangeException(nameof(batchSize));
-        }
+        ArgumentOutOfRangeException.ThrowIfLessThan(batchSize, 1);
 
         var leaseToken = Guid.NewGuid();
 
-        await using var tx = await dbContext.Database.BeginTransactionAsync(IsolationLevel.ReadCommitted, cancellationToken);
+        await using IDbContextTransaction tx = await dbContext.Database.BeginTransactionAsync(IsolationLevel.ReadCommitted, cancellationToken);
 
         var claimedCount = await dbContext.Database.ExecuteSqlInterpolatedAsync($"""
             WITH claimable AS (
@@ -230,7 +229,7 @@ internal sealed partial class AssetProcessingJobStore(ApplicationDbContext dbCon
             return [];
         }
 
-        var claimed = await dbContext.AssetProcessingJobs
+        List<ClaimedAssetProcessingJob> claimed = await dbContext.AssetProcessingJobs
             .AsNoTracking()
             .Where(j => j.LeaseToken == leaseToken)
             .OrderBy(j => j.AvailableAt)
@@ -263,9 +262,9 @@ internal sealed partial class AssetProcessingJobStore(ApplicationDbContext dbCon
         TimeSpan leaseDuration,
         CancellationToken cancellationToken = default)
     {
-        await using var tx = await dbContext.Database.BeginTransactionAsync(IsolationLevel.ReadCommitted, cancellationToken);
+        await using IDbContextTransaction tx = await dbContext.Database.BeginTransactionAsync(IsolationLevel.ReadCommitted, cancellationToken);
 
-        var locked = await dbContext.Database.SqlQueryRaw<Guid>(
+        List<Guid> locked = await dbContext.Database.SqlQueryRaw<Guid>(
             """
             SELECT "Id"
             FROM asset_processing_jobs
@@ -305,9 +304,9 @@ internal sealed partial class AssetProcessingJobStore(ApplicationDbContext dbCon
         AssetProcessingResult? result,
         CancellationToken cancellationToken = default)
     {
-        await using var tx = await dbContext.Database.BeginTransactionAsync(IsolationLevel.ReadCommitted, cancellationToken);
+        await using IDbContextTransaction tx = await dbContext.Database.BeginTransactionAsync(IsolationLevel.ReadCommitted, cancellationToken);
 
-        var jobTypes = await dbContext.Database.SqlQueryRaw<string>(
+        List<string> jobTypes = await dbContext.Database.SqlQueryRaw<string>(
             """
             SELECT "Type"
             FROM asset_processing_jobs
@@ -322,7 +321,7 @@ internal sealed partial class AssetProcessingJobStore(ApplicationDbContext dbCon
             return false;
         }
 
-        var jobType = Enum.Parse<AssetProcessingJobType>(jobTypes[0]);
+        AssetProcessingJobType jobType = Enum.Parse<AssetProcessingJobType>(jobTypes[0]);
         var serializedResult = result != null ? AssetProcessingSerializer.SerializeResult(jobType, result) : null;
 
         var updated = await dbContext.Database.ExecuteSqlInterpolatedAsync($"""
@@ -372,9 +371,9 @@ internal sealed partial class AssetProcessingJobStore(ApplicationDbContext dbCon
 
         var boundedSummary = BoundErrorSummary(errorSummary);
 
-        await using var tx = await dbContext.Database.BeginTransactionAsync(IsolationLevel.ReadCommitted, cancellationToken);
+        await using IDbContextTransaction tx = await dbContext.Database.BeginTransactionAsync(IsolationLevel.ReadCommitted, cancellationToken);
 
-        var locked = await dbContext.Database.SqlQueryRaw<Guid>(
+        List<Guid> locked = await dbContext.Database.SqlQueryRaw<Guid>(
             """
             SELECT "Id"
             FROM asset_processing_jobs
@@ -430,9 +429,9 @@ internal sealed partial class AssetProcessingJobStore(ApplicationDbContext dbCon
 
         var boundedSummary = BoundErrorSummary(errorSummary);
 
-        await using var tx = await dbContext.Database.BeginTransactionAsync(IsolationLevel.ReadCommitted, cancellationToken);
+        await using IDbContextTransaction tx = await dbContext.Database.BeginTransactionAsync(IsolationLevel.ReadCommitted, cancellationToken);
 
-        var locked = await dbContext.Database.SqlQueryRaw<Guid>(
+        List<Guid> locked = await dbContext.Database.SqlQueryRaw<Guid>(
             """
             SELECT "Id"
             FROM asset_processing_jobs
@@ -478,9 +477,9 @@ internal sealed partial class AssetProcessingJobStore(ApplicationDbContext dbCon
         Guid leaseToken,
         CancellationToken cancellationToken = default)
     {
-        await using var tx = await dbContext.Database.BeginTransactionAsync(IsolationLevel.ReadCommitted, cancellationToken);
+        await using IDbContextTransaction tx = await dbContext.Database.BeginTransactionAsync(IsolationLevel.ReadCommitted, cancellationToken);
 
-        var locked = await dbContext.Database.SqlQueryRaw<Guid>(
+        List<Guid> locked = await dbContext.Database.SqlQueryRaw<Guid>(
             """
             SELECT "Id"
             FROM asset_processing_jobs
@@ -523,7 +522,7 @@ internal sealed partial class AssetProcessingJobStore(ApplicationDbContext dbCon
 
     public async Task<int> RecoverExpiredLeases(CancellationToken cancellationToken = default)
     {
-        var leaseExpiredCode = ErrorCodes.LEASE_EXPIRED;
+        const string leaseExpiredCode = ErrorCodes.LEASE_EXPIRED;
         var leaseExpiredSummary = ErrorCodesToErrorMessages.GetMessage(ErrorCodes.LEASE_EXPIRED);
         var updated = await dbContext.Database.ExecuteSqlInterpolatedAsync($"""
             WITH expired AS (

@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text;
 using Ardalis.Result;
 using AssetBlock.Application.Common;
@@ -7,6 +8,7 @@ using AssetBlock.Domain.Core.Dto.Audit;
 using AssetBlock.Domain.Core.Enums;
 using AssetBlock.Application.Messaging;
 using Microsoft.Extensions.Logging;
+using AssetBlock.Domain.Core.Dto.Analytics;
 
 namespace AssetBlock.Application.UseCases.SellerAnalytics.ExportSellerAnalyticsSales;
 
@@ -34,7 +36,7 @@ internal sealed class ExportSellerAnalyticsSalesCommandHandler(
         var rowCount = 0;
         try
         {
-            await foreach (var row in request.Session.ReadRows(cancellationToken))
+            await foreach (AnalyticsSalesExportRow row in request.Session.ReadRows(cancellationToken))
             {
                 await WriteCsvLineAsync(
                     request.OutputStream,
@@ -67,7 +69,7 @@ internal sealed class ExportSellerAnalyticsSalesCommandHandler(
         using var auditCts = new CancellationTokenSource(_auditTimeout);
         try
         {
-            var generatedAt = DateTimeOffset.UtcNow;
+            DateTimeOffset generatedAt = DateTimeOffset.UtcNow;
             await auditWriter.WriteBestEffort(
                 new AuditEvent(
                     AuditActions.SELLER_ANALYTICS_EXPORTED,
@@ -77,10 +79,10 @@ internal sealed class ExportSellerAnalyticsSalesCommandHandler(
                     new Dictionary<string, object?>
                     {
                         ["sellerId"] = request.SellerId.ToString(),
-                        ["from"] = request.From.ToString("O"),
-                        ["to"] = request.To.ToString("O"),
+                        ["from"] = request.From.ToString("O", CultureInfo.InvariantCulture),
+                        ["to"] = request.To.ToString("O", CultureInfo.InvariantCulture),
                         ["rowCount"] = rowCount,
-                        ["generatedAt"] = generatedAt.ToString("O")
+                        ["generatedAt"] = generatedAt.ToString("O", CultureInfo.InvariantCulture)
                     },
                     ActorTypeOverride: AuditActorType.USER,
                     ActorUserIdOverride: request.SellerId),

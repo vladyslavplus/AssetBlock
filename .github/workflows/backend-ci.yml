@@ -28,13 +28,13 @@ jobs:
       - uses: actions/cache@v6
         with:
           path: ~/.nuget/packages
-          key: nuget-${{ hashFiles('asblock-backend/**/*.csproj', 'asblock-backend/Directory.Packages.props', 'asblock-backend/NuGet.config', 'asblock-backend/**/packages.lock.json', 'asblock-backend/global.json', 'asblock-backend/.config/dotnet-tools.json') }}
+          key: nuget-${{ hashFiles('asblock-backend/**/*.csproj', 'asblock-backend/Directory.Build.props', 'asblock-backend/Directory.Packages.props', 'asblock-backend/NuGet.config', 'asblock-backend/**/packages.lock.json', 'asblock-backend/global.json', 'asblock-backend/.config/dotnet-tools.json') }}
           restore-keys: nuget-
 
       - name: Restore
         working-directory: asblock-backend
         run: |
-          dotnet restore asblock-backend.slnx
+          dotnet restore asblock-backend.slnx --locked-mode
           dotnet tool restore
 
       - name: Build

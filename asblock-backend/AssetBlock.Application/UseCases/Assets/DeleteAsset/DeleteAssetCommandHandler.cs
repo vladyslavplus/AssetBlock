@@ -7,6 +7,7 @@ using AssetBlock.Domain.Core.Enums;
 using AssetBlock.Domain.Core.Exceptions;
 using AssetBlock.Application.Messaging;
 using Microsoft.Extensions.Logging;
+using AssetBlock.Domain.Core.Entities;
 
 namespace AssetBlock.Application.UseCases.Assets.DeleteAsset;
 
@@ -22,7 +23,7 @@ internal sealed class DeleteAssetCommandHandler(
 {
     public async Task<Result> Handle(DeleteAssetCommand request, CancellationToken cancellationToken)
     {
-        var asset = await assetStore.GetById(request.Id, cancellationToken);
+        Asset? asset = await assetStore.GetById(request.Id, cancellationToken);
         if (asset is null)
         {
             return Result.NotFound(ErrorCodes.ERR_ASSET_NOT_FOUND);
@@ -44,7 +45,7 @@ internal sealed class DeleteAssetCommandHandler(
             var softDeleted = false;
             await unitOfWork.ExecuteInTransaction(async ct =>
             {
-                var lockedAsset = await assetStore.GetForUpdate(request.Id, ct)
+                Asset lockedAsset = await assetStore.GetForUpdate(request.Id, ct)
                     ?? throw new AssetNotFoundException();
                 if (lockedAsset.AuthorId != request.UserId)
                 {
@@ -57,7 +58,7 @@ internal sealed class DeleteAssetCommandHandler(
                     return;
                 }
 
-                var now = DateTimeOffset.UtcNow;
+                DateTimeOffset now = DateTimeOffset.UtcNow;
                 var hasPurchases = await purchaseStore.HasPurchasesForAsset(request.Id, ct);
                 var hasActiveCheckout = await checkoutIntentStore.HasActiveForAsset(request.Id, now, ct);
                 softDeleted = hasPurchases || hasActiveCheckout;
@@ -76,7 +77,7 @@ internal sealed class DeleteAssetCommandHandler(
 
                 await checkoutIntentStore.DeleteTerminalUnpaidReferencingAsset(request.Id, ct);
 
-                var allStorageKeys = await assetStore.GetAllStorageKeys(request.Id, ct);
+                IReadOnlyList<string> allStorageKeys = await assetStore.GetAllStorageKeys(request.Id, ct);
                 await assetStore.Delete(lockedAsset.Id, ct);
                 foreach (var key in allStorageKeys)
                 {
@@ -112,11 +113,18 @@ internal sealed class DeleteAssetCommandHandler(
                 logger.LogWarning(ex, "Cache invalidation failed after delete {AssetId}", request.Id);
             }
 
-            logger.LogInformation(
-                softDeleted
-                    ? "Soft-deleted (delisted) asset {AssetId}: purchase or checkout exists; blobs retained."
-                    : "Hard-deleted asset {AssetId}; blob delete enqueued.",
-                request.Id);
+            if (softDeleted)
+            {
+                logger.LogInformation(
+                    "Soft-deleted (delisted) asset {AssetId}: purchase or checkout exists; blobs retained.",
+                    request.Id);
+            }
+            else
+            {
+                logger.LogInformation(
+                    "Hard-deleted asset {AssetId}; blob delete enqueued.",
+                    request.Id);
+            }
             return Result.Success();
         }
         catch (AssetNotFoundException)
