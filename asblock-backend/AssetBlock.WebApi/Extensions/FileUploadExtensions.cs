@@ -1,6 +1,6 @@
+using AssetBlock.Domain.Core.Primitives.AppSettingsOptions;
 using Microsoft.AspNetCore.Http.Features;
 using Microsoft.AspNetCore.Server.Kestrel.Core;
-using AssetBlock.Domain.Core.Primitives.AppSettingsOptions;
 
 namespace AssetBlock.WebApi.Extensions;
 
@@ -14,7 +14,7 @@ public static class FileUploadExtensions
     /// </summary>
     public static IServiceCollection AddFileUploadLimits(this IServiceCollection services, IConfiguration configuration)
     {
-        var section = configuration.GetSection(FileUploadOptions.SECTION_NAME);
+        IConfigurationSection section = configuration.GetSection(FileUploadOptions.SECTION_NAME);
         var maxFileBytes = section.GetValue<long?>(nameof(FileUploadOptions.MaxFileBytes))
             ?? new FileUploadOptions().MaxFileBytes;
         var maxRequestBytes = checked(maxFileBytes + MULTIPART_OVERHEAD_BYTES);

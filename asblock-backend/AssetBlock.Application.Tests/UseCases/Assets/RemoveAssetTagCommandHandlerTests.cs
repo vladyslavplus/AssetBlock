@@ -1,3 +1,4 @@
+using Ardalis.Result;
 using AssetBlock.Application.UseCases.Assets.RemoveAssetTag;
 using AssetBlock.Domain.Abstractions.Services;
 using AssetBlock.Domain.Core.Constants;
@@ -23,7 +24,7 @@ public class RemoveAssetTagCommandHandlerTests
     {
         _assetStoreMock = Substitute.For<IAssetStore>();
         _tagStoreMock = Substitute.For<ITagStore>();
-        var unitOfWorkMock = Substitute.For<IUnitOfWork>();
+        IUnitOfWork unitOfWorkMock = Substitute.For<IUnitOfWork>();
         _auditWriterMock = Substitute.For<IAuditWriter>();
         _cacheMock = Substitute.For<ICacheService>();
 
@@ -45,7 +46,7 @@ public class RemoveAssetTagCommandHandlerTests
         var command = new RemoveAssetTagCommand(Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid());
         _assetStoreMock.GetById(command.AssetId).Returns((Asset?)null);
 
-        var result = await _handler.Handle(command, CancellationToken.None);
+        Result result = await _handler.Handle(command, CancellationToken.None);
 
         result.IsSuccess.Should().BeFalse();
         result.Errors.Should().Contain(ErrorCodes.ERR_ASSET_NOT_FOUND);
@@ -58,7 +59,7 @@ public class RemoveAssetTagCommandHandlerTests
         var asset = new Asset { Id = command.AssetId, AuthorId = Guid.NewGuid(), CategoryId = Guid.NewGuid(), Title = "t" };
         _assetStoreMock.GetById(command.AssetId).Returns(asset);
 
-        var result = await _handler.Handle(command, CancellationToken.None);
+        Result result = await _handler.Handle(command, CancellationToken.None);
 
         result.IsSuccess.Should().BeFalse();
         result.Errors.Should().Contain(ErrorCodes.ERR_FORBIDDEN);
@@ -80,7 +81,7 @@ public class RemoveAssetTagCommandHandlerTests
         _assetStoreMock.GetById(command.AssetId).Returns(asset);
         _tagStoreMock.GetById(command.TagId).Returns((Tag?)null);
 
-        var result = await _handler.Handle(command, CancellationToken.None);
+        Result result = await _handler.Handle(command, CancellationToken.None);
 
         result.IsSuccess.Should().BeFalse();
         result.Errors.Should().Contain(ErrorCodes.ERR_TAG_NOT_FOUND);
@@ -98,7 +99,7 @@ public class RemoveAssetTagCommandHandlerTests
         _tagStoreMock.GetById(command.TagId).Returns(tag);
         _assetStoreMock.HasAssetTag(command.AssetId, command.TagId).Returns(false);
 
-        var result = await _handler.Handle(command, CancellationToken.None);
+        Result result = await _handler.Handle(command, CancellationToken.None);
 
         result.IsSuccess.Should().BeFalse();
         result.Errors.Should().Contain(ErrorCodes.ERR_ASSET_TAG_NOT_FOUND);
@@ -118,7 +119,7 @@ public class RemoveAssetTagCommandHandlerTests
         _assetStoreMock.HasAssetTag(command.AssetId, command.TagId).Returns(true);
         _assetStoreMock.RemoveTag(command.AssetId, command.TagId).Returns(Task.FromResult(true));
 
-        var result = await _handler.Handle(command, CancellationToken.None);
+        Result result = await _handler.Handle(command, CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
 
@@ -138,7 +139,7 @@ public class RemoveAssetTagCommandHandlerTests
     public async Task Handle_WhenExceptionThrown_ShouldLogSafeContextAndRethrow()
     {
         var testLogger = new TestLogger<RemoveAssetTagCommandHandler>();
-        var unitOfWorkMock = Substitute.For<IUnitOfWork>();
+        IUnitOfWork unitOfWorkMock = Substitute.For<IUnitOfWork>();
         unitOfWorkMock.ExecuteInTransaction(Arg.Any<Func<CancellationToken, Task>>(), Arg.Any<CancellationToken>())
             .Returns(ci => ci.Arg<Func<CancellationToken, Task>>()(CancellationToken.None));
         var handler = new RemoveAssetTagCommandHandler(
@@ -159,7 +160,7 @@ public class RemoveAssetTagCommandHandlerTests
         _assetStoreMock.HasAssetTag(command.AssetId, command.TagId).Returns(true);
         _assetStoreMock.RemoveTag(command.AssetId, command.TagId).ThrowsAsync(new InvalidOperationException("db error"));
 
-        var act = () => handler.Handle(command, CancellationToken.None);
+        Func<Task<Result>> act = () => handler.Handle(command, CancellationToken.None);
 
         await act.Should().ThrowAsync<InvalidOperationException>().WithMessage("db error");
         testLogger.Logs.Should().Contain(l =>
@@ -172,7 +173,7 @@ public class RemoveAssetTagCommandHandlerTests
     public async Task Handle_WhenCancelled_ShouldRethrowWithoutErrorLogging()
     {
         var testLogger = new TestLogger<RemoveAssetTagCommandHandler>();
-        var unitOfWorkMock = Substitute.For<IUnitOfWork>();
+        IUnitOfWork unitOfWorkMock = Substitute.For<IUnitOfWork>();
         unitOfWorkMock.ExecuteInTransaction(Arg.Any<Func<CancellationToken, Task>>(), Arg.Any<CancellationToken>())
             .Returns(ci => ci.Arg<Func<CancellationToken, Task>>()(CancellationToken.None));
         var handler = new RemoveAssetTagCommandHandler(
@@ -193,7 +194,7 @@ public class RemoveAssetTagCommandHandlerTests
         _assetStoreMock.HasAssetTag(command.AssetId, command.TagId).Returns(true);
         _assetStoreMock.RemoveTag(command.AssetId, command.TagId).ThrowsAsync(new OperationCanceledException());
 
-        var act = () => handler.Handle(command, CancellationToken.None);
+        Func<Task<Result>> act = () => handler.Handle(command, CancellationToken.None);
 
         await act.Should().ThrowAsync<OperationCanceledException>();
         testLogger.Logs.Should().NotContain(l => l.Level == Microsoft.Extensions.Logging.LogLevel.Error);

@@ -17,7 +17,7 @@ internal sealed class AssetBlobDeleteOutboxHandler(
 
     public async Task Handle(OutboxMessage message, CancellationToken cancellationToken)
     {
-        var payload = JsonSerializer.Deserialize<AssetBlobDeletePayload>(message.Payload, _json)
+        AssetBlobDeletePayload payload = JsonSerializer.Deserialize<AssetBlobDeletePayload>(message.Payload, _json)
             ?? throw new InvalidOperationException("Invalid AssetBlobDelete payload.");
 
         await storageService.Delete(payload.StorageKey, cancellationToken);

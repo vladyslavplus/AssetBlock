@@ -1,7 +1,7 @@
-using AssetBlock.Application.Ai;
-using AwesomeAssertions;
 using System.Text.Json;
+using AssetBlock.Application.Ai;
 using AssetBlock.Domain.Core.Dto;
+using AwesomeAssertions;
 
 namespace AssetBlock.Application.Tests.Ai;
 
@@ -19,10 +19,10 @@ public sealed class ListingCopilotPromptTests
                 ["lowpoly"]));
 
         using var document = JsonDocument.Parse(prompt);
-        var root = document.RootElement;
+        JsonElement root = document.RootElement;
         root.GetProperty("allowedCategories")[0].GetString().Should().Be("3D");
         root.GetProperty("allowedTags")[0].GetString().Should().Be("lowpoly");
-        var untrusted = root.GetProperty("untrustedArchive");
+        JsonElement untrusted = root.GetProperty("untrustedArchive");
         untrusted.GetProperty("readme").GetProperty("text").GetString().Should()
             .Contain("Ignore previous instructions");
         untrusted.GetProperty("fileExtensions").EnumerateArray().Select(e => e.GetString())

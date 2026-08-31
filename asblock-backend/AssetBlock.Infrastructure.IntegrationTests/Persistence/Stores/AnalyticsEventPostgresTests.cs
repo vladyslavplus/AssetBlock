@@ -3,6 +3,7 @@ using AssetBlock.Domain.Core.Enums;
 using AssetBlock.Infrastructure.IntegrationTests.Support;
 using AssetBlock.Infrastructure.Persistence;
 using AssetBlock.Infrastructure.Persistence.Stores;
+using AwesomeAssertions.Specialized;
 using Microsoft.EntityFrameworkCore;
 using Npgsql;
 
@@ -14,14 +15,14 @@ public sealed class AnalyticsEventPostgresTests(PostgresFixture fixture)
     [Fact]
     public async Task TryInsert_WhenEventIsNew_ShouldWriteRowAndReturnTrue()
     {
-        await using var db = await fixture.CreateCleanDbContext();
+        await using ApplicationDbContext db = await fixture.CreateCleanDbContext();
         var store = new AnalyticsEventStore(db);
-        var analyticsEvent = CreateEvent();
+        AnalyticsEvent analyticsEvent = CreateEvent();
 
         var inserted = await store.TryInsert(analyticsEvent);
 
         inserted.Should().BeTrue();
-        var stored = await db.AnalyticsEvents.AsNoTracking().SingleAsync(e => e.Id == analyticsEvent.Id);
+        AnalyticsEvent stored = await db.AnalyticsEvents.AsNoTracking().SingleAsync(e => e.Id == analyticsEvent.Id);
         stored.SellerId.Should().Be(analyticsEvent.SellerId);
         stored.EventType.Should().Be(AnalyticsEventType.ASSET_VIEW);
         stored.Source.Should().Be(AnalyticsTrafficSource.CATALOG);
@@ -32,9 +33,9 @@ public sealed class AnalyticsEventPostgresTests(PostgresFixture fixture)
     [Fact]
     public async Task TryInsert_WhenEventIdIsReplayed_ShouldReturnFalseAndKeepOneRow()
     {
-        await using var db = await fixture.CreateCleanDbContext();
+        await using ApplicationDbContext db = await fixture.CreateCleanDbContext();
         var store = new AnalyticsEventStore(db);
-        var analyticsEvent = CreateEvent();
+        AnalyticsEvent analyticsEvent = CreateEvent();
         await store.TryInsert(analyticsEvent);
 
         var replayed = await store.TryInsert(analyticsEvent);
@@ -57,9 +58,9 @@ public sealed class AnalyticsEventPostgresTests(PostgresFixture fixture)
         bool hasBundle,
         bool hasCollection)
     {
-        await using var db = await fixture.CreateCleanDbContext();
+        await using ApplicationDbContext db = await fixture.CreateCleanDbContext();
 
-        var act = () => InsertRaw(
+        Func<Task> act = () => InsertRaw(
             db,
             eventType,
             assetId: hasAsset ? Guid.NewGuid() : null,
@@ -73,9 +74,9 @@ public sealed class AnalyticsEventPostgresTests(PostgresFixture fixture)
     [Fact]
     public async Task Insert_WhenEventTypeIsUnknown_ShouldViolateCheckConstraint()
     {
-        await using var db = await fixture.CreateCleanDbContext();
+        await using ApplicationDbContext db = await fixture.CreateCleanDbContext();
 
-        var act = () => InsertRaw(db, "PAGE_VIEW", assetId: Guid.NewGuid());
+        Func<Task> act = () => InsertRaw(db, "PAGE_VIEW", assetId: Guid.NewGuid());
 
         await ShouldViolateCheck(act, "CK_analytics_events_EventType");
     }
@@ -83,9 +84,9 @@ public sealed class AnalyticsEventPostgresTests(PostgresFixture fixture)
     [Fact]
     public async Task Insert_WhenSourceIsUnknown_ShouldViolateCheckConstraint()
     {
-        await using var db = await fixture.CreateCleanDbContext();
+        await using ApplicationDbContext db = await fixture.CreateCleanDbContext();
 
-        var act = () => InsertRaw(
+        Func<Task> act = () => InsertRaw(
             db,
             nameof(AnalyticsEventType.ASSET_VIEW),
             assetId: Guid.NewGuid(),
@@ -97,9 +98,9 @@ public sealed class AnalyticsEventPostgresTests(PostgresFixture fixture)
     [Fact]
     public async Task Insert_WhenDeviceClassIsUnknown_ShouldViolateCheckConstraint()
     {
-        await using var db = await fixture.CreateCleanDbContext();
+        await using ApplicationDbContext db = await fixture.CreateCleanDbContext();
 
-        var act = () => InsertRaw(
+        Func<Task> act = () => InsertRaw(
             db,
             nameof(AnalyticsEventType.ASSET_VIEW),
             assetId: Guid.NewGuid(),
@@ -111,9 +112,9 @@ public sealed class AnalyticsEventPostgresTests(PostgresFixture fixture)
     [Fact]
     public async Task Insert_WhenReferrerHostIsEmpty_ShouldViolateCheckConstraint()
     {
-        await using var db = await fixture.CreateCleanDbContext();
+        await using ApplicationDbContext db = await fixture.CreateCleanDbContext();
 
-        var act = () => InsertRaw(
+        Func<Task> act = () => InsertRaw(
             db,
             nameof(AnalyticsEventType.ASSET_VIEW),
             assetId: Guid.NewGuid(),
@@ -126,9 +127,9 @@ public sealed class AnalyticsEventPostgresTests(PostgresFixture fixture)
     [Fact]
     public async Task Insert_WhenReferrerHostPresentWithoutExternalSource_ShouldViolateCheckConstraint()
     {
-        await using var db = await fixture.CreateCleanDbContext();
+        await using ApplicationDbContext db = await fixture.CreateCleanDbContext();
 
-        var act = () => InsertRaw(
+        Func<Task> act = () => InsertRaw(
             db,
             nameof(AnalyticsEventType.ASSET_VIEW),
             assetId: Guid.NewGuid(),
@@ -141,9 +142,9 @@ public sealed class AnalyticsEventPostgresTests(PostgresFixture fixture)
     [Fact]
     public async Task Migrate_WhenFreshDatabase_ShouldHaveNoForeignKeysFromAnalyticsEventsToProducts()
     {
-        await using var db = await fixture.CreateCleanDbContext();
+        await using ApplicationDbContext db = await fixture.CreateCleanDbContext();
 
-        var foreignKeys = await db.Database.SqlQueryRaw<string>(
+        List<string> foreignKeys = await db.Database.SqlQueryRaw<string>(
                 """
                 SELECT tc.constraint_name AS "Value"
                 FROM information_schema.table_constraints tc
@@ -162,9 +163,9 @@ public sealed class AnalyticsEventPostgresTests(PostgresFixture fixture)
     [Fact]
     public async Task Migrate_WhenFreshDatabase_ShouldCreateAnalyticsEventChecksAndIndexes()
     {
-        await using var db = await fixture.CreateCleanDbContext();
+        await using ApplicationDbContext db = await fixture.CreateCleanDbContext();
 
-        var checks = await db.Database.SqlQueryRaw<string>(
+        List<string> checks = await db.Database.SqlQueryRaw<string>(
                 """
                 SELECT conname AS "Value"
                 FROM pg_constraint
@@ -181,7 +182,7 @@ public sealed class AnalyticsEventPostgresTests(PostgresFixture fixture)
             .ToListAsync();
         checks.Should().HaveCount(6);
 
-        var indexes = await db.Database.SqlQueryRaw<string>(
+        List<string> indexes = await db.Database.SqlQueryRaw<string>(
                 """
                 SELECT indexname AS "Value"
                 FROM pg_indexes
@@ -203,7 +204,7 @@ public sealed class AnalyticsEventPostgresTests(PostgresFixture fixture)
 
     private static async Task ShouldViolateCheck(Func<Task> act, string constraintName)
     {
-        var ex = await act.Should().ThrowAsync<PostgresException>();
+        ExceptionAssertions<PostgresException> ex = await act.Should().ThrowAsync<PostgresException>();
         ex.Which.SqlState.Should().Be(PostgresErrorCodes.CheckViolation);
         ex.Which.ConstraintName.Should().Be(constraintName);
     }

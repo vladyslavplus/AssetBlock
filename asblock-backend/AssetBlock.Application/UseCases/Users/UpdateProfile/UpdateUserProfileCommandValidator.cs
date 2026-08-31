@@ -39,7 +39,7 @@ internal sealed class UpdateUserProfileCommandValidator : AbstractValidator<Upda
             return true;
         }
 
-        if (!Uri.TryCreate(url.Trim(), UriKind.Absolute, out var uri))
+        if (!Uri.TryCreate(url.Trim(), UriKind.Absolute, out Uri? uri))
         {
             return false;
         }

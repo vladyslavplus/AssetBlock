@@ -1,10 +1,12 @@
+using Ardalis.Result;
+using AssetBlock.Application.Messaging;
 using AssetBlock.Application.UseCases.Payments.Checkout;
 using AssetBlock.Application.UseCases.Payments.CreateCheckoutSession;
 using AssetBlock.Domain.Abstractions.Services;
 using AssetBlock.Domain.Core.Constants;
+using AssetBlock.Domain.Core.Dto.Bundles;
+using AssetBlock.Domain.Core.Entities;
 using AssetBlock.Domain.Core.Payments;
-using Ardalis.Result;
-using AssetBlock.Application.Messaging;
 
 namespace AssetBlock.Application.UseCases.Payments.CreateBundleCheckoutSession;
 
@@ -30,13 +32,13 @@ internal sealed class CreateBundleCheckoutSessionCommandHandler(
         CreateBundleCheckoutSessionCommand request,
         CancellationToken cancellationToken)
     {
-        var lockedBundle = await bundleStore.LockForUpdate(request.BundleId, cancellationToken);
+        Bundle? lockedBundle = await bundleStore.LockForUpdate(request.BundleId, cancellationToken);
         if (lockedBundle is null || lockedBundle.ArchivedAt.HasValue)
         {
             return Result.NotFound(ErrorCodes.ERR_BUNDLE_NOT_FOUND);
         }
 
-        var snapshot = await bundleStore.GetCheckoutSnapshot(request.BundleId, cancellationToken);
+        BundleCheckoutSnapshot? snapshot = await bundleStore.GetCheckoutSnapshot(request.BundleId, cancellationToken);
         if (snapshot is null)
         {
             return Result.NotFound(ErrorCodes.ERR_BUNDLE_NOT_FOUND);
@@ -52,7 +54,7 @@ internal sealed class CreateBundleCheckoutSessionCommandHandler(
             return Result.Conflict(ErrorCodes.ERR_BUNDLE_UNAVAILABLE);
         }
 
-        var assetIds = snapshot.Items.Select(i => i.AssetId).OrderBy(id => id).ToArray();
+        Guid[] assetIds = snapshot.Items.Select(i => i.AssetId).OrderBy(id => id).ToArray();
         await bundleStore.LockAssetsInOrder(assetIds, cancellationToken);
 
         // Re-read after asset locks so soft/hard deletes and current versions are fresh.
@@ -100,7 +102,7 @@ internal sealed class CreateBundleCheckoutSessionCommandHandler(
             .OrderBy(i => i.Position)
             .Select(i =>
             {
-                var allocated = allocatedByAsset[i.AssetId];
+                BundlePriceAllocator.AllocationResult allocated = allocatedByAsset[i.AssetId];
                 return new CheckoutDraftItem(
                     i.AssetId,
                     i.AssetVersionId,
@@ -118,7 +120,7 @@ internal sealed class CreateBundleCheckoutSessionCommandHandler(
             .ToList();
 
         // No asset id is passed, so COLLECTION attribution can never survive a bundle checkout.
-        var attribution = await attributionNormalizer.TryNormalize(
+        CheckoutAttributionSnapshot? attribution = await attributionNormalizer.TryNormalize(
             request.Attribution,
             assetId: null,
             snapshot.SellerId,

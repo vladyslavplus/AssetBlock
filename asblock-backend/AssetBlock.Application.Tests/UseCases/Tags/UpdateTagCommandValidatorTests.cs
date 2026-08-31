@@ -1,5 +1,6 @@
 using AssetBlock.Application.UseCases.Tags.UpdateTag;
 using AwesomeAssertions;
+using FluentValidation.Results;
 
 namespace AssetBlock.Application.Tests.UseCases.Tags;
 
@@ -11,7 +12,7 @@ public class UpdateTagCommandValidatorTests
     public async Task Validate_WhenIdEmpty_ShouldFail()
     {
         var cmd = new UpdateTagCommand(Guid.Empty, "valid-name");
-        var result = await _validator.ValidateAsync(cmd);
+        ValidationResult result = await _validator.ValidateAsync(cmd);
         result.IsValid.Should().BeFalse();
     }
 
@@ -19,7 +20,7 @@ public class UpdateTagCommandValidatorTests
     public async Task Validate_WhenValid_ShouldPass()
     {
         var cmd = new UpdateTagCommand(Guid.NewGuid(), "tools");
-        var result = await _validator.ValidateAsync(cmd);
+        ValidationResult result = await _validator.ValidateAsync(cmd);
         result.IsValid.Should().BeTrue();
     }
 }

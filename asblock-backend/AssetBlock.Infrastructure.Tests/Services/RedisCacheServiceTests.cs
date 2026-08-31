@@ -11,8 +11,8 @@ public sealed class RedisCacheServiceTests
     [Fact]
     public async Task GetString_returnsValue_whenRedisReturnsValue()
     {
-        var mux = Substitute.For<IConnectionMultiplexer>();
-        var db = Substitute.For<IDatabase>();
+        IConnectionMultiplexer mux = Substitute.For<IConnectionMultiplexer>();
+        IDatabase db = Substitute.For<IDatabase>();
         mux.GetDatabase().Returns(db);
         db.StringGetAsync(Arg.Any<RedisKey>())
             .Returns(Task.FromResult(new RedisValue("hello")));
@@ -24,8 +24,8 @@ public sealed class RedisCacheServiceTests
     [Fact]
     public async Task GetString_returnsNull_whenRedisThrows()
     {
-        var mux = Substitute.For<IConnectionMultiplexer>();
-        var db = Substitute.For<IDatabase>();
+        IConnectionMultiplexer mux = Substitute.For<IConnectionMultiplexer>();
+        IDatabase db = Substitute.For<IDatabase>();
         mux.GetDatabase().Returns(db);
         db.StringGetAsync(Arg.Any<RedisKey>())
             .Returns(_ => Task.FromException<RedisValue>(new RedisConnectionException(ConnectionFailureType.SocketFailure, "down")));
@@ -37,8 +37,8 @@ public sealed class RedisCacheServiceTests
     [Fact]
     public async Task SetString_withExpiry_callsStringSet()
     {
-        var mux = Substitute.For<IConnectionMultiplexer>();
-        var db = Substitute.For<IDatabase>();
+        IConnectionMultiplexer mux = Substitute.For<IConnectionMultiplexer>();
+        IDatabase db = Substitute.For<IDatabase>();
         mux.GetDatabase().Returns(db);
         db.StringSetAsync(Arg.Any<RedisKey>(), Arg.Any<RedisValue>(), Arg.Any<Expiration>())
             .Returns(Task.FromResult(true));
@@ -52,8 +52,8 @@ public sealed class RedisCacheServiceTests
     [Fact]
     public async Task SetString_withoutExpiration_callsTwoArgOverload()
     {
-        var mux = Substitute.For<IConnectionMultiplexer>();
-        var db = Substitute.For<IDatabase>();
+        IConnectionMultiplexer mux = Substitute.For<IConnectionMultiplexer>();
+        IDatabase db = Substitute.For<IDatabase>();
         mux.GetDatabase().Returns(db);
         db.StringSetAsync(Arg.Any<RedisKey>(), Arg.Any<RedisValue>())
             .Returns(Task.FromResult(true));
@@ -67,8 +67,8 @@ public sealed class RedisCacheServiceTests
     [Fact]
     public async Task Increment_setsExpiryOnFirstHit()
     {
-        var mux = Substitute.For<IConnectionMultiplexer>();
-        var db = Substitute.For<IDatabase>();
+        IConnectionMultiplexer mux = Substitute.For<IConnectionMultiplexer>();
+        IDatabase db = Substitute.For<IDatabase>();
         mux.GetDatabase().Returns(db);
         db.StringIncrementAsync(Arg.Any<RedisKey>())
             .Returns(Task.FromResult(1L));
@@ -86,9 +86,9 @@ public sealed class RedisCacheServiceTests
     [Fact]
     public async Task RemoveByPrefix_iteratesKeysAndDeletes()
     {
-        var mux = Substitute.For<IConnectionMultiplexer>();
-        var db = Substitute.For<IDatabase>();
-        var server = Substitute.For<IServer>();
+        IConnectionMultiplexer mux = Substitute.For<IConnectionMultiplexer>();
+        IDatabase db = Substitute.For<IDatabase>();
+        IServer server = Substitute.For<IServer>();
         mux.GetDatabase().Returns(db);
         mux.GetEndPoints().Returns([new DnsEndPoint("127.0.0.1", 6379)]);
         mux.GetServer(Arg.Any<EndPoint>()).Returns(server);

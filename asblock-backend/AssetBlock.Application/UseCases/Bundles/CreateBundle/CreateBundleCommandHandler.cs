@@ -1,12 +1,12 @@
 using Ardalis.Result;
 using AssetBlock.Application.Common;
+using AssetBlock.Application.Messaging;
 using AssetBlock.Domain.Abstractions.Services;
 using AssetBlock.Domain.Core.Constants;
 using AssetBlock.Domain.Core.Dto.Audit;
 using AssetBlock.Domain.Core.Dto.Bundles;
 using AssetBlock.Domain.Core.Entities;
 using AssetBlock.Domain.Core.Enums;
-using AssetBlock.Application.Messaging;
 using Microsoft.Extensions.Logging;
 
 namespace AssetBlock.Application.UseCases.Bundles.CreateBundle;
@@ -29,7 +29,7 @@ internal sealed class CreateBundleCommandHandler(
 
         await unitOfWork.ExecuteInTransaction(async ct =>
         {
-            var prepared = await BundleRevisionDraftBuilder.Build(
+            Result<(decimal ListPriceTotal, IReadOnlyList<BundleRevisionItemDraft> Items)> prepared = await BundleRevisionDraftBuilder.Build(
                 bundleStore,
                 assetStore,
                 request.SellerId,

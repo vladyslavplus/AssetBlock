@@ -13,9 +13,9 @@ internal sealed class GetMyListingsQueryHandler(IAssetStore assetStore)
         GetMyListingsQuery request,
         CancellationToken cancellationToken)
     {
-        var normalizedRequest = request.Request with { Tags = AssetListNormalization.NormalizeTags(request.Request.Tags) };
-        var paged = await assetStore.GetMyListings(request.AuthorId, normalizedRequest, cancellationToken);
-        var normalized = AssetListNormalization.NormalizeDescriptions(paged);
+        GetAssetsRequest normalizedRequest = request.Request with { Tags = AssetListNormalization.NormalizeTags(request.Request.Tags) };
+        Domain.Core.Dto.Paging.PagedResult<SellerAssetListItem> paged = await assetStore.GetMyListings(request.AuthorId, normalizedRequest, cancellationToken);
+        Domain.Core.Dto.Paging.PagedResult<SellerAssetListItem> normalized = AssetListNormalization.NormalizeDescriptions(paged);
         return Result.Success(normalized);
     }
 }

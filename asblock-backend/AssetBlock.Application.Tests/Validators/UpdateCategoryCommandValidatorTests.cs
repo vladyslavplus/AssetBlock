@@ -1,5 +1,6 @@
 using AssetBlock.Application.UseCases.Categories.UpdateCategory;
 using AwesomeAssertions;
+using FluentValidation.Results;
 
 namespace AssetBlock.Application.Tests.Validators;
 
@@ -12,7 +13,7 @@ public class UpdateCategoryCommandValidatorTests
     {
         // Sending empty string (not null) is invalid — the name is being "set to nothing"
         var command = new UpdateCategoryCommand(Guid.NewGuid(), "", null, null);
-        var result = await _validator.ValidateAsync(command);
+        ValidationResult result = await _validator.ValidateAsync(command);
         result.IsValid.Should().BeFalse();
         result.Errors.Should().Contain(e => e.PropertyName == "Name");
     }
@@ -22,7 +23,7 @@ public class UpdateCategoryCommandValidatorTests
     {
         // Null means "don't update" — validator skips it
         var command = new UpdateCategoryCommand(Guid.NewGuid(), null, null, null);
-        var result = await _validator.ValidateAsync(command);
+        ValidationResult result = await _validator.ValidateAsync(command);
         result.IsValid.Should().BeTrue();
     }
 
@@ -30,7 +31,7 @@ public class UpdateCategoryCommandValidatorTests
     public async Task Validate_WhenNameExceeds255Chars_ShouldFail()
     {
         var command = new UpdateCategoryCommand(Guid.NewGuid(), new string('A', 256), null, null);
-        var result = await _validator.ValidateAsync(command);
+        ValidationResult result = await _validator.ValidateAsync(command);
         result.IsValid.Should().BeFalse();
         result.Errors.Should().Contain(e => e.PropertyName == "Name");
     }
@@ -45,7 +46,7 @@ public class UpdateCategoryCommandValidatorTests
     public async Task Validate_WhenSlugIsInvalid_ShouldFail(string slug)
     {
         var command = new UpdateCategoryCommand(Guid.NewGuid(), null, null, slug);
-        var result = await _validator.ValidateAsync(command);
+        ValidationResult result = await _validator.ValidateAsync(command);
         result.IsValid.Should().BeFalse();
         result.Errors.Should().Contain(e => e.PropertyName == "Slug");
     }
@@ -58,7 +59,7 @@ public class UpdateCategoryCommandValidatorTests
     public async Task Validate_WhenSlugIsValid_ShouldPass(string slug)
     {
         var command = new UpdateCategoryCommand(Guid.NewGuid(), null, null, slug);
-        var result = await _validator.ValidateAsync(command);
+        ValidationResult result = await _validator.ValidateAsync(command);
         result.Errors.Should().NotContain(e => e.PropertyName == "Slug");
     }
 
@@ -66,7 +67,7 @@ public class UpdateCategoryCommandValidatorTests
     public async Task Validate_WhenDescriptionExceeds1000Chars_ShouldFail()
     {
         var command = new UpdateCategoryCommand(Guid.NewGuid(), null, new string('x', 1001), null);
-        var result = await _validator.ValidateAsync(command);
+        ValidationResult result = await _validator.ValidateAsync(command);
         result.IsValid.Should().BeFalse();
         result.Errors.Should().Contain(e => e.PropertyName == "Description");
     }
@@ -76,7 +77,7 @@ public class UpdateCategoryCommandValidatorTests
     {
         // Completely empty update (all null) is technically valid from a validator perspective
         var command = new UpdateCategoryCommand(Guid.NewGuid(), null, null, null);
-        var result = await _validator.ValidateAsync(command);
+        ValidationResult result = await _validator.ValidateAsync(command);
         result.IsValid.Should().BeTrue();
     }
 }

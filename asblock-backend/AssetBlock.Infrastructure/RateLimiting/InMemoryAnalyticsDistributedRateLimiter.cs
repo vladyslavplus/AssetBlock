@@ -33,10 +33,10 @@ internal sealed class InMemoryAnalyticsDistributedRateLimiter(TimeProvider timeP
         AnalyticsRateLimitPolicy policy,
         string partitionMaterial)
     {
-        var (limit, windowSeconds) = ResolvePolicy(policy);
-        var now = timeProvider.GetUtcNow();
-        var windowStart = GetWindowStart(now, windowSeconds);
-        var retryAfter = windowStart.AddSeconds(windowSeconds) - now;
+        (var limit, var windowSeconds) = ResolvePolicy(policy);
+        DateTimeOffset now = timeProvider.GetUtcNow();
+        DateTimeOffset windowStart = GetWindowStart(now, windowSeconds);
+        TimeSpan retryAfter = windowStart.AddSeconds(windowSeconds) - now;
         if (retryAfter <= TimeSpan.Zero)
         {
             retryAfter = TimeSpan.FromSeconds(1);
@@ -45,7 +45,7 @@ internal sealed class InMemoryAnalyticsDistributedRateLimiter(TimeProvider timeP
         MaybeCleanupExpiredWindows(now);
 
         var key = $"{policy}:{partitionMaterial}:{windowStart.ToUnixTimeSeconds()}";
-        var state = _windows.GetOrAdd(key, _ => new WindowState(windowStart, windowSeconds));
+        WindowState state = _windows.GetOrAdd(key, _ => new WindowState(windowStart, windowSeconds));
         var count = Interlocked.Increment(ref state.Count);
 
         if (count > limit)
@@ -64,7 +64,7 @@ internal sealed class InMemoryAnalyticsDistributedRateLimiter(TimeProvider timeP
             return;
         }
 
-        foreach (var entry in _windows)
+        foreach (KeyValuePair<string, WindowState> entry in _windows)
         {
             if (entry.Value.IsExpired(now))
             {

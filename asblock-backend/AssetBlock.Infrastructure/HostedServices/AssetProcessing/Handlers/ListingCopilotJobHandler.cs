@@ -2,6 +2,7 @@ using AssetBlock.Domain.Abstractions.Services;
 using AssetBlock.Domain.Core;
 using AssetBlock.Domain.Core.Constants;
 using AssetBlock.Domain.Core.Dto;
+using AssetBlock.Domain.Core.Entities;
 using AssetBlock.Domain.Core.Enums;
 using AssetBlock.Domain.Core.Primitives.AppSettingsOptions;
 using AssetBlock.Infrastructure.Persistence.Stores;
@@ -33,7 +34,7 @@ internal sealed class ListingCopilotJobHandler(
                 ErrorCodesToErrorMessages.GetMessage(ErrorCodes.INVALID_JOB_PAYLOAD));
         }
 
-        var version = await assetStore.GetVersion(context.AssetId, context.AssetVersionId, cancellationToken);
+        AssetVersion? version = await assetStore.GetVersion(context.AssetId, context.AssetVersionId, cancellationToken);
         if (version is null)
         {
             return AssetProcessingJobOutcome.Terminal(
@@ -41,7 +42,7 @@ internal sealed class ListingCopilotJobHandler(
                 ErrorCodesToErrorMessages.GetMessage(ErrorCodes.VERSION_NOT_FOUND));
         }
 
-        var analysis = await analysisStore.GetByVersionId(context.AssetVersionId, cancellationToken);
+        AssetArchiveAnalysis? analysis = await analysisStore.GetByVersionId(context.AssetVersionId, cancellationToken);
         if (analysis is null)
         {
             return AssetProcessingJobOutcome.Terminal(
@@ -64,8 +65,8 @@ internal sealed class ListingCopilotJobHandler(
                 ErrorCodesToErrorMessages.GetMessage(ErrorCodes.INVALID_JOB_PAYLOAD));
         }
 
-        var categories = await listingCopilotStore.ListCategoryNames(cancellationToken);
-        var tags = await listingCopilotStore.ListTagNames(cancellationToken);
+        IReadOnlyList<string> categories = await listingCopilotStore.ListCategoryNames(cancellationToken);
+        IReadOnlyList<string> tags = await listingCopilotStore.ListTagNames(cancellationToken);
         if (categories.Count > ListingSuggestionBounds.MAX_ALLOWLIST_CATEGORIES
             || tags.Count > ListingSuggestionBounds.MAX_ALLOWLIST_TAGS)
         {
@@ -83,8 +84,8 @@ internal sealed class ListingCopilotJobHandler(
         SafeReadmeExcerpt? readme = null;
         if (sanitizedReadme is not null)
         {
-            var options = aiOptions.Value;
-            if (AiProviderParser.TryParse(options.Provider, out var parsedProvider)
+            AiOptions options = aiOptions.Value;
+            if (AiProviderParser.TryParse(options.Provider, out AiProviderKind parsedProvider)
                 && parsedProvider == AiProviderKind.OPENROUTER
                 && !openRouterOptions.Value.ZeroDataRetention)
             {
@@ -110,7 +111,7 @@ internal sealed class ListingCopilotJobHandler(
             categories,
             tags);
 
-        var result = await orchestrator.Generate(request, cancellationToken);
+        ListingSuggestionResult result = await orchestrator.Generate(request, cancellationToken);
         return result.Outcome switch
         {
             AiGenerationOutcomeKind.SUCCESS => await CommitSuccess(context, result, categories, tags, cancellationToken),

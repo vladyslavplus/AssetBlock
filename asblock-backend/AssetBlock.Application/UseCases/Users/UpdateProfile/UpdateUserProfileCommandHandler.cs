@@ -1,11 +1,12 @@
+using Ardalis.Result;
+using AssetBlock.Application.Messaging;
 using AssetBlock.Domain.Abstractions.Services;
 using AssetBlock.Domain.Core.Constants;
 using AssetBlock.Domain.Core.Dto.Audit;
 using AssetBlock.Domain.Core.Dto.Users;
+using AssetBlock.Domain.Core.Entities;
 using AssetBlock.Domain.Core.Enums;
 using AssetBlock.Domain.Core.Exceptions;
-using Ardalis.Result;
-using AssetBlock.Application.Messaging;
 using Microsoft.Extensions.Logging;
 
 namespace AssetBlock.Application.UseCases.Users.UpdateProfile;
@@ -18,7 +19,7 @@ internal sealed class UpdateUserProfileCommandHandler(
 {
     public async Task<Result<UpdateUserProfileResponse>> Handle(UpdateUserProfileCommand request, CancellationToken cancellationToken)
     {
-        var user = await userStore.GetByIdForUpdate(request.UserId, cancellationToken);
+        User? user = await userStore.GetByIdForUpdate(request.UserId, cancellationToken);
         if (user is null)
         {
             return Result.NotFound(ErrorCodes.ERR_USER_NOT_FOUND);

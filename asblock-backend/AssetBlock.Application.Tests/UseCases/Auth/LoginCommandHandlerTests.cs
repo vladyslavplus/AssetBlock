@@ -1,3 +1,4 @@
+using Ardalis.Result;
 using AssetBlock.Application.UseCases.Auth.Login;
 using AssetBlock.Domain.Abstractions.Services;
 using AssetBlock.Domain.Core.Constants;
@@ -46,7 +47,7 @@ public class LoginCommandHandlerTests
         var command = new LoginCommand("test@example.com", "password123");
         _userStoreMock.GetByEmail(command.Email, Arg.Any<CancellationToken>()).Returns((User?)null);
 
-        var result = await _handler.Handle(command, CancellationToken.None);
+        Result<TokensResponse> result = await _handler.Handle(command, CancellationToken.None);
 
         result.IsSuccess.Should().BeFalse();
         result.ValidationErrors.Should().Contain(e => e.Identifier == ErrorCodes.ERR_AUTH_INVALID_CREDENTIALS);
@@ -68,7 +69,7 @@ public class LoginCommandHandlerTests
         _userStoreMock.GetByEmail(command.Email, Arg.Any<CancellationToken>()).Returns(user);
         _passwordHasherMock.Verify(command.Password, user.PasswordHash).Returns(false);
 
-        var result = await _handler.Handle(command, CancellationToken.None);
+        Result<TokensResponse> result = await _handler.Handle(command, CancellationToken.None);
 
         result.IsSuccess.Should().BeFalse();
         result.ValidationErrors.Should().Contain(e => e.Identifier == ErrorCodes.ERR_AUTH_INVALID_CREDENTIALS);
@@ -92,7 +93,7 @@ public class LoginCommandHandlerTests
         _passwordHasherMock.Verify(command.Password, user.PasswordHash).Returns(true);
         _jwtTokenServiceMock.GenerateTokenPair(user.Id, user.Username, user.Email, user.Role).Returns(tokenResponse);
 
-        var result = await _handler.Handle(command, CancellationToken.None);
+        Result<TokensResponse> result = await _handler.Handle(command, CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
         result.Value.AccessToken.Should().Be("acc");
@@ -125,7 +126,7 @@ public class LoginCommandHandlerTests
         _userStoreMock.UpdatePasswordHashIfMatches(user.Id, "$2a$10$oldhash", "$2a$12$newhash", Arg.Any<CancellationToken>()).Returns(true);
         _jwtTokenServiceMock.GenerateTokenPair(user.Id, user.Username, user.Email, user.Role).Returns(tokenResponse);
 
-        var result = await _handler.Handle(command, CancellationToken.None);
+        Result<TokensResponse> result = await _handler.Handle(command, CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
         await _userStoreMock.Received(1).UpdatePasswordHashIfMatches(user.Id, "$2a$10$oldhash", "$2a$12$newhash", Arg.Any<CancellationToken>());
@@ -148,7 +149,7 @@ public class LoginCommandHandlerTests
         _userStoreMock.UpdatePasswordHashIfMatches(user.Id, "$2a$10$oldhash", "$2a$12$newhash", Arg.Any<CancellationToken>()).Returns(false);
         _jwtTokenServiceMock.GenerateTokenPair(user.Id, user.Username, user.Email, user.Role).Returns(tokenResponse);
 
-        var result = await _handler.Handle(command, CancellationToken.None);
+        Result<TokensResponse> result = await _handler.Handle(command, CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
         result.Value.AccessToken.Should().Be("acc");
@@ -165,7 +166,7 @@ public class LoginCommandHandlerTests
         _userStoreMock.GetByEmail(command.Email, Arg.Any<CancellationToken>()).Returns(user);
         _passwordHasherMock.Verify(command.Password, user.PasswordHash).Returns(false);
 
-        var result = await _handler.Handle(command, CancellationToken.None);
+        Result<TokensResponse> result = await _handler.Handle(command, CancellationToken.None);
 
         result.IsSuccess.Should().BeFalse();
         _passwordHasherMock.DidNotReceive().NeedsRehash(Arg.Any<string>());

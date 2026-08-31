@@ -1,6 +1,7 @@
 using AssetBlock.Application.UseCases.Users.UpdateSocialLinks;
 using AssetBlock.Domain.Core.Dto.Users;
 using AwesomeAssertions;
+using FluentValidation.Results;
 
 namespace AssetBlock.Application.Tests.Validators;
 
@@ -12,7 +13,7 @@ public class UpdateUserSocialLinksCommandValidatorTests
     public async Task Validate_WhenLinksNull_ShouldFail()
     {
         var cmd = new UpdateUserSocialLinksCommand(Guid.NewGuid(), null);
-        var result = await _validator.ValidateAsync(cmd);
+        ValidationResult result = await _validator.ValidateAsync(cmd);
         result.IsValid.Should().BeFalse();
     }
 
@@ -26,7 +27,7 @@ public class UpdateUserSocialLinksCommandValidatorTests
                 new SocialLinkInput { PlatformId = pid, Url = "https://a.com" },
                 new SocialLinkInput { PlatformId = pid, Url = "https://b.com" }
             ]);
-        var result = await _validator.ValidateAsync(cmd);
+        ValidationResult result = await _validator.ValidateAsync(cmd);
         result.IsValid.Should().BeFalse();
     }
 
@@ -36,7 +37,7 @@ public class UpdateUserSocialLinksCommandValidatorTests
         var cmd = new UpdateUserSocialLinksCommand(
             Guid.NewGuid(),
             [new SocialLinkInput { PlatformId = Guid.NewGuid(), Url = "ftp://bad" }]);
-        var result = await _validator.ValidateAsync(cmd);
+        ValidationResult result = await _validator.ValidateAsync(cmd);
         result.IsValid.Should().BeFalse();
     }
 
@@ -46,7 +47,7 @@ public class UpdateUserSocialLinksCommandValidatorTests
         var cmd = new UpdateUserSocialLinksCommand(
             Guid.NewGuid(),
             [new SocialLinkInput { PlatformId = Guid.NewGuid(), Url = "https://github.com/u" }]);
-        var result = await _validator.ValidateAsync(cmd);
+        ValidationResult result = await _validator.ValidateAsync(cmd);
         result.IsValid.Should().BeTrue();
     }
 
@@ -56,7 +57,7 @@ public class UpdateUserSocialLinksCommandValidatorTests
         var cmd = new UpdateUserSocialLinksCommand(
             Guid.NewGuid(),
             [new SocialLinkInput { PlatformId = Guid.NewGuid(), Url = "http://example.com/x" }]);
-        var result = await _validator.ValidateAsync(cmd);
+        ValidationResult result = await _validator.ValidateAsync(cmd);
         result.IsValid.Should().BeTrue();
     }
 
@@ -66,7 +67,7 @@ public class UpdateUserSocialLinksCommandValidatorTests
         var cmd = new UpdateUserSocialLinksCommand(
             Guid.NewGuid(),
             [new SocialLinkInput { PlatformId = Guid.NewGuid(), Url = "/relative" }]);
-        var result = await _validator.ValidateAsync(cmd);
+        ValidationResult result = await _validator.ValidateAsync(cmd);
         result.IsValid.Should().BeFalse();
     }
 }

@@ -18,13 +18,13 @@ public sealed class OptionsValidateOnStartTests
     [Fact]
     public void BuildServiceProvider_WhenEncryptionKeyInvalid_ShouldThrowOptionsValidationException()
     {
-        var services = BuildInfrastructureServices(
+        ServiceCollection services = BuildInfrastructureServices(
             new TestHostEnvironment { EnvironmentName = Environments.Development },
             encryptionKey: "not-valid-base64!!");
 
-        var act = () =>
+        Action act = () =>
         {
-            using var sp = services.BuildServiceProvider();
+            using ServiceProvider sp = services.BuildServiceProvider();
             _ = sp.GetRequiredService<IOptions<EncryptionOptions>>().Value;
         };
 
@@ -34,13 +34,13 @@ public sealed class OptionsValidateOnStartTests
     [Fact]
     public void BuildServiceProvider_WhenCurrentKeyIdMissing_ShouldThrowOptionsValidationException()
     {
-        var services = BuildInfrastructureServices(
+        ServiceCollection services = BuildInfrastructureServices(
             new TestHostEnvironment { EnvironmentName = Environments.Development },
             encryptionCurrentKeyId: null);
 
-        var act = () =>
+        Action act = () =>
         {
-            using var sp = services.BuildServiceProvider();
+            using ServiceProvider sp = services.BuildServiceProvider();
             _ = sp.GetRequiredService<IOptions<EncryptionOptions>>().Value;
         };
 
@@ -50,13 +50,13 @@ public sealed class OptionsValidateOnStartTests
     [Fact]
     public void BuildServiceProvider_WhenCurrentKeyIdExplicitlyEmpty_ShouldThrowOptionsValidationException()
     {
-        var services = BuildInfrastructureServices(
+        ServiceCollection services = BuildInfrastructureServices(
             new TestHostEnvironment { EnvironmentName = Environments.Development },
             encryptionCurrentKeyId: "");
 
-        var act = () =>
+        Action act = () =>
         {
-            using var sp = services.BuildServiceProvider();
+            using ServiceProvider sp = services.BuildServiceProvider();
             _ = sp.GetRequiredService<IOptions<EncryptionOptions>>().Value;
         };
 
@@ -66,13 +66,13 @@ public sealed class OptionsValidateOnStartTests
     [Fact]
     public async Task HostStart_WhenAnalyticsSigningSecretTooShort_ShouldThrowOptionsValidationException()
     {
-        var builder = Host.CreateApplicationBuilder();
+        HostApplicationBuilder builder = Host.CreateApplicationBuilder();
         builder.Environment.EnvironmentName = Environments.Development;
         builder.Configuration["AnalyticsRateLimiting:BffSigningSecret"] = "too-short";
         builder.Services.AddAnalyticsRateLimitingOptions(builder.Configuration);
 
-        using var host = builder.Build();
-        var act = async () => await host.StartAsync();
+        using IHost host = builder.Build();
+        Func<Task> act = async () => await host.StartAsync();
 
         await act.Should().ThrowAsync<OptionsValidationException>();
     }
@@ -81,10 +81,10 @@ public sealed class OptionsValidateOnStartTests
     public void AddAnalyticsDistributedRateLimiting_WhenIntegrationTestingWithoutRedis_ShouldNotThrow()
     {
         var services = new ServiceCollection();
-        var config = BuildMinimalConfig(includeRedis: false);
+        IConfiguration config = BuildMinimalConfig(includeRedis: false);
         var env = new TestHostEnvironment { EnvironmentName = "IntegrationTesting" };
 
-        var act = () => services.AddAnalyticsDistributedRateLimiting(config, env);
+        Func<IServiceCollection> act = () => services.AddAnalyticsDistributedRateLimiting(config, env);
 
         act.Should().NotThrow();
     }
@@ -93,10 +93,10 @@ public sealed class OptionsValidateOnStartTests
     public void AddAnalyticsDistributedRateLimiting_WhenStagingWithoutRedis_ShouldThrow()
     {
         var services = new ServiceCollection();
-        var config = BuildMinimalConfig(includeRedis: false);
+        IConfiguration config = BuildMinimalConfig(includeRedis: false);
         var env = new TestHostEnvironment { EnvironmentName = Environments.Staging };
 
-        var act = () => services.AddAnalyticsDistributedRateLimiting(config, env);
+        Func<IServiceCollection> act = () => services.AddAnalyticsDistributedRateLimiting(config, env);
 
         act.Should().Throw<InvalidOperationException>()
             .WithMessage("*Redis*");
@@ -142,7 +142,7 @@ public sealed class OptionsValidateOnStartTests
             AnalyticsRateLimiting = new { BffSigningSecret = analyticsSigningSecret ?? new string('s', 32) }
         });
 
-        var config = new ConfigurationBuilder()
+        IConfigurationRoot config = new ConfigurationBuilder()
             .AddJsonStream(new MemoryStream(Encoding.UTF8.GetBytes(json)))
             .Build();
 

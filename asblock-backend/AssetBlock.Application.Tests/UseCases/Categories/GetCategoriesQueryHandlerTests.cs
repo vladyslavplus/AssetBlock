@@ -40,7 +40,7 @@ public class GetCategoriesQueryHandlerTests
         var request = new GetCategoriesRequest { Page = 1, PageSize = 10 };
         var query = new GetCategoriesQuery(request);
 
-        var result = await _handler.Handle(query, CancellationToken.None);
+        Ardalis.Result.Result<PagedResult<CategoryListItem>> result = await _handler.Handle(query, CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
         result.Value.Items.Should().HaveCount(1);
@@ -67,7 +67,7 @@ public class GetCategoriesQueryHandlerTests
         var request = new GetCategoriesRequest { Page = 1, PageSize = 10 };
         var query = new GetCategoriesQuery(request);
 
-        var result = await _handler.Handle(query, CancellationToken.None);
+        Ardalis.Result.Result<PagedResult<CategoryListItem>> result = await _handler.Handle(query, CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
         result.Value.Items.Should().HaveCount(1);

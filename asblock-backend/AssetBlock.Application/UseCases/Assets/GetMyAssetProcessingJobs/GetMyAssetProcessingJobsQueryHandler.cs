@@ -13,7 +13,7 @@ internal sealed class GetMyAssetProcessingJobsQueryHandler(
         GetMyAssetProcessingJobsQuery request,
         CancellationToken cancellationToken)
     {
-        var jobs = await jobStore.GetJobsForAsset(request.AssetId, request.OwnerUserId, cancellationToken);
+        IReadOnlyList<AssetProcessingJobDto>? jobs = await jobStore.GetJobsForAsset(request.AssetId, request.OwnerUserId, cancellationToken);
         if (jobs is null)
         {
             return Result.NotFound("Asset was not found or is inaccessible.");

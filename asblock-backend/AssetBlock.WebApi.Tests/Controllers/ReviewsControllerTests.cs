@@ -27,7 +27,7 @@ public sealed class ReviewsControllerTests : ControllerTestBase
 
         var controller = new ReviewsController(Sender);
         SetupUser(_userId, controller);
-        var result = await controller.CreateReview(Guid.NewGuid(), new CreateReviewRequest(5, "ok"), CancellationToken.None);
+        IActionResult result = await controller.CreateReview(Guid.NewGuid(), new CreateReviewRequest(5, "ok"), CancellationToken.None);
 
         result.Should().BeOfType<OkResult>();
     }
@@ -40,7 +40,7 @@ public sealed class ReviewsControllerTests : ControllerTestBase
 
         var controller = new ReviewsController(Sender);
         SetupUser(_userId, controller);
-        var result = await controller.CreateReview(Guid.NewGuid(), new CreateReviewRequest(5, null), CancellationToken.None);
+        IActionResult result = await controller.CreateReview(Guid.NewGuid(), new CreateReviewRequest(5, null), CancellationToken.None);
 
         await AssertStatusCodeAsync(controller, result, StatusCodes.Status404NotFound);
     }
@@ -52,7 +52,7 @@ public sealed class ReviewsControllerTests : ControllerTestBase
             .Returns(Task.FromResult(Result.Success(new DomainPaging.PagedResult<ReviewListItem>([], 0, 1, 10))));
 
         var controller = new ReviewsController(Sender);
-        var result = await controller.GetReviews(Guid.NewGuid(), new GetReviewsRequest(), CancellationToken.None);
+        IActionResult result = await controller.GetReviews(Guid.NewGuid(), new GetReviewsRequest(), CancellationToken.None);
 
         result.Should().BeOfType<OkObjectResult>();
     }
@@ -65,7 +65,7 @@ public sealed class ReviewsControllerTests : ControllerTestBase
             .Returns(Task.FromResult(Result.Success(detail)));
 
         var controller = new ReviewsController(Sender);
-        var result = await controller.GetReviewById(detail.Id, CancellationToken.None);
+        IActionResult result = await controller.GetReviewById(detail.Id, CancellationToken.None);
 
         result.Should().BeOfType<OkObjectResult>();
     }
@@ -77,7 +77,7 @@ public sealed class ReviewsControllerTests : ControllerTestBase
             .Returns(Task.FromResult(NoValueResult.Success()));
 
         var controller = new ReviewsController(Sender);
-        var result = await controller.DeleteReview(Guid.NewGuid(), CancellationToken.None);
+        IActionResult result = await controller.DeleteReview(Guid.NewGuid(), CancellationToken.None);
 
         result.Should().BeOfType<OkResult>();
     }

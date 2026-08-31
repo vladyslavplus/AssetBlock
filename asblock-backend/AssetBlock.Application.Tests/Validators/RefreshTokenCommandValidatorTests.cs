@@ -1,5 +1,6 @@
 using AssetBlock.Application.UseCases.Auth.RefreshToken;
 using AwesomeAssertions;
+using FluentValidation.Results;
 
 namespace AssetBlock.Application.Tests.Validators;
 
@@ -13,7 +14,7 @@ public class RefreshTokenCommandValidatorTests
     public async Task Validate_WhenRefreshTokenIsEmpty_ShouldFail(string token)
     {
         var command = new RefreshTokenCommand(token);
-        var result = await _validator.ValidateAsync(command);
+        ValidationResult result = await _validator.ValidateAsync(command);
 
         result.IsValid.Should().BeFalse();
         result.Errors.Should().Contain(e => e.PropertyName == "RefreshToken");
@@ -24,7 +25,7 @@ public class RefreshTokenCommandValidatorTests
     {
         var token = new string('x', 2000);
         var command = new RefreshTokenCommand(token);
-        var result = await _validator.ValidateAsync(command);
+        ValidationResult result = await _validator.ValidateAsync(command);
 
         result.IsValid.Should().BeTrue();
     }
@@ -34,7 +35,7 @@ public class RefreshTokenCommandValidatorTests
     {
         var token = new string('x', 2001);
         var command = new RefreshTokenCommand(token);
-        var result = await _validator.ValidateAsync(command);
+        ValidationResult result = await _validator.ValidateAsync(command);
 
         result.IsValid.Should().BeFalse();
         result.Errors.Should().Contain(e => e.PropertyName == "RefreshToken");
@@ -44,7 +45,7 @@ public class RefreshTokenCommandValidatorTests
     public async Task Validate_WhenTokenIsValid_ShouldPass()
     {
         var command = new RefreshTokenCommand("valid-token");
-        var result = await _validator.ValidateAsync(command);
+        ValidationResult result = await _validator.ValidateAsync(command);
 
         result.IsValid.Should().BeTrue();
     }

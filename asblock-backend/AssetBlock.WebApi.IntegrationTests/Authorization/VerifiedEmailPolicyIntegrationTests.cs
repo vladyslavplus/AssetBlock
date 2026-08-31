@@ -6,6 +6,7 @@ using System.Text.Json;
 using AssetBlock.Domain.Core.Constants;
 using AssetBlock.Domain.Core.Dto.Auth;
 using AssetBlock.Domain.Core.Dto.Payments;
+using AssetBlock.Domain.Core.Entities;
 using AssetBlock.Infrastructure.Persistence;
 using AssetBlock.WebApi.IntegrationTests.Support;
 using AwesomeAssertions;
@@ -52,23 +53,23 @@ public sealed class VerifiedEmailPolicyIntegrationTests(IntegrationTestFixture f
     [Fact]
     public async Task AdminEndpoint_WhenUnverifiedAdmin_ShouldReturn403EmailNotVerified()
     {
-        var (_, username) = await IntegrationTestAuth.RegisterAndAuthenticateAsync(fixture.Factory);
+        (HttpClient _, var username) = await IntegrationTestAuth.RegisterAndAuthenticateAsync(fixture.Factory);
 
-        await using (var scope = fixture.Factory.Services.CreateAsyncScope())
+        await using (AsyncServiceScope scope = fixture.Factory.Services.CreateAsyncScope())
         {
-            var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
-            var user = await db.Users.SingleAsync(u => u.Username == username);
+            ApplicationDbContext db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+            User user = await db.Users.SingleAsync(u => u.Username == username);
             user.Role = AppRoles.ADMIN;
             await db.SaveChangesAsync();
         }
 
-        var client = fixture.Factory.CreateClient();
+        HttpClient client = fixture.Factory.CreateClient();
         var email = await FindEmailAsync(username);
-        var login = await client.PostAsJsonAsync(
+        HttpResponseMessage login = await client.PostAsJsonAsync(
             new Uri("/api/auth/login", UriKind.Relative),
             new LoginRequest(email, "Password1!"));
         login.EnsureSuccessStatusCode();
-        var tokens = await login.Content.ReadFromJsonAsync<IntegrationTestAuth.TokensResponseDto>(
+        IntegrationTestAuth.TokensResponseDto? tokens = await login.Content.ReadFromJsonAsync<IntegrationTestAuth.TokensResponseDto>(
             IntegrationTestAuth.JsonOptions);
         client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", tokens!.AccessToken);
 
@@ -80,7 +81,7 @@ public sealed class VerifiedEmailPolicyIntegrationTests(IntegrationTestFixture f
     public async Task ProtectedEndpoint_WhenVerified_ShouldPassAuthorizationBoundary()
     {
         (HttpClient client, _) = await IntegrationTestAuth.RegisterVerifiedAndAuthenticateAsync(fixture.Factory);
-        var response = await client.PostAsJsonAsync(
+        HttpResponseMessage response = await client.PostAsJsonAsync(
             new Uri("/api/payments/checkout", UriKind.Relative),
             new CreateCheckoutRequest(Guid.Parse("d4e5f6a7-b8c9-0123-def0-456789abcdef")));
 
@@ -95,20 +96,20 @@ public sealed class VerifiedEmailPolicyIntegrationTests(IntegrationTestFixture f
     {
         (HttpClient client, _) = await IntegrationTestAuth.RegisterAndAuthenticateAsync(fixture.Factory);
 
-        var me = await client.GetAsync(new Uri("/api/users/me", UriKind.Relative));
+        HttpResponseMessage me = await client.GetAsync(new Uri("/api/users/me", UriKind.Relative));
         me.StatusCode.Should().Be(HttpStatusCode.OK);
 
-        var resend = await client.PostAsync(
+        HttpResponseMessage resend = await client.PostAsync(
             new Uri("/api/users/me/email-verification/resend", UriKind.Relative),
             new StringContent(string.Empty, Encoding.UTF8, "application/json"));
         resend.StatusCode.Should().BeOneOf(HttpStatusCode.OK, HttpStatusCode.BadRequest);
 
-        var password = await client.PostAsJsonAsync(
+        HttpResponseMessage password = await client.PostAsJsonAsync(
             new Uri("/api/users/me/password", UriKind.Relative),
             new { currentPassword = "Password1!", newPassword = "Password2!" });
         password.StatusCode.Should().Be(HttpStatusCode.OK);
 
-        var emailChange = await client.PostAsJsonAsync(
+        HttpResponseMessage emailChange = await client.PostAsJsonAsync(
             new Uri("/api/users/me/email-change/request", UriKind.Relative),
             new { newEmail = $"new-{Guid.NewGuid():N}@test.local", currentPassword = "Password2!" });
         emailChange.StatusCode.Should().Be(HttpStatusCode.OK);
@@ -118,9 +119,9 @@ public sealed class VerifiedEmailPolicyIntegrationTests(IntegrationTestFixture f
     {
         response.StatusCode.Should().Be(HttpStatusCode.Forbidden);
         response.Content.Headers.ContentType!.MediaType.Should().Be("application/problem+json");
-        await using var stream = await response.Content.ReadAsStreamAsync();
-        using var doc = await JsonDocument.ParseAsync(stream);
-        var root = doc.RootElement;
+        await using Stream stream = await response.Content.ReadAsStreamAsync();
+        using JsonDocument doc = await JsonDocument.ParseAsync(stream);
+        JsonElement root = doc.RootElement;
         root.GetProperty("status").GetInt32().Should().Be(403);
         root.GetProperty("code").GetString().Should().Be(ErrorCodes.ERR_EMAIL_NOT_VERIFIED);
         root.GetProperty("type").GetString().Should().Be($"urn:assetblock:error:{ErrorCodes.ERR_EMAIL_NOT_VERIFIED}");
@@ -129,9 +130,9 @@ public sealed class VerifiedEmailPolicyIntegrationTests(IntegrationTestFixture f
 
     private async Task<string> FindEmailAsync(string username)
     {
-        await using var scope = fixture.Factory.Services.CreateAsyncScope();
-        var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
-        var user = await db.Users.AsNoTracking().SingleAsync(u => u.Username == username);
+        await using AsyncServiceScope scope = fixture.Factory.Services.CreateAsyncScope();
+        ApplicationDbContext db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+        User user = await db.Users.AsNoTracking().SingleAsync(u => u.Username == username);
         return user.Email;
     }
 }

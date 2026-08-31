@@ -1,5 +1,6 @@
 using AssetBlock.Domain.Core.Constants;
 using AssetBlock.Domain.Core.Dto.Audit;
+using AssetBlock.Domain.Core.Dto.Paging;
 using AssetBlock.Domain.Core.Entities;
 using AssetBlock.Domain.Core.Enums;
 using AssetBlock.Infrastructure.IntegrationTests.Support;
@@ -22,8 +23,8 @@ public sealed class AuditStorePostgresTests(PostgresFixture fixture)
     [Fact]
     public async Task Add_WhenSystemContext_ShouldPersistNullableActorAndRequestFields()
     {
-        await using var db = await fixture.CreateCleanDbContext();
-        var writer = CreateWriter(db);
+        await using ApplicationDbContext db = await fixture.CreateCleanDbContext();
+        AuditWriter writer = CreateWriter(db);
 
         await writer.Write(new AuditEvent(
             AuditActions.PAYMENT_ORDER_COMPLETED,
@@ -33,7 +34,7 @@ public sealed class AuditStorePostgresTests(PostgresFixture fixture)
             new Dictionary<string, object?> { ["assetId"] = Guid.NewGuid().ToString() },
             ActorTypeOverride: AuditActorType.SYSTEM), CancellationToken.None);
 
-        var row = await db.AuditLogs.AsNoTracking().SingleAsync();
+        AuditLog row = await db.AuditLogs.AsNoTracking().SingleAsync();
         row.ActorType.Should().Be(AuditActorType.SYSTEM);
         row.ActorUserId.Should().BeNull();
         row.TraceId.Should().BeNull();
@@ -45,12 +46,12 @@ public sealed class AuditStorePostgresTests(PostgresFixture fixture)
     [Fact]
     public async Task GetPaged_WhenFiltersAndPaging_ShouldApplyInclusiveRangeAndStableOrder()
     {
-        await using var db = await fixture.CreateCleanDbContext();
-        var store = CreateStore(db);
+        await using ApplicationDbContext db = await fixture.CreateCleanDbContext();
+        AuditStore store = CreateStore(db);
         var actor = Guid.NewGuid();
-        var t0 = DateTimeOffset.UtcNow.AddHours(-2);
-        var t1 = t0.AddMinutes(1);
-        var t2 = t0.AddMinutes(2);
+        DateTimeOffset t0 = DateTimeOffset.UtcNow.AddHours(-2);
+        DateTimeOffset t1 = t0.AddMinutes(1);
+        DateTimeOffset t2 = t0.AddMinutes(2);
 
         db.AuditLogs.AddRange(
             new AuditLog
@@ -85,7 +86,7 @@ public sealed class AuditStorePostgresTests(PostgresFixture fixture)
             });
         await db.SaveChangesAsync();
 
-        var page = await store.GetPaged(new GetAuditLogsRequest
+        PagedResult<AuditLogListItem> page = await store.GetPaged(new GetAuditLogsRequest
         {
             Page = 1,
             PageSize = 10,
@@ -106,12 +107,12 @@ public sealed class AuditStorePostgresTests(PostgresFixture fixture)
     [Fact]
     public async Task Transaction_WhenRolledBack_ShouldRemoveBusinessAndAuditRows()
     {
-        await using var db = await fixture.CreateCleanDbContext();
+        await using ApplicationDbContext db = await fixture.CreateCleanDbContext();
         (User author, Category category) = await TestData.SeedAuthorAndCategory(db);
         var unitOfWork = new EfUnitOfWork(db);
-        var writer = CreateWriter(db);
+        AuditWriter writer = CreateWriter(db);
 
-        var act = async () => await unitOfWork.ExecuteInTransaction(async ct =>
+        Func<Task> act = async () => await unitOfWork.ExecuteInTransaction(async ct =>
         {
             db.Assets.Add(TestData.CreateAsset(author.Id, category.Id, title: "Audit Rollback Asset"));
             await db.SaveChangesAsync(ct);
@@ -132,10 +133,10 @@ public sealed class AuditStorePostgresTests(PostgresFixture fixture)
     [Fact]
     public async Task Transaction_WhenCommitted_ShouldKeepBusinessAndAuditRows()
     {
-        await using var db = await fixture.CreateCleanDbContext();
+        await using ApplicationDbContext db = await fixture.CreateCleanDbContext();
         (User author, Category category) = await TestData.SeedAuthorAndCategory(db);
         var unitOfWork = new EfUnitOfWork(db);
-        var writer = CreateWriter(db);
+        AuditWriter writer = CreateWriter(db);
         var assetId = Guid.NewGuid();
 
         await unitOfWork.ExecuteInTransaction(async ct =>
@@ -151,7 +152,7 @@ public sealed class AuditStorePostgresTests(PostgresFixture fixture)
         });
 
         (await db.Assets.CountAsync(a => a.Id == assetId)).Should().Be(1);
-        var audit = await db.AuditLogs.AsNoTracking().SingleAsync();
+        AuditLog audit = await db.AuditLogs.AsNoTracking().SingleAsync();
         audit.Action.Should().Be(AuditActions.ASSET_CREATE);
         audit.ResourceId.Should().Be(assetId.ToString());
     }
@@ -159,7 +160,7 @@ public sealed class AuditStorePostgresTests(PostgresFixture fixture)
     [Fact]
     public async Task Add_WhenMetadataIsNotObject_ShouldFailDatabaseConstraint()
     {
-        await using var db = await fixture.CreateCleanDbContext();
+        await using ApplicationDbContext db = await fixture.CreateCleanDbContext();
         db.AuditLogs.Add(new AuditLog
         {
             OccurredAt = DateTimeOffset.UtcNow,
@@ -170,7 +171,7 @@ public sealed class AuditStorePostgresTests(PostgresFixture fixture)
             MetadataJson = "[]"
         });
 
-        var act = () => db.SaveChangesAsync();
+        Func<Task<int>> act = () => db.SaveChangesAsync();
 
         await act.Should().ThrowAsync<DbUpdateException>();
     }

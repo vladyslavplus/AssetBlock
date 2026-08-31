@@ -1,14 +1,16 @@
+using Ardalis.Result;
+using AssetBlock.Application.Messaging;
 using AssetBlock.Application.UseCases.Payments.CreateBundleCheckoutSession;
 using AssetBlock.Application.UseCases.Payments.CreateCheckoutSession;
 using AssetBlock.Application.UseCases.Payments.GetCheckoutStatus;
 using AssetBlock.Application.UseCases.Payments.HandleStripeWebhook;
 using AssetBlock.Domain.Core.Constants;
+using AssetBlock.Domain.Core.Dto.Outbox;
 using AssetBlock.Domain.Core.Dto.Payments;
-using AssetBlock.WebApi.Constants;
-using AssetBlock.WebApi.Extensions;
 using AssetBlock.Domain.Core.Primitives.AppSettingsOptions;
 using AssetBlock.Infrastructure.Options;
-using AssetBlock.Application.Messaging;
+using AssetBlock.WebApi.Constants;
+using AssetBlock.WebApi.Extensions;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
@@ -43,7 +45,7 @@ public sealed class PaymentsController(ISender sender) : ApiControllerBase(sende
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
     public async Task<IActionResult> CreateCheckout([FromBody] CreateCheckoutRequest request, CancellationToken cancellationToken)
     {
-        if (!User.TryGetUserId(out var userId))
+        if (!User.TryGetUserId(out Guid userId))
         {
             return UnauthorizedProblem();
         }
@@ -54,7 +56,7 @@ public sealed class PaymentsController(ISender sender) : ApiControllerBase(sende
             request.Attribution,
             request.AnalyticsVisitorId,
             request.AnalyticsSessionId);
-        var result = await Sender.Send(command, cancellationToken);
+        Result<CreateCheckoutSessionResponse> result = await Sender.Send(command, cancellationToken);
         return MapResultToActionResult(result);
     }
 
@@ -73,7 +75,7 @@ public sealed class PaymentsController(ISender sender) : ApiControllerBase(sende
         [FromBody] CreateBundleCheckoutRequest request,
         CancellationToken cancellationToken)
     {
-        if (!User.TryGetUserId(out var userId))
+        if (!User.TryGetUserId(out Guid userId))
         {
             return UnauthorizedProblem();
         }
@@ -84,7 +86,7 @@ public sealed class PaymentsController(ISender sender) : ApiControllerBase(sende
             request.Attribution,
             request.AnalyticsVisitorId,
             request.AnalyticsSessionId);
-        var result = await Sender.Send(command, cancellationToken);
+        Result<CreateCheckoutSessionResponse> result = await Sender.Send(command, cancellationToken);
         return MapResultToActionResult(result);
     }
 
@@ -98,12 +100,12 @@ public sealed class PaymentsController(ISender sender) : ApiControllerBase(sende
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> GetCheckoutStatus(Guid checkoutIntentId, CancellationToken cancellationToken)
     {
-        if (!User.TryGetUserId(out var userId))
+        if (!User.TryGetUserId(out Guid userId))
         {
             return UnauthorizedProblem();
         }
 
-        var result = await Sender.Send(new GetCheckoutStatusQuery(checkoutIntentId, userId), cancellationToken);
+        Result<GetCheckoutStatusResponse> result = await Sender.Send(new GetCheckoutStatusQuery(checkoutIntentId, userId), cancellationToken);
         return MapResultToActionResult(result);
     }
 
@@ -125,7 +127,7 @@ public sealed class PaymentsController(ISender sender) : ApiControllerBase(sende
         var payload = await reader.ReadToEndAsync(cancellationToken);
 
         var command = new HandleStripeWebhookCommand(payload, signature);
-        var result = await Sender.Send(command, cancellationToken);
+        Result<OrderCompletedPayload?> result = await Sender.Send(command, cancellationToken);
         if (result.IsSuccess)
         {
             return Ok();

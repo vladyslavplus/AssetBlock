@@ -1,3 +1,4 @@
+using Ardalis.Result;
 using AssetBlock.Application.UseCases.Payments.GetCheckoutStatus;
 using AssetBlock.Domain.Abstractions.Services;
 using AssetBlock.Domain.Core.Constants;
@@ -29,7 +30,7 @@ public class GetCheckoutStatusQueryHandlerTests
             .Returns((CheckoutIntent?)null);
 
         var query = new GetCheckoutStatusQuery(intentId, userId);
-        var result = await _handler.Handle(query, CancellationToken.None);
+        Result<GetCheckoutStatusResponse> result = await _handler.Handle(query, CancellationToken.None);
 
         result.IsSuccess.Should().BeFalse();
         result.Errors.Should().Contain(ErrorCodes.ERR_NOT_FOUND);
@@ -70,7 +71,7 @@ public class GetCheckoutStatusQueryHandlerTests
             .Returns(order);
 
         var query = new GetCheckoutStatusQuery(intentId, userId);
-        var result = await _handler.Handle(query, CancellationToken.None);
+        Result<GetCheckoutStatusResponse> result = await _handler.Handle(query, CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
         result.Value.Status.Should().Be(CheckoutFulfillmentStatuses.COMPLETED);
@@ -99,7 +100,7 @@ public class GetCheckoutStatusQueryHandlerTests
             .Returns((Order?)null);
 
         var query = new GetCheckoutStatusQuery(intentId, userId);
-        var result = await _handler.Handle(query, CancellationToken.None);
+        Result<GetCheckoutStatusResponse> result = await _handler.Handle(query, CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
         result.Value.Status.Should().Be(CheckoutFulfillmentStatuses.CANCELLED);
@@ -128,7 +129,7 @@ public class GetCheckoutStatusQueryHandlerTests
             .Returns((Order?)null);
 
         var query = new GetCheckoutStatusQuery(intentId, userId);
-        var result = await _handler.Handle(query, CancellationToken.None);
+        Result<GetCheckoutStatusResponse> result = await _handler.Handle(query, CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
         result.Value.Status.Should().Be(CheckoutFulfillmentStatuses.PENDING);

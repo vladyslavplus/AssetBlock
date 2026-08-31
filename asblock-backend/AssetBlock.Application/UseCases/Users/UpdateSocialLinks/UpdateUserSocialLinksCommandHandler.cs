@@ -1,11 +1,11 @@
+using Ardalis.Result;
+using AssetBlock.Application.Messaging;
 using AssetBlock.Domain.Abstractions.Services;
 using AssetBlock.Domain.Core.Constants;
 using AssetBlock.Domain.Core.Dto.Audit;
 using AssetBlock.Domain.Core.Dto.Users;
 using AssetBlock.Domain.Core.Entities;
 using AssetBlock.Domain.Core.Enums;
-using Ardalis.Result;
-using AssetBlock.Application.Messaging;
 using Microsoft.Extensions.Logging;
 
 namespace AssetBlock.Application.UseCases.Users.UpdateSocialLinks;
@@ -19,12 +19,12 @@ internal sealed class UpdateUserSocialLinksCommandHandler(
 {
     public async Task<Result<List<UserSocialLinkDto>>> Handle(UpdateUserSocialLinksCommand request, CancellationToken cancellationToken)
     {
-        var platforms = await socialPlatformStore.GetAll(cancellationToken);
+        List<SocialPlatform> platforms = await socialPlatformStore.GetAll(cancellationToken);
         var platformIds = platforms.Select(p => p.Id).ToHashSet();
 
         var deduped = new List<(Guid PlatformId, string Url)>();
         var seen = new HashSet<Guid>();
-        foreach (var link in request.Links!)
+        foreach (SocialLinkInput link in request.Links!)
         {
             if (!seen.Add(link.PlatformId))
             {
@@ -43,7 +43,7 @@ internal sealed class UpdateUserSocialLinksCommandHandler(
             }
         }
 
-        bool ok = false;
+        var ok = false;
         await unitOfWork.ExecuteInTransaction(async ct =>
         {
             ok = await userStore.ReplaceUserSocialLinks(request.UserId, deduped, ct);
@@ -63,7 +63,7 @@ internal sealed class UpdateUserSocialLinksCommandHandler(
             return Result.NotFound(ErrorCodes.ERR_USER_NOT_FOUND);
         }
 
-        var user = await userStore.GetByIdWithLinks(request.UserId, cancellationToken);
+        User? user = await userStore.GetByIdWithLinks(request.UserId, cancellationToken);
         if (user is null)
         {
             return Result.NotFound(ErrorCodes.ERR_USER_NOT_FOUND);

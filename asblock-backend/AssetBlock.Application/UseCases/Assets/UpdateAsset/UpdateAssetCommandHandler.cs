@@ -1,9 +1,10 @@
 using Ardalis.Result;
+using AssetBlock.Application.Messaging;
 using AssetBlock.Domain.Abstractions.Services;
 using AssetBlock.Domain.Core.Constants;
 using AssetBlock.Domain.Core.Dto.Audit;
+using AssetBlock.Domain.Core.Entities;
 using AssetBlock.Domain.Core.Enums;
-using AssetBlock.Application.Messaging;
 using Microsoft.Extensions.Logging;
 
 namespace AssetBlock.Application.UseCases.Assets.UpdateAsset;
@@ -18,10 +19,10 @@ internal sealed class UpdateAssetCommandHandler(
 {
     public async Task<Result> Handle(UpdateAssetCommand request, CancellationToken cancellationToken)
     {
-        bool updated = false;
+        var updated = false;
         try
         {
-            var asset = await assetStore.GetById(request.AssetId, cancellationToken);
+            Asset? asset = await assetStore.GetById(request.AssetId, cancellationToken);
             if (asset is null)
             {
                 return Result.NotFound(ErrorCodes.ERR_ASSET_NOT_FOUND);
@@ -44,7 +45,7 @@ internal sealed class UpdateAssetCommandHandler(
 
             if (request.CategoryId.HasValue)
             {
-                var category = await categoryStore.GetById(request.CategoryId.Value, cancellationToken);
+                Category? category = await categoryStore.GetById(request.CategoryId.Value, cancellationToken);
                 if (category is null)
                 {
                     return Result.NotFound(ErrorCodes.ERR_CATEGORY_NOT_FOUND);

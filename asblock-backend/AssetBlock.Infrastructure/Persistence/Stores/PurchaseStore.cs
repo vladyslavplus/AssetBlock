@@ -86,7 +86,7 @@ internal sealed class PurchaseStore(ApplicationDbContext dbContext) : IPurchaseS
         ListMyPurchasesRequest request,
         CancellationToken cancellationToken = default)
     {
-        var query = dbContext.Purchases.AsNoTracking().Where(p => p.UserId == userId);
+        IQueryable<Purchase> query = dbContext.Purchases.AsNoTracking().Where(p => p.UserId == userId);
         var total = await query.CountAsync(cancellationToken);
 
         var sortBy = string.IsNullOrWhiteSpace(request.SortBy) || !ListMyPurchasesRequest.AllowedSortBy.Contains(request.SortBy)
@@ -105,7 +105,7 @@ internal sealed class PurchaseStore(ApplicationDbContext dbContext) : IPurchaseS
         var page = Math.Max(PagedRequest.DEFAULT_PAGE, request.Page);
         var pageSize = Math.Clamp(request.PageSize, PagedRequest.MIN_PAGE_SIZE, PagedRequest.MAX_PAGE_SIZE);
 
-        var items = await query
+        List<PurchaseLibraryItemDto> items = await query
             .Skip((page - 1) * pageSize)
             .Take(pageSize)
             .Select(p => new PurchaseLibraryItemDto(

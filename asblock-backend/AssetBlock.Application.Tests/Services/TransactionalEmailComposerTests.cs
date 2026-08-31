@@ -1,5 +1,6 @@
 using AssetBlock.Application.Services;
 using AssetBlock.Domain.Core.Constants;
+using AssetBlock.Domain.Core.Dto.Email;
 using AssetBlock.Domain.Core.Enums;
 using AssetBlock.Domain.Core.Primitives.AppSettingsOptions;
 using AwesomeAssertions;
@@ -14,7 +15,7 @@ public sealed class TransactionalEmailComposerTests
     public void CreatePurchaseReceipt_WhenValid_ShouldBuildEncodedMultipartContent()
     {
         var purchasedAt = new DateTimeOffset(2026, 7, 18, 12, 0, 0, TimeSpan.Zero);
-        var payload = _sut.CreatePurchaseReceipt(
+        EmailDispatchPayload payload = _sut.CreatePurchaseReceipt(
             "buyer@example.com",
             Guid.NewGuid(),
             "Pack <script>alert(1)</script>",
@@ -33,7 +34,7 @@ public sealed class TransactionalEmailComposerTests
     [Fact]
     public void CreateAssetSold_WhenValid_ShouldUseSellerListingsUrl()
     {
-        var payload = _sut.CreateAssetSold(
+        EmailDispatchPayload payload = _sut.CreateAssetSold(
             "author@example.com",
             Guid.NewGuid(),
             "My Asset",
@@ -54,7 +55,7 @@ public sealed class TransactionalEmailComposerTests
     {
         var sut = new TransactionalEmailComposer(Microsoft.Extensions.Options.Options.Create(CreateOptions(baseUrl)));
 
-        var act = () => sut.CreatePurchaseReceipt(
+        Func<EmailDispatchPayload> act = () => sut.CreatePurchaseReceipt(
             "buyer@example.com",
             Guid.NewGuid(),
             "Pack",
@@ -66,7 +67,7 @@ public sealed class TransactionalEmailComposerTests
     [Fact]
     public void CreatePurchaseReceipt_WhenTitleEmpty_ShouldThrow()
     {
-        var act = () => _sut.CreatePurchaseReceipt(
+        Func<EmailDispatchPayload> act = () => _sut.CreatePurchaseReceipt(
             "buyer@example.com",
             Guid.NewGuid(),
             "  ",
@@ -78,7 +79,7 @@ public sealed class TransactionalEmailComposerTests
     [Fact]
     public void CreatePurchaseReceipt_WhenRecipientInvalid_ShouldThrow()
     {
-        var act = () => _sut.CreatePurchaseReceipt(
+        Func<EmailDispatchPayload> act = () => _sut.CreatePurchaseReceipt(
             "not-an-email",
             Guid.NewGuid(),
             "Pack",
@@ -91,7 +92,7 @@ public sealed class TransactionalEmailComposerTests
     public void CreatePurchaseReceipt_WhenSubjectWouldExceedLimit_ShouldTruncateSubject()
     {
         var title = new string('A', EmailContentLimits.MAX_SUBJECT_LENGTH);
-        var payload = _sut.CreatePurchaseReceipt(
+        EmailDispatchPayload payload = _sut.CreatePurchaseReceipt(
             "buyer@example.com",
             Guid.NewGuid(),
             title,
@@ -104,7 +105,7 @@ public sealed class TransactionalEmailComposerTests
     public void CreateOrderReceipt_WhenValid_ShouldIncludeAmountItemsAndLibraryUrl()
     {
         var purchasedAt = new DateTimeOffset(2026, 7, 18, 12, 0, 0, TimeSpan.Zero);
-        var payload = _sut.CreateOrderReceipt(
+        EmailDispatchPayload payload = _sut.CreateOrderReceipt(
             "buyer@example.com",
             Guid.NewGuid(),
             "Bundle <b>Deal</b>",
@@ -131,7 +132,7 @@ public sealed class TransactionalEmailComposerTests
     [Fact]
     public void CreateOrderSold_WhenValid_ShouldUseSellerListingsUrl()
     {
-        var payload = _sut.CreateOrderSold(
+        EmailDispatchPayload payload = _sut.CreateOrderSold(
             "author@example.com",
             Guid.NewGuid(),
             "My Bundle",
@@ -150,7 +151,7 @@ public sealed class TransactionalEmailComposerTests
     [Fact]
     public void CreateOrderReceipt_WhenAmountNotPositive_ShouldThrow()
     {
-        var act = () => _sut.CreateOrderReceipt(
+        Func<EmailDispatchPayload> act = () => _sut.CreateOrderReceipt(
             "buyer@example.com",
             Guid.NewGuid(),
             "Pack",

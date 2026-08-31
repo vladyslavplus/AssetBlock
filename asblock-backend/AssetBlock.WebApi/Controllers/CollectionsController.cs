@@ -1,9 +1,9 @@
+using AssetBlock.Application.Messaging;
 using AssetBlock.Application.UseCases.Collections.GetCollection;
 using AssetBlock.Application.UseCases.Collections.GetCollections;
 using AssetBlock.Domain.Core.Dto.Collections;
 using AssetBlock.Domain.Core.Dto.Paging;
 using AssetBlock.WebApi.Constants;
-using AssetBlock.Application.Messaging;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
@@ -23,7 +23,7 @@ public sealed class CollectionsController(ISender sender) : ApiControllerBase(se
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> List([FromQuery] ListCollectionsRequest request, CancellationToken cancellationToken)
     {
-        var result = await Sender.Send(new GetCollectionsQuery(request), cancellationToken);
+        Ardalis.Result.Result<PagedResult<CollectionListItemDto>> result = await Sender.Send(new GetCollectionsQuery(request), cancellationToken);
         return MapResultToActionResult(result);
     }
 
@@ -36,7 +36,7 @@ public sealed class CollectionsController(ISender sender) : ApiControllerBase(se
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> GetById(Guid id, CancellationToken cancellationToken)
     {
-        var result = await Sender.Send(new GetCollectionQuery(id), cancellationToken);
+        Ardalis.Result.Result<CollectionDetailDto> result = await Sender.Send(new GetCollectionQuery(id), cancellationToken);
         return MapResultToActionResult(result);
     }
 }

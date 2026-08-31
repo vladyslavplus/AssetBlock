@@ -1,3 +1,4 @@
+using Ardalis.Result;
 using AssetBlock.Application.UseCases.Assets.GetAssetVersions;
 using AssetBlock.Domain.Abstractions.Services;
 using AssetBlock.Domain.Core.Constants;
@@ -40,7 +41,7 @@ public class GetAssetVersionsQueryHandlerTests
             .Returns(versions);
 
         var query = new GetAssetVersionsQuery(assetId, requesterUserId);
-        var result = await _handler.Handle(query, CancellationToken.None);
+        Result<IReadOnlyList<AssetVersionSummaryDto>> result = await _handler.Handle(query, CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
         result.Value.Should().HaveCount(1);
@@ -57,7 +58,7 @@ public class GetAssetVersionsQueryHandlerTests
             .Returns((IReadOnlyList<AssetVersionSummaryDto>?)null);
 
         var query = new GetAssetVersionsQuery(assetId, requesterUserId);
-        var result = await _handler.Handle(query, CancellationToken.None);
+        Result<IReadOnlyList<AssetVersionSummaryDto>> result = await _handler.Handle(query, CancellationToken.None);
 
         result.IsSuccess.Should().BeFalse();
         result.Errors.Should().Contain(ErrorCodes.ERR_ASSET_NOT_FOUND);

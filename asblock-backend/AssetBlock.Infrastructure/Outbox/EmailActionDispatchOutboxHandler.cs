@@ -50,7 +50,7 @@ internal sealed class EmailActionDispatchOutboxHandler(
 
         ValidatePayload(payload);
 
-        var action = await emailActionStore.GetById(payload.EmailActionId, cancellationToken);
+        EmailAction? action = await emailActionStore.GetById(payload.EmailActionId, cancellationToken);
         if (action is null
             || action.UserId != payload.RecipientUserId
             || action.Version != payload.ActionVersion
@@ -66,7 +66,7 @@ internal sealed class EmailActionDispatchOutboxHandler(
             return;
         }
 
-        var recipient = await userStore.GetEmailRecipientById(payload.RecipientUserId, cancellationToken);
+        EmailRecipient? recipient = await userStore.GetEmailRecipientById(payload.RecipientUserId, cancellationToken);
         if (recipient is null
             || !string.Equals(recipient.Email, action.TargetEmail, StringComparison.OrdinalIgnoreCase))
         {
@@ -113,11 +113,11 @@ internal sealed class EmailActionDispatchOutboxHandler(
         var smtpTimeoutSeconds = Math.Max(emailOptions.Value.Smtp.TimeoutSeconds, 5);
         var sendDeadline = TimeSpan.FromSeconds(smtpTimeoutSeconds);
         var claimSafetyMargin = TimeSpan.FromSeconds(Math.Max(smtpTimeoutSeconds, 30));
-        var claimDuration = sendDeadline + claimSafetyMargin;
+        TimeSpan claimDuration = sendDeadline + claimSafetyMargin;
 
-        var email = CreateMessage(payload.TemplateKind, deliveryAddress, payload.RecipientUserId, actionUrl, message.Id);
+        EmailMessage email = CreateMessage(payload.TemplateKind, deliveryAddress, payload.RecipientUserId, actionUrl, message.Id);
 
-        var (claimStatus, claimToken) = await emailDeliveryStore.TryClaimDelivery(
+        (DeliveryClaimStatus claimStatus, Guid? claimToken) = await emailDeliveryStore.TryClaimDelivery(
             message.Id,
             email.MessageId,
             deliveryAddress,
@@ -238,7 +238,7 @@ internal sealed class EmailActionDispatchOutboxHandler(
         string actionUrl,
         Guid outboxId)
     {
-        var composed = kind switch
+        EmailMessage composed = kind switch
         {
             EmailTemplateKind.EMAIL_VERIFICATION =>
                 emailComposer.CreateEmailVerification(recipientAddress, recipientUserId, actionUrl),

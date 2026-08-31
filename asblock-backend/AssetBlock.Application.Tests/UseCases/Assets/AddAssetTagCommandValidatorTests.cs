@@ -1,5 +1,6 @@
 using AssetBlock.Application.UseCases.Assets.AddAssetTag;
 using AwesomeAssertions;
+using FluentValidation.Results;
 
 namespace AssetBlock.Application.Tests.UseCases.Assets;
 
@@ -11,7 +12,7 @@ public class AddAssetTagCommandValidatorTests
     public async Task Validate_WhenTagNameInvalidPattern_ShouldFail()
     {
         var cmd = new AddAssetTagCommand(Guid.NewGuid(), Guid.NewGuid(), "Bad Tag!");
-        var result = await _validator.ValidateAsync(cmd);
+        ValidationResult result = await _validator.ValidateAsync(cmd);
         result.IsValid.Should().BeFalse();
     }
 
@@ -19,7 +20,7 @@ public class AddAssetTagCommandValidatorTests
     public async Task Validate_WhenValid_ShouldPass()
     {
         var cmd = new AddAssetTagCommand(Guid.NewGuid(), Guid.NewGuid(), "rust-game");
-        var result = await _validator.ValidateAsync(cmd);
+        ValidationResult result = await _validator.ValidateAsync(cmd);
         result.IsValid.Should().BeTrue();
     }
 }

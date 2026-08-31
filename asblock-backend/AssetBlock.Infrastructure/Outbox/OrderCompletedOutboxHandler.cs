@@ -16,7 +16,7 @@ internal sealed class OrderCompletedOutboxHandler(
 
     public Task Handle(OutboxMessage message, CancellationToken cancellationToken)
     {
-        var payload = JsonSerializer.Deserialize<OrderCompletedPayload>(message.Payload, _json)
+        OrderCompletedPayload payload = JsonSerializer.Deserialize<OrderCompletedPayload>(message.Payload, _json)
                       ?? throw new InvalidOperationException("Invalid OrderCompleted payload.");
 
         logger.LogInformation(

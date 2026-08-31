@@ -1,3 +1,4 @@
+using Ardalis.Result;
 using AssetBlock.Application.UseCases.Categories.DeleteCategory;
 using AssetBlock.Domain.Abstractions.Services;
 using AssetBlock.Domain.Core.Constants;
@@ -40,7 +41,7 @@ public class DeleteCategoryCommandHandlerTests
         var command = new DeleteCategoryCommand(Guid.NewGuid());
         _categoryStoreMock.Delete(command.Id, Arg.Any<CancellationToken>()).Returns(false);
 
-        var result = await _handler.Handle(command, CancellationToken.None);
+        Result result = await _handler.Handle(command, CancellationToken.None);
 
         result.IsSuccess.Should().BeFalse();
         result.Status.Should().Be(Ardalis.Result.ResultStatus.NotFound);
@@ -54,7 +55,7 @@ public class DeleteCategoryCommandHandlerTests
         var command = new DeleteCategoryCommand(Guid.NewGuid());
         _categoryStoreMock.Delete(command.Id, Arg.Any<CancellationToken>()).ThrowsAsync(new CategoryInUseException());
 
-        var result = await _handler.Handle(command, CancellationToken.None);
+        Result result = await _handler.Handle(command, CancellationToken.None);
 
         result.IsSuccess.Should().BeFalse();
         result.Status.Should().Be(Ardalis.Result.ResultStatus.Conflict);
@@ -67,7 +68,7 @@ public class DeleteCategoryCommandHandlerTests
         var command = new DeleteCategoryCommand(Guid.NewGuid());
         _categoryStoreMock.Delete(command.Id, Arg.Any<CancellationToken>()).Returns(true);
 
-        var result = await _handler.Handle(command, CancellationToken.None);
+        Result result = await _handler.Handle(command, CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
         await _unitOfWorkMock.Received(1).ExecuteInTransaction(Arg.Any<Func<CancellationToken, Task>>(), Arg.Any<CancellationToken>());

@@ -18,7 +18,7 @@ internal sealed class MinioAssetStorageService : IAssetStorageService
         ResiliencePipelineProvider<string> resilience,
         ILogger<MinioAssetStorageService> logger)
     {
-        var opts = options.Value;
+        MinioOptions opts = options.Value;
         _store = new S3CompatibleObjectStore(client, opts.Bucket, resilience, logger);
     }
 

@@ -46,7 +46,7 @@ public class DownloadServiceTests
     {
         _assetStoreMock.GetById(_assetId, Arg.Any<bool>(), Arg.Any<CancellationToken>()).Returns((Asset?)null);
 
-        var result = await _service.AuthorizeDownload(_assetId, _userId);
+        DownloadAuthorization result = await _service.AuthorizeDownload(_assetId, _userId);
 
         result.Status.Should().Be(AssetDownloadStatus.NOT_FOUND);
         result.Permit.Should().BeNull();
@@ -55,11 +55,11 @@ public class DownloadServiceTests
     [Fact]
     public async Task AuthorizeDownload_WhenUserHasNoPurchaseAndIsNotAuthor_ShouldReturnForbidden()
     {
-        var asset = MakeAsset(authorId: _authorId, downloadLimit: null);
+        Asset asset = MakeAsset(authorId: _authorId, downloadLimit: null);
         _assetStoreMock.GetById(_assetId, Arg.Any<bool>(), Arg.Any<CancellationToken>()).Returns(asset);
         _purchaseStoreMock.GetPurchase(_userId, _assetId, Arg.Any<CancellationToken>()).Returns((Purchase?)null);
 
-        var result = await _service.AuthorizeDownload(_assetId, _userId);
+        DownloadAuthorization result = await _service.AuthorizeDownload(_assetId, _userId);
 
         result.Status.Should().Be(AssetDownloadStatus.FORBIDDEN);
     }
@@ -67,7 +67,7 @@ public class DownloadServiceTests
     [Fact]
     public async Task AuthorizeDownload_WhenUserIsAuthor_ShouldNotCheckPurchase_AndSucceed()
     {
-        var asset = MakeAsset(authorId: _userId, downloadLimit: null);
+        Asset asset = MakeAsset(authorId: _userId, downloadLimit: null);
         var currentVersionId = Guid.NewGuid();
         const string storageKey = "assets/test/file.bin";
         const string fileName = "file.zip";
@@ -75,7 +75,7 @@ public class DownloadServiceTests
         _assetStoreMock.GetCurrentVersionSnapshot(_assetId, Arg.Any<CancellationToken>())
             .Returns(MakeSnapshot(currentVersionId, storageKey, fileName));
 
-        var result = await _service.AuthorizeDownload(_assetId, _userId);
+        DownloadAuthorization result = await _service.AuthorizeDownload(_assetId, _userId);
 
         result.Status.Should().Be(AssetDownloadStatus.SUCCESS);
         result.Permit.Should().NotBeNull();
@@ -87,14 +87,14 @@ public class DownloadServiceTests
     [Fact]
     public async Task AuthorizeDownload_WhenUserHasPurchase_ShouldSucceed()
     {
-        var asset = MakeAsset(authorId: _authorId, downloadLimit: null);
+        Asset asset = MakeAsset(authorId: _authorId, downloadLimit: null);
         var versionId = Guid.NewGuid();
-        var purchase = MakePurchase(_userId, _assetId, versionId);
+        Purchase purchase = MakePurchase(_userId, _assetId, versionId);
         _assetStoreMock.GetById(_assetId, Arg.Any<bool>(), Arg.Any<CancellationToken>()).Returns(asset);
         _purchaseStoreMock.GetPurchase(_userId, _assetId, Arg.Any<CancellationToken>()).Returns(purchase);
         StubPurchaserEntitledVersion(versionId);
 
-        var result = await _service.AuthorizeDownload(_assetId, _userId);
+        DownloadAuthorization result = await _service.AuthorizeDownload(_assetId, _userId);
 
         result.Status.Should().Be(AssetDownloadStatus.SUCCESS);
         result.Permit.Should().NotBeNull();
@@ -104,15 +104,15 @@ public class DownloadServiceTests
     public async Task AuthorizeDownload_WhenUnderRateLimit_ShouldSucceed()
     {
         const int limit = 5;
-        var asset = MakeAsset(authorId: _authorId, downloadLimit: limit);
+        Asset asset = MakeAsset(authorId: _authorId, downloadLimit: limit);
         var versionId = Guid.NewGuid();
-        var purchase = MakePurchase(_userId, _assetId, versionId);
+        Purchase purchase = MakePurchase(_userId, _assetId, versionId);
         _assetStoreMock.GetById(_assetId, Arg.Any<bool>(), Arg.Any<CancellationToken>()).Returns(asset);
         _purchaseStoreMock.GetPurchase(_userId, _assetId, Arg.Any<CancellationToken>()).Returns(purchase);
         StubPurchaserEntitledVersion(versionId);
         _cacheMock.Increment(Arg.Any<string>(), Arg.Any<TimeSpan>(), Arg.Any<CancellationToken>()).Returns(4L);
 
-        var result = await _service.AuthorizeDownload(_assetId, _userId);
+        DownloadAuthorization result = await _service.AuthorizeDownload(_assetId, _userId);
 
         result.Status.Should().Be(AssetDownloadStatus.SUCCESS);
     }
@@ -121,15 +121,15 @@ public class DownloadServiceTests
     public async Task AuthorizeDownload_WhenAtExactRateLimit_ShouldSucceed()
     {
         const int limit = 5;
-        var asset = MakeAsset(authorId: _authorId, downloadLimit: limit);
+        Asset asset = MakeAsset(authorId: _authorId, downloadLimit: limit);
         var versionId = Guid.NewGuid();
-        var purchase = MakePurchase(_userId, _assetId, versionId);
+        Purchase purchase = MakePurchase(_userId, _assetId, versionId);
         _assetStoreMock.GetById(_assetId, Arg.Any<bool>(), Arg.Any<CancellationToken>()).Returns(asset);
         _purchaseStoreMock.GetPurchase(_userId, _assetId, Arg.Any<CancellationToken>()).Returns(purchase);
         StubPurchaserEntitledVersion(versionId);
         _cacheMock.Increment(Arg.Any<string>(), Arg.Any<TimeSpan>(), Arg.Any<CancellationToken>()).Returns(limit);
 
-        var result = await _service.AuthorizeDownload(_assetId, _userId);
+        DownloadAuthorization result = await _service.AuthorizeDownload(_assetId, _userId);
 
         result.Status.Should().Be(AssetDownloadStatus.SUCCESS);
     }
@@ -138,15 +138,15 @@ public class DownloadServiceTests
     public async Task AuthorizeDownload_WhenRateLimitExceeded_ShouldReturnRateLimited()
     {
         const int limit = 5;
-        var asset = MakeAsset(authorId: _authorId, downloadLimit: limit);
+        Asset asset = MakeAsset(authorId: _authorId, downloadLimit: limit);
         var versionId = Guid.NewGuid();
-        var purchase = MakePurchase(_userId, _assetId, versionId);
+        Purchase purchase = MakePurchase(_userId, _assetId, versionId);
         _assetStoreMock.GetById(_assetId, Arg.Any<bool>(), Arg.Any<CancellationToken>()).Returns(asset);
         _purchaseStoreMock.GetPurchase(_userId, _assetId, Arg.Any<CancellationToken>()).Returns(purchase);
         StubPurchaserEntitledVersion(versionId);
         _cacheMock.Increment(Arg.Any<string>(), Arg.Any<TimeSpan>(), Arg.Any<CancellationToken>()).Returns(limit + 1L);
 
-        var result = await _service.AuthorizeDownload(_assetId, _userId);
+        DownloadAuthorization result = await _service.AuthorizeDownload(_assetId, _userId);
 
         result.Status.Should().Be(AssetDownloadStatus.RATE_LIMITED);
     }
@@ -154,14 +154,14 @@ public class DownloadServiceTests
     [Fact]
     public async Task AuthorizeDownload_WhenNoDownloadLimit_ShouldNeverCallCacheIncrement()
     {
-        var asset = MakeAsset(authorId: _authorId, downloadLimit: null);
+        Asset asset = MakeAsset(authorId: _authorId, downloadLimit: null);
         var versionId = Guid.NewGuid();
-        var purchase = MakePurchase(_userId, _assetId, versionId);
+        Purchase purchase = MakePurchase(_userId, _assetId, versionId);
         _assetStoreMock.GetById(_assetId, Arg.Any<bool>(), Arg.Any<CancellationToken>()).Returns(asset);
         _purchaseStoreMock.GetPurchase(_userId, _assetId, Arg.Any<CancellationToken>()).Returns(purchase);
         StubPurchaserEntitledVersion(versionId);
 
-        var result = await _service.AuthorizeDownload(_assetId, _userId);
+        DownloadAuthorization result = await _service.AuthorizeDownload(_assetId, _userId);
 
         result.Status.Should().Be(AssetDownloadStatus.SUCCESS);
         await _cacheMock.DidNotReceiveWithAnyArgs()
@@ -171,9 +171,9 @@ public class DownloadServiceTests
     [Fact]
     public async Task AuthorizeDownload_RateLimitKey_MustIncludeAssetIdAndUserId()
     {
-        var asset = MakeAsset(authorId: _authorId, downloadLimit: 10);
+        Asset asset = MakeAsset(authorId: _authorId, downloadLimit: 10);
         var versionId = Guid.NewGuid();
-        var purchase = MakePurchase(_userId, _assetId, versionId);
+        Purchase purchase = MakePurchase(_userId, _assetId, versionId);
         _assetStoreMock.GetById(_assetId, Arg.Any<bool>(), Arg.Any<CancellationToken>()).Returns(asset);
         _purchaseStoreMock.GetPurchase(_userId, _assetId, Arg.Any<CancellationToken>()).Returns(purchase);
         StubPurchaserEntitledVersion(versionId);
@@ -194,7 +194,7 @@ public class DownloadServiceTests
             .OpenRead(Arg.Any<string>(), Arg.Any<Func<Stream, CancellationToken, Task>>(), Arg.Any<CancellationToken>())
             .Returns(ci =>
             {
-                var consumer = ci.Arg<Func<Stream, CancellationToken, Task>>();
+                Func<Stream, CancellationToken, Task> consumer = ci.Arg<Func<Stream, CancellationToken, Task>>();
                 return consumer(new MemoryStream([1, 2, 3]), CancellationToken.None);
             });
 
@@ -208,13 +208,13 @@ public class DownloadServiceTests
     [Fact]
     public async Task AuthorizeDownload_Author_CanDownloadSpecificOlderVersion()
     {
-        var asset = MakeAsset(authorId: _userId, downloadLimit: null);
+        Asset asset = MakeAsset(authorId: _userId, downloadLimit: null);
         var versionId = Guid.NewGuid();
-        var version = MakeVersion(versionId, versionNumber: 1, storageKey: "assets/v1.bin", fileName: "v1.zip");
+        AssetVersion version = MakeVersion(versionId, versionNumber: 1, storageKey: "assets/v1.bin", fileName: "v1.zip");
         _assetStoreMock.GetById(_assetId, Arg.Any<bool>(), Arg.Any<CancellationToken>()).Returns(asset);
         _assetStoreMock.GetVersion(_assetId, versionId, Arg.Any<CancellationToken>()).Returns(version);
 
-        var result = await _service.AuthorizeDownload(_assetId, _userId, versionId);
+        DownloadAuthorization result = await _service.AuthorizeDownload(_assetId, _userId, versionId);
 
         result.Status.Should().Be(AssetDownloadStatus.SUCCESS);
         result.Permit!.StorageKey.Should().Be("assets/v1.bin");
@@ -224,10 +224,10 @@ public class DownloadServiceTests
     [Fact]
     public async Task AuthorizeDownload_Purchaser_CanDownloadPurchasedAndLaterVersions()
     {
-        var asset = MakeAsset(authorId: _authorId, downloadLimit: null);
+        Asset asset = MakeAsset(authorId: _authorId, downloadLimit: null);
         var purchasedVersionId = Guid.NewGuid();
         var laterVersionId = Guid.NewGuid();
-        var purchase = MakePurchase(_userId, _assetId, purchasedVersionId);
+        Purchase purchase = MakePurchase(_userId, _assetId, purchasedVersionId);
         _assetStoreMock.GetById(_assetId, Arg.Any<bool>(), Arg.Any<CancellationToken>()).Returns(asset);
         _purchaseStoreMock.GetPurchase(_userId, _assetId, Arg.Any<CancellationToken>()).Returns(purchase);
         _assetStoreMock.GetVersion(_assetId, purchasedVersionId, Arg.Any<CancellationToken>())
@@ -235,8 +235,8 @@ public class DownloadServiceTests
         _assetStoreMock.GetVersion(_assetId, laterVersionId, Arg.Any<CancellationToken>())
             .Returns(MakeVersion(laterVersionId, 3, "assets/v3.bin", "v3.zip"));
 
-        var purchased = await _service.AuthorizeDownload(_assetId, _userId, purchasedVersionId);
-        var later = await _service.AuthorizeDownload(_assetId, _userId, laterVersionId);
+        DownloadAuthorization purchased = await _service.AuthorizeDownload(_assetId, _userId, purchasedVersionId);
+        DownloadAuthorization later = await _service.AuthorizeDownload(_assetId, _userId, laterVersionId);
 
         purchased.Status.Should().Be(AssetDownloadStatus.SUCCESS);
         purchased.Permit!.StorageKey.Should().Be("assets/v2.bin");
@@ -252,10 +252,10 @@ public class DownloadServiceTests
     public async Task AuthorizeDownload_Purchaser_CannotDownloadNonReadyVersion(
         AssetVersionProcessingStatus processingStatus)
     {
-        var asset = MakeAsset(authorId: _authorId, downloadLimit: null);
+        Asset asset = MakeAsset(authorId: _authorId, downloadLimit: null);
         var purchasedVersionId = Guid.NewGuid();
         var laterVersionId = Guid.NewGuid();
-        var purchase = MakePurchase(_userId, _assetId, purchasedVersionId);
+        Purchase purchase = MakePurchase(_userId, _assetId, purchasedVersionId);
         _assetStoreMock.GetById(_assetId, Arg.Any<bool>(), Arg.Any<CancellationToken>()).Returns(asset);
         _purchaseStoreMock.GetPurchase(_userId, _assetId, Arg.Any<CancellationToken>()).Returns(purchase);
         _assetStoreMock.GetVersion(_assetId, purchasedVersionId, Arg.Any<CancellationToken>())
@@ -263,7 +263,7 @@ public class DownloadServiceTests
         _assetStoreMock.GetVersion(_assetId, laterVersionId, Arg.Any<CancellationToken>())
             .Returns(MakeVersion(laterVersionId, 2, "assets/v2.bin", "v2.zip", processingStatus));
 
-        var result = await _service.AuthorizeDownload(_assetId, _userId, laterVersionId);
+        DownloadAuthorization result = await _service.AuthorizeDownload(_assetId, _userId, laterVersionId);
 
         result.Status.Should().Be(AssetDownloadStatus.NOT_FOUND);
         result.Permit.Should().BeNull();
@@ -272,9 +272,9 @@ public class DownloadServiceTests
     [Fact]
     public async Task AuthorizeDownload_Author_CanDownloadPendingVersion()
     {
-        var asset = MakeAsset(authorId: _userId, downloadLimit: null);
+        Asset asset = MakeAsset(authorId: _userId, downloadLimit: null);
         var versionId = Guid.NewGuid();
-        var version = MakeVersion(
+        AssetVersion version = MakeVersion(
             versionId,
             versionNumber: 2,
             storageKey: "assets/pending.bin",
@@ -283,7 +283,7 @@ public class DownloadServiceTests
         _assetStoreMock.GetById(_assetId, Arg.Any<bool>(), Arg.Any<CancellationToken>()).Returns(asset);
         _assetStoreMock.GetVersion(_assetId, versionId, Arg.Any<CancellationToken>()).Returns(version);
 
-        var result = await _service.AuthorizeDownload(_assetId, _userId, versionId);
+        DownloadAuthorization result = await _service.AuthorizeDownload(_assetId, _userId, versionId);
 
         result.Status.Should().Be(AssetDownloadStatus.SUCCESS);
         result.Permit!.StorageKey.Should().Be("assets/pending.bin");
@@ -292,10 +292,10 @@ public class DownloadServiceTests
     [Fact]
     public async Task AuthorizeDownload_Purchaser_CannotDownloadPrePurchaseVersion()
     {
-        var asset = MakeAsset(authorId: _authorId, downloadLimit: null);
+        Asset asset = MakeAsset(authorId: _authorId, downloadLimit: null);
         var purchasedVersionId = Guid.NewGuid();
         var olderVersionId = Guid.NewGuid();
-        var purchase = MakePurchase(_userId, _assetId, purchasedVersionId);
+        Purchase purchase = MakePurchase(_userId, _assetId, purchasedVersionId);
         _assetStoreMock.GetById(_assetId, Arg.Any<bool>(), Arg.Any<CancellationToken>()).Returns(asset);
         _purchaseStoreMock.GetPurchase(_userId, _assetId, Arg.Any<CancellationToken>()).Returns(purchase);
         _assetStoreMock.GetVersion(_assetId, purchasedVersionId, Arg.Any<CancellationToken>())
@@ -303,7 +303,7 @@ public class DownloadServiceTests
         _assetStoreMock.GetVersion(_assetId, olderVersionId, Arg.Any<CancellationToken>())
             .Returns(MakeVersion(olderVersionId, 1, "assets/v1.bin", "v1.zip"));
 
-        var result = await _service.AuthorizeDownload(_assetId, _userId, olderVersionId);
+        DownloadAuthorization result = await _service.AuthorizeDownload(_assetId, _userId, olderVersionId);
 
         result.Status.Should().Be(AssetDownloadStatus.FORBIDDEN);
         result.Permit.Should().BeNull();
@@ -312,10 +312,10 @@ public class DownloadServiceTests
     [Fact]
     public async Task AuthorizeDownload_Default_ServesLatestEntitledCurrentVersion()
     {
-        var asset = MakeAsset(authorId: _authorId, downloadLimit: null);
+        Asset asset = MakeAsset(authorId: _authorId, downloadLimit: null);
         var purchasedVersionId = Guid.NewGuid();
         var currentVersionId = Guid.NewGuid();
-        var purchase = MakePurchase(_userId, _assetId, purchasedVersionId);
+        Purchase purchase = MakePurchase(_userId, _assetId, purchasedVersionId);
         _assetStoreMock.GetById(_assetId, Arg.Any<bool>(), Arg.Any<CancellationToken>()).Returns(asset);
         _purchaseStoreMock.GetPurchase(_userId, _assetId, Arg.Any<CancellationToken>()).Returns(purchase);
         _assetStoreMock.GetVersion(_assetId, purchasedVersionId, Arg.Any<CancellationToken>())
@@ -340,7 +340,7 @@ public class DownloadServiceTests
                 "Personal use",
                 "terms"));
 
-        var result = await _service.AuthorizeDownload(_assetId, _userId);
+        DownloadAuthorization result = await _service.AuthorizeDownload(_assetId, _userId);
 
         result.Status.Should().Be(AssetDownloadStatus.SUCCESS);
         result.Permit!.StorageKey.Should().Be("assets/v2.bin");
@@ -350,11 +350,11 @@ public class DownloadServiceTests
     [Fact]
     public async Task AuthorizeDownload_UnrelatedUser_IsForbidden()
     {
-        var asset = MakeAsset(authorId: _authorId, downloadLimit: null);
+        Asset asset = MakeAsset(authorId: _authorId, downloadLimit: null);
         _assetStoreMock.GetById(_assetId, Arg.Any<bool>(), Arg.Any<CancellationToken>()).Returns(asset);
         _purchaseStoreMock.GetPurchase(_userId, _assetId, Arg.Any<CancellationToken>()).Returns((Purchase?)null);
 
-        var result = await _service.AuthorizeDownload(_assetId, _userId, Guid.NewGuid());
+        DownloadAuthorization result = await _service.AuthorizeDownload(_assetId, _userId, Guid.NewGuid());
 
         result.Status.Should().Be(AssetDownloadStatus.FORBIDDEN);
     }

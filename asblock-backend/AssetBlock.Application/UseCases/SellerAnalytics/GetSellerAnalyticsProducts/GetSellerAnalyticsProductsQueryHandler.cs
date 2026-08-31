@@ -1,9 +1,9 @@
 using Ardalis.Result;
 using AssetBlock.Application.Common.Caching;
+using AssetBlock.Application.Messaging;
 using AssetBlock.Domain.Abstractions.Services;
 using AssetBlock.Domain.Core.Constants;
 using AssetBlock.Domain.Core.Dto.Analytics;
-using AssetBlock.Application.Messaging;
 using Microsoft.Extensions.Logging;
 
 namespace AssetBlock.Application.UseCases.SellerAnalytics.GetSellerAnalyticsProducts;
@@ -23,16 +23,16 @@ internal sealed class GetSellerAnalyticsProductsQueryHandler(
     {
         var cacheKey = CacheKeys.SellerAnalyticsProducts(request.SellerId, request.Request);
 
-        var cached = await cache.Get<AnalyticsProductsResult>(cacheKey, cancellationToken);
+        AnalyticsProductsResult? cached = await cache.Get<AnalyticsProductsResult>(cacheKey, cancellationToken);
         if (cached is not null)
         {
             logger.LogDebug("Seller analytics products cache hit: {Key}", cacheKey);
             return Result.Success(cached);
         }
 
-        var fromDto = AnalyticsRange.ToUtcStart(request.Request.From);
-        var toDto = AnalyticsRange.ToUtcStart(request.Request.To);
-        var req = request.Request;
+        DateTimeOffset fromDto = AnalyticsRange.ToUtcStart(request.Request.From);
+        DateTimeOffset toDto = AnalyticsRange.ToUtcStart(request.Request.To);
+        AnalyticsProductsRequest req = request.Request;
 
         (IReadOnlyList<AnalyticsProductRow> rows, var total) = await analyticsStore.GetProductsPage(
             request.SellerId,

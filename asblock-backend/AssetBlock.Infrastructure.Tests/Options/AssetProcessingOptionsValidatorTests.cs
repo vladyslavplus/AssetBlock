@@ -1,5 +1,6 @@
 using AssetBlock.Domain.Core.Primitives.AppSettingsOptions;
 using AssetBlock.Infrastructure.Options;
+using Microsoft.Extensions.Options;
 
 namespace AssetBlock.Infrastructure.Tests.Options;
 
@@ -21,7 +22,7 @@ public sealed class AssetProcessingOptionsValidatorTests
             MaxAttempts = 3
         };
 
-        var result = _sut.Validate(null, options);
+        ValidateOptionsResult result = _sut.Validate(null, options);
 
         result.Succeeded.Should().BeTrue();
     }
@@ -32,7 +33,7 @@ public sealed class AssetProcessingOptionsValidatorTests
     public void Validate_WhenPollIntervalIsZeroOrNegative_ShouldReturnFailure(int seconds)
     {
         var options = new AssetProcessingOptions { PollInterval = TimeSpan.FromSeconds(seconds) };
-        var result = _sut.Validate(null, options);
+        ValidateOptionsResult result = _sut.Validate(null, options);
         result.Succeeded.Should().BeFalse();
         result.Failures.Should().Contain(f => f.Contains("PollInterval must be between 1 second and 5 minutes"));
     }
@@ -43,7 +44,7 @@ public sealed class AssetProcessingOptionsValidatorTests
     public void Validate_WhenBatchSizeIsZeroOrNegative_ShouldReturnFailure(int value)
     {
         var options = new AssetProcessingOptions { BatchSize = value };
-        var result = _sut.Validate(null, options);
+        ValidateOptionsResult result = _sut.Validate(null, options);
         result.Succeeded.Should().BeFalse();
         result.Failures.Should().Contain(f => f.Contains("BatchSize must be between 1 and 100"));
     }
@@ -54,7 +55,7 @@ public sealed class AssetProcessingOptionsValidatorTests
     public void Validate_WhenConcurrencyIsZeroOrNegative_ShouldReturnFailure(int value)
     {
         var options = new AssetProcessingOptions { Concurrency = value };
-        var result = _sut.Validate(null, options);
+        ValidateOptionsResult result = _sut.Validate(null, options);
         result.Succeeded.Should().BeFalse();
         result.Failures.Should().Contain(f => f.Contains("Concurrency must be between 1 and 200"));
     }
@@ -63,7 +64,7 @@ public sealed class AssetProcessingOptionsValidatorTests
     public void Validate_WhenConcurrencyGreaterThanBatchSize_ShouldReturnFailure()
     {
         var options = new AssetProcessingOptions { Concurrency = 20, BatchSize = 10 };
-        var result = _sut.Validate(null, options);
+        ValidateOptionsResult result = _sut.Validate(null, options);
         result.Succeeded.Should().BeFalse();
         result.Failures.Should().Contain(f => f.Contains("Concurrency cannot be greater than BatchSize"));
     }
@@ -76,7 +77,7 @@ public sealed class AssetProcessingOptionsValidatorTests
             LeaseDuration = TimeSpan.FromMinutes(5),
             OperationTimeout = TimeSpan.FromMinutes(4) + TimeSpan.FromSeconds(45)
         };
-        var result = _sut.Validate(null, options);
+        ValidateOptionsResult result = _sut.Validate(null, options);
         result.Succeeded.Should().BeFalse();
         result.Failures.Should().Contain(f => f.Contains("LeaseDuration must be at least 30 seconds greater than OperationTimeout"));
     }
@@ -85,7 +86,7 @@ public sealed class AssetProcessingOptionsValidatorTests
     public void Validate_WhenMaxAttemptsIsZero_ShouldReturnFailure()
     {
         var options = new AssetProcessingOptions { MaxAttempts = 0 };
-        var result = _sut.Validate(null, options);
+        ValidateOptionsResult result = _sut.Validate(null, options);
         result.Succeeded.Should().BeFalse();
         result.Failures.Should().Contain(f => f.Contains("MaxAttempts must be between 1 and 10"));
     }
@@ -94,7 +95,7 @@ public sealed class AssetProcessingOptionsValidatorTests
     public void Validate_WhenInitialRetryDelayIsInvalid_ShouldReturnFailure()
     {
         var options = new AssetProcessingOptions { InitialRetryDelay = TimeSpan.FromSeconds(1) };
-        var result = _sut.Validate(null, options);
+        ValidateOptionsResult result = _sut.Validate(null, options);
         result.Succeeded.Should().BeFalse();
         result.Failures.Should().Contain(f => f.Contains("InitialRetryDelay must be between 5 seconds and 10 minutes"));
     }
@@ -103,7 +104,7 @@ public sealed class AssetProcessingOptionsValidatorTests
     public void Validate_WhenMaxRetryDelayIsInvalid_ShouldReturnFailure()
     {
         var options = new AssetProcessingOptions { MaxRetryDelay = TimeSpan.FromSeconds(1) };
-        var result = _sut.Validate(null, options);
+        ValidateOptionsResult result = _sut.Validate(null, options);
         result.Succeeded.Should().BeFalse();
         result.Failures.Should().Contain(f => f.Contains("MaxRetryDelay must be between 1 minute and 24 hours"));
     }
@@ -116,7 +117,7 @@ public sealed class AssetProcessingOptionsValidatorTests
             InitialRetryDelay = TimeSpan.FromMinutes(10),
             MaxRetryDelay = TimeSpan.FromMinutes(5)
         };
-        var result = _sut.Validate(null, options);
+        ValidateOptionsResult result = _sut.Validate(null, options);
         result.Succeeded.Should().BeFalse();
         result.Failures.Should().Contain(f => f.Contains("InitialRetryDelay cannot be greater than MaxRetryDelay"));
     }

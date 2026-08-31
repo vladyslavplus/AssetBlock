@@ -13,8 +13,8 @@ public sealed class SignalrTokenSchemeIsolationIntegrationTests(IntegrationTestF
     [Fact]
     public async Task SignalrTokenEndpoint_WhenAnonymous_ShouldReturn401Unauthorized()
     {
-        var client = fixture.Factory.CreateClient();
-        var response = await client.PostAsync(
+        HttpClient client = fixture.Factory.CreateClient();
+        HttpResponseMessage response = await client.PostAsync(
             new Uri("/api/auth/signalr-token", UriKind.Relative),
             null);
 
@@ -24,14 +24,14 @@ public sealed class SignalrTokenSchemeIsolationIntegrationTests(IntegrationTestF
     [Fact]
     public async Task SignalrTokenEndpoint_WhenAuthenticatedWithApiBearer_ShouldReturnHubToken()
     {
-        var (client, _) = await IntegrationTestAuth.RegisterAndAuthenticateAsync(fixture.Factory);
+        (HttpClient? client, var _) = await IntegrationTestAuth.RegisterAndAuthenticateAsync(fixture.Factory);
 
-        var response = await client.PostAsync(
+        HttpResponseMessage response = await client.PostAsync(
             new Uri("/api/auth/signalr-token", UriKind.Relative),
             null);
 
         response.StatusCode.Should().Be(HttpStatusCode.OK);
-        var hubTokenDto = await response.Content.ReadFromJsonAsync<HubTokenResponse>(IntegrationTestAuth.JsonOptions);
+        HubTokenResponse? hubTokenDto = await response.Content.ReadFromJsonAsync<HubTokenResponse>(IntegrationTestAuth.JsonOptions);
 
         hubTokenDto.Should().NotBeNull();
         hubTokenDto.HubToken.Should().NotBeNullOrWhiteSpace();
@@ -41,23 +41,23 @@ public sealed class SignalrTokenSchemeIsolationIntegrationTests(IntegrationTestF
     [Fact]
     public async Task RestApiEndpoint_WhenPresentedWithHubToken_ShouldReturn401Unauthorized()
     {
-        var (client, _) = await IntegrationTestAuth.RegisterAndAuthenticateAsync(fixture.Factory);
+        (HttpClient? client, var _) = await IntegrationTestAuth.RegisterAndAuthenticateAsync(fixture.Factory);
 
-        var tokenResponse = await client.PostAsync(
+        HttpResponseMessage tokenResponse = await client.PostAsync(
             new Uri("/api/auth/signalr-token", UriKind.Relative),
             null);
         tokenResponse.StatusCode.Should().Be(HttpStatusCode.OK);
-        var hubTokenDto = await tokenResponse.Content.ReadFromJsonAsync<HubTokenResponse>(IntegrationTestAuth.JsonOptions);
+        HubTokenResponse? hubTokenDto = await tokenResponse.Content.ReadFromJsonAsync<HubTokenResponse>(IntegrationTestAuth.JsonOptions);
 
         // Create a new client presenting the hub token to REST API endpoints
-        var hubClient = fixture.Factory.CreateClient();
+        HttpClient hubClient = fixture.Factory.CreateClient();
         hubClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", hubTokenDto!.HubToken);
 
         // REST endpoint requiring API bearer scheme must reject hub token
-        var meResponse = await hubClient.GetAsync(new Uri("/api/users/me", UriKind.Relative));
+        HttpResponseMessage meResponse = await hubClient.GetAsync(new Uri("/api/users/me", UriKind.Relative));
         meResponse.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
 
-        var signalrTokenEndpointResponse = await hubClient.PostAsync(
+        HttpResponseMessage signalrTokenEndpointResponse = await hubClient.PostAsync(
             new Uri("/api/auth/signalr-token", UriKind.Relative),
             null);
         signalrTokenEndpointResponse.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
@@ -66,8 +66,8 @@ public sealed class SignalrTokenSchemeIsolationIntegrationTests(IntegrationTestF
     [Fact]
     public async Task NotificationsHubNegotiate_WhenAnonymous_ShouldReturn401Unauthorized()
     {
-        var client = fixture.Factory.CreateClient();
-        var response = await client.PostAsync(
+        HttpClient client = fixture.Factory.CreateClient();
+        HttpResponseMessage response = await client.PostAsync(
             new Uri("/hubs/notifications/negotiate?negotiateVersion=1", UriKind.Relative),
             null);
 
@@ -77,21 +77,21 @@ public sealed class SignalrTokenSchemeIsolationIntegrationTests(IntegrationTestF
     [Fact]
     public async Task NotificationsHubNegotiate_WhenPresentedWithStandardApiToken_ShouldReturn401Unauthorized()
     {
-        var (apiClient, _) = await IntegrationTestAuth.RegisterAndAuthenticateAsync(fixture.Factory);
+        (HttpClient? apiClient, var _) = await IntegrationTestAuth.RegisterAndAuthenticateAsync(fixture.Factory);
         var apiBearerToken = apiClient.DefaultRequestHeaders.Authorization!.Parameter!;
 
         // Attempting to negotiate SignalR hub with standard API token (either query param or header) must be rejected
-        var client = fixture.Factory.CreateClient();
+        HttpClient client = fixture.Factory.CreateClient();
 
         // 1. Query parameter token
-        var queryResponse = await client.PostAsync(
+        HttpResponseMessage queryResponse = await client.PostAsync(
             new Uri($"/hubs/notifications/negotiate?negotiateVersion=1&access_token={apiBearerToken}", UriKind.Relative),
             null);
         queryResponse.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
 
         // 2. Authorization header token
         client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", apiBearerToken);
-        var headerResponse = await client.PostAsync(
+        HttpResponseMessage headerResponse = await client.PostAsync(
             new Uri("/hubs/notifications/negotiate?negotiateVersion=1", UriKind.Relative),
             null);
         headerResponse.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
@@ -100,18 +100,18 @@ public sealed class SignalrTokenSchemeIsolationIntegrationTests(IntegrationTestF
     [Fact]
     public async Task NotificationsHubNegotiate_WhenPresentedWithValidHubToken_ShouldSucceed()
     {
-        var (apiClient, _) = await IntegrationTestAuth.RegisterAndAuthenticateAsync(fixture.Factory);
+        (HttpClient? apiClient, var _) = await IntegrationTestAuth.RegisterAndAuthenticateAsync(fixture.Factory);
 
-        var tokenResponse = await apiClient.PostAsync(
+        HttpResponseMessage tokenResponse = await apiClient.PostAsync(
             new Uri("/api/auth/signalr-token", UriKind.Relative),
             null);
         tokenResponse.StatusCode.Should().Be(HttpStatusCode.OK);
-        var hubTokenDto = await tokenResponse.Content.ReadFromJsonAsync<HubTokenResponse>(IntegrationTestAuth.JsonOptions);
+        HubTokenResponse? hubTokenDto = await tokenResponse.Content.ReadFromJsonAsync<HubTokenResponse>(IntegrationTestAuth.JsonOptions);
 
-        var client = fixture.Factory.CreateClient();
+        HttpClient client = fixture.Factory.CreateClient();
 
         // Negotiate via query parameter access_token
-        var queryResponse = await client.PostAsync(
+        HttpResponseMessage queryResponse = await client.PostAsync(
             new Uri($"/hubs/notifications/negotiate?negotiateVersion=1&access_token={hubTokenDto!.HubToken}", UriKind.Relative),
             null);
 

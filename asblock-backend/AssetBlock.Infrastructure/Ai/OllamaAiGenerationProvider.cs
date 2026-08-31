@@ -1,3 +1,8 @@
+using System.Diagnostics;
+using System.Net;
+using System.Text;
+using System.Text.Json;
+using System.Text.Json.Nodes;
 using AssetBlock.Domain.Abstractions.Services;
 using AssetBlock.Domain.Core.Constants;
 using AssetBlock.Domain.Core.Dto;
@@ -5,11 +10,6 @@ using AssetBlock.Domain.Core.Enums;
 using AssetBlock.Domain.Core.Primitives.AppSettingsOptions;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
-using System.Diagnostics;
-using System.Net;
-using System.Text;
-using System.Text.Json;
-using System.Text.Json.Nodes;
 
 namespace AssetBlock.Infrastructure.Ai;
 
@@ -53,7 +53,7 @@ internal sealed class OllamaAiGenerationProvider : IAiGenerationProvider
         CancellationToken cancellationToken)
     {
         var started = Stopwatch.GetTimestamp();
-        var options = _optionsAccessor.Value;
+        OllamaOptions options = _optionsAccessor.Value;
         var modelId = options.Model;
         var expectedDigest = options.Digest;
         if (!AiConfigurationRules.IsModelId(modelId) || !AiConfigurationRules.IsSha256Digest(expectedDigest))
@@ -71,9 +71,9 @@ internal sealed class OllamaAiGenerationProvider : IAiGenerationProvider
             return Terminal(ErrorCodes.ERR_AI_INVALID_REQUEST, started);
         }
 
-        var client = _httpClientFactory.CreateClient(HTTP_CLIENT_NAME);
+        HttpClient client = _httpClientFactory.CreateClient(HTTP_CLIENT_NAME);
         var budget = Stopwatch.StartNew();
-        var digestCheck = await VerifyInstalledModel(
+        AiGenerationProviderResult? digestCheck = await VerifyInstalledModel(
             client,
             options,
             modelId,
@@ -89,7 +89,7 @@ internal sealed class OllamaAiGenerationProvider : IAiGenerationProvider
         using var httpRequest = new HttpRequestMessage(HttpMethod.Post, "api/chat");
         httpRequest.Content = new StringContent(BuildPayload(request, modelId), Encoding.UTF8, "application/json");
 
-        using var timed = await _timedSender(
+        using AiTimedHttpResult timed = await _timedSender(
             client,
             httpRequest,
             AiTimeoutBudget.Remaining(options.Timeout, budget.Elapsed),
@@ -107,7 +107,7 @@ internal sealed class OllamaAiGenerationProvider : IAiGenerationProvider
             return Retryable(ErrorCodes.ERR_AI_PROVIDER_UNAVAILABLE, started);
         }
 
-        var response = timed.Response!;
+        HttpResponseMessage response = timed.Response!;
         _logger.LogInformation("Ollama generation completed with HTTP {StatusCode}", (int)response.StatusCode);
 
         if ((int)response.StatusCode >= 500 || response.StatusCode == HttpStatusCode.RequestTimeout)
@@ -138,7 +138,7 @@ internal sealed class OllamaAiGenerationProvider : IAiGenerationProvider
         CancellationToken cancellationToken)
     {
         using var tagsRequest = new HttpRequestMessage(HttpMethod.Get, "api/tags");
-        using var timed = await _timedSender(
+        using AiTimedHttpResult timed = await _timedSender(
             client,
             tagsRequest,
             AiTimeoutBudget.Remaining(options.Timeout, budget.Elapsed),
@@ -156,7 +156,7 @@ internal sealed class OllamaAiGenerationProvider : IAiGenerationProvider
             return Retryable(ErrorCodes.ERR_AI_PROVIDER_UNAVAILABLE, started);
         }
 
-        var response = timed.Response!;
+        HttpResponseMessage response = timed.Response!;
         if ((int)response.StatusCode >= 500 || response.StatusCode == HttpStatusCode.RequestTimeout)
         {
             return Retryable(ErrorCodes.ERR_AI_PROVIDER_UNAVAILABLE, started);
@@ -170,15 +170,15 @@ internal sealed class OllamaAiGenerationProvider : IAiGenerationProvider
         try
         {
             using var document = JsonDocument.Parse(timed.Body);
-            if (!document.RootElement.TryGetProperty("models", out var models) || models.ValueKind != JsonValueKind.Array)
+            if (!document.RootElement.TryGetProperty("models", out JsonElement models) || models.ValueKind != JsonValueKind.Array)
             {
                 return Terminal(ErrorCodes.ERR_AI_INVALID_RESPONSE, started);
             }
 
-            foreach (var model in models.EnumerateArray())
+            foreach (JsonElement model in models.EnumerateArray())
             {
-                var name = model.TryGetProperty("name", out var nameEl) ? nameEl.GetString() : null;
-                var digest = model.TryGetProperty("digest", out var digestEl) ? digestEl.GetString() : null;
+                var name = model.TryGetProperty("name", out JsonElement nameEl) ? nameEl.GetString() : null;
+                var digest = model.TryGetProperty("digest", out JsonElement digestEl) ? digestEl.GetString() : null;
                 if (string.Equals(name, modelId, StringComparison.Ordinal)
                     && string.Equals(digest, expectedDigest, StringComparison.Ordinal))
                 {
@@ -203,10 +203,10 @@ internal sealed class OllamaAiGenerationProvider : IAiGenerationProvider
         try
         {
             using var document = JsonDocument.Parse(body);
-            var root = document.RootElement;
-            var actualModel = root.TryGetProperty("model", out var modelEl) ? modelEl.GetString() : null;
-            int? inputTokens = ReadInt(root, "prompt_eval_count");
-            int? outputTokens = ReadInt(root, "eval_count");
+            JsonElement root = document.RootElement;
+            var actualModel = root.TryGetProperty("model", out JsonElement modelEl) ? modelEl.GetString() : null;
+            var inputTokens = ReadInt(root, "prompt_eval_count");
+            var outputTokens = ReadInt(root, "eval_count");
 
             if (string.IsNullOrWhiteSpace(actualModel)
                 || !string.Equals(actualModel, modelId, StringComparison.Ordinal))
@@ -228,13 +228,13 @@ internal sealed class OllamaAiGenerationProvider : IAiGenerationProvider
 
             var modelRevision = expectedDigest;
 
-            if (!root.TryGetProperty("message", out var message)
-                || !message.TryGetProperty("content", out var content))
+            if (!root.TryGetProperty("message", out JsonElement message)
+                || !message.TryGetProperty("content", out JsonElement content))
             {
                 return Terminal(ErrorCodes.ERR_AI_INVALID_RESPONSE, started, actualModel, inputTokens, outputTokens, modelRevision);
             }
 
-            string? structuredJson = content.ValueKind switch
+            var structuredJson = content.ValueKind switch
             {
                 JsonValueKind.String => content.GetString(),
                 JsonValueKind.Object => content.GetRawText(),
@@ -268,7 +268,7 @@ internal sealed class OllamaAiGenerationProvider : IAiGenerationProvider
     }
 
     private static int? ReadInt(JsonElement root, string name) =>
-        root.TryGetProperty(name, out var el) && el.TryGetInt32(out var value) ? value : null;
+        root.TryGetProperty(name, out JsonElement el) && el.TryGetInt32(out var value) ? value : null;
 
     private static string BuildPayload(AiGenerationRequest request, string modelId)
     {

@@ -1,9 +1,9 @@
+using System.Diagnostics;
+using System.Diagnostics.Metrics;
 using AssetBlock.Domain.Core.Enums;
 using AssetBlock.Infrastructure.Ai;
 using AssetBlock.Infrastructure.Observability;
 using AssetBlock.Infrastructure.Tests.Observability;
-using System.Diagnostics;
-using System.Diagnostics.Metrics;
 
 namespace AssetBlock.Infrastructure.Tests.Ai;
 
@@ -49,7 +49,7 @@ public sealed class AiTelemetryTests : IDisposable
     [Fact]
     public void Record_ShouldWriteRequestIdOnActivityNotMetrics()
     {
-        using var activity = AssetBlockDiagnostics.ActivitySource.StartActivity("test");
+        using Activity? activity = AssetBlockDiagnostics.ActivitySource.StartActivity("test");
         var sut = new AiTelemetry();
 
         sut.Record(
@@ -62,7 +62,7 @@ public sealed class AiTelemetryTests : IDisposable
             "gen-secret-not-a-metric");
 
         activity!.GetTagItem(AiTelemetry.REQUEST_ID_TAG).Should().Be("gen-secret-not-a-metric");
-        var metricTags = _records.SelectMany(r => r.Tags.Select(t => t.Key)).Distinct();
+        IEnumerable<string> metricTags = _records.SelectMany(r => r.Tags.Select(t => t.Key)).Distinct();
         metricTags.Should().NotContain("ai.request_id");
         metricTags.Should().NotContain("gen-secret-not-a-metric");
         _records.Where(r => r.Name is "assetblock.ai.requests" or "assetblock.ai.results").Should().HaveCount(2);

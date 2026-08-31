@@ -2,6 +2,7 @@ using AssetBlock.Domain.Core.Entities;
 using AssetBlock.Domain.Core.Enums;
 using AssetBlock.Domain.Core.Exceptions;
 using AssetBlock.Infrastructure.IntegrationTests.Support;
+using AssetBlock.Infrastructure.Persistence;
 using AssetBlock.Infrastructure.Persistence.Stores;
 using Microsoft.EntityFrameworkCore;
 
@@ -13,21 +14,21 @@ public sealed class CheckoutReservationPostgresTests(PostgresFixture fixture)
     [Fact]
     public async Task CreateWithItemsAndReservations_WhenAssetOverlapsActiveReservation_ShouldThrowCheckoutItemReservedException()
     {
-        await using var db = await fixture.CreateCleanDbContext();
+        await using ApplicationDbContext db = await fixture.CreateCleanDbContext();
         (User author, Category category) = await TestData.SeedAuthorAndCategory(db);
-        var buyer = TestData.CreateUser("reserve-buyer", "reserve-buyer@example.test");
+        User buyer = TestData.CreateUser("reserve-buyer", "reserve-buyer@example.test");
         db.Users.Add(buyer);
-        var asset = TestData.CreateAsset(author.Id, category.Id, title: "Shared", price: 12m);
-        var other = TestData.CreateAsset(author.Id, category.Id, title: "Other", price: 8m);
+        Asset asset = TestData.CreateAsset(author.Id, category.Id, title: "Shared", price: 12m);
+        Asset other = TestData.CreateAsset(author.Id, category.Id, title: "Other", price: 8m);
         db.Assets.AddRange(asset, other);
         await db.SaveChangesAsync();
-        var version = TestData.CreateAssetVersion(asset.Id);
-        var otherVersion = TestData.CreateAssetVersion(other.Id);
+        AssetVersion version = TestData.CreateAssetVersion(asset.Id);
+        AssetVersion otherVersion = TestData.CreateAssetVersion(other.Id);
         db.AssetVersions.AddRange(version, otherVersion);
         await db.SaveChangesAsync();
 
         var bundleStore = new BundleStore(db);
-        var (bundle, revision) = await bundleStore.CreateWithRevision(
+        (Bundle? bundle, BundleRevision? revision) = await bundleStore.CreateWithRevision(
             author.Id,
             "Shared Bundle",
             null,
@@ -40,8 +41,8 @@ public sealed class CheckoutReservationPostgresTests(PostgresFixture fixture)
             ]);
 
         var store = new CheckoutIntentStore(db);
-        var now = DateTimeOffset.UtcNow;
-        var assetIntent = BuildPendingIntent(
+        DateTimeOffset now = DateTimeOffset.UtcNow;
+        CheckoutIntent assetIntent = BuildPendingIntent(
             buyer.Id,
             assetId: asset.Id,
             bundleId: null,
@@ -56,7 +57,7 @@ public sealed class CheckoutReservationPostgresTests(PostgresFixture fixture)
             ],
             [TestData.CreateReservation(assetIntent.Id, buyer.Id, asset.Id, expiresAt: now.AddHours(1), createdAt: now)]);
 
-        var bundleIntent = BuildPendingIntent(
+        CheckoutIntent bundleIntent = BuildPendingIntent(
             buyer.Id,
             assetId: null,
             bundleId: bundle.Id,
@@ -64,7 +65,7 @@ public sealed class CheckoutReservationPostgresTests(PostgresFixture fixture)
             productTitle: "Bundle with shared asset",
             amount: 15m,
             now);
-        var act = () => store.CreateWithItemsAndReservations(
+        Func<Task> act = () => store.CreateWithItemsAndReservations(
             bundleIntent,
             [
                 BuildItem(bundleIntent.Id, asset.Id, version.Id, author.Id, asset.Title, asset.Price, position: 1),
@@ -81,21 +82,21 @@ public sealed class CheckoutReservationPostgresTests(PostgresFixture fixture)
     [Fact]
     public async Task CleanupExpiredUnattachedPendingBatch_WhenReservationExpired_ShouldAllowNewCheckout()
     {
-        await using var db = await fixture.CreateCleanDbContext();
+        await using ApplicationDbContext db = await fixture.CreateCleanDbContext();
         (User author, Category category) = await TestData.SeedAuthorAndCategory(db);
-        var buyer = TestData.CreateUser("expire-buyer", "expire-buyer@example.test");
+        User buyer = TestData.CreateUser("expire-buyer", "expire-buyer@example.test");
         db.Users.Add(buyer);
-        var asset = TestData.CreateAsset(author.Id, category.Id, title: "Expiring", price: 9m);
+        Asset asset = TestData.CreateAsset(author.Id, category.Id, title: "Expiring", price: 9m);
         db.Assets.Add(asset);
         await db.SaveChangesAsync();
-        var version = TestData.CreateAssetVersion(asset.Id);
+        AssetVersion version = TestData.CreateAssetVersion(asset.Id);
         db.AssetVersions.Add(version);
         await db.SaveChangesAsync();
 
         var store = new CheckoutIntentStore(db);
-        var created = DateTimeOffset.UtcNow.AddHours(-2);
-        var expiredAt = DateTimeOffset.UtcNow.AddMinutes(-5);
-        var staleIntent = BuildPendingIntent(
+        DateTimeOffset created = DateTimeOffset.UtcNow.AddHours(-2);
+        DateTimeOffset expiredAt = DateTimeOffset.UtcNow.AddMinutes(-5);
+        CheckoutIntent staleIntent = BuildPendingIntent(
             buyer.Id,
             assetId: asset.Id,
             bundleId: null,
@@ -112,8 +113,8 @@ public sealed class CheckoutReservationPostgresTests(PostgresFixture fixture)
         var cleaned = await store.CleanupExpiredUnattachedPendingBatch(DateTimeOffset.UtcNow, batchSize: 10);
         cleaned.Should().Be(1);
 
-        var now = DateTimeOffset.UtcNow;
-        var freshIntent = BuildPendingIntent(
+        DateTimeOffset now = DateTimeOffset.UtcNow;
+        CheckoutIntent freshIntent = BuildPendingIntent(
             buyer.Id,
             assetId: asset.Id,
             bundleId: null,
@@ -121,7 +122,7 @@ public sealed class CheckoutReservationPostgresTests(PostgresFixture fixture)
             productTitle: asset.Title,
             amount: asset.Price,
             now);
-        var act = () => store.CreateWithItemsAndReservations(
+        Func<Task> act = () => store.CreateWithItemsAndReservations(
             freshIntent,
             [BuildItem(freshIntent.Id, asset.Id, version.Id, author.Id, asset.Title, asset.Price, position: 1)],
             [TestData.CreateReservation(freshIntent.Id, buyer.Id, asset.Id, expiresAt: now.AddHours(1), createdAt: now)]);
@@ -132,21 +133,21 @@ public sealed class CheckoutReservationPostgresTests(PostgresFixture fixture)
 
     [Fact]
     public async Task CleanupExpiredUnattachedPendingBatch_WhenIntentHasStripeSession_ShouldNotCancel()    {
-        await using var db = await fixture.CreateCleanDbContext();
+        await using ApplicationDbContext db = await fixture.CreateCleanDbContext();
         (User author, Category category) = await TestData.SeedAuthorAndCategory(db);
-        var buyer = TestData.CreateUser("attached-buyer", "attached-buyer@example.test");
+        User buyer = TestData.CreateUser("attached-buyer", "attached-buyer@example.test");
         db.Users.Add(buyer);
-        var asset = TestData.CreateAsset(author.Id, category.Id, title: "Attached", price: 5m);
+        Asset asset = TestData.CreateAsset(author.Id, category.Id, title: "Attached", price: 5m);
         db.Assets.Add(asset);
         await db.SaveChangesAsync();
-        var version = TestData.CreateAssetVersion(asset.Id);
+        AssetVersion version = TestData.CreateAssetVersion(asset.Id);
         db.AssetVersions.Add(version);
         await db.SaveChangesAsync();
 
         var store = new CheckoutIntentStore(db);
-        var created = DateTimeOffset.UtcNow.AddHours(-2);
-        var expiredAt = DateTimeOffset.UtcNow.AddMinutes(-5);
-        var attachedIntent = BuildPendingIntent(
+        DateTimeOffset created = DateTimeOffset.UtcNow.AddHours(-2);
+        DateTimeOffset expiredAt = DateTimeOffset.UtcNow.AddMinutes(-5);
+        CheckoutIntent attachedIntent = BuildPendingIntent(
             buyer.Id,
             assetId: asset.Id,
             bundleId: null,
@@ -166,27 +167,27 @@ public sealed class CheckoutReservationPostgresTests(PostgresFixture fixture)
         var cleaned = await store.CleanupExpiredUnattachedPendingBatch(DateTimeOffset.UtcNow, batchSize: 10);
 
         cleaned.Should().Be(0);
-        var intent = await db.CheckoutIntents.AsNoTracking().SingleAsync(i => i.Id == attachedIntent.Id);
+        CheckoutIntent intent = await db.CheckoutIntents.AsNoTracking().SingleAsync(i => i.Id == attachedIntent.Id);
         intent.Status.Should().Be(CheckoutIntentStatus.PENDING);
     }
 
     [Fact]
     public async Task ClaimAttachedPendingForStripeSyncBatch_WhenYoungerThanDueBefore_ShouldNotReturn()
     {
-        await using var db = await fixture.CreateCleanDbContext();
+        await using ApplicationDbContext db = await fixture.CreateCleanDbContext();
         (User author, Category category) = await TestData.SeedAuthorAndCategory(db);
-        var buyer = TestData.CreateUser("young-buyer", "young-buyer@example.test");
+        User buyer = TestData.CreateUser("young-buyer", "young-buyer@example.test");
         db.Users.Add(buyer);
-        var asset = TestData.CreateAsset(author.Id, category.Id, title: "Young", price: 7m);
+        Asset asset = TestData.CreateAsset(author.Id, category.Id, title: "Young", price: 7m);
         db.Assets.Add(asset);
         await db.SaveChangesAsync();
-        var version = TestData.CreateAssetVersion(asset.Id);
+        AssetVersion version = TestData.CreateAssetVersion(asset.Id);
         db.AssetVersions.Add(version);
         await db.SaveChangesAsync();
 
         var store = new CheckoutIntentStore(db);
-        var now = DateTimeOffset.UtcNow;
-        var intent = BuildPendingIntent(
+        DateTimeOffset now = DateTimeOffset.UtcNow;
+        CheckoutIntent intent = BuildPendingIntent(
             buyer.Id,
             assetId: asset.Id,
             bundleId: null,
@@ -201,7 +202,7 @@ public sealed class CheckoutReservationPostgresTests(PostgresFixture fixture)
             [TestData.CreateReservation(intent.Id, buyer.Id, asset.Id, expiresAt: intent.ExpiresAt, createdAt: intent.CreatedAt)]);
         await store.TrySetStripeSessionId(intent.Id, "cs_young_attached", CancellationToken.None);
 
-        var batch = await store.ClaimAttachedPendingForStripeSyncBatch(
+        IReadOnlyList<(Guid Id, string StripeSessionId)> batch = await store.ClaimAttachedPendingForStripeSyncBatch(
             now,
             dueBefore: now.AddMinutes(-2),
             batchSize: 10);
@@ -212,20 +213,20 @@ public sealed class CheckoutReservationPostgresTests(PostgresFixture fixture)
     [Fact]
     public async Task ClaimAttachedPendingForStripeSyncBatch_WhenOlderThanDueBefore_ShouldClaimAndLease()
     {
-        await using var db = await fixture.CreateCleanDbContext();
+        await using ApplicationDbContext db = await fixture.CreateCleanDbContext();
         (User author, Category category) = await TestData.SeedAuthorAndCategory(db);
-        var buyer = TestData.CreateUser("due-buyer", "due-buyer@example.test");
+        User buyer = TestData.CreateUser("due-buyer", "due-buyer@example.test");
         db.Users.Add(buyer);
-        var asset = TestData.CreateAsset(author.Id, category.Id, title: "Due", price: 7m);
+        Asset asset = TestData.CreateAsset(author.Id, category.Id, title: "Due", price: 7m);
         db.Assets.Add(asset);
         await db.SaveChangesAsync();
-        var version = TestData.CreateAssetVersion(asset.Id);
+        AssetVersion version = TestData.CreateAssetVersion(asset.Id);
         db.AssetVersions.Add(version);
         await db.SaveChangesAsync();
 
         var store = new CheckoutIntentStore(db);
-        var now = DateTimeOffset.UtcNow;
-        var intent = BuildPendingIntent(
+        DateTimeOffset now = DateTimeOffset.UtcNow;
+        CheckoutIntent intent = BuildPendingIntent(
             buyer.Id,
             assetId: asset.Id,
             bundleId: null,
@@ -240,16 +241,16 @@ public sealed class CheckoutReservationPostgresTests(PostgresFixture fixture)
             [TestData.CreateReservation(intent.Id, buyer.Id, asset.Id, expiresAt: intent.ExpiresAt, createdAt: intent.CreatedAt)]);
         await store.TrySetStripeSessionId(intent.Id, "cs_due_attached", CancellationToken.None);
 
-        var batch = await store.ClaimAttachedPendingForStripeSyncBatch(
+        IReadOnlyList<(Guid Id, string StripeSessionId)> batch = await store.ClaimAttachedPendingForStripeSyncBatch(
             now,
             dueBefore: now.AddMinutes(-2),
             batchSize: 10);
 
         batch.Should().ContainSingle(item => item.Id == intent.Id && item.StripeSessionId == "cs_due_attached");
-        var row = await db.CheckoutIntents.AsNoTracking().SingleAsync(i => i.Id == intent.Id);
+        CheckoutIntent row = await db.CheckoutIntents.AsNoTracking().SingleAsync(i => i.Id == intent.Id);
         row.LastStripeReconciledAt.Should().BeCloseTo(now, TimeSpan.FromMilliseconds(1));
 
-        var second = await store.ClaimAttachedPendingForStripeSyncBatch(
+        IReadOnlyList<(Guid Id, string StripeSessionId)> second = await store.ClaimAttachedPendingForStripeSyncBatch(
             now,
             dueBefore: now.AddMinutes(-2),
             batchSize: 10);
@@ -259,21 +260,21 @@ public sealed class CheckoutReservationPostgresTests(PostgresFixture fixture)
     [Fact]
     public async Task ClaimAttachedPendingForStripeSyncBatch_WhenExpiredAndAttached_ShouldClaimIntent()
     {
-        await using var db = await fixture.CreateCleanDbContext();
+        await using ApplicationDbContext db = await fixture.CreateCleanDbContext();
         (User author, Category category) = await TestData.SeedAuthorAndCategory(db);
-        var buyer = TestData.CreateUser("listexp-buyer", "listexp-buyer@example.test");
+        User buyer = TestData.CreateUser("listexp-buyer", "listexp-buyer@example.test");
         db.Users.Add(buyer);
-        var asset = TestData.CreateAsset(author.Id, category.Id, title: "Listed", price: 7m);
+        Asset asset = TestData.CreateAsset(author.Id, category.Id, title: "Listed", price: 7m);
         db.Assets.Add(asset);
         await db.SaveChangesAsync();
-        var version = TestData.CreateAssetVersion(asset.Id);
+        AssetVersion version = TestData.CreateAssetVersion(asset.Id);
         db.AssetVersions.Add(version);
         await db.SaveChangesAsync();
 
         var store = new CheckoutIntentStore(db);
-        var created = DateTimeOffset.UtcNow.AddHours(-3);
-        var expiredAt = DateTimeOffset.UtcNow.AddMinutes(-10);
-        var intent = BuildPendingIntent(
+        DateTimeOffset created = DateTimeOffset.UtcNow.AddHours(-3);
+        DateTimeOffset expiredAt = DateTimeOffset.UtcNow.AddMinutes(-10);
+        CheckoutIntent intent = BuildPendingIntent(
             buyer.Id,
             assetId: asset.Id,
             bundleId: null,
@@ -288,7 +289,7 @@ public sealed class CheckoutReservationPostgresTests(PostgresFixture fixture)
             [TestData.CreateReservation(intent.Id, buyer.Id, asset.Id, expiresAt: expiredAt, createdAt: created)]);
         await store.TrySetStripeSessionId(intent.Id, "cs_list_expired_test", CancellationToken.None);
 
-        var batch = await store.ClaimAttachedPendingForStripeSyncBatch(
+        IReadOnlyList<(Guid Id, string StripeSessionId)> batch = await store.ClaimAttachedPendingForStripeSyncBatch(
             DateTimeOffset.UtcNow,
             dueBefore: DateTimeOffset.UtcNow.AddMinutes(-2),
             batchSize: 10);
@@ -299,20 +300,20 @@ public sealed class CheckoutReservationPostgresTests(PostgresFixture fixture)
     [Fact]
     public async Task ClaimAttachedPendingForStripeSyncBatch_WhenTwoWorkersRace_ShouldPartitionWithoutOverlap()
     {
-        await using var seedDb = await fixture.CreateCleanDbContext();
+        await using ApplicationDbContext seedDb = await fixture.CreateCleanDbContext();
         (User author, Category category) = await TestData.SeedAuthorAndCategory(seedDb);
-        var buyer = TestData.CreateUser("claim-race-buyer", "claim-race-buyer@example.test");
+        User buyer = TestData.CreateUser("claim-race-buyer", "claim-race-buyer@example.test");
         seedDb.Users.Add(buyer);
-        var asset = TestData.CreateAsset(author.Id, category.Id, title: "Claim Race", price: 9m);
+        Asset asset = TestData.CreateAsset(author.Id, category.Id, title: "Claim Race", price: 9m);
         seedDb.Assets.Add(asset);
         await seedDb.SaveChangesAsync();
-        var version = TestData.CreateAssetVersion(asset.Id);
+        AssetVersion version = TestData.CreateAssetVersion(asset.Id);
         seedDb.AssetVersions.Add(version);
         await seedDb.SaveChangesAsync();
 
         var seedStore = new CheckoutIntentStore(seedDb);
-        var now = DateTimeOffset.UtcNow;
-        var intent = BuildPendingIntent(
+        DateTimeOffset now = DateTimeOffset.UtcNow;
+        CheckoutIntent intent = BuildPendingIntent(
             buyer.Id,
             assetId: asset.Id,
             bundleId: null,
@@ -327,13 +328,13 @@ public sealed class CheckoutReservationPostgresTests(PostgresFixture fixture)
             [TestData.CreateReservation(intent.Id, buyer.Id, asset.Id, expiresAt: intent.ExpiresAt, createdAt: intent.CreatedAt)]);
         await seedStore.TrySetStripeSessionId(intent.Id, "cs_claim_race", CancellationToken.None);
 
-        await using var dbA = fixture.CreateDbContext();
-        await using var dbB = fixture.CreateDbContext();
+        await using ApplicationDbContext dbA = fixture.CreateDbContext();
+        await using ApplicationDbContext dbB = fixture.CreateDbContext();
         var storeA = new CheckoutIntentStore(dbA);
         var storeB = new CheckoutIntentStore(dbB);
-        var dueBefore = now.AddMinutes(-2);
+        DateTimeOffset dueBefore = now.AddMinutes(-2);
 
-        var results = await Task.WhenAll(
+        IReadOnlyList<(Guid Id, string StripeSessionId)>[] results = await Task.WhenAll(
             storeA.ClaimAttachedPendingForStripeSyncBatch(now, dueBefore, batchSize: 10),
             storeB.ClaimAttachedPendingForStripeSyncBatch(now, dueBefore, batchSize: 10));
 
@@ -345,20 +346,20 @@ public sealed class CheckoutReservationPostgresTests(PostgresFixture fixture)
     [Fact]
     public async Task TouchLastStripeReconciledAt_WhenPending_ShouldUpdateTimestampAndDeferNextSync()
     {
-        await using var db = await fixture.CreateCleanDbContext();
+        await using ApplicationDbContext db = await fixture.CreateCleanDbContext();
         (User author, Category category) = await TestData.SeedAuthorAndCategory(db);
-        var buyer = TestData.CreateUser("touch-buyer", "touch-buyer@example.test");
+        User buyer = TestData.CreateUser("touch-buyer", "touch-buyer@example.test");
         db.Users.Add(buyer);
-        var asset = TestData.CreateAsset(author.Id, category.Id, title: "Touch", price: 4m);
+        Asset asset = TestData.CreateAsset(author.Id, category.Id, title: "Touch", price: 4m);
         db.Assets.Add(asset);
         await db.SaveChangesAsync();
-        var version = TestData.CreateAssetVersion(asset.Id);
+        AssetVersion version = TestData.CreateAssetVersion(asset.Id);
         db.AssetVersions.Add(version);
         await db.SaveChangesAsync();
 
         var store = new CheckoutIntentStore(db);
-        var now = DateTimeOffset.UtcNow;
-        var intent = BuildPendingIntent(
+        DateTimeOffset now = DateTimeOffset.UtcNow;
+        CheckoutIntent intent = BuildPendingIntent(
             buyer.Id,
             assetId: asset.Id,
             bundleId: null,
@@ -375,10 +376,10 @@ public sealed class CheckoutReservationPostgresTests(PostgresFixture fixture)
 
         await store.TouchLastStripeReconciledAt(intent.Id, now);
 
-        var row = await db.CheckoutIntents.AsNoTracking().SingleAsync(i => i.Id == intent.Id);
+        CheckoutIntent row = await db.CheckoutIntents.AsNoTracking().SingleAsync(i => i.Id == intent.Id);
         row.LastStripeReconciledAt.Should().BeCloseTo(now, TimeSpan.FromMilliseconds(1));
 
-        var deferred = await store.ClaimAttachedPendingForStripeSyncBatch(
+        IReadOnlyList<(Guid Id, string StripeSessionId)> deferred = await store.ClaimAttachedPendingForStripeSyncBatch(
             now,
             dueBefore: now.AddMinutes(-2),
             batchSize: 10);
@@ -388,21 +389,21 @@ public sealed class CheckoutReservationPostgresTests(PostgresFixture fixture)
     [Fact]
     public async Task TryCancelAndRelease_WhenPendingIntent_ShouldCancelAndDeleteReservations()
     {
-        await using var db = await fixture.CreateCleanDbContext();
+        await using ApplicationDbContext db = await fixture.CreateCleanDbContext();
         (User author, Category category) = await TestData.SeedAuthorAndCategory(db);
-        var buyer = TestData.CreateUser("cancel-buyer", "cancel-buyer@example.test");
+        User buyer = TestData.CreateUser("cancel-buyer", "cancel-buyer@example.test");
         db.Users.Add(buyer);
-        var asset = TestData.CreateAsset(author.Id, category.Id, title: "CancelAsset", price: 6m);
+        Asset asset = TestData.CreateAsset(author.Id, category.Id, title: "CancelAsset", price: 6m);
         db.Assets.Add(asset);
         await db.SaveChangesAsync();
-        var version = TestData.CreateAssetVersion(asset.Id);
+        AssetVersion version = TestData.CreateAssetVersion(asset.Id);
         db.AssetVersions.Add(version);
         await db.SaveChangesAsync();
 
         var store = new CheckoutIntentStore(db);
-        var created = DateTimeOffset.UtcNow.AddHours(-2);
-        var expiredAt = DateTimeOffset.UtcNow.AddMinutes(-5);
-        var intent = BuildPendingIntent(
+        DateTimeOffset created = DateTimeOffset.UtcNow.AddHours(-2);
+        DateTimeOffset expiredAt = DateTimeOffset.UtcNow.AddMinutes(-5);
+        CheckoutIntent intent = BuildPendingIntent(
             buyer.Id,
             assetId: asset.Id,
             bundleId: null,
@@ -419,7 +420,7 @@ public sealed class CheckoutReservationPostgresTests(PostgresFixture fixture)
         var cancelled = await store.TryCancelAndRelease(intent.Id);
 
         cancelled.Should().BeTrue();
-        var row = await db.CheckoutIntents.AsNoTracking().SingleAsync(i => i.Id == intent.Id);
+        CheckoutIntent row = await db.CheckoutIntents.AsNoTracking().SingleAsync(i => i.Id == intent.Id);
         row.Status.Should().Be(CheckoutIntentStatus.CANCELLED);
         (await db.CheckoutReservations.CountAsync(r => r.CheckoutIntentId == intent.Id)).Should().Be(0);
     }

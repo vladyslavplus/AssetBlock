@@ -1,12 +1,12 @@
+using Ardalis.Result;
 using AssetBlock.Application.Common;
+using AssetBlock.Application.Messaging;
 using AssetBlock.Domain.Abstractions.Services;
 using AssetBlock.Domain.Core.Constants;
-using AssetBlock.Domain.Core.Dto.Auth;
-using Ardalis.Result;
-using AssetBlock.Domain.Core.Primitives.Api;
 using AssetBlock.Domain.Core.Dto.Audit;
+using AssetBlock.Domain.Core.Dto.Auth;
 using AssetBlock.Domain.Core.Enums;
-using AssetBlock.Application.Messaging;
+using AssetBlock.Domain.Core.Primitives.Api;
 using Microsoft.Extensions.Logging;
 
 namespace AssetBlock.Application.UseCases.Auth.RefreshToken;
@@ -19,7 +19,7 @@ internal sealed class RefreshTokenCommandHandler(
 {
     public async Task<Result<TokensResponse>> Handle(RefreshTokenCommand request, CancellationToken cancellationToken)
     {
-        var validation = await jwtTokenService.ValidateRefreshToken(request.RefreshToken, cancellationToken);
+        RefreshTokenValidationResult validation = await jwtTokenService.ValidateRefreshToken(request.RefreshToken, cancellationToken);
         if (validation.Status == RefreshTokenValidationStatus.REVOKED_REUSED && validation.UserId is { } reusedUserId)
         {
             logger.LogWarning("Refresh token theft/reuse detected for user {UserId}! Revoking all active user sessions", reusedUserId);
@@ -45,12 +45,12 @@ internal sealed class RefreshTokenCommandHandler(
             return ResultError.Error<TokensResponse>(ErrorCodes.ERR_AUTH_TOKEN_INVALID);
         }
 
-        var userId = validation.UserId.Value;
-        var tokenId = validation.TokenId.Value;
+        Guid userId = validation.UserId.Value;
+        Guid tokenId = validation.TokenId.Value;
         var username = validation.Username!;
         var email = validation.Email!;
         var role = validation.Role!;
-        var tokens = jwtTokenService.GenerateTokenPair(userId, username, email, role);
+        TokensResponse tokens = jwtTokenService.GenerateTokenPair(userId, username, email, role);
 
         var rotated = false;
         await unitOfWork.ExecuteInTransaction(async ct =>

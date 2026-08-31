@@ -17,8 +17,8 @@ public class DependencyInjectionTests
         services.AddLogging();
         services.AddApplication();
 
-        using var provider = services.BuildServiceProvider();
-        var sender = provider.GetRequiredService<ISender>();
+        using ServiceProvider provider = services.BuildServiceProvider();
+        ISender sender = provider.GetRequiredService<ISender>();
         sender.Should().NotBeNull();
         sender.Should().BeOfType<Sender>();
     }

@@ -1,7 +1,10 @@
 using AssetBlock.Domain.Core.Constants;
+using AssetBlock.Domain.Core.Dto.Paging;
+using AssetBlock.Domain.Core.Entities;
 using AssetBlock.Domain.Core.Enums;
 using AssetBlock.Domain.Core.Licenses;
 using AssetBlock.Infrastructure.IntegrationTests.Support;
+using AssetBlock.Infrastructure.Persistence;
 using AssetBlock.Infrastructure.Persistence.Stores;
 using Microsoft.EntityFrameworkCore;
 
@@ -13,9 +16,9 @@ public sealed class MigrationSmokePostgresTests(PostgresFixture fixture)
     [Fact]
     public async Task MigrateAsync_WhenFreshDatabase_ShouldCreateCommerceAndCatalogTables()
     {
-        await using var db = await fixture.CreateCleanDbContext();
+        await using ApplicationDbContext db = await fixture.CreateCleanDbContext();
 
-        var tables = await db.Database.SqlQueryRaw<string>(
+        List<string> tables = await db.Database.SqlQueryRaw<string>(
                 """
                 SELECT table_name AS "Value"
                 FROM information_schema.tables
@@ -44,7 +47,7 @@ public sealed class MigrationSmokePostgresTests(PostgresFixture fixture)
     [Fact]
     public async Task MigrateAsync_WhenFreshDatabase_ShouldEnablePgTrgmSearchVectorAndCatalogIndexes()
     {
-        await using var db = await fixture.CreateCleanDbContext();
+        await using ApplicationDbContext db = await fixture.CreateCleanDbContext();
 
         var hasPgTrgm = await db.Database.SqlQueryRaw<bool>(
                 """
@@ -66,7 +69,7 @@ public sealed class MigrationSmokePostgresTests(PostgresFixture fixture)
             .SingleAsync();
         hasSearchVector.Should().BeTrue();
 
-        var indexNames = await db.Database.SqlQueryRaw<string>(
+        List<string> indexNames = await db.Database.SqlQueryRaw<string>(
                 """
                 SELECT indexname AS "Value"
                 FROM pg_indexes
@@ -105,7 +108,7 @@ public sealed class MigrationSmokePostgresTests(PostgresFixture fixture)
     [Fact]
     public async Task MigrateAsync_WhenFreshDatabase_ShouldCreateAuditLogsSchemaWithoutUserFk()
     {
-        await using var db = await fixture.CreateCleanDbContext();
+        await using ApplicationDbContext db = await fixture.CreateCleanDbContext();
 
         var hasTable = await db.Database.SqlQueryRaw<bool>(
                 """
@@ -118,7 +121,7 @@ public sealed class MigrationSmokePostgresTests(PostgresFixture fixture)
             .SingleAsync();
         hasTable.Should().BeTrue();
 
-        var columnTypes = await db.Database.SqlQueryRaw<string>(
+        List<string> columnTypes = await db.Database.SqlQueryRaw<string>(
                 """
                 SELECT column_name || ':' || data_type AS "Value"
                 FROM information_schema.columns
@@ -145,7 +148,7 @@ public sealed class MigrationSmokePostgresTests(PostgresFixture fixture)
             .SingleAsync();
         hasUserFk.Should().BeFalse();
 
-        var indexNames = await db.Database.SqlQueryRaw<string>(
+        List<string> indexNames = await db.Database.SqlQueryRaw<string>(
                 """
                 SELECT indexname AS "Value"
                 FROM pg_indexes
@@ -163,21 +166,21 @@ public sealed class MigrationSmokePostgresTests(PostgresFixture fixture)
     [Fact]
     public async Task MigrateAsync_WhenFreshDatabase_ShouldHaveNoPendingMigrationsAndContainInitialCreate()
     {
-        await using var db = await fixture.CreateCleanDbContext();
+        await using ApplicationDbContext db = await fixture.CreateCleanDbContext();
 
-        var pending = await db.Database.GetPendingMigrationsAsync();
+        IEnumerable<string> pending = await db.Database.GetPendingMigrationsAsync();
         pending.Should().BeEmpty();
 
-        var applied = await db.Database.GetAppliedMigrationsAsync();
+        IEnumerable<string> applied = await db.Database.GetAppliedMigrationsAsync();
         applied.Should().ContainSingle(m => m.Contains("InitialCreate", StringComparison.OrdinalIgnoreCase));
     }
 
     [Fact]
     public async Task MigrateAsync_WhenFreshDatabase_ShouldCreateAssetVersionProcessingLifecycleAndAnalysisTables()
     {
-        await using var db = await fixture.CreateCleanDbContext();
+        await using ApplicationDbContext db = await fixture.CreateCleanDbContext();
 
-        var tables = await db.Database.SqlQueryRaw<string>(
+        List<string> tables = await db.Database.SqlQueryRaw<string>(
                 """
                 SELECT table_name AS "Value"
                 FROM information_schema.tables
@@ -188,7 +191,7 @@ public sealed class MigrationSmokePostgresTests(PostgresFixture fixture)
 
         tables.Should().ContainSingle();
 
-        var versionColumns = await db.Database.SqlQueryRaw<string>(
+        List<string> versionColumns = await db.Database.SqlQueryRaw<string>(
                 """
                 SELECT column_name AS "Value"
                 FROM information_schema.columns
@@ -204,7 +207,7 @@ public sealed class MigrationSmokePostgresTests(PostgresFixture fixture)
 
         versionColumns.Should().HaveCount(4);
 
-        var versionChecks = await db.Database.SqlQueryRaw<string>(
+        List<string> versionChecks = await db.Database.SqlQueryRaw<string>(
                 """
                 SELECT conname AS "Value"
                 FROM pg_constraint
@@ -221,7 +224,7 @@ public sealed class MigrationSmokePostgresTests(PostgresFixture fixture)
 
         versionChecks.Should().HaveCount(4);
 
-        var analysisChecks = await db.Database.SqlQueryRaw<string>(
+        List<string> analysisChecks = await db.Database.SqlQueryRaw<string>(
                 """
                 SELECT conname AS "Value"
                 FROM pg_constraint
@@ -243,9 +246,9 @@ public sealed class MigrationSmokePostgresTests(PostgresFixture fixture)
     [Fact]
     public async Task MigrateAsync_WhenFreshDatabase_ShouldCreateEngagementAnalyticsTablesAndCheckoutAttributionChecks()
     {
-        await using var db = await fixture.CreateCleanDbContext();
+        await using ApplicationDbContext db = await fixture.CreateCleanDbContext();
 
-        var tables = await db.Database.SqlQueryRaw<string>(
+        List<string> tables = await db.Database.SqlQueryRaw<string>(
                 """
                 SELECT table_name AS "Value"
                 FROM information_schema.tables
@@ -262,7 +265,7 @@ public sealed class MigrationSmokePostgresTests(PostgresFixture fixture)
 
         tables.Should().HaveCount(5);
 
-        var checkoutChecks = await db.Database.SqlQueryRaw<string>(
+        List<string> checkoutChecks = await db.Database.SqlQueryRaw<string>(
                 """
                 SELECT conname AS "Value"
                 FROM pg_constraint
@@ -283,7 +286,7 @@ public sealed class MigrationSmokePostgresTests(PostgresFixture fixture)
     [Fact]
     public async Task MigrateAsync_WhenFreshDatabase_ShouldEnforceConstraintsAndSupportOutboxAndRatingAggregates()
     {
-        await using var db = await fixture.CreateCleanDbContext();
+        await using ApplicationDbContext db = await fixture.CreateCleanDbContext();
 
         var hasRefreshTokenIndex = await db.Database.SqlQueryRaw<bool>(
             """
@@ -300,7 +303,7 @@ public sealed class MigrationSmokePostgresTests(PostgresFixture fixture)
         var categoryId = Guid.NewGuid();
         var assetId = Guid.NewGuid();
         var versionId = Guid.NewGuid();
-        var now = DateTimeOffset.UtcNow;
+        DateTimeOffset now = DateTimeOffset.UtcNow;
 
         db.Users.AddRange(
             new Domain.Core.Entities.User { Id = authorId, Username = "author", Email = "author@test.com", PasswordHash = "h", Role = AppRoles.USER, CreatedAt = now },
@@ -366,10 +369,10 @@ public sealed class MigrationSmokePostgresTests(PostgresFixture fixture)
         await db.SaveChangesAsync();
 
         var store = new OutboxStore(db, Microsoft.Extensions.Logging.Abstractions.NullLogger<OutboxStore>.Instance);
-        var batch = await store.ClaimPendingBatch(10, TimeSpan.FromMinutes(5));
+        IReadOnlyList<OutboxMessage> batch = await store.ClaimPendingBatch(10, TimeSpan.FromMinutes(5));
         batch.Should().ContainSingle(m => m.Id == outboxMsgId);
 
-        var loadedAsset = await db.Assets.AsNoTracking().SingleAsync(a => a.Id == assetId);
+        Asset loadedAsset = await db.Assets.AsNoTracking().SingleAsync(a => a.Id == assetId);
         loadedAsset.RatingCount.Should().Be(1);
         loadedAsset.RatingAverage.Should().Be(5.0d);
     }
@@ -377,7 +380,7 @@ public sealed class MigrationSmokePostgresTests(PostgresFixture fixture)
     [Fact]
     public async Task CategoryStore_WhenSearchingBySlug_ShouldHandleMixedCaseAndEscapedWildcards()
     {
-        await using var db = await fixture.CreateCleanDbContext();
+        await using ApplicationDbContext db = await fixture.CreateCleanDbContext();
         var c1 = new Domain.Core.Entities.Category { Id = Guid.NewGuid(), Name = "Special 100% Deals", Slug = "special-100%-deal_v1\\pack", Description = "A 100% discount", CreatedAt = DateTimeOffset.UtcNow };
         var c2 = new Domain.Core.Entities.Category { Id = Guid.NewGuid(), Name = "Other Items", Slug = "other-items-deal-v1-pack", Description = "Normal", CreatedAt = DateTimeOffset.UtcNow };
         db.Categories.AddRange(c1, c2);
@@ -386,22 +389,22 @@ public sealed class MigrationSmokePostgresTests(PostgresFixture fixture)
         var store = new CategoryStore(db, Microsoft.Extensions.Logging.Abstractions.NullLogger<CategoryStore>.Instance);
 
         // Mixed case search matching slug
-        var caseMatch = await store.GetPaged(new Domain.Core.Dto.Categories.GetCategoriesRequest { Search = "SPECIAL-100%" });
+        PagedResult<Category> caseMatch = await store.GetPaged(new Domain.Core.Dto.Categories.GetCategoriesRequest { Search = "SPECIAL-100%" });
         caseMatch.Items.Should().ContainSingle();
         caseMatch.Items[0].Id.Should().Be(c1.Id);
 
         // Literal '%' in slug
-        var percentMatch = await store.GetPaged(new Domain.Core.Dto.Categories.GetCategoriesRequest { Search = "100%" });
+        PagedResult<Category> percentMatch = await store.GetPaged(new Domain.Core.Dto.Categories.GetCategoriesRequest { Search = "100%" });
         percentMatch.Items.Should().ContainSingle();
         percentMatch.Items[0].Id.Should().Be(c1.Id);
 
         // Literal '_' in slug (should not match '-' in other item)
-        var underscoreMatch = await store.GetPaged(new Domain.Core.Dto.Categories.GetCategoriesRequest { Search = "deal_v1" });
+        PagedResult<Category> underscoreMatch = await store.GetPaged(new Domain.Core.Dto.Categories.GetCategoriesRequest { Search = "deal_v1" });
         underscoreMatch.Items.Should().ContainSingle();
         underscoreMatch.Items[0].Id.Should().Be(c1.Id);
 
         // Literal '\' in slug
-        var backslashMatch = await store.GetPaged(new Domain.Core.Dto.Categories.GetCategoriesRequest { Search = "v1\\pack" });
+        PagedResult<Category> backslashMatch = await store.GetPaged(new Domain.Core.Dto.Categories.GetCategoriesRequest { Search = "v1\\pack" });
         backslashMatch.Items.Should().ContainSingle();
         backslashMatch.Items[0].Id.Should().Be(c1.Id);
     }

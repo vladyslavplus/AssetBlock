@@ -1,6 +1,8 @@
 using AssetBlock.Domain.Core.Entities;
 using AssetBlock.Domain.Core.Enums;
 using AssetBlock.Infrastructure.IntegrationTests.Support;
+using AssetBlock.Infrastructure.Persistence;
+using AwesomeAssertions.Specialized;
 using Microsoft.EntityFrameworkCore;
 using Npgsql;
 
@@ -17,11 +19,11 @@ public sealed class CommerceInvariantPostgresTests(PostgresFixture fixture)
     [InlineData("123")]
     public async Task CheckoutIntent_WhenCurrencyNotLowercaseUsd_ShouldViolateCheckConstraint(string currency)
     {
-        await using var db = await fixture.CreateCleanDbContext();
+        await using ApplicationDbContext db = await fixture.CreateCleanDbContext();
         (User author, Category category) = await TestData.SeedAuthorAndCategory(db);
-        var buyer = TestData.CreateUser("cur-buyer", "cur-buyer@example.test");
+        User buyer = TestData.CreateUser("cur-buyer", "cur-buyer@example.test");
         db.Users.Add(buyer);
-        var asset = TestData.CreateAsset(author.Id, category.Id, title: "Currency Gate", price: 5m);
+        Asset asset = TestData.CreateAsset(author.Id, category.Id, title: "Currency Gate", price: 5m);
         db.Assets.Add(asset);
         await db.SaveChangesAsync();
 
@@ -38,8 +40,8 @@ public sealed class CommerceInvariantPostgresTests(PostgresFixture fixture)
             ExpiresAt = DateTimeOffset.UtcNow.AddHours(1)
         });
 
-        var act = () => db.SaveChangesAsync();
-        var ex = await act.Should().ThrowAsync<DbUpdateException>();
+        Func<Task<int>> act = () => db.SaveChangesAsync();
+        ExceptionAssertions<DbUpdateException> ex = await act.Should().ThrowAsync<DbUpdateException>();
         // Longer-than-3 values hit varchar(3) first (22001); invalid 3-letter codes hit check (23514).
         ex.Which.InnerException.Should().BeOfType<PostgresException>()
             .Which.SqlState.Should().BeOneOf(
@@ -50,15 +52,15 @@ public sealed class CommerceInvariantPostgresTests(PostgresFixture fixture)
     [Fact]
     public async Task CheckoutIntentItem_WhenAssetVersionBelongsToOtherAsset_ShouldViolateForeignKey()
     {
-        await using var db = await fixture.CreateCleanDbContext();
+        await using ApplicationDbContext db = await fixture.CreateCleanDbContext();
         (User author, Category category) = await TestData.SeedAuthorAndCategory(db);
-        var buyer = TestData.CreateUser("mismatch-buyer", "mismatch-buyer@example.test");
+        User buyer = TestData.CreateUser("mismatch-buyer", "mismatch-buyer@example.test");
         db.Users.Add(buyer);
-        var assetA = TestData.CreateAsset(author.Id, category.Id, title: "Asset A", price: 5m);
-        var assetB = TestData.CreateAsset(author.Id, category.Id, title: "Asset B", price: 8m);
+        Asset assetA = TestData.CreateAsset(author.Id, category.Id, title: "Asset A", price: 5m);
+        Asset assetB = TestData.CreateAsset(author.Id, category.Id, title: "Asset B", price: 8m);
         db.Assets.AddRange(assetA, assetB);
         await db.SaveChangesAsync();
-        var versionB = TestData.CreateAssetVersion(assetB.Id);
+        AssetVersion versionB = TestData.CreateAssetVersion(assetB.Id);
         db.AssetVersions.Add(versionB);
         await db.SaveChangesAsync();
 
@@ -93,8 +95,8 @@ public sealed class CommerceInvariantPostgresTests(PostgresFixture fixture)
             LicenseTerms = "terms"
         });
 
-        var act = () => db.SaveChangesAsync();
-        var ex = await act.Should().ThrowAsync<DbUpdateException>();
+        Func<Task<int>> act = () => db.SaveChangesAsync();
+        ExceptionAssertions<DbUpdateException> ex = await act.Should().ThrowAsync<DbUpdateException>();
         ex.Which.InnerException.Should().BeOfType<PostgresException>()
             .Which.SqlState.Should().Be(PostgresErrorCodes.ForeignKeyViolation);
     }
@@ -102,16 +104,16 @@ public sealed class CommerceInvariantPostgresTests(PostgresFixture fixture)
     [Fact]
     public async Task OrderLine_WhenAssetVersionBelongsToOtherAsset_ShouldViolateForeignKey()
     {
-        await using var db = await fixture.CreateCleanDbContext();
+        await using ApplicationDbContext db = await fixture.CreateCleanDbContext();
         (User author, Category category) = await TestData.SeedAuthorAndCategory(db);
-        var buyer = TestData.CreateUser("oline-buyer", "oline-buyer@example.test");
+        User buyer = TestData.CreateUser("oline-buyer", "oline-buyer@example.test");
         db.Users.Add(buyer);
-        var assetA = TestData.CreateAsset(author.Id, category.Id, title: "Line A", price: 5m);
-        var assetB = TestData.CreateAsset(author.Id, category.Id, title: "Line B", price: 8m);
+        Asset assetA = TestData.CreateAsset(author.Id, category.Id, title: "Line A", price: 5m);
+        Asset assetB = TestData.CreateAsset(author.Id, category.Id, title: "Line B", price: 8m);
         db.Assets.AddRange(assetA, assetB);
         await db.SaveChangesAsync();
-        var versionA = TestData.CreateAssetVersion(assetA.Id);
-        var versionB = TestData.CreateAssetVersion(assetB.Id);
+        AssetVersion versionA = TestData.CreateAssetVersion(assetA.Id);
+        AssetVersion versionB = TestData.CreateAssetVersion(assetB.Id);
         db.AssetVersions.AddRange(versionA, versionB);
         await db.SaveChangesAsync();
 
@@ -181,8 +183,8 @@ public sealed class CommerceInvariantPostgresTests(PostgresFixture fixture)
             LicenseTerms = "terms"
         });
 
-        var act = () => db.SaveChangesAsync();
-        var ex = await act.Should().ThrowAsync<DbUpdateException>();
+        Func<Task<int>> act = () => db.SaveChangesAsync();
+        ExceptionAssertions<DbUpdateException> ex = await act.Should().ThrowAsync<DbUpdateException>();
         ex.Which.InnerException.Should().BeOfType<PostgresException>()
             .Which.SqlState.Should().Be(PostgresErrorCodes.ForeignKeyViolation);
     }
@@ -190,9 +192,9 @@ public sealed class CommerceInvariantPostgresTests(PostgresFixture fixture)
     [Fact]
     public async Task MigrateAsync_WhenFreshDatabase_ShouldContainCurrencyAndAssetVersionInvariants()
     {
-        await using var db = await fixture.CreateCleanDbContext();
+        await using ApplicationDbContext db = await fixture.CreateCleanDbContext();
 
-        var checks = await db.Database.SqlQueryRaw<string>(
+        List<string> checks = await db.Database.SqlQueryRaw<string>(
                 """
                 SELECT conname AS "Value"
                 FROM pg_constraint

@@ -84,10 +84,10 @@ public sealed class ReviewStorePostgresTests(PostgresFixture fixture)
 
         var ratings = new[] { 5, 4, 3, 2, 1 }; // avg: 3.0, count: 5
 
-        var tasks = reviewers.Select(async (reviewer, index) =>
+        IEnumerable<Task> tasks = reviewers.Select(async (reviewer, index) =>
         {
             await using ApplicationDbContext taskDb = fixture.CreateDbContext();
-            var store = CreateStore(taskDb);
+            ReviewStore store = CreateStore(taskDb);
             await store.Create(TestData.CreateReview(reviewer.Id, asset.Id, rating: ratings[index]));
         });
 
@@ -119,17 +119,17 @@ public sealed class ReviewStorePostgresTests(PostgresFixture fixture)
         Review r1 = await initialStore.Create(TestData.CreateReview(initialReviewers[0].Id, asset.Id, rating: 5));
         Review r2 = await initialStore.Create(TestData.CreateReview(initialReviewers[1].Id, asset.Id, rating: 2));
 
-        var deleteTasks = new[] { r1.Id, r2.Id }.Select(async reviewId =>
+        IEnumerable<Task> deleteTasks = new[] { r1.Id, r2.Id }.Select(async reviewId =>
         {
             await using ApplicationDbContext taskDb = fixture.CreateDbContext();
-            var store = CreateStore(taskDb);
+            ReviewStore store = CreateStore(taskDb);
             await store.Delete(reviewId);
         });
 
-        var createTasks = newReviewers.Select(async (reviewer, idx) =>
+        IEnumerable<Task> createTasks = newReviewers.Select(async (reviewer, idx) =>
         {
             await using ApplicationDbContext taskDb = fixture.CreateDbContext();
-            var store = CreateStore(taskDb);
+            ReviewStore store = CreateStore(taskDb);
             await store.Create(TestData.CreateReview(reviewer.Id, asset.Id, rating: 4 + idx % 2));
         });
 

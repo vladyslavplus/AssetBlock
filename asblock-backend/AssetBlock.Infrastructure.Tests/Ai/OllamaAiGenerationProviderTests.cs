@@ -1,9 +1,11 @@
 using System.Net;
 using System.Text.Json;
 using AssetBlock.Domain.Core.Constants;
+using AssetBlock.Domain.Core.Dto;
 using AssetBlock.Domain.Core.Enums;
 using AssetBlock.Domain.Core.Primitives.AppSettingsOptions;
 using AssetBlock.Infrastructure.Ai;
+using Microsoft.Extensions.Options;
 
 namespace AssetBlock.Infrastructure.Tests.Ai;
 
@@ -31,9 +33,9 @@ public sealed class OllamaAiGenerationProviderTests
                     """));
             }
         };
-        var sut = CreateSut(handler);
+        OllamaAiGenerationProvider sut = CreateSut(handler);
 
-        var result = await sut.Generate(AiProviderTestFactory.OllamaRequest(), CancellationToken.None);
+        AiGenerationProviderResult result = await sut.Generate(AiProviderTestFactory.OllamaRequest(), CancellationToken.None);
 
         handler.SendCount.Should().Be(2);
         result.Outcome.Should().Be(AiGenerationOutcomeKind.SUCCESS);
@@ -61,7 +63,7 @@ public sealed class OllamaAiGenerationProviderTests
                 AiProviderTestFactory.OllamaTagsBody(digest: "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb")))
         };
 
-        var result = await CreateSut(handler).Generate(AiProviderTestFactory.OllamaRequest(), CancellationToken.None);
+        AiGenerationProviderResult result = await CreateSut(handler).Generate(AiProviderTestFactory.OllamaRequest(), CancellationToken.None);
 
         handler.SendCount.Should().Be(1);
         result.ErrorCode.Should().Be(ErrorCodes.ERR_AI_MODEL_NOT_ALLOWED);
@@ -72,9 +74,9 @@ public sealed class OllamaAiGenerationProviderTests
     public async Task Generate_WhenDigestIsMissing_ShouldNotSendHttp()
     {
         var handler = new RecordingHttpMessageHandler();
-        var sut = CreateSut(handler, digest: "");
+        OllamaAiGenerationProvider sut = CreateSut(handler, digest: "");
 
-        var result = await sut.Generate(AiProviderTestFactory.OllamaRequest(), CancellationToken.None);
+        AiGenerationProviderResult result = await sut.Generate(AiProviderTestFactory.OllamaRequest(), CancellationToken.None);
 
         handler.SendCount.Should().Be(0);
         result.ErrorCode.Should().Be(ErrorCodes.ERR_AI_MODEL_NOT_ALLOWED);
@@ -92,9 +94,9 @@ public sealed class OllamaAiGenerationProviderTests
             Responder = (_, _) => Task.FromResult(AiProviderTestFactory.Json(status, """{"error":"model not found raw"}"""))
         };
         var logger = new CollectingLogger<OllamaAiGenerationProvider>();
-        var sut = CreateSut(handler, logger: logger);
+        OllamaAiGenerationProvider sut = CreateSut(handler, logger: logger);
 
-        var result = await sut.Generate(AiProviderTestFactory.OllamaRequest(), CancellationToken.None);
+        AiGenerationProviderResult result = await sut.Generate(AiProviderTestFactory.OllamaRequest(), CancellationToken.None);
 
         handler.SendCount.Should().Be(1);
         result.ErrorCode.Should().Be(errorCode);
@@ -123,9 +125,9 @@ public sealed class OllamaAiGenerationProviderTests
             }
         };
         var logger = new CollectingLogger<OllamaAiGenerationProvider>();
-        var sut = CreateSut(handler, logger: logger);
+        OllamaAiGenerationProvider sut = CreateSut(handler, logger: logger);
 
-        var result = await sut.Generate(AiProviderTestFactory.OllamaRequest(), CancellationToken.None);
+        AiGenerationProviderResult result = await sut.Generate(AiProviderTestFactory.OllamaRequest(), CancellationToken.None);
 
         handler.SendCount.Should().Be(2);
         result.ErrorCode.Should().Be(errorCode);
@@ -148,7 +150,7 @@ public sealed class OllamaAiGenerationProviderTests
         };
         using var cts = new CancellationTokenSource(TimeSpan.FromMilliseconds(20));
 
-        var act = async () => await CreateSut(handler).Generate(AiProviderTestFactory.OllamaRequest(), cts.Token);
+        Func<Task<AiGenerationProviderResult>> act = async () => await CreateSut(handler).Generate(AiProviderTestFactory.OllamaRequest(), cts.Token);
 
         await act.Should().ThrowAsync<OperationCanceledException>();
     }
@@ -169,7 +171,7 @@ public sealed class OllamaAiGenerationProviderTests
             }
         };
 
-        var result = await CreateSut(handler).Generate(AiProviderTestFactory.OllamaRequest(), CancellationToken.None);
+        AiGenerationProviderResult result = await CreateSut(handler).Generate(AiProviderTestFactory.OllamaRequest(), CancellationToken.None);
 
         result.ErrorCode.Should().Be(ErrorCodes.ERR_AI_INVALID_RESPONSE);
         result.IsRetryable.Should().BeFalse();
@@ -195,9 +197,9 @@ public sealed class OllamaAiGenerationProviderTests
                     """));
             }
         };
-        var sut = CreateSut(handler);
+        OllamaAiGenerationProvider sut = CreateSut(handler);
 
-        var result = await sut.Generate(AiProviderTestFactory.OllamaRequest(), CancellationToken.None);
+        AiGenerationProviderResult result = await sut.Generate(AiProviderTestFactory.OllamaRequest(), CancellationToken.None);
 
         handler.SendCount.Should().Be(2);
         result.ErrorCode.Should().Be(ErrorCodes.ERR_AI_MODEL_NOT_ALLOWED);
@@ -236,9 +238,9 @@ public sealed class OllamaAiGenerationProviderTests
             });
         });
 
-        var sut = CreateSut(handler, timeout: timeout, timedSender: timedSender);
+        OllamaAiGenerationProvider sut = CreateSut(handler, timeout: timeout, timedSender: timedSender);
 
-        var result = await sut.Generate(AiProviderTestFactory.OllamaRequest(), CancellationToken.None);
+        AiGenerationProviderResult result = await sut.Generate(AiProviderTestFactory.OllamaRequest(), CancellationToken.None);
 
         result.Outcome.Should().Be(AiGenerationOutcomeKind.RETRYABLE_FAILURE);
         result.ErrorCode.Should().Be(ErrorCodes.ERR_AI_TIMEOUT);
@@ -260,7 +262,7 @@ public sealed class OllamaAiGenerationProviderTests
         TimeSpan? timeout = null,
         TimedHttpSender? timedSender = null)
     {
-        var options = Microsoft.Extensions.Options.Options.Create(new OllamaOptions
+        IOptions<OllamaOptions> options = Microsoft.Extensions.Options.Options.Create(new OllamaOptions
         {
             BaseUrl = "http://127.0.0.1:11434",
             Model = model,
@@ -269,7 +271,7 @@ public sealed class OllamaAiGenerationProviderTests
             MaxInputChars = 12000,
             MaxOutputTokens = 1000
         });
-        var factory = AiProviderTestFactory.CreateFactory(
+        IHttpClientFactory factory = AiProviderTestFactory.CreateFactory(
             OllamaAiGenerationProvider.HTTP_CLIENT_NAME,
             handler,
             new Uri("http://127.0.0.1:11434/"));

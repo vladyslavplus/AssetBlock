@@ -24,7 +24,7 @@ public class CheckoutAttributionNormalizerTests
     [Fact]
     public async Task TryNormalize_WhenRequestIsNull_ShouldReturnNull()
     {
-        var snapshot = await _normalizer.TryNormalize(null, Guid.NewGuid(), Guid.NewGuid());
+        CheckoutAttributionSnapshot? snapshot = await _normalizer.TryNormalize(null, Guid.NewGuid(), Guid.NewGuid());
 
         snapshot.Should().BeNull();
     }
@@ -34,7 +34,7 @@ public class CheckoutAttributionNormalizerTests
     {
         var request = new CheckoutAttributionRequest(null, Guid.NewGuid(), "example.com");
 
-        var snapshot = await _normalizer.TryNormalize(request, Guid.NewGuid(), Guid.NewGuid());
+        CheckoutAttributionSnapshot? snapshot = await _normalizer.TryNormalize(request, Guid.NewGuid(), Guid.NewGuid());
 
         snapshot.Should().BeNull();
     }
@@ -44,7 +44,7 @@ public class CheckoutAttributionNormalizerTests
     {
         var request = new CheckoutAttributionRequest((AnalyticsTrafficSource)77, null, null);
 
-        var snapshot = await _normalizer.TryNormalize(request, Guid.NewGuid(), Guid.NewGuid());
+        CheckoutAttributionSnapshot? snapshot = await _normalizer.TryNormalize(request, Guid.NewGuid(), Guid.NewGuid());
 
         snapshot.Should().BeNull();
     }
@@ -62,7 +62,7 @@ public class CheckoutAttributionNormalizerTests
             .Returns(sellerId);
         var request = new CheckoutAttributionRequest(AnalyticsTrafficSource.COLLECTION, collectionId, null);
 
-        var snapshot = await _normalizer.TryNormalize(
+        CheckoutAttributionSnapshot? snapshot = await _normalizer.TryNormalize(
             request,
             assetId,
             sellerId,
@@ -87,7 +87,7 @@ public class CheckoutAttributionNormalizerTests
             .Returns(Guid.NewGuid());
         var request = new CheckoutAttributionRequest(AnalyticsTrafficSource.COLLECTION, collectionId, null);
 
-        var snapshot = await _normalizer.TryNormalize(
+        CheckoutAttributionSnapshot? snapshot = await _normalizer.TryNormalize(
             request,
             assetId,
             Guid.NewGuid(),
@@ -107,7 +107,7 @@ public class CheckoutAttributionNormalizerTests
             .Returns((Guid?)null);
         var request = new CheckoutAttributionRequest(AnalyticsTrafficSource.COLLECTION, collectionId, null);
 
-        var snapshot = await _normalizer.TryNormalize(request, assetId, Guid.NewGuid());
+        CheckoutAttributionSnapshot? snapshot = await _normalizer.TryNormalize(request, assetId, Guid.NewGuid());
 
         snapshot.Should().BeNull();
     }
@@ -117,7 +117,7 @@ public class CheckoutAttributionNormalizerTests
     {
         var request = new CheckoutAttributionRequest(AnalyticsTrafficSource.COLLECTION, null, null);
 
-        var snapshot = await _normalizer.TryNormalize(request, Guid.NewGuid(), Guid.NewGuid());
+        CheckoutAttributionSnapshot? snapshot = await _normalizer.TryNormalize(request, Guid.NewGuid(), Guid.NewGuid());
 
         snapshot.Should().BeNull();
     }
@@ -127,7 +127,7 @@ public class CheckoutAttributionNormalizerTests
     {
         var request = new CheckoutAttributionRequest(AnalyticsTrafficSource.COLLECTION, Guid.NewGuid(), null);
 
-        var snapshot = await _normalizer.TryNormalize(request, assetId: null, Guid.NewGuid());
+        CheckoutAttributionSnapshot? snapshot = await _normalizer.TryNormalize(request, assetId: null, Guid.NewGuid());
 
         snapshot.Should().BeNull();
         await _collectionStoreMock.DidNotReceiveWithAnyArgs()
@@ -139,7 +139,7 @@ public class CheckoutAttributionNormalizerTests
     {
         var request = new CheckoutAttributionRequest(AnalyticsTrafficSource.SEARCH, Guid.NewGuid(), null);
 
-        var snapshot = await _normalizer.TryNormalize(request, Guid.NewGuid(), Guid.NewGuid());
+        CheckoutAttributionSnapshot? snapshot = await _normalizer.TryNormalize(request, Guid.NewGuid(), Guid.NewGuid());
 
         snapshot.Should().BeNull();
     }
@@ -152,7 +152,7 @@ public class CheckoutAttributionNormalizerTests
             null,
             "https://Blog.Example.com/post?utm_source=x");
 
-        var snapshot = await _normalizer.TryNormalize(request, Guid.NewGuid(), Guid.NewGuid());
+        CheckoutAttributionSnapshot? snapshot = await _normalizer.TryNormalize(request, Guid.NewGuid(), Guid.NewGuid());
 
         snapshot.Should().NotBeNull();
         snapshot.Source.Should().Be(AnalyticsTrafficSource.EXTERNAL);
@@ -165,7 +165,7 @@ public class CheckoutAttributionNormalizerTests
     {
         var request = new CheckoutAttributionRequest(AnalyticsTrafficSource.EXTERNAL, null, "not a host");
 
-        var snapshot = await _normalizer.TryNormalize(request, Guid.NewGuid(), Guid.NewGuid());
+        CheckoutAttributionSnapshot? snapshot = await _normalizer.TryNormalize(request, Guid.NewGuid(), Guid.NewGuid());
 
         snapshot.Should().NotBeNull();
         snapshot.Source.Should().Be(AnalyticsTrafficSource.EXTERNAL);
@@ -177,7 +177,7 @@ public class CheckoutAttributionNormalizerTests
     {
         var request = new CheckoutAttributionRequest(AnalyticsTrafficSource.CATALOG, null, "blog.example.com");
 
-        var snapshot = await _normalizer.TryNormalize(request, Guid.NewGuid(), Guid.NewGuid());
+        CheckoutAttributionSnapshot? snapshot = await _normalizer.TryNormalize(request, Guid.NewGuid(), Guid.NewGuid());
 
         snapshot.Should().NotBeNull();
         snapshot.Source.Should().Be(AnalyticsTrafficSource.CATALOG);
@@ -189,7 +189,7 @@ public class CheckoutAttributionNormalizerTests
     {
         var request = new CheckoutAttributionRequest(AnalyticsTrafficSource.CATALOG, null, null);
 
-        var snapshot = await _normalizer.TryNormalize(
+        CheckoutAttributionSnapshot? snapshot = await _normalizer.TryNormalize(
             request,
             Guid.NewGuid(),
             Guid.NewGuid(),
@@ -211,7 +211,7 @@ public class CheckoutAttributionNormalizerTests
             .ThrowsAsync(new InvalidOperationException("store unavailable"));
         var request = new CheckoutAttributionRequest(AnalyticsTrafficSource.COLLECTION, collectionId, null);
 
-        var snapshot = await _normalizer.TryNormalize(request, assetId, Guid.NewGuid());
+        CheckoutAttributionSnapshot? snapshot = await _normalizer.TryNormalize(request, assetId, Guid.NewGuid());
 
         snapshot.Should().BeNull();
     }

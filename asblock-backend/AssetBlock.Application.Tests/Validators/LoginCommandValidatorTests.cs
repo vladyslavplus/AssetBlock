@@ -1,5 +1,6 @@
 using AssetBlock.Application.UseCases.Auth.Login;
 using AwesomeAssertions;
+using FluentValidation.Results;
 
 namespace AssetBlock.Application.Tests.Validators;
 
@@ -13,7 +14,7 @@ public class LoginCommandValidatorTests
     public async Task Validate_WhenEmailIsEmpty_ShouldFail(string email)
     {
         var command = new LoginCommand(email, "password123");
-        var result = await _validator.ValidateAsync(command);
+        ValidationResult result = await _validator.ValidateAsync(command);
 
         result.IsValid.Should().BeFalse();
         result.Errors.Should().Contain(e => e.PropertyName == "Email");
@@ -26,7 +27,7 @@ public class LoginCommandValidatorTests
     public async Task Validate_WhenEmailIsInvalid_ShouldFail(string email)
     {
         var command = new LoginCommand(email, "password123");
-        var result = await _validator.ValidateAsync(command);
+        ValidationResult result = await _validator.ValidateAsync(command);
 
         result.IsValid.Should().BeFalse();
         result.Errors.Should().Contain(e => e.PropertyName == "Email" && e.ErrorMessage.Contains("format"));
@@ -38,7 +39,7 @@ public class LoginCommandValidatorTests
     public async Task Validate_WhenPasswordIsEmpty_ShouldFail(string password)
     {
         var command = new LoginCommand("test@example.com", password);
-        var result = await _validator.ValidateAsync(command);
+        ValidationResult result = await _validator.ValidateAsync(command);
 
         result.IsValid.Should().BeFalse();
         result.Errors.Should().Contain(e => e.PropertyName == "Password");
@@ -48,7 +49,7 @@ public class LoginCommandValidatorTests
     public async Task Validate_WhenValid_ShouldPass()
     {
         var command = new LoginCommand("test@example.com", "password123");
-        var result = await _validator.ValidateAsync(command);
+        ValidationResult result = await _validator.ValidateAsync(command);
 
         result.IsValid.Should().BeTrue();
     }

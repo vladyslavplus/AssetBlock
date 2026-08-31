@@ -20,12 +20,12 @@ internal sealed class VerifiedEmailAuthorizationHandler(IUserVerificationStore v
         var subject =
             context.User.FindFirstValue(ClaimTypes.NameIdentifier)
             ?? context.User.FindFirstValue(JwtClaimTypes.SUB);
-        if (!Guid.TryParse(subject, out var userId))
+        if (!Guid.TryParse(subject, out Guid userId))
         {
             return;
         }
 
-        var cancellationToken = context.Resource is HttpContext httpContext
+        CancellationToken cancellationToken = context.Resource is HttpContext httpContext
             ? httpContext.RequestAborted
             : CancellationToken.None;
 

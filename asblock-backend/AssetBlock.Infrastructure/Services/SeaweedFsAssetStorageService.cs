@@ -18,7 +18,7 @@ internal sealed class SeaweedFsAssetStorageService : IAssetStorageService
         ResiliencePipelineProvider<string> resilience,
         ILogger<SeaweedFsAssetStorageService> logger)
     {
-        var opts = options.Value;
+        SeaweedFsOptions opts = options.Value;
         _store = new S3CompatibleObjectStore(client, opts.Bucket, resilience, logger);
     }
 

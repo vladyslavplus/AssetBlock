@@ -5,6 +5,7 @@ using AssetBlock.Domain.Core.Primitives.AppSettingsOptions;
 using AssetBlock.WebApi.Constants;
 using AssetBlock.WebApi.ProblemDetails;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.Extensions.Primitives;
 using Microsoft.IdentityModel.Tokens;
 
 namespace AssetBlock.WebApi.Extensions;
@@ -13,7 +14,7 @@ internal static class JwtAuthenticationExtensions
 {
     public static IServiceCollection AddJwtAuthentication(this IServiceCollection services, IConfiguration configuration)
     {
-        var jwt = configuration.GetSection(JwtOptions.SECTION_NAME).Get<JwtOptions>()
+        JwtOptions jwt = configuration.GetSection(JwtOptions.SECTION_NAME).Get<JwtOptions>()
             ?? throw new InvalidOperationException("Jwt configuration section is missing.");
         if (string.IsNullOrWhiteSpace(jwt.Key))
         {
@@ -53,7 +54,7 @@ internal static class JwtAuthenticationExtensions
                         }
                         else
                         {
-                            var logger = ctx.HttpContext.RequestServices.GetRequiredService<ILogger<JwtBearerEvents>>();
+                            ILogger<JwtBearerEvents> logger = ctx.HttpContext.RequestServices.GetRequiredService<ILogger<JwtBearerEvents>>();
                             var sub = ctx.Principal?.FindFirstValue(ClaimTypes.NameIdentifier);
                             logger.LogDebug("JWT validated for subject {Subject}", sub);
                         }
@@ -62,7 +63,7 @@ internal static class JwtAuthenticationExtensions
                     },
                     OnAuthenticationFailed = ctx =>
                     {
-                        var logger = ctx.HttpContext.RequestServices.GetRequiredService<ILogger<JwtBearerEvents>>();
+                        ILogger<JwtBearerEvents> logger = ctx.HttpContext.RequestServices.GetRequiredService<ILogger<JwtBearerEvents>>();
                         var reason = ResolveJwtFailureReason(ctx.Exception);
                         logger.LogDebug("JWT authentication failed: {Reason}", reason);
                         return Task.CompletedTask;
@@ -70,7 +71,7 @@ internal static class JwtAuthenticationExtensions
                     OnChallenge = async ctx =>
                     {
                         ctx.HandleResponse();
-                        var logger = ctx.HttpContext.RequestServices.GetRequiredService<ILogger<JwtBearerEvents>>();
+                        ILogger<JwtBearerEvents> logger = ctx.HttpContext.RequestServices.GetRequiredService<ILogger<JwtBearerEvents>>();
 
                         // If authentication failed (e.g. expired or bad signature token), OnAuthenticationFailed already logged the reason.
                         // Only log challenge here when AuthenticateFailure is null (e.g. missing token).
@@ -83,7 +84,7 @@ internal static class JwtAuthenticationExtensions
                                 hasAuth);
                         }
 
-                        var problem = AssetBlockProblemDetails.Create(
+                        Microsoft.AspNetCore.Mvc.ProblemDetails problem = AssetBlockProblemDetails.Create(
                             ctx.HttpContext,
                             StatusCodes.Status401Unauthorized,
                             ErrorCodes.ERR_AUTH_TOKEN_INVALID);
@@ -91,7 +92,7 @@ internal static class JwtAuthenticationExtensions
                     },
                     OnForbidden = async ctx =>
                     {
-                        var problem = AssetBlockProblemDetails.Create(
+                        Microsoft.AspNetCore.Mvc.ProblemDetails problem = AssetBlockProblemDetails.Create(
                             ctx.HttpContext,
                             StatusCodes.Status403Forbidden,
                             ErrorCodes.ERR_FORBIDDEN);
@@ -124,7 +125,7 @@ internal static class JwtAuthenticationExtensions
                     {
                         // WebSockets cannot set Authorization; SignalR clients pass access_token in the query string.
                         // Accept the query-string token ONLY on the notifications hub path.
-                        var accessToken = ctx.Request.Query["access_token"];
+                        StringValues accessToken = ctx.Request.Query["access_token"];
                         if (!string.IsNullOrEmpty(accessToken) &&
                             ctx.Request.Path.StartsWithSegments(ApiRoutes.Hubs.NOTIFICATIONS))
                         {
@@ -147,7 +148,7 @@ internal static class JwtAuthenticationExtensions
                     },
                     OnAuthenticationFailed = ctx =>
                     {
-                        var logger = ctx.HttpContext.RequestServices.GetRequiredService<ILogger<JwtBearerEvents>>();
+                        ILogger<JwtBearerEvents> logger = ctx.HttpContext.RequestServices.GetRequiredService<ILogger<JwtBearerEvents>>();
                         var reason = ResolveJwtFailureReason(ctx.Exception);
                         logger.LogDebug("Hub JWT authentication failed: {Reason}", reason);
                         return Task.CompletedTask;
@@ -155,7 +156,7 @@ internal static class JwtAuthenticationExtensions
                     OnChallenge = async ctx =>
                     {
                         ctx.HandleResponse();
-                        var problem = AssetBlockProblemDetails.Create(
+                        Microsoft.AspNetCore.Mvc.ProblemDetails problem = AssetBlockProblemDetails.Create(
                             ctx.HttpContext,
                             StatusCodes.Status401Unauthorized,
                             ErrorCodes.ERR_AUTH_TOKEN_INVALID);
@@ -163,7 +164,7 @@ internal static class JwtAuthenticationExtensions
                     },
                     OnForbidden = async ctx =>
                     {
-                        var problem = AssetBlockProblemDetails.Create(
+                        Microsoft.AspNetCore.Mvc.ProblemDetails problem = AssetBlockProblemDetails.Create(
                             ctx.HttpContext,
                             StatusCodes.Status403Forbidden,
                             ErrorCodes.ERR_FORBIDDEN);

@@ -6,6 +6,7 @@ using AssetBlock.Domain.Core.Payments;
 using AssetBlock.Domain.Core.Primitives.AppSettingsOptions;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using Polly;
 using Polly.Registry;
 using Stripe;
 using Stripe.Checkout;
@@ -23,7 +24,7 @@ internal sealed class StripePaymentService(
         CheckoutSessionDraft draft,
         CancellationToken cancellationToken = default)
     {
-        var opts = options.Value;
+        StripeOptions opts = options.Value;
         var resolvedSuccessUrl = opts.SuccessUrl;
         var resolvedCancelUrl = opts.CancelUrl;
 
@@ -44,7 +45,7 @@ internal sealed class StripePaymentService(
 
         var lineItems = new List<SessionLineItemOptions>(draft.Lines.Count);
         long totalCents = 0;
-        foreach (var line in draft.Lines)
+        foreach (CheckoutSessionDraftLine line in draft.Lines)
         {
             if (!string.Equals(line.Currency, currency, StringComparison.Ordinal))
             {
@@ -96,12 +97,12 @@ internal sealed class StripePaymentService(
             LineItems = lineItems
         };
 
-        var pipeline = resilience.GetPipeline(ResilienceConstants.Pipelines.STRIPE);
+        ResiliencePipeline pipeline = resilience.GetPipeline(ResilienceConstants.Pipelines.STRIPE);
         var requestOptions = new RequestOptions
         {
             IdempotencyKey = draft.CheckoutIntentId.ToString("N")
         };
-        var session = await pipeline.ExecuteAsync(
+        Session session = await pipeline.ExecuteAsync(
             async ct => await sessionService.CreateAsync(sessionOptions, requestOptions, ct),
             cancellationToken);
         if (string.IsNullOrWhiteSpace(session.Id) || string.IsNullOrWhiteSpace(session.Url))
@@ -117,8 +118,8 @@ internal sealed class StripePaymentService(
         CancellationToken cancellationToken = default)
     {
         var sessionService = new SessionService(_stripeClient);
-        var pipeline = resilience.GetPipeline(ResilienceConstants.Pipelines.STRIPE);
-        var session = await pipeline.ExecuteAsync(
+        ResiliencePipeline pipeline = resilience.GetPipeline(ResilienceConstants.Pipelines.STRIPE);
+        Session session = await pipeline.ExecuteAsync(
             async ct => await sessionService.GetAsync(stripeSessionId, cancellationToken: ct),
             cancellationToken);
 
@@ -180,8 +181,8 @@ internal sealed class StripePaymentService(
 
         if (!session.Metadata.TryGetValue(StripeConstants.MetadataKeys.USER_ID, out var userIdStr)
             || !session.Metadata.TryGetValue(StripeConstants.MetadataKeys.CHECKOUT_INTENT_ID, out var checkoutIntentIdStr)
-            || !Guid.TryParse(userIdStr, out var userId)
-            || !Guid.TryParse(checkoutIntentIdStr, out var checkoutIntentId))
+            || !Guid.TryParse(userIdStr, out Guid userId)
+            || !Guid.TryParse(checkoutIntentIdStr, out Guid checkoutIntentId))
         {
             return null;
         }

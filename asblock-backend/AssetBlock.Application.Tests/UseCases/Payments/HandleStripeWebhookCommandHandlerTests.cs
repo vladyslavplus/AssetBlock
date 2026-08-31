@@ -1,3 +1,4 @@
+using Ardalis.Result;
 using AssetBlock.Application.Services;
 using AssetBlock.Application.UseCases.Payments.HandleStripeWebhook;
 using AssetBlock.Domain.Abstractions.Services;
@@ -33,7 +34,7 @@ public class HandleStripeWebhookCommandHandlerTests
     {
         _paymentServiceMock = Substitute.For<IPaymentService>();
         _assetStoreMock = Substitute.For<IAssetStore>();
-        var bundleStoreMock = Substitute.For<IBundleStore>();
+        IBundleStore bundleStoreMock = Substitute.For<IBundleStore>();
         _orderStoreMock = Substitute.For<IOrderStore>();
         _checkoutIntentStoreMock = Substitute.For<ICheckoutIntentStore>();
         _userStoreMock = Substitute.For<IUserStore>();
@@ -88,7 +89,7 @@ public class HandleStripeWebhookCommandHandlerTests
         _assetStoreMock.GetVersion(assetId, versionId, Arg.Any<CancellationToken>())
             .Returns((AssetVersion?)null);
 
-        var result = await _handler.Handle(command, CancellationToken.None);
+        Result<OrderCompletedPayload?> result = await _handler.Handle(command, CancellationToken.None);
 
         result.IsSuccess.Should().BeFalse();
         result.ValidationErrors.Select(v => v.Identifier).Should().Contain(ErrorCodes.ERR_PAYMENT_WEBHOOK_MISMATCH);
@@ -118,7 +119,7 @@ public class HandleStripeWebhookCommandHandlerTests
         StubUsers(userId, sellerId);
         StubOrderCreate();
 
-        var result = await _handler.Handle(command, CancellationToken.None);
+        Result<OrderCompletedPayload?> result = await _handler.Handle(command, CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
         await _orderStoreMock.Received(1).CreateWithLinesAndPurchases(
@@ -137,7 +138,7 @@ public class HandleStripeWebhookCommandHandlerTests
         _paymentServiceMock.VerifyCheckoutCompleted(command.Payload, command.Signature, Arg.Any<CancellationToken>())
             .Returns((StripeCheckoutCompleted?)null);
 
-        var result = await _handler.Handle(command, CancellationToken.None);
+        Result<OrderCompletedPayload?> result = await _handler.Handle(command, CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
         result.Value.Should().BeNull();
@@ -167,7 +168,7 @@ public class HandleStripeWebhookCommandHandlerTests
         StubUsers(userId, sellerId);
         StubOrderCreate();
 
-        var result = await _handler.Handle(command, CancellationToken.None);
+        Result<OrderCompletedPayload?> result = await _handler.Handle(command, CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
         result.Value.Should().NotBeNull();
@@ -234,7 +235,7 @@ public class HandleStripeWebhookCommandHandlerTests
                 existing.CheckoutIntentId, userId, sessionId, 9.99m, "usd"));
         _orderStoreMock.GetByStripeSessionId(sessionId, Arg.Any<CancellationToken>()).Returns(existing);
 
-        var result = await _handler.Handle(command, CancellationToken.None);
+        Result<OrderCompletedPayload?> result = await _handler.Handle(command, CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
         result.Value.Should().NotBeNull();
@@ -269,7 +270,7 @@ public class HandleStripeWebhookCommandHandlerTests
         StubUsers(buyerId, sellerId);
         StubOrderCreate();
 
-        var result = await _handler.Handle(command, CancellationToken.None);
+        Result<OrderCompletedPayload?> result = await _handler.Handle(command, CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
         await _outboxStoreMock.Received(1).Enqueue(
@@ -298,7 +299,7 @@ public class HandleStripeWebhookCommandHandlerTests
         StubUsers(buyerId, sellerId);
         StubOrderCreate();
 
-        var result = await _handler.Handle(command, CancellationToken.None);
+        Result<OrderCompletedPayload?> result = await _handler.Handle(command, CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
         await _outboxStoreMock.Received(2).Enqueue(
@@ -330,7 +331,7 @@ public class HandleStripeWebhookCommandHandlerTests
         StubUsers(userId, authorId: null);
         StubOrderCreate();
 
-        var result = await _handler.Handle(command, CancellationToken.None);
+        Result<OrderCompletedPayload?> result = await _handler.Handle(command, CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
         await _outboxStoreMock.Received(1).Enqueue(
@@ -365,7 +366,7 @@ public class HandleStripeWebhookCommandHandlerTests
             .Returns(new EmailRecipient(sellerId, "author@example.com"));
         StubOrderCreate();
 
-        var result = await _handler.Handle(command, CancellationToken.None);
+        Result<OrderCompletedPayload?> result = await _handler.Handle(command, CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
         await _orderStoreMock.Received(1).CreateWithLinesAndPurchases(
@@ -397,7 +398,7 @@ public class HandleStripeWebhookCommandHandlerTests
         _orderStoreMock.GetByStripeSessionId(sessionId, Arg.Any<CancellationToken>()).Returns((Order?)null);
         _assetStoreMock.GetVersion(assetId, versionId, Arg.Any<CancellationToken>()).Returns((AssetVersion?)null);
 
-        var result = await _handler.Handle(command, CancellationToken.None);
+        Result<OrderCompletedPayload?> result = await _handler.Handle(command, CancellationToken.None);
 
         result.IsSuccess.Should().BeFalse();
         result.ValidationErrors.Select(v => v.Identifier).Should().Contain(ErrorCodes.ERR_PAYMENT_WEBHOOK_MISMATCH);
@@ -465,7 +466,7 @@ public class HandleStripeWebhookCommandHandlerTests
                 Arg.Any<CancellationToken>())
             .ThrowsAsync(new DuplicateOrderException());
 
-        var result = await _handler.Handle(command, CancellationToken.None);
+        Result<OrderCompletedPayload?> result = await _handler.Handle(command, CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
         result.Value.Should().NotBeNull();
@@ -495,7 +496,7 @@ public class HandleStripeWebhookCommandHandlerTests
                 Arg.Any<CancellationToken>())
             .ThrowsAsync(new DuplicateEntitlementException());
 
-        var act = () => _handler.Handle(command, CancellationToken.None);
+        Func<Task<Result<OrderCompletedPayload?>>> act = () => _handler.Handle(command, CancellationToken.None);
 
         await act.Should().ThrowAsync<DuplicateEntitlementException>();
         await _auditWriterMock.DidNotReceiveWithAnyArgs().Write(Arg.Any<AuditEvent>(), Arg.Any<CancellationToken>());
@@ -523,7 +524,7 @@ public class HandleStripeWebhookCommandHandlerTests
                 Arg.Any<CancellationToken>())
             .ThrowsAsync(new DuplicateOrderException());
 
-        var act = () => _handler.Handle(command, CancellationToken.None);
+        Func<Task<Result<OrderCompletedPayload?>>> act = () => _handler.Handle(command, CancellationToken.None);
 
         await act.Should().ThrowAsync<InvalidOperationException>();
     }
@@ -555,8 +556,8 @@ public class HandleStripeWebhookCommandHandlerTests
         _assetStoreMock.GetVersion(assetId, versionId, Arg.Any<CancellationToken>()).Returns(CreateVersion(assetId, versionId));
         StubUsers(buyerId, sellerId);
 
-        var first = await _handler.Handle(command, CancellationToken.None);
-        var second = await _handler.Handle(command, CancellationToken.None);
+        Result<OrderCompletedPayload?> first = await _handler.Handle(command, CancellationToken.None);
+        Result<OrderCompletedPayload?> second = await _handler.Handle(command, CancellationToken.None);
 
         first.IsSuccess.Should().BeTrue();
         second.IsSuccess.Should().BeTrue();
@@ -581,7 +582,7 @@ public class HandleStripeWebhookCommandHandlerTests
         _paymentServiceMock.VerifyCheckoutCompleted(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
             .ThrowsAsync(new StripeWebhookInvalidSignatureException());
 
-        var result = await _handler.Handle(command, CancellationToken.None);
+        Result<OrderCompletedPayload?> result = await _handler.Handle(command, CancellationToken.None);
 
         result.IsSuccess.Should().BeFalse();
         result.Status.Should().Be(Ardalis.Result.ResultStatus.Invalid);
@@ -597,7 +598,7 @@ public class HandleStripeWebhookCommandHandlerTests
         _paymentServiceMock.VerifyCheckoutCompleted(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
             .ThrowsAsync(new InvalidOperationException("Stripe API down"));
 
-        var act = () => _handler.Handle(command, CancellationToken.None);
+        Func<Task<Result<OrderCompletedPayload?>>> act = () => _handler.Handle(command, CancellationToken.None);
         await act.Should().ThrowAsync<InvalidOperationException>()
             .WithMessage("Stripe API down");
     }
@@ -714,8 +715,8 @@ public class HandleStripeWebhookCommandHandlerTests
     [Fact]
     public async Task Handle_WhenVerified_ShouldDelegateToCheckoutCompletionService()
     {
-        var mockCompletionService = Substitute.For<ICheckoutCompletionService>();
-        var mockPaymentService = Substitute.For<IPaymentService>();
+        ICheckoutCompletionService mockCompletionService = Substitute.For<ICheckoutCompletionService>();
+        IPaymentService mockPaymentService = Substitute.For<IPaymentService>();
         var handler = new HandleStripeWebhookCommandHandler(
             mockPaymentService,
             mockCompletionService,
@@ -728,7 +729,7 @@ public class HandleStripeWebhookCommandHandlerTests
         mockCompletionService.CompletePaidCheckout(verified, Arg.Any<CancellationToken>())
             .Returns(expectedPayload);
 
-        var result = await handler.Handle(new HandleStripeWebhookCommand("payload", "sig"), CancellationToken.None);
+        Result<OrderCompletedPayload?> result = await handler.Handle(new HandleStripeWebhookCommand("payload", "sig"), CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
         result.Value.Should().Be(expectedPayload);

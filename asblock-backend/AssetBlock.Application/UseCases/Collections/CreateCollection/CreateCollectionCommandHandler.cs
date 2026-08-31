@@ -1,10 +1,11 @@
 using Ardalis.Result;
+using AssetBlock.Application.Messaging;
 using AssetBlock.Domain.Abstractions.Services;
 using AssetBlock.Domain.Core.Constants;
 using AssetBlock.Domain.Core.Dto.Audit;
 using AssetBlock.Domain.Core.Dto.Collections;
+using AssetBlock.Domain.Core.Entities;
 using AssetBlock.Domain.Core.Enums;
-using AssetBlock.Application.Messaging;
 using Microsoft.Extensions.Logging;
 
 namespace AssetBlock.Application.UseCases.Collections.CreateCollection;
@@ -28,7 +29,7 @@ internal sealed class CreateCollectionCommandHandler(
         {
             await unitOfWork.ExecuteInTransaction(async ct =>
             {
-                var collection = await collectionStore.Create(request.SellerId, title, description, ct);
+                Collection collection = await collectionStore.Create(request.SellerId, title, description, ct);
                 collectionId = collection.Id;
                 await auditWriter.Write(new AuditEvent(
                     AuditActions.COLLECTION_CREATE,

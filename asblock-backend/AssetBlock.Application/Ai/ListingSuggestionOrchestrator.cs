@@ -1,3 +1,6 @@
+using System.Diagnostics;
+using System.Text.Json;
+using System.Text.Json.Serialization;
 using AssetBlock.Domain.Abstractions.Services;
 using AssetBlock.Domain.Core;
 using AssetBlock.Domain.Core.Constants;
@@ -6,9 +9,6 @@ using AssetBlock.Domain.Core.Enums;
 using AssetBlock.Domain.Core.Primitives.AppSettingsOptions;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
-using System.Diagnostics;
-using System.Text.Json;
-using System.Text.Json.Serialization;
 
 namespace AssetBlock.Application.Ai;
 
@@ -30,9 +30,9 @@ internal sealed class ListingSuggestionOrchestrator(
         CancellationToken cancellationToken)
     {
         var started = Stopwatch.GetTimestamp();
-        var options = aiOptions.Value;
-        var parsedProvider = AiProviderParser.TryParse(options.Provider, out var requestedProvider);
-        using var activity = telemetry.StartActivity();
+        AiOptions options = aiOptions.Value;
+        var parsedProvider = AiProviderParser.TryParse(options.Provider, out AiProviderKind requestedProvider);
+        using IDisposable? activity = telemetry.StartActivity();
 
         try
         {
@@ -40,7 +40,7 @@ internal sealed class ListingSuggestionOrchestrator(
 
             if (!options.Enabled)
             {
-                var disabledProvider = parsedProvider ? requestedProvider : AiProviderKind.OPENROUTER;
+                AiProviderKind disabledProvider = parsedProvider ? requestedProvider : AiProviderKind.OPENROUTER;
                 return Complete(
                     DisabledResult(disabledProvider),
                     started,
@@ -66,7 +66,7 @@ internal sealed class ListingSuggestionOrchestrator(
                     requestId: null);
             }
 
-            if (!providers.TryGet(requestedProvider, out var provider))
+            if (!providers.TryGet(requestedProvider, out IAiGenerationProvider? provider))
             {
                 return Complete(
                     Terminal(requestedProvider, ErrorCodes.ERR_AI_ERROR, TimeSpan.Zero),
@@ -93,7 +93,7 @@ internal sealed class ListingSuggestionOrchestrator(
                 ListingSuggestionJsonSchema.ForAllowlists(request.AllowedCategories, request.AllowedTags),
                 provider.MaxOutputTokens);
 
-            var providerResult = await provider.Generate(generationRequest, cancellationToken);
+            AiGenerationProviderResult providerResult = await provider.Generate(generationRequest, cancellationToken);
             if (providerResult.Outcome != AiGenerationOutcomeKind.SUCCESS
                 || string.IsNullOrWhiteSpace(providerResult.StructuredJson))
             {
@@ -108,7 +108,7 @@ internal sealed class ListingSuggestionOrchestrator(
                     requestId: providerResult.RequestId);
             }
 
-            if (!TryParseSuggestion(providerResult.StructuredJson, out var draft, out var parseError))
+            if (!TryParseSuggestion(providerResult.StructuredJson, out ListingSuggestionDraft? draft, out var parseError))
             {
                 logger.LogInformation("Listing suggestion JSON failed schema validation");
                 return Complete(
@@ -127,7 +127,7 @@ internal sealed class ListingSuggestionOrchestrator(
                     requestId: providerResult.RequestId);
             }
 
-            if (!TryResolveAllowlists(draft, request, out var suggestion, out var allowlistError))
+            if (!TryResolveAllowlists(draft, request, out ListingSuggestion? suggestion, out var allowlistError))
             {
                 logger.LogInformation("Listing suggestion failed allowlist resolution with {ErrorCode}", allowlistError);
                 return Complete(
@@ -196,7 +196,7 @@ internal sealed class ListingSuggestionOrchestrator(
         string? allowlistedModel,
         string? requestId)
     {
-        var duration = result.Latency > TimeSpan.Zero
+        TimeSpan duration = result.Latency > TimeSpan.Zero
             ? result.Latency
             : Stopwatch.GetElapsedTime(started);
         telemetry.Record(
@@ -270,7 +270,7 @@ internal sealed class ListingSuggestionOrchestrator(
         errorCode = ErrorCodes.ERR_AI_INVALID_RESPONSE;
         try
         {
-            var parsed = JsonSerializer.Deserialize<ListingSuggestionDraft>(json, _suggestionJsonOptions);
+            ListingSuggestionDraft? parsed = JsonSerializer.Deserialize<ListingSuggestionDraft>(json, _suggestionJsonOptions);
             if (parsed is null
                 || string.IsNullOrWhiteSpace(parsed.Title)
                 || parsed.Title.Length > ListingSuggestionBounds.TITLE_MAX_LENGTH

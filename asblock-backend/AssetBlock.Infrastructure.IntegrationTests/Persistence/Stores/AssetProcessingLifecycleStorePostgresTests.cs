@@ -25,13 +25,13 @@ public sealed class AssetProcessingLifecycleStorePostgresTests(PostgresFixture f
 
     private async Task<TestContext> SetupRunningJob(AssetProcessingJobType jobType, TimeSpan? leaseDuration = null)
     {
-        var db = await fixture.CreateCleanDbContext();
+        ApplicationDbContext db = await fixture.CreateCleanDbContext();
         (User author, Category category) = await TestData.SeedAuthorAndCategory(db);
-        var asset = TestData.CreateAsset(author.Id, category.Id);
+        Asset asset = TestData.CreateAsset(author.Id, category.Id);
         db.Assets.Add(asset);
         await db.SaveChangesAsync();
 
-        var version = TestData.CreateAssetVersion(
+        AssetVersion version = TestData.CreateAssetVersion(
             asset.Id,
             isCurrent: false,
             processingStatus: jobType == AssetProcessingJobType.ARCHIVE_INSPECTION
@@ -40,7 +40,7 @@ public sealed class AssetProcessingLifecycleStorePostgresTests(PostgresFixture f
         db.AssetVersions.Add(version);
         await db.SaveChangesAsync();
 
-        var jobStore = CreateJobStore(db);
+        AssetProcessingJobStore jobStore = CreateJobStore(db);
         AssetProcessingPayload payload = jobType == AssetProcessingJobType.ARCHIVE_INSPECTION
             ? new ArchiveInspectionPayload()
             : new MalwareScanPayload("1.0");
@@ -53,15 +53,15 @@ public sealed class AssetProcessingLifecycleStorePostgresTests(PostgresFixture f
             initialDelay: TimeSpan.Zero,
             payload: payload);
 
-        var claimed = await jobStore.ClaimPendingBatch(
+        IReadOnlyList<ClaimedAssetProcessingJob> claimed = await jobStore.ClaimPendingBatch(
             batchSize: 1,
             leaseDuration: leaseDuration ?? _leaseDuration,
             leaseOwner: "test-worker-1");
 
         claimed.Should().HaveCount(1);
-        var claimedJob = claimed[0];
+        ClaimedAssetProcessingJob claimedJob = claimed[0];
 
-        var lifecycleStore = CreateLifecycleStore(db);
+        AssetProcessingLifecycleStore lifecycleStore = CreateLifecycleStore(db);
         return new TestContext(db, author, asset, version, jobStore, lifecycleStore, claimedJob);
     }
 
@@ -77,7 +77,7 @@ public sealed class AssetProcessingLifecycleStorePostgresTests(PostgresFixture f
     [Fact]
     public async Task TransitionArchiveInspectionAccepted_WithValidToken_ShouldPersistAnalysisAndEnqueueMalwareScan()
     {
-        var ctx = await SetupRunningJob(AssetProcessingJobType.ARCHIVE_INSPECTION);
+        TestContext ctx = await SetupRunningJob(AssetProcessingJobType.ARCHIVE_INSPECTION);
         var manifest = new ArchiveAnalysisManifestMetadata([
             new RecognizedManifestItem("package.json", "npm", "@pkg/core", "1.0.0")
         ]);
@@ -103,23 +103,23 @@ public sealed class AssetProcessingLifecycleStorePostgresTests(PostgresFixture f
         success.Should().BeTrue();
 
         // Verify version updated to PENDING_MALWARE_SCAN
-        var updatedVersion = await ctx.Db.AssetVersions.AsNoTracking().FirstAsync(v => v.Id == ctx.Version.Id);
+        AssetVersion updatedVersion = await ctx.Db.AssetVersions.AsNoTracking().FirstAsync(v => v.Id == ctx.Version.Id);
         updatedVersion.ProcessingStatus.Should().Be(AssetVersionProcessingStatus.PENDING_MALWARE_SCAN);
         updatedVersion.ProcessingErrorCode.Should().BeNull();
         updatedVersion.ProcessingErrorSummary.Should().BeNull();
 
         // Verify analysis row saved
-        var savedAnalysis = await ctx.Db.AssetArchiveAnalyses.AsNoTracking().FirstAsync(a => a.AssetVersionId == ctx.Version.Id);
+        AssetArchiveAnalysis savedAnalysis = await ctx.Db.AssetArchiveAnalyses.AsNoTracking().FirstAsync(a => a.AssetVersionId == ctx.Version.Id);
         savedAnalysis.FileCount.Should().Be(5);
         savedAnalysis.TotalExpandedBytes.Should().Be(1024);
         savedAnalysis.ReadmeContent.Should().Be("# Readme");
 
         // Verify ARCHIVE_INSPECTION job is SUCCEEDED
-        var archiveJob = await ctx.Db.AssetProcessingJobs.AsNoTracking().FirstAsync(j => j.Id == ctx.ClaimedJob.JobId);
+        AssetProcessingJob archiveJob = await ctx.Db.AssetProcessingJobs.AsNoTracking().FirstAsync(j => j.Id == ctx.ClaimedJob.JobId);
         archiveJob.Status.Should().Be(AssetProcessingJobStatus.SUCCEEDED);
 
         // Verify exactly one MALWARE_SCAN job enqueued
-        var malwareJobs = await ctx.Db.AssetProcessingJobs.AsNoTracking()
+        List<AssetProcessingJob> malwareJobs = await ctx.Db.AssetProcessingJobs.AsNoTracking()
             .Where(j => j.AssetVersionId == ctx.Version.Id && j.Type == AssetProcessingJobType.MALWARE_SCAN)
             .ToListAsync();
         malwareJobs.Should().HaveCount(1);
@@ -129,7 +129,7 @@ public sealed class AssetProcessingLifecycleStorePostgresTests(PostgresFixture f
     [Fact]
     public async Task TransitionArchiveInspectionAccepted_WithStaleOrExpiredToken_ShouldFailWithoutMutating()
     {
-        var ctx = await SetupRunningJob(AssetProcessingJobType.ARCHIVE_INSPECTION);
+        TestContext ctx = await SetupRunningJob(AssetProcessingJobType.ARCHIVE_INSPECTION);
         var staleToken = Guid.NewGuid();
 
         var analysis = new BoundedArchiveAnalysisRecord(1, 100, null, null);
@@ -146,7 +146,7 @@ public sealed class AssetProcessingLifecycleStorePostgresTests(PostgresFixture f
         success.Should().BeFalse();
 
         // Version should remain unchanged
-        var unchangedVersion = await ctx.Db.AssetVersions.AsNoTracking().FirstAsync(v => v.Id == ctx.Version.Id);
+        AssetVersion unchangedVersion = await ctx.Db.AssetVersions.AsNoTracking().FirstAsync(v => v.Id == ctx.Version.Id);
         unchangedVersion.ProcessingStatus.Should().Be(AssetVersionProcessingStatus.PENDING_INSPECTION);
 
         // Analysis must not exist
@@ -158,7 +158,7 @@ public sealed class AssetProcessingLifecycleStorePostgresTests(PostgresFixture f
     public async Task TransitionArchiveInspectionAccepted_WhenExpiredInDb_ShouldFailWithoutMutating()
     {
         // Setup job and immediately force its LeaseExpiresAt into the past
-        var ctx = await SetupRunningJob(AssetProcessingJobType.ARCHIVE_INSPECTION);
+        TestContext ctx = await SetupRunningJob(AssetProcessingJobType.ARCHIVE_INSPECTION);
         await ctx.Db.Database.ExecuteSqlRawAsync(
             """UPDATE asset_processing_jobs SET "LeaseExpiresAt" = clock_timestamp() - INTERVAL '10 seconds' WHERE "Id" = {0}""",
             ctx.ClaimedJob.JobId);
@@ -176,14 +176,14 @@ public sealed class AssetProcessingLifecycleStorePostgresTests(PostgresFixture f
 
         success.Should().BeFalse();
 
-        var unchangedVersion = await ctx.Db.AssetVersions.AsNoTracking().FirstAsync(v => v.Id == ctx.Version.Id);
+        AssetVersion unchangedVersion = await ctx.Db.AssetVersions.AsNoTracking().FirstAsync(v => v.Id == ctx.Version.Id);
         unchangedVersion.ProcessingStatus.Should().Be(AssetVersionProcessingStatus.PENDING_INSPECTION);
     }
 
     [Fact]
     public async Task TransitionArchiveInspectionRejected_ShouldSetRejectedStatusAndErrorCode()
     {
-        var ctx = await SetupRunningJob(AssetProcessingJobType.ARCHIVE_INSPECTION);
+        TestContext ctx = await SetupRunningJob(AssetProcessingJobType.ARCHIVE_INSPECTION);
 
         var success = await ctx.LifecycleStore.TransitionArchiveInspectionRejected(
             ctx.ClaimedJob.JobId,
@@ -195,12 +195,12 @@ public sealed class AssetProcessingLifecycleStorePostgresTests(PostgresFixture f
 
         success.Should().BeTrue();
 
-        var rejectedVersion = await ctx.Db.AssetVersions.AsNoTracking().FirstAsync(v => v.Id == ctx.Version.Id);
+        AssetVersion rejectedVersion = await ctx.Db.AssetVersions.AsNoTracking().FirstAsync(v => v.Id == ctx.Version.Id);
         rejectedVersion.ProcessingStatus.Should().Be(AssetVersionProcessingStatus.REJECTED);
         rejectedVersion.ProcessingErrorCode.Should().Be("ARCHIVE_CORRUPT");
         rejectedVersion.ProcessingErrorSummary.Should().Be("The archive could not be decompressed safely.");
 
-        var job = await ctx.Db.AssetProcessingJobs.AsNoTracking().FirstAsync(j => j.Id == ctx.ClaimedJob.JobId);
+        AssetProcessingJob job = await ctx.Db.AssetProcessingJobs.AsNoTracking().FirstAsync(j => j.Id == ctx.ClaimedJob.JobId);
         job.Status.Should().Be(AssetProcessingJobStatus.FAILED);
         job.ErrorCode.Should().Be("ARCHIVE_CORRUPT");
     }
@@ -208,22 +208,22 @@ public sealed class AssetProcessingLifecycleStorePostgresTests(PostgresFixture f
     [Fact]
     public async Task TransitionMalwareScanClean_ShouldPromoteCandidateToCurrentMonotonically()
     {
-        var db = await fixture.CreateCleanDbContext();
+        ApplicationDbContext db = await fixture.CreateCleanDbContext();
         (User author, Category category) = await TestData.SeedAuthorAndCategory(db);
-        var asset = TestData.CreateAsset(author.Id, category.Id);
+        Asset asset = TestData.CreateAsset(author.Id, category.Id);
         db.Assets.Add(asset);
         await db.SaveChangesAsync();
 
         // v1 is current READY version
-        var v1 = TestData.CreateAssetVersion(asset.Id, storageKey: "assets/test/v1.bin", versionNumber: 1, isCurrent: true, processingStatus: AssetVersionProcessingStatus.READY);
+        AssetVersion v1 = TestData.CreateAssetVersion(asset.Id, storageKey: "assets/test/v1.bin", versionNumber: 1, isCurrent: true, processingStatus: AssetVersionProcessingStatus.READY);
         db.AssetVersions.Add(v1);
 
         // v2 is candidate version in PENDING_MALWARE_SCAN
-        var v2 = TestData.CreateAssetVersion(asset.Id, storageKey: "assets/test/v2.bin", versionNumber: 2, isCurrent: false, processingStatus: AssetVersionProcessingStatus.PENDING_MALWARE_SCAN);
+        AssetVersion v2 = TestData.CreateAssetVersion(asset.Id, storageKey: "assets/test/v2.bin", versionNumber: 2, isCurrent: false, processingStatus: AssetVersionProcessingStatus.PENDING_MALWARE_SCAN);
         db.AssetVersions.Add(v2);
         await db.SaveChangesAsync();
 
-        var jobStore = CreateJobStore(db);
+        AssetProcessingJobStore jobStore = CreateJobStore(db);
         await jobStore.Enqueue(
             asset.Id,
             v2.Id,
@@ -232,11 +232,11 @@ public sealed class AssetProcessingLifecycleStorePostgresTests(PostgresFixture f
             initialDelay: TimeSpan.Zero,
             payload: new MalwareScanPayload("1.0"));
 
-        var claimed = await jobStore.ClaimPendingBatch(1, _leaseDuration, "test-worker-1");
+        IReadOnlyList<ClaimedAssetProcessingJob> claimed = await jobStore.ClaimPendingBatch(1, _leaseDuration, "test-worker-1");
         claimed.Should().HaveCount(1);
-        var claimedJob = claimed[0];
+        ClaimedAssetProcessingJob claimedJob = claimed[0];
 
-        var lifecycleStore = CreateLifecycleStore(db);
+        AssetProcessingLifecycleStore lifecycleStore = CreateLifecycleStore(db);
         var cleanResult = new MalwareScanResult(IsClean: true);
 
         var success = await lifecycleStore.TransitionMalwareScanClean(
@@ -249,23 +249,23 @@ public sealed class AssetProcessingLifecycleStorePostgresTests(PostgresFixture f
         success.Should().BeTrue();
 
         // Candidate (v2) should be READY and IsCurrent = true
-        var candidate = await db.AssetVersions.AsNoTracking().FirstAsync(v => v.Id == v2.Id);
+        AssetVersion candidate = await db.AssetVersions.AsNoTracking().FirstAsync(v => v.Id == v2.Id);
         candidate.ProcessingStatus.Should().Be(AssetVersionProcessingStatus.READY);
         candidate.IsCurrent.Should().BeTrue();
 
         // Previous current (v1) should now be IsCurrent = false
-        var previous = await db.AssetVersions.AsNoTracking().FirstAsync(v => v.Id == v1.Id);
+        AssetVersion previous = await db.AssetVersions.AsNoTracking().FirstAsync(v => v.Id == v1.Id);
         previous.IsCurrent.Should().BeFalse();
 
         // MALWARE_SCAN job is SUCCEEDED
-        var job = await db.AssetProcessingJobs.AsNoTracking().FirstAsync(j => j.Id == claimedJob.JobId);
+        AssetProcessingJob job = await db.AssetProcessingJobs.AsNoTracking().FirstAsync(j => j.Id == claimedJob.JobId);
         job.Status.Should().Be(AssetProcessingJobStatus.SUCCEEDED);
     }
 
     [Fact]
     public async Task TransitionMalwareScanRejected_ShouldSetRejectedStatus()
     {
-        var ctx = await SetupRunningJob(AssetProcessingJobType.MALWARE_SCAN);
+        TestContext ctx = await SetupRunningJob(AssetProcessingJobType.MALWARE_SCAN);
 
         var success = await ctx.LifecycleStore.TransitionMalwareScanRejected(
             ctx.ClaimedJob.JobId,
@@ -277,7 +277,7 @@ public sealed class AssetProcessingLifecycleStorePostgresTests(PostgresFixture f
 
         success.Should().BeTrue();
 
-        var rejectedVersion = await ctx.Db.AssetVersions.AsNoTracking().FirstAsync(v => v.Id == ctx.Version.Id);
+        AssetVersion rejectedVersion = await ctx.Db.AssetVersions.AsNoTracking().FirstAsync(v => v.Id == ctx.Version.Id);
         rejectedVersion.ProcessingStatus.Should().Be(AssetVersionProcessingStatus.REJECTED);
         rejectedVersion.ProcessingErrorCode.Should().Be("MALWARE_DETECTED");
         rejectedVersion.IsCurrent.Should().BeFalse();
@@ -286,23 +286,23 @@ public sealed class AssetProcessingLifecycleStorePostgresTests(PostgresFixture f
     [Fact]
     public async Task TransitionMalwareScanRejected_WhenPreviousReadyCurrentExists_ShouldNotDemotePrevious()
     {
-        var db = await fixture.CreateCleanDbContext();
+        ApplicationDbContext db = await fixture.CreateCleanDbContext();
         (User author, Category category) = await TestData.SeedAuthorAndCategory(db);
-        var asset = TestData.CreateAsset(author.Id, category.Id);
+        Asset asset = TestData.CreateAsset(author.Id, category.Id);
         db.Assets.Add(asset);
         await db.SaveChangesAsync();
 
-        var v1 = TestData.CreateAssetVersion(asset.Id, storageKey: "assets/test/v1.bin", versionNumber: 1, isCurrent: true, processingStatus: AssetVersionProcessingStatus.READY);
-        var v2 = TestData.CreateAssetVersion(asset.Id, storageKey: "assets/test/v2.bin", versionNumber: 2, isCurrent: false, processingStatus: AssetVersionProcessingStatus.PENDING_MALWARE_SCAN);
+        AssetVersion v1 = TestData.CreateAssetVersion(asset.Id, storageKey: "assets/test/v1.bin", versionNumber: 1, isCurrent: true, processingStatus: AssetVersionProcessingStatus.READY);
+        AssetVersion v2 = TestData.CreateAssetVersion(asset.Id, storageKey: "assets/test/v2.bin", versionNumber: 2, isCurrent: false, processingStatus: AssetVersionProcessingStatus.PENDING_MALWARE_SCAN);
         db.AssetVersions.AddRange(v1, v2);
         await db.SaveChangesAsync();
 
-        var jobStore = CreateJobStore(db);
+        AssetProcessingJobStore jobStore = CreateJobStore(db);
         await jobStore.Enqueue(asset.Id, v2.Id, AssetProcessingJobType.MALWARE_SCAN, 1, TimeSpan.Zero, new MalwareScanPayload("1.0"));
-        var claimed = await jobStore.ClaimPendingBatch(1, _leaseDuration, "test-worker-1");
+        IReadOnlyList<ClaimedAssetProcessingJob> claimed = await jobStore.ClaimPendingBatch(1, _leaseDuration, "test-worker-1");
         claimed.Should().HaveCount(1);
 
-        var lifecycleStore = CreateLifecycleStore(db);
+        AssetProcessingLifecycleStore lifecycleStore = CreateLifecycleStore(db);
         var success = await lifecycleStore.TransitionMalwareScanRejected(
             claimed[0].JobId,
             claimed[0].LeaseToken,
@@ -321,23 +321,23 @@ public sealed class AssetProcessingLifecycleStorePostgresTests(PostgresFixture f
     [Fact]
     public async Task TransitionMalwareScanFailed_WhenPreviousReadyCurrentExists_ShouldNotDemotePrevious()
     {
-        var db = await fixture.CreateCleanDbContext();
+        ApplicationDbContext db = await fixture.CreateCleanDbContext();
         (User author, Category category) = await TestData.SeedAuthorAndCategory(db);
-        var asset = TestData.CreateAsset(author.Id, category.Id);
+        Asset asset = TestData.CreateAsset(author.Id, category.Id);
         db.Assets.Add(asset);
         await db.SaveChangesAsync();
 
-        var v1 = TestData.CreateAssetVersion(asset.Id, storageKey: "assets/test/v1.bin", versionNumber: 1, isCurrent: true, processingStatus: AssetVersionProcessingStatus.READY);
-        var v2 = TestData.CreateAssetVersion(asset.Id, storageKey: "assets/test/v2.bin", versionNumber: 2, isCurrent: false, processingStatus: AssetVersionProcessingStatus.PENDING_MALWARE_SCAN);
+        AssetVersion v1 = TestData.CreateAssetVersion(asset.Id, storageKey: "assets/test/v1.bin", versionNumber: 1, isCurrent: true, processingStatus: AssetVersionProcessingStatus.READY);
+        AssetVersion v2 = TestData.CreateAssetVersion(asset.Id, storageKey: "assets/test/v2.bin", versionNumber: 2, isCurrent: false, processingStatus: AssetVersionProcessingStatus.PENDING_MALWARE_SCAN);
         db.AssetVersions.AddRange(v1, v2);
         await db.SaveChangesAsync();
 
-        var jobStore = CreateJobStore(db);
+        AssetProcessingJobStore jobStore = CreateJobStore(db);
         await jobStore.Enqueue(asset.Id, v2.Id, AssetProcessingJobType.MALWARE_SCAN, 1, TimeSpan.Zero, new MalwareScanPayload("1.0"));
-        var claimed = await jobStore.ClaimPendingBatch(1, _leaseDuration, "test-worker-1");
+        IReadOnlyList<ClaimedAssetProcessingJob> claimed = await jobStore.ClaimPendingBatch(1, _leaseDuration, "test-worker-1");
         claimed.Should().HaveCount(1);
 
-        var lifecycleStore = CreateLifecycleStore(db);
+        AssetProcessingLifecycleStore lifecycleStore = CreateLifecycleStore(db);
         var success = await lifecycleStore.TransitionMalwareScanFailed(
             claimed[0].JobId,
             claimed[0].LeaseToken,
@@ -356,10 +356,10 @@ public sealed class AssetProcessingLifecycleStorePostgresTests(PostgresFixture f
     [Fact]
     public async Task TransitionMalwareScanClean_WhenResultIsNotClean_ShouldThrow()
     {
-        var ctx = await SetupRunningJob(AssetProcessingJobType.MALWARE_SCAN);
+        TestContext ctx = await SetupRunningJob(AssetProcessingJobType.MALWARE_SCAN);
         var dirtyResult = new MalwareScanResult(IsClean: false);
 
-        var act = () => ctx.LifecycleStore.TransitionMalwareScanClean(
+        Func<Task<bool>> act = () => ctx.LifecycleStore.TransitionMalwareScanClean(
             ctx.ClaimedJob.JobId,
             ctx.ClaimedJob.LeaseToken,
             ctx.Asset.Id,
@@ -373,7 +373,7 @@ public sealed class AssetProcessingLifecycleStorePostgresTests(PostgresFixture f
     [Fact]
     public async Task TransitionArchiveInspectionAccepted_WhenVersionNotInPendingInspection_ShouldReturnFalse()
     {
-        var ctx = await SetupRunningJob(AssetProcessingJobType.ARCHIVE_INSPECTION);
+        TestContext ctx = await SetupRunningJob(AssetProcessingJobType.ARCHIVE_INSPECTION);
 
         // Force version into a different state (already PENDING_MALWARE_SCAN)
         await ctx.Db.AssetVersions
@@ -395,14 +395,14 @@ public sealed class AssetProcessingLifecycleStorePostgresTests(PostgresFixture f
         success.Should().BeFalse();
 
         // Version should remain in PENDING_MALWARE_SCAN (no state corruption)
-        var unchangedVersion = await ctx.Db.AssetVersions.AsNoTracking().FirstAsync(v => v.Id == ctx.Version.Id);
+        AssetVersion unchangedVersion = await ctx.Db.AssetVersions.AsNoTracking().FirstAsync(v => v.Id == ctx.Version.Id);
         unchangedVersion.ProcessingStatus.Should().Be(AssetVersionProcessingStatus.PENDING_MALWARE_SCAN);
     }
 
     [Fact]
     public async Task TransitionMalwareScanClean_WhenVersionNotInPendingMalwareScan_ShouldReturnFalse()
     {
-        var ctx = await SetupRunningJob(AssetProcessingJobType.MALWARE_SCAN);
+        TestContext ctx = await SetupRunningJob(AssetProcessingJobType.MALWARE_SCAN);
 
         // Force version into READY (e.g. another worker already promoted it)
         await ctx.Db.AssetVersions
@@ -424,7 +424,7 @@ public sealed class AssetProcessingLifecycleStorePostgresTests(PostgresFixture f
         success.Should().BeFalse();
 
         // Version should remain READY and current (no state corruption)
-        var unchangedVersion = await ctx.Db.AssetVersions.AsNoTracking().FirstAsync(v => v.Id == ctx.Version.Id);
+        AssetVersion unchangedVersion = await ctx.Db.AssetVersions.AsNoTracking().FirstAsync(v => v.Id == ctx.Version.Id);
         unchangedVersion.ProcessingStatus.Should().Be(AssetVersionProcessingStatus.READY);
         unchangedVersion.IsCurrent.Should().BeTrue();
     }
@@ -432,7 +432,7 @@ public sealed class AssetProcessingLifecycleStorePostgresTests(PostgresFixture f
     [Fact]
     public async Task TransitionArchiveInspectionRejected_WhenVersionNotInPendingInspection_ShouldReturnFalse()
     {
-        var ctx = await SetupRunningJob(AssetProcessingJobType.ARCHIVE_INSPECTION);
+        TestContext ctx = await SetupRunningJob(AssetProcessingJobType.ARCHIVE_INSPECTION);
 
         // Force version into READY (e.g. invalid state for archive rejection)
         await ctx.Db.AssetVersions
@@ -452,14 +452,14 @@ public sealed class AssetProcessingLifecycleStorePostgresTests(PostgresFixture f
         success.Should().BeFalse();
 
         // Version should remain READY (not corrupted to REJECTED)
-        var unchangedVersion = await ctx.Db.AssetVersions.AsNoTracking().FirstAsync(v => v.Id == ctx.Version.Id);
+        AssetVersion unchangedVersion = await ctx.Db.AssetVersions.AsNoTracking().FirstAsync(v => v.Id == ctx.Version.Id);
         unchangedVersion.ProcessingStatus.Should().Be(AssetVersionProcessingStatus.READY);
     }
 
     [Fact]
     public async Task TransitionMalwareScanFailed_WhenVersionNotInPendingMalwareScan_ShouldReturnFalse()
     {
-        var ctx = await SetupRunningJob(AssetProcessingJobType.MALWARE_SCAN);
+        TestContext ctx = await SetupRunningJob(AssetProcessingJobType.MALWARE_SCAN);
 
         // Force version into PENDING_INSPECTION (invalid state for malware scan failure)
         await ctx.Db.AssetVersions
@@ -477,14 +477,14 @@ public sealed class AssetProcessingLifecycleStorePostgresTests(PostgresFixture f
 
         success.Should().BeFalse();
 
-        var unchangedVersion = await ctx.Db.AssetVersions.AsNoTracking().FirstAsync(v => v.Id == ctx.Version.Id);
+        AssetVersion unchangedVersion = await ctx.Db.AssetVersions.AsNoTracking().FirstAsync(v => v.Id == ctx.Version.Id);
         unchangedVersion.ProcessingStatus.Should().Be(AssetVersionProcessingStatus.PENDING_INSPECTION);
     }
 
     [Fact]
     public async Task TransitionArchiveInspectionRejected_WhenSummaryExceeds2000Chars_ShouldRuneBoundAndSucceed()
     {
-        var ctx = await SetupRunningJob(AssetProcessingJobType.ARCHIVE_INSPECTION);
+        TestContext ctx = await SetupRunningJob(AssetProcessingJobType.ARCHIVE_INSPECTION);
         var hugeSummary = new string('A', 3000);
 
         var success = await ctx.LifecycleStore.TransitionArchiveInspectionRejected(
@@ -497,7 +497,7 @@ public sealed class AssetProcessingLifecycleStorePostgresTests(PostgresFixture f
 
         success.Should().BeTrue();
 
-        var rejectedVersion = await ctx.Db.AssetVersions.AsNoTracking().FirstAsync(v => v.Id == ctx.Version.Id);
+        AssetVersion rejectedVersion = await ctx.Db.AssetVersions.AsNoTracking().FirstAsync(v => v.Id == ctx.Version.Id);
         rejectedVersion.ProcessingStatus.Should().Be(AssetVersionProcessingStatus.REJECTED);
         rejectedVersion.ProcessingErrorSummary!.Length.Should().Be(2000);
     }
@@ -505,7 +505,7 @@ public sealed class AssetProcessingLifecycleStorePostgresTests(PostgresFixture f
     [Fact]
     public async Task TransitionProcessingFailed_WhenArchiveInspectionLeaseValid_ShouldFailJobAndVersionAtomically()
     {
-        var ctx = await SetupRunningJob(AssetProcessingJobType.ARCHIVE_INSPECTION);
+        TestContext ctx = await SetupRunningJob(AssetProcessingJobType.ARCHIVE_INSPECTION);
 
         var success = await ctx.LifecycleStore.TransitionProcessingFailed(
             ctx.ClaimedJob.JobId,
@@ -518,18 +518,18 @@ public sealed class AssetProcessingLifecycleStorePostgresTests(PostgresFixture f
 
         success.Should().BeTrue();
 
-        var failedVersion = await ctx.Db.AssetVersions.AsNoTracking().FirstAsync(v => v.Id == ctx.Version.Id);
+        AssetVersion failedVersion = await ctx.Db.AssetVersions.AsNoTracking().FirstAsync(v => v.Id == ctx.Version.Id);
         failedVersion.ProcessingStatus.Should().Be(AssetVersionProcessingStatus.PROCESSING_FAILED);
         failedVersion.ProcessingErrorCode.Should().Be("PROCESSING_TIMEOUT");
 
-        var job = await ctx.Db.AssetProcessingJobs.AsNoTracking().FirstAsync(j => j.Id == ctx.ClaimedJob.JobId);
+        AssetProcessingJob job = await ctx.Db.AssetProcessingJobs.AsNoTracking().FirstAsync(j => j.Id == ctx.ClaimedJob.JobId);
         job.Status.Should().Be(AssetProcessingJobStatus.FAILED);
     }
 
     [Fact]
     public async Task TransitionProcessingFailed_WhenMalwareScanLeaseValid_ShouldFailJobAndVersionAtomically()
     {
-        var ctx = await SetupRunningJob(AssetProcessingJobType.MALWARE_SCAN);
+        TestContext ctx = await SetupRunningJob(AssetProcessingJobType.MALWARE_SCAN);
 
         var success = await ctx.LifecycleStore.TransitionProcessingFailed(
             ctx.ClaimedJob.JobId,
@@ -542,18 +542,18 @@ public sealed class AssetProcessingLifecycleStorePostgresTests(PostgresFixture f
 
         success.Should().BeTrue();
 
-        var failedVersion = await ctx.Db.AssetVersions.AsNoTracking().FirstAsync(v => v.Id == ctx.Version.Id);
+        AssetVersion failedVersion = await ctx.Db.AssetVersions.AsNoTracking().FirstAsync(v => v.Id == ctx.Version.Id);
         failedVersion.ProcessingStatus.Should().Be(AssetVersionProcessingStatus.PROCESSING_FAILED);
         failedVersion.ProcessingErrorCode.Should().Be("SCANNER_UNAVAILABLE");
 
-        var job = await ctx.Db.AssetProcessingJobs.AsNoTracking().FirstAsync(j => j.Id == ctx.ClaimedJob.JobId);
+        AssetProcessingJob job = await ctx.Db.AssetProcessingJobs.AsNoTracking().FirstAsync(j => j.Id == ctx.ClaimedJob.JobId);
         job.Status.Should().Be(AssetProcessingJobStatus.FAILED);
     }
 
     [Fact]
     public async Task TransitionMalwareScanClean_ShouldCreateOneDurableNotificationAndOutbox()
     {
-        var ctx = await SetupRunningJob(AssetProcessingJobType.MALWARE_SCAN);
+        TestContext ctx = await SetupRunningJob(AssetProcessingJobType.MALWARE_SCAN);
         var success = await ctx.LifecycleStore.TransitionMalwareScanClean(
             ctx.ClaimedJob.JobId,
             ctx.ClaimedJob.LeaseToken,
@@ -574,7 +574,7 @@ public sealed class AssetProcessingLifecycleStorePostgresTests(PostgresFixture f
     [Fact]
     public async Task TransitionMalwareScanClean_WhenReplayed_ShouldNotDuplicateNotification()
     {
-        var ctx = await SetupRunningJob(AssetProcessingJobType.MALWARE_SCAN);
+        TestContext ctx = await SetupRunningJob(AssetProcessingJobType.MALWARE_SCAN);
         var first = await ctx.LifecycleStore.TransitionMalwareScanClean(
             ctx.ClaimedJob.JobId,
             ctx.ClaimedJob.LeaseToken,
@@ -598,7 +598,7 @@ public sealed class AssetProcessingLifecycleStorePostgresTests(PostgresFixture f
     [Fact]
     public async Task TransitionArchiveInspectionRejected_ShouldCreateRejectedNotification()
     {
-        var ctx = await SetupRunningJob(AssetProcessingJobType.ARCHIVE_INSPECTION);
+        TestContext ctx = await SetupRunningJob(AssetProcessingJobType.ARCHIVE_INSPECTION);
         var success = await ctx.LifecycleStore.TransitionArchiveInspectionRejected(
             ctx.ClaimedJob.JobId,
             ctx.ClaimedJob.LeaseToken,
@@ -620,7 +620,7 @@ public sealed class AssetProcessingLifecycleStorePostgresTests(PostgresFixture f
     [Fact]
     public async Task TransitionProcessingFailed_ShouldCreateFailedNotification()
     {
-        var ctx = await SetupRunningJob(AssetProcessingJobType.MALWARE_SCAN);
+        TestContext ctx = await SetupRunningJob(AssetProcessingJobType.MALWARE_SCAN);
         var success = await ctx.LifecycleStore.TransitionProcessingFailed(
             ctx.ClaimedJob.JobId,
             ctx.ClaimedJob.LeaseToken,
@@ -643,7 +643,7 @@ public sealed class AssetProcessingLifecycleStorePostgresTests(PostgresFixture f
     [Fact]
     public async Task TransitionArchiveInspectionAccepted_ShouldNotCreateNotification()
     {
-        var ctx = await SetupRunningJob(AssetProcessingJobType.ARCHIVE_INSPECTION);
+        TestContext ctx = await SetupRunningJob(AssetProcessingJobType.ARCHIVE_INSPECTION);
         var success = await ctx.LifecycleStore.TransitionArchiveInspectionAccepted(
             ctx.ClaimedJob.JobId,
             ctx.ClaimedJob.LeaseToken,
@@ -661,7 +661,7 @@ public sealed class AssetProcessingLifecycleStorePostgresTests(PostgresFixture f
     [Fact]
     public async Task TransitionArchiveInspectionRejected_WhenLeaseLost_ShouldNotCreateNotification()
     {
-        var ctx = await SetupRunningJob(AssetProcessingJobType.ARCHIVE_INSPECTION);
+        TestContext ctx = await SetupRunningJob(AssetProcessingJobType.ARCHIVE_INSPECTION);
         var success = await ctx.LifecycleStore.TransitionArchiveInspectionRejected(
             ctx.ClaimedJob.JobId,
             Guid.NewGuid(),
@@ -679,7 +679,7 @@ public sealed class AssetProcessingLifecycleStorePostgresTests(PostgresFixture f
     [Fact]
     public async Task TransitionMalwareScanClean_WhenVersionNotPending_ShouldRollbackWithoutNotification()
     {
-        var ctx = await SetupRunningJob(AssetProcessingJobType.MALWARE_SCAN);
+        TestContext ctx = await SetupRunningJob(AssetProcessingJobType.MALWARE_SCAN);
         await ctx.Db.AssetVersions
             .Where(v => v.Id == ctx.Version.Id)
             .ExecuteUpdateAsync(s => s
@@ -697,14 +697,14 @@ public sealed class AssetProcessingLifecycleStorePostgresTests(PostgresFixture f
         (await ctx.Db.UserNotifications.AsNoTracking().CountAsync()).Should().Be(0);
         (await ctx.Db.OutboxMessages.AsNoTracking()
             .CountAsync(m => m.Type == OutboxMessageTypes.NOTIFICATION_DISPATCH)).Should().Be(0);
-        var job = await ctx.Db.AssetProcessingJobs.AsNoTracking().FirstAsync(j => j.Id == ctx.ClaimedJob.JobId);
+        AssetProcessingJob job = await ctx.Db.AssetProcessingJobs.AsNoTracking().FirstAsync(j => j.Id == ctx.ClaimedJob.JobId);
         job.Status.Should().Be(AssetProcessingJobStatus.RUNNING);
     }
 
     [Fact]
     public async Task TransitionArchiveInspectionRejected_WhenReplayed_ShouldNotDuplicateNotification()
     {
-        var ctx = await SetupRunningJob(AssetProcessingJobType.ARCHIVE_INSPECTION);
+        TestContext ctx = await SetupRunningJob(AssetProcessingJobType.ARCHIVE_INSPECTION);
         var first = await ctx.LifecycleStore.TransitionArchiveInspectionRejected(
             ctx.ClaimedJob.JobId,
             ctx.ClaimedJob.LeaseToken,
@@ -731,7 +731,7 @@ public sealed class AssetProcessingLifecycleStorePostgresTests(PostgresFixture f
     public async Task RecoverExpiredExhaustedSecurityJobs_WhenFinalAttemptExpires_ShouldFailVersionAndNotify(
         AssetProcessingJobType jobType)
     {
-        var ctx = await SetupRunningJob(jobType);
+        TestContext ctx = await SetupRunningJob(jobType);
         await ctx.Db.Database.ExecuteSqlRawAsync(
             """UPDATE asset_processing_jobs SET "MaxAttempts" = {1}, "AttemptCount" = {2} WHERE "Id" = {0}""",
             ctx.ClaimedJob.JobId, 1, 1);
@@ -743,11 +743,11 @@ public sealed class AssetProcessingLifecycleStorePostgresTests(PostgresFixture f
         (await ctx.LifecycleStore.RecoverExpiredExhaustedSecurityJobs()).Should().Be(1);
 
         ctx.Db.ChangeTracker.Clear();
-        var version = await ctx.Db.AssetVersions.AsNoTracking().SingleAsync(v => v.Id == ctx.Version.Id);
+        AssetVersion version = await ctx.Db.AssetVersions.AsNoTracking().SingleAsync(v => v.Id == ctx.Version.Id);
         version.ProcessingStatus.Should().Be(AssetVersionProcessingStatus.PROCESSING_FAILED);
         version.ProcessingErrorCode.Should().Be(ErrorCodes.LEASE_EXPIRED);
 
-        var job = await ctx.Db.AssetProcessingJobs.AsNoTracking().SingleAsync(j => j.Id == ctx.ClaimedJob.JobId);
+        AssetProcessingJob job = await ctx.Db.AssetProcessingJobs.AsNoTracking().SingleAsync(j => j.Id == ctx.ClaimedJob.JobId);
         job.Status.Should().Be(AssetProcessingJobStatus.FAILED);
         job.Stage.Should().Be("FAILED_LEASE_EXPIRED");
         job.ErrorCode.Should().Be(ErrorCodes.LEASE_EXPIRED);
@@ -764,7 +764,7 @@ public sealed class AssetProcessingLifecycleStorePostgresTests(PostgresFixture f
     [Fact]
     public async Task RecoverExpiredExhaustedSecurityJobs_WhenReplayed_ShouldNotDuplicateNotification()
     {
-        var ctx = await SetupRunningJob(AssetProcessingJobType.ARCHIVE_INSPECTION);
+        TestContext ctx = await SetupRunningJob(AssetProcessingJobType.ARCHIVE_INSPECTION);
         await ctx.Db.Database.ExecuteSqlRawAsync(
             """UPDATE asset_processing_jobs SET "MaxAttempts" = {1}, "AttemptCount" = {2} WHERE "Id" = {0}""",
             ctx.ClaimedJob.JobId, 1, 1);
@@ -780,7 +780,7 @@ public sealed class AssetProcessingLifecycleStorePostgresTests(PostgresFixture f
     [Fact]
     public async Task TransitionProcessingFailed_WhenTerminalFailure_CreatesOutboxMessageWithPendingStatus()
     {
-        var ctx = await SetupRunningJob(AssetProcessingJobType.MALWARE_SCAN);
+        TestContext ctx = await SetupRunningJob(AssetProcessingJobType.MALWARE_SCAN);
 
         var transitioned = await ctx.LifecycleStore.TransitionMalwareScanFailed(
             ctx.ClaimedJob.JobId,
@@ -792,10 +792,10 @@ public sealed class AssetProcessingLifecycleStorePostgresTests(PostgresFixture f
 
         transitioned.Should().BeTrue();
 
-        var notification = await ctx.Db.UserNotifications.AsNoTracking().SingleAsync();
+        UserNotification notification = await ctx.Db.UserNotifications.AsNoTracking().SingleAsync();
         notification.SourceOutboxMessageId.Should().NotBeNull();
 
-        var outbox = await ctx.Db.OutboxMessages.AsNoTracking().SingleAsync(m => m.Id == notification.SourceOutboxMessageId!.Value);
+        OutboxMessage outbox = await ctx.Db.OutboxMessages.AsNoTracking().SingleAsync(m => m.Id == notification.SourceOutboxMessageId!.Value);
         outbox.Status.Should().Be(OutboxMessageStatus.PENDING);
         outbox.AttemptCount.Should().Be(0);
         outbox.Type.Should().Be(OutboxMessageTypes.NOTIFICATION_DISPATCH);
@@ -809,9 +809,9 @@ public sealed class AssetProcessingLifecycleStorePostgresTests(PostgresFixture f
         NotificationKind kind,
         string processingStatus)
     {
-        var notifications = await db.UserNotifications.AsNoTracking().ToListAsync();
+        List<UserNotification> notifications = await db.UserNotifications.AsNoTracking().ToListAsync();
         notifications.Should().ContainSingle();
-        var notification = notifications[0];
+        UserNotification notification = notifications[0];
         notification.RecipientUserId.Should().Be(recipientUserId);
         notification.Kind.Should().Be(kind);
         notification.SourceOutboxMessageId.Should().NotBeNull();
@@ -821,7 +821,7 @@ public sealed class AssetProcessingLifecycleStorePostgresTests(PostgresFixture f
         notification.MetadataJson.Should().NotContain("storageKey");
         notification.MetadataJson.Should().NotContain("package.zip");
 
-        var outbox = await db.OutboxMessages.AsNoTracking()
+        OutboxMessage outbox = await db.OutboxMessages.AsNoTracking()
             .SingleAsync(m => m.Type == OutboxMessageTypes.NOTIFICATION_DISPATCH);
         outbox.Id.Should().Be(notification.SourceOutboxMessageId!.Value);
         outbox.Status.Should().Be(OutboxMessageStatus.PENDING);

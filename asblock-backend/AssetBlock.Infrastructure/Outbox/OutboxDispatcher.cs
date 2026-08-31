@@ -1,11 +1,12 @@
+using System.Diagnostics;
 using AssetBlock.Domain.Abstractions.Services;
 using AssetBlock.Domain.Core.Constants;
+using AssetBlock.Domain.Core.Entities;
 using AssetBlock.Infrastructure.Common;
+using AssetBlock.Infrastructure.Observability;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
-using System.Diagnostics;
-using AssetBlock.Infrastructure.Observability;
 
 namespace AssetBlock.Infrastructure.Outbox;
 
@@ -37,7 +38,7 @@ internal sealed class OutboxDispatcher(
 
             try
             {
-                var pollDelay = CalculatePollInterval(jitterProvider);
+                TimeSpan pollDelay = CalculatePollInterval(jitterProvider);
                 await Task.Delay(pollDelay, stoppingToken);
             }
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
@@ -56,23 +57,23 @@ internal sealed class OutboxDispatcher(
     {
         var baseSeconds = Math.Min(3600, Math.Pow(2, Math.Min(attemptCount, 10)));
         var baseDelay = TimeSpan.FromSeconds(baseSeconds);
-        var jitteredDelay = DelayJitter.Apply(baseDelay, jitterProvider);
+        TimeSpan jitteredDelay = DelayJitter.Apply(baseDelay, jitterProvider);
         return jitteredDelay > TimeSpan.FromSeconds(3600) ? TimeSpan.FromSeconds(3600) : jitteredDelay;
     }
 
     internal async Task DispatchBatch(CancellationToken cancellationToken)
     {
-        await using var scope = scopeFactory.CreateAsyncScope();
-        var outbox = scope.ServiceProvider.GetRequiredService<IOutboxStore>();
+        await using AsyncServiceScope scope = scopeFactory.CreateAsyncScope();
+        IOutboxStore outbox = scope.ServiceProvider.GetRequiredService<IOutboxStore>();
         var handlers = scope.ServiceProvider.GetServices<IOutboxMessageHandler>()
             .ToDictionary(h => h.MessageType, StringComparer.Ordinal);
 
-        var batch = await outbox.ClaimPendingBatch(
+        IReadOnlyList<OutboxMessage> batch = await outbox.ClaimPendingBatch(
             OutboxMessageTypes.DISPATCH_BATCH_SIZE,
             _lease,
             cancellationToken);
 
-        foreach (var message in batch)
+        foreach (OutboxMessage message in batch)
         {
             if (message.LockToken is not { } lockToken)
             {
@@ -82,9 +83,9 @@ internal sealed class OutboxDispatcher(
 
             var stopwatch = Stopwatch.StartNew();
 
-            if (!handlers.TryGetValue(message.Type, out var handler))
+            if (!handlers.TryGetValue(message.Type, out IOutboxMessageHandler? handler))
             {
-                var outcome = DiagnosticsOutcome.DEAD_LETTER;
+                DiagnosticsOutcome outcome = DiagnosticsOutcome.DEAD_LETTER;
                 try
                 {
                     logger.LogError("No handler found for outbox message {OutboxId} of type '{Type}'; moving to dead letter", message.Id, message.Type);
@@ -116,7 +117,7 @@ internal sealed class OutboxDispatcher(
                 continue;
             }
 
-            var processingOutcome = DiagnosticsOutcome.SUCCESS;
+            DiagnosticsOutcome processingOutcome = DiagnosticsOutcome.SUCCESS;
             try
             {
                 await handler.Handle(message, cancellationToken);
@@ -157,8 +158,8 @@ internal sealed class OutboxDispatcher(
                 else
                 {
                     processingOutcome = DiagnosticsOutcome.HANDLER_FAILURE;
-                    var cappedDelay = CalculateRetryDelay(message.AttemptCount, jitterProvider);
-                    var next = DateTimeOffset.UtcNow.Add(cappedDelay);
+                    TimeSpan cappedDelay = CalculateRetryDelay(message.AttemptCount, jitterProvider);
+                    DateTimeOffset next = DateTimeOffset.UtcNow.Add(cappedDelay);
                     logger.LogError(
                         ex,
                         "Outbox handler failed for {OutboxId} type {Type} attempt {Attempt}",

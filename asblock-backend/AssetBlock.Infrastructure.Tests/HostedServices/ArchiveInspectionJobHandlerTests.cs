@@ -3,8 +3,8 @@ using AssetBlock.Domain.Abstractions.Services;
 using AssetBlock.Domain.Core.Dto;
 using AssetBlock.Domain.Core.Entities;
 using AssetBlock.Domain.Core.Enums;
-using AssetBlock.Infrastructure.HostedServices.AssetProcessing.Handlers;
 using AssetBlock.Domain.Core.Primitives.AppSettingsOptions;
+using AssetBlock.Infrastructure.HostedServices.AssetProcessing.Handlers;
 using Microsoft.Extensions.Logging.Abstractions;
 using NSubstitute;
 
@@ -42,11 +42,11 @@ public sealed class ArchiveInspectionJobHandlerTests
     [Fact]
     public async Task Process_WhenVersionNotFound_ShouldReturnTerminalFailure()
     {
-        var context = CreateContext();
+        AssetProcessingJobContext<ArchiveInspectionPayload> context = CreateContext();
         _assetStore.GetVersion(context.AssetId, context.AssetVersionId, Arg.Any<CancellationToken>())
             .Returns((AssetVersion?)null);
 
-        var outcome = await _sut.Process(context, CancellationToken.None);
+        AssetProcessingJobOutcome outcome = await _sut.Process(context, CancellationToken.None);
 
         outcome.Should().BeOfType<AssetProcessingJobOutcome.TerminalFailure>();
         var terminal = (AssetProcessingJobOutcome.TerminalFailure)outcome;
@@ -56,8 +56,8 @@ public sealed class ArchiveInspectionJobHandlerTests
     [Fact]
     public async Task Process_WhenDecryptionFailsWithCryptographicException_ShouldTransitionRejected()
     {
-        var context = CreateContext();
-        var version = CreateVersion(context.AssetVersionId);
+        AssetProcessingJobContext<ArchiveInspectionPayload> context = CreateContext();
+        AssetVersion version = CreateVersion(context.AssetVersionId);
         _assetStore.GetVersion(context.AssetId, context.AssetVersionId, Arg.Any<CancellationToken>())
             .Returns(version);
 
@@ -77,7 +77,7 @@ public sealed class ArchiveInspectionJobHandlerTests
             Arg.Any<CancellationToken>())
             .Returns(true);
 
-        var outcome = await _sut.Process(context, CancellationToken.None);
+        AssetProcessingJobOutcome outcome = await _sut.Process(context, CancellationToken.None);
 
         outcome.Should().BeOfType<AssetProcessingJobOutcome.AtomicCommitted>();
         var committed = (AssetProcessingJobOutcome.AtomicCommitted)outcome;
@@ -87,8 +87,8 @@ public sealed class ArchiveInspectionJobHandlerTests
     [Fact]
     public async Task Process_WhenArchiveSafe_ShouldTransitionAcceptedAndReturnCommitted()
     {
-        var context = CreateContext();
-        var version = CreateVersion(context.AssetVersionId);
+        AssetProcessingJobContext<ArchiveInspectionPayload> context = CreateContext();
+        AssetVersion version = CreateVersion(context.AssetVersionId);
         _assetStore.GetVersion(context.AssetId, context.AssetVersionId, Arg.Any<CancellationToken>())
             .Returns(version);
 
@@ -106,7 +106,7 @@ public sealed class ArchiveInspectionJobHandlerTests
             Arg.Any<CancellationToken>())
             .Returns(true);
 
-        var outcome = await _sut.Process(context, CancellationToken.None);
+        AssetProcessingJobOutcome outcome = await _sut.Process(context, CancellationToken.None);
 
         outcome.Should().BeOfType<AssetProcessingJobOutcome.AtomicCommitted>();
         var committed = (AssetProcessingJobOutcome.AtomicCommitted)outcome;
@@ -116,8 +116,8 @@ public sealed class ArchiveInspectionJobHandlerTests
     [Fact]
     public async Task Process_WhenArchiveUnsafe_ShouldTransitionRejectedAndReturnCommitted()
     {
-        var context = CreateContext();
-        var version = CreateVersion(context.AssetVersionId);
+        AssetProcessingJobContext<ArchiveInspectionPayload> context = CreateContext();
+        AssetVersion version = CreateVersion(context.AssetVersionId);
         _assetStore.GetVersion(context.AssetId, context.AssetVersionId, Arg.Any<CancellationToken>())
             .Returns(version);
 
@@ -135,7 +135,7 @@ public sealed class ArchiveInspectionJobHandlerTests
             Arg.Any<CancellationToken>())
             .Returns(true);
 
-        var outcome = await _sut.Process(context, CancellationToken.None);
+        AssetProcessingJobOutcome outcome = await _sut.Process(context, CancellationToken.None);
 
         outcome.Should().BeOfType<AssetProcessingJobOutcome.AtomicCommitted>();
         var committed = (AssetProcessingJobOutcome.AtomicCommitted)outcome;

@@ -1,10 +1,12 @@
 using Ardalis.Result;
+using AssetBlock.Application.Messaging;
 using AssetBlock.Domain.Abstractions.Services;
 using AssetBlock.Domain.Core.Constants;
+using AssetBlock.Domain.Core.Dto.Assets;
 using AssetBlock.Domain.Core.Dto.Audit;
 using AssetBlock.Domain.Core.Dto.Tags;
+using AssetBlock.Domain.Core.Entities;
 using AssetBlock.Domain.Core.Enums;
-using AssetBlock.Application.Messaging;
 using Microsoft.Extensions.Logging;
 
 namespace AssetBlock.Application.UseCases.Assets.AddAssetTag;
@@ -19,7 +21,7 @@ internal sealed class AddAssetTagCommandHandler(
 {
     public async Task<Result<TagDto>> Handle(AddAssetTagCommand request, CancellationToken cancellationToken)
     {
-        var asset = await assetStore.GetOwnership(request.AssetId, cancellationToken);
+        AssetOwnershipDto? asset = await assetStore.GetOwnership(request.AssetId, cancellationToken);
         if (asset is null)
         {
             return Result.NotFound(ErrorCodes.ERR_ASSET_NOT_FOUND);
@@ -41,7 +43,7 @@ internal sealed class AddAssetTagCommandHandler(
         }
 
         var normalizedName = request.TagName.Trim().ToLowerInvariant();
-        var tag = await tagStore.GetByName(normalizedName, cancellationToken);
+        Tag? tag = await tagStore.GetByName(normalizedName, cancellationToken);
         if (tag is null)
         {
             logger.LogDebug("Add tag failed: tag not found {TagName}", normalizedName);

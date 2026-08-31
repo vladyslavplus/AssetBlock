@@ -6,6 +6,7 @@ using AssetBlock.Domain.Core.Entities;
 using AssetBlock.Domain.Core.Enums;
 using AssetBlock.Domain.Core.Primitives.AppSettingsOptions;
 using AssetBlock.Infrastructure.Outbox;
+using AwesomeAssertions.Specialized;
 using Microsoft.Extensions.Logging.Abstractions;
 using NSubstitute;
 using NSubstitute.ExceptionExtensions;
@@ -125,7 +126,7 @@ public sealed class EmailDispatchOutboxHandlerTests
             Arg.Any<CancellationToken>())
             .Returns((DeliveryClaimStatus.CONCURRENT_CONFLICT, (Guid?)null));
 
-        var act = () => _sut.Handle(message, CancellationToken.None);
+        Func<Task> act = () => _sut.Handle(message, CancellationToken.None);
 
         await act.Should().ThrowAsync<InvalidOperationException>()
             .WithMessage("*locked by another worker*");
@@ -202,7 +203,7 @@ public sealed class EmailDispatchOutboxHandlerTests
             Arg.Any<CancellationToken>())
             .Returns(false);
 
-        var act = () => _sut.Handle(message, CancellationToken.None);
+        Func<Task> act = () => _sut.Handle(message, CancellationToken.None);
 
         await act.Should().ThrowAsync<InvalidOperationException>()
             .WithMessage("Email delivery claim was lost before confirmation.");
@@ -238,9 +239,9 @@ public sealed class EmailDispatchOutboxHandlerTests
             Arg.Any<CancellationToken>())
             .ThrowsAsync(new InvalidOperationException("DB connection error during confirmation"));
 
-        var act = () => _sut.Handle(message, CancellationToken.None);
+        Func<Task> act = () => _sut.Handle(message, CancellationToken.None);
 
-        var ex = await act.Should().ThrowAsync<InvalidOperationException>();
+        ExceptionAssertions<InvalidOperationException> ex = await act.Should().ThrowAsync<InvalidOperationException>();
         ex.Which.Message.Should().Be("Email transport failed.");
 
         // Must NOT release claim after successful SMTP send
@@ -329,7 +330,7 @@ public sealed class EmailDispatchOutboxHandlerTests
             OccurredAt = DateTimeOffset.UtcNow
         };
 
-        var act = () => _sut.Handle(message, CancellationToken.None);
+        Func<Task> act = () => _sut.Handle(message, CancellationToken.None);
         await act.Should().ThrowAsync<InvalidOperationException>();
         await _emailSender.DidNotReceiveWithAnyArgs().Send(Arg.Any<EmailMessage>(), Arg.Any<CancellationToken>());
     }
@@ -352,7 +353,7 @@ public sealed class EmailDispatchOutboxHandlerTests
             OccurredAt = DateTimeOffset.UtcNow
         };
 
-        var act = () => _sut.Handle(message, CancellationToken.None);
+        Func<Task> act = () => _sut.Handle(message, CancellationToken.None);
         await act.Should().ThrowAsync<InvalidOperationException>()
             .WithMessage("*template kind*");
         await _emailDeliveryStore.DidNotReceiveWithAnyArgs().TryClaimDelivery(
@@ -378,7 +379,7 @@ public sealed class EmailDispatchOutboxHandlerTests
             OccurredAt = DateTimeOffset.UtcNow
         };
 
-        var act = () => _sut.Handle(message, CancellationToken.None);
+        Func<Task> act = () => _sut.Handle(message, CancellationToken.None);
         await act.Should().ThrowAsync<InvalidOperationException>()
             .WithMessage("*subject*");
         await _emailDeliveryStore.DidNotReceiveWithAnyArgs().TryClaimDelivery(
@@ -404,7 +405,7 @@ public sealed class EmailDispatchOutboxHandlerTests
             OccurredAt = DateTimeOffset.UtcNow
         };
 
-        var act = () => _sut.Handle(message, CancellationToken.None);
+        Func<Task> act = () => _sut.Handle(message, CancellationToken.None);
         await act.Should().ThrowAsync<InvalidOperationException>()
             .WithMessage("*text body*");
         await _emailDeliveryStore.DidNotReceiveWithAnyArgs().TryClaimDelivery(
@@ -430,7 +431,7 @@ public sealed class EmailDispatchOutboxHandlerTests
             OccurredAt = DateTimeOffset.UtcNow
         };
 
-        var act = () => _sut.Handle(message, CancellationToken.None);
+        Func<Task> act = () => _sut.Handle(message, CancellationToken.None);
         await act.Should().ThrowAsync<InvalidOperationException>()
             .WithMessage("*html body*");
         await _emailDeliveryStore.DidNotReceiveWithAnyArgs().TryClaimDelivery(
@@ -456,7 +457,7 @@ public sealed class EmailDispatchOutboxHandlerTests
             OccurredAt = DateTimeOffset.UtcNow
         };
 
-        var act = () => _sut.Handle(message, CancellationToken.None);
+        Func<Task> act = () => _sut.Handle(message, CancellationToken.None);
         await act.Should().ThrowAsync<InvalidOperationException>()
             .WithMessage("*recipient address*");
         await _emailSender.DidNotReceiveWithAnyArgs().Send(Arg.Any<EmailMessage>(), Arg.Any<CancellationToken>());
@@ -487,7 +488,7 @@ public sealed class EmailDispatchOutboxHandlerTests
         _emailSender.Send(Arg.Any<EmailMessage>(), Arg.Any<CancellationToken>())
             .ThrowsAsync(new OperationCanceledException(cts.Token));
 
-        var act = () => _sut.Handle(message, cts.Token);
+        Func<Task> act = () => _sut.Handle(message, cts.Token);
         await act.Should().ThrowAsync<OperationCanceledException>();
 
         await _emailDeliveryStore.Received(1).ReleaseClaim(outboxId, _defaultClaimToken, Arg.Any<CancellationToken>());
@@ -521,7 +522,7 @@ public sealed class EmailDispatchOutboxHandlerTests
         _emailDeliveryStore.ReleaseClaim(Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<CancellationToken>())
             .ThrowsAsync(new InvalidOperationException("DB error during release"));
 
-        var act = () => _sut.Handle(message, cts.Token);
+        Func<Task> act = () => _sut.Handle(message, cts.Token);
         await act.Should().ThrowAsync<OperationCanceledException>();
     }
 
@@ -546,8 +547,8 @@ public sealed class EmailDispatchOutboxHandlerTests
         _emailSender.Send(Arg.Any<EmailMessage>(), Arg.Any<CancellationToken>())
             .ThrowsAsync(new InvalidOperationException("SMTP rejected buyer@example.com with MIME body leak"));
 
-        var act = () => _sut.Handle(message, CancellationToken.None);
-        var exception = await act.Should().ThrowAsync<InvalidOperationException>();
+        Func<Task> act = () => _sut.Handle(message, CancellationToken.None);
+        ExceptionAssertions<InvalidOperationException> exception = await act.Should().ThrowAsync<InvalidOperationException>();
         exception.Which.Message.Should().Be("Email transport failed.");
         exception.Which.InnerException.Should().BeNull();
         exception.Which.Message.Should().NotContain("buyer@example.com");
@@ -581,8 +582,8 @@ public sealed class EmailDispatchOutboxHandlerTests
         _emailDeliveryStore.ReleaseClaim(Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<CancellationToken>())
             .ThrowsAsync(new InvalidOperationException("DB connection closed"));
 
-        var act = () => _sut.Handle(message, CancellationToken.None);
-        var exception = await act.Should().ThrowAsync<InvalidOperationException>();
+        Func<Task> act = () => _sut.Handle(message, CancellationToken.None);
+        ExceptionAssertions<InvalidOperationException> exception = await act.Should().ThrowAsync<InvalidOperationException>();
         exception.Which.Message.Should().Be("Email transport failed.");
     }
 }

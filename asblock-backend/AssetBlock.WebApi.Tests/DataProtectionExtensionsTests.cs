@@ -12,7 +12,7 @@ public sealed class DataProtectionExtensionsTests
     public void EnsureDedicatedKeyRingDirectory_WhenLeafNotDedicated_ShouldThrow()
     {
         var path = Path.Combine(Path.GetTempPath(), "not-a-key-ring-folder", Guid.NewGuid().ToString("N"));
-        var act = () => DataProtectionExtensions.EnsureDedicatedKeyRingDirectory(path);
+        Func<DirectoryInfo> act = () => DataProtectionExtensions.EnsureDedicatedKeyRingDirectory(path);
         act.Should().Throw<InvalidOperationException>().WithMessage("*dedicated*");
     }
 
@@ -22,7 +22,7 @@ public sealed class DataProtectionExtensionsTests
         var path = Path.Combine(Path.GetTempPath(), $"assetblock-dataprotection-keys-{Guid.NewGuid():N}");
         try
         {
-            var dir = DataProtectionExtensions.EnsureDedicatedKeyRingDirectory(path);
+            DirectoryInfo dir = DataProtectionExtensions.EnsureDedicatedKeyRingDirectory(path);
             dir.Exists.Should().BeTrue();
             File.Exists(Path.Combine(path, DataProtectionExtensions.KEY_RING_MARKER_FILE_NAME)).Should().BeTrue();
         }
@@ -43,7 +43,7 @@ public sealed class DataProtectionExtensionsTests
         File.WriteAllText(Path.Combine(path, "other-secret.txt"), "nope");
         try
         {
-            var act = () => DataProtectionExtensions.EnsureDedicatedKeyRingDirectory(path);
+            Func<DirectoryInfo> act = () => DataProtectionExtensions.EnsureDedicatedKeyRingDirectory(path);
             act.Should().Throw<InvalidOperationException>().WithMessage("*unexpected*");
         }
         finally
@@ -82,7 +82,7 @@ public sealed class DataProtectionExtensionsTests
             return;
         }
 
-        var act = () => DataProtectionExtensions.ResolveProtectionMode(
+        Func<string> act = () => DataProtectionExtensions.ResolveProtectionMode(
             string.Empty,
             new FakeHostEnvironment(Environments.Production));
         act.Should().Throw<InvalidOperationException>().WithMessage("*Certificate or Kms*");

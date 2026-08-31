@@ -1,10 +1,10 @@
+using Ardalis.Result;
+using AssetBlock.Application.Messaging;
 using AssetBlock.Domain.Abstractions.Services;
 using AssetBlock.Domain.Core.Constants;
 using AssetBlock.Domain.Core.Dto.Users;
 using AssetBlock.Domain.Core.Entities;
 using AssetBlock.Domain.Core.Enums;
-using Ardalis.Result;
-using AssetBlock.Application.Messaging;
 
 namespace AssetBlock.Application.UseCases.Users.GetProfile;
 
@@ -16,26 +16,26 @@ internal sealed class GetUserProfileQueryHandler(
     {
         if (string.IsNullOrWhiteSpace(request.Username))
         {
-            var self = await userStore.GetByIdWithLinks(request.CurrentUserId!.Value, cancellationToken);
+            User? self = await userStore.GetByIdWithLinks(request.CurrentUserId!.Value, cancellationToken);
             if (self is null)
             {
                 return Result.NotFound(ErrorCodes.ERR_USER_NOT_FOUND);
             }
 
-            var pendingChange = await emailActionStore.GetCurrent(
+            EmailAction? pendingChange = await emailActionStore.GetCurrent(
                 self.Id,
                 EmailActionPurpose.EMAIL_CHANGE,
                 cancellationToken);
 
-            var now = DateTimeOffset.UtcNow;
-            var activePendingChange = pendingChange is { ConsumedAt: null } && pendingChange.ExpiresAt > now
+            DateTimeOffset now = DateTimeOffset.UtcNow;
+            EmailAction? activePendingChange = pendingChange is { ConsumedAt: null } && pendingChange.ExpiresAt > now
                 ? pendingChange
                 : null;
 
             return Result.Success(MapToProfileDto(self, includeEmail: true, activePendingChange));
         }
 
-        var user = await userStore.GetByUsernameWithLinks(request.Username.Trim(), cancellationToken);
+        User? user = await userStore.GetByUsernameWithLinks(request.Username.Trim(), cancellationToken);
         if (user is null)
         {
             return Result.NotFound(ErrorCodes.ERR_USER_NOT_FOUND);
@@ -50,8 +50,8 @@ internal sealed class GetUserProfileQueryHandler(
         EmailAction? ownerPendingChange = null;
         if (isOwner)
         {
-            var pending = await emailActionStore.GetCurrent(user.Id, EmailActionPurpose.EMAIL_CHANGE, cancellationToken);
-            var now = DateTimeOffset.UtcNow;
+            EmailAction? pending = await emailActionStore.GetCurrent(user.Id, EmailActionPurpose.EMAIL_CHANGE, cancellationToken);
+            DateTimeOffset now = DateTimeOffset.UtcNow;
             ownerPendingChange = pending is { ConsumedAt: null } && pending.ExpiresAt > now ? pending : null;
         }
 

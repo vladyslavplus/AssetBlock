@@ -1,10 +1,11 @@
 using Ardalis.Result;
 using AssetBlock.Application.Common;
+using AssetBlock.Application.Messaging;
 using AssetBlock.Domain.Abstractions.Services;
 using AssetBlock.Domain.Core.Constants;
 using AssetBlock.Domain.Core.Dto.Email;
+using AssetBlock.Domain.Core.Entities;
 using AssetBlock.Domain.Core.Enums;
-using AssetBlock.Application.Messaging;
 using Microsoft.Extensions.Logging;
 
 namespace AssetBlock.Application.UseCases.Auth.ResendEmailVerification;
@@ -18,7 +19,7 @@ internal sealed class ResendEmailVerificationCommandHandler(
 {
     public async Task<Result> Handle(ResendEmailVerificationCommand request, CancellationToken cancellationToken)
     {
-        var user = await userStore.GetByIdForUpdate(request.UserId, cancellationToken);
+        User? user = await userStore.GetByIdForUpdate(request.UserId, cancellationToken);
         if (user is null)
         {
             return Result.NotFound(ErrorCodes.ERR_USER_NOT_FOUND);
@@ -29,12 +30,12 @@ internal sealed class ResendEmailVerificationCommandHandler(
             return Result.Success();
         }
 
-        var existing = await emailActionStore.GetCurrent(
+        EmailAction? existing = await emailActionStore.GetCurrent(
             request.UserId,
             EmailActionPurpose.EMAIL_VERIFICATION,
             cancellationToken);
 
-        var now = DateTimeOffset.UtcNow;
+        DateTimeOffset now = DateTimeOffset.UtcNow;
         if (emailActionStore.IsInCooldown(existing, EmailActionConstants.ResendCooldown, now))
         {
             logger.LogDebug("ResendEmailVerification cooldown active for user {UserId}", request.UserId);
@@ -43,7 +44,7 @@ internal sealed class ResendEmailVerificationCommandHandler(
 
         await unitOfWork.ExecuteInTransaction(async ct =>
         {
-            var action = await emailActionStore.IssueOrReplace(
+            EmailAction action = await emailActionStore.IssueOrReplace(
                 request.UserId,
                 EmailActionPurpose.EMAIL_VERIFICATION,
                 user.Email,

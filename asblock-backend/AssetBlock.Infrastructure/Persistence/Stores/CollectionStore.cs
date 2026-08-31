@@ -24,7 +24,7 @@ internal sealed class CollectionStore(ApplicationDbContext dbContext) : ICollect
 
     public async Task<Collection?> GetForUpdate(Guid id, CancellationToken cancellationToken = default)
     {
-        var lockedId = await dbContext.Database
+        Guid lockedId = await dbContext.Database
             .SqlQuery<Guid>($"""SELECT "Id" AS "Value" FROM collections WHERE "Id" = {id} FOR UPDATE""")
             .FirstOrDefaultAsync(cancellationToken);
 
@@ -237,7 +237,7 @@ internal sealed class CollectionStore(ApplicationDbContext dbContext) : ICollect
         }
 
         if (!string.IsNullOrWhiteSpace(request.Status)
-            && Enum.TryParse<CollectionStatus>(request.Status.Trim(), ignoreCase: true, out CollectionStatus status))
+            && Enum.TryParse(request.Status.Trim(), ignoreCase: true, out CollectionStatus status))
         {
             query = query.Where(c => c.Status == status);
         }

@@ -1,6 +1,7 @@
 using System.Net;
 using System.Text.Json;
 using AssetBlock.Domain.Core.Constants;
+using AssetBlock.Domain.Core.Entities;
 using AssetBlock.Infrastructure.Persistence;
 using AssetBlock.WebApi.IntegrationTests.Support;
 using AwesomeAssertions;
@@ -15,32 +16,32 @@ public sealed class SellerAnalyticsControllerIntegrationTests(IntegrationTestFix
     [Fact]
     public async Task GetOverview_Anonymous_Returns401()
     {
-        var client = fixture.Factory.CreateClient();
-        var response = await client.GetAsync(new Uri("/api/seller/analytics/overview", UriKind.Relative));
+        HttpClient client = fixture.Factory.CreateClient();
+        HttpResponseMessage response = await client.GetAsync(new Uri("/api/seller/analytics/overview", UriKind.Relative));
         response.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
     }
 
     [Fact]
     public async Task GetProducts_Anonymous_Returns401()
     {
-        var client = fixture.Factory.CreateClient();
-        var response = await client.GetAsync(new Uri("/api/seller/analytics/products", UriKind.Relative));
+        HttpClient client = fixture.Factory.CreateClient();
+        HttpResponseMessage response = await client.GetAsync(new Uri("/api/seller/analytics/products", UriKind.Relative));
         response.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
     }
 
     [Fact]
     public async Task GetSales_Anonymous_Returns401()
     {
-        var client = fixture.Factory.CreateClient();
-        var response = await client.GetAsync(new Uri("/api/seller/analytics/sales", UriKind.Relative));
+        HttpClient client = fixture.Factory.CreateClient();
+        HttpResponseMessage response = await client.GetAsync(new Uri("/api/seller/analytics/sales", UriKind.Relative));
         response.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
     }
 
     [Fact]
     public async Task GetOverview_UnverifiedUser_Returns403WithEmailNotVerified()
     {
-        var (client, _) = await IntegrationTestAuth.RegisterAndAuthenticateAsync(fixture.Factory);
-        var response = await client.GetAsync(new Uri("/api/seller/analytics/overview", UriKind.Relative));
+        (HttpClient? client, var _) = await IntegrationTestAuth.RegisterAndAuthenticateAsync(fixture.Factory);
+        HttpResponseMessage response = await client.GetAsync(new Uri("/api/seller/analytics/overview", UriKind.Relative));
         response.StatusCode.Should().Be(HttpStatusCode.Forbidden);
         var body = await response.Content.ReadAsStringAsync();
         body.Should().Contain(ErrorCodes.ERR_EMAIL_NOT_VERIFIED);
@@ -50,19 +51,19 @@ public sealed class SellerAnalyticsControllerIntegrationTests(IntegrationTestFix
     [Fact]
     public async Task GetOverview_VerifiedUserNoSales_Returns200WithZeroKpis()
     {
-        var (client, _) = await IntegrationTestAuth.RegisterVerifiedAndAuthenticateAsync(fixture.Factory);
+        (HttpClient? client, var _) = await IntegrationTestAuth.RegisterVerifiedAndAuthenticateAsync(fixture.Factory);
 
         var from = DateTime.UtcNow.AddDays(-7).ToString("yyyy-MM-dd");
         var to = DateTime.UtcNow.AddDays(1).ToString("yyyy-MM-dd");
 
-        var response = await client.GetAsync(
+        HttpResponseMessage response = await client.GetAsync(
             new Uri($"/api/seller/analytics/overview?from={from}&to={to}", UriKind.Relative));
 
         response.StatusCode.Should().Be(HttpStatusCode.OK);
 
         var json = await response.Content.ReadAsStringAsync();
         using var doc = JsonDocument.Parse(json);
-        var root = doc.RootElement;
+        JsonElement root = doc.RootElement;
 
         root.GetProperty("grossRevenue").GetProperty("current").GetInt64().Should().Be(0);
         root.GetProperty("orders").GetProperty("current").GetInt64().Should().Be(0);
@@ -76,12 +77,12 @@ public sealed class SellerAnalyticsControllerIntegrationTests(IntegrationTestFix
     [Fact]
     public async Task GetProducts_VerifiedUserNoSales_Returns200WithEmptyItems()
     {
-        var (client, _) = await IntegrationTestAuth.RegisterVerifiedAndAuthenticateAsync(fixture.Factory);
+        (HttpClient? client, var _) = await IntegrationTestAuth.RegisterVerifiedAndAuthenticateAsync(fixture.Factory);
 
         var from = DateTime.UtcNow.AddDays(-7).ToString("yyyy-MM-dd");
         var to = DateTime.UtcNow.AddDays(1).ToString("yyyy-MM-dd");
 
-        var response = await client.GetAsync(
+        HttpResponseMessage response = await client.GetAsync(
             new Uri($"/api/seller/analytics/products?from={from}&to={to}", UriKind.Relative));
 
         response.StatusCode.Should().Be(HttpStatusCode.OK);
@@ -95,12 +96,12 @@ public sealed class SellerAnalyticsControllerIntegrationTests(IntegrationTestFix
     [Fact]
     public async Task GetSales_VerifiedUserNoSales_Returns200WithEmptyItems()
     {
-        var (client, _) = await IntegrationTestAuth.RegisterVerifiedAndAuthenticateAsync(fixture.Factory);
+        (HttpClient? client, var _) = await IntegrationTestAuth.RegisterVerifiedAndAuthenticateAsync(fixture.Factory);
 
         var from = DateTime.UtcNow.AddDays(-7).ToString("yyyy-MM-dd");
         var to = DateTime.UtcNow.AddDays(1).ToString("yyyy-MM-dd");
 
-        var response = await client.GetAsync(
+        HttpResponseMessage response = await client.GetAsync(
             new Uri($"/api/seller/analytics/sales?from={from}&to={to}", UriKind.Relative));
 
         response.StatusCode.Should().Be(HttpStatusCode.OK);
@@ -115,8 +116,8 @@ public sealed class SellerAnalyticsControllerIntegrationTests(IntegrationTestFix
     [Fact]
     public async Task GetOverview_ToBeforeFrom_Returns400()
     {
-        var (client, _) = await IntegrationTestAuth.RegisterVerifiedAndAuthenticateAsync(fixture.Factory);
-        var response = await client.GetAsync(
+        (HttpClient? client, var _) = await IntegrationTestAuth.RegisterVerifiedAndAuthenticateAsync(fixture.Factory);
+        HttpResponseMessage response = await client.GetAsync(
             new Uri("/api/seller/analytics/overview?from=2024-06-01&to=2024-01-01", UriKind.Relative));
         response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
     }
@@ -124,9 +125,9 @@ public sealed class SellerAnalyticsControllerIntegrationTests(IntegrationTestFix
     [Fact]
     public async Task GetOverview_ToAfterTomorrowUtc_Returns400()
     {
-        var (client, _) = await IntegrationTestAuth.RegisterVerifiedAndAuthenticateAsync(fixture.Factory);
+        (HttpClient? client, var _) = await IntegrationTestAuth.RegisterVerifiedAndAuthenticateAsync(fixture.Factory);
         var futureDate = DateTime.UtcNow.AddDays(10).ToString("yyyy-MM-dd");
-        var response = await client.GetAsync(
+        HttpResponseMessage response = await client.GetAsync(
             new Uri($"/api/seller/analytics/overview?from=2024-01-01&to={futureDate}", UriKind.Relative));
         response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
     }
@@ -134,8 +135,8 @@ public sealed class SellerAnalyticsControllerIntegrationTests(IntegrationTestFix
     [Fact]
     public async Task GetProducts_InvalidPageSize_Returns400()
     {
-        var (client, _) = await IntegrationTestAuth.RegisterVerifiedAndAuthenticateAsync(fixture.Factory);
-        var response = await client.GetAsync(
+        (HttpClient? client, var _) = await IntegrationTestAuth.RegisterVerifiedAndAuthenticateAsync(fixture.Factory);
+        HttpResponseMessage response = await client.GetAsync(
             new Uri("/api/seller/analytics/products?from=2024-01-01&to=2024-02-01&pageSize=999", UriKind.Relative));
         response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
     }
@@ -143,8 +144,8 @@ public sealed class SellerAnalyticsControllerIntegrationTests(IntegrationTestFix
     [Fact]
     public async Task GetSales_InvalidCursor_Returns400()
     {
-        var (client, _) = await IntegrationTestAuth.RegisterVerifiedAndAuthenticateAsync(fixture.Factory);
-        var response = await client.GetAsync(
+        (HttpClient? client, var _) = await IntegrationTestAuth.RegisterVerifiedAndAuthenticateAsync(fixture.Factory);
+        HttpResponseMessage response = await client.GetAsync(
             new Uri("/api/seller/analytics/sales?from=2024-01-01&to=2024-02-01&cursor=not_valid!!!", UriKind.Relative));
         response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
     }
@@ -154,16 +155,16 @@ public sealed class SellerAnalyticsControllerIntegrationTests(IntegrationTestFix
     public async Task GetOverview_SellerOnlySeeOwnSales()
     {
         // Seller A and Seller B both verified
-        var (clientA, usernameA) = await IntegrationTestAuth.RegisterVerifiedAndAuthenticateAsync(fixture.Factory);
-        var (clientB, _) = await IntegrationTestAuth.RegisterVerifiedAndAuthenticateAsync(fixture.Factory);
+        (HttpClient? clientA, var usernameA) = await IntegrationTestAuth.RegisterVerifiedAndAuthenticateAsync(fixture.Factory);
+        (HttpClient? clientB, var _) = await IntegrationTestAuth.RegisterVerifiedAndAuthenticateAsync(fixture.Factory);
 
         // Seed a purchase for Seller A's asset
-        await using (var scope = fixture.Factory.Services.CreateAsyncScope())
+        await using (AsyncServiceScope scope = fixture.Factory.Services.CreateAsyncScope())
         {
-            var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+            ApplicationDbContext db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
 
-            var sellerA = await db.Users.SingleAsync(u => u.Username == usernameA);
-            var category = await db.Categories.FirstAsync();
+            User sellerA = await db.Users.SingleAsync(u => u.Username == usernameA);
+            Category category = await db.Categories.FirstAsync();
 
             var asset = new Domain.Core.Entities.Asset
             {
@@ -203,7 +204,7 @@ public sealed class SellerAnalyticsControllerIntegrationTests(IntegrationTestFix
             var intentId = Guid.NewGuid();
             var orderId = Guid.NewGuid();
             var session = $"test-stripe-iso-{Guid.NewGuid():N}";
-            var now = DateTimeOffset.UtcNow.AddDays(-1);
+            DateTimeOffset now = DateTimeOffset.UtcNow.AddDays(-1);
 
             db.CheckoutIntents.Add(new Domain.Core.Entities.CheckoutIntent
             {
@@ -273,14 +274,14 @@ public sealed class SellerAnalyticsControllerIntegrationTests(IntegrationTestFix
         var to = DateTime.UtcNow.AddDays(1).ToString("yyyy-MM-dd");
 
         // Seller A should see the sale
-        var respA = await clientA.GetAsync(
+        HttpResponseMessage respA = await clientA.GetAsync(
             new Uri($"/api/seller/analytics/overview?from={from}&to={to}", UriKind.Relative));
         respA.StatusCode.Should().Be(HttpStatusCode.OK);
         var docA = JsonDocument.Parse(await respA.Content.ReadAsStringAsync());
         docA.RootElement.GetProperty("grossRevenue").GetProperty("current").GetInt64().Should().Be(2000);
 
         // Seller B should see nothing
-        var respB = await clientB.GetAsync(
+        HttpResponseMessage respB = await clientB.GetAsync(
             new Uri($"/api/seller/analytics/overview?from={from}&to={to}", UriKind.Relative));
         respB.StatusCode.Should().Be(HttpStatusCode.OK);
         var docB = JsonDocument.Parse(await respB.Content.ReadAsStringAsync());
@@ -291,17 +292,17 @@ public sealed class SellerAnalyticsControllerIntegrationTests(IntegrationTestFix
     [Fact]
     public async Task GetOverview_VerifiedUser_ResponseShapeContainsAllRequiredFields()
     {
-        var (client, _) = await IntegrationTestAuth.RegisterVerifiedAndAuthenticateAsync(fixture.Factory);
+        (HttpClient? client, var _) = await IntegrationTestAuth.RegisterVerifiedAndAuthenticateAsync(fixture.Factory);
         var from = DateTime.UtcNow.AddDays(-7).ToString("yyyy-MM-dd");
         var to = DateTime.UtcNow.AddDays(1).ToString("yyyy-MM-dd");
 
-        var response = await client.GetAsync(
+        HttpResponseMessage response = await client.GetAsync(
             new Uri($"/api/seller/analytics/overview?from={from}&to={to}", UriKind.Relative));
 
         response.StatusCode.Should().Be(HttpStatusCode.OK);
         var json = await response.Content.ReadAsStringAsync();
         using var doc = JsonDocument.Parse(json);
-        var root = doc.RootElement;
+        JsonElement root = doc.RootElement;
 
         root.TryGetProperty("from", out _).Should().BeTrue();
         root.TryGetProperty("to", out _).Should().BeTrue();
@@ -331,7 +332,7 @@ public sealed class SellerAnalyticsControllerIntegrationTests(IntegrationTestFix
     public async Task GetAssetDetail_UnverifiedUser_Returns403WithEmailNotVerified()
     {
         (HttpClient client, _) = await IntegrationTestAuth.RegisterAndAuthenticateAsync(fixture.Factory);
-        var response = await client.GetAsync(
+        HttpResponseMessage response = await client.GetAsync(
             new Uri($"/api/seller/analytics/products/assets/{Guid.NewGuid()}?from=2024-01-01&to=2024-01-11", UriKind.Relative));
         response.StatusCode.Should().Be(HttpStatusCode.Forbidden);
         (await response.Content.ReadAsStringAsync()).Should().Contain(ErrorCodes.ERR_EMAIL_NOT_VERIFIED);
@@ -341,7 +342,7 @@ public sealed class SellerAnalyticsControllerIntegrationTests(IntegrationTestFix
     public async Task GetCollections_UnverifiedUser_Returns403WithEmailNotVerified()
     {
         (HttpClient client, _) = await IntegrationTestAuth.RegisterAndAuthenticateAsync(fixture.Factory);
-        var response = await client.GetAsync(
+        HttpResponseMessage response = await client.GetAsync(
             new Uri("/api/seller/analytics/collections?from=2024-01-01&to=2024-01-11", UriKind.Relative));
         response.StatusCode.Should().Be(HttpStatusCode.Forbidden);
         (await response.Content.ReadAsStringAsync()).Should().Contain(ErrorCodes.ERR_EMAIL_NOT_VERIFIED);
@@ -350,15 +351,15 @@ public sealed class SellerAnalyticsControllerIntegrationTests(IntegrationTestFix
     [Fact]
     public async Task GetAssetDetail_ForeignAsset_Returns404()
     {
-        var (_, usernameA) = await IntegrationTestAuth.RegisterVerifiedAndAuthenticateAsync(fixture.Factory);
+        (HttpClient _, var usernameA) = await IntegrationTestAuth.RegisterVerifiedAndAuthenticateAsync(fixture.Factory);
         (HttpClient clientB, _) = await IntegrationTestAuth.RegisterVerifiedAndAuthenticateAsync(fixture.Factory);
 
         Guid foreignAssetId;
-        await using (var scope = fixture.Factory.Services.CreateAsyncScope())
+        await using (AsyncServiceScope scope = fixture.Factory.Services.CreateAsyncScope())
         {
-            var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
-            var sellerA = await db.Users.SingleAsync(u => u.Username == usernameA);
-            var category = await db.Categories.FirstAsync();
+            ApplicationDbContext db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+            User sellerA = await db.Users.SingleAsync(u => u.Username == usernameA);
+            Category category = await db.Categories.FirstAsync();
             var asset = new Domain.Core.Entities.Asset
             {
                 Id = Guid.NewGuid(),
@@ -373,7 +374,7 @@ public sealed class SellerAnalyticsControllerIntegrationTests(IntegrationTestFix
             foreignAssetId = asset.Id;
         }
 
-        var response = await clientB.GetAsync(
+        HttpResponseMessage response = await clientB.GetAsync(
             new Uri($"/api/seller/analytics/products/assets/{foreignAssetId}?from=2024-01-01&to=2024-01-11", UriKind.Relative));
 
         response.StatusCode.Should().Be(HttpStatusCode.NotFound);
@@ -382,15 +383,15 @@ public sealed class SellerAnalyticsControllerIntegrationTests(IntegrationTestFix
     [Fact]
     public async Task GetBundleDetail_ForeignBundle_Returns404()
     {
-        var (_, usernameA) = await IntegrationTestAuth.RegisterVerifiedAndAuthenticateAsync(fixture.Factory);
+        (HttpClient _, var usernameA) = await IntegrationTestAuth.RegisterVerifiedAndAuthenticateAsync(fixture.Factory);
         (HttpClient clientB, _) = await IntegrationTestAuth.RegisterVerifiedAndAuthenticateAsync(fixture.Factory);
 
         Guid foreignBundleId;
-        await using (var scope = fixture.Factory.Services.CreateAsyncScope())
+        await using (AsyncServiceScope scope = fixture.Factory.Services.CreateAsyncScope())
         {
-            var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
-            var sellerA = await db.Users.SingleAsync(u => u.Username == usernameA);
-            var category = await db.Categories.FirstAsync();
+            ApplicationDbContext db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+            User sellerA = await db.Users.SingleAsync(u => u.Username == usernameA);
+            Category category = await db.Categories.FirstAsync();
             var asset = new Domain.Core.Entities.Asset
             {
                 Id = Guid.NewGuid(),
@@ -427,7 +428,7 @@ public sealed class SellerAnalyticsControllerIntegrationTests(IntegrationTestFix
 
             var bundleId = Guid.NewGuid();
             var revisionId = Guid.NewGuid();
-            var now = DateTimeOffset.UtcNow;
+            DateTimeOffset now = DateTimeOffset.UtcNow;
             db.Bundles.Add(new Domain.Core.Entities.Bundle
             {
                 Id = bundleId,
@@ -459,7 +460,7 @@ public sealed class SellerAnalyticsControllerIntegrationTests(IntegrationTestFix
             foreignBundleId = bundleId;
         }
 
-        var response = await clientB.GetAsync(
+        HttpResponseMessage response = await clientB.GetAsync(
             new Uri($"/api/seller/analytics/products/bundles/{foreignBundleId}?from=2024-01-01&to=2024-01-11", UriKind.Relative));
 
         response.StatusCode.Should().Be(HttpStatusCode.NotFound);
@@ -469,7 +470,7 @@ public sealed class SellerAnalyticsControllerIntegrationTests(IntegrationTestFix
     public async Task GetCollections_InvalidRange_ReturnsProblemDetails()
     {
         (HttpClient client, _) = await IntegrationTestAuth.RegisterVerifiedAndAuthenticateAsync(fixture.Factory);
-        var response = await client.GetAsync(
+        HttpResponseMessage response = await client.GetAsync(
             new Uri("/api/seller/analytics/collections?from=2024-06-01&to=2024-01-01", UriKind.Relative));
 
         response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
@@ -482,7 +483,7 @@ public sealed class SellerAnalyticsControllerIntegrationTests(IntegrationTestFix
     public async Task GetAssetDetail_InvalidRange_ReturnsProblemDetails()
     {
         (HttpClient client, _) = await IntegrationTestAuth.RegisterVerifiedAndAuthenticateAsync(fixture.Factory);
-        var response = await client.GetAsync(
+        HttpResponseMessage response = await client.GetAsync(
             new Uri($"/api/seller/analytics/products/assets/{Guid.NewGuid()}?from=2024-06-01&to=2024-01-01", UriKind.Relative));
 
         response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
@@ -498,7 +499,7 @@ public sealed class SellerAnalyticsControllerIntegrationTests(IntegrationTestFix
         var from = DateTime.UtcNow.AddDays(-7).ToString("yyyy-MM-dd");
         var to = DateTime.UtcNow.AddDays(1).ToString("yyyy-MM-dd");
 
-        var response = await client.GetAsync(
+        HttpResponseMessage response = await client.GetAsync(
             new Uri($"/api/seller/analytics/collections?from={from}&to={to}", UriKind.Relative));
 
         response.StatusCode.Should().Be(HttpStatusCode.OK);
@@ -515,8 +516,8 @@ public sealed class SellerAnalyticsControllerIntegrationTests(IntegrationTestFix
     [Fact]
     public async Task IntegrationHost_WithAnalyticsAggregationDisabled_ShouldStartSuccessfully()
     {
-        var client = fixture.Factory.CreateClient();
-        var response = await client.GetAsync(new Uri("/health/live", UriKind.Relative));
+        HttpClient client = fixture.Factory.CreateClient();
+        HttpResponseMessage response = await client.GetAsync(new Uri("/health/live", UriKind.Relative));
         response.StatusCode.Should().Be(HttpStatusCode.OK);
     }
 }

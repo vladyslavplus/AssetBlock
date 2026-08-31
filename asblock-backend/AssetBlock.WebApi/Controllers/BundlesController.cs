@@ -1,8 +1,9 @@
+using Ardalis.Result;
+using AssetBlock.Application.Messaging;
 using AssetBlock.Application.UseCases.Bundles.GetBundle;
 using AssetBlock.Application.UseCases.Bundles.GetBundles;
 using AssetBlock.Domain.Core.Dto.Bundles;
 using AssetBlock.WebApi.Constants;
-using AssetBlock.Application.Messaging;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
@@ -23,7 +24,7 @@ public sealed class BundlesController(ISender sender) : ApiControllerBase(sender
     public async Task<IActionResult> List([FromQuery] ListBundlesRequest? request, CancellationToken cancellationToken)
     {
         request ??= new ListBundlesRequest();
-        var result = await Sender.Send(new GetBundlesQuery(request), cancellationToken);
+        Result<Domain.Core.Dto.Paging.PagedResult<BundleListItemDto>> result = await Sender.Send(new GetBundlesQuery(request), cancellationToken);
         return MapResultToActionResult(result);
     }
 
@@ -36,7 +37,7 @@ public sealed class BundlesController(ISender sender) : ApiControllerBase(sender
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> GetById(Guid id, CancellationToken cancellationToken)
     {
-        var result = await Sender.Send(new GetBundleQuery(id), cancellationToken);
+        Result<BundleDetailDto> result = await Sender.Send(new GetBundleQuery(id), cancellationToken);
         return MapResultToActionResult(result);
     }
 }

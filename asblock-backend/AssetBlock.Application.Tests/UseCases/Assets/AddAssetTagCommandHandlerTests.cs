@@ -4,6 +4,7 @@ using AssetBlock.Domain.Abstractions.Services;
 using AssetBlock.Domain.Core.Constants;
 using AssetBlock.Domain.Core.Dto.Assets;
 using AssetBlock.Domain.Core.Dto.Audit;
+using AssetBlock.Domain.Core.Dto.Tags;
 using AssetBlock.Domain.Core.Entities;
 using AssetBlock.Domain.Core.Enums;
 using AwesomeAssertions;
@@ -27,7 +28,7 @@ public class AddAssetTagCommandHandlerTests
         _tagStoreMock = Substitute.For<ITagStore>();
         _unitOfWorkMock = Substitute.For<IUnitOfWork>();
         _auditWriterMock = Substitute.For<IAuditWriter>();
-        var cacheMock = Substitute.For<ICacheService>();
+        ICacheService cacheMock = Substitute.For<ICacheService>();
 
         _unitOfWorkMock.ExecuteInTransaction(Arg.Any<Func<CancellationToken, Task>>(), Arg.Any<CancellationToken>())
             .Returns(ci => ci.Arg<Func<CancellationToken, Task>>()(CancellationToken.None));
@@ -47,7 +48,7 @@ public class AddAssetTagCommandHandlerTests
         var command = new AddAssetTagCommand(Guid.NewGuid(), Guid.NewGuid(), "test");
         _assetStoreMock.GetOwnership(command.AssetId).Returns((AssetOwnershipDto?)null);
 
-        var result = await _handler.Handle(command, CancellationToken.None);
+        Result<TagDto> result = await _handler.Handle(command, CancellationToken.None);
 
         result.IsSuccess.Should().BeFalse();
         result.Status.Should().Be(ResultStatus.NotFound);
@@ -61,7 +62,7 @@ public class AddAssetTagCommandHandlerTests
         var ownership = new AssetOwnershipDto(command.AssetId, Guid.NewGuid(), false);
         _assetStoreMock.GetOwnership(command.AssetId).Returns(ownership);
 
-        var result = await _handler.Handle(command, CancellationToken.None);
+        Result<TagDto> result = await _handler.Handle(command, CancellationToken.None);
 
         result.IsSuccess.Should().BeFalse();
         result.Status.Should().Be(ResultStatus.Forbidden);
@@ -84,7 +85,7 @@ public class AddAssetTagCommandHandlerTests
         _assetStoreMock.GetOwnership(command.AssetId).Returns(ownership);
         _tagStoreMock.GetByName("new-tag").Returns((Tag?)null);
 
-        var result = await _handler.Handle(command, CancellationToken.None);
+        Result<TagDto> result = await _handler.Handle(command, CancellationToken.None);
 
         result.IsSuccess.Should().BeFalse();
         result.Errors.Should().Contain(ErrorCodes.ERR_TAG_NOT_FOUND);
@@ -105,7 +106,7 @@ public class AddAssetTagCommandHandlerTests
         _tagStoreMock.GetByName("existing").Returns(tag);
         _assetStoreMock.TryAddTag(assetId, tag.Id, Arg.Any<CancellationToken>()).Returns(false);
 
-        var result = await _handler.Handle(command, CancellationToken.None);
+        Result<TagDto> result = await _handler.Handle(command, CancellationToken.None);
 
         result.IsSuccess.Should().BeFalse();
         result.Status.Should().Be(ResultStatus.Conflict);
@@ -124,7 +125,7 @@ public class AddAssetTagCommandHandlerTests
         _tagStoreMock.GetByName("existing").Returns(tag);
         _assetStoreMock.TryAddTag(command.AssetId, tag.Id, Arg.Any<CancellationToken>()).Returns(true);
 
-        var result = await _handler.Handle(command, CancellationToken.None);
+        Result<TagDto> result = await _handler.Handle(command, CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
         result.Value.Name.Should().Be("existing");
@@ -143,7 +144,7 @@ public class AddAssetTagCommandHandlerTests
     public async Task Handle_WhenAddTagThrows_ShouldLogSafeContextAndRethrow()
     {
         var testLogger = new TestLogger<AddAssetTagCommandHandler>();
-        var cacheMock = Substitute.For<ICacheService>();
+        ICacheService cacheMock = Substitute.For<ICacheService>();
         var handler = new AddAssetTagCommandHandler(
             _assetStoreMock,
             _tagStoreMock,
@@ -162,7 +163,7 @@ public class AddAssetTagCommandHandlerTests
         _assetStoreMock.TryAddTag(command.AssetId, tag.Id, Arg.Any<CancellationToken>())
             .ThrowsAsync(new InvalidOperationException("db"));
 
-        var act = () => handler.Handle(command, CancellationToken.None);
+        Func<Task<Result<TagDto>>> act = () => handler.Handle(command, CancellationToken.None);
 
         await act.Should().ThrowAsync<InvalidOperationException>().WithMessage("db");
         testLogger.Logs.Should().Contain(l =>
@@ -175,7 +176,7 @@ public class AddAssetTagCommandHandlerTests
     public async Task Handle_WhenCancelled_ShouldRethrowWithoutErrorLogging()
     {
         var testLogger = new TestLogger<AddAssetTagCommandHandler>();
-        var cacheMock = Substitute.For<ICacheService>();
+        ICacheService cacheMock = Substitute.For<ICacheService>();
         var handler = new AddAssetTagCommandHandler(
             _assetStoreMock,
             _tagStoreMock,
@@ -194,7 +195,7 @@ public class AddAssetTagCommandHandlerTests
         _assetStoreMock.TryAddTag(command.AssetId, tag.Id, Arg.Any<CancellationToken>())
             .ThrowsAsync(new OperationCanceledException());
 
-        var act = () => handler.Handle(command, CancellationToken.None);
+        Func<Task<Result<TagDto>>> act = () => handler.Handle(command, CancellationToken.None);
 
         await act.Should().ThrowAsync<OperationCanceledException>();
         testLogger.Logs.Should().NotContain(l => l.Level == Microsoft.Extensions.Logging.LogLevel.Error);

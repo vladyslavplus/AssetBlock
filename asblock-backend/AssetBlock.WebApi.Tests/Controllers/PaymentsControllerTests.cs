@@ -25,7 +25,7 @@ public sealed class PaymentsControllerTests : ControllerTestBase
     public void GetCapabilities_WhenStripeKeysMissing_ShouldReturnCheckoutConfiguredFalse()
     {
         var controller = new PaymentsController(Sender);
-        var opts = Options.Create(
+        IOptions<StripeOptions> opts = Options.Create(
             new StripeOptions
             {
                 SecretKey = "",
@@ -33,7 +33,7 @@ public sealed class PaymentsControllerTests : ControllerTestBase
                 SuccessUrl = "",
                 CancelUrl = ""
             });
-        var result = controller.GetCapabilities(opts);
+        IActionResult result = controller.GetCapabilities(opts);
         var body = result.Should().BeOfType<OkObjectResult>().Which.Value;
         body.Should().BeEquivalentTo(new { checkoutConfigured = false });
     }
@@ -42,7 +42,7 @@ public sealed class PaymentsControllerTests : ControllerTestBase
     public void GetCapabilities_WhenAllPlaceholders_ShouldReturnCheckoutConfiguredFalse()
     {
         var controller = new PaymentsController(Sender);
-        var opts = Options.Create(
+        IOptions<StripeOptions> opts = Options.Create(
             new StripeOptions
             {
                 SecretKey = "<stripe-secret-key>",
@@ -50,7 +50,7 @@ public sealed class PaymentsControllerTests : ControllerTestBase
                 SuccessUrl = "<default-success-url>",
                 CancelUrl = "<default-cancel-url>"
             });
-        var result = controller.GetCapabilities(opts);
+        IActionResult result = controller.GetCapabilities(opts);
         var body = result.Should().BeOfType<OkObjectResult>().Which.Value;
         body.Should().BeEquivalentTo(new { checkoutConfigured = false });
     }
@@ -59,7 +59,7 @@ public sealed class PaymentsControllerTests : ControllerTestBase
     public void GetCapabilities_WhenFullyConfigured_ShouldReturnCheckoutConfiguredTrue()
     {
         var controller = new PaymentsController(Sender);
-        var opts = Options.Create(
+        IOptions<StripeOptions> opts = Options.Create(
             new StripeOptions
             {
                 SecretKey = "stripe_test_secret_key_not_real",
@@ -67,7 +67,7 @@ public sealed class PaymentsControllerTests : ControllerTestBase
                 SuccessUrl = "http://localhost/checkout/success",
                 CancelUrl = "http://localhost/checkout/cancel"
             });
-        var result = controller.GetCapabilities(opts);
+        IActionResult result = controller.GetCapabilities(opts);
         var body = result.Should().BeOfType<OkObjectResult>().Which.Value;
         body.Should().BeEquivalentTo(new { checkoutConfigured = true });
     }
@@ -77,7 +77,7 @@ public sealed class PaymentsControllerTests : ControllerTestBase
     {
         var controller = new PaymentsController(Sender);
         SetupAnonymous(controller);
-        var result = await controller.CreateCheckout(new CreateCheckoutRequest(Guid.NewGuid()), CancellationToken.None);
+        IActionResult result = await controller.CreateCheckout(new CreateCheckoutRequest(Guid.NewGuid()), CancellationToken.None);
 
         await AssertStatusCodeAsync(controller, result, StatusCodes.Status401Unauthorized);
     }
@@ -90,7 +90,7 @@ public sealed class PaymentsControllerTests : ControllerTestBase
 
         var controller = new PaymentsController(Sender);
         SetupUser(_userId, controller);
-        var action = await controller.CreateCheckout(new CreateCheckoutRequest(Guid.NewGuid()), CancellationToken.None);
+        IActionResult action = await controller.CreateCheckout(new CreateCheckoutRequest(Guid.NewGuid()), CancellationToken.None);
 
         action.Should().BeOfType<OkObjectResult>();
     }
@@ -110,7 +110,7 @@ public sealed class PaymentsControllerTests : ControllerTestBase
         controller.HttpContext.Request.Body = new MemoryStream(bytes);
         controller.HttpContext.Request.Headers["Stripe-Signature"] = "sig";
 
-        var result = await controller.Webhook(CancellationToken.None);
+        IActionResult result = await controller.Webhook(CancellationToken.None);
 
         result.Should().BeOfType<OkResult>();
     }
@@ -132,7 +132,7 @@ public sealed class PaymentsControllerTests : ControllerTestBase
         };
         controller.ControllerContext = new ControllerContext { HttpContext = httpContext };
 
-        var result = await controller.Webhook(CancellationToken.None);
+        IActionResult result = await controller.Webhook(CancellationToken.None);
 
         await AssertStatusCodeAsync(controller, result, StatusCodes.Status400BadRequest);
     }
@@ -156,9 +156,9 @@ public sealed class PaymentsControllerTests : ControllerTestBase
         };
         controller.ControllerContext = new ControllerContext { HttpContext = httpContext };
 
-        var result = await controller.Webhook(CancellationToken.None);
+        IActionResult result = await controller.Webhook(CancellationToken.None);
 
-        var okResult = result.Should().BeOfType<OkObjectResult>().Which;
+        OkObjectResult okResult = result.Should().BeOfType<OkObjectResult>().Which;
         okResult.StatusCode.Should().Be(StatusCodes.Status200OK);
         okResult.Value.Should().BeEquivalentTo(new { received = true, status = "ignored_mismatch" });
     }
@@ -182,7 +182,7 @@ public sealed class PaymentsControllerTests : ControllerTestBase
         };
         controller.ControllerContext = new ControllerContext { HttpContext = httpContext };
 
-        var result = await controller.Webhook(CancellationToken.None);
+        IActionResult result = await controller.Webhook(CancellationToken.None);
 
         await AssertStatusCodeAsync(controller, result, StatusCodes.Status400BadRequest);
     }

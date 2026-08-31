@@ -16,14 +16,14 @@ public sealed class RedisAnalyticsDistributedRateLimiterTests
     public async Task Acquire_WhenRedisThrows_ShouldEnterOutageAndReturnUnavailable()
     {
         var time = new FakeTimeProvider();
-        var database = Substitute.For<IDatabase>();
+        IDatabase database = Substitute.For<IDatabase>();
         database.ScriptEvaluateAsync(Arg.Any<string>(), Arg.Any<RedisKey[]>(), Arg.Any<RedisValue[]>())
             .Returns<RedisResult>(_ => throw new RedisConnectionException(ConnectionFailureType.UnableToConnect, "down"));
 
-        var limiter = CreateLimiter(database, time);
+        RedisAnalyticsDistributedRateLimiter limiter = CreateLimiter(database, time);
 
-        var first = await limiter.Acquire(AnalyticsRateLimitPolicy.ANALYTICS_EVENTS, "partition");
-        var second = await limiter.Acquire(AnalyticsRateLimitPolicy.ANALYTICS_EVENTS, "partition");
+        AnalyticsRateLimitAcquireResult first = await limiter.Acquire(AnalyticsRateLimitPolicy.ANALYTICS_EVENTS, "partition");
+        AnalyticsRateLimitAcquireResult second = await limiter.Acquire(AnalyticsRateLimitPolicy.ANALYTICS_EVENTS, "partition");
 
         first.Status.Should().Be(AnalyticsRateLimitAcquireStatus.UNAVAILABLE);
         second.Status.Should().Be(AnalyticsRateLimitAcquireStatus.UNAVAILABLE);
@@ -37,15 +37,15 @@ public sealed class RedisAnalyticsDistributedRateLimiterTests
     public async Task Acquire_WhenCallerCancels_ShouldThrowWithoutEnteringOutage()
     {
         var time = new FakeTimeProvider();
-        var database = Substitute.For<IDatabase>();
+        IDatabase database = Substitute.For<IDatabase>();
         using var cts = new CancellationTokenSource();
         await cts.CancelAsync();
         database.ScriptEvaluateAsync(Arg.Any<string>(), Arg.Any<RedisKey[]>(), Arg.Any<RedisValue[]>())
             .Returns<RedisResult>(_ => throw new OperationCanceledException(cts.Token));
 
-        var limiter = CreateLimiter(database, time);
+        RedisAnalyticsDistributedRateLimiter limiter = CreateLimiter(database, time);
 
-        var act = () => limiter.Acquire(AnalyticsRateLimitPolicy.ANALYTICS_EVENTS, "partition", cts.Token).AsTask();
+        Func<Task<AnalyticsRateLimitAcquireResult>> act = () => limiter.Acquire(AnalyticsRateLimitPolicy.ANALYTICS_EVENTS, "partition", cts.Token).AsTask();
 
         await act.Should().ThrowAsync<OperationCanceledException>();
     }
@@ -54,13 +54,13 @@ public sealed class RedisAnalyticsDistributedRateLimiterTests
     public async Task Acquire_WhenDenied_ShouldNotEnterOutage()
     {
         var time = new FakeTimeProvider();
-        var database = Substitute.For<IDatabase>();
+        IDatabase database = Substitute.For<IDatabase>();
         database.ScriptEvaluateAsync(Arg.Any<string>(), Arg.Any<RedisKey[]>(), Arg.Any<RedisValue[]>())
             .Returns(RedisResult.Create([0, 30]));
 
-        var limiter = CreateLimiter(database, time);
+        RedisAnalyticsDistributedRateLimiter limiter = CreateLimiter(database, time);
 
-        var result = await limiter.Acquire(AnalyticsRateLimitPolicy.ANALYTICS_EVENTS, "partition");
+        AnalyticsRateLimitAcquireResult result = await limiter.Acquire(AnalyticsRateLimitPolicy.ANALYTICS_EVENTS, "partition");
 
         result.Status.Should().Be(AnalyticsRateLimitAcquireStatus.DENIED);
         result.RetryAfter.Should().Be(TimeSpan.FromSeconds(30));
@@ -71,7 +71,7 @@ public sealed class RedisAnalyticsDistributedRateLimiterTests
     {
         var time = new FakeTimeProvider();
         var logger = new CollectingLogger();
-        var database = Substitute.For<IDatabase>();
+        IDatabase database = Substitute.For<IDatabase>();
         var calls = 0;
         database.ScriptEvaluateAsync(Arg.Any<string>(), Arg.Any<RedisKey[]>(), Arg.Any<RedisValue[]>())
             .Returns(_ =>
@@ -85,7 +85,7 @@ public sealed class RedisAnalyticsDistributedRateLimiterTests
                 return RedisResult.Create([1, 45]);
             });
 
-        var limiter = CreateLimiter(database, time, logger);
+        RedisAnalyticsDistributedRateLimiter limiter = CreateLimiter(database, time, logger);
 
         (await limiter.Acquire(AnalyticsRateLimitPolicy.ANALYTICS_EVENTS, "partition"))
             .Status.Should().Be(AnalyticsRateLimitAcquireStatus.UNAVAILABLE);
@@ -104,11 +104,11 @@ public sealed class RedisAnalyticsDistributedRateLimiterTests
     {
         var time = new FakeTimeProvider();
         var logger = new CollectingLogger();
-        var database = Substitute.For<IDatabase>();
+        IDatabase database = Substitute.For<IDatabase>();
         database.ScriptEvaluateAsync(Arg.Any<string>(), Arg.Any<RedisKey[]>(), Arg.Any<RedisValue[]>())
             .Returns<RedisResult>(_ => throw new RedisConnectionException(ConnectionFailureType.UnableToConnect, "down"));
 
-        var limiter = CreateLimiter(database, time, logger);
+        RedisAnalyticsDistributedRateLimiter limiter = CreateLimiter(database, time, logger);
 
         (await limiter.Acquire(AnalyticsRateLimitPolicy.ANALYTICS_EVENTS, "partition"))
             .Status.Should().Be(AnalyticsRateLimitAcquireStatus.UNAVAILABLE);
@@ -130,7 +130,7 @@ public sealed class RedisAnalyticsDistributedRateLimiterTests
     public async Task Acquire_WhenHalfOpen_ShouldAllowOnlyOneProbeUnderConcurrency()
     {
         var time = new FakeTimeProvider();
-        var database = Substitute.For<IDatabase>();
+        IDatabase database = Substitute.For<IDatabase>();
         var gate = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var evaluateCalls = 0;
 
@@ -147,17 +147,17 @@ public sealed class RedisAnalyticsDistributedRateLimiterTests
                 return RedisResult.Create([1, 45]);
             });
 
-        var limiter = CreateLimiter(database, time);
+        RedisAnalyticsDistributedRateLimiter limiter = CreateLimiter(database, time);
 
         (await limiter.Acquire(AnalyticsRateLimitPolicy.ANALYTICS_EVENTS, "partition"))
             .Status.Should().Be(AnalyticsRateLimitAcquireStatus.UNAVAILABLE);
 
         time.Advance(TimeSpan.FromSeconds(6));
 
-        var probe = limiter.Acquire(AnalyticsRateLimitPolicy.ANALYTICS_EVENTS, "partition").AsTask();
+        Task<AnalyticsRateLimitAcquireResult> probe = limiter.Acquire(AnalyticsRateLimitPolicy.ANALYTICS_EVENTS, "partition").AsTask();
         await Task.Delay(50);
 
-        var others = await Task.WhenAll(
+        AnalyticsRateLimitAcquireResult[] others = await Task.WhenAll(
             Enumerable.Range(0, 20).Select(_ => limiter.Acquire(AnalyticsRateLimitPolicy.ANALYTICS_EVENTS, "partition").AsTask()));
 
         others.Should().OnlyContain(r => r.Status == AnalyticsRateLimitAcquireStatus.UNAVAILABLE);
@@ -172,7 +172,7 @@ public sealed class RedisAnalyticsDistributedRateLimiterTests
     {
         var time = new FakeTimeProvider();
         var logger = new CollectingLogger();
-        var database = Substitute.For<IDatabase>();
+        IDatabase database = Substitute.For<IDatabase>();
         var staleFailGate = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var probeGate = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var evaluateCalls = 0;
@@ -197,9 +197,9 @@ public sealed class RedisAnalyticsDistributedRateLimiterTests
                 }
             });
 
-        var limiter = CreateLimiter(database, time, logger);
+        RedisAnalyticsDistributedRateLimiter limiter = CreateLimiter(database, time, logger);
 
-        var staleHealthy = limiter.Acquire(AnalyticsRateLimitPolicy.ANALYTICS_EVENTS, "partition").AsTask();
+        Task<AnalyticsRateLimitAcquireResult> staleHealthy = limiter.Acquire(AnalyticsRateLimitPolicy.ANALYTICS_EVENTS, "partition").AsTask();
         await Task.Delay(30);
 
         (await limiter.Acquire(AnalyticsRateLimitPolicy.ANALYTICS_EVENTS, "partition"))
@@ -207,7 +207,7 @@ public sealed class RedisAnalyticsDistributedRateLimiterTests
 
         time.Advance(TimeSpan.FromSeconds(6));
 
-        var probe = limiter.Acquire(AnalyticsRateLimitPolicy.ANALYTICS_EVENTS, "partition").AsTask();
+        Task<AnalyticsRateLimitAcquireResult> probe = limiter.Acquire(AnalyticsRateLimitPolicy.ANALYTICS_EVENTS, "partition").AsTask();
         await Task.Delay(30);
 
         staleFailGate.SetResult();
@@ -233,7 +233,7 @@ public sealed class RedisAnalyticsDistributedRateLimiterTests
     {
         var time = new FakeTimeProvider();
         var logger = new CollectingLogger();
-        var database = Substitute.For<IDatabase>();
+        IDatabase database = Substitute.For<IDatabase>();
         var staleGate = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var evaluateCalls = 0;
 
@@ -250,9 +250,9 @@ public sealed class RedisAnalyticsDistributedRateLimiterTests
                 throw new RedisConnectionException(ConnectionFailureType.UnableToConnect, "down");
             });
 
-        var limiter = CreateLimiter(database, time, logger);
+        RedisAnalyticsDistributedRateLimiter limiter = CreateLimiter(database, time, logger);
 
-        var staleHealthy = limiter.Acquire(AnalyticsRateLimitPolicy.ANALYTICS_EVENTS, "partition").AsTask();
+        Task<AnalyticsRateLimitAcquireResult> staleHealthy = limiter.Acquire(AnalyticsRateLimitPolicy.ANALYTICS_EVENTS, "partition").AsTask();
         await Task.Delay(30);
 
         (await limiter.Acquire(AnalyticsRateLimitPolicy.ANALYTICS_EVENTS, "partition"))
@@ -276,11 +276,11 @@ public sealed class RedisAnalyticsDistributedRateLimiterTests
     public async Task Acquire_WhenMalformedRedisElements_ShouldEnterBackoff()
     {
         var time = new FakeTimeProvider();
-        var database = Substitute.For<IDatabase>();
+        IDatabase database = Substitute.For<IDatabase>();
         database.ScriptEvaluateAsync(Arg.Any<string>(), Arg.Any<RedisKey[]>(), Arg.Any<RedisValue[]>())
             .Returns(RedisResult.Create([(RedisValue)"invalid", (RedisValue)"30"]));
 
-        var limiter = CreateLimiter(database, time);
+        RedisAnalyticsDistributedRateLimiter limiter = CreateLimiter(database, time);
 
         (await limiter.Acquire(AnalyticsRateLimitPolicy.ANALYTICS_EVENTS, "partition"))
             .Status.Should().Be(AnalyticsRateLimitAcquireStatus.UNAVAILABLE);
@@ -298,11 +298,11 @@ public sealed class RedisAnalyticsDistributedRateLimiterTests
     public async Task Acquire_WhenMalformedRedisResult_ShouldEnterBackoff()
     {
         var time = new FakeTimeProvider();
-        var database = Substitute.For<IDatabase>();
+        IDatabase database = Substitute.For<IDatabase>();
         database.ScriptEvaluateAsync(Arg.Any<string>(), Arg.Any<RedisKey[]>(), Arg.Any<RedisValue[]>())
             .Returns(RedisResult.Create([1]));
 
-        var limiter = CreateLimiter(database, time);
+        RedisAnalyticsDistributedRateLimiter limiter = CreateLimiter(database, time);
 
         (await limiter.Acquire(AnalyticsRateLimitPolicy.ANALYTICS_EVENTS, "partition"))
             .Status.Should().Be(AnalyticsRateLimitAcquireStatus.UNAVAILABLE);
@@ -319,9 +319,9 @@ public sealed class RedisAnalyticsDistributedRateLimiterTests
     [Fact]
     public async Task Acquire_WhenInvalidPolicy_ShouldFailFast()
     {
-        var limiter = CreateLimiter(Substitute.For<IDatabase>(), new FakeTimeProvider());
+        RedisAnalyticsDistributedRateLimiter limiter = CreateLimiter(Substitute.For<IDatabase>(), new FakeTimeProvider());
 
-        var act = () => limiter.Acquire((AnalyticsRateLimitPolicy)999, "partition").AsTask();
+        Func<Task<AnalyticsRateLimitAcquireResult>> act = () => limiter.Acquire((AnalyticsRateLimitPolicy)999, "partition").AsTask();
 
         await act.Should().ThrowAsync<ArgumentOutOfRangeException>();
     }
@@ -330,13 +330,13 @@ public sealed class RedisAnalyticsDistributedRateLimiterTests
     public void AcquireBlocking_WhenRedisUnavailable_ShouldReturnUnavailableWithoutAsyncWait()
     {
         var time = new FakeTimeProvider();
-        var database = Substitute.For<IDatabase>();
+        IDatabase database = Substitute.For<IDatabase>();
         database.ScriptEvaluate(Arg.Any<string>(), Arg.Any<RedisKey[]>(), Arg.Any<RedisValue[]>())
             .Returns(_ => throw new RedisConnectionException(ConnectionFailureType.UnableToConnect, "down"));
 
-        var limiter = CreateLimiter(database, time);
+        RedisAnalyticsDistributedRateLimiter limiter = CreateLimiter(database, time);
 
-        var result = limiter.AcquireBlocking(AnalyticsRateLimitPolicy.ANALYTICS_EVENTS, "partition");
+        AnalyticsRateLimitAcquireResult result = limiter.AcquireBlocking(AnalyticsRateLimitPolicy.ANALYTICS_EVENTS, "partition");
 
         result.Status.Should().Be(AnalyticsRateLimitAcquireStatus.UNAVAILABLE);
     }
@@ -346,7 +346,7 @@ public sealed class RedisAnalyticsDistributedRateLimiterTests
         FakeTimeProvider time,
         ILogger<RedisAnalyticsDistributedRateLimiter>? logger = null)
     {
-        var multiplexer = Substitute.For<IConnectionMultiplexer>();
+        IConnectionMultiplexer multiplexer = Substitute.For<IConnectionMultiplexer>();
         multiplexer.GetDatabase(Arg.Any<int>(), Arg.Any<object?>()).Returns(database);
 
         return new RedisAnalyticsDistributedRateLimiter(

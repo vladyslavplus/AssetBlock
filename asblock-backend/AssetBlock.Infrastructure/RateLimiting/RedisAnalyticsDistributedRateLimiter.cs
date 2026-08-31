@@ -57,8 +57,8 @@ internal sealed class RedisAnalyticsDistributedRateLimiter(
         AnalyticsRateLimitPolicy policy,
         string partitionMaterial)
     {
-        var resolved = ResolvePolicy(policy);
-        var permit = TryBeginCall();
+        (int Limit, int WindowSeconds, string Domain) resolved = ResolvePolicy(policy);
+        CallPermit permit = TryBeginCall();
         if (permit == CallPermit.DENIED)
         {
             return new AnalyticsRateLimitAcquireResult(AnalyticsRateLimitAcquireStatus.UNAVAILABLE);
@@ -66,7 +66,7 @@ internal sealed class RedisAnalyticsDistributedRateLimiter(
 
         try
         {
-            var result = EvaluateScript(resolved, policy, partitionMaterial);
+            AnalyticsRateLimitAcquireResult result = EvaluateScript(resolved, policy, partitionMaterial);
             CompleteSuccess(permit);
             return result;
         }
@@ -82,8 +82,8 @@ internal sealed class RedisAnalyticsDistributedRateLimiter(
         string partitionMaterial,
         CancellationToken cancellationToken = default)
     {
-        var resolved = ResolvePolicy(policy);
-        var permit = TryBeginCall();
+        (int Limit, int WindowSeconds, string Domain) resolved = ResolvePolicy(policy);
+        CallPermit permit = TryBeginCall();
         if (permit == CallPermit.DENIED)
         {
             return new AnalyticsRateLimitAcquireResult(AnalyticsRateLimitAcquireStatus.UNAVAILABLE);
@@ -91,7 +91,7 @@ internal sealed class RedisAnalyticsDistributedRateLimiter(
 
         try
         {
-            var result = await EvaluateScriptAsync(resolved, policy, partitionMaterial, cancellationToken);
+            AnalyticsRateLimitAcquireResult result = await EvaluateScriptAsync(resolved, policy, partitionMaterial, cancellationToken);
             CompleteSuccess(permit);
             return result;
         }
@@ -212,7 +212,7 @@ internal sealed class RedisAnalyticsDistributedRateLimiter(
         string partitionMaterial)
     {
         var redisKey = BuildRedisKey(resolved.Domain, partitionMaterial);
-        var result = _database.ScriptEvaluate(
+        RedisResult result = _database.ScriptEvaluate(
             FIXED_WINDOW_SCRIPT,
             [redisKey],
             [resolved.Limit, resolved.WindowSeconds]);
@@ -227,7 +227,7 @@ internal sealed class RedisAnalyticsDistributedRateLimiter(
         CancellationToken cancellationToken)
     {
         var redisKey = BuildRedisKey(resolved.Domain, partitionMaterial);
-        var result = await _database.ScriptEvaluateAsync(
+        RedisResult result = await _database.ScriptEvaluateAsync(
             FIXED_WINDOW_SCRIPT,
             [redisKey],
             [resolved.Limit, resolved.WindowSeconds]);

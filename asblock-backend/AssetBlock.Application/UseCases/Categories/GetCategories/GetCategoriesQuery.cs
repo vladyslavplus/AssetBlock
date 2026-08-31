@@ -1,6 +1,6 @@
 using Ardalis.Result;
-using AssetBlock.Domain.Core.Dto.Categories;
 using AssetBlock.Application.Messaging;
+using AssetBlock.Domain.Core.Dto.Categories;
 
 namespace AssetBlock.Application.UseCases.Categories.GetCategories;
 

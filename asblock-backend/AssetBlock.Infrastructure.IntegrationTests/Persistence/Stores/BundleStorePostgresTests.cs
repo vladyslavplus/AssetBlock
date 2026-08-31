@@ -17,10 +17,10 @@ public sealed class BundleStorePostgresTests(PostgresFixture fixture)
     [Fact]
     public async Task PublishNextRevision_WhenCalledConcurrently_ShouldSerializeSequentialRevisionsWithOneCurrent()
     {
-        await using var seedDb = await fixture.CreateCleanDbContext();
+        await using ApplicationDbContext seedDb = await fixture.CreateCleanDbContext();
         (User author, Category category) = await TestData.SeedAuthorAndCategory(seedDb);
-        var assetA = TestData.CreateAsset(author.Id, category.Id, title: "A", price: 10m);
-        var assetB = TestData.CreateAsset(author.Id, category.Id, title: "B", price: 20m);
+        Asset assetA = TestData.CreateAsset(author.Id, category.Id, title: "A", price: 10m);
+        Asset assetB = TestData.CreateAsset(author.Id, category.Id, title: "B", price: 20m);
         seedDb.Assets.AddRange(assetA, assetB);
         await seedDb.SaveChangesAsync();
         seedDb.AssetVersions.AddRange(
@@ -29,14 +29,14 @@ public sealed class BundleStorePostgresTests(PostgresFixture fixture)
         await seedDb.SaveChangesAsync();
 
         var seedStore = new BundleStore(seedDb);
-        var items = CreateItems(assetA, assetB);
+        IReadOnlyList<BundleRevisionItemDraft> items = CreateItems(assetA, assetB);
         (Bundle bundle, _) = await seedStore.CreateWithRevision(
             author.Id, "Race Bundle", null, 15m, "usd", 30m, items);
 
         var gate = new LockRaceGate(participantCount: 2);
 
-        await using var dbA = fixture.CreateDbContext();
-        await using var dbB = fixture.CreateDbContext();
+        await using ApplicationDbContext dbA = fixture.CreateDbContext();
+        await using ApplicationDbContext dbB = fixture.CreateDbContext();
         var uowA = new EfUnitOfWork(dbA);
         var uowB = new EfUnitOfWork(dbB);
         var storeA = new GatedBundleStore(new BundleStore(dbA), gate);
@@ -44,21 +44,21 @@ public sealed class BundleStorePostgresTests(PostgresFixture fixture)
 
         BundleRevision? revA = null;
         BundleRevision? revB = null;
-        var taskA = uowA.ExecuteInTransaction(async ct =>
+        Task taskA = uowA.ExecuteInTransaction(async ct =>
         {
             revA = await storeA.PublishNextRevision(bundle.Id, "Rev A", null, 14m, "usd", 30m, items, ct);
         });
-        var taskB = uowB.ExecuteInTransaction(async ct =>
+        Task taskB = uowB.ExecuteInTransaction(async ct =>
         {
             revB = await storeB.PublishNextRevision(bundle.Id, "Rev B", null, 13m, "usd", 30m, items, ct);
         });
         await Task.WhenAll(taskA, taskB);
 
-        var revisions = new[] { revA!, revB! };
+        BundleRevision[] revisions = new[] { revA!, revB! };
         revisions.Select(r => r.RevisionNumber).Should().BeEquivalentTo([2, 3]);
 
-        await using var verify = fixture.CreateDbContext();
-        var rows = await verify.BundleRevisions.AsNoTracking().Where(r => r.BundleId == bundle.Id).ToListAsync();
+        await using ApplicationDbContext verify = fixture.CreateDbContext();
+        List<BundleRevision> rows = await verify.BundleRevisions.AsNoTracking().Where(r => r.BundleId == bundle.Id).ToListAsync();
         rows.Should().HaveCount(3);
         rows.Count(r => r.IsCurrent).Should().Be(1);
         rows.Single(r => r.IsCurrent).RevisionNumber.Should().Be(3);
@@ -67,10 +67,10 @@ public sealed class BundleStorePostgresTests(PostgresFixture fixture)
     [Fact]
     public async Task HardDeleteAsset_ShouldSetBundleRevisionItemAssetIdNull()
     {
-        await using var db = await fixture.CreateCleanDbContext();
+        await using ApplicationDbContext db = await fixture.CreateCleanDbContext();
         (User author, Category category) = await TestData.SeedAuthorAndCategory(db);
-        var assetA = TestData.CreateAsset(author.Id, category.Id, title: "Keep", price: 10m);
-        var assetB = TestData.CreateAsset(author.Id, category.Id, title: "Drop", price: 20m);
+        Asset assetA = TestData.CreateAsset(author.Id, category.Id, title: "Keep", price: 10m);
+        Asset assetB = TestData.CreateAsset(author.Id, category.Id, title: "Drop", price: 20m);
         db.Assets.AddRange(assetA, assetB);
         await db.SaveChangesAsync();
         db.AssetVersions.AddRange(
@@ -84,8 +84,8 @@ public sealed class BundleStorePostgresTests(PostgresFixture fixture)
 
         await new AssetStore(db).Delete(assetB.Id);
 
-        await using var verify = fixture.CreateDbContext();
-        var items = await verify.BundleRevisionItems.AsNoTracking()
+        await using ApplicationDbContext verify = fixture.CreateDbContext();
+        List<BundleRevisionItem> items = await verify.BundleRevisionItems.AsNoTracking()
             .Where(i => i.BundleRevisionId == revision.Id)
             .OrderBy(i => i.Position)
             .ToListAsync();
@@ -99,10 +99,10 @@ public sealed class BundleStorePostgresTests(PostgresFixture fixture)
     [Fact]
     public async Task GetPublicDetail_WhenItemAssetSoftDeleted_ShouldReturnNull()
     {
-        await using var db = await fixture.CreateCleanDbContext();
+        await using ApplicationDbContext db = await fixture.CreateCleanDbContext();
         (User author, Category category) = await TestData.SeedAuthorAndCategory(db);
-        var assetA = TestData.CreateAsset(author.Id, category.Id, title: "A", price: 10m);
-        var assetB = TestData.CreateAsset(author.Id, category.Id, title: "B", price: 20m);
+        Asset assetA = TestData.CreateAsset(author.Id, category.Id, title: "A", price: 10m);
+        Asset assetB = TestData.CreateAsset(author.Id, category.Id, title: "B", price: 20m);
         db.Assets.AddRange(assetA, assetB);
         await db.SaveChangesAsync();
         db.AssetVersions.AddRange(
@@ -114,29 +114,29 @@ public sealed class BundleStorePostgresTests(PostgresFixture fixture)
         (Bundle bundle, _) = await store.CreateWithRevision(
             author.Id, "Unavailable", null, 15m, "usd", 30m, CreateItems(assetA, assetB));
 
-        var before = await store.ListPublic(new ListBundlesRequest { Page = 1, PageSize = 20 });
+        PagedResult<BundleListItemDto> before = await store.ListPublic(new ListBundlesRequest { Page = 1, PageSize = 20 });
         before.Items.Should().Contain(i => i.Id == bundle.Id);
         (await store.GetCheckoutSnapshot(bundle.Id)).Should().NotBeNull();
 
         await new AssetStore(db).SoftDelete(assetB.Id, DateTimeOffset.UtcNow);
 
         (await store.GetCheckoutSnapshot(bundle.Id)).Should().BeNull();
-        var after = await store.ListPublic(new ListBundlesRequest { Page = 1, PageSize = 20 });
+        PagedResult<BundleListItemDto> after = await store.ListPublic(new ListBundlesRequest { Page = 1, PageSize = 20 });
         after.Items.Should().NotContain(i => i.Id == bundle.Id);
     }
 
     [Fact]
     public async Task GetPublicDetail_ShouldReturnSemanticStringLicenseCodes()
     {
-        await using var db = await fixture.CreateCleanDbContext();
+        await using ApplicationDbContext db = await fixture.CreateCleanDbContext();
         (User author, Category category) = await TestData.SeedAuthorAndCategory(db);
-        var assetPersonal = TestData.CreateAsset(author.Id, category.Id, title: "Personal Asset", price: 10m);
-        var assetCommercial = TestData.CreateAsset(author.Id, category.Id, title: "Commercial Asset", price: 20m);
+        Asset assetPersonal = TestData.CreateAsset(author.Id, category.Id, title: "Personal Asset", price: 10m);
+        Asset assetCommercial = TestData.CreateAsset(author.Id, category.Id, title: "Commercial Asset", price: 20m);
         db.Assets.AddRange(assetPersonal, assetCommercial);
         await db.SaveChangesAsync();
 
-        var commercialLicense = AssetLicenseCatalog.Get(AssetLicenseCode.COMMERCIAL);
-        var commercialVersion = TestData.CreateAssetVersion(assetCommercial.Id);
+        AssetLicenseTemplate commercialLicense = AssetLicenseCatalog.Get(AssetLicenseCode.COMMERCIAL);
+        AssetVersion commercialVersion = TestData.CreateAssetVersion(assetCommercial.Id);
         commercialVersion.LicenseCode = commercialLicense.Code;
         commercialVersion.LicenseTemplateVersion = commercialLicense.TemplateVersion;
         commercialVersion.LicenseDisplayName = commercialLicense.DisplayName;
@@ -159,13 +159,13 @@ public sealed class BundleStorePostgresTests(PostgresFixture fixture)
                 new(assetCommercial.Id, 2, assetCommercial.Title, assetCommercial.Price)
             ]);
 
-        var detail = await store.GetPublicDetail(bundle.Id);
+        BundleDetailDto? detail = await store.GetPublicDetail(bundle.Id);
         detail.Should().NotBeNull();
         detail.Items.Should().HaveCount(2);
         detail.Items.Single(i => i.Position == 1).LicenseCode.Should().Be("PERSONAL");
         detail.Items.Single(i => i.Position == 2).LicenseCode.Should().Be("COMMERCIAL");
 
-        var snapshot = await store.GetCheckoutSnapshot(bundle.Id);
+        BundleCheckoutSnapshot? snapshot = await store.GetCheckoutSnapshot(bundle.Id);
         snapshot.Should().NotBeNull();
         snapshot.Items.Select(i => i.LicenseCode).Should().BeEquivalentTo(
             [AssetLicenseCode.PERSONAL, AssetLicenseCode.COMMERCIAL]);
@@ -174,10 +174,10 @@ public sealed class BundleStorePostgresTests(PostgresFixture fixture)
     [Fact]
     public async Task GetSellerDetail_WhenItemAssetHardDeleted_ShouldReturnNullLicenseCode()
     {
-        await using var db = await fixture.CreateCleanDbContext();
+        await using ApplicationDbContext db = await fixture.CreateCleanDbContext();
         (User author, Category category) = await TestData.SeedAuthorAndCategory(db);
-        var assetA = TestData.CreateAsset(author.Id, category.Id, title: "Keep", price: 10m);
-        var assetB = TestData.CreateAsset(author.Id, category.Id, title: "Drop", price: 20m);
+        Asset assetA = TestData.CreateAsset(author.Id, category.Id, title: "Keep", price: 10m);
+        Asset assetB = TestData.CreateAsset(author.Id, category.Id, title: "Drop", price: 20m);
         db.Assets.AddRange(assetA, assetB);
         await db.SaveChangesAsync();
         db.AssetVersions.AddRange(
@@ -191,7 +191,7 @@ public sealed class BundleStorePostgresTests(PostgresFixture fixture)
 
         await new AssetStore(db).Delete(assetB.Id);
 
-        var detail = await store.GetSellerDetail(bundle.Id, author.Id);
+        BundleDetailDto? detail = await store.GetSellerDetail(bundle.Id, author.Id);
         detail.Should().NotBeNull();
         detail.Items.Single(i => i.Position == 1).LicenseCode.Should().Be("PERSONAL");
         detail.Items.Single(i => i.Position == 2).LicenseCode.Should().BeNull();
@@ -201,22 +201,22 @@ public sealed class BundleStorePostgresTests(PostgresFixture fixture)
     [Fact]
     public async Task ListPublic_WhenFiltered_ShouldApplySellerIdMinPriceMaxPrice()
     {
-        await using var db = await fixture.CreateCleanDbContext();
-        var seller1 = TestData.CreateUser("seller-list-1", "seller-list-1@example.test");
-        var seller2 = TestData.CreateUser("seller-list-2", "seller-list-2@example.test");
+        await using ApplicationDbContext db = await fixture.CreateCleanDbContext();
+        User seller1 = TestData.CreateUser("seller-list-1", "seller-list-1@example.test");
+        User seller2 = TestData.CreateUser("seller-list-2", "seller-list-2@example.test");
         db.Users.AddRange(seller1, seller2);
-        var category = TestData.CreateCategory("filter-cat", "filter-cat");
+        Category category = TestData.CreateCategory("filter-cat", "filter-cat");
         db.Categories.Add(category);
         await db.SaveChangesAsync();
 
         // seller1: cheap bundle ($5) and expensive bundle ($50)
-        var cheapA = TestData.CreateAsset(seller1.Id, category.Id, title: "CheapA", price: 3m);
-        var cheapB = TestData.CreateAsset(seller1.Id, category.Id, title: "CheapB", price: 4m);
-        var expA   = TestData.CreateAsset(seller1.Id, category.Id, title: "ExpA", price: 30m);
-        var expB   = TestData.CreateAsset(seller1.Id, category.Id, title: "ExpB", price: 40m);
+        Asset cheapA = TestData.CreateAsset(seller1.Id, category.Id, title: "CheapA", price: 3m);
+        Asset cheapB = TestData.CreateAsset(seller1.Id, category.Id, title: "CheapB", price: 4m);
+        Asset expA   = TestData.CreateAsset(seller1.Id, category.Id, title: "ExpA", price: 30m);
+        Asset expB   = TestData.CreateAsset(seller1.Id, category.Id, title: "ExpB", price: 40m);
         // seller2: mid bundle ($20)
-        var midA   = TestData.CreateAsset(seller2.Id, category.Id, title: "MidA", price: 10m);
-        var midB   = TestData.CreateAsset(seller2.Id, category.Id, title: "MidB", price: 15m);
+        Asset midA   = TestData.CreateAsset(seller2.Id, category.Id, title: "MidA", price: 10m);
+        Asset midB   = TestData.CreateAsset(seller2.Id, category.Id, title: "MidB", price: 15m);
         db.Assets.AddRange(cheapA, cheapB, expA, expB, midA, midB);
         await db.SaveChangesAsync();
         db.AssetVersions.AddRange(
@@ -237,24 +237,24 @@ public sealed class BundleStorePostgresTests(PostgresFixture fixture)
             [new(midA.Id, 1, midA.Title, midA.Price), new(midB.Id, 2, midB.Title, midB.Price)]);
 
         // Filter by SellerId → only seller1's bundles
-        var bySeller = await store.ListPublic(new ListBundlesRequest { Page = 1, PageSize = 20, SellerId = seller1.Id });
+        PagedResult<BundleListItemDto> bySeller = await store.ListPublic(new ListBundlesRequest { Page = 1, PageSize = 20, SellerId = seller1.Id });
         bySeller.Items.Select(i => i.Id).Should().BeEquivalentTo([cheap.Id, exp.Id]);
         bySeller.Items.Select(i => i.Id).Should().NotContain(mid.Id);
 
         // Filter MinPrice = 15 → should exclude cheap ($5), include exp ($50) and mid ($20)
-        var byMin = await store.ListPublic(new ListBundlesRequest { Page = 1, PageSize = 20, MinPrice = 15m });
+        PagedResult<BundleListItemDto> byMin = await store.ListPublic(new ListBundlesRequest { Page = 1, PageSize = 20, MinPrice = 15m });
         byMin.Items.Select(i => i.Id).Should().Contain(exp.Id);
         byMin.Items.Select(i => i.Id).Should().Contain(mid.Id);
         byMin.Items.Select(i => i.Id).Should().NotContain(cheap.Id);
 
         // Filter MaxPrice = 25 → should exclude exp ($50), include cheap ($5) and mid ($20)
-        var byMax = await store.ListPublic(new ListBundlesRequest { Page = 1, PageSize = 20, MaxPrice = 25m });
+        PagedResult<BundleListItemDto> byMax = await store.ListPublic(new ListBundlesRequest { Page = 1, PageSize = 20, MaxPrice = 25m });
         byMax.Items.Select(i => i.Id).Should().Contain(cheap.Id);
         byMax.Items.Select(i => i.Id).Should().Contain(mid.Id);
         byMax.Items.Select(i => i.Id).Should().NotContain(exp.Id);
 
         // Combined MinPrice=10, MaxPrice=30 → only mid ($20) and not cheap ($5) or exp ($50)
-        var byRange = await store.ListPublic(new ListBundlesRequest { Page = 1, PageSize = 20, MinPrice = 10m, MaxPrice = 30m });
+        PagedResult<BundleListItemDto> byRange = await store.ListPublic(new ListBundlesRequest { Page = 1, PageSize = 20, MinPrice = 10m, MaxPrice = 30m });
         byRange.Items.Select(i => i.Id).Should().Contain(mid.Id);
         byRange.Items.Select(i => i.Id).Should().NotContain(cheap.Id);
         byRange.Items.Select(i => i.Id).Should().NotContain(exp.Id);
@@ -263,10 +263,10 @@ public sealed class BundleStorePostgresTests(PostgresFixture fixture)
     [Fact]
     public async Task ListPublic_WhenSearching_ShouldHandleCaseInsensitivityAndWildcards()
     {
-        await using var db = await fixture.CreateCleanDbContext();
+        await using ApplicationDbContext db = await fixture.CreateCleanDbContext();
         (User author, Category category) = await TestData.SeedAuthorAndCategory(db);
-        var asset1 = TestData.CreateAsset(author.Id, category.Id, title: "Asset 100% discount", price: 10m);
-        var asset2 = TestData.CreateAsset(author.Id, category.Id, title: "Asset regular", price: 10m);
+        Asset asset1 = TestData.CreateAsset(author.Id, category.Id, title: "Asset 100% discount", price: 10m);
+        Asset asset2 = TestData.CreateAsset(author.Id, category.Id, title: "Asset regular", price: 10m);
         db.Assets.AddRange(asset1, asset2);
         await db.SaveChangesAsync();
         db.AssetVersions.AddRange(
@@ -281,12 +281,12 @@ public sealed class BundleStorePostgresTests(PostgresFixture fixture)
             [new BundleRevisionItemDraft(asset2.Id, 1, asset2.Title, asset2.Price)]);
 
         // Case insensitive match
-        var caseMatch = await store.ListPublic(new ListBundlesRequest { Search = "super 100%" });
+        PagedResult<BundleListItemDto> caseMatch = await store.ListPublic(new ListBundlesRequest { Search = "super 100%" });
         caseMatch.Items.Should().ContainSingle();
         caseMatch.Items[0].Id.Should().Be(b1.Id);
 
         // Literal '%' escaping check - "100%" should not match random text unless literal
-        var literalMatch = await store.ListPublic(new ListBundlesRequest { Search = "100%" });
+        PagedResult<BundleListItemDto> literalMatch = await store.ListPublic(new ListBundlesRequest { Search = "100%" });
         literalMatch.Items.Should().ContainSingle();
         literalMatch.Items[0].Id.Should().Be(b1.Id);
     }
@@ -294,10 +294,10 @@ public sealed class BundleStorePostgresTests(PostgresFixture fixture)
     [Fact]
     public async Task LockAssetsInOrder_WhenAssetsExist_LocksInSingleQuery()
     {
-        await using var db = await fixture.CreateCleanDbContext();
+        await using ApplicationDbContext db = await fixture.CreateCleanDbContext();
         (User author, Category category) = await TestData.SeedAuthorAndCategory(db);
-        var asset1 = TestData.CreateAsset(author.Id, category.Id, title: "Lock 1", price: 10m);
-        var asset2 = TestData.CreateAsset(author.Id, category.Id, title: "Lock 2", price: 20m);
+        Asset asset1 = TestData.CreateAsset(author.Id, category.Id, title: "Lock 1", price: 10m);
+        Asset asset2 = TestData.CreateAsset(author.Id, category.Id, title: "Lock 2", price: 20m);
         db.Assets.AddRange(asset1, asset2);
         await db.SaveChangesAsync();
 

@@ -38,7 +38,7 @@ public class GetTagsQueryHandlerTests
         _cacheMock.Get<PagedResult<TagDto>>(Arg.Any<string>(), Arg.Any<CancellationToken>())
             .Returns(cachedResult);
 
-        var result = await _handler.Handle(query, CancellationToken.None);
+        Ardalis.Result.Result<PagedResult<TagDto>> result = await _handler.Handle(query, CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
         result.Value.Items.Should().HaveCount(2);
@@ -64,7 +64,7 @@ public class GetTagsQueryHandlerTests
         var pagedResult = new PagedResult<Tag>(storedTags, 1, 1, 10);
         _tagStoreMock.SearchTags(Arg.Any<GetTagsRequest>(), Arg.Any<CancellationToken>()).Returns(pagedResult);
 
-        var result = await _handler.Handle(query, CancellationToken.None);
+        Ardalis.Result.Result<PagedResult<TagDto>> result = await _handler.Handle(query, CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
         result.Value.Items.Should().HaveCount(1);

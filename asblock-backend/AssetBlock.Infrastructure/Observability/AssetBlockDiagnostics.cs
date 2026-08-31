@@ -1,6 +1,6 @@
-using AssetBlock.Domain.Core.Enums;
 using System.Diagnostics;
 using System.Diagnostics.Metrics;
+using AssetBlock.Domain.Core.Enums;
 
 namespace AssetBlock.Infrastructure.Observability;
 
@@ -164,7 +164,7 @@ public static class AssetBlockDiagnostics
         "assetblock.scan.results",
         description: "Count of ClamAV scans by outcome");
 
-    private static readonly object _signatureAgeGate = new();
+    private static readonly Lock _signatureAgeGate = new();
     private static DateTimeOffset? _signatureDatabaseBuiltAt;
     internal static TimeProvider TimeProvider { get; set; } = TimeProvider.System;
 
@@ -217,7 +217,7 @@ public static class AssetBlockDiagnostics
             builtAt = stored;
         }
 
-        var age = TimeProvider.GetUtcNow() - builtAt;
+        TimeSpan age = TimeProvider.GetUtcNow() - builtAt;
         if (age < TimeSpan.Zero)
         {
             age = TimeSpan.Zero;

@@ -44,7 +44,7 @@ public static class BundlePriceAllocator
 
         var seenAssets = new HashSet<Guid>();
         long listTotal = 0;
-        foreach (var item in items)
+        foreach (AllocationInput item in items)
         {
             if (item.Position <= 0)
             {
@@ -70,7 +70,7 @@ public static class BundlePriceAllocator
         var reserved = items.Count;
         var remainingToDistribute = bundleTotalCents - reserved;
 
-        var ordered = items
+        AllocationInput[] ordered = items
             .OrderBy(i => i.Position)
             .ThenBy(i => i.AssetId)
             .ToArray();
@@ -81,7 +81,7 @@ public static class BundlePriceAllocator
         for (var i = 0; i < ordered.Length; i++)
         {
             // BigInteger avoids overflow when multiplying large long cents.
-            var weighted = (BigInteger)remainingToDistribute * ordered[i].ListPrice.Cents;
+            BigInteger weighted = (BigInteger)remainingToDistribute * ordered[i].ListPrice.Cents;
             var baseShare = (long)(weighted / listTotal);
             var remainder = (long)(weighted % listTotal);
             baseAllocations[i] = baseShare;

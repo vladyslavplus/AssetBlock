@@ -96,7 +96,7 @@ internal sealed class SellerAnalyticsSalesExportSession : ISellerAnalyticsSalesE
         try
         {
             db = await dbFactory.CreateDbContextAsync(cancellationToken);
-            var query = db.Database
+            IAsyncEnumerable<AnalyticsSaleExportSqlRow> query = db.Database
                 .SqlQueryRaw<AnalyticsSaleExportSqlRow>(sql, sellerId, from, to, peekLimit)
                 .AsAsyncEnumerable();
             enumerator = query.GetAsyncEnumerator(cancellationToken);
@@ -106,7 +106,7 @@ internal sealed class SellerAnalyticsSalesExportSession : ISellerAnalyticsSalesE
                 return new SellerAnalyticsSalesExportSession(db, disposeContext, false, enumerator, null);
             }
 
-            var first = enumerator.Current;
+            AnalyticsSaleExportSqlRow first = enumerator.Current;
             if (first.PeekCount > AnalyticsConstants.MAX_SALES_EXPORT_ROWS)
             {
                 try

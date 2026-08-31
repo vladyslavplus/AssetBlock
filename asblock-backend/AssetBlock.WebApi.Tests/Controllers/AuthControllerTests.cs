@@ -1,3 +1,4 @@
+using System.Reflection;
 using Ardalis.Result;
 using AssetBlock.Application.UseCases.Auth.Login;
 using AssetBlock.Application.UseCases.Auth.Logout;
@@ -9,8 +10,8 @@ using AssetBlock.Domain.Core.Primitives.Api;
 using AssetBlock.WebApi.Controllers;
 using AssetBlock.WebApi.Tests.Common;
 using AwesomeAssertions;
-using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using NSubstitute;
 
 namespace AssetBlock.WebApi.Tests.Controllers;
@@ -26,7 +27,7 @@ public sealed class AuthControllerTests : ControllerTestBase
             .Returns(Task.FromResult(Result.Success(_tokens)));
 
         var controller = new AuthController(Sender);
-        var result = await controller.Login(new LoginRequest("a@b.c", "pwd"), CancellationToken.None);
+        IActionResult result = await controller.Login(new LoginRequest("a@b.c", "pwd"), CancellationToken.None);
 
         result.Should().BeOfType<OkObjectResult>().Which.Value.Should().Be(_tokens);
     }
@@ -38,7 +39,7 @@ public sealed class AuthControllerTests : ControllerTestBase
             .Returns(Task.FromResult(Result.Success(_tokens)));
 
         var controller = new AuthController(Sender);
-        var result = await controller.Refresh(new RefreshTokenRequest("rt"), CancellationToken.None);
+        IActionResult result = await controller.Refresh(new RefreshTokenRequest("rt"), CancellationToken.None);
 
         result.Should().BeOfType<OkObjectResult>();
     }
@@ -46,9 +47,9 @@ public sealed class AuthControllerTests : ControllerTestBase
     [Fact]
     public void Refresh_ShouldUseDedicatedRateLimitPolicy()
     {
-        var method = typeof(AuthController).GetMethod(nameof(AuthController.Refresh));
+        MethodInfo? method = typeof(AuthController).GetMethod(nameof(AuthController.Refresh));
 
-        var attribute = method!
+        EnableRateLimitingAttribute attribute = method!
             .GetCustomAttributes(typeof(EnableRateLimitingAttribute), inherit: true)
             .Cast<EnableRateLimitingAttribute>()
             .Single();
@@ -63,7 +64,7 @@ public sealed class AuthControllerTests : ControllerTestBase
             .Returns(Task.FromResult(Result.Success()));
 
         var controller = new AuthController(Sender);
-        var result = await controller.Logout(new RefreshTokenRequest("rt"), CancellationToken.None);
+        IActionResult result = await controller.Logout(new RefreshTokenRequest("rt"), CancellationToken.None);
 
         result.Should().BeOfType<OkResult>();
     }
@@ -71,9 +72,9 @@ public sealed class AuthControllerTests : ControllerTestBase
     [Fact]
     public void Logout_ShouldUseDedicatedRateLimitPolicy()
     {
-        var method = typeof(AuthController).GetMethod(nameof(AuthController.Logout));
+        MethodInfo? method = typeof(AuthController).GetMethod(nameof(AuthController.Logout));
 
-        var attribute = method!
+        EnableRateLimitingAttribute attribute = method!
             .GetCustomAttributes(typeof(EnableRateLimitingAttribute), inherit: true)
             .Cast<EnableRateLimitingAttribute>()
             .Single();
@@ -88,7 +89,7 @@ public sealed class AuthControllerTests : ControllerTestBase
             .Returns(Task.FromResult(Result.Success(_tokens)));
 
         var controller = new AuthController(Sender);
-        var result = await controller.Register(new RegisterRequest("user", "a@b.c", "pwd"), CancellationToken.None);
+        IActionResult result = await controller.Register(new RegisterRequest("user", "a@b.c", "pwd"), CancellationToken.None);
 
         result.Should().BeOfType<OkObjectResult>();
     }

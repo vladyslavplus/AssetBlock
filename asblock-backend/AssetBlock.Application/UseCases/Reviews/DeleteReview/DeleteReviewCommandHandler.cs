@@ -1,10 +1,10 @@
 using Ardalis.Result;
+using AssetBlock.Application.Messaging;
 using AssetBlock.Domain.Abstractions.Services;
 using AssetBlock.Domain.Core.Constants;
 using AssetBlock.Domain.Core.Dto.Audit;
 using AssetBlock.Domain.Core.Entities;
 using AssetBlock.Domain.Core.Enums;
-using AssetBlock.Application.Messaging;
 using Microsoft.Extensions.Logging;
 
 namespace AssetBlock.Application.UseCases.Reviews.DeleteReview;
@@ -19,7 +19,7 @@ internal sealed class DeleteReviewCommandHandler(
     public async Task<Result> Handle(DeleteReviewCommand request, CancellationToken cancellationToken)
     {
         Review? review;
-        bool deleted = false;
+        var deleted = false;
         try
         {
             review = await reviewStore.GetById(request.Id, cancellationToken);

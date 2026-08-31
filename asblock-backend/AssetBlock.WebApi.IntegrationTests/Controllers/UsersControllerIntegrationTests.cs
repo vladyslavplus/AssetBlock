@@ -15,8 +15,8 @@ public sealed class UsersControllerIntegrationTests(IntegrationTestFixture fixtu
     [Fact]
     public async Task ListSocialPlatforms_ShouldReturnOkWithSeededPlatforms()
     {
-        var client = fixture.Factory.CreateClient();
-        var response = await client.GetAsync(new Uri("/api/users/social-platforms", UriKind.Relative));
+        HttpClient client = fixture.Factory.CreateClient();
+        HttpResponseMessage response = await client.GetAsync(new Uri("/api/users/social-platforms", UriKind.Relative));
 
         response.StatusCode.Should().Be(HttpStatusCode.OK);
         var json = await response.Content.ReadAsStringAsync();
@@ -26,8 +26,8 @@ public sealed class UsersControllerIntegrationTests(IntegrationTestFixture fixtu
     [Fact]
     public async Task GetMe_WithoutAuth_ShouldReturn401()
     {
-        var client = fixture.Factory.CreateClient();
-        var response = await client.GetAsync(new Uri("/api/users/me", UriKind.Relative));
+        HttpClient client = fixture.Factory.CreateClient();
+        HttpResponseMessage response = await client.GetAsync(new Uri("/api/users/me", UriKind.Relative));
 
         response.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
     }
@@ -36,10 +36,10 @@ public sealed class UsersControllerIntegrationTests(IntegrationTestFixture fixtu
     public async Task GetMe_WithAuth_ShouldReturnOk()
     {
         (HttpClient client, _) = await IntegrationTestAuth.RegisterAndAuthenticateAsync(fixture.Factory);
-        var response = await client.GetAsync(new Uri("/api/users/me", UriKind.Relative));
+        HttpResponseMessage response = await client.GetAsync(new Uri("/api/users/me", UriKind.Relative));
 
         response.StatusCode.Should().Be(HttpStatusCode.OK);
-        var profile = await response.Content.ReadFromJsonAsync<UserProfileDto>(IntegrationTestAuth.JsonOptions);
+        UserProfileDto? profile = await response.Content.ReadFromJsonAsync<UserProfileDto>(IntegrationTestAuth.JsonOptions);
         profile.Should().NotBeNull();
         profile.Username.Should().NotBeNullOrWhiteSpace();
         profile.Role.Should().Be(AppRoles.USER);
@@ -51,11 +51,11 @@ public sealed class UsersControllerIntegrationTests(IntegrationTestFixture fixtu
         (HttpClient authClient, var username) = await IntegrationTestAuth.RegisterAndAuthenticateAsync(fixture.Factory);
         _ = authClient;
 
-        var anonymous = fixture.Factory.CreateClient();
-        var response = await anonymous.GetAsync(new Uri($"/api/users/{Uri.EscapeDataString(username)}", UriKind.Relative));
+        HttpClient anonymous = fixture.Factory.CreateClient();
+        HttpResponseMessage response = await anonymous.GetAsync(new Uri($"/api/users/{Uri.EscapeDataString(username)}", UriKind.Relative));
 
         response.StatusCode.Should().Be(HttpStatusCode.OK);
-        var profile = await response.Content.ReadFromJsonAsync<UserProfileDto>(IntegrationTestAuth.JsonOptions);
+        UserProfileDto? profile = await response.Content.ReadFromJsonAsync<UserProfileDto>(IntegrationTestAuth.JsonOptions);
         profile.Should().NotBeNull();
         profile.Username.Should().Be(username);
     }
@@ -64,7 +64,7 @@ public sealed class UsersControllerIntegrationTests(IntegrationTestFixture fixtu
     public async Task ListNotifications_WithAuth_ShouldReturnOk()
     {
         (HttpClient client, _) = await IntegrationTestAuth.RegisterAndAuthenticateAsync(fixture.Factory);
-        var response = await client.GetAsync(new Uri("/api/users/me/notifications?page=1&pageSize=10", UriKind.Relative));
+        HttpResponseMessage response = await client.GetAsync(new Uri("/api/users/me/notifications?page=1&pageSize=10", UriKind.Relative));
 
         response.StatusCode.Should().Be(HttpStatusCode.OK);
         var json = await response.Content.ReadAsStringAsync();
@@ -77,7 +77,7 @@ public sealed class UsersControllerIntegrationTests(IntegrationTestFixture fixtu
     {
         (HttpClient client, _) = await IntegrationTestAuth.RegisterAndAuthenticateAsync(fixture.Factory);
         var missingId = Guid.Parse("a1b2c3d4-e5f6-7890-abcd-ef1234567890");
-        var response = await client.PatchAsync(
+        HttpResponseMessage response = await client.PatchAsync(
             new Uri($"/api/users/me/notifications/{missingId}/read", UriKind.Relative),
             new StringContent(string.Empty, Encoding.UTF8, "application/json"));
 
@@ -89,7 +89,7 @@ public sealed class UsersControllerIntegrationTests(IntegrationTestFixture fixtu
     {
         (HttpClient client, _) = await IntegrationTestAuth.RegisterAndAuthenticateAsync(fixture.Factory);
         var missingId = Guid.Parse("a1b2c3d4-e5f6-7890-abcd-ef1234567890");
-        var response = await client.PatchAsync(
+        HttpResponseMessage response = await client.PatchAsync(
             new Uri($"/api/users/me/notifications/{missingId}/unread", UriKind.Relative),
             new StringContent(string.Empty, Encoding.UTF8, "application/json"));
 
@@ -100,7 +100,7 @@ public sealed class UsersControllerIntegrationTests(IntegrationTestFixture fixtu
     public async Task MarkAllNotificationsRead_WithAuth_ShouldReturnOkWithCount()
     {
         (HttpClient client, _) = await IntegrationTestAuth.RegisterAndAuthenticateAsync(fixture.Factory);
-        var response = await client.PostAsync(
+        HttpResponseMessage response = await client.PostAsync(
             new Uri("/api/users/me/notifications/read-all", UriKind.Relative),
             new StringContent(string.Empty, Encoding.UTF8, "application/json"));
 
@@ -113,7 +113,7 @@ public sealed class UsersControllerIntegrationTests(IntegrationTestFixture fixtu
     public async Task UpdateMe_WithAuth_ShouldReturnOk()
     {
         (HttpClient client, _) = await IntegrationTestAuth.RegisterVerifiedAndAuthenticateAsync(fixture.Factory);
-        var response = await client.PatchAsJsonAsync(
+        HttpResponseMessage response = await client.PatchAsJsonAsync(
             new Uri("/api/users/me", UriKind.Relative),
             new { bio = "Integration test bio." });
 
@@ -124,7 +124,7 @@ public sealed class UsersControllerIntegrationTests(IntegrationTestFixture fixtu
     public async Task UpdateSocials_WithAuth_EmptyLinks_ShouldReturnOk()
     {
         (HttpClient client, _) = await IntegrationTestAuth.RegisterVerifiedAndAuthenticateAsync(fixture.Factory);
-        var response = await client.PutAsJsonAsync(
+        HttpResponseMessage response = await client.PutAsJsonAsync(
             new Uri("/api/users/me/socials", UriKind.Relative),
             new UpdateUserSocialLinksRequest { Links = [] });
 
@@ -134,8 +134,8 @@ public sealed class UsersControllerIntegrationTests(IntegrationTestFixture fixtu
     [Fact]
     public async Task GetMyAssetProcessingJobs_WithoutAuth_ShouldReturn401()
     {
-        var client = fixture.Factory.CreateClient();
-        var response = await client.GetAsync(new Uri($"/api/users/me/assets/{Guid.NewGuid()}/processing-jobs", UriKind.Relative));
+        HttpClient client = fixture.Factory.CreateClient();
+        HttpResponseMessage response = await client.GetAsync(new Uri($"/api/users/me/assets/{Guid.NewGuid()}/processing-jobs", UriKind.Relative));
 
         response.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
     }
@@ -144,7 +144,7 @@ public sealed class UsersControllerIntegrationTests(IntegrationTestFixture fixtu
     public async Task GetMyAssetProcessingJobs_WithAuth_WhenAssetNotFound_ShouldReturn404()
     {
         (HttpClient client, _) = await IntegrationTestAuth.RegisterAndAuthenticateAsync(fixture.Factory);
-        var response = await client.GetAsync(new Uri($"/api/users/me/assets/{Guid.NewGuid()}/processing-jobs", UriKind.Relative));
+        HttpResponseMessage response = await client.GetAsync(new Uri($"/api/users/me/assets/{Guid.NewGuid()}/processing-jobs", UriKind.Relative));
 
         response.StatusCode.Should().Be(HttpStatusCode.NotFound);
     }
@@ -152,8 +152,8 @@ public sealed class UsersControllerIntegrationTests(IntegrationTestFixture fixtu
     [Fact]
     public async Task GetMyAssetVersionProcessingJobs_WithoutAuth_ShouldReturn401()
     {
-        var client = fixture.Factory.CreateClient();
-        var response = await client.GetAsync(new Uri($"/api/users/me/asset-versions/{Guid.NewGuid()}/processing-jobs", UriKind.Relative));
+        HttpClient client = fixture.Factory.CreateClient();
+        HttpResponseMessage response = await client.GetAsync(new Uri($"/api/users/me/asset-versions/{Guid.NewGuid()}/processing-jobs", UriKind.Relative));
 
         response.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
     }
@@ -162,7 +162,7 @@ public sealed class UsersControllerIntegrationTests(IntegrationTestFixture fixtu
     public async Task GetMyAssetVersionProcessingJobs_WithAuth_WhenVersionNotFound_ShouldReturn404()
     {
         (HttpClient client, _) = await IntegrationTestAuth.RegisterAndAuthenticateAsync(fixture.Factory);
-        var response = await client.GetAsync(new Uri($"/api/users/me/asset-versions/{Guid.NewGuid()}/processing-jobs", UriKind.Relative));
+        HttpResponseMessage response = await client.GetAsync(new Uri($"/api/users/me/asset-versions/{Guid.NewGuid()}/processing-jobs", UriKind.Relative));
 
         response.StatusCode.Should().Be(HttpStatusCode.NotFound);
     }
@@ -170,8 +170,8 @@ public sealed class UsersControllerIntegrationTests(IntegrationTestFixture fixtu
     [Fact]
     public async Task GetMyAsset_WithoutAuth_ShouldReturn401()
     {
-        var client = fixture.Factory.CreateClient();
-        var response = await client.GetAsync(new Uri($"/api/users/me/assets/{Guid.NewGuid()}", UriKind.Relative));
+        HttpClient client = fixture.Factory.CreateClient();
+        HttpResponseMessage response = await client.GetAsync(new Uri($"/api/users/me/assets/{Guid.NewGuid()}", UriKind.Relative));
 
         response.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
     }
@@ -180,7 +180,7 @@ public sealed class UsersControllerIntegrationTests(IntegrationTestFixture fixtu
     public async Task GetMyAsset_WithAuth_WhenMissing_ShouldReturn404()
     {
         (HttpClient client, _) = await IntegrationTestAuth.RegisterAndAuthenticateAsync(fixture.Factory);
-        var response = await client.GetAsync(new Uri($"/api/users/me/assets/{Guid.NewGuid()}", UriKind.Relative));
+        HttpResponseMessage response = await client.GetAsync(new Uri($"/api/users/me/assets/{Guid.NewGuid()}", UriKind.Relative));
 
         response.StatusCode.Should().Be(HttpStatusCode.NotFound);
     }
@@ -188,10 +188,10 @@ public sealed class UsersControllerIntegrationTests(IntegrationTestFixture fixtu
     [Fact]
     public async Task ListingCopilot_WithoutAuth_ShouldReturn401()
     {
-        var client = fixture.Factory.CreateClient();
+        HttpClient client = fixture.Factory.CreateClient();
         var versionId = Guid.NewGuid();
-        var get = await client.GetAsync(new Uri($"/api/users/me/asset-versions/{versionId}/listing-copilot", UriKind.Relative));
-        var post = await client.PostAsync(new Uri($"/api/users/me/asset-versions/{versionId}/listing-copilot", UriKind.Relative), null);
+        HttpResponseMessage get = await client.GetAsync(new Uri($"/api/users/me/asset-versions/{versionId}/listing-copilot", UriKind.Relative));
+        HttpResponseMessage post = await client.PostAsync(new Uri($"/api/users/me/asset-versions/{versionId}/listing-copilot", UriKind.Relative), null);
 
         get.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
         post.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
@@ -201,7 +201,7 @@ public sealed class UsersControllerIntegrationTests(IntegrationTestFixture fixtu
     public async Task ListingCopilotPost_WhenEmailUnverified_ShouldReturn403()
     {
         (HttpClient client, _) = await IntegrationTestAuth.RegisterAndAuthenticateAsync(fixture.Factory);
-        var response = await client.PostAsync(
+        HttpResponseMessage response = await client.PostAsync(
             new Uri($"/api/users/me/asset-versions/{Guid.NewGuid()}/listing-copilot", UriKind.Relative),
             null);
 
@@ -213,8 +213,8 @@ public sealed class UsersControllerIntegrationTests(IntegrationTestFixture fixtu
     {
         (HttpClient client, _) = await IntegrationTestAuth.RegisterVerifiedAndAuthenticateAsync(fixture.Factory);
         var versionId = Guid.NewGuid();
-        var get = await client.GetAsync(new Uri($"/api/users/me/asset-versions/{versionId}/listing-copilot", UriKind.Relative));
-        var post = await client.PostAsync(new Uri($"/api/users/me/asset-versions/{versionId}/listing-copilot", UriKind.Relative), null);
+        HttpResponseMessage get = await client.GetAsync(new Uri($"/api/users/me/asset-versions/{versionId}/listing-copilot", UriKind.Relative));
+        HttpResponseMessage post = await client.PostAsync(new Uri($"/api/users/me/asset-versions/{versionId}/listing-copilot", UriKind.Relative), null);
 
         get.StatusCode.Should().Be(HttpStatusCode.NotFound);
         post.StatusCode.Should().Be(HttpStatusCode.NotFound);

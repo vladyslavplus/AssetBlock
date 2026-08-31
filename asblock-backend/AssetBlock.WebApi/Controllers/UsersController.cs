@@ -1,3 +1,4 @@
+using AssetBlock.Application.Messaging;
 using AssetBlock.Application.UseCases.Assets.EnqueueListingCopilot;
 using AssetBlock.Application.UseCases.Assets.GetListingCopilotSuggestion;
 using AssetBlock.Application.UseCases.Assets.GetMyAssetProcessingJobs;
@@ -9,23 +10,22 @@ using AssetBlock.Application.UseCases.Users.GetMyListings;
 using AssetBlock.Application.UseCases.Users.GetProfile;
 using AssetBlock.Application.UseCases.Users.ListMyPurchases;
 using AssetBlock.Application.UseCases.Users.ListNotifications;
-using AssetBlock.Application.UseCases.Users.MarkAllNotificationsRead;
 using AssetBlock.Application.UseCases.Users.ListSocialPlatforms;
+using AssetBlock.Application.UseCases.Users.MarkAllNotificationsRead;
 using AssetBlock.Application.UseCases.Users.MarkNotificationRead;
 using AssetBlock.Application.UseCases.Users.MarkNotificationUnread;
 using AssetBlock.Application.UseCases.Users.RequestEmailChange;
 using AssetBlock.Application.UseCases.Users.UpdateProfile;
 using AssetBlock.Application.UseCases.Users.UpdateSocialLinks;
 using AssetBlock.Domain.Core.Constants;
+using AssetBlock.Domain.Core.Dto;
+using AssetBlock.Domain.Core.Dto.Assets;
 using AssetBlock.Domain.Core.Dto.Auth;
 using AssetBlock.Domain.Core.Dto.Notifications;
 using AssetBlock.Domain.Core.Dto.Paging;
-using AssetBlock.Domain.Core.Dto.Assets;
 using AssetBlock.Domain.Core.Dto.Users;
 using AssetBlock.WebApi.Constants;
 using AssetBlock.WebApi.Extensions;
-using AssetBlock.Application.Messaging;
-using AssetBlock.Domain.Core.Dto;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
@@ -45,7 +45,7 @@ public sealed class UsersController(ISender sender) : ApiControllerBase(sender)
     [ProducesResponseType(StatusCodes.Status200OK)]
     public async Task<IActionResult> ListSocialPlatforms(CancellationToken cancellationToken)
     {
-        var result = await Sender.Send(new ListSocialPlatformsQuery(), cancellationToken);
+        Ardalis.Result.Result<List<SocialPlatformListItemDto>> result = await Sender.Send(new ListSocialPlatformsQuery(), cancellationToken);
         return MapResultToActionResult(result);
     }
 
@@ -59,12 +59,12 @@ public sealed class UsersController(ISender sender) : ApiControllerBase(sender)
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> ListMyPurchases([FromQuery] ListMyPurchasesRequest request, CancellationToken cancellationToken)
     {
-        if (!User.TryGetUserId(out var userId))
+        if (!User.TryGetUserId(out Guid userId))
         {
             return UnauthorizedProblem();
         }
 
-        var result = await Sender.Send(new GetMyPurchasesQuery(userId, request), cancellationToken);
+        Ardalis.Result.Result<PagedResult<PurchaseLibraryItemDto>> result = await Sender.Send(new GetMyPurchasesQuery(userId, request), cancellationToken);
         return MapResultToActionResult(result);
     }
 
@@ -78,12 +78,12 @@ public sealed class UsersController(ISender sender) : ApiControllerBase(sender)
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> ListMyAssets([FromQuery] GetAssetsRequest request, CancellationToken cancellationToken)
     {
-        if (!User.TryGetUserId(out var userId))
+        if (!User.TryGetUserId(out Guid userId))
         {
             return UnauthorizedProblem();
         }
 
-        var result = await Sender.Send(new GetMyListingsQuery(userId, request), cancellationToken);
+        Ardalis.Result.Result<PagedResult<SellerAssetListItem>> result = await Sender.Send(new GetMyListingsQuery(userId, request), cancellationToken);
         return MapResultToActionResult(result);
     }
 
@@ -99,12 +99,12 @@ public sealed class UsersController(ISender sender) : ApiControllerBase(sender)
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> GetMyAsset([FromRoute] Guid assetId, CancellationToken cancellationToken)
     {
-        if (!User.TryGetUserId(out var userId))
+        if (!User.TryGetUserId(out Guid userId))
         {
             return UnauthorizedProblem();
         }
 
-        var result = await Sender.Send(new GetSellerAssetDetailQuery(assetId, userId), cancellationToken);
+        Ardalis.Result.Result<SellerAssetDetailItem> result = await Sender.Send(new GetSellerAssetDetailQuery(assetId, userId), cancellationToken);
         return MapResultToActionResult(result);
     }
 
@@ -118,12 +118,12 @@ public sealed class UsersController(ISender sender) : ApiControllerBase(sender)
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> ListMyNotifications([FromQuery] GetNotificationsRequest request, CancellationToken cancellationToken)
     {
-        if (!User.TryGetUserId(out var userId))
+        if (!User.TryGetUserId(out Guid userId))
         {
             return UnauthorizedProblem();
         }
 
-        var result = await Sender.Send(new GetNotificationsQuery(userId, request), cancellationToken);
+        Ardalis.Result.Result<PagedResult<NotificationListItemDto>> result = await Sender.Send(new GetNotificationsQuery(userId, request), cancellationToken);
         return MapResultToActionResult(result);
     }
 
@@ -136,12 +136,12 @@ public sealed class UsersController(ISender sender) : ApiControllerBase(sender)
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> MarkAllMyNotificationsRead(CancellationToken cancellationToken)
     {
-        if (!User.TryGetUserId(out var userId))
+        if (!User.TryGetUserId(out Guid userId))
         {
             return UnauthorizedProblem();
         }
 
-        var result = await Sender.Send(new MarkAllNotificationsReadCommand(userId), cancellationToken);
+        Ardalis.Result.Result<MarkAllNotificationsReadResponseDto> result = await Sender.Send(new MarkAllNotificationsReadCommand(userId), cancellationToken);
         return MapResultToActionResult(result);
     }
 
@@ -155,12 +155,12 @@ public sealed class UsersController(ISender sender) : ApiControllerBase(sender)
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> MarkMyNotificationRead(Guid id, CancellationToken cancellationToken)
     {
-        if (!User.TryGetUserId(out var userId))
+        if (!User.TryGetUserId(out Guid userId))
         {
             return UnauthorizedProblem();
         }
 
-        var result = await Sender.Send(new MarkNotificationReadCommand(userId, id), cancellationToken);
+        Ardalis.Result.Result result = await Sender.Send(new MarkNotificationReadCommand(userId, id), cancellationToken);
         return MapResultToActionResult(result);
     }
 
@@ -174,12 +174,12 @@ public sealed class UsersController(ISender sender) : ApiControllerBase(sender)
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> MarkMyNotificationUnread(Guid id, CancellationToken cancellationToken)
     {
-        if (!User.TryGetUserId(out var userId))
+        if (!User.TryGetUserId(out Guid userId))
         {
             return UnauthorizedProblem();
         }
 
-        var result = await Sender.Send(new MarkNotificationUnreadCommand(userId, id), cancellationToken);
+        Ardalis.Result.Result result = await Sender.Send(new MarkNotificationUnreadCommand(userId, id), cancellationToken);
         return MapResultToActionResult(result);
     }
 
@@ -193,12 +193,12 @@ public sealed class UsersController(ISender sender) : ApiControllerBase(sender)
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> GetMe(CancellationToken cancellationToken)
     {
-        if (!User.TryGetUserId(out var userId))
+        if (!User.TryGetUserId(out Guid userId))
         {
             return UnauthorizedProblem();
         }
 
-        var result = await Sender.Send(new GetUserProfileQuery(null, userId), cancellationToken);
+        Ardalis.Result.Result<UserProfileDto> result = await Sender.Send(new GetUserProfileQuery(null, userId), cancellationToken);
         return MapResultToActionResult(result);
     }
 
@@ -216,7 +216,7 @@ public sealed class UsersController(ISender sender) : ApiControllerBase(sender)
     [ProducesResponseType(StatusCodes.Status409Conflict)]
     public async Task<IActionResult> UpdateMe([FromBody] UpdateUserProfileRequest request, CancellationToken cancellationToken)
     {
-        if (!User.TryGetUserId(out var userId))
+        if (!User.TryGetUserId(out Guid userId))
         {
             return UnauthorizedProblem();
         }
@@ -227,7 +227,7 @@ public sealed class UsersController(ISender sender) : ApiControllerBase(sender)
             request.AvatarUrl,
             request.Bio,
             request.IsPublicProfile);
-        var result = await Sender.Send(command, cancellationToken);
+        Ardalis.Result.Result<UpdateUserProfileResponse> result = await Sender.Send(command, cancellationToken);
         return MapResultToActionResult(result);
     }
 
@@ -243,13 +243,13 @@ public sealed class UsersController(ISender sender) : ApiControllerBase(sender)
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> ChangePassword([FromBody] ChangePasswordRequest request, CancellationToken cancellationToken)
     {
-        if (!User.TryGetUserId(out var userId))
+        if (!User.TryGetUserId(out Guid userId))
         {
             return UnauthorizedProblem();
         }
 
         var command = new ChangePasswordCommand(userId, request.CurrentPassword, request.NewPassword);
-        var result = await Sender.Send(command, cancellationToken);
+        Ardalis.Result.Result result = await Sender.Send(command, cancellationToken);
         return MapResultToActionResult(result);
     }
 
@@ -265,12 +265,12 @@ public sealed class UsersController(ISender sender) : ApiControllerBase(sender)
     [ProducesResponseType(StatusCodes.Status429TooManyRequests)]
     public async Task<IActionResult> ResendEmailVerification(CancellationToken cancellationToken)
     {
-        if (!User.TryGetUserId(out var userId))
+        if (!User.TryGetUserId(out Guid userId))
         {
             return UnauthorizedProblem();
         }
 
-        var result = await Sender.Send(new ResendEmailVerificationCommand(userId), cancellationToken);
+        Ardalis.Result.Result result = await Sender.Send(new ResendEmailVerificationCommand(userId), cancellationToken);
         return result.IsSuccess ? Ok() : MapResultToActionResult(result);
     }
 
@@ -289,12 +289,12 @@ public sealed class UsersController(ISender sender) : ApiControllerBase(sender)
         [FromBody] RequestEmailChangeRequest request,
         CancellationToken cancellationToken)
     {
-        if (!User.TryGetUserId(out var userId))
+        if (!User.TryGetUserId(out Guid userId))
         {
             return UnauthorizedProblem();
         }
 
-        var result = await Sender.Send(
+        Ardalis.Result.Result result = await Sender.Send(
             new RequestEmailChangeCommand(userId, request.NewEmail, request.CurrentPassword),
             cancellationToken);
         return result.IsSuccess ? Ok() : MapResultToActionResult(result);
@@ -313,13 +313,13 @@ public sealed class UsersController(ISender sender) : ApiControllerBase(sender)
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> UpdateSocials([FromBody] UpdateUserSocialLinksRequest request, CancellationToken cancellationToken)
     {
-        if (!User.TryGetUserId(out var userId))
+        if (!User.TryGetUserId(out Guid userId))
         {
             return UnauthorizedProblem();
         }
 
         var command = new UpdateUserSocialLinksCommand(userId, request.Links);
-        var result = await Sender.Send(command, cancellationToken);
+        Ardalis.Result.Result<List<UserSocialLinkDto>> result = await Sender.Send(command, cancellationToken);
         return MapResultToActionResult(result);
     }
 
@@ -332,8 +332,8 @@ public sealed class UsersController(ISender sender) : ApiControllerBase(sender)
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> GetByUsername(string username, CancellationToken cancellationToken)
     {
-        var currentUserId = User.GetUserIdOrNull();
-        var result = await Sender.Send(new GetUserProfileQuery(username, currentUserId), cancellationToken);
+        Guid? currentUserId = User.GetUserIdOrNull();
+        Ardalis.Result.Result<UserProfileDto> result = await Sender.Send(new GetUserProfileQuery(username, currentUserId), cancellationToken);
         return MapResultToActionResult(result);
     }
 
@@ -348,12 +348,12 @@ public sealed class UsersController(ISender sender) : ApiControllerBase(sender)
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> GetMyAssetProcessingJobs([FromRoute] Guid assetId, CancellationToken cancellationToken)
     {
-        if (!User.TryGetUserId(out var userId))
+        if (!User.TryGetUserId(out Guid userId))
         {
             return UnauthorizedProblem();
         }
 
-        var result = await Sender.Send(new GetMyAssetProcessingJobsQuery(assetId, userId), cancellationToken);
+        Ardalis.Result.Result<IReadOnlyList<AssetProcessingJobDto>> result = await Sender.Send(new GetMyAssetProcessingJobsQuery(assetId, userId), cancellationToken);
         return MapResultToActionResult(result);
     }
 
@@ -368,12 +368,12 @@ public sealed class UsersController(ISender sender) : ApiControllerBase(sender)
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> GetMyAssetVersionProcessingJobs([FromRoute] Guid assetVersionId, CancellationToken cancellationToken)
     {
-        if (!User.TryGetUserId(out var userId))
+        if (!User.TryGetUserId(out Guid userId))
         {
             return UnauthorizedProblem();
         }
 
-        var result = await Sender.Send(new GetMyAssetVersionProcessingJobsQuery(assetVersionId, userId), cancellationToken);
+        Ardalis.Result.Result<IReadOnlyList<AssetProcessingJobDto>> result = await Sender.Send(new GetMyAssetVersionProcessingJobsQuery(assetVersionId, userId), cancellationToken);
         return MapResultToActionResult(result);
     }
 
@@ -389,12 +389,12 @@ public sealed class UsersController(ISender sender) : ApiControllerBase(sender)
     [ProducesResponseType(StatusCodes.Status429TooManyRequests)]
     public async Task<IActionResult> EnqueueListingCopilot([FromRoute] Guid assetVersionId, CancellationToken cancellationToken)
     {
-        if (!User.TryGetUserId(out var userId))
+        if (!User.TryGetUserId(out Guid userId))
         {
             return UnauthorizedProblem();
         }
 
-        var result = await Sender.Send(new EnqueueListingCopilotCommand(assetVersionId, userId), cancellationToken);
+        Ardalis.Result.Result<ListingCopilotEnqueueResponse> result = await Sender.Send(new EnqueueListingCopilotCommand(assetVersionId, userId), cancellationToken);
         return result.IsSuccess ? Accepted(result.Value) : MapResultToActionResult(result);
     }
 
@@ -406,12 +406,12 @@ public sealed class UsersController(ISender sender) : ApiControllerBase(sender)
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> GetListingCopilotSuggestion([FromRoute] Guid assetVersionId, CancellationToken cancellationToken)
     {
-        if (!User.TryGetUserId(out var userId))
+        if (!User.TryGetUserId(out Guid userId))
         {
             return UnauthorizedProblem();
         }
 
-        var result = await Sender.Send(new GetListingCopilotSuggestionQuery(assetVersionId, userId), cancellationToken);
+        Ardalis.Result.Result<ListingCopilotSuggestionDto> result = await Sender.Send(new GetListingCopilotSuggestionQuery(assetVersionId, userId), cancellationToken);
         return MapResultToActionResult(result);
     }
 }

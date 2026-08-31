@@ -1,13 +1,13 @@
+using Ardalis.Result;
+using AssetBlock.Application.Messaging;
 using AssetBlock.Domain.Abstractions.Services;
 using AssetBlock.Domain.Core.Constants;
-using Ardalis.Result;
-using AssetBlock.Domain.Core.Entities;
-using AssetBlock.Domain.Core.Primitives.Api;
-using AssetBlock.Application.Messaging;
-using AssetBlock.Domain.Core.Exceptions;
 using AssetBlock.Domain.Core.Dto.Audit;
 using AssetBlock.Domain.Core.Dto.Email;
+using AssetBlock.Domain.Core.Entities;
 using AssetBlock.Domain.Core.Enums;
+using AssetBlock.Domain.Core.Exceptions;
+using AssetBlock.Domain.Core.Primitives.Api;
 using Microsoft.Extensions.Logging;
 
 namespace AssetBlock.Application.UseCases.Auth.Register;
@@ -24,7 +24,7 @@ internal sealed class RegisterCommandHandler(
 {
     public async Task<Result<TokensResponse>> Handle(RegisterCommand request, CancellationToken cancellationToken)
     {
-        var existing = await userStore.GetByEmail(request.Email, cancellationToken);
+        User? existing = await userStore.GetByEmail(request.Email, cancellationToken);
         if (existing is not null)
         {
             logger.LogWarning("Register failed: email already exists");
@@ -49,7 +49,7 @@ internal sealed class RegisterCommandHandler(
                 tokens = jwtTokenService.GenerateTokenPair(user.Id, user.Username, user.Email, user.Role);
                 await jwtTokenService.StoreRefreshToken(user.Id, tokens.RefreshToken, tokens.RefreshExpiresAt, ct);
 
-                var action = await emailActionStore.IssueOrReplace(
+                EmailAction action = await emailActionStore.IssueOrReplace(
                     user.Id,
                     EmailActionPurpose.EMAIL_VERIFICATION,
                     user.Email,

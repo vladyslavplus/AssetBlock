@@ -1,9 +1,11 @@
+using System.Formats.Tar;
 using System.IO.Compression;
 using System.Text;
+using AssetBlock.Domain.Core.Dto;
 using AssetBlock.Domain.Core.Primitives.AppSettingsOptions;
 using AssetBlock.Infrastructure.Services;
-using System.Formats.Tar;
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Options;
 
 namespace AssetBlock.Infrastructure.Tests.Services;
 
@@ -13,7 +15,7 @@ public sealed class ArchiveSafetyInspectorTests
 
     public ArchiveSafetyInspectorTests()
     {
-        var options = Microsoft.Extensions.Options.Options.Create(new ArchiveInspectionOptions
+        IOptions<ArchiveInspectionOptions> options = Microsoft.Extensions.Options.Options.Create(new ArchiveInspectionOptions
         {
             MaxEntries = 100,
             MaxTotalExpandedBytes = 10 * 1024 * 1024,
@@ -47,12 +49,12 @@ public sealed class ArchiveSafetyInspectorTests
 
         const string readme = "# Sample Asset\n\nThis is a clean asset package with documentation.";
 
-        await using var zip = CreateZip(
+        await using MemoryStream zip = CreateZip(
             ("README.md", readme),
             ("package.json", packageJson),
             ("src/index.js", "console.log('hello');"));
 
-        var result = await _sut.Inspect(zip, "asset.zip");
+        ArchiveSafetyResult result = await _sut.Inspect(zip, "asset.zip");
 
         result.IsSafe.Should().BeTrue();
         result.FileCount.Should().Be(3);
@@ -67,9 +69,9 @@ public sealed class ArchiveSafetyInspectorTests
     [Fact]
     public async Task Inspect_WhenPathTraversal_ShouldRejectWithSpecificCode()
     {
-        await using var zip = CreateZip(("../evil.sh", "#!/bin/sh\nrm -rf /"));
+        await using MemoryStream zip = CreateZip(("../evil.sh", "#!/bin/sh\nrm -rf /"));
 
-        var result = await _sut.Inspect(zip, "evil.zip");
+        ArchiveSafetyResult result = await _sut.Inspect(zip, "evil.zip");
 
         result.IsSafe.Should().BeFalse();
         result.ErrorCode.Should().Be("ARCHIVE_PATH_TRAVERSAL");
@@ -78,9 +80,9 @@ public sealed class ArchiveSafetyInspectorTests
     [Fact]
     public async Task Inspect_WhenAbsolutePath_ShouldRejectWithSpecificCode()
     {
-        await using var zip = CreateZip(("/etc/shadow", "root:secret"));
+        await using MemoryStream zip = CreateZip(("/etc/shadow", "root:secret"));
 
-        var result = await _sut.Inspect(zip, "evil.zip");
+        ArchiveSafetyResult result = await _sut.Inspect(zip, "evil.zip");
 
         result.IsSafe.Should().BeFalse();
         result.ErrorCode.Should().Be("ARCHIVE_ABSOLUTE_PATH");
@@ -93,7 +95,7 @@ public sealed class ArchiveSafetyInspectorTests
         await using (new ZipArchive(ms, ZipArchiveMode.Create, leaveOpen: true)) { }
         ms.Position = 0;
 
-        var result = await _sut.Inspect(ms, "empty.zip");
+        ArchiveSafetyResult result = await _sut.Inspect(ms, "empty.zip");
 
         result.IsSafe.Should().BeFalse();
         result.ErrorCode.Should().Be("ARCHIVE_EMPTY");
@@ -102,10 +104,10 @@ public sealed class ArchiveSafetyInspectorTests
     [Fact]
     public async Task Inspect_WhenNonSeekableValidZip_ShouldReturnSafe()
     {
-        await using var zip = CreateZip(("README.md", "# ok"));
+        await using MemoryStream zip = CreateZip(("README.md", "# ok"));
         await using var stream = new NonSeekableStream(zip.ToArray());
 
-        var result = await _sut.Inspect(stream, "test.zip");
+        ArchiveSafetyResult result = await _sut.Inspect(stream, "test.zip");
 
         result.IsSafe.Should().BeTrue();
     }
@@ -117,13 +119,13 @@ public sealed class ArchiveSafetyInspectorTests
         await using var ms = new MemoryStream();
         await using (var archive = new ZipArchive(ms, ZipArchiveMode.Create, leaveOpen: true))
         {
-            var entry = archive.CreateEntry("bomb.bin", CompressionLevel.Optimal);
-            await using var s = await entry.OpenAsync();
+            ZipArchiveEntry entry = archive.CreateEntry("bomb.bin", CompressionLevel.Optimal);
+            await using Stream s = await entry.OpenAsync();
             await s.WriteAsync(zeros);
         }
 
         ms.Position = 0;
-        var result = await _sut.Inspect(ms, "bomb.zip");
+        ArchiveSafetyResult result = await _sut.Inspect(ms, "bomb.zip");
 
         result.IsSafe.Should().BeFalse();
         result.ErrorCode.Should().Be("ARCHIVE_COMPRESSION_RATIO_EXCEEDED");
@@ -132,10 +134,10 @@ public sealed class ArchiveSafetyInspectorTests
     [Fact]
     public async Task Inspect_WhenZipContainsNestedZip_ShouldTreatInnerArchiveAsOrdinaryFile()
     {
-        await using var inner = CreateZip(("README.md", "# nested"));
-        await using var outer = CreateZipWithBinary(("nested.zip", inner.ToArray()));
+        await using MemoryStream inner = CreateZip(("README.md", "# nested"));
+        await using MemoryStream outer = CreateZipWithBinary(("nested.zip", inner.ToArray()));
 
-        var result = await _sut.Inspect(outer, "outer.zip");
+        ArchiveSafetyResult result = await _sut.Inspect(outer, "outer.zip");
 
         result.IsSafe.Should().BeTrue();
         result.FileCount.Should().Be(1);
@@ -145,7 +147,7 @@ public sealed class ArchiveSafetyInspectorTests
     [Fact]
     public async Task Inspect_WhenTarGzCompressionRatioExceeded_ShouldRejectBeforeFullyExpanding()
     {
-        var options = Microsoft.Extensions.Options.Options.Create(new ArchiveInspectionOptions
+        IOptions<ArchiveInspectionOptions> options = Microsoft.Extensions.Options.Options.Create(new ArchiveInspectionOptions
         {
             MaxEntries = 10,
             MaxTotalExpandedBytes = 50 * 1024 * 1024,
@@ -159,9 +161,9 @@ public sealed class ArchiveSafetyInspectorTests
         });
         var sut = new ArchiveSafetyInspector(options, NullLogger<ArchiveSafetyInspector>.Instance);
         const int uncompressedBytes = 4 * 1024 * 1024;
-        await using var archive = CreateTarGzZeros(uncompressedBytes);
+        await using MemoryStream archive = CreateTarGzZeros(uncompressedBytes);
 
-        var result = await sut.Inspect(archive, "bomb.tar.gz");
+        ArchiveSafetyResult result = await sut.Inspect(archive, "bomb.tar.gz");
 
         result.IsSafe.Should().BeFalse();
         result.ErrorCode.Should().Be("ARCHIVE_COMPRESSION_RATIO_EXCEEDED");
@@ -172,7 +174,7 @@ public sealed class ArchiveSafetyInspectorTests
     [Fact]
     public async Task Inspect_WhenPlainTarContainsZeros_ShouldNotApplyGzipRatio()
     {
-        var options = Microsoft.Extensions.Options.Options.Create(new ArchiveInspectionOptions
+        IOptions<ArchiveInspectionOptions> options = Microsoft.Extensions.Options.Options.Create(new ArchiveInspectionOptions
         {
             MaxEntries = 10,
             MaxTotalExpandedBytes = 10 * 1024 * 1024,
@@ -185,9 +187,9 @@ public sealed class ArchiveSafetyInspectorTests
             MaxManifestBytes = 1024
         });
         var sut = new ArchiveSafetyInspector(options, NullLogger<ArchiveSafetyInspector>.Instance);
-        await using var tar = CreateTarZeros(2 * 1024 * 1024, gzip: false);
+        await using MemoryStream tar = CreateTarZeros(2 * 1024 * 1024, gzip: false);
 
-        var result = await sut.Inspect(tar, "zeros.tar");
+        ArchiveSafetyResult result = await sut.Inspect(tar, "zeros.tar");
 
         result.IsSafe.Should().BeTrue();
         result.FileCount.Should().Be(1);
@@ -197,8 +199,8 @@ public sealed class ArchiveSafetyInspectorTests
     [Fact]
     public async Task Inspect_WhenDuplicatePathsDifferOnlyByCase_ShouldReject()
     {
-        await using var zip = CreateZip(("README.md", "a"), ("readme.md", "b"));
-        var result = await _sut.Inspect(zip, "dup.zip");
+        await using MemoryStream zip = CreateZip(("README.md", "a"), ("readme.md", "b"));
+        ArchiveSafetyResult result = await _sut.Inspect(zip, "dup.zip");
         result.IsSafe.Should().BeFalse();
         result.ErrorCode.Should().Be("ARCHIVE_DUPLICATE_ENTRY");
     }
@@ -207,8 +209,8 @@ public sealed class ArchiveSafetyInspectorTests
     public async Task Inspect_WhenPathDepthExceeded_ShouldReject()
     {
         var deep = string.Join('/', Enumerable.Repeat("d", 40)) + "/file.txt";
-        await using var zip = CreateZip((deep, "x"));
-        var result = await _sut.Inspect(zip, "deep.zip");
+        await using MemoryStream zip = CreateZip((deep, "x"));
+        ArchiveSafetyResult result = await _sut.Inspect(zip, "deep.zip");
         result.IsSafe.Should().BeFalse();
         result.ErrorCode.Should().Be("ARCHIVE_PATH_TOO_DEEP");
     }
@@ -216,7 +218,7 @@ public sealed class ArchiveSafetyInspectorTests
     [Fact]
     public async Task Inspect_WhenReadmeExceedsLimit_ShouldKeepUtf8Boundary()
     {
-        var options = Microsoft.Extensions.Options.Options.Create(new ArchiveInspectionOptions
+        IOptions<ArchiveInspectionOptions> options = Microsoft.Extensions.Options.Options.Create(new ArchiveInspectionOptions
         {
             MaxEntries = 10,
             MaxTotalExpandedBytes = 1024 * 1024,
@@ -230,8 +232,8 @@ public sealed class ArchiveSafetyInspectorTests
         });
         var sut = new ArchiveSafetyInspector(options, NullLogger<ArchiveSafetyInspector>.Instance);
         var readme = "éééééééééééé"; // 2-byte UTF-8 chars
-        await using var zip = CreateZip(("README.md", readme));
-        var result = await sut.Inspect(zip, "readme.zip");
+        await using MemoryStream zip = CreateZip(("README.md", readme));
+        ArchiveSafetyResult result = await sut.Inspect(zip, "readme.zip");
         result.IsSafe.Should().BeTrue();
         Encoding.UTF8.GetByteCount(result.ReadmeContent!).Should().BeLessThanOrEqualTo(16);
     }
@@ -239,7 +241,7 @@ public sealed class ArchiveSafetyInspectorTests
     [Fact]
     public async Task Inspect_WhenExpandedBytesExceedEntryLimit_ShouldRejectEvenIfMetadataLooksSmall()
     {
-        var options = Microsoft.Extensions.Options.Options.Create(new ArchiveInspectionOptions
+        IOptions<ArchiveInspectionOptions> options = Microsoft.Extensions.Options.Options.Create(new ArchiveInspectionOptions
         {
             MaxEntries = 10,
             MaxTotalExpandedBytes = 1024 * 1024,
@@ -252,8 +254,8 @@ public sealed class ArchiveSafetyInspectorTests
             MaxManifestBytes = 1024
         });
         var sut = new ArchiveSafetyInspector(options, NullLogger<ArchiveSafetyInspector>.Instance);
-        await using var zip = CreateZip(("payload.bin", "0123456789ABCDEF"));
-        var result = await sut.Inspect(zip, "over.zip");
+        await using MemoryStream zip = CreateZip(("payload.bin", "0123456789ABCDEF"));
+        ArchiveSafetyResult result = await sut.Inspect(zip, "over.zip");
         result.IsSafe.Should().BeFalse();
         result.ErrorCode.Should().Be("ARCHIVE_ENTRY_TOO_LARGE");
     }
@@ -264,8 +266,8 @@ public sealed class ArchiveSafetyInspectorTests
     [InlineData("asset.tgz", true)]
     public async Task Inspect_WhenAllowedTarFamily_ShouldReturnSafe(string fileName, bool gzip)
     {
-        await using var tar = CreateTar(("README.md", "# tar"), gzip);
-        var result = await _sut.Inspect(tar, fileName);
+        await using MemoryStream tar = CreateTar(("README.md", "# tar"), gzip);
+        ArchiveSafetyResult result = await _sut.Inspect(tar, fileName);
         result.IsSafe.Should().BeTrue();
         result.FileCount.Should().Be(1);
     }
@@ -278,8 +280,8 @@ public sealed class ArchiveSafetyInspectorTests
     [InlineData(TarEntryType.BlockDevice, "ARCHIVE_SPECIAL_ENTRY_NOT_ALLOWED")]
     public async Task Inspect_WhenTarSpecialEntry_ShouldReject(TarEntryType entryType, string errorCode)
     {
-        await using var tar = CreateTar(("special", string.Empty, entryType, "target"));
-        var result = await _sut.Inspect(tar, "asset.tar");
+        await using MemoryStream tar = CreateTar(("special", string.Empty, entryType, "target"));
+        ArchiveSafetyResult result = await _sut.Inspect(tar, "asset.tar");
         result.IsSafe.Should().BeFalse();
         result.ErrorCode.Should().Be(errorCode);
     }
@@ -326,7 +328,7 @@ public sealed class ArchiveSafetyInspectorTests
         }
 
         tar.Position = 0;
-        var result = await _sut.Inspect(tar, "asset.tar");
+        ArchiveSafetyResult result = await _sut.Inspect(tar, "asset.tar");
         result.IsSafe.Should().BeTrue();
         result.FileCount.Should().Be(1);
     }
@@ -334,7 +336,7 @@ public sealed class ArchiveSafetyInspectorTests
     [Fact]
     public async Task Inspect_WhenRemainingTotalBudgetIsSmall_ShouldStopBeforeFullyExpandingNextEntry()
     {
-        var options = Microsoft.Extensions.Options.Options.Create(new ArchiveInspectionOptions
+        IOptions<ArchiveInspectionOptions> options = Microsoft.Extensions.Options.Options.Create(new ArchiveInspectionOptions
         {
             MaxEntries = 10,
             MaxTotalExpandedBytes = 40,
@@ -347,10 +349,10 @@ public sealed class ArchiveSafetyInspectorTests
             MaxManifestBytes = 1024
         });
         var sut = new ArchiveSafetyInspector(options, NullLogger<ArchiveSafetyInspector>.Instance);
-        await using var zip = CreateZip(
+        await using MemoryStream zip = CreateZip(
             ("small.bin", new string('a', 32)),
             ("huge.bin", new string('b', 2 * 1024 * 1024)));
-        var result = await sut.Inspect(zip, "budget.zip");
+        ArchiveSafetyResult result = await sut.Inspect(zip, "budget.zip");
         result.IsSafe.Should().BeFalse();
         result.ErrorCode.Should().Be("ARCHIVE_TOTAL_SIZE_EXCEEDED");
     }
@@ -451,10 +453,10 @@ public sealed class ArchiveSafetyInspectorTests
         var ms = new MemoryStream();
         using (var archive = new ZipArchive(ms, ZipArchiveMode.Create, leaveOpen: true))
         {
-            foreach (var (name, content) in entries)
+            foreach ((var name, var content) in entries)
             {
-                var entry = archive.CreateEntry(name, CompressionLevel.NoCompression);
-                using var stream = entry.Open();
+                ZipArchiveEntry entry = archive.CreateEntry(name, CompressionLevel.NoCompression);
+                using Stream stream = entry.Open();
                 using var writer = new StreamWriter(stream, Encoding.UTF8);
                 writer.Write(content);
             }
@@ -469,10 +471,10 @@ public sealed class ArchiveSafetyInspectorTests
         var ms = new MemoryStream();
         using (var archive = new ZipArchive(ms, ZipArchiveMode.Create, leaveOpen: true))
         {
-            foreach (var (name, content) in entries)
+            foreach ((var name, var content) in entries)
             {
-                var entry = archive.CreateEntry(name, CompressionLevel.NoCompression);
-                using var stream = entry.Open();
+                ZipArchiveEntry entry = archive.CreateEntry(name, CompressionLevel.NoCompression);
+                using Stream stream = entry.Open();
                 stream.Write(content);
             }
         }

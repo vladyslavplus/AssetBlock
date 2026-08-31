@@ -1,6 +1,7 @@
 using AssetBlock.Domain.Core.Enums;
 using AssetBlock.Domain.Core.Primitives.AppSettingsOptions;
 using AssetBlock.Infrastructure.Options;
+using Microsoft.Extensions.Options;
 
 namespace AssetBlock.Infrastructure.Tests.OptionsValidatorTests;
 
@@ -11,21 +12,21 @@ public sealed class EmailOptionsValidatorTests
     [Fact]
     public void Validate_WhenMailpitLocalConfigValid_ShouldSucceed()
     {
-        var result = _sut.Validate(null, CreateValidMailpit());
+        ValidateOptionsResult result = _sut.Validate(null, CreateValidMailpit());
         result.Succeeded.Should().BeTrue();
     }
 
     [Fact]
     public void Validate_WhenPlaceholders_ShouldFail()
     {
-        var options = CreateValidMailpit();
+        EmailOptions options = CreateValidMailpit();
         options.FromName = "<AssetBlock>";
         options.FromAddress = "<noreply@example.com>";
         options.PublicAppBaseUrl = "<public-app-base-url>";
         options.MessageIdDomain = "<message-id-domain>";
         options.Smtp.Host = "<smtp-host>";
 
-        var result = _sut.Validate(null, options);
+        ValidateOptionsResult result = _sut.Validate(null, options);
 
         result.Failed.Should().BeTrue();
         result.Failures.Should().Contain(m => m.Contains("FromName"));
@@ -38,10 +39,10 @@ public sealed class EmailOptionsValidatorTests
     [Fact]
     public void Validate_WhenProviderNotSmtp_ShouldFail()
     {
-        var options = CreateValidMailpit();
+        EmailOptions options = CreateValidMailpit();
         options.Provider = "Resend";
 
-        var result = _sut.Validate(null, options);
+        ValidateOptionsResult result = _sut.Validate(null, options);
 
         result.Failed.Should().BeTrue();
         result.Failures.Should().Contain(m => m.Contains("Provider"));
@@ -50,10 +51,10 @@ public sealed class EmailOptionsValidatorTests
     [Fact]
     public void Validate_WhenPortInvalid_ShouldFail()
     {
-        var options = CreateValidMailpit();
+        EmailOptions options = CreateValidMailpit();
         options.Smtp.Port = 0;
 
-        var result = _sut.Validate(null, options);
+        ValidateOptionsResult result = _sut.Validate(null, options);
 
         result.Failed.Should().BeTrue();
         result.Failures.Should().Contain(m => m.Contains("Port"));
@@ -62,10 +63,10 @@ public sealed class EmailOptionsValidatorTests
     [Fact]
     public void Validate_WhenSecurityUndefined_ShouldFail()
     {
-        var options = CreateValidMailpit();
+        EmailOptions options = CreateValidMailpit();
         options.Smtp.Security = (SmtpSecurityMode)999;
 
-        var result = _sut.Validate(null, options);
+        ValidateOptionsResult result = _sut.Validate(null, options);
 
         result.Failed.Should().BeTrue();
         result.Failures.Should().Contain(m => m.Contains("Security"));
@@ -74,11 +75,11 @@ public sealed class EmailOptionsValidatorTests
     [Fact]
     public void Validate_WhenPartialCredentials_ShouldFail()
     {
-        var options = CreateValidMailpit();
+        EmailOptions options = CreateValidMailpit();
         options.Smtp.Username = "user";
         options.Smtp.Password = "";
 
-        var result = _sut.Validate(null, options);
+        ValidateOptionsResult result = _sut.Validate(null, options);
 
         result.Failed.Should().BeTrue();
         result.Failures.Should().Contain(m => m.Contains("Username") && m.Contains("Password"));
@@ -87,11 +88,11 @@ public sealed class EmailOptionsValidatorTests
     [Fact]
     public void Validate_WhenBothCredentialsEmpty_ShouldSucceed()
     {
-        var options = CreateValidMailpit();
+        EmailOptions options = CreateValidMailpit();
         options.Smtp.Username = "";
         options.Smtp.Password = "";
 
-        var result = _sut.Validate(null, options);
+        ValidateOptionsResult result = _sut.Validate(null, options);
 
         result.Succeeded.Should().BeTrue();
     }
@@ -99,11 +100,11 @@ public sealed class EmailOptionsValidatorTests
     [Fact]
     public void Validate_WhenBothCredentialsSet_ShouldSucceed()
     {
-        var options = CreateValidMailpit();
+        EmailOptions options = CreateValidMailpit();
         options.Smtp.Username = "user";
         options.Smtp.Password = "secret";
 
-        var result = _sut.Validate(null, options);
+        ValidateOptionsResult result = _sut.Validate(null, options);
 
         result.Succeeded.Should().BeTrue();
     }
@@ -111,11 +112,11 @@ public sealed class EmailOptionsValidatorTests
     [Fact]
     public void Validate_WhenBothCredentialPlaceholders_ShouldFail()
     {
-        var options = CreateValidMailpit();
+        EmailOptions options = CreateValidMailpit();
         options.Smtp.Username = "<user>";
         options.Smtp.Password = "<password>";
 
-        var result = _sut.Validate(null, options);
+        ValidateOptionsResult result = _sut.Validate(null, options);
 
         result.Failed.Should().BeTrue();
         result.Failures.Should().Contain(m => m.Contains("placeholders"));
@@ -124,11 +125,11 @@ public sealed class EmailOptionsValidatorTests
     [Fact]
     public void Validate_WhenUsernamePlaceholderAndRealPassword_ShouldFail()
     {
-        var options = CreateValidMailpit();
+        EmailOptions options = CreateValidMailpit();
         options.Smtp.Username = "<user>";
         options.Smtp.Password = "secret";
 
-        var result = _sut.Validate(null, options);
+        ValidateOptionsResult result = _sut.Validate(null, options);
 
         result.Failed.Should().BeTrue();
         result.Failures.Should().Contain(m => m.Contains("placeholders"));
@@ -137,11 +138,11 @@ public sealed class EmailOptionsValidatorTests
     [Fact]
     public void Validate_WhenRealUsernameAndPasswordPlaceholder_ShouldFail()
     {
-        var options = CreateValidMailpit();
+        EmailOptions options = CreateValidMailpit();
         options.Smtp.Username = "user";
         options.Smtp.Password = "<password>";
 
-        var result = _sut.Validate(null, options);
+        ValidateOptionsResult result = _sut.Validate(null, options);
 
         result.Failed.Should().BeTrue();
         result.Failures.Should().Contain(m => m.Contains("placeholders"));
@@ -150,10 +151,10 @@ public sealed class EmailOptionsValidatorTests
     [Fact]
     public void Validate_WhenTimeoutOutOfRange_ShouldFail()
     {
-        var options = CreateValidMailpit();
+        EmailOptions options = CreateValidMailpit();
         options.Smtp.TimeoutSeconds = EmailOptionsValidator.MAX_TIMEOUT_SECONDS + 1;
 
-        var result = _sut.Validate(null, options);
+        ValidateOptionsResult result = _sut.Validate(null, options);
 
         result.Failed.Should().BeTrue();
         result.Failures.Should().Contain(m => m.Contains("TimeoutSeconds"));
@@ -162,10 +163,10 @@ public sealed class EmailOptionsValidatorTests
     [Fact]
     public void Validate_WhenPublicAppBaseUrlIsOrigin_ShouldSucceed()
     {
-        var options = CreateValidMailpit();
+        EmailOptions options = CreateValidMailpit();
         options.PublicAppBaseUrl = "http://localhost:3000";
 
-        var result = _sut.Validate(null, options);
+        ValidateOptionsResult result = _sut.Validate(null, options);
 
         result.Succeeded.Should().BeTrue();
     }
@@ -177,10 +178,10 @@ public sealed class EmailOptionsValidatorTests
     [InlineData("https://user:pass@app.test")]
     public void Validate_WhenPublicAppBaseUrlNotOrigin_ShouldFail(string url)
     {
-        var options = CreateValidMailpit();
+        EmailOptions options = CreateValidMailpit();
         options.PublicAppBaseUrl = url;
 
-        var result = _sut.Validate(null, options);
+        ValidateOptionsResult result = _sut.Validate(null, options);
 
         result.Failed.Should().BeTrue();
         result.Failures.Should().Contain(m => m.Contains("PublicAppBaseUrl"));
@@ -189,10 +190,10 @@ public sealed class EmailOptionsValidatorTests
     [Fact]
     public void Validate_WhenMessageIdDomainHasWhitespace_ShouldFail()
     {
-        var options = CreateValidMailpit();
+        EmailOptions options = CreateValidMailpit();
         options.MessageIdDomain = "mail localhost";
 
-        var result = _sut.Validate(null, options);
+        ValidateOptionsResult result = _sut.Validate(null, options);
 
         result.Failed.Should().BeTrue();
         result.Failures.Should().Contain(m => m.Contains("MessageIdDomain"));
@@ -208,10 +209,10 @@ public sealed class EmailOptionsValidatorTests
     [InlineData("mail#frag")]
     public void Validate_WhenMessageIdDomainInvalidHostSyntax_ShouldFail(string domain)
     {
-        var options = CreateValidMailpit();
+        EmailOptions options = CreateValidMailpit();
         options.MessageIdDomain = domain;
 
-        var result = _sut.Validate(null, options);
+        ValidateOptionsResult result = _sut.Validate(null, options);
 
         result.Failed.Should().BeTrue();
         result.Failures.Should().Contain(m => m.Contains("MessageIdDomain"));
@@ -220,10 +221,10 @@ public sealed class EmailOptionsValidatorTests
     [Fact]
     public void Validate_WhenMessageIdDomainIsMailLocalhost_ShouldSucceed()
     {
-        var options = CreateValidMailpit();
+        EmailOptions options = CreateValidMailpit();
         options.MessageIdDomain = "mail.localhost";
 
-        var result = _sut.Validate(null, options);
+        ValidateOptionsResult result = _sut.Validate(null, options);
 
         result.Succeeded.Should().BeTrue();
     }

@@ -1,5 +1,6 @@
 using AssetBlock.Domain.Core.Primitives.AppSettingsOptions;
 using AssetBlock.Infrastructure.Options;
+using Microsoft.Extensions.Options;
 
 namespace AssetBlock.Infrastructure.Tests.Options;
 
@@ -18,7 +19,7 @@ public class ObservabilityOptionsValidatorTests
             TraceSampleRatio = -1.0
         };
 
-        var result = _sut.Validate(null, options);
+        ValidateOptionsResult result = _sut.Validate(null, options);
 
         result.Succeeded.Should().BeTrue();
     }
@@ -34,7 +35,7 @@ public class ObservabilityOptionsValidatorTests
             TraceSampleRatio = 1.0
         };
 
-        var result = _sut.Validate(null, options);
+        ValidateOptionsResult result = _sut.Validate(null, options);
 
         result.Succeeded.Should().BeTrue();
     }
@@ -53,7 +54,7 @@ public class ObservabilityOptionsValidatorTests
             TraceSampleRatio = 1.0
         };
 
-        var result = _sut.Validate(null, options);
+        ValidateOptionsResult result = _sut.Validate(null, options);
 
         result.Failed.Should().BeTrue();
         result.FailureMessage.Should().Contain("ServiceName is required");
@@ -75,7 +76,7 @@ public class ObservabilityOptionsValidatorTests
             TraceSampleRatio = 1.0
         };
 
-        var result = _sut.Validate(null, options);
+        ValidateOptionsResult result = _sut.Validate(null, options);
 
         result.Failed.Should().BeTrue();
         result.FailureMessage.Should().Contain("OtlpEndpoint must be a valid absolute HTTP/HTTPS URI");
@@ -97,7 +98,7 @@ public class ObservabilityOptionsValidatorTests
             TraceSampleRatio = ratio
         };
 
-        var result = _sut.Validate(null, options);
+        ValidateOptionsResult result = _sut.Validate(null, options);
 
         result.Failed.Should().BeTrue();
         result.FailureMessage.Should().Contain("TraceSampleRatio must be between 0.0 and 1.0");

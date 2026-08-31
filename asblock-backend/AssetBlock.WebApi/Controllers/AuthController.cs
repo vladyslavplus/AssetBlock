@@ -1,3 +1,5 @@
+using Ardalis.Result;
+using AssetBlock.Application.Messaging;
 using AssetBlock.Application.UseCases.Auth.ConfirmEmailChange;
 using AssetBlock.Application.UseCases.Auth.ConfirmEmailVerification;
 using AssetBlock.Application.UseCases.Auth.ConfirmPasswordReset;
@@ -8,8 +10,8 @@ using AssetBlock.Application.UseCases.Auth.Register;
 using AssetBlock.Application.UseCases.Auth.RequestPasswordReset;
 using AssetBlock.Domain.Core.Constants;
 using AssetBlock.Domain.Core.Dto.Auth;
+using AssetBlock.Domain.Core.Primitives.Api;
 using AssetBlock.WebApi.Constants;
-using AssetBlock.Application.Messaging;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
@@ -29,7 +31,7 @@ public sealed class AuthController(ISender sender) : ApiControllerBase(sender)
     public async Task<IActionResult> Login([FromBody] LoginRequest request, CancellationToken cancellationToken)
     {
         var command = new LoginCommand(request.Email, request.Password);
-        var result = await Sender.Send(command, cancellationToken);
+        Result<TokensResponse> result = await Sender.Send(command, cancellationToken);
         return MapResultToActionResult(result);
     }
 
@@ -44,7 +46,7 @@ public sealed class AuthController(ISender sender) : ApiControllerBase(sender)
     public async Task<IActionResult> Refresh([FromBody] RefreshTokenRequest request, CancellationToken cancellationToken)
     {
         var command = new RefreshTokenCommand(request.RefreshToken);
-        var result = await Sender.Send(command, cancellationToken);
+        Result<TokensResponse> result = await Sender.Send(command, cancellationToken);
         return MapResultToActionResult(result);
     }
 
@@ -59,7 +61,7 @@ public sealed class AuthController(ISender sender) : ApiControllerBase(sender)
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> Logout([FromBody] RefreshTokenRequest request, CancellationToken cancellationToken)
     {
-        var result = await Sender.Send(new LogoutCommand(request.RefreshToken), cancellationToken);
+        Result result = await Sender.Send(new LogoutCommand(request.RefreshToken), cancellationToken);
         return result.IsSuccess ? Ok() : MapResultToActionResult(result);
     }
 
@@ -74,7 +76,7 @@ public sealed class AuthController(ISender sender) : ApiControllerBase(sender)
     public async Task<IActionResult> Register([FromBody] RegisterRequest request, CancellationToken cancellationToken)
     {
         var command = new RegisterCommand(request.Username, request.Email, request.Password);
-        var result = await Sender.Send(command, cancellationToken);
+        Result<TokensResponse> result = await Sender.Send(command, cancellationToken);
         return MapResultToActionResult(result);
     }
 
@@ -91,7 +93,7 @@ public sealed class AuthController(ISender sender) : ApiControllerBase(sender)
         [FromBody] RequestPasswordResetRequest request,
         CancellationToken cancellationToken)
     {
-        var result = await Sender.Send(new RequestPasswordResetCommand(request.Email), cancellationToken);
+        Result result = await Sender.Send(new RequestPasswordResetCommand(request.Email), cancellationToken);
         return result.IsSuccess ? Accepted() : MapResultToActionResult(result);
     }
 
@@ -109,7 +111,7 @@ public sealed class AuthController(ISender sender) : ApiControllerBase(sender)
         [FromBody] ConfirmPasswordResetRequest request,
         CancellationToken cancellationToken)
     {
-        var result = await Sender.Send(
+        Result result = await Sender.Send(
             new ConfirmPasswordResetCommand(request.Token, request.NewPassword),
             cancellationToken);
         return result.IsSuccess ? Ok() : MapResultToActionResult(result);
@@ -129,7 +131,7 @@ public sealed class AuthController(ISender sender) : ApiControllerBase(sender)
         [FromBody] ConfirmEmailActionRequest request,
         CancellationToken cancellationToken)
     {
-        var result = await Sender.Send(new ConfirmEmailVerificationCommand(request.Token), cancellationToken);
+        Result result = await Sender.Send(new ConfirmEmailVerificationCommand(request.Token), cancellationToken);
         return result.IsSuccess ? Ok() : MapResultToActionResult(result);
     }
 
@@ -148,7 +150,7 @@ public sealed class AuthController(ISender sender) : ApiControllerBase(sender)
         [FromBody] ConfirmEmailActionRequest request,
         CancellationToken cancellationToken)
     {
-        var result = await Sender.Send(new ConfirmEmailChangeCommand(request.Token), cancellationToken);
+        Result result = await Sender.Send(new ConfirmEmailChangeCommand(request.Token), cancellationToken);
         return result.IsSuccess ? Ok() : MapResultToActionResult(result);
     }
 }

@@ -1,5 +1,6 @@
 using AssetBlock.Domain.Core.Primitives.AppSettingsOptions;
 using AssetBlock.Infrastructure.Options;
+using Microsoft.Extensions.Options;
 
 namespace AssetBlock.Infrastructure.Tests.OptionsValidatorTests;
 
@@ -11,7 +12,7 @@ public sealed class EncryptionOptionsValidatorTests
     public void Validate_WhenKeyringValid_ShouldSucceed()
     {
         var key = Convert.ToBase64String(new byte[EncryptionOptionsValidator.AES_256_KEY_LENGTH_BYTES]);
-        var result = _sut.Validate(null, new EncryptionOptions
+        ValidateOptionsResult result = _sut.Validate(null, new EncryptionOptions
         {
             CurrentKeyId = "k2",
             Keys = new Dictionary<string, string>
@@ -27,7 +28,7 @@ public sealed class EncryptionOptionsValidatorTests
     [Fact]
     public void Validate_WhenKeysEmpty_ShouldFail()
     {
-        var result = _sut.Validate(null, new EncryptionOptions
+        ValidateOptionsResult result = _sut.Validate(null, new EncryptionOptions
         {
             CurrentKeyId = "k1",
             Keys = new Dictionary<string, string>()
@@ -41,7 +42,7 @@ public sealed class EncryptionOptionsValidatorTests
     public void Validate_WhenCurrentKeyIdEmpty_ShouldFail()
     {
         var key = Convert.ToBase64String(new byte[EncryptionOptionsValidator.AES_256_KEY_LENGTH_BYTES]);
-        var result = _sut.Validate(null, new EncryptionOptions
+        ValidateOptionsResult result = _sut.Validate(null, new EncryptionOptions
         {
             CurrentKeyId = "",
             Keys = new Dictionary<string, string>
@@ -58,7 +59,7 @@ public sealed class EncryptionOptionsValidatorTests
     public void Validate_WhenCurrentKeyIdWhitespace_ShouldFail()
     {
         var key = Convert.ToBase64String(new byte[EncryptionOptionsValidator.AES_256_KEY_LENGTH_BYTES]);
-        var result = _sut.Validate(null, new EncryptionOptions
+        ValidateOptionsResult result = _sut.Validate(null, new EncryptionOptions
         {
             CurrentKeyId = "   ",
             Keys = new Dictionary<string, string>
@@ -75,7 +76,7 @@ public sealed class EncryptionOptionsValidatorTests
     public void Validate_WhenCurrentKeyIdMissingFromKeys_ShouldFail()
     {
         var key = Convert.ToBase64String(new byte[EncryptionOptionsValidator.AES_256_KEY_LENGTH_BYTES]);
-        var result = _sut.Validate(null, new EncryptionOptions
+        ValidateOptionsResult result = _sut.Validate(null, new EncryptionOptions
         {
             CurrentKeyId = "k3",
             Keys = new Dictionary<string, string>
@@ -94,7 +95,7 @@ public sealed class EncryptionOptionsValidatorTests
     {
         var key = Convert.ToBase64String(new byte[EncryptionOptionsValidator.AES_256_KEY_LENGTH_BYTES]);
         var longKeyId = new string('a', 65);
-        var result = _sut.Validate(null, new EncryptionOptions
+        ValidateOptionsResult result = _sut.Validate(null, new EncryptionOptions
         {
             CurrentKeyId = longKeyId,
             Keys = new Dictionary<string, string>
@@ -111,7 +112,7 @@ public sealed class EncryptionOptionsValidatorTests
     public void Validate_WhenKeyringContainsEmptyKeyId_ShouldFail()
     {
         var key = Convert.ToBase64String(new byte[EncryptionOptionsValidator.AES_256_KEY_LENGTH_BYTES]);
-        var result = _sut.Validate(null, new EncryptionOptions
+        ValidateOptionsResult result = _sut.Validate(null, new EncryptionOptions
         {
             CurrentKeyId = "k1",
             Keys = new Dictionary<string, string>
@@ -128,7 +129,7 @@ public sealed class EncryptionOptionsValidatorTests
     [Fact]
     public void Validate_WhenKeyringKeyEmpty_ShouldFail()
     {
-        var result = _sut.Validate(null, new EncryptionOptions
+        ValidateOptionsResult result = _sut.Validate(null, new EncryptionOptions
         {
             CurrentKeyId = "k1",
             Keys = new Dictionary<string, string>
@@ -144,7 +145,7 @@ public sealed class EncryptionOptionsValidatorTests
     [Fact]
     public void Validate_WhenKeyringKeyInvalidBase64_ShouldFail()
     {
-        var result = _sut.Validate(null, new EncryptionOptions
+        ValidateOptionsResult result = _sut.Validate(null, new EncryptionOptions
         {
             CurrentKeyId = "k1",
             Keys = new Dictionary<string, string>
@@ -160,7 +161,7 @@ public sealed class EncryptionOptionsValidatorTests
     [Fact]
     public void Validate_WhenKeyringKeyDecodedLengthNot32Bytes_ShouldFail()
     {
-        var result = _sut.Validate(null, new EncryptionOptions
+        ValidateOptionsResult result = _sut.Validate(null, new EncryptionOptions
         {
             CurrentKeyId = "k1",
             Keys = new Dictionary<string, string>

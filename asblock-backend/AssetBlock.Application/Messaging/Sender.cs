@@ -22,7 +22,7 @@ internal sealed class Sender(IServiceProvider serviceProvider) : ISender
     private static Func<IServiceProvider, object, CancellationToken, Task<TResponse>> CreateDispatcher<TResponse>(
         Type requestType)
     {
-        var method = typeof(Sender).GetMethod(nameof(Dispatch), BindingFlags.NonPublic | BindingFlags.Static);
+        MethodInfo? method = typeof(Sender).GetMethod(nameof(Dispatch), BindingFlags.NonPublic | BindingFlags.Static);
         if (method is null)
         {
             throw new InvalidOperationException("Sender dispatch method was not found.");
@@ -42,7 +42,7 @@ internal sealed class Sender(IServiceProvider serviceProvider) : ISender
         var typedRequest = (TRequest)request;
         RequestHandlerDelegate<TResponse> pipeline = ct =>
         {
-            var handlers = services.GetServices<IRequestHandler<TRequest, TResponse>>().ToArray();
+            IRequestHandler<TRequest, TResponse>[] handlers = services.GetServices<IRequestHandler<TRequest, TResponse>>().ToArray();
             if (handlers.Length == 0)
             {
                 throw new InvalidOperationException(
@@ -58,11 +58,11 @@ internal sealed class Sender(IServiceProvider serviceProvider) : ISender
             return handlers[0].Handle(typedRequest, ct);
         };
 
-        var behaviors = services.GetServices<IPipelineBehavior<TRequest, TResponse>>().ToArray();
+        IPipelineBehavior<TRequest, TResponse>[] behaviors = services.GetServices<IPipelineBehavior<TRequest, TResponse>>().ToArray();
         for (var i = behaviors.Length - 1; i >= 0; i--)
         {
-            var behavior = behaviors[i];
-            var next = pipeline;
+            IPipelineBehavior<TRequest, TResponse> behavior = behaviors[i];
+            RequestHandlerDelegate<TResponse> next = pipeline;
             pipeline = ct => behavior.Handle(typedRequest, next, ct);
         }
 

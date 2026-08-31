@@ -2,6 +2,7 @@ using Ardalis.Result;
 using AssetBlock.Domain.Abstractions.Services;
 using AssetBlock.Domain.Core.Constants;
 using AssetBlock.Domain.Core.Dto.Audit;
+using AssetBlock.Domain.Core.Entities;
 using AssetBlock.Domain.Core.Enums;
 using Microsoft.Extensions.Logging;
 
@@ -25,7 +26,7 @@ internal static class BundleLifecycleTransition
         string logActionVerb,
         CancellationToken cancellationToken)
     {
-        var bundle = await bundleStore.GetById(bundleId, cancellationToken);
+        Bundle? bundle = await bundleStore.GetById(bundleId, cancellationToken);
         if (bundle is null)
         {
             return Result.NotFound(ErrorCodes.ERR_BUNDLE_NOT_FOUND);

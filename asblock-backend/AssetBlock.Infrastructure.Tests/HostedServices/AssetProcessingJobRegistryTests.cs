@@ -1,3 +1,4 @@
+using System.Reflection;
 using AssetBlock.Domain.Abstractions.Services;
 using AssetBlock.Domain.Core.Dto;
 using AssetBlock.Domain.Core.Enums;
@@ -48,7 +49,7 @@ public sealed class AssetProcessingJobRegistryTests
         var adapter2 = new AssetProcessingJobHandlerAdapter<TestInspectionHandler, ArchiveInspectionPayload, ArchiveInspectionResult>(
             AssetProcessingJobType.ARCHIVE_INSPECTION);
 
-        var act = () => new AssetProcessingJobRegistry([adapter1, adapter2]);
+        Func<AssetProcessingJobRegistry> act = () => new AssetProcessingJobRegistry([adapter1, adapter2]);
 
         act.Should().Throw<InvalidOperationException>()
             .WithMessage("*Duplicate job handlers registered*");
@@ -68,7 +69,7 @@ public sealed class AssetProcessingJobRegistryTests
     {
         var services = new ServiceCollection();
         services.AddScoped<TestInspectionHandler>();
-        var provider = services.BuildServiceProvider();
+        ServiceProvider provider = services.BuildServiceProvider();
 
         var adapter = new AssetProcessingJobHandlerAdapter<TestInspectionHandler, ArchiveInspectionPayload, ArchiveInspectionResult>(
             AssetProcessingJobType.ARCHIVE_INSPECTION);
@@ -92,7 +93,7 @@ public sealed class AssetProcessingJobRegistryTests
             DateTimeOffset.UtcNow,
             DateTimeOffset.UtcNow);
 
-        var outcome = await adapter.Execute(provider, claimedJob, CancellationToken.None);
+        AssetProcessingJobOutcome outcome = await adapter.Execute(provider, claimedJob, CancellationToken.None);
 
         outcome.Should().BeOfType<AssetProcessingJobOutcome.Success>();
         var success = (AssetProcessingJobOutcome.Success)outcome;
@@ -105,7 +106,7 @@ public sealed class AssetProcessingJobRegistryTests
     {
         var services = new ServiceCollection();
         services.AddScoped<WrongResultHandler>();
-        var provider = services.BuildServiceProvider();
+        ServiceProvider provider = services.BuildServiceProvider();
 
         var adapter = new AssetProcessingJobHandlerAdapter<WrongResultHandler, ArchiveInspectionPayload, ArchiveInspectionResult>(
             AssetProcessingJobType.ARCHIVE_INSPECTION);
@@ -129,7 +130,7 @@ public sealed class AssetProcessingJobRegistryTests
             DateTimeOffset.UtcNow,
             DateTimeOffset.UtcNow);
 
-        var act = () => adapter.Execute(provider, claimedJob, CancellationToken.None);
+        Func<Task<AssetProcessingJobOutcome>> act = () => adapter.Execute(provider, claimedJob, CancellationToken.None);
 
         await act.Should().ThrowAsync<InvalidAssetProcessingJobResultException>()
             .WithMessage("*returned result of type MalwareScanResult instead of ArchiveInspectionResult*");
@@ -140,7 +141,7 @@ public sealed class AssetProcessingJobRegistryTests
     {
         var services = new ServiceCollection();
         services.AddScoped<NullOutcomeHandler>();
-        var provider = services.BuildServiceProvider();
+        ServiceProvider provider = services.BuildServiceProvider();
 
         var adapter = new AssetProcessingJobHandlerAdapter<NullOutcomeHandler, ArchiveInspectionPayload, ArchiveInspectionResult>(
             AssetProcessingJobType.ARCHIVE_INSPECTION);
@@ -164,7 +165,7 @@ public sealed class AssetProcessingJobRegistryTests
             DateTimeOffset.UtcNow,
             DateTimeOffset.UtcNow);
 
-        var act = () => adapter.Execute(provider, claimedJob, CancellationToken.None);
+        Func<Task<AssetProcessingJobOutcome>> act = () => adapter.Execute(provider, claimedJob, CancellationToken.None);
 
         await act.Should().ThrowAsync<InvalidAssetProcessingJobResultException>()
             .WithMessage("*returned a null outcome*");
@@ -174,19 +175,19 @@ public sealed class AssetProcessingJobRegistryTests
     public void OutcomeFactories_ValidateArgumentsStrictly()
     {
         // Null result
-        var actNullSuccess = () => AssetProcessingJobOutcome.Succeeded(null!);
+        Func<AssetProcessingJobOutcome> actNullSuccess = () => AssetProcessingJobOutcome.Succeeded(null!);
         actNullSuccess.Should().Throw<ArgumentNullException>();
 
         // Bad error code format
-        var actBadCode = () => AssetProcessingJobOutcome.Terminal("invalid-lowercase", "Safe summary");
+        Func<AssetProcessingJobOutcome> actBadCode = () => AssetProcessingJobOutcome.Terminal("invalid-lowercase", "Safe summary");
         actBadCode.Should().Throw<ArgumentException>();
 
         // Empty summary
-        var actEmptySummary = () => AssetProcessingJobOutcome.Terminal("VALID_CODE", "   ");
+        Func<AssetProcessingJobOutcome> actEmptySummary = () => AssetProcessingJobOutcome.Terminal("VALID_CODE", "   ");
         actEmptySummary.Should().Throw<ArgumentException>();
 
         // Negative retry delay
-        var actNegativeDelay = () => AssetProcessingJobOutcome.Retryable("VALID_CODE", "Safe summary", TimeSpan.FromSeconds(-5));
+        Func<AssetProcessingJobOutcome> actNegativeDelay = () => AssetProcessingJobOutcome.Retryable("VALID_CODE", "Safe summary", TimeSpan.FromSeconds(-5));
         actNegativeDelay.Should().Throw<ArgumentOutOfRangeException>();
 
         // Valid outcomes pass
@@ -203,24 +204,24 @@ public sealed class AssetProcessingJobRegistryTests
     [Fact]
     public void OutcomeTypes_AreImmutableClassesWithoutPublicSettersOrInit()
     {
-        var types = new[]
-        {
+        Type[] types =
+        [
             typeof(AssetProcessingJobOutcome.Success),
             typeof(AssetProcessingJobOutcome.RetryableFailure),
             typeof(AssetProcessingJobOutcome.TerminalFailure)
-        };
+        ];
 
-        foreach (var type in types)
+        foreach (Type type in types)
         {
             type.IsClass.Should().BeTrue();
 
             // All public constructors should be 0 (only internal constructors)
-            var publicConstructors = type.GetConstructors(System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance);
+            ConstructorInfo[] publicConstructors = type.GetConstructors(BindingFlags.Public | BindingFlags.Instance);
             publicConstructors.Should().BeEmpty($"{type.Name} should not have public constructors.");
 
             // All properties must have no public setter or init setter
-            var publicProperties = type.GetProperties(System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance);
-            foreach (var prop in publicProperties)
+            PropertyInfo[] publicProperties = type.GetProperties(BindingFlags.Public | BindingFlags.Instance);
+            foreach (PropertyInfo prop in publicProperties)
             {
                 prop.CanWrite.Should().BeFalse($"{type.Name}.{prop.Name} should be get-only without setters or init.");
                 prop.GetSetMethod(nonPublic: true).Should().BeNull();

@@ -21,7 +21,7 @@ internal static class CollectionMutationGuard
         CancellationToken cancellationToken,
         bool requireDraft = false)
     {
-        var collection = await collectionStore.GetForUpdate(collectionId, cancellationToken);
+        Collection? collection = await collectionStore.GetForUpdate(collectionId, cancellationToken);
         if (collection is null)
         {
             return (Result.NotFound(ErrorCodes.ERR_COLLECTION_NOT_FOUND), null);

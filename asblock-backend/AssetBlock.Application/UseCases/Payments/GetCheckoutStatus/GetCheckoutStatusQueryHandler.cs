@@ -1,8 +1,9 @@
 using Ardalis.Result;
+using AssetBlock.Application.Messaging;
 using AssetBlock.Domain.Abstractions.Services;
 using AssetBlock.Domain.Core.Constants;
+using AssetBlock.Domain.Core.Entities;
 using AssetBlock.Domain.Core.Enums;
-using AssetBlock.Application.Messaging;
 
 namespace AssetBlock.Application.UseCases.Payments.GetCheckoutStatus;
 
@@ -15,13 +16,13 @@ internal sealed class GetCheckoutStatusQueryHandler(
         GetCheckoutStatusQuery request,
         CancellationToken cancellationToken)
     {
-        var intent = await checkoutIntentStore.GetByIdWithItems(request.CheckoutIntentId, cancellationToken);
+        CheckoutIntent? intent = await checkoutIntentStore.GetByIdWithItems(request.CheckoutIntentId, cancellationToken);
         if (intent is null || intent.UserId != request.UserId)
         {
             return Result.NotFound(ErrorCodes.ERR_NOT_FOUND);
         }
 
-        var order = await orderStore.GetByCheckoutIntentId(intent.Id, cancellationToken);
+        Order? order = await orderStore.GetByCheckoutIntentId(intent.Id, cancellationToken);
         if (order is not null || intent.Status == CheckoutIntentStatus.COMPLETED)
         {
             return Result.Success(new GetCheckoutStatusResponse(

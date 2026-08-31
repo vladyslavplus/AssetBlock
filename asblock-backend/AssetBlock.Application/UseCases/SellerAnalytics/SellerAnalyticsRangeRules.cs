@@ -30,12 +30,12 @@ internal static class SellerAnalyticsRangeRules
         validator.RuleFor(q => q)
             .Must(q =>
             {
-                var from = fromSelector(q);
-                var to = toSelector(q);
+                DateOnly from = fromSelector(q);
+                DateOnly to = toSelector(q);
                 var days = to.DayNumber - from.DayNumber;
                 try
                 {
-                    var compFrom = from.AddDays(-days);
+                    DateOnly compFrom = from.AddDays(-days);
                     return compFrom >= DateOnly.MinValue;
                 }
                 catch (ArgumentOutOfRangeException)

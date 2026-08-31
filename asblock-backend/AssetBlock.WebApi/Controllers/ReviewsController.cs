@@ -1,3 +1,5 @@
+using Ardalis.Result;
+using AssetBlock.Application.Messaging;
 using AssetBlock.Application.UseCases.Reviews.CreateReview;
 using AssetBlock.Application.UseCases.Reviews.DeleteReview;
 using AssetBlock.Application.UseCases.Reviews.GetReviewById;
@@ -6,7 +8,6 @@ using AssetBlock.Domain.Core.Constants;
 using AssetBlock.Domain.Core.Dto.Reviews;
 using AssetBlock.WebApi.Constants;
 using AssetBlock.WebApi.Extensions;
-using AssetBlock.Application.Messaging;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
@@ -26,14 +27,14 @@ public class ReviewsController(ISender sender) : ApiControllerBase(sender)
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
     public async Task<IActionResult> CreateReview(Guid assetId, [FromBody] CreateReviewRequest request, CancellationToken cancellationToken)
     {
-        if (!User.TryGetUserId(out var userId))
+        if (!User.TryGetUserId(out Guid userId))
         {
             return UnauthorizedProblem();
         }
 
         var command = new CreateReviewCommand(assetId, userId, request.Rating, request.Comment);
 
-        var result = await Sender.Send(command, cancellationToken);
+        Result result = await Sender.Send(command, cancellationToken);
         return result.IsSuccess ? Ok() : MapResultToActionResult(result);
     }
 
@@ -47,7 +48,7 @@ public class ReviewsController(ISender sender) : ApiControllerBase(sender)
     public async Task<IActionResult> GetReviews(Guid assetId, [FromQuery] GetReviewsRequest request, CancellationToken cancellationToken)
     {
         var query = new GetReviewsQuery(assetId, request);
-        var result = await Sender.Send(query, cancellationToken);
+        Result<Domain.Core.Dto.Paging.PagedResult<ReviewListItem>> result = await Sender.Send(query, cancellationToken);
         return MapResultToActionResult(result);
     }
 
@@ -61,7 +62,7 @@ public class ReviewsController(ISender sender) : ApiControllerBase(sender)
     public async Task<IActionResult> GetReviewById(Guid id, CancellationToken cancellationToken)
     {
         var query = new GetReviewByIdQuery(id);
-        var result = await Sender.Send(query, cancellationToken);
+        Result<ReviewDetailItem> result = await Sender.Send(query, cancellationToken);
         return MapResultToActionResult(result);
     }
 
@@ -78,7 +79,7 @@ public class ReviewsController(ISender sender) : ApiControllerBase(sender)
     public async Task<IActionResult> DeleteReview(Guid id, CancellationToken cancellationToken)
     {
         var command = new DeleteReviewCommand(id);
-        var result = await Sender.Send(command, cancellationToken);
+        Result result = await Sender.Send(command, cancellationToken);
         return MapResultToActionResult(result);
     }
 }

@@ -47,7 +47,7 @@ internal sealed class UpdateUserSocialLinksCommandValidator : AbstractValidator<
             return false;
         }
 
-        if (!Uri.TryCreate(url.Trim(), UriKind.Absolute, out var uri))
+        if (!Uri.TryCreate(url.Trim(), UriKind.Absolute, out Uri? uri))
         {
             return false;
         }

@@ -17,7 +17,7 @@ public sealed class RealtimeNotificationPublisherTests
         var outboxId = Guid.NewGuid();
         var recipientId = Guid.NewGuid();
         UserNotification? persisted = null;
-        var store = Substitute.For<INotificationStore>();
+        INotificationStore store = Substitute.For<INotificationStore>();
         store.GetBySourceOutboxMessageId(outboxId, Arg.Any<CancellationToken>())
             .Returns(_ => persisted);
         store.Add(Arg.Any<UserNotification>(), Arg.Any<CancellationToken>())
@@ -27,15 +27,15 @@ public sealed class RealtimeNotificationPublisherTests
                 return persisted;
             });
 
-        var clientProxy = Substitute.For<IClientProxy>();
+        IClientProxy clientProxy = Substitute.For<IClientProxy>();
         clientProxy.SendCoreAsync(
                 Arg.Any<string>(),
                 Arg.Any<object?[]>(),
                 Arg.Any<CancellationToken>())
             .Returns(Task.CompletedTask);
-        var clients = Substitute.For<IHubClients>();
+        IHubClients clients = Substitute.For<IHubClients>();
         clients.User(recipientId.ToString()).Returns(clientProxy);
-        var hubContext = Substitute.For<IHubContext<NotificationsHub>>();
+        IHubContext<NotificationsHub> hubContext = Substitute.For<IHubContext<NotificationsHub>>();
         hubContext.Clients.Returns(clients);
         var publisher = new RealtimeNotificationPublisher(
             hubContext,

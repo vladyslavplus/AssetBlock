@@ -11,14 +11,14 @@ public sealed class HealthEndpointsIntegrationTests(IntegrationTestFixture fixtu
     [Fact]
     public async Task Live_WhenProcessIsRunning_ShouldReturnHealthyJson()
     {
-        var client = fixture.Factory.CreateClient();
+        HttpClient client = fixture.Factory.CreateClient();
 
-        var response = await client.GetAsync(new Uri("/health/live", UriKind.Relative));
+        HttpResponseMessage response = await client.GetAsync(new Uri("/health/live", UriKind.Relative));
 
         response.StatusCode.Should().Be(HttpStatusCode.OK);
         response.Content.Headers.ContentType!.MediaType.Should().Be("application/json");
-        await using var stream = await response.Content.ReadAsStreamAsync();
-        using var document = await JsonDocument.ParseAsync(stream);
+        await using Stream stream = await response.Content.ReadAsStreamAsync();
+        using JsonDocument document = await JsonDocument.ParseAsync(stream);
         document.RootElement.GetProperty("status").GetString().Should().Be("Healthy");
         document.RootElement.GetProperty("checks").TryGetProperty("self", out _).Should().BeTrue();
     }

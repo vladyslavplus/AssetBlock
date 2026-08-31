@@ -25,11 +25,11 @@ internal sealed class SmtpEmailSender(
     {
         ArgumentNullException.ThrowIfNull(message);
 
-        var mime = BuildMimeMessage(message);
-        var smtp = _options.Smtp;
+        MimeMessage mime = BuildMimeMessage(message);
+        EmailSmtpOptions smtp = _options.Smtp;
         var timeout = TimeSpan.FromSeconds(smtp.TimeoutSeconds);
 
-        using var client = _clientFactory();
+        using ISmtpClient client = _clientFactory();
         client.Timeout = (int)timeout.TotalMilliseconds;
         var sendCompleted = false;
 

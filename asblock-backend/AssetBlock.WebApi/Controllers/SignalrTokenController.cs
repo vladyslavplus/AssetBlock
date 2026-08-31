@@ -1,5 +1,6 @@
 using AssetBlock.Domain.Abstractions.Services;
 using AssetBlock.Domain.Core.Constants;
+using AssetBlock.Domain.Core.Dto.Auth;
 using AssetBlock.WebApi.Constants;
 using AssetBlock.WebApi.Extensions;
 using AssetBlock.WebApi.ProblemDetails;
@@ -29,16 +30,16 @@ public sealed class SignalrTokenController(IJwtTokenService jwtTokenService) : C
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public IActionResult GetHubToken()
     {
-        if (!User.TryGetUserId(out var userId))
+        if (!User.TryGetUserId(out Guid userId))
         {
-            var problem = AssetBlockProblemDetails.Create(
+            Microsoft.AspNetCore.Mvc.ProblemDetails problem = AssetBlockProblemDetails.Create(
                 HttpContext,
                 StatusCodes.Status401Unauthorized,
                 ErrorCodes.ERR_AUTH_TOKEN_INVALID);
             return AssetBlockProblemDetails.ToActionResult(problem);
         }
 
-        var response = jwtTokenService.GenerateHubToken(userId);
+        HubTokenResponse response = jwtTokenService.GenerateHubToken(userId);
         return Ok(new { hubToken = response.HubToken, expiresAt = response.ExpiresAt });
     }
 }

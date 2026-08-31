@@ -1,6 +1,8 @@
 using AssetBlock.Domain.Core.Constants;
+using AssetBlock.Domain.Core.Dto.Paging;
 using AssetBlock.Domain.Core.Dto.Reviews;
 using AssetBlock.Domain.Core.Entities;
+using AssetBlock.Infrastructure.Persistence;
 using AssetBlock.Infrastructure.Persistence.Stores;
 using AssetBlock.Infrastructure.Tests.Infrastructure;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -12,7 +14,7 @@ public sealed class ReviewStoreTests
     [Fact]
     public async Task GetById_GetPaged_Exists_GetAverageRating()
     {
-        await using var db = InMemoryDbContextFactory.Create();
+        await using ApplicationDbContext db = InMemoryDbContextFactory.Create();
         var catId = Guid.NewGuid();
         db.Categories.Add(new Category { Id = catId, Name = "C", Slug = "c", CreatedAt = DateTimeOffset.UtcNow });
         var authorId = Guid.NewGuid();
@@ -65,12 +67,12 @@ public sealed class ReviewStoreTests
 
         (await sut.Exists(reviewerId, assetId)).Should().BeTrue();
 
-        var byId = await sut.GetById(review.Id);
+        Review? byId = await sut.GetById(review.Id);
         byId.Should().NotBeNull();
         byId.User.Should().NotBeNull();
         byId.User.Username.Should().Be("rev");
 
-        var paged = await sut.GetPaged(assetId, new GetReviewsRequest { Page = 1, PageSize = 10, SortBy = "Rating" });
+        PagedResult<ReviewListItem> paged = await sut.GetPaged(assetId, new GetReviewsRequest { Page = 1, PageSize = 10, SortBy = "Rating" });
         paged.Items.Should().Contain(r => r.Id == review.Id);
         paged.Items[0].Username.Should().Be("rev");
 

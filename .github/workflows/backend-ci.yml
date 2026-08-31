@@ -37,6 +37,10 @@ jobs:
           dotnet restore asblock-backend.slnx --locked-mode
           dotnet tool restore
 
+      - name: Verify code style
+        working-directory: asblock-backend
+        run: dotnet format asblock-backend.slnx style --no-restore --verify-no-changes --severity warn --diagnostics IDE0007 IDE0008
+
       - name: Build
         working-directory: asblock-backend
         run: dotnet build asblock-backend.slnx --no-restore --configuration Release

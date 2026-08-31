@@ -13,11 +13,11 @@ public class LoggingBehaviorTests
     [Fact]
     public async Task Handle_WhenNextSucceeds_ShouldReturnResponse()
     {
-        var logger = NullLogger<LoggingBehavior<LoginCommand, Result<TokensResponse>>>.Instance;
+        NullLogger<LoggingBehavior<LoginCommand, Result<TokensResponse>>> logger = NullLogger<LoggingBehavior<LoginCommand, Result<TokensResponse>>>.Instance;
         var behavior = new LoggingBehavior<LoginCommand, Result<TokensResponse>>(logger);
 
         var expected = Result.Success(new TokensResponse("a", "b", DateTimeOffset.UtcNow, DateTimeOffset.UtcNow));
-        var result = await behavior.Handle(
+        Result<TokensResponse> result = await behavior.Handle(
             new LoginCommand("a@b.com", "pwd"),
             _ => Task.FromResult(expected),
             CancellationToken.None);
@@ -28,10 +28,10 @@ public class LoggingBehaviorTests
     [Fact]
     public async Task Handle_WhenNextThrows_ShouldRethrow()
     {
-        var logger = NullLogger<LoggingBehavior<LoginCommand, Result<TokensResponse>>>.Instance;
+        NullLogger<LoggingBehavior<LoginCommand, Result<TokensResponse>>> logger = NullLogger<LoggingBehavior<LoginCommand, Result<TokensResponse>>>.Instance;
         var behavior = new LoggingBehavior<LoginCommand, Result<TokensResponse>>(logger);
 
-        var act = () => behavior.Handle(
+        Func<Task<Result<TokensResponse>>> act = () => behavior.Handle(
             new LoginCommand("a@b.com", "pwd"),
             _ => Task.FromException<Result<TokensResponse>>(new InvalidOperationException("boom")),
             CancellationToken.None);
@@ -47,7 +47,7 @@ public class LoggingBehaviorTests
         using var cts = new CancellationTokenSource();
         await cts.CancelAsync();
 
-        var act = () => behavior.Handle(
+        Func<Task<Result<TokensResponse>>> act = () => behavior.Handle(
             new LoginCommand("a@b.com", "pwd"),
             _ => Task.FromException<Result<TokensResponse>>(new OperationCanceledException(cts.Token)),
             cts.Token);
@@ -63,7 +63,7 @@ public class LoggingBehaviorTests
         var logger = new RecordingLogger<LoggingBehavior<LoginCommand, Result<TokensResponse>>>();
         var behavior = new LoggingBehavior<LoginCommand, Result<TokensResponse>>(logger);
 
-        var act = () => behavior.Handle(
+        Func<Task<Result<TokensResponse>>> act = () => behavior.Handle(
             new LoginCommand("a@b.com", "pwd"),
             _ => Task.FromException<Result<TokensResponse>>(new InvalidOperationException("boom")),
             CancellationToken.None);

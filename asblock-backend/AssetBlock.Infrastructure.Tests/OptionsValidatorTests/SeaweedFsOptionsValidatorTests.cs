@@ -1,6 +1,7 @@
 using AssetBlock.Domain.Core.Primitives.AppSettingsOptions;
 using AssetBlock.Infrastructure.Options;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Options;
 
 namespace AssetBlock.Infrastructure.Tests.OptionsValidatorTests;
 
@@ -11,14 +12,14 @@ public sealed class SeaweedFsOptionsValidatorTests
     [Fact]
     public void Validate_WhenAbsoluteHttpUri_ShouldSucceed()
     {
-        var result = _sut.Validate(null, CreateValid(endpoint: "http://localhost:8333", useSsl: false));
+        ValidateOptionsResult result = _sut.Validate(null, CreateValid(endpoint: "http://localhost:8333", useSsl: false));
         result.Succeeded.Should().BeTrue();
     }
 
     [Fact]
     public void Validate_WhenRequiredFieldsEmpty_ShouldFail()
     {
-        var result = _sut.Validate(null, new SeaweedFsOptions
+        ValidateOptionsResult result = _sut.Validate(null, new SeaweedFsOptions
         {
             Endpoint = "",
             Bucket = "",
@@ -34,8 +35,8 @@ public sealed class SeaweedFsOptionsValidatorTests
     [Fact]
     public void Validate_WhenInactiveProvider_ShouldIgnoreInvalidPlaceholders()
     {
-        var sut = CreateValidator(provider: "Minio");
-        var result = sut.Validate(null, new SeaweedFsOptions
+        SeaweedFsOptionsValidator sut = CreateValidator(provider: "Minio");
+        ValidateOptionsResult result = sut.Validate(null, new SeaweedFsOptions
         {
             Endpoint = "<seaweedfs-endpoint>:8333",
             Bucket = "<bucket-name>",
@@ -50,7 +51,7 @@ public sealed class SeaweedFsOptionsValidatorTests
     [Fact]
     public void Validate_WhenHttpsWithUseSslFalse_ShouldFail()
     {
-        var result = _sut.Validate(null, CreateValid(endpoint: "https://seaweed.example.com", useSsl: false));
+        ValidateOptionsResult result = _sut.Validate(null, CreateValid(endpoint: "https://seaweed.example.com", useSsl: false));
 
         result.Failed.Should().BeTrue();
         result.Failures.Should().Contain(m => m.Contains("SeaweedFs:UseSsl"));
@@ -58,7 +59,7 @@ public sealed class SeaweedFsOptionsValidatorTests
 
     private static SeaweedFsOptionsValidator CreateValidator(string provider)
     {
-        var config = new ConfigurationBuilder()
+        IConfigurationRoot config = new ConfigurationBuilder()
             .AddInMemoryCollection(new Dictionary<string, string?>
             {
                 ["Storage:Provider"] = provider

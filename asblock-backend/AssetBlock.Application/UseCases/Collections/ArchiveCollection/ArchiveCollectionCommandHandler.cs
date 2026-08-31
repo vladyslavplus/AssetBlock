@@ -1,9 +1,10 @@
 using Ardalis.Result;
+using AssetBlock.Application.Messaging;
 using AssetBlock.Domain.Abstractions.Services;
 using AssetBlock.Domain.Core.Constants;
 using AssetBlock.Domain.Core.Dto.Audit;
+using AssetBlock.Domain.Core.Entities;
 using AssetBlock.Domain.Core.Enums;
-using AssetBlock.Application.Messaging;
 using Microsoft.Extensions.Logging;
 
 namespace AssetBlock.Application.UseCases.Collections.ArchiveCollection;
@@ -19,12 +20,12 @@ internal sealed class ArchiveCollectionCommandHandler(
     {
         Result? outcome = null;
         var archived = false;
-        var now = DateTimeOffset.UtcNow;
+        DateTimeOffset now = DateTimeOffset.UtcNow;
         try
         {
             await unitOfWork.ExecuteInTransaction(async ct =>
             {
-                var collection = await collectionStore.GetForUpdate(request.Id, ct);
+                Collection? collection = await collectionStore.GetForUpdate(request.Id, ct);
                 if (collection is null)
                 {
                     outcome = Result.NotFound(ErrorCodes.ERR_COLLECTION_NOT_FOUND);

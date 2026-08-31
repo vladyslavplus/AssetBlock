@@ -1,5 +1,6 @@
 using AssetBlock.Application.UseCases.Users.GetProfile;
 using AwesomeAssertions;
+using FluentValidation.Results;
 
 namespace AssetBlock.Application.Tests.Validators;
 
@@ -11,7 +12,7 @@ public class GetUserProfileQueryValidatorTests
     public async Task Validate_WhenUsernameBlankAndNoCurrentUser_ShouldFail()
     {
         var query = new GetUserProfileQuery("  ", null);
-        var result = await _validator.ValidateAsync(query);
+        ValidationResult result = await _validator.ValidateAsync(query);
         result.IsValid.Should().BeFalse();
     }
 
@@ -19,7 +20,7 @@ public class GetUserProfileQueryValidatorTests
     public async Task Validate_WhenCurrentUserOnly_ShouldPass()
     {
         var query = new GetUserProfileQuery(null, Guid.NewGuid());
-        var result = await _validator.ValidateAsync(query);
+        ValidationResult result = await _validator.ValidateAsync(query);
         result.IsValid.Should().BeTrue();
     }
 
@@ -27,7 +28,7 @@ public class GetUserProfileQueryValidatorTests
     public async Task Validate_WhenUsernameTooLong_ShouldFail()
     {
         var query = new GetUserProfileQuery(new string('a', 51), null);
-        var result = await _validator.ValidateAsync(query);
+        ValidationResult result = await _validator.ValidateAsync(query);
         result.IsValid.Should().BeFalse();
     }
 }

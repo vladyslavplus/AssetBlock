@@ -1,3 +1,4 @@
+using Ardalis.Result;
 using AssetBlock.Application.UseCases.SellerAnalytics.ExportSellerAnalyticsSales;
 using AssetBlock.Domain.Abstractions.Services;
 using AssetBlock.Domain.Core.Constants;
@@ -27,7 +28,7 @@ public sealed class ExportSellerAnalyticsSalesCommandHandlerTests
         var sellerId = Guid.NewGuid();
         var orderId = Guid.NewGuid();
         var productId = Guid.NewGuid();
-        var rows = new[]
+        AnalyticsSalesExportRow[] rows = new[]
         {
             new AnalyticsSalesExportRow(
                 new DateTimeOffset(2024, 5, 1, 10, 0, 0, TimeSpan.Zero),
@@ -50,7 +51,7 @@ public sealed class ExportSellerAnalyticsSalesCommandHandlerTests
             output,
             session);
 
-        var result = await _handler.Handle(command, CancellationToken.None);
+        Result<int> result = await _handler.Handle(command, CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
         result.Value.Should().Be(1);
@@ -74,7 +75,7 @@ public sealed class ExportSellerAnalyticsSalesCommandHandlerTests
     public async Task Handle_WhenSuccessful_ShouldDisposeSessionBeforeFlush()
     {
         var sellerId = Guid.NewGuid();
-        var rows = new[]
+        AnalyticsSalesExportRow[] rows = new[]
         {
             new AnalyticsSalesExportRow(
                 new DateTimeOffset(2024, 5, 1, 10, 0, 0, TimeSpan.Zero),
@@ -118,7 +119,7 @@ public sealed class ExportSellerAnalyticsSalesCommandHandlerTests
             output,
             session);
 
-        var result = await _handler.Handle(command, CancellationToken.None);
+        Result<int> result = await _handler.Handle(command, CancellationToken.None);
 
         result.IsSuccess.Should().BeFalse();
         result.ValidationErrors.Should().ContainSingle(e => e.Identifier == ErrorCodes.ERR_ANALYTICS_EXPORT_TOO_LARGE);
@@ -146,7 +147,7 @@ public sealed class ExportSellerAnalyticsSalesCommandHandlerTests
         using var cts = new CancellationTokenSource();
         await cts.CancelAsync();
 
-        var act = () => _handler.Handle(command, cts.Token);
+        Func<Task<Result<int>>> act = () => _handler.Handle(command, cts.Token);
         await act.Should().ThrowAsync<OperationCanceledException>();
 
         await _auditWriter.DidNotReceive().WriteBestEffort(
@@ -161,7 +162,7 @@ public sealed class ExportSellerAnalyticsSalesCommandHandlerTests
             .WriteBestEffort(Arg.Any<Domain.Core.Dto.Audit.AuditEvent>(), Arg.Any<CancellationToken>())
             .Returns(callInfo =>
             {
-                var token = callInfo.Arg<CancellationToken>();
+                CancellationToken token = callInfo.Arg<CancellationToken>();
                 return Task.Delay(Timeout.InfiniteTimeSpan, token);
             });
 
@@ -170,7 +171,7 @@ public sealed class ExportSellerAnalyticsSalesCommandHandlerTests
             NullLogger<ExportSellerAnalyticsSalesCommandHandler>.Instance,
             TimeSpan.FromMilliseconds(20));
 
-        var rows = new[]
+        AnalyticsSalesExportRow[] rows = new[]
         {
             new AnalyticsSalesExportRow(
                 new DateTimeOffset(2024, 5, 1, 10, 0, 0, TimeSpan.Zero),
@@ -192,7 +193,7 @@ public sealed class ExportSellerAnalyticsSalesCommandHandlerTests
             output,
             session);
 
-        var result = await handler.Handle(command, CancellationToken.None);
+        Result<int> result = await handler.Handle(command, CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
         result.Value.Should().Be(1);
@@ -217,7 +218,7 @@ public sealed class ExportSellerAnalyticsSalesCommandHandlerTests
         public async IAsyncEnumerable<AnalyticsSalesExportRow> ReadRows(
             [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
         {
-            foreach (var row in _rows)
+            foreach (AnalyticsSalesExportRow row in _rows)
             {
                 cancellationToken.ThrowIfCancellationRequested();
                 yield return row;

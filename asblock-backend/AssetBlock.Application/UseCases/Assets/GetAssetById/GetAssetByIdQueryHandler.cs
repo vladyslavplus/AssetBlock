@@ -1,8 +1,9 @@
 using Ardalis.Result;
+using AssetBlock.Application.Messaging;
 using AssetBlock.Domain.Abstractions.Services;
 using AssetBlock.Domain.Core.Constants;
 using AssetBlock.Domain.Core.Dto.Assets;
-using AssetBlock.Application.Messaging;
+using AssetBlock.Domain.Core.Entities;
 
 namespace AssetBlock.Application.UseCases.Assets.GetAssetById;
 
@@ -11,7 +12,7 @@ internal sealed class GetAssetByIdQueryHandler(IAssetStore assetStore, IReviewSt
 {
     public async Task<Result<AssetDetailItem>> Handle(GetAssetByIdQuery request, CancellationToken cancellationToken)
     {
-        var asset = await assetStore.GetById(request.Id, cancellationToken);
+        Asset? asset = await assetStore.GetById(request.Id, cancellationToken);
         if (asset is null)
         {
             return Result.NotFound(ErrorCodes.ERR_ASSET_NOT_FOUND);
@@ -22,7 +23,7 @@ internal sealed class GetAssetByIdQueryHandler(IAssetStore assetStore, IReviewSt
             return Result.NotFound(ErrorCodes.ERR_ASSET_NOT_FOUND);
         }
 
-        var snapshot = await assetStore.GetCurrentVersionSnapshot(request.Id, cancellationToken);
+        AssetCurrentVersionSnapshot? snapshot = await assetStore.GetCurrentVersionSnapshot(request.Id, cancellationToken);
         if (snapshot is null)
         {
             return Result.NotFound(ErrorCodes.ERR_ASSET_NOT_FOUND);

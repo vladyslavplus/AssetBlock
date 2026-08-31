@@ -15,9 +15,9 @@ public sealed class ClaimsPrincipalExtensionsTests
     [Fact]
     public void TryGetUserId_WhenNameIdentifierValid_ShouldReturnExpectedId()
     {
-        var principal = Principal(new Claim(ClaimTypes.NameIdentifier, _expected.ToString()));
+        ClaimsPrincipal principal = Principal(new Claim(ClaimTypes.NameIdentifier, _expected.ToString()));
 
-        var result = principal.TryGetUserId(out var userId);
+        var result = principal.TryGetUserId(out Guid userId);
 
         result.Should().BeTrue();
         userId.Should().Be(_expected);
@@ -26,9 +26,9 @@ public sealed class ClaimsPrincipalExtensionsTests
     [Fact]
     public void TryGetUserId_WhenNameIdentifierMissingAndSubValid_ShouldReturnExpectedId()
     {
-        var principal = Principal(new Claim(JwtClaimTypes.SUB, _expected.ToString()));
+        ClaimsPrincipal principal = Principal(new Claim(JwtClaimTypes.SUB, _expected.ToString()));
 
-        var result = principal.TryGetUserId(out var userId);
+        var result = principal.TryGetUserId(out Guid userId);
 
         result.Should().BeTrue();
         userId.Should().Be(_expected);
@@ -47,7 +47,7 @@ public sealed class ClaimsPrincipalExtensionsTests
     [Fact]
     public void TryGetUserId_WhenSelectedClaimMalformed_ShouldReturnFalse()
     {
-        var principal = Principal(new Claim(ClaimTypes.NameIdentifier, "not-a-guid"));
+        ClaimsPrincipal principal = Principal(new Claim(ClaimTypes.NameIdentifier, "not-a-guid"));
 
         var result = principal.TryGetUserId(out Guid _);
 
@@ -58,11 +58,11 @@ public sealed class ClaimsPrincipalExtensionsTests
     public void TryGetUserId_WhenBothClaimsPresent_ShouldPreferNameIdentifier()
     {
         var other = Guid.NewGuid();
-        var principal = Principal(
+        ClaimsPrincipal principal = Principal(
             new Claim(ClaimTypes.NameIdentifier, _expected.ToString()),
             new Claim(JwtClaimTypes.SUB, other.ToString()));
 
-        var result = principal.TryGetUserId(out var userId);
+        var result = principal.TryGetUserId(out Guid userId);
 
         result.Should().BeTrue();
         userId.Should().Be(_expected);
@@ -71,7 +71,7 @@ public sealed class ClaimsPrincipalExtensionsTests
     [Fact]
     public void TryGetUserId_WhenNameIdentifierMalformedAndSubValid_ShouldNotFallBack()
     {
-        var principal = Principal(
+        ClaimsPrincipal principal = Principal(
             new Claim(ClaimTypes.NameIdentifier, "not-a-guid"),
             new Claim(JwtClaimTypes.SUB, _expected.ToString()));
 
@@ -83,11 +83,11 @@ public sealed class ClaimsPrincipalExtensionsTests
     [Fact]
     public void GetUserIdOrNull_WhenUserIdResolves_ShouldMatchTryGetUserId()
     {
-        var principal = Principal(new Claim(ClaimTypes.NameIdentifier, _expected.ToString()));
+        ClaimsPrincipal principal = Principal(new Claim(ClaimTypes.NameIdentifier, _expected.ToString()));
 
-        var viaNull = principal.GetUserIdOrNull();
+        Guid? viaNull = principal.GetUserIdOrNull();
 
-        principal.TryGetUserId(out var viaTry).Should().BeTrue();
+        principal.TryGetUserId(out Guid viaTry).Should().BeTrue();
         viaNull.Should().Be(viaTry);
     }
 
@@ -104,7 +104,7 @@ public sealed class ClaimsPrincipalExtensionsTests
     {
         var principal = new ClaimsPrincipal();
 
-        var action = () => principal.TryGetUserId(out _);
+        Func<bool> action = () => principal.TryGetUserId(out _);
 
         action.Should().NotThrow();
     }

@@ -49,7 +49,7 @@ internal sealed class EmailOptionsValidator : IValidateOptions<EmailOptions>
             failures.Add("Email:MessageIdDomain must be a safe hostname/domain (e.g. mail.localhost).");
         }
 
-        var smtp = options.Smtp;
+        EmailSmtpOptions smtp = options.Smtp;
         if (OptionsValidation.IsMissingOrPlaceholder(smtp.Host))
         {
             failures.Add("Email:Smtp:Host must be non-empty.");
@@ -130,7 +130,7 @@ internal sealed class EmailOptionsValidator : IValidateOptions<EmailOptions>
             }
         }
 
-        var hostKind = Uri.CheckHostName(trimmed);
+        UriHostNameType hostKind = Uri.CheckHostName(trimmed);
         return hostKind is UriHostNameType.Dns or UriHostNameType.Basic;
     }
 }

@@ -1,4 +1,5 @@
 using Ardalis.Result;
+using AssetBlock.Application.Messaging;
 using AssetBlock.Application.UseCases.Collections.AddCollectionItem;
 using AssetBlock.Application.UseCases.Collections.ArchiveCollection;
 using AssetBlock.Application.UseCases.Collections.CreateCollection;
@@ -14,7 +15,6 @@ using AssetBlock.Domain.Core.Dto.Collections;
 using AssetBlock.WebApi.Constants;
 using AssetBlock.WebApi.Extensions;
 using AssetBlock.WebApi.ProblemDetails;
-using AssetBlock.Application.Messaging;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
@@ -39,12 +39,12 @@ public sealed class SellerCollectionsController(ISender sender) : ControllerBase
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> List([FromQuery] ListMyCollectionsRequest request, CancellationToken cancellationToken)
     {
-        if (!User.TryGetUserId(out var userId))
+        if (!User.TryGetUserId(out Guid userId))
         {
             return UnauthorizedProblem();
         }
 
-        var result = await sender.Send(new GetMyCollectionsQuery(userId, request), cancellationToken);
+        Result<Domain.Core.Dto.Paging.PagedResult<CollectionListItemDto>> result = await sender.Send(new GetMyCollectionsQuery(userId, request), cancellationToken);
         return MapResultToActionResult(result);
     }
 
@@ -59,12 +59,12 @@ public sealed class SellerCollectionsController(ISender sender) : ControllerBase
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> GetById(Guid id, CancellationToken cancellationToken)
     {
-        if (!User.TryGetUserId(out var userId))
+        if (!User.TryGetUserId(out Guid userId))
         {
             return UnauthorizedProblem();
         }
 
-        var result = await sender.Send(new GetMyCollectionQuery(id, userId), cancellationToken);
+        Result<CollectionDetailDto> result = await sender.Send(new GetMyCollectionQuery(id, userId), cancellationToken);
         return MapResultToActionResult(result);
     }
 
@@ -79,12 +79,12 @@ public sealed class SellerCollectionsController(ISender sender) : ControllerBase
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
     public async Task<IActionResult> Create([FromBody] CreateCollectionRequest request, CancellationToken cancellationToken)
     {
-        if (!User.TryGetUserId(out var userId))
+        if (!User.TryGetUserId(out Guid userId))
         {
             return UnauthorizedProblem();
         }
 
-        var result = await sender.Send(
+        Result<CreateCollectionResponse> result = await sender.Send(
             new CreateCollectionCommand(userId, request.Title, request.Description),
             cancellationToken);
 
@@ -109,12 +109,12 @@ public sealed class SellerCollectionsController(ISender sender) : ControllerBase
         [FromBody] UpdateCollectionRequest request,
         CancellationToken cancellationToken)
     {
-        if (!User.TryGetUserId(out var userId))
+        if (!User.TryGetUserId(out Guid userId))
         {
             return UnauthorizedProblem();
         }
 
-        var result = await sender.Send(
+        Result result = await sender.Send(
             new UpdateCollectionCommand(id, userId, request.Title, request.Description),
             cancellationToken);
         return MapResultToActionResult(result);
@@ -136,12 +136,12 @@ public sealed class SellerCollectionsController(ISender sender) : ControllerBase
         [FromBody] AddCollectionItemRequest request,
         CancellationToken cancellationToken)
     {
-        if (!User.TryGetUserId(out var userId))
+        if (!User.TryGetUserId(out Guid userId))
         {
             return UnauthorizedProblem();
         }
 
-        var result = await sender.Send(
+        Result result = await sender.Send(
             new AddCollectionItemCommand(id, userId, request.AssetId),
             cancellationToken);
         return MapResultToActionResult(result);
@@ -160,12 +160,12 @@ public sealed class SellerCollectionsController(ISender sender) : ControllerBase
     [ProducesResponseType(StatusCodes.Status409Conflict)]
     public async Task<IActionResult> RemoveItem(Guid id, Guid assetId, CancellationToken cancellationToken)
     {
-        if (!User.TryGetUserId(out var userId))
+        if (!User.TryGetUserId(out Guid userId))
         {
             return UnauthorizedProblem();
         }
 
-        var result = await sender.Send(
+        Result result = await sender.Send(
             new RemoveCollectionItemCommand(id, userId, assetId),
             cancellationToken);
         return MapResultToActionResult(result);
@@ -187,12 +187,12 @@ public sealed class SellerCollectionsController(ISender sender) : ControllerBase
         [FromBody] ReorderCollectionItemsRequest request,
         CancellationToken cancellationToken)
     {
-        if (!User.TryGetUserId(out var userId))
+        if (!User.TryGetUserId(out Guid userId))
         {
             return UnauthorizedProblem();
         }
 
-        var result = await sender.Send(
+        Result result = await sender.Send(
             new ReorderCollectionItemsCommand(id, userId, request.AssetIds),
             cancellationToken);
         return MapResultToActionResult(result);
@@ -210,12 +210,12 @@ public sealed class SellerCollectionsController(ISender sender) : ControllerBase
     [ProducesResponseType(StatusCodes.Status409Conflict)]
     public async Task<IActionResult> Publish(Guid id, CancellationToken cancellationToken)
     {
-        if (!User.TryGetUserId(out var userId))
+        if (!User.TryGetUserId(out Guid userId))
         {
             return UnauthorizedProblem();
         }
 
-        var result = await sender.Send(new PublishCollectionCommand(id, userId), cancellationToken);
+        Result result = await sender.Send(new PublishCollectionCommand(id, userId), cancellationToken);
         return MapResultToActionResult(result);
     }
 
@@ -231,12 +231,12 @@ public sealed class SellerCollectionsController(ISender sender) : ControllerBase
     [ProducesResponseType(StatusCodes.Status409Conflict)]
     public async Task<IActionResult> Archive(Guid id, CancellationToken cancellationToken)
     {
-        if (!User.TryGetUserId(out var userId))
+        if (!User.TryGetUserId(out Guid userId))
         {
             return UnauthorizedProblem();
         }
 
-        var result = await sender.Send(new ArchiveCollectionCommand(id, userId), cancellationToken);
+        Result result = await sender.Send(new ArchiveCollectionCommand(id, userId), cancellationToken);
         return MapResultToActionResult(result);
     }
 
@@ -252,12 +252,12 @@ public sealed class SellerCollectionsController(ISender sender) : ControllerBase
     [ProducesResponseType(StatusCodes.Status409Conflict)]
     public async Task<IActionResult> Restore(Guid id, CancellationToken cancellationToken)
     {
-        if (!User.TryGetUserId(out var userId))
+        if (!User.TryGetUserId(out Guid userId))
         {
             return UnauthorizedProblem();
         }
 
-        var result = await sender.Send(new RestoreCollectionCommand(id, userId), cancellationToken);
+        Result result = await sender.Send(new RestoreCollectionCommand(id, userId), cancellationToken);
         return MapResultToActionResult(result);
     }
 

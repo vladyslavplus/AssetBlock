@@ -1,3 +1,4 @@
+using Ardalis.Result;
 using AssetBlock.Application.UseCases.Users.UpdateSocialLinks;
 using AssetBlock.Domain.Abstractions.Services;
 using AssetBlock.Domain.Core.Constants;
@@ -48,7 +49,7 @@ public class UpdateUserSocialLinksCommandHandlerTests
             new SocialLinkInput { PlatformId = Guid.NewGuid(), Url = "https://a.com/x" }
         ]);
 
-        var result = await _handler.Handle(command, CancellationToken.None);
+        Result<List<UserSocialLinkDto>> result = await _handler.Handle(command, CancellationToken.None);
 
         result.IsSuccess.Should().BeFalse();
         result.Errors.Should().Contain(ErrorCodes.ERR_SOCIAL_PLATFORM_NOT_FOUND);
@@ -86,7 +87,7 @@ public class UpdateUserSocialLinksCommandHandlerTests
         };
         _userStore.GetByIdWithLinks(userId, Arg.Any<CancellationToken>()).Returns(user);
 
-        var result = await _handler.Handle(
+        Result<List<UserSocialLinkDto>> result = await _handler.Handle(
             new UpdateUserSocialLinksCommand(userId, [new SocialLinkInput { PlatformId = platformId, Url = "https://github.com/u" }]),
             CancellationToken.None);
 

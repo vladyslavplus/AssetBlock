@@ -20,7 +20,7 @@ internal sealed class ObservabilityOptionsValidator : IValidateOptions<Observabi
         }
 
         if (string.IsNullOrWhiteSpace(options.OtlpEndpoint)
-            || !Uri.TryCreate(options.OtlpEndpoint, UriKind.Absolute, out var result)
+            || !Uri.TryCreate(options.OtlpEndpoint, UriKind.Absolute, out Uri? result)
             || (result.Scheme != Uri.UriSchemeHttp && result.Scheme != Uri.UriSchemeHttps))
         {
             errors.Add("OtlpEndpoint must be a valid absolute HTTP/HTTPS URI when Observability is enabled.");

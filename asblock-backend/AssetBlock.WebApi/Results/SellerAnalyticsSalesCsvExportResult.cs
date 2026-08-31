@@ -1,8 +1,10 @@
+using Ardalis.Result;
 using AssetBlock.Application.Common;
+using AssetBlock.Application.Messaging;
 using AssetBlock.Application.UseCases.SellerAnalytics.ExportSellerAnalyticsSales;
+using AssetBlock.Domain.Abstractions.Services;
 using AssetBlock.Domain.Core.Enums;
 using AssetBlock.WebApi.ProblemDetails;
-using AssetBlock.Application.Messaging;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Net.Http.Headers;
 
@@ -17,21 +19,21 @@ internal sealed class SellerAnalyticsSalesCsvExportResult(
 {
     public async Task ExecuteResultAsync(ActionContext context)
     {
-        var httpContext = context.HttpContext;
-        var cancellationToken = httpContext.RequestAborted;
+        HttpContext httpContext = context.HttpContext;
+        CancellationToken cancellationToken = httpContext.RequestAborted;
 
-        var prepareResult = await sender.Send(
+        Result<PreparedSellerAnalyticsSalesExport> prepareResult = await sender.Send(
             new PrepareSellerAnalyticsSalesExportQuery(sellerId, from, to, productType),
             cancellationToken);
 
         if (!prepareResult.IsSuccess)
         {
-            var gateActionResult = ResultProblemDetailsMapper.Map(httpContext, prepareResult);
+            IActionResult gateActionResult = ResultProblemDetailsMapper.Map(httpContext, prepareResult);
             await gateActionResult.ExecuteResultAsync(context);
             return;
         }
 
-        await using var session = prepareResult.Value.Session;
+        await using ISellerAnalyticsSalesExportSession session = prepareResult.Value.Session;
 
         httpContext.Response.ContentType = "text/csv; charset=utf-8";
         httpContext.Response.Headers.CacheControl = "no-store";
@@ -48,10 +50,10 @@ internal sealed class SellerAnalyticsSalesCsvExportResult(
             httpContext.Response.Body,
             session);
 
-        var result = await sender.Send(command, cancellationToken);
+        Result<int> result = await sender.Send(command, cancellationToken);
         if (!result.IsSuccess)
         {
-            var actionResult = ResultProblemDetailsMapper.Map(httpContext, result);
+            IActionResult actionResult = ResultProblemDetailsMapper.Map(httpContext, result);
             await actionResult.ExecuteResultAsync(context);
         }
     }

@@ -62,7 +62,7 @@ public static class AnalyticsRateLimitingServiceCollectionExtensions
 
             services.AddSingleton<IConnectionMultiplexer>(_ =>
             {
-                var opts = RedisConnectionOptions.Parse(redisConfiguration);
+                ConfigurationOptions opts = RedisConnectionOptions.Parse(redisConfiguration);
                 return ConnectionMultiplexer.Connect(opts);
             });
 

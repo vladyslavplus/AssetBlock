@@ -23,10 +23,10 @@ public sealed class PaymentsCheckoutAttributionIntegrationTests(IntegrationTestF
         (_, Guid assetId) = await SeedSellerAsset(price: 11m);
         (HttpClient buyerClient, _) = await IntegrationTestAuth.RegisterVerifiedAndAuthenticateAsync(fixture.Factory);
 
-        var response = await buyerClient.PostAsJsonAsync(_checkoutUri, new CreateCheckoutRequest(assetId));
+        HttpResponseMessage response = await buyerClient.PostAsJsonAsync(_checkoutUri, new CreateCheckoutRequest(assetId));
 
         response.StatusCode.Should().Be(HttpStatusCode.OK);
-        var intent = await GetPendingIntentForAsset(assetId);
+        CheckoutIntent intent = await GetPendingIntentForAsset(assetId);
         intent.AttributionSource.Should().BeNull();
         intent.AttributionCollectionId.Should().BeNull();
         intent.AttributionReferrerHost.Should().BeNull();
@@ -38,12 +38,12 @@ public sealed class PaymentsCheckoutAttributionIntegrationTests(IntegrationTestF
     public async Task CreateCheckout_WithVerifiedCollectionAttribution_ShouldStoreCollectionAttribution()
     {
         (Guid sellerId, Guid assetId) = await SeedSellerAsset(price: 13m);
-        var collectionId = await SeedPublishedCollection(sellerId, assetId);
+        Guid collectionId = await SeedPublishedCollection(sellerId, assetId);
         (HttpClient buyerClient, _) = await IntegrationTestAuth.RegisterVerifiedAndAuthenticateAsync(fixture.Factory);
         var visitorId = Guid.NewGuid();
         var sessionId = Guid.NewGuid();
 
-        var response = await buyerClient.PostAsJsonAsync(
+        HttpResponseMessage response = await buyerClient.PostAsJsonAsync(
             _checkoutUri,
             new CreateCheckoutRequest(
                 assetId,
@@ -52,7 +52,7 @@ public sealed class PaymentsCheckoutAttributionIntegrationTests(IntegrationTestF
                 sessionId));
 
         response.StatusCode.Should().Be(HttpStatusCode.OK);
-        var intent = await GetPendingIntentForAsset(assetId);
+        CheckoutIntent intent = await GetPendingIntentForAsset(assetId);
         intent.AttributionSource.Should().Be(AnalyticsTrafficSource.COLLECTION);
         intent.AttributionCollectionId.Should().Be(collectionId);
         intent.AttributionReferrerHost.Should().BeNull();
@@ -66,7 +66,7 @@ public sealed class PaymentsCheckoutAttributionIntegrationTests(IntegrationTestF
         (_, Guid assetId) = await SeedSellerAsset(price: 14m);
         (HttpClient buyerClient, _) = await IntegrationTestAuth.RegisterVerifiedAndAuthenticateAsync(fixture.Factory);
 
-        var response = await buyerClient.PostAsJsonAsync(
+        HttpResponseMessage response = await buyerClient.PostAsJsonAsync(
             _checkoutUri,
             new CreateCheckoutRequest(
                 assetId,
@@ -76,7 +76,7 @@ public sealed class PaymentsCheckoutAttributionIntegrationTests(IntegrationTestF
                     "https://Partner.Example.com/deals?ref=abc")));
 
         response.StatusCode.Should().Be(HttpStatusCode.OK);
-        var intent = await GetPendingIntentForAsset(assetId);
+        CheckoutIntent intent = await GetPendingIntentForAsset(assetId);
         intent.AttributionSource.Should().Be(AnalyticsTrafficSource.EXTERNAL);
         intent.AttributionReferrerHost.Should().Be("partner.example.com");
     }
@@ -86,17 +86,17 @@ public sealed class PaymentsCheckoutAttributionIntegrationTests(IntegrationTestF
     {
         (_, Guid assetId) = await SeedSellerAsset(price: 15m);
         (Guid otherSellerId, Guid otherAssetId) = await SeedSellerAsset(price: 16m);
-        var foreignCollectionId = await SeedPublishedCollection(otherSellerId, otherAssetId);
+        Guid foreignCollectionId = await SeedPublishedCollection(otherSellerId, otherAssetId);
         (HttpClient buyerClient, _) = await IntegrationTestAuth.RegisterVerifiedAndAuthenticateAsync(fixture.Factory);
 
-        var response = await buyerClient.PostAsJsonAsync(
+        HttpResponseMessage response = await buyerClient.PostAsJsonAsync(
             _checkoutUri,
             new CreateCheckoutRequest(
                 assetId,
                 new CheckoutAttributionRequest(AnalyticsTrafficSource.COLLECTION, foreignCollectionId, null)));
 
         response.StatusCode.Should().Be(HttpStatusCode.OK);
-        var intent = await GetPendingIntentForAsset(assetId);
+        CheckoutIntent intent = await GetPendingIntentForAsset(assetId);
         intent.AttributionSource.Should().BeNull();
         intent.AttributionCollectionId.Should().BeNull();
     }
@@ -107,22 +107,22 @@ public sealed class PaymentsCheckoutAttributionIntegrationTests(IntegrationTestF
         (_, Guid assetId) = await SeedSellerAsset(price: 17m);
         (HttpClient buyerClient, _) = await IntegrationTestAuth.RegisterVerifiedAndAuthenticateAsync(fixture.Factory);
 
-        var first = await buyerClient.PostAsJsonAsync(
+        HttpResponseMessage first = await buyerClient.PostAsJsonAsync(
             _checkoutUri,
             new CreateCheckoutRequest(
                 assetId,
                 new CheckoutAttributionRequest(AnalyticsTrafficSource.EXTERNAL, null, "first.example.com")));
         first.StatusCode.Should().Be(HttpStatusCode.OK);
-        var created = await GetPendingIntentForAsset(assetId);
+        CheckoutIntent created = await GetPendingIntentForAsset(assetId);
 
-        var resumed = await buyerClient.PostAsJsonAsync(
+        HttpResponseMessage resumed = await buyerClient.PostAsJsonAsync(
             _checkoutUri,
             new CreateCheckoutRequest(
                 assetId,
                 new CheckoutAttributionRequest(AnalyticsTrafficSource.SEARCH, null, null)));
 
         resumed.StatusCode.Should().Be(HttpStatusCode.OK);
-        var afterResume = await GetPendingIntentForAsset(assetId);
+        CheckoutIntent afterResume = await GetPendingIntentForAsset(assetId);
         afterResume.Id.Should().Be(created.Id);
         afterResume.AttributionSource.Should().Be(AnalyticsTrafficSource.EXTERNAL);
         afterResume.AttributionReferrerHost.Should().Be("first.example.com");
@@ -133,20 +133,20 @@ public sealed class PaymentsCheckoutAttributionIntegrationTests(IntegrationTestF
     {
         (Guid sellerId, Guid assetA) = await SeedSellerAsset(price: 10m);
         (_, Guid assetB) = await SeedSellerAsset(price: 20m, sellerId);
-        var collectionId = await SeedPublishedCollection(sellerId, assetA);
-        var bundleId = await SeedBundle(sellerId, assetA, assetB);
+        Guid collectionId = await SeedPublishedCollection(sellerId, assetA);
+        Guid bundleId = await SeedBundle(sellerId, assetA, assetB);
         (HttpClient buyerClient, _) = await IntegrationTestAuth.RegisterVerifiedAndAuthenticateAsync(fixture.Factory);
 
-        var response = await buyerClient.PostAsJsonAsync(
+        HttpResponseMessage response = await buyerClient.PostAsJsonAsync(
             _bundleCheckoutUri,
             new CreateBundleCheckoutRequest(
                 bundleId,
                 new CheckoutAttributionRequest(AnalyticsTrafficSource.COLLECTION, collectionId, null)));
 
         response.StatusCode.Should().Be(HttpStatusCode.OK);
-        await using var scope = fixture.Factory.Services.CreateAsyncScope();
-        var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
-        var intent = await db.CheckoutIntents.AsNoTracking()
+        await using AsyncServiceScope scope = fixture.Factory.Services.CreateAsyncScope();
+        ApplicationDbContext db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+        CheckoutIntent intent = await db.CheckoutIntents.AsNoTracking()
             .SingleAsync(i => i.BundleId == bundleId && i.Status == CheckoutIntentStatus.PENDING);
         intent.AttributionSource.Should().BeNull();
         intent.AttributionCollectionId.Should().BeNull();
@@ -157,10 +157,10 @@ public sealed class PaymentsCheckoutAttributionIntegrationTests(IntegrationTestF
     {
         (Guid sellerId, Guid assetA) = await SeedSellerAsset(price: 10m);
         (_, Guid assetB) = await SeedSellerAsset(price: 30m, sellerId);
-        var bundleId = await SeedBundle(sellerId, assetA, assetB);
+        Guid bundleId = await SeedBundle(sellerId, assetA, assetB);
         (HttpClient buyerClient, _) = await IntegrationTestAuth.RegisterVerifiedAndAuthenticateAsync(fixture.Factory);
 
-        var response = await buyerClient.PostAsJsonAsync(
+        HttpResponseMessage response = await buyerClient.PostAsJsonAsync(
             _bundleCheckoutUri,
             new CreateBundleCheckoutRequest(
                 bundleId,
@@ -170,9 +170,9 @@ public sealed class PaymentsCheckoutAttributionIntegrationTests(IntegrationTestF
                     "https://Deals.Example.net/bundle")));
 
         response.StatusCode.Should().Be(HttpStatusCode.OK);
-        await using var scope = fixture.Factory.Services.CreateAsyncScope();
-        var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
-        var intent = await db.CheckoutIntents.AsNoTracking()
+        await using AsyncServiceScope scope = fixture.Factory.Services.CreateAsyncScope();
+        ApplicationDbContext db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+        CheckoutIntent intent = await db.CheckoutIntents.AsNoTracking()
             .SingleAsync(i => i.BundleId == bundleId && i.Status == CheckoutIntentStatus.PENDING);
         intent.AttributionSource.Should().Be(AnalyticsTrafficSource.EXTERNAL);
         intent.AttributionReferrerHost.Should().Be("deals.example.net");
@@ -180,7 +180,7 @@ public sealed class PaymentsCheckoutAttributionIntegrationTests(IntegrationTestF
 
     private async Task<(Guid SellerId, Guid AssetId)> SeedSellerAsset(decimal price, Guid? existingSellerId = null)
     {
-        var scopeFactory = fixture.Factory.Services.GetRequiredService<IServiceScopeFactory>();
+        IServiceScopeFactory scopeFactory = fixture.Factory.Services.GetRequiredService<IServiceScopeFactory>();
         Guid sellerId;
         if (existingSellerId is { } known)
         {
@@ -188,19 +188,19 @@ public sealed class PaymentsCheckoutAttributionIntegrationTests(IntegrationTestF
         }
         else
         {
-            (_, string sellerUsername) = await IntegrationTestAuth.RegisterVerifiedAndAuthenticateAsync(fixture.Factory);
+            (_, var sellerUsername) = await IntegrationTestAuth.RegisterVerifiedAndAuthenticateAsync(fixture.Factory);
             sellerId = await AssetVersionsSeed.GetUserIdAsync(scopeFactory, sellerUsername);
         }
 
-        var (assetId, _) = await AssetVersionsSeed.SeedAssetWithVersionsAsync(scopeFactory, sellerId, price: price);
+        (Guid assetId, List<Guid> _) = await AssetVersionsSeed.SeedAssetWithVersionsAsync(scopeFactory, sellerId, price: price);
         return (sellerId, assetId);
     }
 
     private async Task<Guid> SeedPublishedCollection(Guid sellerId, Guid assetId)
     {
-        await using var scope = fixture.Factory.Services.CreateAsyncScope();
-        var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
-        var now = DateTimeOffset.UtcNow;
+        await using AsyncServiceScope scope = fixture.Factory.Services.CreateAsyncScope();
+        ApplicationDbContext db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+        DateTimeOffset now = DateTimeOffset.UtcNow;
         var collectionId = Guid.NewGuid();
         db.Collections.Add(new Collection
         {
@@ -224,12 +224,12 @@ public sealed class PaymentsCheckoutAttributionIntegrationTests(IntegrationTestF
 
     private async Task<Guid> SeedBundle(Guid sellerId, Guid assetA, Guid assetB)
     {
-        await using var scope = fixture.Factory.Services.CreateAsyncScope();
-        var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
-        var assetRows = await db.Assets.AsNoTracking()
+        await using AsyncServiceScope scope = fixture.Factory.Services.CreateAsyncScope();
+        ApplicationDbContext db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+        Dictionary<Guid, Asset> assetRows = await db.Assets.AsNoTracking()
             .Where(a => a.Id == assetA || a.Id == assetB)
             .ToDictionaryAsync(a => a.Id);
-        var now = DateTimeOffset.UtcNow;
+        DateTimeOffset now = DateTimeOffset.UtcNow;
         var bundleId = Guid.NewGuid();
         var revisionId = Guid.NewGuid();
         var listPriceTotal = assetRows[assetA].Price + assetRows[assetB].Price;
@@ -277,8 +277,8 @@ public sealed class PaymentsCheckoutAttributionIntegrationTests(IntegrationTestF
 
     private async Task<CheckoutIntent> GetPendingIntentForAsset(Guid assetId)
     {
-        await using var scope = fixture.Factory.Services.CreateAsyncScope();
-        var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+        await using AsyncServiceScope scope = fixture.Factory.Services.CreateAsyncScope();
+        ApplicationDbContext db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
         return await db.CheckoutIntents.AsNoTracking()
             .SingleAsync(i => i.AssetId == assetId && i.Status == CheckoutIntentStatus.PENDING);
     }

@@ -2,6 +2,7 @@ using AssetBlock.Application.UseCases.Bundles.CreateBundle;
 using AssetBlock.Domain.Core.Constants;
 using AssetBlock.Domain.Core.Payments;
 using AwesomeAssertions;
+using FluentValidation.Results;
 
 namespace AssetBlock.Application.Tests.Validators;
 
@@ -23,7 +24,7 @@ public sealed class CreateBundleCommandValidatorTests
     [Fact]
     public async Task Validate_WhenAssetCountBelowMin_ShouldFail()
     {
-        var result = await _validator.ValidateAsync(Valid(assetIds: [Guid.NewGuid()]));
+        ValidationResult result = await _validator.ValidateAsync(Valid(assetIds: [Guid.NewGuid()]));
 
         result.IsValid.Should().BeFalse();
         result.Errors.Should().Contain(e =>
@@ -34,7 +35,7 @@ public sealed class CreateBundleCommandValidatorTests
     public async Task Validate_WhenAssetCountAboveMax_ShouldFail()
     {
         var ids = Enumerable.Range(0, BundleConstants.MAX_ITEMS + 1).Select(_ => Guid.NewGuid()).ToList();
-        var result = await _validator.ValidateAsync(Valid(assetIds: ids));
+        ValidationResult result = await _validator.ValidateAsync(Valid(assetIds: ids));
 
         result.IsValid.Should().BeFalse();
         result.Errors.Should().Contain(e =>
@@ -45,7 +46,7 @@ public sealed class CreateBundleCommandValidatorTests
     public async Task Validate_WhenDuplicateAssetIds_ShouldFail()
     {
         var id = Guid.NewGuid();
-        var result = await _validator.ValidateAsync(Valid(assetIds: [id, id]));
+        ValidationResult result = await _validator.ValidateAsync(Valid(assetIds: [id, id]));
 
         result.IsValid.Should().BeFalse();
         result.Errors.Should().Contain(e =>
@@ -55,7 +56,7 @@ public sealed class CreateBundleCommandValidatorTests
     [Fact]
     public async Task Validate_WhenPriceNotPositive_ShouldFail()
     {
-        var result = await _validator.ValidateAsync(Valid(price: 0m));
+        ValidationResult result = await _validator.ValidateAsync(Valid(price: 0m));
 
         result.IsValid.Should().BeFalse();
         result.Errors.Should().Contain(e => e.PropertyName == nameof(CreateBundleCommand.Price));
@@ -65,7 +66,7 @@ public sealed class CreateBundleCommandValidatorTests
     public async Task Validate_WhenTitleExceedsMaxLength_ShouldFail()
     {
         var title = new string('x', BundleConstants.TITLE_MAX_LENGTH + 1);
-        var result = await _validator.ValidateAsync(Valid(title: title));
+        ValidationResult result = await _validator.ValidateAsync(Valid(title: title));
 
         result.IsValid.Should().BeFalse();
         result.Errors.Should().Contain(e => e.PropertyName == nameof(CreateBundleCommand.Title));
@@ -75,7 +76,7 @@ public sealed class CreateBundleCommandValidatorTests
     public async Task Validate_WhenBoundariesValid_ShouldPass()
     {
         var ids = Enumerable.Range(0, BundleConstants.MIN_ITEMS).Select(_ => Guid.NewGuid()).ToList();
-        var result = await _validator.ValidateAsync(Valid(assetIds: ids));
+        ValidationResult result = await _validator.ValidateAsync(Valid(assetIds: ids));
 
         result.IsValid.Should().BeTrue();
     }
@@ -83,7 +84,7 @@ public sealed class CreateBundleCommandValidatorTests
     [Fact]
     public async Task Validate_WhenPriceOverMaxAmount_ShouldFail()
     {
-        var result = await _validator.ValidateAsync(Valid(price: BundlePriceAllocator.MAX_AMOUNT + 0.01m));
+        ValidationResult result = await _validator.ValidateAsync(Valid(price: BundlePriceAllocator.MAX_AMOUNT + 0.01m));
 
         result.IsValid.Should().BeFalse();
         result.Errors.Should().Contain(e => e.PropertyName == nameof(CreateBundleCommand.Price));

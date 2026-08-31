@@ -24,7 +24,7 @@ internal sealed class CategoryStore(
 
     public async Task<PagedResult<Category>> GetPaged(GetCategoriesRequest request, CancellationToken cancellationToken = default)
     {
-        var query = dbContext.Categories.AsNoTracking();
+        IQueryable<Category> query = dbContext.Categories.AsNoTracking();
 
         if (!string.IsNullOrWhiteSpace(request.Search))
         {
@@ -52,7 +52,7 @@ internal sealed class CategoryStore(
 
         var page = Math.Max(PagedRequest.DEFAULT_PAGE, request.Page);
         var pageSize = Math.Clamp(request.PageSize, PagedRequest.MIN_PAGE_SIZE, PagedRequest.MAX_PAGE_SIZE);
-        var items = await query
+        List<Category> items = await query
             .Skip((page - 1) * pageSize)
             .Take(pageSize)
             .ToListAsync(cancellationToken);
@@ -69,7 +69,7 @@ internal sealed class CategoryStore(
 
     public async Task<Category> Create(string name, string? description, string slug, CancellationToken cancellationToken = default)
     {
-        var now = DateTimeOffset.UtcNow;
+        DateTimeOffset now = DateTimeOffset.UtcNow;
         var category = new Category
         {
             Id = Guid.NewGuid(),

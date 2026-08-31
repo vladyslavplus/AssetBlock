@@ -15,7 +15,7 @@ internal static class BoundedHttpContentReader
             return null;
         }
 
-        await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
+        await using Stream stream = await response.Content.ReadAsStreamAsync(cancellationToken);
         using var buffer = new MemoryStream(Math.Min(maxBytes, 4096));
         var chunk = new byte[4096];
         var total = 0;
@@ -94,7 +94,7 @@ internal static class AiTimeoutBudget
 {
     public static TimeSpan Remaining(TimeSpan budget, TimeSpan elapsed)
     {
-        var left = budget - elapsed;
+        TimeSpan left = budget - elapsed;
         return left > TimeSpan.Zero ? left : TimeSpan.Zero;
     }
 }

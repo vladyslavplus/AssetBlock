@@ -1,10 +1,11 @@
-using AssetBlock.Infrastructure.Observability;
 using AssetBlock.Domain.Core.Primitives.AppSettingsOptions;
+using AssetBlock.Infrastructure.Observability;
+using Npgsql;
+using OpenTelemetry;
 using OpenTelemetry.Logs;
 using OpenTelemetry.Metrics;
 using OpenTelemetry.Resources;
 using OpenTelemetry.Trace;
-using Npgsql;
 
 namespace AssetBlock.WebApi.Extensions;
 
@@ -15,7 +16,7 @@ public static class ObservabilityExtensions
         IConfiguration configuration,
         IHostEnvironment environment)
     {
-        var options = configuration.GetSection(ObservabilityOptions.SECTION_NAME).Get<ObservabilityOptions>() ?? new ObservabilityOptions();
+        ObservabilityOptions options = configuration.GetSection(ObservabilityOptions.SECTION_NAME).Get<ObservabilityOptions>() ?? new ObservabilityOptions();
 
         if (!options.Enabled)
         {
@@ -25,7 +26,7 @@ public static class ObservabilityExtensions
         var instanceId = Environment.GetEnvironmentVariable("WEBSITE_INSTANCE_ID")
             ?? Environment.MachineName;
 
-        var otel = services.AddOpenTelemetry()
+        OpenTelemetryBuilder otel = services.AddOpenTelemetry()
             .ConfigureResource(r => r
                 .AddService(
                     serviceName: options.ServiceName,
@@ -81,7 +82,7 @@ public static class ObservabilityExtensions
         IConfiguration configuration,
         IHostEnvironment environment)
     {
-        var options = configuration.GetSection(ObservabilityOptions.SECTION_NAME).Get<ObservabilityOptions>() ?? new ObservabilityOptions();
+        ObservabilityOptions options = configuration.GetSection(ObservabilityOptions.SECTION_NAME).Get<ObservabilityOptions>() ?? new ObservabilityOptions();
 
         if (!options.Enabled || !options.ExportLogs)
         {
@@ -93,7 +94,7 @@ public static class ObservabilityExtensions
 
         logging.AddOpenTelemetry(otelOpts =>
         {
-            var resourceBuilder = ResourceBuilder.CreateDefault()
+            ResourceBuilder resourceBuilder = ResourceBuilder.CreateDefault()
                 .AddService(
                     serviceName: options.ServiceName,
                     serviceVersion: typeof(Program).Assembly.GetName().Version?.ToString() ?? "1.0.0",

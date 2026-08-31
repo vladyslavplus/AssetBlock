@@ -1,5 +1,7 @@
+using Ardalis.Result;
 using AssetBlock.Application.UseCases.Users.ListSocialPlatforms;
 using AssetBlock.Domain.Abstractions.Services;
+using AssetBlock.Domain.Core.Dto.Users;
 using AssetBlock.Domain.Core.Entities;
 using AwesomeAssertions;
 using NSubstitute;
@@ -23,7 +25,7 @@ public class ListSocialPlatformsQueryHandlerTests
         var p1 = new SocialPlatform { Id = Guid.NewGuid(), Name = "Alpha", IconName = "a" };
         _store.GetAll(Arg.Any<CancellationToken>()).Returns([p2, p1]);
 
-        var result = await _handler.Handle(new ListSocialPlatformsQuery(), CancellationToken.None);
+        Result<List<SocialPlatformListItemDto>> result = await _handler.Handle(new ListSocialPlatformsQuery(), CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
         result.Value.Should().HaveCount(2);

@@ -1,6 +1,7 @@
 using AssetBlock.Domain.Core.Entities;
 using AssetBlock.Infrastructure.Persistence.Configurations;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Metadata.Builders;
 using NpgsqlTypes;
 
 namespace AssetBlock.Infrastructure.Persistence;
@@ -66,7 +67,7 @@ public sealed class ApplicationDbContext(DbContextOptions<ApplicationDbContext> 
 
     private static void ConfigurePostgresSecondarySearch(ModelBuilder modelBuilder)
     {
-        var bundleRevision = modelBuilder.Entity<BundleRevision>();
+        EntityTypeBuilder<BundleRevision> bundleRevision = modelBuilder.Entity<BundleRevision>();
         bundleRevision.HasIndex(r => r.Title)
             .HasMethod("GIN")
             .HasOperators("gin_trgm_ops")
@@ -76,7 +77,7 @@ public sealed class ApplicationDbContext(DbContextOptions<ApplicationDbContext> 
             .HasOperators("gin_trgm_ops")
             .HasDatabaseName("IX_bundle_revisions_Description_trgm");
 
-        var collection = modelBuilder.Entity<Collection>();
+        EntityTypeBuilder<Collection> collection = modelBuilder.Entity<Collection>();
         collection.HasIndex(c => c.Title)
             .HasMethod("GIN")
             .HasOperators("gin_trgm_ops")
@@ -86,7 +87,7 @@ public sealed class ApplicationDbContext(DbContextOptions<ApplicationDbContext> 
             .HasOperators("gin_trgm_ops")
             .HasDatabaseName("IX_collections_Description_trgm");
 
-        var category = modelBuilder.Entity<Category>();
+        EntityTypeBuilder<Category> category = modelBuilder.Entity<Category>();
         category.HasIndex(c => c.Name)
             .HasMethod("GIN")
             .HasOperators("gin_trgm_ops")
@@ -103,7 +104,7 @@ public sealed class ApplicationDbContext(DbContextOptions<ApplicationDbContext> 
 
     private static void ConfigurePostgresAssetSearch(ModelBuilder modelBuilder)
     {
-        var asset = modelBuilder.Entity<Asset>();
+        EntityTypeBuilder<Asset> asset = modelBuilder.Entity<Asset>();
 
         asset.Property<NpgsqlTsVector>(AssetConfiguration.SEARCH_VECTOR_PROPERTY)
             .HasColumnName("search_vector")

@@ -1,6 +1,7 @@
 using AssetBlock.Application.UseCases.Admin.Outbox.GetDeadLetters;
 using AssetBlock.Domain.Core.Dto.Outbox;
 using AwesomeAssertions;
+using FluentValidation.Results;
 
 namespace AssetBlock.Application.Tests.Validators;
 
@@ -12,7 +13,7 @@ public sealed class GetDeadLettersQueryValidatorTests
     public void Validate_WhenRequestValid_ShouldNotHaveErrors()
     {
         var query = new GetDeadLettersQuery(new GetDeadLettersRequest());
-        var result = _validator.Validate(query);
+        ValidationResult result = _validator.Validate(query);
         result.IsValid.Should().BeTrue();
     }
 
@@ -22,7 +23,7 @@ public sealed class GetDeadLettersQueryValidatorTests
     public void Validate_WhenPageInvalid_ShouldHaveError(int page)
     {
         var query = new GetDeadLettersQuery(new GetDeadLettersRequest(page));
-        var result = _validator.Validate(query);
+        ValidationResult result = _validator.Validate(query);
         result.IsValid.Should().BeFalse();
         result.Errors.Should().Contain(e => e.PropertyName.Contains("Page"));
     }
@@ -34,7 +35,7 @@ public sealed class GetDeadLettersQueryValidatorTests
     public void Validate_WhenPageSizeInvalid_ShouldHaveError(int pageSize)
     {
         var query = new GetDeadLettersQuery(new GetDeadLettersRequest(1, pageSize));
-        var result = _validator.Validate(query);
+        ValidationResult result = _validator.Validate(query);
         result.IsValid.Should().BeFalse();
         result.Errors.Should().Contain(e => e.PropertyName.Contains("PageSize"));
     }

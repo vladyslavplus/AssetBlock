@@ -1,6 +1,6 @@
 using Ardalis.Result;
-using AssetBlock.Domain.Core.Dto.Audit;
 using AssetBlock.Application.Messaging;
+using AssetBlock.Domain.Core.Dto.Audit;
 
 namespace AssetBlock.Application.UseCases.AuditLogs.GetAuditLogs;
 

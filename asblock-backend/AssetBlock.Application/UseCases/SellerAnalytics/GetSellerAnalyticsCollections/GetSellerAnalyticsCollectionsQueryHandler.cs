@@ -1,9 +1,9 @@
 using Ardalis.Result;
 using AssetBlock.Application.Common.Caching;
+using AssetBlock.Application.Messaging;
 using AssetBlock.Domain.Abstractions.Services;
 using AssetBlock.Domain.Core.Constants;
 using AssetBlock.Domain.Core.Dto.Analytics;
-using AssetBlock.Application.Messaging;
 using Microsoft.Extensions.Logging;
 
 namespace AssetBlock.Application.UseCases.SellerAnalytics.GetSellerAnalyticsCollections;
@@ -23,18 +23,18 @@ internal sealed class GetSellerAnalyticsCollectionsQueryHandler(
     {
         var cacheKey = CacheKeys.SellerAnalyticsCollections(request.SellerId, request.Request);
 
-        var cached = await cache.Get<AnalyticsCollectionsResult>(cacheKey, cancellationToken);
+        AnalyticsCollectionsResult? cached = await cache.Get<AnalyticsCollectionsResult>(cacheKey, cancellationToken);
         if (cached is not null)
         {
             logger.LogDebug("Seller analytics collections cache hit: {Key}", cacheKey);
             return Result.Success(cached);
         }
 
-        var fromUtc = AnalyticsRange.ToUtcStart(request.Request.From);
-        var toUtc = AnalyticsRange.ToUtcStart(request.Request.To);
-        var req = request.Request;
+        DateTimeOffset fromUtc = AnalyticsRange.ToUtcStart(request.Request.From);
+        DateTimeOffset toUtc = AnalyticsRange.ToUtcStart(request.Request.To);
+        AnalyticsCollectionsRequest req = request.Request;
 
-        (IReadOnlyList<AnalyticsCollectionItem> items, var total, var engagementAvailableFrom) =
+        (IReadOnlyList<AnalyticsCollectionItem> items, var total, DateTimeOffset? engagementAvailableFrom) =
             await analyticsStore.GetCollectionsPage(
                 request.SellerId,
                 fromUtc,

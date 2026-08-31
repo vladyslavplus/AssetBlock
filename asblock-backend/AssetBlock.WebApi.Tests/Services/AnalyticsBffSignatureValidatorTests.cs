@@ -18,10 +18,10 @@ public sealed class AnalyticsBffSignatureValidatorTests
     [Fact]
     public void Validate_WhenNoHeaders_ShouldReturnNoHeaders()
     {
-        var validator = CreateValidator(TEST_SECRET);
+        AnalyticsBffSignatureValidator validator = CreateValidator(TEST_SECRET);
         var context = new DefaultHttpContext();
 
-        var result = validator.Validate(context);
+        AnalyticsBffSignatureValidationResult result = validator.Validate(context);
 
         result.Outcome.Should().Be(AnalyticsBffSignatureValidationOutcome.NO_HEADERS);
     }
@@ -29,7 +29,7 @@ public sealed class AnalyticsBffSignatureValidatorTests
     [Fact]
     public void Validate_WhenValidHeaders_ShouldReturnVerifiedPartition()
     {
-        var validator = CreateValidator(TEST_SECRET);
+        AnalyticsBffSignatureValidator validator = CreateValidator(TEST_SECRET);
         var context = new DefaultHttpContext();
         const string clientIp = "198.51.100.42";
         var partition = AnalyticsBffSignatureHelper.CreatePartition(clientIp, TEST_SECRET);
@@ -40,7 +40,7 @@ public sealed class AnalyticsBffSignatureValidatorTests
         context.Request.Headers[AnalyticsBffRateLimitHeaders.TIMESTAMP] = timestamp;
         context.Request.Headers[AnalyticsBffRateLimitHeaders.SIGNATURE] = signature;
 
-        var result = validator.Validate(context);
+        AnalyticsBffSignatureValidationResult result = validator.Validate(context);
 
         result.Outcome.Should().Be(AnalyticsBffSignatureValidationOutcome.VALID);
         result.VerifiedPartition.Should().Be(partition);
@@ -49,7 +49,7 @@ public sealed class AnalyticsBffSignatureValidatorTests
     [Fact]
     public void Validate_WhenSignatureDiffersByOneCharacter_ShouldReturnInvalid()
     {
-        var validator = CreateValidator(TEST_SECRET);
+        AnalyticsBffSignatureValidator validator = CreateValidator(TEST_SECRET);
         var context = new DefaultHttpContext();
         const string clientIp = "198.51.100.43";
         var partition = AnalyticsBffSignatureHelper.CreatePartition(clientIp, TEST_SECRET);
@@ -61,7 +61,7 @@ public sealed class AnalyticsBffSignatureValidatorTests
         context.Request.Headers[AnalyticsBffRateLimitHeaders.TIMESTAMP] = timestamp;
         context.Request.Headers[AnalyticsBffRateLimitHeaders.SIGNATURE] = tampered;
 
-        var result = validator.Validate(context);
+        AnalyticsBffSignatureValidationResult result = validator.Validate(context);
 
         result.Outcome.Should().Be(AnalyticsBffSignatureValidationOutcome.INVALID);
     }
@@ -69,7 +69,7 @@ public sealed class AnalyticsBffSignatureValidatorTests
     [Fact]
     public void Validate_WhenTimestampOutsideTolerance_ShouldReturnInvalid()
     {
-        var validator = CreateValidator(TEST_SECRET);
+        AnalyticsBffSignatureValidator validator = CreateValidator(TEST_SECRET);
         var context = new DefaultHttpContext();
         const string clientIp = "198.51.100.44";
         var partition = AnalyticsBffSignatureHelper.CreatePartition(clientIp, TEST_SECRET);
@@ -80,7 +80,7 @@ public sealed class AnalyticsBffSignatureValidatorTests
         context.Request.Headers[AnalyticsBffRateLimitHeaders.TIMESTAMP] = staleTimestamp;
         context.Request.Headers[AnalyticsBffRateLimitHeaders.SIGNATURE] = signature;
 
-        var result = validator.Validate(context);
+        AnalyticsBffSignatureValidationResult result = validator.Validate(context);
 
         result.Outcome.Should().Be(AnalyticsBffSignatureValidationOutcome.INVALID);
     }
@@ -88,14 +88,14 @@ public sealed class AnalyticsBffSignatureValidatorTests
     [Fact]
     public void Validate_WhenBackendSecretMissingAndHeadersPresent_ShouldReturnInvalid()
     {
-        var validator = CreateValidator(string.Empty);
+        AnalyticsBffSignatureValidator validator = CreateValidator(string.Empty);
         var context = new DefaultHttpContext();
         context.Request.Headers[AnalyticsBffRateLimitHeaders.PARTITION] = new string('e', 64);
         context.Request.Headers[AnalyticsBffRateLimitHeaders.TIMESTAMP] =
             DateTimeOffset.UtcNow.ToUnixTimeSeconds().ToString();
         context.Request.Headers[AnalyticsBffRateLimitHeaders.SIGNATURE] = new string('f', 64);
 
-        var result = validator.Validate(context);
+        AnalyticsBffSignatureValidationResult result = validator.Validate(context);
 
         result.Outcome.Should().Be(AnalyticsBffSignatureValidationOutcome.INVALID);
     }
@@ -120,15 +120,15 @@ public sealed class AnalyticsBffSignatureValidatorTests
     [Fact]
     public async Task AddAnalyticsRateLimitingOptions_WhenProductionSecretMissing_ShouldFailOnStart()
     {
-        var builder = WebApplication.CreateBuilder(new WebApplicationOptions
+        WebApplicationBuilder builder = WebApplication.CreateBuilder(new WebApplicationOptions
         {
             EnvironmentName = Environments.Production,
         });
         builder.WebHost.UseTestServer();
         builder.Services.AddAnalyticsRateLimitingOptions(builder.Configuration);
 
-        await using var app = builder.Build();
-        var act = async () => await app.StartAsync();
+        await using WebApplication app = builder.Build();
+        Func<Task> act = async () => await app.StartAsync();
 
         await act.Should().ThrowAsync<OptionsValidationException>()
             .Where(ex => ex.Failures.Any(f => f.Contains("AnalyticsRateLimiting:BffSigningSecret")));
@@ -137,15 +137,15 @@ public sealed class AnalyticsBffSignatureValidatorTests
     [Fact]
     public async Task AddAnalyticsRateLimitingOptions_WhenStagingSecretMissing_ShouldFailOnStart()
     {
-        var builder = WebApplication.CreateBuilder(new WebApplicationOptions
+        WebApplicationBuilder builder = WebApplication.CreateBuilder(new WebApplicationOptions
         {
             EnvironmentName = "Staging",
         });
         builder.WebHost.UseTestServer();
         builder.Services.AddAnalyticsRateLimitingOptions(builder.Configuration);
 
-        await using var app = builder.Build();
-        var act = async () => await app.StartAsync();
+        await using WebApplication app = builder.Build();
+        Func<Task> act = async () => await app.StartAsync();
 
         await act.Should().ThrowAsync<OptionsValidationException>()
             .Where(ex => ex.Failures.Any(f => f.Contains("AnalyticsRateLimiting:BffSigningSecret")));
@@ -154,7 +154,7 @@ public sealed class AnalyticsBffSignatureValidatorTests
     [Fact]
     public async Task AddAnalyticsRateLimitingOptions_WhenProductionSecretTooShort_ShouldFailOnStart()
     {
-        var builder = WebApplication.CreateBuilder(new WebApplicationOptions
+        WebApplicationBuilder builder = WebApplication.CreateBuilder(new WebApplicationOptions
         {
             EnvironmentName = Environments.Production,
         });
@@ -162,8 +162,8 @@ public sealed class AnalyticsBffSignatureValidatorTests
         builder.Configuration["AnalyticsRateLimiting:BffSigningSecret"] = "too-short";
         builder.Services.AddAnalyticsRateLimitingOptions(builder.Configuration);
 
-        await using var app = builder.Build();
-        var act = async () => await app.StartAsync();
+        await using WebApplication app = builder.Build();
+        Func<Task> act = async () => await app.StartAsync();
 
         await act.Should().ThrowAsync<OptionsValidationException>()
             .Where(ex => ex.Failures.Any(f => f.Contains("at least 32 characters")));
@@ -172,15 +172,15 @@ public sealed class AnalyticsBffSignatureValidatorTests
     [Fact]
     public async Task AddAnalyticsRateLimitingOptions_WhenDevelopmentSecretMissing_ShouldStart()
     {
-        var builder = WebApplication.CreateBuilder(new WebApplicationOptions
+        WebApplicationBuilder builder = WebApplication.CreateBuilder(new WebApplicationOptions
         {
             EnvironmentName = Environments.Development,
         });
         builder.WebHost.UseTestServer();
         builder.Services.AddAnalyticsRateLimitingOptions(builder.Configuration);
 
-        await using var app = builder.Build();
-        var act = async () => await app.StartAsync();
+        await using WebApplication app = builder.Build();
+        Func<Task> act = async () => await app.StartAsync();
 
         await act.Should().NotThrowAsync();
     }
@@ -188,7 +188,7 @@ public sealed class AnalyticsBffSignatureValidatorTests
     [Fact]
     public async Task AddAnalyticsRateLimitingOptions_WhenDevelopmentSecretTooShort_ShouldFailOnStart()
     {
-        var builder = WebApplication.CreateBuilder(new WebApplicationOptions
+        WebApplicationBuilder builder = WebApplication.CreateBuilder(new WebApplicationOptions
         {
             EnvironmentName = Environments.Development,
         });
@@ -196,8 +196,8 @@ public sealed class AnalyticsBffSignatureValidatorTests
         builder.Configuration["AnalyticsRateLimiting:BffSigningSecret"] = "too-short";
         builder.Services.AddAnalyticsRateLimitingOptions(builder.Configuration);
 
-        await using var app = builder.Build();
-        var act = async () => await app.StartAsync();
+        await using WebApplication app = builder.Build();
+        Func<Task> act = async () => await app.StartAsync();
 
         await act.Should().ThrowAsync<OptionsValidationException>()
             .Where(ex => ex.Failures.Any(f => f.Contains("at least 32 characters")));
@@ -206,22 +206,22 @@ public sealed class AnalyticsBffSignatureValidatorTests
     [Fact]
     public async Task AddAnalyticsRateLimitingOptions_WhenIntegrationTestingSecretMissing_ShouldStart()
     {
-        var builder = WebApplication.CreateBuilder(new WebApplicationOptions
+        WebApplicationBuilder builder = WebApplication.CreateBuilder(new WebApplicationOptions
         {
             EnvironmentName = "IntegrationTesting",
         });
         builder.WebHost.UseTestServer();
         builder.Services.AddAnalyticsRateLimitingOptions(builder.Configuration);
 
-        await using var app = builder.Build();
-        var act = async () => await app.StartAsync();
+        await using WebApplication app = builder.Build();
+        Func<Task> act = async () => await app.StartAsync();
 
         await act.Should().NotThrowAsync();
     }
 
     private static AnalyticsBffSignatureValidator CreateValidator(string secret)
     {
-        var options = Options.Create(new AnalyticsRateLimitingOptions { BffSigningSecret = secret });
+        IOptions<AnalyticsRateLimitingOptions> options = Options.Create(new AnalyticsRateLimitingOptions { BffSigningSecret = secret });
         return new AnalyticsBffSignatureValidator(options);
     }
 }

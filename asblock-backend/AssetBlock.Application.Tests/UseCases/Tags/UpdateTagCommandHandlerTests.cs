@@ -3,6 +3,7 @@ using AssetBlock.Application.UseCases.Tags.UpdateTag;
 using AssetBlock.Domain.Abstractions.Services;
 using AssetBlock.Domain.Core.Constants;
 using AssetBlock.Domain.Core.Dto.Audit;
+using AssetBlock.Domain.Core.Dto.Tags;
 using AssetBlock.Domain.Core.Entities;
 using AssetBlock.Domain.Core.Enums;
 using AwesomeAssertions;
@@ -42,7 +43,7 @@ public class UpdateTagCommandHandlerTests
         _tagStoreMock.GetById(tagId, Arg.Any<CancellationToken>()).Returns(existingTag);
         _tagStoreMock.GetByName("updated-name", Arg.Any<CancellationToken>()).Returns((Tag?)null);
 
-        var result = await _handler.Handle(command, CancellationToken.None);
+        Result<TagDto> result = await _handler.Handle(command, CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
         result.Value.Name.Should().Be("updated-name");
@@ -66,7 +67,7 @@ public class UpdateTagCommandHandlerTests
         var command = new UpdateTagCommand(tagId, "updated-name");
         _tagStoreMock.GetById(tagId, Arg.Any<CancellationToken>()).Returns((Tag?)null);
 
-        var result = await _handler.Handle(command, CancellationToken.None);
+        Result<TagDto> result = await _handler.Handle(command, CancellationToken.None);
 
         result.Status.Should().Be(ResultStatus.NotFound);
         result.Errors.Should().Contain(ErrorCodes.ERR_TAG_NOT_FOUND);
@@ -82,7 +83,7 @@ public class UpdateTagCommandHandlerTests
         _tagStoreMock.GetById(tagId, Arg.Any<CancellationToken>()).Returns(existingTag);
         _tagStoreMock.GetByName("updated-name", Arg.Any<CancellationToken>()).Returns(new Tag { Id = Guid.NewGuid(), Name = "updated-name" });
 
-        var result = await _handler.Handle(command, CancellationToken.None);
+        Result<TagDto> result = await _handler.Handle(command, CancellationToken.None);
 
         result.IsSuccess.Should().BeFalse();
         result.Status.Should().Be(ResultStatus.Conflict);

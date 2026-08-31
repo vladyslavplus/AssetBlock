@@ -1,6 +1,6 @@
 using Ardalis.Result;
-using AssetBlock.Domain.Abstractions.Services;
 using AssetBlock.Application.Messaging;
+using AssetBlock.Domain.Abstractions.Services;
 using Microsoft.Extensions.Logging;
 
 namespace AssetBlock.Application.UseCases.Users.MarkAllNotificationsRead;

@@ -1,9 +1,11 @@
+using Ardalis.Result;
 using AssetBlock.Application.UseCases.Users.UpdateProfile;
 using AssetBlock.Domain.Abstractions.Services;
 using AssetBlock.Domain.Core.Constants;
 using AssetBlock.Domain.Core.Dto.Audit;
-using AssetBlock.Domain.Core.Enums;
+using AssetBlock.Domain.Core.Dto.Users;
 using AssetBlock.Domain.Core.Entities;
+using AssetBlock.Domain.Core.Enums;
 using AssetBlock.Domain.Core.Exceptions;
 using AwesomeAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -39,7 +41,7 @@ public class UpdateUserProfileCommandHandlerTests
         var id = Guid.NewGuid();
         _userStore.GetByIdForUpdate(id, Arg.Any<CancellationToken>()).Returns((User?)null);
 
-        var result = await _handler.Handle(new UpdateUserProfileCommand(id, "x", null, null, null), CancellationToken.None);
+        Result<UpdateUserProfileResponse> result = await _handler.Handle(new UpdateUserProfileCommand(id, "x", null, null, null), CancellationToken.None);
 
         result.IsSuccess.Should().BeFalse();
         result.Errors.Should().Contain(ErrorCodes.ERR_USER_NOT_FOUND);
@@ -62,7 +64,7 @@ public class UpdateUserProfileCommandHandlerTests
             .Update(Arg.Any<User>(), Arg.Any<CancellationToken>())
             .Returns<Task<User>>(_ => throw new DuplicateUsernameException());
 
-        var result = await _handler.Handle(new UpdateUserProfileCommand(id, "taken", null, null, null), CancellationToken.None);
+        Result<UpdateUserProfileResponse> result = await _handler.Handle(new UpdateUserProfileCommand(id, "taken", null, null, null), CancellationToken.None);
 
         result.IsSuccess.Should().BeFalse();
         result.Status.Should().Be(Ardalis.Result.ResultStatus.Conflict);
@@ -84,7 +86,7 @@ public class UpdateUserProfileCommandHandlerTests
         _userStore.GetByIdForUpdate(id, Arg.Any<CancellationToken>()).Returns(user);
         _userStore.Update(Arg.Any<User>(), Arg.Any<CancellationToken>()).Returns(callInfo => callInfo.Arg<User>());
 
-        var result = await _handler.Handle(new UpdateUserProfileCommand(id, "newname", null, "bio", true), CancellationToken.None);
+        Result<UpdateUserProfileResponse> result = await _handler.Handle(new UpdateUserProfileCommand(id, "newname", null, "bio", true), CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
         result.Value.Username.Should().Be("newname");
@@ -118,7 +120,7 @@ public class UpdateUserProfileCommandHandlerTests
         _userStore.GetByIdForUpdate(id, Arg.Any<CancellationToken>()).Returns(user);
         _userStore.Update(Arg.Any<User>(), Arg.Any<CancellationToken>()).Returns(callInfo => callInfo.Arg<User>());
 
-        var result = await _handler.Handle(new UpdateUserProfileCommand(id, null, "   ", "  \t ", null), CancellationToken.None);
+        Result<UpdateUserProfileResponse> result = await _handler.Handle(new UpdateUserProfileCommand(id, null, "   ", "  \t ", null), CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
         result.Value.AvatarUrl.Should().BeNull();

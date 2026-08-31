@@ -24,7 +24,7 @@ internal static class AnalyticsProductMapper
 
     public static AnalyticsProductItem FromBundleRow(AnalyticsBundleProductRow r)
     {
-        var (currentPriceCents, listPriceCents, discountPercent) =
+        (var currentPriceCents, var listPriceCents, var discountPercent) =
             MapBundlePricing(r.CurrentPrice, r.ListPriceTotal);
 
         return new AnalyticsProductItem(
@@ -65,7 +65,7 @@ internal static class AnalyticsProductMapper
                 null, null, null);
         }
 
-        var (currentPriceCents, listPriceCents, discountPercent) =
+        (var currentPriceCents, var listPriceCents, var discountPercent) =
             MapBundlePricing(r.CurrentPrice, r.ListPriceTotal);
 
         return new AnalyticsProductItem(
@@ -122,12 +122,12 @@ internal static class SellerAnalyticsOverviewMapper
         DateOnly compTo,
         AnalyticsGranularity granularity)
     {
-        var cur = snapshot.CurrentFacts;
-        var prev = snapshot.ComparisonFacts;
-        var ratings = snapshot.CurrentRatings;
-        var prevRatings = snapshot.ComparisonRatings;
+        SellerAnalyticsRawFacts cur = snapshot.CurrentFacts;
+        SellerAnalyticsRawFacts prev = snapshot.ComparisonFacts;
+        SellerRatingsRaw ratings = snapshot.CurrentRatings;
+        SellerRatingsRaw prevRatings = snapshot.ComparisonRatings;
 
-        var series = AnalyticsRange.BuildSeries(
+        IReadOnlyList<AnalyticsSeriesPoint> series = AnalyticsRange.BuildSeries(
             snapshot.DaySeries,
             from,
             to,
@@ -155,13 +155,13 @@ internal static class SellerAnalyticsOverviewMapper
             ? curRepeatRate.Value - prevRepeatRate.Value
             : (decimal?)null;
 
-        var engagementAvailable = snapshot.EngagementAvailableFrom;
-        var engagementTotals = AnalyticsEngagementMapper.MapEngagementTotals(
+        DateTimeOffset? engagementAvailable = snapshot.EngagementAvailableFrom;
+        AnalyticsEngagementTotals? engagementTotals = AnalyticsEngagementMapper.MapEngagementTotals(
             snapshot.CurrentEngagement,
             snapshot.ComparisonEngagement);
-        var commerceFunnel = AnalyticsEngagementMapper.MapCommerceFunnel(snapshot.CommerceFunnel);
-        var trackedFunnel = AnalyticsEngagementMapper.MapTrackedFunnel(snapshot.TrackedFunnel);
-        var trafficSources = AnalyticsEngagementMapper.MapTrafficSources(
+        AnalyticsCommerceFunnel? commerceFunnel = AnalyticsEngagementMapper.MapCommerceFunnel(snapshot.CommerceFunnel);
+        AnalyticsTrackedFunnel? trackedFunnel = AnalyticsEngagementMapper.MapTrackedFunnel(snapshot.TrackedFunnel);
+        IReadOnlyList<AnalyticsTrafficSourceRow>? trafficSources = AnalyticsEngagementMapper.MapTrafficSources(
             snapshot.TrafficSources,
             snapshot.ExternalReferrers);
 

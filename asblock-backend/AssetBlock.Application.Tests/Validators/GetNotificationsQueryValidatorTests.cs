@@ -1,6 +1,7 @@
 using AssetBlock.Application.UseCases.Users.ListNotifications;
 using AssetBlock.Domain.Core.Dto.Notifications;
 using AwesomeAssertions;
+using FluentValidation.Results;
 
 namespace AssetBlock.Application.Tests.Validators;
 
@@ -15,7 +16,7 @@ public class GetNotificationsQueryValidatorTests
             Guid.NewGuid(),
             new GetNotificationsRequest { UnreadOnly = true, SortBy = "ReadAt" });
 
-        var result = await _validator.ValidateAsync(query);
+        ValidationResult result = await _validator.ValidateAsync(query);
 
         result.IsValid.Should().BeFalse();
         result.Errors.Should().Contain(e => e.PropertyName == "Request");
@@ -30,7 +31,7 @@ public class GetNotificationsQueryValidatorTests
             Guid.NewGuid(),
             new GetNotificationsRequest { UnreadOnly = true, SortBy = sortBy });
 
-        var result = await _validator.ValidateAsync(query);
+        ValidationResult result = await _validator.ValidateAsync(query);
 
         result.IsValid.Should().BeFalse();
     }
@@ -42,7 +43,7 @@ public class GetNotificationsQueryValidatorTests
             Guid.NewGuid(),
             new GetNotificationsRequest { UnreadOnly = true, SortBy = "CreatedAt" });
 
-        var result = await _validator.ValidateAsync(query);
+        ValidationResult result = await _validator.ValidateAsync(query);
 
         result.IsValid.Should().BeTrue();
     }
@@ -54,7 +55,7 @@ public class GetNotificationsQueryValidatorTests
             Guid.NewGuid(),
             new GetNotificationsRequest { UnreadOnly = true, SortBy = null });
 
-        var result = await _validator.ValidateAsync(query);
+        ValidationResult result = await _validator.ValidateAsync(query);
 
         result.IsValid.Should().BeTrue();
     }
@@ -66,7 +67,7 @@ public class GetNotificationsQueryValidatorTests
             Guid.NewGuid(),
             new GetNotificationsRequest { UnreadOnly = true, SortBy = "NotASort" });
 
-        var result = await _validator.ValidateAsync(query);
+        ValidationResult result = await _validator.ValidateAsync(query);
 
         result.IsValid.Should().BeFalse();
         result.Errors.Should().Contain(e => e.PropertyName == "Request.SortBy");
@@ -79,7 +80,7 @@ public class GetNotificationsQueryValidatorTests
             Guid.NewGuid(),
             new GetNotificationsRequest { UnreadOnly = false, SortBy = "ReadAt" });
 
-        var result = await _validator.ValidateAsync(query);
+        ValidationResult result = await _validator.ValidateAsync(query);
 
         result.IsValid.Should().BeTrue();
     }

@@ -51,15 +51,15 @@ internal sealed class StorageBucketEnsureHostedService : BackgroundService
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         var attempt = 0;
-        var backoff = _initialBackoff;
+        TimeSpan backoff = _initialBackoff;
 
         while (!stoppingToken.IsCancellationRequested)
         {
             attempt++;
             try
             {
-                using var scope = _services.CreateScope();
-                var storage = scope.ServiceProvider.GetRequiredService<IAssetStorageService>();
+                using IServiceScope scope = _services.CreateScope();
+                IAssetStorageService storage = scope.ServiceProvider.GetRequiredService<IAssetStorageService>();
                 await storage.EnsureBucket(stoppingToken).ConfigureAwait(false);
                 _logger.LogInformation(
                     "Storage bucket ensure succeeded on attempt {Attempt}.",
@@ -72,7 +72,7 @@ internal sealed class StorageBucketEnsureHostedService : BackgroundService
             }
             catch (Exception ex)
             {
-                var delay = attempt < FAST_ATTEMPTS ? _fastRetryDelay : backoff;
+                TimeSpan delay = attempt < FAST_ATTEMPTS ? _fastRetryDelay : backoff;
                 _logger.LogWarning(
                     ex,
                     "Storage bucket ensure attempt {Attempt} failed; retrying in {DelayMs}ms. " +

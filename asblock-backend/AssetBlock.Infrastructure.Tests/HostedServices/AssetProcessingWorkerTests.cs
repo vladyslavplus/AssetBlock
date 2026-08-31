@@ -37,8 +37,8 @@ public sealed class AssetProcessingWorkerTests
         AssetProcessingOptions options,
         Func<double>? jitterProvider = null)
     {
-        var serviceProvider = Substitute.For<IServiceProvider>();
-        var scope = Substitute.For<IServiceScope>();
+        IServiceProvider serviceProvider = Substitute.For<IServiceProvider>();
+        IServiceScope scope = Substitute.For<IServiceScope>();
 
         serviceProvider.GetService(typeof(IAssetProcessingJobStore)).Returns(_store);
         serviceProvider.GetService(typeof(IAssetProcessingLifecycleStore)).Returns(_lifecycleStore);
@@ -63,10 +63,10 @@ public sealed class AssetProcessingWorkerTests
     [InlineData(10, 300)] // Capped at MaxRetryDelay (300s)
     public void CalculateRetryDelay_ExponentialBackoff_CalculatesCorrectDelay(int attempt, int expectedSeconds)
     {
-        var options = CreateDefaultOptions();
-        var worker = CreateWorker(options);
+        AssetProcessingOptions options = CreateDefaultOptions();
+        AssetProcessingWorker worker = CreateWorker(options);
 
-        var delay = worker.CalculateRetryDelay(attempt, null);
+        TimeSpan delay = worker.CalculateRetryDelay(attempt, null);
 
         delay.Should().Be(TimeSpan.FromSeconds(expectedSeconds));
     }
@@ -74,11 +74,11 @@ public sealed class AssetProcessingWorkerTests
     [Fact]
     public void CalculateRetryDelay_WhenHandlerProvidesLargerRetryAfter_UsesHandlerValue()
     {
-        var options = CreateDefaultOptions();
-        var worker = CreateWorker(options);
+        AssetProcessingOptions options = CreateDefaultOptions();
+        AssetProcessingWorker worker = CreateWorker(options);
 
         var handlerRetryAfter = TimeSpan.FromMinutes(2); // 120s > 10s exponential
-        var delay = worker.CalculateRetryDelay(1, handlerRetryAfter);
+        TimeSpan delay = worker.CalculateRetryDelay(1, handlerRetryAfter);
 
         delay.Should().Be(TimeSpan.FromMinutes(2));
     }
@@ -86,11 +86,11 @@ public sealed class AssetProcessingWorkerTests
     [Fact]
     public void CalculateRetryDelay_WhenHandlerProvidesValueExceedingMax_CapsAtMaxRetryDelay()
     {
-        var options = CreateDefaultOptions();
-        var worker = CreateWorker(options);
+        AssetProcessingOptions options = CreateDefaultOptions();
+        AssetProcessingWorker worker = CreateWorker(options);
 
         var handlerRetryAfter = TimeSpan.FromHours(1); // 1h > 5min max
-        var delay = worker.CalculateRetryDelay(1, handlerRetryAfter);
+        TimeSpan delay = worker.CalculateRetryDelay(1, handlerRetryAfter);
 
         delay.Should().Be(options.MaxRetryDelay);
     }
@@ -98,8 +98,8 @@ public sealed class AssetProcessingWorkerTests
     [Fact]
     public async Task Worker_WhenRecoveringLeases_AlsoRecoversExhaustedSecurityJobs()
     {
-        var options = CreateDefaultOptions();
-        var worker = CreateWorker(options);
+        AssetProcessingOptions options = CreateDefaultOptions();
+        AssetProcessingWorker worker = CreateWorker(options);
 
         _store.ClaimPendingBatch(Arg.Any<int>(), Arg.Any<TimeSpan>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
             .Returns(Task.FromResult<IReadOnlyList<ClaimedAssetProcessingJob>>([]));
@@ -119,8 +119,8 @@ public sealed class AssetProcessingWorkerTests
     [Fact]
     public async Task Worker_WhenDisabled_DoesNotClaimJobs()
     {
-        var options = CreateDefaultOptions(enabled: false);
-        var worker = CreateWorker(options);
+        AssetProcessingOptions options = CreateDefaultOptions(enabled: false);
+        AssetProcessingWorker worker = CreateWorker(options);
 
         using var cts = new CancellationTokenSource(TimeSpan.FromMilliseconds(100));
 
@@ -138,8 +138,8 @@ public sealed class AssetProcessingWorkerTests
     [Fact]
     public async Task Worker_WhenHandlerThrowsInvalidResultException_MarksTerminalWithoutRetry()
     {
-        var options = CreateDefaultOptions();
-        var worker = CreateWorker(options);
+        AssetProcessingOptions options = CreateDefaultOptions();
+        AssetProcessingWorker worker = CreateWorker(options);
 
         var jobId = Guid.NewGuid();
         var leaseToken = Guid.NewGuid();
@@ -160,7 +160,7 @@ public sealed class AssetProcessingWorkerTests
             DateTimeOffset.UtcNow,
             DateTimeOffset.UtcNow);
 
-        var adapter = Substitute.For<IAssetProcessingJobHandlerAdapter>();
+        IAssetProcessingJobHandlerAdapter adapter = Substitute.For<IAssetProcessingJobHandlerAdapter>();
         adapter.Execute(Arg.Any<IServiceProvider>(), Arg.Any<ClaimedAssetProcessingJob>(), Arg.Any<CancellationToken>())
             .Returns<AssetProcessingJobOutcome>(_ => throw new InvalidAssetProcessingJobResultException("Result type mismatch"));
 
@@ -207,8 +207,8 @@ public sealed class AssetProcessingWorkerTests
     [Fact]
     public async Task Worker_WhenDbTransitionThrows_LogsAndRemovesTaskWithoutDoubleTransition()
     {
-        var options = CreateDefaultOptions();
-        var worker = CreateWorker(options);
+        AssetProcessingOptions options = CreateDefaultOptions();
+        AssetProcessingWorker worker = CreateWorker(options);
 
         var jobId = Guid.NewGuid();
         var leaseToken = Guid.NewGuid();
@@ -228,7 +228,7 @@ public sealed class AssetProcessingWorkerTests
             DateTimeOffset.UtcNow,
             DateTimeOffset.UtcNow);
 
-        var adapter = Substitute.For<IAssetProcessingJobHandlerAdapter>();
+        IAssetProcessingJobHandlerAdapter adapter = Substitute.For<IAssetProcessingJobHandlerAdapter>();
         adapter.Execute(Arg.Any<IServiceProvider>(), Arg.Any<ClaimedAssetProcessingJob>(), Arg.Any<CancellationToken>())
             .Returns(Task.FromResult(AssetProcessingJobOutcome.Succeeded(new ArchiveInspectionResult(1, 10))));
 
@@ -278,13 +278,13 @@ public sealed class AssetProcessingWorkerTests
     [Fact]
     public async Task Worker_SignalRUpdates_SentInMonotonicOrderWithJobUpdatedAt()
     {
-        var options = CreateDefaultOptions();
-        var worker = CreateWorker(options);
+        AssetProcessingOptions options = CreateDefaultOptions();
+        AssetProcessingWorker worker = CreateWorker(options);
 
         var jobId = Guid.NewGuid();
         var leaseToken = Guid.NewGuid();
         var ownerUserId = Guid.NewGuid();
-        var updatedAt = DateTimeOffset.UtcNow.AddSeconds(-1);
+        DateTimeOffset updatedAt = DateTimeOffset.UtcNow.AddSeconds(-1);
 
         var claimedJob = new ClaimedAssetProcessingJob(
             jobId,
@@ -302,7 +302,7 @@ public sealed class AssetProcessingWorkerTests
             DateTimeOffset.UtcNow.AddMinutes(-5),
             updatedAt);
 
-        var adapter = Substitute.For<IAssetProcessingJobHandlerAdapter>();
+        IAssetProcessingJobHandlerAdapter adapter = Substitute.For<IAssetProcessingJobHandlerAdapter>();
         adapter.Execute(Arg.Any<IServiceProvider>(), Arg.Any<ClaimedAssetProcessingJob>(), Arg.Any<CancellationToken>())
             .Returns(Task.FromResult(AssetProcessingJobOutcome.Succeeded(new ArchiveInspectionResult(1, 10))));
 
@@ -353,8 +353,8 @@ public sealed class AssetProcessingWorkerTests
     [Fact]
     public async Task Worker_WhenListingCopilotCommitsAtomically_ShouldPublishFinalStateOnceWithoutMarkSucceeded()
     {
-        var options = CreateDefaultOptions();
-        var worker = CreateWorker(options);
+        AssetProcessingOptions options = CreateDefaultOptions();
+        AssetProcessingWorker worker = CreateWorker(options);
 
         var jobId = Guid.NewGuid();
         var leaseToken = Guid.NewGuid();
@@ -375,7 +375,7 @@ public sealed class AssetProcessingWorkerTests
             DateTimeOffset.UtcNow,
             DateTimeOffset.UtcNow);
 
-        var adapter = Substitute.For<IAssetProcessingJobHandlerAdapter>();
+        IAssetProcessingJobHandlerAdapter adapter = Substitute.For<IAssetProcessingJobHandlerAdapter>();
         adapter.Execute(Arg.Any<IServiceProvider>(), Arg.Any<ClaimedAssetProcessingJob>(), Arg.Any<CancellationToken>())
             .Returns(Task.FromResult(AssetProcessingJobOutcome.CommittedSucceeded()));
 
@@ -444,8 +444,8 @@ public sealed class AssetProcessingWorkerTests
     [Fact]
     public async Task Worker_WhenRetryableExceptionBeforeFinalAttempt_MarksRetryableWithoutFailingVersion()
     {
-        var options = CreateDefaultOptions();
-        var worker = CreateWorker(options);
+        AssetProcessingOptions options = CreateDefaultOptions();
+        AssetProcessingWorker worker = CreateWorker(options);
 
         var jobId = Guid.NewGuid();
         var leaseToken = Guid.NewGuid();
@@ -465,7 +465,7 @@ public sealed class AssetProcessingWorkerTests
             DateTimeOffset.UtcNow,
             DateTimeOffset.UtcNow);
 
-        var adapter = Substitute.For<IAssetProcessingJobHandlerAdapter>();
+        IAssetProcessingJobHandlerAdapter adapter = Substitute.For<IAssetProcessingJobHandlerAdapter>();
         adapter.Execute(Arg.Any<IServiceProvider>(), Arg.Any<ClaimedAssetProcessingJob>(), Arg.Any<CancellationToken>())
             .Returns<AssetProcessingJobOutcome>(_ => throw new InvalidOperationException("transient storage"));
 
@@ -518,8 +518,8 @@ public sealed class AssetProcessingWorkerTests
     [Fact]
     public async Task Worker_WhenScannerUnavailableBeforeFinalAttempt_MarksRetryable()
     {
-        var options = CreateDefaultOptions();
-        var worker = CreateWorker(options);
+        AssetProcessingOptions options = CreateDefaultOptions();
+        AssetProcessingWorker worker = CreateWorker(options);
 
         var jobId = Guid.NewGuid();
         var leaseToken = Guid.NewGuid();
@@ -539,7 +539,7 @@ public sealed class AssetProcessingWorkerTests
             DateTimeOffset.UtcNow,
             DateTimeOffset.UtcNow);
 
-        var adapter = Substitute.For<IAssetProcessingJobHandlerAdapter>();
+        IAssetProcessingJobHandlerAdapter adapter = Substitute.For<IAssetProcessingJobHandlerAdapter>();
         adapter.Execute(Arg.Any<IServiceProvider>(), Arg.Any<ClaimedAssetProcessingJob>(), Arg.Any<CancellationToken>())
             .Returns(AssetProcessingJobOutcome.Retryable(
                 ErrorCodes.SCANNER_UNAVAILABLE,
@@ -594,8 +594,8 @@ public sealed class AssetProcessingWorkerTests
     [Fact]
     public async Task Worker_WhenScannerUnavailableOnFinalAttempt_TransitionsProcessingFailed()
     {
-        var options = CreateDefaultOptions();
-        var worker = CreateWorker(options);
+        AssetProcessingOptions options = CreateDefaultOptions();
+        AssetProcessingWorker worker = CreateWorker(options);
 
         var jobId = Guid.NewGuid();
         var leaseToken = Guid.NewGuid();
@@ -615,7 +615,7 @@ public sealed class AssetProcessingWorkerTests
             DateTimeOffset.UtcNow,
             DateTimeOffset.UtcNow);
 
-        var adapter = Substitute.For<IAssetProcessingJobHandlerAdapter>();
+        IAssetProcessingJobHandlerAdapter adapter = Substitute.For<IAssetProcessingJobHandlerAdapter>();
         adapter.Execute(Arg.Any<IServiceProvider>(), Arg.Any<ClaimedAssetProcessingJob>(), Arg.Any<CancellationToken>())
             .Returns(AssetProcessingJobOutcome.Retryable(
                 ErrorCodes.SCANNER_UNAVAILABLE,
@@ -688,7 +688,7 @@ public sealed class AssetProcessingWorkerTests
             InitialRetryDelay = TimeSpan.FromSeconds(10),
             MaxRetryDelay = TimeSpan.FromMinutes(5)
         };
-        var worker = CreateWorker(options);
+        AssetProcessingWorker worker = CreateWorker(options);
 
         var jobId = Guid.NewGuid();
         var leaseToken = Guid.NewGuid();
@@ -708,7 +708,7 @@ public sealed class AssetProcessingWorkerTests
             DateTimeOffset.UtcNow,
             DateTimeOffset.UtcNow);
 
-        var adapter = Substitute.For<IAssetProcessingJobHandlerAdapter>();
+        IAssetProcessingJobHandlerAdapter adapter = Substitute.For<IAssetProcessingJobHandlerAdapter>();
         if (mode == "timeout")
         {
             adapter.Execute(Arg.Any<IServiceProvider>(), Arg.Any<ClaimedAssetProcessingJob>(), Arg.Any<CancellationToken>())
@@ -793,8 +793,8 @@ public sealed class AssetProcessingWorkerTests
     [Fact]
     public async Task Worker_WhenListingCopilotHandlerMissing_MarksJobTerminalWithoutLifecycle()
     {
-        var options = CreateDefaultOptions();
-        var worker = CreateWorker(options);
+        AssetProcessingOptions options = CreateDefaultOptions();
+        AssetProcessingWorker worker = CreateWorker(options);
 
         var jobId = Guid.NewGuid();
         var leaseToken = Guid.NewGuid();
@@ -856,8 +856,8 @@ public sealed class AssetProcessingWorkerTests
     [Fact]
     public async Task Worker_WhenListingCopilotExhaustsRetries_MarksJobTerminalWithoutLifecycle()
     {
-        var options = CreateDefaultOptions();
-        var worker = CreateWorker(options);
+        AssetProcessingOptions options = CreateDefaultOptions();
+        AssetProcessingWorker worker = CreateWorker(options);
 
         var jobId = Guid.NewGuid();
         var leaseToken = Guid.NewGuid();
@@ -877,7 +877,7 @@ public sealed class AssetProcessingWorkerTests
             DateTimeOffset.UtcNow,
             DateTimeOffset.UtcNow);
 
-        var adapter = Substitute.For<IAssetProcessingJobHandlerAdapter>();
+        IAssetProcessingJobHandlerAdapter adapter = Substitute.For<IAssetProcessingJobHandlerAdapter>();
         adapter.Execute(Arg.Any<IServiceProvider>(), Arg.Any<ClaimedAssetProcessingJob>(), Arg.Any<CancellationToken>())
             .Returns<AssetProcessingJobOutcome>(_ => throw new InvalidOperationException("copilot boom"));
         _registry.GetHandler(AssetProcessingJobType.LISTING_COPILOT).Returns(adapter);
@@ -934,7 +934,7 @@ public sealed class AssetProcessingWorkerTests
             InitialRetryDelay = TimeSpan.FromSeconds(1),
             MaxRetryDelay = TimeSpan.FromSeconds(5)
         };
-        var worker = CreateWorker(options);
+        AssetProcessingWorker worker = CreateWorker(options);
 
         var jobId = Guid.NewGuid();
         var leaseToken = Guid.NewGuid();
@@ -955,11 +955,11 @@ public sealed class AssetProcessingWorkerTests
             DateTimeOffset.UtcNow);
 
         var adapterCancelled = false;
-        var adapter = Substitute.For<IAssetProcessingJobHandlerAdapter>();
+        IAssetProcessingJobHandlerAdapter adapter = Substitute.For<IAssetProcessingJobHandlerAdapter>();
         adapter.Execute(Arg.Any<IServiceProvider>(), Arg.Any<ClaimedAssetProcessingJob>(), Arg.Any<CancellationToken>())
             .Returns<Task<AssetProcessingJobOutcome>>(async info =>
             {
-                var ct = info.Arg<CancellationToken>();
+                CancellationToken ct = info.Arg<CancellationToken>();
                 try
                 {
                     await Task.Delay(TimeSpan.FromSeconds(5), ct);
@@ -1015,7 +1015,7 @@ public sealed class AssetProcessingWorkerTests
             InitialRetryDelay = TimeSpan.FromSeconds(1),
             MaxRetryDelay = TimeSpan.FromSeconds(5)
         };
-        var worker = CreateWorker(options);
+        AssetProcessingWorker worker = CreateWorker(options);
 
         var jobId = Guid.NewGuid();
         var leaseToken = Guid.NewGuid();
@@ -1036,11 +1036,11 @@ public sealed class AssetProcessingWorkerTests
             DateTimeOffset.UtcNow);
 
         var adapterCancelled = false;
-        var adapter = Substitute.For<IAssetProcessingJobHandlerAdapter>();
+        IAssetProcessingJobHandlerAdapter adapter = Substitute.For<IAssetProcessingJobHandlerAdapter>();
         adapter.Execute(Arg.Any<IServiceProvider>(), Arg.Any<ClaimedAssetProcessingJob>(), Arg.Any<CancellationToken>())
             .Returns<Task<AssetProcessingJobOutcome>>(async info =>
             {
-                var ct = info.Arg<CancellationToken>();
+                CancellationToken ct = info.Arg<CancellationToken>();
                 try
                 {
                     await Task.Delay(TimeSpan.FromSeconds(5), ct);
@@ -1096,7 +1096,7 @@ public sealed class AssetProcessingWorkerTests
             InitialRetryDelay = TimeSpan.FromSeconds(1),
             MaxRetryDelay = TimeSpan.FromSeconds(5)
         };
-        var worker = CreateWorker(options);
+        AssetProcessingWorker worker = CreateWorker(options);
 
         var jobId = Guid.NewGuid();
         var leaseToken = Guid.NewGuid();
@@ -1116,7 +1116,7 @@ public sealed class AssetProcessingWorkerTests
             DateTimeOffset.UtcNow,
             DateTimeOffset.UtcNow);
 
-        var adapter = Substitute.For<IAssetProcessingJobHandlerAdapter>();
+        IAssetProcessingJobHandlerAdapter adapter = Substitute.For<IAssetProcessingJobHandlerAdapter>();
         adapter.Execute(Arg.Any<IServiceProvider>(), Arg.Any<ClaimedAssetProcessingJob>(), Arg.Any<CancellationToken>())
             .Returns<Task<AssetProcessingJobOutcome>>(async _ =>
             {
@@ -1167,7 +1167,7 @@ public sealed class AssetProcessingWorkerTests
             InitialRetryDelay = TimeSpan.FromSeconds(1),
             MaxRetryDelay = TimeSpan.FromSeconds(5)
         };
-        var worker = CreateWorker(options);
+        AssetProcessingWorker worker = CreateWorker(options);
 
         var jobId = Guid.NewGuid();
         var leaseToken = Guid.NewGuid();
@@ -1187,11 +1187,11 @@ public sealed class AssetProcessingWorkerTests
             DateTimeOffset.UtcNow,
             DateTimeOffset.UtcNow);
 
-        var adapter = Substitute.For<IAssetProcessingJobHandlerAdapter>();
+        IAssetProcessingJobHandlerAdapter adapter = Substitute.For<IAssetProcessingJobHandlerAdapter>();
         adapter.Execute(Arg.Any<IServiceProvider>(), Arg.Any<ClaimedAssetProcessingJob>(), Arg.Any<CancellationToken>())
             .Returns<Task<AssetProcessingJobOutcome>>(async info =>
             {
-                var ct = info.Arg<CancellationToken>();
+                CancellationToken ct = info.Arg<CancellationToken>();
                 try
                 {
                     await Task.Delay(TimeSpan.FromSeconds(5), ct);
@@ -1246,7 +1246,7 @@ public sealed class AssetProcessingWorkerTests
             InitialRetryDelay = TimeSpan.FromSeconds(1),
             MaxRetryDelay = TimeSpan.FromSeconds(5)
         };
-        var worker = CreateWorker(options);
+        AssetProcessingWorker worker = CreateWorker(options);
 
         var jobId = Guid.NewGuid();
         var leaseToken = Guid.NewGuid();
@@ -1267,11 +1267,11 @@ public sealed class AssetProcessingWorkerTests
             DateTimeOffset.UtcNow);
 
         var adapterCancelledTcs = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
-        var adapter = Substitute.For<IAssetProcessingJobHandlerAdapter>();
+        IAssetProcessingJobHandlerAdapter adapter = Substitute.For<IAssetProcessingJobHandlerAdapter>();
         adapter.Execute(Arg.Any<IServiceProvider>(), Arg.Any<ClaimedAssetProcessingJob>(), Arg.Any<CancellationToken>())
             .Returns<Task<AssetProcessingJobOutcome>>(async info =>
             {
-                var ct = info.Arg<CancellationToken>();
+                CancellationToken ct = info.Arg<CancellationToken>();
                 try
                 {
                     await Task.Delay(TimeSpan.FromSeconds(30), ct);

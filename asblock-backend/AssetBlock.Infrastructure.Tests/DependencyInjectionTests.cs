@@ -5,6 +5,7 @@ using AssetBlock.Domain.Abstractions.Services;
 using AssetBlock.Domain.Core.Enums;
 using AssetBlock.Domain.Core.Primitives.AppSettingsOptions;
 using AssetBlock.Infrastructure.Persistence;
+using AssetBlock.Infrastructure.RateLimiting;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -12,7 +13,6 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using NSubstitute;
-using AssetBlock.Infrastructure.RateLimiting;
 using StackExchange.Redis;
 
 namespace AssetBlock.Infrastructure.Tests;
@@ -22,8 +22,8 @@ public sealed class DependencyInjectionTests
     [Fact]
     public void AddInfrastructure_resolves_core_services()
     {
-        var services = BuildValidServices(new TestHostEnvironment());
-        using var sp = services.BuildServiceProvider();
+        ServiceCollection services = BuildValidServices(new TestHostEnvironment());
+        using ServiceProvider sp = services.BuildServiceProvider();
 
         sp.GetRequiredService<IJwtTokenService>().Should().NotBeNull();
         sp.GetRequiredService<IUserStore>().Should().NotBeNull();
@@ -53,18 +53,18 @@ public sealed class DependencyInjectionTests
         sp.GetRequiredService<IOptions<AiOptions>>().Value.Enabled.Should().BeFalse();
         sp.GetRequiredService<IOptions<OpenRouterOptions>>().Value.Models.Should().BeEmpty();
 
-        var clientFactory = sp.GetRequiredService<IHttpClientFactory>();
-        var openRouterClient = clientFactory.CreateClient(AssetBlock.Infrastructure.Ai.OpenRouterAiGenerationProvider.HTTP_CLIENT_NAME);
+        IHttpClientFactory clientFactory = sp.GetRequiredService<IHttpClientFactory>();
+        HttpClient openRouterClient = clientFactory.CreateClient(AssetBlock.Infrastructure.Ai.OpenRouterAiGenerationProvider.HTTP_CLIENT_NAME);
         openRouterClient.Timeout.Should().Be(TimeSpan.FromMinutes(5));
 
-        var ollamaClient = clientFactory.CreateClient(AssetBlock.Infrastructure.Ai.OllamaAiGenerationProvider.HTTP_CLIENT_NAME);
+        HttpClient ollamaClient = clientFactory.CreateClient(AssetBlock.Infrastructure.Ai.OllamaAiGenerationProvider.HTTP_CLIENT_NAME);
         ollamaClient.Timeout.Should().Be(TimeSpan.FromMinutes(5));
     }
 
     [Fact]
     public void AddInfrastructure_WhenAiEnabledWithValidOpenRouterModels_ShouldBindOrderedModels()
     {
-        var services = BuildValidServices(new TestHostEnvironment(), includeRedis: false, extra: new Dictionary<string, string?>
+        ServiceCollection services = BuildValidServices(new TestHostEnvironment(), includeRedis: false, extra: new Dictionary<string, string?>
         {
             ["Ai:Enabled"] = "true",
             ["Ai:Provider"] = "OpenRouter",
@@ -74,8 +74,8 @@ public sealed class DependencyInjectionTests
             ["Ai:OpenRouter:Models:1"] = "nex-agi/nex-n2-pro:free"
         });
 
-        using var sp = services.BuildServiceProvider();
-        var models = sp.GetRequiredService<IOptions<OpenRouterOptions>>().Value.Models;
+        using ServiceProvider sp = services.BuildServiceProvider();
+        List<string> models = sp.GetRequiredService<IOptions<OpenRouterOptions>>().Value.Models;
 
         models.Should().Equal(
             "nvidia/nemotron-3-super-120b-a12b:free",
@@ -85,7 +85,7 @@ public sealed class DependencyInjectionTests
     [Fact]
     public void AddInfrastructure_WhenAiEnabledOpenRouterWithEmptyModels_ShouldFailOptionsValidation()
     {
-        var services = BuildValidServices(new TestHostEnvironment(), includeRedis: false, extra: new Dictionary<string, string?>
+        ServiceCollection services = BuildValidServices(new TestHostEnvironment(), includeRedis: false, extra: new Dictionary<string, string?>
         {
             ["Ai:Enabled"] = "true",
             ["Ai:Provider"] = "OpenRouter",
@@ -93,8 +93,8 @@ public sealed class DependencyInjectionTests
             ["Ai:OpenRouter:ApiKey"] = "sk-test-key-value"
         });
 
-        using var sp = services.BuildServiceProvider();
-        var act = () => _ = sp.GetRequiredService<IOptions<OpenRouterOptions>>().Value;
+        using ServiceProvider sp = services.BuildServiceProvider();
+        Func<OpenRouterOptions> act = () => _ = sp.GetRequiredService<IOptions<OpenRouterOptions>>().Value;
 
         act.Should().Throw<OptionsValidationException>();
     }
@@ -102,15 +102,15 @@ public sealed class DependencyInjectionTests
     [Fact]
     public void AddInfrastructure_WhenAiEnabledWithUnknownProvider_ShouldFailOptionsValidation()
     {
-        var services = BuildValidServices(new TestHostEnvironment(), includeRedis: false, extra: new Dictionary<string, string?>
+        ServiceCollection services = BuildValidServices(new TestHostEnvironment(), includeRedis: false, extra: new Dictionary<string, string?>
         {
             ["Ai:Enabled"] = "true",
             ["Ai:Provider"] = "NotAProvider",
             ["Ai:PromptPolicyVersion"] = "listing-copilot-v1"
         });
 
-        using var sp = services.BuildServiceProvider();
-        var act = () => _ = sp.GetRequiredService<IOptions<AiOptions>>().Value;
+        using ServiceProvider sp = services.BuildServiceProvider();
+        Func<AiOptions> act = () => _ = sp.GetRequiredService<IOptions<AiOptions>>().Value;
 
         act.Should().Throw<OptionsValidationException>();
     }
@@ -147,7 +147,7 @@ public sealed class DependencyInjectionTests
             DataProtection = new { KeysPath = tempKeysPath },
             AnalyticsRateLimiting = new { BffSigningSecret = new string('s', 32) }
         });
-        var config = new ConfigurationBuilder()
+        IConfigurationRoot config = new ConfigurationBuilder()
             .AddJsonStream(new MemoryStream(Encoding.UTF8.GetBytes(json)))
             .Build();
 
@@ -158,8 +158,8 @@ public sealed class DependencyInjectionTests
         services.AddSingleton(Substitute.For<ITransactionalEmailComposer>());
         services.AddInfrastructure(config, new TestHostEnvironment());
 
-        using var sp = services.BuildServiceProvider();
-        var act = () => _ = sp.GetRequiredService<IOptions<EncryptionOptions>>().Value;
+        using ServiceProvider sp = services.BuildServiceProvider();
+        Func<EncryptionOptions> act = () => _ = sp.GetRequiredService<IOptions<EncryptionOptions>>().Value;
 
         act.Should().Throw<OptionsValidationException>();
     }
@@ -168,7 +168,7 @@ public sealed class DependencyInjectionTests
     public void AddAnalyticsDistributedRateLimiting_WhenDevelopmentWithoutRedis_ShouldRegisterInMemoryLimiter()
     {
         var services = new ServiceCollection();
-        var config = BuildConfig(includeRedis: false);
+        IConfiguration config = BuildConfig(includeRedis: false);
         services.AddAnalyticsDistributedRateLimiting(config, new TestHostEnvironment());
 
         services.Count(d => d.ServiceType == typeof(IAnalyticsDistributedRateLimiter)).Should().Be(1);
@@ -181,7 +181,7 @@ public sealed class DependencyInjectionTests
     public void AddAnalyticsDistributedRateLimiting_WhenDevelopmentWithRedis_ShouldRegisterRedisLimiterAndSingleMultiplexer()
     {
         var services = new ServiceCollection();
-        var config = BuildConfig(includeRedis: true);
+        IConfiguration config = BuildConfig(includeRedis: true);
         services.AddAnalyticsDistributedRateLimiting(config, new TestHostEnvironment());
 
         services.Count(d => d.ServiceType == typeof(IConnectionMultiplexer)).Should().Be(1);
@@ -192,7 +192,7 @@ public sealed class DependencyInjectionTests
     [Fact]
     public void AddInfrastructure_WhenRedisConfigured_ShouldRegisterSingleMultiplexerForCacheAndLimiter()
     {
-        var services = BuildValidServices(new TestHostEnvironment(), includeRedis: true);
+        ServiceCollection services = BuildValidServices(new TestHostEnvironment(), includeRedis: true);
 
         services.Count(d => d.ServiceType == typeof(IConnectionMultiplexer)).Should().Be(1);
         services.Count(d => d.ServiceType == typeof(IAnalyticsDistributedRateLimiter)).Should().Be(1);
@@ -202,10 +202,10 @@ public sealed class DependencyInjectionTests
     public void AddAnalyticsDistributedRateLimiting_WhenProductionWithoutRedis_ShouldThrowOnBuild()
     {
         var services = new ServiceCollection();
-        var config = BuildConfig(includeRedis: false);
+        IConfiguration config = BuildConfig(includeRedis: false);
         var env = new TestHostEnvironment { EnvironmentName = Environments.Production };
 
-        var act = () => services.AddAnalyticsDistributedRateLimiting(config, env);
+        Func<IServiceCollection> act = () => services.AddAnalyticsDistributedRateLimiting(config, env);
 
         act.Should().Throw<InvalidOperationException>()
             .WithMessage("*Redis*");
@@ -221,7 +221,7 @@ public sealed class DependencyInjectionTests
         BuildValidServicesOnto(services, new TestHostEnvironment(), includeRedis: false);
 
         services.Count(d => d.ServiceType == typeof(TimeProvider)).Should().Be(1);
-        using var sp = services.BuildServiceProvider();
+        using ServiceProvider sp = services.BuildServiceProvider();
         sp.GetRequiredService<TimeProvider>().Should().BeSameAs(custom);
     }
 
@@ -265,14 +265,14 @@ public sealed class DependencyInjectionTests
             DataProtection = new { KeysPath = tempKeysPath },
             AnalyticsRateLimiting = new { BffSigningSecret = new string('s', 32) }
         });
-        var configBuilder = new ConfigurationBuilder()
+        IConfigurationBuilder configBuilder = new ConfigurationBuilder()
             .AddJsonStream(new MemoryStream(Encoding.UTF8.GetBytes(json)));
         if (extra is not null)
         {
             configBuilder.AddInMemoryCollection(extra);
         }
 
-        var config = configBuilder.Build();
+        IConfigurationRoot config = configBuilder.Build();
 
         services.AddLogging(b => b.ClearProviders());
         Directory.CreateDirectory(tempKeysPath);

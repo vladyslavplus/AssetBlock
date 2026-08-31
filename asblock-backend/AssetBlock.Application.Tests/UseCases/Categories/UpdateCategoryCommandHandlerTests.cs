@@ -42,7 +42,7 @@ public class UpdateCategoryCommandHandlerTests
         var command = new UpdateCategoryCommand(Guid.NewGuid(), "New Name", null, null);
         _categoryStoreMock.GetById(command.Id, Arg.Any<CancellationToken>()).Returns((Category?)null);
 
-        var result = await _handler.Handle(command, CancellationToken.None);
+        Result result = await _handler.Handle(command, CancellationToken.None);
 
         result.Status.Should().Be(ResultStatus.NotFound);
         result.Errors.Should().Contain(ErrorCodes.ERR_CATEGORY_NOT_FOUND);
@@ -57,7 +57,7 @@ public class UpdateCategoryCommandHandlerTests
         _categoryStoreMock.GetById(command.Id, Arg.Any<CancellationToken>()).Returns(existingCategory);
         _categoryStoreMock.SlugExists(command.Slug!, command.Id, Arg.Any<CancellationToken>()).Returns(true);
 
-        var result = await _handler.Handle(command, CancellationToken.None);
+        Result result = await _handler.Handle(command, CancellationToken.None);
 
         result.IsSuccess.Should().BeFalse();
         result.Status.Should().Be(ResultStatus.Conflict);
@@ -74,7 +74,7 @@ public class UpdateCategoryCommandHandlerTests
         _categoryStoreMock.SlugExists(command.Slug!, command.Id, Arg.Any<CancellationToken>()).Returns(false);
         _categoryStoreMock.Update(Arg.Any<Category>(), Arg.Any<CancellationToken>()).ThrowsAsync(new DuplicateSlugException());
 
-        var result = await _handler.Handle(command, CancellationToken.None);
+        Result result = await _handler.Handle(command, CancellationToken.None);
 
         result.IsSuccess.Should().BeFalse();
         result.Status.Should().Be(ResultStatus.Conflict);
@@ -89,7 +89,7 @@ public class UpdateCategoryCommandHandlerTests
 
         _categoryStoreMock.GetById(command.Id, Arg.Any<CancellationToken>()).Returns(existingCategory);
 
-        var result = await _handler.Handle(command, CancellationToken.None);
+        Result result = await _handler.Handle(command, CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
         existingCategory.Name.Should().Be("Updated Name");

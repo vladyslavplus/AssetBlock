@@ -40,12 +40,12 @@ public class GetNotificationsQueryHandlerTests
         _storeMock.GetPaged(userId, request, Arg.Any<CancellationToken>())
             .Returns(new PagedResult<UserNotification>([notification], 1, 1, 10));
 
-        var result = await _handler.Handle(new GetNotificationsQuery(userId, request), CancellationToken.None);
+        Ardalis.Result.Result<PagedResult<NotificationListItemDto>> result = await _handler.Handle(new GetNotificationsQuery(userId, request), CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
         await _storeMock.Received(1).GetPaged(userId, request, Arg.Any<CancellationToken>());
         result.Value!.Items.Should().ContainSingle();
-        var item = result.Value.Items[0];
+        NotificationListItemDto item = result.Value.Items[0];
         item.Id.Should().Be(notification.Id);
         item.Kind.Should().Be(nameof(NotificationKind.REVIEW_RECEIVED));
         item.MetadataJson.Should().Be(notification.MetadataJson);
@@ -62,7 +62,7 @@ public class GetNotificationsQueryHandlerTests
         _storeMock.GetPaged(userId, request, Arg.Any<CancellationToken>())
             .ThrowsAsync(new OperationCanceledException());
 
-        var act = () => _handler.Handle(new GetNotificationsQuery(userId, request), cts.Token);
+        Func<Task<Ardalis.Result.Result<PagedResult<NotificationListItemDto>>>> act = () => _handler.Handle(new GetNotificationsQuery(userId, request), cts.Token);
 
         await act.Should().ThrowAsync<OperationCanceledException>();
     }
@@ -75,7 +75,7 @@ public class GetNotificationsQueryHandlerTests
         _storeMock.GetPaged(userId, request, Arg.Any<CancellationToken>())
             .ThrowsAsync(new InvalidOperationException("Database error"));
 
-        var result = await _handler.Handle(new GetNotificationsQuery(userId, request), CancellationToken.None);
+        Ardalis.Result.Result<PagedResult<NotificationListItemDto>> result = await _handler.Handle(new GetNotificationsQuery(userId, request), CancellationToken.None);
 
         result.IsSuccess.Should().BeFalse();
         result.Status.Should().Be(Ardalis.Result.ResultStatus.Invalid);
@@ -90,7 +90,7 @@ public class GetNotificationsQueryHandlerTests
         _storeMock.GetPaged(userId, request, Arg.Any<CancellationToken>())
             .Returns(new PagedResult<UserNotification>([], 0, 1, 10));
 
-        var result = await _handler.Handle(new GetNotificationsQuery(userId, request), CancellationToken.None);
+        Ardalis.Result.Result<PagedResult<NotificationListItemDto>> result = await _handler.Handle(new GetNotificationsQuery(userId, request), CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
         result.Value.Should().NotBeNull();
@@ -126,7 +126,7 @@ public class GetNotificationsQueryHandlerTests
         _storeMock.GetPaged(userId, request, Arg.Any<CancellationToken>())
             .Returns(new PagedResult<UserNotification>([first, second], 5, 2, 2));
 
-        var result = await _handler.Handle(new GetNotificationsQuery(userId, request), CancellationToken.None);
+        Ardalis.Result.Result<PagedResult<NotificationListItemDto>> result = await _handler.Handle(new GetNotificationsQuery(userId, request), CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
         result.Value.Should().NotBeNull();
@@ -144,7 +144,7 @@ public class GetNotificationsQueryHandlerTests
     public async Task Handle_ShouldMapReadNotification_WhenReadAtPopulated()
     {
         var userId = Guid.NewGuid();
-        var readAt = DateTimeOffset.UtcNow.AddMinutes(-5);
+        DateTimeOffset readAt = DateTimeOffset.UtcNow.AddMinutes(-5);
         var notification = new UserNotification
         {
             Id = Guid.NewGuid(),
@@ -158,12 +158,12 @@ public class GetNotificationsQueryHandlerTests
         _storeMock.GetPaged(userId, request, Arg.Any<CancellationToken>())
             .Returns(new PagedResult<UserNotification>([notification], 1, 1, 10));
 
-        var result = await _handler.Handle(new GetNotificationsQuery(userId, request), CancellationToken.None);
+        Ardalis.Result.Result<PagedResult<NotificationListItemDto>> result = await _handler.Handle(new GetNotificationsQuery(userId, request), CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
         result.Value.Should().NotBeNull();
         result.Value!.Items.Should().ContainSingle();
-        var item = result.Value.Items[0];
+        NotificationListItemDto item = result.Value.Items[0];
         item.Id.Should().Be(notification.Id);
         item.Kind.Should().Be(nameof(NotificationKind.ASSET_SOLD));
         item.MetadataJson.Should().Be(notification.MetadataJson);
@@ -244,7 +244,7 @@ public class GetNotificationsQueryHandlerTests
         _storeMock.GetPaged(userId, request, Arg.Any<CancellationToken>())
             .Returns(new PagedResult<UserNotification>(notifications, notifications.Count, 1, 10));
 
-        var result = await _handler.Handle(new GetNotificationsQuery(userId, request), CancellationToken.None);
+        Ardalis.Result.Result<PagedResult<NotificationListItemDto>> result = await _handler.Handle(new GetNotificationsQuery(userId, request), CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
         result.Value.Should().NotBeNull();

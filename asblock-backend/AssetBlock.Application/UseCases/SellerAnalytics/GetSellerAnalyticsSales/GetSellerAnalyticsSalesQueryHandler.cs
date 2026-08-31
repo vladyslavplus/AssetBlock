@@ -1,10 +1,10 @@
 using Ardalis.Result;
 using AssetBlock.Application.Common.Caching;
+using AssetBlock.Application.Messaging;
 using AssetBlock.Domain.Abstractions.Services;
 using AssetBlock.Domain.Core.Constants;
 using AssetBlock.Domain.Core.Dto.Analytics;
 using AssetBlock.Domain.Core.Payments;
-using AssetBlock.Application.Messaging;
 using Microsoft.Extensions.Logging;
 
 namespace AssetBlock.Application.UseCases.SellerAnalytics.GetSellerAnalyticsSales;
@@ -24,22 +24,22 @@ internal sealed class GetSellerAnalyticsSalesQueryHandler(
     {
         var cacheKey = CacheKeys.SellerAnalyticsSales(request.SellerId, request.Request);
 
-        var cached = await cache.Get<AnalyticsSalesResult>(cacheKey, cancellationToken);
+        AnalyticsSalesResult? cached = await cache.Get<AnalyticsSalesResult>(cacheKey, cancellationToken);
         if (cached is not null)
         {
             logger.LogDebug("Seller analytics sales cache hit: {Key}", cacheKey);
             return Result.Success(cached);
         }
 
-        var fromDto = AnalyticsRange.ToUtcStart(request.Request.From);
-        var toDto = AnalyticsRange.ToUtcStart(request.Request.To);
+        DateTimeOffset fromDto = AnalyticsRange.ToUtcStart(request.Request.From);
+        DateTimeOffset toDto = AnalyticsRange.ToUtcStart(request.Request.To);
 
         DateTimeOffset? cursorPurchasedAt = null;
         Guid? cursorOrderId = null;
 
         if (request.Request.Cursor is not null)
         {
-            if (!SalesCursorCodec.TryDecode(request.Request.Cursor, out var cat, out var cid))
+            if (!SalesCursorCodec.TryDecode(request.Request.Cursor, out DateTimeOffset cat, out Guid cid))
             {
                 return Result.Invalid(
                     new ValidationError(ErrorCodes.ERR_ANALYTICS_INVALID_CURSOR, "Cursor is malformed.", "", ValidationSeverity.Error));
@@ -71,7 +71,7 @@ internal sealed class GetSellerAnalyticsSalesQueryHandler(
         string? nextCursor = null;
         if (hasMore && items.Count > 0)
         {
-            var last = items[^1];
+            AnalyticsSaleItem last = items[^1];
             nextCursor = SalesCursorCodec.Encode(last.PurchasedAt, last.OrderId);
         }
 

@@ -3,6 +3,7 @@ using AssetBlock.Domain.Core.Dto.Assets;
 using AssetBlock.Domain.Core.Dto.Paging;
 using AssetBlock.Domain.Core.Entities;
 using AssetBlock.Domain.Core.Enums;
+using AssetBlock.Infrastructure.Persistence;
 using AssetBlock.Infrastructure.Persistence.Stores;
 using AssetBlock.Infrastructure.Tests.Infrastructure;
 
@@ -14,7 +15,7 @@ public sealed class AssetStoreTests
     public async Task Add_GetById_GetPaged_Update_Delete_AddRemoveTag()
     {
         await using var holder = new SqliteDbContextHolder();
-        var db = holder.Context;
+        ApplicationDbContext db = holder.Context;
         var catId = Guid.NewGuid();
         db.Categories.Add(new Category
         {
@@ -69,11 +70,11 @@ public sealed class AssetStoreTests
         db.AssetVersions.Add(version);
         await db.SaveChangesAsync();
 
-        var loaded = await sut.GetById(asset.Id);
+        Asset? loaded = await sut.GetById(asset.Id);
         loaded!.Title.Should().Be("Title");
         loaded.Category.Should().NotBeNull();
 
-        var paged = await sut.GetPaged(new GetAssetsRequest { SortBy = "Price", SortDirection = SortDirection.ASC });
+        PagedResult<AssetListItem> paged = await sut.GetPaged(new GetAssetsRequest { SortBy = "Price", SortDirection = SortDirection.ASC });
         paged.Items.Should().Contain(a => a.Id == asset.Id);
         paged.Items.Single(a => a.Id == asset.Id).AuthorUsername.Should().Be("a");
         paged.Items.Single(a => a.Id == asset.Id).CategoryName.Should().Be("C");
@@ -104,7 +105,7 @@ public sealed class AssetStoreTests
     public async Task AddWithTags_linksTags()
     {
         await using var holder = new SqliteDbContextHolder();
-        var db = holder.Context;
+        ApplicationDbContext db = holder.Context;
         var catId = Guid.NewGuid();
         db.Categories.Add(new Category { Id = catId, Name = "C", Slug = "c", CreatedAt = DateTimeOffset.UtcNow });
         var authorId = Guid.NewGuid();
@@ -133,7 +134,7 @@ public sealed class AssetStoreTests
 
         await sut.AddWithTags(asset, [tag]);
 
-        var loaded = await sut.GetById(asset.Id);
+        Asset? loaded = await sut.GetById(asset.Id);
         loaded!.AssetTags.Should().HaveCount(1);
     }
 
@@ -141,7 +142,7 @@ public sealed class AssetStoreTests
     public async Task GetById_WhenAssetSoftDeleted_HidesByDefaultAndRespectsIncludeDeleted()
     {
         await using var holder = new SqliteDbContextHolder();
-        var db = holder.Context;
+        ApplicationDbContext db = holder.Context;
         var catId = Guid.NewGuid();
         db.Categories.Add(new Category { Id = catId, Name = "C", Slug = "c", CreatedAt = DateTimeOffset.UtcNow });
         var authorId = Guid.NewGuid();
@@ -168,17 +169,17 @@ public sealed class AssetStoreTests
 
         var sut = new AssetStore(db);
 
-        var defaultGet = await sut.GetById(asset.Id);
+        Asset? defaultGet = await sut.GetById(asset.Id);
         defaultGet.Should().BeNull();
 
-        var explicitExclude = await sut.GetById(asset.Id, includeDeleted: false);
+        Asset? explicitExclude = await sut.GetById(asset.Id, includeDeleted: false);
         explicitExclude.Should().BeNull();
 
-        var explicitInclude = await sut.GetById(asset.Id, includeDeleted: true);
+        Asset? explicitInclude = await sut.GetById(asset.Id, includeDeleted: true);
         explicitInclude.Should().NotBeNull();
         explicitInclude.Id.Should().Be(asset.Id);
 
-        var ownership = await sut.GetOwnership(asset.Id);
+        AssetOwnershipDto? ownership = await sut.GetOwnership(asset.Id);
         ownership.Should().NotBeNull();
         ownership.IsDeleted.Should().BeTrue();
     }

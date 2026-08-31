@@ -28,7 +28,7 @@ internal sealed class AesGcmEncryptionService : IEncryptionService, IDisposable
 
     public AesGcmEncryptionService(IOptions<EncryptionOptions> options)
     {
-        var opt = options.Value;
+        EncryptionOptions opt = options.Value;
         if (opt.Keys is null || opt.Keys.Count == 0)
         {
             throw new InvalidOperationException("Encryption:Keys must contain at least one configured encryption key.");
@@ -39,7 +39,7 @@ internal sealed class AesGcmEncryptionService : IEncryptionService, IDisposable
             throw new InvalidOperationException("Encryption:CurrentKeyId must be specified.");
         }
 
-        foreach (var (keyId, keyBase64) in opt.Keys)
+        foreach ((var keyId, var keyBase64) in opt.Keys)
         {
             if (string.IsNullOrWhiteSpace(keyId))
             {
@@ -52,11 +52,11 @@ internal sealed class AesGcmEncryptionService : IEncryptionService, IDisposable
                 throw new InvalidOperationException($"Encryption key ID '{keyId}' exceeds maximum length of {MAX_KEY_ID_BYTES} bytes.");
             }
 
-            var entry = CreateKeyEntry(keyId, keyBase64);
+            KeyEntry entry = CreateKeyEntry(keyId, keyBase64);
             _keyRing[keyId] = entry;
         }
 
-        if (!_keyRing.TryGetValue(opt.CurrentKeyId, out var activeEntry))
+        if (!_keyRing.TryGetValue(opt.CurrentKeyId, out KeyEntry? activeEntry))
         {
             throw new InvalidOperationException($"Encryption:CurrentKeyId '{opt.CurrentKeyId}' was not found in Encryption:Keys.");
         }
@@ -164,7 +164,7 @@ internal sealed class AesGcmEncryptionService : IEncryptionService, IDisposable
         await ReadExactOrThrow(cipher, keyIdBytes, cancellationToken);
         var keyId = Encoding.UTF8.GetString(keyIdBytes);
 
-        if (!_keyRing.TryGetValue(keyId, out var keyEntry))
+        if (!_keyRing.TryGetValue(keyId, out KeyEntry? keyEntry))
         {
             throw new CryptographicException($"Unknown encryption key ID '{keyId}'.");
         }
@@ -242,7 +242,7 @@ internal sealed class AesGcmEncryptionService : IEncryptionService, IDisposable
         var fullChunks = plaintextLength / CHUNK_SIZE;
         var remainder = plaintextLength % CHUNK_SIZE;
 
-        long length = headerLength + (fullChunks * (overheadPerChunk + CHUNK_SIZE));
+        var length = headerLength + (fullChunks * (overheadPerChunk + CHUNK_SIZE));
         if (remainder > 0)
         {
             length += overheadPerChunk + remainder;
@@ -287,7 +287,7 @@ internal sealed class AesGcmEncryptionService : IEncryptionService, IDisposable
 
     private static async Task<int> ReadExact(Stream stream, Memory<byte> buffer, CancellationToken token)
     {
-        int totalRead = 0;
+        var totalRead = 0;
         while (totalRead < buffer.Length)
         {
             var read = await stream.ReadAsync(buffer[totalRead..], token);
@@ -319,7 +319,7 @@ internal sealed class AesGcmEncryptionService : IEncryptionService, IDisposable
         }
 
         _disposed = true;
-        foreach (var entry in _keyRing.Values)
+        foreach (KeyEntry entry in _keyRing.Values)
         {
             entry.Dispose();
         }

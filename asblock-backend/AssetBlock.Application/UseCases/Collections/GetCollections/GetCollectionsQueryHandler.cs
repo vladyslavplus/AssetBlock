@@ -1,7 +1,7 @@
 using Ardalis.Result;
+using AssetBlock.Application.Messaging;
 using AssetBlock.Domain.Abstractions.Services;
 using AssetBlock.Domain.Core.Dto.Collections;
-using AssetBlock.Application.Messaging;
 
 namespace AssetBlock.Application.UseCases.Collections.GetCollections;
 
@@ -12,7 +12,7 @@ internal sealed class GetCollectionsQueryHandler(ICollectionStore collectionStor
         GetCollectionsQuery request,
         CancellationToken cancellationToken)
     {
-        var paged = await collectionStore.ListPublic(request.Request, cancellationToken);
+        Domain.Core.Dto.Paging.PagedResult<CollectionListItemDto> paged = await collectionStore.ListPublic(request.Request, cancellationToken);
         return Result.Success(paged);
     }
 }

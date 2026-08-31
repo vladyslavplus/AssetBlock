@@ -13,7 +13,7 @@ internal sealed class GetMyAssetVersionProcessingJobsQueryHandler(
         GetMyAssetVersionProcessingJobsQuery request,
         CancellationToken cancellationToken)
     {
-        var jobs = await jobStore.GetJobsForVersion(request.AssetVersionId, request.OwnerUserId, cancellationToken);
+        IReadOnlyList<AssetProcessingJobDto>? jobs = await jobStore.GetJobsForVersion(request.AssetVersionId, request.OwnerUserId, cancellationToken);
         if (jobs is null)
         {
             return Result.NotFound("Asset version was not found or is inaccessible.");

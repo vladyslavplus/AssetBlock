@@ -5,6 +5,7 @@ using System.Text.Json;
 using AssetBlock.Domain.Core.Constants;
 using AssetBlock.Domain.Core.Dto.Outbox;
 using AssetBlock.Domain.Core.Dto.Paging;
+using AssetBlock.Domain.Core.Entities;
 using AssetBlock.Infrastructure.Persistence;
 using AssetBlock.WebApi.IntegrationTests.Support;
 using AwesomeAssertions;
@@ -24,8 +25,8 @@ public sealed class AdminOutboxControllerIntegrationTests(IntegrationTestFixture
     [Fact]
     public async Task GetDeadLetters_WithoutAuth_ShouldReturn401()
     {
-        var client = fixture.Factory.CreateClient();
-        var response = await client.GetAsync(new Uri("/api/admin/outbox/dead-letters?page=1&pageSize=20", UriKind.Relative));
+        HttpClient client = fixture.Factory.CreateClient();
+        HttpResponseMessage response = await client.GetAsync(new Uri("/api/admin/outbox/dead-letters?page=1&pageSize=20", UriKind.Relative));
         response.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
     }
 
@@ -33,34 +34,34 @@ public sealed class AdminOutboxControllerIntegrationTests(IntegrationTestFixture
     public async Task GetDeadLetters_WhenNonAdmin_ShouldReturn403()
     {
         (HttpClient client, _) = await IntegrationTestAuth.RegisterAndAuthenticateAsync(fixture.Factory);
-        var response = await client.GetAsync(new Uri("/api/admin/outbox/dead-letters?page=1&pageSize=20", UriKind.Relative));
+        HttpResponseMessage response = await client.GetAsync(new Uri("/api/admin/outbox/dead-letters?page=1&pageSize=20", UriKind.Relative));
         response.StatusCode.Should().Be(HttpStatusCode.Forbidden);
     }
 
     [Fact]
     public async Task GetDeadLetters_WhenUnverifiedAdmin_ShouldReturn403EmailNotVerified()
     {
-        var (_, username) = await IntegrationTestAuth.RegisterAndAuthenticateAsync(fixture.Factory);
+        (HttpClient _, var username) = await IntegrationTestAuth.RegisterAndAuthenticateAsync(fixture.Factory);
 
-        await using (var scope = fixture.Factory.Services.CreateAsyncScope())
+        await using (AsyncServiceScope scope = fixture.Factory.Services.CreateAsyncScope())
         {
-            var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
-            var user = await db.Users.SingleAsync(u => u.Username == username);
+            ApplicationDbContext db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+            User user = await db.Users.SingleAsync(u => u.Username == username);
             user.Role = AppRoles.ADMIN;
             await db.SaveChangesAsync();
         }
 
-        var client = fixture.Factory.CreateClient();
+        HttpClient client = fixture.Factory.CreateClient();
         var email = await FindEmailAsync(username);
-        var login = await client.PostAsJsonAsync(
+        HttpResponseMessage login = await client.PostAsJsonAsync(
             new Uri("/api/auth/login", UriKind.Relative),
             new { Email = email, Password = "Password1!" });
         login.EnsureSuccessStatusCode();
-        var tokens = await login.Content.ReadFromJsonAsync<IntegrationTestAuth.TokensResponseDto>(
+        IntegrationTestAuth.TokensResponseDto? tokens = await login.Content.ReadFromJsonAsync<IntegrationTestAuth.TokensResponseDto>(
             IntegrationTestAuth.JsonOptions);
         client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", tokens!.AccessToken);
 
-        var response = await client.GetAsync(new Uri("/api/admin/outbox/dead-letters?page=1&pageSize=20", UriKind.Relative));
+        HttpResponseMessage response = await client.GetAsync(new Uri("/api/admin/outbox/dead-letters?page=1&pageSize=20", UriKind.Relative));
         response.StatusCode.Should().Be(HttpStatusCode.Forbidden);
         var body = await response.Content.ReadAsStringAsync();
         body.Should().Contain(ErrorCodes.ERR_EMAIL_NOT_VERIFIED);
@@ -70,11 +71,11 @@ public sealed class AdminOutboxControllerIntegrationTests(IntegrationTestFixture
     public async Task GetDeadLetters_WhenVerifiedAdmin_ShouldReturn200()
     {
         (HttpClient client, _) = await IntegrationTestAuth.RegisterAdminAndAuthenticateAsync(fixture.Factory);
-        var response = await client.GetAsync(new Uri("/api/admin/outbox/dead-letters?page=1&pageSize=20", UriKind.Relative));
+        HttpResponseMessage response = await client.GetAsync(new Uri("/api/admin/outbox/dead-letters?page=1&pageSize=20", UriKind.Relative));
 
         response.StatusCode.Should().Be(HttpStatusCode.OK);
         response.Content.Headers.ContentType!.MediaType.Should().Be("application/json");
-        var page = await response.Content.ReadFromJsonAsync<PagedResult<DeadLetterOutboxListItemDto>>(_jsonOptions);
+        PagedResult<DeadLetterOutboxListItemDto>? page = await response.Content.ReadFromJsonAsync<PagedResult<DeadLetterOutboxListItemDto>>(_jsonOptions);
         page.Should().NotBeNull();
         page.Page.Should().Be(1);
         page.PageSize.Should().Be(20);
@@ -84,8 +85,8 @@ public sealed class AdminOutboxControllerIntegrationTests(IntegrationTestFixture
     [Fact]
     public async Task Replay_WithoutAuth_ShouldReturn401()
     {
-        var client = fixture.Factory.CreateClient();
-        var response = await client.PostAsync(
+        HttpClient client = fixture.Factory.CreateClient();
+        HttpResponseMessage response = await client.PostAsync(
             new Uri($"/api/admin/outbox/dead-letters/{Guid.NewGuid()}/replay", UriKind.Relative),
             null);
         response.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
@@ -95,7 +96,7 @@ public sealed class AdminOutboxControllerIntegrationTests(IntegrationTestFixture
     public async Task Replay_WhenNonAdmin_ShouldReturn403()
     {
         (HttpClient client, _) = await IntegrationTestAuth.RegisterAndAuthenticateAsync(fixture.Factory);
-        var response = await client.PostAsync(
+        HttpResponseMessage response = await client.PostAsync(
             new Uri($"/api/admin/outbox/dead-letters/{Guid.NewGuid()}/replay", UriKind.Relative),
             null);
         response.StatusCode.Should().Be(HttpStatusCode.Forbidden);
@@ -104,27 +105,27 @@ public sealed class AdminOutboxControllerIntegrationTests(IntegrationTestFixture
     [Fact]
     public async Task Replay_WhenUnverifiedAdmin_ShouldReturn403EmailNotVerified()
     {
-        var (_, username) = await IntegrationTestAuth.RegisterAndAuthenticateAsync(fixture.Factory);
+        (HttpClient _, var username) = await IntegrationTestAuth.RegisterAndAuthenticateAsync(fixture.Factory);
 
-        await using (var scope = fixture.Factory.Services.CreateAsyncScope())
+        await using (AsyncServiceScope scope = fixture.Factory.Services.CreateAsyncScope())
         {
-            var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
-            var user = await db.Users.SingleAsync(u => u.Username == username);
+            ApplicationDbContext db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+            User user = await db.Users.SingleAsync(u => u.Username == username);
             user.Role = AppRoles.ADMIN;
             await db.SaveChangesAsync();
         }
 
-        var client = fixture.Factory.CreateClient();
+        HttpClient client = fixture.Factory.CreateClient();
         var email = await FindEmailAsync(username);
-        var login = await client.PostAsJsonAsync(
+        HttpResponseMessage login = await client.PostAsJsonAsync(
             new Uri("/api/auth/login", UriKind.Relative),
             new { Email = email, Password = "Password1!" });
         login.EnsureSuccessStatusCode();
-        var tokens = await login.Content.ReadFromJsonAsync<IntegrationTestAuth.TokensResponseDto>(
+        IntegrationTestAuth.TokensResponseDto? tokens = await login.Content.ReadFromJsonAsync<IntegrationTestAuth.TokensResponseDto>(
             IntegrationTestAuth.JsonOptions);
         client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", tokens!.AccessToken);
 
-        var response = await client.PostAsync(
+        HttpResponseMessage response = await client.PostAsync(
             new Uri($"/api/admin/outbox/dead-letters/{Guid.NewGuid()}/replay", UriKind.Relative),
             null);
         response.StatusCode.Should().Be(HttpStatusCode.Forbidden);
@@ -136,7 +137,7 @@ public sealed class AdminOutboxControllerIntegrationTests(IntegrationTestFixture
     public async Task Replay_WhenVerifiedAdmin_AndNotFound_ShouldReturn404ProblemDetails()
     {
         (HttpClient client, _) = await IntegrationTestAuth.RegisterAdminAndAuthenticateAsync(fixture.Factory);
-        var response = await client.PostAsync(
+        HttpResponseMessage response = await client.PostAsync(
             new Uri($"/api/admin/outbox/dead-letters/{Guid.NewGuid()}/replay", UriKind.Relative),
             null);
 
@@ -148,9 +149,9 @@ public sealed class AdminOutboxControllerIntegrationTests(IntegrationTestFixture
 
     private async Task<string> FindEmailAsync(string username)
     {
-        await using var scope = fixture.Factory.Services.CreateAsyncScope();
-        var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
-        var user = await db.Users.AsNoTracking().SingleAsync(u => u.Username == username);
+        await using AsyncServiceScope scope = fixture.Factory.Services.CreateAsyncScope();
+        ApplicationDbContext db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+        User user = await db.Users.AsNoTracking().SingleAsync(u => u.Username == username);
         return user.Email;
     }
 }

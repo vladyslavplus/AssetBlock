@@ -1,9 +1,9 @@
 using Ardalis.Result;
+using AssetBlock.Application.Messaging;
 using AssetBlock.Domain.Abstractions.Services;
 using AssetBlock.Domain.Core.Constants;
 using AssetBlock.Domain.Core.Dto.Audit;
 using AssetBlock.Domain.Core.Enums;
-using AssetBlock.Application.Messaging;
 using Microsoft.Extensions.Logging;
 
 namespace AssetBlock.Application.UseCases.Collections.UpdateCollection;
@@ -20,7 +20,7 @@ internal sealed class UpdateCollectionCommandHandler(
         Result? outcome = null;
         var title = request.Title.Trim();
         var description = string.IsNullOrWhiteSpace(request.Description) ? null : request.Description.Trim();
-        var now = DateTimeOffset.UtcNow;
+        DateTimeOffset now = DateTimeOffset.UtcNow;
 
         try
         {

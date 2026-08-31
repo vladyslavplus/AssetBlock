@@ -15,7 +15,7 @@ public static class ListingSuggestionCanonicalizer
     public static string ComputeContentHash(ListingSuggestion suggestion)
     {
         ArgumentNullException.ThrowIfNull(suggestion);
-        var sortedTags = suggestion.Tags is null
+        IReadOnlyList<string> sortedTags = suggestion.Tags is null
             ? (IReadOnlyList<string>)[]
             : suggestion.Tags.OrderBy(t => t, StringComparer.Ordinal).ToArray();
 

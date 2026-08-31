@@ -1,3 +1,4 @@
+using System.Reflection;
 using Ardalis.Result;
 using AssetBlock.Application.UseCases.Admin.Outbox.GetDeadLetters;
 using AssetBlock.Application.UseCases.Admin.Outbox.ReplayDeadLetter;
@@ -9,6 +10,7 @@ using AwesomeAssertions;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using NSubstitute;
 
 namespace AssetBlock.WebApi.Tests.Controllers;
@@ -18,7 +20,7 @@ public sealed class AdminOutboxControllerTests : ControllerTestBase
     [Fact]
     public void Controller_ShouldHaveAdminAndVerifiedEmailAuthorizationAttributes()
     {
-        var type = typeof(AdminOutboxController);
+        Type type = typeof(AdminOutboxController);
         var authAttributes = type.GetCustomAttributes(typeof(AuthorizeAttribute), true).Cast<AuthorizeAttribute>().ToList();
 
         authAttributes.Should().Contain(a => a.Roles == AppRoles.ADMIN);
@@ -28,9 +30,9 @@ public sealed class AdminOutboxControllerTests : ControllerTestBase
     [Fact]
     public void Replay_ShouldHaveAdminOutboxReplayRateLimitingAttribute()
     {
-        var method = typeof(AdminOutboxController).GetMethod(nameof(AdminOutboxController.Replay));
-        var rateLimitAttribute = method!.GetCustomAttributes(typeof(Microsoft.AspNetCore.RateLimiting.EnableRateLimitingAttribute), true)
-            .Cast<Microsoft.AspNetCore.RateLimiting.EnableRateLimitingAttribute>()
+        MethodInfo? method = typeof(AdminOutboxController).GetMethod(nameof(AdminOutboxController.Replay));
+        EnableRateLimitingAttribute? rateLimitAttribute = method!.GetCustomAttributes(typeof(EnableRateLimitingAttribute), true)
+            .Cast<EnableRateLimitingAttribute>()
             .SingleOrDefault();
 
         rateLimitAttribute.Should().NotBeNull();
@@ -51,7 +53,7 @@ public sealed class AdminOutboxControllerTests : ControllerTestBase
 
         var controller = new AdminOutboxController(Sender) { ControllerContext = new ControllerContext { HttpContext = new DefaultHttpContext() } };
 
-        var result = await controller.GetDeadLetters(null, CancellationToken.None);
+        IActionResult result = await controller.GetDeadLetters(null, CancellationToken.None);
 
         result.Should().BeOfType<OkObjectResult>();
         var ok = (OkObjectResult)result;
@@ -69,7 +71,7 @@ public sealed class AdminOutboxControllerTests : ControllerTestBase
 
         var controller = new AdminOutboxController(Sender) { ControllerContext = new ControllerContext { HttpContext = new DefaultHttpContext() } };
 
-        var result = await controller.Replay(id, CancellationToken.None);
+        IActionResult result = await controller.Replay(id, CancellationToken.None);
 
         result.Should().BeOfType<OkObjectResult>();
         var ok = (OkObjectResult)result;
@@ -90,7 +92,7 @@ public sealed class AdminOutboxControllerTests : ControllerTestBase
             }
         };
 
-        var result = await controller.Replay(id, CancellationToken.None);
+        IActionResult result = await controller.Replay(id, CancellationToken.None);
 
         await result.ExecuteResultAsync(controller.ControllerContext);
         controller.HttpContext.Response.StatusCode.Should().Be(StatusCodes.Status404NotFound);
@@ -110,7 +112,7 @@ public sealed class AdminOutboxControllerTests : ControllerTestBase
             }
         };
 
-        var result = await controller.Replay(id, CancellationToken.None);
+        IActionResult result = await controller.Replay(id, CancellationToken.None);
 
         await result.ExecuteResultAsync(controller.ControllerContext);
         controller.HttpContext.Response.StatusCode.Should().Be(StatusCodes.Status409Conflict);

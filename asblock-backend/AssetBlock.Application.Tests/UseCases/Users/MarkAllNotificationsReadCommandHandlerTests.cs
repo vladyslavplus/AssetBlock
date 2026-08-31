@@ -24,7 +24,7 @@ public sealed class MarkAllNotificationsReadCommandHandlerTests
         var userId = Guid.NewGuid();
         _storeMock.MarkAllRead(userId, Arg.Any<CancellationToken>()).Returns(5);
 
-        var result = await _handler.Handle(new MarkAllNotificationsReadCommand(userId), CancellationToken.None);
+        Result<MarkAllNotificationsReadResponseDto> result = await _handler.Handle(new MarkAllNotificationsReadCommand(userId), CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
         result.Value.UpdatedCount.Should().Be(5);

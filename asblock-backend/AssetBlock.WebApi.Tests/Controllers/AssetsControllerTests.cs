@@ -42,8 +42,8 @@ public sealed class AssetsControllerTests : ControllerTestBase
         Sender.Send(Arg.Any<GetAssetsQuery>(), Arg.Any<CancellationToken>())
             .Returns(Task.FromResult(Result.Success(new DomainPaging.PagedResult<AssetListItem>([], 0, 1, 10))));
 
-        var controller = CreateController();
-        var result = await controller.List(new GetAssetsRequest(), CancellationToken.None);
+        AssetsController controller = CreateController();
+        IActionResult result = await controller.List(new GetAssetsRequest(), CancellationToken.None);
 
         result.Should().BeOfType<OkObjectResult>();
     }
@@ -73,8 +73,8 @@ public sealed class AssetsControllerTests : ControllerTestBase
                 CurrentContentSha256: new string('a', 64),
                 CurrentLicense: new AssetLicenseSummaryDto("PERSONAL", "Personal use", "1.0", "Terms text")))));
 
-        var controller = CreateController();
-        var result = await controller.GetById(Guid.NewGuid(), CancellationToken.None);
+        AssetsController controller = CreateController();
+        IActionResult result = await controller.GetById(Guid.NewGuid(), CancellationToken.None);
 
         result.Should().BeOfType<OkObjectResult>();
     }
@@ -82,9 +82,9 @@ public sealed class AssetsControllerTests : ControllerTestBase
     [Fact]
     public async Task Download_WhenNoUser_ShouldReturnUnauthorized()
     {
-        var controller = CreateController();
+        AssetsController controller = CreateController();
         SetupAnonymous(controller);
-        var result = await controller.Download(Guid.NewGuid(), CancellationToken.None);
+        IActionResult result = await controller.Download(Guid.NewGuid(), CancellationToken.None);
 
         await AssertStatusCodeAsync(controller, result, StatusCodes.Status401Unauthorized);
     }
@@ -95,9 +95,9 @@ public sealed class AssetsControllerTests : ControllerTestBase
         _downloadService.AuthorizeDownload(Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<Guid?>(), Arg.Any<CancellationToken>())
             .Returns(new DownloadAuthorization(AssetDownloadStatus.NOT_FOUND));
 
-        var controller = CreateController();
+        AssetsController controller = CreateController();
         SetupUser(_userId, controller);
-        var result = await controller.Download(Guid.NewGuid(), CancellationToken.None);
+        IActionResult result = await controller.Download(Guid.NewGuid(), CancellationToken.None);
 
         await AssertStatusCodeAsync(controller, result, StatusCodes.Status404NotFound);
     }
@@ -108,9 +108,9 @@ public sealed class AssetsControllerTests : ControllerTestBase
         _downloadService.AuthorizeDownload(Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<Guid?>(), Arg.Any<CancellationToken>())
             .Returns(new DownloadAuthorization(AssetDownloadStatus.FORBIDDEN));
 
-        var controller = CreateController();
+        AssetsController controller = CreateController();
         SetupUser(_userId, controller);
-        var result = await controller.Download(Guid.NewGuid(), CancellationToken.None);
+        IActionResult result = await controller.Download(Guid.NewGuid(), CancellationToken.None);
 
         await AssertStatusCodeAsync(controller, result, StatusCodes.Status403Forbidden);
     }
@@ -121,9 +121,9 @@ public sealed class AssetsControllerTests : ControllerTestBase
         _downloadService.AuthorizeDownload(Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<Guid?>(), Arg.Any<CancellationToken>())
             .Returns(new DownloadAuthorization(AssetDownloadStatus.RATE_LIMITED));
 
-        var controller = CreateController();
+        AssetsController controller = CreateController();
         SetupUser(_userId, controller);
-        var result = await controller.Download(Guid.NewGuid(), CancellationToken.None);
+        IActionResult result = await controller.Download(Guid.NewGuid(), CancellationToken.None);
 
         await AssertStatusCodeAsync(controller, result, StatusCodes.Status429TooManyRequests);
     }
@@ -138,13 +138,13 @@ public sealed class AssetsControllerTests : ControllerTestBase
         _downloadService.CopyDecrypted(Arg.Any<string>(), Arg.Any<Stream>(), Arg.Any<CancellationToken>())
             .Returns(ci =>
             {
-                var dest = ci.ArgAt<Stream>(1);
+                Stream dest = ci.ArgAt<Stream>(1);
                 return dest.WriteAsync(new byte[] { 1, 2, 3 }).AsTask();
             });
 
-        var controller = CreateController();
+        AssetsController controller = CreateController();
         SetupUser(_userId, controller);
-        var result = await controller.Download(Guid.NewGuid(), CancellationToken.None);
+        IActionResult result = await controller.Download(Guid.NewGuid(), CancellationToken.None);
 
         result.Should().BeOfType<EmptyResult>();
         await _downloadService.Received(1).CopyDecrypted("assets/k", Arg.Any<Stream>(), Arg.Any<CancellationToken>());
@@ -162,9 +162,9 @@ public sealed class AssetsControllerTests : ControllerTestBase
         _downloadService.CopyDecrypted(Arg.Any<string>(), Arg.Any<Stream>(), Arg.Any<CancellationToken>())
             .Returns(Task.CompletedTask);
 
-        var controller = CreateController();
+        AssetsController controller = CreateController();
         SetupUser(_userId, controller);
-        var result = await controller.Download(Guid.NewGuid(), CancellationToken.None);
+        IActionResult result = await controller.Download(Guid.NewGuid(), CancellationToken.None);
 
         result.Should().BeOfType<EmptyResult>();
         var cd = controller.Response.Headers.ContentDisposition.ToString();
@@ -183,9 +183,9 @@ public sealed class AssetsControllerTests : ControllerTestBase
         _downloadService.CopyDecrypted(Arg.Any<string>(), Arg.Any<Stream>(), Arg.Any<CancellationToken>())
             .Returns(Task.CompletedTask);
 
-        var controller = CreateController();
+        AssetsController controller = CreateController();
         SetupUser(_userId, controller);
-        var result = await controller.DownloadVersion(Guid.NewGuid(), versionId, CancellationToken.None);
+        IActionResult result = await controller.DownloadVersion(Guid.NewGuid(), versionId, CancellationToken.None);
 
         result.Should().BeOfType<EmptyResult>();
         await _downloadService.Received(1).CopyDecrypted("assets/k2", Arg.Any<Stream>(), Arg.Any<CancellationToken>());
@@ -195,13 +195,13 @@ public sealed class AssetsControllerTests : ControllerTestBase
     [Fact]
     public async Task Download_WhenRangeHeader_ShouldReturn416()
     {
-        var controller = CreateController();
+        AssetsController controller = CreateController();
         SetupUser(_userId, controller);
         controller.Request.Headers.Range = "bytes=0-1";
 
-        var result = await controller.Download(Guid.NewGuid(), CancellationToken.None);
+        IActionResult result = await controller.Download(Guid.NewGuid(), CancellationToken.None);
 
-        var status = result.Should().BeOfType<StatusCodeResult>().Which;
+        StatusCodeResult status = result.Should().BeOfType<StatusCodeResult>().Which;
         status.StatusCode.Should().Be(StatusCodes.Status416RangeNotSatisfiable);
         await _downloadService.DidNotReceiveWithAnyArgs()
             .AuthorizeDownload(Guid.Empty, Guid.Empty, Arg.Any<Guid?>(), CancellationToken.None);
@@ -210,7 +210,7 @@ public sealed class AssetsControllerTests : ControllerTestBase
     [Fact]
     public async Task Upload_WhenNoUser_ShouldReturnUnauthorized()
     {
-        var controller = CreateController();
+        AssetsController controller = CreateController();
         SetupAnonymous(controller);
         var form = new UploadAssetFormWithFile
         {
@@ -218,7 +218,7 @@ public sealed class AssetsControllerTests : ControllerTestBase
             Title = "t",
             CategoryId = Guid.NewGuid()
         };
-        var result = await controller.Upload(form, CancellationToken.None);
+        IActionResult result = await controller.Upload(form, CancellationToken.None);
 
         await AssertStatusCodeAsync(controller, result, StatusCodes.Status401Unauthorized);
     }
@@ -226,7 +226,7 @@ public sealed class AssetsControllerTests : ControllerTestBase
     [Fact]
     public async Task Upload_WhenEmptyFile_ShouldReturnBadRequest()
     {
-        var controller = CreateController();
+        AssetsController controller = CreateController();
         SetupUser(_userId, controller);
         var form = new UploadAssetFormWithFile
         {
@@ -234,7 +234,7 @@ public sealed class AssetsControllerTests : ControllerTestBase
             Title = "t",
             CategoryId = Guid.NewGuid()
         };
-        var result = await controller.Upload(form, CancellationToken.None);
+        IActionResult result = await controller.Upload(form, CancellationToken.None);
 
         await AssertStatusCodeAsync(controller, result, StatusCodes.Status400BadRequest);
     }
@@ -242,7 +242,7 @@ public sealed class AssetsControllerTests : ControllerTestBase
     [Fact]
     public async Task Upload_WhenFileTooLarge_ShouldReturnBadRequest()
     {
-        var controller = CreateController();
+        AssetsController controller = CreateController();
         SetupUser(_userId, controller);
         var length = _fileUploadOptions.Value.MaxFileBytes + 1;
         var form = new UploadAssetFormWithFile
@@ -251,7 +251,7 @@ public sealed class AssetsControllerTests : ControllerTestBase
             Title = "t",
             CategoryId = Guid.NewGuid()
         };
-        var result = await controller.Upload(form, CancellationToken.None);
+        IActionResult result = await controller.Upload(form, CancellationToken.None);
 
         await AssertStatusCodeAsync(controller, result, StatusCodes.Status400BadRequest);
     }
@@ -263,7 +263,7 @@ public sealed class AssetsControllerTests : ControllerTestBase
         Sender.Send(Arg.Any<UploadAssetCommand>(), Arg.Any<CancellationToken>())
             .Returns(Task.FromResult(Result.Success(assetId)));
 
-        var controller = CreateController();
+        AssetsController controller = CreateController();
         SetupUser(_userId, controller);
         var form = new UploadAssetFormWithFile
         {
@@ -271,9 +271,9 @@ public sealed class AssetsControllerTests : ControllerTestBase
             Title = "t",
             CategoryId = Guid.NewGuid()
         };
-        var result = await controller.Upload(form, CancellationToken.None);
+        IActionResult result = await controller.Upload(form, CancellationToken.None);
 
-        var ok = result.Should().BeOfType<OkObjectResult>().Which;
+        OkObjectResult ok = result.Should().BeOfType<OkObjectResult>().Which;
         ok.Value.Should().NotBeNull();
     }
 
@@ -283,7 +283,7 @@ public sealed class AssetsControllerTests : ControllerTestBase
         Sender.Send(Arg.Any<UploadAssetCommand>(), Arg.Any<CancellationToken>())
             .Returns(Task.FromResult(Result<Guid>.NotFound(ErrorCodes.ERR_CATEGORY_NOT_FOUND)));
 
-        var controller = CreateController();
+        AssetsController controller = CreateController();
         SetupUser(_userId, controller);
         var form = new UploadAssetFormWithFile
         {
@@ -291,7 +291,7 @@ public sealed class AssetsControllerTests : ControllerTestBase
             Title = "t",
             CategoryId = Guid.NewGuid()
         };
-        var result = await controller.Upload(form, CancellationToken.None);
+        IActionResult result = await controller.Upload(form, CancellationToken.None);
 
         await AssertStatusCodeAsync(controller, result, StatusCodes.Status404NotFound);
     }
@@ -299,9 +299,9 @@ public sealed class AssetsControllerTests : ControllerTestBase
     [Fact]
     public async Task Update_WhenNoUser_ShouldReturnUnauthorized()
     {
-        var controller = CreateController();
+        AssetsController controller = CreateController();
         SetupAnonymous(controller);
-        var result = await controller.Update(Guid.NewGuid(), new UpdateAssetRequest(), CancellationToken.None);
+        IActionResult result = await controller.Update(Guid.NewGuid(), new UpdateAssetRequest(), CancellationToken.None);
 
         await AssertStatusCodeAsync(controller, result, StatusCodes.Status401Unauthorized);
     }
@@ -312,9 +312,9 @@ public sealed class AssetsControllerTests : ControllerTestBase
         Sender.Send(Arg.Any<UpdateAssetCommand>(), Arg.Any<CancellationToken>())
             .Returns(Task.FromResult(NoValueResult.Success()));
 
-        var controller = CreateController();
+        AssetsController controller = CreateController();
         SetupUser(_userId, controller);
-        var result = await controller.Update(Guid.NewGuid(), new UpdateAssetRequest(Title: "x"), CancellationToken.None);
+        IActionResult result = await controller.Update(Guid.NewGuid(), new UpdateAssetRequest(Title: "x"), CancellationToken.None);
 
         result.Should().BeOfType<OkResult>();
     }
@@ -325,9 +325,9 @@ public sealed class AssetsControllerTests : ControllerTestBase
         Sender.Send(Arg.Any<UpdateAssetCommand>(), Arg.Any<CancellationToken>())
             .Returns(Task.FromResult(NoValueResult.NotFound(ErrorCodes.ERR_ASSET_NOT_FOUND)));
 
-        var controller = CreateController();
+        AssetsController controller = CreateController();
         SetupUser(_userId, controller);
-        var result = await controller.Update(Guid.NewGuid(), new UpdateAssetRequest(), CancellationToken.None);
+        IActionResult result = await controller.Update(Guid.NewGuid(), new UpdateAssetRequest(), CancellationToken.None);
 
         await AssertStatusCodeAsync(controller, result, StatusCodes.Status404NotFound);
     }
@@ -338,9 +338,9 @@ public sealed class AssetsControllerTests : ControllerTestBase
         Sender.Send(Arg.Any<DeleteAssetCommand>(), Arg.Any<CancellationToken>())
             .Returns(Task.FromResult(NoValueResult.Success()));
 
-        var controller = CreateController();
+        AssetsController controller = CreateController();
         SetupUser(_userId, controller);
-        var result = await controller.Delete(Guid.NewGuid(), CancellationToken.None);
+        IActionResult result = await controller.Delete(Guid.NewGuid(), CancellationToken.None);
 
         result.Should().BeOfType<OkResult>();
     }
@@ -352,11 +352,11 @@ public sealed class AssetsControllerTests : ControllerTestBase
         Sender.Send(Arg.Any<AddAssetTagCommand>(), Arg.Any<CancellationToken>())
             .Returns(Task.FromResult(Result.Success(tag)));
 
-        var controller = CreateController();
+        AssetsController controller = CreateController();
         SetupUser(_userId, controller);
-        var result = await controller.AddTag(Guid.NewGuid(), new AddAssetTagRequest("t"), CancellationToken.None);
+        IActionResult result = await controller.AddTag(Guid.NewGuid(), new AddAssetTagRequest("t"), CancellationToken.None);
 
-        var ok = result.Should().BeOfType<OkObjectResult>().Which;
+        OkObjectResult ok = result.Should().BeOfType<OkObjectResult>().Which;
         ok.Value.Should().Be(tag);
     }
 
@@ -366,9 +366,9 @@ public sealed class AssetsControllerTests : ControllerTestBase
         Sender.Send(Arg.Any<AddAssetTagCommand>(), Arg.Any<CancellationToken>())
             .Returns(Task.FromResult(Result<TagDto>.Conflict(ErrorCodes.ERR_ASSET_TAG_ALREADY_EXISTS)));
 
-        var controller = CreateController();
+        AssetsController controller = CreateController();
         SetupUser(_userId, controller);
-        var result = await controller.AddTag(Guid.NewGuid(), new AddAssetTagRequest("t"), CancellationToken.None);
+        IActionResult result = await controller.AddTag(Guid.NewGuid(), new AddAssetTagRequest("t"), CancellationToken.None);
 
         await AssertStatusCodeAsync(controller, result, StatusCodes.Status409Conflict);
     }
@@ -379,9 +379,9 @@ public sealed class AssetsControllerTests : ControllerTestBase
         Sender.Send(Arg.Any<RemoveAssetTagCommand>(), Arg.Any<CancellationToken>())
             .Returns(Task.FromResult(NoValueResult.Success()));
 
-        var controller = CreateController();
+        AssetsController controller = CreateController();
         SetupUser(_userId, controller);
-        var result = await controller.RemoveTag(Guid.NewGuid(), Guid.NewGuid(), CancellationToken.None);
+        IActionResult result = await controller.RemoveTag(Guid.NewGuid(), Guid.NewGuid(), CancellationToken.None);
 
         result.Should().BeOfType<OkResult>();
     }

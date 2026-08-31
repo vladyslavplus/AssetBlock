@@ -1,3 +1,4 @@
+using Ardalis.Result;
 using AssetBlock.Application.Messaging;
 using AssetBlock.Application.UseCases.Admin.Outbox.GetDeadLetters;
 using AssetBlock.Application.UseCases.Admin.Outbox.ReplayDeadLetter;
@@ -34,7 +35,7 @@ public sealed class AdminOutboxController(ISender sender) : ControllerBase
         CancellationToken cancellationToken)
     {
         request ??= new GetDeadLettersRequest();
-        var result = await sender.Send(new GetDeadLettersQuery(request), cancellationToken);
+        Result<Domain.Core.Dto.Paging.PagedResult<DeadLetterOutboxListItemDto>> result = await sender.Send(new GetDeadLettersQuery(request), cancellationToken);
         return ResultProblemDetailsMapper.Map(HttpContext, result);
     }
 
@@ -53,7 +54,7 @@ public sealed class AdminOutboxController(ISender sender) : ControllerBase
         [FromRoute] Guid id,
         CancellationToken cancellationToken)
     {
-        var result = await sender.Send(new ReplayDeadLetterCommand(id), cancellationToken);
+        Result<ReplayDeadLetterResponseDto> result = await sender.Send(new ReplayDeadLetterCommand(id), cancellationToken);
         return ResultProblemDetailsMapper.Map(HttpContext, result);
     }
 }

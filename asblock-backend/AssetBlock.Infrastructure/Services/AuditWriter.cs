@@ -21,7 +21,7 @@ internal sealed class AuditWriter(
 
     public async Task Write(AuditEvent auditEvent, CancellationToken cancellationToken = default)
     {
-        var entry = BuildEntry(auditEvent);
+        AuditLog entry = BuildEntry(auditEvent);
         await auditStore.Add(entry, cancellationToken);
     }
 
@@ -50,8 +50,8 @@ internal sealed class AuditWriter(
         ArgumentException.ThrowIfNullOrWhiteSpace(auditEvent.Action);
         ArgumentException.ThrowIfNullOrWhiteSpace(auditEvent.ResourceType);
 
-        var context = auditContextAccessor.GetCurrent();
-        var (actorType, actorUserId) = ResolveActor(auditEvent, context);
+        CurrentAuditContext? context = auditContextAccessor.GetCurrent();
+        (AuditActorType actorType, Guid? actorUserId) = ResolveActor(auditEvent, context);
 
         return new AuditLog
         {

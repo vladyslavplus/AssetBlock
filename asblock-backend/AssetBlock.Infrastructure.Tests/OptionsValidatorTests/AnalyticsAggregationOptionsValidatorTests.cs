@@ -1,5 +1,6 @@
 using AssetBlock.Domain.Core.Primitives.AppSettingsOptions;
 using AssetBlock.Infrastructure.Options;
+using Microsoft.Extensions.Options;
 
 namespace AssetBlock.Infrastructure.Tests.OptionsValidatorTests;
 
@@ -18,7 +19,7 @@ public sealed class AnalyticsAggregationOptionsValidatorTests
     [InlineData(3601)]
     public void Validate_WhenIntervalSecondsOutOfRange_ShouldFail(int intervalSeconds)
     {
-        var result = _sut.Validate(null, new AnalyticsAggregationOptions { IntervalSeconds = intervalSeconds });
+        ValidateOptionsResult result = _sut.Validate(null, new AnalyticsAggregationOptions { IntervalSeconds = intervalSeconds });
         result.Failed.Should().BeTrue();
         result.FailureMessage.Should().Contain("IntervalSeconds");
     }
@@ -28,7 +29,7 @@ public sealed class AnalyticsAggregationOptionsValidatorTests
     [InlineData(50_001)]
     public void Validate_WhenRetentionBatchSizeOutOfRange_ShouldFail(int batchSize)
     {
-        var result = _sut.Validate(null, new AnalyticsAggregationOptions { RetentionBatchSize = batchSize });
+        ValidateOptionsResult result = _sut.Validate(null, new AnalyticsAggregationOptions { RetentionBatchSize = batchSize });
         result.Failed.Should().BeTrue();
         result.FailureMessage.Should().Contain("RetentionBatchSize");
     }
@@ -38,7 +39,7 @@ public sealed class AnalyticsAggregationOptionsValidatorTests
     [InlineData(101)]
     public void Validate_WhenMaxRetentionBatchesOutOfRange_ShouldFail(int maxBatches)
     {
-        var result = _sut.Validate(null, new AnalyticsAggregationOptions { MaxRetentionBatchesPerRun = maxBatches });
+        ValidateOptionsResult result = _sut.Validate(null, new AnalyticsAggregationOptions { MaxRetentionBatchesPerRun = maxBatches });
         result.Failed.Should().BeTrue();
         result.FailureMessage.Should().Contain("MaxRetentionBatchesPerRun");
     }
@@ -48,7 +49,7 @@ public sealed class AnalyticsAggregationOptionsValidatorTests
     [InlineData(601)]
     public void Validate_WhenCommandTimeoutOutOfRange_ShouldFail(int timeoutSeconds)
     {
-        var result = _sut.Validate(null, new AnalyticsAggregationOptions { CommandTimeoutSeconds = timeoutSeconds });
+        ValidateOptionsResult result = _sut.Validate(null, new AnalyticsAggregationOptions { CommandTimeoutSeconds = timeoutSeconds });
         result.Failed.Should().BeTrue();
         result.FailureMessage.Should().Contain("CommandTimeoutSeconds");
     }

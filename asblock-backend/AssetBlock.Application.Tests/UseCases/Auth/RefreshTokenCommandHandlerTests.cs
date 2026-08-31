@@ -1,8 +1,9 @@
+using Ardalis.Result;
 using AssetBlock.Application.UseCases.Auth.RefreshToken;
 using AssetBlock.Domain.Abstractions.Services;
 using AssetBlock.Domain.Core.Constants;
-using AssetBlock.Domain.Core.Dto.Auth;
 using AssetBlock.Domain.Core.Dto.Audit;
+using AssetBlock.Domain.Core.Dto.Auth;
 using AssetBlock.Domain.Core.Enums;
 using AssetBlock.Domain.Core.Primitives.Api;
 using AwesomeAssertions;
@@ -41,7 +42,7 @@ public class RefreshTokenCommandHandlerTests
         _jwtTokenServiceMock.ValidateRefreshToken(command.RefreshToken, Arg.Any<CancellationToken>())
             .Returns(new RefreshTokenValidationResult(RefreshTokenValidationStatus.NOT_FOUND_OR_EXPIRED));
 
-        var result = await _handler.Handle(command, CancellationToken.None);
+        Result<TokensResponse> result = await _handler.Handle(command, CancellationToken.None);
 
         result.IsSuccess.Should().BeFalse();
         result.ValidationErrors.Should().Contain(e => e.Identifier == ErrorCodes.ERR_AUTH_TOKEN_INVALID);
@@ -61,7 +62,7 @@ public class RefreshTokenCommandHandlerTests
         _jwtTokenServiceMock.ValidateRefreshToken(command.RefreshToken, Arg.Any<CancellationToken>())
             .Returns(new RefreshTokenValidationResult(RefreshTokenValidationStatus.REVOKED_REUSED, userId, "user", "u@e.com", AppRoles.USER, Guid.NewGuid()));
 
-        var result = await _handler.Handle(command, CancellationToken.None);
+        Result<TokensResponse> result = await _handler.Handle(command, CancellationToken.None);
 
         result.IsSuccess.Should().BeFalse();
         result.ValidationErrors.Should().Contain(e => e.Identifier == ErrorCodes.ERR_AUTH_TOKEN_INVALID);
@@ -91,7 +92,7 @@ public class RefreshTokenCommandHandlerTests
         _jwtTokenServiceMock.RevokeRefreshToken(tokenId, Arg.Any<CancellationToken>()).Returns(true);
         _jwtTokenServiceMock.GenerateTokenPair(userId, username, email, role).Returns(tokenResponse);
 
-        var result = await _handler.Handle(command, CancellationToken.None);
+        Result<TokensResponse> result = await _handler.Handle(command, CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
         result.Value.AccessToken.Should().Be("new-acc");
@@ -126,7 +127,7 @@ public class RefreshTokenCommandHandlerTests
         _jwtTokenServiceMock.RevokeRefreshToken(tokenId, Arg.Any<CancellationToken>()).Returns(false);
         _jwtTokenServiceMock.GenerateTokenPair(userId, username, email, role).Returns(tokenResponse);
 
-        var result = await _handler.Handle(command, CancellationToken.None);
+        Result<TokensResponse> result = await _handler.Handle(command, CancellationToken.None);
 
         result.IsSuccess.Should().BeFalse();
         result.ValidationErrors.Should().Contain(e => e.Identifier == ErrorCodes.ERR_AUTH_TOKEN_INVALID);

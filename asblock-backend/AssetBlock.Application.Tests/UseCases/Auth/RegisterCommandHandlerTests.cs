@@ -58,7 +58,7 @@ public class RegisterCommandHandlerTests
 
         _userStoreMock.GetByEmail(command.Email, Arg.Any<CancellationToken>()).Returns(existingUser);
 
-        var result = await _handler.Handle(command, CancellationToken.None);
+        Result<TokensResponse> result = await _handler.Handle(command, CancellationToken.None);
 
         result.IsSuccess.Should().BeFalse();
         result.Status.Should().Be(ResultStatus.Conflict);
@@ -82,7 +82,7 @@ public class RegisterCommandHandlerTests
         _userStoreMock.Create("newuser", command.Email, "hashed", Arg.Any<CancellationToken>())
             .ThrowsAsync(new DuplicateEmailException());
 
-        var result = await _handler.Handle(command, CancellationToken.None);
+        Result<TokensResponse> result = await _handler.Handle(command, CancellationToken.None);
 
         result.IsSuccess.Should().BeFalse();
         result.Status.Should().Be(ResultStatus.Conflict);
@@ -99,7 +99,7 @@ public class RegisterCommandHandlerTests
         _userStoreMock.Create("taken", command.Email, "hashed", Arg.Any<CancellationToken>())
             .ThrowsAsync(new DuplicateUsernameException());
 
-        var result = await _handler.Handle(command, CancellationToken.None);
+        Result<TokensResponse> result = await _handler.Handle(command, CancellationToken.None);
 
         result.IsSuccess.Should().BeFalse();
         result.Status.Should().Be(ResultStatus.Conflict);
@@ -121,7 +121,7 @@ public class RegisterCommandHandlerTests
         _emailActionStoreMock.IssueOrReplace(Arg.Any<Guid>(), Arg.Any<EmailActionPurpose>(), Arg.Any<string>(), Arg.Any<TimeSpan>(), Arg.Any<CancellationToken>())
             .Returns(action);
 
-        var result = await _handler.Handle(command, CancellationToken.None);
+        Result<TokensResponse> result = await _handler.Handle(command, CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
         result.Value.AccessToken.Should().Be("acc");

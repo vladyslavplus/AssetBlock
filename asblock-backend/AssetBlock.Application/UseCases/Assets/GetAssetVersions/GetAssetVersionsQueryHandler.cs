@@ -1,8 +1,8 @@
 using Ardalis.Result;
+using AssetBlock.Application.Messaging;
 using AssetBlock.Domain.Abstractions.Services;
 using AssetBlock.Domain.Core.Constants;
 using AssetBlock.Domain.Core.Dto.Assets;
-using AssetBlock.Application.Messaging;
 
 namespace AssetBlock.Application.UseCases.Assets.GetAssetVersions;
 
@@ -13,7 +13,7 @@ internal sealed class GetAssetVersionsQueryHandler(IAssetStore assetStore)
         GetAssetVersionsQuery request,
         CancellationToken cancellationToken)
     {
-        var versions = await assetStore.ListVersions(
+        IReadOnlyList<AssetVersionSummaryDto>? versions = await assetStore.ListVersions(
             request.AssetId,
             request.RequesterUserId,
             cancellationToken);

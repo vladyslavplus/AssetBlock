@@ -1,12 +1,13 @@
+using Ardalis.Result;
+using AssetBlock.Application.Messaging;
 using AssetBlock.Application.UseCases.Tags.CreateTag;
 using AssetBlock.Application.UseCases.Tags.DeleteTag;
 using AssetBlock.Application.UseCases.Tags.GetTagById;
 using AssetBlock.Application.UseCases.Tags.GetTags;
 using AssetBlock.Application.UseCases.Tags.UpdateTag;
-using AssetBlock.Domain.Core.Dto.Tags;
 using AssetBlock.Domain.Core.Constants;
+using AssetBlock.Domain.Core.Dto.Tags;
 using AssetBlock.WebApi.Constants;
-using AssetBlock.Application.Messaging;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
@@ -23,7 +24,7 @@ public class TagsController(ISender sender) : ApiControllerBase(sender)
     public async Task<IActionResult> SearchTags([FromQuery] GetTagsRequest request, CancellationToken cancellationToken = default)
     {
         var query = new GetTagsQuery(request);
-        var result = await Sender.Send(query, cancellationToken);
+        Result<Domain.Core.Dto.Paging.PagedResult<TagDto>> result = await Sender.Send(query, cancellationToken);
 
         return MapResultToActionResult(result);
     }
@@ -38,7 +39,7 @@ public class TagsController(ISender sender) : ApiControllerBase(sender)
     public async Task<IActionResult> GetById(Guid id, CancellationToken cancellationToken = default)
     {
         var query = new GetTagByIdQuery(id);
-        var result = await Sender.Send(query, cancellationToken);
+        Result<TagDto> result = await Sender.Send(query, cancellationToken);
 
         return MapResultToActionResult(result);
     }
@@ -56,7 +57,7 @@ public class TagsController(ISender sender) : ApiControllerBase(sender)
     [ProducesResponseType(StatusCodes.Status409Conflict)]
     public async Task<IActionResult> Create([FromBody] CreateTagCommand command, CancellationToken cancellationToken = default)
     {
-        var result = await Sender.Send(command, cancellationToken);
+        Result<TagDto> result = await Sender.Send(command, cancellationToken);
 
         return result.IsSuccess
             ? CreatedAtAction(nameof(GetById), new { id = result.Value.Id }, result.Value)
@@ -77,7 +78,7 @@ public class TagsController(ISender sender) : ApiControllerBase(sender)
     public async Task<IActionResult> Update(Guid id, [FromBody] UpdateTagRequest request, CancellationToken cancellationToken = default)
     {
         var command = new UpdateTagCommand(id, request.Name);
-        var result = await Sender.Send(command, cancellationToken);
+        Result<TagDto> result = await Sender.Send(command, cancellationToken);
 
         return MapResultToActionResult(result);
     }
@@ -95,7 +96,7 @@ public class TagsController(ISender sender) : ApiControllerBase(sender)
     public async Task<IActionResult> Delete(Guid id, CancellationToken cancellationToken = default)
     {
         var command = new DeleteTagCommand(id);
-        var result = await Sender.Send(command, cancellationToken);
+        Result result = await Sender.Send(command, cancellationToken);
 
         return result.IsSuccess ? Ok() : MapResultToActionResult(result);
     }

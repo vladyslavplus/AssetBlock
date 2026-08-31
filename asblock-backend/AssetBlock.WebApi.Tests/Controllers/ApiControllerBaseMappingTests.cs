@@ -1,16 +1,16 @@
+using System.Text;
+using System.Text.Json;
 using Ardalis.Result;
 using AssetBlock.Application.Common;
+using AssetBlock.Application.Messaging;
 using AssetBlock.Domain.Core.Constants;
 using AssetBlock.Domain.Core.Primitives.Api;
 using AssetBlock.WebApi.Controllers;
 using AssetBlock.WebApi.Tests.Common;
 using AwesomeAssertions;
-using AssetBlock.Application.Messaging;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using NSubstitute;
-using System.Text;
-using System.Text.Json;
 
 namespace AssetBlock.WebApi.Tests.Controllers;
 
@@ -46,7 +46,7 @@ public sealed class ApiControllerBaseMappingTests : ControllerTestBase
         using var reader = new StreamReader(c.HttpContext.Response.Body, Encoding.UTF8, leaveOpen: true);
         var json = await reader.ReadToEndAsync();
         using var doc = JsonDocument.Parse(json);
-        var root = doc.RootElement;
+        JsonElement root = doc.RootElement;
         root.GetProperty("status").GetInt32().Should().Be(status);
         root.GetProperty("type").GetString().Should().Be($"urn:assetblock:error:{code}");
         root.GetProperty("code").GetString().Should().Be(code);
@@ -56,18 +56,18 @@ public sealed class ApiControllerBaseMappingTests : ControllerTestBase
     [Fact]
     public void Map_Generic_WhenSuccess_ShouldReturnOkWithValue()
     {
-        var c = CreateController();
-        var action = c.Map(Result.Success(_sampleTokens));
+        MappingController c = CreateController();
+        IActionResult action = c.Map(Result.Success(_sampleTokens));
         action.Should().BeOfType<OkObjectResult>().Which.Value.Should().Be(_sampleTokens);
     }
 
     [Fact]
     public void Map_Generic_WhenCreated_ShouldReturn201WithValue()
     {
-        var c = CreateController();
-        var action = c.Map(Result.Created(_sampleTokens));
+        MappingController c = CreateController();
+        IActionResult action = c.Map(Result.Created(_sampleTokens));
 
-        var created = action.Should().BeOfType<ObjectResult>().Subject;
+        ObjectResult created = action.Should().BeOfType<ObjectResult>().Subject;
         created.StatusCode.Should().Be(StatusCodes.Status201Created);
         created.Value.Should().Be(_sampleTokens);
     }
@@ -75,8 +75,8 @@ public sealed class ApiControllerBaseMappingTests : ControllerTestBase
     [Fact]
     public void Map_Generic_WhenNoContent_ShouldReturn204()
     {
-        var c = CreateController();
-        var action = c.Map(Result<TokensResponse>.NoContent());
+        MappingController c = CreateController();
+        IActionResult action = c.Map(Result<TokensResponse>.NoContent());
 
         action.Should().BeOfType<NoContentResult>();
     }
@@ -84,64 +84,64 @@ public sealed class ApiControllerBaseMappingTests : ControllerTestBase
     [Fact]
     public async Task Map_Generic_WhenInvalid_ShouldReturnBadRequestProblem()
     {
-        var c = CreateController();
-        var action = c.Map(ResultError.Error<TokensResponse>(ErrorCodes.ERR_AUTH_INVALID_CREDENTIALS));
+        MappingController c = CreateController();
+        IActionResult action = c.Map(ResultError.Error<TokensResponse>(ErrorCodes.ERR_AUTH_INVALID_CREDENTIALS));
         await AssertProblem(c, action, StatusCodes.Status400BadRequest, ErrorCodes.ERR_AUTH_INVALID_CREDENTIALS);
     }
 
     [Fact]
     public async Task Map_Generic_WhenNotFound_ShouldReturnNotFoundProblem()
     {
-        var c = CreateController();
-        var action = c.Map(Result<TokensResponse>.NotFound(ErrorCodes.ERR_USER_NOT_FOUND));
+        MappingController c = CreateController();
+        IActionResult action = c.Map(Result<TokensResponse>.NotFound(ErrorCodes.ERR_USER_NOT_FOUND));
         await AssertProblem(c, action, StatusCodes.Status404NotFound, ErrorCodes.ERR_USER_NOT_FOUND);
     }
 
     [Fact]
     public async Task Map_Generic_WhenConflict_ShouldReturn409Problem()
     {
-        var c = CreateController();
-        var action = c.Map(Result<TokensResponse>.Conflict(ErrorCodes.ERR_USERNAME_ALREADY_EXISTS));
+        MappingController c = CreateController();
+        IActionResult action = c.Map(Result<TokensResponse>.Conflict(ErrorCodes.ERR_USERNAME_ALREADY_EXISTS));
         await AssertProblem(c, action, StatusCodes.Status409Conflict, ErrorCodes.ERR_USERNAME_ALREADY_EXISTS);
     }
 
     [Fact]
     public async Task Map_Generic_WhenForbidden_ShouldReturn403Problem()
     {
-        var c = CreateController();
-        var action = c.Map(Result<TokensResponse>.Forbidden(ErrorCodes.ERR_FORBIDDEN));
+        MappingController c = CreateController();
+        IActionResult action = c.Map(Result<TokensResponse>.Forbidden(ErrorCodes.ERR_FORBIDDEN));
         await AssertProblem(c, action, StatusCodes.Status403Forbidden, ErrorCodes.ERR_FORBIDDEN);
     }
 
     [Fact]
     public async Task Map_Generic_WhenUnauthorized_ShouldReturn401Problem()
     {
-        var c = CreateController();
-        var action = c.Map(Result<TokensResponse>.Unauthorized(ErrorCodes.ERR_AUTH_TOKEN_INVALID));
+        MappingController c = CreateController();
+        IActionResult action = c.Map(Result<TokensResponse>.Unauthorized(ErrorCodes.ERR_AUTH_TOKEN_INVALID));
         await AssertProblem(c, action, StatusCodes.Status401Unauthorized, ErrorCodes.ERR_AUTH_TOKEN_INVALID);
     }
 
     [Fact]
     public async Task Map_Generic_WhenServiceUnavailable_ShouldReturn503Problem()
     {
-        var c = CreateController();
-        var action = c.Map(Result<TokensResponse>.Unavailable(ErrorCodes.ERR_SERVICE_UNAVAILABLE));
+        MappingController c = CreateController();
+        IActionResult action = c.Map(Result<TokensResponse>.Unavailable(ErrorCodes.ERR_SERVICE_UNAVAILABLE));
         await AssertProblem(c, action, StatusCodes.Status503ServiceUnavailable, ErrorCodes.ERR_SERVICE_UNAVAILABLE);
     }
 
     [Fact]
     public void Map_NonGeneric_WhenSuccess_ShouldReturnOk()
     {
-        var c = CreateController();
-        var action = c.Map(Result.Success());
+        MappingController c = CreateController();
+        IActionResult action = c.Map(Result.Success());
         action.Should().BeOfType<OkResult>();
     }
 
     [Fact]
     public void Map_NonGeneric_WhenNoContent_ShouldReturn204()
     {
-        var c = CreateController();
-        var action = c.Map(Result.NoContent());
+        MappingController c = CreateController();
+        IActionResult action = c.Map(Result.NoContent());
 
         action.Should().BeOfType<NoContentResult>();
     }
@@ -149,33 +149,33 @@ public sealed class ApiControllerBaseMappingTests : ControllerTestBase
     [Fact]
     public async Task Map_NonGeneric_WhenInvalid_ShouldReturnBadRequestProblem()
     {
-        var c = CreateController();
-        var action = c.Map(ResultError.Error(ErrorCodes.ERR_BAD_REQUEST));
+        MappingController c = CreateController();
+        IActionResult action = c.Map(ResultError.Error(ErrorCodes.ERR_BAD_REQUEST));
         await AssertProblem(c, action, StatusCodes.Status400BadRequest, ErrorCodes.ERR_BAD_REQUEST);
     }
 
     [Fact]
     public async Task Map_NonGeneric_WhenErrorWithBadRequestCode_ShouldReturn500WithInternalSemantics()
     {
-        var c = CreateController();
+        MappingController c = CreateController();
         // ResultStatus.Error must stay 500 even if someone passes ERR_BAD_REQUEST as the code payload.
-        var action = c.Map(Result.Error(ErrorCodes.ERR_BAD_REQUEST));
+        IActionResult action = c.Map(Result.Error(ErrorCodes.ERR_BAD_REQUEST));
         await AssertProblem(c, action, StatusCodes.Status500InternalServerError, ErrorCodes.ERR_BAD_REQUEST);
     }
 
     [Fact]
     public async Task Map_NonGeneric_WhenErrorInternal_ShouldReturn500Problem()
     {
-        var c = CreateController();
-        var action = c.Map(Result.Error(ErrorCodes.ERR_INTERNAL));
+        MappingController c = CreateController();
+        IActionResult action = c.Map(Result.Error(ErrorCodes.ERR_INTERNAL));
         await AssertProblem(c, action, StatusCodes.Status500InternalServerError, ErrorCodes.ERR_INTERNAL);
     }
 
     [Fact]
     public async Task Map_NonGeneric_WhenCriticalError_ShouldReturn500Problem()
     {
-        var c = CreateController();
-        var action = c.Map(Result.CriticalError(ErrorCodes.ERR_INTERNAL));
+        MappingController c = CreateController();
+        IActionResult action = c.Map(Result.CriticalError(ErrorCodes.ERR_INTERNAL));
 
         await AssertProblem(c, action, StatusCodes.Status500InternalServerError, ErrorCodes.ERR_INTERNAL);
     }
@@ -183,8 +183,8 @@ public sealed class ApiControllerBaseMappingTests : ControllerTestBase
     [Fact]
     public async Task Map_NonGeneric_WhenUnavailable_ShouldReturn503Problem()
     {
-        var c = CreateController();
-        var action = c.Map(Result.Unavailable(ErrorCodes.ERR_SERVICE_UNAVAILABLE));
+        MappingController c = CreateController();
+        IActionResult action = c.Map(Result.Unavailable(ErrorCodes.ERR_SERVICE_UNAVAILABLE));
 
         await AssertProblem(c, action, StatusCodes.Status503ServiceUnavailable, ErrorCodes.ERR_SERVICE_UNAVAILABLE);
     }
@@ -192,8 +192,8 @@ public sealed class ApiControllerBaseMappingTests : ControllerTestBase
     [Fact]
     public async Task Map_NonGeneric_WhenNotFound_ShouldReturnNotFoundProblem()
     {
-        var c = CreateController();
-        var action = c.Map(Result.NotFound(ErrorCodes.ERR_TAG_NOT_FOUND));
+        MappingController c = CreateController();
+        IActionResult action = c.Map(Result.NotFound(ErrorCodes.ERR_TAG_NOT_FOUND));
         await AssertProblem(c, action, StatusCodes.Status404NotFound, ErrorCodes.ERR_TAG_NOT_FOUND);
     }
 }

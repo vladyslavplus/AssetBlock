@@ -3,6 +3,7 @@ using AssetBlock.Domain.Core.Constants;
 using AssetBlock.Domain.Core.Dto.Analytics;
 using AssetBlock.Domain.Core.Enums;
 using AwesomeAssertions;
+using FluentValidation.Results;
 
 namespace AssetBlock.Application.Tests.UseCases.Analytics;
 
@@ -13,7 +14,7 @@ public class IngestAnalyticsEventCommandValidatorTests
     [Fact]
     public void Validate_WhenAssetViewCarriesOnlyAssetId_ShouldPass()
     {
-        var result = _validator.Validate(Command(AnalyticsEventType.ASSET_VIEW, assetId: Guid.NewGuid()));
+        ValidationResult result = _validator.Validate(Command(AnalyticsEventType.ASSET_VIEW, assetId: Guid.NewGuid()));
 
         result.IsValid.Should().BeTrue();
     }
@@ -21,7 +22,7 @@ public class IngestAnalyticsEventCommandValidatorTests
     [Fact]
     public void Validate_WhenBundleViewCarriesOnlyBundleId_ShouldPass()
     {
-        var result = _validator.Validate(Command(AnalyticsEventType.BUNDLE_VIEW, bundleId: Guid.NewGuid()));
+        ValidationResult result = _validator.Validate(Command(AnalyticsEventType.BUNDLE_VIEW, bundleId: Guid.NewGuid()));
 
         result.IsValid.Should().BeTrue();
     }
@@ -29,7 +30,7 @@ public class IngestAnalyticsEventCommandValidatorTests
     [Fact]
     public void Validate_WhenCollectionViewCarriesOnlyCollectionId_ShouldPass()
     {
-        var result = _validator.Validate(Command(AnalyticsEventType.COLLECTION_VIEW, collectionId: Guid.NewGuid()));
+        ValidationResult result = _validator.Validate(Command(AnalyticsEventType.COLLECTION_VIEW, collectionId: Guid.NewGuid()));
 
         result.IsValid.Should().BeTrue();
     }
@@ -37,7 +38,7 @@ public class IngestAnalyticsEventCommandValidatorTests
     [Fact]
     public void Validate_WhenCollectionItemClickCarriesCollectionAndAsset_ShouldPass()
     {
-        var command = Command(
+        IngestAnalyticsEventCommand command = Command(
             AnalyticsEventType.COLLECTION_ITEM_CLICK,
             assetId: Guid.NewGuid(),
             collectionId: Guid.NewGuid());
@@ -48,7 +49,7 @@ public class IngestAnalyticsEventCommandValidatorTests
     [Fact]
     public void Validate_WhenDownloadRequestedCarriesAssetAndVersion_ShouldPass()
     {
-        var command = Command(
+        IngestAnalyticsEventCommand command = Command(
             AnalyticsEventType.DOWNLOAD_REQUESTED,
             assetId: Guid.NewGuid(),
             assetVersionId: Guid.NewGuid());
@@ -170,7 +171,7 @@ public class IngestAnalyticsEventCommandValidatorTests
 
     private void ShouldFailWithEventInvalid(IngestAnalyticsEventCommand command)
     {
-        var result = _validator.Validate(command);
+        ValidationResult result = _validator.Validate(command);
 
         result.IsValid.Should().BeFalse();
         result.Errors.Should().Contain(e => e.ErrorMessage.Contains(ErrorCodes.ERR_ANALYTICS_EVENT_INVALID));

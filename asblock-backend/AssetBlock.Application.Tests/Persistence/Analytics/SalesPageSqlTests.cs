@@ -35,7 +35,7 @@ public sealed class SalesPageSqlTests
     [Fact]
     public void Build_InvalidProductType_Throws()
     {
-        var act = () => SalesPageSql.Build((AnalyticsProductTypeFilter)999, hasCursor: false);
+        Func<string> act = () => SalesPageSql.Build((AnalyticsProductTypeFilter)999, hasCursor: false);
         act.Should().Throw<ArgumentOutOfRangeException>()
             .And.ParamName.Should().Be("productType");
     }

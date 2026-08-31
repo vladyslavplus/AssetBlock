@@ -14,13 +14,13 @@ internal sealed class GetListingCopilotSuggestionQueryHandler(
         GetListingCopilotSuggestionQuery request,
         CancellationToken cancellationToken)
     {
-        var owned = await listingCopilotStore.GetOwnedVersion(request.AssetVersionId, request.OwnerUserId, cancellationToken);
+        ListingCopilotOwnedVersion? owned = await listingCopilotStore.GetOwnedVersion(request.AssetVersionId, request.OwnerUserId, cancellationToken);
         if (owned is null)
         {
             return Result.NotFound(ErrorCodes.ERR_ASSET_NOT_FOUND);
         }
 
-        var suggestion = await listingCopilotStore.GetSuggestionForOwner(
+        ListingCopilotSuggestionDto? suggestion = await listingCopilotStore.GetSuggestionForOwner(
             request.AssetVersionId,
             request.OwnerUserId,
             cancellationToken);

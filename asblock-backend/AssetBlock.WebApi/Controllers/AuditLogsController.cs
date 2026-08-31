@@ -1,9 +1,10 @@
+using Ardalis.Result;
+using AssetBlock.Application.Messaging;
 using AssetBlock.Application.UseCases.AuditLogs.GetAuditLogs;
 using AssetBlock.Domain.Core.Constants;
 using AssetBlock.Domain.Core.Dto.Audit;
 using AssetBlock.WebApi.Constants;
 using AssetBlock.WebApi.ProblemDetails;
-using AssetBlock.Application.Messaging;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
@@ -32,7 +33,7 @@ public sealed class AuditLogsController(ISender sender) : ControllerBase
     public async Task<IActionResult> Get([FromQuery] GetAuditLogsRequest? request, CancellationToken cancellationToken)
     {
         request ??= new GetAuditLogsRequest();
-        var result = await sender.Send(new GetAuditLogsQuery(request), cancellationToken);
+        Result<Domain.Core.Dto.Paging.PagedResult<AuditLogListItem>> result = await sender.Send(new GetAuditLogsQuery(request), cancellationToken);
         return ResultProblemDetailsMapper.Map(HttpContext, result);
     }
 }

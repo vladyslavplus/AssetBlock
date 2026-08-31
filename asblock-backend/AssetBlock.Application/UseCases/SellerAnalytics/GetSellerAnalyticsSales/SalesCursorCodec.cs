@@ -43,7 +43,7 @@ internal static class SalesCursorCodec
 
             var bytes = Convert.FromBase64String(padded);
             var json = Encoding.UTF8.GetString(bytes);
-            var payload = JsonSerializer.Deserialize<CursorPayload>(json);
+            CursorPayload? payload = JsonSerializer.Deserialize<CursorPayload>(json);
 
             if (payload is null || payload.V != VERSION)
             {

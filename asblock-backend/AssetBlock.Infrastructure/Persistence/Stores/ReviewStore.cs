@@ -3,7 +3,7 @@ using AssetBlock.Domain.Core.Dto.Paging;
 using AssetBlock.Domain.Core.Dto.Reviews;
 using AssetBlock.Domain.Core.Entities;
 using Microsoft.EntityFrameworkCore;
-
+using Microsoft.EntityFrameworkCore.Storage;
 using Microsoft.Extensions.Logging;
 
 namespace AssetBlock.Infrastructure.Persistence.Stores;
@@ -22,7 +22,7 @@ internal sealed class ReviewStore(ApplicationDbContext dbContext, ILogger<Review
     public async Task<Review> Create(Review review, CancellationToken cancellationToken = default)
     {
         var hasAmbientTx = dbContext.Database.CurrentTransaction is not null;
-        var tx = hasAmbientTx ? null : await dbContext.Database.BeginTransactionAsync(cancellationToken);
+        IDbContextTransaction? tx = hasAmbientTx ? null : await dbContext.Database.BeginTransactionAsync(cancellationToken);
         try
         {
             await LockAssetForUpdate(review.AssetId, cancellationToken);
@@ -57,7 +57,7 @@ internal sealed class ReviewStore(ApplicationDbContext dbContext, ILogger<Review
     public async Task<bool> Delete(Guid id, CancellationToken cancellationToken = default)
     {
         var hasAmbientTx = dbContext.Database.CurrentTransaction is not null;
-        var tx = hasAmbientTx ? null : await dbContext.Database.BeginTransactionAsync(cancellationToken);
+        IDbContextTransaction? tx = hasAmbientTx ? null : await dbContext.Database.BeginTransactionAsync(cancellationToken);
         try
         {
             Review? review = await dbContext.Reviews.FindAsync([id], cancellationToken);

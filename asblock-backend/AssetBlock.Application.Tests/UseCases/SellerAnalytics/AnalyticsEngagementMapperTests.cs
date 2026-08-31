@@ -20,7 +20,7 @@ public sealed class AnalyticsEngagementMapperTests
     {
         var current = new SellerEngagementRawFacts(10, 5, 1, 2, 3);
 
-        var totals = AnalyticsEngagementMapper.MapEngagementTotals(current, null);
+        AnalyticsEngagementTotals? totals = AnalyticsEngagementMapper.MapEngagementTotals(current, null);
 
         totals.Should().NotBeNull();
         totals.ProductViews.Current.Should().Be(10);
@@ -35,7 +35,7 @@ public sealed class AnalyticsEngagementMapperTests
         var current = new SellerEngagementRawFacts(10, 5, 1, 2, 3);
         var comparison = new SellerEngagementRawFacts(5, 2, 0, 1, 1);
 
-        var totals = AnalyticsEngagementMapper.MapEngagementTotals(current, comparison);
+        AnalyticsEngagementTotals? totals = AnalyticsEngagementMapper.MapEngagementTotals(current, comparison);
 
         totals.Should().NotBeNull();
         totals.ProductViews.Current.Should().Be(10);
@@ -47,7 +47,7 @@ public sealed class AnalyticsEngagementMapperTests
     [Fact]
     public void MapCommerceFunnel_WhenCheckoutStartsZero_ShouldReturnNullCompletionRate()
     {
-        var funnel = AnalyticsEngagementMapper.MapCommerceFunnel(
+        AnalyticsCommerceFunnel? funnel = AnalyticsEngagementMapper.MapCommerceFunnel(
             new AnalyticsCommerceFunnelRaw(0, 0, 0, 0, 0));
 
         funnel.Should().NotBeNull();
@@ -58,7 +58,7 @@ public sealed class AnalyticsEngagementMapperTests
     [Fact]
     public void MapTrackedFunnel_WhenDenominatorZero_ShouldReturnNullRates()
     {
-        var funnel = AnalyticsEngagementMapper.MapTrackedFunnel(
+        AnalyticsTrackedFunnel? funnel = AnalyticsEngagementMapper.MapTrackedFunnel(
             new AnalyticsTrackedFunnelRaw(0, 0, 0));
 
         funnel.Should().NotBeNull();
@@ -84,7 +84,7 @@ public sealed class AnalyticsEngagementMapperTests
     [Fact]
     public void MapTrackedFunnel_WhenCountsPresent_ShouldComputeRoundedRates()
     {
-        var funnel = AnalyticsEngagementMapper.MapTrackedFunnel(
+        AnalyticsTrackedFunnel? funnel = AnalyticsEngagementMapper.MapTrackedFunnel(
             new AnalyticsTrackedFunnelRaw(100, 25, 5));
 
         funnel!.ViewToCheckoutRate.Should().Be(0.25m);
@@ -101,7 +101,7 @@ public sealed class AnalyticsEngagementMapperTests
     [Fact]
     public void MapTrafficSources_WhenExternalSourcePresent_ShouldAttachReferrerRows()
     {
-        var rows = AnalyticsEngagementMapper.MapTrafficSources(
+        IReadOnlyList<AnalyticsTrafficSourceRow>? rows = AnalyticsEngagementMapper.MapTrafficSources(
             [new AnalyticsTrafficSourceRaw(AnalyticsTrafficSource.EXTERNAL, 10, 4, 2, 1, 9.99m)],
             [new AnalyticsExternalReferrerRaw("news.example", 10, 4, 2, 1, 9.99m)]);
 

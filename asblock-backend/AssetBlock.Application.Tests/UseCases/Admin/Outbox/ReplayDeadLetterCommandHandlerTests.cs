@@ -23,8 +23,8 @@ public sealed class ReplayDeadLetterCommandHandlerTests
         _unitOfWork.ExecuteInTransaction(Arg.Any<Func<CancellationToken, Task>>(), Arg.Any<CancellationToken>())
             .Returns(async callInfo =>
             {
-                var action = callInfo.Arg<Func<CancellationToken, Task>>();
-                var ct = callInfo.Arg<CancellationToken>();
+                Func<CancellationToken, Task> action = callInfo.Arg<Func<CancellationToken, Task>>();
+                CancellationToken ct = callInfo.Arg<CancellationToken>();
                 await action(ct);
             });
 
@@ -38,7 +38,7 @@ public sealed class ReplayDeadLetterCommandHandlerTests
         _outboxStore.ReplayDeadLetter(id, Arg.Any<CancellationToken>())
             .Returns((OutboxReplayOutcome.NOT_FOUND, (ReplayDeadLetterResponseDto?)null));
 
-        var result = await _handler.Handle(new ReplayDeadLetterCommand(id), CancellationToken.None);
+        Result<ReplayDeadLetterResponseDto> result = await _handler.Handle(new ReplayDeadLetterCommand(id), CancellationToken.None);
 
         result.Status.Should().Be(ResultStatus.NotFound);
         result.Errors.Should().Contain(ErrorCodes.ERR_OUTBOX_MESSAGE_NOT_FOUND);
@@ -52,7 +52,7 @@ public sealed class ReplayDeadLetterCommandHandlerTests
         _outboxStore.ReplayDeadLetter(id, Arg.Any<CancellationToken>())
             .Returns((OutboxReplayOutcome.NOT_DEAD_LETTERED, (ReplayDeadLetterResponseDto?)null));
 
-        var result = await _handler.Handle(new ReplayDeadLetterCommand(id), CancellationToken.None);
+        Result<ReplayDeadLetterResponseDto> result = await _handler.Handle(new ReplayDeadLetterCommand(id), CancellationToken.None);
 
         result.Status.Should().Be(ResultStatus.Conflict);
         result.Errors.Should().Contain(ErrorCodes.ERR_OUTBOX_NOT_DEAD_LETTERED);
@@ -63,13 +63,13 @@ public sealed class ReplayDeadLetterCommandHandlerTests
     public async Task Handle_WhenReplaySuccessful_ShouldAuditAndReturnSuccess()
     {
         var id = Guid.NewGuid();
-        var replayedAt = DateTimeOffset.UtcNow;
+        DateTimeOffset replayedAt = DateTimeOffset.UtcNow;
         var response = new ReplayDeadLetterResponseDto(id, replayedAt, 1);
 
         _outboxStore.ReplayDeadLetter(id, Arg.Any<CancellationToken>())
             .Returns((OutboxReplayOutcome.SUCCESS, response));
 
-        var result = await _handler.Handle(new ReplayDeadLetterCommand(id), CancellationToken.None);
+        Result<ReplayDeadLetterResponseDto> result = await _handler.Handle(new ReplayDeadLetterCommand(id), CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
         result.Value.Should().BeEquivalentTo(response);
@@ -94,7 +94,7 @@ public sealed class ReplayDeadLetterCommandHandlerTests
         _auditWriter.Write(Arg.Any<AuditEvent>(), Arg.Any<CancellationToken>())
             .ThrowsAsync(new InvalidOperationException("Audit store connection failed."));
 
-        var act = () => _handler.Handle(new ReplayDeadLetterCommand(id), CancellationToken.None);
+        Func<Task<Result<ReplayDeadLetterResponseDto>>> act = () => _handler.Handle(new ReplayDeadLetterCommand(id), CancellationToken.None);
 
         await act.Should().ThrowAsync<InvalidOperationException>()
             .WithMessage("Audit store connection failed.");

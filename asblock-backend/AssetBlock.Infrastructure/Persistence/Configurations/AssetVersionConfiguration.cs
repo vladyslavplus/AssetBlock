@@ -1,8 +1,8 @@
 using AssetBlock.Domain.Core.Entities;
 using AssetBlock.Domain.Core.Enums;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.EntityFrameworkCore.Metadata.Builders;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Metadata.Builders;
 
 namespace AssetBlock.Infrastructure.Persistence.Configurations;
 

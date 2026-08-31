@@ -1,12 +1,15 @@
 using System.Security.Cryptography;
 using AssetBlock.Domain.Abstractions.Services;
 using AssetBlock.Domain.Core.Primitives.AppSettingsOptions;
+using AssetBlock.Domain.Core.Primitives.Storage;
 using AssetBlock.Infrastructure.Services;
 using DotNet.Testcontainers.Builders;
 using DotNet.Testcontainers.Configurations;
 using DotNet.Testcontainers.Containers;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Options;
+using Minio;
 using Polly;
 using Polly.Registry;
 
@@ -60,7 +63,7 @@ public abstract class StorageProviderFixture : IAsyncLifetime
         Endpoint = $"http://{_container.Hostname}:{_container.GetMappedPublicPort(ContainerPort)}";
         Storage = CreateStorage(Endpoint, AccessKey, SecretKey, Bucket);
 
-        var deadline = DateTimeOffset.UtcNow + TimeSpan.FromSeconds(90);
+        DateTimeOffset deadline = DateTimeOffset.UtcNow + TimeSpan.FromSeconds(90);
         Exception? last = null;
         while (DateTimeOffset.UtcNow < deadline)
         {
@@ -133,8 +136,8 @@ public sealed class MinioStorageFixture : StorageProviderFixture
 
     protected override IAssetStorageService CreateStorage(string endpoint, string accessKey, string secretKey, string bucket)
     {
-        var client = S3CompatibleClientFactory.Create(endpoint, accessKey, secretKey, useSsl: false);
-        var opts = Microsoft.Extensions.Options.Options.Create(new MinioOptions
+        IMinioClient client = S3CompatibleClientFactory.Create(endpoint, accessKey, secretKey, useSsl: false);
+        IOptions<MinioOptions> opts = Microsoft.Extensions.Options.Options.Create(new MinioOptions
         {
             Endpoint = endpoint,
             Bucket = bucket,
@@ -178,8 +181,8 @@ public sealed class SeaweedFsStorageFixture : StorageProviderFixture
 
     protected override IAssetStorageService CreateStorage(string endpoint, string accessKey, string secretKey, string bucket)
     {
-        var client = S3CompatibleClientFactory.Create(endpoint, accessKey, secretKey, useSsl: false);
-        var opts = Microsoft.Extensions.Options.Options.Create(new SeaweedFsOptions
+        IMinioClient client = S3CompatibleClientFactory.Create(endpoint, accessKey, secretKey, useSsl: false);
+        IOptions<SeaweedFsOptions> opts = Microsoft.Extensions.Options.Options.Create(new SeaweedFsOptions
         {
             Endpoint = endpoint,
             Bucket = bucket,
@@ -207,12 +210,12 @@ public abstract class AssetStorageContractTests(StorageProviderFixture fixture)
     private IAssetStorageService CreateStorageForBucket(string bucket) =>
         fixture.CreateStorageForBucket(bucket);
 
-    private static async Task<List<Domain.Core.Primitives.Storage.StorageObjectInfo>> ToList(
-        IAsyncEnumerable<Domain.Core.Primitives.Storage.StorageObjectInfo> source,
+    private static async Task<List<StorageObjectInfo>> ToList(
+        IAsyncEnumerable<StorageObjectInfo> source,
         CancellationToken cancellationToken = default)
     {
-        var list = new List<Domain.Core.Primitives.Storage.StorageObjectInfo>();
-        await foreach (var item in source.WithCancellation(cancellationToken))
+        var list = new List<StorageObjectInfo>();
+        await foreach (StorageObjectInfo item in source.WithCancellation(cancellationToken))
         {
             list.Add(item);
         }
@@ -230,18 +233,18 @@ public abstract class AssetStorageContractTests(StorageProviderFixture fixture)
     public async Task EnsureBucket_WhenCalledConcurrentlyOnMissingBucket_ShouldBeSafe()
     {
         var bucket = $"race{Guid.NewGuid():N}";
-        var storages = Enumerable.Range(0, 8)
+        IAssetStorageService[] storages = Enumerable.Range(0, 8)
             .Select(_ => CreateStorageForBucket(bucket))
             .ToArray();
 
-        var tasks = storages.Select(s => s.EnsureBucket()).ToArray();
+        Task[] tasks = storages.Select(s => s.EnsureBucket()).ToArray();
         await Task.WhenAll(tasks);
 
         // Post-condition: bucket is usable for a tiny object.
         var key = Key("after-race.bin");
         var payload = "ok"u8.ToArray();
         await storages[0].Upload(key, new MemoryStream(payload), payload.Length);
-        var listed = await ToList(storages[0].ListObjects(_keyPrefix));
+        List<StorageObjectInfo> listed = await ToList(storages[0].ListObjects(_keyPrefix));
         listed.Should().Contain(o => o.Key == key);
     }
 
@@ -263,8 +266,8 @@ public abstract class AssetStorageContractTests(StorageProviderFixture fixture)
 
         read.Should().Equal(payload);
 
-        var listed = await ToList(Storage.ListObjects(_keyPrefix));
-        var info = listed.Should().ContainSingle(o => o.Key == key).Subject;
+        List<StorageObjectInfo> listed = await ToList(Storage.ListObjects(_keyPrefix));
+        StorageObjectInfo info = listed.Should().ContainSingle(o => o.Key == key).Subject;
         info.Size.Should().Be(payload.Length);
         info.LastModified.Should().NotBeNull();
     }
@@ -276,8 +279,8 @@ public abstract class AssetStorageContractTests(StorageProviderFixture fixture)
         var payload = "nested-payload"u8.ToArray();
         await Storage.Upload(key, new MemoryStream(payload), payload.Length);
 
-        var listed = await ToList(Storage.ListObjects(_keyPrefix + "nested/"));
-        var info = listed.Should().ContainSingle(o => o.Key == key).Subject;
+        List<StorageObjectInfo> listed = await ToList(Storage.ListObjects(_keyPrefix + "nested/"));
+        StorageObjectInfo info = listed.Should().ContainSingle(o => o.Key == key).Subject;
         info.Size.Should().Be(payload.Length);
         info.LastModified.Should().NotBeNull();
     }
@@ -291,7 +294,7 @@ public abstract class AssetStorageContractTests(StorageProviderFixture fixture)
         await Storage.Delete(key);
         await Storage.Delete(key);
 
-        var listed = await ToList(Storage.ListObjects(_keyPrefix));
+        List<StorageObjectInfo> listed = await ToList(Storage.ListObjects(_keyPrefix));
         listed.Should().NotContain(o => o.Key == key);
     }
 
@@ -322,7 +325,7 @@ public abstract class AssetStorageContractTests(StorageProviderFixture fixture)
         await FluentActions.Awaiting(() => Storage.Upload(key, throwing, objectSize: 8 * 1024 * 1024))
             .Should().ThrowAsync<Exception>();
 
-        var listed = await ToList(Storage.ListObjects(_keyPrefix));
+        List<StorageObjectInfo> listed = await ToList(Storage.ListObjects(_keyPrefix));
         listed.Should().NotContain(o => o.Key == key);
     }
 
@@ -336,8 +339,8 @@ public abstract class AssetStorageContractTests(StorageProviderFixture fixture)
         await FluentActions.Awaiting(() => Storage.Upload(key, slow, objectSize: 8 * 1024 * 1024, cts.Token))
             .Should().ThrowAsync<OperationCanceledException>();
 
-        // Verification must not reuse the cancelled token from the aborted upload.
-        var listed = await ToList(Storage.ListObjects(_keyPrefix));
+        // Verification must not reuse the canceled token from the aborted upload.
+        List<StorageObjectInfo> listed = await ToList(Storage.ListObjects(_keyPrefix));
         listed.Should().NotContain(o => o.Key == key);
     }
 
@@ -371,7 +374,7 @@ public abstract class AssetStorageContractTests(StorageProviderFixture fixture)
         length.Should().Be(size);
         actualHash.Should().Be(expectedHash);
 
-        var listed = await ToList(Storage.ListObjects(_keyPrefix));
+        List<StorageObjectInfo> listed = await ToList(Storage.ListObjects(_keyPrefix));
         listed.Should().Contain(o => o.Key == key && o.Size == size && o.LastModified != null);
     }
 

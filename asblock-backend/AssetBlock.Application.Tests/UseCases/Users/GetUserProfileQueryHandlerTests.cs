@@ -1,6 +1,8 @@
+using Ardalis.Result;
 using AssetBlock.Application.UseCases.Users.GetProfile;
 using AssetBlock.Domain.Abstractions.Services;
 using AssetBlock.Domain.Core.Constants;
+using AssetBlock.Domain.Core.Dto.Users;
 using AssetBlock.Domain.Core.Entities;
 using AwesomeAssertions;
 using NSubstitute;
@@ -24,7 +26,7 @@ public class GetUserProfileQueryHandlerTests
         var q = new GetUserProfileQuery("nobody", null);
         _userStore.GetByUsernameWithLinks("nobody", Arg.Any<CancellationToken>()).Returns((User?)null);
 
-        var result = await _handler.Handle(q, CancellationToken.None);
+        Result<UserProfileDto> result = await _handler.Handle(q, CancellationToken.None);
 
         result.IsSuccess.Should().BeFalse();
         result.Status.Should().Be(Ardalis.Result.ResultStatus.NotFound);
@@ -49,7 +51,7 @@ public class GetUserProfileQueryHandlerTests
         _userStore.GetByUsernameWithLinks("a", Arg.Any<CancellationToken>()).Returns(user);
 
         var q = new GetUserProfileQuery("a", viewerId);
-        var result = await _handler.Handle(q, CancellationToken.None);
+        Result<UserProfileDto> result = await _handler.Handle(q, CancellationToken.None);
 
         result.IsSuccess.Should().BeFalse();
         result.Errors.Should().Contain(ErrorCodes.ERR_USER_NOT_FOUND);
@@ -82,7 +84,7 @@ public class GetUserProfileQueryHandlerTests
         };
         _userStore.GetByUsernameWithLinks("a", Arg.Any<CancellationToken>()).Returns(user);
 
-        var result = await _handler.Handle(new GetUserProfileQuery("a", ownerId), CancellationToken.None);
+        Result<UserProfileDto> result = await _handler.Handle(new GetUserProfileQuery("a", ownerId), CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
         result.Value.Username.Should().Be("a");
@@ -106,7 +108,7 @@ public class GetUserProfileQueryHandlerTests
         };
         _userStore.GetByIdWithLinks(id, Arg.Any<CancellationToken>()).Returns(user);
 
-        var result = await _handler.Handle(new GetUserProfileQuery(null, id), CancellationToken.None);
+        Result<UserProfileDto> result = await _handler.Handle(new GetUserProfileQuery(null, id), CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
         result.Value.Username.Should().Be("meuser");
@@ -131,7 +133,7 @@ public class GetUserProfileQueryHandlerTests
         };
         _userStore.GetByUsernameWithLinks("publicuser", Arg.Any<CancellationToken>()).Returns(user);
 
-        var result = await _handler.Handle(new GetUserProfileQuery("publicuser", viewerId), CancellationToken.None);
+        Result<UserProfileDto> result = await _handler.Handle(new GetUserProfileQuery("publicuser", viewerId), CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
         result.Value.Email.Should().BeNull();
@@ -153,7 +155,7 @@ public class GetUserProfileQueryHandlerTests
         };
         _userStore.GetByIdWithLinks(id, Arg.Any<CancellationToken>()).Returns(user);
 
-        var result = await _handler.Handle(new GetUserProfileQuery(null, id), CancellationToken.None);
+        Result<UserProfileDto> result = await _handler.Handle(new GetUserProfileQuery(null, id), CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
         result.Value.Role.Should().Be(AppRoles.ADMIN);

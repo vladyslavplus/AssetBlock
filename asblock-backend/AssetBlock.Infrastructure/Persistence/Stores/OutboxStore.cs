@@ -7,6 +7,7 @@ using AssetBlock.Domain.Core.Dto.Paging;
 using AssetBlock.Domain.Core.Entities;
 using AssetBlock.Domain.Core.Enums;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Storage;
 using Microsoft.Extensions.Logging;
 
 namespace AssetBlock.Infrastructure.Persistence.Stores;
@@ -39,13 +40,13 @@ internal sealed class OutboxStore(ApplicationDbContext dbContext, ILogger<Outbox
         TimeSpan lease,
         CancellationToken cancellationToken = default)
     {
-        var now = DateTimeOffset.UtcNow;
-        var leaseUntil = now.Add(lease);
+        DateTimeOffset now = DateTimeOffset.UtcNow;
+        DateTimeOffset leaseUntil = now.Add(lease);
         var lockToken = Guid.NewGuid();
 
-        await using var tx = await dbContext.Database.BeginTransactionAsync(IsolationLevel.ReadCommitted, cancellationToken);
+        await using IDbContextTransaction tx = await dbContext.Database.BeginTransactionAsync(IsolationLevel.ReadCommitted, cancellationToken);
 
-        var ids = await dbContext.Database
+        List<Guid> ids = await dbContext.Database
             .SqlQuery<Guid>($"""
                 SELECT o."Id" AS "Value"
                 FROM outbox_messages AS o
@@ -75,7 +76,7 @@ internal sealed class OutboxStore(ApplicationDbContext dbContext, ILogger<Outbox
                     .SetProperty(m => m.AttemptCount, m => m.AttemptCount + 1),
                 cancellationToken);
 
-        var claimed = await dbContext.OutboxMessages
+        List<OutboxMessage> claimed = await dbContext.OutboxMessages
             .AsNoTracking()
             .Where(m => ids.Contains(m.Id))
             .OrderBy(m => m.OccurredAt)
@@ -87,7 +88,7 @@ internal sealed class OutboxStore(ApplicationDbContext dbContext, ILogger<Outbox
 
     public async Task<bool> MarkProcessed(Guid id, Guid lockToken, CancellationToken cancellationToken = default)
     {
-        var now = DateTimeOffset.UtcNow;
+        DateTimeOffset now = DateTimeOffset.UtcNow;
         var updated = await dbContext.OutboxMessages
             .Where(m => m.Id == id && m.LockToken == lockToken && m.Status == OutboxMessageStatus.PENDING && m.ProcessedAt == null)
             .ExecuteUpdateAsync(
@@ -129,7 +130,7 @@ internal sealed class OutboxStore(ApplicationDbContext dbContext, ILogger<Outbox
     {
         var boundedReason = reason.Length > 2000 ? reason[..2000] : reason;
         var error = "DEAD_LETTER: " + (reason.Length > 1980 ? reason[..1980] : reason);
-        var now = DateTimeOffset.UtcNow;
+        DateTimeOffset now = DateTimeOffset.UtcNow;
 
         var updated = await dbContext.OutboxMessages
             .Where(m => m.Id == id && m.LockToken == lockToken && m.Status == OutboxMessageStatus.PENDING && m.ProcessedAt == null)
@@ -153,13 +154,13 @@ internal sealed class OutboxStore(ApplicationDbContext dbContext, ILogger<Outbox
         var page = Math.Max(1, request.Page);
         var pageSize = Math.Clamp(request.PageSize, 1, 100);
 
-        var query = dbContext.OutboxMessages
+        IQueryable<OutboxMessage> query = dbContext.OutboxMessages
             .AsNoTracking()
             .Where(m => m.Status == OutboxMessageStatus.DEAD_LETTERED);
 
         var total = await query.CountAsync(cancellationToken);
 
-        var items = await query
+        List<DeadLetterOutboxListItemDto> items = await query
             .OrderByDescending(m => m.DeadLetteredAt)
             .ThenByDescending(m => m.OccurredAt)
             .ThenBy(m => m.Id)
@@ -183,7 +184,7 @@ internal sealed class OutboxStore(ApplicationDbContext dbContext, ILogger<Outbox
         Guid id,
         CancellationToken cancellationToken = default)
     {
-        var message = await dbContext.OutboxMessages
+        OutboxMessage? message = await dbContext.OutboxMessages
             .AsNoTracking()
             .FirstOrDefaultAsync(m => m.Id == id, cancellationToken);
 
@@ -197,7 +198,7 @@ internal sealed class OutboxStore(ApplicationDbContext dbContext, ILogger<Outbox
             return (OutboxReplayOutcome.NOT_DEAD_LETTERED, null);
         }
 
-        var now = DateTimeOffset.UtcNow;
+        DateTimeOffset now = DateTimeOffset.UtcNow;
         var updated = await dbContext.OutboxMessages
             .Where(m => m.Id == id && m.Status == OutboxMessageStatus.DEAD_LETTERED)
             .ExecuteUpdateAsync(

@@ -44,7 +44,7 @@ public sealed class ConfirmEmailVerificationCommandHandlerTests
         // TryUnprotect returns false by default (NSubstitute default for bool)
         // No need to set up - default is false with out param as default
 
-        var result = await _handler.Handle(command, CancellationToken.None);
+        Result result = await _handler.Handle(command, CancellationToken.None);
 
         result.Status.Should().Be(ResultStatus.Invalid);
         result.ValidationErrors.Should().Contain(e => e.Identifier == ErrorCodes.ERR_EMAIL_ACTION_INVALID_OR_EXPIRED);
@@ -67,7 +67,7 @@ public sealed class ConfirmEmailVerificationCommandHandlerTests
             .Returns(x => { x[2] = claims; return true; });
         _emailActionStore.GetById(Arg.Any<Guid>(), Arg.Any<CancellationToken>()).Returns((EmailAction?)null);
 
-        var result = await _handler.Handle(command, CancellationToken.None);
+        Result result = await _handler.Handle(command, CancellationToken.None);
 
         result.Status.Should().Be(ResultStatus.Invalid);
         result.ValidationErrors.Should().Contain(e => e.Identifier == ErrorCodes.ERR_EMAIL_ACTION_INVALID_OR_EXPIRED);
@@ -76,7 +76,7 @@ public sealed class ConfirmEmailVerificationCommandHandlerTests
     [Fact]
     public async Task Handle_WhenConsumeSucceeds_ShouldSetEmailVerifiedAtAndReturnSuccess()
     {
-        var user = CreateUser();
+        User user = CreateUser();
         var actionId = Guid.NewGuid();
         var version = Guid.NewGuid();
         var claims = new EmailActionLinkClaims(actionId, version, EmailActionPurpose.EMAIL_VERIFICATION, DateTimeOffset.UtcNow.AddHours(1));
@@ -95,7 +95,7 @@ public sealed class ConfirmEmailVerificationCommandHandlerTests
         _emailActionStore.TryConsume(Arg.Any<Guid>(), Arg.Any<EmailActionPurpose>(), Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
             .Returns(true);
 
-        var result = await _handler.Handle(new ConfirmEmailVerificationCommand("token"), CancellationToken.None);
+        Result result = await _handler.Handle(new ConfirmEmailVerificationCommand("token"), CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
         user.EmailVerifiedAt.Should().NotBeNull();
@@ -111,7 +111,7 @@ public sealed class ConfirmEmailVerificationCommandHandlerTests
     [Fact]
     public async Task Handle_WhenTryConsumeReturnsFalse_ShouldReturnInvalidError()
     {
-        var user = CreateUser();
+        User user = CreateUser();
         var actionId = Guid.NewGuid();
         var version = Guid.NewGuid();
         var claims = new EmailActionLinkClaims(actionId, version, EmailActionPurpose.EMAIL_VERIFICATION, DateTimeOffset.UtcNow.AddHours(1));
@@ -130,7 +130,7 @@ public sealed class ConfirmEmailVerificationCommandHandlerTests
         _emailActionStore.TryConsume(Arg.Any<Guid>(), Arg.Any<EmailActionPurpose>(), Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
             .Returns(false);
 
-        var result = await _handler.Handle(new ConfirmEmailVerificationCommand("token"), CancellationToken.None);
+        Result result = await _handler.Handle(new ConfirmEmailVerificationCommand("token"), CancellationToken.None);
 
         result.Status.Should().Be(ResultStatus.Invalid);
         result.ValidationErrors.Should().Contain(e => e.Identifier == ErrorCodes.ERR_EMAIL_ACTION_INVALID_OR_EXPIRED);

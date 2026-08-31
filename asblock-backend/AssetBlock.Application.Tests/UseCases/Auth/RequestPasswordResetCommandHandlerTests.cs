@@ -1,3 +1,4 @@
+using Ardalis.Result;
 using AssetBlock.Application.UseCases.Auth.RequestPasswordReset;
 using AssetBlock.Domain.Abstractions.Services;
 using AssetBlock.Domain.Core.Constants;
@@ -42,7 +43,7 @@ public sealed class RequestPasswordResetCommandHandlerTests
         var command = new RequestPasswordResetCommand("unknown@example.test");
         _userStore.GetByEmail(command.Email.Trim(), Arg.Any<CancellationToken>()).Returns((User?)null);
 
-        var result = await _handler.Handle(command, CancellationToken.None);
+        Result result = await _handler.Handle(command, CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
         await _emailActionStore.DidNotReceiveWithAnyArgs().IssueOrReplace(Guid.Empty, default, null!, TimeSpan.Zero, CancellationToken.None);
@@ -52,7 +53,7 @@ public sealed class RequestPasswordResetCommandHandlerTests
     [Fact]
     public async Task Handle_WhenUserInCooldown_ShouldReturnSuccessWithoutIssuingAction()
     {
-        var user = CreateUser();
+        User user = CreateUser();
         var command = new RequestPasswordResetCommand(user.Email);
         var existingAction = new EmailAction
         {
@@ -67,7 +68,7 @@ public sealed class RequestPasswordResetCommandHandlerTests
             .Returns(existingAction);
         _emailActionStore.IsInCooldown(Arg.Any<EmailAction?>(), Arg.Any<TimeSpan>(), Arg.Any<DateTimeOffset>()).Returns(true);
 
-        var result = await _handler.Handle(command, CancellationToken.None);
+        Result result = await _handler.Handle(command, CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
         await _emailActionStore.DidNotReceiveWithAnyArgs().IssueOrReplace(Guid.Empty, default, null!, TimeSpan.Zero, CancellationToken.None);
@@ -77,7 +78,7 @@ public sealed class RequestPasswordResetCommandHandlerTests
     [Fact]
     public async Task Handle_WhenKnownEmailNotInCooldown_ShouldIssueActionAndEnqueueOutbox()
     {
-        var user = CreateUser();
+        User user = CreateUser();
         var command = new RequestPasswordResetCommand(user.Email);
         var action = new EmailAction
         {
@@ -93,7 +94,7 @@ public sealed class RequestPasswordResetCommandHandlerTests
         _emailActionStore.IssueOrReplace(Arg.Any<Guid>(), Arg.Any<EmailActionPurpose>(), Arg.Any<string>(), Arg.Any<TimeSpan>(), Arg.Any<CancellationToken>())
             .Returns(action);
 
-        var result = await _handler.Handle(command, CancellationToken.None);
+        Result result = await _handler.Handle(command, CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
         await _emailActionStore.Received(1).IssueOrReplace(

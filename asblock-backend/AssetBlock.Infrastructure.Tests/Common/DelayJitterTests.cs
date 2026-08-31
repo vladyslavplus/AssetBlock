@@ -4,6 +4,7 @@ using AssetBlock.Infrastructure.Common;
 using AssetBlock.Infrastructure.HostedServices.AssetProcessing;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Options;
 using NSubstitute;
 
 namespace AssetBlock.Infrastructure.Tests.Common;
@@ -38,7 +39,7 @@ public sealed class DelayJitterTests
         var baseDelay = TimeSpan.FromSeconds(10);
         for (var i = 0; i < 100; i++)
         {
-            var jittered = DelayJitter.Apply(baseDelay);
+            TimeSpan jittered = DelayJitter.Apply(baseDelay);
             jittered.Should().BeGreaterThanOrEqualTo(TimeSpan.FromSeconds(8));
             jittered.Should().BeLessThanOrEqualTo(TimeSpan.FromSeconds(12));
         }
@@ -53,9 +54,9 @@ public sealed class DelayJitterTests
             MaxRetryDelay = TimeSpan.FromHours(1)
         };
 
-        var workerMin = CreateWorker(options, () => 0.0); // 0.8x multiplier
-        var workerMid = CreateWorker(options, () => 0.5); // 1.0x multiplier
-        var workerMax = CreateWorker(options, () => 1.0); // 1.2x multiplier
+        AssetProcessingWorker workerMin = CreateWorker(options, () => 0.0); // 0.8x multiplier
+        AssetProcessingWorker workerMid = CreateWorker(options, () => 0.5); // 1.0x multiplier
+        AssetProcessingWorker workerMax = CreateWorker(options, () => 1.0); // 1.2x multiplier
 
         // Attempt 1: base exponential delay is 30s * 2^0 = 30s
         workerMin.CalculateRetryDelay(1, null).Should().Be(TimeSpan.FromSeconds(24));
@@ -71,7 +72,7 @@ public sealed class DelayJitterTests
         workerMax.CalculateRetryDelay(50, null).Should().Be(TimeSpan.FromHours(1));
 
         // Overflow safety for huge attempt counts
-        var hugeAttemptDelay = workerMid.CalculateRetryDelay(1000, null);
+        TimeSpan hugeAttemptDelay = workerMid.CalculateRetryDelay(1000, null);
         hugeAttemptDelay.Should().Be(TimeSpan.FromHours(1));
     }
 
@@ -79,10 +80,10 @@ public sealed class DelayJitterTests
         AssetProcessingOptions options,
         Func<double> jitterProvider)
     {
-        var scopeFactory = Substitute.For<IServiceScopeFactory>();
-        var registry = Substitute.For<IAssetProcessingJobRegistry>();
-        var publisher = Substitute.For<IAssetProcessingRealtimePublisher>();
-        var optionsWrapper = Microsoft.Extensions.Options.Options.Create(options);
+        IServiceScopeFactory scopeFactory = Substitute.For<IServiceScopeFactory>();
+        IAssetProcessingJobRegistry registry = Substitute.For<IAssetProcessingJobRegistry>();
+        IAssetProcessingRealtimePublisher publisher = Substitute.For<IAssetProcessingRealtimePublisher>();
+        IOptions<AssetProcessingOptions> optionsWrapper = Microsoft.Extensions.Options.Options.Create(options);
 
         return new AssetProcessingWorker(
             scopeFactory,

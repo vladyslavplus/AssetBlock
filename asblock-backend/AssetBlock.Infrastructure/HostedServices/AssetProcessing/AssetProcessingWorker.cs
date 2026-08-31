@@ -64,7 +64,7 @@ public sealed class AssetProcessingWorker(
 
                 // Clean up finished tasks from tracking
                 var finishedTasks = _activeTasks.Where(kvp => kvp.Value.IsCompleted).Select(kvp => kvp.Key).ToList();
-                foreach (var id in finishedTasks)
+                foreach (Guid id in finishedTasks)
                 {
                     _activeTasks.TryRemove(id, out _);
                 }
@@ -80,15 +80,15 @@ public sealed class AssetProcessingWorker(
 
                 if (claimed.Count > 0)
                 {
-                    foreach (var job in claimed)
+                    foreach (ClaimedAssetProcessingJob job in claimed)
                     {
-                        var task = RunTrackedJob(job, stoppingToken);
+                        Task task = RunTrackedJob(job, stoppingToken);
                         _activeTasks.TryAdd(job.JobId, task);
                     }
                 }
                 else
                 {
-                    var pollDelay = DelayJitter.Apply(_options.PollInterval, _jitterProvider);
+                    TimeSpan pollDelay = DelayJitter.Apply(_options.PollInterval, _jitterProvider);
                     await Task.Delay(pollDelay, timeProvider, stoppingToken);
                 }
             }
@@ -101,7 +101,7 @@ public sealed class AssetProcessingWorker(
                 logger.LogError(ex, "Error in AssetProcessingWorker polling cycle.");
                 try
                 {
-                    var pollDelay = DelayJitter.Apply(_options.PollInterval, _jitterProvider);
+                    TimeSpan pollDelay = DelayJitter.Apply(_options.PollInterval, _jitterProvider);
                     await Task.Delay(pollDelay, timeProvider, stoppingToken);
                 }
                 catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
@@ -118,7 +118,7 @@ public sealed class AssetProcessingWorker(
             try
             {
                 var allTasks = Task.WhenAll(_activeTasks.Values);
-                var completed = await Task.WhenAny(allTasks, Task.Delay(_shutdownTimeout, timeProvider, CancellationToken.None));
+                Task completed = await Task.WhenAny(allTasks, Task.Delay(_shutdownTimeout, timeProvider, CancellationToken.None));
                 if (completed != allTasks)
                 {
                     logger.LogWarning("AssetProcessingWorker shutdown budget ({Seconds}s) exceeded; {Count} tasks remain in-flight and will be reclaimed by another worker", _shutdownTimeout.TotalSeconds, _activeTasks.Count);
@@ -155,8 +155,8 @@ public sealed class AssetProcessingWorker(
 
     private async Task<IReadOnlyList<ClaimedAssetProcessingJob>> ClaimBatch(int count, CancellationToken cancellationToken)
     {
-        await using var scope = scopeFactory.CreateAsyncScope();
-        var store = scope.ServiceProvider.GetRequiredService<IAssetProcessingJobStore>();
+        await using AsyncServiceScope scope = scopeFactory.CreateAsyncScope();
+        IAssetProcessingJobStore store = scope.ServiceProvider.GetRequiredService<IAssetProcessingJobStore>();
         return await store.ClaimPendingBatch(count, _options.LeaseDuration, _workerId, cancellationToken);
     }
 
@@ -164,9 +164,9 @@ public sealed class AssetProcessingWorker(
     {
         try
         {
-            await using var scope = scopeFactory.CreateAsyncScope();
-            var store = scope.ServiceProvider.GetRequiredService<IAssetProcessingJobStore>();
-            var lifecycleStore = scope.ServiceProvider.GetRequiredService<IAssetProcessingLifecycleStore>();
+            await using AsyncServiceScope scope = scopeFactory.CreateAsyncScope();
+            IAssetProcessingJobStore store = scope.ServiceProvider.GetRequiredService<IAssetProcessingJobStore>();
+            IAssetProcessingLifecycleStore lifecycleStore = scope.ServiceProvider.GetRequiredService<IAssetProcessingLifecycleStore>();
             await store.RecoverExpiredLeases(cancellationToken);
             await lifecycleStore.RecoverExpiredExhaustedSecurityJobs(cancellationToken);
         }
@@ -203,9 +203,9 @@ public sealed class AssetProcessingWorker(
         var finalOutcome = JobOutcomeNames.FAILED;
 
         Activity? activity;
-        if (job.TraceParent != null && ActivityContext.TryParse(job.TraceParent, null, out var parentContext))
+        if (job.TraceParent != null && ActivityContext.TryParse(job.TraceParent, null, out ActivityContext parentContext))
         {
-            var links = new[] { new ActivityLink(parentContext) };
+            ActivityLink[] links = new[] { new ActivityLink(parentContext) };
             activity = AssetBlockDiagnostics.ActivitySource.StartActivity(
                 $"AssetProcessingJob {job.Type}",
                 ActivityKind.Consumer,
@@ -236,11 +236,11 @@ public sealed class AssetProcessingWorker(
 
         try
         {
-            await using var scope = scopeFactory.CreateAsyncScope();
-            var jobStore = scope.ServiceProvider.GetRequiredService<IAssetProcessingJobStore>();
-            var lifecycleStore = scope.ServiceProvider.GetRequiredService<IAssetProcessingLifecycleStore>();
+            await using AsyncServiceScope scope = scopeFactory.CreateAsyncScope();
+            IAssetProcessingJobStore jobStore = scope.ServiceProvider.GetRequiredService<IAssetProcessingJobStore>();
+            IAssetProcessingLifecycleStore lifecycleStore = scope.ServiceProvider.GetRequiredService<IAssetProcessingLifecycleStore>();
 
-            var adapter = registry.GetHandler(job.Type);
+            IAssetProcessingJobHandlerAdapter? adapter = registry.GetHandler(job.Type);
             if (adapter is null)
             {
                 logger.LogWarning("No handler is registered for job {JobId} of type {Type}", job.JobId, job.Type);
@@ -279,8 +279,8 @@ public sealed class AssetProcessingWorker(
                     {
                         try
                         {
-                            await using var renewalScope = scopeFactory.CreateAsyncScope();
-                            var store = renewalScope.ServiceProvider.GetRequiredService<IAssetProcessingJobStore>();
+                            await using AsyncServiceScope renewalScope = scopeFactory.CreateAsyncScope();
+                            IAssetProcessingJobStore store = renewalScope.ServiceProvider.GetRequiredService<IAssetProcessingJobStore>();
                             var renewed = await store.RenewLease(job.JobId, job.LeaseToken, _options.LeaseDuration, renewalCts.Token);
                             if (!renewed)
                             {
@@ -415,7 +415,7 @@ public sealed class AssetProcessingWorker(
 
                 logger.LogWarning("Job {JobId} of type {Type} timed out after {Timeout}", job.JobId, job.Type, _options.OperationTimeout);
 
-                var retryDelay = CalculateRetryDelay(job.AttemptCount, null);
+                TimeSpan retryDelay = CalculateRetryDelay(job.AttemptCount, null);
                 using var cleanupCts = new CancellationTokenSource(_cleanupTimeout);
                 transitionSucceeded = await FailProcessing(
                     jobStore, lifecycleStore, job,
@@ -439,7 +439,7 @@ public sealed class AssetProcessingWorker(
                 logger.LogError(ex, "Unexpected handler exception for job {JobId} of type {Type}, attempt {Attempt}",
                     job.JobId, job.Type, job.AttemptCount);
 
-                var retryDelay = CalculateRetryDelay(job.AttemptCount, null);
+                TimeSpan retryDelay = CalculateRetryDelay(job.AttemptCount, null);
                 using var cleanupCts = new CancellationTokenSource(_cleanupTimeout);
                 transitionSucceeded = await FailProcessing(
                     jobStore, lifecycleStore, job,
@@ -492,7 +492,7 @@ public sealed class AssetProcessingWorker(
                 }
                 else if (outcome is AssetProcessingJobOutcome.RetryableFailure retryable)
                 {
-                    var retryDelay = CalculateRetryDelay(job.AttemptCount, retryable.RetryAfter);
+                    TimeSpan retryDelay = CalculateRetryDelay(job.AttemptCount, retryable.RetryAfter);
                     transitionSucceeded = await FailProcessing(
                         jobStore, lifecycleStore, job,
                         retryable.ErrorCode,
@@ -530,9 +530,9 @@ public sealed class AssetProcessingWorker(
                 try
                 {
                     using var stateCts = new CancellationTokenSource(_cleanupTimeout);
-                    await using var scope = scopeFactory.CreateAsyncScope();
-                    var store = scope.ServiceProvider.GetRequiredService<IAssetProcessingJobStore>();
-                    var state = await store.GetRealtimeState(job.JobId, stateCts.Token);
+                    await using AsyncServiceScope scope = scopeFactory.CreateAsyncScope();
+                    IAssetProcessingJobStore store = scope.ServiceProvider.GetRequiredService<IAssetProcessingJobStore>();
+                    AssetProcessingJobRealtimeState? state = await store.GetRealtimeState(job.JobId, stateCts.Token);
                     if (state != null)
                     {
                         using var finalPublishCts = new CancellationTokenSource(_signalRPublishTimeout);
@@ -548,8 +548,8 @@ public sealed class AssetProcessingWorker(
             AssetBlockDiagnostics.DecrementActiveJobs(job.Type);
             activity?.Dispose();
 
-            var duration = stopwatch.Elapsed;
-            var queueAge = timeProvider.GetUtcNow() - job.CreatedAt;
+            TimeSpan duration = stopwatch.Elapsed;
+            TimeSpan queueAge = timeProvider.GetUtcNow() - job.CreatedAt;
             AssetBlockDiagnostics.RecordJobCompletion(job.Type, finalOutcome, duration, queueAge, job.AttemptCount);
         }
     }
@@ -603,9 +603,9 @@ public sealed class AssetProcessingWorker(
         var multiplier = Math.Pow(2, Math.Min(30, exponent));
         var exponentialTicks = (long)(_options.InitialRetryDelay.Ticks * multiplier);
         var exponentialDelay = TimeSpan.FromTicks(exponentialTicks);
-        var jitteredDelay = DelayJitter.Apply(exponentialDelay, _jitterProvider);
+        TimeSpan jitteredDelay = DelayJitter.Apply(exponentialDelay, _jitterProvider);
 
-        var delay = handlerRetryAfter.HasValue && handlerRetryAfter.Value > jitteredDelay
+        TimeSpan delay = handlerRetryAfter.HasValue && handlerRetryAfter.Value > jitteredDelay
             ? handlerRetryAfter.Value
             : jitteredDelay;
 

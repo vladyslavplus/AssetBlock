@@ -22,7 +22,7 @@ public sealed class ArchiveAnalysisSerializerTests
         var json = ArchiveAnalysisSerializer.SerializeManifestMetadata(metadata);
         json.Should().NotBeNullOrWhiteSpace();
 
-        var restored = ArchiveAnalysisSerializer.DeserializeManifestMetadata(json);
+        ArchiveAnalysisManifestMetadata restored = ArchiveAnalysisSerializer.DeserializeManifestMetadata(json);
         restored.Should().NotBeNull();
         restored.Manifests.Should().HaveCount(1);
         restored.Manifests[0].FileName.Should().Be("package.json");
@@ -36,7 +36,7 @@ public sealed class ArchiveAnalysisSerializerTests
     public void Serialize_ShouldRejectPolymorphicType()
     {
         const string jsonWithPolymorphism = """{"$type":"evil","manifests":[]}""";
-        var act = () => ArchiveAnalysisSerializer.DeserializeManifestMetadata(jsonWithPolymorphism);
+        Func<ArchiveAnalysisManifestMetadata> act = () => ArchiveAnalysisSerializer.DeserializeManifestMetadata(jsonWithPolymorphism);
         act.Should().Throw<ArchiveAnalysisSerializerException>()
             .WithMessage("*$type*");
     }
@@ -53,7 +53,7 @@ public sealed class ArchiveAnalysisSerializerTests
         );
 
         var metadata = new ArchiveAnalysisManifestMetadata([manifest]);
-        var act = () => ArchiveAnalysisSerializer.SerializeManifestMetadata(metadata);
+        Func<string> act = () => ArchiveAnalysisSerializer.SerializeManifestMetadata(metadata);
         act.Should().Throw<ArchiveAnalysisSerializerException>();
     }
 
@@ -65,7 +65,7 @@ public sealed class ArchiveAnalysisSerializerTests
             .ToList();
 
         var metadata = new ArchiveAnalysisManifestMetadata(list);
-        var act = () => ArchiveAnalysisSerializer.SerializeManifestMetadata(metadata);
+        Func<string> act = () => ArchiveAnalysisSerializer.SerializeManifestMetadata(metadata);
         act.Should().Throw<ArchiveAnalysisSerializerException>()
             .WithMessage("*exceeds maximum of 8*");
     }
@@ -75,7 +75,7 @@ public sealed class ArchiveAnalysisSerializerTests
     {
         var manifest = new RecognizedManifestItem("   ", "npm");
         var metadata = new ArchiveAnalysisManifestMetadata([manifest]);
-        var act = () => ArchiveAnalysisSerializer.SerializeManifestMetadata(metadata);
+        Func<string> act = () => ArchiveAnalysisSerializer.SerializeManifestMetadata(metadata);
         act.Should().Throw<ArchiveAnalysisSerializerException>()
             .WithMessage("*FileName*");
     }
@@ -83,10 +83,10 @@ public sealed class ArchiveAnalysisSerializerTests
     [Fact]
     public void Deserialize_ShouldRejectNonObjectOrNull()
     {
-        var nullAct = () => ArchiveAnalysisSerializer.DeserializeManifestMetadata("   ");
+        Func<ArchiveAnalysisManifestMetadata> nullAct = () => ArchiveAnalysisSerializer.DeserializeManifestMetadata("   ");
         nullAct.Should().Throw<ArchiveAnalysisSerializerException>();
 
-        var nonObjectAct = () => ArchiveAnalysisSerializer.DeserializeManifestMetadata("[\"not an object\"]");
+        Func<ArchiveAnalysisManifestMetadata> nonObjectAct = () => ArchiveAnalysisSerializer.DeserializeManifestMetadata("[\"not an object\"]");
         nonObjectAct.Should().Throw<ArchiveAnalysisSerializerException>();
     }
 }

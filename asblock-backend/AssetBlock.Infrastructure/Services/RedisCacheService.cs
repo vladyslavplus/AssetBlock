@@ -1,6 +1,7 @@
+using System.Net;
 using AssetBlock.Domain.Abstractions.Services;
-using StackExchange.Redis;
 using Microsoft.Extensions.Logging;
+using StackExchange.Redis;
 
 namespace AssetBlock.Infrastructure.Services;
 
@@ -14,7 +15,7 @@ internal sealed class RedisCacheService(
     {
         try
         {
-            var value = await _db.StringGetAsync(key).WaitAsync(cancellationToken);
+            RedisValue value = await _db.StringGetAsync(key).WaitAsync(cancellationToken);
             return value.HasValue ? value.ToString() : null;
         }
         catch (OperationCanceledException)
@@ -72,11 +73,11 @@ internal sealed class RedisCacheService(
         try
         {
             const int batchSize = 512;
-            foreach (var endpoint in connectionMultiplexer.GetEndPoints())
+            foreach (EndPoint endpoint in connectionMultiplexer.GetEndPoints())
             {
-                var server = connectionMultiplexer.GetServer(endpoint);
+                IServer server = connectionMultiplexer.GetServer(endpoint);
                 var batch = new List<RedisKey>(batchSize);
-                foreach (var key in server.Keys(pattern: prefix + "*"))
+                foreach (RedisKey key in server.Keys(pattern: prefix + "*"))
                 {
                     batch.Add(key);
                     if (batch.Count == batchSize)
@@ -107,7 +108,7 @@ internal sealed class RedisCacheService(
         try
         {
             var count = await _db.StringIncrementAsync(key).WaitAsync(cancellationToken);
-            var ttl = await _db.KeyTimeToLiveAsync(key).WaitAsync(cancellationToken);
+            TimeSpan? ttl = await _db.KeyTimeToLiveAsync(key).WaitAsync(cancellationToken);
             if (count == 1 || ttl is null)
             {
                 await _db.KeyExpireAsync(key, expiry).WaitAsync(cancellationToken);

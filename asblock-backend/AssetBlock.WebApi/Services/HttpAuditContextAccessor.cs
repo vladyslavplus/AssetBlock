@@ -11,21 +11,21 @@ internal sealed class HttpAuditContextAccessor(IHttpContextAccessor httpContextA
 {
     public CurrentAuditContext? GetCurrent()
     {
-        var httpContext = httpContextAccessor.HttpContext;
+        HttpContext? httpContext = httpContextAccessor.HttpContext;
         if (httpContext is null)
         {
             return null;
         }
 
-        var user = httpContext.User;
+        ClaimsPrincipal user = httpContext.User;
         Guid? actorUserId = null;
-        var actorType = AuditActorType.ANONYMOUS;
+        AuditActorType actorType = AuditActorType.ANONYMOUS;
 
         if (user.Identity?.IsAuthenticated == true)
         {
             var sub = user.FindFirstValue(ClaimTypes.NameIdentifier)
                 ?? user.FindFirstValue("sub");
-            if (Guid.TryParse(sub, out var parsed))
+            if (Guid.TryParse(sub, out Guid parsed))
             {
                 actorUserId = parsed;
                 actorType = AuditActorType.USER;

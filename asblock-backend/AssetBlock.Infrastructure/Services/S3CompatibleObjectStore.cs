@@ -1,8 +1,10 @@
 using AssetBlock.Domain.Core.Primitives.Storage;
 using Microsoft.Extensions.Logging;
 using Minio;
+using Minio.DataModel;
 using Minio.DataModel.Args;
 using Minio.Exceptions;
+using Polly;
 using Polly.Registry;
 
 namespace AssetBlock.Infrastructure.Services;
@@ -20,7 +22,7 @@ internal sealed class S3CompatibleObjectStore(
 {
     public async Task EnsureBucket(CancellationToken cancellationToken = default)
     {
-        var pipeline = resilience.GetPipeline(ResilienceConstants.Pipelines.STORAGE_REPLAYABLE);
+        ResiliencePipeline pipeline = resilience.GetPipeline(ResilienceConstants.Pipelines.STORAGE_REPLAYABLE);
         await pipeline.ExecuteAsync(async ct =>
         {
             var exists = await client.BucketExistsAsync(
@@ -53,7 +55,7 @@ internal sealed class S3CompatibleObjectStore(
             content.Position = 0;
         }
 
-        var pipeline = resilience.GetPipeline(ResilienceConstants.Pipelines.STORAGE_STREAMING);
+        ResiliencePipeline pipeline = resilience.GetPipeline(ResilienceConstants.Pipelines.STORAGE_STREAMING);
         await pipeline.ExecuteAsync(async ct =>
             await client.PutObjectAsync(
                 new PutObjectArgs()
@@ -70,7 +72,7 @@ internal sealed class S3CompatibleObjectStore(
     public async Task OpenRead(string key, Func<Stream, CancellationToken, Task> consumer, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(consumer);
-        var pipeline = resilience.GetPipeline(ResilienceConstants.Pipelines.STORAGE_STREAMING);
+        ResiliencePipeline pipeline = resilience.GetPipeline(ResilienceConstants.Pipelines.STORAGE_STREAMING);
         await pipeline.ExecuteAsync(async ct =>
             await client.GetObjectAsync(
                 new GetObjectArgs()
@@ -83,7 +85,7 @@ internal sealed class S3CompatibleObjectStore(
 
     public async Task Delete(string key, CancellationToken cancellationToken = default)
     {
-        var pipeline = resilience.GetPipeline(ResilienceConstants.Pipelines.STORAGE_REPLAYABLE);
+        ResiliencePipeline pipeline = resilience.GetPipeline(ResilienceConstants.Pipelines.STORAGE_REPLAYABLE);
         await pipeline.ExecuteAsync(async ct =>
             await client.RemoveObjectAsync(
                 new RemoveObjectArgs().WithBucket(bucket).WithObject(key),
@@ -97,7 +99,7 @@ internal sealed class S3CompatibleObjectStore(
         string? prefix = null,
         [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
-        var listArgs = new ListObjectsArgs()
+        ListObjectsArgs listArgs = new ListObjectsArgs()
             .WithBucket(bucket)
             .WithRecursive(true);
 
@@ -106,7 +108,7 @@ internal sealed class S3CompatibleObjectStore(
             listArgs = listArgs.WithPrefix(prefix);
         }
 
-        await foreach (var item in client.ListObjectsEnumAsync(listArgs, cancellationToken).ConfigureAwait(false))
+        await foreach (Item? item in client.ListObjectsEnumAsync(listArgs, cancellationToken).ConfigureAwait(false))
         {
             if (item.IsDir)
             {
@@ -115,7 +117,7 @@ internal sealed class S3CompatibleObjectStore(
 
             DateTimeOffset? lastModified = null;
             if (!string.IsNullOrEmpty(item.LastModified)
-                && DateTimeOffset.TryParse(item.LastModified, out var parsed))
+                && DateTimeOffset.TryParse(item.LastModified, out DateTimeOffset parsed))
             {
                 lastModified = parsed;
             }

@@ -1,13 +1,14 @@
+using System.Diagnostics;
 using AssetBlock.Domain.Abstractions.Services;
 using AssetBlock.Domain.Core.Constants;
+using AssetBlock.Domain.Core.Dto.Analytics;
 using AssetBlock.Domain.Core.Enums;
 using AssetBlock.Domain.Core.Primitives.AppSettingsOptions;
+using AssetBlock.Infrastructure.Observability;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
-using System.Diagnostics;
-using AssetBlock.Infrastructure.Observability;
 
 namespace AssetBlock.Infrastructure.HostedServices;
 
@@ -31,7 +32,7 @@ internal sealed class AnalyticsAggregationWorker(
             return;
         }
 
-        var opts = options.Value;
+        AnalyticsAggregationOptions opts = options.Value;
         if (!opts.Enabled)
         {
             logger.LogInformation("AnalyticsAggregationWorker disabled via configuration.");
@@ -68,25 +69,25 @@ internal sealed class AnalyticsAggregationWorker(
 
     internal async Task RunIteration(CancellationToken cancellationToken)
     {
-        var opts = options.Value;
+        AnalyticsAggregationOptions opts = options.Value;
         if (!opts.Enabled)
         {
             return;
         }
 
-        var now = timeProvider.GetUtcNow();
+        DateTimeOffset now = timeProvider.GetUtcNow();
         var currentDayUtc = DateOnly.FromDateTime(now.UtcDateTime);
-        var previousDayUtc = currentDayUtc.AddDays(-1);
+        DateOnly previousDayUtc = currentDayUtc.AddDays(-1);
 
-        await using var scope = scopeFactory.CreateAsyncScope();
-        var store = scope.ServiceProvider.GetRequiredService<IAnalyticsEventStore>();
+        await using AsyncServiceScope scope = scopeFactory.CreateAsyncScope();
+        IAnalyticsEventStore store = scope.ServiceProvider.GetRequiredService<IAnalyticsEventStore>();
 
         var rollupStopwatch = Stopwatch.StartNew();
-        var outcome = DiagnosticsOutcome.SUCCESS;
-        
+        DiagnosticsOutcome outcome = DiagnosticsOutcome.SUCCESS;
+
         try
         {
-            var rollup = await store.TryAcquireAndRecomputeDaily(
+            AnalyticsDailyRecomputeResult rollup = await store.TryAcquireAndRecomputeDaily(
                 currentDayUtc,
                 previousDayUtc,
                 now,
@@ -133,16 +134,16 @@ internal sealed class AnalyticsAggregationWorker(
             return;
         }
 
-        var cutoffExclusive = now - TimeSpan.FromDays(AnalyticsAggregationConstants.RAW_EVENT_RETENTION_DAYS);
+        DateTimeOffset cutoffExclusive = now - TimeSpan.FromDays(AnalyticsAggregationConstants.RAW_EVENT_RETENTION_DAYS);
         var retentionStopwatch = Stopwatch.StartNew();
-        var retention = await store.TryAcquireAndDeleteExpiredEvents(
+        AnalyticsEventRetentionResult retention = await store.TryAcquireAndDeleteExpiredEvents(
             cutoffExclusive,
             opts.RetentionBatchSize,
             opts.MaxRetentionBatchesPerRun,
             opts.CommandTimeoutSeconds,
             cancellationToken);
 
-        if (retention.LockAcquired && !retention.HasBacklog)
+        if (retention is { LockAcquired: true, HasBacklog: false })
         {
             _lastRetentionDayUtc = currentDayUtc;
         }

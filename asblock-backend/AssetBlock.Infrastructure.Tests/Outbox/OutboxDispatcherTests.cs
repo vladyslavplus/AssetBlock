@@ -28,7 +28,7 @@ public sealed class OutboxDispatcherTests
     [InlineData(15, 1.0, 1228.8)] // Exponent capped at 10 (1024s * 1.2 = 1228.8s)
     public void CalculateRetryDelay_WithJitter_ShouldScaleAndCap(int attempt, double factor, double expectedSeconds)
     {
-        var delay = OutboxDispatcher.CalculateRetryDelay(attempt, () => factor);
+        TimeSpan delay = OutboxDispatcher.CalculateRetryDelay(attempt, () => factor);
         delay.TotalSeconds.Should().BeApproximately(expectedSeconds, 0.01);
     }
 
@@ -44,7 +44,7 @@ public sealed class OutboxDispatcherTests
             LockToken = lockToken,
             AttemptCount = 1 // base 2s * 0.8 = 1.6s
         };
-        var outbox = Substitute.For<IOutboxStore>();
+        IOutboxStore outbox = Substitute.For<IOutboxStore>();
         outbox.ClaimPendingBatch(Arg.Any<int>(), Arg.Any<TimeSpan>(), Arg.Any<CancellationToken>())
             .Returns([message]);
         outbox.MarkFailed(
@@ -55,7 +55,7 @@ public sealed class OutboxDispatcherTests
                 Arg.Any<CancellationToken>())
             .Returns(true);
 
-        var handler = Substitute.For<IOutboxMessageHandler>();
+        IOutboxMessageHandler handler = Substitute.For<IOutboxMessageHandler>();
         handler.MessageType.Returns(message.Type);
         handler.Handle(message, Arg.Any<CancellationToken>())
             .ThrowsAsync(new InvalidOperationException("transient error"));
@@ -63,7 +63,7 @@ public sealed class OutboxDispatcherTests
         var services = new ServiceCollection();
         services.AddSingleton(outbox);
         services.AddSingleton(handler);
-        await using var provider = services.BuildServiceProvider();
+        await using ServiceProvider provider = services.BuildServiceProvider();
 
         // Pass deterministic jitter factor 0.0 -> 0.8x base delay = 1.6s
         var dispatcher = new OutboxDispatcher(
@@ -71,9 +71,9 @@ public sealed class OutboxDispatcherTests
             NullLogger<OutboxDispatcher>.Instance,
             () => 0.0);
 
-        var before = DateTimeOffset.UtcNow;
+        DateTimeOffset before = DateTimeOffset.UtcNow;
         await dispatcher.DispatchBatch(CancellationToken.None);
-        var after = DateTimeOffset.UtcNow;
+        DateTimeOffset after = DateTimeOffset.UtcNow;
 
         await outbox.Received(1).MarkFailed(
             message.Id,
@@ -95,7 +95,7 @@ public sealed class OutboxDispatcherTests
             LockToken = lockToken,
             AttemptCount = 1
         };
-        var outbox = Substitute.For<IOutboxStore>();
+        IOutboxStore outbox = Substitute.For<IOutboxStore>();
         outbox.ClaimPendingBatch(Arg.Any<int>(), Arg.Any<TimeSpan>(), Arg.Any<CancellationToken>())
             .Returns([message]);
         outbox.MarkFailed(
@@ -106,7 +106,7 @@ public sealed class OutboxDispatcherTests
                 Arg.Any<CancellationToken>())
             .Returns(true);
 
-        var handler = Substitute.For<IOutboxMessageHandler>();
+        IOutboxMessageHandler handler = Substitute.For<IOutboxMessageHandler>();
         handler.MessageType.Returns(message.Type);
         handler.Handle(message, Arg.Any<CancellationToken>())
             .ThrowsAsync(new InvalidOperationException("dependency unavailable"));
@@ -114,11 +114,11 @@ public sealed class OutboxDispatcherTests
         var services = new ServiceCollection();
         services.AddSingleton(outbox);
         services.AddSingleton(handler);
-        await using var provider = services.BuildServiceProvider();
+        await using ServiceProvider provider = services.BuildServiceProvider();
         var dispatcher = new OutboxDispatcher(
             provider.GetRequiredService<IServiceScopeFactory>(),
             NullLogger<OutboxDispatcher>.Instance);
-        var startedAt = DateTimeOffset.UtcNow;
+        DateTimeOffset startedAt = DateTimeOffset.UtcNow;
 
         await dispatcher.DispatchBatch(CancellationToken.None);
 
@@ -145,7 +145,7 @@ public sealed class OutboxDispatcherTests
             Payload = "{}",
             LockToken = lockToken
         };
-        var outbox = Substitute.For<IOutboxStore>();
+        IOutboxStore outbox = Substitute.For<IOutboxStore>();
         outbox.ClaimPendingBatch(Arg.Any<int>(), Arg.Any<TimeSpan>(), Arg.Any<CancellationToken>())
             .Returns([message]);
         outbox.MarkDeadLettered(Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
@@ -157,7 +157,7 @@ public sealed class OutboxDispatcherTests
 
         var services = new ServiceCollection();
         services.AddSingleton(outbox);
-        await using var provider = services.BuildServiceProvider();
+        await using ServiceProvider provider = services.BuildServiceProvider();
         var dispatcher = new OutboxDispatcher(
             provider.GetRequiredService<IServiceScopeFactory>(),
             NullLogger<OutboxDispatcher>.Instance);
@@ -206,13 +206,13 @@ public sealed class OutboxDispatcherTests
             LockToken = lockToken,
             AttemptCount = 10
         };
-        var outbox = Substitute.For<IOutboxStore>();
+        IOutboxStore outbox = Substitute.For<IOutboxStore>();
         outbox.ClaimPendingBatch(Arg.Any<int>(), Arg.Any<TimeSpan>(), Arg.Any<CancellationToken>())
             .Returns([message]);
         outbox.MarkDeadLettered(message.Id, lockToken, Arg.Any<string>(), Arg.Any<CancellationToken>())
             .Returns(true);
 
-        var handler = Substitute.For<IOutboxMessageHandler>();
+        IOutboxMessageHandler handler = Substitute.For<IOutboxMessageHandler>();
         handler.MessageType.Returns(message.Type);
         handler.Handle(message, Arg.Any<CancellationToken>())
             .ThrowsAsync(new InvalidOperationException("persistent failure"));
@@ -220,7 +220,7 @@ public sealed class OutboxDispatcherTests
         var services = new ServiceCollection();
         services.AddSingleton(outbox);
         services.AddSingleton(handler);
-        await using var provider = services.BuildServiceProvider();
+        await using ServiceProvider provider = services.BuildServiceProvider();
         var dispatcher = new OutboxDispatcher(
             provider.GetRequiredService<IServiceScopeFactory>(),
             NullLogger<OutboxDispatcher>.Instance);
@@ -251,7 +251,7 @@ public sealed class OutboxDispatcherTests
             Payload = "{}",
             LockToken = lockToken
         };
-        var outbox = Substitute.For<IOutboxStore>();
+        IOutboxStore outbox = Substitute.For<IOutboxStore>();
         outbox.ClaimPendingBatch(Arg.Any<int>(), Arg.Any<TimeSpan>(), Arg.Any<CancellationToken>())
             .Returns([message]);
         outbox.MarkDeadLettered(Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
@@ -259,7 +259,7 @@ public sealed class OutboxDispatcherTests
 
         var services = new ServiceCollection();
         services.AddSingleton(outbox);
-        await using var provider = services.BuildServiceProvider();
+        await using ServiceProvider provider = services.BuildServiceProvider();
         var dispatcher = new OutboxDispatcher(
             provider.GetRequiredService<IServiceScopeFactory>(),
             NullLogger<OutboxDispatcher>.Instance);
@@ -285,7 +285,7 @@ public sealed class OutboxDispatcherTests
 
         listener.Start();
 
-        var act = () => dispatcher.DispatchBatch(CancellationToken.None);
+        Func<Task> act = () => dispatcher.DispatchBatch(CancellationToken.None);
         await act.Should().ThrowAsync<InvalidOperationException>();
 
         listener.RecordObservableInstruments();

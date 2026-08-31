@@ -3,9 +3,11 @@ using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
 using AssetBlock.Domain.Core.Constants;
+using AssetBlock.Domain.Core.Dto;
 using AssetBlock.Domain.Core.Enums;
 using AssetBlock.Domain.Core.Primitives.AppSettingsOptions;
 using AssetBlock.Infrastructure.Ai;
+using Microsoft.Extensions.Options;
 
 namespace AssetBlock.Infrastructure.Tests.Ai;
 
@@ -20,9 +22,9 @@ public sealed class OpenRouterAiGenerationProviderTests
         {
             Responder = (_, _) => Task.FromResult(AiProviderTestFactory.Json(HttpStatusCode.OK, AiProviderTestFactory.OpenRouterSuccessBody()))
         };
-        var sut = CreateSut(handler, ["fixture/openrouter-test", "fixture/openrouter-test-b"]);
+        OpenRouterAiGenerationProvider sut = CreateSut(handler, ["fixture/openrouter-test", "fixture/openrouter-test-b"]);
 
-        var result = await sut.Generate(
+        AiGenerationProviderResult result = await sut.Generate(
             AiProviderTestFactory.OpenRouterRequest(),
             CancellationToken.None);
 
@@ -54,9 +56,9 @@ public sealed class OpenRouterAiGenerationProviderTests
     public async Task Generate_WhenConfiguredModelsAreEmpty_ShouldNotSendHttp()
     {
         var handler = new RecordingHttpMessageHandler();
-        var sut = CreateSut(handler, []);
+        OpenRouterAiGenerationProvider sut = CreateSut(handler, []);
 
-        var result = await sut.Generate(AiProviderTestFactory.OpenRouterRequest(), CancellationToken.None);
+        AiGenerationProviderResult result = await sut.Generate(AiProviderTestFactory.OpenRouterRequest(), CancellationToken.None);
 
         handler.SendCount.Should().Be(0);
         result.ErrorCode.Should().Be(ErrorCodes.ERR_AI_MODEL_NOT_ALLOWED);
@@ -83,9 +85,9 @@ public sealed class OpenRouterAiGenerationProviderTests
             Responder = (_, _) => Task.FromResult(AiProviderTestFactory.Json(status, """{"error":"raw secret body sk-leak"}"""))
         };
         var logger = new CollectingLogger<OpenRouterAiGenerationProvider>();
-        var sut = CreateSut(handler, logger: logger);
+        OpenRouterAiGenerationProvider sut = CreateSut(handler, logger: logger);
 
-        var result = await sut.Generate(AiProviderTestFactory.OpenRouterRequest(), CancellationToken.None);
+        AiGenerationProviderResult result = await sut.Generate(AiProviderTestFactory.OpenRouterRequest(), CancellationToken.None);
 
         result.ErrorCode.Should().Be(errorCode);
         result.IsRetryable.Should().Be(retryable);
@@ -101,13 +103,13 @@ public sealed class OpenRouterAiGenerationProviderTests
         {
             Responder = (_, _) =>
             {
-                var response = AiProviderTestFactory.Json(HttpStatusCode.TooManyRequests, "{}");
+                HttpResponseMessage response = AiProviderTestFactory.Json(HttpStatusCode.TooManyRequests, "{}");
                 response.Headers.RetryAfter = new RetryConditionHeaderValue(TimeSpan.FromSeconds(120));
                 return Task.FromResult(response);
             }
         };
 
-        var result = await CreateSut(handler).Generate(AiProviderTestFactory.OpenRouterRequest(), CancellationToken.None);
+        AiGenerationProviderResult result = await CreateSut(handler).Generate(AiProviderTestFactory.OpenRouterRequest(), CancellationToken.None);
 
         result.RetryAfter.Should().Be(TimeSpan.FromSeconds(120));
         result.IsRetryable.Should().BeTrue();
@@ -116,18 +118,18 @@ public sealed class OpenRouterAiGenerationProviderTests
     [Fact]
     public async Task Generate_WhenRetryAfterIsHttpDate_ShouldHonorDelay()
     {
-        var when = DateTimeOffset.UtcNow.AddMinutes(4);
+        DateTimeOffset when = DateTimeOffset.UtcNow.AddMinutes(4);
         var handler = new RecordingHttpMessageHandler
         {
             Responder = (_, _) =>
             {
-                var response = AiProviderTestFactory.Json(HttpStatusCode.TooManyRequests, "{}");
+                HttpResponseMessage response = AiProviderTestFactory.Json(HttpStatusCode.TooManyRequests, "{}");
                 response.Headers.RetryAfter = new RetryConditionHeaderValue(when);
                 return Task.FromResult(response);
             }
         };
 
-        var result = await CreateSut(handler).Generate(AiProviderTestFactory.OpenRouterRequest(), CancellationToken.None);
+        AiGenerationProviderResult result = await CreateSut(handler).Generate(AiProviderTestFactory.OpenRouterRequest(), CancellationToken.None);
 
         result.RetryAfter.Should().NotBeNull();
         result.RetryAfter!.Value.Should().BeGreaterThan(TimeSpan.FromMinutes(3));
@@ -141,13 +143,13 @@ public sealed class OpenRouterAiGenerationProviderTests
         {
             Responder = (_, _) =>
             {
-                var response = AiProviderTestFactory.Json(HttpStatusCode.TooManyRequests, "{}");
+                HttpResponseMessage response = AiProviderTestFactory.Json(HttpStatusCode.TooManyRequests, "{}");
                 response.Headers.RetryAfter = new RetryConditionHeaderValue(TimeSpan.FromHours(10));
                 return Task.FromResult(response);
             }
         };
 
-        var result = await CreateSut(handler).Generate(AiProviderTestFactory.OpenRouterRequest(), CancellationToken.None);
+        AiGenerationProviderResult result = await CreateSut(handler).Generate(AiProviderTestFactory.OpenRouterRequest(), CancellationToken.None);
 
         result.RetryAfter.Should().Be(TimeSpan.FromHours(1));
     }
@@ -160,7 +162,7 @@ public sealed class OpenRouterAiGenerationProviderTests
             Responder = (_, _) => throw new HttpRequestException("connection reset")
         };
 
-        var result = await CreateSut(handler).Generate(AiProviderTestFactory.OpenRouterRequest(), CancellationToken.None);
+        AiGenerationProviderResult result = await CreateSut(handler).Generate(AiProviderTestFactory.OpenRouterRequest(), CancellationToken.None);
 
         result.ErrorCode.Should().Be(ErrorCodes.ERR_AI_PROVIDER_UNAVAILABLE);
         result.IsRetryable.Should().BeTrue();
@@ -177,9 +179,9 @@ public sealed class OpenRouterAiGenerationProviderTests
                 return AiProviderTestFactory.Json(HttpStatusCode.OK, "{}");
             }
         };
-        var sut = CreateSut(handler, timeout: TimeSpan.FromMilliseconds(50));
+        OpenRouterAiGenerationProvider sut = CreateSut(handler, timeout: TimeSpan.FromMilliseconds(50));
 
-        var result = await sut.Generate(AiProviderTestFactory.OpenRouterRequest(), CancellationToken.None);
+        AiGenerationProviderResult result = await sut.Generate(AiProviderTestFactory.OpenRouterRequest(), CancellationToken.None);
 
         result.ErrorCode.Should().Be(ErrorCodes.ERR_AI_TIMEOUT);
         result.IsRetryable.Should().BeTrue();
@@ -197,9 +199,9 @@ public sealed class OpenRouterAiGenerationProviderTests
             }
         };
         using var cts = new CancellationTokenSource(TimeSpan.FromMilliseconds(20));
-        var sut = CreateSut(handler);
+        OpenRouterAiGenerationProvider sut = CreateSut(handler);
 
-        var act = async () => await sut.Generate(AiProviderTestFactory.OpenRouterRequest(), cts.Token);
+        Func<Task<AiGenerationProviderResult>> act = async () => await sut.Generate(AiProviderTestFactory.OpenRouterRequest(), cts.Token);
 
         await act.Should().ThrowAsync<OperationCanceledException>();
     }
@@ -212,7 +214,7 @@ public sealed class OpenRouterAiGenerationProviderTests
             Responder = (_, _) => Task.FromResult(AiProviderTestFactory.Json(HttpStatusCode.OK, "not-json"))
         };
 
-        var result = await CreateSut(handler).Generate(AiProviderTestFactory.OpenRouterRequest(), CancellationToken.None);
+        AiGenerationProviderResult result = await CreateSut(handler).Generate(AiProviderTestFactory.OpenRouterRequest(), CancellationToken.None);
 
         result.ErrorCode.Should().Be(ErrorCodes.ERR_AI_INVALID_RESPONSE);
         result.IsRetryable.Should().BeFalse();
@@ -230,7 +232,7 @@ public sealed class OpenRouterAiGenerationProviderTests
             })
         };
 
-        var result = await CreateSut(handler).Generate(AiProviderTestFactory.OpenRouterRequest(), CancellationToken.None);
+        AiGenerationProviderResult result = await CreateSut(handler).Generate(AiProviderTestFactory.OpenRouterRequest(), CancellationToken.None);
 
         result.ErrorCode.Should().Be(ErrorCodes.ERR_AI_INVALID_RESPONSE);
     }
@@ -245,7 +247,7 @@ public sealed class OpenRouterAiGenerationProviderTests
                 AiProviderTestFactory.OpenRouterSuccessBody(model: "unexpected/model")))
         };
 
-        var result = await CreateSut(handler).Generate(AiProviderTestFactory.OpenRouterRequest(), CancellationToken.None);
+        AiGenerationProviderResult result = await CreateSut(handler).Generate(AiProviderTestFactory.OpenRouterRequest(), CancellationToken.None);
 
         result.ErrorCode.Should().Be(ErrorCodes.ERR_AI_MODEL_NOT_ALLOWED);
         result.ActualModel.Should().Be("unexpected/model");
@@ -263,9 +265,9 @@ public sealed class OpenRouterAiGenerationProviderTests
                 HttpStatusCode.OK,
                 AiProviderTestFactory.OpenRouterSuccessBody(model: "fixture/openrouter-test-b")))
         };
-        var sut = CreateSut(handler, ["fixture/openrouter-test", "fixture/openrouter-test-b"]);
+        OpenRouterAiGenerationProvider sut = CreateSut(handler, ["fixture/openrouter-test", "fixture/openrouter-test-b"]);
 
-        var result = await sut.Generate(AiProviderTestFactory.OpenRouterRequest(), CancellationToken.None);
+        AiGenerationProviderResult result = await sut.Generate(AiProviderTestFactory.OpenRouterRequest(), CancellationToken.None);
 
         result.Outcome.Should().Be(AiGenerationOutcomeKind.SUCCESS);
         result.ActualModel.Should().Be("fixture/openrouter-test-b");
@@ -282,9 +284,9 @@ public sealed class OpenRouterAiGenerationProviderTests
                 HttpStatusCode.OK,
                 AiProviderTestFactory.OpenRouterSuccessBody(model: "fixture/openrouter-test-b")))
         };
-        var sut = CreateSut(handler, ["fixture/openrouter-test"]);
+        OpenRouterAiGenerationProvider sut = CreateSut(handler, ["fixture/openrouter-test"]);
 
-        var result = await sut.Generate(AiProviderTestFactory.OpenRouterRequest(), CancellationToken.None);
+        AiGenerationProviderResult result = await sut.Generate(AiProviderTestFactory.OpenRouterRequest(), CancellationToken.None);
 
         result.ErrorCode.Should().Be(ErrorCodes.ERR_AI_MODEL_NOT_ALLOWED);
         result.ActualModel.Should().Be("fixture/openrouter-test-b");
@@ -307,7 +309,7 @@ public sealed class OpenRouterAiGenerationProviderTests
                     })))
         };
 
-        var result = await CreateSut(handler).Generate(AiProviderTestFactory.OpenRouterRequest(), CancellationToken.None);
+        AiGenerationProviderResult result = await CreateSut(handler).Generate(AiProviderTestFactory.OpenRouterRequest(), CancellationToken.None);
 
         result.Outcome.Should().Be(AiGenerationOutcomeKind.SUCCESS);
         result.UpstreamProvider.Should().Be("RightHost");
@@ -328,7 +330,7 @@ public sealed class OpenRouterAiGenerationProviderTests
                     })))
         };
 
-        var result = await CreateSut(handler).Generate(AiProviderTestFactory.OpenRouterRequest(), CancellationToken.None);
+        AiGenerationProviderResult result = await CreateSut(handler).Generate(AiProviderTestFactory.OpenRouterRequest(), CancellationToken.None);
 
         result.Outcome.Should().Be(AiGenerationOutcomeKind.SUCCESS);
         result.UpstreamProvider.Should().BeNull();
@@ -344,9 +346,9 @@ public sealed class OpenRouterAiGenerationProviderTests
                 Content = new StreamContent(new HangingReadStream())
             })
         };
-        var sut = CreateSut(handler, timeout: TimeSpan.FromMilliseconds(80));
+        OpenRouterAiGenerationProvider sut = CreateSut(handler, timeout: TimeSpan.FromMilliseconds(80));
 
-        var result = await sut.Generate(AiProviderTestFactory.OpenRouterRequest(), CancellationToken.None);
+        AiGenerationProviderResult result = await sut.Generate(AiProviderTestFactory.OpenRouterRequest(), CancellationToken.None);
 
         handler.SendCount.Should().Be(1);
         result.ErrorCode.Should().Be(ErrorCodes.ERR_AI_TIMEOUT);
@@ -361,7 +363,7 @@ public sealed class OpenRouterAiGenerationProviderTests
             Responder = (_, _) => throw new IOException("connection reset while reading body")
         };
 
-        var result = await CreateSut(handler).Generate(AiProviderTestFactory.OpenRouterRequest(), CancellationToken.None);
+        AiGenerationProviderResult result = await CreateSut(handler).Generate(AiProviderTestFactory.OpenRouterRequest(), CancellationToken.None);
 
         result.ErrorCode.Should().Be(ErrorCodes.ERR_AI_PROVIDER_UNAVAILABLE);
         result.IsRetryable.Should().BeTrue();
@@ -374,7 +376,7 @@ public sealed class OpenRouterAiGenerationProviderTests
         {
             Responder = (_, _) => Task.FromResult(AiProviderTestFactory.Json(HttpStatusCode.OK, AiProviderTestFactory.OpenRouterSuccessBody()))
         };
-        var sut = CreateSut(handler, zeroDataRetention: true);
+        OpenRouterAiGenerationProvider sut = CreateSut(handler, zeroDataRetention: true);
 
         await sut.Generate(AiProviderTestFactory.OpenRouterRequest(), CancellationToken.None);
 
@@ -389,7 +391,7 @@ public sealed class OpenRouterAiGenerationProviderTests
         TimeSpan? timeout = null,
         bool zeroDataRetention = false)
     {
-        var options = Microsoft.Extensions.Options.Options.Create(new OpenRouterOptions
+        IOptions<OpenRouterOptions> options = Microsoft.Extensions.Options.Options.Create(new OpenRouterOptions
         {
             BaseUrl = "https://openrouter.ai/api/v1",
             ApiKey = API_KEY,
@@ -402,7 +404,7 @@ public sealed class OpenRouterAiGenerationProviderTests
             AppName = "AssetBlock",
             ZeroDataRetention = zeroDataRetention
         });
-        var factory = AiProviderTestFactory.CreateFactory(
+        IHttpClientFactory factory = AiProviderTestFactory.CreateFactory(
             OpenRouterAiGenerationProvider.HTTP_CLIENT_NAME,
             handler,
             new Uri("https://openrouter.ai/api/v1/"));

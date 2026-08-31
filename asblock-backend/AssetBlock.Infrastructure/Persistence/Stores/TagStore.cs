@@ -14,7 +14,7 @@ internal sealed class TagStore(ApplicationDbContext dbContext) : ITagStore
 
     public async Task<PagedResult<Tag>> SearchTags(GetTagsRequest request, CancellationToken cancellationToken = default)
     {
-        var query = dbContext.Tags.AsNoTracking().AsQueryable();
+        IQueryable<Tag> query = dbContext.Tags.AsNoTracking().AsQueryable();
 
         if (!string.IsNullOrWhiteSpace(request.Search))
         {
@@ -41,7 +41,7 @@ internal sealed class TagStore(ApplicationDbContext dbContext) : ITagStore
         var page = Math.Max(PagedRequest.DEFAULT_PAGE, request.Page);
         var pageSize = Math.Clamp(request.PageSize, PagedRequest.MIN_PAGE_SIZE, PagedRequest.MAX_PAGE_SIZE);
 
-        var items = await query
+        List<Tag> items = await query
             .Skip((page - 1) * pageSize)
             .Take(pageSize)
             .ToListAsync(cancellationToken);

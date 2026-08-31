@@ -14,7 +14,7 @@ public sealed class DownloadServiceTests
     [Fact]
     public async Task AuthorizeDownload_whenAssetMissing_returnsNotFound()
     {
-        var assetStore = Substitute.For<IAssetStore>();
+        IAssetStore assetStore = Substitute.For<IAssetStore>();
         assetStore.GetById(Arg.Any<Guid>(), Arg.Any<bool>(), Arg.Any<CancellationToken>())
             .Returns(Task.FromResult<Asset?>(null));
 
@@ -25,18 +25,18 @@ public sealed class DownloadServiceTests
             CreateEncryption(),
             new MemoryCacheService());
 
-        var r = await sut.AuthorizeDownload(Guid.NewGuid(), Guid.NewGuid());
+        DownloadAuthorization r = await sut.AuthorizeDownload(Guid.NewGuid(), Guid.NewGuid());
         r.Status.Should().Be(AssetDownloadStatus.NOT_FOUND);
     }
 
     [Fact]
     public async Task AuthorizeDownload_whenNotAuthorAndNoPurchase_returnsForbidden()
     {
-        var asset = CreateAsset(Guid.NewGuid(), Guid.NewGuid());
-        var assetStore = Substitute.For<IAssetStore>();
+        Asset asset = CreateAsset(Guid.NewGuid(), Guid.NewGuid());
+        IAssetStore assetStore = Substitute.For<IAssetStore>();
         assetStore.GetById(asset.Id, Arg.Any<bool>(), Arg.Any<CancellationToken>()).Returns(Task.FromResult<Asset?>(asset));
 
-        var purchaseStore = Substitute.For<IPurchaseStore>();
+        IPurchaseStore purchaseStore = Substitute.For<IPurchaseStore>();
         purchaseStore.Exists(Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<CancellationToken>())
             .Returns(Task.FromResult(false));
 
@@ -47,7 +47,7 @@ public sealed class DownloadServiceTests
             CreateEncryption(),
             new MemoryCacheService());
 
-        var r = await sut.AuthorizeDownload(asset.Id, Guid.NewGuid());
+        DownloadAuthorization r = await sut.AuthorizeDownload(asset.Id, Guid.NewGuid());
         r.Status.Should().Be(AssetDownloadStatus.FORBIDDEN);
     }
 
@@ -55,17 +55,17 @@ public sealed class DownloadServiceTests
     public async Task CopyDecrypted_whenAuthor_decryptsContent()
     {
         const string storageKey = "sk";
-        var encryption = CreateEncryption();
+        AesGcmEncryptionService encryption = CreateEncryption();
         await using var plain = new MemoryStream(Encoding.UTF8.GetBytes("payload"));
         await using var cipherMs = new MemoryStream();
         await encryption.Encrypt(plain, cipherMs);
         var cipherBytes = cipherMs.ToArray();
 
-        var storage = Substitute.For<IAssetStorageService>();
+        IAssetStorageService storage = Substitute.For<IAssetStorageService>();
         storage.OpenRead(storageKey, Arg.Any<Func<Stream, CancellationToken, Task>>(), Arg.Any<CancellationToken>())
             .Returns(ci =>
             {
-                var consumer = ci.Arg<Func<Stream, CancellationToken, Task>>();
+                Func<Stream, CancellationToken, Task> consumer = ci.Arg<Func<Stream, CancellationToken, Task>>();
                 return consumer(new MemoryStream(cipherBytes), CancellationToken.None);
             });
 
@@ -84,7 +84,7 @@ public sealed class DownloadServiceTests
     [Fact]
     public async Task CopyDecrypted_whenStorageReadIsCancelled_propagatesCancellation()
     {
-        var storage = Substitute.For<IAssetStorageService>();
+        IAssetStorageService storage = Substitute.For<IAssetStorageService>();
         storage.OpenRead(
                 Arg.Any<string>(),
                 Arg.Any<Func<Stream, CancellationToken, Task>>(),
@@ -98,7 +98,7 @@ public sealed class DownloadServiceTests
             new MemoryCacheService());
         await using var destination = new MemoryStream();
 
-        var act = () => sut.CopyDecrypted("key", destination, new CancellationToken(canceled: true));
+        Func<Task> act = () => sut.CopyDecrypted("key", destination, new CancellationToken(canceled: true));
 
         await act.Should().ThrowAsync<OperationCanceledException>();
     }
@@ -107,11 +107,11 @@ public sealed class DownloadServiceTests
     public async Task AuthorizeDownload_rateLimited_afterTooManyDownloads()
     {
         var userId = Guid.NewGuid();
-        var asset = CreateAsset(userId, Guid.NewGuid());
+        Asset asset = CreateAsset(userId, Guid.NewGuid());
         asset.DownloadLimitPerHour = 1;
         var versionId = Guid.NewGuid();
 
-        var assetStore = Substitute.For<IAssetStore>();
+        IAssetStore assetStore = Substitute.For<IAssetStore>();
         assetStore.GetById(asset.Id, Arg.Any<bool>(), Arg.Any<CancellationToken>()).Returns(Task.FromResult<Asset?>(asset));
         assetStore.GetCurrentVersionSnapshot(asset.Id, Arg.Any<CancellationToken>())
             .Returns(Task.FromResult<Domain.Core.Dto.Assets.AssetCurrentVersionSnapshot?>(

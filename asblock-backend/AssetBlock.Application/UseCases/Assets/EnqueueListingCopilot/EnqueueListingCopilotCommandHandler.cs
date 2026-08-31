@@ -21,20 +21,20 @@ internal sealed class EnqueueListingCopilotCommandHandler(
         EnqueueListingCopilotCommand request,
         CancellationToken cancellationToken)
     {
-        var owned = await listingCopilotStore.GetOwnedVersion(request.AssetVersionId, request.OwnerUserId, cancellationToken);
+        ListingCopilotOwnedVersion? owned = await listingCopilotStore.GetOwnedVersion(request.AssetVersionId, request.OwnerUserId, cancellationToken);
         if (owned is null)
         {
             return Result.NotFound(ErrorCodes.ERR_ASSET_NOT_FOUND);
         }
 
-        var options = aiOptions.Value;
+        AiOptions options = aiOptions.Value;
         if (!options.Enabled)
         {
             return ResultError.Error<ListingCopilotEnqueueResponse>(ErrorCodes.ERR_AI_DISABLED);
         }
 
-        if (!AiProviderParser.TryParse(options.Provider, out var providerKind)
-            || !providers.TryGet(providerKind, out var provider)
+        if (!AiProviderParser.TryParse(options.Provider, out AiProviderKind providerKind)
+            || !providers.TryGet(providerKind, out IAiGenerationProvider? provider)
             || provider.OrderedModelIds.Count == 0)
         {
             return ResultError.Error<ListingCopilotEnqueueResponse>(ErrorCodes.ERR_AI_ERROR);
@@ -50,7 +50,7 @@ internal sealed class EnqueueListingCopilotCommandHandler(
             return Result.Conflict(ErrorCodes.ERR_AI_ARCHIVE_ANALYSIS_MISSING);
         }
 
-        var jobId = await jobStore.Enqueue(
+        Guid jobId = await jobStore.Enqueue(
             owned.AssetId,
             owned.AssetVersionId,
             AssetProcessingJobType.LISTING_COPILOT,

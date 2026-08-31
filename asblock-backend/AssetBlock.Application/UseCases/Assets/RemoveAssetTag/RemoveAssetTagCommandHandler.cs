@@ -1,9 +1,10 @@
 using Ardalis.Result;
+using AssetBlock.Application.Messaging;
 using AssetBlock.Domain.Abstractions.Services;
 using AssetBlock.Domain.Core.Constants;
 using AssetBlock.Domain.Core.Dto.Audit;
+using AssetBlock.Domain.Core.Entities;
 using AssetBlock.Domain.Core.Enums;
-using AssetBlock.Application.Messaging;
 using Microsoft.Extensions.Logging;
 
 namespace AssetBlock.Application.UseCases.Assets.RemoveAssetTag;
@@ -18,7 +19,7 @@ internal sealed class RemoveAssetTagCommandHandler(
 {
     public async Task<Result> Handle(RemoveAssetTagCommand request, CancellationToken cancellationToken)
     {
-        var asset = await assetStore.GetById(request.AssetId, cancellationToken);
+        Asset? asset = await assetStore.GetById(request.AssetId, cancellationToken);
         if (asset is null)
         {
             return Result.NotFound(ErrorCodes.ERR_ASSET_NOT_FOUND);
@@ -39,7 +40,7 @@ internal sealed class RemoveAssetTagCommandHandler(
             return Result.NotFound(ErrorCodes.ERR_ASSET_NOT_FOUND);
         }
 
-        var tag = await tagStore.GetById(request.TagId, cancellationToken);
+        Tag? tag = await tagStore.GetById(request.TagId, cancellationToken);
         if (tag is null)
         {
             return Result.NotFound(ErrorCodes.ERR_TAG_NOT_FOUND);

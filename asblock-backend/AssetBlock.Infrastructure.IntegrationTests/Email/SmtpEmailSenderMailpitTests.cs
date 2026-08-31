@@ -6,6 +6,7 @@ using AssetBlock.Domain.Core.Primitives.AppSettingsOptions;
 using AssetBlock.Infrastructure.Email;
 using DotNet.Testcontainers.Builders;
 using DotNet.Testcontainers.Containers;
+using Microsoft.Extensions.Options;
 
 namespace AssetBlock.Infrastructure.IntegrationTests.Email;
 
@@ -67,7 +68,7 @@ public sealed class SmtpEmailSenderMailpitTests : IAsyncLifetime, IDisposable
     public async Task Send_WhenMailpitReceivesSmtp_ShouldCaptureRecipientSubjectMultipartAndMessageId()
     {
         var smtpPort = _mailpit!.GetMappedPublicPort(1025);
-        var options = Microsoft.Extensions.Options.Options.Create(new EmailOptions
+        IOptions<EmailOptions> options = Microsoft.Extensions.Options.Options.Create(new EmailOptions
         {
             Provider = "Smtp",
             FromName = "AssetBlock",
@@ -100,7 +101,7 @@ public sealed class SmtpEmailSenderMailpitTests : IAsyncLifetime, IDisposable
         MailpitMessageSummary? summary = null;
         for (var attempt = 0; attempt < 20; attempt++)
         {
-            var list = await _http!.GetFromJsonAsync<MailpitMessagesResponse>("api/v1/messages");
+            MailpitMessagesResponse? list = await _http!.GetFromJsonAsync<MailpitMessagesResponse>("api/v1/messages");
             summary = list?.Messages.FirstOrDefault(m =>
                 m.To.Any(t => t.Address.Equals("buyer@example.com", StringComparison.OrdinalIgnoreCase))
                 && m.Subject == "Purchase receipt: Pack");
@@ -113,7 +114,7 @@ public sealed class SmtpEmailSenderMailpitTests : IAsyncLifetime, IDisposable
         }
 
         summary.Should().NotBeNull("Mailpit should capture the SMTP message");
-        var detail = await _http!.GetFromJsonAsync<MailpitMessageDetail>($"api/v1/message/{summary.Id}");
+        MailpitMessageDetail? detail = await _http!.GetFromJsonAsync<MailpitMessageDetail>($"api/v1/message/{summary.Id}");
         detail.Should().NotBeNull();
         detail.Subject.Should().Be("Purchase receipt: Pack");
         detail.To.Should().Contain(t => t.Address.Equals("buyer@example.com", StringComparison.OrdinalIgnoreCase));

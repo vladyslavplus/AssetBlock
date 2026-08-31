@@ -1,3 +1,4 @@
+using System.Reflection;
 using AssetBlock.Application.Ai;
 using AssetBlock.Application.Common;
 using AssetBlock.Application.Common.Behaviors;
@@ -16,7 +17,7 @@ public static class DependencyInjection
 {
     public static IServiceCollection AddApplication(this IServiceCollection services)
     {
-        var assembly = typeof(DependencyInjection).Assembly;
+        Assembly assembly = typeof(DependencyInjection).Assembly;
         services.AddApplicationMessaging(assembly);
         services.AddValidatorsFromAssembly(
             assembly,

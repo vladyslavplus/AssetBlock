@@ -26,7 +26,7 @@ public sealed class GetSellerAssetDetailQueryHandlerTests
         _assetStore.GetOwnedSellerDetail(query.AssetId, query.OwnerUserId, Arg.Any<CancellationToken>())
             .Returns((SellerAssetDetailItem?)null);
 
-        var result = await _handler.Handle(query, CancellationToken.None);
+        Result<SellerAssetDetailItem> result = await _handler.Handle(query, CancellationToken.None);
 
         result.Status.Should().Be(ResultStatus.NotFound);
         result.Errors.Should().Contain(ErrorCodes.ERR_ASSET_NOT_FOUND);
@@ -42,7 +42,7 @@ public sealed class GetSellerAssetDetailQueryHandlerTests
         var assetId = Guid.NewGuid();
         var ownerId = Guid.NewGuid();
         var versionId = Guid.NewGuid();
-        var now = DateTimeOffset.UtcNow;
+        DateTimeOffset now = DateTimeOffset.UtcNow;
         Guid? currentReady = status == AssetVersionProcessingStatus.READY ? versionId : null;
         var item = new SellerAssetDetailItem(
             assetId,
@@ -66,7 +66,7 @@ public sealed class GetSellerAssetDetailQueryHandlerTests
 
         _assetStore.GetOwnedSellerDetail(assetId, ownerId, Arg.Any<CancellationToken>()).Returns(item);
 
-        var result = await _handler.Handle(new GetSellerAssetDetailQuery(assetId, ownerId), CancellationToken.None);
+        Result<SellerAssetDetailItem> result = await _handler.Handle(new GetSellerAssetDetailQuery(assetId, ownerId), CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
         result.Value.Id.Should().Be(assetId);

@@ -1,3 +1,4 @@
+using AssetBlock.Domain.Core.Entities;
 using AssetBlock.Domain.Core.Enums;
 using AssetBlock.Infrastructure.IntegrationTests.Support;
 using AssetBlock.Infrastructure.Persistence;
@@ -16,21 +17,21 @@ public sealed class EmailDeliveryStorePostgresTests(PostgresFixture fixture)
     [Fact]
     public async Task TryClaimDelivery_WhenConcurrentWorkersAttemptClaim_ExactlyOneSucceeds()
     {
-        await using var db = await fixture.CreateCleanDbContext();
+        await using ApplicationDbContext db = await fixture.CreateCleanDbContext();
         var outboxId = Guid.NewGuid();
         var messageId = $"<{outboxId:N}@mail.localhost>";
         var recipientUserId = Guid.NewGuid();
         const string recipientAddress = "concurrent@example.com";
 
-        await using var dbA = fixture.CreateDbContext();
-        await using var dbB = fixture.CreateDbContext();
-        var storeA = CreateStore(dbA);
-        var storeB = CreateStore(dbB);
+        await using ApplicationDbContext dbA = fixture.CreateDbContext();
+        await using ApplicationDbContext dbB = fixture.CreateDbContext();
+        EmailDeliveryStore storeA = CreateStore(dbA);
+        EmailDeliveryStore storeB = CreateStore(dbB);
 
-        var taskA = storeA.TryClaimDelivery(outboxId, messageId, recipientAddress, recipientUserId, EmailTemplateKind.PURCHASE_RECEIPT, TimeSpan.FromMinutes(2));
-        var taskB = storeB.TryClaimDelivery(outboxId, messageId, recipientAddress, recipientUserId, EmailTemplateKind.PURCHASE_RECEIPT, TimeSpan.FromMinutes(2));
+        Task<(DeliveryClaimStatus Status, Guid? ClaimToken)> taskA = storeA.TryClaimDelivery(outboxId, messageId, recipientAddress, recipientUserId, EmailTemplateKind.PURCHASE_RECEIPT, TimeSpan.FromMinutes(2));
+        Task<(DeliveryClaimStatus Status, Guid? ClaimToken)> taskB = storeB.TryClaimDelivery(outboxId, messageId, recipientAddress, recipientUserId, EmailTemplateKind.PURCHASE_RECEIPT, TimeSpan.FromMinutes(2));
 
-        var results = await Task.WhenAll(taskA, taskB);
+        (DeliveryClaimStatus Status, Guid? ClaimToken)[] results = await Task.WhenAll(taskA, taskB);
 
         var claimedCount = results.Count(r => r.Status == DeliveryClaimStatus.CLAIMED);
         var conflictCount = results.Count(r => r.Status == DeliveryClaimStatus.CONCURRENT_CONFLICT);
@@ -42,8 +43,8 @@ public sealed class EmailDeliveryStorePostgresTests(PostgresFixture fixture)
     [Fact]
     public async Task ConfirmDelivery_WhenClaimTokenMatches_ShouldMarkDeliveredAndMakeSubsequentClaimsReturnAlreadyDelivered()
     {
-        await using var db = await fixture.CreateCleanDbContext();
-        var store = CreateStore(db);
+        await using ApplicationDbContext db = await fixture.CreateCleanDbContext();
+        EmailDeliveryStore store = CreateStore(db);
 
         var outboxId = Guid.NewGuid();
         var messageId = $"<{outboxId:N}@mail.localhost>";
@@ -61,17 +62,17 @@ public sealed class EmailDeliveryStorePostgresTests(PostgresFixture fixture)
         claimStatus.Should().Be(DeliveryClaimStatus.CLAIMED);
         claimToken.Should().NotBeNull();
 
-        var deliveredAt = DateTimeOffset.UtcNow;
+        DateTimeOffset deliveredAt = DateTimeOffset.UtcNow;
         var confirmed = await store.ConfirmDelivery(outboxId, claimToken.Value, deliveredAt);
         confirmed.Should().BeTrue();
 
-        await using var verifyDb = fixture.CreateDbContext();
-        var row = await verifyDb.OutboxEmailDeliveries.AsNoTracking().SingleAsync(d => d.OutboxMessageId == outboxId);
+        await using ApplicationDbContext verifyDb = fixture.CreateDbContext();
+        OutboxEmailDelivery row = await verifyDb.OutboxEmailDeliveries.AsNoTracking().SingleAsync(d => d.OutboxMessageId == outboxId);
         row.DeliveredAt.Should().BeCloseTo(deliveredAt, TimeSpan.FromSeconds(1));
         row.ClaimToken.Should().BeNull();
         row.ClaimedUntil.Should().BeNull();
 
-        var store2 = CreateStore(verifyDb);
+        EmailDeliveryStore store2 = CreateStore(verifyDb);
         (DeliveryClaimStatus subsequentStatus, Guid? subsequentToken) = await store2.TryClaimDelivery(
             outboxId,
             messageId,
@@ -87,8 +88,8 @@ public sealed class EmailDeliveryStorePostgresTests(PostgresFixture fixture)
     [Fact]
     public async Task ReleaseClaim_ShouldAllowImmediateReclaim()
     {
-        await using var db = await fixture.CreateCleanDbContext();
-        var store = CreateStore(db);
+        await using ApplicationDbContext db = await fixture.CreateCleanDbContext();
+        EmailDeliveryStore store = CreateStore(db);
 
         var outboxId = Guid.NewGuid();
         var messageId = $"<{outboxId:N}@mail.localhost>";
@@ -108,8 +109,8 @@ public sealed class EmailDeliveryStorePostgresTests(PostgresFixture fixture)
         var released = await store.ReleaseClaim(outboxId, token1!.Value);
         released.Should().BeTrue();
 
-        await using var db2 = fixture.CreateDbContext();
-        var store2 = CreateStore(db2);
+        await using ApplicationDbContext db2 = fixture.CreateDbContext();
+        EmailDeliveryStore store2 = CreateStore(db2);
         (DeliveryClaimStatus status2, Guid? token2) = await store2.TryClaimDelivery(
             outboxId,
             messageId,
@@ -126,8 +127,8 @@ public sealed class EmailDeliveryStorePostgresTests(PostgresFixture fixture)
     [Fact]
     public async Task ExpiredClaim_CanBeReclaimed_AndStaleTokenCannotConfirm()
     {
-        await using var db = await fixture.CreateCleanDbContext();
-        var store = CreateStore(db);
+        await using ApplicationDbContext db = await fixture.CreateCleanDbContext();
+        EmailDeliveryStore store = CreateStore(db);
 
         var outboxId = Guid.NewGuid();
         var messageId = $"<{outboxId:N}@mail.localhost>";
@@ -146,8 +147,8 @@ public sealed class EmailDeliveryStorePostgresTests(PostgresFixture fixture)
 
         await Task.Delay(80);
 
-        await using var db2 = fixture.CreateDbContext();
-        var store2 = CreateStore(db2);
+        await using ApplicationDbContext db2 = fixture.CreateDbContext();
+        EmailDeliveryStore store2 = CreateStore(db2);
         (DeliveryClaimStatus status2, Guid? token2) = await store2.TryClaimDelivery(
             outboxId,
             messageId,
@@ -171,16 +172,16 @@ public sealed class EmailDeliveryStorePostgresTests(PostgresFixture fixture)
     [Fact]
     public async Task ExpiredClaim_WhenReclaimedBySecondStoreInstance_FirstStoreConfirmationIsRejected()
     {
-        await using var db = await fixture.CreateCleanDbContext();
+        await using ApplicationDbContext db = await fixture.CreateCleanDbContext();
         var outboxId = Guid.NewGuid();
         var recipientUserId = Guid.NewGuid();
         const string recipientAddress = "blocked-worker@example.com";
         var messageId = $"<{outboxId:N}@mail.localhost>";
 
-        await using var dbA = fixture.CreateDbContext();
-        await using var dbB = fixture.CreateDbContext();
-        var storeA = CreateStore(dbA);
-        var storeB = CreateStore(dbB);
+        await using ApplicationDbContext dbA = fixture.CreateDbContext();
+        await using ApplicationDbContext dbB = fixture.CreateDbContext();
+        EmailDeliveryStore storeA = CreateStore(dbA);
+        EmailDeliveryStore storeB = CreateStore(dbB);
 
         // Worker A claims with 50ms lease
         (DeliveryClaimStatus statusA, Guid? tokenA) = await storeA.TryClaimDelivery(
@@ -219,8 +220,8 @@ public sealed class EmailDeliveryStorePostgresTests(PostgresFixture fixture)
         confirmedA.Should().BeFalse();
 
         // Exactly one delivery record exists and it is marked delivered
-        await using var verifyDb = fixture.CreateDbContext();
-        var delivery = await verifyDb.OutboxEmailDeliveries.AsNoTracking().SingleAsync(d => d.OutboxMessageId == outboxId);
+        await using ApplicationDbContext verifyDb = fixture.CreateDbContext();
+        OutboxEmailDelivery delivery = await verifyDb.OutboxEmailDeliveries.AsNoTracking().SingleAsync(d => d.OutboxMessageId == outboxId);
         delivery.DeliveredAt.Should().NotBeNull();
         delivery.ClaimToken.Should().BeNull();
     }

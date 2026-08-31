@@ -12,15 +12,15 @@ internal static class AssetVersionsSeed
 {
     public static async Task<Guid> GetUserIdAsync(IServiceScopeFactory scopeFactory, string username)
     {
-        using var scope = scopeFactory.CreateScope();
-        var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+        using IServiceScope scope = scopeFactory.CreateScope();
+        ApplicationDbContext db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
         return await db.Users.AsNoTracking().Where(u => u.Username == username).Select(u => u.Id).SingleAsync();
     }
 
     public static async Task<string> GetVersionStorageKeyAsync(IServiceScopeFactory scopeFactory, Guid versionId)
     {
-        using var scope = scopeFactory.CreateScope();
-        var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+        using IServiceScope scope = scopeFactory.CreateScope();
+        ApplicationDbContext db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
         return await db.AssetVersions.AsNoTracking()
             .Where(v => v.Id == versionId)
             .Select(v => v.StorageKey)
@@ -36,14 +36,14 @@ internal static class AssetVersionsSeed
         bool deleted = false,
         decimal price = 9.99m)
     {
-        using var scope = scopeFactory.CreateScope();
-        var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+        using IServiceScope scope = scopeFactory.CreateScope();
+        ApplicationDbContext db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
 
-        var category = await db.Categories.AsNoTracking().FirstOrDefaultAsync()
+        Category category = await db.Categories.AsNoTracking().FirstOrDefaultAsync()
             ?? throw new InvalidOperationException("No category seeded; expected at least one from migrations/seed data.");
 
         var assetId = Guid.NewGuid();
-        var now = DateTimeOffset.UtcNow;
+        DateTimeOffset now = DateTimeOffset.UtcNow;
         var asset = new Asset
         {
             Id = assetId,
@@ -58,7 +58,7 @@ internal static class AssetVersionsSeed
         db.Assets.Add(asset);
 
         var versionIds = new List<Guid>();
-        var license = AssetLicenseCatalog.Get(AssetLicenseCode.PERSONAL);
+        AssetLicenseTemplate license = AssetLicenseCatalog.Get(AssetLicenseCode.PERSONAL);
         for (var i = 1; i <= versionCount; i++)
         {
             var versionId = Guid.NewGuid();
@@ -96,15 +96,15 @@ internal static class AssetVersionsSeed
         Guid assetVersionId,
         decimal pricePaid = 9.99m)
     {
-        using var scope = scopeFactory.CreateScope();
-        var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+        using IServiceScope scope = scopeFactory.CreateScope();
+        ApplicationDbContext db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
 
-        var sellerId = await db.Assets.AsNoTracking()
+        Guid sellerId = await db.Assets.AsNoTracking()
             .Where(a => a.Id == assetId)
             .Select(a => a.AuthorId)
             .SingleAsync();
 
-        var now = DateTimeOffset.UtcNow;
+        DateTimeOffset now = DateTimeOffset.UtcNow;
         var checkoutIntentId = Guid.NewGuid();
         var orderId = Guid.NewGuid();
         var orderLineId = Guid.NewGuid();

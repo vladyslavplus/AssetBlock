@@ -1,9 +1,10 @@
 using Ardalis.Result;
 using AssetBlock.Application.Common;
+using AssetBlock.Application.Messaging;
 using AssetBlock.Domain.Abstractions.Services;
 using AssetBlock.Domain.Core.Constants;
 using AssetBlock.Domain.Core.Dto.Notifications;
-using AssetBlock.Application.Messaging;
+using AssetBlock.Domain.Core.Entities;
 using Microsoft.Extensions.Logging;
 
 namespace AssetBlock.Application.UseCases.Users.ListNotifications;
@@ -17,7 +18,7 @@ internal sealed class GetNotificationsQueryHandler(
     {
         try
         {
-            var paged = await notificationStore.GetPaged(request.UserId, request.Request, cancellationToken);
+            Domain.Core.Dto.Paging.PagedResult<UserNotification> paged = await notificationStore.GetPaged(request.UserId, request.Request, cancellationToken);
             var items = paged.Items
                 .Select(n => new NotificationListItemDto(
                     n.Id,

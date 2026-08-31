@@ -1,7 +1,7 @@
 using Ardalis.Result;
+using AssetBlock.Application.Messaging;
 using AssetBlock.Domain.Abstractions.Services;
 using AssetBlock.Domain.Core.Dto.Audit;
-using AssetBlock.Application.Messaging;
 
 namespace AssetBlock.Application.UseCases.AuditLogs.GetAuditLogs;
 
@@ -10,7 +10,7 @@ internal sealed class GetAuditLogsQueryHandler(
 {
     public async Task<Result<Domain.Core.Dto.Paging.PagedResult<AuditLogListItem>>> Handle(GetAuditLogsQuery request, CancellationToken cancellationToken)
     {
-        var result = await auditStore.GetPaged(request.Request, cancellationToken);
+        Domain.Core.Dto.Paging.PagedResult<AuditLogListItem> result = await auditStore.GetPaged(request.Request, cancellationToken);
         return Result.Success(result);
     }
 }

@@ -1,15 +1,15 @@
+using Ardalis.Result;
 using AssetBlock.Application.Common;
+using AssetBlock.Application.Messaging;
 using AssetBlock.Domain.Abstractions.Services;
 using AssetBlock.Domain.Core.Constants;
 using AssetBlock.Domain.Core.Dto;
 using AssetBlock.Domain.Core.Dto.Audit;
-using AssetBlock.Domain.Core.Enums;
 using AssetBlock.Domain.Core.Entities;
+using AssetBlock.Domain.Core.Enums;
 using AssetBlock.Domain.Core.Exceptions;
 using AssetBlock.Domain.Core.Licenses;
 using AssetBlock.Domain.Core.Primitives.AppSettingsOptions;
-using Ardalis.Result;
-using AssetBlock.Application.Messaging;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
@@ -29,13 +29,13 @@ internal sealed class PublishAssetVersionCommandHandler(
 {
     public async Task<Result<Guid>> Handle(PublishAssetVersionCommand request, CancellationToken cancellationToken)
     {
-        var uploadOpts = fileUploadOptions.Value;
+        FileUploadOptions uploadOpts = fileUploadOptions.Value;
         var displayFileName = uploadOpts.NormalizeDisplayFileName(request.FileName);
         _ = uploadOpts.TryMatchAllowedExtension(displayFileName, out var matchedExtension);
-        _ = AssetLicenseCatalog.TryParseCode(request.Request.LicenseCode, out var licenseCode);
-        var licenseTemplate = AssetLicenseCatalog.Get(licenseCode);
+        _ = AssetLicenseCatalog.TryParseCode(request.Request.LicenseCode, out AssetLicenseCode licenseCode);
+        AssetLicenseTemplate licenseTemplate = AssetLicenseCatalog.Get(licenseCode);
 
-        var asset = await assetStore.GetById(request.AssetId, cancellationToken);
+        Asset? asset = await assetStore.GetById(request.AssetId, cancellationToken);
         if (asset is null || asset.DeletedAt.HasValue)
         {
             return Result.NotFound(ErrorCodes.ERR_ASSET_NOT_FOUND);
@@ -67,7 +67,7 @@ internal sealed class PublishAssetVersionCommandHandler(
             return ResultError.Error<Guid>(ErrorCodes.ERR_ASSET_UPLOAD_FAILED);
         }
 
-        var now = DateTimeOffset.UtcNow;
+        DateTimeOffset now = DateTimeOffset.UtcNow;
         var draft = new AssetVersion
         {
             Id = versionId,

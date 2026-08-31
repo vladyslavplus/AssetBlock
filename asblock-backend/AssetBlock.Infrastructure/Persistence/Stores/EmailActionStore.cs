@@ -28,12 +28,12 @@ internal sealed class EmailActionStore(ApplicationDbContext dbContext) : IEmailA
         TimeSpan lifetime,
         CancellationToken cancellationToken = default)
     {
-        var now = DateTimeOffset.UtcNow;
+        DateTimeOffset now = DateTimeOffset.UtcNow;
         var normalizedEmail = targetEmail.Trim().ToLowerInvariant();
         var purposeValue = purpose.ToString();
         var id = Guid.NewGuid();
         var version = Guid.NewGuid();
-        var expiresAt = now.Add(lifetime);
+        DateTimeOffset expiresAt = now.Add(lifetime);
 
         // Atomic upsert: concurrent first inserts cannot race on IX_email_actions_UserId_Purpose.
         await dbContext.Database.ExecuteSqlAsync(
@@ -62,7 +62,7 @@ internal sealed class EmailActionStore(ApplicationDbContext dbContext) : IEmailA
         string expectedTargetEmail,
         CancellationToken cancellationToken = default)
     {
-        var now = DateTimeOffset.UtcNow;
+        DateTimeOffset now = DateTimeOffset.UtcNow;
         var normalizedEmail = expectedTargetEmail.Trim().ToLowerInvariant();
         var affected = await dbContext.EmailActions
             .Where(a =>

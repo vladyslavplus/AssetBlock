@@ -1,7 +1,7 @@
 using Ardalis.Result;
+using AssetBlock.Application.Messaging;
 using AssetBlock.Domain.Abstractions.Services;
 using AssetBlock.Domain.Core.Dto.Bundles;
-using AssetBlock.Application.Messaging;
 
 namespace AssetBlock.Application.UseCases.Bundles.GetBundles;
 
@@ -12,7 +12,7 @@ internal sealed class GetBundlesQueryHandler(IBundleStore bundleStore)
         GetBundlesQuery request,
         CancellationToken cancellationToken)
     {
-        var paged = await bundleStore.ListPublic(request.Request, cancellationToken);
+        Domain.Core.Dto.Paging.PagedResult<BundleListItemDto> paged = await bundleStore.ListPublic(request.Request, cancellationToken);
         return Result.Success(paged);
     }
 }

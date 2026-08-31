@@ -1,5 +1,7 @@
 using System.Text.Json;
+using Ardalis.Result;
 using AssetBlock.Application.Common;
+using AssetBlock.Application.Messaging;
 using AssetBlock.Application.Services;
 using AssetBlock.Domain.Abstractions.Services;
 using AssetBlock.Domain.Core.Constants;
@@ -11,8 +13,6 @@ using AssetBlock.Domain.Core.Dto.Payments;
 using AssetBlock.Domain.Core.Entities;
 using AssetBlock.Domain.Core.Enums;
 using AssetBlock.Domain.Core.Exceptions;
-using Ardalis.Result;
-using AssetBlock.Application.Messaging;
 using Microsoft.Extensions.Logging;
 
 namespace AssetBlock.Application.UseCases.Payments.HandleStripeWebhook;
@@ -29,7 +29,7 @@ internal sealed class HandleStripeWebhookCommandHandler(
     {
         try
         {
-            var verified = await paymentService.VerifyCheckoutCompleted(
+            StripeCheckoutCompleted? verified = await paymentService.VerifyCheckoutCompleted(
                 request.Payload,
                 request.Signature,
                 cancellationToken);
@@ -80,7 +80,7 @@ internal sealed class CheckoutCompletionOrchestrator(
         StripeCheckoutCompleted verified,
         CancellationToken cancellationToken = default)
     {
-        var existingBySession = await orderStore.GetByStripeSessionId(
+        Order? existingBySession = await orderStore.GetByStripeSessionId(
             verified.StripeSessionId,
             cancellationToken);
         if (existingBySession is not null)
@@ -88,7 +88,7 @@ internal sealed class CheckoutCompletionOrchestrator(
             return ToPayload(existingBySession);
         }
 
-        var checkoutIntent = await checkoutIntentStore.GetByIdWithItems(
+        CheckoutIntent? checkoutIntent = await checkoutIntentStore.GetByIdWithItems(
             verified.CheckoutIntentId,
             cancellationToken);
         if (checkoutIntent is null
@@ -119,9 +119,9 @@ internal sealed class CheckoutCompletionOrchestrator(
             throw new PaymentWebhookMismatchException("Paid Stripe checkout references an empty checkout intent.");
         }
 
-        foreach (var item in items)
+        foreach (CheckoutIntentItem? item in items)
         {
-            var assetVersion = await assetStore.GetVersion(item.AssetId, item.AssetVersionId, cancellationToken);
+            AssetVersion? assetVersion = await assetStore.GetVersion(item.AssetId, item.AssetVersionId, cancellationToken);
             if (assetVersion is null)
             {
                 logger.LogError(
@@ -133,8 +133,8 @@ internal sealed class CheckoutCompletionOrchestrator(
             }
         }
 
-        var sellerId = items[0].SellerId;
-        var buyer = await userStore.GetEmailRecipientById(verified.UserId, cancellationToken);
+        Guid sellerId = items[0].SellerId;
+        EmailRecipient? buyer = await userStore.GetEmailRecipientById(verified.UserId, cancellationToken);
         EmailRecipient? seller = null;
         if (sellerId != verified.UserId)
         {
@@ -142,7 +142,7 @@ internal sealed class CheckoutCompletionOrchestrator(
         }
 
         var orderId = Guid.NewGuid();
-        var purchasedAt = DateTimeOffset.UtcNow;
+        DateTimeOffset purchasedAt = DateTimeOffset.UtcNow;
         var lostCompletionRace = false;
         Order? createdOrder = null;
 
@@ -164,12 +164,12 @@ internal sealed class CheckoutCompletionOrchestrator(
                     return;
                 }
 
-                var assetIds = items.Select(i => i.AssetId).OrderBy(id => id).ToArray();
+                Guid[] assetIds = items.Select(i => i.AssetId).OrderBy(id => id).ToArray();
                 await bundleStore.LockAssetsInOrder(assetIds, ct);
 
                 var lines = new List<OrderLine>(items.Count);
                 var purchases = new List<Purchase>(items.Count);
-                foreach (var item in items)
+                foreach (CheckoutIntentItem? item in items)
                 {
                     var lineId = Guid.NewGuid();
                     lines.Add(new OrderLine
@@ -297,7 +297,7 @@ internal sealed class CheckoutCompletionOrchestrator(
 
         if (lostCompletionRace)
         {
-            var existingAfterRace = await orderStore.GetByStripeSessionId(
+            Order? existingAfterRace = await orderStore.GetByStripeSessionId(
                 verified.StripeSessionId,
                 cancellationToken);
             if (existingAfterRace is null)
@@ -324,7 +324,7 @@ internal sealed class CheckoutCompletionOrchestrator(
             return ToPayload(createdOrder, sellerId);
         }
 
-        var existingAfterDuplicate = await orderStore.GetByStripeSessionId(
+        Order? existingAfterDuplicate = await orderStore.GetByStripeSessionId(
             verified.StripeSessionId,
             cancellationToken);
         if (existingAfterDuplicate is null)
@@ -367,7 +367,7 @@ internal sealed class CheckoutCompletionOrchestrator(
         }
         else
         {
-            var receipt = emailComposer.CreateOrderReceipt(
+            EmailDispatchPayload receipt = emailComposer.CreateOrderReceipt(
                 buyer.Email,
                 buyer.Id,
                 order.ProductTitle,
@@ -391,7 +391,7 @@ internal sealed class CheckoutCompletionOrchestrator(
             return;
         }
 
-        var sold = emailComposer.CreateOrderSold(
+        EmailDispatchPayload sold = emailComposer.CreateOrderSold(
             sellerRecipient.Email,
             sellerRecipient.Id,
             order.ProductTitle,
@@ -418,7 +418,7 @@ internal sealed class CheckoutCompletionOrchestrator(
 
     private static OrderCompletedPayload ToPayload(Order order, Guid? sellerId = null)
     {
-        var resolvedSellerId = sellerId
+        Guid resolvedSellerId = sellerId
             ?? order.Lines.OrderBy(l => l.Position).Select(l => l.SellerId).FirstOrDefault();
         return new OrderCompletedPayload(
             order.Id,
