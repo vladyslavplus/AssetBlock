@@ -12,7 +12,7 @@ internal static class MarketplacePriceRules
             .GreaterThan(0).WithMessage("Price must be greater than zero.")
             .LessThanOrEqualTo(BundlePriceAllocator.MAX_AMOUNT)
             .WithMessage($"Price must not exceed {BundlePriceAllocator.MAX_AMOUNT:F2}.")
-            .Must(BundlePriceAllocator.HasAtMostTwoDecimalPlaces)
+            .Must(UsdAmount.HasAtMostTwoDecimalPlaces)
             .WithMessage("Price must have at most two decimal places.");
     }
 }

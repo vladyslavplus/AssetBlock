@@ -68,10 +68,17 @@ internal sealed class CreateBundleCheckoutSessionCommandHandler(
             return Result.Conflict(ErrorCodes.ERR_BUNDLE_CONTAINS_OWNED_ASSET);
         }
 
-        long bundleTotalCents;
+        UsdAmount bundleTotal;
+        BundlePriceAllocator.AllocationInput[] allocationInputs;
         try
         {
-            bundleTotalCents = BundlePriceAllocator.ToCents(snapshot.Price);
+            bundleTotal = UsdAmount.FromDollarsExact(snapshot.Price);
+            allocationInputs = snapshot.Items
+                .Select(i => new BundlePriceAllocator.AllocationInput(
+                    i.AssetId,
+                    i.Position,
+                    UsdAmount.FromDollarsExact(i.ListPrice)))
+                .ToArray();
         }
         catch (ArgumentException)
         {
@@ -81,14 +88,7 @@ internal sealed class CreateBundleCheckoutSessionCommandHandler(
         IReadOnlyList<BundlePriceAllocator.AllocationResult> allocations;
         try
         {
-            allocations = BundlePriceAllocator.Allocate(
-                bundleTotalCents,
-                snapshot.Items
-                    .Select(i => new BundlePriceAllocator.AllocationInput(
-                        i.AssetId,
-                        i.Position,
-                        BundlePriceAllocator.ToCents(i.ListPrice)))
-                    .ToArray());
+            allocations = BundlePriceAllocator.Allocate(bundleTotal, allocationInputs);
         }
         catch (ArgumentException)
         {
@@ -109,7 +109,7 @@ internal sealed class CreateBundleCheckoutSessionCommandHandler(
                     i.AssetTitle,
                     i.VersionNumber,
                     i.ListPrice,
-                    BundlePriceAllocator.FromCents(allocated.AllocatedCents),
+                    allocated.AllocatedPrice.Dollars,
                     i.LicenseCode,
                     i.LicenseTemplateVersion,
                     i.LicenseDisplayName,

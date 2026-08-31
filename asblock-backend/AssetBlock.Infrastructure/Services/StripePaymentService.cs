@@ -51,7 +51,14 @@ internal sealed class StripePaymentService(
                 throw new InvalidOperationException("Checkout draft line currency must match header currency.");
             }
 
-            var cents = BundlePriceAllocator.ToCents(line.Amount);
+            var usdAmount = UsdAmount.FromDollarsExact(line.Amount);
+            if (usdAmount.Cents is <= 0 or > BundlePriceAllocator.MAX_AMOUNT_CENTS)
+            {
+                throw new InvalidOperationException(
+                    $"Checkout draft line amount must be between 1 and {BundlePriceAllocator.MAX_AMOUNT_CENTS} cents.");
+            }
+
+            var cents = usdAmount.Cents;
             totalCents = checked(totalCents + cents);
             lineItems.Add(new SessionLineItemOptions
             {
@@ -68,9 +75,10 @@ internal sealed class StripePaymentService(
             });
         }
 
-        if (totalCents <= 0)
+        if (totalCents is <= 0 or > BundlePriceAllocator.MAX_AMOUNT_CENTS)
         {
-            throw new InvalidOperationException("Checkout session total must be positive.");
+            throw new InvalidOperationException(
+                $"Checkout session total must be between 1 and {BundlePriceAllocator.MAX_AMOUNT_CENTS} cents.");
         }
 
         var sessionService = new SessionService(_stripeClient);
@@ -186,7 +194,7 @@ internal sealed class StripePaymentService(
             throw new InvalidOperationException("Paid Stripe checkout session has an invalid amount or currency.");
         }
 
-        var amountTotal = BundlePriceAllocator.FromCents(amountTotalInCents);
+        var amountTotal = UsdAmount.FromCents(amountTotalInCents).Dollars;
         return new StripeCheckoutCompleted(checkoutIntentId, userId, session.Id, amountTotal, currency);
     }
 }

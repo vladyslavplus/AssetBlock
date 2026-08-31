@@ -3,6 +3,7 @@ using AssetBlock.Application.Common.Caching;
 using AssetBlock.Domain.Abstractions.Services;
 using AssetBlock.Domain.Core.Constants;
 using AssetBlock.Domain.Core.Dto.Analytics;
+using AssetBlock.Domain.Core.Payments;
 using AssetBlock.Application.Messaging;
 using Microsoft.Extensions.Logging;
 
@@ -65,7 +66,7 @@ internal sealed class GetSellerAnalyticsSalesQueryHandler(
             r.OrderId,
             r.PurchasedAt,
             r.Units,
-            AnalyticsRange.ToCents(r.GrossRevenue))).ToList();
+            UsdAmount.FromDollarsRounded(r.GrossRevenue, MidpointRounding.AwayFromZero).Cents)).ToList();
 
         string? nextCursor = null;
         if (hasMore && items.Count > 0)

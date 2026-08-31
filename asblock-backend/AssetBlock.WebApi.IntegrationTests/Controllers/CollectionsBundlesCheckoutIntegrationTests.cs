@@ -60,8 +60,8 @@ public sealed class CollectionsBundlesCheckoutIntegrationTests(IntegrationTestFi
             await IntegrationTestAuth.RegisterVerifiedAndAuthenticateAsync(fixture.Factory);
         var scopeFactory = fixture.Factory.Services.GetRequiredService<IServiceScopeFactory>();
         var sellerId = await AssetVersionsSeed.GetUserIdAsync(scopeFactory, sellerUsername);
-        var (assetA, _) = await AssetVersionsSeed.SeedAssetWithVersionsAsync(scopeFactory, sellerId, price: 10m);
-        var (assetB, _) = await AssetVersionsSeed.SeedAssetWithVersionsAsync(scopeFactory, sellerId, price: 20m);
+        (Guid assetA, _) = await AssetVersionsSeed.SeedAssetWithVersionsAsync(scopeFactory, sellerId, price: 10m);
+        (Guid assetB, _) = await AssetVersionsSeed.SeedAssetWithVersionsAsync(scopeFactory, sellerId, price: 20m);
 
         Guid bundleId;
         await using (var scope = fixture.Factory.Services.CreateAsyncScope())
@@ -127,8 +127,8 @@ public sealed class CollectionsBundlesCheckoutIntegrationTests(IntegrationTestFi
             await IntegrationTestAuth.RegisterVerifiedAndAuthenticateAsync(fixture.Factory);
         var scopeFactory = fixture.Factory.Services.GetRequiredService<IServiceScopeFactory>();
         var sellerId = await AssetVersionsSeed.GetUserIdAsync(scopeFactory, sellerUsername);
-        var (assetA, _) = await AssetVersionsSeed.SeedAssetWithVersionsAsync(scopeFactory, sellerId, price: 10m);
-        var (assetB, _) = await AssetVersionsSeed.SeedAssetWithVersionsAsync(scopeFactory, sellerId, price: 20m);
+        (Guid assetA, _) = await AssetVersionsSeed.SeedAssetWithVersionsAsync(scopeFactory, sellerId, price: 10m);
+        (Guid assetB, _) = await AssetVersionsSeed.SeedAssetWithVersionsAsync(scopeFactory, sellerId, price: 20m);
 
         Guid bundleId;
         await using (var scope = fixture.Factory.Services.CreateAsyncScope())
@@ -205,7 +205,7 @@ public sealed class CollectionsBundlesCheckoutIntegrationTests(IntegrationTestFi
             await IntegrationTestAuth.RegisterVerifiedAndAuthenticateAsync(fixture.Factory);
         var scopeFactory = fixture.Factory.Services.GetRequiredService<IServiceScopeFactory>();
         var sellerId = await AssetVersionsSeed.GetUserIdAsync(scopeFactory, sellerUsername);
-        var (assetId, _) = await AssetVersionsSeed.SeedAssetWithVersionsAsync(scopeFactory, sellerId, price: 12.50m);
+        (Guid assetId, _) = await AssetVersionsSeed.SeedAssetWithVersionsAsync(scopeFactory, sellerId, price: 12.50m);
 
         (HttpClient buyerClient, _) =
             await IntegrationTestAuth.RegisterVerifiedAndAuthenticateAsync(fixture.Factory);
@@ -228,8 +228,8 @@ public sealed class CollectionsBundlesCheckoutIntegrationTests(IntegrationTestFi
             await IntegrationTestAuth.RegisterVerifiedAndAuthenticateAsync(fixture.Factory);
         var scopeFactory = fixture.Factory.Services.GetRequiredService<IServiceScopeFactory>();
         var sellerId = await AssetVersionsSeed.GetUserIdAsync(scopeFactory, sellerUsername);
-        var (assetA, _) = await AssetVersionsSeed.SeedAssetWithVersionsAsync(scopeFactory, sellerId, price: 10m);
-        var (assetB, _) = await AssetVersionsSeed.SeedAssetWithVersionsAsync(scopeFactory, sellerId, price: 20m);
+        (Guid assetA, _) = await AssetVersionsSeed.SeedAssetWithVersionsAsync(scopeFactory, sellerId, price: 10m);
+        (Guid assetB, _) = await AssetVersionsSeed.SeedAssetWithVersionsAsync(scopeFactory, sellerId, price: 20m);
 
         Guid bundleId;
         await using (var scope = fixture.Factory.Services.CreateAsyncScope())
@@ -296,5 +296,95 @@ public sealed class CollectionsBundlesCheckoutIntegrationTests(IntegrationTestFi
         bundleCheckout.StatusCode.Should().Be(HttpStatusCode.Conflict);
         var body = await bundleCheckout.Content.ReadAsStringAsync();
         body.Should().Contain("ERR_CHECKOUT_ITEM_RESERVED");
+    }
+
+    [Fact]
+    public async Task CreateBundleCheckout_WhenAvailable_ShouldPersistExactCentAllocations()
+    {
+        (_, string sellerUsername) =
+            await IntegrationTestAuth.RegisterVerifiedAndAuthenticateAsync(fixture.Factory);
+        var scopeFactory = fixture.Factory.Services.GetRequiredService<IServiceScopeFactory>();
+        var sellerId = await AssetVersionsSeed.GetUserIdAsync(scopeFactory, sellerUsername);
+        (Guid assetA, _) = await AssetVersionsSeed.SeedAssetWithVersionsAsync(scopeFactory, sellerId, price: 10.00m);
+        (Guid assetB, _) = await AssetVersionsSeed.SeedAssetWithVersionsAsync(scopeFactory, sellerId, price: 30.00m);
+
+        Guid bundleId;
+        const decimal bundlePrice = 25.00m;
+        await using (var scope = fixture.Factory.Services.CreateAsyncScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+            var assetRows = await db.Assets.AsNoTracking()
+                .Where(a => a.Id == assetA || a.Id == assetB)
+                .ToDictionaryAsync(a => a.Id);
+            var now = DateTimeOffset.UtcNow;
+            bundleId = Guid.NewGuid();
+            var revisionId = Guid.NewGuid();
+            db.Bundles.Add(new Bundle
+            {
+                Id = bundleId,
+                SellerId = sellerId,
+                CreatedAt = now
+            });
+            db.BundleRevisions.Add(new BundleRevision
+            {
+                Id = revisionId,
+                BundleId = bundleId,
+                RevisionNumber = 1,
+                IsCurrent = true,
+                Title = "Discounted Bundle",
+                Price = bundlePrice,
+                Currency = "usd",
+                ListPriceTotal = 40.00m,
+                CreatedAt = now
+            });
+            db.BundleRevisionItems.AddRange(
+                new BundleRevisionItem
+                {
+                    Id = Guid.NewGuid(),
+                    BundleRevisionId = revisionId,
+                    AssetId = assetA,
+                    Position = 1,
+                    AssetTitleSnapshot = assetRows[assetA].Title,
+                    ListPriceSnapshot = assetRows[assetA].Price
+                },
+                new BundleRevisionItem
+                {
+                    Id = Guid.NewGuid(),
+                    BundleRevisionId = revisionId,
+                    AssetId = assetB,
+                    Position = 2,
+                    AssetTitleSnapshot = assetRows[assetB].Title,
+                    ListPriceSnapshot = assetRows[assetB].Price
+                });
+            await db.SaveChangesAsync();
+        }
+
+        (HttpClient buyerClient, _) =
+            await IntegrationTestAuth.RegisterVerifiedAndAuthenticateAsync(fixture.Factory);
+
+        var response = await buyerClient.PostAsJsonAsync(
+            new Uri("/api/payments/checkout/bundles", UriKind.Relative),
+            new CreateBundleCheckoutRequest(bundleId));
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        var result = await response.Content.ReadFromJsonAsync<CreateCheckoutSessionResponse>(
+            IntegrationTestAuth.JsonOptions);
+        result.Should().NotBeNull();
+        result.CheckoutUrl.Should().StartWith("https://checkout.test/");
+
+        await using (var scope = fixture.Factory.Services.CreateAsyncScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+            var intent = await db.CheckoutIntents
+                .Include(ci => ci.Items)
+                .SingleOrDefaultAsync(ci => ci.BundleId == bundleId);
+
+            intent.Should().NotBeNull();
+            intent.AmountTotal.Should().Be(bundlePrice);
+            intent.Items.Should().HaveCount(2);
+            intent.Items.Sum(i => i.AllocatedPrice).Should().Be(bundlePrice);
+            intent.Items.Should().OnlyContain(i => i.AllocatedPrice >= 0.01m);
+            intent.Items.Should().OnlyContain(i => decimal.Round(i.AllocatedPrice, 2, MidpointRounding.AwayFromZero) == i.AllocatedPrice);
+        }
     }
 }

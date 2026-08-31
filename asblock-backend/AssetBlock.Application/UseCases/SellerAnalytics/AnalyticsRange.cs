@@ -1,6 +1,7 @@
 using AssetBlock.Domain.Core.Constants;
 using AssetBlock.Domain.Core.Dto.Analytics;
 using AssetBlock.Domain.Core.Enums;
+using AssetBlock.Domain.Core.Payments;
 
 namespace AssetBlock.Application.UseCases.SellerAnalytics;
 
@@ -48,10 +49,6 @@ public static class AnalyticsRange
         return decimal.Round((current - previous) / Math.Abs(previous) * 100m, 2, MidpointRounding.AwayFromZero);
     }
 
-    /// <summary>Converts decimal dollars to integer cents (MidpointRounding.AwayFromZero).</summary>
-    public static long ToCents(decimal amount) =>
-        (long)decimal.Round(amount * 100m, 0, MidpointRounding.AwayFromZero);
-
     /// <summary>Average order value in cents. Zero orders → 0 cents. Uses MidpointRounding.AwayFromZero.</summary>
     public static long AovCents(decimal grossRevenue, int orders)
     {
@@ -60,7 +57,7 @@ public static class AnalyticsRange
             return 0;
         }
 
-        return (long)decimal.Round(grossRevenue * 100m / orders, 0, MidpointRounding.AwayFromZero);
+        return UsdAmount.FromDollarsRounded(grossRevenue / orders, MidpointRounding.AwayFromZero).Cents;
     }
 
     /// <summary>
@@ -258,7 +255,7 @@ public static class AnalyticsRange
 
         return new AnalyticsSeriesPoint(
             ToUtcStart(date),
-            ToCents(commerce.GrossRevenue),
+            UsdAmount.FromDollarsRounded(commerce.GrossRevenue, MidpointRounding.AwayFromZero).Cents,
             commerce.Orders,
             commerce.Units,
             productViews,

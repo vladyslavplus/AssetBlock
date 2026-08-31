@@ -4,6 +4,7 @@ using AssetBlock.Domain.Abstractions.Services;
 using AssetBlock.Domain.Core.Constants;
 using AssetBlock.Domain.Core.Dto.Analytics;
 using AssetBlock.Domain.Core.Enums;
+using AssetBlock.Domain.Core.Payments;
 using AssetBlock.Application.Messaging;
 using Microsoft.Extensions.Logging;
 
@@ -75,7 +76,7 @@ internal sealed class GetSellerAnalyticsBundleDetailQueryHandler(
             snapshot.IsArchived
                 ? AnalyticsProductAvailability.ARCHIVED
                 : AnalyticsProductAvailability.ACTIVE,
-            AnalyticsRange.ToCents(snapshot.GrossRevenue),
+            UsdAmount.FromDollarsRounded(snapshot.GrossRevenue, MidpointRounding.AwayFromZero).Cents,
             snapshot.Orders,
             snapshot.UnitsSold,
             currentPriceCents,

@@ -1,4 +1,5 @@
 using AssetBlock.Domain.Core.Dto.Analytics;
+using AssetBlock.Domain.Core.Payments;
 
 namespace AssetBlock.Application.UseCases.SellerAnalytics;
 
@@ -79,7 +80,7 @@ internal static class AnalyticsEngagementMapper
                 r.UniqueVisitors,
                 r.CheckoutStarts,
                 r.CompletedOrders,
-                AnalyticsRange.ToCents(r.AttributedGrossRevenue)))
+                UsdAmount.FromDollarsRounded(r.AttributedGrossRevenue, MidpointRounding.AwayFromZero).Cents))
             .ToList();
 
         return sources.Select(s => new AnalyticsTrafficSourceRow(
@@ -88,7 +89,7 @@ internal static class AnalyticsEngagementMapper
             s.UniqueVisitors,
             s.CheckoutStarts,
             s.CompletedOrders,
-            AnalyticsRange.ToCents(s.AttributedGrossRevenue),
+            UsdAmount.FromDollarsRounded(s.AttributedGrossRevenue, MidpointRounding.AwayFromZero).Cents,
             s.Source == Domain.Core.Enums.AnalyticsTrafficSource.EXTERNAL ? externalRows : null)).ToList();
     }
 

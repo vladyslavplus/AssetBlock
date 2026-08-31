@@ -1,5 +1,6 @@
 using AssetBlock.Domain.Core.Dto.Payments;
 using AssetBlock.Domain.Core.Exceptions;
+using AssetBlock.Domain.Core.Payments;
 using AssetBlock.Domain.Core.Primitives.AppSettingsOptions;
 using AssetBlock.Infrastructure.Services;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -61,6 +62,56 @@ public sealed class StripePaymentServiceTests
     }
 
     [Fact]
+    public async Task CreateCheckoutSession_throws_whenLineAmountHasSubCentPrecision()
+    {
+        var sut = CreateSut(webhookSecret: "whsec_test");
+        var draft = new CheckoutSessionDraft(
+            Guid.NewGuid(),
+            Guid.NewGuid(),
+            DateTimeOffset.UtcNow.AddHours(1),
+            "usd",
+            [new CheckoutSessionDraftLine("Test Asset", 9.999m, "usd")]);
+
+        var act = async () => await sut.CreateCheckoutSession(draft);
+
+        await act.Should().ThrowAsync<ArgumentException>()
+            .WithMessage("*at most two decimal places*");
+    }
+
+    [Fact]
+    public async Task CreateCheckoutSession_throws_whenLineAmountIsZero()
+    {
+        var sut = CreateSut(webhookSecret: "whsec_test");
+        var draft = new CheckoutSessionDraft(
+            Guid.NewGuid(),
+            Guid.NewGuid(),
+            DateTimeOffset.UtcNow.AddHours(1),
+            "usd",
+            [new CheckoutSessionDraftLine("Test Asset", 0m, "usd")]);
+
+        var act = async () => await sut.CreateCheckoutSession(draft);
+
+        await act.Should().ThrowAsync<InvalidOperationException>();
+    }
+
+    [Fact]
+    public async Task CreateCheckoutSession_throws_whenLineAmountExceedsMaxAmount()
+    {
+        var sut = CreateSut(webhookSecret: "whsec_test");
+        var draft = new CheckoutSessionDraft(
+            Guid.NewGuid(),
+            Guid.NewGuid(),
+            DateTimeOffset.UtcNow.AddHours(1),
+            "usd",
+            [new CheckoutSessionDraftLine("Test Asset", 1_000_000.00m, "usd")]);
+
+        var act = async () => await sut.CreateCheckoutSession(draft);
+
+        await act.Should().ThrowAsync<InvalidOperationException>()
+            .WithMessage($"*{BundlePriceAllocator.MAX_AMOUNT_CENTS}*");
+    }
+
+    [Fact]
     public async Task VerifyCheckoutCompleted_throws_whenWebhookSecretMissing()
     {
         var sut = CreateSut(webhookSecret: "");
@@ -89,7 +140,9 @@ public sealed class StripePaymentServiceTests
         var opts = Microsoft.Extensions.Options.Options.Create(new StripeOptions
         {
             SecretKey = "stripe_test_secret_key_not_real",
-            WebhookSecret = webhookSecret
+            WebhookSecret = webhookSecret,
+            SuccessUrl = "https://example.com/checkout/success",
+            CancelUrl = "https://example.com/checkout/cancel"
         });
         var resilience = Substitute.For<ResiliencePipelineProvider<string>>();
         resilience.GetPipeline(Arg.Any<string>())

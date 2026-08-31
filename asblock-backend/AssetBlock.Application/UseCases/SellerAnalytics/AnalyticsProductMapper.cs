@@ -1,5 +1,6 @@
 using AssetBlock.Domain.Core.Dto.Analytics;
 using AssetBlock.Domain.Core.Enums;
+using AssetBlock.Domain.Core.Payments;
 
 namespace AssetBlock.Application.UseCases.SellerAnalytics;
 
@@ -11,9 +12,9 @@ internal static class AnalyticsProductMapper
             r.AssetId,
             r.Title,
             r.IsDeleted ? AnalyticsProductAvailability.UNAVAILABLE : AnalyticsProductAvailability.ACTIVE,
-            AnalyticsRange.ToCents(r.GrossRevenue),
-            AnalyticsRange.ToCents(r.DirectRevenue),
-            AnalyticsRange.ToCents(r.BundleAllocatedRevenue),
+            UsdAmount.FromDollarsRounded(r.GrossRevenue, MidpointRounding.AwayFromZero).Cents,
+            UsdAmount.FromDollarsRounded(r.DirectRevenue, MidpointRounding.AwayFromZero).Cents,
+            UsdAmount.FromDollarsRounded(r.BundleAllocatedRevenue, MidpointRounding.AwayFromZero).Cents,
             r.Orders,
             r.UnitsSold,
             r.AverageRating,
@@ -31,7 +32,7 @@ internal static class AnalyticsProductMapper
             r.BundleId,
             r.Title,
             r.IsArchived ? AnalyticsProductAvailability.ARCHIVED : AnalyticsProductAvailability.ACTIVE,
-            AnalyticsRange.ToCents(r.GrossRevenue),
+            UsdAmount.FromDollarsRounded(r.GrossRevenue, MidpointRounding.AwayFromZero).Cents,
             null, null,
             r.Orders,
             r.UnitsSold,
@@ -53,9 +54,9 @@ internal static class AnalyticsProductMapper
                 r.IsDeletedOrArchived
                     ? AnalyticsProductAvailability.UNAVAILABLE
                     : AnalyticsProductAvailability.ACTIVE,
-                AnalyticsRange.ToCents(r.GrossRevenue),
-                AnalyticsRange.ToCents(r.DirectRevenue),
-                AnalyticsRange.ToCents(r.BundleAllocatedRevenue),
+                UsdAmount.FromDollarsRounded(r.GrossRevenue, MidpointRounding.AwayFromZero).Cents,
+                UsdAmount.FromDollarsRounded(r.DirectRevenue, MidpointRounding.AwayFromZero).Cents,
+                UsdAmount.FromDollarsRounded(r.BundleAllocatedRevenue, MidpointRounding.AwayFromZero).Cents,
                 r.Orders,
                 r.UnitsSold,
                 r.AverageRating,
@@ -74,7 +75,7 @@ internal static class AnalyticsProductMapper
             r.IsDeletedOrArchived
                 ? AnalyticsProductAvailability.ARCHIVED
                 : AnalyticsProductAvailability.ACTIVE,
-            AnalyticsRange.ToCents(r.GrossRevenue),
+            UsdAmount.FromDollarsRounded(r.GrossRevenue, MidpointRounding.AwayFromZero).Cents,
             null, null,
             r.Orders,
             r.UnitsSold,
@@ -89,8 +90,12 @@ internal static class AnalyticsProductMapper
         decimal? currentPrice,
         decimal? listPrice)
     {
-        long? currentPriceCents = currentPrice.HasValue ? AnalyticsRange.ToCents(currentPrice.Value) : null;
-        long? listPriceCents = listPrice.HasValue ? AnalyticsRange.ToCents(listPrice.Value) : null;
+        long? currentPriceCents = currentPrice.HasValue
+            ? UsdAmount.FromDollarsRounded(currentPrice.Value, MidpointRounding.AwayFromZero).Cents
+            : null;
+        long? listPriceCents = listPrice.HasValue
+            ? UsdAmount.FromDollarsRounded(listPrice.Value, MidpointRounding.AwayFromZero).Cents
+            : null;
         decimal? discountPercent = null;
         if (currentPriceCents.HasValue && listPriceCents is > 0)
         {
@@ -130,12 +135,12 @@ internal static class SellerAnalyticsOverviewMapper
             snapshot.EngagementAvailableFrom,
             snapshot.EngagementDaySeries);
 
-        var curRevCents = AnalyticsRange.ToCents(cur.GrossRevenue);
-        var prevRevCents = AnalyticsRange.ToCents(prev.GrossRevenue);
-        var curDirCents = AnalyticsRange.ToCents(cur.DirectRevenue);
-        var prevDirCents = AnalyticsRange.ToCents(prev.DirectRevenue);
-        var curBundleCents = AnalyticsRange.ToCents(cur.BundleRevenue);
-        var prevBundleCents = AnalyticsRange.ToCents(prev.BundleRevenue);
+        var curRevCents = UsdAmount.FromDollarsRounded(cur.GrossRevenue, MidpointRounding.AwayFromZero).Cents;
+        var prevRevCents = UsdAmount.FromDollarsRounded(prev.GrossRevenue, MidpointRounding.AwayFromZero).Cents;
+        var curDirCents = UsdAmount.FromDollarsRounded(cur.DirectRevenue, MidpointRounding.AwayFromZero).Cents;
+        var prevDirCents = UsdAmount.FromDollarsRounded(prev.DirectRevenue, MidpointRounding.AwayFromZero).Cents;
+        var curBundleCents = UsdAmount.FromDollarsRounded(cur.BundleRevenue, MidpointRounding.AwayFromZero).Cents;
+        var prevBundleCents = UsdAmount.FromDollarsRounded(prev.BundleRevenue, MidpointRounding.AwayFromZero).Cents;
         var curAov = AnalyticsRange.AovCents(cur.GrossRevenue, cur.Orders);
         var prevAov = AnalyticsRange.AovCents(prev.GrossRevenue, prev.Orders);
         var curReturning = cur.UniqueCustomers - cur.NewCustomers;

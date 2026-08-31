@@ -24,7 +24,7 @@ internal static class BundleRevisionDraftBuilder
         await bundleStore.LockAssetsInOrder(sortedIds, cancellationToken);
 
         var items = new List<BundleRevisionItemDraft>(assetIds.Count);
-        decimal listPriceTotal = 0m;
+        long listPriceTotalCents = 0;
 
         for (var i = 0; i < assetIds.Count; i++)
         {
@@ -39,9 +39,10 @@ internal static class BundleRevisionDraftBuilder
                     ErrorCodes.ERR_BUNDLE_ASSET_INVALID);
             }
 
+            UsdAmount listPrice;
             try
             {
-                _ = BundlePriceAllocator.ToCents(snapshot.Price);
+                listPrice = UsdAmount.FromDollarsExact(snapshot.Price);
             }
             catch (ArgumentException)
             {
@@ -49,24 +50,24 @@ internal static class BundleRevisionDraftBuilder
                     ErrorCodes.ERR_BUNDLE_ASSET_INVALID);
             }
 
-            listPriceTotal += snapshot.Price;
+            if (listPrice.Cents <= 0 || listPrice.Cents > BundlePriceAllocator.MAX_AMOUNT_CENTS)
+            {
+                return ResultError.Error<(decimal, IReadOnlyList<BundleRevisionItemDraft>)>(
+                    ErrorCodes.ERR_BUNDLE_ASSET_INVALID);
+            }
+
+            listPriceTotalCents = checked(listPriceTotalCents + listPrice.Cents);
             items.Add(new BundleRevisionItemDraft(
                 snapshot.AssetId,
                 Position: i + 1,
                 snapshot.Title,
-                snapshot.Price));
+                listPrice.Dollars));
         }
 
-        if (bundlePrice <= 0 || bundlePrice >= listPriceTotal)
-        {
-            return ResultError.Error<(decimal, IReadOnlyList<BundleRevisionItemDraft>)>(
-                ErrorCodes.ERR_BUNDLE_PRICE_INVALID);
-        }
-
-        long bundleTotalCents;
+        UsdAmount bundleAmount;
         try
         {
-            bundleTotalCents = BundlePriceAllocator.ToCents(bundlePrice);
+            bundleAmount = UsdAmount.FromDollarsExact(bundlePrice);
         }
         catch (ArgumentException)
         {
@@ -74,12 +75,16 @@ internal static class BundleRevisionDraftBuilder
                 ErrorCodes.ERR_BUNDLE_PRICE_INVALID);
         }
 
-        if (bundleTotalCents < items.Count)
+        if (bundleAmount.Cents <= 0
+            || bundleAmount.Cents > BundlePriceAllocator.MAX_AMOUNT_CENTS
+            || bundleAmount.Cents >= listPriceTotalCents
+            || bundleAmount.Cents < items.Count)
         {
             return ResultError.Error<(decimal, IReadOnlyList<BundleRevisionItemDraft>)>(
                 ErrorCodes.ERR_BUNDLE_PRICE_INVALID);
         }
 
+        var listPriceTotal = UsdAmount.FromCents(listPriceTotalCents).Dollars;
         return Result.Success<(decimal, IReadOnlyList<BundleRevisionItemDraft>)>((listPriceTotal, items));
     }
 }
