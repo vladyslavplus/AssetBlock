@@ -29,20 +29,34 @@ public sealed class StorageBucketEnsureHostedServiceTests
     public async Task ExecuteAsync_WhenEnsureBucketAlwaysFails_ShouldNotPropagateAndKeepRetryingUntilStopped()
     {
         IAssetStorageService storage = Substitute.For<IAssetStorageService>();
+        var calls = 0;
+        var secondAttemptReached = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         storage.EnsureBucket(Arg.Any<CancellationToken>())
-            .Returns(_ => Task.FromException(new InvalidOperationException("boom")));
+            .Returns(_ =>
+            {
+                if (Interlocked.Increment(ref calls) >= 2)
+                {
+                    secondAttemptReached.TrySetResult();
+                }
+
+                return Task.FromException(new InvalidOperationException("boom"));
+            });
 
         await using ServiceProvider provider = BuildProvider(storage);
-        using var cts = new CancellationTokenSource();
         StorageBucketEnsureHostedService sut = CreateSut(provider);
 
-        await sut.StartAsync(cts.Token);
-        await Task.Delay(200, cts.Token);
-        await cts.CancelAsync();
-        await WaitForIdle(sut);
+        await sut.StartAsync(CancellationToken.None);
+        try
+        {
+            await secondAttemptReached.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        }
+        finally
+        {
+            await sut.StopAsync(CancellationToken.None);
+        }
 
-        var calls = storage.ReceivedCalls().Count(c => c.GetMethodInfo().Name == nameof(IAssetStorageService.EnsureBucket));
         calls.Should().BeGreaterThan(1);
+        await storage.Received(calls).EnsureBucket(Arg.Any<CancellationToken>());
     }
 
     [Fact]
