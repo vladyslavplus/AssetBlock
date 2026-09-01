@@ -3,6 +3,7 @@ import type { AssetListItem } from '@/lib/catalog/asset-types'
 import { formatUsdWhole } from '@/lib/format-currency'
 import { formatLongDate } from '@/lib/format-date'
 import { StarRating } from '@/components/assets/star-rating'
+import { routes } from '@/lib/routes'
 
 interface AssetDetailHeroProps {
   asset: AssetListItem
@@ -46,7 +47,7 @@ export function AssetDetailHero({ asset }: AssetDetailHeroProps) {
 
         <div className="text-sm text-muted-foreground">
           <Link
-            href={`/users/${encodeURIComponent(asset.authorUsername)}`}
+            href={routes.userProfile(asset.authorUsername)}
             className="text-accent hover:underline underline-offset-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-background rounded-sm"
           >
             @{asset.authorUsername}

@@ -1,3 +1,4 @@
+import type { Route } from 'next'
 import { normalizeAnalyticsReferrerHost } from '@/lib/analytics/analytics-referrer'
 import {
   ANALYTICS_COLLECTION_ID_PARAM,
@@ -36,10 +37,10 @@ export function buildAnalyticsQuery(
 }
 
 export function appendAnalyticsQuery(
-  href: string,
+  href: Route,
   source: AnalyticsSourceQuery,
   options?: { collectionId?: string },
-): string {
+): Route {
   const [path, existingQuery = ''] = href.split('?', 2)
   const params = new URLSearchParams(existingQuery)
   params.set(ANALYTICS_SRC_PARAM, source)
@@ -47,7 +48,7 @@ export function appendAnalyticsQuery(
     params.set(ANALYTICS_COLLECTION_ID_PARAM, options.collectionId)
   }
   const query = params.toString()
-  return query ? `${path}?${query}` : path
+  return (query ? `${path}?${query}` : path) as Route
 }
 
 export function readCollectionIdFromSearchParams(

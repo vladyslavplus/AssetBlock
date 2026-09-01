@@ -1,6 +1,11 @@
 import { z } from 'zod'
 import { ASSET_LICENSE_CODES } from '@/lib/assets/license-types'
 import { marketplacePriceSchema } from '@/lib/marketplace/price-schema'
+import {
+  ASSET_DESCRIPTION_MAX_LENGTH,
+  ASSET_TAG_NAME_MAX_LENGTH,
+  ASSET_TITLE_MAX_LENGTH,
+} from '@/lib/contracts/marketplace-bounds'
 
 export const ASSET_UPLOAD_MAX_BYTES = 250 * 1024 * 1024
 export const ASSET_UPLOAD_ALLOWED_EXTENSIONS = ['.zip', '.tar', '.tar.gz', '.tgz']
@@ -10,13 +15,14 @@ function hasAllowedArchiveExtension(file: File): boolean {
   return ASSET_UPLOAD_ALLOWED_EXTENSIONS.some((extension) => fileName.endsWith(extension))
 }
 
-const ASSET_DESCRIPTION_MAX = 5000
-
 export const assetUploadFormSchema = z.object({
-  title: z.string().min(1, 'Title is required').max(500),
+  title: z.string().min(1, 'Title is required').max(ASSET_TITLE_MAX_LENGTH),
   description: z
     .string()
-    .max(ASSET_DESCRIPTION_MAX, `Description must be at most ${ASSET_DESCRIPTION_MAX} characters`)
+    .max(
+      ASSET_DESCRIPTION_MAX_LENGTH,
+      `Description must be at most ${ASSET_DESCRIPTION_MAX_LENGTH} characters`,
+    )
     .optional(),
   price: marketplacePriceSchema,
   categoryId: z.string().uuid('Select a category'),
@@ -37,10 +43,13 @@ export const assetUploadFormSchema = z.object({
 export type AssetUploadFormValues = z.infer<typeof assetUploadFormSchema>
 
 export const assetEditFormSchema = z.object({
-  title: z.string().min(1, 'Title is required').max(500),
+  title: z.string().min(1, 'Title is required').max(ASSET_TITLE_MAX_LENGTH),
   description: z
     .string()
-    .max(ASSET_DESCRIPTION_MAX, `Description must be at most ${ASSET_DESCRIPTION_MAX} characters`)
+    .max(
+      ASSET_DESCRIPTION_MAX_LENGTH,
+      `Description must be at most ${ASSET_DESCRIPTION_MAX_LENGTH} characters`,
+    )
     .optional(),
   price: marketplacePriceSchema,
   categoryId: z.string().uuid('Select a category'),
@@ -50,10 +59,13 @@ export const assetEditFormSchema = z.object({
 export type AssetEditFormValues = z.infer<typeof assetEditFormSchema>
 
 export const sellerAssetPatchSchema = z.object({
-  title: z.string().min(1, 'Title is required').max(500).optional(),
+  title: z.string().min(1, 'Title is required').max(ASSET_TITLE_MAX_LENGTH).optional(),
   description: z
     .string()
-    .max(ASSET_DESCRIPTION_MAX, `Description must be at most ${ASSET_DESCRIPTION_MAX} characters`)
+    .max(
+      ASSET_DESCRIPTION_MAX_LENGTH,
+      `Description must be at most ${ASSET_DESCRIPTION_MAX_LENGTH} characters`,
+    )
     .nullable()
     .optional(),
   price: marketplacePriceSchema.optional(),
@@ -67,7 +79,10 @@ export const assetTagAddSchema = z.object({
     .string()
     .trim()
     .min(1, 'Tag name is required')
-    .max(50, 'Tag name must not exceed 50 characters'),
+    .max(
+      ASSET_TAG_NAME_MAX_LENGTH,
+      `Tag name must not exceed ${ASSET_TAG_NAME_MAX_LENGTH} characters`,
+    ),
 })
 
 export type AssetTagAddValues = z.infer<typeof assetTagAddSchema>

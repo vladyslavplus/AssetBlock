@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { appendAnalyticsQuery } from '@/lib/analytics/telemetry-source'
 import type { AnalyticsSourceQuery } from '@/lib/analytics/telemetry-constants'
 import type { BundleListItem } from '@/lib/bundles/bundle-types'
+import { routes } from '@/lib/routes'
 import { formatUsdWhole } from '@/lib/format-currency'
 
 interface BundleCardProps {
@@ -12,7 +13,7 @@ interface BundleCardProps {
 }
 
 export function BundleCard({ bundle, linkSource = 'catalog' }: BundleCardProps) {
-  const bundleHref = appendAnalyticsQuery(`/bundles/${bundle.id}`, linkSource)
+  const bundleHref = appendAnalyticsQuery(routes.bundleDetail(bundle.id), linkSource)
   const savings =
     bundle.savingsAmount > 0
       ? `Save ${formatUsdWhole(bundle.savingsAmount)} (${Math.round(bundle.savingsPercent)}%)`
@@ -57,7 +58,7 @@ export function BundleCard({ bundle, linkSource = 'catalog' }: BundleCardProps) 
 
       <div className="border-t border-border pt-3 flex items-center justify-between gap-2">
         <Link
-          href={`/users/${encodeURIComponent(bundle.sellerUsername)}`}
+          href={routes.userProfile(bundle.sellerUsername)}
           className="text-xs text-muted-foreground hover:text-accent transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 rounded-sm"
         >
           <span className="text-accent">@{bundle.sellerUsername}</span>

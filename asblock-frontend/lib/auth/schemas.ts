@@ -1,7 +1,19 @@
 import { z } from 'zod'
 
+export const emailFieldSchema = z
+  .string()
+  .min(1, 'Email is required')
+  .email('Enter a valid email')
+  .max(256, 'Email must not exceed 256 characters')
+
+export const passwordResetRequestSchema = z.object({
+  email: emailFieldSchema,
+})
+
+export type PasswordResetRequestValues = z.infer<typeof passwordResetRequestSchema>
+
 export const loginFormSchema = z.object({
-  email: z.string().min(1, 'Email is required').email('Enter a valid email'),
+  email: emailFieldSchema,
   password: z.string().min(1, 'Password is required'),
 })
 
@@ -13,7 +25,7 @@ export const registerFormSchema = z
       .string()
       .min(1, 'Username is required')
       .max(50, 'Username must not exceed 50 characters'),
-    email: z.string().min(1, 'Email is required').email('Enter a valid email'),
+    email: emailFieldSchema,
     password: z.string().min(8, 'Password must be at least 8 characters'),
     confirmPassword: z.string().min(1, 'Confirm your password'),
   })

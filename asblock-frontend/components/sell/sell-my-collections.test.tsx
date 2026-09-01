@@ -1,10 +1,9 @@
-import { QueryClientProvider } from '@tanstack/react-query'
-import { render, screen } from '@testing-library/react'
+import { screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 
 import { SellMyCollections } from '@/components/sell/sell-my-collections'
-import { createTestQueryClient } from '@/test/query-client'
+import { renderWithQueryClient } from '@/test/render'
 import { verifiedSeller } from '@/test/session-user'
 
 const useAuth = vi.hoisted(() => vi.fn())
@@ -82,11 +81,7 @@ describe('SellMyCollections listings error', () => {
         return new Response('{}', { status: 200 })
       }),
     )
-    render(
-      <QueryClientProvider client={createTestQueryClient()}>
-        <SellMyCollections />
-      </QueryClientProvider>,
-    )
+    renderWithQueryClient(<SellMyCollections />)
     await user.click(await screen.findByRole('button', { name: /starter pack/i }))
     expect(await screen.findByText(/could not load your assets/i)).toBeInTheDocument()
     expect(screen.queryByText(/no available assets to add/i)).not.toBeInTheDocument()

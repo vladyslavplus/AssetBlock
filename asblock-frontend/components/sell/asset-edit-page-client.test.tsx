@@ -1,10 +1,9 @@
-import { QueryClientProvider } from '@tanstack/react-query'
-import { render, screen } from '@testing-library/react'
+import { screen } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { AssetEditPageClient } from '@/components/sell/asset-edit-page-client'
 import type { SellerAssetDetail } from '@/lib/seller/seller-asset-schemas'
-import { createTestQueryClient } from '@/test/query-client'
+import { renderWithQueryClient } from '@/test/render'
 import { verifiedSeller } from '@/test/session-user'
 
 const useAuth = vi.hoisted(() => vi.fn())
@@ -81,10 +80,8 @@ describe('AssetEditPageClient', () => {
       }),
     )
 
-    render(
-      <QueryClientProvider client={createTestQueryClient()}>
-        <AssetEditPageClient assetId={pendingAsset.id} initialAsset={pendingAsset} />
-      </QueryClientProvider>,
+    renderWithQueryClient(
+      <AssetEditPageClient assetId={pendingAsset.id} initialAsset={pendingAsset} />,
     )
 
     expect(await screen.findByText('Inspecting archive')).toBeInTheDocument()

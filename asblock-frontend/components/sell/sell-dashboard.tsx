@@ -2,6 +2,7 @@
 
 import dynamic from 'next/dynamic'
 import { usePathname, useRouter, useSearchParams } from 'next/navigation'
+import type { Route } from 'next'
 import { Suspense, useEffect } from 'react'
 
 import { SiteMain } from '@/components/layout/site-main'
@@ -41,7 +42,7 @@ function SellDashboardInner() {
       const patched = new URLSearchParams(current.toString())
       patched.delete('tab')
       const qs = patched.toString()
-      router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false })
+      router.replace((qs ? `${pathname}?${qs}` : pathname) as Route, { scroll: false })
     }
   }, [pathname, router, searchParams])
 
@@ -53,7 +54,7 @@ function SellDashboardInner() {
       params.set('tab', nextTab)
     }
     const qs = params.toString()
-    router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false })
+    router.replace((qs ? `${pathname}?${qs}` : pathname) as Route, { scroll: false })
   }
 
   return (

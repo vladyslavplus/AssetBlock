@@ -1,4 +1,5 @@
 import type { Metadata } from 'next'
+import { Suspense } from 'react'
 import { CollectionsBrowsePage } from '@/components/collections/collections-browse-page'
 
 export const metadata: Metadata = {
@@ -7,5 +8,9 @@ export const metadata: Metadata = {
 }
 
 export default function CollectionsPage() {
-  return <CollectionsBrowsePage />
+  return (
+    <Suspense>
+      <CollectionsBrowsePage />
+    </Suspense>
+  )
 }

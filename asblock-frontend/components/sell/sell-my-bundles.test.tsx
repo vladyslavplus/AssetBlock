@@ -1,10 +1,9 @@
-import { QueryClientProvider } from '@tanstack/react-query'
-import { render, screen } from '@testing-library/react'
+import { screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 
 import { SellMyBundles } from '@/components/sell/sell-my-bundles'
-import { createTestQueryClient } from '@/test/query-client'
+import { renderWithQueryClient } from '@/test/render'
 import { verifiedSeller } from '@/test/session-user'
 
 const useAuth = vi.hoisted(() => vi.fn())
@@ -50,11 +49,7 @@ describe('SellMyBundles', () => {
         return new Response('{}', { status: 200 })
       }),
     )
-    render(
-      <QueryClientProvider client={createTestQueryClient()}>
-        <SellMyBundles />
-      </QueryClientProvider>,
-    )
+    renderWithQueryClient(<SellMyBundles />)
     expect(await screen.findByText(/could not load your assets/i)).toBeInTheDocument()
     expect(screen.queryByText(/no bundles yet/i)).toBeInTheDocument()
   })
@@ -79,11 +74,7 @@ describe('SellMyBundles', () => {
     })
     authSeller()
     vi.stubGlobal('fetch', fetchMock)
-    render(
-      <QueryClientProvider client={createTestQueryClient()}>
-        <SellMyBundles />
-      </QueryClientProvider>,
-    )
+    renderWithQueryClient(<SellMyBundles />)
     await screen.findByText(/no bundles yet/i)
     await user.click(screen.getByRole('button', { name: /create bundle/i }))
     expect(await screen.findByText(/title is required/i)).toBeInTheDocument()

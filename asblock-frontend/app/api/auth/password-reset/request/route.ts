@@ -1,4 +1,4 @@
-import { z } from 'zod'
+import { passwordResetRequestSchema } from '@/lib/auth/schemas'
 import {
   assertSameOrigin,
   forwardBackendResponse,
@@ -7,10 +7,6 @@ import {
 } from '@/lib/server/bff-http'
 import { enforceBffRateLimit, getVerifiedClientIp } from '@/lib/server/bff-rate-limit'
 import { fetchBackendPublic } from '@/lib/server/fetch-backend'
-
-const bodySchema = z.object({
-  email: z.string().min(1, 'Email is required').email('Enter a valid email address').max(256),
-})
 
 export async function POST(request: Request) {
   const originError = assertSameOrigin(request)
@@ -23,7 +19,7 @@ export async function POST(request: Request) {
     return invalidJsonResponse()
   }
 
-  const parsed = bodySchema.safeParse(json)
+  const parsed = passwordResetRequestSchema.safeParse(json)
   if (!parsed.success) {
     return zodValidationProblemResponse(parsed.error)
   }

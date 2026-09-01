@@ -12,6 +12,7 @@ import { formatUsdWhole } from '@/lib/format-currency'
 import type { CheckoutAttributionInput } from '@/lib/analytics/telemetry-source'
 import { CheckoutRequestError, postCreateBundleCheckoutSession } from '@/lib/payments/checkout-api'
 import { writePendingCheckoutContext } from '@/lib/reviews/review-constants'
+import { routes } from '@/lib/routes'
 import type { BundleItem } from '@/lib/bundles/bundle-types'
 
 interface BundlePurchaseCardProps {
@@ -47,7 +48,7 @@ export function BundlePurchaseCard({
   const { user, status } = useAuth()
   const isOwner = Boolean(user && user.id === sellerId)
   const verified = isEmailVerified(user)
-  const loginHref = `/login?returnUrl=${encodeURIComponent(returnPath)}`
+  const loginHref = routes.login(returnPath)
 
   const checkoutMutation = useMutation({
     mutationFn: () => postCreateBundleCheckoutSession(bundleId, checkoutAttribution),

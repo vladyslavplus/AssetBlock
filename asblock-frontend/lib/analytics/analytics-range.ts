@@ -1,3 +1,4 @@
+import type { Route } from 'next'
 import {
   ANALYTICS_DEFAULT_COLLECTIONS_PAGE_SIZE,
   ANALYTICS_DEFAULT_PRODUCTS_PAGE_SIZE,
@@ -314,10 +315,10 @@ export function buildAnalyticsCollectionsFilters(state: AnalyticsUrlState) {
   }
 }
 
-export function buildAnalyticsDashboardHref(state: AnalyticsUrlState): string {
+export function buildAnalyticsDashboardHref(state: AnalyticsUrlState): Route {
   const params = patchAnalyticsSearchParams(new URLSearchParams(), state, 'analytics')
   const qs = params.toString()
-  return qs ? `/sell?${qs}` : '/sell?tab=analytics'
+  return (qs ? `/sell?${qs}` : '/sell?tab=analytics') as Route
 }
 
 export function buildAnalyticsProductDetailHref(
@@ -325,7 +326,7 @@ export function buildAnalyticsProductDetailHref(
   productId: string,
   state: AnalyticsUrlState,
   utcRange: AnalyticsUtcRange,
-): string {
+): Route {
   const detailState: AnalyticsUrlState = {
     ...state,
     range: 'custom',
@@ -338,7 +339,7 @@ export function buildAnalyticsProductDetailHref(
     kind === 'ASSET'
       ? `/sell/analytics/assets/${productId}`
       : `/sell/analytics/bundles/${productId}`
-  return qs ? `${base}?${qs}` : base
+  return (qs ? `${base}?${qs}` : base) as Route
 }
 
 export function rangePresetLabel(preset: AnalyticsRangePreset): string {

@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { Star, CheckCircle2 } from 'lucide-react'
 import type { AssetReview } from '@/lib/catalog/catalog-utils'
 import { formatShortMonthDate } from '@/lib/format-date'
+import { routes } from '@/lib/routes'
 
 interface AssetReviewsListProps {
   reviews: AssetReview[]
@@ -32,7 +33,7 @@ export function AssetReviewsList({ reviews }: AssetReviewsListProps) {
             <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
               <div className="flex items-center gap-2">
                 <Link
-                  href={`/users/${encodeURIComponent(review.authorUsername)}`}
+                  href={routes.userProfile(review.authorUsername)}
                   className="text-sm font-medium text-foreground hover:text-accent transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-card rounded-sm"
                 >
                   @{review.authorUsername}

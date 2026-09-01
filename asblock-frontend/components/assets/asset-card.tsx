@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { appendAnalyticsQuery } from '@/lib/analytics/telemetry-source'
 import type { AnalyticsSourceQuery } from '@/lib/analytics/telemetry-constants'
 import type { AssetListItem } from '@/lib/catalog/asset-types'
+import { routes } from '@/lib/routes'
 import { formatUsdWhole } from '@/lib/format-currency'
 import { StarRating } from '@/components/assets/star-rating'
 import { cn } from '@/lib/utils'
@@ -21,7 +22,7 @@ export function AssetCard({
   linkSource = 'catalog',
   collectionId,
 }: AssetCardProps) {
-  const assetHref = appendAnalyticsQuery(`/assets/${asset.id}`, linkSource, { collectionId })
+  const assetHref = appendAnalyticsQuery(routes.assetDetail(asset.id), linkSource, { collectionId })
   const visibleTags = asset.tags.slice(0, 3)
   const overflowCount = Math.max(0, asset.tags.length - 3)
   const isCarousel = variant === 'carousel'
@@ -103,7 +104,7 @@ export function AssetCard({
       >
         <div className="flex items-center justify-between">
           <Link
-            href={`/users/${encodeURIComponent(asset.authorUsername)}`}
+            href={routes.userProfile(asset.authorUsername)}
             className="text-xs text-muted-foreground hover:text-accent transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-card rounded-sm"
           >
             <span className="text-accent">@{asset.authorUsername}</span>

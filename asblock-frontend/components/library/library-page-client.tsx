@@ -19,6 +19,7 @@ import {
   LibraryFetchError,
 } from '@/lib/library/library-query'
 import { runQueryInBackground } from '@/lib/query/query-refresh'
+import { routes } from '@/lib/routes'
 
 const LIBRARY_PAGE_SIZE = 12
 
@@ -68,7 +69,7 @@ export function LibraryPageClient() {
             <div className="rounded-lg border border-border bg-card-elevated/50 px-4 py-8 text-center space-y-3">
               <p className="text-sm text-muted-foreground">Sign in to view your library.</p>
               <Button asChild className="bg-primary text-primary-foreground hover:bg-[#6D28D9]">
-                <Link href="/login?returnUrl=/library">Sign in</Link>
+                <Link href={routes.login(routes.library())}>Sign in</Link>
               </Button>
             </div>
           )}
@@ -91,7 +92,7 @@ export function LibraryPageClient() {
                   size="sm"
                   className="mt-3 border-destructive/50 text-destructive"
                 >
-                  <Link href="/login?returnUrl=/library">Sign in again</Link>
+                  <Link href={routes.login(routes.library())}>Sign in again</Link>
                 </Button>
               )}
               <Button

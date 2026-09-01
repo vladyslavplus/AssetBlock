@@ -26,6 +26,7 @@ import { SellQueryError } from '@/components/sell/sell-query-error'
 import { QueryEmptyState } from '@/components/shared/query-empty-state'
 import { deleteSellerAsset } from '@/lib/seller/seller-api'
 import { formatUsdWhole } from '@/lib/format-currency'
+import { routes } from '@/lib/routes'
 import type { SellerAssetListItem } from '@/lib/seller/seller-asset-schemas'
 import { isSellerListingPubliclyReady } from '@/lib/seller/seller-asset-schemas'
 import {
@@ -86,7 +87,7 @@ export function SellMyListings() {
       <div className="max-w-lg w-full rounded-lg border border-border bg-card-elevated/50 px-4 py-8 text-center space-y-3">
         <p className="text-sm text-muted-foreground">Sign in to see assets you have published.</p>
         <Button asChild className="bg-primary text-primary-foreground hover:bg-[#6D28D9]">
-          <Link href="/login?returnUrl=/sell">Sign in</Link>
+          <Link href={routes.login(routes.sell())}>Sign in</Link>
         </Button>
       </div>
     )
@@ -169,14 +170,14 @@ export function SellMyListings() {
             <div className="flex flex-wrap gap-2 shrink-0">
               {isSellerListingPubliclyReady(a) ? (
                 <Button asChild variant="outline" size="sm" className="border-border">
-                  <Link href={`/assets/${a.id}`}>
+                  <Link href={routes.assetDetail(a.id)}>
                     <ExternalLink className="h-3.5 w-3.5 mr-1.5" />
                     View
                   </Link>
                 </Button>
               ) : (
                 <Button asChild variant="outline" size="sm" className="border-border">
-                  <Link href={`/sell/assets/${a.id}/edit`}>
+                  <Link href={routes.sellerAssetEdit(a.id)}>
                     <Pencil className="h-3.5 w-3.5 mr-1.5" />
                     Manage
                   </Link>
@@ -186,7 +187,7 @@ export function SellMyListings() {
                 <>
                   {isSellerListingPubliclyReady(a) ? (
                     <Button asChild variant="outline" size="sm" className="border-border">
-                      <Link href={`/sell/assets/${a.id}/edit`}>
+                      <Link href={routes.sellerAssetEdit(a.id)}>
                         <Pencil className="h-3.5 w-3.5 mr-1.5" />
                         Edit
                       </Link>

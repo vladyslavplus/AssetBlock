@@ -2,13 +2,6 @@ const LOCALE = 'en-US'
 
 const DATE_ONLY = /^(\d{4})-(\d{2})-(\d{2})$/
 
-const usdCentsFormatter = new Intl.NumberFormat(LOCALE, {
-  style: 'currency',
-  currency: 'USD',
-  minimumFractionDigits: 2,
-  maximumFractionDigits: 2,
-})
-
 const utcShortDateFormatter = new Intl.DateTimeFormat(LOCALE, {
   timeZone: 'UTC',
   year: 'numeric',
@@ -50,35 +43,7 @@ export function parseDateOnlyUtc(dateOnly: string): Date | null {
   return parsed
 }
 
-/** Formats integer cents as currency (defaults to USD). */
-export function formatMoneyCents(cents: number, currency = 'usd'): string {
-  if (currency.toLowerCase() !== 'usd') {
-    return new Intl.NumberFormat(LOCALE, {
-      style: 'currency',
-      currency: currency.toUpperCase(),
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2,
-    }).format(cents / 100)
-  }
-  return usdCentsFormatter.format(cents / 100)
-}
-
-/** Compact currency for chart axes (e.g. $1.2k). */
-export function formatCompactMoneyCents(cents: number, currency = 'usd'): string {
-  const dollars = cents / 100
-  if (currency.toLowerCase() !== 'usd') {
-    return new Intl.NumberFormat(LOCALE, {
-      style: 'currency',
-      currency: currency.toUpperCase(),
-      notation: 'compact',
-      maximumFractionDigits: 1,
-    }).format(dollars)
-  }
-  if (Math.abs(dollars) >= 1000) {
-    return `$${(dollars / 1000).toFixed(dollars >= 10_000 ? 0 : 1)}k`
-  }
-  return `$${dollars.toFixed(dollars >= 100 ? 0 : 1)}`
-}
+export { formatMoneyCents, formatCompactMoneyCents } from '@/lib/format-currency'
 
 /** Formats a 0–1 rate as a percentage string. */
 export function formatRatePercent(rate: number | null | undefined): string {

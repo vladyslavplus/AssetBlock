@@ -35,8 +35,10 @@ export default async function AssetDetailPage({ params }: AssetDetailPageProps) 
     notFound()
   }
 
-  const reviews = await getAssetReviewsCached(resolvedParams.id)
-  const { checkoutConfigured } = await fetchPaymentsCapabilitiesServer()
+  const [reviews, { checkoutConfigured }] = await Promise.all([
+    getAssetReviewsCached(resolvedParams.id),
+    fetchPaymentsCapabilitiesServer(),
+  ])
 
   return (
     <div className="min-h-screen flex flex-col bg-background text-foreground">

@@ -18,6 +18,7 @@ import {
   isEmailVerified,
 } from '@/components/auth/email-verification-notice'
 import Link from 'next/link'
+import { routes } from '@/lib/routes'
 import { AssetLicenseSelector } from '@/components/assets/asset-license-selector'
 import { applyApiFieldErrorsToForm } from '@/lib/http/api-errors'
 import {
@@ -122,7 +123,7 @@ export function AssetUploadForm() {
       <div className="rounded-lg border border-border bg-card-elevated/50 px-4 py-8 text-center space-y-3">
         <p className="text-sm text-muted-foreground">Sign in to upload assets.</p>
         <Button asChild className="bg-primary text-primary-foreground hover:bg-[#6D28D9]">
-          <Link href="/login?returnUrl=/sell">Sign in</Link>
+          <Link href={routes.login(routes.sell())}>Sign in</Link>
         </Button>
       </div>
     )

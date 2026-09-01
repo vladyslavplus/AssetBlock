@@ -1,7 +1,12 @@
 import { z } from 'zod'
+import {
+  COLLECTION_DESCRIPTION_MAX_LENGTH,
+  COLLECTION_MAX_ITEMS,
+  COLLECTION_TITLE_MAX_LENGTH,
+} from '@/lib/contracts/marketplace-bounds'
 
-const TITLE_MAX = 160
-const DESCRIPTION_MAX = 2000
+const TITLE_MAX = COLLECTION_TITLE_MAX_LENGTH
+const DESCRIPTION_MAX = COLLECTION_DESCRIPTION_MAX_LENGTH
 
 export const createCollectionSchema = z
   .object({
@@ -30,7 +35,7 @@ export type AddCollectionItemBody = z.infer<typeof addCollectionItemSchema>
 
 export const reorderCollectionItemsSchema = z
   .object({
-    assetIds: z.array(z.string().uuid('Asset ID must be a valid UUID.')).max(50),
+    assetIds: z.array(z.string().uuid('Asset ID must be a valid UUID.')).max(COLLECTION_MAX_ITEMS),
   })
   .strict()
 

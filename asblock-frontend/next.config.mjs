@@ -7,6 +7,7 @@ const appRoot = path.dirname(fileURLToPath(import.meta.url))
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactCompiler: true,
+  typedRoutes: true,
   typescript: {
     ignoreBuildErrors: false,
   },

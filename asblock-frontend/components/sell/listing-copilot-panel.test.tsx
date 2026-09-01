@@ -1,5 +1,4 @@
-import { QueryClientProvider } from '@tanstack/react-query'
-import { render, screen, waitFor } from '@testing-library/react'
+import { screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { useForm, useWatch } from 'react-hook-form'
@@ -7,7 +6,7 @@ import { useForm, useWatch } from 'react-hook-form'
 import { ListingCopilotPanel } from '@/components/sell/listing-copilot-panel'
 import type { AssetEditFormValues } from '@/lib/seller/seller-schemas'
 import type { AssetProcessingJobDto } from '@/lib/seller/seller-processing-schemas'
-import { createTestQueryClient } from '@/test/query-client'
+import { renderWithProviders } from '@/test/render'
 
 const subscribeProcessingHub = vi.hoisted(() => vi.fn())
 
@@ -130,11 +129,7 @@ describe('ListingCopilotPanel', () => {
       vi.fn(async () => new Promise<Response>(() => {})),
     )
 
-    render(
-      <QueryClientProvider client={createTestQueryClient()}>
-        <FormHost />
-      </QueryClientProvider>,
-    )
+    renderWithProviders(<FormHost />)
 
     expect(document.querySelectorAll('[class*="animate-pulse"]').length).toBeGreaterThan(0)
     expect(screen.queryByRole('button', { name: /generate with ai/i })).not.toBeInTheDocument()
@@ -142,41 +137,25 @@ describe('ListingCopilotPanel', () => {
 
   it('shows queued, running, and retry-scheduled copy without generating again', async () => {
     mockFetch({ jobs: [copilotJob('QUEUED')] })
-    const queued = render(
-      <QueryClientProvider client={createTestQueryClient()}>
-        <FormHost />
-      </QueryClientProvider>,
-    )
+    const queued = renderWithProviders(<FormHost />)
     expect(await screen.findByText('Queued…')).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /generate with ai/i })).not.toBeInTheDocument()
     queued.unmount()
 
     mockFetch({ jobs: [copilotJob('RUNNING')] })
-    const running = render(
-      <QueryClientProvider client={createTestQueryClient()}>
-        <FormHost />
-      </QueryClientProvider>,
-    )
+    const running = renderWithProviders(<FormHost />)
     expect(await screen.findByText('Generating a suggestion…')).toBeInTheDocument()
     running.unmount()
 
     mockFetch({ jobs: [copilotJob('RETRY_SCHEDULED')] })
-    render(
-      <QueryClientProvider client={createTestQueryClient()}>
-        <FormHost />
-      </QueryClientProvider>,
-    )
+    renderWithProviders(<FormHost />)
     expect(await screen.findByText('Retry scheduled…')).toBeInTheDocument()
   })
 
   it('shows a terminal failure and retries the existing query', async () => {
     const user = userEvent.setup()
     mockFetch({ jobs: [copilotJob('FAILED')] })
-    render(
-      <QueryClientProvider client={createTestQueryClient()}>
-        <FormHost />
-      </QueryClientProvider>,
-    )
+    renderWithProviders(<FormHost />)
 
     expect(await screen.findByText('The AI request failed.')).toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: /^retry$/i }))
@@ -199,11 +178,7 @@ describe('ListingCopilotPanel', () => {
         ),
     })
 
-    render(
-      <QueryClientProvider client={createTestQueryClient()}>
-        <FormHost />
-      </QueryClientProvider>,
-    )
+    renderWithProviders(<FormHost />)
 
     await user.click(await screen.findByRole('button', { name: /generate with ai/i }))
     expect(
@@ -217,11 +192,7 @@ describe('ListingCopilotPanel', () => {
     const user = userEvent.setup()
     mockFetch({ suggestion })
 
-    render(
-      <QueryClientProvider client={createTestQueryClient()}>
-        <FormHost />
-      </QueryClientProvider>,
-    )
+    renderWithProviders(<FormHost />)
 
     expect(await screen.findByText('Oak Chair')).toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: /apply suggestion/i }))
@@ -235,11 +206,7 @@ describe('ListingCopilotPanel', () => {
   it('disables apply when a suggested tag is missing from the catalog', async () => {
     mockFetch({ suggestion })
 
-    render(
-      <QueryClientProvider client={createTestQueryClient()}>
-        <FormHost stale />
-      </QueryClientProvider>,
-    )
+    renderWithProviders(<FormHost stale />)
 
     expect(await screen.findByText(/no longer in the catalog/i)).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /apply suggestion/i })).toBeDisabled()
@@ -257,11 +224,7 @@ describe('ListingCopilotPanel', () => {
       },
     })
 
-    render(
-      <QueryClientProvider client={createTestQueryClient()}>
-        <FormHost />
-      </QueryClientProvider>,
-    )
+    renderWithProviders(<FormHost />)
 
     const generate = await screen.findByRole('button', { name: /generate with ai/i })
     await user.click(generate)

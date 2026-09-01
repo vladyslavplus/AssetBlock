@@ -1,10 +1,15 @@
 import { z } from 'zod'
 import { marketplacePriceSchema } from '@/lib/marketplace/price-schema'
+import {
+  BUNDLE_DESCRIPTION_MAX_LENGTH,
+  BUNDLE_MAX_ITEMS,
+  BUNDLE_MIN_ITEMS,
+  BUNDLE_TITLE_MAX_LENGTH,
+} from '@/lib/contracts/marketplace-bounds'
 
-export const BUNDLE_MIN_ITEMS = 2
-export const BUNDLE_MAX_ITEMS = 20
-const TITLE_MAX = 160
-const DESCRIPTION_MAX = 2000
+export { BUNDLE_MIN_ITEMS, BUNDLE_MAX_ITEMS }
+const TITLE_MAX = BUNDLE_TITLE_MAX_LENGTH
+const DESCRIPTION_MAX = BUNDLE_DESCRIPTION_MAX_LENGTH
 
 export const createBundleSchema = z
   .object({

@@ -16,6 +16,7 @@ import {
   Trash2,
 } from 'lucide-react'
 import { toast } from 'sonner'
+import { routes } from '@/lib/routes'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -216,7 +217,7 @@ export function SellMyCollections() {
       <div className="max-w-lg w-full rounded-lg border border-border bg-card-elevated/50 px-4 py-8 text-center space-y-3">
         <p className="text-sm text-muted-foreground">Sign in to manage collections.</p>
         <Button asChild className="bg-primary text-primary-foreground hover:bg-[#6D28D9]">
-          <Link href="/login?returnUrl=/sell">Sign in</Link>
+          <Link href={routes.login(routes.sell())}>Sign in</Link>
         </Button>
       </div>
     )
@@ -511,7 +512,7 @@ export function SellMyCollections() {
                 ) : null}
                 {managedDetail.status === 'PUBLISHED' ? (
                   <Button asChild variant="outline" size="sm" className="border-border">
-                    <Link href={`/collections/${managedDetail.id}`}>View public page</Link>
+                    <Link href={routes.collectionDetail(managedDetail.id)}>View public page</Link>
                   </Button>
                 ) : null}
               </div>

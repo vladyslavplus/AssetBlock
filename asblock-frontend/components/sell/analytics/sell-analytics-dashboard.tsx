@@ -2,6 +2,7 @@
 
 import { keepPreviousData, useInfiniteQuery, useQuery } from '@tanstack/react-query'
 import { usePathname, useRouter, useSearchParams } from 'next/navigation'
+import type { Route } from 'next'
 import { useEffect } from 'react'
 import { Loader2 } from 'lucide-react'
 
@@ -101,7 +102,7 @@ export function SellAnalyticsDashboard() {
     const patched = patchAnalyticsSearchParams(current, canonical)
     if (!analyticsSearchParamsEqual(current, patched)) {
       const qs = patched.toString()
-      router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false })
+      router.replace((qs ? `${pathname}?${qs}` : pathname) as Route, { scroll: false })
     }
   }, [pathname, router, searchParams])
 
@@ -110,7 +111,7 @@ export function SellAnalyticsDashboard() {
     const next = canonicalizeAnalyticsState({ ...urlState, ...patch })
     const patched = patchAnalyticsSearchParams(current, next, 'analytics')
     const qs = patched.toString()
-    router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false })
+    router.replace((qs ? `${pathname}?${qs}` : pathname) as Route, { scroll: false })
   }
 
   const overviewQuery = useQuery({
@@ -163,7 +164,7 @@ export function SellAnalyticsDashboard() {
     const next = canonicalizeAnalyticsState({ ...urlState, page: targetPage })
     const patched = patchAnalyticsSearchParams(current, next, 'analytics')
     const qs = patched.toString()
-    router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false })
+    router.replace((qs ? `${pathname}?${qs}` : pathname) as Route, { scroll: false })
   }, [
     pathname,
     productsData,
@@ -202,7 +203,7 @@ export function SellAnalyticsDashboard() {
     const next = canonicalizeAnalyticsState({ ...urlState, collectionPage: targetPage })
     const patched = patchAnalyticsSearchParams(current, next, 'analytics')
     const qs = patched.toString()
-    router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false })
+    router.replace((qs ? `${pathname}?${qs}` : pathname) as Route, { scroll: false })
   }, [
     collectionsData,
     collectionsFilters.pageSize,
@@ -235,7 +236,7 @@ export function SellAnalyticsDashboard() {
     })
     const patched = patchAnalyticsSearchParams(current, next, 'analytics')
     const qs = patched.toString()
-    router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false })
+    router.replace((qs ? `${pathname}?${qs}` : pathname) as Route, { scroll: false })
   }, [
     collectionsData,
     collectionsQuery.isPlaceholderData,
