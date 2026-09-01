@@ -1,10 +1,9 @@
 using AssetBlock.Domain.Core.Constants;
+using AssetBlock.Domain.Core.Exceptions;
 using AssetBlock.WebApi.ProblemDetails;
 using FluentValidation;
 using Microsoft.AspNetCore.Diagnostics;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Logging;
 
 namespace AssetBlock.WebApi.Extensions;
 
@@ -26,6 +25,21 @@ internal static class ExceptionHandlerExtensions
                         .ToDictionary(g => g.Key, g => g.Select(e => e.ErrorMessage).ToArray());
                     ValidationProblemDetails problem = AssetBlockProblemDetails.CreateValidation(context, errors);
                     await AssetBlockProblemDetails.Write(context, problem);
+                    return;
+                }
+
+                if (exception is CacheUnavailableException cacheUnavailableException)
+                {
+                    ILogger<ExceptionHandlerLog> cacheLogger = context.RequestServices.GetRequiredService<ILogger<ExceptionHandlerLog>>();
+                    cacheLogger.LogWarning(
+                        cacheUnavailableException,
+                        "Cache unavailable; traceId={TraceId}",
+                        context.TraceIdentifier);
+                    Microsoft.AspNetCore.Mvc.ProblemDetails unavailableProblem = AssetBlockProblemDetails.Create(
+                        context,
+                        StatusCodes.Status503ServiceUnavailable,
+                        ErrorCodes.ERR_SERVICE_UNAVAILABLE);
+                    await AssetBlockProblemDetails.Write(context, unavailableProblem);
                     return;
                 }
 

@@ -195,8 +195,8 @@ public static class DependencyInjection
         }
         else
         {
-            services.AddMemoryCache();
-            services.AddSingleton<ICacheService, MemoryCacheService>();
+            services.AddSingleton<ICacheService>(serviceProvider =>
+                new MemoryCacheService(serviceProvider.GetRequiredService<TimeProvider>()));
         }
 
         // Polly v8 resilience pipelines for external services

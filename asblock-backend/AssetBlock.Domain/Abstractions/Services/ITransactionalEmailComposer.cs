@@ -39,6 +39,8 @@ public interface ITransactionalEmailComposer
 
     EmailDispatchPayload CreateEmailChangedNotice(string recipientAddress, Guid recipientUserId);
 
+    EmailDispatchPayload CreateRegistrationAttemptNotice(string recipientAddress, Guid recipientUserId);
+
     EmailMessage CreateEmailVerification(
         string recipientAddress,
         Guid recipientUserId,

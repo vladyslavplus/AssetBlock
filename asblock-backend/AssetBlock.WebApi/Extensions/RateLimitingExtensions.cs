@@ -3,6 +3,7 @@ using System.Security.Claims;
 using System.Threading.RateLimiting;
 using AssetBlock.Domain.Abstractions.Services;
 using AssetBlock.Domain.Core.Constants;
+using AssetBlock.Infrastructure.Observability;
 using AssetBlock.WebApi.ProblemDetails;
 using AssetBlock.WebApi.RateLimiting;
 using Microsoft.AspNetCore.RateLimiting;
@@ -52,14 +53,19 @@ internal static class RateLimitingExtensions
     {
         Endpoint? endpoint = context.HttpContext.GetEndpoint();
         var policyName = endpoint?.Metadata.GetMetadata<EnableRateLimitingAttribute>()?.PolicyName;
+        AssetBlockDiagnostics.RecordAnalyticsRateLimitUnavailable(policyName ?? "unknown");
 
         if (string.Equals(
                 policyName,
                 RateLimitingConstants.Policies.ANALYTICS_EVENTS,
                 StringComparison.Ordinal))
         {
-            context.HttpContext.Response.StatusCode = StatusCodes.Status202Accepted;
-            return;
+            IHostEnvironment environment = context.HttpContext.RequestServices.GetRequiredService<IHostEnvironment>();
+            if (!environment.IsStaging() && !environment.IsProduction())
+            {
+                context.HttpContext.Response.StatusCode = StatusCodes.Status202Accepted;
+                return;
+            }
         }
 
         if (string.Equals(
@@ -133,54 +139,34 @@ internal static class RateLimitingExtensions
     private static void AddAuthPolicies(RateLimiterOptions opts)
     {
         opts.AddPolicy(RateLimitingConstants.Policies.AUTH_REGISTER, httpContext =>
-            RateLimitPartition.GetFixedWindowLimiter(
-                partitionKey: httpContext.Connection.RemoteIpAddress?.ToString() ?? UNKNOWN_PARTITION_KEY,
-                factory: _ => new FixedWindowRateLimiterOptions
-                {
-                    Window = TimeSpan.FromSeconds(RateLimitingConstants.Windows.AUTH_REGISTER_PERIOD_SECONDS),
-                    PermitLimit = RateLimitingConstants.Windows.AUTH_REGISTER_LIMIT,
-                    QueueProcessingOrder = QueueProcessingOrder.OldestFirst
-                }));
+            GetAuthIpPartition(
+                httpContext,
+                RateLimitingConstants.Windows.AUTH_REGISTER_LIMIT,
+                RateLimitingConstants.Windows.AUTH_REGISTER_PERIOD_SECONDS));
 
         opts.AddPolicy(RateLimitingConstants.Policies.AUTH_LOGIN, httpContext =>
-            RateLimitPartition.GetFixedWindowLimiter(
-                partitionKey: httpContext.Connection.RemoteIpAddress?.ToString() ?? UNKNOWN_PARTITION_KEY,
-                factory: _ => new FixedWindowRateLimiterOptions
-                {
-                    Window = TimeSpan.FromSeconds(RateLimitingConstants.Windows.AUTH_LOGIN_PERIOD_SECONDS),
-                    PermitLimit = RateLimitingConstants.Windows.AUTH_LOGIN_LIMIT,
-                    QueueProcessingOrder = QueueProcessingOrder.OldestFirst
-                }));
+            GetAuthIpPartition(
+                httpContext,
+                RateLimitingConstants.Windows.AUTH_LOGIN_LIMIT,
+                RateLimitingConstants.Windows.AUTH_LOGIN_PERIOD_SECONDS));
 
         opts.AddPolicy(RateLimitingConstants.Policies.AUTH_REFRESH, httpContext =>
-            RateLimitPartition.GetFixedWindowLimiter(
-                partitionKey: httpContext.Connection.RemoteIpAddress?.ToString() ?? UNKNOWN_PARTITION_KEY,
-                factory: _ => new FixedWindowRateLimiterOptions
-                {
-                    Window = TimeSpan.FromSeconds(RateLimitingConstants.Windows.AUTH_REFRESH_PERIOD_SECONDS),
-                    PermitLimit = RateLimitingConstants.Windows.AUTH_REFRESH_LIMIT,
-                    QueueProcessingOrder = QueueProcessingOrder.OldestFirst
-                }));
+            GetAuthIpPartition(
+                httpContext,
+                RateLimitingConstants.Windows.AUTH_REFRESH_LIMIT,
+                RateLimitingConstants.Windows.AUTH_REFRESH_PERIOD_SECONDS));
 
         opts.AddPolicy(RateLimitingConstants.Policies.AUTH_PASSWORD_RESET_REQUEST, httpContext =>
-            RateLimitPartition.GetFixedWindowLimiter(
-                partitionKey: httpContext.Connection.RemoteIpAddress?.ToString() ?? UNKNOWN_PARTITION_KEY,
-                factory: _ => new FixedWindowRateLimiterOptions
-                {
-                    Window = TimeSpan.FromSeconds(RateLimitingConstants.Windows.AUTH_PASSWORD_RESET_REQUEST_PERIOD_SECONDS),
-                    PermitLimit = RateLimitingConstants.Windows.AUTH_PASSWORD_RESET_REQUEST_LIMIT,
-                    QueueProcessingOrder = QueueProcessingOrder.OldestFirst
-                }));
+            GetAuthIpPartition(
+                httpContext,
+                RateLimitingConstants.Windows.AUTH_PASSWORD_RESET_REQUEST_LIMIT,
+                RateLimitingConstants.Windows.AUTH_PASSWORD_RESET_REQUEST_PERIOD_SECONDS));
 
         opts.AddPolicy(RateLimitingConstants.Policies.AUTH_EMAIL_ACTION_CONFIRM, httpContext =>
-            RateLimitPartition.GetFixedWindowLimiter(
-                partitionKey: httpContext.Connection.RemoteIpAddress?.ToString() ?? UNKNOWN_PARTITION_KEY,
-                factory: _ => new FixedWindowRateLimiterOptions
-                {
-                    Window = TimeSpan.FromSeconds(RateLimitingConstants.Windows.AUTH_EMAIL_ACTION_CONFIRM_PERIOD_SECONDS),
-                    PermitLimit = RateLimitingConstants.Windows.AUTH_EMAIL_ACTION_CONFIRM_LIMIT,
-                    QueueProcessingOrder = QueueProcessingOrder.OldestFirst
-                }));
+            GetAuthIpPartition(
+                httpContext,
+                RateLimitingConstants.Windows.AUTH_EMAIL_ACTION_CONFIRM_LIMIT,
+                RateLimitingConstants.Windows.AUTH_EMAIL_ACTION_CONFIRM_PERIOD_SECONDS));
 
         opts.AddPolicy(RateLimitingConstants.Policies.AUTH_SIGNALR_TOKEN, httpContext =>
             RateLimitPartition.GetFixedWindowLimiter(
@@ -191,6 +177,28 @@ internal static class RateLimitingExtensions
                     PermitLimit = RateLimitingConstants.Windows.AUTH_SIGNALR_TOKEN_LIMIT,
                     QueueProcessingOrder = QueueProcessingOrder.OldestFirst
                 }));
+    }
+
+    private static RateLimitPartition<string> GetAuthIpPartition(
+        HttpContext httpContext,
+        int permitLimit,
+        int periodSeconds)
+    {
+        if (httpContext.Connection.RemoteIpAddress is not { } remoteIp)
+        {
+            return RateLimitPartition.Get(
+                "auth:missing-client-ip",
+                static _ => new MissingClientIpRateLimiter());
+        }
+
+        return RateLimitPartition.GetFixedWindowLimiter(
+            partitionKey: remoteIp.ToString(),
+            factory: _ => new FixedWindowRateLimiterOptions
+            {
+                Window = TimeSpan.FromSeconds(periodSeconds),
+                PermitLimit = permitLimit,
+                QueueProcessingOrder = QueueProcessingOrder.OldestFirst
+            });
     }
 
     private static void AddSlidingWindowPolicies(RateLimiterOptions opts)

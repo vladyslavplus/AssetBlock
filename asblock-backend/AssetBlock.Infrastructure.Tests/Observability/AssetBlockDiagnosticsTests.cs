@@ -84,6 +84,18 @@ public sealed class AssetBlockDiagnosticsTests : IDisposable
     }
 
     [Fact]
+    public void RecordAnalyticsRateLimitUnavailable_ShouldIncrementCounterWithPolicyOnly()
+    {
+        AssetBlockDiagnostics.RecordAnalyticsRateLimitUnavailable("analytics-events");
+
+        var measurements = GetMeasurements("assetblock.analytics.rate_limit.unavailable").ToList();
+        measurements.Should().HaveCount(1);
+        measurements[0].Measurement.Should().Be(1L);
+        measurements[0].Tags.Should().ContainSingle();
+        measurements[0].Tags["rate_limit.policy"].Should().Be("analytics-events");
+    }
+
+    [Fact]
     public void RecordOrphanCleanup_ShouldRecordDurationAndCounters()
     {
         AssetBlockDiagnostics.RecordOrphanCleanup(TimeSpan.FromSeconds(5.5), DiagnosticsOutcome.PARTIAL_FAILURE, 42, 3);

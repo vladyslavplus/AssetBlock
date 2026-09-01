@@ -84,7 +84,10 @@ public sealed class OllamaAiGenerationProviderTests
     }
 
     [Theory]
-    [InlineData(HttpStatusCode.InternalServerError, ErrorCodes.ERR_AI_PROVIDER_UNAVAILABLE, true)]
+    [InlineData(HttpStatusCode.InternalServerError, ErrorCodes.ERR_AI_PROVIDER_UNAVAILABLE, false)]
+    [InlineData(HttpStatusCode.BadGateway, ErrorCodes.ERR_AI_PROVIDER_UNAVAILABLE, true)]
+    [InlineData(HttpStatusCode.ServiceUnavailable, ErrorCodes.ERR_AI_PROVIDER_UNAVAILABLE, true)]
+    [InlineData(HttpStatusCode.GatewayTimeout, ErrorCodes.ERR_AI_PROVIDER_UNAVAILABLE, true)]
     [InlineData(HttpStatusCode.BadRequest, ErrorCodes.ERR_AI_INVALID_REQUEST, false)]
     [InlineData(HttpStatusCode.NotFound, ErrorCodes.ERR_AI_INVALID_REQUEST, false)]
     public async Task Generate_ShouldMapTagLookupStatusCodes(HttpStatusCode status, string errorCode, bool retryable)
@@ -107,7 +110,10 @@ public sealed class OllamaAiGenerationProviderTests
     }
 
     [Theory]
-    [InlineData(HttpStatusCode.InternalServerError, ErrorCodes.ERR_AI_PROVIDER_UNAVAILABLE, true)]
+    [InlineData(HttpStatusCode.InternalServerError, ErrorCodes.ERR_AI_PROVIDER_UNAVAILABLE, false)]
+    [InlineData(HttpStatusCode.BadGateway, ErrorCodes.ERR_AI_PROVIDER_UNAVAILABLE, true)]
+    [InlineData(HttpStatusCode.ServiceUnavailable, ErrorCodes.ERR_AI_PROVIDER_UNAVAILABLE, true)]
+    [InlineData(HttpStatusCode.GatewayTimeout, ErrorCodes.ERR_AI_PROVIDER_UNAVAILABLE, true)]
     [InlineData(HttpStatusCode.BadRequest, ErrorCodes.ERR_AI_INVALID_REQUEST, false)]
     [InlineData(HttpStatusCode.NotFound, ErrorCodes.ERR_AI_INVALID_REQUEST, false)]
     public async Task Generate_ShouldMapChatStatusCodes(HttpStatusCode status, string errorCode, bool retryable)

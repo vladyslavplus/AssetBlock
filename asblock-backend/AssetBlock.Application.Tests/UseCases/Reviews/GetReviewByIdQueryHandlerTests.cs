@@ -101,7 +101,7 @@ public class GetReviewByIdQueryHandlerTests
         await _cacheMock.Received(1).SetString(
             key,
             Arg.Is<string>(s => s.Contains("user123")),
-            Arg.Any<TimeSpan?>(),
+            Arg.Any<TimeSpan>(),
             Arg.Any<CancellationToken>());
     }
 

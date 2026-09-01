@@ -1,5 +1,4 @@
 using Ardalis.Result;
-using AssetBlock.Application.Common;
 using AssetBlock.Application.Messaging;
 using AssetBlock.Application.UseCases.SellerAnalytics.ExportSellerAnalyticsSales;
 using AssetBlock.Domain.Abstractions.Services;
@@ -53,6 +52,12 @@ internal sealed class SellerAnalyticsSalesCsvExportResult(
         Result<int> result = await sender.Send(command, cancellationToken);
         if (!result.IsSuccess)
         {
+            if (httpContext.Response.HasStarted)
+            {
+                httpContext.Abort();
+                return;
+            }
+
             IActionResult actionResult = ResultProblemDetailsMapper.Map(httpContext, result);
             await actionResult.ExecuteResultAsync(context);
         }

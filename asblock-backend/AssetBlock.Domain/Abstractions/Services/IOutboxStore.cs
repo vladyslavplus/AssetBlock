@@ -16,6 +16,13 @@ public interface IOutboxStore
         TimeSpan lease,
         CancellationToken cancellationToken = default);
 
+    /// <summary>Extends an unexpired claim owned by the supplied lock token.</summary>
+    Task<bool> RenewLease(
+        Guid id,
+        Guid lockToken,
+        TimeSpan lease,
+        CancellationToken cancellationToken = default);
+
     /// <summary>
     /// Marks processed only if Id + LockToken still match and ProcessedAt is null.
     /// Returns false when the lease was lost to another worker.

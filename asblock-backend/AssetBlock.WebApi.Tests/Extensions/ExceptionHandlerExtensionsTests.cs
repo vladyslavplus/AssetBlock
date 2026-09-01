@@ -1,6 +1,7 @@
 using System.Net;
 using System.Text.Json;
 using AssetBlock.Domain.Core.Constants;
+using AssetBlock.Domain.Core.Exceptions;
 using AssetBlock.WebApi.Extensions;
 using AwesomeAssertions;
 using FluentValidation;
@@ -53,6 +54,32 @@ public sealed class ExceptionHandlerExtensionsTests
         logger.Entries.Should().NotContain(e => e.Level == LogLevel.Error);
     }
 
+    [Fact]
+    public async Task Run_WhenCacheUnavailable_ShouldLogWarningAndReturn503()
+    {
+        const string traceId = "cache-trace";
+        var logger = new RecordingLogger<ExceptionHandlerLog>();
+        await using WebApplication app = CreateApp(
+            logger,
+            traceId,
+            new CacheUnavailableException("redis down"));
+
+        await app.StartAsync();
+        HttpResponseMessage response = await app.GetTestClient().GetAsync(new Uri("/boom", UriKind.Relative));
+
+        response.StatusCode.Should().Be(HttpStatusCode.ServiceUnavailable);
+        response.Content.Headers.ContentType!.MediaType.Should().Be("application/problem+json");
+        await using Stream stream = await response.Content.ReadAsStreamAsync();
+        using JsonDocument doc = await JsonDocument.ParseAsync(stream);
+        doc.RootElement.GetProperty("code").GetString().Should().Be(ErrorCodes.ERR_SERVICE_UNAVAILABLE);
+        doc.RootElement.GetProperty("traceId").GetString().Should().Be(traceId);
+        logger.Entries.Should().ContainSingle(entry =>
+            entry.Level == LogLevel.Warning
+            && entry.Exception is CacheUnavailableException
+            && entry.Message.Contains(traceId));
+        logger.Entries.Should().NotContain(entry => entry.Level == LogLevel.Error);
+    }
+
     private static WebApplication CreateApp(
         RecordingLogger<ExceptionHandlerLog> logger,
         string traceId,
@@ -72,7 +99,7 @@ public sealed class ExceptionHandlerExtensionsTests
             await next();
         });
         app.UseValidationExceptionHandler();
-        app.MapGet("/boom", (HttpContext _) => throw exceptionToThrow);
+        app.MapGet("/boom", _ => throw exceptionToThrow);
 
         return app;
     }

@@ -86,11 +86,11 @@ public sealed class AuthControllerTests : ControllerTestBase
     public async Task Register_WhenSuccess_ShouldReturnOk()
     {
         Sender.Send(Arg.Any<RegisterCommand>(), Arg.Any<CancellationToken>())
-            .Returns(Task.FromResult(Result.Success(_tokens)));
+            .Returns(Task.FromResult(Result.Success()));
 
         var controller = new AuthController(Sender);
         IActionResult result = await controller.Register(new RegisterRequest("user", "a@b.c", "pwd"), CancellationToken.None);
 
-        result.Should().BeOfType<OkObjectResult>();
+        result.Should().BeOfType<AcceptedResult>();
     }
 }

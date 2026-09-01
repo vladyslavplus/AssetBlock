@@ -1,5 +1,4 @@
 using System.Diagnostics;
-using System.Net;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
@@ -110,14 +109,18 @@ internal sealed class OllamaAiGenerationProvider : IAiGenerationProvider
         HttpResponseMessage response = timed.Response!;
         _logger.LogInformation("Ollama generation completed with HTTP {StatusCode}", (int)response.StatusCode);
 
-        if ((int)response.StatusCode >= 500 || response.StatusCode == HttpStatusCode.RequestTimeout)
+        if (AiHttpStatusClassifier.IsRetryable(response.StatusCode))
         {
             return Retryable(ErrorCodes.ERR_AI_PROVIDER_UNAVAILABLE, started);
         }
 
         if (!response.IsSuccessStatusCode)
         {
-            return Terminal(ErrorCodes.ERR_AI_INVALID_REQUEST, started);
+            return Terminal(
+                (int)response.StatusCode >= 500
+                    ? ErrorCodes.ERR_AI_PROVIDER_UNAVAILABLE
+                    : ErrorCodes.ERR_AI_INVALID_REQUEST,
+                started);
         }
 
         if (timed.Oversized || timed.Body is null)
@@ -157,14 +160,18 @@ internal sealed class OllamaAiGenerationProvider : IAiGenerationProvider
         }
 
         HttpResponseMessage response = timed.Response!;
-        if ((int)response.StatusCode >= 500 || response.StatusCode == HttpStatusCode.RequestTimeout)
+        if (AiHttpStatusClassifier.IsRetryable(response.StatusCode))
         {
             return Retryable(ErrorCodes.ERR_AI_PROVIDER_UNAVAILABLE, started);
         }
 
         if (!response.IsSuccessStatusCode || timed.Oversized || timed.Body is null)
         {
-            return Terminal(ErrorCodes.ERR_AI_INVALID_REQUEST, started);
+            return Terminal(
+                (int)response.StatusCode >= 500
+                    ? ErrorCodes.ERR_AI_PROVIDER_UNAVAILABLE
+                    : ErrorCodes.ERR_AI_INVALID_REQUEST,
+                started);
         }
 
         try

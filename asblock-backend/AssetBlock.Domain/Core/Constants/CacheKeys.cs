@@ -13,6 +13,8 @@ namespace AssetBlock.Domain.Core.Constants;
 public static class CacheKeys
 {
     private const string PREFIX = "assetblock";
+    private const string INVALIDATION_INDEX_PREFIX = PREFIX + ":cache:index";
+    private const string DOWNLOAD_COUNTER_PREFIX = PREFIX + ":downloads:hourly";
 
     public const string SOCIAL_PLATFORMS = PREFIX + ":social_platforms:list";
 
@@ -75,6 +77,73 @@ public static class CacheKeys
     }
 
     public static string ReviewItem(Guid reviewId) => $"{REVIEW_ITEM_PREFIX}:{reviewId}";
+
+    /// <summary>Builds the per-user, per-asset counter key for one UTC hourly download window.</summary>
+    public static string DownloadCounter(Guid assetId, Guid userId, DateTimeOffset now)
+    {
+        var window = now.ToUniversalTime().ToString("yyyyMMddHH", CultureInfo.InvariantCulture);
+        return $"{DOWNLOAD_COUNTER_PREFIX}:{assetId}:{userId}:{window}";
+    }
+
+    /// <summary>Returns the remaining TTL in the current UTC hourly download window.</summary>
+    public static TimeSpan DownloadCounterExpiry(DateTimeOffset now)
+    {
+        DateTimeOffset utc = now.ToUniversalTime();
+        DateTimeOffset nextHour = new DateTimeOffset(
+            utc.Year,
+            utc.Month,
+            utc.Day,
+            utc.Hour,
+            0,
+            0,
+            TimeSpan.Zero).AddHours(1);
+        return nextHour - utc;
+    }
+
+    /// <summary>Returns exact invalidation prefixes tracked for a cache key.</summary>
+    public static IReadOnlyList<string> InvalidationPrefixes(string key)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(key);
+
+        if (key.StartsWith(ASSETS_LIST_PREFIX + ":", StringComparison.Ordinal))
+        {
+            return [ASSETS_LIST_PREFIX];
+        }
+
+        if (key.StartsWith(CATEGORIES_LIST_PREFIX + ":", StringComparison.Ordinal))
+        {
+            return [CATEGORIES_LIST_PREFIX];
+        }
+
+        if (key.StartsWith(TAGS_LIST_PREFIX + ":", StringComparison.Ordinal))
+        {
+            return [TAGS_LIST_PREFIX];
+        }
+
+        if (key.StartsWith(REVIEWS_LIST_PREFIX + ":", StringComparison.Ordinal))
+        {
+            ReadOnlySpan<char> suffix = key.AsSpan(REVIEWS_LIST_PREFIX.Length + 1);
+            var separator = suffix.IndexOf(':');
+            if (separator > 0 && Guid.TryParse(suffix[..separator], out _))
+            {
+                return [$"{REVIEWS_LIST_PREFIX}:{suffix[..separator]}"];
+            }
+        }
+
+        if (key.StartsWith(REVIEW_ITEM_PREFIX + ":", StringComparison.Ordinal))
+        {
+            return [key];
+        }
+
+        return [];
+    }
+
+    /// <summary>Redis set containing keys owned by one exact invalidation prefix.</summary>
+    public static string InvalidationIndex(string prefix)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(prefix);
+        return $"{INVALIDATION_INDEX_PREFIX}:{prefix}";
+    }
 
     private const string ANALYTICS_PREFIX = PREFIX + ":analytics:seller";
 

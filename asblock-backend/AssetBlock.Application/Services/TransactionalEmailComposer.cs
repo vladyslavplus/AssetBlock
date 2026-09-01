@@ -272,6 +272,33 @@ public sealed class TransactionalEmailComposer(IOptions<EmailOptions> emailOptio
             html);
     }
 
+    public EmailDispatchPayload CreateRegistrationAttemptNotice(string recipientAddress, Guid recipientUserId)
+    {
+        ValidateRecipient(recipientAddress);
+        var subject = NormalizeSubject("A registration attempt used your AssetBlock email");
+        var text = new StringBuilder()
+            .AppendLine("Someone tried to register an AssetBlock account using this email address.")
+            .AppendLine()
+            .AppendLine("Your existing account was not changed.")
+            .AppendLine("If this was not you, no action is required.")
+            .ToString();
+        var html = WrapHtmlLayout(
+            "Registration attempt noticed",
+            """
+            <p>Someone tried to register an AssetBlock account using this email address.</p>
+            <p>Your existing account was not changed.</p>
+            <p>If this was not you, no action is required.</p>
+            """);
+        EnsureBounded(subject, text, html);
+        return new EmailDispatchPayload(
+            recipientAddress.Trim(),
+            recipientUserId,
+            EmailTemplateKind.REGISTRATION_ATTEMPT_NOTICE,
+            subject,
+            text,
+            html);
+    }
+
     public EmailMessage CreateEmailVerification(string recipientAddress, Guid recipientUserId, string actionUrl)
     {
         ValidateRecipient(recipientAddress);

@@ -1,7 +1,18 @@
+using System.Net;
 using System.Net.Http.Headers;
 using System.Text;
 
 namespace AssetBlock.Infrastructure.Ai;
+
+internal static class AiHttpStatusClassifier
+{
+    public static bool IsRetryable(HttpStatusCode statusCode) =>
+        statusCode is HttpStatusCode.RequestTimeout
+            or HttpStatusCode.TooManyRequests
+            or HttpStatusCode.BadGateway
+            or HttpStatusCode.ServiceUnavailable
+            or HttpStatusCode.GatewayTimeout;
+}
 
 internal static class BoundedHttpContentReader
 {

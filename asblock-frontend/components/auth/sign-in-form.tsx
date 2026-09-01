@@ -20,6 +20,7 @@ import { sanitizeInternalReturnUrl } from '@/lib/routes'
 
 const MESSAGE_LABELS: Record<string, string> = {
   'password-changed': 'Password changed. Please sign in again.',
+  'registration-accepted': 'Check your inbox for registration or account-security instructions.',
 }
 
 interface SignInFormProps {

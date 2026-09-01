@@ -102,6 +102,27 @@ internal sealed class OutboxStore(ApplicationDbContext dbContext, ILogger<Outbox
         return updated > 0;
     }
 
+    public async Task<bool> RenewLease(
+        Guid id,
+        Guid lockToken,
+        TimeSpan lease,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentOutOfRangeException.ThrowIfLessThanOrEqual(lease, TimeSpan.Zero);
+        DateTimeOffset now = DateTimeOffset.UtcNow;
+        var updated = await dbContext.OutboxMessages
+            .Where(m =>
+                m.Id == id
+                && m.LockToken == lockToken
+                && m.Status == OutboxMessageStatus.PENDING
+                && m.ProcessedAt == null
+                && m.LockedUntil > now)
+            .ExecuteUpdateAsync(
+                setters => setters.SetProperty(m => m.LockedUntil, now.Add(lease)),
+                cancellationToken);
+        return updated > 0;
+    }
+
     public async Task<bool> MarkFailed(
         Guid id,
         Guid lockToken,

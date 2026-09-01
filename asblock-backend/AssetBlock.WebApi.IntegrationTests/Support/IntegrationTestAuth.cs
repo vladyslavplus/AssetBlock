@@ -5,6 +5,7 @@ using AssetBlock.Domain.Core.Constants;
 using AssetBlock.Domain.Core.Dto.Auth;
 using AssetBlock.Domain.Core.Entities;
 using AssetBlock.Infrastructure.Persistence;
+using AwesomeAssertions;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -38,7 +39,13 @@ internal static class IntegrationTestAuth
             new RegisterRequest(username, email, password));
 
         registerResponse.EnsureSuccessStatusCode();
-        TokensResponseDto? tokens = await registerResponse.Content.ReadFromJsonAsync<TokensResponseDto>(JsonOptions);
+        registerResponse.StatusCode.Should().Be(System.Net.HttpStatusCode.Accepted);
+
+        HttpResponseMessage loginResponse = await client.PostAsJsonAsync(
+            new Uri("/api/auth/login", UriKind.Relative),
+            new LoginRequest(email, password));
+        loginResponse.EnsureSuccessStatusCode();
+        TokensResponseDto? tokens = await loginResponse.Content.ReadFromJsonAsync<TokensResponseDto>(JsonOptions);
         client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", tokens!.AccessToken);
         return (client, username);
     }
@@ -77,8 +84,16 @@ internal static class IntegrationTestAuth
     public static async Task<(HttpClient Client, string Username)> RegisterVerifiedAndAuthenticateAsync(
         WebApplicationFactory<Program> factory)
     {
-        (HttpClient? client, var username) = await RegisterAndAuthenticateAsync(factory);
+        (HttpClient _, var username) = await RegisterAndAuthenticateAsync(factory);
         await MarkEmailVerifiedAsync(factory, username);
+        HttpClient client = factory.CreateClient();
+        var email = await FindEmailAsync(factory, username);
+        HttpResponseMessage loginResponse = await client.PostAsJsonAsync(
+            new Uri("/api/auth/login", UriKind.Relative),
+            new LoginRequest(email, "Password1!"));
+        loginResponse.EnsureSuccessStatusCode();
+        TokensResponseDto? tokens = await loginResponse.Content.ReadFromJsonAsync<TokensResponseDto>(JsonOptions);
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", tokens!.AccessToken);
         return (client, username);
     }
 

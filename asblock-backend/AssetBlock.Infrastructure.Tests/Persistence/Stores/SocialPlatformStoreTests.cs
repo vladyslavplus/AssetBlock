@@ -32,7 +32,7 @@ public sealed class SocialPlatformStoreTests
     {
         await using ApplicationDbContext db = InMemoryDbContextFactory.Create();
         var cache = new MemoryCacheService();
-        await cache.SetString(CacheKeys.SOCIAL_PLATFORMS, "null");
+        await cache.SetString(CacheKeys.SOCIAL_PLATFORMS, "null", TimeSpan.FromMinutes(1));
 
         var sut = new SocialPlatformStore(db, cache);
         List<SocialPlatform> all = await sut.GetAll();

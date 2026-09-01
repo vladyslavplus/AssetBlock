@@ -3,6 +3,7 @@ using System.Text.Json.Serialization;
 using AssetBlock.Application.Common;
 using AssetBlock.Application.Common.Caching;
 using AssetBlock.Domain.Abstractions.Services;
+using AssetBlock.Domain.Core.Exceptions;
 using AwesomeAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
 using NSubstitute;
@@ -87,10 +88,20 @@ public sealed class JsonTypedCacheTests
     }
 
     [Fact]
-    public async Task Get_InfrastructureFailure_ReturnsNull()
+    public async Task Get_CacheUnavailable_Rethrows()
     {
         _raw.GetString("k", Arg.Any<CancellationToken>())
-            .ThrowsAsync(new InvalidOperationException("redis down"));
+            .ThrowsAsync(new CacheUnavailableException("redis down"));
+
+        Func<Task<SampleDto?>> act = () => _sut.Get<SampleDto>("k");
+        await act.Should().ThrowAsync<CacheUnavailableException>();
+    }
+
+    [Fact]
+    public async Task Get_UnexpectedInfrastructureFailure_ReturnsNull()
+    {
+        _raw.GetString("k", Arg.Any<CancellationToken>())
+            .ThrowsAsync(new InvalidOperationException("unexpected"));
 
         (await _sut.Get<SampleDto>("k")).Should().BeNull();
     }
@@ -108,7 +119,7 @@ public sealed class JsonTypedCacheTests
     [Fact]
     public async Task Set_InfrastructureFailure_DoesNotThrow()
     {
-        _raw.SetString("k", Arg.Any<string>(), Arg.Any<TimeSpan?>(), Arg.Any<CancellationToken>())
+        _raw.SetString("k", Arg.Any<string>(), Arg.Any<TimeSpan>(), Arg.Any<CancellationToken>())
             .ThrowsAsync(new InvalidOperationException("redis down"));
 
         Func<Task> act = () => _sut.Set("k", new SampleDto("a", 1), TimeSpan.FromSeconds(1));
@@ -121,13 +132,13 @@ public sealed class JsonTypedCacheTests
         Func<Task> act = () => _sut.Set("k", new ExplodingDto(), TimeSpan.FromSeconds(1));
         await act.Should().NotThrowAsync();
         await _raw.DidNotReceiveWithAnyArgs()
-            .SetString(null!, null!, null, CancellationToken.None);
+            .SetString(null!, null!, default, CancellationToken.None);
     }
 
     [Fact]
     public async Task Set_Cancellation_Rethrows()
     {
-        _raw.SetString("k", Arg.Any<string>(), Arg.Any<TimeSpan?>(), Arg.Any<CancellationToken>())
+        _raw.SetString("k", Arg.Any<string>(), Arg.Any<TimeSpan>(), Arg.Any<CancellationToken>())
             .ThrowsAsync(new OperationCanceledException());
 
         Func<Task> act = () => _sut.Set("k", new SampleDto("a", 1), TimeSpan.FromSeconds(1));

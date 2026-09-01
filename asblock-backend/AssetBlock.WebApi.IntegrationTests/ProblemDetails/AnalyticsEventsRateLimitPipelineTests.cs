@@ -1,15 +1,48 @@
 using System.Net;
 using System.Text.Json;
+using AssetBlock.Domain.Abstractions.Services;
 using AssetBlock.Domain.Core.Constants;
 using AssetBlock.WebApi.IntegrationTests.Support;
 using AwesomeAssertions;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.TestHost;
+using Microsoft.Extensions.Hosting;
 
 namespace AssetBlock.WebApi.IntegrationTests.ProblemDetails;
 
 public sealed class AnalyticsEventsRateLimitPipelineTests
 {
+    [Fact]
+    public async Task LimiterUnavailable_InProduction_ShouldReturn503ProblemDetails()
+    {
+        await using WebApplication app = await AnalyticsRateLimitTestHost.StartAsync(
+            environmentName: Environments.Production,
+            limiterOverride: new UnavailableAnalyticsRateLimiter());
+        HttpClient client = app.GetTestClient();
+
+        HttpResponseMessage response = await AnalyticsRateLimitTestHost.PostProbeAsync(
+            client,
+            "203.0.113.200");
+
+        response.StatusCode.Should().Be(HttpStatusCode.ServiceUnavailable);
+        response.Content.Headers.ContentType!.MediaType.Should().Be("application/problem+json");
+        (await response.Content.ReadAsStringAsync())
+            .Should().Contain(ErrorCodes.ERR_ANALYTICS_RATE_LIMIT_UNAVAILABLE);
+    }
+
+    [Fact]
+    public async Task LimiterUnavailable_InDevelopment_ShouldKeepAcceptedDropSemantics()
+    {
+        await using WebApplication app = await AnalyticsRateLimitTestHost.StartAsync(
+            limiterOverride: new UnavailableAnalyticsRateLimiter());
+        HttpClient client = app.GetTestClient();
+
+        HttpResponseMessage response = await AnalyticsRateLimitTestHost.PostProbeAsync(
+            client,
+            "203.0.113.201");
+
+        response.StatusCode.Should().Be(HttpStatusCode.Accepted);
+    }
     [Fact]
     public async Task DirectPartition_WhenSameRemoteIpExceedsLimit_ShouldReturn429AndOtherIpAccepted()
     {
@@ -165,5 +198,20 @@ public sealed class AnalyticsEventsRateLimitPipelineTests
         var json = await response.Content.ReadAsStringAsync();
         using var doc = JsonDocument.Parse(json);
         doc.RootElement.GetProperty("code").GetString().Should().Be(ErrorCodes.ERR_ANALYTICS_BFF_SIGNATURE_INVALID);
+    }
+
+    private sealed class UnavailableAnalyticsRateLimiter : IAnalyticsDistributedRateLimiter
+    {
+        private static readonly AnalyticsRateLimitAcquireResult _result =
+            new(AnalyticsRateLimitAcquireStatus.UNAVAILABLE);
+
+        public AnalyticsRateLimitAcquireResult AcquireBlocking(
+            AnalyticsRateLimitPolicy policy,
+            string partitionMaterial) => _result;
+
+        public ValueTask<AnalyticsRateLimitAcquireResult> Acquire(
+            AnalyticsRateLimitPolicy policy,
+            string partitionMaterial,
+            CancellationToken cancellationToken = default) => ValueTask.FromResult(_result);
     }
 }

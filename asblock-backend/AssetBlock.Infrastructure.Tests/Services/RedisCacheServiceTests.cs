@@ -1,4 +1,5 @@
-using System.Net;
+using AssetBlock.Domain.Core.Constants;
+using AssetBlock.Domain.Core.Exceptions;
 using AssetBlock.Infrastructure.Services;
 using Microsoft.Extensions.Logging.Abstractions;
 using NSubstitute;
@@ -22,16 +23,43 @@ public sealed class RedisCacheServiceTests
     }
 
     [Fact]
-    public async Task GetString_returnsNull_whenRedisThrows()
+    public async Task GetString_returnsNull_whenKeyIsMissing()
     {
         IConnectionMultiplexer mux = Substitute.For<IConnectionMultiplexer>();
         IDatabase db = Substitute.For<IDatabase>();
         mux.GetDatabase().Returns(db);
-        db.StringGetAsync(Arg.Any<RedisKey>())
-            .Returns(_ => Task.FromException<RedisValue>(new RedisConnectionException(ConnectionFailureType.SocketFailure, "down")));
+        db.StringGetAsync(Arg.Any<RedisKey>()).Returns(Task.FromResult(RedisValue.Null));
 
         var sut = new RedisCacheService(mux, NullLogger<RedisCacheService>.Instance);
         (await sut.GetString("k")).Should().BeNull();
+    }
+
+    [Fact]
+    public async Task GetString_whenRedisThrows_throwsUnavailableAndOpensCircuitAfterThreshold()
+    {
+        IConnectionMultiplexer mux = Substitute.For<IConnectionMultiplexer>();
+        IDatabase db = Substitute.For<IDatabase>();
+        var time = new FakeTimeProvider();
+        var unavailable = true;
+        mux.GetDatabase().Returns(db);
+        db.StringGetAsync(Arg.Any<RedisKey>())
+            .Returns(_ => unavailable
+                ? Task.FromException<RedisValue>(new RedisConnectionException(ConnectionFailureType.SocketFailure, "down"))
+                : Task.FromResult(new RedisValue("recovered")));
+
+        var sut = new RedisCacheService(mux, NullLogger<RedisCacheService>.Instance, time);
+        for (var attempt = 0; attempt < 4; attempt++)
+        {
+            Func<Task<string?>> act = () => sut.GetString("k");
+            await act.Should().ThrowAsync<CacheUnavailableException>();
+        }
+
+        await db.Received(3).StringGetAsync(Arg.Any<RedisKey>());
+
+        time.Advance(TimeSpan.FromSeconds(31));
+        unavailable = false;
+        (await sut.GetString("k")).Should().Be("recovered");
+        await db.Received(4).StringGetAsync(Arg.Any<RedisKey>());
     }
 
     [Fact]
@@ -50,18 +78,24 @@ public sealed class RedisCacheServiceTests
     }
 
     [Fact]
-    public async Task SetString_withoutExpiration_callsTwoArgOverload()
+    public async Task SetString_forIndexedKey_usesAtomicMembershipScript()
     {
         IConnectionMultiplexer mux = Substitute.For<IConnectionMultiplexer>();
         IDatabase db = Substitute.For<IDatabase>();
         mux.GetDatabase().Returns(db);
-        db.StringSetAsync(Arg.Any<RedisKey>(), Arg.Any<RedisValue>())
-            .Returns(Task.FromResult(true));
+        db.ScriptEvaluateAsync(Arg.Any<string>(), Arg.Any<RedisKey[]>(), Arg.Any<RedisValue[]>())
+            .Returns(RedisResult.Create(1));
 
         var sut = new RedisCacheService(mux, NullLogger<RedisCacheService>.Instance);
-        await sut.SetString("k", "v");
+        await sut.SetString(CacheKeys.ASSETS_LIST_PREFIX + ":page", "v", TimeSpan.FromMinutes(5));
 
-        await db.Received(1).StringSetAsync(Arg.Any<RedisKey>(), Arg.Any<RedisValue>());
+        await db.Received(1).ScriptEvaluateAsync(
+            Arg.Any<string>(),
+            Arg.Is<RedisKey[]>(keys =>
+                keys.Length == 2
+                && keys[0] == CacheKeys.ASSETS_LIST_PREFIX + ":page"
+                && keys[1] == CacheKeys.InvalidationIndex(CacheKeys.ASSETS_LIST_PREFIX)),
+            Arg.Any<RedisValue[]>());
     }
 
     [Fact]
@@ -84,22 +118,35 @@ public sealed class RedisCacheServiceTests
     }
 
     [Fact]
-    public async Task RemoveByPrefix_iteratesKeysAndDeletes()
+    public async Task RemoveByPrefix_takesIndexedMembersAndDeletesOnlyThoseKeys()
     {
         IConnectionMultiplexer mux = Substitute.For<IConnectionMultiplexer>();
         IDatabase db = Substitute.For<IDatabase>();
-        IServer server = Substitute.For<IServer>();
         mux.GetDatabase().Returns(db);
-        mux.GetEndPoints().Returns([new DnsEndPoint("127.0.0.1", 6379)]);
-        mux.GetServer(Arg.Any<EndPoint>()).Returns(server);
-        server.Keys(Arg.Any<int>(), Arg.Any<RedisValue>(), Arg.Any<int>(), Arg.Any<long>(), Arg.Any<int>(), Arg.Any<CommandFlags>())
-            .Returns([new RedisKey("pre:a"), new RedisKey("pre:b")]);
+        db.ScriptEvaluateAsync(Arg.Any<string>(), Arg.Any<RedisKey[]>(), Arg.Any<RedisValue[]>())
+            .Returns(RedisResult.Create(["pre:a", "pre:b"]));
         db.KeyDeleteAsync(Arg.Any<RedisKey[]>(), Arg.Any<CommandFlags>())
             .Returns(Task.FromResult(2L));
 
         var sut = new RedisCacheService(mux, NullLogger<RedisCacheService>.Instance);
         await sut.RemoveByPrefix("pre");
 
-        await db.Received().KeyDeleteAsync(Arg.Any<RedisKey[]>(), Arg.Any<CommandFlags>());
+        await db.Received(1).ScriptEvaluateAsync(
+            Arg.Any<string>(),
+            Arg.Is<RedisKey[]>(keys => keys.SequenceEqual(new RedisKey[] { CacheKeys.InvalidationIndex("pre") })),
+            Arg.Any<RedisValue[]>());
+        await db.Received(1).KeyDeleteAsync(
+            Arg.Is<RedisKey[]>(keys => keys.SequenceEqual(new RedisKey[] { "pre:a", "pre:b" })),
+            Arg.Any<CommandFlags>());
+        mux.DidNotReceiveWithAnyArgs().GetEndPoints(default);
+    }
+
+    private sealed class FakeTimeProvider : TimeProvider
+    {
+        private DateTimeOffset _now = new(2026, 1, 1, 0, 0, 0, TimeSpan.Zero);
+
+        public override DateTimeOffset GetUtcNow() => _now;
+
+        public void Advance(TimeSpan amount) => _now = _now.Add(amount);
     }
 }

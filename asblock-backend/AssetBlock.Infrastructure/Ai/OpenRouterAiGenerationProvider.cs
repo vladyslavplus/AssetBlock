@@ -86,13 +86,14 @@ internal sealed class OpenRouterAiGenerationProvider(
         TimeSpan? retryAfter = RetryAfterParser.Parse(response.Headers, options.MaxRetryAfter);
         logger.LogInformation("OpenRouter generation completed with HTTP {StatusCode}", (int)response.StatusCode);
 
-        if (IsRetryableStatus(response.StatusCode))
+        if (AiHttpStatusClassifier.IsRetryable(response.StatusCode))
         {
-            var code = response.StatusCode == HttpStatusCode.TooManyRequests
-                ? ErrorCodes.ERR_AI_RATE_LIMITED
-                : response.StatusCode == HttpStatusCode.RequestTimeout
-                    ? ErrorCodes.ERR_AI_TIMEOUT
-                    : ErrorCodes.ERR_AI_PROVIDER_UNAVAILABLE;
+            var code = response.StatusCode switch
+            {
+                HttpStatusCode.TooManyRequests => ErrorCodes.ERR_AI_RATE_LIMITED,
+                HttpStatusCode.RequestTimeout => ErrorCodes.ERR_AI_TIMEOUT,
+                _ => ErrorCodes.ERR_AI_PROVIDER_UNAVAILABLE
+            };
             return Retryable(code, started, retryAfter);
         }
 
@@ -118,7 +119,7 @@ internal sealed class OpenRouterAiGenerationProvider(
 
         if (!response.IsSuccessStatusCode)
         {
-            return Retryable(ErrorCodes.ERR_AI_PROVIDER_UNAVAILABLE, started, retryAfter);
+            return Terminal(ErrorCodes.ERR_AI_PROVIDER_UNAVAILABLE, started);
         }
 
         if (timed.Oversized || timed.Body is null)
@@ -317,10 +318,6 @@ internal sealed class OpenRouterAiGenerationProvider(
 
         return payload.ToJsonString();
     }
-
-    private static bool IsRetryableStatus(HttpStatusCode statusCode) =>
-        statusCode is HttpStatusCode.RequestTimeout or HttpStatusCode.TooManyRequests
-        || (int)statusCode >= 500;
 
     private static string? Truncate(string? value)
     {

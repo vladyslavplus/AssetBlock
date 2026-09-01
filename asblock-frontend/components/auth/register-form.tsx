@@ -1,6 +1,6 @@
 'use client'
 
-import { useMutation, useQueryClient } from '@tanstack/react-query'
+import { useMutation } from '@tanstack/react-query'
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useForm } from 'react-hook-form'
@@ -13,7 +13,6 @@ import { Label } from '@/components/ui/label'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { AuthRequestError, postAuthRegister } from '@/lib/auth/auth-api'
 import { registerFormSchema, type RegisterFormValues } from '@/lib/auth/schemas'
-import { syncQueryCacheAfterAuth } from '@/lib/query/query-sync-after-auth'
 
 interface RegisterFormProps {
   formError?: string
@@ -21,7 +20,6 @@ interface RegisterFormProps {
 
 export function RegisterForm({ formError }: RegisterFormProps) {
   const router = useRouter()
-  const queryClient = useQueryClient()
   const [showPassword, setShowPassword] = useState(false)
   const [showConfirm, setShowConfirm] = useState(false)
   const [submitError, setSubmitError] = useState<string>('')
@@ -43,11 +41,9 @@ export function RegisterForm({ formError }: RegisterFormProps) {
   const registerMutation = useMutation({
     mutationFn: postAuthRegister,
     onMutate: () => setSubmitError(''),
-    onSuccess: async () => {
-      await syncQueryCacheAfterAuth(queryClient)
-      toast.info('Account created! Check your inbox to verify your email address.')
-      router.push('/account')
-      router.refresh()
+    onSuccess: () => {
+      toast.info('Check your inbox for the next step.')
+      router.push('/login?message=registration-accepted')
     },
     onError: (err: unknown) => {
       if (err instanceof AuthRequestError) {

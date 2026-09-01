@@ -5,8 +5,9 @@ namespace AssetBlock.Domain.Abstractions.Services;
 /// </summary>
 public interface ICacheService
 {
+    /// <exception cref="Core.Exceptions.CacheUnavailableException">The configured cache cannot serve reads.</exception>
     Task<string?> GetString(string key, CancellationToken cancellationToken = default);
-    Task SetString(string key, string value, TimeSpan? expiration = null, CancellationToken cancellationToken = default);
+    Task SetString(string key, string value, TimeSpan expiration, CancellationToken cancellationToken = default);
     Task Remove(string key, CancellationToken cancellationToken = default);
     Task RemoveByPrefix(string prefix, CancellationToken cancellationToken = default);
 

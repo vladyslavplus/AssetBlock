@@ -12,6 +12,169 @@ namespace AssetBlock.Infrastructure.Tests.Outbox;
 public sealed class OutboxDispatcherTests
 {
     [Fact]
+    public async Task DispatchBatch_WhenMultipleMessages_ShouldUseBoundedConcurrency()
+    {
+        var lockToken = Guid.NewGuid();
+        OutboxMessage[] messages = Enumerable.Range(0, 6)
+            .Select(index => new OutboxMessage
+            {
+                Id = Guid.NewGuid(),
+                Type = "test.concurrent",
+                Payload = "{}",
+                LockToken = lockToken,
+                AttemptCount = 1,
+                OccurredAt = DateTimeOffset.UtcNow.AddMilliseconds(index)
+            })
+            .ToArray();
+        IOutboxStore outbox = Substitute.For<IOutboxStore>();
+        outbox.ClaimPendingBatch(Arg.Any<int>(), Arg.Any<TimeSpan>(), Arg.Any<CancellationToken>())
+            .Returns(messages);
+        outbox.MarkProcessed(Arg.Any<Guid>(), lockToken, Arg.Any<CancellationToken>()).Returns(true);
+
+        var active = 0;
+        var maxActive = 0;
+        IOutboxMessageHandler handler = Substitute.For<IOutboxMessageHandler>();
+        handler.MessageType.Returns("test.concurrent");
+        handler.Handle(Arg.Any<OutboxMessage>(), Arg.Any<CancellationToken>()).Returns(async call =>
+        {
+            var current = Interlocked.Increment(ref active);
+            UpdateMaximum(ref maxActive, current);
+            await Task.Delay(40, call.Arg<CancellationToken>());
+            Interlocked.Decrement(ref active);
+        });
+
+        var services = new ServiceCollection();
+        services.AddSingleton(outbox);
+        services.AddSingleton(handler);
+        await using ServiceProvider provider = services.BuildServiceProvider();
+        var dispatcher = new OutboxDispatcher(
+            provider.GetRequiredService<IServiceScopeFactory>(),
+            NullLogger<OutboxDispatcher>.Instance,
+            maxConcurrency: 2);
+
+        await dispatcher.DispatchBatch(CancellationToken.None);
+
+        maxActive.Should().Be(2);
+        await outbox.Received(messages.Length).MarkProcessed(
+            Arg.Any<Guid>(),
+            lockToken,
+            Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task DispatchBatch_WhenHandlerOutlivesRenewalInterval_ShouldRenewLease()
+    {
+        var lockToken = Guid.NewGuid();
+        var message = new OutboxMessage
+        {
+            Id = Guid.NewGuid(),
+            Type = "test.slow",
+            Payload = "{}",
+            LockToken = lockToken,
+            AttemptCount = 1
+        };
+        IOutboxStore outbox = Substitute.For<IOutboxStore>();
+        outbox.ClaimPendingBatch(Arg.Any<int>(), Arg.Any<TimeSpan>(), Arg.Any<CancellationToken>())
+            .Returns([message]);
+        outbox.RenewLease(message.Id, lockToken, Arg.Any<TimeSpan>(), Arg.Any<CancellationToken>())
+            .Returns(true);
+        outbox.MarkProcessed(message.Id, lockToken, Arg.Any<CancellationToken>()).Returns(true);
+
+        IOutboxMessageHandler handler = Substitute.For<IOutboxMessageHandler>();
+        handler.MessageType.Returns(message.Type);
+        handler.Handle(message, Arg.Any<CancellationToken>()).Returns(async call =>
+            await Task.Delay(100, call.Arg<CancellationToken>()));
+
+        var services = new ServiceCollection();
+        services.AddSingleton(outbox);
+        services.AddSingleton(handler);
+        await using ServiceProvider provider = services.BuildServiceProvider();
+        var dispatcher = new OutboxDispatcher(
+            provider.GetRequiredService<IServiceScopeFactory>(),
+            NullLogger<OutboxDispatcher>.Instance,
+            leaseDuration: TimeSpan.FromMilliseconds(60));
+
+        await dispatcher.DispatchBatch(CancellationToken.None);
+
+        await outbox.Received().RenewLease(
+            message.Id,
+            lockToken,
+            TimeSpan.FromMilliseconds(60),
+            Arg.Any<CancellationToken>());
+        await outbox.Received(1).MarkProcessed(message.Id, lockToken, Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task DispatchBatch_WhenLeaseRenewalLosesOwnership_ShouldCancelHandlerWithoutMarkingMessage()
+    {
+        var lockToken = Guid.NewGuid();
+        var message = new OutboxMessage
+        {
+            Id = Guid.NewGuid(),
+            Type = "test.lease-lost",
+            Payload = "{}",
+            LockToken = lockToken,
+            AttemptCount = 1
+        };
+        IOutboxStore outbox = Substitute.For<IOutboxStore>();
+        outbox.ClaimPendingBatch(Arg.Any<int>(), Arg.Any<TimeSpan>(), Arg.Any<CancellationToken>())
+            .Returns([message]);
+        outbox.RenewLease(message.Id, lockToken, Arg.Any<TimeSpan>(), Arg.Any<CancellationToken>())
+            .Returns(false);
+
+        IOutboxMessageHandler handler = Substitute.For<IOutboxMessageHandler>();
+        handler.MessageType.Returns(message.Type);
+        handler.Handle(message, Arg.Any<CancellationToken>()).Returns(async call =>
+            await Task.Delay(Timeout.InfiniteTimeSpan, call.Arg<CancellationToken>()));
+
+        var services = new ServiceCollection();
+        services.AddSingleton(outbox);
+        services.AddSingleton(handler);
+        await using ServiceProvider provider = services.BuildServiceProvider();
+        var dispatcher = new OutboxDispatcher(
+            provider.GetRequiredService<IServiceScopeFactory>(),
+            NullLogger<OutboxDispatcher>.Instance,
+            leaseDuration: TimeSpan.FromMilliseconds(30));
+
+        await dispatcher.DispatchBatch(CancellationToken.None);
+
+        await outbox.Received(1).RenewLease(
+            message.Id,
+            lockToken,
+            TimeSpan.FromMilliseconds(30),
+            Arg.Any<CancellationToken>());
+        await outbox.DidNotReceive().MarkProcessed(
+            Arg.Any<Guid>(),
+            Arg.Any<Guid>(),
+            Arg.Any<CancellationToken>());
+        await outbox.DidNotReceive().MarkFailed(
+            Arg.Any<Guid>(),
+            Arg.Any<Guid>(),
+            Arg.Any<string>(),
+            Arg.Any<DateTimeOffset>(),
+            Arg.Any<CancellationToken>());
+        await outbox.DidNotReceive().MarkDeadLettered(
+            Arg.Any<Guid>(),
+            Arg.Any<Guid>(),
+            Arg.Any<string>(),
+            Arg.Any<CancellationToken>());
+    }
+
+    private static void UpdateMaximum(ref int target, int candidate)
+    {
+        int observed;
+        do
+        {
+            observed = Volatile.Read(ref target);
+            if (candidate <= observed)
+            {
+                return;
+            }
+        }
+        while (Interlocked.CompareExchange(ref target, candidate, observed) != observed);
+    }
+
+    [Fact]
     public void CalculatePollInterval_WithJitter_ShouldScaleAccurately()
     {
         // PollInterval base is 2.0s

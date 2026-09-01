@@ -1,4 +1,5 @@
 using System.Net;
+using AssetBlock.Domain.Abstractions.Services;
 using AssetBlock.Domain.Core.Constants;
 using AssetBlock.Infrastructure;
 using AssetBlock.WebApi.Extensions;
@@ -16,7 +17,10 @@ internal static class AnalyticsRateLimitTestHost
     internal const string TEST_SIGNING_SECRET = AssetBlockWebApplicationFactory.TEST_ANALYTICS_BFF_SIGNING_SECRET;
     private const string PROBE_PATH = "/api/analytics/events";
 
-    internal static async Task<WebApplication> StartAsync(string? signingSecret = TEST_SIGNING_SECRET)
+    internal static async Task<WebApplication> StartAsync(
+        string? signingSecret = TEST_SIGNING_SECRET,
+        string? environmentName = null,
+        IAnalyticsDistributedRateLimiter? limiterOverride = null)
     {
         WebApplicationBuilder builder = WebApplication.CreateBuilder();
         builder.WebHost.UseTestServer();
@@ -29,8 +33,19 @@ internal static class AnalyticsRateLimitTestHost
 
         builder.Configuration["ConnectionStrings:Redis"] = string.Empty;
 
-        builder.Services.AddSingleton<IHostEnvironment>(new TestHostEnvironment());
-        builder.Services.AddAnalyticsDistributedRateLimiting(builder.Configuration, new TestHostEnvironment());
+        var hostEnvironment = new TestHostEnvironment
+        {
+            EnvironmentName = environmentName ?? Environments.Development
+        };
+        builder.Services.AddSingleton<IHostEnvironment>(hostEnvironment);
+        if (limiterOverride is null)
+        {
+            builder.Services.AddAnalyticsDistributedRateLimiting(builder.Configuration, hostEnvironment);
+        }
+        else
+        {
+            builder.Services.AddSingleton(limiterOverride);
+        }
         builder.Services.AddAnalyticsBffSignatureValidation();
         builder.Services.AddApiRateLimiting();
 

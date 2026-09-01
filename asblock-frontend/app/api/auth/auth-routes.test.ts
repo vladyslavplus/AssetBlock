@@ -111,6 +111,32 @@ describe('auth BFF routes', () => {
     expect(responses.every((response) => response.status !== 429)).toBe(true)
   })
 
+  it('returns the accepted registration envelope without setting auth cookies', async () => {
+    vi.stubEnv('TRUSTED_CLIENT_IP_HEADER', 'x-test-client-ip')
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => new Response(null, { status: 202 })),
+    )
+
+    const response = await registerPost(
+      authRequest(
+        'register',
+        {
+          username: 'accepted-user',
+          email: 'accepted@example.com',
+          password: 'correct-horse',
+          confirmPassword: 'correct-horse',
+        },
+        '198.51.100.61',
+      ),
+    )
+
+    expect(response.status).toBe(202)
+    expect(await response.json()).toEqual({ ok: true })
+    expect(cookieStore.snapshot()[AUTH_COOKIE_ACCESS]).toBeUndefined()
+    expect(cookieStore.snapshot()[AUTH_COOKIE_REFRESH]).toBeUndefined()
+  })
+
   it('rejects cross-origin login and does not set cookies', async () => {
     const res = await loginPost(
       loginRequest({ email: 'a@b.com', password: 'secret' }, 'https://evil.test'),

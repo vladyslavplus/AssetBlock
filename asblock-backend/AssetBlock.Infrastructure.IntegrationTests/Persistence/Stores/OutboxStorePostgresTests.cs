@@ -223,6 +223,35 @@ public sealed class OutboxStorePostgresTests(PostgresFixture fixture)
     }
 
     [Fact]
+    public async Task RenewLease_WhenClaimIsCurrent_ShouldPreventReclaimUntilExtendedLeaseExpires()
+    {
+        await using ApplicationDbContext db = await fixture.CreateCleanDbContext();
+        OutboxStore store = CreateStore(db);
+        await store.Enqueue(
+            OutboxMessageTypes.ASSET_BLOB_DELETE,
+            new AssetBlobDeletePayload(Guid.NewGuid(), "assets/renew-test.bin"));
+
+        IReadOnlyList<OutboxMessage> claimed = await store.ClaimPendingBatch(1, TimeSpan.FromMilliseconds(200));
+        OutboxMessage message = claimed.Should().ContainSingle().Subject;
+        Guid lockToken = message.LockToken!.Value;
+
+        await Task.Delay(75);
+        (await store.RenewLease(message.Id, lockToken, TimeSpan.FromMilliseconds(300))).Should().BeTrue();
+        await Task.Delay(175);
+
+        await using ApplicationDbContext competingDb = fixture.CreateDbContext();
+        OutboxStore competingStore = CreateStore(competingDb);
+        (await competingStore.ClaimPendingBatch(1, TimeSpan.FromMinutes(5))).Should().BeEmpty();
+
+        await Task.Delay(175);
+        IReadOnlyList<OutboxMessage> reclaimed = await competingStore.ClaimPendingBatch(1, TimeSpan.FromMinutes(5));
+        reclaimed.Should().ContainSingle();
+        reclaimed[0].Id.Should().Be(message.Id);
+        reclaimed[0].LockToken.Should().NotBe(lockToken);
+        (await store.RenewLease(message.Id, lockToken, TimeSpan.FromMinutes(5))).Should().BeFalse();
+    }
+
+    [Fact]
     public async Task MarkFailed_WhenRetryIsDue_ShouldMakeSameMessageClaimableAgain()
     {
         await using ApplicationDbContext db = await fixture.CreateCleanDbContext();
@@ -295,7 +324,7 @@ public sealed class OutboxStorePostgresTests(PostgresFixture fixture)
         (OutboxReplayOutcome successOutcome, ReplayDeadLetterResponseDto? replayResponse) = await store.ReplayDeadLetter(msg.Id);
         successOutcome.Should().Be(OutboxReplayOutcome.SUCCESS);
         replayResponse.Should().NotBeNull();
-        replayResponse!.Id.Should().Be(msg.Id);
+        replayResponse.Id.Should().Be(msg.Id);
         replayResponse.ReplayCount.Should().Be(1);
 
         // 5. Replay again -> NOT_DEAD_LETTERED (because it is now PENDING)
@@ -337,7 +366,7 @@ public sealed class OutboxStorePostgresTests(PostgresFixture fixture)
 
         // Setup Handler with real EfUnitOfWork, real OutboxStore, and failing IAuditWriter
         var unitOfWork = new EfUnitOfWork(db);
-        IAuditWriter auditWriterMock = Substitute.For<Domain.Abstractions.Services.IAuditWriter>();
+        IAuditWriter auditWriterMock = Substitute.For<IAuditWriter>();
         auditWriterMock.Write(Arg.Any<Domain.Core.Dto.Audit.AuditEvent>(), Arg.Any<CancellationToken>())
             .ThrowsAsync(new InvalidOperationException("Audit database down."));
 

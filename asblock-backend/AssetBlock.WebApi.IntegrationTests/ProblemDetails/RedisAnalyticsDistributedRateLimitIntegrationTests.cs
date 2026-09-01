@@ -1,6 +1,7 @@
 using System.Net;
 using AssetBlock.Domain.Core.Constants;
 using AssetBlock.Infrastructure;
+using AssetBlock.Infrastructure.Services;
 using AssetBlock.WebApi.Extensions;
 using AssetBlock.WebApi.IntegrationTests.Support;
 using AwesomeAssertions;
@@ -8,6 +9,8 @@ using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.TestHost;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging.Abstractions;
+using StackExchange.Redis;
 using Testcontainers.Redis;
 
 namespace AssetBlock.WebApi.IntegrationTests.ProblemDetails;
@@ -125,6 +128,26 @@ public sealed class RedisAnalyticsDistributedRateLimitIntegrationTests : IAsyncL
 
         (await AnalyticsRateLimitTestHost.PostProbeAsync(client, remoteIp))
             .StatusCode.Should().Be(HttpStatusCode.Accepted);
+    }
+
+    [Fact]
+    public async Task RedisCache_WhenIndexedPrefixInvalidated_ShouldDeleteMembersWithoutScanningOtherKeys()
+    {
+        await using IConnectionMultiplexer connection = await ConnectionMultiplexer.ConnectAsync(_connectionString);
+        IDatabase database = connection.GetDatabase();
+        var suffix = Guid.NewGuid().ToString("N");
+        var indexedKey = $"{CacheKeys.ASSETS_LIST_PREFIX}:indexed:{suffix}";
+        var unindexedKey = $"{CacheKeys.ASSETS_LIST_PREFIX}:legacy:{suffix}";
+        await database.StringSetAsync(unindexedKey, "legacy", TimeSpan.FromMinutes(5));
+        var cache = new RedisCacheService(connection, NullLogger<RedisCacheService>.Instance);
+
+        await cache.SetString(indexedKey, "indexed", TimeSpan.FromMinutes(5));
+        (await database.StringGetAsync(indexedKey)).ToString().Should().Be("indexed");
+
+        await cache.RemoveByPrefix(CacheKeys.ASSETS_LIST_PREFIX);
+
+        (await database.StringGetAsync(indexedKey)).HasValue.Should().BeFalse();
+        (await database.StringGetAsync(unindexedKey)).ToString().Should().Be("legacy");
     }
 
     private async Task<WebApplication> StartHostAsync(string? redisConnectionString = null)

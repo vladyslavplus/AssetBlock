@@ -66,18 +66,18 @@ public sealed class AuthController(ISender sender) : ApiControllerBase(sender)
     }
 
     /// <summary>
-    /// Register a new user with email and password.
+    /// Request registration. Always returns 202 without revealing whether the email already exists.
     /// </summary>
     [HttpPost(ApiRoutes.Auth.REGISTER)]
     [AllowAnonymous]
     [EnableRateLimiting(RateLimitingConstants.Policies.AUTH_REGISTER)]
-    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status202Accepted)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> Register([FromBody] RegisterRequest request, CancellationToken cancellationToken)
     {
         var command = new RegisterCommand(request.Username, request.Email, request.Password);
-        Result<TokensResponse> result = await Sender.Send(command, cancellationToken);
-        return MapResultToActionResult(result);
+        Result result = await Sender.Send(command, cancellationToken);
+        return result.IsSuccess ? Accepted() : MapResultToActionResult(result);
     }
 
     /// <summary>

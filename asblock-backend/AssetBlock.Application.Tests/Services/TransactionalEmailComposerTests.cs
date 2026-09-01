@@ -149,6 +149,20 @@ public sealed class TransactionalEmailComposerTests
     }
 
     [Fact]
+    public void CreateRegistrationAttemptNotice_WhenValid_ShouldBuildSecurityNoticeWithoutAccountData()
+    {
+        EmailDispatchPayload payload = _sut.CreateRegistrationAttemptNotice(
+            "existing@example.com",
+            Guid.NewGuid());
+
+        payload.TemplateKind.Should().Be(EmailTemplateKind.REGISTRATION_ATTEMPT_NOTICE);
+        payload.Subject.Should().Contain("registration attempt");
+        payload.TextBody.Should().Contain("existing account was not changed");
+        payload.HtmlBody.Should().Contain("existing account was not changed");
+        payload.TextBody.Contains("password", StringComparison.OrdinalIgnoreCase).Should().BeFalse();
+    }
+
+    [Fact]
     public void CreateOrderReceipt_WhenAmountNotPositive_ShouldThrow()
     {
         Func<EmailDispatchPayload> act = () => _sut.CreateOrderReceipt(

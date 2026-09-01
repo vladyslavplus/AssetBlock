@@ -36,7 +36,7 @@ public sealed class PasswordResetControllerIntegrationTests(IntegrationTestFixtu
         HttpResponseMessage registerResponse = await client.PostAsJsonAsync(
             new Uri("/api/auth/register", UriKind.Relative),
             new RegisterRequest($"pwreset_{suffix}", email, password));
-        registerResponse.StatusCode.Should().Be(HttpStatusCode.OK);
+        registerResponse.StatusCode.Should().Be(HttpStatusCode.Accepted);
 
         HttpResponseMessage resetResponse = await client.PostAsJsonAsync(
             new Uri("/api/auth/password-reset/request", UriKind.Relative),

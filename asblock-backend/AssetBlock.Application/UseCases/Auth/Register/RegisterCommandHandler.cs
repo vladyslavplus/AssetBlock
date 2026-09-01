@@ -7,7 +7,6 @@ using AssetBlock.Domain.Core.Dto.Email;
 using AssetBlock.Domain.Core.Entities;
 using AssetBlock.Domain.Core.Enums;
 using AssetBlock.Domain.Core.Exceptions;
-using AssetBlock.Domain.Core.Primitives.Api;
 using Microsoft.Extensions.Logging;
 
 namespace AssetBlock.Application.UseCases.Auth.Register;
@@ -15,39 +14,31 @@ namespace AssetBlock.Application.UseCases.Auth.Register;
 internal sealed class RegisterCommandHandler(
     IUserStore userStore,
     IPasswordHasher passwordHasher,
-    IJwtTokenService jwtTokenService,
     IEmailActionStore emailActionStore,
     IOutboxStore outboxStore,
+    ITransactionalEmailComposer emailComposer,
     IUnitOfWork unitOfWork,
     IAuditWriter auditWriter,
-    ILogger<RegisterCommandHandler> logger) : IRequestHandler<RegisterCommand, Result<TokensResponse>>
+    ILogger<RegisterCommandHandler> logger) : IRequestHandler<RegisterCommand, Result>
 {
-    public async Task<Result<TokensResponse>> Handle(RegisterCommand request, CancellationToken cancellationToken)
+    public async Task<Result> Handle(RegisterCommand request, CancellationToken cancellationToken)
     {
         User? existing = await userStore.GetByEmail(request.Email, cancellationToken);
         if (existing is not null)
         {
-            logger.LogWarning("Register failed: email already exists");
-            await auditWriter.WriteBestEffort(new AuditEvent(
-                AuditActions.AUTH_REGISTER,
-                AuditOutcome.FAILURE,
-                AuditResourceTypes.USER,
-                Metadata: new Dictionary<string, object?> { ["reasonCode"] = ErrorCodes.ERR_AUTH_EMAIL_ALREADY_EXISTS },
-                ActorTypeOverride: AuditActorType.ANONYMOUS), cancellationToken);
-            return Result.Conflict(ErrorCodes.ERR_AUTH_EMAIL_ALREADY_EXISTS);
+            _ = passwordHasher.Hash(request.Password);
+            await RecordExistingAccountAttempt(existing, cancellationToken);
+            return Result.Success();
         }
 
         var hash = passwordHasher.Hash(request.Password);
         User? user = null;
-        TokensResponse? tokens = null;
 
         try
         {
             await unitOfWork.ExecuteInTransaction(async ct =>
             {
                 user = await userStore.Create(request.Username, request.Email, hash, ct);
-                tokens = jwtTokenService.GenerateTokenPair(user.Id, user.Username, user.Email, user.Role);
-                await jwtTokenService.StoreRefreshToken(user.Id, tokens.RefreshToken, tokens.RefreshExpiresAt, ct);
 
                 EmailAction action = await emailActionStore.IssueOrReplace(
                     user.Id,
@@ -72,13 +63,12 @@ internal sealed class RegisterCommandHandler(
         catch (DuplicateEmailException)
         {
             logger.LogWarning("Register failed: duplicate email (concurrent)");
-            await auditWriter.WriteBestEffort(new AuditEvent(
-                AuditActions.AUTH_REGISTER,
-                AuditOutcome.FAILURE,
-                AuditResourceTypes.USER,
-                Metadata: new Dictionary<string, object?> { ["reasonCode"] = ErrorCodes.ERR_AUTH_EMAIL_ALREADY_EXISTS },
-                ActorTypeOverride: AuditActorType.ANONYMOUS), cancellationToken);
-            return Result.Conflict(ErrorCodes.ERR_AUTH_EMAIL_ALREADY_EXISTS);
+            User? concurrentExisting = await userStore.GetByEmail(request.Email, cancellationToken);
+            if (concurrentExisting is not null)
+            {
+                await RecordExistingAccountAttempt(concurrentExisting, cancellationToken);
+            }
+            return Result.Success();
         }
         catch (DuplicateUsernameException)
         {
@@ -93,6 +83,19 @@ internal sealed class RegisterCommandHandler(
         }
 
         logger.LogInformation("Register succeeded: UserId={UserId}", user!.Id);
-        return Result.Success(tokens!);
+        return Result.Success();
+    }
+
+    private async Task RecordExistingAccountAttempt(User existing, CancellationToken cancellationToken)
+    {
+        logger.LogWarning("Registration attempt used an existing email");
+        EmailDispatchPayload notice = emailComposer.CreateRegistrationAttemptNotice(existing.Email, existing.Id);
+        await outboxStore.Enqueue(OutboxMessageTypes.EMAIL_DISPATCH, notice, cancellationToken);
+        await auditWriter.WriteBestEffort(new AuditEvent(
+            AuditActions.AUTH_REGISTER,
+            AuditOutcome.FAILURE,
+            AuditResourceTypes.USER,
+            Metadata: new Dictionary<string, object?> { ["reasonCode"] = ErrorCodes.ERR_AUTH_EMAIL_ALREADY_EXISTS },
+            ActorTypeOverride: AuditActorType.ANONYMOUS), cancellationToken);
     }
 }

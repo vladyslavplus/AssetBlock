@@ -7,7 +7,6 @@ using AssetBlock.Domain.Core.Dto.Email;
 using AssetBlock.Domain.Core.Entities;
 using AssetBlock.Domain.Core.Enums;
 using AssetBlock.Domain.Core.Exceptions;
-using AssetBlock.Domain.Core.Primitives.Api;
 using AwesomeAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
 using NSubstitute;
@@ -19,9 +18,9 @@ public class RegisterCommandHandlerTests
 {
     private readonly IUserStore _userStoreMock;
     private readonly IPasswordHasher _passwordHasherMock;
-    private readonly IJwtTokenService _jwtTokenServiceMock;
     private readonly IEmailActionStore _emailActionStoreMock;
     private readonly IOutboxStore _outboxStoreMock;
+    private readonly ITransactionalEmailComposer _emailComposerMock;
     private readonly IUnitOfWork _unitOfWorkMock;
     private readonly IAuditWriter _auditWriterMock;
     private readonly RegisterCommandHandler _handler;
@@ -30,9 +29,9 @@ public class RegisterCommandHandlerTests
     {
         _userStoreMock = Substitute.For<IUserStore>();
         _passwordHasherMock = Substitute.For<IPasswordHasher>();
-        _jwtTokenServiceMock = Substitute.For<IJwtTokenService>();
         _emailActionStoreMock = Substitute.For<IEmailActionStore>();
         _outboxStoreMock = Substitute.For<IOutboxStore>();
+        _emailComposerMock = Substitute.For<ITransactionalEmailComposer>();
         _unitOfWorkMock = Substitute.For<IUnitOfWork>();
         _auditWriterMock = Substitute.For<IAuditWriter>();
 
@@ -42,27 +41,37 @@ public class RegisterCommandHandlerTests
         _handler = new RegisterCommandHandler(
             _userStoreMock,
             _passwordHasherMock,
-            _jwtTokenServiceMock,
             _emailActionStoreMock,
             _outboxStoreMock,
+            _emailComposerMock,
             _unitOfWorkMock,
             _auditWriterMock,
             NullLogger<RegisterCommandHandler>.Instance);
     }
 
     [Fact]
-    public async Task Handle_WhenEmailExists_ShouldReturnConflictAndWriteBestEffort()
+    public async Task Handle_WhenEmailExists_ShouldReturnSuccessAndQueueSecurityNotice()
     {
         var command = new RegisterCommand("existuser", "exist@example.com", "password123");
         var existingUser = new User { Id = Guid.NewGuid(), Username = "existuser", Email = "exist@example.com", PasswordHash = "hash", Role = AppRoles.USER };
 
         _userStoreMock.GetByEmail(command.Email, Arg.Any<CancellationToken>()).Returns(existingUser);
+        var notice = new EmailDispatchPayload(
+            existingUser.Email,
+            existingUser.Id,
+            EmailTemplateKind.REGISTRATION_ATTEMPT_NOTICE,
+            "subject",
+            "text",
+            "html");
+        _emailComposerMock.CreateRegistrationAttemptNotice(existingUser.Email, existingUser.Id).Returns(notice);
 
-        Result<TokensResponse> result = await _handler.Handle(command, CancellationToken.None);
+        Result result = await _handler.Handle(command, CancellationToken.None);
 
-        result.IsSuccess.Should().BeFalse();
-        result.Status.Should().Be(ResultStatus.Conflict);
-        result.Errors.Should().Contain(ErrorCodes.ERR_AUTH_EMAIL_ALREADY_EXISTS);
+        result.IsSuccess.Should().BeTrue();
+        await _outboxStoreMock.Received(1).Enqueue(
+            OutboxMessageTypes.EMAIL_DISPATCH,
+            notice,
+            Arg.Any<CancellationToken>());
         await _auditWriterMock.Received(1).WriteBestEffort(
             Arg.Is<AuditEvent>(e =>
                 e.Action == AuditActions.AUTH_REGISTER &&
@@ -73,7 +82,7 @@ public class RegisterCommandHandlerTests
     }
 
     [Fact]
-    public async Task Handle_WhenDbThrowsDuplicateEmailException_ShouldReturnConflict()
+    public async Task Handle_WhenDbThrowsDuplicateEmailException_ShouldReturnSuccess()
     {
         var command = new RegisterCommand("newuser", "new@example.com", "password123");
 
@@ -81,12 +90,19 @@ public class RegisterCommandHandlerTests
         _passwordHasherMock.Hash(command.Password).Returns("hashed");
         _userStoreMock.Create("newuser", command.Email, "hashed", Arg.Any<CancellationToken>())
             .ThrowsAsync(new DuplicateEmailException());
+        _userStoreMock.GetByEmail(command.Email, Arg.Any<CancellationToken>())
+            .Returns(null, new User
+            {
+                Id = Guid.NewGuid(),
+                Username = "existing",
+                Email = command.Email,
+                PasswordHash = "hash",
+                Role = AppRoles.USER
+            });
 
-        Result<TokensResponse> result = await _handler.Handle(command, CancellationToken.None);
+        Result result = await _handler.Handle(command, CancellationToken.None);
 
-        result.IsSuccess.Should().BeFalse();
-        result.Status.Should().Be(ResultStatus.Conflict);
-        result.Errors.Should().Contain(ErrorCodes.ERR_AUTH_EMAIL_ALREADY_EXISTS);
+        result.IsSuccess.Should().BeTrue();
     }
 
     [Fact]
@@ -99,7 +115,7 @@ public class RegisterCommandHandlerTests
         _userStoreMock.Create("taken", command.Email, "hashed", Arg.Any<CancellationToken>())
             .ThrowsAsync(new DuplicateUsernameException());
 
-        Result<TokensResponse> result = await _handler.Handle(command, CancellationToken.None);
+        Result result = await _handler.Handle(command, CancellationToken.None);
 
         result.IsSuccess.Should().BeFalse();
         result.Status.Should().Be(ResultStatus.Conflict);
@@ -111,21 +127,17 @@ public class RegisterCommandHandlerTests
     {
         var command = new RegisterCommand("newuser", "new@example.com", "password123");
         var user = new User { Id = Guid.NewGuid(), Username = "newuser", Email = "new@example.com", PasswordHash = "hashed", Role = AppRoles.USER };
-        var tokenResponse = new TokensResponse("acc", "ref", DateTimeOffset.UtcNow.AddMinutes(15), DateTimeOffset.UtcNow.AddDays(7));
         var action = new EmailAction { Id = Guid.NewGuid(), UserId = user.Id, Purpose = EmailActionPurpose.EMAIL_VERIFICATION, TargetEmail = user.Email, Version = Guid.NewGuid(), CreatedAt = DateTimeOffset.UtcNow, ExpiresAt = DateTimeOffset.UtcNow.AddHours(24) };
 
         _userStoreMock.GetByEmail(command.Email, Arg.Any<CancellationToken>()).Returns((User?)null);
         _passwordHasherMock.Hash(command.Password).Returns("hashed");
         _userStoreMock.Create("newuser", command.Email, "hashed", Arg.Any<CancellationToken>()).Returns(user);
-        _jwtTokenServiceMock.GenerateTokenPair(user.Id, user.Username, user.Email, user.Role).Returns(tokenResponse);
         _emailActionStoreMock.IssueOrReplace(Arg.Any<Guid>(), Arg.Any<EmailActionPurpose>(), Arg.Any<string>(), Arg.Any<TimeSpan>(), Arg.Any<CancellationToken>())
             .Returns(action);
 
-        Result<TokensResponse> result = await _handler.Handle(command, CancellationToken.None);
+        Result result = await _handler.Handle(command, CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
-        result.Value.AccessToken.Should().Be("acc");
-        result.Value.RefreshToken.Should().Be("ref");
 
         await _unitOfWorkMock.Received(1).ExecuteInTransaction(Arg.Any<Func<CancellationToken, Task>>(), Arg.Any<CancellationToken>());
         await _emailActionStoreMock.Received(1).IssueOrReplace(

@@ -246,6 +246,7 @@ The `dataprotection-keys/` directory is gitignored (`**/dataprotection-keys/`). 
 ### Email lifecycle
 
 - Provider-neutral `IEmailSender` + SMTP transport; Mailpit catches all mail locally.
+- **Registration anti-enumeration:** `POST /api/auth/register` returns 202 for both new and existing email addresses and does not issue an authenticated session. New accounts receive verification mail; existing accounts receive a generic registration-attempt notice. Callers must sign in separately after registration.
 - **Verification on register:** every new account receives an `EMAIL_VERIFICATION` action link via outbox (`EMAIL_ACTION_DISPATCH`). The link is time-limited (24 h) and generated at delivery time by `EmailActionLinkProtector` (ASP.NET Core Data Protection). No token or URL is stored in the outbox payload.
 - **Verified-email authorization:** named policy `VERIFIED_EMAIL` (`AuthorizationPolicies.VERIFIED_EMAIL`) loads current `EmailVerifiedAt` from the database (not a JWT claim). Failure returns HTTP 403 `application/problem+json` with `ERR_EMAIL_NOT_VERIFIED`.
   - **Blocked until verified:** asset upload/update/delete/tag writes; publish version; checkout; review create; profile and socials writes; all Admin mutations and audit-log read (Admin role **and** verified email — no Admin bypass).

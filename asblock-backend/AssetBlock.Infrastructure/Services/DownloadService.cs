@@ -1,5 +1,5 @@
-using System.Globalization;
 using AssetBlock.Domain.Abstractions.Services;
+using AssetBlock.Domain.Core.Constants;
 using AssetBlock.Domain.Core.Dto.Assets;
 using AssetBlock.Domain.Core.Entities;
 using AssetBlock.Domain.Core.Enums;
@@ -14,10 +14,6 @@ internal sealed class DownloadService(
     IEncryptionService encryptionService,
     ICacheService cacheService) : IDownloadService
 {
-    private const string DOWNLOAD_COUNTER_PREFIX = "dl";
-    private const string DOWNLOAD_WINDOW_KEY_FORMAT = "yyyyMMddHH";
-    private static readonly TimeSpan _downloadWindow = TimeSpan.FromHours(1);
-
     public async Task<DownloadAuthorization> AuthorizeDownload(Guid assetId, Guid userId, Guid? versionId = null,
         CancellationToken cancellationToken = default)
     {
@@ -93,7 +89,7 @@ internal sealed class DownloadService(
     private async Task<VersionResolution?> ResolveEntitledVersion(
         Guid assetId,
         Guid? versionId,
-        Domain.Core.Entities.Purchase purchase,
+        Purchase purchase,
         CancellationToken cancellationToken)
     {
         AssetVersion? purchasedVersion = await assetStore.GetVersion(assetId, purchase.AssetVersionId, cancellationToken);
@@ -165,12 +161,8 @@ internal sealed class DownloadService(
     private async Task<bool> IsRateLimited(Guid assetId, Guid userId, int limit, CancellationToken cancellationToken)
     {
         DateTimeOffset now = DateTimeOffset.UtcNow;
-        var windowKey = now.ToString(DOWNLOAD_WINDOW_KEY_FORMAT, CultureInfo.InvariantCulture);
-        TimeSpan expiresIn = _downloadWindow
-            - TimeSpan.FromMinutes(now.Minute)
-            - TimeSpan.FromSeconds(now.Second)
-            - TimeSpan.FromMilliseconds(now.Millisecond);
-        var counterKey = $"{DOWNLOAD_COUNTER_PREFIX}:{assetId}:{userId}:{windowKey}";
+        TimeSpan expiresIn = CacheKeys.DownloadCounterExpiry(now);
+        var counterKey = CacheKeys.DownloadCounter(assetId, userId, now);
         var count = await cacheService.Increment(counterKey, expiresIn, cancellationToken);
 
         return count > limit;

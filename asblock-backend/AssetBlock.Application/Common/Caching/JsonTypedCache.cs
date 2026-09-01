@@ -1,5 +1,6 @@
 using System.Text.Json;
 using AssetBlock.Domain.Abstractions.Services;
+using AssetBlock.Domain.Core.Exceptions;
 using Microsoft.Extensions.Logging;
 
 namespace AssetBlock.Application.Common.Caching;
@@ -20,6 +21,10 @@ internal sealed class JsonTypedCache(
             cached = await cache.GetString(key, cancellationToken);
         }
         catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (CacheUnavailableException)
         {
             throw;
         }

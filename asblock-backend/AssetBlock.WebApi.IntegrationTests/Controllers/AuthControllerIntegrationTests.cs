@@ -23,7 +23,7 @@ public sealed class AuthControllerIntegrationTests(IntegrationTestFixture fixtur
     }
 
     [Fact]
-    public async Task RegisterThenLogin_ShouldReturnOkWithTokens()
+    public async Task RegisterThenLogin_ShouldReturnAcceptedThenLoginWithTokens()
     {
         HttpClient client = fixture.Factory.CreateClient();
         var suffix = Guid.NewGuid().ToString("N");
@@ -34,20 +34,9 @@ public sealed class AuthControllerIntegrationTests(IntegrationTestFixture fixtur
             new Uri("/api/auth/register", UriKind.Relative),
             new RegisterRequest($"user_{suffix}", email, password));
 
-        registerResponse.StatusCode.Should().Be(HttpStatusCode.OK);
-        IntegrationTestAuth.TokensResponseDto? registerTokens = await registerResponse.Content.ReadFromJsonAsync<IntegrationTestAuth.TokensResponseDto>(IntegrationTestAuth.JsonOptions);
-        registerTokens.Should().NotBeNull();
-        registerTokens.AccessToken.Should().NotBeNullOrWhiteSpace();
-        registerTokens.RefreshToken.Should().NotBeNullOrWhiteSpace();
+        registerResponse.StatusCode.Should().Be(HttpStatusCode.Accepted);
+        (await registerResponse.Content.ReadAsStringAsync()).Should().BeEmpty();
 
-        client.DefaultRequestHeaders.Authorization =
-            new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", registerTokens.AccessToken);
-        HttpResponseMessage meResponse = await client.GetAsync(new Uri("/api/users/me", UriKind.Relative));
-        meResponse.StatusCode.Should().Be(HttpStatusCode.OK);
-        var meJson = await meResponse.Content.ReadAsStringAsync();
-        meJson.Should().Contain("\"emailVerifiedAt\":null");
-
-        client.DefaultRequestHeaders.Authorization = null;
         HttpResponseMessage loginResponse = await client.PostAsJsonAsync(
             new Uri("/api/auth/login", UriKind.Relative),
             new LoginRequest(email, password));
@@ -56,6 +45,13 @@ public sealed class AuthControllerIntegrationTests(IntegrationTestFixture fixtur
         IntegrationTestAuth.TokensResponseDto? loginTokens = await loginResponse.Content.ReadFromJsonAsync<IntegrationTestAuth.TokensResponseDto>(IntegrationTestAuth.JsonOptions);
         loginTokens.Should().NotBeNull();
         loginTokens.AccessToken.Should().NotBeNullOrWhiteSpace();
+
+        client.DefaultRequestHeaders.Authorization =
+            new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", loginTokens.AccessToken);
+        HttpResponseMessage meResponse = await client.GetAsync(new Uri("/api/users/me", UriKind.Relative));
+        meResponse.StatusCode.Should().Be(HttpStatusCode.OK);
+        var meJson = await meResponse.Content.ReadAsStringAsync();
+        meJson.Should().Contain("\"emailVerifiedAt\":null");
     }
 
     [Fact]
@@ -69,7 +65,14 @@ public sealed class AuthControllerIntegrationTests(IntegrationTestFixture fixtur
         HttpResponseMessage registerResponse = await client.PostAsJsonAsync(
             new Uri("/api/auth/register", UriKind.Relative),
             new RegisterRequest($"reset_{suffix}", knownEmail, password));
-        registerResponse.StatusCode.Should().Be(HttpStatusCode.OK);
+        registerResponse.StatusCode.Should().Be(HttpStatusCode.Accepted);
+
+        HttpResponseMessage duplicateResponse = await client.PostAsJsonAsync(
+            new Uri("/api/auth/register", UriKind.Relative),
+            new RegisterRequest($"other_{suffix}", knownEmail, password));
+        duplicateResponse.StatusCode.Should().Be(HttpStatusCode.Accepted);
+        (await duplicateResponse.Content.ReadAsStringAsync())
+            .Should().Be(await registerResponse.Content.ReadAsStringAsync());
 
         HttpResponseMessage knownResponse = await client.PostAsJsonAsync(
             new Uri("/api/auth/password-reset/request", UriKind.Relative),

@@ -48,6 +48,16 @@ public static class AssetBlockDiagnostics
         _analyticsAggregationDuration.Record(elapsed.TotalSeconds, in tags);
     }
 
+    private static readonly Counter<long> _analyticsRateLimitUnavailable = _meter.CreateCounter<long>(
+        "assetblock.analytics.rate_limit.unavailable",
+        description: "Count of analytics requests rejected because the authoritative rate limiter was unavailable");
+
+    public static void RecordAnalyticsRateLimitUnavailable(string policy)
+    {
+        var tags = new TagList { { "rate_limit.policy", policy } };
+        _analyticsRateLimitUnavailable.Add(1, in tags);
+    }
+
     // --- Storage Orphan Cleanup ---
     private static readonly Histogram<double> _orphanCleanupDuration = _meter.CreateHistogram<double>(
         "assetblock.storage.orphan_cleanup.duration",
