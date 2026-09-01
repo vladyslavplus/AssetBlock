@@ -65,13 +65,14 @@ public sealed class JwtTokenServiceTests
     public void GenerateHubToken_ShouldReturnShortLivedTokenWithHubAudience()
     {
         using ApplicationDbContext db = InMemoryDbContextFactory.Create();
-        JwtTokenService sut = CreateSut(db);
+        var now = new DateTimeOffset(2026, 9, 2, 10, 0, 0, TimeSpan.Zero);
+        JwtTokenService sut = CreateSut(db, new TestTimeProvider(now));
         var userId = Guid.NewGuid();
 
         HubTokenResponse result = sut.GenerateHubToken(userId);
 
         result.HubToken.Should().NotBeNullOrWhiteSpace();
-        result.ExpiresAt.Should().BeCloseTo(DateTimeOffset.UtcNow.AddSeconds(90), TimeSpan.FromSeconds(5));
+        result.ExpiresAt.Should().Be(now.AddSeconds(90));
 
         // Decode claims from the JWT payload without signature verification.
         var parts = result.HubToken.Split('.');
@@ -90,7 +91,7 @@ public sealed class JwtTokenServiceTests
         return s.PadRight(s.Length + (4 - s.Length % 4) % 4, '=');
     }
 
-    private static JwtTokenService CreateSut(ApplicationDbContext db)
+    private static JwtTokenService CreateSut(ApplicationDbContext db, TimeProvider? timeProvider = null)
     {
         IOptions<JwtOptions> opts = Microsoft.Extensions.Options.Options.Create(new JwtOptions
         {
@@ -102,6 +103,6 @@ public sealed class JwtTokenServiceTests
             HubAudience = "hub-aud",
             HubTokenSeconds = 90
         });
-        return new JwtTokenService(db, opts, NullLogger<JwtTokenService>.Instance);
+        return new JwtTokenService(db, opts, NullLogger<JwtTokenService>.Instance, timeProvider);
     }
 }

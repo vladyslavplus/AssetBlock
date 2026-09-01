@@ -18,16 +18,20 @@ namespace AssetBlock.Infrastructure.Services;
 internal sealed class JwtTokenService(
     ApplicationDbContext dbContext,
     IOptions<JwtOptions> options,
-    ILogger<JwtTokenService> logger) : IJwtTokenService
+    ILogger<JwtTokenService> logger,
+    TimeProvider? timeProvider = null) : IJwtTokenService
 {
     private static readonly TimeSpan _reusedGraceWindow = TimeSpan.FromSeconds(15);
+    private readonly TimeProvider _timeProvider = timeProvider ?? TimeProvider.System;
+
     public TokensResponse GenerateTokenPair(Guid userId, string username, string email, string role)
     {
         JwtOptions jwtOptions = options.Value;
         var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtOptions.Key));
         var credentials = new SigningCredentials(key, SecurityAlgorithms.HmacSha256);
-        DateTime accessExpiresAt = DateTime.UtcNow.AddMinutes(jwtOptions.AccessTokenMinutes);
-        DateTimeOffset refreshExpiresAt = DateTimeOffset.UtcNow.AddDays(jwtOptions.RefreshTokenDays);
+        DateTimeOffset now = _timeProvider.GetUtcNow();
+        DateTime accessExpiresAt = now.AddMinutes(jwtOptions.AccessTokenMinutes).UtcDateTime;
+        DateTimeOffset refreshExpiresAt = now.AddDays(jwtOptions.RefreshTokenDays);
 
         var claims = new List<Claim>
         {
@@ -61,7 +65,7 @@ internal sealed class JwtTokenService(
         JwtOptions jwtOptions = options.Value;
         var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtOptions.Key));
         var credentials = new SigningCredentials(key, SecurityAlgorithms.HmacSha256);
-        DateTimeOffset expiresAt = DateTimeOffset.UtcNow.AddSeconds(jwtOptions.HubTokenSeconds);
+        DateTimeOffset expiresAt = _timeProvider.GetUtcNow().AddSeconds(jwtOptions.HubTokenSeconds);
 
         // Intentionally minimal claims: no email, role, or name.
         // The distinct hub audience and token_use claim prevent this token from
@@ -98,7 +102,7 @@ internal sealed class JwtTokenService(
             UserId = userId,
             TokenHash = hash,
             ExpiresAt = expiresAt,
-            CreatedAt = DateTimeOffset.UtcNow
+            CreatedAt = _timeProvider.GetUtcNow()
         };
         dbContext.RefreshTokens.Add(entity);
         await dbContext.SaveChangesAsync(cancellationToken);
@@ -108,7 +112,7 @@ internal sealed class JwtTokenService(
     public async Task<RefreshTokenValidationResult> ValidateRefreshToken(string refreshToken, CancellationToken cancellationToken = default)
     {
         var hash = ComputeSha256Hash(refreshToken);
-        DateTimeOffset now = DateTimeOffset.UtcNow;
+        DateTimeOffset now = _timeProvider.GetUtcNow();
         var entity = await dbContext.RefreshTokens
             .AsNoTracking()
             .Where(rt => rt.TokenHash == hash && rt.ExpiresAt > now)
@@ -150,7 +154,7 @@ internal sealed class JwtTokenService(
 
     public async Task<bool> RevokeRefreshToken(Guid tokenId, CancellationToken cancellationToken = default)
     {
-        DateTimeOffset now = DateTimeOffset.UtcNow;
+        DateTimeOffset now = _timeProvider.GetUtcNow();
         var affected = await dbContext.RefreshTokens
             .Where(rt => rt.Id == tokenId && rt.RevokedAt == null)
             .ExecuteUpdateAsync(setters => setters.SetProperty(rt => rt.RevokedAt, now), cancellationToken);
@@ -167,7 +171,7 @@ internal sealed class JwtTokenService(
 
     public async Task RevokeAllRefreshTokens(Guid userId, CancellationToken cancellationToken = default)
     {
-        DateTimeOffset now = DateTimeOffset.UtcNow;
+        DateTimeOffset now = _timeProvider.GetUtcNow();
         await dbContext.RefreshTokens
             .Where(rt => rt.UserId == userId && rt.RevokedAt == null)
             .ExecuteUpdateAsync(setters => setters.SetProperty(rt => rt.RevokedAt, now), cancellationToken);

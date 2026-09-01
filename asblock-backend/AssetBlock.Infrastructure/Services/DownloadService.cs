@@ -12,8 +12,11 @@ internal sealed class DownloadService(
     IPurchaseStore purchaseStore,
     IAssetStorageService assetStorageService,
     IEncryptionService encryptionService,
-    ICacheService cacheService) : IDownloadService
+    ICacheService cacheService,
+    TimeProvider? timeProvider = null) : IDownloadService
 {
+    private readonly TimeProvider _timeProvider = timeProvider ?? TimeProvider.System;
+
     public async Task<DownloadAuthorization> AuthorizeDownload(Guid assetId, Guid userId, Guid? versionId = null,
         CancellationToken cancellationToken = default)
     {
@@ -160,7 +163,7 @@ internal sealed class DownloadService(
 
     private async Task<bool> IsRateLimited(Guid assetId, Guid userId, int limit, CancellationToken cancellationToken)
     {
-        DateTimeOffset now = DateTimeOffset.UtcNow;
+        DateTimeOffset now = _timeProvider.GetUtcNow();
         TimeSpan expiresIn = CacheKeys.DownloadCounterExpiry(now);
         var counterKey = CacheKeys.DownloadCounter(assetId, userId, now);
         var count = await cacheService.Increment(counterKey, expiresIn, cancellationToken);

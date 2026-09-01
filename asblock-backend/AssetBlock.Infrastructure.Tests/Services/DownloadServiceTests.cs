@@ -5,6 +5,7 @@ using AssetBlock.Domain.Core.Entities;
 using AssetBlock.Domain.Core.Primitives.Api;
 using AssetBlock.Domain.Core.Primitives.AppSettingsOptions;
 using AssetBlock.Infrastructure.Services;
+using AssetBlock.Infrastructure.Tests.Infrastructure;
 using NSubstitute;
 
 namespace AssetBlock.Infrastructure.Tests.Services;
@@ -134,15 +135,20 @@ public sealed class DownloadServiceTests
                     "Personal",
                     "terms")));
 
+        var time = new TestTimeProvider(new DateTimeOffset(2026, 9, 2, 10, 30, 0, TimeSpan.Zero));
         var sut = new DownloadService(
             assetStore,
             Substitute.For<IPurchaseStore>(),
             Substitute.For<IAssetStorageService>(),
             CreateEncryption(),
-            new MemoryCacheService());
+            new MemoryCacheService(time),
+            time);
 
         (await sut.AuthorizeDownload(asset.Id, userId)).Status.Should().Be(AssetDownloadStatus.SUCCESS);
         (await sut.AuthorizeDownload(asset.Id, userId)).Status.Should().Be(AssetDownloadStatus.RATE_LIMITED);
+
+        time.SetUtcNow(new DateTimeOffset(2026, 9, 2, 11, 0, 0, TimeSpan.Zero));
+        (await sut.AuthorizeDownload(asset.Id, userId)).Status.Should().Be(AssetDownloadStatus.SUCCESS);
     }
 
     private static Asset CreateAsset(Guid authorId, Guid categoryId) =>

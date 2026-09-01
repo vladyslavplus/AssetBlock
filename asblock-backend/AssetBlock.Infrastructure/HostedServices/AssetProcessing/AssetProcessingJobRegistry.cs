@@ -2,7 +2,6 @@ using AssetBlock.Domain.Abstractions.Services;
 using AssetBlock.Domain.Core.Dto;
 using AssetBlock.Domain.Core.Enums;
 using AssetBlock.Infrastructure.Persistence.Stores;
-using Microsoft.Extensions.DependencyInjection;
 
 namespace AssetBlock.Infrastructure.HostedServices.AssetProcessing;
 
@@ -20,12 +19,13 @@ public interface IAssetProcessingJobHandlerAdapter
     Type ResultType { get; }
 
     Task<AssetProcessingJobOutcome> Execute(
-        IServiceProvider serviceProvider,
         ClaimedAssetProcessingJob claimedJob,
         CancellationToken cancellationToken);
 }
 
-public sealed class AssetProcessingJobHandlerAdapter<THandler, TPayload, TResult>(AssetProcessingJobType jobType)
+public sealed class AssetProcessingJobHandlerAdapter<THandler, TPayload, TResult>(
+    AssetProcessingJobType jobType,
+    THandler handler)
     : IAssetProcessingJobHandlerAdapter
     where THandler : IAssetProcessingJobHandler<TPayload, TResult>
     where TPayload : AssetProcessingPayload
@@ -36,12 +36,9 @@ public sealed class AssetProcessingJobHandlerAdapter<THandler, TPayload, TResult
     public Type ResultType => typeof(TResult);
 
     public async Task<AssetProcessingJobOutcome> Execute(
-        IServiceProvider serviceProvider,
         ClaimedAssetProcessingJob claimedJob,
         CancellationToken cancellationToken)
     {
-        THandler handler = serviceProvider.GetRequiredService<THandler>();
-
         AssetProcessingPayload rawPayload = AssetProcessingSerializer.DeserializePayload(JobType, claimedJob.Payload);
         if (rawPayload is not TPayload typedPayload)
         {

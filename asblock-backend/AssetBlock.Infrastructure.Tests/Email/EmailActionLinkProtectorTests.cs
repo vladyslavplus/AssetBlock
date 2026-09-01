@@ -2,6 +2,7 @@ using AssetBlock.Domain.Core.Dto.Email;
 using AssetBlock.Domain.Core.Enums;
 using AssetBlock.Domain.Core.Primitives.AppSettingsOptions;
 using AssetBlock.Infrastructure.Email;
+using AssetBlock.Infrastructure.Tests.Infrastructure;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -140,6 +141,24 @@ public sealed class EmailActionLinkProtectorTests : IDisposable
     }
 
     [Fact]
+    public void TryUnprotect_WhenInjectedClockPassesExpiry_ShouldReturnFalse()
+    {
+        using ServiceProvider provider = BuildProtectorProvider(_tempKeysPath);
+        var time = new TestTimeProvider(new DateTimeOffset(2030, 1, 1, 0, 0, 0, TimeSpan.Zero));
+        EmailActionLinkProtector protector = CreateProtector(provider, time);
+        var claims = new EmailActionLinkClaims(
+            Guid.NewGuid(),
+            Guid.NewGuid(),
+            EmailActionPurpose.PASSWORD_RESET,
+            time.GetUtcNow().AddMinutes(10));
+        var token = protector.Protect(claims);
+
+        time.SetUtcNow(claims.ExpiresAt.AddTicks(1));
+
+        protector.TryUnprotect(token, EmailActionPurpose.PASSWORD_RESET, out _).Should().BeFalse();
+    }
+
+    [Fact]
     public void Protect_ThenUnprotect_AcrossNewServiceProvider_ShouldSucceedWithPersistedKeyRing()
     {
         var keysPath = Path.Combine(Path.GetTempPath(), $"assetblock-dataprotection-keys-{Guid.NewGuid():N}");
@@ -187,7 +206,7 @@ public sealed class EmailActionLinkProtectorTests : IDisposable
         return services.BuildServiceProvider();
     }
 
-    private static EmailActionLinkProtector CreateProtector(ServiceProvider sp)
+    private static EmailActionLinkProtector CreateProtector(ServiceProvider sp, TimeProvider? timeProvider = null)
     {
         IOptionsEmail emailOptions = OptionsHelper.Create(new EmailOptions
         {
@@ -202,6 +221,7 @@ public sealed class EmailActionLinkProtectorTests : IDisposable
         return new EmailActionLinkProtector(
             sp.GetRequiredService<IDataProtectionProvider>(),
             emailOptions,
-            NullLogger<EmailActionLinkProtector>.Instance);
+            NullLogger<EmailActionLinkProtector>.Instance,
+            timeProvider);
     }
 }

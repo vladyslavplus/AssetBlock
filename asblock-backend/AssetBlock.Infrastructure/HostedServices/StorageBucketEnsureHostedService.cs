@@ -15,17 +15,17 @@ internal sealed class StorageBucketEnsureHostedService : BackgroundService
 {
     private const int FAST_ATTEMPTS = 3;
 
-    private readonly IServiceProvider _services;
+    private readonly IServiceScopeFactory _scopeFactory;
     private readonly ILogger<StorageBucketEnsureHostedService> _logger;
     private readonly TimeSpan _fastRetryDelay;
     private readonly TimeSpan _initialBackoff;
     private readonly TimeSpan _maxBackoff;
 
     public StorageBucketEnsureHostedService(
-        IServiceProvider services,
+        IServiceScopeFactory scopeFactory,
         ILogger<StorageBucketEnsureHostedService> logger)
         : this(
-            services,
+            scopeFactory,
             logger,
             fastRetryDelay: TimeSpan.FromMilliseconds(500),
             initialBackoff: TimeSpan.FromSeconds(2),
@@ -35,13 +35,13 @@ internal sealed class StorageBucketEnsureHostedService : BackgroundService
 
     /// <summary>Test seam for short delays.</summary>
     internal StorageBucketEnsureHostedService(
-        IServiceProvider services,
+        IServiceScopeFactory scopeFactory,
         ILogger<StorageBucketEnsureHostedService> logger,
         TimeSpan fastRetryDelay,
         TimeSpan initialBackoff,
         TimeSpan maxBackoff)
     {
-        _services = services;
+        _scopeFactory = scopeFactory;
         _logger = logger;
         _fastRetryDelay = fastRetryDelay;
         _initialBackoff = initialBackoff;
@@ -58,7 +58,7 @@ internal sealed class StorageBucketEnsureHostedService : BackgroundService
             attempt++;
             try
             {
-                using IServiceScope scope = _services.CreateScope();
+                using IServiceScope scope = _scopeFactory.CreateScope();
                 IAssetStorageService storage = scope.ServiceProvider.GetRequiredService<IAssetStorageService>();
                 await storage.EnsureBucket(stoppingToken).ConfigureAwait(false);
                 _logger.LogInformation(

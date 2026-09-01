@@ -136,13 +136,11 @@ public static class DependencyInjection
         services.AddHostedService<RefreshTokenRetentionWorker>();
         services.AddHostedService<AnalyticsAggregationWorker>();
         services.AddHostedService<AssetProcessingWorker>();
-        services.AddSingleton<IAssetProcessingJobRegistry, AssetProcessingJobRegistry>();
-        services.AddSingleton<IAssetProcessingJobHandlerAdapter, AssetProcessingJobHandlerAdapter<ArchiveInspectionJobHandler, ArchiveInspectionPayload, ArchiveInspectionResult>>(
-            _ => new AssetProcessingJobHandlerAdapter<ArchiveInspectionJobHandler, ArchiveInspectionPayload, ArchiveInspectionResult>(AssetProcessingJobType.ARCHIVE_INSPECTION));
-        services.AddSingleton<IAssetProcessingJobHandlerAdapter, AssetProcessingJobHandlerAdapter<MalwareScanJobHandler, MalwareScanPayload, MalwareScanResult>>(
-            _ => new AssetProcessingJobHandlerAdapter<MalwareScanJobHandler, MalwareScanPayload, MalwareScanResult>(AssetProcessingJobType.MALWARE_SCAN));
-        services.AddScoped<ArchiveInspectionJobHandler>();
-        services.AddScoped<MalwareScanJobHandler>();
+        services.AddScoped<IAssetProcessingJobRegistry, AssetProcessingJobRegistry>();
+        services.AddAssetProcessingJobHandler<ArchiveInspectionJobHandler, ArchiveInspectionPayload, ArchiveInspectionResult>(
+            AssetProcessingJobType.ARCHIVE_INSPECTION);
+        services.AddAssetProcessingJobHandler<MalwareScanJobHandler, MalwareScanPayload, MalwareScanResult>(
+            AssetProcessingJobType.MALWARE_SCAN);
         services.AddAssetProcessingJobHandler<ListingCopilotJobHandler, ListingCopilotPayload, ListingCopilotResult>(
             AssetProcessingJobType.LISTING_COPILOT);
         services.AddSingleton<IArchiveSafetyInspector, ArchiveSafetyInspector>();
@@ -233,8 +231,10 @@ public static class DependencyInjection
         where TResult : AssetProcessingResult
     {
         services.AddScoped<THandler>();
-        services.AddSingleton<IAssetProcessingJobHandlerAdapter>(
-            new AssetProcessingJobHandlerAdapter<THandler, TPayload, TResult>(jobType));
+        services.AddScoped<IAssetProcessingJobHandlerAdapter>(serviceProvider =>
+            new AssetProcessingJobHandlerAdapter<THandler, TPayload, TResult>(
+                jobType,
+                serviceProvider.GetRequiredService<THandler>()));
         return services;
     }
 }

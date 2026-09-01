@@ -42,12 +42,12 @@ public sealed class AssetProcessingWorkerTests
 
         serviceProvider.GetService(typeof(IAssetProcessingJobStore)).Returns(_store);
         serviceProvider.GetService(typeof(IAssetProcessingLifecycleStore)).Returns(_lifecycleStore);
+        serviceProvider.GetService(typeof(IAssetProcessingJobRegistry)).Returns(_registry);
         scope.ServiceProvider.Returns(serviceProvider);
         _scopeFactory.CreateScope().Returns(scope);
 
         return new AssetProcessingWorker(
             _scopeFactory,
-            _registry,
             _publisher,
             Microsoft.Extensions.Options.Options.Create(options),
             _timeProvider,
@@ -127,7 +127,6 @@ public sealed class AssetProcessingWorkerTests
         AssetProcessingWorker worker = CreateWorker(options);
 
         await worker.StartAsync(CancellationToken.None);
-        await Task.Delay(50);
         await worker.StopAsync(CancellationToken.None);
 
         await _store.DidNotReceive().ClaimPendingBatch(
@@ -163,7 +162,7 @@ public sealed class AssetProcessingWorkerTests
             DateTimeOffset.UtcNow);
 
         IAssetProcessingJobHandlerAdapter adapter = Substitute.For<IAssetProcessingJobHandlerAdapter>();
-        adapter.Execute(Arg.Any<IServiceProvider>(), Arg.Any<ClaimedAssetProcessingJob>(), Arg.Any<CancellationToken>())
+        adapter.Execute(Arg.Any<ClaimedAssetProcessingJob>(), Arg.Any<CancellationToken>())
             .Returns<AssetProcessingJobOutcome>(_ => throw new InvalidAssetProcessingJobResultException("Result type mismatch"));
 
         _registry.GetHandler(AssetProcessingJobType.ARCHIVE_INSPECTION).Returns(adapter);
@@ -241,7 +240,7 @@ public sealed class AssetProcessingWorkerTests
             DateTimeOffset.UtcNow);
 
         IAssetProcessingJobHandlerAdapter adapter = Substitute.For<IAssetProcessingJobHandlerAdapter>();
-        adapter.Execute(Arg.Any<IServiceProvider>(), Arg.Any<ClaimedAssetProcessingJob>(), Arg.Any<CancellationToken>())
+        adapter.Execute(Arg.Any<ClaimedAssetProcessingJob>(), Arg.Any<CancellationToken>())
             .Returns(Task.FromResult(AssetProcessingJobOutcome.Succeeded(new ArchiveInspectionResult(1, 10))));
 
         _registry.GetHandler(AssetProcessingJobType.ARCHIVE_INSPECTION).Returns(adapter);
@@ -269,7 +268,7 @@ public sealed class AssetProcessingWorkerTests
         try
         {
             await dbErrorTcs.Task.WaitAsync(TimeSpan.FromSeconds(5));
-            await Task.Delay(50);
+            await WaitUntil(() => worker.ActiveJobsCount == 0);
         }
         finally
         {
@@ -326,7 +325,7 @@ public sealed class AssetProcessingWorkerTests
             updatedAt);
 
         IAssetProcessingJobHandlerAdapter adapter = Substitute.For<IAssetProcessingJobHandlerAdapter>();
-        adapter.Execute(Arg.Any<IServiceProvider>(), Arg.Any<ClaimedAssetProcessingJob>(), Arg.Any<CancellationToken>())
+        adapter.Execute(Arg.Any<ClaimedAssetProcessingJob>(), Arg.Any<CancellationToken>())
             .Returns(Task.FromResult(AssetProcessingJobOutcome.Succeeded(new ArchiveInspectionResult(1, 10))));
 
         _registry.GetHandler(AssetProcessingJobType.ARCHIVE_INSPECTION).Returns(adapter);
@@ -412,7 +411,7 @@ public sealed class AssetProcessingWorkerTests
             DateTimeOffset.UtcNow);
 
         IAssetProcessingJobHandlerAdapter adapter = Substitute.For<IAssetProcessingJobHandlerAdapter>();
-        adapter.Execute(Arg.Any<IServiceProvider>(), Arg.Any<ClaimedAssetProcessingJob>(), Arg.Any<CancellationToken>())
+        adapter.Execute(Arg.Any<ClaimedAssetProcessingJob>(), Arg.Any<CancellationToken>())
             .Returns(Task.FromResult(AssetProcessingJobOutcome.CommittedSucceeded()));
 
         _registry.GetHandler(AssetProcessingJobType.LISTING_COPILOT).Returns(adapter);
@@ -502,7 +501,7 @@ public sealed class AssetProcessingWorkerTests
             DateTimeOffset.UtcNow);
 
         IAssetProcessingJobHandlerAdapter adapter = Substitute.For<IAssetProcessingJobHandlerAdapter>();
-        adapter.Execute(Arg.Any<IServiceProvider>(), Arg.Any<ClaimedAssetProcessingJob>(), Arg.Any<CancellationToken>())
+        adapter.Execute(Arg.Any<ClaimedAssetProcessingJob>(), Arg.Any<CancellationToken>())
             .Returns<AssetProcessingJobOutcome>(_ => throw new InvalidOperationException("transient storage"));
 
         _registry.GetHandler(AssetProcessingJobType.ARCHIVE_INSPECTION).Returns(adapter);
@@ -586,7 +585,7 @@ public sealed class AssetProcessingWorkerTests
             DateTimeOffset.UtcNow);
 
         IAssetProcessingJobHandlerAdapter adapter = Substitute.For<IAssetProcessingJobHandlerAdapter>();
-        adapter.Execute(Arg.Any<IServiceProvider>(), Arg.Any<ClaimedAssetProcessingJob>(), Arg.Any<CancellationToken>())
+        adapter.Execute(Arg.Any<ClaimedAssetProcessingJob>(), Arg.Any<CancellationToken>())
             .Returns(AssetProcessingJobOutcome.Retryable(
                 ErrorCodes.SCANNER_UNAVAILABLE,
                 ErrorCodesToErrorMessages.GetMessage(ErrorCodes.SCANNER_UNAVAILABLE)));
@@ -672,7 +671,7 @@ public sealed class AssetProcessingWorkerTests
             DateTimeOffset.UtcNow);
 
         IAssetProcessingJobHandlerAdapter adapter = Substitute.For<IAssetProcessingJobHandlerAdapter>();
-        adapter.Execute(Arg.Any<IServiceProvider>(), Arg.Any<ClaimedAssetProcessingJob>(), Arg.Any<CancellationToken>())
+        adapter.Execute(Arg.Any<ClaimedAssetProcessingJob>(), Arg.Any<CancellationToken>())
             .Returns(AssetProcessingJobOutcome.Retryable(
                 ErrorCodes.SCANNER_UNAVAILABLE,
                 ErrorCodesToErrorMessages.GetMessage(ErrorCodes.SCANNER_UNAVAILABLE)));
@@ -777,17 +776,17 @@ public sealed class AssetProcessingWorkerTests
         IAssetProcessingJobHandlerAdapter adapter = Substitute.For<IAssetProcessingJobHandlerAdapter>();
         if (mode == "timeout")
         {
-            adapter.Execute(Arg.Any<IServiceProvider>(), Arg.Any<ClaimedAssetProcessingJob>(), Arg.Any<CancellationToken>())
+            adapter.Execute(Arg.Any<ClaimedAssetProcessingJob>(), Arg.Any<CancellationToken>())
                 .Returns(ci => TimeoutThenSucceed(ci.Arg<CancellationToken>()));
         }
         else if (mode == "payload")
         {
-            adapter.Execute(Arg.Any<IServiceProvider>(), Arg.Any<ClaimedAssetProcessingJob>(), Arg.Any<CancellationToken>())
+            adapter.Execute(Arg.Any<ClaimedAssetProcessingJob>(), Arg.Any<CancellationToken>())
                 .Returns<AssetProcessingJobOutcome>(_ => throw new AssetProcessingSerializerException("bad payload"));
         }
         else
         {
-            adapter.Execute(Arg.Any<IServiceProvider>(), Arg.Any<ClaimedAssetProcessingJob>(), Arg.Any<CancellationToken>())
+            adapter.Execute(Arg.Any<ClaimedAssetProcessingJob>(), Arg.Any<CancellationToken>())
                 .Returns<AssetProcessingJobOutcome>(_ => throw new InvalidOperationException("boom"));
         }
 
@@ -954,7 +953,7 @@ public sealed class AssetProcessingWorkerTests
             DateTimeOffset.UtcNow);
 
         IAssetProcessingJobHandlerAdapter adapter = Substitute.For<IAssetProcessingJobHandlerAdapter>();
-        adapter.Execute(Arg.Any<IServiceProvider>(), Arg.Any<ClaimedAssetProcessingJob>(), Arg.Any<CancellationToken>())
+        adapter.Execute(Arg.Any<ClaimedAssetProcessingJob>(), Arg.Any<CancellationToken>())
             .Returns<AssetProcessingJobOutcome>(_ => throw new InvalidOperationException("copilot boom"));
         _registry.GetHandler(AssetProcessingJobType.LISTING_COPILOT).Returns(adapter);
 
@@ -1042,7 +1041,7 @@ public sealed class AssetProcessingWorkerTests
 
         var adapterCancelledTcs = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
         IAssetProcessingJobHandlerAdapter adapter = Substitute.For<IAssetProcessingJobHandlerAdapter>();
-        adapter.Execute(Arg.Any<IServiceProvider>(), Arg.Any<ClaimedAssetProcessingJob>(), Arg.Any<CancellationToken>())
+        adapter.Execute(Arg.Any<ClaimedAssetProcessingJob>(), Arg.Any<CancellationToken>())
             .Returns<Task<AssetProcessingJobOutcome>>(async info =>
             {
                 CancellationToken ct = info.Arg<CancellationToken>();
@@ -1127,7 +1126,7 @@ public sealed class AssetProcessingWorkerTests
 
         var adapterCancelledTcs = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
         IAssetProcessingJobHandlerAdapter adapter = Substitute.For<IAssetProcessingJobHandlerAdapter>();
-        adapter.Execute(Arg.Any<IServiceProvider>(), Arg.Any<ClaimedAssetProcessingJob>(), Arg.Any<CancellationToken>())
+        adapter.Execute(Arg.Any<ClaimedAssetProcessingJob>(), Arg.Any<CancellationToken>())
             .Returns<Task<AssetProcessingJobOutcome>>(async info =>
             {
                 CancellationToken ct = info.Arg<CancellationToken>();
@@ -1211,12 +1210,13 @@ public sealed class AssetProcessingWorkerTests
             DateTimeOffset.UtcNow);
 
         var adapterExecutedTcs = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var releaseAdapterTcs = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         IAssetProcessingJobHandlerAdapter adapter = Substitute.For<IAssetProcessingJobHandlerAdapter>();
-        adapter.Execute(Arg.Any<IServiceProvider>(), Arg.Any<ClaimedAssetProcessingJob>(), Arg.Any<CancellationToken>())
+        adapter.Execute(Arg.Any<ClaimedAssetProcessingJob>(), Arg.Any<CancellationToken>())
             .Returns<Task<AssetProcessingJobOutcome>>(async _ =>
             {
-                // Ignores cancellation and returns Success after delay
-                await Task.Delay(80);
+                // Ignores cancellation and returns Success after test observes lease loss.
+                await releaseAdapterTcs.Task;
                 adapterExecutedTcs.TrySetResult(true);
                 return AssetProcessingJobOutcome.Succeeded(new ArchiveInspectionResult(1, 1));
             });
@@ -1235,13 +1235,16 @@ public sealed class AssetProcessingWorkerTests
 
         // Renewal returns false (lease lost)
         _store.RenewLease(jobId, leaseToken, Arg.Any<TimeSpan>(), Arg.Any<CancellationToken>())
-            .Returns(Task.FromResult(false));
+            .Returns(_ =>
+            {
+                releaseAdapterTcs.TrySetResult();
+                return Task.FromResult(false);
+            });
 
         await worker.StartAsync(CancellationToken.None);
         try
         {
             await adapterExecutedTcs.Task.WaitAsync(TimeSpan.FromSeconds(10));
-            await Task.Delay(50);
             await _store.DidNotReceive().MarkSucceeded(Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<AssetProcessingResult?>(), Arg.Any<CancellationToken>());
             await _store.DidNotReceive().MarkFailedTerminal(Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>());
             await _store.DidNotReceive().MarkFailedRetryable(Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<TimeSpan>(), Arg.Any<CancellationToken>());
@@ -1290,7 +1293,7 @@ public sealed class AssetProcessingWorkerTests
 
         var adapterFailedTcs = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
         IAssetProcessingJobHandlerAdapter adapter = Substitute.For<IAssetProcessingJobHandlerAdapter>();
-        adapter.Execute(Arg.Any<IServiceProvider>(), Arg.Any<ClaimedAssetProcessingJob>(), Arg.Any<CancellationToken>())
+        adapter.Execute(Arg.Any<ClaimedAssetProcessingJob>(), Arg.Any<CancellationToken>())
             .Returns<Task<AssetProcessingJobOutcome>>(async info =>
             {
                 CancellationToken ct = info.Arg<CancellationToken>();
@@ -1327,7 +1330,7 @@ public sealed class AssetProcessingWorkerTests
         try
         {
             await adapterFailedTcs.Task.WaitAsync(TimeSpan.FromSeconds(10));
-            await Task.Delay(50);
+            await WaitUntil(() => worker.ActiveJobsCount == 0);
             await _store.DidNotReceive().MarkSucceeded(Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<AssetProcessingResult?>(), Arg.Any<CancellationToken>());
             await _store.DidNotReceive().MarkFailedTerminal(Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>());
             await _store.DidNotReceive().MarkFailedRetryable(Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<TimeSpan>(), Arg.Any<CancellationToken>());
@@ -1376,7 +1379,7 @@ public sealed class AssetProcessingWorkerTests
 
         var adapterCancelledTcs = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
         IAssetProcessingJobHandlerAdapter adapter = Substitute.For<IAssetProcessingJobHandlerAdapter>();
-        adapter.Execute(Arg.Any<IServiceProvider>(), Arg.Any<ClaimedAssetProcessingJob>(), Arg.Any<CancellationToken>())
+        adapter.Execute(Arg.Any<ClaimedAssetProcessingJob>(), Arg.Any<CancellationToken>())
             .Returns<Task<AssetProcessingJobOutcome>>(async info =>
             {
                 CancellationToken ct = info.Arg<CancellationToken>();
@@ -1429,5 +1432,15 @@ public sealed class AssetProcessingWorkerTests
     {
         await Task.Delay(TimeSpan.FromSeconds(5), cancellationToken);
         return AssetProcessingJobOutcome.Succeeded(new ArchiveInspectionResult(1, 1));
+    }
+
+    private static async Task WaitUntil(Func<bool> condition)
+    {
+        using var timeoutCts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        while (!condition())
+        {
+            timeoutCts.Token.ThrowIfCancellationRequested();
+            await Task.Yield();
+        }
     }
 }

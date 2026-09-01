@@ -184,6 +184,61 @@ public sealed class OllamaAiGenerationProviderTests
     }
 
     [Fact]
+    public async Task Generate_WhenStructuredContentViolatesResponseSchema_ShouldBeTerminal()
+    {
+        var handler = new RecordingHttpMessageHandler
+        {
+            Responder = (request, _) => Task.FromResult(request.Method == HttpMethod.Get
+                ? AiProviderTestFactory.Json(HttpStatusCode.OK, AiProviderTestFactory.OllamaTagsBody())
+                : AiProviderTestFactory.Json(HttpStatusCode.OK, """
+                    {
+                      "model": "fixture-ollama-test",
+                      "message": { "content": "{\"title\":42}" }
+                    }
+                    """))
+        };
+        AiGenerationRequest request = AiProviderTestFactory.OllamaRequest() with
+        {
+            ResponseSchemaJson = """
+                {"type":"object","additionalProperties":false,"required":["title"],"properties":{"title":{"type":"string"}}}
+                """
+        };
+
+        AiGenerationProviderResult result = await CreateSut(handler).Generate(request, CancellationToken.None);
+
+        result.ErrorCode.Should().Be(ErrorCodes.ERR_AI_INVALID_RESPONSE);
+        result.IsRetryable.Should().BeFalse();
+        result.StructuredJson.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task Generate_WhenResponseSchemaUsesUnsupportedKeyword_ShouldFailClosed()
+    {
+        var handler = new RecordingHttpMessageHandler
+        {
+            Responder = (request, _) => Task.FromResult(request.Method == HttpMethod.Get
+                ? AiProviderTestFactory.Json(HttpStatusCode.OK, AiProviderTestFactory.OllamaTagsBody())
+                : AiProviderTestFactory.Json(HttpStatusCode.OK, """
+                    {
+                      "model": "fixture-ollama-test",
+                      "message": { "content": "{\"title\":\"T\"}" }
+                    }
+                    """))
+        };
+        AiGenerationRequest request = AiProviderTestFactory.OllamaRequest() with
+        {
+            ResponseSchemaJson = """
+                {"type":"object","properties":{"title":{"type":"string","pattern":"^[A-Z]"}}}
+                """
+        };
+
+        AiGenerationProviderResult result = await CreateSut(handler).Generate(request, CancellationToken.None);
+
+        result.ErrorCode.Should().Be(ErrorCodes.ERR_AI_INVALID_RESPONSE);
+        result.IsRetryable.Should().BeFalse();
+    }
+
+    [Fact]
     public async Task Generate_WhenReturnedModelDoesNotMatchConfiguredModel_ShouldBeTerminal()
     {
         var handler = new RecordingHttpMessageHandler

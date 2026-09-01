@@ -13,15 +13,17 @@ namespace AssetBlock.Infrastructure.Email;
 internal sealed class EmailActionLinkProtector(
     IDataProtectionProvider dataProtectionProvider,
     IOptions<EmailOptions> emailOptions,
-    ILogger<EmailActionLinkProtector> logger) : IEmailActionLinkProtector
+    ILogger<EmailActionLinkProtector> logger,
+    TimeProvider? timeProvider = null) : IEmailActionLinkProtector
 {
+    private readonly TimeProvider _timeProvider = timeProvider ?? TimeProvider.System;
     private readonly ITimeLimitedDataProtector _protector = dataProtectionProvider
         .CreateProtector(EmailActionConstants.DATA_PROTECTION_PURPOSE)
         .ToTimeLimitedDataProtector();
 
     public string Protect(EmailActionLinkClaims claims)
     {
-        TimeSpan lifetime = claims.ExpiresAt - DateTimeOffset.UtcNow;
+        TimeSpan lifetime = claims.ExpiresAt - _timeProvider.GetUtcNow();
         if (lifetime <= TimeSpan.Zero)
         {
             throw new InvalidOperationException("Email action link is already expired.");
@@ -54,7 +56,7 @@ internal sealed class EmailActionLinkProtector(
                 return false;
             }
 
-            if (decoded.ExpiresAt <= DateTimeOffset.UtcNow)
+            if (decoded.ExpiresAt <= _timeProvider.GetUtcNow())
             {
                 return false;
             }

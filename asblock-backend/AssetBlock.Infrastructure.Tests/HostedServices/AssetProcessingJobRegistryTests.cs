@@ -4,7 +4,6 @@ using AssetBlock.Domain.Core.Dto;
 using AssetBlock.Domain.Core.Enums;
 using AssetBlock.Infrastructure.HostedServices.AssetProcessing;
 using AssetBlock.Infrastructure.Persistence.Stores;
-using Microsoft.Extensions.DependencyInjection;
 
 namespace AssetBlock.Infrastructure.Tests.HostedServices;
 
@@ -45,9 +44,11 @@ public sealed class AssetProcessingJobRegistryTests
     public void Constructor_WhenDuplicateHandlersForSameType_ShouldThrowInvalidOperationException()
     {
         var adapter1 = new AssetProcessingJobHandlerAdapter<TestInspectionHandler, ArchiveInspectionPayload, ArchiveInspectionResult>(
-            AssetProcessingJobType.ARCHIVE_INSPECTION);
+            AssetProcessingJobType.ARCHIVE_INSPECTION,
+            new TestInspectionHandler());
         var adapter2 = new AssetProcessingJobHandlerAdapter<TestInspectionHandler, ArchiveInspectionPayload, ArchiveInspectionResult>(
-            AssetProcessingJobType.ARCHIVE_INSPECTION);
+            AssetProcessingJobType.ARCHIVE_INSPECTION,
+            new TestInspectionHandler());
 
         Func<AssetProcessingJobRegistry> act = () => new AssetProcessingJobRegistry([adapter1, adapter2]);
 
@@ -67,12 +68,9 @@ public sealed class AssetProcessingJobRegistryTests
     [Fact]
     public async Task Adapter_Execute_WhenPayloadValid_ExecutesTypedHandler()
     {
-        var services = new ServiceCollection();
-        services.AddScoped<TestInspectionHandler>();
-        ServiceProvider provider = services.BuildServiceProvider();
-
         var adapter = new AssetProcessingJobHandlerAdapter<TestInspectionHandler, ArchiveInspectionPayload, ArchiveInspectionResult>(
-            AssetProcessingJobType.ARCHIVE_INSPECTION);
+            AssetProcessingJobType.ARCHIVE_INSPECTION,
+            new TestInspectionHandler());
 
         var payloadJson = AssetProcessingSerializer.SerializePayload(
             AssetProcessingJobType.ARCHIVE_INSPECTION,
@@ -93,7 +91,7 @@ public sealed class AssetProcessingJobRegistryTests
             DateTimeOffset.UtcNow,
             DateTimeOffset.UtcNow);
 
-        AssetProcessingJobOutcome outcome = await adapter.Execute(provider, claimedJob, CancellationToken.None);
+        AssetProcessingJobOutcome outcome = await adapter.Execute(claimedJob, CancellationToken.None);
 
         outcome.Should().BeOfType<AssetProcessingJobOutcome.Success>();
         var success = (AssetProcessingJobOutcome.Success)outcome;
@@ -104,12 +102,9 @@ public sealed class AssetProcessingJobRegistryTests
     [Fact]
     public async Task Adapter_Execute_WhenResultTypeMismatch_ShouldThrowInvalidAssetProcessingJobResultException()
     {
-        var services = new ServiceCollection();
-        services.AddScoped<WrongResultHandler>();
-        ServiceProvider provider = services.BuildServiceProvider();
-
         var adapter = new AssetProcessingJobHandlerAdapter<WrongResultHandler, ArchiveInspectionPayload, ArchiveInspectionResult>(
-            AssetProcessingJobType.ARCHIVE_INSPECTION);
+            AssetProcessingJobType.ARCHIVE_INSPECTION,
+            new WrongResultHandler());
 
         var payloadJson = AssetProcessingSerializer.SerializePayload(
             AssetProcessingJobType.ARCHIVE_INSPECTION,
@@ -130,7 +125,7 @@ public sealed class AssetProcessingJobRegistryTests
             DateTimeOffset.UtcNow,
             DateTimeOffset.UtcNow);
 
-        Func<Task<AssetProcessingJobOutcome>> act = () => adapter.Execute(provider, claimedJob, CancellationToken.None);
+        Func<Task<AssetProcessingJobOutcome>> act = () => adapter.Execute(claimedJob, CancellationToken.None);
 
         await act.Should().ThrowAsync<InvalidAssetProcessingJobResultException>()
             .WithMessage("*returned result of type MalwareScanResult instead of ArchiveInspectionResult*");
@@ -139,12 +134,9 @@ public sealed class AssetProcessingJobRegistryTests
     [Fact]
     public async Task Adapter_Execute_WhenHandlerReturnsNullOutcome_ShouldThrowInvalidAssetProcessingJobResultException()
     {
-        var services = new ServiceCollection();
-        services.AddScoped<NullOutcomeHandler>();
-        ServiceProvider provider = services.BuildServiceProvider();
-
         var adapter = new AssetProcessingJobHandlerAdapter<NullOutcomeHandler, ArchiveInspectionPayload, ArchiveInspectionResult>(
-            AssetProcessingJobType.ARCHIVE_INSPECTION);
+            AssetProcessingJobType.ARCHIVE_INSPECTION,
+            new NullOutcomeHandler());
 
         var payloadJson = AssetProcessingSerializer.SerializePayload(
             AssetProcessingJobType.ARCHIVE_INSPECTION,
@@ -165,7 +157,7 @@ public sealed class AssetProcessingJobRegistryTests
             DateTimeOffset.UtcNow,
             DateTimeOffset.UtcNow);
 
-        Func<Task<AssetProcessingJobOutcome>> act = () => adapter.Execute(provider, claimedJob, CancellationToken.None);
+        Func<Task<AssetProcessingJobOutcome>> act = () => adapter.Execute(claimedJob, CancellationToken.None);
 
         await act.Should().ThrowAsync<InvalidAssetProcessingJobResultException>()
             .WithMessage("*returned a null outcome*");

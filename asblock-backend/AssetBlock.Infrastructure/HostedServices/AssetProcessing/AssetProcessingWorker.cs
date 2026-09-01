@@ -17,7 +17,6 @@ namespace AssetBlock.Infrastructure.HostedServices.AssetProcessing;
 
 public sealed class AssetProcessingWorker(
     IServiceScopeFactory scopeFactory,
-    IAssetProcessingJobRegistry registry,
     IAssetProcessingRealtimePublisher realtimePublisher,
     IOptions<AssetProcessingOptions> options,
     TimeProvider timeProvider,
@@ -239,6 +238,7 @@ public sealed class AssetProcessingWorker(
             await using AsyncServiceScope scope = scopeFactory.CreateAsyncScope();
             IAssetProcessingJobStore jobStore = scope.ServiceProvider.GetRequiredService<IAssetProcessingJobStore>();
             IAssetProcessingLifecycleStore lifecycleStore = scope.ServiceProvider.GetRequiredService<IAssetProcessingLifecycleStore>();
+            IAssetProcessingJobRegistry registry = scope.ServiceProvider.GetRequiredService<IAssetProcessingJobRegistry>();
 
             IAssetProcessingJobHandlerAdapter? adapter = registry.GetHandler(job.Type);
             if (adapter is null)
@@ -311,7 +311,7 @@ public sealed class AssetProcessingWorker(
             {
                 try
                 {
-                    outcome = await adapter.Execute(scope.ServiceProvider, job, executionCts.Token);
+                    outcome = await adapter.Execute(job, executionCts.Token);
                 }
                 finally
                 {

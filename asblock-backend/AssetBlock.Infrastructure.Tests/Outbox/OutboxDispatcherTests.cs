@@ -1,6 +1,7 @@
 using AssetBlock.Domain.Abstractions.Services;
 using AssetBlock.Domain.Core.Entities;
 using AssetBlock.Infrastructure.Outbox;
+using AssetBlock.Infrastructure.Tests.Infrastructure;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using NSubstitute;
@@ -33,13 +34,20 @@ public sealed class OutboxDispatcherTests
 
         var active = 0;
         var maxActive = 0;
+        var twoHandlersStarted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var releaseHandlers = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         IOutboxMessageHandler handler = Substitute.For<IOutboxMessageHandler>();
         handler.MessageType.Returns("test.concurrent");
         handler.Handle(Arg.Any<OutboxMessage>(), Arg.Any<CancellationToken>()).Returns(async call =>
         {
             var current = Interlocked.Increment(ref active);
             UpdateMaximum(ref maxActive, current);
-            await Task.Delay(40, call.Arg<CancellationToken>());
+            if (current == 2)
+            {
+                twoHandlersStarted.TrySetResult();
+            }
+
+            await releaseHandlers.Task.WaitAsync(call.Arg<CancellationToken>());
             Interlocked.Decrement(ref active);
         });
 
@@ -52,7 +60,11 @@ public sealed class OutboxDispatcherTests
             NullLogger<OutboxDispatcher>.Instance,
             maxConcurrency: 2);
 
-        await dispatcher.DispatchBatch(CancellationToken.None);
+        Task dispatch = dispatcher.DispatchBatch(CancellationToken.None);
+        await twoHandlersStarted.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        maxActive.Should().Be(2);
+        releaseHandlers.TrySetResult();
+        await dispatch;
 
         maxActive.Should().Be(2);
         await outbox.Received(messages.Length).MarkProcessed(
@@ -76,14 +88,20 @@ public sealed class OutboxDispatcherTests
         IOutboxStore outbox = Substitute.For<IOutboxStore>();
         outbox.ClaimPendingBatch(Arg.Any<int>(), Arg.Any<TimeSpan>(), Arg.Any<CancellationToken>())
             .Returns([message]);
+        var leaseRenewed = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         outbox.RenewLease(message.Id, lockToken, Arg.Any<TimeSpan>(), Arg.Any<CancellationToken>())
-            .Returns(true);
+            .Returns(_ =>
+            {
+                leaseRenewed.TrySetResult();
+                return true;
+            });
         outbox.MarkProcessed(message.Id, lockToken, Arg.Any<CancellationToken>()).Returns(true);
 
         IOutboxMessageHandler handler = Substitute.For<IOutboxMessageHandler>();
         handler.MessageType.Returns(message.Type);
+        var releaseHandler = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         handler.Handle(message, Arg.Any<CancellationToken>()).Returns(async call =>
-            await Task.Delay(100, call.Arg<CancellationToken>()));
+            await releaseHandler.Task.WaitAsync(call.Arg<CancellationToken>()));
 
         var services = new ServiceCollection();
         services.AddSingleton(outbox);
@@ -94,7 +112,10 @@ public sealed class OutboxDispatcherTests
             NullLogger<OutboxDispatcher>.Instance,
             leaseDuration: TimeSpan.FromMilliseconds(60));
 
-        await dispatcher.DispatchBatch(CancellationToken.None);
+        Task dispatch = dispatcher.DispatchBatch(CancellationToken.None);
+        await leaseRenewed.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        releaseHandler.TrySetResult();
+        await dispatch;
 
         await outbox.Received().RenewLease(
             message.Id,
@@ -232,7 +253,7 @@ public sealed class OutboxDispatcherTests
         var dispatcher = new OutboxDispatcher(
             provider.GetRequiredService<IServiceScopeFactory>(),
             NullLogger<OutboxDispatcher>.Instance,
-            () => 0.0);
+            jitterProvider: () => 0.0);
 
         DateTimeOffset before = DateTimeOffset.UtcNow;
         await dispatcher.DispatchBatch(CancellationToken.None);
@@ -278,10 +299,11 @@ public sealed class OutboxDispatcherTests
         services.AddSingleton(outbox);
         services.AddSingleton(handler);
         await using ServiceProvider provider = services.BuildServiceProvider();
+        var now = new DateTimeOffset(2030, 1, 1, 12, 0, 0, TimeSpan.Zero);
         var dispatcher = new OutboxDispatcher(
             provider.GetRequiredService<IServiceScopeFactory>(),
-            NullLogger<OutboxDispatcher>.Instance);
-        DateTimeOffset startedAt = DateTimeOffset.UtcNow;
+            NullLogger<OutboxDispatcher>.Instance,
+            new TestTimeProvider(now));
 
         await dispatcher.DispatchBatch(CancellationToken.None);
 
@@ -289,7 +311,7 @@ public sealed class OutboxDispatcherTests
             message.Id,
             lockToken,
             "dependency unavailable",
-            Arg.Is<DateTimeOffset>(next => next > startedAt),
+            Arg.Is<DateTimeOffset>(next => next > now),
             Arg.Any<CancellationToken>());
         await outbox.DidNotReceive().MarkProcessed(
             Arg.Any<Guid>(),
@@ -312,11 +334,7 @@ public sealed class OutboxDispatcherTests
         outbox.ClaimPendingBatch(Arg.Any<int>(), Arg.Any<TimeSpan>(), Arg.Any<CancellationToken>())
             .Returns([message]);
         outbox.MarkDeadLettered(Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
-            .Returns(async _ =>
-            {
-                await Task.Delay(15);
-                return true;
-            });
+            .Returns(true);
 
         var services = new ServiceCollection();
         services.AddSingleton(outbox);

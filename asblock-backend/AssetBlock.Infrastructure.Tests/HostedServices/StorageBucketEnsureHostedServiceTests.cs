@@ -96,7 +96,7 @@ public sealed class StorageBucketEnsureHostedServiceTests
 
     private static StorageBucketEnsureHostedService CreateSut(IServiceProvider provider) =>
         new(
-            provider,
+            provider.GetRequiredService<IServiceScopeFactory>(),
             NullLogger<StorageBucketEnsureHostedService>.Instance,
             fastRetryDelay: TimeSpan.FromMilliseconds(10),
             initialBackoff: TimeSpan.FromMilliseconds(20),

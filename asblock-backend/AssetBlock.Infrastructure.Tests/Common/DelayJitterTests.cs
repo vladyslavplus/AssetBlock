@@ -81,13 +81,11 @@ public sealed class DelayJitterTests
         Func<double> jitterProvider)
     {
         IServiceScopeFactory scopeFactory = Substitute.For<IServiceScopeFactory>();
-        IAssetProcessingJobRegistry registry = Substitute.For<IAssetProcessingJobRegistry>();
         IAssetProcessingRealtimePublisher publisher = Substitute.For<IAssetProcessingRealtimePublisher>();
         IOptions<AssetProcessingOptions> optionsWrapper = Microsoft.Extensions.Options.Options.Create(options);
 
         return new AssetProcessingWorker(
             scopeFactory,
-            registry,
             publisher,
             optionsWrapper,
             TimeProvider.System,

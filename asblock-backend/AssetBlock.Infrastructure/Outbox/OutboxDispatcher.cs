@@ -13,11 +13,13 @@ namespace AssetBlock.Infrastructure.Outbox;
 internal sealed class OutboxDispatcher(
     IServiceScopeFactory scopeFactory,
     ILogger<OutboxDispatcher> logger,
+    TimeProvider? timeProvider = null,
     Func<double>? jitterProvider = null,
     TimeSpan? leaseDuration = null,
     int maxConcurrency = 4) : BackgroundService
 {
     private static readonly TimeSpan _pollInterval = TimeSpan.FromSeconds(2);
+    private readonly TimeProvider _timeProvider = timeProvider ?? TimeProvider.System;
     private readonly TimeSpan _lease = leaseDuration ?? TimeSpan.FromMinutes(OutboxMessageTypes.LEASE_MINUTES);
     private readonly int _maxConcurrency = Math.Clamp(maxConcurrency, 1, OutboxMessageTypes.DISPATCH_BATCH_SIZE);
 
@@ -42,7 +44,7 @@ internal sealed class OutboxDispatcher(
             try
             {
                 TimeSpan pollDelay = CalculatePollInterval(jitterProvider);
-                await Task.Delay(pollDelay, stoppingToken);
+                await Task.Delay(pollDelay, _timeProvider, stoppingToken);
             }
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
             {
@@ -201,7 +203,7 @@ internal sealed class OutboxDispatcher(
             {
                 processingOutcome = DiagnosticsOutcome.HANDLER_FAILURE;
                 TimeSpan cappedDelay = CalculateRetryDelay(message.AttemptCount, jitterProvider);
-                DateTimeOffset next = DateTimeOffset.UtcNow.Add(cappedDelay);
+                DateTimeOffset next = _timeProvider.GetUtcNow().Add(cappedDelay);
                 logger.LogError(
                     ex,
                     "Outbox handler failed for {OutboxId} type {Type} attempt {Attempt}",
@@ -234,7 +236,7 @@ internal sealed class OutboxDispatcher(
         {
             while (true)
             {
-                await Task.Delay(interval, handlerCts.Token);
+                await Task.Delay(interval, _timeProvider, handlerCts.Token);
                 await using AsyncServiceScope scope = scopeFactory.CreateAsyncScope();
                 IOutboxStore renewalStore = scope.ServiceProvider.GetRequiredService<IOutboxStore>();
                 if (!await renewalStore.RenewLease(messageId, lockToken, _lease, handlerCts.Token))

@@ -128,7 +128,7 @@ internal sealed class OllamaAiGenerationProvider : IAiGenerationProvider
             return Terminal(ErrorCodes.ERR_AI_INVALID_RESPONSE, started);
         }
 
-        return ParseSuccess(timed.Body, started, modelId, expectedDigest);
+        return ParseSuccess(timed.Body, started, modelId, expectedDigest, request.ResponseSchemaJson);
     }
 
     private async Task<AiGenerationProviderResult?> VerifyInstalledModel(
@@ -205,7 +205,8 @@ internal sealed class OllamaAiGenerationProvider : IAiGenerationProvider
         string body,
         long started,
         string modelId,
-        string expectedDigest)
+        string expectedDigest,
+        string responseSchemaJson)
     {
         try
         {
@@ -249,6 +250,11 @@ internal sealed class OllamaAiGenerationProvider : IAiGenerationProvider
             };
 
             if (string.IsNullOrWhiteSpace(structuredJson))
+            {
+                return Terminal(ErrorCodes.ERR_AI_INVALID_RESPONSE, started, actualModel, inputTokens, outputTokens, modelRevision);
+            }
+
+            if (!JsonSchemaContractValidator.IsValid(structuredJson, responseSchemaJson))
             {
                 return Terminal(ErrorCodes.ERR_AI_INVALID_RESPONSE, started, actualModel, inputTokens, outputTokens, modelRevision);
             }
