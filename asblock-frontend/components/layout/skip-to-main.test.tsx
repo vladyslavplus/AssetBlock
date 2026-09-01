@@ -45,11 +45,8 @@ describe('Skip to main content accessibility', () => {
 
   it('allows keyboard focus on skip link and verifies focus target', async () => {
     const user = userEvent.setup()
-    const { container } = render(
-      <RootLayout>
-        <HomePage />
-      </RootLayout>,
-    )
+    const homeNode = await HomePage()
+    const { container } = render(<RootLayout>{homeNode}</RootLayout>)
 
     const skipLink = screen.getByRole('link', { name: /skip to main content/i })
     const mainTarget = container.querySelector('#main-content') as HTMLElement
@@ -69,8 +66,9 @@ describe('Skip to main content accessibility', () => {
     { name: 'LoginPage', Component: LoginPage },
   ])(
     'ensures real $name component renders valid <main id="main-content" tabIndex={-1}>',
-    ({ Component }) => {
-      const { container } = render(<Component />)
+    async ({ Component }) => {
+      const node = await Component()
+      const { container } = render(node)
       const mainTarget = container.querySelector('#main-content')
       expect(mainTarget).toBeInTheDocument()
       expect(mainTarget?.tagName.toLowerCase()).toBe('main')

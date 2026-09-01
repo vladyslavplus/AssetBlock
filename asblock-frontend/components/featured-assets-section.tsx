@@ -5,7 +5,11 @@ import { useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
 import { ChevronLeft, ChevronRight, ArrowRight } from 'lucide-react'
 import type { AssetListItem } from '@/lib/catalog/asset-types'
-import { catalogKeys, fetchFeaturedAssets } from '@/lib/catalog/catalog-query'
+import {
+  catalogKeys,
+  DEFAULT_FEATURED_LIMIT,
+  fetchFeaturedAssets,
+} from '@/lib/catalog/catalog-query'
 import { AssetCard } from '@/components/assets/asset-card'
 import { FeaturedAssetCarouselSkeleton } from '@/components/assets/asset-card-skeleton'
 import { Button } from '@/components/ui/button'
@@ -36,18 +40,22 @@ function updateScrollAvailability(
   setCanScrollRight(element.scrollLeft < maxScroll - 4)
 }
 
-const FEATURED_LIMIT = 8
+export const FEATURED_LIMIT = DEFAULT_FEATURED_LIMIT
 
-export function FeaturedAssetsSection() {
+export interface FeaturedAssetsSectionProps {
+  initialAssets?: AssetListItem[]
+}
+
+export function FeaturedAssetsSection({ initialAssets }: FeaturedAssetsSectionProps = {}) {
   const scrollRef = useRef<HTMLDivElement>(null)
   const [canScrollLeft, setCanScrollLeft] = useState(false)
   const [canScrollRight, setCanScrollRight] = useState(false)
 
   const featuredQuery = useQuery({
     queryKey: catalogKeys.featured(FEATURED_LIMIT),
-    // Do not forward TanStack Query's cancellation signal to browser fetch. On navigation,
-    // Next dev reports the expected abort as an unhandled rejection even though the query owns it.
     queryFn: () => fetchFeaturedAssets({ limit: FEATURED_LIMIT }),
+    initialData: initialAssets,
+    staleTime: 60 * 1000,
   })
 
   const assets = featuredQuery.data ?? EMPTY_ASSETS

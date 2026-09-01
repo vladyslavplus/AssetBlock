@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect } from 'react'
+import { useEffect, useRef } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { subscribeProcessingHub } from '@/lib/notifications/notification-hub'
 import { assetKeys } from '@/lib/catalog/asset-detail-query'
@@ -10,6 +10,8 @@ import { sellerKeys } from '@/lib/seller/seller-query'
 import { sellerProcessingKeys } from '@/lib/seller/seller-processing-query'
 import type { AssetProcessingUpdateMessage } from '@/lib/seller/seller-processing-schemas'
 import { invalidateQueriesInBackground } from '@/lib/query/query-refresh'
+import { useNotificationHubConnectionState } from '@/hooks/use-notification-hub-connection-state'
+import type { HubConnectionState } from '@/lib/notifications/hub-connection-state'
 
 function isSecurityLifecycleTerminal(msg: AssetProcessingUpdateMessage): boolean {
   if (msg.type === 'LISTING_COPILOT') {
@@ -24,9 +26,35 @@ function isSecurityLifecycleTerminal(msg: AssetProcessingUpdateMessage): boolean
 /**
  * Listens to SignalR AssetProcessingUpdated events and invalidates seller, processing, and catalog keys.
  * Mount once in the authenticated shell; do not also subscribe from edit/processing panels.
+ * Performs a single catch-up invalidation when transitioning from disconnected/connecting/reconnecting to connected.
  */
 export function useAssetProcessingSubscription(enabled = true, userId?: string | null): void {
   const queryClient = useQueryClient()
+  const hubState = useNotificationHubConnectionState()
+  const prevHubStateRef = useRef<HubConnectionState>('disconnected')
+
+  // Catch-up invalidation on transition to connected state
+  useEffect(() => {
+    if (!enabled || !userId) {
+      prevHubStateRef.current = hubState
+      return
+    }
+
+    const prevState = prevHubStateRef.current
+    prevHubStateRef.current = hubState
+
+    if (prevState !== 'connected' && hubState === 'connected') {
+      invalidateQueriesInBackground(queryClient, {
+        queryKey: sellerKeys.all,
+      })
+      invalidateQueriesInBackground(queryClient, {
+        queryKey: catalogKeys.all,
+      })
+      invalidateQueriesInBackground(queryClient, {
+        queryKey: assetKeys.all,
+      })
+    }
+  }, [queryClient, enabled, userId, hubState])
 
   useEffect(() => {
     if (!enabled || !userId) {

@@ -21,12 +21,19 @@ import { formatUsdWhole } from '@/lib/format-currency'
 import { routes } from '@/lib/routes'
 import { ZodError } from 'zod'
 
+import type { BundleDetail } from '@/lib/bundles/bundle-types'
+
 interface BundleDetailViewProps {
   bundleId: string
   checkoutConfigured: boolean
+  initialBundle?: BundleDetail
 }
 
-export function BundleDetailView({ bundleId, checkoutConfigured }: BundleDetailViewProps) {
+export function BundleDetailView({
+  bundleId,
+  checkoutConfigured,
+  initialBundle,
+}: BundleDetailViewProps) {
   const searchParams = useSearchParams()
   const trafficSource = resolveTrafficSourceFromLocation(searchParams)
   const checkoutAttribution = buildCheckoutAttributionFromPage(searchParams)
@@ -40,6 +47,8 @@ export function BundleDetailView({ bundleId, checkoutConfigured }: BundleDetailV
   const detailQuery = useQuery({
     queryKey: bundleKeys.publicDetail(bundleId),
     queryFn: () => fetchBundleDetailQuery(bundleId),
+    initialData: initialBundle,
+    staleTime: 60 * 1000,
     retry: (count, err) => {
       if (err instanceof ApiRequestError && err.status === 404) return false
       return count < 2

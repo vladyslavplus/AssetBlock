@@ -8,6 +8,7 @@ import {
 } from '@/lib/seller/seller-processing-schemas'
 import { z } from 'zod'
 import { toast } from 'sonner'
+import { setHubConnectionState } from '@/lib/notifications/hub-connection-state'
 
 const HUB_METHODS = [
   'OrderReady',
@@ -175,6 +176,24 @@ function buildConnection(): signalR.HubConnection {
     .configureLogging(createHubLogger())
     .build()
 
+  conn.onreconnecting(() => {
+    if (hubConnection === conn) {
+      setHubConnectionState('reconnecting')
+    }
+  })
+
+  conn.onreconnected(() => {
+    if (hubConnection === conn) {
+      setHubConnectionState('connected')
+    }
+  })
+
+  conn.onclose(() => {
+    if (hubConnection === conn) {
+      setHubConnectionState('disconnected')
+    }
+  })
+
   for (const m of HUB_METHODS) {
     conn.on(m, (payload: unknown) => {
       if (hubConnection !== conn) {
@@ -237,8 +256,17 @@ function ensureConnection(): void {
   const conn = hubConnection
   startPromise = (async () => {
     try {
+      if (hubConnection === conn) {
+        setHubConnectionState('connecting')
+      }
       await conn.start()
+      if (hubConnection === conn) {
+        setHubConnectionState('connected')
+      }
     } catch (err) {
+      if (hubConnection === conn) {
+        setHubConnectionState('disconnected')
+      }
       if (disconnectRequested || hubConnection !== conn) {
         return
       }
@@ -256,6 +284,7 @@ async function tearDownConnection(): Promise<void> {
   const conn = hubConnection
   hubConnection = null
   startPromise = null
+  setHubConnectionState('disconnected')
   if (conn == null) {
     return
   }
@@ -320,4 +349,16 @@ export function subscribeProcessingHub(
       scheduleStopIfIdle()
     }
   }
+}
+
+export function _resetNotificationHubForTest(): void {
+  cancelPendingStop()
+  hubConnection = null
+  startPromise = null
+  disconnectRequested = false
+  boundUserId = null
+  invalidateHandlers.clear()
+  processingUpdateHandlers.clear()
+  seenNotificationIds.clear()
+  setHubConnectionState('disconnected')
 }

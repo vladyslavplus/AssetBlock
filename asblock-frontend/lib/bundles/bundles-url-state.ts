@@ -1,13 +1,16 @@
-import { parsePositiveIntParam } from '@/lib/catalog/catalog-url-state'
-
-type SearchParamsSource = URLSearchParams | { get(name: string): string | null }
+import {
+  normalizeSearchParamsSource,
+  parsePositiveIntParam,
+  type SearchParamsSource,
+} from '@/lib/catalog/catalog-url-state'
 
 export interface BundlesBrowseFilters {
   search: string
   page: number
 }
 
-export function parseBundlesUrlParams(sp: SearchParamsSource): BundlesBrowseFilters {
+export function parseBundlesUrlParams(rawSource: SearchParamsSource): BundlesBrowseFilters {
+  const sp = normalizeSearchParamsSource(rawSource)
   const search = sp.get('search')?.trim() || sp.get('query')?.trim() || ''
   const page = parsePositiveIntParam(sp.get('page'), 1)
 

@@ -1,5 +1,5 @@
 import { QueryClientProvider } from '@tanstack/react-query'
-import { render, renderHook, waitFor } from '@testing-library/react'
+import { act, render, renderHook, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { useForm } from 'react-hook-form'
 
@@ -12,6 +12,10 @@ import { sellerKeys } from '@/lib/seller/seller-query'
 import { sellerProcessingKeys } from '@/lib/seller/seller-processing-query'
 import { catalogKeys } from '@/lib/catalog/catalog-query'
 import { assetKeys } from '@/lib/catalog/asset-detail-query'
+import {
+  setHubConnectionState,
+  _resetHubConnectionStateForTest,
+} from '@/lib/notifications/hub-connection-state'
 import { createTestQueryClient } from '@/test/query-client'
 
 const subscribeProcessingHub = vi.hoisted(() => vi.fn())
@@ -242,5 +246,58 @@ describe('useAssetProcessingSubscription', () => {
       ),
     ).toHaveLength(1)
     expect(invalidate).toHaveBeenCalledTimes(7)
+  })
+
+  it('triggers catch-up invalidations when SignalR transitions to connected state', async () => {
+    _resetHubConnectionStateForTest()
+    const queryClient = createTestQueryClient()
+    const invalidate = vi.spyOn(queryClient, 'invalidateQueries')
+
+    const { rerender } = renderHook(() => useAssetProcessingSubscription(true, ownerUserId), {
+      wrapper: ({ children }) => (
+        <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+      ),
+    })
+
+    expect(invalidate).not.toHaveBeenCalled()
+
+    // Transition to connected triggers catch-up invalidations once across seller, catalog, asset
+    act(() => {
+      setHubConnectionState('connected')
+    })
+
+    expect(invalidate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        queryKey: sellerKeys.all,
+      }),
+      expect.anything(),
+    )
+    expect(invalidate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        queryKey: catalogKeys.all,
+      }),
+      expect.anything(),
+    )
+    expect(invalidate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        queryKey: assetKeys.all,
+      }),
+      expect.anything(),
+    )
+    const callCount = invalidate.mock.calls.length
+    expect(callCount).toBe(3)
+
+    // Re-render without state change does NOT fire catch-up again
+    rerender()
+    expect(invalidate).toHaveBeenCalledTimes(callCount)
+
+    // Disconnecting and reconnecting fires catch-up again
+    act(() => {
+      setHubConnectionState('reconnecting')
+    })
+    act(() => {
+      setHubConnectionState('connected')
+    })
+    expect(invalidate).toHaveBeenCalledTimes(callCount + 3)
   })
 })

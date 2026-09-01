@@ -5,9 +5,35 @@ import {
   type CatalogFilters,
 } from '@/lib/catalog/catalog-filters'
 
-type SearchParamsSource =
+export type SearchParamsSource =
   | URLSearchParams
   | { get(name: string): string | null; getAll?(name: string): string[] }
+  | Record<string, string | string[] | undefined>
+
+export function normalizeSearchParamsSource(sp: SearchParamsSource): {
+  get(name: string): string | null
+  getAll?(name: string): string[]
+} {
+  if (sp && typeof (sp as { get?: unknown }).get === 'function') {
+    return sp as { get(name: string): string | null; getAll?(name: string): string[] }
+  }
+  const params = new URLSearchParams()
+  if (sp && typeof sp === 'object') {
+    for (const [key, value] of Object.entries(
+      sp as Record<string, string | string[] | undefined>,
+    )) {
+      if (value === undefined) continue
+      if (Array.isArray(value)) {
+        for (const item of value) {
+          params.append(key, item)
+        }
+      } else {
+        params.set(key, value)
+      }
+    }
+  }
+  return params
+}
 
 const VALID_SORT_BY = new Set<CatalogFilters['sortBy']>(['CreatedAt', 'Title', 'Price'])
 const VALID_SORT_DIR = new Set<CatalogFilters['sortDirection']>(['ASC', 'DESC'])
@@ -28,7 +54,8 @@ export function parseUuidParam(raw: string | null | undefined): string {
   return UUID_RE.test(trimmed) ? trimmed.toLowerCase() : ''
 }
 
-export function parseCatalogUrlParams(sp: SearchParamsSource): CatalogFilters {
+export function parseCatalogUrlParams(rawSource: SearchParamsSource): CatalogFilters {
+  const sp = normalizeSearchParamsSource(rawSource)
   const search = sp.get('search')?.trim() || sp.get('query')?.trim() || ''
   const categoryId = parseUuidParam(sp.get('categoryId') || sp.get('category'))
 

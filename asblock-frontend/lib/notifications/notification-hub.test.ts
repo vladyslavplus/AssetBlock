@@ -1,9 +1,14 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { toast } from 'sonner'
 import {
+  _resetNotificationHubForTest,
   subscribeNotificationHub,
   subscribeProcessingHub,
 } from '@/lib/notifications/notification-hub'
+import {
+  getHubConnectionState,
+  _resetHubConnectionStateForTest,
+} from '@/lib/notifications/hub-connection-state'
 import type { AssetProcessingUpdateMessage } from '@/lib/seller/seller-processing-schemas'
 
 const handlers = vi.hoisted<Record<string, (payload: unknown) => void>>(() => ({}))
@@ -11,15 +16,23 @@ const connections = vi.hoisted(
   () =>
     [] as Array<{
       on: ReturnType<typeof vi.fn>
+      onreconnecting: (cb: () => void) => void
+      onreconnected: (cb: () => void) => void
+      onclose: (cb: () => void) => void
       start: ReturnType<typeof vi.fn>
       stop: ReturnType<typeof vi.fn>
       state: string
       handlers: Record<string, (payload: unknown) => void>
+      triggerReconnecting: () => void
+      triggerReconnected: () => void
+      triggerClose: () => void
     }>,
 )
 
 const USER_A = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'
 const USER_B = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb'
+
+let customStartImplementation: ((conn: (typeof connections)[0]) => Promise<void>) | null = null
 
 vi.mock('@microsoft/signalr', () => ({
   HubConnectionBuilder: vi.fn(() => ({
@@ -28,15 +41,48 @@ vi.mock('@microsoft/signalr', () => ({
     configureLogging: vi.fn().mockReturnThis(),
     build: vi.fn(() => {
       const connHandlers: Record<string, (payload: unknown) => void> = {}
+      let reconnectingCb: (() => void) | null = null
+      let reconnectedCb: (() => void) | null = null
+      let closeCb: (() => void) | null = null
+
       const conn = {
         on: vi.fn((event: string, cb: (payload: unknown) => void) => {
           connHandlers[event] = cb
           handlers[event] = cb
         }),
-        start: vi.fn(async () => {}),
-        stop: vi.fn(async () => {}),
-        state: 'Connected',
+        onreconnecting: vi.fn((cb: () => void) => {
+          reconnectingCb = cb
+        }),
+        onreconnected: vi.fn((cb: () => void) => {
+          reconnectedCb = cb
+        }),
+        onclose: vi.fn((cb: () => void) => {
+          closeCb = cb
+        }),
+        start: vi.fn(async () => {
+          if (customStartImplementation) {
+            await customStartImplementation(conn)
+          } else {
+            conn.state = 'Connected'
+          }
+        }),
+        stop: vi.fn(async () => {
+          conn.state = 'Disconnected'
+        }),
+        state: 'Disconnected',
         handlers: connHandlers,
+        triggerReconnecting: () => {
+          conn.state = 'Reconnecting'
+          reconnectingCb?.()
+        },
+        triggerReconnected: () => {
+          conn.state = 'Connected'
+          reconnectedCb?.()
+        },
+        triggerClose: () => {
+          conn.state = 'Disconnected'
+          closeCb?.()
+        },
       }
       connections.push(conn)
       return conn
@@ -318,6 +364,142 @@ describe('notification-hub identity lifecycle', () => {
     })
     expect(toast.info).toHaveBeenCalledTimes(1)
     expect(receivedB).toEqual(['invalidate'])
+    unsubB()
+  })
+})
+
+async function flushMicrotasks(): Promise<void> {
+  await Promise.resolve()
+  await Promise.resolve()
+  await Promise.resolve()
+}
+
+describe('notification-hub connection state synchronization', () => {
+  beforeEach(() => {
+    customStartImplementation = null
+    _resetNotificationHubForTest()
+    _resetHubConnectionStateForTest()
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(
+        async () =>
+          new Response(JSON.stringify({ hubToken: 'test-token' }), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          }),
+      ),
+    )
+  })
+
+  afterEach(() => {
+    customStartImplementation = null
+    vi.unstubAllGlobals()
+  })
+
+  it('transitions disconnected -> connecting -> connected with deferred start resolution', async () => {
+    let resolveStart!: () => void
+    let connInstance: (typeof connections)[0] | undefined
+    const startDeferred = new Promise<void>((resolve) => {
+      resolveStart = () => {
+        if (connInstance) connInstance.state = 'Connected'
+        resolve()
+      }
+    })
+    customStartImplementation = (c) => {
+      connInstance = c
+      return startDeferred
+    }
+
+    expect(getHubConnectionState()).toBe('disconnected')
+
+    const unsub = subscribeNotificationHub(() => {}, USER_A)
+    const conn = connections.at(-1)
+    expect(conn).toBeDefined()
+    expect(conn?.start).toHaveBeenCalled()
+
+    // While start is pending, state is connecting
+    expect(getHubConnectionState()).toBe('connecting')
+
+    // Resolving start transitions to connected
+    resolveStart()
+    await flushMicrotasks()
+    expect(getHubConnectionState()).toBe('connected')
+
+    unsub()
+  })
+
+  it('transitions disconnected -> connecting -> disconnected when start fails/rejects', async () => {
+    let rejectStart!: (err: Error) => void
+    const startDeferred = new Promise<void>((_, reject) => {
+      rejectStart = reject
+    })
+    customStartImplementation = () => startDeferred
+
+    expect(getHubConnectionState()).toBe('disconnected')
+
+    const unsub = subscribeNotificationHub(() => {}, USER_A)
+    const conn = connections.at(-1)
+    expect(conn).toBeDefined()
+    expect(conn?.start).toHaveBeenCalled()
+
+    // While start is pending, state is connecting
+    expect(getHubConnectionState()).toBe('connecting')
+
+    // Rejecting start transitions back to disconnected
+    rejectStart(new Error('Connection failure'))
+    await flushMicrotasks()
+    expect(getHubConnectionState()).toBe('disconnected')
+
+    unsub()
+  })
+
+  it('handles reconnecting, reconnected, and close transitions with exact state assertions', async () => {
+    const unsub = subscribeNotificationHub(() => {}, USER_A)
+    const conn = connections.at(-1)
+    expect(conn).toBeDefined()
+    await flushMicrotasks()
+    expect(getHubConnectionState()).toBe('connected')
+
+    conn?.triggerReconnecting()
+    expect(getHubConnectionState()).toBe('reconnecting')
+
+    conn?.triggerReconnected()
+    expect(getHubConnectionState()).toBe('connected')
+
+    conn?.triggerClose()
+    expect(getHubConnectionState()).toBe('disconnected')
+
+    unsub()
+  })
+
+  it('ignores stale connection callbacks after identity change creates a new connection', async () => {
+    const unsubA = subscribeNotificationHub(() => {}, USER_A)
+    const connA = connections.at(-1)
+    await flushMicrotasks()
+    expect(getHubConnectionState()).toBe('connected')
+
+    // Switch user identity to USER_B -> creates connB and tears down connA
+    const unsubB = subscribeNotificationHub(() => {}, USER_B)
+    const connB = connections.at(-1)
+    expect(connB).not.toBe(connA)
+    await flushMicrotasks()
+    expect(getHubConnectionState()).toBe('connected')
+
+    // Stale callbacks on old connA must be ignored by the identity guard
+    connA?.triggerReconnecting()
+    expect(getHubConnectionState()).toBe('connected') // NOT reconnecting, because connA is stale
+
+    connA?.triggerClose()
+    expect(getHubConnectionState()).toBe('connected') // NOT disconnected
+
+    // Active connB lifecycle transitions work normally
+    connB?.triggerReconnecting()
+    expect(getHubConnectionState()).toBe('reconnecting')
+
+    connB?.triggerReconnected()
+    expect(getHubConnectionState()).toBe('connected')
+
+    unsubA()
     unsubB()
   })
 })
