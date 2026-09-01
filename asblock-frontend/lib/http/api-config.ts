@@ -1,15 +1,11 @@
+import { getPublicEnvironment, getServerEnvironment } from '@/lib/env'
+
 /**
  * Public API base URL for browser-side fetch (must be NEXT_PUBLIC_*).
  * Configure in `.env.local` — see `.env.example`.
  */
 export function getPublicApiBaseUrl(): string {
-  const base = process.env.NEXT_PUBLIC_API_BASE_URL?.trim()
-  if (!base) {
-    throw new Error(
-      'NEXT_PUBLIC_API_BASE_URL is not set. Copy .env.example to .env.local and set the AssetBlock API URL.',
-    )
-  }
-  return base.replace(/\/+$/, '')
+  return getPublicEnvironment().publicApiBaseUrl
 }
 
 /**
@@ -17,13 +13,7 @@ export function getPublicApiBaseUrl(): string {
  * Configured via ASSETBLOCK_API_BASE_URL (e.g. `http://localhost:5088` in local dev).
  */
 export function getServerApiBaseUrl(): string {
-  const base = process.env.ASSETBLOCK_API_BASE_URL?.trim()
-  if (!base) {
-    throw new Error(
-      'ASSETBLOCK_API_BASE_URL is not set for server-side API calls. Copy .env.example to .env.local and set ASSETBLOCK_API_BASE_URL.',
-    )
-  }
-  return base.replace(/\/+$/, '')
+  return getServerEnvironment().serverApiBaseUrl
 }
 
 /**

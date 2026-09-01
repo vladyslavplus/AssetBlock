@@ -1,10 +1,7 @@
 import { z } from 'zod'
 import { ASSET_LICENSE_CODES } from '@/lib/assets/license-types'
 import { marketplacePriceSchema } from '@/lib/marketplace/price-schema'
-import {
-  ASSET_UPLOAD_ALLOWED_EXTENSIONS,
-  ASSET_UPLOAD_MAX_BYTES,
-} from '@/lib/seller/seller-schemas'
+import { ASSET_UPLOAD_ALLOWED_EXTENSIONS } from '@/lib/seller/seller-schemas'
 
 const RELEASE_NOTES_MAX = 4000
 
@@ -33,14 +30,11 @@ function hasAllowedArchiveExtension(fileName: string): boolean {
   return ASSET_UPLOAD_ALLOWED_EXTENSIONS.some((ext) => lower.endsWith(ext))
 }
 
-export function validateArchiveUploadFile(file: File | null): string | null {
-  if (!file || file.size <= 0) {
+export function validateArchiveUploadFilename(fileName: string | null): string | null {
+  if (!fileName) {
     return 'Choose a file to upload.'
   }
-  if (file.size > ASSET_UPLOAD_MAX_BYTES) {
-    return 'File must be at most 250 MiB.'
-  }
-  if (!hasAllowedArchiveExtension(file.name)) {
+  if (!hasAllowedArchiveExtension(fileName)) {
     return 'Choose a .zip, .tar, .tar.gz, or .tgz archive.'
   }
   return null
@@ -53,7 +47,7 @@ function readOptionalString(formData: FormData, key: string): string | undefined
   return trimmed.length > 0 ? trimmed : undefined
 }
 
-export function parseAssetUploadMultipart(formData: FormData) {
+export function parseAssetUploadMetadata(formData: FormData) {
   const tags = formData
     .getAll('tags')
     .filter((v): v is string => typeof v === 'string')
@@ -69,50 +63,12 @@ export function parseAssetUploadMultipart(formData: FormData) {
     tags: tags.length > 0 ? tags : undefined,
   })
 
-  const fileEntry = formData.get('file')
-  const file = fileEntry instanceof File ? fileEntry : null
-  const fileError = validateArchiveUploadFile(file)
-
-  return { parsed, file, fileError }
+  return parsed
 }
 
-export function parsePublishVersionMultipart(formData: FormData) {
-  const parsed = publishVersionMultipartSchema.safeParse({
+export function parsePublishVersionMetadata(formData: FormData) {
+  return publishVersionMultipartSchema.safeParse({
     licenseCode: readOptionalString(formData, 'licenseCode') ?? '',
     releaseNotes: readOptionalString(formData, 'releaseNotes') ?? '',
   })
-
-  const fileEntry = formData.get('file')
-  const file = fileEntry instanceof File ? fileEntry : null
-  const fileError = validateArchiveUploadFile(file)
-
-  return { parsed, file, fileError }
-}
-
-export function buildAssetUploadForwardForm(
-  values: z.infer<typeof assetUploadMultipartSchema>,
-  file: File,
-): FormData {
-  const fd = new FormData()
-  fd.set('title', values.title)
-  if (values.description) fd.set('description', values.description)
-  fd.set('price', String(values.price))
-  fd.set('categoryId', values.categoryId)
-  fd.set('licenseCode', values.licenseCode)
-  fd.set('file', file)
-  for (const tag of values.tags ?? []) {
-    fd.append('tags', tag)
-  }
-  return fd
-}
-
-export function buildPublishVersionForwardForm(
-  values: z.infer<typeof publishVersionMultipartSchema>,
-  file: File,
-): FormData {
-  const fd = new FormData()
-  fd.set('licenseCode', values.licenseCode)
-  fd.set('releaseNotes', values.releaseNotes)
-  fd.set('file', file)
-  return fd
 }

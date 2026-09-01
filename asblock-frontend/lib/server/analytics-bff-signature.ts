@@ -1,13 +1,13 @@
 import 'server-only'
 
 import { createHmac } from 'node:crypto'
+import { getServerEnvironment } from '@/lib/env'
 
 /** Must match backend AnalyticsBffRateLimitHeaders. */
 export const ANALYTICS_BFF_HEADER_PARTITION = 'X-AssetBlock-Analytics-Partition'
 export const ANALYTICS_BFF_HEADER_TIMESTAMP = 'X-AssetBlock-Analytics-Timestamp'
 export const ANALYTICS_BFF_HEADER_SIGNATURE = 'X-AssetBlock-Analytics-Signature'
 
-const MIN_SIGNING_SECRET_LENGTH = 32
 const PARTITION_PREFIX = 'assetblock:analytics:partition:v1\n'
 const REQUEST_PREFIX = 'assetblock:analytics:request:v1\nPOST\n/api/analytics/events\n'
 
@@ -29,12 +29,12 @@ export interface AnalyticsBffRateLimitHeaders {
 }
 
 function resolveSigningSecret(): string | null {
-  const secret = process.env.ASSETBLOCK_ANALYTICS_BFF_SIGNING_SECRET?.trim()
-  if (!secret || secret.length < MIN_SIGNING_SECRET_LENGTH) {
+  const secret = getServerEnvironment().analyticsBffSigningSecret
+  if (!secret) {
     if (!signingSecretMissingLogged) {
       signingSecretMissingLogged = true
       console.warn(
-        '[analytics-bff-signature] ASSETBLOCK_ANALYTICS_BFF_SIGNING_SECRET is missing or shorter than 32 characters; analytics forwarding is disabled.',
+        '[analytics-bff-signature] ASSETBLOCK_ANALYTICS_BFF_SIGNING_SECRET is missing; analytics forwarding is disabled.',
       )
     }
     return null

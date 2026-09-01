@@ -1,3 +1,5 @@
+import { getServerEnvironment } from '@/lib/env'
+
 /**
  * Lightweight in-memory fixed-window rate limit for public BFF auth routes.
  *
@@ -136,7 +138,7 @@ export function enforceBffRateLimit(key: string, limit: number, windowMs: number
  * a shared `unverified` bucket (safe default; does not trust client headers).
  */
 export function getVerifiedClientIp(request: Request): string {
-  const headerName = process.env.TRUSTED_CLIENT_IP_HEADER?.trim().toLowerCase()
+  const headerName = getServerEnvironment().trustedClientIpHeader
   if (headerName) {
     const raw = request.headers.get(headerName)
     const value = raw?.split(',')[0]?.trim()

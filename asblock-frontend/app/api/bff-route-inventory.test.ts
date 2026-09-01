@@ -67,8 +67,11 @@ describe('BFF route inventory contract', () => {
   it.each([
     ['assets/[id]/download/route.ts', /forwardBackendDownloadResponse/],
     ['seller/analytics/sales/export/route.ts', /forwardBackendDownloadResponse/],
-    ['seller/upload/route.ts', /maxDuration = 300[\s\S]*formData\(\)/],
-    ['seller/assets/[id]/versions/route.ts', /maxDuration = 300[\s\S]*formData\(\)/],
+    ['seller/upload/route.ts', /maxDuration = 300[\s\S]*prepareMultipartUpload\(request\)/],
+    [
+      'seller/assets/[id]/versions/route.ts',
+      /maxDuration = 300[\s\S]*prepareMultipartUpload\(request\)/,
+    ],
     ['auth/signalr-access/route.ts', /hubToken[\s\S]*Cache-Control/],
   ])('%s retains its specialized response or body flow', (path, contract) => {
     const route = routeSources.find((candidate) => candidate.path === path)

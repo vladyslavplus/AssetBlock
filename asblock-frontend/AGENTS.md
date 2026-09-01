@@ -36,6 +36,7 @@
 - Validate Route Handler payloads with existing Zod schemas before forwarding. Treat form values, URL parameters, browser state, and backend error bodies as untrusted.
 - Preserve same-origin/CSRF protection for mutating BFF routes. Do not weaken cookie flags, CORS, redirect validation, role checks, or backend authorization.
 - API authorization is authoritative. Page/route guards are UX only and cannot be the sole access-control mechanism.
+- Never make security decisions in `proxy.ts`; its unsigned JWT parsing is only a coarse UX guard, while BFF and backend authorization remain authoritative.
 - Never use untrusted HTML, arbitrary script injection, or secret values in `NEXT_PUBLIC_*` variables.
 
 ## Forms, API contracts, and errors

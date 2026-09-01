@@ -33,6 +33,15 @@ const assetListItem = {
   averageRating: 5,
 }
 
+const shaderSearchItem = {
+  ...assetListItem,
+  id: 'ffffffff-ffff-4fff-8fff-ffffffffffff',
+  title: 'Shader Noise Pack',
+  description: 'Filtered search result',
+  price: 9,
+  averageRating: 4,
+}
+
 const assetDetail = {
   ...assetListItem,
   updatedAt: '2026-01-01T00:00:00.000Z',
@@ -185,7 +194,8 @@ const server = http.createServer((req, res) => {
   }
 
   if (pathname === '/api/assets') {
-    send(res, 200, { items: [assetListItem], totalCount: 1, page: 1, pageSize: 12 })
+    const items = url.searchParams.get('search') === 'shader' ? [shaderSearchItem] : [assetListItem]
+    send(res, 200, { items, totalCount: items.length, page: 1, pageSize: 12 })
     return
   }
 

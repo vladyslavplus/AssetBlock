@@ -196,19 +196,8 @@ test('public catalog search, asset detail, and collection detail', async ({ page
   await interceptBrowserApi(page, null)
   await page.goto('/assets')
   await expect(page.getByText('Procedural Shader Kit').first()).toBeVisible()
-  const searchRequest = page.waitForRequest((request) => {
-    try {
-      const requested = new URL(request.url())
-      return (
-        requested.pathname.includes('/api/assets') &&
-        requested.searchParams.get('search') === 'shader'
-      )
-    } catch {
-      return false
-    }
-  })
   await page.getByRole('textbox', { name: /^search$/i }).fill('shader')
-  await searchRequest
+  await expect(page).toHaveURL((url) => url.searchParams.get('search') === 'shader')
   await expect(page.getByRole('heading', { name: 'Shader Noise Pack' }).first()).toBeVisible()
   await expect(page.getByText('Procedural Shader Kit')).toHaveCount(0)
   await page.goto(`/assets/${assetId}`)

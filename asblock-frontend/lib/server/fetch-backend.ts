@@ -33,6 +33,8 @@ export interface FetchBackendOptions {
   persistRefreshedTokens?: boolean
   /** Request timeout budget in milliseconds. Defaults to 30,000 ms (30 s). */
   timeoutMs?: number
+  /** Disable only for one-shot streaming bodies that cannot be replayed after a backend 401. */
+  retryOnUnauthorized?: boolean
 }
 
 type FetchBackendMode = 'required' | 'optional'
@@ -127,6 +129,7 @@ export async function fetchBackend(
   authOpts: FetchBackendOptions = {},
 ): Promise<Response> {
   const persistRefreshedTokens = authOpts.persistRefreshedTokens !== false
+  const retryOnUnauthorized = authOpts.retryOnUnauthorized !== false
   const timeoutMs = authOpts.timeoutMs ?? DEFAULT_BACKEND_TIMEOUT_MS
   const timeoutCtx = createTimeoutContext(timeoutMs, init.signal)
   const refreshOpts = { persistCookies: persistRefreshedTokens, signal: timeoutCtx.signal }
@@ -192,7 +195,7 @@ export async function fetchBackend(
       signal: timeoutCtx.signal,
     })
 
-    if (res.status === 401 && access) {
+    if (res.status === 401 && access && retryOnUnauthorized) {
       const refreshRes = await tryRefreshFromCookies(cookieStore, refreshOpts)
       if (refreshRes.kind === 'success') {
         headers.set('Authorization', `Bearer ${refreshRes.tokens.accessToken}`)

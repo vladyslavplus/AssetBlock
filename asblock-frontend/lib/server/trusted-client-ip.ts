@@ -1,13 +1,14 @@
 import 'server-only'
 
 import { isIP } from 'node:net'
+import { getServerEnvironment } from '@/lib/env'
 
 /**
  * Resolves a trusted client IP for analytics BFF rate-limit partitioning.
  * Never uses `request.ip`. Never logs raw IP or header values.
  */
 export function resolveTrustedClientIp(request: Request): string | null {
-  const configuredHeader = process.env.TRUSTED_CLIENT_IP_HEADER?.trim()
+  const configuredHeader = getServerEnvironment().trustedClientIpHeader
   if (configuredHeader) {
     return parseAndValidateIpHeader(request.headers.get(configuredHeader))
   }

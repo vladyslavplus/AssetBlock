@@ -33,6 +33,7 @@ export function proxy(request: NextRequest) {
   if (policy?.sessionRequired && !hasRefresh) {
     const url = request.nextUrl.clone()
     url.pathname = '/login'
+    url.search = ''
     url.searchParams.set('returnUrl', `${pathname}${request.nextUrl.search}`)
     return NextResponse.redirect(url)
   }

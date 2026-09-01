@@ -87,8 +87,6 @@ export function AssetUploadForm() {
     fd.set('price', String(values.price))
     fd.set('categoryId', values.categoryId)
     fd.set('licenseCode', values.licenseCode)
-    fd.set('file', values.file)
-
     const tagParts = (values.tags ?? '')
       .split(/[,;\n]+/)
       .map((t) => t.trim())
@@ -96,6 +94,7 @@ export function AssetUploadForm() {
     for (const t of tagParts) {
       fd.append('tags', t)
     }
+    fd.set('file', values.file)
 
     const result = await uploadSellerAsset(fd)
     if (!result.ok) {

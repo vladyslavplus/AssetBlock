@@ -777,4 +777,25 @@ describe('fetchBackend session refresh', () => {
     const body = await res.json()
     expect(body.code).toBe('ERR_GATEWAY_ERROR')
   })
+
+  it('does not replay a one-shot request body when unauthorized retry is disabled', async () => {
+    const access = makeJwt(Math.floor(Date.now() / 1000) + 3600)
+    const store = createMemoryCookieStore({
+      [AUTH_COOKIE_ACCESS]: access,
+      [AUTH_COOKIE_REFRESH]: 'refresh-token',
+    })
+    const fetchMock = vi.fn(async () => new Response(null, { status: 401 }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    const res = await fetchBackend(
+      store,
+      '/api/assets/upload',
+      { method: 'POST', body: 'one-shot-body' },
+      'required',
+      { retryOnUnauthorized: false },
+    )
+
+    expect(res.status).toBe(401)
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+  })
 })

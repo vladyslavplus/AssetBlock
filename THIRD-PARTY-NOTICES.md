@@ -78,6 +78,9 @@ from the npm registry (canonical, OS-independent). Reviewed exceptions may set
   - copyright/author: Jesse Beach
   - source: https://github.com/A11yance/axobject-query
   - license-url: https://spdx.org/licenses/Apache-2.0.html
+- `npm` baseline-browser-mapping@2.11.20
+  - source: https://github.com/web-platform-dx/baseline-browser-mapping
+  - license-url: https://spdx.org/licenses/Apache-2.0.html
 - `npm` baseline-browser-mapping@2.9.19
   - source: https://github.com/web-platform-dx/baseline-browser-mapping
   - license-url: https://spdx.org/licenses/Apache-2.0.html
@@ -439,6 +442,10 @@ from the npm registry (canonical, OS-independent). Reviewed exceptions may set
   - copyright/author: Ben Briggs
   - source: https://github.com/browserslist/caniuse-lite
   - license-url: https://spdx.org/licenses/CC-BY-4.0.html
+- `npm` caniuse-lite@1.0.30001810
+  - copyright/author: Ben Briggs
+  - source: https://github.com/browserslist/caniuse-lite
+  - license-url: https://spdx.org/licenses/CC-BY-4.0.html
 
 ## CC0-1.0
 
@@ -492,9 +499,9 @@ from the npm registry (canonical, OS-independent). Reviewed exceptions may set
   - copyright/author: Mike Bostock
   - source: https://github.com/d3/d3-timer
   - license-url: https://spdx.org/licenses/ISC.html
-- `npm` electron-to-chromium@1.5.286
+- `npm` electron-to-chromium@1.5.417
   - copyright/author: Kilian Valkhof
-  - source: https://github.com/kilian/electron-to-chromium
+  - source: https://github.com/Kilian/electron-to-chromium
   - license-url: https://spdx.org/licenses/ISC.html
 - `npm` eslint-import-resolver-typescript@3.10.1
   - copyright/author: Alex Gorbatchev
@@ -1693,7 +1700,7 @@ from the npm registry (canonical, OS-independent). Reviewed exceptions may set
   - copyright/author: Jon Schlinkert
   - source: https://github.com/micromatch/braces
   - license-url: https://spdx.org/licenses/MIT.html
-- `npm` browserslist@4.28.1
+- `npm` browserslist@4.28.7
   - copyright/author: Andrey Sitnik
   - source: https://github.com/browserslist/browserslist
   - license-url: https://spdx.org/licenses/MIT.html
@@ -2479,7 +2486,7 @@ from the npm registry (canonical, OS-independent). Reviewed exceptions may set
   - copyright/author: David Frank
   - source: https://github.com/bitinn/node-fetch
   - license-url: https://spdx.org/licenses/MIT.html
-- `npm` node-releases@2.0.27
+- `npm` node-releases@2.0.54
   - copyright/author: Sergey Rubanov
   - source: https://github.com/chicoxyzzy/node-releases
   - license-url: https://spdx.org/licenses/MIT.html

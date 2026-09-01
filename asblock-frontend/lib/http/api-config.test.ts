@@ -27,7 +27,7 @@ describe('api-config', () => {
 
     it('throws when NEXT_PUBLIC_API_BASE_URL is not set', () => {
       delete process.env.NEXT_PUBLIC_API_BASE_URL
-      expect(() => getPublicApiBaseUrl()).toThrowError(/NEXT_PUBLIC_API_BASE_URL is not set/)
+      expect(() => getPublicApiBaseUrl()).toThrowError(/NEXT_PUBLIC_API_BASE_URL/)
     })
   })
 
@@ -40,7 +40,7 @@ describe('api-config', () => {
     it('throws when ASSETBLOCK_API_BASE_URL is not set, even if NEXT_PUBLIC_API_BASE_URL is present', () => {
       delete process.env.ASSETBLOCK_API_BASE_URL
       process.env.NEXT_PUBLIC_API_BASE_URL = 'https://api.example.com'
-      expect(() => getServerApiBaseUrl()).toThrowError(/ASSETBLOCK_API_BASE_URL is not set/)
+      expect(() => getServerApiBaseUrl()).toThrowError(/ASSETBLOCK_API_BASE_URL/)
     })
   })
 

@@ -4,9 +4,12 @@ import { AuthenticatedProcessingListener } from '@/components/providers/authenti
 import { QueryProvider } from '@/components/providers/query-provider'
 import { ThemeProvider } from '@/components/theme-provider'
 import { Toaster } from '@/components/ui/sonner'
+import { validateEnvironment } from '@/lib/env'
 import { fontVariablesClassName } from '@/lib/fonts'
 import { defaultMetadata } from '@/lib/site-metadata'
 import './globals.css'
+
+validateEnvironment()
 
 export const metadata: Metadata = defaultMetadata
 
