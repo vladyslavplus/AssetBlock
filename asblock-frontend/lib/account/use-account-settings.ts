@@ -27,6 +27,7 @@ import {
   changePasswordFormSchema,
   type ChangePasswordFormValues,
 } from '@/lib/account/account-schemas'
+import { routes } from '@/lib/routes'
 import { buildSocialUrlsFromProfile } from '@/lib/account/social-links-account'
 import type { AccountProfile } from '@/lib/account/account-types'
 import { postAuthLogout } from '@/lib/auth/auth-api'
@@ -162,7 +163,7 @@ export function useAccountSettings() {
       profileQuery.error instanceof Error &&
       profileQuery.error.message === 'UNAUTHORIZED'
     ) {
-      router.push(`/login?returnUrl=${encodeURIComponent('/account')}`)
+      router.push(routes.login(routes.account()))
     }
   }, [profileQuery.isError, profileQuery.error, router])
 
@@ -220,7 +221,7 @@ export function useAccountSettings() {
     onError: (error: unknown) => {
       if (error instanceof AccountRequestError) {
         if (error.status === 401) {
-          router.push(`/login?returnUrl=${encodeURIComponent('/account')}`)
+          router.push(routes.login(routes.account()))
           return
         }
         const parsed = parseApiErrorBody(error.body)
@@ -244,7 +245,7 @@ export function useAccountSettings() {
     onError: (error: unknown) => {
       if (error instanceof AccountRequestError) {
         if (error.status === 401) {
-          router.push(`/login?returnUrl=${encodeURIComponent('/account')}`)
+          router.push(routes.login(routes.account()))
           return
         }
         const parsed = parseApiErrorBody(error.body)
@@ -273,7 +274,7 @@ export function useAccountSettings() {
     onError: (error: unknown) => {
       if (error instanceof AccountRequestError) {
         if (error.status === 401) {
-          router.push(`/login?returnUrl=${encodeURIComponent('/account')}`)
+          router.push(routes.login(routes.account()))
           return
         }
         const parsed = parseApiErrorBody(error.body)
@@ -351,7 +352,7 @@ export function useAccountSettings() {
         } catch (error) {
           if (error instanceof AccountRequestError) {
             if (error.status === 401) {
-              router.push(`/login?returnUrl=${encodeURIComponent('/account')}`)
+              router.push(routes.login(routes.account()))
               return
             }
             const parsed = parseApiErrorBody(error.body)
@@ -378,7 +379,7 @@ export function useAccountSettings() {
         } catch (error) {
           if (error instanceof AccountRequestError) {
             if (error.status === 401) {
-              router.push(`/login?returnUrl=${encodeURIComponent('/account')}`)
+              router.push(routes.login(routes.account()))
               return
             }
             toast.error(getApiErrorMessage(error.body, 'Could not save social links.'))

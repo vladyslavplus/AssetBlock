@@ -1,6 +1,7 @@
 'use client'
 
 import Link from 'next/link'
+import type { Route } from 'next'
 
 import { AnalyticsAvailabilityBadge } from '@/components/sell/analytics/analytics-availability-badge'
 import { AnalyticsSeriesChart } from '@/components/sell/analytics/analytics-series-chart'
@@ -166,13 +167,13 @@ export function AnalyticsProductDetailMetrics({
 }
 
 interface AnalyticsDetailBackLinkProps {
-  href: string
+  href: Route | string
 }
 
 export function AnalyticsDetailBackLink({ href }: AnalyticsDetailBackLinkProps) {
   return (
     <Link
-      href={href}
+      href={href as Route}
       className="inline-flex items-center text-sm text-muted-foreground hover:text-foreground"
     >
       ← Back to analytics

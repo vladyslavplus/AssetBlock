@@ -1,7 +1,9 @@
 'use client'
 
 import { keepPreviousData, useQuery } from '@tanstack/react-query'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
+import { usePathname, useRouter, useSearchParams } from 'next/navigation'
+import type { Route } from 'next'
 import { AlertCircle, ChevronLeft, ChevronRight } from 'lucide-react'
 import { SiteMain } from '@/components/layout/site-main'
 import { SitePageContainer } from '@/components/layout/site-page-container'
@@ -11,23 +13,36 @@ import { BundleCard } from '@/components/bundles/bundle-card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { bundleKeys, fetchBundlesListQuery } from '@/lib/bundles/bundles-query'
+import { parseBundlesUrlParams, serializeBundlesUrlParams } from '@/lib/bundles/bundles-url-state'
 
 export function BundlesBrowsePage() {
-  const [page, setPage] = useState(1)
-  const [search, setSearch] = useState('')
-  const [appliedSearch, setAppliedSearch] = useState('')
+  const searchParams = useSearchParams()
+  const router = useRouter()
+  const pathname = usePathname()
 
-  const filters = { page, search: appliedSearch }
+  const filters = parseBundlesUrlParams(searchParams)
+  const [search, setSearch] = useState(filters.search)
+
+  useEffect(() => {
+    queueMicrotask(() => setSearch(filters.search))
+  }, [filters.search])
+
   const listQuery = useQuery({
     queryKey: bundleKeys.publicList(filters),
     queryFn: () => fetchBundlesListQuery(filters),
     placeholderData: keepPreviousData,
   })
 
+  const navigateFilters = (next: { search?: string; page?: number }) => {
+    const qs = serializeBundlesUrlParams(next).toString()
+    const target = (qs ? `${pathname}?${qs}` : pathname) as Route
+    router.push(target)
+  }
+
   const items = listQuery.data?.items ?? []
   const totalPages = listQuery.data?.totalPages ?? 0
   const loading = listQuery.isPending
-  const bundleLinkSource = appliedSearch.trim() ? 'search' : 'catalog'
+  const bundleLinkSource = filters.search.trim() ? 'search' : 'catalog'
   const error = listQuery.isError
     ? listQuery.error instanceof Error
       ? listQuery.error.message
@@ -50,8 +65,7 @@ export function BundlesBrowsePage() {
             className="mb-6 flex flex-col sm:flex-row gap-2"
             onSubmit={(e) => {
               e.preventDefault()
-              setPage(1)
-              setAppliedSearch(search.trim())
+              navigateFilters({ search: search.trim(), page: 1 })
             }}
           >
             <Input
@@ -100,21 +114,31 @@ export function BundlesBrowsePage() {
                 variant="outline"
                 size="sm"
                 className="border-border"
-                disabled={page === 1 || loading}
-                onClick={() => setPage((p) => Math.max(1, p - 1))}
+                disabled={filters.page === 1 || loading}
+                onClick={() =>
+                  navigateFilters({
+                    search: filters.search,
+                    page: Math.max(1, filters.page - 1),
+                  })
+                }
               >
                 <ChevronLeft className="w-4 h-4" />
               </Button>
               <span className="text-xs text-muted-foreground">
-                Page {page} of {totalPages}
+                Page {filters.page} of {totalPages}
               </span>
               <Button
                 type="button"
                 variant="outline"
                 size="sm"
                 className="border-border"
-                disabled={page === totalPages || loading}
-                onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                disabled={filters.page === totalPages || loading}
+                onClick={() =>
+                  navigateFilters({
+                    search: filters.search,
+                    page: Math.min(totalPages, filters.page + 1),
+                  })
+                }
               >
                 <ChevronRight className="w-4 h-4" />
               </Button>

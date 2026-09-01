@@ -1,4 +1,5 @@
 import type { Metadata } from 'next'
+import { Suspense } from 'react'
 import { BundlesBrowsePage } from '@/components/bundles/bundles-browse-page'
 
 export const metadata: Metadata = {
@@ -7,5 +8,9 @@ export const metadata: Metadata = {
 }
 
 export default function BundlesPage() {
-  return <BundlesBrowsePage />
+  return (
+    <Suspense>
+      <BundlesBrowsePage />
+    </Suspense>
+  )
 }

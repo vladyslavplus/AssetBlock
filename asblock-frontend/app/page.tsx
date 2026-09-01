@@ -10,7 +10,7 @@ export default function HomePage() {
   return (
     <div className="min-h-screen bg-background text-foreground">
       <SiteHeader />
-      <main>
+      <main id="main-content" tabIndex={-1} className="outline-none">
         <HeroSection />
         <FeaturesSection />
         <FeaturedAssetsSection />

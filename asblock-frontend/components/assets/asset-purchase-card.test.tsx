@@ -1,10 +1,9 @@
-import { QueryClientProvider } from '@tanstack/react-query'
-import { render, screen, waitFor } from '@testing-library/react'
+import { screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { AssetPurchaseCard } from '@/components/assets/asset-purchase-card'
-import { createTestQueryClient } from '@/test/query-client'
+import { renderWithQueryClient } from '@/test/render'
 import { verifiedSeller } from '@/test/session-user'
 
 const postCreateCheckoutSession = vi.hoisted(() => vi.fn())
@@ -61,17 +60,15 @@ describe('AssetPurchaseCard', () => {
       refresh: vi.fn(),
       logout: vi.fn(),
     })
-    render(
-      <QueryClientProvider client={createTestQueryClient()}>
-        <AssetPurchaseCard
-          assetId="aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
-          authorId="bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb"
-          title="Pack"
-          price={9}
-          checkoutConfigured
-          returnPath="/assets/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
-        />
-      </QueryClientProvider>,
+    renderWithQueryClient(
+      <AssetPurchaseCard
+        assetId="aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
+        authorId="bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb"
+        title="Pack"
+        price={9}
+        checkoutConfigured
+        returnPath="/assets/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
+      />,
     )
     expect(screen.getByRole('link', { name: /sign in to purchase/i })).toHaveAttribute(
       'href',
@@ -80,17 +77,15 @@ describe('AssetPurchaseCard', () => {
   })
 
   it('disables checkout when payments are unavailable', () => {
-    render(
-      <QueryClientProvider client={createTestQueryClient()}>
-        <AssetPurchaseCard
-          assetId="aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
-          authorId="bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb"
-          title="Pack"
-          price={9}
-          checkoutConfigured={false}
-          returnPath="/assets/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
-        />
-      </QueryClientProvider>,
+    renderWithQueryClient(
+      <AssetPurchaseCard
+        assetId="aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
+        authorId="bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb"
+        title="Pack"
+        price={9}
+        checkoutConfigured={false}
+        returnPath="/assets/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
+      />,
     )
     expect(screen.getByRole('button', { name: /checkout unavailable/i })).toBeDisabled()
   })
@@ -98,17 +93,15 @@ describe('AssetPurchaseCard', () => {
   it('does not treat API failure as success and never hits Stripe', async () => {
     const user = userEvent.setup()
     postCreateCheckoutSession.mockRejectedValueOnce(new Error('gateway'))
-    render(
-      <QueryClientProvider client={createTestQueryClient()}>
-        <AssetPurchaseCard
-          assetId="aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
-          authorId="bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb"
-          title="Pack"
-          price={9}
-          checkoutConfigured
-          returnPath="/assets/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
-        />
-      </QueryClientProvider>,
+    renderWithQueryClient(
+      <AssetPurchaseCard
+        assetId="aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
+        authorId="bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb"
+        title="Pack"
+        price={9}
+        checkoutConfigured
+        returnPath="/assets/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
+      />,
     )
     await user.click(screen.getByRole('button', { name: /buy now/i }))
     await waitFor(() => expect(toastError).toHaveBeenCalled())
@@ -121,17 +114,15 @@ describe('AssetPurchaseCard', () => {
       checkoutUrl: 'https://checkout.stripe.test/c/pay_123',
       checkoutIntentId: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
     })
-    render(
-      <QueryClientProvider client={createTestQueryClient()}>
-        <AssetPurchaseCard
-          assetId="aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
-          authorId="bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb"
-          title="Pack"
-          price={9}
-          checkoutConfigured
-          returnPath="/assets/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
-        />
-      </QueryClientProvider>,
+    renderWithQueryClient(
+      <AssetPurchaseCard
+        assetId="aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
+        authorId="bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb"
+        title="Pack"
+        price={9}
+        checkoutConfigured
+        returnPath="/assets/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
+      />,
     )
     await user.click(screen.getByRole('button', { name: /buy now/i }))
     await waitFor(() => expect(postCreateCheckoutSession).toHaveBeenCalledTimes(1))

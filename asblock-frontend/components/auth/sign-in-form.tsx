@@ -15,6 +15,8 @@ import { Alert, AlertDescription } from '@/components/ui/alert'
 import { AuthRequestError, postAuthLogin } from '@/lib/auth/auth-api'
 import { loginFormSchema, type LoginFormValues } from '@/lib/auth/schemas'
 import { syncQueryCacheAfterAuth } from '@/lib/query/query-sync-after-auth'
+import type { Route } from 'next'
+import { sanitizeInternalReturnUrl } from '@/lib/routes'
 
 const MESSAGE_LABELS: Record<string, string> = {
   'password-changed': 'Password changed. Please sign in again.',
@@ -58,8 +60,8 @@ export function SignInForm({ formError }: SignInFormProps) {
     onMutate: () => setSubmitError(''),
     onSuccess: async () => {
       await syncQueryCacheAfterAuth(queryClient)
-      const next = returnUrl.startsWith('/') ? returnUrl : '/assets'
-      router.push(next)
+      const next = sanitizeInternalReturnUrl(returnUrl) || '/assets'
+      router.push(next as Route)
       router.refresh()
     },
     onError: (err: unknown) => {

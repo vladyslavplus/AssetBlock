@@ -18,6 +18,7 @@ import {
 import { ApiRequestError } from '@/lib/http/api-client'
 import { bundleKeys, fetchBundleDetailQuery } from '@/lib/bundles/bundles-query'
 import { formatUsdWhole } from '@/lib/format-currency'
+import { routes } from '@/lib/routes'
 import { ZodError } from 'zod'
 
 interface BundleDetailViewProps {
@@ -149,7 +150,7 @@ export function BundleDetailView({ bundleId, checkoutConfigured }: BundleDetailV
                     </p>
                     {item.assetId && item.isAvailable ? (
                       <Link
-                        href={appendAnalyticsQuery(`/assets/${item.assetId}`, 'bundle_page')}
+                        href={appendAnalyticsQuery(routes.assetDetail(item.assetId), 'bundle_page')}
                         className="text-xs font-medium text-primary hover:text-primary/80"
                       >
                         View asset →

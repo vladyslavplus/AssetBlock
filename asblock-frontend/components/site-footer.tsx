@@ -1,4 +1,5 @@
 import Link from 'next/link'
+import type { Route } from 'next'
 import { siteShellClass } from '@/lib/site-layout'
 import { Github, Twitter } from 'lucide-react'
 import { BrandLogo } from '@/components/brand-logo'
@@ -59,7 +60,7 @@ export function SiteFooter() {
                 {links.map((link) => (
                   <li key={link.label}>
                     <Link
-                      href={link.href}
+                      href={link.href as Route}
                       className="text-xs text-muted-foreground hover:text-foreground transition-colors"
                     >
                       {link.label}

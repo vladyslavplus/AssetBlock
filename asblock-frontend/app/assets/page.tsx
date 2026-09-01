@@ -1,7 +1,9 @@
 'use client'
 
 import { keepPreviousData, useQuery } from '@tanstack/react-query'
-import { useState } from 'react'
+import { Suspense, useState } from 'react'
+import { usePathname, useRouter, useSearchParams } from 'next/navigation'
+import type { Route } from 'next'
 import { SiteMain } from '@/components/layout/site-main'
 import { SitePageContainer } from '@/components/layout/site-page-container'
 import { SiteHeader } from '@/components/site-header'
@@ -21,15 +23,19 @@ import {
 import { AlertCircle, ChevronLeft, ChevronRight } from 'lucide-react'
 import {
   CATALOG_ASSETS_PAGE_SIZE,
-  DEFAULT_CATALOG_FILTERS,
   sortDirectionForSortBy,
   type CatalogFilters,
 } from '@/lib/catalog/catalog-filters'
+import { parseCatalogUrlParams, serializeCatalogUrlParams } from '@/lib/catalog/catalog-url-state'
 import { catalogKeys, fetchCatalogFacets, fetchCatalogPage } from '@/lib/catalog/catalog-query'
 
-export default function AssetsPage() {
-  const [filters, setFilters] = useState<CatalogFilters>(DEFAULT_CATALOG_FILTERS)
+function AssetsCatalogContent() {
+  const searchParams = useSearchParams()
+  const router = useRouter()
+  const pathname = usePathname()
   const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false)
+
+  const filters = parseCatalogUrlParams(searchParams)
 
   const facetsQuery = useQuery({
     queryKey: catalogKeys.facets(),
@@ -62,26 +68,37 @@ export default function AssetsPage() {
     : null
 
   const handleFilterChange = (updates: Partial<CatalogFilters>) => {
-    setFilters((prev) => {
-      const next: CatalogFilters = { ...prev, ...updates }
-      next.pageSize = CATALOG_ASSETS_PAGE_SIZE
-      if (updates.sortBy !== undefined) {
-        next.sortDirection = sortDirectionForSortBy(updates.sortBy)
-      }
-      const shouldResetPage =
-        updates.page === undefined &&
-        (updates.search !== undefined ||
-          updates.categoryId !== undefined ||
-          updates.tags !== undefined ||
-          updates.minPrice !== undefined ||
-          updates.maxPrice !== undefined)
-      if (shouldResetPage) next.page = 1
-      return next
-    })
+    const next: CatalogFilters = { ...filters, ...updates }
+    next.pageSize = CATALOG_ASSETS_PAGE_SIZE
+    if (updates.sortBy !== undefined && updates.sortDirection === undefined) {
+      next.sortDirection = sortDirectionForSortBy(updates.sortBy)
+    }
+    const shouldResetPage =
+      updates.page === undefined &&
+      (updates.search !== undefined ||
+        updates.categoryId !== undefined ||
+        updates.tags !== undefined ||
+        updates.minPrice !== undefined ||
+        updates.maxPrice !== undefined ||
+        updates.sortBy !== undefined)
+    if (shouldResetPage) next.page = 1
+
+    const qs = serializeCatalogUrlParams(next).toString()
+    const target = (qs ? `${pathname}?${qs}` : pathname) as Route
+    const isDebouncedInput =
+      updates.page === undefined &&
+      (updates.search !== undefined ||
+        updates.minPrice !== undefined ||
+        updates.maxPrice !== undefined)
+    if (isDebouncedInput) {
+      router.replace(target)
+    } else {
+      router.push(target)
+    }
   }
 
   const handleResetFilters = () => {
-    setFilters(DEFAULT_CATALOG_FILTERS)
+    router.push(pathname as Route)
   }
 
   const items = pageData?.items ?? []
@@ -396,5 +413,13 @@ export default function AssetsPage() {
 
       <SiteFooter />
     </div>
+  )
+}
+
+export default function AssetsPage() {
+  return (
+    <Suspense>
+      <AssetsCatalogContent />
+    </Suspense>
   )
 }

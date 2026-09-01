@@ -14,6 +14,7 @@ import { AssetEditForm } from './asset-edit-form'
 import { fetchSellerAssetDetailQuery, sellerKeys } from '@/lib/seller/seller-query'
 import type { SellerAssetDetail } from '@/lib/seller/seller-asset-schemas'
 import { runQueryInBackground } from '@/lib/query/query-refresh'
+import { routes } from '@/lib/routes'
 
 export function AssetEditPageClient({
   assetId,
@@ -41,7 +42,7 @@ export function AssetEditPageClient({
       <div className="rounded-lg border border-border bg-card-elevated/50 px-4 py-8 text-center space-y-3 max-w-lg">
         <p className="text-sm text-muted-foreground">Sign in to edit your listings.</p>
         <Button asChild className="bg-primary text-primary-foreground hover:bg-[#6D28D9]">
-          <Link href={`/login?returnUrl=/sell/assets/${assetId}/edit`}>Sign in</Link>
+          <Link href={routes.login(routes.sellerAssetEdit(assetId))}>Sign in</Link>
         </Button>
       </div>
     )

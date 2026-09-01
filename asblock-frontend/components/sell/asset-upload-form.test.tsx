@@ -1,11 +1,10 @@
-import { QueryClientProvider } from '@tanstack/react-query'
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { fireEvent, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { AssetUploadForm } from '@/components/sell/asset-upload-form'
 import type * as sellerApi from '@/lib/seller/seller-api'
-import { createTestQueryClient } from '@/test/query-client'
+import { renderWithQueryClient } from '@/test/render'
 import { verifiedSeller } from '@/test/session-user'
 
 const uploadSellerAsset = vi.hoisted(() => vi.fn())
@@ -37,15 +36,7 @@ vi.mock('sonner', () => ({
 const categoryId = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'
 
 function renderUpload() {
-  const queryClient = createTestQueryClient()
-  return {
-    queryClient,
-    ...render(
-      <QueryClientProvider client={queryClient}>
-        <AssetUploadForm />
-      </QueryClientProvider>,
-    ),
-  }
+  return renderWithQueryClient(<AssetUploadForm />)
 }
 
 function setPackageFile(file: File) {

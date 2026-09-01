@@ -1,12 +1,11 @@
-import { QueryClientProvider } from '@tanstack/react-query'
-import { render, screen, waitFor } from '@testing-library/react'
+import { screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { SellMyListings } from '@/components/sell/sell-my-listings'
 import type * as sellerApi from '@/lib/seller/seller-api'
 import { sellerKeys } from '@/lib/seller/seller-query'
-import { createTestQueryClient } from '@/test/query-client'
+import { renderWithQueryClient } from '@/test/render'
 import { verifiedSeller } from '@/test/session-user'
 
 const deleteSellerAsset = vi.hoisted(() => vi.fn())
@@ -77,11 +76,7 @@ describe('SellMyListings', () => {
       refresh: vi.fn(),
       logout: vi.fn(),
     })
-    render(
-      <QueryClientProvider client={createTestQueryClient()}>
-        <SellMyListings />
-      </QueryClientProvider>,
-    )
+    renderWithQueryClient(<SellMyListings />)
     expect(await screen.findByText(/sign in to see assets you have published/i)).toBeInTheDocument()
   })
 
@@ -90,11 +85,7 @@ describe('SellMyListings', () => {
       'fetch',
       vi.fn(async () => new Response('{"type":"urn:assetblock:error:ERR_X"}', { status: 500 })),
     )
-    render(
-      <QueryClientProvider client={createTestQueryClient()}>
-        <SellMyListings />
-      </QueryClientProvider>,
-    )
+    renderWithQueryClient(<SellMyListings />)
     expect(await screen.findByText(/could not load listings/i)).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /retry/i })).toBeInTheDocument()
     expect(screen.queryByText(/ZodError|ERR_X|stack/)).not.toBeInTheDocument()
@@ -102,7 +93,6 @@ describe('SellMyListings', () => {
 
   it('confirms delete, tracks pending target, and invalidates the list', async () => {
     const user = userEvent.setup()
-    const queryClient = createTestQueryClient()
     vi.stubGlobal(
       'fetch',
       vi.fn(async () => {
@@ -119,11 +109,7 @@ describe('SellMyListings', () => {
           resolveDelete = resolve
         }),
     )
-    render(
-      <QueryClientProvider client={queryClient}>
-        <SellMyListings />
-      </QueryClientProvider>,
-    )
+    const { queryClient } = renderWithQueryClient(<SellMyListings />)
     expect(await screen.findByText('Forest Pack')).toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: /delete/i }))
     expect(await screen.findByText(/delete this listing/i)).toBeInTheDocument()
@@ -154,11 +140,7 @@ describe('SellMyListings', () => {
         )
       }),
     )
-    render(
-      <QueryClientProvider client={createTestQueryClient()}>
-        <SellMyListings />
-      </QueryClientProvider>,
-    )
+    renderWithQueryClient(<SellMyListings />)
     expect(await screen.findByText('Forest Pack')).toBeInTheDocument()
     expect(screen.getByText('Pending Pack')).toBeInTheDocument()
     expect(screen.getByRole('link', { name: /view/i })).toHaveAttribute(

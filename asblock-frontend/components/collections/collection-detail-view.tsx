@@ -16,6 +16,7 @@ import { trackAnalyticsEvent } from '@/lib/analytics/telemetry-client'
 import { ApiRequestError } from '@/lib/http/api-client'
 import { collectionKeys, fetchCollectionDetailQuery } from '@/lib/collections/collections-query'
 import { formatUsdWhole } from '@/lib/format-currency'
+import { routes } from '@/lib/routes'
 
 interface CollectionDetailViewProps {
   collectionId: string
@@ -129,7 +130,7 @@ export function CollectionDetailView({ collectionId }: CollectionDetailViewProps
               </div>
               {item.isAvailable ? (
                 <Link
-                  href={appendAnalyticsQuery(`/assets/${item.assetId}`, 'collection', {
+                  href={appendAnalyticsQuery(routes.assetDetail(item.assetId), 'collection', {
                     collectionId,
                   })}
                   onClick={() => {

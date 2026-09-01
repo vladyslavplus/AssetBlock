@@ -20,6 +20,7 @@ import { fetchTagNameToIdMap, patchSellerAsset, syncSellerAssetTags } from '@/li
 import { assetKeys } from '@/lib/catalog/asset-detail-query'
 import { catalogKeys, fetchCatalogFacets } from '@/lib/catalog/catalog-query'
 import { sellerKeys } from '@/lib/seller/seller-query'
+import { routes } from '@/lib/routes'
 import {
   getSellerProcessingBadgeClass,
   getSellerProcessingStatusDescription,
@@ -106,7 +107,7 @@ export function AssetEditForm({ asset }: AssetEditFormProps) {
     invalidateQueriesInBackground(queryClient, { queryKey: catalogKeys.all })
     invalidateQueriesInBackground(queryClient, { queryKey: assetKeys.detail(assetId) })
     if (publiclyReady) {
-      router.push(`/assets/${assetId}`)
+      router.push(routes.assetDetail(assetId))
     }
     router.refresh()
   })
@@ -257,7 +258,7 @@ export function AssetEditForm({ asset }: AssetEditFormProps) {
             className="border-border w-full sm:w-auto"
             asChild
           >
-            <Link href={publiclyReady ? `/assets/${assetId}` : '/sell'}>Cancel</Link>
+            <Link href={publiclyReady ? routes.assetDetail(assetId) : routes.sell()}>Cancel</Link>
           </Button>
         </div>
       </form>

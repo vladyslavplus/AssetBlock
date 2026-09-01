@@ -10,6 +10,7 @@ import { formatUsdWhole } from '@/lib/format-currency'
 import type { CheckoutAttributionInput } from '@/lib/analytics/telemetry-source'
 import { CheckoutRequestError, postCreateCheckoutSession } from '@/lib/payments/checkout-api'
 import { writePendingCheckoutContext } from '@/lib/reviews/review-constants'
+import { routes } from '@/lib/routes'
 import { Download, Lock, Loader2, Zap } from 'lucide-react'
 import { toast } from 'sonner'
 
@@ -37,7 +38,7 @@ export function AssetPurchaseCard({
 
   const isOwner = Boolean(user && user.id === authorId)
   const verified = isEmailVerified(user)
-  const loginHref = `/login?returnUrl=${encodeURIComponent(returnPath)}`
+  const loginHref = routes.login(returnPath)
 
   const checkoutMutation = useMutation({
     mutationFn: () => postCreateCheckoutSession(assetId, checkoutAttribution),

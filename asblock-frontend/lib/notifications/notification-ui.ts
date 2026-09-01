@@ -1,3 +1,6 @@
+import type { Route } from 'next'
+import { routes } from '@/lib/routes'
+
 function tryParseJson(json: string): unknown {
   try {
     return JSON.parse(json) as unknown
@@ -82,14 +85,14 @@ export function getNotificationAssetId(metadataJson: string): string | undefined
   return typeof id === 'string' && id.length > 0 ? id : undefined
 }
 
-export function getNotificationHref(kindOrMethod: string, metadataJson: string): string {
+export function getNotificationHref(kindOrMethod: string, metadataJson: string): Route {
   const k = normalizeNotificationKind(kindOrMethod)
   const parsed = tryParseJson(metadataJson)
   const r = asRecord(parsed)
   if (r) {
     const bundleId = pickString(r, 'bundleId')
     if (bundleId && (k === 'ORDER_READY' || k === 'ASSET_SOLD')) {
-      return `/bundles/${encodeURIComponent(bundleId)}`
+      return routes.bundleDetail(bundleId)
     }
     const assetId = pickString(r, 'assetId')
     if (assetId) {
@@ -98,13 +101,13 @@ export function getNotificationHref(kindOrMethod: string, metadataJson: string):
         k === 'ASSET_PROCESSING_REJECTED' ||
         k === 'ASSET_PROCESSING_FAILED'
       ) {
-        return `/sell/assets/${encodeURIComponent(assetId)}/edit`
+        return routes.sellerAssetEdit(assetId)
       }
-      return `/assets/${encodeURIComponent(assetId)}`
+      return routes.assetDetail(assetId)
     }
   }
   if (k === 'ORDER_READY') {
-    return '/library'
+    return routes.library()
   }
-  return '/library'
+  return routes.library()
 }

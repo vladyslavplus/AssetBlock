@@ -1,11 +1,10 @@
-import { QueryClientProvider } from '@tanstack/react-query'
-import { render, screen, waitFor } from '@testing-library/react'
+import { screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { AssetProcessingStatusPanel } from '@/components/sell/asset-processing-status-panel'
 import type { AssetProcessingJobDto } from '@/lib/seller/seller-processing-schemas'
-import { createTestQueryClient } from '@/test/query-client'
+import { renderWithProviders } from '@/test/render'
 
 const subscribeProcessingHub = vi.hoisted(() => vi.fn())
 
@@ -82,10 +81,8 @@ describe('AssetProcessingStatusPanel', () => {
       vi.fn(() => new Promise(() => {})), // never resolves
     )
 
-    const { container } = render(
-      <QueryClientProvider client={createTestQueryClient()}>
-        <AssetProcessingStatusPanel assetId="22222222-2222-4222-8222-222222222222" />
-      </QueryClientProvider>,
+    const { container } = renderWithProviders(
+      <AssetProcessingStatusPanel assetId="22222222-2222-4222-8222-222222222222" />,
     )
 
     expect(container.querySelectorAll('.animate-pulse').length).toBeGreaterThan(0)
@@ -108,10 +105,8 @@ describe('AssetProcessingStatusPanel', () => {
       }),
     )
 
-    render(
-      <QueryClientProvider client={createTestQueryClient()}>
-        <AssetProcessingStatusPanel assetId="22222222-2222-4222-8222-222222222222" />
-      </QueryClientProvider>,
+    renderWithProviders(
+      <AssetProcessingStatusPanel assetId="22222222-2222-4222-8222-222222222222" />,
     )
 
     expect(await screen.findByRole('alert')).toBeInTheDocument()
@@ -135,10 +130,8 @@ describe('AssetProcessingStatusPanel', () => {
       ),
     )
 
-    const { container } = render(
-      <QueryClientProvider client={createTestQueryClient()}>
-        <AssetProcessingStatusPanel assetId="22222222-2222-4222-8222-222222222222" />
-      </QueryClientProvider>,
+    const { container } = renderWithProviders(
+      <AssetProcessingStatusPanel assetId="22222222-2222-4222-8222-222222222222" />,
     )
 
     await waitFor(() => {
@@ -158,10 +151,8 @@ describe('AssetProcessingStatusPanel', () => {
       ),
     )
 
-    render(
-      <QueryClientProvider client={createTestQueryClient()}>
-        <AssetProcessingStatusPanel assetId="22222222-2222-4222-8222-222222222222" />
-      </QueryClientProvider>,
+    renderWithProviders(
+      <AssetProcessingStatusPanel assetId="22222222-2222-4222-8222-222222222222" />,
     )
 
     expect(await screen.findByText('Archive Inspection')).toBeInTheDocument()
@@ -181,10 +172,8 @@ describe('AssetProcessingStatusPanel', () => {
       ),
     )
 
-    render(
-      <QueryClientProvider client={createTestQueryClient()}>
-        <AssetProcessingStatusPanel assetId="22222222-2222-4222-8222-222222222222" />
-      </QueryClientProvider>,
+    renderWithProviders(
+      <AssetProcessingStatusPanel assetId="22222222-2222-4222-8222-222222222222" />,
     )
 
     expect(await screen.findByText('Malware & Security Scan')).toBeInTheDocument()
@@ -205,10 +194,8 @@ describe('AssetProcessingStatusPanel', () => {
       ),
     )
 
-    render(
-      <QueryClientProvider client={createTestQueryClient()}>
-        <AssetProcessingStatusPanel assetId="22222222-2222-4222-8222-222222222222" />
-      </QueryClientProvider>,
+    renderWithProviders(
+      <AssetProcessingStatusPanel assetId="22222222-2222-4222-8222-222222222222" />,
     )
 
     expect(await screen.findByText('AI Listing Analysis')).toBeInTheDocument()
@@ -227,13 +214,11 @@ describe('AssetProcessingStatusPanel', () => {
       ),
     )
 
-    render(
-      <QueryClientProvider client={createTestQueryClient()}>
-        <AssetProcessingStatusPanel
-          assetId="22222222-2222-4222-8222-222222222222"
-          assetVersionId="33333333-3333-4333-8333-333333333333"
-        />
-      </QueryClientProvider>,
+    renderWithProviders(
+      <AssetProcessingStatusPanel
+        assetId="22222222-2222-4222-8222-222222222222"
+        assetVersionId="33333333-3333-4333-8333-333333333333"
+      />,
     )
 
     expect(await screen.findByText('Archive Inspection')).toBeInTheDocument()
@@ -306,10 +291,8 @@ describe('AssetProcessingStatusPanel', () => {
       ),
     )
 
-    render(
-      <QueryClientProvider client={createTestQueryClient()}>
-        <AssetProcessingStatusPanel assetId={activeJob.assetId} versions={versions} />
-      </QueryClientProvider>,
+    renderWithProviders(
+      <AssetProcessingStatusPanel assetId={activeJob.assetId} versions={versions} />,
     )
 
     expect(await screen.findByText('v1')).toBeInTheDocument()
@@ -328,11 +311,7 @@ describe('AssetProcessingStatusPanel', () => {
       ),
     )
 
-    render(
-      <QueryClientProvider client={createTestQueryClient()}>
-        <AssetProcessingStatusPanel assetId={activeJob.assetId} />
-      </QueryClientProvider>,
-    )
+    renderWithProviders(<AssetProcessingStatusPanel assetId={activeJob.assetId} />)
 
     expect(await screen.findByRole('alert')).toBeInTheDocument()
     expect(screen.getByText(/Could not load processing/i)).toBeInTheDocument()
@@ -362,11 +341,7 @@ describe('AssetProcessingStatusPanel', () => {
       ),
     )
 
-    render(
-      <QueryClientProvider client={createTestQueryClient()}>
-        <AssetProcessingStatusPanel assetId={activeJob.assetId} />
-      </QueryClientProvider>,
-    )
+    renderWithProviders(<AssetProcessingStatusPanel assetId={activeJob.assetId} />)
 
     expect(await screen.findByText('Version …333333')).toBeInTheDocument()
     expect(screen.getByText('Version …444444')).toBeInTheDocument()

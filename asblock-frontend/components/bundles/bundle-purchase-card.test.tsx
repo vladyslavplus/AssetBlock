@@ -1,10 +1,9 @@
-import { QueryClientProvider } from '@tanstack/react-query'
-import { render, screen, waitFor } from '@testing-library/react'
+import { screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { BundlePurchaseCard } from '@/components/bundles/bundle-purchase-card'
-import { createTestQueryClient } from '@/test/query-client'
+import { renderWithQueryClient } from '@/test/render'
 import { verifiedSeller } from '@/test/session-user'
 
 const postCreateBundleCheckoutSession = vi.hoisted(() => vi.fn())
@@ -65,22 +64,20 @@ describe('BundlePurchaseCard', () => {
       new CheckoutRequestError(409, 'Conflict occurred', 'ERR_BUNDLE_CONTAINS_OWNED_ASSET'),
     )
 
-    render(
-      <QueryClientProvider client={createTestQueryClient()}>
-        <BundlePurchaseCard
-          bundleId="bundle-1"
-          sellerId="seller-1"
-          title="Mega Bundle"
-          price={49}
-          listPriceTotal={100}
-          savingsAmount={51}
-          savingsPercent={51}
-          isAvailable={true}
-          items={[]}
-          checkoutConfigured={true}
-          returnPath="/bundles/bundle-1"
-        />
-      </QueryClientProvider>,
+    renderWithQueryClient(
+      <BundlePurchaseCard
+        bundleId="bundle-1"
+        sellerId="seller-1"
+        title="Mega Bundle"
+        price={49}
+        listPriceTotal={100}
+        savingsAmount={51}
+        savingsPercent={51}
+        isAvailable={true}
+        items={[]}
+        checkoutConfigured={true}
+        returnPath="/bundles/bundle-1"
+      />,
     )
 
     const buyButton = screen.getByRole('button', { name: /buy bundle/i })
@@ -105,22 +102,20 @@ describe('BundlePurchaseCard', () => {
       ),
     )
 
-    render(
-      <QueryClientProvider client={createTestQueryClient()}>
-        <BundlePurchaseCard
-          bundleId="bundle-1"
-          sellerId="seller-1"
-          title="Mega Bundle"
-          price={49}
-          listPriceTotal={100}
-          savingsAmount={51}
-          savingsPercent={51}
-          isAvailable={true}
-          items={[]}
-          checkoutConfigured={true}
-          returnPath="/bundles/bundle-1"
-        />
-      </QueryClientProvider>,
+    renderWithQueryClient(
+      <BundlePurchaseCard
+        bundleId="bundle-1"
+        sellerId="seller-1"
+        title="Mega Bundle"
+        price={49}
+        listPriceTotal={100}
+        savingsAmount={51}
+        savingsPercent={51}
+        isAvailable={true}
+        items={[]}
+        checkoutConfigured={true}
+        returnPath="/bundles/bundle-1"
+      />,
     )
 
     const buyButton = screen.getByRole('button', { name: /buy bundle/i })

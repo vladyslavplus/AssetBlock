@@ -6,6 +6,7 @@ import { AssetCard } from '@/components/assets/asset-card'
 import { Button } from '@/components/ui/button'
 import type { AuthorCatalogPageResult } from '@/lib/server/user-profile-server'
 import { fetchAuthorCatalogClient, userProfileKeys } from '@/lib/profile/user-profile-query'
+import { routes } from '@/lib/routes'
 
 function ProfilePagination({
   username,
@@ -19,9 +20,8 @@ function ProfilePagination({
   if (totalPages <= 1) {
     return null
   }
-  const basePath = `/users/${encodeURIComponent(username)}`
-  const prevHref = page <= 2 ? basePath : `${basePath}?page=${page - 1}`
-  const nextHref = `${basePath}?page=${page + 1}`
+  const prevHref = routes.userProfile(username, Math.max(1, page - 1))
+  const nextHref = routes.userProfile(username, page + 1)
 
   return (
     <div className="flex flex-wrap items-center justify-center gap-3 pt-10">

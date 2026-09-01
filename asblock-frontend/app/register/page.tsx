@@ -2,7 +2,11 @@ import { AuthCard } from '@/components/auth/auth-card'
 
 export default function RegisterPage() {
   return (
-    <main className="min-h-screen bg-background text-foreground flex items-center justify-center px-4 py-12">
+    <main
+      id="main-content"
+      tabIndex={-1}
+      className="min-h-screen bg-background text-foreground flex items-center justify-center px-4 py-12 outline-none"
+    >
       <div
         className="fixed inset-0 opacity-[0.035] pointer-events-none"
         style={{

@@ -18,6 +18,7 @@ import { formatLongDate } from '@/lib/format-date'
 import { fetchLibraryAssetVersions, libraryKeys } from '@/lib/library/library-query'
 import type { PurchaseLibraryItem } from '@/lib/library/purchase-types'
 import { isWithinReviewWindowAfterPurchase } from '@/lib/reviews/review-constants'
+import { routes } from '@/lib/routes'
 import { cn } from '@/lib/utils'
 
 interface LibraryPurchaseCardProps {
@@ -79,7 +80,7 @@ export function LibraryPurchaseCard({ purchase }: LibraryPurchaseCardProps) {
         <span className="text-xs text-muted-foreground">
           by{' '}
           <Link
-            href={`/users/${encodeURIComponent(purchase.authorUsername)}`}
+            href={routes.userProfile(purchase.authorUsername)}
             className="font-mono text-muted-foreground/80 hover:text-accent transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 rounded-sm"
           >
             @{purchase.authorUsername}
@@ -93,7 +94,7 @@ export function LibraryPurchaseCard({ purchase }: LibraryPurchaseCardProps) {
             Purchased in bundle{' '}
             {purchase.bundleId ? (
               <Link
-                href={`/bundles/${purchase.bundleId}`}
+                href={routes.bundleDetail(purchase.bundleId)}
                 className="font-medium text-foreground hover:text-accent transition-colors"
               >
                 {purchase.bundleTitle}
@@ -179,7 +180,7 @@ export function LibraryPurchaseCard({ purchase }: LibraryPurchaseCardProps) {
             size="sm"
             className="flex-1 border-border text-foreground bg-transparent hover:bg-secondary/50 hover:border-foreground/40 hover:text-foreground transition-smooth font-medium text-xs h-8"
           >
-            <Link href={`/assets/${purchase.assetId}`}>
+            <Link href={routes.assetDetail(purchase.assetId)}>
               <ExternalLink className="w-3.5 h-3.5 mr-1.5" />
               View asset
             </Link>

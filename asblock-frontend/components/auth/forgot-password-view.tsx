@@ -6,7 +6,6 @@ import Link from 'next/link'
 import { useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
-import { z } from 'zod'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -14,11 +13,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Separator } from '@/components/ui/separator'
 import { AuthRequestError, postPasswordResetRequest } from '@/lib/auth/auth-api'
-
-const schema = z.object({
-  email: z.string().min(1, 'Email is required').email('Enter a valid email address'),
-})
-type FormValues = z.infer<typeof schema>
+import { passwordResetRequestSchema, type PasswordResetRequestValues } from '@/lib/auth/schemas'
 
 export function ForgotPasswordView() {
   const [submitError, setSubmitError] = useState('')
@@ -29,13 +24,13 @@ export function ForgotPasswordView() {
     handleSubmit,
     formState: { errors },
     getValues,
-  } = useForm<FormValues>({
-    resolver: zodResolver(schema),
+  } = useForm<PasswordResetRequestValues>({
+    resolver: zodResolver(passwordResetRequestSchema),
     defaultValues: { email: '' },
   })
 
   const mutation = useMutation({
-    mutationFn: (values: FormValues) => postPasswordResetRequest(values.email),
+    mutationFn: (values: PasswordResetRequestValues) => postPasswordResetRequest(values.email),
     onMutate: () => setSubmitError(''),
     onSuccess: () => setSent(true),
     onError: (err: unknown) => {
