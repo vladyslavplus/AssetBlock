@@ -23,6 +23,7 @@ import {
 import { SessionBlockSkeleton } from '@/components/skeletons/session-block-skeleton'
 import { SellListingListSkeleton } from '@/components/sell/sell-listing-row-skeleton'
 import { SellQueryError } from '@/components/sell/sell-query-error'
+import { QueryEmptyState } from '@/components/shared/query-empty-state'
 import { deleteSellerAsset } from '@/lib/seller/seller-api'
 import { formatUsdWhole } from '@/lib/format-currency'
 import type { SellerAssetListItem } from '@/lib/seller/seller-asset-schemas'
@@ -117,16 +118,22 @@ export function SellMyListings() {
 
   if (items.length === 0) {
     return (
-      <div className="max-w-lg w-full rounded-lg border border-dashed border-border px-6 py-12 text-center">
-        <Package className="h-10 w-10 text-muted-foreground/50 mx-auto mb-3" aria-hidden />
-        <p className="font-medium text-foreground mb-1">No listings yet</p>
-        <p className="text-sm text-muted-foreground mb-4">
-          Upload your first asset using the <span className="text-foreground">Upload asset</span>{' '}
-          tab.
-        </p>
-        <Button asChild variant="outline" className="border-border">
-          <Link href="/assets">Browse the catalog for inspiration</Link>
-        </Button>
+      <div className="max-w-lg w-full">
+        <QueryEmptyState
+          icon={Package}
+          title="No listings yet"
+          description={
+            <>
+              Upload your first asset using the{' '}
+              <span className="text-foreground">Upload asset</span> tab.
+            </>
+          }
+          action={
+            <Button asChild variant="outline" className="border-border">
+              <Link href="/assets">Browse the catalog for inspiration</Link>
+            </Button>
+          }
+        />
       </div>
     )
   }

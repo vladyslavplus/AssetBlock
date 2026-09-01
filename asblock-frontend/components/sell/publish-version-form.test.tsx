@@ -24,8 +24,10 @@ const assetId = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'
 
 function renderPublish() {
   const queryClient = createTestQueryClient()
+  const invalidate = vi.spyOn(queryClient, 'invalidateQueries')
   return {
     queryClient,
+    invalidate,
     ...render(
       <QueryClientProvider client={queryClient}>
         <PublishVersionForm assetId={assetId} />
@@ -49,10 +51,10 @@ describe('PublishVersionForm', () => {
     toastSuccess.mockReset()
   })
 
-  it('shows processing toast after a successful upload and stays on the seller page', async () => {
+  it('shows processing toast after a successful upload and does not invalidate library queries', async () => {
     const user = userEvent.setup()
     publishSellerAssetVersion.mockResolvedValueOnce({ ok: true, versionId: 'version-1' })
-    renderPublish()
+    const { invalidate } = renderPublish()
 
     await user.type(screen.getByLabelText(/release notes/i), 'Security scan pending')
     setPackageFile(new File(['zip'], 'pack.zip', { type: 'application/zip' }))
@@ -62,5 +64,9 @@ describe('PublishVersionForm', () => {
       expect(publishSellerAssetVersion).toHaveBeenCalledTimes(1)
     })
     expect(toastSuccess).toHaveBeenCalledWith('New version uploaded. Security processing started.')
+
+    const calls = invalidate.mock.calls.map((c) => JSON.stringify(c[0]))
+    expect(calls.some((k) => k.includes('library'))).toBe(false)
+    expect(calls.some((k) => k.includes('seller'))).toBe(true)
   })
 })

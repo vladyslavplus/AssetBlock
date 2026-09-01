@@ -7,7 +7,7 @@ import { Loader2, Package, Star } from 'lucide-react'
 
 import { LeaveReviewDialog } from '@/components/reviews/leave-review-dialog'
 import { Button } from '@/components/ui/button'
-import { fetchCheckoutStatus } from '@/lib/payments/checkout-api'
+import { checkoutStatusQueryOptions } from '@/lib/payments/checkout-query'
 import { libraryKeys } from '@/lib/library/library-query'
 import { notificationsKeys } from '@/lib/notifications/notifications-query'
 import { invalidateQueriesInBackground, runQueryInBackground } from '@/lib/query/query-refresh'
@@ -39,12 +39,7 @@ export function PostCheckoutReviewBanner() {
   }, [])
 
   const statusQuery = useQuery({
-    queryKey: ['checkout-status', context?.checkoutIntentId],
-    queryFn: () => {
-      if (!context?.checkoutIntentId) throw new Error('Missing checkout intent id')
-      return fetchCheckoutStatus(context.checkoutIntentId)
-    },
-    enabled: Boolean(context?.checkoutIntentId),
+    ...checkoutStatusQueryOptions(context?.checkoutIntentId),
     refetchInterval: (q) => (q.state.data?.status === 'pending' && !pollTimedOut ? POLL_MS : false),
     retry: 1,
   })

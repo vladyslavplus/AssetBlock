@@ -1,10 +1,12 @@
-export type CollectionStatus = 'DRAFT' | 'PUBLISHED' | 'ARCHIVED'
+import type { CollectionStatus } from '@/lib/collections/collection-schemas'
+
+export type { CollectionStatus }
 
 export interface CollectionListItem {
   id: string
   title: string
   description: string | null
-  status: CollectionStatus | string
+  status: CollectionStatus
   publishedAt: string | null
   createdAt: string
   sellerId: string
@@ -27,7 +29,7 @@ export interface CollectionDetail {
   id: string
   title: string
   description: string | null
-  status: CollectionStatus | string
+  status: CollectionStatus
   publishedAt: string | null
   archivedAt: string | null
   createdAt: string

@@ -4,6 +4,7 @@ import { accountKeys } from '@/lib/account/account-query'
 import { adminAuditKeys } from '@/lib/admin/admin-audit-query'
 import { adminKeys } from '@/lib/admin/admin-query'
 import { bundleKeys } from '@/lib/bundles/bundles-query'
+import { checkoutKeys } from '@/lib/payments/checkout-query'
 import { collectionKeys } from '@/lib/collections/collections-query'
 import { libraryKeys } from '@/lib/library/library-query'
 import { notificationsKeys } from '@/lib/notifications/notifications-query'
@@ -16,6 +17,7 @@ import { sellerKeys } from '@/lib/seller/seller-query'
 export function clearPrivateUserQueries(queryClient: QueryClient): void {
   queryClient.removeQueries({ queryKey: sellerKeys.all })
   queryClient.removeQueries({ queryKey: libraryKeys.all })
+  queryClient.removeQueries({ queryKey: checkoutKeys.all })
   queryClient.removeQueries({ queryKey: notificationsKeys.all })
   queryClient.removeQueries({ queryKey: accountKeys.all })
   queryClient.removeQueries({ queryKey: adminKeys.all })

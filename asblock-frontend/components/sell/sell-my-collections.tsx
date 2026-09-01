@@ -55,6 +55,7 @@ import {
   collectionMetadataFormSchema,
   type CollectionMetadataFormValues,
 } from '@/lib/collections/collection-schemas'
+import { getCollectionStatusBadgeVariant } from '@/lib/collections/collection-ui'
 import {
   collectionKeys,
   fetchSellerCollectionQuery,
@@ -63,12 +64,6 @@ import {
 import { fetchSellerListingsQuery, sellerKeys } from '@/lib/seller/seller-query'
 import { invalidateQueriesInBackground, runQueryInBackground } from '@/lib/query/query-refresh'
 import { formatUsdWhole } from '@/lib/format-currency'
-
-function statusBadgeVariant(status: string): 'default' | 'secondary' | 'outline' {
-  if (status === 'PUBLISHED') return 'default'
-  if (status === 'ARCHIVED') return 'outline'
-  return 'secondary'
-}
 
 export function SellMyCollections() {
   const queryClient = useQueryClient()
@@ -363,7 +358,10 @@ export function SellMyCollections() {
                       {c.itemCount} {c.itemCount === 1 ? 'item' : 'items'}
                     </p>
                   </div>
-                  <Badge variant={statusBadgeVariant(c.status)} className="text-[10px] shrink-0">
+                  <Badge
+                    variant={getCollectionStatusBadgeVariant(c.status)}
+                    className="text-[10px] shrink-0"
+                  >
                     {c.status}
                   </Badge>
                 </div>
@@ -387,7 +385,10 @@ export function SellMyCollections() {
         <div className="rounded-lg border border-border bg-card-elevated p-4 space-y-4">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <h2 className="text-sm font-semibold text-foreground">Manage collection</h2>
-            <Badge variant={statusBadgeVariant(managedDetail.status)} className="text-[10px]">
+            <Badge
+              variant={getCollectionStatusBadgeVariant(managedDetail.status)}
+              className="text-[10px]"
+            >
               {managedDetail.status}
             </Badge>
           </div>

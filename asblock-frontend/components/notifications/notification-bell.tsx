@@ -7,7 +7,6 @@ import {
   useQueryClient,
   type InfiniteData,
 } from '@tanstack/react-query'
-import { formatDistanceToNow } from 'date-fns'
 import { Bell, BellOff, Loader2, RotateCw } from 'lucide-react'
 import Link from 'next/link'
 import { useEffect, useState } from 'react'
@@ -18,12 +17,14 @@ import {
   NotificationListSkeleton,
   NotificationListSkeletonRow,
 } from '@/components/notifications/notification-list-skeleton'
+import { QueryEmptyState } from '@/components/shared/query-empty-state'
 import { Button } from '@/components/ui/button'
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
+import { formatRelativeTime } from '@/lib/format-date'
 import { getApiErrorMessage } from '@/lib/http/api-errors'
 import type {
   NotificationListItem,
@@ -153,9 +154,12 @@ export function NotificationBell() {
       return
     }
     return subscribeNotificationHub(() => {
-      invalidateQueriesInBackground(queryClient, { queryKey: notificationsKeys.all })
+      invalidateQueriesInBackground(queryClient, { queryKey: notificationsKeys.unread() })
+      if (open) {
+        invalidateQueriesInBackground(queryClient, { queryKey: notificationsKeys.inbox() })
+      }
     }, user.id)
-  }, [status, user?.id, queryClient])
+  }, [status, user?.id, queryClient, open])
 
   const toggleRead = async (n: NotificationListItem) => {
     const wasUnread = !n.readAt
@@ -269,14 +273,13 @@ export function NotificationBell() {
               Could not load notifications. Try Refresh or check your connection.
             </p>
           ) : items.length === 0 ? (
-            <div className="flex flex-col items-center justify-center gap-2 px-4 py-8 text-center">
-              <BellOff className="size-8 text-muted-foreground/50" aria-hidden />
-              <p className="text-sm font-medium text-foreground">No notifications yet</p>
-              <p className="text-xs text-muted-foreground leading-relaxed max-w-[18rem]">
-                Purchases, downloads, sales, and reviews will show up here. We will notify you in
-                real time when something new arrives.
-              </p>
-            </div>
+            <QueryEmptyState
+              compact
+              icon={BellOff}
+              title="No notifications yet"
+              description="Purchases, downloads, sales, and reviews will show up here. We will notify you in real time when something new arrives."
+              className="border-0 bg-transparent px-4 py-8"
+            />
           ) : (
             <ul className="divide-y divide-border">
               {items.map((n) => {
@@ -302,7 +305,7 @@ export function NotificationBell() {
                         {title}
                       </span>
                       <span className="text-[10px] text-muted-foreground shrink-0 tabular-nums">
-                        {formatDistanceToNow(new Date(n.createdAt), { addSuffix: true })}
+                        {formatRelativeTime(n.createdAt)}
                       </span>
                     </div>
                     {body ? (

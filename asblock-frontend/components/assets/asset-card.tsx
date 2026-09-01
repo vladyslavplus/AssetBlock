@@ -1,26 +1,39 @@
 'use client'
 
 import Link from 'next/link'
-import { Star } from 'lucide-react'
 import { appendAnalyticsQuery } from '@/lib/analytics/telemetry-source'
 import type { AnalyticsSourceQuery } from '@/lib/analytics/telemetry-constants'
 import type { AssetListItem } from '@/lib/catalog/asset-types'
 import { formatUsdWhole } from '@/lib/format-currency'
+import { StarRating } from '@/components/assets/star-rating'
+import { cn } from '@/lib/utils'
 
-interface AssetCardProps {
+export interface AssetCardProps {
   asset: AssetListItem
+  variant?: 'grid' | 'carousel'
   linkSource?: AnalyticsSourceQuery
   collectionId?: string
 }
 
-export function AssetCard({ asset, linkSource = 'catalog', collectionId }: AssetCardProps) {
+export function AssetCard({
+  asset,
+  variant = 'grid',
+  linkSource = 'catalog',
+  collectionId,
+}: AssetCardProps) {
   const assetHref = appendAnalyticsQuery(`/assets/${asset.id}`, linkSource, { collectionId })
   const visibleTags = asset.tags.slice(0, 3)
   const overflowCount = Math.max(0, asset.tags.length - 3)
+  const isCarousel = variant === 'carousel'
 
   return (
     <article
-      className="flex-none w-full rounded-xl border border-border p-4 flex flex-col gap-3 group transition-smooth hover:border-primary/50 hover:bg-card-elevated hover:shadow-[0_8px_24px_rgba(124,58,237,0.15)] focus-within:ring-2 focus-within:ring-primary focus-within:ring-offset-2 focus-within:ring-offset-background"
+      className={cn(
+        'rounded-xl border border-border group transition-smooth hover:border-primary/50 hover:bg-card-elevated hover:shadow-[0_8px_24px_rgba(124,58,237,0.15)] focus-within:ring-2 focus-within:ring-primary focus-within:ring-offset-2 focus-within:ring-offset-background',
+        isCarousel
+          ? 'flex min-h-[19rem] h-full w-72 flex-none flex-col gap-4 p-5 sm:w-80 min-w-0'
+          : 'flex-none w-full p-4 flex flex-col gap-3',
+      )}
       style={{ background: '#11101A' }}
     >
       <div className="flex items-start justify-between gap-2 h-12">
@@ -34,20 +47,41 @@ export function AssetCard({ asset, linkSource = 'catalog', collectionId }: Asset
             {asset.title}
           </h3>
         </div>
-        <span className="text-base font-semibold text-foreground shrink-0 font-mono">
+        <span
+          className={cn(
+            'font-semibold text-foreground shrink-0 font-mono',
+            isCarousel ? 'text-lg' : 'text-base',
+          )}
+        >
           {formatUsdWhole(asset.price)}
         </span>
       </div>
 
-      {asset.description && (
-        <p className="line-clamp-2 min-w-0 flex-1 break-words text-xs leading-relaxed text-muted-foreground [overflow-wrap:anywhere]">
-          {asset.description}
-        </p>
+      {isCarousel ? (
+        <div className="flex min-h-[2.5rem] min-w-0 flex-1 flex-col">
+          {asset.description ? (
+            <p className="line-clamp-2 min-w-0 break-words text-xs leading-relaxed text-muted-foreground [overflow-wrap:anywhere]">
+              {asset.description}
+            </p>
+          ) : (
+            <span className="text-xs text-muted-foreground/40" aria-hidden="true">
+              &nbsp;
+            </span>
+          )}
+        </div>
+      ) : (
+        <>
+          {asset.description && (
+            <p className="line-clamp-2 min-w-0 flex-1 break-words text-xs leading-relaxed text-muted-foreground [overflow-wrap:anywhere]">
+              {asset.description}
+            </p>
+          )}
+          {!asset.description && <div className="flex-1" />}
+        </>
       )}
-      {!asset.description && <div className="flex-1" />}
 
       {asset.tags.length > 0 && (
-        <div className="flex flex-wrap gap-1.5 h-7">
+        <div className={cn('flex flex-wrap gap-1.5', isCarousel ? 'min-h-7 content-start' : 'h-7')}>
           {visibleTags.map((tag) => (
             <span
               key={tag}
@@ -64,7 +98,9 @@ export function AssetCard({ asset, linkSource = 'catalog', collectionId }: Asset
         </div>
       )}
 
-      <div className="border-t border-border pt-3 flex flex-col gap-3">
+      <div
+        className={cn('border-t border-border pt-3 flex flex-col gap-3', isCarousel && 'mt-auto')}
+      >
         <div className="flex items-center justify-between">
           <Link
             href={`/users/${encodeURIComponent(asset.authorUsername)}`}
@@ -72,23 +108,7 @@ export function AssetCard({ asset, linkSource = 'catalog', collectionId }: Asset
           >
             <span className="text-accent">@{asset.authorUsername}</span>
           </Link>
-          <div className="flex items-center gap-1">
-            <div className="flex gap-0.5">
-              {[...Array(5)].map((_, i) => (
-                <Star
-                  key={i}
-                  className={`w-3 h-3 ${
-                    i < Math.round(asset.averageRating)
-                      ? 'fill-yellow-400 text-yellow-400'
-                      : 'text-muted-foreground/20'
-                  }`}
-                />
-              ))}
-            </div>
-            <span className="text-xs text-muted-foreground ml-1">
-              {asset.averageRating.toFixed(1)}
-            </span>
-          </div>
+          <StarRating value={asset.averageRating} />
         </div>
         <Link
           href={assetHref}

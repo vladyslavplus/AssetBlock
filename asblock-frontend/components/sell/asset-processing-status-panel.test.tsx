@@ -255,7 +255,6 @@ describe('AssetProcessingStatusPanel', () => {
     const versions = [
       {
         id: '33333333-3333-4333-8333-333333333333',
-        assetId: activeJob.assetId,
         versionNumber: 1,
         contentLength: 1000,
         contentSha256: 'a'.repeat(64),
@@ -269,10 +268,13 @@ describe('AssetProcessingStatusPanel', () => {
           terms: '',
         },
         createdAt: '2026-08-24T12:00:00Z',
+        processingStatus: 'READY' as const,
+        processingErrorCode: null,
+        processingErrorSummary: null,
+        processingUpdatedAt: null,
       },
       {
         id: '44444444-4444-4444-8444-444444444444',
-        assetId: activeJob.assetId,
         versionNumber: 2,
         contentLength: 2000,
         contentSha256: 'b'.repeat(64),
@@ -286,6 +288,10 @@ describe('AssetProcessingStatusPanel', () => {
           terms: '',
         },
         createdAt: '2026-08-24T12:00:00Z',
+        processingStatus: 'READY' as const,
+        processingErrorCode: null,
+        processingErrorSummary: null,
+        processingUpdatedAt: null,
       },
     ]
 

@@ -177,17 +177,7 @@ export interface AssetDetailItemApi {
   currentLicense: AssetLicenseSummaryApi
 }
 
-export interface AssetVersionSummaryApi {
-  id: string
-  versionNumber: number
-  isCurrent: boolean
-  fileName: string
-  contentLength: number
-  contentSha256: string
-  releaseNotes: string | null
-  createdAt: string
-  license: AssetLicenseSummaryApi
-}
+export type { AssetVersionSummary as AssetVersionSummaryApi } from '@/lib/library/library-schemas'
 
 /** Shapes list item for components that still expect AssetListItem (detail lacks tags/rating/username). */
 export function mapDetailApiToListItemForHero(row: AssetDetailItemApi): AssetListItem {

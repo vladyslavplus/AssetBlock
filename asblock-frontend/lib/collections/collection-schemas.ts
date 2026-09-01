@@ -46,7 +46,8 @@ export const collectionMetadataFormSchema = z.object({
 
 export type CollectionMetadataFormValues = z.infer<typeof collectionMetadataFormSchema>
 
-const collectionStatusResponseSchema = z.enum(['DRAFT', 'PUBLISHED', 'ARCHIVED'])
+export const collectionStatusResponseSchema = z.enum(['DRAFT', 'PUBLISHED', 'ARCHIVED'])
+export type CollectionStatus = z.infer<typeof collectionStatusResponseSchema>
 
 export const collectionItemResponseSchema = z.object({
   assetId: z.string().uuid(),

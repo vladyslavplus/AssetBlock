@@ -44,6 +44,10 @@ jobs:
         working-directory: asblock-frontend
         run: pnpm install --frozen-lockfile
 
+      - name: Check
+        working-directory: asblock-frontend
+        run: pnpm run check
+
       - name: Unit and component tests
         working-directory: asblock-frontend
         run: pnpm run test:coverage
@@ -56,10 +60,6 @@ jobs:
           path: asblock-frontend/coverage
           if-no-files-found: ignore
 
-      - name: Check
-        working-directory: asblock-frontend
-        run: pnpm run check
-
       - name: Build
         working-directory: asblock-frontend
         env:
@@ -67,11 +67,75 @@ jobs:
           ASSETBLOCK_API_BASE_URL: http://127.0.0.1:3999
         run: pnpm run build
 
+      - name: Upload Next.js build
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: frontend-next-build
+          path: asblock-frontend/.next
+          include-hidden-files: true
+          if-no-files-found: error
+          retention-days: 1
+
+  e2e:
+    name: Playwright E2E
+    needs: check
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: "22.x"
+
+      - name: Install pnpm
+        run: npm install -g pnpm@11.13.0
+
+      - name: Get pnpm store directory
+        shell: bash
+        run: |
+          echo "STORE_PATH=$(pnpm store path --silent)" >> $GITHUB_ENV
+
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        name: Setup pnpm cache
+        with:
+          path: ${{ env.STORE_PATH }}
+          key: ${{ runner.os }}-pnpm-store-${{ hashFiles('**/pnpm-lock.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-pnpm-store-
+
+      - name: Install dependencies
+        working-directory: asblock-frontend
+        run: pnpm install --frozen-lockfile
+
+      - name: Download Next.js build
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: frontend-next-build
+          path: asblock-frontend/.next
+
+      - name: Get Playwright version
+        id: playwright-version
+        working-directory: asblock-frontend
+        shell: bash
+        run: |
+          PLAYWRIGHT_VERSION=$(node -p "require('./node_modules/@playwright/test/package.json').version")
+          echo "version=${PLAYWRIGHT_VERSION}" >> $GITHUB_OUTPUT
+
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        name: Setup Playwright browser cache
+        id: playwright-cache
+        with:
+          path: ~/.cache/ms-playwright
+          key: ${{ runner.os }}-playwright-${{ steps.playwright-version.outputs.version }}
+
       - name: Install Playwright Chromium
         working-directory: asblock-frontend
         run: pnpm exec playwright install --with-deps chromium
 
-      - name: Playwright smoke
+      - name: Playwright E2E
         working-directory: asblock-frontend
         env:
           CI: true

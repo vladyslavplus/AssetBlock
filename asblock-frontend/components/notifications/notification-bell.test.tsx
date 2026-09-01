@@ -1,5 +1,6 @@
 import { QueryClientProvider } from '@tanstack/react-query'
 import { render, screen } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 
 import { NotificationBell } from '@/components/notifications/notification-bell'
@@ -22,7 +23,7 @@ vi.mock('@/lib/notifications/notification-hub', () => ({
 vi.mock('sonner', () => ({ toast: { error: vi.fn(), success: vi.fn(), info: vi.fn() } }))
 
 describe('NotificationBell hub invalidation', () => {
-  it('invalidates only notification queries when the hub fires', async () => {
+  it('invalidates unread count always and avoids inbox invalidation when closed', async () => {
     useAuth.mockReturnValue({
       user: verifiedSeller(),
       status: 'authenticated',
@@ -50,12 +51,56 @@ describe('NotificationBell hub invalidation', () => {
     )
     await screen.findByRole('button', { name: /notifications/i })
     expect(subscribeNotificationHub).toHaveBeenCalledWith(expect.any(Function), verifiedSeller().id)
+
     hubCb?.()
-    expect(invalidate).toHaveBeenCalledWith(
-      expect.objectContaining({ queryKey: notificationsKeys.all }),
-      expect.anything(),
+
+    const unreadKey = JSON.stringify(notificationsKeys.unread())
+    const inboxKey = JSON.stringify(notificationsKeys.inbox())
+
+    const calls = invalidate.mock.calls.map((call) => JSON.stringify(call[0]))
+    expect(calls.some((k) => k.includes(unreadKey))).toBe(true)
+    expect(calls.some((k) => k.includes(inboxKey))).toBe(false)
+    expect(calls.some((k) => k === JSON.stringify({ queryKey: notificationsKeys.all }))).toBe(false)
+    expect(calls.some((k) => k.includes('catalog') || k.includes('library'))).toBe(false)
+  })
+
+  it('invalidates both unread and inbox when the notification menu is open', async () => {
+    const user = userEvent.setup()
+    useAuth.mockReturnValue({
+      user: verifiedSeller(),
+      status: 'authenticated',
+      isAdmin: false,
+      refresh: vi.fn(),
+      logout: vi.fn(),
+    })
+    let hubCb: (() => void) | undefined
+    subscribeNotificationHub.mockImplementation((cb: () => void) => {
+      hubCb = cb
+      return () => {}
+    })
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(
+        async () => new Response(JSON.stringify({ items: [], totalCount: 0 }), { status: 200 }),
+      ),
     )
-    const keys = invalidate.mock.calls.map((call) => JSON.stringify(call[0]))
-    expect(keys.some((key) => key.includes('catalog') || key.includes('library'))).toBe(false)
+    const queryClient = createTestQueryClient()
+    render(
+      <QueryClientProvider client={queryClient}>
+        <NotificationBell />
+      </QueryClientProvider>,
+    )
+    const button = await screen.findByRole('button', { name: /notifications/i })
+    await user.click(button)
+
+    const invalidate = vi.spyOn(queryClient, 'invalidateQueries')
+    hubCb?.()
+
+    const unreadKey = JSON.stringify(notificationsKeys.unread())
+    const inboxKey = JSON.stringify(notificationsKeys.inbox())
+
+    const calls = invalidate.mock.calls.map((call) => JSON.stringify(call[0]))
+    expect(calls.some((k) => k.includes(unreadKey))).toBe(true)
+    expect(calls.some((k) => k.includes(inboxKey))).toBe(true)
   })
 })

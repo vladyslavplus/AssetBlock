@@ -1,10 +1,10 @@
 import { getApiErrorMessage } from '@/lib/http/api-errors'
-import type { AssetVersionSummaryApi } from '@/lib/catalog/assets-api'
 import {
-  normalizePurchaseSource,
-  type PurchaseLibraryItem,
+  assetVersionsResponseSchema,
+  pagedPurchaseLibraryResponseSchema,
+  type AssetVersionSummary,
   type PagedPurchaseLibraryDto,
-} from '@/lib/library/purchase-types'
+} from '@/lib/library/library-schemas'
 
 export interface LibraryPurchasesParams {
   page?: number
@@ -65,31 +65,19 @@ export async function fetchLibraryPurchases(
       ),
     }
   }
-  const data = parsed as PagedPurchaseLibraryDto
-  const rawItems = Array.isArray(data.items) ? data.items : []
-  const items: PurchaseLibraryItem[] = rawItems.map((row) => ({
-    ...row,
-    orderId: row.orderId ?? '',
-    hasUserReviewed: Boolean(row.hasUserReviewed),
-    purchasedVersionNumber: Number(row.purchasedVersionNumber),
-    purchasedVersionId: row.purchasedVersionId,
-    latestEntitledVersionNumber: Number(row.latestEntitledVersionNumber),
-    latestEntitledVersionId: row.latestEntitledVersionId,
-    hasUpdate: Boolean(row.hasUpdate),
-    pricePaid: Number(row.pricePaid),
-    currency: row.currency ?? 'usd',
-    source: normalizePurchaseSource(row.source),
-    bundleId: row.bundleId ?? null,
-    bundleTitle: row.bundleTitle ?? null,
-  }))
+
+  const result = pagedPurchaseLibraryResponseSchema.safeParse(parsed)
+  if (!result.success) {
+    return {
+      ok: false,
+      status: 502,
+      message: 'Invalid library response from server.',
+    }
+  }
+
   return {
     ok: true,
-    data: {
-      items,
-      totalCount: Number(data.totalCount) || 0,
-      page: Number(data.page) || 1,
-      pageSize: Number(data.pageSize) || 0,
-    },
+    data: result.data,
   }
 }
 
@@ -107,9 +95,7 @@ export async function fetchLibraryPurchasesOrThrow(
   return r.data
 }
 
-export async function fetchLibraryAssetVersions(
-  assetId: string,
-): Promise<AssetVersionSummaryApi[]> {
+export async function fetchLibraryAssetVersions(assetId: string): Promise<AssetVersionSummary[]> {
   const res = await fetch(`/api/assets/${encodeURIComponent(assetId)}/versions`, {
     credentials: 'include',
   })
@@ -128,5 +114,11 @@ export async function fetchLibraryAssetVersions(
       getApiErrorMessage(parsed, `Could not load versions (${res.status})`),
     )
   }
-  return Array.isArray(parsed) ? (parsed as AssetVersionSummaryApi[]) : []
+
+  const result = assetVersionsResponseSchema.safeParse(parsed)
+  if (!result.success) {
+    throw new LibraryFetchError(502, 'Invalid asset versions response from server.')
+  }
+
+  return result.data
 }

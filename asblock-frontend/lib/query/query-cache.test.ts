@@ -13,6 +13,7 @@ import { authKeys } from '@/lib/auth/auth-query'
 import { accountKeys } from '@/lib/account/account-query'
 import { adminAuditKeys } from '@/lib/admin/admin-audit-query'
 import { adminKeys } from '@/lib/admin/admin-query'
+import { checkoutKeys } from '@/lib/payments/checkout-query'
 import { clearPrivateUserQueries } from '@/lib/query/clear-user-scoped-queries'
 import { runQueryInBackground } from '@/lib/query/query-refresh'
 import { createTestQueryClient } from '@/test/query-client'
@@ -95,6 +96,7 @@ describe('session cache isolation', () => {
     client.setQueryData(collectionKeys.sellerList(), { items: [] })
     client.setQueryData(adminKeys.categories(), { items: ['admin-cat'] })
     client.setQueryData(adminAuditKeys.all, { items: ['audit-log'] })
+    client.setQueryData(checkoutKeys.status('intent-1'), { status: 'pending' })
 
     clearPrivateUserQueries(client)
 
@@ -107,6 +109,7 @@ describe('session cache isolation', () => {
     expect(client.getQueryData(authKeys.session())).toEqual({ id: 'u1' })
     expect(client.getQueryData(sellerKeys.listings())).toBeUndefined()
     expect(client.getQueryData(libraryKeys.purchases())).toBeUndefined()
+    expect(client.getQueryData(checkoutKeys.status('intent-1'))).toBeUndefined()
     expect(client.getQueryData(notificationsKeys.inbox())).toBeUndefined()
     expect(client.getQueryData(accountKeys.me())).toBeUndefined()
     expect(client.getQueryData(collectionKeys.sellerList())).toBeUndefined()

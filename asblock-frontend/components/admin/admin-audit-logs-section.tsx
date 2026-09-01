@@ -17,6 +17,7 @@ import {
 } from '@/components/ui/table'
 import type { AuditLogListItemApi, AuditOutcome } from '@/lib/admin/admin-audit-query'
 import type { AdminAuditLogsController } from '@/lib/admin/use-admin-audit-logs'
+import { formatDateTimeLocal } from '@/lib/format-date'
 import { ApiRequestError } from '@/lib/http/api-client'
 import { getApiErrorMessage } from '@/lib/http/api-errors'
 import { cn } from '@/lib/utils'
@@ -34,19 +35,6 @@ function outcomeVariant(
     default:
       return 'secondary'
   }
-}
-
-function formatTime(iso: string): string {
-  const date = new Date(iso)
-  if (Number.isNaN(date.getTime())) return iso
-  return date.toLocaleString(undefined, {
-    year: 'numeric',
-    month: 'short',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-    second: '2-digit',
-  })
 }
 
 async function copyText(label: string, value: string) {
@@ -331,7 +319,7 @@ export function AdminAuditLogsSection({ controller }: AdminAuditLogsSectionProps
                           </Button>
                         </TableCell>
                         <TableCell className="align-top py-2 text-xs whitespace-nowrap">
-                          {formatTime(row.occurredAt)}
+                          {formatDateTimeLocal(row.occurredAt)}
                         </TableCell>
                         <TableCell className="align-top py-2">
                           <ActorCell row={row} />

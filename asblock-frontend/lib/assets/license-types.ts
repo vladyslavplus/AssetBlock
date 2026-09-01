@@ -1,14 +1,20 @@
+import { z } from 'zod'
+
 export const ASSET_LICENSE_CODES = ['PERSONAL', 'COMMERCIAL'] as const
 
 export type AssetLicenseCode = (typeof ASSET_LICENSE_CODES)[number]
 
-export interface AssetLicenseSummaryApi {
-  code: AssetLicenseCode
-  displayName: string
-  templateVersion: string
+export const assetLicenseCodeSchema = z.enum(ASSET_LICENSE_CODES)
+
+export const assetLicenseSummarySchema = z.object({
+  code: assetLicenseCodeSchema,
+  displayName: z.string().min(1),
+  templateVersion: z.string().min(1),
   /** Immutable plain-text terms snapshot (platform template; not author-supplied). */
-  terms: string
-}
+  terms: z.string(),
+})
+
+export type AssetLicenseSummaryApi = z.infer<typeof assetLicenseSummarySchema>
 
 export const ASSET_LICENSE_OPTIONS: ReadonlyArray<{
   code: AssetLicenseCode

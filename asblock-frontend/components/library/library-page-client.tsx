@@ -8,6 +8,7 @@ import { SitePageContainer } from '@/components/layout/site-page-container'
 import { SiteHeader } from '@/components/site-header'
 import { SiteFooter } from '@/components/site-footer'
 import { Button } from '@/components/ui/button'
+import { QueryEmptyState } from '@/components/shared/query-empty-state'
 import { LibraryGridSkeleton } from '@/components/library/library-purchase-card-skeleton'
 import { LibraryPurchaseCard } from '@/components/library/library-purchase-card'
 import { SessionBlockSkeleton } from '@/components/skeletons/session-block-skeleton'
@@ -144,18 +145,20 @@ export function LibraryPageClient() {
           )}
 
           {authed && purchasesQuery.isSuccess && purchases.length === 0 && !loading && (
-            <div className="flex flex-col items-center justify-center py-16">
-              <h2 className="text-lg font-semibold text-foreground mb-2">No purchases yet</h2>
-              <p className="text-sm text-muted-foreground mb-6 text-center max-w-md">
-                When you buy an asset, it will appear here. Browse the catalog to get started.
-              </p>
-              <Button
-                asChild
-                className="bg-primary text-primary-foreground hover:bg-[#6D28D9] transition-smooth font-medium"
-              >
-                <Link href="/assets">Browse assets</Link>
-              </Button>
-            </div>
+            <QueryEmptyState
+              title="No purchases yet"
+              description="When you buy an asset, it will appear here. Browse the catalog to get started."
+              headingLevel="h2"
+              className="border-0 bg-transparent py-16"
+              action={
+                <Button
+                  asChild
+                  className="bg-primary text-primary-foreground hover:bg-[#6D28D9] transition-smooth font-medium"
+                >
+                  <Link href="/assets">Browse assets</Link>
+                </Button>
+              }
+            />
           )}
         </SitePageContainer>
       </SiteMain>

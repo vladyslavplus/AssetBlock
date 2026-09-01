@@ -12,7 +12,6 @@ import { AssetLicenseSelector } from '@/components/assets/asset-license-selector
 import { applyApiFieldErrorsToForm } from '@/lib/http/api-errors'
 import { assetKeys } from '@/lib/catalog/asset-detail-query'
 import { catalogKeys } from '@/lib/catalog/catalog-query'
-import { libraryKeys } from '@/lib/library/library-query'
 import { invalidateQueriesInBackground } from '@/lib/query/query-refresh'
 import {
   ASSET_UPLOAD_ALLOWED_EXTENSIONS,
@@ -76,7 +75,6 @@ export function PublishVersionForm({ assetId }: PublishVersionFormProps) {
     invalidateQueriesInBackground(queryClient, { queryKey: assetKeys.detail(assetId) })
     invalidateQueriesInBackground(queryClient, { queryKey: assetKeys.versions(assetId) })
     invalidateQueriesInBackground(queryClient, { queryKey: catalogKeys.all })
-    invalidateQueriesInBackground(queryClient, { queryKey: libraryKeys.all })
   })
 
   return (
