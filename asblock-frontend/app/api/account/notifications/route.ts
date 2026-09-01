@@ -1,10 +1,6 @@
-import { cookies } from 'next/headers'
 import { z } from 'zod'
-import { fetchBackendAuthorized } from '@/lib/server/backend-authorized'
-import {
-  forwardAuthenticatedBackendResponse,
-  zodValidationProblemResponse,
-} from '@/lib/server/bff-http'
+import { zodValidationProblemResponse } from '@/lib/server/bff-http'
+import { proxyAuthenticatedBff } from '@/lib/server/bff-route'
 
 const notificationsQuerySchema = z.object({
   page: z.coerce.number().int().min(1).optional(),
@@ -34,12 +30,7 @@ export async function GET(request: Request) {
   if (sortBy) qs.set('sortBy', sortBy)
   if (unreadOnly !== undefined) qs.set('unreadOnly', String(unreadOnly))
 
-  const store = await cookies()
   const path =
     qs.size > 0 ? `/api/users/me/notifications?${qs.toString()}` : '/api/users/me/notifications'
-  const res = await fetchBackendAuthorized(store, path, {
-    method: 'GET',
-    signal: request.signal,
-  })
-  return forwardAuthenticatedBackendResponse(res)
+  return proxyAuthenticatedBff(request, { path, init: { method: 'GET' } })
 }

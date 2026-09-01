@@ -1,10 +1,6 @@
-import { cookies } from 'next/headers'
 import { z } from 'zod'
-import { fetchBackendAuthorized } from '@/lib/server/backend-authorized'
-import {
-  forwardAuthenticatedBackendResponse,
-  zodValidationProblemResponse,
-} from '@/lib/server/bff-http'
+import { zodValidationProblemResponse } from '@/lib/server/bff-http'
+import { proxyAuthenticatedBff } from '@/lib/server/bff-route'
 
 const libraryQuerySchema = z.object({
   page: z.coerce.number().int().min(1).default(1),
@@ -26,10 +22,8 @@ export async function GET(request: Request) {
     sortDirection,
   })
 
-  const store = await cookies()
-  const res = await fetchBackendAuthorized(store, `/api/users/me/purchases?${qs.toString()}`, {
-    method: 'GET',
-    signal: request.signal,
+  return proxyAuthenticatedBff(request, {
+    path: `/api/users/me/purchases?${qs.toString()}`,
+    init: { method: 'GET' },
   })
-  return forwardAuthenticatedBackendResponse(res)
 }

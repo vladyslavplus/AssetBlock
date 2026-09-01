@@ -1,13 +1,11 @@
-import { cookies } from 'next/headers'
 import { z } from 'zod'
 import { createCollectionSchema } from '@/lib/collections/collection-schemas'
-import { fetchBackendAuthorized } from '@/lib/server/backend-authorized'
 import {
   assertSameOrigin,
-  forwardAuthenticatedBackendResponse,
   invalidJsonResponse,
   zodValidationProblemResponse,
 } from '@/lib/server/bff-http'
+import { proxyAuthenticatedBff } from '@/lib/server/bff-route'
 
 const sellerCollectionsQuerySchema = z.object({
   page: z.coerce.number().int().min(1).optional(),
@@ -36,14 +34,9 @@ export async function GET(request: Request) {
   if (status) qs.set('status', status)
   if (search) qs.set('search', search)
 
-  const store = await cookies()
   const backendPath =
     qs.size > 0 ? `/api/seller/collections?${qs.toString()}` : '/api/seller/collections'
-  const res = await fetchBackendAuthorized(store, backendPath, {
-    method: 'GET',
-    signal: request.signal,
-  })
-  return forwardAuthenticatedBackendResponse(res)
+  return proxyAuthenticatedBff(request, { path: backendPath, init: { method: 'GET' } })
 }
 
 export async function POST(request: Request) {
@@ -61,15 +54,15 @@ export async function POST(request: Request) {
     return zodValidationProblemResponse(parsed.error)
   }
 
-  const store = await cookies()
-  const res = await fetchBackendAuthorized(store, '/api/seller/collections', {
-    method: 'POST',
-    body: JSON.stringify({
-      title: parsed.data.title,
-      description: parsed.data.description?.trim() ? parsed.data.description.trim() : null,
-    }),
-    headers: { 'Content-Type': 'application/json' },
-    signal: request.signal,
+  return proxyAuthenticatedBff(request, {
+    path: '/api/seller/collections',
+    init: {
+      method: 'POST',
+      body: JSON.stringify({
+        title: parsed.data.title,
+        description: parsed.data.description?.trim() ? parsed.data.description.trim() : null,
+      }),
+      headers: { 'Content-Type': 'application/json' },
+    },
   })
-  return forwardAuthenticatedBackendResponse(res)
 }

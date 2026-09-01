@@ -1,12 +1,8 @@
 'use client'
 
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { useEffect, useState } from 'react'
 import Link from 'next/link'
-import { Controller, useForm, useWatch } from 'react-hook-form'
-import { zodResolver } from '@hookform/resolvers/zod'
+import { Controller } from 'react-hook-form'
 import { Archive, ArrowDown, ArrowUp, Loader2, Package, Plus, RotateCcw } from 'lucide-react'
-import { toast } from 'sonner'
 import { routes } from '@/lib/routes'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -14,11 +10,7 @@ import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Badge } from '@/components/ui/badge'
 import { Checkbox } from '@/components/ui/checkbox'
-import { useAuth } from '@/components/auth/auth-context'
-import {
-  EmailVerificationNotice,
-  isEmailVerified,
-} from '@/components/auth/email-verification-notice'
+import { EmailVerificationNotice } from '@/components/auth/email-verification-notice'
 import { SessionBlockSkeleton } from '@/components/skeletons/session-block-skeleton'
 import { SellerPriceStepInput } from '@/components/sell/seller-price-step-input'
 import {
@@ -27,191 +19,46 @@ import {
   SellFormSkeleton,
 } from '@/components/sell/sell-panel-skeletons'
 import { SellQueryError } from '@/components/sell/sell-query-error'
-import {
-  archiveSellerBundle,
-  createSellerBundle,
-  restoreSellerBundle,
-  reviseSellerBundle,
-} from '@/lib/bundles/bundles-api'
-import {
-  BUNDLE_MAX_ITEMS,
-  BUNDLE_MIN_ITEMS,
-  bundleFormSchema,
-  type BundleFormValues,
-} from '@/lib/bundles/bundle-schemas'
-import {
-  bundleKeys,
-  fetchSellerBundleQuery,
-  fetchSellerBundlesQuery,
-} from '@/lib/bundles/bundles-query'
-import { fetchSellerListingsQuery, sellerKeys } from '@/lib/seller/seller-query'
-import { invalidateQueriesInBackground, runQueryInBackground } from '@/lib/query/query-refresh'
+import { BUNDLE_MAX_ITEMS, BUNDLE_MIN_ITEMS } from '@/lib/bundles/bundle-schemas'
+import { runQueryInBackground } from '@/lib/query/query-refresh'
 import { formatUsdWhole } from '@/lib/format-currency'
+import {
+  useSellBundlesController,
+  type SellBundlesController,
+} from '@/lib/bundles/use-sell-bundles'
 
 export function SellMyBundles() {
-  const queryClient = useQueryClient()
-  const { status, user } = useAuth()
-  const authed = status === 'authenticated'
-  const pending = status === 'loading'
-  const verified = isEmailVerified(user)
-  const [selectedId, setSelectedId] = useState<string | null>(null)
-  const [mode, setMode] = useState<'create' | 'revise'>('create')
+  const controller = useSellBundlesController()
+  return <SellMyBundlesView controller={controller} />
+}
 
-  const listQuery = useQuery({
-    queryKey: bundleKeys.sellerList(),
-    queryFn: fetchSellerBundlesQuery,
-    enabled: authed,
-  })
-
-  const detailQuery = useQuery({
-    queryKey: bundleKeys.sellerDetail(selectedId ?? ''),
-    queryFn: ({ signal }) => {
-      if (!selectedId) throw new Error('Missing bundle id')
-      return fetchSellerBundleQuery(selectedId, signal)
-    },
-    enabled: authed && Boolean(selectedId) && mode === 'revise',
-  })
-
-  const listingsQuery = useQuery({
-    queryKey: sellerKeys.listings(),
-    queryFn: fetchSellerListingsQuery,
-    enabled: authed && verified,
-  })
-
-  const detail = detailQuery.data
-  const reviseDetail =
-    mode === 'revise' && selectedId && detail && detail.id === selectedId ? detail : null
-  const detailReady = reviseDetail != null
-  const detailInitialLoading =
-    mode === 'revise' && Boolean(selectedId) && detailQuery.isPending && !detailReady
-
-  const form = useForm<BundleFormValues>({
-    resolver: zodResolver(bundleFormSchema),
-    defaultValues: {
-      title: '',
-      description: '',
-      price: undefined,
-      assetIds: [],
-    },
-  })
-
-  useEffect(() => {
-    if (mode !== 'revise' || !detail || detail.id !== selectedId) return
-    form.reset({
-      title: detail.title,
-      description: detail.description ?? '',
-      price: detail.price,
-      assetIds: detail.items
-        .filter((i): i is typeof i & { assetId: string } => i.assetId !== null)
-        .sort((a, b) => a.position - b.position)
-        .map((i) => i.assetId),
-    })
-  }, [mode, detail, selectedId, form])
-
-  const watchedAssetIds = useWatch({ control: form.control, name: 'assetIds' }) ?? []
-  const watchedPrice = useWatch({ control: form.control, name: 'price' })
-
-  const listingsPending = listingsQuery.isPending
-  const ownAssets = listingsQuery.data?.items ?? []
-  const selectedAssets = ownAssets.filter((a) => watchedAssetIds.includes(a.id))
-  const listTotal = selectedAssets.reduce((sum, a) => sum + Number(a.price), 0)
-  const savingsAmount =
-    typeof watchedPrice === 'number' && watchedPrice > 0 && listTotal > watchedPrice
-      ? listTotal - watchedPrice
-      : 0
-  const savingsPercent = listTotal > 0 && savingsAmount > 0 ? (savingsAmount / listTotal) * 100 : 0
-
-  const invalidateSeller = () => {
-    invalidateQueriesInBackground(queryClient, { queryKey: bundleKeys.all })
-  }
-
-  const saveMutation = useMutation({
-    mutationFn: async (values: BundleFormValues) => {
-      if (values.price == null) {
-        return { ok: false as const, message: 'Price must be greater than zero' }
-      }
-      const body = {
-        title: values.title,
-        description: values.description?.trim() ? values.description : null,
-        price: values.price,
-        assetIds: values.assetIds,
-      }
-      if (mode === 'revise' && selectedId) {
-        return reviseSellerBundle(selectedId, body)
-      }
-      return createSellerBundle(body)
-    },
-    onSuccess: (result) => {
-      if (!result.ok) {
-        toast.error(result.message)
-        return
-      }
-      toast.success(mode === 'revise' ? 'Bundle revision published.' : 'Bundle created.')
-      form.reset({
-        title: '',
-        description: '',
-        price: undefined,
-        assetIds: [],
-      })
-      setSelectedId(result.data.id)
-      setMode('revise')
-      invalidateSeller()
-    },
-  })
-
-  const archiveMutation = useMutation({
-    mutationFn: (id: string) => archiveSellerBundle(id),
-    onSuccess: (result) => {
-      if (!result.ok) {
-        toast.error(result.message)
-        return
-      }
-      toast.success('Bundle archived.')
-      invalidateSeller()
-    },
-  })
-
-  const restoreMutation = useMutation({
-    mutationFn: (id: string) => restoreSellerBundle(id),
-    onSuccess: (result) => {
-      if (!result.ok) {
-        toast.error(result.message)
-        return
-      }
-      toast.success('Bundle restored.')
-      invalidateSeller()
-    },
-  })
-
-  const toggleAsset = (assetId: string, checked: boolean) => {
-    const current = form.getValues('assetIds') ?? []
-    if (checked) {
-      if (current.length >= BUNDLE_MAX_ITEMS) {
-        toast.error(`Bundles can include at most ${BUNDLE_MAX_ITEMS} assets.`)
-        return
-      }
-      form.setValue('assetIds', [...current, assetId], { shouldDirty: true, shouldValidate: true })
-    } else {
-      form.setValue(
-        'assetIds',
-        current.filter((id) => id !== assetId),
-        { shouldDirty: true, shouldValidate: true },
-      )
-    }
-  }
-
-  const moveSelectedAsset = (assetId: string, direction: -1 | 1) => {
-    const current = [...(form.getValues('assetIds') ?? [])]
-    const index = current.indexOf(assetId)
-    const next = index + direction
-    if (index < 0 || next < 0 || next >= current.length) return
-    const left = current[index]
-    const right = current[next]
-    if (left === undefined || right === undefined) return
-    current[index] = right
-    current[next] = left
-    form.setValue('assetIds', current, { shouldDirty: true, shouldValidate: true })
-  }
+function SellMyBundlesView({ controller }: { controller: SellBundlesController }) {
+  const {
+    authed,
+    pending,
+    verified,
+    setSelectedId,
+    mode,
+    setMode,
+    listQuery,
+    detailQuery,
+    listingsQuery,
+    reviseDetail,
+    detailReady,
+    detailInitialLoading,
+    form,
+    watchedAssetIds,
+    ownAssets,
+    listTotal,
+    savingsAmount,
+    savingsPercent,
+    saveMutation,
+    archiveMutation,
+    restoreMutation,
+    toggleAsset,
+    moveSelectedAsset,
+    resetForm,
+  } = controller
 
   if (pending) return <SessionBlockSkeleton />
 
@@ -227,6 +74,7 @@ export function SellMyBundles() {
   }
 
   const items = listQuery.data?.items ?? []
+  const listingsPending = listingsQuery.isPending
   const titleInvalid = Boolean(form.formState.errors.title)
   const descriptionInvalid = Boolean(form.formState.errors.description)
   const priceInvalid = Boolean(form.formState.errors.price)
@@ -351,12 +199,7 @@ export function SellMyBundles() {
                 onClick={() => {
                   setMode('create')
                   setSelectedId(null)
-                  form.reset({
-                    title: '',
-                    description: '',
-                    price: undefined,
-                    assetIds: [],
-                  })
+                  resetForm()
                 }}
               >
                 <Plus className="size-3.5 mr-1.5" aria-hidden />

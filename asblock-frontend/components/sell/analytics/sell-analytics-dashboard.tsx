@@ -1,16 +1,8 @@
 'use client'
 
-import { keepPreviousData, useInfiniteQuery, useQuery } from '@tanstack/react-query'
-import { usePathname, useRouter, useSearchParams } from 'next/navigation'
-import type { Route } from 'next'
-import { useEffect } from 'react'
 import { Loader2 } from 'lucide-react'
 
-import { useAuth } from '@/components/auth/auth-context'
-import {
-  EmailVerificationNotice,
-  isEmailVerified,
-} from '@/components/auth/email-verification-notice'
+import { EmailVerificationNotice } from '@/components/auth/email-verification-notice'
 import { AnalyticsCollectionsTable } from '@/components/sell/analytics/analytics-collections-table'
 import { AnalyticsCommerceFunnel } from '@/components/sell/analytics/analytics-commerce-funnel'
 import {
@@ -40,29 +32,13 @@ import {
 } from '@/components/sell/analytics/analytics-top-products'
 import { hasFullEngagementCoverage } from '@/lib/analytics/analytics-engagement'
 import { formatUtcDateTime } from '@/lib/analytics/analytics-format'
-import {
-  analyticsSearchParamsEqual,
-  buildAnalyticsCollectionsFilters,
-  buildAnalyticsProductsFilters,
-  canonicalizeAnalyticsState,
-  maxAccessibleProductsPage,
-  parseAnalyticsSearchParams,
-  patchAnalyticsSearchParams,
-  resolveAnalyticsUtcRange,
-} from '@/lib/analytics/analytics-range'
-import {
-  sellerCollectionsQueryOptions,
-  sellerOverviewQueryOptions,
-  sellerProductsQueryOptions,
-  sellerSalesInfiniteQueryOptions,
-} from '@/lib/analytics/analytics-query'
-import {
-  ANALYTICS_DEFAULT_SALES_PAGE_SIZE,
-  type AnalyticsUrlState,
-} from '@/lib/analytics/analytics-types'
 import { ApiRequestError } from '@/lib/http/api-client'
 import { SessionBlockSkeleton } from '@/components/skeletons/session-block-skeleton'
 import { runQueryInBackground } from '@/lib/query/query-refresh'
+import {
+  useSellAnalyticsController,
+  type SellAnalyticsController,
+} from '@/lib/analytics/use-sell-analytics'
 
 function queryErrorMessage(error: unknown, fallback: string): string {
   if (error instanceof ApiRequestError) {
@@ -77,190 +53,31 @@ function queryErrorMessage(error: unknown, fallback: string): string {
 }
 
 export function SellAnalyticsDashboard() {
-  const router = useRouter()
-  const pathname = usePathname()
-  const searchParams = useSearchParams()
+  const controller = useSellAnalyticsController()
+  return <SellAnalyticsDashboardView controller={controller} />
+}
 
-  const { status, user } = useAuth()
-  const authed = status === 'authenticated'
-  const pending = status === 'loading'
-  const verified = isEmailVerified(user)
-
-  const currentParams = new URLSearchParams(searchParams.toString())
-  const urlState = canonicalizeAnalyticsState(parseAnalyticsSearchParams(currentParams))
-  const utcRange = resolveAnalyticsUtcRange(urlState)
-  const productsFilters = buildAnalyticsProductsFilters(urlState)
-  const collectionsFilters = buildAnalyticsCollectionsFilters(urlState)
-  const salesFilters = {
-    productType: urlState.productType,
-    pageSize: ANALYTICS_DEFAULT_SALES_PAGE_SIZE,
-  }
-
-  useEffect(() => {
-    const current = new URLSearchParams(searchParams.toString())
-    const canonical = canonicalizeAnalyticsState(parseAnalyticsSearchParams(current))
-    const patched = patchAnalyticsSearchParams(current, canonical)
-    if (!analyticsSearchParamsEqual(current, patched)) {
-      const qs = patched.toString()
-      router.replace((qs ? `${pathname}?${qs}` : pathname) as Route, { scroll: false })
-    }
-  }, [pathname, router, searchParams])
-
-  function patchAnalyticsState(patch: Partial<AnalyticsUrlState>) {
-    const current = new URLSearchParams(searchParams.toString())
-    const next = canonicalizeAnalyticsState({ ...urlState, ...patch })
-    const patched = patchAnalyticsSearchParams(current, next, 'analytics')
-    const qs = patched.toString()
-    router.replace((qs ? `${pathname}?${qs}` : pathname) as Route, { scroll: false })
-  }
-
-  const overviewQuery = useQuery({
-    ...sellerOverviewQueryOptions(utcRange),
-    enabled: authed && verified,
-    placeholderData: keepPreviousData,
-  })
-
-  const productsQuery = useQuery({
-    ...sellerProductsQueryOptions(utcRange, productsFilters),
-    enabled: authed && verified,
-    placeholderData: keepPreviousData,
-  })
-
-  const collectionsQuery = useQuery({
-    ...sellerCollectionsQueryOptions(utcRange, collectionsFilters),
-    enabled: authed && verified,
-    placeholderData: keepPreviousData,
-  })
-
-  const salesQuery = useInfiniteQuery({
-    ...sellerSalesInfiniteQueryOptions(utcRange, salesFilters),
-    enabled: authed && verified,
-  })
-
-  const productsData = productsQuery.data
-  const productsTotalPages =
-    productsData && productsData.totalCount > 0
-      ? Math.ceil(productsData.totalCount / productsData.pageSize)
-      : 0
-
-  useEffect(() => {
-    if (!productsData || productsQuery.isPlaceholderData) return
-
-    const pageSize = productsData.pageSize || productsFilters.pageSize
-    const maxAccessible = maxAccessibleProductsPage(pageSize)
-    let targetPage: number | null = null
-
-    if (productsData.totalCount === 0 && urlState.page > 1) {
-      targetPage = 1
-    } else if (productsTotalPages > 0 && urlState.page > productsTotalPages) {
-      targetPage = productsTotalPages
-    } else if (urlState.page > maxAccessible) {
-      targetPage = maxAccessible
-    }
-
-    if (targetPage == null || targetPage === urlState.page) return
-
-    const current = new URLSearchParams(searchParams.toString())
-    const next = canonicalizeAnalyticsState({ ...urlState, page: targetPage })
-    const patched = patchAnalyticsSearchParams(current, next, 'analytics')
-    const qs = patched.toString()
-    router.replace((qs ? `${pathname}?${qs}` : pathname) as Route, { scroll: false })
-  }, [
-    pathname,
-    productsData,
-    productsFilters.pageSize,
-    productsQuery.isPlaceholderData,
-    productsTotalPages,
-    router,
-    searchParams,
+function SellAnalyticsDashboardView({ controller }: { controller: SellAnalyticsController }) {
+  const {
+    authed,
+    pending,
+    verified,
     urlState,
-  ])
-
-  const collectionsData = collectionsQuery.data
-  const collectionsTotalPages =
-    collectionsData && collectionsData.totalCount > 0
-      ? Math.ceil(collectionsData.totalCount / collectionsData.pageSize)
-      : 0
-
-  useEffect(() => {
-    if (!collectionsData || collectionsQuery.isPlaceholderData) return
-
-    const pageSize = collectionsData.pageSize || collectionsFilters.pageSize
-    const maxAccessible = maxAccessibleProductsPage(pageSize)
-    let targetPage: number | null = null
-
-    if (collectionsData.totalCount === 0 && urlState.collectionPage > 1) {
-      targetPage = 1
-    } else if (collectionsTotalPages > 0 && urlState.collectionPage > collectionsTotalPages) {
-      targetPage = collectionsTotalPages
-    } else if (urlState.collectionPage > maxAccessible) {
-      targetPage = maxAccessible
-    }
-
-    if (targetPage == null || targetPage === urlState.collectionPage) return
-
-    const current = new URLSearchParams(searchParams.toString())
-    const next = canonicalizeAnalyticsState({ ...urlState, collectionPage: targetPage })
-    const patched = patchAnalyticsSearchParams(current, next, 'analytics')
-    const qs = patched.toString()
-    router.replace((qs ? `${pathname}?${qs}` : pathname) as Route, { scroll: false })
-  }, [
-    collectionsData,
-    collectionsFilters.pageSize,
-    collectionsQuery.isPlaceholderData,
-    collectionsTotalPages,
-    pathname,
-    router,
-    searchParams,
-    urlState,
-  ])
-
-  useEffect(() => {
-    if (!collectionsData || collectionsQuery.isPlaceholderData) return
-    if (hasFullEngagementCoverage(collectionsData.engagementAvailableFrom, utcRange.from)) {
-      return
-    }
-    if (
-      urlState.collectionSort === 'ATTRIBUTED_REVENUE' &&
-      urlState.collectionDirection === 'DESC'
-    ) {
-      return
-    }
-
-    const current = new URLSearchParams(searchParams.toString())
-    const next = canonicalizeAnalyticsState({
-      ...urlState,
-      collectionSort: 'ATTRIBUTED_REVENUE',
-      collectionDirection: 'DESC',
-      collectionPage: 1,
-    })
-    const patched = patchAnalyticsSearchParams(current, next, 'analytics')
-    const qs = patched.toString()
-    router.replace((qs ? `${pathname}?${qs}` : pathname) as Route, { scroll: false })
-  }, [
-    collectionsData,
-    collectionsQuery.isPlaceholderData,
-    utcRange.from,
-    urlState,
-    pathname,
-    router,
-    searchParams,
-  ])
-
-  const salesItems = salesQuery.data?.pages.flatMap((page) => page.items) ?? []
-  const salesCurrency = salesQuery.data?.pages[0]?.currency ?? overviewQuery.data?.currency ?? 'usd'
-  const hasMoreSales = salesQuery.data?.pages.at(-1)?.hasMore ?? false
-
-  const overviewUpdating =
-    overviewQuery.isFetching && (overviewQuery.isPlaceholderData || overviewQuery.isRefetching)
-  const productsUpdating =
-    productsQuery.isFetching && (productsQuery.isPlaceholderData || productsQuery.isRefetching)
-  const collectionsUpdating =
-    collectionsQuery.isFetching &&
-    (collectionsQuery.isPlaceholderData || collectionsQuery.isRefetching)
-  const salesUpdating = salesQuery.isFetching && !salesQuery.isFetchingNextPage
-  const isUpdatingAnalytics =
-    overviewUpdating || productsUpdating || collectionsUpdating || salesUpdating
+    utcRange,
+    patchAnalyticsState,
+    overviewQuery,
+    productsQuery,
+    collectionsQuery,
+    salesQuery,
+    salesItems,
+    salesCurrency,
+    hasMoreSales,
+    overviewUpdating,
+    productsUpdating,
+    collectionsUpdating,
+    salesUpdating,
+    isUpdatingAnalytics,
+  } = controller
 
   if (pending) {
     return <SessionBlockSkeleton />

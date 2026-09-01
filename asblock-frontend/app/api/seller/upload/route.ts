@@ -16,6 +16,8 @@ import {
  * Proxies multipart POST to AssetBlock POST /api/assets/upload (Bearer from cookies).
  * Rebuilds FormData from whitelisted fields after Zod validation.
  */
+export const maxDuration = 300
+
 export async function POST(request: Request) {
   const originError = assertSameOrigin(request)
   if (originError) return originError

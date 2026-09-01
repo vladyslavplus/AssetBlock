@@ -1,10 +1,6 @@
-import { cookies } from 'next/headers'
 import { z } from 'zod'
-import { fetchBackendAuthorized } from '@/lib/server/backend-authorized'
-import {
-  forwardAuthenticatedBackendResponse,
-  zodValidationProblemResponse,
-} from '@/lib/server/bff-http'
+import { zodValidationProblemResponse } from '@/lib/server/bff-http'
+import { proxyAuthenticatedBff } from '@/lib/server/bff-route'
 
 const adminAuditLogsQuerySchema = z.object({
   page: z.coerce.number().int().min(1).optional(),
@@ -53,11 +49,6 @@ export async function GET(request: Request) {
   if (from) qs.set('from', from)
   if (to) qs.set('to', to)
 
-  const store = await cookies()
   const path = qs.size > 0 ? `/api/admin/audit-logs?${qs.toString()}` : '/api/admin/audit-logs'
-  const res = await fetchBackendAuthorized(store, path, {
-    method: 'GET',
-    signal: request.signal,
-  })
-  return forwardAuthenticatedBackendResponse(res)
+  return proxyAuthenticatedBff(request, { path, init: { method: 'GET' } })
 }

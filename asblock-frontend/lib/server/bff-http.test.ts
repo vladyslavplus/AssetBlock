@@ -7,6 +7,7 @@ import {
   forwardBackendResponse,
   invalidJsonResponse,
   problemResponse,
+  safeBackendProblemResponse,
 } from '@/lib/server/bff-http'
 
 describe('BFF same-origin and response forwarding', () => {
@@ -18,15 +19,42 @@ describe('BFF same-origin and response forwarding', () => {
     expect(assertSameOrigin(request)).toBeNull()
   })
 
-  it('rejects a missing Origin', async () => {
+  it('accepts a same-origin Referer when Origin is absent', () => {
+    const request = new Request('http://localhost:3000/api/auth/logout', {
+      method: 'POST',
+      headers: { Referer: 'http://localhost:3000/account' },
+    })
+    expect(assertSameOrigin(request)).toBeNull()
+  })
+
+  it.each([
+    ['missing browser signals', {}, 'A same-origin request is required.'],
+    [
+      'cross-site fetch metadata',
+      { Origin: 'http://localhost:3000', 'Sec-Fetch-Site': 'cross-site' },
+      'Cross-site requests are not allowed.',
+    ],
+    [
+      'foreign referer',
+      { Referer: 'https://evil.example/form' },
+      'Cross-origin requests are not allowed.',
+    ],
+    ['malformed referer', { Referer: 'not a URL' }, 'The request origin information is invalid.'],
+  ])('rejects %s', async (_label, headers, detail) => {
     const request = new Request('http://localhost:3000/api/auth/logout', { method: 'POST' })
+    for (const [name, value] of Object.entries(headers)) request.headers.set(name, value)
     const res = assertSameOrigin(request)
     expect(res?.status).toBe(403)
     expect(res).toBeInstanceOf(Response)
     if (!(res instanceof Response)) return
     const body = await res.json()
     expect(body.code).toBe('ERR_ORIGIN_FORBIDDEN')
-    expect(body.detail).toBe('A same-origin request is required.')
+    expect(body.detail).toBe(detail)
+  })
+
+  it.each(['GET', 'HEAD', 'OPTIONS'])('does not require CSRF signals for safe %s', (method) => {
+    const request = new Request('http://localhost:3000/api/account/me', { method })
+    expect(assertSameOrigin(request)).toBeNull()
   })
 
   it('rejects a foreign Origin', async () => {
@@ -112,5 +140,52 @@ describe('BFF same-origin and response forwarding', () => {
 
     const badRequest = problemResponse(400, 'ERR_VALIDATION_FAILED', 'Bad request')
     expect(badRequest.headers.get('Cache-Control')).toBeNull()
+  })
+
+  it('forwards bounded ProblemDetails and Retry-After without backend internals', async () => {
+    const response = safeBackendProblemResponse(
+      429,
+      {
+        code: 'ERR_RATE_LIMIT_EXCEEDED',
+        title: 'Too many requests',
+        detail: 'Try again later.',
+        stack: 'secret',
+      },
+      new Headers({ 'Retry-After': '30', 'X-Internal': 'secret' }),
+    )
+    expect(response.status).toBe(429)
+    expect(response.headers.get('Retry-After')).toBe('30')
+    expect(response.headers.get('X-Internal')).toBeNull()
+    expect(await response.json()).toMatchObject({
+      code: 'ERR_RATE_LIMIT_EXCEEDED',
+      title: 'Too many requests',
+      detail: 'Try again later.',
+    })
+  })
+
+  it.each([
+    ['HTML', '<html>blocked by WAF</html>'],
+    ['stack trace', 'Error: boom\n at handler (route.ts:1)'],
+  ])('uses stable fallback for malformed %s backend errors', async (_label, detail) => {
+    const response = safeBackendProblemResponse(502, { detail })
+    const body = await response.json()
+    expect(body.code).toBe('ERR_BAD_GATEWAY')
+    expect(body.detail).toBe('The service returned an unexpected error response.')
+    expect(JSON.stringify(body)).not.toContain(detail)
+  })
+
+  it('does not forward safe-looking detail or code from a backend server error', async () => {
+    const secret = 'Database password was rejected at 10.0.0.1'
+    const response = safeBackendProblemResponse(500, {
+      code: 'ERR_INTERNAL_SERVER_ERROR',
+      title: 'Internal server error',
+      detail: secret,
+    })
+    expect(response.status).toBe(502)
+    expect(await response.json()).toMatchObject({
+      code: 'ERR_BAD_GATEWAY',
+      title: 'Request failed',
+      detail: 'The service returned an unexpected error response.',
+    })
   })
 })

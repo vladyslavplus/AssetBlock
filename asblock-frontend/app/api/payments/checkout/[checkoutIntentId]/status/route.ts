@@ -1,7 +1,5 @@
-import { cookies } from 'next/headers'
-import { fetchBackendAuthorized } from '@/lib/server/backend-authorized'
-import { forwardAuthenticatedBackendResponse } from '@/lib/server/bff-http'
 import { parseUuidParam } from '@/lib/server/bff-params'
+import { proxyAuthenticatedBff } from '@/lib/server/bff-route'
 
 interface RouteContext {
   params: Promise<{ checkoutIntentId: string }>
@@ -14,11 +12,8 @@ export async function GET(request: Request, context: RouteContext) {
     return parsedId.response
   }
 
-  const store = await cookies()
-  const res = await fetchBackendAuthorized(
-    store,
-    `/api/payments/checkout/${encodeURIComponent(parsedId.value)}/status`,
-    { method: 'GET', signal: request.signal },
-  )
-  return forwardAuthenticatedBackendResponse(res)
+  return proxyAuthenticatedBff(request, {
+    path: `/api/payments/checkout/${encodeURIComponent(parsedId.value)}/status`,
+    init: { method: 'GET' },
+  })
 }

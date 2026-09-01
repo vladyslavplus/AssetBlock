@@ -1,8 +1,11 @@
 import 'server-only'
 import type { ZodError } from 'zod'
+import { parseApiErrorBody, readApiResponseBody } from '@/lib/http/api-errors'
 
 const SAFE_BACKEND_RESPONSE_HEADERS = ['content-type', 'content-disposition'] as const
 const BODYLESS_STATUSES = new Set([204, 205, 304])
+const SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS'])
+const SAFE_PROBLEM_CODE = /^ERR_[A-Z0-9_]+$/
 
 export function problemResponse(
   status: number,
@@ -10,11 +13,14 @@ export function problemResponse(
   detail: string,
   errors?: Record<string, string[]>,
   extraHeaders?: Record<string, string>,
+  titleOverride?: string,
 ): Response {
   const body = {
     type: `urn:assetblock:error:${code}`,
     status,
-    title: status === 401 ? 'Unauthorized' : status === 403 ? 'Forbidden' : 'Request failed',
+    title:
+      titleOverride ??
+      (status === 401 ? 'Unauthorized' : status === 403 ? 'Forbidden' : 'Request failed'),
     detail,
     code,
     traceId: crypto.randomUUID(),
@@ -53,20 +59,78 @@ export function zodValidationProblemResponse(error: ZodError): Response {
 
 /** Returns a 403 response when a state-changing BFF request is not same-origin. */
 export function assertSameOrigin(request: Request): Response | null {
+  if (SAFE_METHODS.has(request.method.toUpperCase())) return null
+  if (request.headers.get('Sec-Fetch-Site')?.toLowerCase() === 'cross-site') {
+    return problemResponse(403, 'ERR_ORIGIN_FORBIDDEN', 'Cross-site requests are not allowed.')
+  }
   const origin = request.headers.get('Origin')
-  if (!origin) {
+  const referer = request.headers.get('Referer')
+  const browserSource = origin || referer
+  if (!browserSource) {
     return problemResponse(403, 'ERR_ORIGIN_FORBIDDEN', 'A same-origin request is required.')
   }
 
   try {
-    if (new URL(origin).origin !== new URL(request.url).origin) {
+    if (new URL(browserSource).origin !== new URL(request.url).origin) {
       return problemResponse(403, 'ERR_ORIGIN_FORBIDDEN', 'Cross-origin requests are not allowed.')
     }
   } catch {
-    return problemResponse(403, 'ERR_ORIGIN_FORBIDDEN', 'The request origin is invalid.')
+    return problemResponse(
+      403,
+      'ERR_ORIGIN_FORBIDDEN',
+      'The request origin information is invalid.',
+    )
   }
 
   return null
+}
+
+function isSafeProblemText(value: string | undefined): value is string {
+  return Boolean(
+    value && value.length <= 300 && !/[<>\r\n]/.test(value) && !/\bat\s+\S+\s*\(/i.test(value),
+  )
+}
+
+function readSafeBackendTitle(body: unknown): string | undefined {
+  if (typeof body !== 'object' || body === null || Array.isArray(body)) return undefined
+  const title = Reflect.get(body, 'title')
+  return typeof title === 'string' && isSafeProblemText(title) ? title : undefined
+}
+
+/** Maps backend ProblemDetails to a bounded browser-safe contract and allowlisted headers. */
+export function safeBackendProblemResponse(
+  status: number,
+  body: unknown,
+  backendHeaders?: Headers,
+): Response {
+  const parsed = parseApiErrorBody(body)
+  const clientErrorStatus = status >= 400 && status <= 499
+  const code =
+    clientErrorStatus && parsed?.code && SAFE_PROBLEM_CODE.test(parsed.code)
+      ? parsed.code
+      : 'ERR_BAD_GATEWAY'
+  const detail =
+    code !== 'ERR_BAD_GATEWAY' && isSafeProblemText(parsed?.summary)
+      ? parsed.summary
+      : 'The service returned an unexpected error response.'
+  const retryAfter = backendHeaders?.get('Retry-After')
+  const title = code !== 'ERR_BAD_GATEWAY' ? readSafeBackendTitle(body) : undefined
+  return problemResponse(
+    clientErrorStatus ? status : 502,
+    code,
+    detail,
+    undefined,
+    retryAfter ? { 'Retry-After': retryAfter } : undefined,
+    title,
+  )
+}
+
+export async function forwardBackendProblem(response: Response): Promise<Response> {
+  return safeBackendProblemResponse(
+    response.status,
+    await readApiResponseBody(response),
+    response.headers,
+  )
 }
 
 /** Streams a backend response while forwarding only explicitly safe response headers. */

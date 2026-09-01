@@ -1,6 +1,7 @@
 import { z } from 'zod'
 import {
   assertSameOrigin,
+  forwardBackendProblem,
   forwardBackendResponse,
   invalidJsonResponse,
   zodValidationProblemResponse,
@@ -47,5 +48,5 @@ export async function POST(request: Request) {
     signal: request.signal,
   })
 
-  return forwardBackendResponse(res)
+  return res.ok ? forwardBackendResponse(res) : forwardBackendProblem(res)
 }

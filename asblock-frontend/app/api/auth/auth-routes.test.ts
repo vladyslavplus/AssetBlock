@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { POST as loginPost } from '@/app/api/auth/login/route'
+import { POST as registerPost } from '@/app/api/auth/register/route'
 import { POST as logoutPost } from '@/app/api/auth/logout/route'
 import { POST as refreshPost } from '@/app/api/auth/refresh/route'
 import { AUTH_COOKIE_ACCESS, AUTH_COOKIE_REFRESH } from '@/lib/auth/constants'
@@ -25,12 +26,89 @@ function loginRequest(body: unknown, origin = 'http://localhost:3000'): Request 
   })
 }
 
+function authRequest(path: 'login' | 'register', body: unknown, ip: string): Request {
+  return new Request(`http://localhost:3000/api/auth/${path}`, {
+    method: 'POST',
+    headers: {
+      Origin: 'http://localhost:3000',
+      'Content-Type': 'application/json',
+      'X-Test-Client-IP': ip,
+    },
+    body: JSON.stringify(body),
+  })
+}
+
 describe('auth BFF routes', () => {
   afterEach(() => {
     vi.unstubAllGlobals()
+    vi.unstubAllEnvs()
     cookieStore.delete(AUTH_COOKIE_ACCESS)
     cookieStore.delete(AUTH_COOKIE_REFRESH)
     cookieStore.setCalls.length = 0
+  })
+
+  it('rate limits login by IP with stable 429 and Retry-After', async () => {
+    vi.stubEnv('TRUSTED_CLIENT_IP_HEADER', 'x-test-client-ip')
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => Response.json({ code: 'ERR_AUTH_INVALID_CREDENTIALS' }, { status: 401 })),
+    )
+    let response = new Response()
+    for (let index = 0; index < 11; index += 1) {
+      response = await loginPost(
+        authRequest(
+          'login',
+          { email: `user-${index}@example.com`, password: 'secret' },
+          '198.51.100.10',
+        ),
+      )
+    }
+    expect(response.status).toBe(429)
+    expect(response.headers.get('Retry-After')).toMatch(/^\d+$/)
+    expect(await response.json()).toMatchObject({ code: 'ERR_RATE_LIMIT_EXCEEDED' })
+  })
+
+  it('normalizes and hashes email bucket keys without exposing raw email', async () => {
+    vi.stubEnv('TRUSTED_CLIENT_IP_HEADER', 'x-test-client-ip')
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => Response.json({ code: 'ERR_AUTH_INVALID_CREDENTIALS' }, { status: 401 })),
+    )
+    let response = new Response()
+    for (let index = 0; index < 11; index += 1) {
+      response = await loginPost(
+        authRequest(
+          'login',
+          { email: index % 2 === 0 ? 'Case@Example.com' : 'case@example.com', password: 'secret' },
+          `198.51.100.${20 + index}`,
+        ),
+      )
+    }
+    expect(response.status).toBe(429)
+    expect(JSON.stringify(await response.json())).not.toContain('case@example.com')
+  })
+
+  it('validates malformed register body before consuming rate-limit buckets', async () => {
+    vi.stubEnv('TRUSTED_CLIENT_IP_HEADER', 'x-test-client-ip')
+    const fetchMock = vi.fn(async () =>
+      Response.json({ code: 'ERR_AUTH_EMAIL_ALREADY_EXISTS' }, { status: 409 }),
+    )
+    vi.stubGlobal('fetch', fetchMock)
+    const invalid = await registerPost(authRequest('register', { email: 'bad' }, '198.51.100.60'))
+    expect(invalid.status).toBe(400)
+    expect(fetchMock).not.toHaveBeenCalled()
+
+    const valid = {
+      username: 'new-user',
+      email: 'new-user@example.com',
+      password: 'correct-horse',
+      confirmPassword: 'correct-horse',
+    }
+    const responses = []
+    for (let index = 0; index < 5; index += 1) {
+      responses.push(await registerPost(authRequest('register', valid, '198.51.100.60')))
+    }
+    expect(responses.every((response) => response.status !== 429)).toBe(true)
   })
 
   it('rejects cross-origin login and does not set cookies', async () => {

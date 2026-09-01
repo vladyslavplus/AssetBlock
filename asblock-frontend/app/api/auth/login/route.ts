@@ -5,9 +5,15 @@ import { tokensResponseSchema } from '@/lib/auth/tokens-schema'
 import { postAuthJson } from '@/lib/server/auth-backend'
 import { setAuthCookies } from '@/lib/server/auth-cookies'
 import {
+  enforceBffRateLimit,
+  getVerifiedClientIp,
+  hashBffRateLimitKey,
+} from '@/lib/server/bff-rate-limit'
+import {
   assertSameOrigin,
   invalidJsonResponse,
   problemResponse,
+  safeBackendProblemResponse,
   zodValidationProblemResponse,
 } from '@/lib/server/bff-http'
 
@@ -27,16 +33,20 @@ export async function POST(request: Request) {
     return zodValidationProblemResponse(parsed.error)
   }
 
-  const { ok, status, data } = await postAuthJson('login', {
+  const normalizedEmail = parsed.data.email.trim().toLowerCase()
+  const emailKey = await hashBffRateLimitKey(normalizedEmail)
+  const rateLimited =
+    enforceBffRateLimit(`auth-login:ip:${getVerifiedClientIp(request)}`, 10, 60_000) ??
+    enforceBffRateLimit(`auth-login:email:${emailKey}`, 10, 60_000)
+  if (rateLimited) return rateLimited
+
+  const { ok, status, data, headers } = await postAuthJson('login', {
     email: parsed.data.email,
     password: parsed.data.password,
   })
 
   if (!ok) {
-    return new Response(JSON.stringify(data), {
-      status,
-      headers: { 'Content-Type': 'application/problem+json' },
-    })
+    return safeBackendProblemResponse(status, data, headers)
   }
 
   const tokens = tokensResponseSchema.safeParse(data)

@@ -1,10 +1,6 @@
-import { cookies } from 'next/headers'
 import { z } from 'zod'
-import { fetchBackendAuthorized } from '@/lib/server/backend-authorized'
-import {
-  forwardAuthenticatedBackendResponse,
-  zodValidationProblemResponse,
-} from '@/lib/server/bff-http'
+import { zodValidationProblemResponse } from '@/lib/server/bff-http'
+import { proxyAuthenticatedBff } from '@/lib/server/bff-route'
 
 const sellerListingsQuerySchema = z
   .object({
@@ -48,11 +44,6 @@ export async function GET(request: Request) {
   if (minPrice !== undefined) qs.set('minPrice', String(minPrice))
   if (maxPrice !== undefined) qs.set('maxPrice', String(maxPrice))
 
-  const store = await cookies()
   const backendPath = qs.size > 0 ? `/api/users/me/assets?${qs.toString()}` : '/api/users/me/assets'
-  const res = await fetchBackendAuthorized(store, backendPath, {
-    method: 'GET',
-    signal: request.signal,
-  })
-  return forwardAuthenticatedBackendResponse(res)
+  return proxyAuthenticatedBff(request, { path: backendPath, init: { method: 'GET' } })
 }

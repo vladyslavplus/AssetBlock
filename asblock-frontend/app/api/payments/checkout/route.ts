@@ -1,13 +1,12 @@
 import { cookies } from 'next/headers'
 import { createCheckoutRequestSchema } from '@/lib/payments/payments-schemas'
 import { prepareCheckoutAnalyticsContext } from '@/lib/server/checkout-analytics-context'
-import { fetchBackendAuthorized } from '@/lib/server/backend-authorized'
 import {
   assertSameOrigin,
-  forwardAuthenticatedBackendResponse,
   invalidJsonResponse,
   zodValidationProblemResponse,
 } from '@/lib/server/bff-http'
+import { proxyAuthenticatedBff } from '@/lib/server/bff-route'
 
 export async function POST(request: Request) {
   const originError = assertSameOrigin(request)
@@ -43,11 +42,13 @@ export async function POST(request: Request) {
       : {}),
   }
 
-  const res = await fetchBackendAuthorized(store, '/api/payments/checkout', {
-    method: 'POST',
-    body: JSON.stringify(backendBody),
-    headers: { 'Content-Type': 'application/json' },
-    signal: request.signal,
+  return proxyAuthenticatedBff(request, {
+    path: '/api/payments/checkout',
+    cookieStore: store,
+    init: {
+      method: 'POST',
+      body: JSON.stringify(backendBody),
+      headers: { 'Content-Type': 'application/json' },
+    },
   })
-  return forwardAuthenticatedBackendResponse(res)
 }

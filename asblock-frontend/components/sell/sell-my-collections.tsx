@@ -1,10 +1,6 @@
 'use client'
 
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { useEffect, useState } from 'react'
 import Link from 'next/link'
-import { useForm } from 'react-hook-form'
-import { zodResolver } from '@hookform/resolvers/zod'
 import {
   Archive,
   ArrowDown,
@@ -15,7 +11,6 @@ import {
   RotateCcw,
   Trash2,
 } from 'lucide-react'
-import { toast } from 'sonner'
 import { routes } from '@/lib/routes'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -29,11 +24,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { useAuth } from '@/components/auth/auth-context'
-import {
-  EmailVerificationNotice,
-  isEmailVerified,
-} from '@/components/auth/email-verification-notice'
+import { EmailVerificationNotice } from '@/components/auth/email-verification-notice'
 import { SessionBlockSkeleton } from '@/components/skeletons/session-block-skeleton'
 import {
   SellCollectionListSkeleton,
@@ -41,174 +32,45 @@ import {
   SellSelectControlSkeleton,
 } from '@/components/sell/sell-panel-skeletons'
 import { SellQueryError } from '@/components/sell/sell-query-error'
-import {
-  addSellerCollectionItem,
-  archiveSellerCollection,
-  createSellerCollection,
-  publishSellerCollection,
-  removeSellerCollectionItem,
-  reorderSellerCollectionItems,
-  restoreSellerCollection,
-  updateSellerCollection,
-  type SellerMutationResult,
-} from '@/lib/collections/collections-api'
-import {
-  collectionMetadataFormSchema,
-  type CollectionMetadataFormValues,
-} from '@/lib/collections/collection-schemas'
 import { getCollectionStatusBadgeVariant } from '@/lib/collections/collection-ui'
-import {
-  collectionKeys,
-  fetchSellerCollectionQuery,
-  fetchSellerCollectionsQuery,
-} from '@/lib/collections/collections-query'
-import { fetchSellerListingsQuery, sellerKeys } from '@/lib/seller/seller-query'
-import { invalidateQueriesInBackground, runQueryInBackground } from '@/lib/query/query-refresh'
+import { runQueryInBackground } from '@/lib/query/query-refresh'
 import { formatUsdWhole } from '@/lib/format-currency'
+import {
+  useSellCollectionsController,
+  type SellCollectionsController,
+} from '@/lib/collections/use-sell-collections'
 
 export function SellMyCollections() {
-  const queryClient = useQueryClient()
-  const { status, user } = useAuth()
-  const authed = status === 'authenticated'
-  const pending = status === 'loading'
-  const verified = isEmailVerified(user)
-  const [selectedId, setSelectedId] = useState<string | null>(null)
-  const [addAssetId, setAddAssetId] = useState<string>('')
+  const controller = useSellCollectionsController()
+  return <SellMyCollectionsView controller={controller} />
+}
 
-  const listQuery = useQuery({
-    queryKey: collectionKeys.sellerList(),
-    queryFn: fetchSellerCollectionsQuery,
-    enabled: authed,
-  })
-
-  const detailQuery = useQuery({
-    queryKey: collectionKeys.sellerDetail(selectedId ?? ''),
-    queryFn: ({ signal }) => {
-      if (!selectedId) throw new Error('Missing collection id')
-      return fetchSellerCollectionQuery(selectedId, signal)
-    },
-    enabled: authed && Boolean(selectedId),
-  })
-
-  const listingsQuery = useQuery({
-    queryKey: sellerKeys.listings(),
-    queryFn: fetchSellerListingsQuery,
-    enabled: authed && verified,
-  })
-
-  const createForm = useForm<CollectionMetadataFormValues>({
-    resolver: zodResolver(collectionMetadataFormSchema),
-    defaultValues: { title: '', description: '' },
-  })
-
-  const editForm = useForm<CollectionMetadataFormValues>({
-    resolver: zodResolver(collectionMetadataFormSchema),
-    defaultValues: { title: '', description: '' },
-  })
-
-  useEffect(() => {
-    if (!detailQuery.data || detailQuery.data.id !== selectedId) return
-    editForm.reset({
-      title: detailQuery.data.title,
-      description: detailQuery.data.description ?? '',
-    })
-  }, [detailQuery.data, selectedId, editForm])
-
-  const invalidateSeller = () => {
-    invalidateQueriesInBackground(queryClient, { queryKey: collectionKeys.all })
-  }
-
-  const createMutation = useMutation({
-    mutationFn: createSellerCollection,
-    onSuccess: (result) => {
-      if (!result.ok) {
-        toast.error(result.message)
-        return
-      }
-      toast.success('Collection created as draft.')
-      createForm.reset({ title: '', description: '' })
-      setSelectedId(result.id)
-      invalidateSeller()
-    },
-  })
-
-  const updateMutation = useMutation({
-    mutationFn: async (values: CollectionMetadataFormValues): Promise<SellerMutationResult> => {
-      if (!selectedId) {
-        return { ok: false, message: 'No collection selected.' }
-      }
-      return updateSellerCollection(selectedId, {
-        title: values.title,
-        description: values.description?.trim() ? values.description : null,
-      })
-    },
-    onSuccess: (result) => {
-      if (!result.ok) {
-        toast.error(result.message)
-        return
-      }
-      toast.success('Collection updated.')
-      invalidateSeller()
-    },
-  })
-
-  const actionMutation = useMutation({
-    mutationFn: async (
-      action: 'publish' | 'archive' | 'restore',
-    ): Promise<SellerMutationResult> => {
-      if (!selectedId) return { ok: false, message: 'No collection selected.' }
-      if (action === 'publish') return publishSellerCollection(selectedId)
-      if (action === 'archive') return archiveSellerCollection(selectedId)
-      return restoreSellerCollection(selectedId)
-    },
-    onSuccess: (result, action) => {
-      if (!result.ok) {
-        toast.error(result.message)
-        return
-      }
-      toast.success(
-        action === 'publish'
-          ? 'Collection published.'
-          : action === 'archive'
-            ? 'Collection archived.'
-            : 'Collection restored to draft.',
-      )
-      invalidateSeller()
-    },
-  })
-
-  const itemMutation = useMutation({
-    mutationFn: async (op: {
-      type: 'add' | 'remove' | 'reorder'
-      assetId?: string
-      assetIds?: string[]
-    }) => {
-      if (!selectedId) return { ok: false as const, message: 'No collection selected.' }
-      if (op.type === 'add' && op.assetId) {
-        return addSellerCollectionItem(selectedId, { assetId: op.assetId })
-      }
-      if (op.type === 'remove' && op.assetId) {
-        return removeSellerCollectionItem(selectedId, op.assetId)
-      }
-      if (op.type === 'reorder' && op.assetIds) {
-        return reorderSellerCollectionItems(selectedId, { assetIds: op.assetIds })
-      }
-      return { ok: false as const, message: 'Invalid operation.' }
-    },
-    onSuccess: (result, op) => {
-      if (!result.ok) {
-        toast.error(result.message)
-        return
-      }
-      if (op.type === 'add') {
-        toast.success('Asset added.')
-        setAddAssetId('')
-      } else if (op.type === 'remove') {
-        toast.success('Asset removed.')
-      }
-      invalidateSeller()
-    },
-  })
+function SellMyCollectionsView({ controller }: { controller: SellCollectionsController }) {
+  const {
+    authed,
+    pending,
+    verified,
+    selectedId,
+    setSelectedId,
+    addAssetId,
+    setAddAssetId,
+    listQuery,
+    detailQuery,
+    listingsQuery,
+    createForm,
+    editForm,
+    createMutation,
+    updateMutation,
+    actionMutation,
+    itemMutation,
+    items,
+    managedDetail,
+    detailReady,
+    detailInitialLoading,
+    orderedItems,
+    ownAssets,
+    moveItem,
+  } = controller
 
   if (pending) return <SessionBlockSkeleton />
 
@@ -223,33 +85,9 @@ export function SellMyCollections() {
     )
   }
 
-  const items = listQuery.data?.items ?? []
-  const detail = detailQuery.data
-  const managedDetail = selectedId && detail && detail.id === selectedId ? detail : null
-  const detailReady = managedDetail != null
-  const detailInitialLoading = Boolean(selectedId) && detailQuery.isPending && !detailReady
-  const orderedItems = managedDetail
-    ? [...managedDetail.items].sort((a, b) => a.position - b.position)
-    : []
-  const memberIds = new Set(orderedItems.map((i) => i.assetId))
   const listingsPending = listingsQuery.isPending
-  const ownAssets = (listingsQuery.data?.items ?? []).filter((a) => !memberIds.has(a.id))
   const pendingAction = actionMutation.isPending ? actionMutation.variables : null
   const pendingItem = itemMutation.isPending ? itemMutation.variables : null
-
-  const moveItem = (assetId: string, direction: -1 | 1) => {
-    const ids = orderedItems.map((i) => i.assetId)
-    const index = ids.indexOf(assetId)
-    const next = index + direction
-    if (index < 0 || next < 0 || next >= ids.length) return
-    const nextIds = [...ids]
-    const left = nextIds[index]
-    const right = nextIds[next]
-    if (left === undefined || right === undefined) return
-    nextIds[index] = right
-    nextIds[next] = left
-    itemMutation.mutate({ type: 'reorder', assetIds: nextIds, assetId })
-  }
 
   const createTitleInvalid = Boolean(createForm.formState.errors.title)
   const createDescriptionInvalid = Boolean(createForm.formState.errors.description)

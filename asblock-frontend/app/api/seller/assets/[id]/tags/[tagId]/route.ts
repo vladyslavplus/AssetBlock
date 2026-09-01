@@ -1,15 +1,10 @@
-import { cookies } from 'next/headers'
-import { fetchBackendAuthorized } from '@/lib/server/backend-authorized'
-import { assertSameOrigin, forwardAuthenticatedBackendResponse } from '@/lib/server/bff-http'
 import { parseUuidParam } from '@/lib/server/bff-params'
+import { proxyAuthenticatedBff } from '@/lib/server/bff-route'
 
 export async function DELETE(
   request: Request,
   context: { params: Promise<{ id: string; tagId: string }> },
 ) {
-  const originError = assertSameOrigin(request)
-  if (originError) return originError
-
   const { id, tagId } = await context.params
   const parsedId = parseUuidParam('id', id)
   if (!parsedId.ok) {
@@ -20,14 +15,9 @@ export async function DELETE(
     return parsedTagId.response
   }
 
-  const store = await cookies()
-  const res = await fetchBackendAuthorized(
-    store,
-    `/api/assets/${encodeURIComponent(parsedId.value)}/tags/${encodeURIComponent(parsedTagId.value)}`,
-    {
-      method: 'DELETE',
-      signal: request.signal,
-    },
-  )
-  return forwardAuthenticatedBackendResponse(res)
+  return proxyAuthenticatedBff(request, {
+    path: `/api/assets/${encodeURIComponent(parsedId.value)}/tags/${encodeURIComponent(parsedTagId.value)}`,
+    init: { method: 'DELETE' },
+    enforceSameOrigin: true,
+  })
 }

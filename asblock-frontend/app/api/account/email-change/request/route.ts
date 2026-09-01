@@ -1,12 +1,10 @@
-import { cookies } from 'next/headers'
 import { z } from 'zod'
-import { fetchBackendAuthorized } from '@/lib/server/backend-authorized'
 import {
   assertSameOrigin,
-  forwardAuthenticatedBackendResponse,
   invalidJsonResponse,
   zodValidationProblemResponse,
 } from '@/lib/server/bff-http'
+import { proxyAuthenticatedBff } from '@/lib/server/bff-route'
 
 const bodySchema = z.object({
   newEmail: z.string().min(1, 'Email is required').email('Enter a valid email address'),
@@ -29,15 +27,14 @@ export async function POST(request: Request) {
     return zodValidationProblemResponse(parsed.error)
   }
 
-  const store = await cookies()
-  const res = await fetchBackendAuthorized(store, '/api/users/me/email-change/request', {
-    method: 'POST',
-    body: JSON.stringify({
-      newEmail: parsed.data.newEmail,
-      currentPassword: parsed.data.currentPassword,
-    }),
-    signal: request.signal,
+  return proxyAuthenticatedBff(request, {
+    path: '/api/users/me/email-change/request',
+    init: {
+      method: 'POST',
+      body: JSON.stringify({
+        newEmail: parsed.data.newEmail,
+        currentPassword: parsed.data.currentPassword,
+      }),
+    },
   })
-
-  return forwardAuthenticatedBackendResponse(res)
 }

@@ -49,7 +49,7 @@ function tooManyRequests(retryAfterSec: number): Response {
       title: 'Too Many Requests',
       status: 429,
       detail: 'Rate limit exceeded. Try again later.',
-      code: 'ERR_RATE_LIMITED',
+      code: 'ERR_RATE_LIMIT_EXCEEDED',
     }),
     {
       status: 429,
@@ -59,6 +59,12 @@ function tooManyRequests(retryAfterSec: number): Response {
       },
     },
   )
+}
+
+/** Deterministic opaque bucket component; never stores raw email or other identifiers. */
+export async function hashBffRateLimitKey(value: string): Promise<string> {
+  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(value))
+  return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, '0')).join('')
 }
 
 function overflowKey(limit: number, windowMs: number): string {

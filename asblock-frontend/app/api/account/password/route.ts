@@ -1,13 +1,11 @@
-import { cookies } from 'next/headers'
 import { z } from 'zod'
-import { fetchBackendAuthorized } from '@/lib/server/backend-authorized'
 import {
   assertSameOrigin,
-  forwardAuthenticatedBackendResponse,
   invalidJsonResponse,
   problemResponse,
   zodValidationProblemResponse,
 } from '@/lib/server/bff-http'
+import { proxyAuthenticatedBff } from '@/lib/server/bff-route'
 
 const bodySchema = z.object({
   currentPassword: z.string().min(1, 'Current password is required'),
@@ -39,15 +37,11 @@ export async function POST(request: Request) {
     )
   }
 
-  const store = await cookies()
-  const res = await fetchBackendAuthorized(store, '/api/users/me/password', {
-    method: 'POST',
-    body: JSON.stringify({
-      currentPassword,
-      newPassword,
-    }),
-    signal: request.signal,
+  return proxyAuthenticatedBff(request, {
+    path: '/api/users/me/password',
+    init: {
+      method: 'POST',
+      body: JSON.stringify({ currentPassword, newPassword }),
+    },
   })
-
-  return forwardAuthenticatedBackendResponse(res)
 }

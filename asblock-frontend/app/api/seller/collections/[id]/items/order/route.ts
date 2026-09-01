@@ -1,13 +1,11 @@
-import { cookies } from 'next/headers'
 import { reorderCollectionItemsSchema } from '@/lib/collections/collection-schemas'
-import { fetchBackendAuthorized } from '@/lib/server/backend-authorized'
 import {
   assertSameOrigin,
-  forwardAuthenticatedBackendResponse,
   invalidJsonResponse,
   zodValidationProblemResponse,
 } from '@/lib/server/bff-http'
 import { parseUuidParam } from '@/lib/server/bff-params'
+import { proxyAuthenticatedBff } from '@/lib/server/bff-route'
 
 export async function PUT(request: Request, context: { params: Promise<{ id: string }> }) {
   const originError = assertSameOrigin(request)
@@ -30,16 +28,12 @@ export async function PUT(request: Request, context: { params: Promise<{ id: str
     return zodValidationProblemResponse(parsed.error)
   }
 
-  const store = await cookies()
-  const res = await fetchBackendAuthorized(
-    store,
-    `/api/seller/collections/${encodeURIComponent(parsedId.value)}/items/order`,
-    {
+  return proxyAuthenticatedBff(request, {
+    path: `/api/seller/collections/${encodeURIComponent(parsedId.value)}/items/order`,
+    init: {
       method: 'PUT',
       body: JSON.stringify(parsed.data),
       headers: { 'Content-Type': 'application/json' },
-      signal: request.signal,
     },
-  )
-  return forwardAuthenticatedBackendResponse(res)
+  })
 }

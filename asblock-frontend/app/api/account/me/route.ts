@@ -1,20 +1,13 @@
-import { cookies } from 'next/headers'
-import { fetchBackendAuthorized } from '@/lib/server/backend-authorized'
 import {
   assertSameOrigin,
-  forwardAuthenticatedBackendResponse,
   invalidJsonResponse,
   zodValidationProblemResponse,
 } from '@/lib/server/bff-http'
+import { proxyAuthenticatedBff } from '@/lib/server/bff-route'
 import { accountProfileUpdateSchema } from '@/lib/account/account-schemas'
 
 export async function GET(request: Request) {
-  const store = await cookies()
-  const res = await fetchBackendAuthorized(store, '/api/users/me', {
-    method: 'GET',
-    signal: request?.signal,
-  })
-  return forwardAuthenticatedBackendResponse(res)
+  return proxyAuthenticatedBff(request, { path: '/api/users/me', init: { method: 'GET' } })
 }
 
 export async function PATCH(request: Request) {
@@ -34,12 +27,12 @@ export async function PATCH(request: Request) {
     return zodValidationProblemResponse(parsed.error)
   }
 
-  const store = await cookies()
-  const res = await fetchBackendAuthorized(store, '/api/users/me', {
-    method: 'PATCH',
-    body: JSON.stringify(parsed.data),
-    headers: { 'Content-Type': 'application/json' },
-    signal: request.signal,
+  return proxyAuthenticatedBff(request, {
+    path: '/api/users/me',
+    init: {
+      method: 'PATCH',
+      body: JSON.stringify(parsed.data),
+      headers: { 'Content-Type': 'application/json' },
+    },
   })
-  return forwardAuthenticatedBackendResponse(res)
 }

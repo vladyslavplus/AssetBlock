@@ -1,13 +1,11 @@
-import { cookies } from 'next/headers'
 import { z } from 'zod'
 import { createBundleSchema } from '@/lib/bundles/bundle-schemas'
-import { fetchBackendAuthorized } from '@/lib/server/backend-authorized'
 import {
   assertSameOrigin,
-  forwardAuthenticatedBackendResponse,
   invalidJsonResponse,
   zodValidationProblemResponse,
 } from '@/lib/server/bff-http'
+import { proxyAuthenticatedBff } from '@/lib/server/bff-route'
 
 const sellerBundlesQuerySchema = z.object({
   page: z.coerce.number().int().min(1).optional(),
@@ -39,13 +37,8 @@ export async function GET(request: Request) {
   if (search) qs.set('search', search)
   if (archivedOnly !== undefined) qs.set('archivedOnly', String(archivedOnly))
 
-  const store = await cookies()
   const backendPath = qs.size > 0 ? `/api/seller/bundles?${qs.toString()}` : '/api/seller/bundles'
-  const res = await fetchBackendAuthorized(store, backendPath, {
-    method: 'GET',
-    signal: request.signal,
-  })
-  return forwardAuthenticatedBackendResponse(res)
+  return proxyAuthenticatedBff(request, { path: backendPath, init: { method: 'GET' } })
 }
 
 export async function POST(request: Request) {
@@ -63,17 +56,17 @@ export async function POST(request: Request) {
     return zodValidationProblemResponse(parsed.error)
   }
 
-  const store = await cookies()
-  const res = await fetchBackendAuthorized(store, '/api/seller/bundles', {
-    method: 'POST',
-    body: JSON.stringify({
-      title: parsed.data.title,
-      description: parsed.data.description?.trim() ? parsed.data.description.trim() : null,
-      price: parsed.data.price,
-      assetIds: parsed.data.assetIds,
-    }),
-    headers: { 'Content-Type': 'application/json' },
-    signal: request.signal,
+  return proxyAuthenticatedBff(request, {
+    path: '/api/seller/bundles',
+    init: {
+      method: 'POST',
+      body: JSON.stringify({
+        title: parsed.data.title,
+        description: parsed.data.description?.trim() ? parsed.data.description.trim() : null,
+        price: parsed.data.price,
+        assetIds: parsed.data.assetIds,
+      }),
+      headers: { 'Content-Type': 'application/json' },
+    },
   })
-  return forwardAuthenticatedBackendResponse(res)
 }

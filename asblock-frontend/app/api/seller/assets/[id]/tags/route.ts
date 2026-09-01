@@ -1,12 +1,10 @@
-import { cookies } from 'next/headers'
-import { fetchBackendAuthorized } from '@/lib/server/backend-authorized'
 import {
   assertSameOrigin,
-  forwardAuthenticatedBackendResponse,
   invalidJsonResponse,
   zodValidationProblemResponse,
 } from '@/lib/server/bff-http'
 import { parseUuidParam } from '@/lib/server/bff-params'
+import { proxyAuthenticatedBff } from '@/lib/server/bff-route'
 import { assetTagAddSchema } from '@/lib/seller/seller-schemas'
 
 export async function POST(request: Request, context: { params: Promise<{ id: string }> }) {
@@ -32,16 +30,12 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
     return zodValidationProblemResponse(parsed.error)
   }
 
-  const store = await cookies()
-  const res = await fetchBackendAuthorized(
-    store,
-    `/api/assets/${encodeURIComponent(parsedId.value)}/tags`,
-    {
+  return proxyAuthenticatedBff(request, {
+    path: `/api/assets/${encodeURIComponent(parsedId.value)}/tags`,
+    init: {
       method: 'POST',
       body: JSON.stringify(parsed.data),
       headers: { 'Content-Type': 'application/json' },
-      signal: request.signal,
     },
-  )
-  return forwardAuthenticatedBackendResponse(res)
+  })
 }

@@ -1,10 +1,10 @@
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { GET, POST } from '@/app/api/seller/asset-versions/[id]/listing-copilot/route'
-import { createMemoryCookieStore } from '@/test/cookie-store'
+import { AUTH_COOKIE_ACCESS } from '@/lib/auth/constants'
+import { createMemoryCookieStore, makeJwt } from '@/test/cookie-store'
 
-const cookieStore = createMemoryCookieStore()
-const fetchBackendAuthorized = vi.hoisted(() => vi.fn())
+let cookieStore = createMemoryCookieStore()
 
 vi.mock('next/headers', () => ({
   cookies: async () => cookieStore,
@@ -12,79 +12,118 @@ vi.mock('next/headers', () => ({
 
 vi.mock('server-only', () => ({}))
 
-vi.mock('@/lib/server/backend-authorized', () => ({
-  fetchBackendAuthorized: (...args: unknown[]) => fetchBackendAuthorized(...args),
-}))
-
 describe('listing-copilot BFF route', () => {
   const validVersionId = '123e4567-e89b-12d3-a456-426614174000'
+  const backendBaseUrl = 'https://api.example.test'
+
+  beforeEach(() => {
+    cookieStore = createMemoryCookieStore({
+      [AUTH_COOKIE_ACCESS]: makeJwt(Math.floor(Date.now() / 1000) + 3600),
+    })
+    vi.stubEnv('ASSETBLOCK_API_BASE_URL', backendBaseUrl)
+    vi.stubEnv('NEXT_PUBLIC_API_BASE_URL', backendBaseUrl)
+  })
 
   afterEach(() => {
     vi.unstubAllGlobals()
-    fetchBackendAuthorized.mockReset()
+    vi.unstubAllEnvs()
   })
 
-  it('forwards GET to the owner listing-copilot endpoint', async () => {
-    fetchBackendAuthorized.mockResolvedValue(new Response('{}', { status: 200 }))
+  it('forwards authenticated GET with no-store response headers', async () => {
+    const fetchMock = vi.fn(
+      async () =>
+        new Response('{"suggestion":"ready"}', {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        }),
+    )
+    vi.stubGlobal('fetch', fetchMock)
+
     const request = new Request(
       `http://localhost:3000/api/seller/asset-versions/${validVersionId}/listing-copilot`,
     )
-    const res = await GET(request, {
-      params: Promise.resolve({ id: validVersionId }),
-    })
+    const res = await GET(request, { params: Promise.resolve({ id: validVersionId }) })
+
     expect(res.status).toBe(200)
-    expect(fetchBackendAuthorized).toHaveBeenCalledWith(
-      cookieStore,
-      `/api/users/me/asset-versions/${validVersionId}/listing-copilot`,
-      { method: 'GET', signal: request.signal },
+    expect(res.headers.get('Cache-Control')).toBe('private, no-store')
+    expect(res.headers.get('Vary')).toBe('Cookie')
+    expect(fetchMock).toHaveBeenCalledOnce()
+    const [url, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit]
+    expect(url).toBe(
+      `${backendBaseUrl}/api/users/me/asset-versions/${validVersionId}/listing-copilot`,
     )
+    expect(init.cache).toBe('no-store')
+    expect(new Headers(init.headers).get('Authorization')).toMatch(/^Bearer /)
   })
 
-  it('rejects cross-origin POST', async () => {
-    const res = await POST(
+  it('returns 401 without calling the backend when the session is missing', async () => {
+    cookieStore = createMemoryCookieStore()
+    const fetchMock = vi.fn()
+    vi.stubGlobal('fetch', fetchMock)
+
+    const res = await GET(
       new Request(
         `http://localhost:3000/api/seller/asset-versions/${validVersionId}/listing-copilot`,
-        {
-          method: 'POST',
-          headers: { Origin: 'https://evil.test' },
-        },
       ),
       { params: Promise.resolve({ id: validVersionId }) },
     )
-    expect(res.status).toBe(403)
-    expect(fetchBackendAuthorized).not.toHaveBeenCalled()
+
+    expect(res.status).toBe(401)
+    expect(res.headers.get('Cache-Control')).toBe('private, no-store')
+    expect(fetchMock).not.toHaveBeenCalled()
   })
 
-  it('forwards same-origin POST without a browser token', async () => {
-    fetchBackendAuthorized.mockResolvedValue(new Response('{"jobId":"1"}', { status: 202 }))
+  it('rejects cross-origin POST before auth or backend access', async () => {
+    const fetchMock = vi.fn()
+    vi.stubGlobal('fetch', fetchMock)
+
+    const res = await POST(
+      new Request(
+        `http://localhost:3000/api/seller/asset-versions/${validVersionId}/listing-copilot`,
+        { method: 'POST', headers: { Origin: 'https://evil.test' } },
+      ),
+      { params: Promise.resolve({ id: validVersionId }) },
+    )
+
+    expect(res.status).toBe(403)
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
+
+  it('forwards same-origin POST and preserves backend status safely', async () => {
+    const fetchMock = vi.fn(
+      async () =>
+        new Response('{"code":"ERR_LISTING_COPILOT_FAILED","detail":"Generation failed."}', {
+          status: 409,
+          headers: { 'Content-Type': 'application/problem+json' },
+        }),
+    )
+    vi.stubGlobal('fetch', fetchMock)
     const request = new Request(
       `http://localhost:3000/api/seller/asset-versions/${validVersionId}/listing-copilot`,
-      {
-        method: 'POST',
-        headers: { Origin: 'http://localhost:3000' },
-      },
+      { method: 'POST', headers: { Origin: 'http://localhost:3000' } },
     )
+
     const res = await POST(request, { params: Promise.resolve({ id: validVersionId }) })
-    expect(res.status).toBe(202)
-    const [, path, init] = fetchBackendAuthorized.mock.calls[0] as [
-      unknown,
-      string,
-      { method: string },
-    ]
-    expect(path).toBe(`/api/users/me/asset-versions/${validVersionId}/listing-copilot`)
+
+    expect(res.status).toBe(409)
+    expect(res.headers.get('Cache-Control')).toBe('private, no-store')
+    expect(fetchMock).toHaveBeenCalledOnce()
+    const [, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit]
     expect(init.method).toBe('POST')
-    expect(JSON.stringify(init)).not.toContain('Bearer')
+    expect(init.signal).toBeInstanceOf(AbortSignal)
   })
 
-  it('rejects invalid UUID param with 400 ProblemDetails (E5)', async () => {
+  it('rejects an invalid UUID before auth or backend access', async () => {
+    const fetchMock = vi.fn()
+    vi.stubGlobal('fetch', fetchMock)
+
     const res = await GET(
       new Request('http://localhost:3000/api/seller/asset-versions/not-a-uuid/listing-copilot'),
       { params: Promise.resolve({ id: 'not-a-uuid' }) },
     )
+
     expect(res.status).toBe(400)
-    const body = await res.json()
-    expect(body.code).toBe('ERR_VALIDATION_FAILED')
-    expect(body.errors?.id).toBeDefined()
-    expect(fetchBackendAuthorized).not.toHaveBeenCalled()
+    expect((await res.json()).code).toBe('ERR_VALIDATION_FAILED')
+    expect(fetchMock).not.toHaveBeenCalled()
   })
 })

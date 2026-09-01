@@ -5,9 +5,15 @@ import { tokensResponseSchema } from '@/lib/auth/tokens-schema'
 import { postAuthJson } from '@/lib/server/auth-backend'
 import { setAuthCookies } from '@/lib/server/auth-cookies'
 import {
+  enforceBffRateLimit,
+  getVerifiedClientIp,
+  hashBffRateLimitKey,
+} from '@/lib/server/bff-rate-limit'
+import {
   assertSameOrigin,
   invalidJsonResponse,
   problemResponse,
+  safeBackendProblemResponse,
   zodValidationProblemResponse,
 } from '@/lib/server/bff-http'
 
@@ -28,13 +34,20 @@ export async function POST(request: Request) {
   }
 
   const { username, email, password } = parsed.data
-  const { ok, status, data } = await postAuthJson('register', { username, email, password })
+  const emailKey = await hashBffRateLimitKey(email.trim().toLowerCase())
+  const rateLimited =
+    enforceBffRateLimit(`auth-register:ip:${getVerifiedClientIp(request)}`, 5, 60_000) ??
+    enforceBffRateLimit(`auth-register:email:${emailKey}`, 5, 60_000)
+  if (rateLimited) return rateLimited
+
+  const { ok, status, data, headers } = await postAuthJson('register', {
+    username,
+    email,
+    password,
+  })
 
   if (!ok) {
-    return new Response(JSON.stringify(data), {
-      status,
-      headers: { 'Content-Type': 'application/problem+json' },
-    })
+    return safeBackendProblemResponse(status, data, headers)
   }
 
   const tokens = tokensResponseSchema.safeParse(data)
