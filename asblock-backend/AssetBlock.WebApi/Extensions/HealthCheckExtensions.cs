@@ -53,14 +53,26 @@ public static class HealthCheckExtensions
         endpoints.MapHealthChecks("/health/live", new HealthCheckOptions
         {
             Predicate = registration => registration.Tags.Contains(LIVE_TAG),
-            ResponseWriter = WriteResponse
+            ResponseWriter = WriteResponse,
+            ResultStatusCodes =
+            {
+                [HealthStatus.Healthy] = StatusCodes.Status200OK,
+                [HealthStatus.Degraded] = StatusCodes.Status503ServiceUnavailable,
+                [HealthStatus.Unhealthy] = StatusCodes.Status503ServiceUnavailable
+            }
         })
             .AllowAnonymous();
 
         endpoints.MapHealthChecks("/health/ready", new HealthCheckOptions
         {
             Predicate = registration => registration.Tags.Contains(READY_TAG),
-            ResponseWriter = WriteResponse
+            ResponseWriter = WriteResponse,
+            ResultStatusCodes =
+            {
+                [HealthStatus.Healthy] = StatusCodes.Status200OK,
+                [HealthStatus.Degraded] = StatusCodes.Status503ServiceUnavailable,
+                [HealthStatus.Unhealthy] = StatusCodes.Status503ServiceUnavailable
+            }
         })
             .AllowAnonymous();
 
@@ -72,16 +84,7 @@ public static class HealthCheckExtensions
         context.Response.ContentType = "application/json";
         var body = new
         {
-            status = report.Status.ToString(),
-            totalDurationMs = Math.Round(report.TotalDuration.TotalMilliseconds, 2),
-            checks = report.Entries.ToDictionary(
-                entry => entry.Key,
-                entry => new
-                {
-                    status = entry.Value.Status.ToString(),
-                    durationMs = Math.Round(entry.Value.Duration.TotalMilliseconds, 2),
-                    description = entry.Value.Description
-                })
+            status = report.Status.ToString()
         };
         return context.Response.WriteAsJsonAsync(body, cancellationToken: context.RequestAborted);
     }

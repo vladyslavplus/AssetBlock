@@ -10,20 +10,19 @@ using AssetBlock.Domain.Core.Constants;
 using AssetBlock.Domain.Core.Dto.Bundles;
 using AssetBlock.WebApi.Constants;
 using AssetBlock.WebApi.Extensions;
-using AssetBlock.WebApi.ProblemDetails;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace AssetBlock.WebApi.Controllers;
 
 /// <summary>
-/// Seller-owned bundle management. Absolute route avoids inheriting api/[controller].
+/// Seller-owned bundle management.
 /// </summary>
 [ApiController]
 [Route(ApiRoutes.SellerBundles.BASE)]
 [Authorize]
 [Produces("application/json")]
-public sealed class SellerBundlesController(ISender sender) : ControllerBase
+public sealed class SellerBundlesController(ISender sender) : ApiControllerBase(sender)
 {
     /// <summary>
     /// List bundles owned by the authenticated seller.
@@ -41,8 +40,8 @@ public sealed class SellerBundlesController(ISender sender) : ControllerBase
         }
 
         request ??= new ListMyBundlesRequest();
-        Result<Domain.Core.Dto.Paging.PagedResult<BundleListItemDto>> result = await sender.Send(new GetMyBundlesQuery(userId, request), cancellationToken);
-        return ResultProblemDetailsMapper.Map(HttpContext, result);
+        Result<Domain.Core.Dto.Paging.PagedResult<BundleListItemDto>> result = await Sender.Send(new GetMyBundlesQuery(userId, request), cancellationToken);
+        return MapResultToActionResult(result);
     }
 
     /// <summary>
@@ -60,8 +59,8 @@ public sealed class SellerBundlesController(ISender sender) : ControllerBase
             return UnauthorizedProblem();
         }
 
-        Result<BundleDetailDto> result = await sender.Send(new GetMyBundleQuery(id, userId), cancellationToken);
-        return ResultProblemDetailsMapper.Map(HttpContext, result);
+        Result<BundleDetailDto> result = await Sender.Send(new GetMyBundleQuery(id, userId), cancellationToken);
+        return MapResultToActionResult(result);
     }
 
     /// <summary>
@@ -86,10 +85,10 @@ public sealed class SellerBundlesController(ISender sender) : ControllerBase
             request.Description,
             request.Price,
             request.AssetIds);
-        Result<CreateBundleResponse> result = await sender.Send(command, cancellationToken);
+        Result<CreateBundleResponse> result = await Sender.Send(command, cancellationToken);
         return result.IsSuccess
             ? CreatedAtAction(nameof(GetById), new { id = result.Value.Id }, result.Value)
-            : ResultProblemDetailsMapper.Map(HttpContext, result);
+            : MapResultToActionResult(result);
     }
 
     /// <summary>
@@ -117,8 +116,8 @@ public sealed class SellerBundlesController(ISender sender) : ControllerBase
             request.Description,
             request.Price,
             request.AssetIds);
-        Result<ReviseBundleResponse> result = await sender.Send(command, cancellationToken);
-        return ResultProblemDetailsMapper.Map(HttpContext, result);
+        Result<ReviseBundleResponse> result = await Sender.Send(command, cancellationToken);
+        return MapResultToActionResult(result);
     }
 
     /// <summary>
@@ -138,8 +137,8 @@ public sealed class SellerBundlesController(ISender sender) : ControllerBase
             return UnauthorizedProblem();
         }
 
-        Result result = await sender.Send(new ArchiveBundleCommand(id, userId), cancellationToken);
-        return ResultProblemDetailsMapper.Map(HttpContext, result);
+        Result result = await Sender.Send(new ArchiveBundleCommand(id, userId), cancellationToken);
+        return MapResultToActionResult(result);
     }
 
     /// <summary>
@@ -159,11 +158,7 @@ public sealed class SellerBundlesController(ISender sender) : ControllerBase
             return UnauthorizedProblem();
         }
 
-        Result result = await sender.Send(new RestoreBundleCommand(id, userId), cancellationToken);
-        return ResultProblemDetailsMapper.Map(HttpContext, result);
+        Result result = await Sender.Send(new RestoreBundleCommand(id, userId), cancellationToken);
+        return MapResultToActionResult(result);
     }
-
-    private IActionResult UnauthorizedProblem() =>
-        AssetBlockProblemDetails.ToActionResult(
-            AssetBlockProblemDetails.Create(HttpContext, StatusCodes.Status401Unauthorized, ErrorCodes.ERR_AUTH_TOKEN_INVALID));
 }

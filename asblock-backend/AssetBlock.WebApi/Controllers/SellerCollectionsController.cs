@@ -14,7 +14,6 @@ using AssetBlock.Domain.Core.Constants;
 using AssetBlock.Domain.Core.Dto.Collections;
 using AssetBlock.WebApi.Constants;
 using AssetBlock.WebApi.Extensions;
-using AssetBlock.WebApi.ProblemDetails;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
@@ -22,12 +21,11 @@ namespace AssetBlock.WebApi.Controllers;
 
 /// <summary>
 /// Seller management for editorial collections (draft / publish / archive).
-/// Absolute route avoids inheriting api/[controller] from ApiControllerBase.
 /// </summary>
 [ApiController]
 [Route(ApiRoutes.SellerCollections.BASE)]
 [Produces("application/json")]
-public sealed class SellerCollectionsController(ISender sender) : ControllerBase
+public sealed class SellerCollectionsController(ISender sender) : ApiControllerBase(sender)
 {
     /// <summary>
     /// List collections owned by the authenticated seller.
@@ -44,7 +42,7 @@ public sealed class SellerCollectionsController(ISender sender) : ControllerBase
             return UnauthorizedProblem();
         }
 
-        Result<Domain.Core.Dto.Paging.PagedResult<CollectionListItemDto>> result = await sender.Send(new GetMyCollectionsQuery(userId, request), cancellationToken);
+        Result<Domain.Core.Dto.Paging.PagedResult<CollectionListItemDto>> result = await Sender.Send(new GetMyCollectionsQuery(userId, request), cancellationToken);
         return MapResultToActionResult(result);
     }
 
@@ -64,7 +62,7 @@ public sealed class SellerCollectionsController(ISender sender) : ControllerBase
             return UnauthorizedProblem();
         }
 
-        Result<CollectionDetailDto> result = await sender.Send(new GetMyCollectionQuery(id, userId), cancellationToken);
+        Result<CollectionDetailDto> result = await Sender.Send(new GetMyCollectionQuery(id, userId), cancellationToken);
         return MapResultToActionResult(result);
     }
 
@@ -84,7 +82,7 @@ public sealed class SellerCollectionsController(ISender sender) : ControllerBase
             return UnauthorizedProblem();
         }
 
-        Result<CreateCollectionResponse> result = await sender.Send(
+        Result<CreateCollectionResponse> result = await Sender.Send(
             new CreateCollectionCommand(userId, request.Title, request.Description),
             cancellationToken);
 
@@ -114,7 +112,7 @@ public sealed class SellerCollectionsController(ISender sender) : ControllerBase
             return UnauthorizedProblem();
         }
 
-        Result result = await sender.Send(
+        Result result = await Sender.Send(
             new UpdateCollectionCommand(id, userId, request.Title, request.Description),
             cancellationToken);
         return MapResultToActionResult(result);
@@ -141,7 +139,7 @@ public sealed class SellerCollectionsController(ISender sender) : ControllerBase
             return UnauthorizedProblem();
         }
 
-        Result result = await sender.Send(
+        Result result = await Sender.Send(
             new AddCollectionItemCommand(id, userId, request.AssetId),
             cancellationToken);
         return MapResultToActionResult(result);
@@ -165,7 +163,7 @@ public sealed class SellerCollectionsController(ISender sender) : ControllerBase
             return UnauthorizedProblem();
         }
 
-        Result result = await sender.Send(
+        Result result = await Sender.Send(
             new RemoveCollectionItemCommand(id, userId, assetId),
             cancellationToken);
         return MapResultToActionResult(result);
@@ -192,7 +190,7 @@ public sealed class SellerCollectionsController(ISender sender) : ControllerBase
             return UnauthorizedProblem();
         }
 
-        Result result = await sender.Send(
+        Result result = await Sender.Send(
             new ReorderCollectionItemsCommand(id, userId, request.AssetIds),
             cancellationToken);
         return MapResultToActionResult(result);
@@ -215,7 +213,7 @@ public sealed class SellerCollectionsController(ISender sender) : ControllerBase
             return UnauthorizedProblem();
         }
 
-        Result result = await sender.Send(new PublishCollectionCommand(id, userId), cancellationToken);
+        Result result = await Sender.Send(new PublishCollectionCommand(id, userId), cancellationToken);
         return MapResultToActionResult(result);
     }
 
@@ -236,7 +234,7 @@ public sealed class SellerCollectionsController(ISender sender) : ControllerBase
             return UnauthorizedProblem();
         }
 
-        Result result = await sender.Send(new ArchiveCollectionCommand(id, userId), cancellationToken);
+        Result result = await Sender.Send(new ArchiveCollectionCommand(id, userId), cancellationToken);
         return MapResultToActionResult(result);
     }
 
@@ -257,19 +255,7 @@ public sealed class SellerCollectionsController(ISender sender) : ControllerBase
             return UnauthorizedProblem();
         }
 
-        Result result = await sender.Send(new RestoreCollectionCommand(id, userId), cancellationToken);
+        Result result = await Sender.Send(new RestoreCollectionCommand(id, userId), cancellationToken);
         return MapResultToActionResult(result);
     }
-
-    private IActionResult MapResultToActionResult<T>(Result<T> result) =>
-        ResultProblemDetailsMapper.Map(HttpContext, result);
-
-    private IActionResult MapResultToActionResult(Result result) =>
-        ResultProblemDetailsMapper.Map(HttpContext, result);
-
-    private IActionResult UnauthorizedProblem() =>
-        ProblemFromCode(StatusCodes.Status401Unauthorized, ErrorCodes.ERR_AUTH_TOKEN_INVALID);
-
-    private IActionResult ProblemFromCode(int status, string code) =>
-        AssetBlockProblemDetails.ToActionResult(AssetBlockProblemDetails.Create(HttpContext, status, code));
 }

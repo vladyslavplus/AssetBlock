@@ -51,9 +51,12 @@ public sealed class TagsControllerTests : ControllerTestBase
             .Returns(Task.FromResult(NoValueResult.Success(tag)));
 
         var controller = new TagsController(Sender);
-        IActionResult result = await controller.Create(new CreateTagCommand("new"), CancellationToken.None);
+        IActionResult result = await controller.Create(new CreateTagRequest("new"), CancellationToken.None);
 
         result.Should().BeOfType<CreatedAtActionResult>();
+        await Sender.Received(1).Send(
+            Arg.Is<CreateTagCommand>(cmd => cmd.Name == "new"),
+            Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -64,7 +67,7 @@ public sealed class TagsControllerTests : ControllerTestBase
 
         var controller = new TagsController(Sender);
         SetupAnonymous(controller);
-        IActionResult result = await controller.Create(new CreateTagCommand("x"), CancellationToken.None);
+        IActionResult result = await controller.Create(new CreateTagRequest("x"), CancellationToken.None);
 
         await AssertStatusCodeAsync(controller, result, StatusCodes.Status409Conflict);
     }

@@ -55,8 +55,9 @@ public class TagsController(ISender sender) : ApiControllerBase(sender)
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
     [ProducesResponseType(StatusCodes.Status409Conflict)]
-    public async Task<IActionResult> Create([FromBody] CreateTagCommand command, CancellationToken cancellationToken = default)
+    public async Task<IActionResult> Create([FromBody] CreateTagRequest request, CancellationToken cancellationToken = default)
     {
+        var command = new CreateTagCommand(request.Name);
         Result<TagDto> result = await Sender.Send(command, cancellationToken);
 
         return result.IsSuccess
