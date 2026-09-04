@@ -4,9 +4,12 @@ using Microsoft.Extensions.Options;
 
 namespace AssetBlock.WebApi.Services;
 
-internal sealed class AnalyticsBffSignatureValidator(IOptions<AnalyticsRateLimitingOptions> options)
+internal sealed class AnalyticsBffSignatureValidator(
+    IOptions<AnalyticsRateLimitingOptions> options,
+    TimeProvider? timeProvider = null)
     : IAnalyticsBffSignatureValidator
 {
+    private readonly TimeProvider _timeProvider = timeProvider ?? TimeProvider.System;
     public AnalyticsBffSignatureValidationResult Validate(HttpContext httpContext)
     {
         var partition = httpContext.Request.Headers[AnalyticsBffRateLimitHeaders.PARTITION].ToString();
@@ -40,7 +43,7 @@ internal sealed class AnalyticsBffSignatureValidator(IOptions<AnalyticsRateLimit
         }
 
         if (!AnalyticsBffSignatureHelper.TryParseUnixTimestampSeconds(timestamp, out var timestampSeconds)
-            || !AnalyticsBffSignatureHelper.IsTimestampWithinTolerance(timestampSeconds, DateTimeOffset.UtcNow))
+            || !AnalyticsBffSignatureHelper.IsTimestampWithinTolerance(timestampSeconds, _timeProvider.GetUtcNow()))
         {
             return new AnalyticsBffSignatureValidationResult(AnalyticsBffSignatureValidationOutcome.INVALID);
         }

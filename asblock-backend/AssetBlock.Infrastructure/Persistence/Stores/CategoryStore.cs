@@ -11,8 +11,10 @@ namespace AssetBlock.Infrastructure.Persistence.Stores;
 
 internal sealed class CategoryStore(
     ApplicationDbContext dbContext,
-    ILogger<CategoryStore> logger) : ICategoryStore
+    ILogger<CategoryStore> logger,
+    TimeProvider? timeProvider = null) : ICategoryStore
 {
+    private readonly TimeProvider _timeProvider = timeProvider ?? TimeProvider.System;
     private const string LIKE_ESCAPE = "\\";
 
     public Task<Category?> GetById(Guid id, CancellationToken cancellationToken = default)
@@ -69,7 +71,7 @@ internal sealed class CategoryStore(
 
     public async Task<Category> Create(string name, string? description, string slug, CancellationToken cancellationToken = default)
     {
-        DateTimeOffset now = DateTimeOffset.UtcNow;
+        DateTimeOffset now = _timeProvider.GetUtcNow();
         var category = new Category
         {
             Id = Guid.NewGuid(),

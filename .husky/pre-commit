@@ -1,2 +1,3 @@
 #!/usr/bin/env sh
+node scripts/git/pre-commit-guard.mjs
 pnpm exec lint-staged

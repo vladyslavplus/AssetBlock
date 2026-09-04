@@ -16,7 +16,7 @@ public class Purchase : BaseEntity
     /// <summary>Paid order line that granted this entitlement.</summary>
     public required Guid OrderLineId { get; set; }
 
-    public DateTimeOffset PurchasedAt { get; init; } = DateTimeOffset.UtcNow;
+    public DateTimeOffset PurchasedAt { get; init; }
 
     public User User { get; set; } = null!;
     public Asset Asset { get; set; } = null!;

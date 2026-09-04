@@ -7,7 +7,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace AssetBlock.Infrastructure.Persistence.Stores;
 
-internal sealed class BundleStore(ApplicationDbContext dbContext) : IBundleStore
+internal sealed class BundleStore(ApplicationDbContext dbContext, TimeProvider? timeProvider = null) : IBundleStore
 {
     private const string LIKE_ESCAPE = "\\";
 
@@ -266,7 +266,7 @@ internal sealed class BundleStore(ApplicationDbContext dbContext) : IBundleStore
         IReadOnlyList<BundleRevisionItemDraft> items,
         CancellationToken cancellationToken = default)
     {
-        DateTimeOffset now = DateTimeOffset.UtcNow;
+        DateTimeOffset now = (timeProvider ?? TimeProvider.System).GetUtcNow();
         var bundle = new Bundle
         {
             Id = Guid.NewGuid(),
@@ -327,7 +327,7 @@ internal sealed class BundleStore(ApplicationDbContext dbContext) : IBundleStore
             .Where(r => r.BundleId == bundleId && r.IsCurrent)
             .ExecuteUpdateAsync(setters => setters.SetProperty(r => r.IsCurrent, false), cancellationToken);
 
-        DateTimeOffset now = DateTimeOffset.UtcNow;
+        DateTimeOffset now = (timeProvider ?? TimeProvider.System).GetUtcNow();
         var revision = new BundleRevision
         {
             Id = Guid.NewGuid(),

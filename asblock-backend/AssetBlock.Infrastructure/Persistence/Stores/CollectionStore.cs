@@ -9,8 +9,11 @@ using Npgsql;
 
 namespace AssetBlock.Infrastructure.Persistence.Stores;
 
-internal sealed class CollectionStore(ApplicationDbContext dbContext) : ICollectionStore
+internal sealed class CollectionStore(
+    ApplicationDbContext dbContext,
+    TimeProvider? timeProvider = null) : ICollectionStore
 {
+    private readonly TimeProvider _timeProvider = timeProvider ?? TimeProvider.System;
     private const string UNIQUE_COLLECTION_ASSET = "PK_collection_items";
     private const string UNIQUE_COLLECTION_POSITION = "UIX_collection_items_collection_position";
     private const string LIKE_ESCAPE = "\\";
@@ -293,7 +296,7 @@ internal sealed class CollectionStore(ApplicationDbContext dbContext) : ICollect
         string? description,
         CancellationToken cancellationToken = default)
     {
-        DateTimeOffset now = DateTimeOffset.UtcNow;
+        DateTimeOffset now = _timeProvider.GetUtcNow();
         var collection = new Collection
         {
             Id = Guid.NewGuid(),
@@ -336,7 +339,7 @@ internal sealed class CollectionStore(ApplicationDbContext dbContext) : ICollect
             CollectionId = collectionId,
             AssetId = assetId,
             Position = maxPosition + 1,
-            CreatedAt = DateTimeOffset.UtcNow
+            CreatedAt = _timeProvider.GetUtcNow()
         };
 
         try

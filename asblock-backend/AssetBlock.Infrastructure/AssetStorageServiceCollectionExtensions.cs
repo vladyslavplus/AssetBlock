@@ -7,9 +7,11 @@ using AssetBlock.Infrastructure.Services;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Minio;
 using Polly;
+using Polly.Registry;
 using Polly.Retry;
 
 namespace AssetBlock.Infrastructure;
@@ -62,14 +64,18 @@ internal static class AssetStorageServiceCollectionExtensions
                 seaweed.UseSsl);
         });
 
-        if (provider == StorageProvider.MINIO)
+        services.AddScoped<IAssetStorageService>(sp =>
         {
-            services.AddScoped<IAssetStorageService, MinioAssetStorageService>();
-        }
-        else
-        {
-            services.AddScoped<IAssetStorageService, SeaweedFsAssetStorageService>();
-        }
+            IMinioClient client = sp.GetRequiredService<IMinioClient>();
+            ResiliencePipelineProvider<string> resilience = sp.GetRequiredService<ResiliencePipelineProvider<string>>();
+            ILogger<S3CompatibleAssetStorageService> logger = sp.GetRequiredService<ILogger<S3CompatibleAssetStorageService>>();
+
+            var bucket = provider == StorageProvider.MINIO
+                ? sp.GetRequiredService<IOptions<MinioOptions>>().Value.Bucket
+                : sp.GetRequiredService<IOptions<SeaweedFsOptions>>().Value.Bucket;
+
+            return new S3CompatibleAssetStorageService(client, bucket, resilience, logger);
+        });
 
         services.AddHostedService<StorageBucketEnsureHostedService>();
 

@@ -8,7 +8,8 @@ internal static class SellerAnalyticsRangeRules
     internal static void ApplyDateRangeRules<T>(
         AbstractValidator<T> validator,
         Func<T, DateOnly> fromSelector,
-        Func<T, DateOnly> toSelector)
+        Func<T, DateOnly> toSelector,
+        TimeProvider? timeProvider = null)
     {
         validator.RuleFor(q => q)
             .Must(q => toSelector(q) > fromSelector(q))
@@ -23,8 +24,9 @@ internal static class SellerAnalyticsRangeRules
             .WithMessage(
                 ErrorCodes.ERR_ANALYTICS_INVALID_RANGE + $": range must not exceed {AnalyticsConstants.MAX_DAYS} days.");
 
+        TimeProvider clock = timeProvider ?? TimeProvider.System;
         validator.RuleFor(q => q)
-            .Must(q => toSelector(q) <= DateOnly.FromDateTime(DateTime.UtcNow.AddDays(1)))
+            .Must(q => toSelector(q) <= DateOnly.FromDateTime(clock.GetUtcNow().UtcDateTime.AddDays(1)))
             .WithMessage(ErrorCodes.ERR_ANALYTICS_INVALID_RANGE + ": 'to' must not be after tomorrow UTC.");
 
         validator.RuleFor(q => q)

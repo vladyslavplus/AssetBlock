@@ -15,7 +15,8 @@ internal sealed class UpdateCategoryCommandHandler(
     IUnitOfWork unitOfWork,
     IAuditWriter auditWriter,
     ICacheService cache,
-    ILogger<UpdateCategoryCommandHandler> logger)
+    ILogger<UpdateCategoryCommandHandler> logger,
+    TimeProvider? timeProvider = null)
     : IRequestHandler<UpdateCategoryCommand, Result>
 {
     public async Task<Result> Handle(UpdateCategoryCommand request, CancellationToken cancellationToken)
@@ -56,7 +57,7 @@ internal sealed class UpdateCategoryCommandHandler(
                 changedFields.Add("slug");
             }
 
-            category.UpdatedAt = DateTimeOffset.UtcNow;
+            category.UpdatedAt = (timeProvider ?? TimeProvider.System).GetUtcNow();
 
             await unitOfWork.ExecuteInTransaction(async ct =>
             {

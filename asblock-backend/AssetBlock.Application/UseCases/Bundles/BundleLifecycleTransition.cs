@@ -24,7 +24,8 @@ internal static class BundleLifecycleTransition
         bool isArchive,
         Func<Guid, Guid, DateTimeOffset, CancellationToken, Task<bool>> transitionOp,
         string logActionVerb,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        TimeProvider? timeProvider = null)
     {
         Bundle? bundle = await bundleStore.GetById(bundleId, cancellationToken);
         if (bundle is null)
@@ -48,10 +49,11 @@ internal static class BundleLifecycleTransition
             return Result.Conflict(ErrorCodes.ERR_BUNDLE_UNAVAILABLE);
         }
 
+        DateTimeOffset now = (timeProvider ?? TimeProvider.System).GetUtcNow();
         var transitionSucceeded = false;
         await unitOfWork.ExecuteInTransaction(async ct =>
         {
-            transitionSucceeded = await transitionOp(bundleId, sellerId, DateTimeOffset.UtcNow, ct);
+            transitionSucceeded = await transitionOp(bundleId, sellerId, now, ct);
             if (transitionSucceeded)
             {
                 await auditWriter.Write(new AuditEvent(

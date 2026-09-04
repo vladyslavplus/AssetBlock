@@ -9,8 +9,11 @@ using Npgsql;
 
 namespace AssetBlock.Infrastructure.Persistence.Stores;
 
-internal sealed class CheckoutIntentStore(ApplicationDbContext dbContext) : ICheckoutIntentStore
+internal sealed class CheckoutIntentStore(
+    ApplicationDbContext dbContext,
+    TimeProvider? timeProvider = null) : ICheckoutIntentStore
 {
+    private readonly TimeProvider _timeProvider = timeProvider ?? TimeProvider.System;
     private const string PENDING_ASSET_UNIQUE = "UIX_checkout_intents_user_asset_pending";
     private const string PENDING_BUNDLE_UNIQUE = "UIX_checkout_intents_user_bundle_pending";
 
@@ -285,7 +288,7 @@ internal sealed class CheckoutIntentStore(ApplicationDbContext dbContext) : IChe
 
     public async Task DeleteTerminalUnpaidReferencingAsset(Guid assetId, CancellationToken cancellationToken = default)
     {
-        DateTimeOffset now = DateTimeOffset.UtcNow;
+        DateTimeOffset now = _timeProvider.GetUtcNow();
         List<Guid> intentIds = await dbContext.CheckoutIntentItems
             .AsNoTracking()
             .Where(i => i.AssetId == assetId)

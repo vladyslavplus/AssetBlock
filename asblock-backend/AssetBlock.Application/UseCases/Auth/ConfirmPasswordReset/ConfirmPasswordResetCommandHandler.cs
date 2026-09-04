@@ -21,11 +21,12 @@ internal sealed class ConfirmPasswordResetCommandHandler(
     ITransactionalEmailComposer emailComposer,
     IUnitOfWork unitOfWork,
     IAuditWriter auditWriter,
-    ILogger<ConfirmPasswordResetCommandHandler> logger) : IRequestHandler<ConfirmPasswordResetCommand, Result>
+    ILogger<ConfirmPasswordResetCommandHandler> logger,
+    TimeProvider? timeProvider = null) : IRequestHandler<ConfirmPasswordResetCommand, Result>
 {
     public async Task<Result> Handle(ConfirmPasswordResetCommand request, CancellationToken cancellationToken)
     {
-        if (!linkProtector.TryUnprotect(request.ProtectedToken, EmailActionPurpose.PASSWORD_RESET, out EmailActionLinkClaims? claims))
+        if (!linkProtector.TryUnprotect(request.ProtectedToken, EmailActionPurpose.PASSWORD_RESET, out EmailActionLinkClaims claims))
         {
             logger.LogDebug("ConfirmPasswordReset: token unprotect failed");
             await auditWriter.WriteBestEffort(new AuditEvent(
@@ -80,7 +81,7 @@ internal sealed class ConfirmPasswordResetCommandHandler(
                 var emailVerifiedByPasswordReset = false;
                 if (user.EmailVerifiedAt is null)
                 {
-                    user.EmailVerifiedAt = DateTimeOffset.UtcNow;
+                    user.EmailVerifiedAt = (timeProvider ?? TimeProvider.System).GetUtcNow();
                     emailVerifiedByPasswordReset = true;
                 }
 

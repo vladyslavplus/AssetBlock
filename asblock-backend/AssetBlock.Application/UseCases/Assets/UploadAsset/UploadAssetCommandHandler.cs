@@ -26,7 +26,8 @@ internal sealed class UploadAssetCommandHandler(
     IUnitOfWork unitOfWork,
     IAuditWriter auditWriter,
     ICacheService cache,
-    ILogger<UploadAssetCommandHandler> logger) : IRequestHandler<UploadAssetCommand, Result<Guid>>
+    ILogger<UploadAssetCommandHandler> logger,
+    TimeProvider? timeProvider = null) : IRequestHandler<UploadAssetCommand, Result<Guid>>
 {
     public async Task<Result<Guid>> Handle(UploadAssetCommand request, CancellationToken cancellationToken)
     {
@@ -79,7 +80,7 @@ internal sealed class UploadAssetCommandHandler(
             return ResultError.Error<Guid>(ErrorCodes.ERR_ASSET_UPLOAD_FAILED);
         }
 
-        DateTimeOffset now = DateTimeOffset.UtcNow;
+        DateTimeOffset now = (timeProvider ?? TimeProvider.System).GetUtcNow();
         var asset = new Asset
         {
             Id = assetId,

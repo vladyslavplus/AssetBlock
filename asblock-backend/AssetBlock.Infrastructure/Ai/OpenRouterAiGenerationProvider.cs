@@ -17,7 +17,8 @@ namespace AssetBlock.Infrastructure.Ai;
 internal sealed class OpenRouterAiGenerationProvider(
     IHttpClientFactory httpClientFactory,
     IOptions<OpenRouterOptions> optionsAccessor,
-    ILogger<OpenRouterAiGenerationProvider> logger) : IAiGenerationProvider
+    ILogger<OpenRouterAiGenerationProvider> logger,
+    TimeProvider? timeProvider = null) : IAiGenerationProvider
 {
     public const string HTTP_CLIENT_NAME = "OpenRouter";
 
@@ -83,7 +84,7 @@ internal sealed class OpenRouterAiGenerationProvider(
         }
 
         HttpResponseMessage response = timed.Response!;
-        TimeSpan? retryAfter = RetryAfterParser.Parse(response.Headers, options.MaxRetryAfter);
+        TimeSpan? retryAfter = RetryAfterParser.Parse(response.Headers, options.MaxRetryAfter, timeProvider);
         logger.LogInformation("OpenRouter generation completed with HTTP {StatusCode}", (int)response.StatusCode);
 
         if (AiHttpStatusClassifier.IsRetryable(response.StatusCode))

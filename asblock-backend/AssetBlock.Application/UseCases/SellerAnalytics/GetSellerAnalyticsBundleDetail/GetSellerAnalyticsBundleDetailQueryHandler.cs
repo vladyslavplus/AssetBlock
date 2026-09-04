@@ -13,7 +13,8 @@ namespace AssetBlock.Application.UseCases.SellerAnalytics.GetSellerAnalyticsBund
 internal sealed class GetSellerAnalyticsBundleDetailQueryHandler(
     ISellerAnalyticsStore analyticsStore,
     ITypedCache cache,
-    ILogger<GetSellerAnalyticsBundleDetailQueryHandler> logger)
+    ILogger<GetSellerAnalyticsBundleDetailQueryHandler> logger,
+    TimeProvider? timeProvider = null)
     : IRequestHandler<GetSellerAnalyticsBundleDetailQuery, Result<AnalyticsBundleDetailDto>>
 {
     private static readonly TimeSpan _cacheExpiration =
@@ -23,6 +24,7 @@ internal sealed class GetSellerAnalyticsBundleDetailQueryHandler(
         GetSellerAnalyticsBundleDetailQuery request,
         CancellationToken cancellationToken)
     {
+        DateTimeOffset now = (timeProvider ?? TimeProvider.System).GetUtcNow();
         var cacheKey = CacheKeys.SellerAnalyticsBundleDetail(
             request.SellerId,
             request.BundleId,
@@ -67,7 +69,7 @@ internal sealed class GetSellerAnalyticsBundleDetailQueryHandler(
             request.From,
             request.To,
             "UTC",
-            DateTimeOffset.UtcNow,
+            now,
             AnalyticsConstants.CURRENCY,
             granularity,
             snapshot.EngagementAvailableFrom,

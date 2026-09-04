@@ -8,7 +8,7 @@ public sealed class OutboxMessage
     public required Guid Id { get; init; }
     public required string Type { get; set; }
     public required string Payload { get; set; }
-    public DateTimeOffset OccurredAt { get; set; } = DateTimeOffset.UtcNow;
+    public DateTimeOffset OccurredAt { get; set; }
     public OutboxMessageStatus Status { get; set; } = OutboxMessageStatus.PENDING;
     public int AttemptCount { get; set; }
     public DateTimeOffset? NextAttemptAt { get; set; }

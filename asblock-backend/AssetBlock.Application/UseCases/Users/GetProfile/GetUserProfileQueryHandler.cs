@@ -10,10 +10,13 @@ namespace AssetBlock.Application.UseCases.Users.GetProfile;
 
 internal sealed class GetUserProfileQueryHandler(
     IUserStore userStore,
-    IEmailActionStore emailActionStore) : IRequestHandler<GetUserProfileQuery, Result<UserProfileDto>>
+    IEmailActionStore emailActionStore,
+    TimeProvider? timeProvider = null) : IRequestHandler<GetUserProfileQuery, Result<UserProfileDto>>
 {
     public async Task<Result<UserProfileDto>> Handle(GetUserProfileQuery request, CancellationToken cancellationToken)
     {
+        DateTimeOffset now = (timeProvider ?? TimeProvider.System).GetUtcNow();
+
         if (string.IsNullOrWhiteSpace(request.Username))
         {
             User? self = await userStore.GetByIdWithLinks(request.CurrentUserId!.Value, cancellationToken);
@@ -27,7 +30,6 @@ internal sealed class GetUserProfileQueryHandler(
                 EmailActionPurpose.EMAIL_CHANGE,
                 cancellationToken);
 
-            DateTimeOffset now = DateTimeOffset.UtcNow;
             EmailAction? activePendingChange = pendingChange is { ConsumedAt: null } && pendingChange.ExpiresAt > now
                 ? pendingChange
                 : null;
@@ -51,7 +53,6 @@ internal sealed class GetUserProfileQueryHandler(
         if (isOwner)
         {
             EmailAction? pending = await emailActionStore.GetCurrent(user.Id, EmailActionPurpose.EMAIL_CHANGE, cancellationToken);
-            DateTimeOffset now = DateTimeOffset.UtcNow;
             ownerPendingChange = pending is { ConsumedAt: null } && pending.ExpiresAt > now ? pending : null;
         }
 

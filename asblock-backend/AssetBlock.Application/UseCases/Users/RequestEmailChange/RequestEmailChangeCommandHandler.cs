@@ -18,7 +18,8 @@ internal sealed class RequestEmailChangeCommandHandler(
     IOutboxStore outboxStore,
     IUnitOfWork unitOfWork,
     IAuditWriter auditWriter,
-    ILogger<RequestEmailChangeCommandHandler> logger) : IRequestHandler<RequestEmailChangeCommand, Result>
+    ILogger<RequestEmailChangeCommandHandler> logger,
+    TimeProvider? timeProvider = null) : IRequestHandler<RequestEmailChangeCommand, Result>
 {
     public async Task<Result> Handle(RequestEmailChangeCommand request, CancellationToken cancellationToken)
     {
@@ -63,7 +64,7 @@ internal sealed class RequestEmailChangeCommandHandler(
             EmailActionPurpose.EMAIL_CHANGE,
             cancellationToken);
 
-        DateTimeOffset now = DateTimeOffset.UtcNow;
+        DateTimeOffset now = (timeProvider ?? TimeProvider.System).GetUtcNow();
         if (emailActionStore.IsInCooldown(existing, EmailActionConstants.ResendCooldown, now))
         {
             logger.LogDebug("RequestEmailChange: cooldown active for user {UserId}", request.UserId);

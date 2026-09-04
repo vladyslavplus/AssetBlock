@@ -16,7 +16,8 @@ internal sealed class RequestPasswordResetCommandHandler(
     IOutboxStore outboxStore,
     IUnitOfWork unitOfWork,
     IAuditWriter auditWriter,
-    ILogger<RequestPasswordResetCommandHandler> logger) : IRequestHandler<RequestPasswordResetCommand, Result>
+    ILogger<RequestPasswordResetCommandHandler> logger,
+    TimeProvider? timeProvider = null) : IRequestHandler<RequestPasswordResetCommand, Result>
 {
     public async Task<Result> Handle(RequestPasswordResetCommand request, CancellationToken cancellationToken)
     {
@@ -32,7 +33,7 @@ internal sealed class RequestPasswordResetCommandHandler(
             EmailActionPurpose.PASSWORD_RESET,
             cancellationToken);
 
-        DateTimeOffset now = DateTimeOffset.UtcNow;
+        DateTimeOffset now = (timeProvider ?? TimeProvider.System).GetUtcNow();
         if (emailActionStore.IsInCooldown(existing, EmailActionConstants.ResendCooldown, now))
         {
             logger.LogDebug("RequestPasswordReset: cooldown active for user {UserId}", user.Id);

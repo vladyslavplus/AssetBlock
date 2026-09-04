@@ -6,6 +6,6 @@ namespace AssetBlock.Domain.Core.Primitives.BaseEntities;
 public abstract class BaseEntity
 {
     public required Guid Id { get; init; }
-    public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
+    public DateTimeOffset CreatedAt { get; set; }
     public DateTimeOffset? UpdatedAt { get; set; }
 }

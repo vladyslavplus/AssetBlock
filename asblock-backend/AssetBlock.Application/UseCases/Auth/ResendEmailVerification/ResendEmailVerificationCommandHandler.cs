@@ -15,7 +15,8 @@ internal sealed class ResendEmailVerificationCommandHandler(
     IEmailActionStore emailActionStore,
     IOutboxStore outboxStore,
     IUnitOfWork unitOfWork,
-    ILogger<ResendEmailVerificationCommandHandler> logger) : IRequestHandler<ResendEmailVerificationCommand, Result>
+    ILogger<ResendEmailVerificationCommandHandler> logger,
+    TimeProvider? timeProvider = null) : IRequestHandler<ResendEmailVerificationCommand, Result>
 {
     public async Task<Result> Handle(ResendEmailVerificationCommand request, CancellationToken cancellationToken)
     {
@@ -35,7 +36,7 @@ internal sealed class ResendEmailVerificationCommandHandler(
             EmailActionPurpose.EMAIL_VERIFICATION,
             cancellationToken);
 
-        DateTimeOffset now = DateTimeOffset.UtcNow;
+        DateTimeOffset now = (timeProvider ?? TimeProvider.System).GetUtcNow();
         if (emailActionStore.IsInCooldown(existing, EmailActionConstants.ResendCooldown, now))
         {
             logger.LogDebug("ResendEmailVerification cooldown active for user {UserId}", request.UserId);

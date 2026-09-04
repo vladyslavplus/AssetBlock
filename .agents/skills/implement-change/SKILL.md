@@ -18,6 +18,7 @@ description: Implement non-trivial features, refactors, and bug fixes in the Ass
 - Preserve security, authorization, transaction, idempotency, file-encryption, checkout, and data-retention invariants described by the scoped guides.
 - Keep external I/O outside database transactions. Do not hand-edit EF migrations or add packages without required approval.
 - Update all affected layers when a contract changes; do not leave backend, BFF, types, validation, and UI behavior inconsistent.
+- Definition of done: when a code change makes any statement, command, or claim in `AGENTS.md`, `README.md`, or skills false or outdated, update that documentation in the same change.
 
 ## Verify proportionally
 
@@ -28,4 +29,5 @@ description: Implement non-trivial features, refactors, and bug fixes in the Ass
 
 ## Deliver
 
-Report outcome, key files, commands and results, plus remaining risks or unverified work. Never present skipped verification as passing.
+- Report concise provenance-backed verification: exact command, exit code, and raw terminal summary/counts (e.g., passed/failed test counts). When claiming a pre-existing failure, provide the baseline command and result.
+- Keep the user-facing report concise while ensuring evidence is directly reviewable. Report outcome, key files, and remaining risks or unverified work. Never present skipped verification as passing.

@@ -17,10 +17,10 @@ namespace AssetBlock.Infrastructure.Tests;
 public sealed class AssetStorageDiTests
 {
     [Theory]
-    [InlineData("SeaweedFs", typeof(SeaweedFsAssetStorageService))]
-    [InlineData("seaweedfs", typeof(SeaweedFsAssetStorageService))]
-    [InlineData("Minio", typeof(MinioAssetStorageService))]
-    [InlineData("MINIO", typeof(MinioAssetStorageService))]
+    [InlineData("SeaweedFs", typeof(S3CompatibleAssetStorageService))]
+    [InlineData("seaweedfs", typeof(S3CompatibleAssetStorageService))]
+    [InlineData("Minio", typeof(S3CompatibleAssetStorageService))]
+    [InlineData("MINIO", typeof(S3CompatibleAssetStorageService))]
     public void AddInfrastructure_WhenProviderSelected_ShouldRegisterExactlyOneStorageAdapter(string provider, Type expectedType)
     {
         ServiceCollection services = BuildServices(provider);
@@ -69,7 +69,7 @@ public sealed class AssetStorageDiTests
         };
 
         act.Should().NotThrow();
-        sp.GetRequiredService<IAssetStorageService>().Should().BeOfType<SeaweedFsAssetStorageService>();
+        sp.GetRequiredService<IAssetStorageService>().Should().BeOfType<S3CompatibleAssetStorageService>();
     }
 
     [Fact]
@@ -92,7 +92,7 @@ public sealed class AssetStorageDiTests
         };
 
         act.Should().NotThrow();
-        sp.GetRequiredService<IAssetStorageService>().Should().BeOfType<MinioAssetStorageService>();
+        sp.GetRequiredService<IAssetStorageService>().Should().BeOfType<S3CompatibleAssetStorageService>();
     }
 
     private static ServiceCollection BuildServices(

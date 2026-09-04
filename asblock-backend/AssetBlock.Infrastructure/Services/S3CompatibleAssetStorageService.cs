@@ -1,26 +1,19 @@
 using AssetBlock.Domain.Abstractions.Services;
-using AssetBlock.Domain.Core.Primitives.AppSettingsOptions;
 using AssetBlock.Domain.Core.Primitives.Storage;
 using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Options;
 using Minio;
 using Polly.Registry;
 
 namespace AssetBlock.Infrastructure.Services;
 
-internal sealed class SeaweedFsAssetStorageService : IAssetStorageService
+internal sealed class S3CompatibleAssetStorageService(
+    IMinioClient client,
+    string bucket,
+    ResiliencePipelineProvider<string> resilience,
+    ILogger<S3CompatibleAssetStorageService> logger)
+    : IAssetStorageService
 {
-    private readonly S3CompatibleObjectStore _store;
-
-    public SeaweedFsAssetStorageService(
-        IMinioClient client,
-        IOptions<SeaweedFsOptions> options,
-        ResiliencePipelineProvider<string> resilience,
-        ILogger<SeaweedFsAssetStorageService> logger)
-    {
-        SeaweedFsOptions opts = options.Value;
-        _store = new S3CompatibleObjectStore(client, opts.Bucket, resilience, logger);
-    }
+    private readonly S3CompatibleObjectStore _store = new(client, bucket, resilience, logger);
 
     public Task EnsureBucket(CancellationToken cancellationToken = default) =>
         _store.EnsureBucket(cancellationToken);

@@ -19,8 +19,10 @@ internal sealed class DatabaseMigrationService(
     IServiceScopeFactory scopeFactory,
     IHostEnvironment environment,
     IOptions<DatabaseOptions> options,
-    ILogger<DatabaseMigrationService> logger) : IHostedService
+    ILogger<DatabaseMigrationService> logger,
+    TimeProvider? timeProvider = null) : IHostedService
 {
+    private readonly TimeProvider _timeProvider = timeProvider ?? TimeProvider.System;
     private const string DEV_ADMIN_USERNAME = "admin";
     private const string DEV_ADMIN_EMAIL = "admin@admin.com";
     private const string DEV_ADMIN_PASSWORD = "test1234";
@@ -163,7 +165,7 @@ internal sealed class DatabaseMigrationService(
             return;
         }
 
-        DateTimeOffset now = DateTimeOffset.UtcNow;
+        DateTimeOffset now = _timeProvider.GetUtcNow();
         foreach ((var name, var slug, var description) in _defaultCategories)
         {
             context.Categories.Add(new Category
@@ -222,14 +224,14 @@ internal sealed class DatabaseMigrationService(
         {
             if (existingAdmin.EmailVerifiedAt is null)
             {
-                existingAdmin.EmailVerifiedAt = DateTimeOffset.UtcNow;
+                existingAdmin.EmailVerifiedAt = _timeProvider.GetUtcNow();
                 await context.SaveChangesAsync(cancellationToken);
             }
 
             return;
         }
 
-        DateTimeOffset now = DateTimeOffset.UtcNow;
+        DateTimeOffset now = _timeProvider.GetUtcNow();
         var admin = new User
         {
             Id = Guid.NewGuid(),
@@ -283,7 +285,7 @@ internal sealed class DatabaseMigrationService(
             return;
         }
 
-        DateTimeOffset now = DateTimeOffset.UtcNow;
+        DateTimeOffset now = _timeProvider.GetUtcNow();
         User? author = await context.Users.FirstOrDefaultAsync(
             u => u.Username == DEMO_VENDOR_USERNAME,
             cancellationToken);

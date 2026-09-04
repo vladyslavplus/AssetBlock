@@ -21,11 +21,12 @@ internal sealed class ConfirmEmailChangeCommandHandler(
     ITransactionalEmailComposer emailComposer,
     IUnitOfWork unitOfWork,
     IAuditWriter auditWriter,
-    ILogger<ConfirmEmailChangeCommandHandler> logger) : IRequestHandler<ConfirmEmailChangeCommand, Result>
+    ILogger<ConfirmEmailChangeCommandHandler> logger,
+    TimeProvider? timeProvider = null) : IRequestHandler<ConfirmEmailChangeCommand, Result>
 {
     public async Task<Result> Handle(ConfirmEmailChangeCommand request, CancellationToken cancellationToken)
     {
-        if (!linkProtector.TryUnprotect(request.ProtectedToken, EmailActionPurpose.EMAIL_CHANGE, out EmailActionLinkClaims? claims))
+        if (!linkProtector.TryUnprotect(request.ProtectedToken, EmailActionPurpose.EMAIL_CHANGE, out EmailActionLinkClaims claims))
         {
             logger.LogDebug("ConfirmEmailChange: token unprotect failed");
             await auditWriter.WriteBestEffort(new AuditEvent(
@@ -94,7 +95,7 @@ internal sealed class ConfirmEmailChangeCommandHandler(
                 if (consumed)
                 {
                     user.Email = targetEmail;
-                    user.EmailVerifiedAt = DateTimeOffset.UtcNow;
+                    user.EmailVerifiedAt = (timeProvider ?? TimeProvider.System).GetUtcNow();
                     await userStore.Update(user, ct);
                     await jwtTokenService.RevokeAllRefreshTokens(user.Id, ct);
                     EmailDispatchPayload notice = emailComposer.CreateEmailChangedNotice(oldEmail, user.Id);

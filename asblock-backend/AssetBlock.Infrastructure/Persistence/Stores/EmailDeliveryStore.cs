@@ -9,8 +9,11 @@ namespace AssetBlock.Infrastructure.Persistence.Stores;
 
 internal sealed class EmailDeliveryStore(
     ApplicationDbContext dbContext,
-    ILogger<EmailDeliveryStore> logger) : IEmailDeliveryStore
+    ILogger<EmailDeliveryStore> logger,
+    TimeProvider? timeProvider = null) : IEmailDeliveryStore
 {
+    private readonly TimeProvider _timeProvider = timeProvider ?? TimeProvider.System;
+
     public async Task<(DeliveryClaimStatus Status, Guid? ClaimToken)> TryClaimDelivery(
         Guid outboxMessageId,
         string messageId,
@@ -20,7 +23,7 @@ internal sealed class EmailDeliveryStore(
         TimeSpan leaseDuration,
         CancellationToken cancellationToken = default)
     {
-        DateTimeOffset now = DateTimeOffset.UtcNow;
+        DateTimeOffset now = _timeProvider.GetUtcNow();
         var claimToken = Guid.NewGuid();
         DateTimeOffset claimedUntil = now.Add(leaseDuration);
 

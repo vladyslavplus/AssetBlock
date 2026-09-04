@@ -25,7 +25,8 @@ internal sealed class PublishAssetVersionCommandHandler(
     IUnitOfWork unitOfWork,
     IAuditWriter auditWriter,
     ICacheService cache,
-    ILogger<PublishAssetVersionCommandHandler> logger) : IRequestHandler<PublishAssetVersionCommand, Result<Guid>>
+    ILogger<PublishAssetVersionCommandHandler> logger,
+    TimeProvider? timeProvider = null) : IRequestHandler<PublishAssetVersionCommand, Result<Guid>>
 {
     public async Task<Result<Guid>> Handle(PublishAssetVersionCommand request, CancellationToken cancellationToken)
     {
@@ -67,7 +68,7 @@ internal sealed class PublishAssetVersionCommandHandler(
             return ResultError.Error<Guid>(ErrorCodes.ERR_ASSET_UPLOAD_FAILED);
         }
 
-        DateTimeOffset now = DateTimeOffset.UtcNow;
+        DateTimeOffset now = (timeProvider ?? TimeProvider.System).GetUtcNow();
         var draft = new AssetVersion
         {
             Id = versionId,

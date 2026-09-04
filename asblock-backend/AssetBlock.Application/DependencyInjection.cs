@@ -29,6 +29,8 @@ public static class DependencyInjection
         services.AddSingleton<IListingSuggestionOrchestrator, ListingSuggestionOrchestrator>();
         services.AddScoped<CheckoutSessionOrchestrator>();
         services.AddScoped<CheckoutAttributionNormalizer>();
+        services.AddSingleton<ICheckoutOrderFactory, CheckoutOrderFactory>();
+        services.AddScoped<ICheckoutNotificationPublisher, CheckoutNotificationPublisher>();
         services.AddScoped<ICheckoutCompletionService, CheckoutCompletionOrchestrator>();
         services.AddSingleton<ITransactionalEmailComposer, TransactionalEmailComposer>();
         services.AddSingleton(sp => (TransactionalEmailComposer)sp.GetRequiredService<ITransactionalEmailComposer>());

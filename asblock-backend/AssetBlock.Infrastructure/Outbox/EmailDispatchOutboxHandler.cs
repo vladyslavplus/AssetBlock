@@ -17,8 +17,10 @@ internal sealed class EmailDispatchOutboxHandler(
     IEmailSender emailSender,
     IEmailDeliveryStore emailDeliveryStore,
     IOptions<EmailOptions> emailOptions,
-    ILogger<EmailDispatchOutboxHandler> logger) : IOutboxMessageHandler
+    ILogger<EmailDispatchOutboxHandler> logger,
+    TimeProvider? timeProvider = null) : IOutboxMessageHandler
 {
+    private readonly TimeProvider _timeProvider = timeProvider ?? TimeProvider.System;
     private const string SAFE_TRANSPORT_FAILURE = "Email transport failed.";
     private const string CLAIM_LOST_FAILURE = "Email delivery claim was lost before confirmation.";
 
@@ -44,7 +46,7 @@ internal sealed class EmailDispatchOutboxHandler(
 
         ValidatePayload(payload);
 
-        var smtpTimeoutSeconds = Math.Max(emailOptions.Value.Smtp?.TimeoutSeconds ?? 30, 5);
+        var smtpTimeoutSeconds = Math.Max(emailOptions.Value.Smtp.TimeoutSeconds, 5);
         var sendDeadline = TimeSpan.FromSeconds(smtpTimeoutSeconds);
         var claimSafetyMargin = TimeSpan.FromSeconds(Math.Max(smtpTimeoutSeconds, 30));
         TimeSpan claimDuration = sendDeadline + claimSafetyMargin;
@@ -111,7 +113,7 @@ internal sealed class EmailDispatchOutboxHandler(
             deliveryConfirmed = await emailDeliveryStore.ConfirmDelivery(
                 message.Id,
                 claimToken!.Value,
-                DateTimeOffset.UtcNow,
+                _timeProvider.GetUtcNow(),
                 confirmCts.Token);
 
             if (!deliveryConfirmed)

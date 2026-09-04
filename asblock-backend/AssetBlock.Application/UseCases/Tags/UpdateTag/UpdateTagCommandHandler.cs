@@ -16,7 +16,8 @@ internal sealed class UpdateTagCommandHandler(
     IUnitOfWork unitOfWork,
     IAuditWriter auditWriter,
     ICacheService cache,
-    ILogger<UpdateTagCommandHandler> logger) : IRequestHandler<UpdateTagCommand, Result<TagDto>>
+    ILogger<UpdateTagCommandHandler> logger,
+    TimeProvider? timeProvider = null) : IRequestHandler<UpdateTagCommand, Result<TagDto>>
 {
     public async Task<Result<TagDto>> Handle(UpdateTagCommand request, CancellationToken cancellationToken)
     {
@@ -41,7 +42,7 @@ internal sealed class UpdateTagCommandHandler(
         try
         {
             tag.Name = normalizedName;
-            tag.UpdatedAt = DateTimeOffset.UtcNow;
+            tag.UpdatedAt = (timeProvider ?? TimeProvider.System).GetUtcNow();
 
             await unitOfWork.ExecuteInTransaction(async ct =>
             {

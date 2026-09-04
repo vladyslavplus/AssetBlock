@@ -12,8 +12,12 @@ using Microsoft.Extensions.Logging;
 
 namespace AssetBlock.Infrastructure.Persistence.Stores;
 
-internal sealed class OutboxStore(ApplicationDbContext dbContext, ILogger<OutboxStore> logger) : IOutboxStore
+internal sealed class OutboxStore(
+    ApplicationDbContext dbContext,
+    ILogger<OutboxStore> logger,
+    TimeProvider? timeProvider = null) : IOutboxStore
 {
+    private readonly TimeProvider _timeProvider = timeProvider ?? TimeProvider.System;
     private static readonly JsonSerializerOptions _jsonOptions = new()
     {
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase
@@ -26,7 +30,7 @@ internal sealed class OutboxStore(ApplicationDbContext dbContext, ILogger<Outbox
             Id = Guid.NewGuid(),
             Type = type,
             Payload = JsonSerializer.Serialize(payload, payload.GetType(), _jsonOptions),
-            OccurredAt = DateTimeOffset.UtcNow,
+            OccurredAt = _timeProvider.GetUtcNow(),
             Status = OutboxMessageStatus.PENDING,
             AttemptCount = 0
         };
@@ -40,7 +44,7 @@ internal sealed class OutboxStore(ApplicationDbContext dbContext, ILogger<Outbox
         TimeSpan lease,
         CancellationToken cancellationToken = default)
     {
-        DateTimeOffset now = DateTimeOffset.UtcNow;
+        DateTimeOffset now = _timeProvider.GetUtcNow();
         DateTimeOffset leaseUntil = now.Add(lease);
         var lockToken = Guid.NewGuid();
 
@@ -88,7 +92,7 @@ internal sealed class OutboxStore(ApplicationDbContext dbContext, ILogger<Outbox
 
     public async Task<bool> MarkProcessed(Guid id, Guid lockToken, CancellationToken cancellationToken = default)
     {
-        DateTimeOffset now = DateTimeOffset.UtcNow;
+        DateTimeOffset now = _timeProvider.GetUtcNow();
         var updated = await dbContext.OutboxMessages
             .Where(m => m.Id == id && m.LockToken == lockToken && m.Status == OutboxMessageStatus.PENDING && m.ProcessedAt == null)
             .ExecuteUpdateAsync(
@@ -109,7 +113,7 @@ internal sealed class OutboxStore(ApplicationDbContext dbContext, ILogger<Outbox
         CancellationToken cancellationToken = default)
     {
         ArgumentOutOfRangeException.ThrowIfLessThanOrEqual(lease, TimeSpan.Zero);
-        DateTimeOffset now = DateTimeOffset.UtcNow;
+        DateTimeOffset now = _timeProvider.GetUtcNow();
         var updated = await dbContext.OutboxMessages
             .Where(m =>
                 m.Id == id
@@ -151,7 +155,7 @@ internal sealed class OutboxStore(ApplicationDbContext dbContext, ILogger<Outbox
     {
         var boundedReason = reason.Length > 2000 ? reason[..2000] : reason;
         var error = "DEAD_LETTER: " + (reason.Length > 1980 ? reason[..1980] : reason);
-        DateTimeOffset now = DateTimeOffset.UtcNow;
+        DateTimeOffset now = _timeProvider.GetUtcNow();
 
         var updated = await dbContext.OutboxMessages
             .Where(m => m.Id == id && m.LockToken == lockToken && m.Status == OutboxMessageStatus.PENDING && m.ProcessedAt == null)
@@ -219,7 +223,7 @@ internal sealed class OutboxStore(ApplicationDbContext dbContext, ILogger<Outbox
             return (OutboxReplayOutcome.NOT_DEAD_LETTERED, null);
         }
 
-        DateTimeOffset now = DateTimeOffset.UtcNow;
+        DateTimeOffset now = _timeProvider.GetUtcNow();
         var updated = await dbContext.OutboxMessages
             .Where(m => m.Id == id && m.Status == OutboxMessageStatus.DEAD_LETTERED)
             .ExecuteUpdateAsync(

@@ -15,7 +15,8 @@ namespace AssetBlock.Application.UseCases.SellerAnalytics.ExportSellerAnalyticsS
 internal sealed class ExportSellerAnalyticsSalesCommandHandler(
     IAuditWriter auditWriter,
     ILogger<ExportSellerAnalyticsSalesCommandHandler> logger,
-    TimeSpan? auditTimeout = null)
+    TimeSpan? auditTimeout = null,
+    TimeProvider? timeProvider = null)
     : IRequestHandler<ExportSellerAnalyticsSalesCommand, Result<int>>
 {
     private static readonly UTF8Encoding _utf8NoBom = new(encoderShouldEmitUTF8Identifier: false);
@@ -69,7 +70,7 @@ internal sealed class ExportSellerAnalyticsSalesCommandHandler(
         using var auditCts = new CancellationTokenSource(_auditTimeout);
         try
         {
-            DateTimeOffset generatedAt = DateTimeOffset.UtcNow;
+            DateTimeOffset generatedAt = (timeProvider ?? TimeProvider.System).GetUtcNow();
             await auditWriter.WriteBestEffort(
                 new AuditEvent(
                     AuditActions.SELLER_ANALYTICS_EXPORTED,
