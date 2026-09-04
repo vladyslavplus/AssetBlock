@@ -6,6 +6,7 @@ using AssetBlock.Domain.Core.Dto.Email;
 using AssetBlock.Domain.Core.Entities;
 using AssetBlock.Domain.Core.Enums;
 using AssetBlock.Domain.Core.Primitives.AppSettingsOptions;
+using AssetBlock.Infrastructure.Observability;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
@@ -58,6 +59,7 @@ internal sealed class EmailActionDispatchOutboxHandler(
             || action.ExpiresAt <= DateTimeOffset.UtcNow
             || !MatchesPurpose(payload.TemplateKind, action.Purpose))
         {
+            AssetBlockDiagnostics.RecordEmailActionDispatchSkipped(EmailActionSkipReasons.STALE_OR_INVALID_ACTION);
             logger.LogInformation(
                 "EmailActionDispatch skipped stale action: Outbox {OutboxId}, Template {TemplateKind}, RecipientUser {RecipientUserId}",
                 message.Id,
@@ -74,6 +76,7 @@ internal sealed class EmailActionDispatchOutboxHandler(
             if (action.Purpose != EmailActionPurpose.EMAIL_CHANGE
                 || string.IsNullOrWhiteSpace(action.TargetEmail))
             {
+                AssetBlockDiagnostics.RecordEmailActionDispatchSkipped(EmailActionSkipReasons.UNAVAILABLE_RECIPIENT);
                 logger.LogInformation(
                     "EmailActionDispatch skipped missing recipient: Outbox {OutboxId}, Template {TemplateKind}, RecipientUser {RecipientUserId}",
                     message.Id,

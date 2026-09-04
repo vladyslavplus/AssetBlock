@@ -134,6 +134,7 @@ public static class DependencyInjection
         services.AddHostedService<StorageOrphanCleanupWorker>();
         services.AddHostedService<CheckoutReservationCleanupWorker>();
         services.AddHostedService<RefreshTokenRetentionWorker>();
+        services.AddHostedService<OutboxRetentionWorker>();
         services.AddHostedService<AnalyticsAggregationWorker>();
         services.AddHostedService<AssetProcessingWorker>();
         services.AddScoped<IAssetProcessingJobRegistry, AssetProcessingJobRegistry>();
@@ -150,7 +151,6 @@ public static class DependencyInjection
         services.AddScoped<IEmailDeliveryStore, EmailDeliveryStore>();
         services.AddScoped<IAssetProcessingJobStore, AssetProcessingJobStore>();
         services.AddScoped<IOutboxMessageHandler, AssetBlobDeleteOutboxHandler>();
-        services.AddScoped<IOutboxMessageHandler, OrderCompletedOutboxHandler>();
         services.AddScoped<IOutboxMessageHandler, EmailDispatchOutboxHandler>();
         services.AddScoped<IOutboxMessageHandler, EmailActionDispatchOutboxHandler>();
         services.AddScoped<IEmailSender, SmtpEmailSender>();

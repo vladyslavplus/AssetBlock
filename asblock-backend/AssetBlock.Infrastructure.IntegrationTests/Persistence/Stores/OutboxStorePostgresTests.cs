@@ -28,7 +28,7 @@ public sealed class OutboxStorePostgresTests(PostgresFixture fixture)
         OutboxStore seedStore = CreateStore(seedDb);
         for (var i = 0; i < 20; i++)
         {
-            await seedStore.Enqueue(OutboxMessageTypes.ORDER_COMPLETED, new { i }, CancellationToken.None);
+            await seedStore.Enqueue(OutboxMessageTypes.NOTIFICATION_DISPATCH, new { i }, CancellationToken.None);
         }
 
         await using ApplicationDbContext dbA = fixture.CreateDbContext();
@@ -394,5 +394,130 @@ public sealed class OutboxStorePostgresTests(PostgresFixture fixture)
 
         IReadOnlyList<OutboxMessage> emptyClaimBatch = await CreateStore(verifyAfterRollback).ClaimPendingBatch(10, TimeSpan.FromMinutes(5));
         emptyClaimBatch.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task CleanupProcessed_ShouldDeleteOldProcessedInBatchesAndRetainRecentAndNonProcessedStates()
+    {
+        await using ApplicationDbContext db = await fixture.CreateCleanDbContext();
+        OutboxStore store = CreateStore(db);
+
+        DateTimeOffset now = DateTimeOffset.UtcNow;
+        DateTimeOffset cutoff = now.AddDays(-7);
+
+        // 1. Old processed rows (older than cutoff) - should be deleted
+        var oldProcessed1 = new OutboxMessage
+        {
+            Id = Guid.NewGuid(),
+            Type = OutboxMessageTypes.ASSET_BLOB_DELETE,
+            Payload = "{}",
+            Status = OutboxMessageStatus.PROCESSED,
+            ProcessedAt = cutoff.AddDays(-2),
+            OccurredAt = cutoff.AddDays(-2)
+        };
+        var oldProcessed2 = new OutboxMessage
+        {
+            Id = Guid.NewGuid(),
+            Type = OutboxMessageTypes.ASSET_BLOB_DELETE,
+            Payload = "{}",
+            Status = OutboxMessageStatus.PROCESSED,
+            ProcessedAt = cutoff.AddDays(-1),
+            OccurredAt = cutoff.AddDays(-1)
+        };
+        var oldProcessed3 = new OutboxMessage
+        {
+            Id = Guid.NewGuid(),
+            Type = OutboxMessageTypes.ASSET_BLOB_DELETE,
+            Payload = "{}",
+            Status = OutboxMessageStatus.PROCESSED,
+            ProcessedAt = cutoff.AddHours(-1),
+            OccurredAt = cutoff.AddHours(-1)
+        };
+
+        // 2. Recent processed row (newer than cutoff) - should be retained
+        var recentProcessed = new OutboxMessage
+        {
+            Id = Guid.NewGuid(),
+            Type = OutboxMessageTypes.ASSET_BLOB_DELETE,
+            Payload = "{}",
+            Status = OutboxMessageStatus.PROCESSED,
+            ProcessedAt = cutoff.AddDays(1),
+            OccurredAt = cutoff.AddDays(1)
+        };
+
+        // 3. Pending row - should be retained
+        var pending = new OutboxMessage
+        {
+            Id = Guid.NewGuid(),
+            Type = OutboxMessageTypes.ASSET_BLOB_DELETE,
+            Payload = "{}",
+            Status = OutboxMessageStatus.PENDING,
+            OccurredAt = cutoff.AddDays(-5)
+        };
+
+        // 4. Leased row - should be retained
+        var leased = new OutboxMessage
+        {
+            Id = Guid.NewGuid(),
+            Type = OutboxMessageTypes.ASSET_BLOB_DELETE,
+            Payload = "{}",
+            Status = OutboxMessageStatus.PENDING,
+            LockedUntil = now.AddMinutes(5),
+            LockToken = Guid.NewGuid(),
+            OccurredAt = cutoff.AddDays(-5)
+        };
+
+        // 5. Retryable row - should be retained
+        var retryable = new OutboxMessage
+        {
+            Id = Guid.NewGuid(),
+            Type = OutboxMessageTypes.ASSET_BLOB_DELETE,
+            Payload = "{}",
+            Status = OutboxMessageStatus.PENDING,
+            NextAttemptAt = now.AddMinutes(10),
+            AttemptCount = 2,
+            OccurredAt = cutoff.AddDays(-5)
+        };
+
+        // 6. Dead lettered row - should be retained
+        var deadLettered = new OutboxMessage
+        {
+            Id = Guid.NewGuid(),
+            Type = OutboxMessageTypes.ASSET_BLOB_DELETE,
+            Payload = "{}",
+            Status = OutboxMessageStatus.DEAD_LETTERED,
+            DeadLetteredAt = cutoff.AddDays(-5),
+            OccurredAt = cutoff.AddDays(-5)
+        };
+
+        db.OutboxMessages.AddRange(oldProcessed1, oldProcessed2, oldProcessed3, recentProcessed, pending, leased, retryable, deadLettered);
+        await db.SaveChangesAsync();
+
+        // Batch 1: batch size 2 -> should delete 2 of the 3 old processed rows
+        var deletedBatch1 = await store.CleanupProcessed(cutoff, batchSize: 2);
+        deletedBatch1.Should().Be(2);
+
+        // Batch 2: batch size 2 -> should delete the remaining 1 old processed row
+        var deletedBatch2 = await store.CleanupProcessed(cutoff, batchSize: 2);
+        deletedBatch2.Should().Be(1);
+
+        // Repeated cycle: should delete 0 and be safe
+        var deletedBatch3 = await store.CleanupProcessed(cutoff, batchSize: 2);
+        deletedBatch3.Should().Be(0);
+
+        // Verify remaining messages in database
+        await using ApplicationDbContext verifyDb = fixture.CreateDbContext();
+        List<Guid> remainingIds = await verifyDb.OutboxMessages.AsNoTracking().Select(m => m.Id).ToListAsync();
+
+        remainingIds.Should().NotContain(oldProcessed1.Id);
+        remainingIds.Should().NotContain(oldProcessed2.Id);
+        remainingIds.Should().NotContain(oldProcessed3.Id);
+
+        remainingIds.Should().Contain(recentProcessed.Id);
+        remainingIds.Should().Contain(pending.Id);
+        remainingIds.Should().Contain(leased.Id);
+        remainingIds.Should().Contain(retryable.Id);
+        remainingIds.Should().Contain(deadLettered.Id);
+        remainingIds.Count.Should().Be(5);
     }
 }

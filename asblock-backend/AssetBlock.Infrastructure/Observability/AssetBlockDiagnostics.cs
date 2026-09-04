@@ -106,6 +106,16 @@ public static class AssetBlockDiagnostics
         _emailDispatchDuration.Record(elapsed.TotalSeconds, in tags);
     }
 
+    private static readonly Counter<long> _emailActionDispatchSkipped = _meter.CreateCounter<long>(
+        "assetblock.email_action.dispatch.skipped",
+        description: "Count of skipped email action dispatch messages by reason");
+
+    public static void RecordEmailActionDispatchSkipped(string reason)
+    {
+        var tags = new TagList { { "email_action.skip_reason", reason } };
+        _emailActionDispatchSkipped.Add(1, in tags);
+    }
+
     // --- Asset Processing Jobs ---
     private static readonly UpDownCounter<long> _activeJobsCount = _meter.CreateUpDownCounter<long>(
         "assetblock.jobs.active",
@@ -327,4 +337,10 @@ public static class JobOutcomeNames
     public const string INVALID_RESULT = "INVALID_RESULT";
     public const string LEASE_LOST = "LEASE_LOST";
     public const string SHUTDOWN = "SHUTDOWN";
+}
+
+public static class EmailActionSkipReasons
+{
+    public const string STALE_OR_INVALID_ACTION = "stale_or_invalid_action";
+    public const string UNAVAILABLE_RECIPIENT = "unavailable_recipient";
 }

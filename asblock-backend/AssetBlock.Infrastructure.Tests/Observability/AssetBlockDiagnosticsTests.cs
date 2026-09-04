@@ -316,6 +316,18 @@ public sealed class AssetBlockDiagnosticsTests : IDisposable
         GetMeasurements("assetblock.ai.input_tokens").Should().BeEmpty();
     }
 
+    [Fact]
+    public void RecordEmailActionDispatchSkipped_ShouldIncrementCounterWithSafeReasonTag()
+    {
+        AssetBlockDiagnostics.RecordEmailActionDispatchSkipped(EmailActionSkipReasons.STALE_OR_INVALID_ACTION);
+
+        var measurements = GetMeasurements("assetblock.email_action.dispatch.skipped").ToList();
+        measurements.Should().HaveCount(1);
+        measurements[0].Measurement.Should().Be(1L);
+        measurements[0].Tags.Should().ContainSingle();
+        measurements[0].Tags["email_action.skip_reason"].Should().Be("stale_or_invalid_action");
+    }
+
     private sealed class ControllableTimeProvider(DateTimeOffset utcNow) : TimeProvider
     {
         private DateTimeOffset _utcNow = utcNow;

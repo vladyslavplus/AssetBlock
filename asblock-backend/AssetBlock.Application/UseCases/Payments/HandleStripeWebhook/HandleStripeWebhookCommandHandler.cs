@@ -119,7 +119,7 @@ internal sealed class CheckoutCompletionOrchestrator(
             throw new PaymentWebhookMismatchException("Paid Stripe checkout references an empty checkout intent.");
         }
 
-        foreach (CheckoutIntentItem? item in items)
+        foreach (CheckoutIntentItem item in items)
         {
             AssetVersion? assetVersion = await assetStore.GetVersion(item.AssetId, item.AssetVersionId, cancellationToken);
             if (assetVersion is null)
@@ -169,7 +169,7 @@ internal sealed class CheckoutCompletionOrchestrator(
 
                 var lines = new List<OrderLine>(items.Count);
                 var purchases = new List<Purchase>(items.Count);
-                foreach (CheckoutIntentItem? item in items)
+                foreach (CheckoutIntentItem item in items)
                 {
                     var lineId = Guid.NewGuid();
                     lines.Add(new OrderLine
@@ -217,11 +217,6 @@ internal sealed class CheckoutCompletionOrchestrator(
                 };
 
                 createdOrder = await orderStore.CreateWithLinesAndPurchases(order, lines, purchases, ct);
-
-                await outboxStore.Enqueue(
-                    OutboxMessageTypes.ORDER_COMPLETED,
-                    ToPayload(createdOrder, sellerId),
-                    ct);
 
                 // One buyer notification per order (plan: not per-item, not dual ORDER_COMPLETED+ORDER_READY).
                 await EnqueueNotification(
@@ -299,13 +294,9 @@ internal sealed class CheckoutCompletionOrchestrator(
         {
             Order? existingAfterRace = await orderStore.GetByStripeSessionId(
                 verified.StripeSessionId,
+                cancellationToken) ?? await orderStore.GetByCheckoutIntentId(
+                verified.CheckoutIntentId,
                 cancellationToken);
-            if (existingAfterRace is null)
-            {
-                existingAfterRace = await orderStore.GetByCheckoutIntentId(
-                    verified.CheckoutIntentId,
-                    cancellationToken);
-            }
 
             if (existingAfterRace is null)
             {
@@ -326,13 +317,9 @@ internal sealed class CheckoutCompletionOrchestrator(
 
         Order? existingAfterDuplicate = await orderStore.GetByStripeSessionId(
             verified.StripeSessionId,
+            cancellationToken) ?? await orderStore.GetByCheckoutIntentId(
+            verified.CheckoutIntentId,
             cancellationToken);
-        if (existingAfterDuplicate is null)
-        {
-            existingAfterDuplicate = await orderStore.GetByCheckoutIntentId(
-                verified.CheckoutIntentId,
-                cancellationToken);
-        }
 
         if (existingAfterDuplicate is not null)
         {

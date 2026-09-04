@@ -306,19 +306,83 @@ export function interpretNpmAuditResult({ status, stdout, stderr, cwd }) {
   return findings;
 }
 
-export function listNpmVulnerabilities() {
+export function isTransientAuditError(error) {
+  if (!error) {
+    return false;
+  }
+  const msg = (error.message ?? String(error)).toLowerCase();
+  return (
+    msg.includes("timeout") ||
+    msg.includes("aborted") ||
+    msg.includes("etimedout") ||
+    msg.includes("econnreset") ||
+    msg.includes("econnrefused") ||
+    msg.includes("err_pnpm_meta_fetch_fail") ||
+    msg.includes("err_pnpm_fetch_fail") ||
+    msg.includes("network error") ||
+    msg.includes("registry unavailable") ||
+    msg.includes("503") ||
+    msg.includes("502") ||
+    msg.includes("504") ||
+    msg.includes("code: 23") ||
+    msg.includes("failed: 23:")
+  );
+}
+
+function sleepSync(ms) {
+  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
+}
+
+export function listNpmVulnerabilities({
+  maxAttempts = 3,
+  allowRegistryFailures = true,
+} = {}) {
   // Audit full graphs (prod + dev) for every pnpm root in the monorepo.
   const findings = [];
   const seen = new Set();
 
   for (const cwd of NPM_PROJECT_DIRS) {
-    const result = runPnpmAllowFail(["audit", "--json"], { cwd });
-    for (const finding of interpretNpmAuditResult({
-      status: result.status ?? 1,
-      stdout: result.stdout,
-      stderr: result.stderr,
-      cwd,
-    })) {
+    let auditFindings = null;
+    let lastError = null;
+
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+      try {
+        const result = runPnpmAllowFail(["audit", "--json"], {
+          cwd,
+          env: {
+            ...process.env,
+            npm_config_fetch_timeout: "120000",
+            npm_config_fetch_retries: "4",
+          },
+        });
+        auditFindings = interpretNpmAuditResult({
+          status: result.status ?? 1,
+          stdout: result.stdout,
+          stderr: result.stderr,
+          cwd,
+        });
+        break;
+      } catch (error) {
+        lastError = error;
+        if (isTransientAuditError(error) && attempt < maxAttempts) {
+          sleepSync(attempt * 1500);
+          continue;
+        }
+        break;
+      }
+    }
+
+    if (auditFindings === null) {
+      if (allowRegistryFailures && isTransientAuditError(lastError)) {
+        console.warn(
+          `[WARN] pnpm audit registry timed out or was unavailable in ${cwd}: ${lastError?.message ?? lastError}. Proceeding without npm audit findings for this root.`,
+        );
+        continue;
+      }
+      throw lastError;
+    }
+
+    for (const finding of auditFindings) {
       const key = [
         finding.name,
         finding.version,

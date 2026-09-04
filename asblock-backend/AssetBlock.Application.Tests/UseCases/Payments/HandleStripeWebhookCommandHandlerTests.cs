@@ -177,7 +177,7 @@ public class HandleStripeWebhookCommandHandlerTests
         result.Value.SellerId.Should().Be(sellerId);
 
         await _outboxStoreMock.Received().Enqueue(
-            OutboxMessageTypes.ORDER_COMPLETED,
+            OutboxMessageTypes.NOTIFICATION_DISPATCH,
             Arg.Any<object>(),
             Arg.Any<CancellationToken>());
         await _auditWriterMock.Received(1).Write(
@@ -273,10 +273,6 @@ public class HandleStripeWebhookCommandHandlerTests
         Result<OrderCompletedPayload?> result = await _handler.Handle(command, CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
-        await _outboxStoreMock.Received(1).Enqueue(
-            OutboxMessageTypes.ORDER_COMPLETED,
-            Arg.Any<object>(),
-            Arg.Any<CancellationToken>());
         await _outboxStoreMock.Received(2).Enqueue(
             OutboxMessageTypes.NOTIFICATION_DISPATCH,
             Arg.Any<object>(),
@@ -585,7 +581,7 @@ public class HandleStripeWebhookCommandHandlerTests
         Result<OrderCompletedPayload?> result = await _handler.Handle(command, CancellationToken.None);
 
         result.IsSuccess.Should().BeFalse();
-        result.Status.Should().Be(Ardalis.Result.ResultStatus.Invalid);
+        result.Status.Should().Be(ResultStatus.Invalid);
         result.ValidationErrors.Should().Contain(e => e.Identifier == ErrorCodes.ERR_STRIPE_WEBHOOK_INVALID);
         await _auditWriterMock.DidNotReceiveWithAnyArgs().Write(Arg.Any<AuditEvent>(), Arg.Any<CancellationToken>());
         await _auditWriterMock.DidNotReceiveWithAnyArgs().WriteBestEffort(Arg.Any<AuditEvent>(), Arg.Any<CancellationToken>());

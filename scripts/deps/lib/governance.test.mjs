@@ -3,7 +3,12 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
-import { interpretNpmAuditResult, parseNpmAuditJson, resolveCanonicalNpmMetadata } from "./npm.mjs";
+import {
+  interpretNpmAuditResult,
+  isTransientAuditError,
+  parseNpmAuditJson,
+  resolveCanonicalNpmMetadata,
+} from "./npm.mjs";
 import { evaluatePackages, filterSevereVulnerabilities } from "./notices.mjs";
 import { validateExceptionEntry } from "./policy.mjs";
 import { listPackagesFromPnpmLock, listPackagesFromPnpmLocks } from "./pnpm-lock.mjs";
@@ -125,6 +130,28 @@ test("interpretNpmAuditResult_WhenNonZeroRegistryErrorJson_ShouldThrowInfrastruc
       }),
     /ERR_PNPM_META_FETCH_FAIL/,
   );
+});
+
+test("isTransientAuditError_WhenTimeoutOrRegistryFailure_ShouldReturnTrue", () => {
+  assert.equal(
+    isTransientAuditError(new Error("pnpm audit failed: 23: The operation was aborted due to timeout")),
+    true,
+  );
+  assert.equal(
+    isTransientAuditError(new Error("pnpm audit failed: ERR_PNPM_META_FETCH_FAIL: registry unavailable")),
+    true,
+  );
+  assert.equal(isTransientAuditError(new Error("ETIMEDOUT: connection timed out")), true);
+  assert.equal(isTransientAuditError(new Error("fetch failed: 503 Service Unavailable")), true);
+});
+
+test("isTransientAuditError_WhenPermanentError_ShouldReturnFalse", () => {
+  assert.equal(isTransientAuditError(new Error("SyntaxError: Unexpected token")), false);
+  assert.equal(
+    isTransientAuditError(new Error("pnpm audit exited with status 1 without vulnerability findings")),
+    false,
+  );
+  assert.equal(isTransientAuditError(null), false);
 });
 
 test("validateExceptionEntry_WhenWildcardWithoutFlag_ShouldFail", () => {

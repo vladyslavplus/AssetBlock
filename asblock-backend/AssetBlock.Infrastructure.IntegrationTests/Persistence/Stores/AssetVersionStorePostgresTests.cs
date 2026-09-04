@@ -404,8 +404,6 @@ public sealed class AssetVersionStorePostgresTests(PostgresFixture fixture)
         Result<OrderCompletedPayload?> second = await handler.Handle(new HandleStripeWebhookCommand("payload", "sig"), CancellationToken.None);
         second.IsSuccess.Should().BeTrue();
         (await verify.Purchases.CountAsync(p => p.AssetId == asset.Id)).Should().Be(1);
-        (await verify.OutboxMessages.CountAsync(m => m.Type == OutboxMessageTypes.ORDER_COMPLETED))
-            .Should().Be(1);
     }
 
     [Fact]
@@ -463,7 +461,6 @@ public sealed class AssetVersionStorePostgresTests(PostgresFixture fixture)
         CheckoutIntent refreshedIntent = await verify.CheckoutIntents.AsNoTracking().SingleAsync(i => i.Id == intentId);
         refreshedIntent.Status.Should().Be(CheckoutIntentStatus.COMPLETED);
         (await verify.AuditLogs.CountAsync(a => a.ResourceId == order.Id.ToString())).Should().Be(1);
-        (await verify.OutboxMessages.CountAsync(m => m.Type == OutboxMessageTypes.ORDER_COMPLETED)).Should().Be(1);
         // Buyer ORDER_READY + seller ASSET_SOLD (one notification set per order).
         (await verify.OutboxMessages.CountAsync(m => m.Type == OutboxMessageTypes.NOTIFICATION_DISPATCH)).Should().Be(2);
         (await verify.OutboxMessages.CountAsync(m => m.Type == OutboxMessageTypes.EMAIL_DISPATCH)).Should().Be(2);
@@ -536,7 +533,6 @@ public sealed class AssetVersionStorePostgresTests(PostgresFixture fixture)
         await using ApplicationDbContext verify = fixture.CreateDbContext();
         (await verify.Orders.CountAsync(o => o.StripeSessionId == sessionId)).Should().Be(1);
         (await verify.Purchases.CountAsync(p => p.AssetId == asset.Id)).Should().Be(1);
-        (await verify.OutboxMessages.CountAsync(m => m.Type == OutboxMessageTypes.ORDER_COMPLETED)).Should().Be(1);
         (await verify.OutboxMessages.CountAsync(m => m.Type == OutboxMessageTypes.NOTIFICATION_DISPATCH)).Should().Be(2);
         (await verify.OutboxMessages.CountAsync(m => m.Type == OutboxMessageTypes.EMAIL_DISPATCH)).Should().Be(2);
     }

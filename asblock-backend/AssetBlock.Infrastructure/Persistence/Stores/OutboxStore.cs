@@ -245,4 +245,44 @@ internal sealed class OutboxStore(ApplicationDbContext dbContext, ILogger<Outbox
         logger.LogInformation("Replayed outbox dead-letter message {OutboxId}, ReplayCount {ReplayCount}", id, response.ReplayCount);
         return (OutboxReplayOutcome.SUCCESS, response);
     }
+
+    public async Task<int> CleanupProcessed(
+        DateTimeOffset cutoff,
+        int batchSize,
+        CancellationToken cancellationToken = default)
+    {
+        if (batchSize <= 0)
+        {
+            return 0;
+        }
+
+        List<Guid> ids = await dbContext.OutboxMessages
+            .AsNoTracking()
+            .Where(m => m.Status == OutboxMessageStatus.PROCESSED
+                        && m.ProcessedAt != null
+                        && m.ProcessedAt <= cutoff)
+            .OrderBy(m => m.ProcessedAt)
+            .Select(m => m.Id)
+            .Take(batchSize)
+            .ToListAsync(cancellationToken);
+
+        if (ids.Count == 0)
+        {
+            return 0;
+        }
+
+        var deleted = await dbContext.OutboxMessages
+            .Where(m => ids.Contains(m.Id)
+                        && m.Status == OutboxMessageStatus.PROCESSED
+                        && m.ProcessedAt != null
+                        && m.ProcessedAt <= cutoff)
+            .ExecuteDeleteAsync(cancellationToken);
+
+        if (deleted > 0)
+        {
+            logger.LogInformation("Cleaned up {DeletedCount} processed outbox messages older than {Cutoff}", deleted, cutoff);
+        }
+
+        return deleted;
+    }
 }

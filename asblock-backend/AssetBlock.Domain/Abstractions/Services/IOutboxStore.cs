@@ -49,7 +49,6 @@ public interface IOutboxStore
         Guid lockToken,
         string reason,
         CancellationToken cancellationToken = default);
-
     /// <summary>Gets a paged list of dead-lettered outbox messages without serialized payloads.</summary>
     Task<PagedResult<DeadLetterOutboxListItemDto>> GetDeadLetters(
         GetDeadLettersRequest request,
@@ -61,5 +60,15 @@ public interface IOutboxStore
     /// </summary>
     Task<(OutboxReplayOutcome Outcome, ReplayDeadLetterResponseDto? Response)> ReplayDeadLetter(
         Guid id,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Deletes up to <paramref name="batchSize"/> processed outbox rows older than <paramref name="cutoff"/>.
+    /// Deletes only messages with Status == PROCESSED and non-null ProcessedAt &lt;= cutoff.
+    /// Never deletes pending, leased, retryable, or dead-lettered messages.
+    /// </summary>
+    Task<int> CleanupProcessed(
+        DateTimeOffset cutoff,
+        int batchSize,
         CancellationToken cancellationToken = default);
 }

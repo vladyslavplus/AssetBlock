@@ -1,3 +1,4 @@
+using System.Diagnostics.Metrics;
 using System.Text.Json;
 using AssetBlock.Domain.Abstractions.Services;
 using AssetBlock.Domain.Core.Constants;
@@ -5,7 +6,9 @@ using AssetBlock.Domain.Core.Dto.Email;
 using AssetBlock.Domain.Core.Entities;
 using AssetBlock.Domain.Core.Enums;
 using AssetBlock.Domain.Core.Primitives.AppSettingsOptions;
+using AssetBlock.Infrastructure.Observability;
 using AssetBlock.Infrastructure.Outbox;
+using AssetBlock.Infrastructure.Tests.Observability;
 using AwesomeAssertions.Specialized;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
@@ -14,6 +17,7 @@ using NSubstitute.ExceptionExtensions;
 
 namespace AssetBlock.Infrastructure.Tests.Outbox;
 
+[Collection(AssetBlockDiagnosticsCollection.NAME)]
 public sealed class EmailActionDispatchOutboxHandlerTests
 {
     private static readonly JsonSerializerOptions _json = new() { PropertyNamingPolicy = JsonNamingPolicy.CamelCase };
@@ -200,7 +204,7 @@ public sealed class EmailActionDispatchOutboxHandlerTests
     public async Task Handle_WhenSenderSucceedsAndCallerTokenCancels_ShouldStillConfirmWithBoundedTokenAndSucceed()
     {
         (EmailActionDispatchPayload? payload, OutboxMessage? message) = BuildValidPayload();
-        var recipientEmail = "verify@example.test";
+        const string recipientEmail = "verify@example.test";
         EmailAction action = BuildAction(payload, targetEmail: recipientEmail);
         var recipient = new EmailRecipient(payload.RecipientUserId, recipientEmail);
         var composedEmail = new EmailMessage(recipientEmail, payload.RecipientUserId, "Subject", "text", "<p>html</p>", EmailTemplateKind.EMAIL_VERIFICATION, "msgid@mail.localhost");
@@ -262,7 +266,7 @@ public sealed class EmailActionDispatchOutboxHandlerTests
     }
 
     [Fact]
-    public async Task Handle_WhenActionVersionMismatch_ShouldSkipWithoutSending()
+    public async Task Handle_WhenActionVersionMismatch_ShouldRecordSkippedMetricAndSkipWithoutSending()
     {
         (EmailActionDispatchPayload? payload, OutboxMessage? message) = BuildValidPayload();
         EmailAction action = BuildAction(payload, targetEmail: "verify@example.test");
@@ -270,9 +274,71 @@ public sealed class EmailActionDispatchOutboxHandlerTests
 
         _emailActionStore.GetById(payload.EmailActionId, Arg.Any<CancellationToken>()).Returns(action);
 
+        using var listener = new MeterListener();
+        var recorded = new List<(Instrument Instrument, object? Measurement, KeyValuePair<string, object?>[] Tags)>();
+        listener.InstrumentPublished = (instrument, l) =>
+        {
+            if (instrument.Meter.Name == AssetBlockDiagnostics.METER_NAME)
+            {
+                l.EnableMeasurementEvents(instrument);
+            }
+        };
+        listener.SetMeasurementEventCallback<long>((instrument, measurement, tags, _) =>
+        {
+            if (instrument.Name == "assetblock.email_action.dispatch.skipped")
+            {
+                recorded.Add((instrument, measurement, tags.ToArray()));
+            }
+        });
+        listener.Start();
+
         await _sut.Handle(message, CancellationToken.None);
 
         await _emailSender.DidNotReceiveWithAnyArgs().Send(Arg.Any<EmailMessage>(), Arg.Any<CancellationToken>());
+
+        recorded.Should().HaveCount(1);
+        recorded[0].Measurement.Should().Be(1L);
+        Dictionary<string, object?> tagDict = recorded[0].Tags.ToDictionary(t => t.Key, t => t.Value);
+        tagDict.Should().ContainSingle();
+        tagDict["email_action.skip_reason"].Should().Be(EmailActionSkipReasons.STALE_OR_INVALID_ACTION);
+    }
+
+    [Fact]
+    public async Task Handle_WhenRecipientMissing_ShouldRecordSkippedMetricAndSkipWithoutSending()
+    {
+        (EmailActionDispatchPayload? payload, OutboxMessage? message) = BuildValidPayload();
+        EmailAction action = BuildAction(payload, targetEmail: "verify@example.test");
+
+        _emailActionStore.GetById(payload.EmailActionId, Arg.Any<CancellationToken>()).Returns(action);
+        _userStore.GetEmailRecipientById(payload.RecipientUserId, Arg.Any<CancellationToken>()).Returns((EmailRecipient?)null);
+
+        using var listener = new MeterListener();
+        var recorded = new List<(Instrument Instrument, object? Measurement, KeyValuePair<string, object?>[] Tags)>();
+        listener.InstrumentPublished = (instrument, l) =>
+        {
+            if (instrument.Meter.Name == AssetBlockDiagnostics.METER_NAME)
+            {
+                l.EnableMeasurementEvents(instrument);
+            }
+        };
+        listener.SetMeasurementEventCallback<long>((instrument, measurement, tags, _) =>
+        {
+            if (instrument.Name == "assetblock.email_action.dispatch.skipped")
+            {
+                recorded.Add((instrument, measurement, tags.ToArray()));
+            }
+        });
+        listener.Start();
+
+        await _sut.Handle(message, CancellationToken.None);
+
+        await _emailSender.DidNotReceiveWithAnyArgs().Send(Arg.Any<EmailMessage>(), Arg.Any<CancellationToken>());
+
+        recorded.Should().HaveCount(1);
+        recorded[0].Measurement.Should().Be(1L);
+        Dictionary<string, object?> tagDict = recorded[0].Tags.ToDictionary(t => t.Key, t => t.Value);
+        tagDict.Should().ContainSingle();
+        tagDict["email_action.skip_reason"].Should().Be(EmailActionSkipReasons.UNAVAILABLE_RECIPIENT);
     }
 
     [Fact]
