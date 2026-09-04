@@ -13,14 +13,15 @@ internal sealed class ArchiveCollectionCommandHandler(
     ICollectionStore collectionStore,
     IUnitOfWork unitOfWork,
     IAuditWriter auditWriter,
-    ILogger<ArchiveCollectionCommandHandler> logger)
+    ILogger<ArchiveCollectionCommandHandler> logger,
+    TimeProvider? timeProvider = null)
     : IRequestHandler<ArchiveCollectionCommand, Result>
 {
     public async Task<Result> Handle(ArchiveCollectionCommand request, CancellationToken cancellationToken)
     {
         Result? outcome = null;
         var archived = false;
-        DateTimeOffset now = DateTimeOffset.UtcNow;
+        DateTimeOffset now = (timeProvider ?? TimeProvider.System).GetUtcNow();
         try
         {
             await unitOfWork.ExecuteInTransaction(async ct =>

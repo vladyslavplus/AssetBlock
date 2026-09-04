@@ -13,7 +13,8 @@ namespace AssetBlock.Application.UseCases.SellerAnalytics.GetSellerAnalyticsAsse
 internal sealed class GetSellerAnalyticsAssetDetailQueryHandler(
     ISellerAnalyticsStore analyticsStore,
     ITypedCache cache,
-    ILogger<GetSellerAnalyticsAssetDetailQueryHandler> logger)
+    ILogger<GetSellerAnalyticsAssetDetailQueryHandler> logger,
+    TimeProvider? timeProvider = null)
     : IRequestHandler<GetSellerAnalyticsAssetDetailQuery, Result<AnalyticsAssetDetailDto>>
 {
     private static readonly TimeSpan _cacheExpiration =
@@ -23,6 +24,7 @@ internal sealed class GetSellerAnalyticsAssetDetailQueryHandler(
         GetSellerAnalyticsAssetDetailQuery request,
         CancellationToken cancellationToken)
     {
+        DateTimeOffset now = (timeProvider ?? TimeProvider.System).GetUtcNow();
         var cacheKey = CacheKeys.SellerAnalyticsAssetDetail(
             request.SellerId,
             request.AssetId,
@@ -64,7 +66,7 @@ internal sealed class GetSellerAnalyticsAssetDetailQueryHandler(
             request.From,
             request.To,
             "UTC",
-            DateTimeOffset.UtcNow,
+            now,
             AnalyticsConstants.CURRENCY,
             granularity,
             snapshot.EngagementAvailableFrom,

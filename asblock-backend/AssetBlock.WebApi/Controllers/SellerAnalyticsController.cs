@@ -24,8 +24,11 @@ namespace AssetBlock.WebApi.Controllers;
 /// </summary>
 [Route(ApiRoutes.SellerAnalytics.BASE)]
 [Authorize(Policy = AuthorizationPolicies.VERIFIED_EMAIL)]
-public sealed class SellerAnalyticsController(ISender sender) : ApiControllerBase(sender)
+public sealed class SellerAnalyticsController(
+    ISender sender,
+    TimeProvider? timeProvider = null) : ApiControllerBase(sender)
 {
+    private readonly TimeProvider _timeProvider = timeProvider ?? TimeProvider.System;
     /// <summary>
     /// Overview KPIs, series chart, and top-5 assets/bundles for the seller.
     /// </summary>
@@ -234,9 +237,9 @@ public sealed class SellerAnalyticsController(ISender sender) : ApiControllerBas
             Sender);
     }
 
-    private static (DateOnly from, DateOnly to) ResolveDateRange(DateOnly? from, DateOnly? to)
+    private (DateOnly from, DateOnly to) ResolveDateRange(DateOnly? from, DateOnly? to)
     {
-        var utcToday = DateOnly.FromDateTime(DateTime.UtcNow);
+        var utcToday = DateOnly.FromDateTime(_timeProvider.GetUtcNow().UtcDateTime);
         return (from ?? utcToday.AddDays(-29), to ?? utcToday.AddDays(1));
     }
 }

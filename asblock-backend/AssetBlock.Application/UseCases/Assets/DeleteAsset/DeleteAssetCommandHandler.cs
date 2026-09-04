@@ -19,7 +19,8 @@ internal sealed class DeleteAssetCommandHandler(
     IOutboxStore outboxStore,
     IAuditWriter auditWriter,
     ICacheService cache,
-    ILogger<DeleteAssetCommandHandler> logger) : IRequestHandler<DeleteAssetCommand, Result>
+    ILogger<DeleteAssetCommandHandler> logger,
+    TimeProvider? timeProvider = null) : IRequestHandler<DeleteAssetCommand, Result>
 {
     public async Task<Result> Handle(DeleteAssetCommand request, CancellationToken cancellationToken)
     {
@@ -58,7 +59,7 @@ internal sealed class DeleteAssetCommandHandler(
                     return;
                 }
 
-                DateTimeOffset now = DateTimeOffset.UtcNow;
+                DateTimeOffset now = (timeProvider ?? TimeProvider.System).GetUtcNow();
                 var hasPurchases = await purchaseStore.HasPurchasesForAsset(request.Id, ct);
                 var hasActiveCheckout = await checkoutIntentStore.HasActiveForAsset(request.Id, now, ct);
                 softDeleted = hasPurchases || hasActiveCheckout;

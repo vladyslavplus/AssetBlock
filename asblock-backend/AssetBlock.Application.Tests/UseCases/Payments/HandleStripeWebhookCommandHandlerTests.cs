@@ -65,6 +65,12 @@ public class HandleStripeWebhookCommandHandlerTests
             Smtp = new EmailSmtpOptions { Host = "localhost", Port = 1025, Security = SmtpSecurityMode.NONE, TimeoutSeconds = 30 }
         }));
 
+        var publisher = new CheckoutNotificationPublisher(
+            _outboxStoreMock,
+            composer,
+            NullLogger<CheckoutNotificationPublisher>.Instance);
+        var orderFactory = new CheckoutOrderFactory();
+
         var orchestrator = new CheckoutCompletionOrchestrator(
             _assetStoreMock,
             bundleStoreMock,
@@ -73,9 +79,9 @@ public class HandleStripeWebhookCommandHandlerTests
             _userStoreMock,
             _processedEventStoreMock,
             _unitOfWorkMock,
-            _outboxStoreMock,
             _auditWriterMock,
-            composer,
+            orderFactory,
+            publisher,
             TimeProvider.System,
             NullLogger<CheckoutCompletionOrchestrator>.Instance);
 
@@ -842,6 +848,12 @@ public class HandleStripeWebhookCommandHandlerTests
             Smtp = new EmailSmtpOptions { Host = "localhost", Port = 1025, Security = SmtpSecurityMode.NONE, TimeoutSeconds = 30 }
         }));
 
+        var publisher = new CheckoutNotificationPublisher(
+            _outboxStoreMock,
+            composer,
+            NullLogger<CheckoutNotificationPublisher>.Instance);
+        var orderFactory = new CheckoutOrderFactory();
+
         var orchestrator = new CheckoutCompletionOrchestrator(
             _assetStoreMock,
             Substitute.For<IBundleStore>(),
@@ -850,9 +862,9 @@ public class HandleStripeWebhookCommandHandlerTests
             _userStoreMock,
             _processedEventStoreMock,
             _unitOfWorkMock,
-            _outboxStoreMock,
             _auditWriterMock,
-            composer,
+            orderFactory,
+            publisher,
             timeProvider,
             NullLogger<CheckoutCompletionOrchestrator>.Instance);
 

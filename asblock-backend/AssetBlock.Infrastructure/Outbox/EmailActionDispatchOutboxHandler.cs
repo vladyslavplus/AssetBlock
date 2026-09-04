@@ -20,8 +20,10 @@ internal sealed class EmailActionDispatchOutboxHandler(
     IEmailActionLinkProtector linkProtector,
     ITransactionalEmailComposer emailComposer,
     IOptions<EmailOptions> emailOptions,
-    ILogger<EmailActionDispatchOutboxHandler> logger) : IOutboxMessageHandler
+    ILogger<EmailActionDispatchOutboxHandler> logger,
+    TimeProvider? timeProvider = null) : IOutboxMessageHandler
 {
+    private readonly TimeProvider _timeProvider = timeProvider ?? TimeProvider.System;
     private const string SAFE_TRANSPORT_FAILURE = "Email transport failed.";
     private const string CLAIM_LOST_FAILURE = "Email delivery claim was lost before confirmation.";
 
@@ -56,7 +58,7 @@ internal sealed class EmailActionDispatchOutboxHandler(
             || action.UserId != payload.RecipientUserId
             || action.Version != payload.ActionVersion
             || action.ConsumedAt is not null
-            || action.ExpiresAt <= DateTimeOffset.UtcNow
+            || action.ExpiresAt <= _timeProvider.GetUtcNow()
             || !MatchesPurpose(payload.TemplateKind, action.Purpose))
         {
             AssetBlockDiagnostics.RecordEmailActionDispatchSkipped(EmailActionSkipReasons.STALE_OR_INVALID_ACTION);
@@ -169,7 +171,7 @@ internal sealed class EmailActionDispatchOutboxHandler(
             deliveryConfirmed = await emailDeliveryStore.ConfirmDelivery(
                 message.Id,
                 claimToken!.Value,
-                DateTimeOffset.UtcNow,
+                _timeProvider.GetUtcNow(),
                 confirmCts.Token);
 
             if (!deliveryConfirmed)

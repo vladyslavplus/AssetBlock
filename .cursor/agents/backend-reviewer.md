@@ -5,7 +5,6 @@ description: >-
   check changes that include asblock-backend. Perform a detailed read-only
   correctness, security/privacy, data, concurrency, performance, and test review.
   Do not use when the review target has no backend changes.
-model: composer-2.5[fast=false]
 readonly: true
 ---
 

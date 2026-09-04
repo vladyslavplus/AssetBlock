@@ -44,7 +44,20 @@
 - Translate known PostgreSQL unique violations narrowly into business outcomes; never swallow unexpected `DbUpdateException` failures.
 - Keep transactions short. Never place Stripe, object-storage, cache network calls, SignalR delivery, or slow file work inside an open transaction.
 - For concurrent writes, enforce invariants with unique indexes, conditional updates, row locking, or explicit idempotency. Do not rely on a prior read alone when a race can produce duplicate effects.
-- Generate migrations only via `dotnet ef migrations add ...` after explicit user approval. Never hand-edit migration files, designer files, or the model snapshot.
+- Generate migrations only via `dotnet ef migrations add ...` after explicit user approval, strictly following [.agents/skills/add-migration/SKILL.md](../.agents/skills/add-migration/SKILL.md). Never hand-edit migration files, designer files, or the model snapshot.
+
+## Golden references
+
+Use these current, well-tested paths as canonical architectural examples:
+
+- **Command / Write:** `PublishAssetVersion`
+  - Handler & Validator: `AssetBlock.Application/UseCases/Assets/PublishAssetVersion/PublishAssetVersionCommandHandler.cs`, `PublishAssetVersionCommandValidator.cs`
+  - Endpoint & Mapping: `AssetBlock.WebApi/Controllers/AssetsController.cs` (`PublishVersion`)
+  - Verification: `AssetBlock.Application.Tests/UseCases/Assets/PublishAssetVersionCommandHandlerTests.cs`
+- **Read / Query:** `GetAssets`
+  - Handler & Validator: `AssetBlock.Application/UseCases/Assets/GetAssets/GetAssetsQueryHandler.cs`, `GetAssetsQueryValidator.cs`
+  - Endpoint & Mapping: `AssetBlock.WebApi/Controllers/AssetsController.cs` (`GetAssets`)
+  - Verification: `AssetBlock.Application.Tests/UseCases/Assets/GetAssetsQueryHandlerTests.cs`
 
 ## Files, external services, cache, and performance
 

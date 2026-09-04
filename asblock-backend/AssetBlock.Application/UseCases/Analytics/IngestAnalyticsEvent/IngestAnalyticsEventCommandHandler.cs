@@ -20,7 +20,8 @@ internal sealed class IngestAnalyticsEventCommandHandler(
     IBundleStore bundleStore,
     ICollectionStore collectionStore,
     IAnalyticsEventStore analyticsEventStore,
-    ILogger<IngestAnalyticsEventCommandHandler> logger)
+    ILogger<IngestAnalyticsEventCommandHandler> logger,
+    TimeProvider? timeProvider = null)
     : IRequestHandler<IngestAnalyticsEventCommand, Result>
 {
     public async Task<Result> Handle(IngestAnalyticsEventCommand request, CancellationToken cancellationToken)
@@ -33,7 +34,8 @@ internal sealed class IngestAnalyticsEventCommandHandler(
                 return Result.Success();
             }
 
-            await analyticsEventStore.TryInsert(BuildEvent(request.Request, sellerId.Value, request.ActorUserId), cancellationToken);
+            DateTimeOffset now = (timeProvider ?? TimeProvider.System).GetUtcNow();
+            await analyticsEventStore.TryInsert(BuildEvent(request.Request, sellerId.Value, request.ActorUserId, now), cancellationToken);
             return Result.Success();
         }
         catch (OperationCanceledException)
@@ -99,7 +101,7 @@ internal sealed class IngestAnalyticsEventCommandHandler(
             cancellationToken);
     }
 
-    private static AnalyticsEvent BuildEvent(IngestAnalyticsEventRequest request, Guid sellerId, Guid? actorUserId)
+    private static AnalyticsEvent BuildEvent(IngestAnalyticsEventRequest request, Guid sellerId, Guid? actorUserId, DateTimeOffset now)
     {
         // A referrer host is only meaningful for external traffic, and an unparseable one is dropped
         // rather than stored raw so no path or query fragment reaches the database.
@@ -111,7 +113,7 @@ internal sealed class IngestAnalyticsEventCommandHandler(
         {
             Id = request.EventId,
             EventType = request.EventType,
-            OccurredAt = DateTimeOffset.UtcNow,
+            OccurredAt = now,
             SellerId = sellerId,
             VisitorId = request.VisitorId,
             SessionId = request.SessionId,

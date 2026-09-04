@@ -21,7 +21,8 @@ internal sealed class CreateReviewCommandHandler(
     IOutboxStore outboxStore,
     IAuditWriter auditWriter,
     ICacheService cache,
-    ILogger<CreateReviewCommandHandler> logger) : IRequestHandler<CreateReviewCommand, Result>
+    ILogger<CreateReviewCommandHandler> logger,
+    TimeProvider? timeProvider = null) : IRequestHandler<CreateReviewCommand, Result>
 {
     private static readonly JsonSerializerOptions _json = new() { PropertyNamingPolicy = JsonNamingPolicy.CamelCase };
 
@@ -33,7 +34,7 @@ internal sealed class CreateReviewCommandHandler(
             return Result.NotFound(ErrorCodes.ERR_ASSET_NOT_FOUND);
         }
 
-        DateTimeOffset now = DateTimeOffset.UtcNow;
+        DateTimeOffset now = (timeProvider ?? TimeProvider.System).GetUtcNow();
         Purchase? purchase = await purchaseStore.GetPurchase(request.UserId, request.AssetId, cancellationToken);
         ReviewCreationResult creationResult = Review.CreateForPurchase(
             request.AssetId,
@@ -55,7 +56,7 @@ internal sealed class CreateReviewCommandHandler(
             return ResultError.Error(ErrorCodes.ERR_ASSET_NOT_PURCHASED);
         }
 
-        if (!creationResult.IsSuccess && creationResult.IsPurchaseWindowExpired)
+        if (creationResult is { IsSuccess: false, IsPurchaseWindowExpired: true })
         {
             logger.LogWarning("CreateReview failed: user {UserId} purchase expired for review (Asset {AssetId})", request.UserId, request.AssetId);
             return ResultError.Error(ErrorCodes.ERR_REVIEW_TIME_WINDOW_EXPIRED);

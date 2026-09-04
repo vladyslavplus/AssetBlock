@@ -10,7 +10,8 @@ internal sealed class RestoreBundleCommandHandler(
     IBundleStore bundleStore,
     IUnitOfWork unitOfWork,
     IAuditWriter auditWriter,
-    ILogger<RestoreBundleCommandHandler> logger)
+    ILogger<RestoreBundleCommandHandler> logger,
+    TimeProvider? timeProvider = null)
     : IRequestHandler<RestoreBundleCommand, Result>
 {
     public Task<Result> Handle(RestoreBundleCommand request, CancellationToken cancellationToken)
@@ -26,6 +27,7 @@ internal sealed class RestoreBundleCommandHandler(
             isArchive: false,
             bundleStore.TryRestore,
             "Restored",
-            cancellationToken);
+            cancellationToken,
+            timeProvider);
     }
 }

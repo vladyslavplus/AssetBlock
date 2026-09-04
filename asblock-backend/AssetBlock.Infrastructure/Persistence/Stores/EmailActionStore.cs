@@ -5,8 +5,11 @@ using Microsoft.EntityFrameworkCore;
 
 namespace AssetBlock.Infrastructure.Persistence.Stores;
 
-internal sealed class EmailActionStore(ApplicationDbContext dbContext) : IEmailActionStore
+internal sealed class EmailActionStore(
+    ApplicationDbContext dbContext,
+    TimeProvider? timeProvider = null) : IEmailActionStore
 {
+    private readonly TimeProvider _timeProvider = timeProvider ?? TimeProvider.System;
     public Task<EmailAction?> GetById(Guid id, CancellationToken cancellationToken = default)
     {
         return dbContext.EmailActions
@@ -28,7 +31,7 @@ internal sealed class EmailActionStore(ApplicationDbContext dbContext) : IEmailA
         TimeSpan lifetime,
         CancellationToken cancellationToken = default)
     {
-        DateTimeOffset now = DateTimeOffset.UtcNow;
+        DateTimeOffset now = _timeProvider.GetUtcNow();
         var normalizedEmail = targetEmail.Trim().ToLowerInvariant();
         var purposeValue = purpose.ToString();
         var id = Guid.NewGuid();
@@ -62,7 +65,7 @@ internal sealed class EmailActionStore(ApplicationDbContext dbContext) : IEmailA
         string expectedTargetEmail,
         CancellationToken cancellationToken = default)
     {
-        DateTimeOffset now = DateTimeOffset.UtcNow;
+        DateTimeOffset now = _timeProvider.GetUtcNow();
         var normalizedEmail = expectedTargetEmail.Trim().ToLowerInvariant();
         var affected = await dbContext.EmailActions
             .Where(a =>

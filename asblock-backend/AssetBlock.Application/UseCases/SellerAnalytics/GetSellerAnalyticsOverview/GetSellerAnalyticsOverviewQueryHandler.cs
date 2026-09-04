@@ -12,7 +12,8 @@ namespace AssetBlock.Application.UseCases.SellerAnalytics.GetSellerAnalyticsOver
 internal sealed class GetSellerAnalyticsOverviewQueryHandler(
     ISellerAnalyticsStore analyticsStore,
     ITypedCache cache,
-    ILogger<GetSellerAnalyticsOverviewQueryHandler> logger)
+    ILogger<GetSellerAnalyticsOverviewQueryHandler> logger,
+    TimeProvider? timeProvider = null)
     : IRequestHandler<GetSellerAnalyticsOverviewQuery, Result<SellerAnalyticsOverviewDto>>
 {
     private static readonly TimeSpan _cacheExpiration =
@@ -31,6 +32,7 @@ internal sealed class GetSellerAnalyticsOverviewQueryHandler(
             return Result.Success(cached);
         }
 
+        DateTimeOffset now = (timeProvider ?? TimeProvider.System).GetUtcNow();
         DateTimeOffset fromDto = AnalyticsRange.ToUtcStart(request.From);
         DateTimeOffset toDto = AnalyticsRange.ToUtcStart(request.To);
 
@@ -56,7 +58,8 @@ internal sealed class GetSellerAnalyticsOverviewQueryHandler(
             request.To,
             compFrom,
             compTo,
-            granularity);
+            granularity,
+            now);
 
         await cache.Set(cacheKey, overviewDto, _cacheExpiration, cancellationToken);
 

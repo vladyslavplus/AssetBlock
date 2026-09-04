@@ -47,6 +47,20 @@
 - Preserve backend error details safely: never render arbitrary backend HTML or expose internal stack traces. Provide a useful fallback message for unknown failures.
 - Route Handlers should preserve required status and safe response headers. Downloads must preserve `Content-Type` and `Content-Disposition` without forwarding unsafe headers blindly.
 
+## Golden references
+
+Use these current, well-tested paths as canonical architectural examples:
+
+- **Feature Slice:** `Library`
+  - Schemas & Types: `lib/library/library-schemas.ts`, `lib/library/purchase-types.ts`
+  - Query & Mutation Hooks: `lib/library/library-query.ts`
+  - BFF Route: `app/api/account/library/route.ts`
+  - UI Components: `app/library/page.tsx`, `components/library/library-page-client.tsx`, `components/library/library-purchase-card.tsx`
+  - Verification: `lib/library/library-query.test.ts`, `components/library/library-page-client.test.tsx`
+- **Authenticated BFF Route:** `app/api/account/library/route.ts`
+  - Validates query params with Zod (`libraryQuerySchema`) and proxies via `proxyAuthenticatedBff` (`lib/server/bff-route`).
+  - Unit/Route Tests: `app/api/bff-routes-validation.test.ts`
+
 ## UI, styling, and performance
 
 - Follow the existing dark-theme visual system, typography, spacing, design tokens, Tailwind conventions, shadcn/Radix primitives, Lucide icons, and Sonner feedback patterns.
@@ -54,7 +68,7 @@
 - Prefer CSS/Tailwind and simple React composition over unnecessary JavaScript-driven layout or animation. Respect `prefers-reduced-motion` where motion is added.
 - Avoid shipping heavy client code to routes that can stay server-rendered. Lazy-load genuinely heavy, below-the-fold, or browser-only visual features when it materially improves initial load.
 - Keep images, lists, filters, and animations performant: avoid rendering unbounded lists, expensive work during render, unstable keys, and unnecessary state duplication. Do not hand-wrap derived values or handlers in `useMemo`/`useCallback` — React Compiler memoizes those automatically.
-- Do not alter `images.unoptimized`, theme forcing, analytics, or global styling without an explicit product/deployment reason.
+- Do not alter theme forcing or global styling without an explicit product/deployment reason.
 
 ## TypeScript and style
 

@@ -13,14 +13,15 @@ internal sealed class RestoreCollectionCommandHandler(
     ICollectionStore collectionStore,
     IUnitOfWork unitOfWork,
     IAuditWriter auditWriter,
-    ILogger<RestoreCollectionCommandHandler> logger)
+    ILogger<RestoreCollectionCommandHandler> logger,
+    TimeProvider? timeProvider = null)
     : IRequestHandler<RestoreCollectionCommand, Result>
 {
     public async Task<Result> Handle(RestoreCollectionCommand request, CancellationToken cancellationToken)
     {
         Result? outcome = null;
         var restored = false;
-        DateTimeOffset now = DateTimeOffset.UtcNow;
+        DateTimeOffset now = (timeProvider ?? TimeProvider.System).GetUtcNow();
         try
         {
             await unitOfWork.ExecuteInTransaction(async ct =>

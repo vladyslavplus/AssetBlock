@@ -651,9 +651,12 @@ public sealed class AssetVersionStorePostgresTests(PostgresFixture fixture)
             new UserStore(db),
             new ProcessedStripeWebhookEventStore(db, NullLogger<ProcessedStripeWebhookEventStore>.Instance),
             new EfUnitOfWork(db),
-            new OutboxStore(db, NullLogger<OutboxStore>.Instance),
             new AuditWriter(new AuditStore(db), new NullAuditContextAccessor(), NullLogger<AuditWriter>.Instance),
-            emailComposer,
+            new CheckoutOrderFactory(),
+            new CheckoutNotificationPublisher(
+                new OutboxStore(db, NullLogger<OutboxStore>.Instance),
+                emailComposer,
+                NullLogger<CheckoutNotificationPublisher>.Instance),
             TimeProvider.System,
             NullLogger<CheckoutCompletionOrchestrator>.Instance);
 

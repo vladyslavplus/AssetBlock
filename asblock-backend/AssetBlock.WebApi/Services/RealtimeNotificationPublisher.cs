@@ -12,8 +12,10 @@ namespace AssetBlock.WebApi.Services;
 public sealed class RealtimeNotificationPublisher(
     IHubContext<NotificationsHub> hubContext,
     INotificationStore notificationStore,
-    ILogger<RealtimeNotificationPublisher> logger) : IRealtimeNotificationPublisher
+    ILogger<RealtimeNotificationPublisher> logger,
+    TimeProvider? timeProvider = null) : IRealtimeNotificationPublisher
 {
+    private readonly TimeProvider _timeProvider = timeProvider ?? TimeProvider.System;
     private static readonly JsonSerializerOptions _jsonOptions = new()
     {
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase
@@ -71,7 +73,7 @@ public sealed class RealtimeNotificationPublisher(
                 RecipientUserId = recipientId,
                 Kind = kind,
                 MetadataJson = json,
-                CreatedAt = DateTimeOffset.UtcNow
+                CreatedAt = _timeProvider.GetUtcNow()
             };
             try
             {
@@ -104,7 +106,7 @@ public sealed class RealtimeNotificationPublisher(
                 Kind = kind,
                 MetadataJson = metadataJson,
                 SourceOutboxMessageId = sourceOutboxMessageId,
-                CreatedAt = DateTimeOffset.UtcNow
+                CreatedAt = _timeProvider.GetUtcNow()
             };
             try
             {

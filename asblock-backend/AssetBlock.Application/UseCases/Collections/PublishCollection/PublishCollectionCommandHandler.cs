@@ -12,14 +12,15 @@ internal sealed class PublishCollectionCommandHandler(
     ICollectionStore collectionStore,
     IUnitOfWork unitOfWork,
     IAuditWriter auditWriter,
-    ILogger<PublishCollectionCommandHandler> logger)
+    ILogger<PublishCollectionCommandHandler> logger,
+    TimeProvider? timeProvider = null)
     : IRequestHandler<PublishCollectionCommand, Result>
 {
     public async Task<Result> Handle(PublishCollectionCommand request, CancellationToken cancellationToken)
     {
         Result? outcome = null;
         var published = false;
-        DateTimeOffset now = DateTimeOffset.UtcNow;
+        DateTimeOffset now = (timeProvider ?? TimeProvider.System).GetUtcNow();
         try
         {
             await unitOfWork.ExecuteInTransaction(async ct =>

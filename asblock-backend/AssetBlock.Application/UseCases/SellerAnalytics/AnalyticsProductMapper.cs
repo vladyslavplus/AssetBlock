@@ -120,7 +120,8 @@ internal static class SellerAnalyticsOverviewMapper
         DateOnly to,
         DateOnly compFrom,
         DateOnly compTo,
-        AnalyticsGranularity granularity)
+        AnalyticsGranularity granularity,
+        DateTimeOffset? generatedAt = null)
     {
         SellerAnalyticsRawFacts cur = snapshot.CurrentFacts;
         SellerAnalyticsRawFacts prev = snapshot.ComparisonFacts;
@@ -172,7 +173,7 @@ internal static class SellerAnalyticsOverviewMapper
             ComparisonTo: compTo,
             Timezone: "UTC",
             Granularity: granularity,
-            GeneratedAt: DateTimeOffset.UtcNow,
+            GeneratedAt: generatedAt ?? TimeProvider.System.GetUtcNow(),
             Currency: Domain.Core.Constants.AnalyticsConstants.CURRENCY,
             EngagementAvailableFrom: engagementAvailable,
             GrossRevenue: new MoneyCentsMetric(curRevCents, prevRevCents, curRevCents - prevRevCents,

@@ -17,11 +17,12 @@ internal sealed class ConfirmEmailVerificationCommandHandler(
     IEmailActionLinkProtector linkProtector,
     IUnitOfWork unitOfWork,
     IAuditWriter auditWriter,
-    ILogger<ConfirmEmailVerificationCommandHandler> logger) : IRequestHandler<ConfirmEmailVerificationCommand, Result>
+    ILogger<ConfirmEmailVerificationCommandHandler> logger,
+    TimeProvider? timeProvider = null) : IRequestHandler<ConfirmEmailVerificationCommand, Result>
 {
     public async Task<Result> Handle(ConfirmEmailVerificationCommand request, CancellationToken cancellationToken)
     {
-        if (!linkProtector.TryUnprotect(request.ProtectedToken, EmailActionPurpose.EMAIL_VERIFICATION, out EmailActionLinkClaims? claims))
+        if (!linkProtector.TryUnprotect(request.ProtectedToken, EmailActionPurpose.EMAIL_VERIFICATION, out EmailActionLinkClaims claims))
         {
             logger.LogDebug("ConfirmEmailVerification: token unprotect failed");
             await auditWriter.WriteBestEffort(new AuditEvent(
@@ -72,7 +73,7 @@ internal sealed class ConfirmEmailVerificationCommandHandler(
 
             if (consumed)
             {
-                user.EmailVerifiedAt = DateTimeOffset.UtcNow;
+                user.EmailVerifiedAt = (timeProvider ?? TimeProvider.System).GetUtcNow();
                 await userStore.Update(user, ct);
                 await auditWriter.Write(new AuditEvent(
                     AuditActions.AUTH_EMAIL_VERIFICATION,

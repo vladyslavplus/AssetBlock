@@ -8,7 +8,6 @@ using DotNet.Testcontainers.Configurations;
 using DotNet.Testcontainers.Containers;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
-using Microsoft.Extensions.Options;
 using Minio;
 using Polly;
 using Polly.Registry;
@@ -137,7 +136,8 @@ public sealed class MinioStorageFixture : StorageProviderFixture
     protected override IAssetStorageService CreateStorage(string endpoint, string accessKey, string secretKey, string bucket)
     {
         IMinioClient client = S3CompatibleClientFactory.Create(endpoint, accessKey, secretKey, useSsl: false);
-        IOptions<MinioOptions> opts = Microsoft.Extensions.Options.Options.Create(new MinioOptions
+
+        _ = Microsoft.Extensions.Options.Options.Create(new MinioOptions
         {
             Endpoint = endpoint,
             Bucket = bucket,
@@ -145,11 +145,11 @@ public sealed class MinioStorageFixture : StorageProviderFixture
             SecretKey = secretKey,
             UseSsl = false
         });
-        return new MinioAssetStorageService(
+        return new S3CompatibleAssetStorageService(
             client,
-            opts,
+            bucket,
             CreateResilienceProvider(),
-            NullLogger<MinioAssetStorageService>.Instance);
+            NullLogger<S3CompatibleAssetStorageService>.Instance);
     }
 }
 
@@ -182,19 +182,11 @@ public sealed class SeaweedFsStorageFixture : StorageProviderFixture
     protected override IAssetStorageService CreateStorage(string endpoint, string accessKey, string secretKey, string bucket)
     {
         IMinioClient client = S3CompatibleClientFactory.Create(endpoint, accessKey, secretKey, useSsl: false);
-        IOptions<SeaweedFsOptions> opts = Microsoft.Extensions.Options.Options.Create(new SeaweedFsOptions
-        {
-            Endpoint = endpoint,
-            Bucket = bucket,
-            AccessKey = accessKey,
-            SecretKey = secretKey,
-            UseSsl = false
-        });
-        return new SeaweedFsAssetStorageService(
+        return new S3CompatibleAssetStorageService(
             client,
-            opts,
+            bucket,
             CreateResilienceProvider(),
-            NullLogger<SeaweedFsAssetStorageService>.Instance);
+            NullLogger<S3CompatibleAssetStorageService>.Instance);
     }
 }
 

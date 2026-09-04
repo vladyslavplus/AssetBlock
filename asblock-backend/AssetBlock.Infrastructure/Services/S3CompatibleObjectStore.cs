@@ -62,7 +62,8 @@ internal sealed class S3CompatibleObjectStore(
                     .WithBucket(bucket)
                     .WithObject(key)
                     .WithStreamData(content)
-                    .WithObjectSize(objectSize),
+                    .WithObjectSize(objectSize)
+                    .WithContentType("application/octet-stream"),
                 ct).ConfigureAwait(false),
             cancellationToken);
 

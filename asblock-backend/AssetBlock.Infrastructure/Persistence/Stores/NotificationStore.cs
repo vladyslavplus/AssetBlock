@@ -7,8 +7,12 @@ using Microsoft.Extensions.Logging;
 
 namespace AssetBlock.Infrastructure.Persistence.Stores;
 
-internal sealed class NotificationStore(ApplicationDbContext dbContext, ILogger<NotificationStore> logger) : INotificationStore
+internal sealed class NotificationStore(
+    ApplicationDbContext dbContext,
+    ILogger<NotificationStore> logger,
+    TimeProvider? timeProvider = null) : INotificationStore
 {
+    private readonly TimeProvider _timeProvider = timeProvider ?? TimeProvider.System;
     public async Task<UserNotification> Add(UserNotification notification, CancellationToken cancellationToken = default)
     {
         try
@@ -85,7 +89,7 @@ internal sealed class NotificationStore(ApplicationDbContext dbContext, ILogger<
             return true;
         }
 
-        row.ReadAt = DateTimeOffset.UtcNow;
+        row.ReadAt = _timeProvider.GetUtcNow();
         try
         {
             await dbContext.SaveChangesAsync(cancellationToken);
@@ -127,7 +131,7 @@ internal sealed class NotificationStore(ApplicationDbContext dbContext, ILogger<
 
     public async Task<int> MarkAllRead(Guid recipientUserId, CancellationToken cancellationToken = default)
     {
-        DateTimeOffset now = DateTimeOffset.UtcNow;
+        DateTimeOffset now = _timeProvider.GetUtcNow();
         try
         {
             var affected = await dbContext.UserNotifications

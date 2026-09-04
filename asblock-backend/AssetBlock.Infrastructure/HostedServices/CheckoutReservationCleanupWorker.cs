@@ -173,11 +173,13 @@ internal sealed class RefreshTokenRetentionWorker(
     IServiceScopeFactory scopeFactory,
     IHostEnvironment environment,
     ILogger<RefreshTokenRetentionWorker> logger,
+    TimeProvider? timeProvider = null,
     Func<double>? jitterProvider = null) : BackgroundService
 {
     private static readonly TimeSpan _interval = TimeSpan.FromHours(1);
     private const int BATCH_SIZE = 500;
     private const int MAX_BATCHES_PER_CYCLE = 20;
+    private readonly TimeProvider _timeProvider = timeProvider ?? TimeProvider.System;
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
@@ -240,7 +242,7 @@ internal sealed class RefreshTokenRetentionWorker(
     {
         await using AsyncServiceScope scope = scopeFactory.CreateAsyncScope();
         IJwtTokenService jwtTokenService = scope.ServiceProvider.GetRequiredService<IJwtTokenService>();
-        DateTimeOffset now = DateTimeOffset.UtcNow;
+        DateTimeOffset now = _timeProvider.GetUtcNow();
         var totalDeleted = 0;
 
         for (var i = 0; i < MAX_BATCHES_PER_CYCLE; i++)

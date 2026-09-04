@@ -11,8 +11,7 @@ public class CheckoutReservation
     public required Guid UserId { get; set; }
     public required Guid AssetId { get; set; }
     public required DateTimeOffset ExpiresAt { get; set; }
-    public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
-
+    public DateTimeOffset CreatedAt { get; set; }
     public CheckoutIntent CheckoutIntent { get; set; } = null!;
     public User User { get; set; } = null!;
     public Asset Asset { get; set; } = null!;

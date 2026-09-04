@@ -9,7 +9,7 @@ using NpgsqlTypes;
 
 namespace AssetBlock.Infrastructure.Persistence.Stores;
 
-internal sealed class AssetStore(ApplicationDbContext dbContext) : IAssetStore
+internal sealed class AssetStore(ApplicationDbContext dbContext, TimeProvider? timeProvider = null) : IAssetStore
 {
     private const float TRIGRAM_SIMILARITY_THRESHOLD = 0.30f;
     private const int MIN_TRIGRAM_QUERY_LENGTH = 3;
@@ -964,7 +964,7 @@ internal sealed class AssetStore(ApplicationDbContext dbContext) : IAssetStore
             asset.CategoryId = categoryId.Value;
         }
 
-        asset.UpdatedAt = DateTimeOffset.UtcNow;
+        asset.UpdatedAt = (timeProvider ?? TimeProvider.System).GetUtcNow();
         await dbContext.SaveChangesAsync(cancellationToken);
         return true;
     }

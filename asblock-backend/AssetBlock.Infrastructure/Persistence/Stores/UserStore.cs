@@ -9,8 +9,11 @@ using Npgsql;
 
 namespace AssetBlock.Infrastructure.Persistence.Stores;
 
-internal sealed class UserStore(ApplicationDbContext dbContext) : IUserStore
+internal sealed class UserStore(
+    ApplicationDbContext dbContext,
+    TimeProvider? timeProvider = null) : IUserStore
 {
+    private readonly TimeProvider _timeProvider = timeProvider ?? TimeProvider.System;
     private const string CONSTRAINT_USERS_EMAIL = "IX_users_Email";
     private const string CONSTRAINT_USERS_USERNAME = "IX_users_Username";
 
@@ -55,7 +58,7 @@ internal sealed class UserStore(ApplicationDbContext dbContext) : IUserStore
 
     public async Task<User> Create(string username, string email, string passwordHash, CancellationToken cancellationToken = default)
     {
-        DateTimeOffset now = DateTimeOffset.UtcNow;
+        DateTimeOffset now = _timeProvider.GetUtcNow();
         var user = new User
         {
             Id = Guid.NewGuid(),
@@ -85,7 +88,7 @@ internal sealed class UserStore(ApplicationDbContext dbContext) : IUserStore
     {
         try
         {
-            user.UpdatedAt = DateTimeOffset.UtcNow;
+            user.UpdatedAt = _timeProvider.GetUtcNow();
             EntityEntry<User> entry = dbContext.Entry(user);
             if (entry.State == EntityState.Detached)
             {
@@ -105,7 +108,7 @@ internal sealed class UserStore(ApplicationDbContext dbContext) : IUserStore
 
     public async Task<bool> UpdatePasswordHashIfMatches(Guid userId, string currentHash, string newHash, CancellationToken cancellationToken = default)
     {
-        DateTimeOffset now = DateTimeOffset.UtcNow;
+        DateTimeOffset now = _timeProvider.GetUtcNow();
         var affected = await dbContext.Users
             .Where(u => u.Id == userId && u.PasswordHash == currentHash)
             .ExecuteUpdateAsync(s => s
@@ -141,7 +144,7 @@ internal sealed class UserStore(ApplicationDbContext dbContext) : IUserStore
             .Where(x => x.UserId == userId)
             .ExecuteDeleteAsync(cancellationToken);
 
-        DateTimeOffset now = DateTimeOffset.UtcNow;
+        DateTimeOffset now = _timeProvider.GetUtcNow();
         foreach ((Guid platformId, var url) in links)
         {
             dbContext.Set<UserSocialLink>().Add(new UserSocialLink

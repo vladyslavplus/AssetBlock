@@ -5,7 +5,6 @@ description: >-
   check changes that include asblock-frontend. Perform a detailed read-only
   correctness, security/privacy, state, contract, performance, accessibility,
   and verification review. Do not use when the target has no frontend changes.
-model: composer-2.5[fast=false]
 readonly: true
 ---
 

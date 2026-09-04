@@ -12,8 +12,10 @@ namespace AssetBlock.Infrastructure.Services;
 internal sealed class AuditWriter(
     IAuditStore auditStore,
     IAuditContextAccessor auditContextAccessor,
-    ILogger<AuditWriter> logger) : IAuditWriter
+    ILogger<AuditWriter> logger,
+    TimeProvider? timeProvider = null) : IAuditWriter
 {
+    private readonly TimeProvider _timeProvider = timeProvider ?? TimeProvider.System;
     private static readonly JsonSerializerOptions _jsonOptions = new()
     {
         WriteIndented = false
@@ -55,7 +57,7 @@ internal sealed class AuditWriter(
 
         return new AuditLog
         {
-            OccurredAt = DateTimeOffset.UtcNow,
+            OccurredAt = _timeProvider.GetUtcNow(),
             ActorType = actorType,
             ActorUserId = actorUserId,
             Action = NormalizeRequired(

@@ -82,13 +82,21 @@ public static class DependencyInjection
         services.AddSingleton<IValidateOptions<AssetProcessingOptions>, AssetProcessingOptionsValidator>();
 
         services.TryAddSingleton(TimeProvider.System);
+        services.AddSingleton<Persistence.Interceptors.AuditTimestampsInterceptor>();
         services.AddAnalyticsDistributedRateLimiting(configuration, environment);
         services.AddAnalyticsAggregationOptions(configuration);
 
-        services.AddDbContext<ApplicationDbContext>(options =>
-            options.UseNpgsql(connectionString));
+        services.AddDbContext<ApplicationDbContext>((sp, options) =>
+        {
+            options.UseNpgsql(connectionString);
+            options.AddInterceptors(sp.GetRequiredService<AssetBlock.Infrastructure.Persistence.Interceptors.AuditTimestampsInterceptor>());
+        });
         services.AddDbContextFactory<ApplicationDbContext>(
-            options => options.UseNpgsql(connectionString),
+            (sp, options) =>
+            {
+                options.UseNpgsql(connectionString);
+                options.AddInterceptors(sp.GetRequiredService<AssetBlock.Infrastructure.Persistence.Interceptors.AuditTimestampsInterceptor>());
+            },
             ServiceLifetime.Scoped);
         services.AddHostedService<DatabaseMigrationService>();
         services.AddHostedService<OutboxDispatcher>();

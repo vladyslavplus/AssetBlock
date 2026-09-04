@@ -15,7 +15,8 @@ internal sealed class CheckoutSessionOrchestrator(
     IPaymentService paymentService,
     ICheckoutIntentStore checkoutIntentStore,
     IUnitOfWork unitOfWork,
-    ILogger<CheckoutSessionOrchestrator> logger)
+    ILogger<CheckoutSessionOrchestrator> logger,
+    TimeProvider? timeProvider = null)
 {
     private static readonly TimeSpan _checkoutIntentLifetime = TimeSpan.FromHours(24);
     private static readonly TimeSpan _minimumStripeSessionLifetime = TimeSpan.FromMinutes(30);
@@ -31,7 +32,7 @@ internal sealed class CheckoutSessionOrchestrator(
         Func<CancellationToken, Task<CheckoutIntent?>> getPending,
         CancellationToken cancellationToken)
     {
-        DateTimeOffset now = DateTimeOffset.UtcNow;
+        DateTimeOffset now = (timeProvider ?? TimeProvider.System).GetUtcNow();
         CheckoutIntent? pendingIntent = await getPending(cancellationToken);
         if (pendingIntent is not null)
         {
@@ -58,7 +59,7 @@ internal sealed class CheckoutSessionOrchestrator(
 
                 CheckoutDraft draft = draftResult.Value;
                 var intentId = Guid.NewGuid();
-                DateTimeOffset expiresAt = DateTimeOffset.UtcNow.Add(_checkoutIntentLifetime);
+                DateTimeOffset expiresAt = now.Add(_checkoutIntentLifetime);
                 var items = draft.Items
                     .OrderBy(i => i.Position)
                     .Select(i => new CheckoutIntentItem
@@ -102,7 +103,7 @@ internal sealed class CheckoutSessionOrchestrator(
                     AmountTotal = draft.AmountTotal,
                     Currency = draft.Currency,
                     Status = CheckoutIntentStatus.PENDING,
-                    CreatedAt = DateTimeOffset.UtcNow,
+                    CreatedAt = now,
                     ExpiresAt = expiresAt,
                     Items = items,
                     Reservations = reservations,
@@ -114,7 +115,7 @@ internal sealed class CheckoutSessionOrchestrator(
                 };
 
                 Guid[] assetIds = items.Select(i => i.AssetId).ToArray();
-                await checkoutIntentStore.ReleaseExpiredReservations(draft.UserId, assetIds, DateTimeOffset.UtcNow, ct);
+                await checkoutIntentStore.ReleaseExpiredReservations(draft.UserId, assetIds, now, ct);
                 await checkoutIntentStore.CreateWithItemsAndReservations(intent, items, reservations, ct);
                 createdIntent = intent;
             }, cancellationToken);
@@ -131,7 +132,7 @@ internal sealed class CheckoutSessionOrchestrator(
                 return Result.Conflict(ErrorCodes.ERR_CHECKOUT_ALREADY_PENDING);
             }
 
-            return await TryResumeCheckout(pendingIntent, DateTimeOffset.UtcNow, cancellationToken)
+            return await TryResumeCheckout(pendingIntent, now, cancellationToken)
                 ?? Result.Conflict(ErrorCodes.ERR_CHECKOUT_ALREADY_PENDING);
         }
 

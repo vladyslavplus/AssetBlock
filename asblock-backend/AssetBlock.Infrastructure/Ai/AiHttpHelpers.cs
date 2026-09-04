@@ -53,7 +53,7 @@ internal static class BoundedHttpContentReader
 
 internal static class RetryAfterParser
 {
-    public static TimeSpan? Parse(HttpResponseHeaders headers, TimeSpan maxRetryAfter)
+    public static TimeSpan? Parse(HttpResponseHeaders headers, TimeSpan maxRetryAfter, TimeProvider? timeProvider = null)
     {
         if (headers.RetryAfter is null)
         {
@@ -67,7 +67,7 @@ internal static class RetryAfterParser
         }
         else if (headers.RetryAfter.Date is { } date)
         {
-            delay = date - DateTimeOffset.UtcNow;
+            delay = date - (timeProvider ?? TimeProvider.System).GetUtcNow();
         }
         else
         {

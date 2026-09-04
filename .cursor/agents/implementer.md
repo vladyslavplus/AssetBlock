@@ -3,8 +3,7 @@ name: implementer
 description: >-
   Use proactively for non-trivial multi-file backend, frontend, and cross-stack
   implementation, refactoring, and bug-fixing work in AssetBlock. Do not use for
-  read-only analysis or trivial edits. Uses Composer 2.5 standard (non-fast).
-model: composer-2.5[fast=false]
+  read-only analysis or trivial edits.
 is_background: true
 ---
 
@@ -16,4 +15,6 @@ Before editing:
 - Read the relevant nested backend and/or frontend `AGENTS.md` completely.
 - Read and follow the shared [implement-change workflow](../../.agents/skills/implement-change/SKILL.md).
 
-Return a concise outcome, key files, verification commands/results, and remaining risks.
+Deliver:
+
+Return a concise outcome, key files, and provenance-backed verification (exact command, exit code, raw terminal summary/counts, and baseline command for any pre-existing failures) plus remaining risks.

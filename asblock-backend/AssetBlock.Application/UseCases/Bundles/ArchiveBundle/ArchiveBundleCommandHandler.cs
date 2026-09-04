@@ -10,7 +10,8 @@ internal sealed class ArchiveBundleCommandHandler(
     IBundleStore bundleStore,
     IUnitOfWork unitOfWork,
     IAuditWriter auditWriter,
-    ILogger<ArchiveBundleCommandHandler> logger)
+    ILogger<ArchiveBundleCommandHandler> logger,
+    TimeProvider? timeProvider = null)
     : IRequestHandler<ArchiveBundleCommand, Result>
 {
     public Task<Result> Handle(ArchiveBundleCommand request, CancellationToken cancellationToken)
@@ -26,6 +27,7 @@ internal sealed class ArchiveBundleCommandHandler(
             isArchive: true,
             bundleStore.TryArchive,
             "Archived",
-            cancellationToken);
+            cancellationToken,
+            timeProvider);
     }
 }

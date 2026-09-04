@@ -12,7 +12,8 @@ internal sealed class UpdateCollectionCommandHandler(
     ICollectionStore collectionStore,
     IUnitOfWork unitOfWork,
     IAuditWriter auditWriter,
-    ILogger<UpdateCollectionCommandHandler> logger)
+    ILogger<UpdateCollectionCommandHandler> logger,
+    TimeProvider? timeProvider = null)
     : IRequestHandler<UpdateCollectionCommand, Result>
 {
     public async Task<Result> Handle(UpdateCollectionCommand request, CancellationToken cancellationToken)
@@ -20,7 +21,7 @@ internal sealed class UpdateCollectionCommandHandler(
         Result? outcome = null;
         var title = request.Title.Trim();
         var description = string.IsNullOrWhiteSpace(request.Description) ? null : request.Description.Trim();
-        DateTimeOffset now = DateTimeOffset.UtcNow;
+        DateTimeOffset now = (timeProvider ?? TimeProvider.System).GetUtcNow();
 
         try
         {
