@@ -15,13 +15,14 @@ internal sealed class CheckoutReservationCleanupWorker(
     IServiceScopeFactory scopeFactory,
     IHostEnvironment environment,
     ILogger<CheckoutReservationCleanupWorker> logger,
+    TimeProvider? timeProvider = null,
     Func<double>? jitterProvider = null) : BackgroundService
 {
     private static readonly TimeSpan _interval = TimeSpan.FromMinutes(1);
     /// <summary>Minimum age since create/last poll before another Stripe API check (1–5 min target).</summary>
     private static readonly TimeSpan _reconcileAfter = TimeSpan.FromMinutes(2);
     private const int BATCH_SIZE = 100;
-    private readonly Func<double>? _jitterProvider = jitterProvider;
+    private readonly TimeProvider _timeProvider = timeProvider ?? TimeProvider.System;
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
@@ -35,7 +36,7 @@ internal sealed class CheckoutReservationCleanupWorker(
 
         try
         {
-            TimeSpan initialDelay = CalculateInitialDelay(_jitterProvider);
+            TimeSpan initialDelay = CalculateInitialDelay(jitterProvider);
             await Task.Delay(initialDelay, stoppingToken);
         }
         catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
@@ -60,7 +61,7 @@ internal sealed class CheckoutReservationCleanupWorker(
 
             try
             {
-                TimeSpan loopDelay = CalculateIntervalDelay(_jitterProvider);
+                TimeSpan loopDelay = CalculateIntervalDelay(jitterProvider);
                 await Task.Delay(loopDelay, stoppingToken);
             }
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
@@ -86,7 +87,7 @@ internal sealed class CheckoutReservationCleanupWorker(
         ICheckoutIntentStore checkoutIntentStore = scope.ServiceProvider.GetRequiredService<ICheckoutIntentStore>();
         IPaymentService paymentService = scope.ServiceProvider.GetRequiredService<IPaymentService>();
         ICheckoutCompletionService completionService = scope.ServiceProvider.GetRequiredService<ICheckoutCompletionService>();
-        DateTimeOffset now = DateTimeOffset.UtcNow;
+        DateTimeOffset now = _timeProvider.GetUtcNow();
         DateTimeOffset dueBefore = now - _reconcileAfter;
 
         var unattached = await checkoutIntentStore.CleanupExpiredUnattachedPendingBatch(

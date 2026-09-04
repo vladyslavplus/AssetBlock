@@ -107,9 +107,52 @@ public sealed class StorageOrphanCleanupWorkerTests
         recordedFailures.Should().ContainSingle().Which.Should().Be(1L);
     }
 
+    [Fact]
+    public async Task RunCleanup_UsesDeterministicTimeProviderForOrphanCutoff()
+    {
+        IAssetStorageService storage = Substitute.For<IAssetStorageService>();
+        IAssetStore assetStore = Substitute.For<IAssetStore>();
+        var frozenNow = new DateTimeOffset(2026, 9, 4, 12, 0, 0, TimeSpan.Zero);
+        var timeProvider = new ControllableTimeProvider(frozenNow);
+
+        DateTimeOffset olderThanCutoff = frozenNow - TimeSpan.FromHours(25);
+        DateTimeOffset newerThanCutoff = frozenNow - TimeSpan.FromHours(23);
+
+        storage.ListObjects("assets/", Arg.Any<CancellationToken>())
+            .Returns(ToAsyncEnumerable(
+            [
+                new StorageObjectInfo("assets/orphan-old.zip", olderThanCutoff, 10),
+                new StorageObjectInfo("assets/orphan-recent.zip", newerThanCutoff, 10)
+            ]));
+        assetStore.ExistsByStorageKey(Arg.Any<string>(), Arg.Any<CancellationToken>()).Returns(false);
+
+        var services = new ServiceCollection();
+        services.AddScoped(_ => storage);
+        services.AddScoped(_ => assetStore);
+        await using ServiceProvider provider = services.BuildServiceProvider();
+
+        IHostEnvironment environment = Substitute.For<IHostEnvironment>();
+        environment.EnvironmentName.Returns(Environments.Development);
+        var sut = new StorageOrphanCleanupWorker(
+            provider.GetRequiredService<IServiceScopeFactory>(),
+            environment,
+            NullLogger<StorageOrphanCleanupWorker>.Instance,
+            timeProvider);
+
+        await sut.RunCleanup(CancellationToken.None);
+
+        await storage.Received(1).Delete("assets/orphan-old.zip", Arg.Any<CancellationToken>());
+        await storage.DidNotReceive().Delete("assets/orphan-recent.zip", Arg.Any<CancellationToken>());
+    }
+
+    private sealed class ControllableTimeProvider(DateTimeOffset utcNow) : TimeProvider
+    {
+        public override DateTimeOffset GetUtcNow() => utcNow;
+    }
+
     private static async IAsyncEnumerable<T> ToAsyncEnumerable<T>(IEnumerable<T> items)
     {
-        foreach (T? item in items)
+        foreach (T item in items)
         {
             yield return item;
         }

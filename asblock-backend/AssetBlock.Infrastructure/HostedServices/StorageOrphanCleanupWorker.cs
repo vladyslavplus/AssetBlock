@@ -14,11 +14,13 @@ namespace AssetBlock.Infrastructure.HostedServices;
 internal sealed class StorageOrphanCleanupWorker(
     IServiceScopeFactory scopeFactory,
     IHostEnvironment environment,
-    ILogger<StorageOrphanCleanupWorker> logger) : BackgroundService
+    ILogger<StorageOrphanCleanupWorker> logger,
+    TimeProvider? timeProvider = null) : BackgroundService
 {
     private static readonly TimeSpan _interval = TimeSpan.FromHours(24);
     private static readonly TimeSpan _orphanAge = TimeSpan.FromHours(24);
     private const string ASSETS_PREFIX = "assets/";
+    private readonly TimeProvider _timeProvider = timeProvider ?? TimeProvider.System;
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
@@ -79,7 +81,7 @@ internal sealed class StorageOrphanCleanupWorker(
 
         try
         {
-            DateTimeOffset cutoff = DateTimeOffset.UtcNow - _orphanAge;
+            DateTimeOffset cutoff = _timeProvider.GetUtcNow() - _orphanAge;
 
             await foreach (StorageObjectInfo obj in storage.ListObjects(ASSETS_PREFIX, cancellationToken))
             {

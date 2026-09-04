@@ -381,7 +381,7 @@ public sealed class AssetVersionStorePostgresTests(PostgresFixture fixture)
             listing.Price.Should().Be(20m);
         }
 
-        var verified = new StripeCheckoutCompleted(intentId, buyer.Id, sessionId, 10m, "usd");
+        var verified = new StripeCheckoutCompleted(intentId, buyer.Id, sessionId, 10m, "usd", "evt_version_snapshot_webhook");
         IPaymentService paymentService = Substitute.For<IPaymentService>();
         paymentService.VerifyCheckoutCompleted(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
             .Returns(verified);
@@ -407,7 +407,7 @@ public sealed class AssetVersionStorePostgresTests(PostgresFixture fixture)
     }
 
     [Fact]
-    public async Task HandleStripeWebhook_WhenSameWebhookDeliveredConcurrently_ShouldPersistExactlyOnePurchase()
+    public async Task HandleStripeWebhook_WhenDifferentEventsRaceOnIntent_ShouldPersistExactlyOnePurchase()
     {
         await using ApplicationDbContext seedDb = await fixture.CreateCleanDbContext();
         (User author, Category category) = await TestData.SeedAuthorAndCategory(seedDb);
@@ -423,10 +423,14 @@ public sealed class AssetVersionStorePostgresTests(PostgresFixture fixture)
         SeedPendingAssetCheckout(seedDb, intentId, buyer.Id, author.Id, asset.Id, version.Id, asset.Title, asset.Price);
         await seedDb.SaveChangesAsync();
 
-        var verified = new StripeCheckoutCompleted(intentId, buyer.Id, sessionId, asset.Price, "usd");
-        IPaymentService paymentService = Substitute.For<IPaymentService>();
-        paymentService.VerifyCheckoutCompleted(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
-            .Returns(verified);
+        var verifiedA = new StripeCheckoutCompleted(intentId, buyer.Id, sessionId, asset.Price, "usd", "evt_intent_race_a");
+        var verifiedB = new StripeCheckoutCompleted(intentId, buyer.Id, sessionId, asset.Price, "usd", "evt_intent_race_b");
+        IPaymentService paymentServiceA = Substitute.For<IPaymentService>();
+        paymentServiceA.VerifyCheckoutCompleted(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(verifiedA);
+        IPaymentService paymentServiceB = Substitute.For<IPaymentService>();
+        paymentServiceB.VerifyCheckoutCompleted(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(verifiedB);
         TransactionalEmailComposer emailComposer = CreateEmailComposer();
         var command = new HandleStripeWebhookCommand("payload", "sig");
 
@@ -443,8 +447,8 @@ public sealed class AssetVersionStorePostgresTests(PostgresFixture fixture)
             dbB,
             emailComposer,
             new GatedCheckoutIntentStore(new CheckoutIntentStore(dbB), gate, tryCompleteResults));
-        HandleStripeWebhookCommandHandler handlerA = CreateWebhookHandler(paymentService, completionA);
-        HandleStripeWebhookCommandHandler handlerB = CreateWebhookHandler(paymentService, completionB);
+        HandleStripeWebhookCommandHandler handlerA = CreateWebhookHandler(paymentServiceA, completionA);
+        HandleStripeWebhookCommandHandler handlerB = CreateWebhookHandler(paymentServiceB, completionB);
 
         Result<OrderCompletedPayload?>[] results = await Task.WhenAll(
             handlerA.Handle(command, CancellationToken.None),
@@ -467,6 +471,51 @@ public sealed class AssetVersionStorePostgresTests(PostgresFixture fixture)
     }
 
     [Fact]
+    public async Task HandleStripeWebhook_WhenSameWebhookDeliveredConcurrently_ShouldDeduplicateViaLedger()
+    {
+        await using ApplicationDbContext seedDb = await fixture.CreateCleanDbContext();
+        (User author, Category category) = await TestData.SeedAuthorAndCategory(seedDb);
+        User buyer = TestData.CreateUser("dup-webhook-buyer", "dup-webhook-buyer@example.test");
+        seedDb.Users.Add(buyer);
+        Asset asset = TestData.CreateAsset(author.Id, category.Id, title: "Dup Webhook Pack", price: 15m);
+        var seedStore = new AssetStore(seedDb);
+        AssetVersion version = TestData.CreateAssetVersion(asset.Id, storageKey: "assets/dup-webhook/v1.bin", versionNumber: 1);
+        await seedStore.AddWithVersion(asset, version, null);
+
+        var intentId = Guid.NewGuid();
+        const string sessionId = "cs_dup_webhook_concurrent";
+        const string eventId = "evt_dup_webhook_concurrent_123";
+        SeedPendingAssetCheckout(seedDb, intentId, buyer.Id, author.Id, asset.Id, version.Id, asset.Title, asset.Price);
+        await seedDb.SaveChangesAsync();
+
+        var verified = new StripeCheckoutCompleted(intentId, buyer.Id, sessionId, asset.Price, "usd", eventId);
+        IPaymentService paymentService = Substitute.For<IPaymentService>();
+        paymentService.VerifyCheckoutCompleted(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(verified);
+        TransactionalEmailComposer emailComposer = CreateEmailComposer();
+        var command = new HandleStripeWebhookCommand("payload", "sig");
+
+        await using ApplicationDbContext dbA = fixture.CreateDbContext();
+        await using ApplicationDbContext dbB = fixture.CreateDbContext();
+        CheckoutCompletionOrchestrator completionA = CreateCompletionOrchestrator(dbA, emailComposer);
+        CheckoutCompletionOrchestrator completionB = CreateCompletionOrchestrator(dbB, emailComposer);
+        HandleStripeWebhookCommandHandler handlerA = CreateWebhookHandler(paymentService, completionA);
+        HandleStripeWebhookCommandHandler handlerB = CreateWebhookHandler(paymentService, completionB);
+
+        Result<OrderCompletedPayload?>[] results = await Task.WhenAll(
+            handlerA.Handle(command, CancellationToken.None),
+            handlerB.Handle(command, CancellationToken.None));
+
+        results[0].IsSuccess.Should().BeTrue();
+        results[1].IsSuccess.Should().BeTrue();
+
+        await using ApplicationDbContext verify = fixture.CreateDbContext();
+        (await verify.Orders.CountAsync(o => o.StripeSessionId == sessionId)).Should().Be(1);
+        (await verify.Purchases.CountAsync(p => p.AssetId == asset.Id)).Should().Be(1);
+        (await verify.ProcessedStripeWebhookEvents.CountAsync(e => e.StripeEventId == eventId)).Should().Be(1);
+    }
+
+    [Fact]
     public async Task CompletePaidCheckout_WhenWebhookAndReconciliationRace_ShouldPersistExactlyOneOrder()
     {
         await using ApplicationDbContext seedDb = await fixture.CreateCleanDbContext();
@@ -486,16 +535,17 @@ public sealed class AssetVersionStorePostgresTests(PostgresFixture fixture)
             .Where(i => i.Id == intentId)
             .ExecuteUpdateAsync(s => s.SetProperty(i => i.StripeSessionId, sessionId));
 
-        var verified = new StripeCheckoutCompleted(intentId, buyer.Id, sessionId, asset.Price, "usd");
+        var webhookVerified = new StripeCheckoutCompleted(intentId, buyer.Id, sessionId, asset.Price, "usd", "evt_webhook_recon_race");
+        var reconcileVerified = new StripeCheckoutCompleted(intentId, buyer.Id, sessionId, asset.Price, "usd");
         IPaymentService paymentService = Substitute.For<IPaymentService>();
         paymentService.VerifyCheckoutCompleted(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
-            .Returns(verified);
+            .Returns(webhookVerified);
         paymentService.GetCheckoutSession(sessionId, Arg.Any<CancellationToken>())
             .Returns(new StripeCheckoutSessionSnapshot(
                 sessionId,
                 StripeConstants.CheckoutSessionStatuses.COMPLETE,
                 null,
-                verified));
+                reconcileVerified));
         TransactionalEmailComposer emailComposer = CreateEmailComposer();
 
         var gate = new TryCompleteRaceGate(participantCount: 2);
@@ -524,7 +574,7 @@ public sealed class AssetVersionStorePostgresTests(PostgresFixture fixture)
         Task<Result<OrderCompletedPayload?>> webhookTask = webhookHandler.Handle(
             new HandleStripeWebhookCommand("payload", "sig"),
             CancellationToken.None);
-        Task<OrderCompletedPayload?> reconcileTask = reconcileCompletion.CompletePaidCheckout(verified, CancellationToken.None);
+        Task<OrderCompletedPayload?> reconcileTask = reconcileCompletion.CompletePaidCheckout(reconcileVerified, CancellationToken.None);
         await Task.WhenAll(webhookTask, reconcileTask);
 
         (await webhookTask).IsSuccess.Should().BeTrue();
@@ -599,10 +649,12 @@ public sealed class AssetVersionStorePostgresTests(PostgresFixture fixture)
             new OrderStore(db),
             checkoutIntentStore ?? new CheckoutIntentStore(db),
             new UserStore(db),
+            new ProcessedStripeWebhookEventStore(db, NullLogger<ProcessedStripeWebhookEventStore>.Instance),
             new EfUnitOfWork(db),
             new OutboxStore(db, NullLogger<OutboxStore>.Instance),
             new AuditWriter(new AuditStore(db), new NullAuditContextAccessor(), NullLogger<AuditWriter>.Instance),
             emailComposer,
+            TimeProvider.System,
             NullLogger<CheckoutCompletionOrchestrator>.Instance);
 
     private static HandleStripeWebhookCommandHandler CreateWebhookHandler(

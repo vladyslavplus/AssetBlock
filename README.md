@@ -10,7 +10,7 @@ This repository is a non-commercial / academic project.
 asblock/
 ├── asblock-backend/           # ASP.NET Core Web API + application/domain/infrastructure
 │   ├── asblock-backend.slnx
-│   ├── docker-compose.yml     # Local dependencies (PostgreSQL, Valkey, SeaweedFS, optional MinIO profile, Mailpit)
+│   ├── docker-compose.yml     # Local dependencies (PostgreSQL [commented out — run locally or uncomment], Valkey, SeaweedFS, optional MinIO profile, Mailpit)
 │   └── README.md
 └── asblock-frontend/          # Next.js web application (App Router)
 ```
@@ -58,7 +58,7 @@ Point the frontend at your running Web API using environment variables (see `asb
 
 ## Seller analytics
 
-Seller-facing analytics live under **`/sell` → Analytics** (UTC date ranges, gross revenue in USD cents, commerce from completed Stripe-webhook orders only). Engagement telemetry is first-party, privacy-bounded, and separate from **Vercel Analytics** (deployment metrics only).
+Seller-facing analytics live under **`/sell` → Analytics** (UTC date ranges, gross revenue in USD cents, commerce from completed Stripe-webhook orders only). Engagement telemetry is first-party and privacy-bounded.
 
 - **Commerce source of truth:** `Order` / `OrderLine` — never browser events.
 - **UTC semantics:** `from` inclusive, `to` exclusive, max 366 days; charts label UTC.

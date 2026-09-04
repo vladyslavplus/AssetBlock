@@ -22,4 +22,5 @@ public sealed record StripeCheckoutCompleted(
     Guid UserId,
     string StripeSessionId,
     decimal AmountTotal,
-    string Currency);
+    string Currency,
+    string StripeEventId = "");

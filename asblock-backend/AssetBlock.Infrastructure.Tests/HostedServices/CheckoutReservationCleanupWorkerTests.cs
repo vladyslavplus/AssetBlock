@@ -33,7 +33,8 @@ public sealed class CheckoutReservationCleanupWorkerTests
     private static (CheckoutReservationCleanupWorker Worker, ServiceProvider Provider) BuildWorker(
         ICheckoutIntentStore checkoutStore,
         IPaymentService paymentService,
-        ICheckoutCompletionService? completionService = null)
+        ICheckoutCompletionService? completionService = null,
+        TimeProvider? timeProvider = null)
     {
         var services = new ServiceCollection();
         services.AddScoped(_ => checkoutStore);
@@ -47,9 +48,34 @@ public sealed class CheckoutReservationCleanupWorkerTests
         var worker = new CheckoutReservationCleanupWorker(
             provider.GetRequiredService<IServiceScopeFactory>(),
             environment,
-            NullLogger<CheckoutReservationCleanupWorker>.Instance);
+            NullLogger<CheckoutReservationCleanupWorker>.Instance,
+            timeProvider ?? TimeProvider.System);
 
         return (worker, provider);
+    }
+
+    [Fact]
+    public async Task RunCleanup_PassesDeterministicCutoffsFromTimeProvider()
+    {
+        var fixedTime = new DateTimeOffset(2026, 9, 4, 15, 30, 0, TimeSpan.Zero);
+        var timeProvider = new ControllableTimeProvider(fixedTime);
+        ICheckoutIntentStore store = Substitute.For<ICheckoutIntentStore>();
+        IPaymentService payment = Substitute.For<IPaymentService>();
+
+        (CheckoutReservationCleanupWorker sut, ServiceProvider provider) = BuildWorker(store, payment, timeProvider: timeProvider);
+        await using (provider)
+        {
+            await sut.RunCleanup(CancellationToken.None);
+        }
+
+        DateTimeOffset expectedSyncCutoff = fixedTime - TimeSpan.FromMinutes(2);
+        await store.Received(1).CleanupExpiredUnattachedPendingBatch(fixedTime, 100, Arg.Any<CancellationToken>());
+        await store.Received(1).ClaimAttachedPendingForStripeSyncBatch(fixedTime, expectedSyncCutoff, 100, Arg.Any<CancellationToken>());
+    }
+
+    private sealed class ControllableTimeProvider(DateTimeOffset utcNow) : TimeProvider
+    {
+        public override DateTimeOffset GetUtcNow() => utcNow;
     }
 
     [Fact]

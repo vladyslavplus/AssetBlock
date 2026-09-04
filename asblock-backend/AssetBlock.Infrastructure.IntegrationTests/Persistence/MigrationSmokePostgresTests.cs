@@ -38,10 +38,12 @@ public sealed class MigrationSmokePostgresTests(PostgresFixture fixture)
             "bundles",
             "bundle_revisions",
             "bundle_revision_items",
-            "asset_listing_suggestions"
+            "asset_listing_suggestions",
+            "processed_stripe_webhook_events"
         ]);
 
         (await db.Assets.CountAsync()).Should().Be(0);
+        (await db.ProcessedStripeWebhookEvents.CountAsync()).Should().Be(0);
     }
 
     [Fact]
@@ -81,11 +83,13 @@ public sealed class MigrationSmokePostgresTests(PostgresFixture fixture)
                     'user_notifications',
                     'bundle_revisions',
                     'collections',
-                    'categories'
+                    'categories',
+                    'processed_stripe_webhook_events'
                 )
                 """)
             .ToListAsync();
 
+        indexNames.Should().Contain("IX_processed_stripe_webhook_events_StripeEventId");
         indexNames.Should().Contain("IX_assets_search_vector");
         indexNames.Should().Contain("IX_assets_Title_trgm");
         indexNames.Should().Contain("IX_assets_Description_trgm");

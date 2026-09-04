@@ -28,6 +28,7 @@ public class HandleStripeWebhookCommandHandlerTests
     private readonly IUnitOfWork _unitOfWorkMock;
     private readonly IOutboxStore _outboxStoreMock;
     private readonly IAuditWriter _auditWriterMock;
+    private readonly IProcessedStripeWebhookEventStore _processedEventStoreMock;
     private readonly HandleStripeWebhookCommandHandler _handler;
 
     public HandleStripeWebhookCommandHandlerTests()
@@ -41,9 +42,18 @@ public class HandleStripeWebhookCommandHandlerTests
         _unitOfWorkMock = Substitute.For<IUnitOfWork>();
         _outboxStoreMock = Substitute.For<IOutboxStore>();
         _auditWriterMock = Substitute.For<IAuditWriter>();
+        _processedEventStoreMock = Substitute.For<IProcessedStripeWebhookEventStore>();
+
+        _processedEventStoreMock.TryRecordEvent(
+                Arg.Any<string>(), Arg.Any<string>(), Arg.Any<DateTimeOffset>(), Arg.Any<CancellationToken>())
+            .Returns(true);
 
         _unitOfWorkMock.ExecuteInTransaction(Arg.Any<Func<CancellationToken, Task>>(), Arg.Any<CancellationToken>())
-            .Returns(ci => ci.Arg<Func<CancellationToken, Task>>()(CancellationToken.None));
+            .Returns(async callInfo =>
+            {
+                Func<CancellationToken, Task> action = callInfo.Arg<Func<CancellationToken, Task>>();
+                await action(CancellationToken.None);
+            });
 
         var composer = new TransactionalEmailComposer(Microsoft.Extensions.Options.Options.Create(new EmailOptions
         {
@@ -61,10 +71,12 @@ public class HandleStripeWebhookCommandHandlerTests
             _orderStoreMock,
             _checkoutIntentStoreMock,
             _userStoreMock,
+            _processedEventStoreMock,
             _unitOfWorkMock,
             _outboxStoreMock,
             _auditWriterMock,
             composer,
+            TimeProvider.System,
             NullLogger<CheckoutCompletionOrchestrator>.Instance);
 
         _handler = new HandleStripeWebhookCommandHandler(
@@ -709,6 +721,88 @@ public class HandleStripeWebhookCommandHandlerTests
     };
 
     [Fact]
+    public async Task Handle_WhenDuplicateStripeEvent_ShouldReturnSuccessWithoutFulfillmentSideEffects()
+    {
+        var userId = Guid.NewGuid();
+        var sellerId = Guid.NewGuid();
+        var assetId = Guid.NewGuid();
+        var versionId = Guid.NewGuid();
+        var sessionId = "cs_test_duplicate_event";
+        var command = new HandleStripeWebhookCommand("payload", "sig");
+
+        StripeCheckoutCompleted verified = Completed(userId, sellerId, assetId, versionId, sessionId, 9.99m, "usd") with
+        {
+            StripeEventId = "evt_duplicate_123"
+        };
+
+        _paymentServiceMock.VerifyCheckoutCompleted(command.Payload, command.Signature, Arg.Any<CancellationToken>())
+            .Returns(verified);
+        _assetStoreMock.GetVersion(assetId, versionId, Arg.Any<CancellationToken>())
+            .Returns(CreateVersion(assetId, versionId));
+
+        _processedEventStoreMock.TryRecordEvent(
+                "evt_duplicate_123",
+                Arg.Any<string>(),
+                Arg.Any<DateTimeOffset>(),
+                Arg.Any<CancellationToken>())
+            .Returns(false);
+
+        _orderStoreMock.GetByStripeSessionId(sessionId, Arg.Any<CancellationToken>())
+            .Returns((Order?)null);
+        _orderStoreMock.GetByCheckoutIntentId(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
+            .Returns((Order?)null);
+
+        Result<OrderCompletedPayload?> result = await _handler.Handle(command, CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.Should().BeNull();
+
+        await _orderStoreMock.DidNotReceiveWithAnyArgs()
+            .CreateWithLinesAndPurchases(
+                Arg.Any<Order>(),
+                Arg.Any<IReadOnlyList<OrderLine>>(),
+                Arg.Any<IReadOnlyList<Purchase>>(),
+                Arg.Any<CancellationToken>());
+        await _outboxStoreMock.DidNotReceiveWithAnyArgs()
+            .Enqueue(Arg.Any<string>(), Arg.Any<object>(), Arg.Any<CancellationToken>());
+        await _auditWriterMock.DidNotReceiveWithAnyArgs()
+            .Write(Arg.Any<AuditEvent>(), Arg.Any<CancellationToken>());
+        await _checkoutIntentStoreMock.DidNotReceiveWithAnyArgs()
+            .TryCompleteAndRelease(Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<DateTimeOffset>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Handle_WhenFulfillmentThrows_ShouldPropagateExceptionWithoutCompleting()
+    {
+        var userId = Guid.NewGuid();
+        var sellerId = Guid.NewGuid();
+        var assetId = Guid.NewGuid();
+        var versionId = Guid.NewGuid();
+        var sessionId = "cs_test_failing_fulfillment";
+        var command = new HandleStripeWebhookCommand("payload", "sig");
+
+        _paymentServiceMock.VerifyCheckoutCompleted(command.Payload, command.Signature, Arg.Any<CancellationToken>())
+            .Returns(_ => Completed(userId, sellerId, assetId, versionId, sessionId, 9.99m, "usd"));
+
+        _orderStoreMock.GetByStripeSessionId(sessionId, Arg.Any<CancellationToken>())
+            .Returns((Order?)null);
+        _assetStoreMock.GetVersion(assetId, versionId, Arg.Any<CancellationToken>())
+            .Returns(CreateVersion(assetId, versionId));
+
+        _orderStoreMock.CreateWithLinesAndPurchases(
+                Arg.Any<Order>(),
+                Arg.Any<IReadOnlyList<OrderLine>>(),
+                Arg.Any<IReadOnlyList<Purchase>>(),
+                Arg.Any<CancellationToken>())
+            .ThrowsAsync(new InvalidOperationException("Simulated database failure during order creation"));
+
+        Func<Task> act = async () => await _handler.Handle(command, CancellationToken.None);
+
+        await act.Should().ThrowAsync<InvalidOperationException>()
+            .WithMessage("Simulated database failure during order creation");
+    }
+
+    [Fact]
     public async Task Handle_WhenVerified_ShouldDelegateToCheckoutCompletionService()
     {
         ICheckoutCompletionService mockCompletionService = Substitute.For<ICheckoutCompletionService>();
@@ -730,5 +824,93 @@ public class HandleStripeWebhookCommandHandlerTests
         result.IsSuccess.Should().BeTrue();
         result.Value.Should().Be(expectedPayload);
         await mockCompletionService.Received(1).CompletePaidCheckout(verified, Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Handle_WhenCheckoutCompleted_UsesDeterministicTimeProviderForPurchasedAtAndLedger()
+    {
+        var fixedTime = new DateTimeOffset(2026, 9, 4, 18, 0, 0, TimeSpan.Zero);
+        var timeProvider = new ControllableTestTimeProvider(fixedTime);
+
+        var composer = new TransactionalEmailComposer(Microsoft.Extensions.Options.Options.Create(new EmailOptions
+        {
+            Provider = "Smtp",
+            FromName = "AssetBlock",
+            FromAddress = "noreply@localhost",
+            PublicAppBaseUrl = "http://localhost:3000",
+            MessageIdDomain = "mail.localhost",
+            Smtp = new EmailSmtpOptions { Host = "localhost", Port = 1025, Security = SmtpSecurityMode.NONE, TimeoutSeconds = 30 }
+        }));
+
+        var orchestrator = new CheckoutCompletionOrchestrator(
+            _assetStoreMock,
+            Substitute.For<IBundleStore>(),
+            _orderStoreMock,
+            _checkoutIntentStoreMock,
+            _userStoreMock,
+            _processedEventStoreMock,
+            _unitOfWorkMock,
+            _outboxStoreMock,
+            _auditWriterMock,
+            composer,
+            timeProvider,
+            NullLogger<CheckoutCompletionOrchestrator>.Instance);
+
+        var handler = new HandleStripeWebhookCommandHandler(
+            _paymentServiceMock,
+            orchestrator,
+            NullLogger<HandleStripeWebhookCommandHandler>.Instance);
+
+        var userId = Guid.NewGuid();
+        var sellerId = Guid.NewGuid();
+        var assetId = Guid.NewGuid();
+        var versionId = Guid.NewGuid();
+        var sessionId = "cs_test_deterministic_time";
+        var command = new HandleStripeWebhookCommand("payload", "sig");
+
+        _paymentServiceMock.VerifyCheckoutCompleted(command.Payload, command.Signature, Arg.Any<CancellationToken>())
+            .Returns(_ => Completed(userId, sellerId, assetId, versionId, sessionId, 9.99m, "usd") with
+            {
+                StripeEventId = "evt_deterministic_time"
+            });
+
+        _orderStoreMock.GetByStripeSessionId(sessionId, Arg.Any<CancellationToken>()).Returns((Order?)null);
+        _assetStoreMock.GetVersion(assetId, versionId, Arg.Any<CancellationToken>())
+            .Returns(CreateVersion(assetId, versionId));
+
+        Order? capturedOrder = null;
+        IReadOnlyList<Purchase>? capturedPurchases = null;
+        _orderStoreMock.CreateWithLinesAndPurchases(
+                Arg.Do<Order>(o => capturedOrder = o),
+                Arg.Any<IReadOnlyList<OrderLine>>(),
+                Arg.Do<IReadOnlyList<Purchase>>(p => capturedPurchases = p),
+                Arg.Any<CancellationToken>())
+            .Returns(callInfo => callInfo.Arg<Order>());
+
+        Result<OrderCompletedPayload?> result = await handler.Handle(command, CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        await _processedEventStoreMock.Received(1).TryRecordEvent(
+            Arg.Any<string>(),
+            StripeConstants.Events.CHECKOUT_SESSION_COMPLETED,
+            fixedTime,
+            Arg.Any<CancellationToken>());
+
+        await _checkoutIntentStoreMock.Received(1).TryCompleteAndRelease(
+            Arg.Any<Guid>(),
+            userId,
+            sessionId,
+            fixedTime,
+            Arg.Any<CancellationToken>());
+
+        capturedOrder.Should().NotBeNull();
+        capturedOrder!.PurchasedAt.Should().Be(fixedTime);
+        capturedPurchases.Should().NotBeNull();
+        capturedPurchases!.Should().AllSatisfy(p => p.PurchasedAt.Should().Be(fixedTime));
+    }
+
+    private sealed class ControllableTestTimeProvider(DateTimeOffset utcNow) : TimeProvider
+    {
+        public override DateTimeOffset GetUtcNow() => utcNow;
     }
 }

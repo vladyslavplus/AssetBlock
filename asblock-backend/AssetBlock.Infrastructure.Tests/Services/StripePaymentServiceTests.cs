@@ -151,6 +151,7 @@ public sealed class StripePaymentServiceTests
         StripeCheckoutCompleted? result = await sut.VerifyCheckoutCompleted(payload, signature);
 
         result.Should().NotBeNull();
+        result.StripeEventId.Should().Be("evt_test_123");
         result.CheckoutIntentId.Should().Be(expectedIntentId);
         result.UserId.Should().Be(expectedUserId);
         result.StripeSessionId.Should().Be(sessionId);
@@ -278,6 +279,39 @@ public sealed class StripePaymentServiceTests
         result.Should().BeNull();
     }
 
+    [Fact]
+    public async Task VerifyCheckoutCompleted_throwsInvalidSignature_whenSignatureOlderThan300Seconds()
+    {
+        const string secret = "whsec_test_expired";
+        StripePaymentService sut = CreateSut(webhookSecret: secret);
+        var expiredTimestamp = DateTimeOffset.UtcNow.AddSeconds(-305).ToUnixTimeSeconds();
+
+        (var payload, var signature) = CreateSignedWebhookEvent(
+            unixTimestamp: expiredTimestamp,
+            webhookSecret: secret);
+
+        Func<Task<StripeCheckoutCompleted?>> act = async () => await sut.VerifyCheckoutCompleted(payload, signature);
+
+        await act.Should().ThrowAsync<StripeWebhookInvalidSignatureException>();
+    }
+
+    [Fact]
+    public async Task VerifyCheckoutCompleted_acceptsSignature_within300Seconds()
+    {
+        const string secret = "whsec_test_valid_window";
+        StripePaymentService sut = CreateSut(webhookSecret: secret);
+        var validTimestamp = DateTimeOffset.UtcNow.AddSeconds(-250).ToUnixTimeSeconds();
+
+        (var payload, var signature) = CreateSignedWebhookEvent(
+            unixTimestamp: validTimestamp,
+            webhookSecret: secret);
+
+        StripeCheckoutCompleted? result = await sut.VerifyCheckoutCompleted(payload, signature);
+
+        result.Should().NotBeNull();
+        result.StripeEventId.Should().Be("evt_test_123");
+    }
+
     private static (string Payload, string Signature) CreateSignedWebhookEvent(
         string eventType = "checkout.session.completed",
         string sessionId = "cs_test_123",
@@ -287,7 +321,9 @@ public sealed class StripePaymentServiceTests
         string? userId = "11111111-1111-1111-1111-111111111111",
         string? checkoutIntentId = "22222222-2222-2222-2222-222222222222",
         Dictionary<string, string>? customMetadata = null,
-        string webhookSecret = "whsec_test")
+        string webhookSecret = "whsec_test",
+        long? unixTimestamp = null,
+        string eventId = "evt_test_123")
     {
         Dictionary<string, string> metadata = customMetadata ?? new Dictionary<string, string>();
         if (customMetadata is null)
@@ -315,7 +351,7 @@ public sealed class StripePaymentServiceTests
 
         var eventObj = new Event
         {
-            Id = "evt_test_123",
+            Id = eventId,
             Type = eventType,
             ApiVersion = StripeConfiguration.ApiVersion,
             Created = DateTime.UtcNow,
@@ -326,7 +362,7 @@ public sealed class StripePaymentServiceTests
         };
 
         var payload = eventObj.ToJson();
-        var timestamp = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+        var timestamp = unixTimestamp ?? DateTimeOffset.UtcNow.ToUnixTimeSeconds();
         var signature = $"t={timestamp},v1={EventUtility.ComputeSignature(webhookSecret, timestamp.ToString(), payload)}";
 
         return (payload, signature);

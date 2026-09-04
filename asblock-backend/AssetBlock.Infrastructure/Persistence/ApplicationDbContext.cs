@@ -40,6 +40,7 @@ public sealed class ApplicationDbContext(DbContextOptions<ApplicationDbContext> 
     public DbSet<AssetArchiveAnalysis> AssetArchiveAnalyses => Set<AssetArchiveAnalysis>();
     public DbSet<AssetListingSuggestion> AssetListingSuggestions => Set<AssetListingSuggestion>();
     public DbSet<OutboxEmailDelivery> OutboxEmailDeliveries => Set<OutboxEmailDelivery>();
+    public DbSet<ProcessedStripeWebhookEvent> ProcessedStripeWebhookEvents => Set<ProcessedStripeWebhookEvent>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

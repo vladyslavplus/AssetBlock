@@ -41,6 +41,9 @@ public static class ObservabilityExtensions
         {
             otel.WithTracing(tracing =>
             {
+                // Production note: TraceSampleRatio defaults to 1.0 for local/Aspire development.
+                // In production/staging deployments, lower TraceSampleRatio (e.g., 0.05-0.10) and ensure
+                // sensitive authorization tokens, query secrets, and PII attributes are scrubbed or excluded.
                 tracing.SetSampler(new ParentBasedSampler(new TraceIdRatioBasedSampler(options.TraceSampleRatio)))
                     .AddAspNetCoreInstrumentation(opts =>
                     {

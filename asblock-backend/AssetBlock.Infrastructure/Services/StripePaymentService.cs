@@ -149,7 +149,7 @@ internal sealed class StripePaymentService(
         Event stripeEvent;
         try
         {
-            stripeEvent = EventUtility.ConstructEvent(payload, signature, webhookSecret);
+            stripeEvent = EventUtility.ConstructEvent(payload, signature, webhookSecret, tolerance: 300);
         }
         catch (Exception ex)
         {
@@ -162,10 +162,10 @@ internal sealed class StripePaymentService(
             return Task.FromResult<StripeCheckoutCompleted?>(null);
         }
 
-        return Task.FromResult(stripeEvent.Data.Object is Session session ? MapPaidCheckout(session) : null);
+        return Task.FromResult(stripeEvent.Data.Object is Session session ? MapPaidCheckout(session, stripeEvent.Id) : null);
     }
 
-    private static StripeCheckoutCompleted? MapPaidCheckout(Session session)
+    private static StripeCheckoutCompleted? MapPaidCheckout(Session session, string eventId = "")
     {
         if (session.Metadata is null
             || session.Metadata.Count == 0
@@ -195,6 +195,6 @@ internal sealed class StripePaymentService(
         }
 
         var amountTotal = UsdAmount.FromCents(amountTotalInCents).Dollars;
-        return new StripeCheckoutCompleted(checkoutIntentId, userId, session.Id, amountTotal, currency);
+        return new StripeCheckoutCompleted(checkoutIntentId, userId, session.Id, amountTotal, currency, eventId);
     }
 }

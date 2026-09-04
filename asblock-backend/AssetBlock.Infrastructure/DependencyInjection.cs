@@ -170,6 +170,7 @@ public static class DependencyInjection
         services.AddScoped<ICollectionStore, CollectionStore>();
         services.AddScoped<IBundleStore, BundleStore>();
         services.AddScoped<IOrderStore, OrderStore>();
+        services.AddScoped<IProcessedStripeWebhookEventStore, ProcessedStripeWebhookEventStore>();
         services.AddScoped<IReviewStore, ReviewStore>();
         services.AddScoped<ISocialPlatformStore, SocialPlatformStore>();
         services.AddScoped<INotificationStore, NotificationStore>();

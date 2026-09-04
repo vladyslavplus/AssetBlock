@@ -67,10 +67,12 @@ internal sealed class CheckoutCompletionOrchestrator(
     IOrderStore orderStore,
     ICheckoutIntentStore checkoutIntentStore,
     IUserStore userStore,
+    IProcessedStripeWebhookEventStore processedEventStore,
     IUnitOfWork unitOfWork,
     IOutboxStore outboxStore,
     IAuditWriter auditWriter,
     TransactionalEmailComposer emailComposer,
+    TimeProvider timeProvider,
     ILogger<CheckoutCompletionOrchestrator> logger) : ICheckoutCompletionService
 {
     private const int MAX_EMAIL_ITEM_TITLES = 20;
@@ -142,14 +144,29 @@ internal sealed class CheckoutCompletionOrchestrator(
         }
 
         var orderId = Guid.NewGuid();
-        DateTimeOffset purchasedAt = DateTimeOffset.UtcNow;
+        DateTimeOffset purchasedAt = timeProvider.GetUtcNow();
         var lostCompletionRace = false;
+        var isDuplicateEvent = false;
         Order? createdOrder = null;
 
         try
         {
             await unitOfWork.ExecuteInTransaction(async ct =>
             {
+                if (!string.IsNullOrWhiteSpace(verified.StripeEventId))
+                {
+                    var isNewEvent = await processedEventStore.TryRecordEvent(
+                        verified.StripeEventId,
+                        StripeConstants.Events.CHECKOUT_SESSION_COMPLETED,
+                        purchasedAt,
+                        ct);
+                    if (!isNewEvent)
+                    {
+                        isDuplicateEvent = true;
+                        return;
+                    }
+                }
+
                 // Claim completion first so concurrent webhooks serialize on the intent row.
                 // Then take asset locks before inserting entitlements.
                 var completed = await checkoutIntentStore.TryCompleteAndRelease(
@@ -290,7 +307,7 @@ internal sealed class CheckoutCompletionOrchestrator(
             throw;
         }
 
-        if (lostCompletionRace)
+        if (isDuplicateEvent || lostCompletionRace)
         {
             Order? existingAfterRace = await orderStore.GetByStripeSessionId(
                 verified.StripeSessionId,
@@ -298,16 +315,25 @@ internal sealed class CheckoutCompletionOrchestrator(
                 verified.CheckoutIntentId,
                 cancellationToken);
 
-            if (existingAfterRace is null)
+            if (existingAfterRace is not null)
             {
-                throw new InvalidOperationException(
-                    $"Checkout intent {verified.CheckoutIntentId} could not be completed for session {verified.StripeSessionId}.");
+                logger.LogInformation(
+                    "Resolved duplicate event or race for session {SessionId}, order {OrderId}",
+                    verified.StripeSessionId,
+                    existingAfterRace.Id);
+                return ToPayload(existingAfterRace);
             }
 
-            logger.LogInformation(
-                "Idempotent webhook: concurrent delivery lost TryComplete race for session {SessionId}",
-                verified.StripeSessionId);
-            return ToPayload(existingAfterRace);
+            if (isDuplicateEvent)
+            {
+                logger.LogInformation(
+                    "Stripe webhook event {EventId} was previously processed; returning success no-op",
+                    verified.StripeEventId);
+                return null;
+            }
+
+            throw new InvalidOperationException(
+                $"Checkout intent {verified.CheckoutIntentId} could not be completed for session {verified.StripeSessionId}.");
         }
 
         if (createdOrder is not null)
