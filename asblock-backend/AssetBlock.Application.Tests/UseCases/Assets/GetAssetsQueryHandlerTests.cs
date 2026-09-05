@@ -162,4 +162,32 @@ public class GetAssetsQueryHandlerTests
                 && r.Tags.Contains("beta")),
             Arg.Any<CancellationToken>());
     }
+
+    [Fact]
+    public async Task Handle_ShouldNormalizeSearchAndPreserveSortContract()
+    {
+        _cacheMock.Get<PagedResult<AssetListItem>>(Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns((PagedResult<AssetListItem>?)null);
+        var emptyPaged = new PagedResult<AssetListItem>([], 0, 1, 10);
+        _assetStoreMock.GetPaged(Arg.Any<GetAssetsRequest>(), Arg.Any<CancellationToken>()).Returns(emptyPaged);
+
+        var query = new GetAssetsQuery(new GetAssetsRequest
+        {
+            Page = 1,
+            PageSize = 10,
+            Search = "   medieval    fantasy   sword   ",
+            SortBy = "Price",
+            SortDirection = SortDirection.ASC
+        });
+
+        Ardalis.Result.Result<PagedResult<AssetListItem>> result = await _handler.Handle(query, CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        await _assetStoreMock.Received(1).GetPaged(
+            Arg.Is<GetAssetsRequest>(r =>
+                r.Search == "medieval fantasy sword"
+                && r.SortBy == "Price"
+                && r.SortDirection == SortDirection.ASC),
+            Arg.Any<CancellationToken>());
+    }
 }

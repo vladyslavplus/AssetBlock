@@ -32,4 +32,30 @@ public class GetAssetsQueryValidatorTests
         ValidationResult result = await _validator.ValidateAsync(query);
         result.IsValid.Should().BeTrue();
     }
+
+    [Fact]
+    public async Task Validate_WhenSearchExceeds256Scalars_ShouldFail()
+    {
+        var query = new GetAssetsQuery(new GetAssetsRequest { Search = new string('s', 257) });
+        ValidationResult result = await _validator.ValidateAsync(query);
+        result.IsValid.Should().BeFalse();
+        result.Errors.Should().Contain(e => e.ErrorMessage.Contains("256 Unicode scalars"));
+    }
+
+    [Fact]
+    public async Task Validate_WhenSearchContainsInvalidControlCharacter_ShouldFail()
+    {
+        var query = new GetAssetsQuery(new GetAssetsRequest { Search = "invalid\0query" });
+        ValidationResult result = await _validator.ValidateAsync(query);
+        result.IsValid.Should().BeFalse();
+        result.Errors.Should().Contain(e => e.ErrorMessage.Contains("invalid control characters"));
+    }
+
+    [Fact]
+    public async Task Validate_WhenSearchValidWithTabsOrNewlines_ShouldPass()
+    {
+        var query = new GetAssetsQuery(new GetAssetsRequest { Search = "valid\tsearch\nquery" });
+        ValidationResult result = await _validator.ValidateAsync(query);
+        result.IsValid.Should().BeTrue();
+    }
 }

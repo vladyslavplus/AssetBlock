@@ -123,6 +123,10 @@ public static class DependencyInjection
             .Bind(configuration.GetSection(OllamaOptions.CONFIGURATION_PATH))
             .ValidateOnStart();
         services.AddSingleton<IValidateOptions<OllamaOptions>, OllamaOptionsValidator>();
+        services.AddOptions<EmbeddingOptions>()
+            .Bind(configuration.GetSection(EmbeddingOptions.CONFIGURATION_PATH))
+            .ValidateOnStart();
+        services.AddSingleton<IValidateOptions<EmbeddingOptions>, EmbeddingOptionsValidator>();
         services.AddHttpClient(OpenRouterAiGenerationProvider.HTTP_CLIENT_NAME, (sp, client) =>
         {
             OpenRouterOptions options = sp.GetRequiredService<IOptions<OpenRouterOptions>>().Value;

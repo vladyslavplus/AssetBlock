@@ -1,0 +1,1395 @@
+{
+  "version": 1,
+  "provenance": "synthetic-and-reviewed",
+  "documents": [
+    {
+      "key": "asset-001",
+      "title": "Low Poly Fantasy Sword and Shield",
+      "description": "Hand-painted low poly fantasy sword and buckler shield set. Optimized for mobile and indie RPG games with clean UV layout and diffuse texture.",
+      "category": "3D Models",
+      "tags": ["fantasy", "lowpoly", "sword", "shield", "weapon", "rpg"]
+    },
+    {
+      "key": "asset-002",
+      "title": "Низькополігональний лицарський меч",
+      "description": "Стилізована 3D модель лицарського дворучного меча. Оптимізована сітка для мобільних ігор та стратегій, ручна текстура.",
+      "category": "3D Models",
+      "tags": ["меч", "зброя", "фентезі", "lowpoly", "лицар", "3d"]
+    },
+    {
+      "key": "asset-003",
+      "title": "Sci-Fi Plasma Blaster Rifle",
+      "description": "Futuristic energy assault rifle model with 4K PBR textures, emissive glow maps, and modular attachments. Rigged and ready for animation.",
+      "category": "3D Models",
+      "tags": ["scifi", "weapon", "gun", "rifle", "plasma", "pbr", "fps"]
+    },
+    {
+      "key": "asset-004",
+      "title": "Плазмова гвинтівка майбутнього",
+      "description": "Футуристична лазерна гвинтівка для шутерів від першої особи. Текстури PBR 4K, емісійні карти світіння, формат FBX.",
+      "category": "3D Models",
+      "tags": ["зброя", "гвинтівка", "scifi", "плазма", "шутер", "модель"]
+    },
+    {
+      "key": "asset-005",
+      "title": "Medieval Stone Castle Modular Kit",
+      "description": "Modular stone castle kit including walls, towers, gates, battlements, and stairs. PBR materials with normal, roughness, and ambient occlusion.",
+      "category": "3D Models",
+      "tags": ["modular", "medieval", "castle", "architecture", "stone", "environment"]
+    },
+    {
+      "key": "asset-006",
+      "title": "Модульний середньовічний замок",
+      "description": "Набір модульних кам'яних стін, веж та брам для побудови фортець у середньовічному сетингу. Сумісний з сіткою припасування.",
+      "category": "3D Models",
+      "tags": ["замок", "модульний", "середньовіччя", "архітектура", "камінь"]
+    },
+    {
+      "key": "asset-007",
+      "title": "Stylized Pine Forest Vegetation Pack",
+      "description": "Stylized pine trees, firs, bushes, rocks, and ground clutter. Features custom wind shader vertex colors and multiple LOD levels.",
+      "category": "3D Models",
+      "tags": ["nature", "trees", "forest", "stylized", "foliage", "vegetation"]
+    },
+    {
+      "key": "asset-008",
+      "title": "Стилізований сосновий ліс та рослинність",
+      "description": "Комплект стилізованих дерев сосни, ялинок, кущів та моху для відкритих природних локацій. Оптимізовані рівні деталізації LOD.",
+      "category": "3D Models",
+      "tags": ["ліс", "дерева", "природа", "стилізований", "рослини", "локація"]
+    },
+    {
+      "key": "asset-009",
+      "title": "Cyberpunk Street Props and Holograms",
+      "description": "Collection of neon signs, holographic advertisements, vending machines, dumpsters, and street lights for futuristic cityscapes.",
+      "category": "3D Models",
+      "tags": ["cyberpunk", "props", "neon", "hologram", "city", "scifi"]
+    },
+    {
+      "key": "asset-010",
+      "title": "Кіберпанк неонові вивіски та вуличні об'єкти",
+      "description": "Реквізит для нічного футуристичного міста: голограми, термінали, неонове підсвічування та міські декорації.",
+      "category": "3D Models",
+      "tags": ["кіберпанк", "неон", "місто", "голограма", "декорації"]
+    },
+    {
+      "key": "asset-011",
+      "title": "PBR Cobblestone and Wet Mud Textures",
+      "description": "Seamless tileable PBR texture set containing albedo, normal, height, roughness, and ambient occlusion maps at 4096x4096 resolution.",
+      "category": "Textures & Materials",
+      "tags": ["pbr", "textures", "stone", "cobblestone", "mud", "seamless", "4k"]
+    },
+    {
+      "key": "asset-012",
+      "title": "Безшовні текстури бруківки та вологої землі",
+      "description": "Набір безшовних PBR текстур кам'яної мостової та мокрої землі. Роздільна здатність 4K, карти нормалей, шорсткості та висоти.",
+      "category": "Textures & Materials",
+      "tags": ["текстури", "бруківка", "земля", "pbr", "безшовні", "матеріали"]
+    },
+    {
+      "key": "asset-013",
+      "title": "Sci-Fi Metal Hull Panels PBR Pack",
+      "description": "Industrial spaceship metal panels with rivets, seams, and ventilation grates. Includes clean and weathered rust variations.",
+      "category": "Textures & Materials",
+      "tags": ["pbr", "scifi", "metal", "hull", "panel", "spaceship", "industrial"]
+    },
+    {
+      "key": "asset-014",
+      "title": "Металеві панелі космічного корабля PBR",
+      "description": "Текстури обшивки космольоту з болтами та стиками. Варіанти чистого металу та зношеного металу з іржею.",
+      "category": "Textures & Materials",
+      "tags": ["метал", "космос", "панелі", "іржа", "текстури", "pbr"]
+    },
+    {
+      "key": "asset-015",
+      "title": "Stylized Hand-Painted Wood Planks",
+      "description": "Vibrant hand-painted wooden floor and wall plank textures for whimsical, fantasy, and adventure game environments.",
+      "category": "Textures & Materials",
+      "tags": ["wood", "stylized", "handpainted", "planks", "floor", "fantasy"]
+    },
+    {
+      "key": "asset-016",
+      "title": "Стилізовані мальовані дерев'яні дошки",
+      "description": "Текстури дощок та дерев'яної підлоги ручної роботи у казковому мультяшному стилі для ізометричних та платформерних ігор.",
+      "category": "Textures & Materials",
+      "tags": ["дерево", "дошки", "мальовані", "стилізовані", "підлога"]
+    },
+    {
+      "key": "asset-017",
+      "title": "Epic Orchestral Battle Music Pack",
+      "description": "High-energy orchestral soundtrack with brass fanfares, booming percussion, and soaring strings. Includes 8 loopable tracks and stinger cues.",
+      "category": "Audio & Music",
+      "tags": ["music", "orchestral", "battle", "epic", "soundtrack", "loop"]
+    },
+    {
+      "key": "asset-018",
+      "title": "Епічна оркестрова бойова музика",
+      "description": "Саундтрек для динамічних битв з живими барабанами, духовими інструментами та струнною секцією. Безшовні лупи та кінцівки треків.",
+      "category": "Audio & Music",
+      "tags": ["музика", "саундтрек", "оркестр", "битва", "епічна", "аудіо"]
+    },
+    {
+      "key": "asset-019",
+      "title": "Retro 8-Bit Chiptune Arcade Soundtrack",
+      "description": "Authentic chiptune music created with classic soundchips. Perfect for retro platformers, arcade shooters, and 2D pixel games.",
+      "category": "Audio & Music",
+      "tags": ["chiptune", "retro", "8bit", "arcade", "pixel", "soundtrack", "synth"]
+    },
+    {
+      "key": "asset-020",
+      "title": "Ретро 8-бітний чіптюн саундтрек для аркад",
+      "description": "Ностальгічні мелодії в стилі NES та GameBoy для піксельних платформерів. 10 аудіодоріжок у форматі WAV та OGG.",
+      "category": "Audio & Music",
+      "tags": ["чіптюн", "8біт", "ретро", "музика", "піксель", "аркада"]
+    },
+    {
+      "key": "asset-021",
+      "title": "Carpathian Ambient Nature and Wind Sounds",
+      "description": "Immersive field recordings from mountain forests: rustling leaves, bird calls, gentle rain, and howling mountain breeze. 96kHz 24-bit.",
+      "category": "Audio & Music",
+      "tags": ["ambient", "nature", "forest", "wind", "rain", "soundfx", "foley"]
+    },
+    {
+      "key": "asset-022",
+      "title": "Звуки карпатського лісу та гірського вітру",
+      "description": "Автентичні польові аудіозаписи дикої природи: шум гірського вітру, спів птахів, шелест лісу та дзюркіт струмка.",
+      "category": "Audio & Music",
+      "tags": ["звуки", "природа", "ліс", "карпати", "вітер", "ембієнт", "фолей"]
+    },
+    {
+      "key": "asset-023",
+      "title": "Sci-Fi Laser and Plasma Sound Effects",
+      "description": "Over 120 sound effects for energy blasters, charging beams, forcefields, reload power-ups, and futuristic explosions.",
+      "category": "Audio & Music",
+      "tags": ["sfx", "scifi", "laser", "plasma", "weapons", "soundeffects", "blaster"]
+    },
+    {
+      "key": "asset-024",
+      "title": "Звукові ефекти лазерів та бластерів",
+      "description": "Колекція з понад сотні футуристичних аудіоефектів пострілів бластера, заряджання батареї та активації силового поля.",
+      "category": "Audio & Music",
+      "tags": ["звуки", "ефекти", "лазер", "бластер", "scifi", "постріли"]
+    },
+    {
+      "key": "asset-025",
+      "title": "Modern Dark HUD UI Kit",
+      "description": "Clean vector user interface package featuring health bars, minimap frames, action slots, buttons, dialog boxes, and tooltips in SVG and PNG.",
+      "category": "UI & 2D Assets",
+      "tags": ["ui", "hud", "interface", "vector", "dark", "minimap", "gui"]
+    },
+    {
+      "key": "asset-026",
+      "title": "Темний мінімалістичний ігровий інтерфейс HUD",
+      "description": "Векторний комплект UI елементів: шкали здоров'я, рамки міні-карти, панелі інвентарю, кнопки та модальні вікна.",
+      "category": "UI & 2D Assets",
+      "tags": ["інтерфейс", "ui", "hud", "вектор", "кнопки", "панелі", "графіка"]
+    },
+    {
+      "key": "asset-027",
+      "title": "Fantasy RPG Inventory and Spell Icons",
+      "description": "250 hand-drawn 512x512 icons of potions, weapons, armors, rings, scrolls, and elemental magic spell runes.",
+      "category": "UI & 2D Assets",
+      "tags": ["icons", "rpg", "inventory", "spells", "magic", "fantasy", "2d"]
+    },
+    {
+      "key": "asset-028",
+      "title": "Іконки інвентарю та магічних заклять для RPG",
+      "description": "Мальовані кольорові іконки зілля, артефактів, броні, сувоїв та магічних стихій для рольових ігор.",
+      "category": "UI & 2D Assets",
+      "tags": ["іконки", "інвентар", "магія", "rpg", "зілля", "фентезі", "2d"]
+    },
+    {
+      "key": "asset-029",
+      "title": "Pixel Art Platformer Tileset and Hero",
+      "description": "16x16 pixel art tileset for underground caves and lush surface biomes, paired with a fully animated retro hero character.",
+      "category": "UI & 2D Assets",
+      "tags": ["pixelart", "tileset", "platformer", "character", "retro", "16bit"]
+    },
+    {
+      "key": "asset-030",
+      "title": "Піксельний тайлсет печер та персонаж платформера",
+      "description": "Набір піксельної графіки 16x16 для створення підземних рівнів, пасток, монет та анімований головний герой.",
+      "category": "UI & 2D Assets",
+      "tags": ["піксель", "тайлсет", "платформер", "персонаж", "анімація", "2d"]
+    },
+    {
+      "key": "asset-031",
+      "title": "Advanced C# Grid Inventory and Equipment System",
+      "description": "Modular inventory framework for Unity featuring drag-and-drop, item stacking, weight capacity, equipment sockets, and save serialization.",
+      "category": "Scripts & Code",
+      "tags": ["unity", "csharp", "inventory", "system", "script", "equipment", "rpg"]
+    },
+    {
+      "key": "asset-032",
+      "title": "Модульна система сіткового інвентаря на C# для Unity",
+      "description": "Архітектура інвентарю з підтримкою переносу предметів мишкою, об'єднання стосів, ваги та серіалізації збережень у JSON.",
+      "category": "Scripts & Code",
+      "tags": ["скрипт", "unity", "інвентар", "csharp", "код", "система"]
+    },
+    {
+      "key": "asset-033",
+      "title": "Third Person Character Controller and Camera",
+      "description": "Smooth kinematic character locomotion controller with root motion support, sprint, crouch, jump, slope sliding, and orbit camera.",
+      "category": "Scripts & Code",
+      "tags": ["controller", "locomotion", "thirdperson", "camera", "movement", "csharp"]
+    },
+    {
+      "key": "asset-034",
+      "title": "Контролер персонажа третьої особи та плавна камера",
+      "description": "Готовий скрипт керування рухом персонажа з плавними переходами між бігом, стрибками, ковзанням та круговою камерою огляду.",
+      "category": "Scripts & Code",
+      "tags": ["контролер", "персонаж", "рух", "камера", "unity", "скрипт"]
+    },
+    {
+      "key": "asset-035",
+      "title": "Fast Pathfinding and Navmesh Dynamic Obstacles",
+      "description": "High-performance A* pathfinding system with multi-threaded grid calculations, local avoidance, and dynamic obstacle carving.",
+      "category": "Scripts & Code",
+      "tags": ["pathfinding", "ai", "navmesh", "navigation", "algorithm", "csharp"]
+    },
+    {
+      "key": "asset-036",
+      "title": "Швидка навігація AI та динамічні перешкоди A*",
+      "description": "Оптимізований алгоритм пошуку шляху для штучного інтелекту ворогів з обходом рухомих перешкод у реальному часі.",
+      "category": "Scripts & Code",
+      "tags": ["ai", "навігація", "шлях", "алгоритм", "штучнийінтелект", "код"]
+    },
+    {
+      "key": "asset-037",
+      "title": "Humanoid Combat Animation Set",
+      "description": "Collection of 45 motion-captured humanoid animations: light attacks, heavy combos, dodges, blocks, hit reactions, and deaths.",
+      "category": "Animations & Rigs",
+      "tags": ["animation", "humanoid", "combat", "mocap", "sword", "fight", "fbx"]
+    },
+    {
+      "key": "asset-038",
+      "title": "Набір бойових анімацій гуманоїда для битв на мечах",
+      "description": "45 якісних анімацій ближнього бою: удари мечем, комбінації, ухилення від ударів, блок щитом та реакції на поранення.",
+      "category": "Animations & Rigs",
+      "tags": ["анімація", "бій", "меч", "удар", "гуманоїд", "fbx"]
+    },
+    {
+      "key": "asset-039",
+      "title": "Quadruped Animal Rig and Locomotion Animations",
+      "description": "Generic four-legged creature rig with bone weighting and walk, trot, gallop, turn, idle, eat, and sleep animation cycles.",
+      "category": "Animations & Rigs",
+      "tags": ["quadruped", "animal", "rig", "animation", "creature", "walkcycle"]
+    },
+    {
+      "key": "asset-040",
+      "title": "Ріг та анімації чотирилапої тварини",
+      "description": "Скелетна прив'язка та цикл анімацій ходьби, рисі, галопу, оглядання та сну для собак, вовків та хижих звірів.",
+      "category": "Animations & Rigs",
+      "tags": ["тварина", "анімація", "ріг", "вовк", "ходьба", "скелет"]
+    },
+    {
+      "key": "asset-041",
+      "title": "Stylized Cartoon Water and Ocean Shader",
+      "description": "Customizable water shader featuring depth fading, dynamic foam shoreline, caustics, wave vertex displacement, and refraction.",
+      "category": "Shaders & VFX",
+      "tags": ["shader", "water", "ocean", "stylized", "vfx", "foam", "hlsl"]
+    },
+    {
+      "key": "asset-042",
+      "title": "Стилізований шейдер води та піни для океану",
+      "description": "Гнучкий шейдер водної поверхні з ефектом хвиль, піною біля берега, прозорістю глибини та сонячними відблисками.",
+      "category": "Shaders & VFX",
+      "tags": ["шейдер", "вода", "океан", "vfx", "піна", "хвилі", "стилізований"]
+    },
+    {
+      "key": "asset-043",
+      "title": "Magical Spell Particle VFX Pack",
+      "description": "50 spectacular particle effects for fantasy magic: fireballs, ice spikes, lightning bolts, arcane portals, and healing auras.",
+      "category": "Shaders & VFX",
+      "tags": ["vfx", "particles", "magic", "spells", "fireball", "lightning", "effects"]
+    },
+    {
+      "key": "asset-044",
+      "title": "Магічні візуальні ефекти часток та заклинань",
+      "description": "Набір спецефектів чаклунства: вогняна куля, крижаний вибух, блискавка, портал телепортації та захисний магічний щит.",
+      "category": "Shaders & VFX",
+      "tags": ["vfx", "магія", "частки", "заклинання", "вогонь", "вибух", "ефекти"]
+    },
+    {
+      "key": "asset-045",
+      "title": "Post-Processing Toon Outline and Cel Shading",
+      "description": "Full-screen post-processing shader delivering crisp anime-style comic outlines based on scene depth and surface normal discontinuity.",
+      "category": "Shaders & VFX",
+      "tags": ["shader", "toon", "celshade", "outline", "postprocessing", "anime"]
+    },
+    {
+      "key": "asset-046",
+      "title": "Аніме шейдер контуру та цел-шейдингу",
+      "description": "Постефект для створення графіки у стилі коміксів та мультфільмів: чіткі контурні лінії за нормалями та ступінчасте освітлення.",
+      "category": "Shaders & VFX",
+      "tags": ["шейдер", "аніме", "контур", "celshading", "постефект", "графіка"]
+    },
+    {
+      "key": "asset-047",
+      "title": "Low Poly Medieval Blacksmith Workshop Props",
+      "description": "Complete blacksmith interior kit: anvil, forge furnace, hammers, tongs, quenched metal barrels, coal piles, and finished blades.",
+      "category": "3D Models",
+      "tags": ["blacksmith", "props", "medieval", "anvil", "tools", "lowpoly", "interior"]
+    },
+    {
+      "key": "asset-048",
+      "title": "Ковальська кузня та інструменти середньовіччя",
+      "description": "Реквізит для майстерні коваля: ковадло, піч з вугіллям, молоти, кліщі, заготовки зброї та бочки з водою.",
+      "category": "3D Models",
+      "tags": ["кузня", "коваль", "ковадло", "інструменти", "модель", "середньовіччя"]
+    },
+    {
+      "key": "asset-049",
+      "title": "Modular Dungeon Crypt and Skeletons",
+      "description": "Modular underground dungeon pieces with stone arches, sarcophagi, wall torches, and posable low poly skeleton warrior models.",
+      "category": "3D Models",
+      "tags": ["dungeon", "crypt", "modular", "skeleton", "props", "fantasy", "spooky"]
+    },
+    {
+      "key": "asset-050",
+      "title": "Підземелля крипти та скелети-воїни",
+      "description": "Модульний підземний лабіринт з кам'яними склепіннями, саркофагами, смолоскипами та моделями скелетів для темного фентезі.",
+      "category": "3D Models",
+      "tags": ["підземелля", "крипта", "скелет", "монстр", "лабіринт", "модульний"]
+    },
+    {
+      "key": "asset-051",
+      "title": "Seamless Procedural Rust and Metal Materials",
+      "description": "Set of 12 procedural metal substances: brushed steel, copper patina, rusted iron, hammered bronze, and chrome coating.",
+      "category": "Textures & Materials",
+      "tags": ["metal", "procedural", "rust", "copper", "iron", "substance", "pbr"]
+    },
+    {
+      "key": "asset-052",
+      "title": "Процедурні матеріали металу та патини",
+      "description": "Колекція реалістичних металевих поверхонь: полірована сталь, окислена мідь, іржаве залізо та кована бронза.",
+      "category": "Textures & Materials",
+      "tags": ["метал", "іржа", "матеріали", "патина", "сталь", "pbr"]
+    },
+    {
+      "key": "asset-053",
+      "title": "Dark Ambient Dungeon Drone Music",
+      "description": "Ominous horror soundscapes with cavernous reverb, metallic resonances, subtle string tension, and subterranean bass rumbles.",
+      "category": "Audio & Music",
+      "tags": ["darkambient", "drone", "horror", "dungeon", "creepy", "soundscape"]
+    },
+    {
+      "key": "asset-054",
+      "title": "Похмурий темний ембієнт для підземель та горорів",
+      "description": "Атмосферні треки з моторошними відлуннями, низькочастотним гулом та скрипами для створення напруги у жахастиках.",
+      "category": "Audio & Music",
+      "tags": ["горор", "ембієнт", "гул", "музика", "темрява", "підземелля"]
+    },
+    {
+      "key": "asset-055",
+      "title": "Mobile Touch Virtual Joystick and Input",
+      "description": "Lightweight virtual joystick and on-screen button solution for iOS and Android games. Features floating stick, deadzones, and multitouch.",
+      "category": "Scripts & Code",
+      "tags": ["mobile", "touch", "joystick", "input", "android", "ios", "unity"]
+    },
+    {
+      "key": "asset-056",
+      "title": "Сенсорний віртуальний джойстик для мобільних ігор",
+      "description": "Готове рішення керування під пальці на екрані смартфонів: плаваючий стик, чутливість зон натискання та підтримка мультитачу.",
+      "category": "Scripts & Code",
+      "tags": ["джойстик", "мобільні", "сенсор", "керування", "код", "unity"]
+    },
+    {
+      "key": "asset-057",
+      "title": "FPS First Person Weapon Sway and Recoil Rig",
+      "description": "Procedural weapon sway, walk bobbing, aiming down sights (ADS) interpolation, and realistic camera recoil impulses.",
+      "category": "Scripts & Code",
+      "tags": ["fps", "recoil", "sway", "procedural", "weapon", "camera", "gun"]
+    },
+    {
+      "key": "asset-058",
+      "title": "Процедурна віддача зброї та коливання камери FPS",
+      "description": "Скрипт реалістичного хитання дула при ходьбі, входу в режим прицілювання та імпульсної віддачі пострілів для шутерів.",
+      "category": "Scripts & Code",
+      "tags": ["віддача", "шутер", "зброя", "fps", "приціл", "скрипт"]
+    },
+    {
+      "key": "asset-059",
+      "title": "Explosion and Fire Blast Particle Pack",
+      "description": "Cinematic volumetric explosion bursts, fiery shockwaves, flying shrapnel, smoke plumes, and glowing burning embers.",
+      "category": "Shaders & VFX",
+      "tags": ["explosion", "fire", "smoke", "particles", "vfx", "blast", "shrapnel"]
+    },
+    {
+      "key": "asset-060",
+      "title": "Спецефекти вибухів, полум'я та димових шлейфів",
+      "description": "Високоякісні частинки вогняних спалахів, розльоту осколків, хвиль диму та палаючого попелу для вибухів гранат і снарядів.",
+      "category": "Shaders & VFX",
+      "tags": ["вибух", "вогонь", "дим", "частки", "vfx", "ефекти", "полум'я"]
+    },
+    {
+      "key": "asset-061",
+      "title": "Isometric Fantasy Village Buildings",
+      "description": "Handcrafted modular village structures: tavern, mill, houses, bridges, and cobblestone paths for 2.5D top-down perspective.",
+      "category": "3D Models",
+      "tags": ["isometric", "village", "fantasy", "tavern", "buildings", "topdown"]
+    },
+    {
+      "key": "asset-062",
+      "title": "Ізометричне фентезійне село та будинки",
+      "description": "Будівлі для поселення: таверна з вивіскою, млин, житлові хати та містки для стратегій та рольових ігор з видом зверху.",
+      "category": "3D Models",
+      "tags": ["село", "будинки", "ізометрія", "таверна", "млин", "фентезі"]
+    },
+    {
+      "key": "asset-063",
+      "title": "Cartoon Game Sound FX Bleeps and Boings",
+      "description": "Fun, goofy sound effects for casual and puzzle games: bounce boings, level up jingles, coin pickups, clicks, and failure buzzers.",
+      "category": "Audio & Music",
+      "tags": ["casual", "cartoon", "sfx", "funny", "gameaudio", "pickup", "arcade"]
+    },
+    {
+      "key": "asset-064",
+      "title": "Кумедні мультяшні звуки та джингли",
+      "description": "Веселі аудіоефекти для казуальних аркад: збір монет, пружинні стрибки, переможні фанфари та звуки помилки.",
+      "category": "Audio & Music",
+      "tags": ["мультяшні", "звуки", "монети", "ефекти", "казуальні", "аудіо"]
+    },
+    {
+      "key": "asset-065",
+      "title": "Dialogue and Quest System with Graph Node Editor",
+      "description": "Node-based branching dialogue system supporting branching choices, quest state variables, localization tables, and actor portraits.",
+      "category": "Scripts & Code",
+      "tags": ["dialogue", "quest", "nodes", "graph", "rpg", "localization", "csharp"]
+    }
+  ],
+  "queries": [
+    {
+      "id": "uk-nat-001",
+      "language": "uk",
+      "kind": "natural",
+      "text": "лицарський меч для рольової гри",
+      "judgments": [
+        { "documentKey": "asset-002", "relevance": 3 },
+        { "documentKey": "asset-001", "relevance": 2 },
+        { "documentKey": "asset-038", "relevance": 1 }
+      ]
+    },
+    {
+      "id": "uk-nat-002",
+      "language": "uk",
+      "kind": "natural",
+      "text": "моделі дерев та природа для лісу",
+      "judgments": [
+        { "documentKey": "asset-008", "relevance": 3 },
+        { "documentKey": "asset-007", "relevance": 2 },
+        { "documentKey": "asset-022", "relevance": 1 }
+      ]
+    },
+    {
+      "id": "uk-nat-003",
+      "language": "uk",
+      "kind": "natural",
+      "text": "футуристична зброя лазерна гвинтівка",
+      "judgments": [
+        { "documentKey": "asset-004", "relevance": 3 },
+        { "documentKey": "asset-003", "relevance": 2 },
+        { "documentKey": "asset-024", "relevance": 1 }
+      ]
+    },
+    {
+      "id": "uk-nat-004",
+      "language": "uk",
+      "kind": "natural",
+      "text": "кам'яний середньовічний замок фортеця",
+      "judgments": [
+        { "documentKey": "asset-006", "relevance": 3 },
+        { "documentKey": "asset-005", "relevance": 2 },
+        { "documentKey": "asset-048", "relevance": 1 }
+      ]
+    },
+    {
+      "id": "uk-nat-005",
+      "language": "uk",
+      "kind": "natural",
+      "text": "текстури кам'яної бруківки та дороги",
+      "judgments": [
+        { "documentKey": "asset-012", "relevance": 3 },
+        { "documentKey": "asset-011", "relevance": 2 }
+      ]
+    },
+    {
+      "id": "uk-nat-006",
+      "language": "uk",
+      "kind": "natural",
+      "text": "епічна бойова музика для битви",
+      "judgments": [
+        { "documentKey": "asset-018", "relevance": 3 },
+        { "documentKey": "asset-017", "relevance": 2 }
+      ]
+    },
+    {
+      "id": "uk-nat-007",
+      "language": "uk",
+      "kind": "natural",
+      "text": "звуки природи лісовий вітер та дощ",
+      "judgments": [
+        { "documentKey": "asset-022", "relevance": 3 },
+        { "documentKey": "asset-021", "relevance": 2 }
+      ]
+    },
+    {
+      "id": "uk-nat-008",
+      "language": "uk",
+      "kind": "natural",
+      "text": "іконки заклинань та магічних сувоїв",
+      "judgments": [
+        { "documentKey": "asset-028", "relevance": 3 },
+        { "documentKey": "asset-027", "relevance": 2 },
+        { "documentKey": "asset-044", "relevance": 1 }
+      ]
+    },
+    {
+      "id": "uk-nat-009",
+      "language": "uk",
+      "kind": "natural",
+      "text": "скрипт системи інвентаря на сітці",
+      "judgments": [
+        { "documentKey": "asset-032", "relevance": 3 },
+        { "documentKey": "asset-031", "relevance": 2 },
+        { "documentKey": "asset-028", "relevance": 1 }
+      ]
+    },
+    {
+      "id": "uk-nat-010",
+      "language": "uk",
+      "kind": "natural",
+      "text": "шейдер поверхні води та піни біля берега",
+      "judgments": [
+        { "documentKey": "asset-042", "relevance": 3 },
+        { "documentKey": "asset-041", "relevance": 2 }
+      ]
+    },
+    {
+      "id": "uk-nat-011",
+      "language": "uk",
+      "kind": "natural",
+      "text": "анімації ближнього бою на мечах",
+      "judgments": [
+        { "documentKey": "asset-038", "relevance": 3 },
+        { "documentKey": "asset-037", "relevance": 2 },
+        { "documentKey": "asset-002", "relevance": 1 }
+      ]
+    },
+    {
+      "id": "uk-nat-012",
+      "language": "uk",
+      "kind": "natural",
+      "text": "спецефекти магії вогняні кулі та спалахи",
+      "judgments": [
+        { "documentKey": "asset-044", "relevance": 3 },
+        { "documentKey": "asset-043", "relevance": 2 },
+        { "documentKey": "asset-060", "relevance": 1 }
+      ]
+    },
+    {
+      "id": "uk-nat-013",
+      "language": "uk",
+      "kind": "natural",
+      "text": "моделі ковальського цеху ковадло та молоти",
+      "judgments": [
+        { "documentKey": "asset-048", "relevance": 3 },
+        { "documentKey": "asset-047", "relevance": 2 }
+      ]
+    },
+    {
+      "id": "uk-nat-014",
+      "language": "uk",
+      "kind": "natural",
+      "text": "підземелля крипти та монстри скелети",
+      "judgments": [
+        { "documentKey": "asset-050", "relevance": 3 },
+        { "documentKey": "asset-049", "relevance": 2 },
+        { "documentKey": "asset-054", "relevance": 1 }
+      ]
+    },
+    {
+      "id": "uk-nat-015",
+      "language": "uk",
+      "kind": "natural",
+      "text": "віртуальний сенсорний джойстик на екран",
+      "judgments": [
+        { "documentKey": "asset-056", "relevance": 3 },
+        { "documentKey": "asset-055", "relevance": 2 }
+      ]
+    },
+    {
+      "id": "uk-nat-016",
+      "language": "uk",
+      "kind": "natural",
+      "text": "похмура фонова музика для жахів та підземель",
+      "judgments": [
+        { "documentKey": "asset-054", "relevance": 3 },
+        { "documentKey": "asset-053", "relevance": 2 }
+      ]
+    },
+    {
+      "id": "uk-key-017",
+      "language": "uk",
+      "kind": "keyword",
+      "text": "піксельний тайлсет персонаж платформер",
+      "judgments": [
+        { "documentKey": "asset-030", "relevance": 3 },
+        { "documentKey": "asset-029", "relevance": 2 }
+      ]
+    },
+    {
+      "id": "uk-key-018",
+      "language": "uk",
+      "kind": "keyword",
+      "text": "ігровий інтерфейс HUD рамки карти",
+      "judgments": [
+        { "documentKey": "asset-026", "relevance": 3 },
+        { "documentKey": "asset-025", "relevance": 2 }
+      ]
+    },
+    {
+      "id": "uk-key-019",
+      "language": "uk",
+      "kind": "keyword",
+      "text": "аніме контур cel shading шейдер",
+      "judgments": [
+        { "documentKey": "asset-046", "relevance": 3 },
+        { "documentKey": "asset-045", "relevance": 2 }
+      ]
+    },
+    {
+      "id": "uk-key-020",
+      "language": "uk",
+      "kind": "keyword",
+      "text": "ізометричне село фентезі таверна",
+      "judgments": [
+        { "documentKey": "asset-062", "relevance": 3 },
+        { "documentKey": "asset-061", "relevance": 2 }
+      ]
+    },
+    {
+      "id": "uk-key-021",
+      "language": "uk",
+      "kind": "keyword",
+      "text": "звукові ефекти вибуху вогонь",
+      "judgments": [
+        { "documentKey": "asset-060", "relevance": 3 },
+        { "documentKey": "asset-059", "relevance": 2 }
+      ]
+    },
+    {
+      "id": "uk-typ-022",
+      "language": "uk",
+      "kind": "typo",
+      "text": "лицрський меч фентез",
+      "judgments": [
+        { "documentKey": "asset-002", "relevance": 3 },
+        { "documentKey": "asset-001", "relevance": 2 }
+      ]
+    },
+    {
+      "id": "uk-typ-023",
+      "language": "uk",
+      "kind": "typo",
+      "text": "модульнии замок камянний",
+      "judgments": [
+        { "documentKey": "asset-006", "relevance": 3 },
+        { "documentKey": "asset-005", "relevance": 2 }
+      ]
+    },
+    {
+      "id": "uk-typ-024",
+      "language": "uk",
+      "kind": "typo",
+      "text": "оркестровва боєва музика",
+      "judgments": [
+        { "documentKey": "asset-018", "relevance": 3 },
+        { "documentKey": "asset-017", "relevance": 2 }
+      ]
+    },
+    {
+      "id": "uk-typ-025",
+      "language": "uk",
+      "kind": "typo",
+      "text": "іконки інвентарю зіля",
+      "judgments": [
+        { "documentKey": "asset-028", "relevance": 3 },
+        { "documentKey": "asset-027", "relevance": 2 }
+      ]
+    },
+    {
+      "id": "uk-typ-026",
+      "language": "uk",
+      "kind": "typo",
+      "text": "шейдєр водди хвилі",
+      "judgments": [
+        { "documentKey": "asset-042", "relevance": 3 },
+        { "documentKey": "asset-041", "relevance": 2 }
+      ]
+    },
+    {
+      "id": "uk-crs-027",
+      "language": "uk",
+      "kind": "cross-language",
+      "text": "low poly sword shield фентезі",
+      "judgments": [
+        { "documentKey": "asset-001", "relevance": 3 },
+        { "documentKey": "asset-002", "relevance": 3 }
+      ]
+    },
+    {
+      "id": "uk-crs-028",
+      "language": "uk",
+      "kind": "cross-language",
+      "text": "scifi rifle плазмова зброя",
+      "judgments": [
+        { "documentKey": "asset-003", "relevance": 3 },
+        { "documentKey": "asset-004", "relevance": 3 }
+      ]
+    },
+    {
+      "id": "uk-crs-029",
+      "language": "uk",
+      "kind": "cross-language",
+      "text": "medieval castle modular kit замок",
+      "judgments": [
+        { "documentKey": "asset-005", "relevance": 3 },
+        { "documentKey": "asset-006", "relevance": 3 }
+      ]
+    },
+    {
+      "id": "uk-crs-030",
+      "language": "uk",
+      "kind": "cross-language",
+      "text": "chiptune 8bit саундтрек для гри",
+      "judgments": [
+        { "documentKey": "asset-019", "relevance": 3 },
+        { "documentKey": "asset-020", "relevance": 3 }
+      ]
+    },
+    {
+      "id": "uk-crs-031",
+      "language": "uk",
+      "kind": "cross-language",
+      "text": "particle vfx заклинання магія",
+      "judgments": [
+        { "documentKey": "asset-043", "relevance": 3 },
+        { "documentKey": "asset-044", "relevance": 3 }
+      ]
+    },
+    {
+      "id": "en-nat-032",
+      "language": "en",
+      "kind": "natural",
+      "text": "low poly sword and buckler shield for rpg",
+      "judgments": [
+        { "documentKey": "asset-001", "relevance": 3 },
+        { "documentKey": "asset-002", "relevance": 2 },
+        { "documentKey": "asset-037", "relevance": 1 }
+      ]
+    },
+    {
+      "id": "en-nat-033",
+      "language": "en",
+      "kind": "natural",
+      "text": "modular medieval stone fortress and towers",
+      "judgments": [
+        { "documentKey": "asset-005", "relevance": 3 },
+        { "documentKey": "asset-006", "relevance": 2 }
+      ]
+    },
+    {
+      "id": "en-nat-034",
+      "language": "en",
+      "kind": "natural",
+      "text": "sci-fi energy plasma assault rifle model",
+      "judgments": [
+        { "documentKey": "asset-003", "relevance": 3 },
+        { "documentKey": "asset-004", "relevance": 2 },
+        { "documentKey": "asset-023", "relevance": 1 }
+      ]
+    },
+    {
+      "id": "en-nat-035",
+      "language": "en",
+      "kind": "natural",
+      "text": "stylized pine forest trees and foliage vegetation",
+      "judgments": [
+        { "documentKey": "asset-007", "relevance": 3 },
+        { "documentKey": "asset-008", "relevance": 2 }
+      ]
+    },
+    {
+      "id": "en-nat-036",
+      "language": "en",
+      "kind": "natural",
+      "text": "seamless cobblestone stone pavement ground textures",
+      "judgments": [
+        { "documentKey": "asset-011", "relevance": 3 },
+        { "documentKey": "asset-012", "relevance": 2 }
+      ]
+    },
+    {
+      "id": "en-nat-037",
+      "language": "en",
+      "kind": "natural",
+      "text": "epic orchestral battle music with brass and drums",
+      "judgments": [
+        { "documentKey": "asset-017", "relevance": 3 },
+        { "documentKey": "asset-018", "relevance": 2 }
+      ]
+    },
+    {
+      "id": "en-nat-038",
+      "language": "en",
+      "kind": "natural",
+      "text": "retro 8-bit chiptune arcade platformer music",
+      "judgments": [
+        { "documentKey": "asset-019", "relevance": 3 },
+        { "documentKey": "asset-020", "relevance": 2 }
+      ]
+    },
+    {
+      "id": "en-nat-039",
+      "language": "en",
+      "kind": "natural",
+      "text": "forest ambient recordings wind rain and leaves",
+      "judgments": [
+        { "documentKey": "asset-021", "relevance": 3 },
+        { "documentKey": "asset-022", "relevance": 2 }
+      ]
+    },
+    {
+      "id": "en-nat-040",
+      "language": "en",
+      "kind": "natural",
+      "text": "dark hud ui health bar and minimap frames",
+      "judgments": [
+        { "documentKey": "asset-025", "relevance": 3 },
+        { "documentKey": "asset-026", "relevance": 2 }
+      ]
+    },
+    {
+      "id": "en-nat-041",
+      "language": "en",
+      "kind": "natural",
+      "text": "fantasy rpg inventory potions and spell rune icons",
+      "judgments": [
+        { "documentKey": "asset-027", "relevance": 3 },
+        { "documentKey": "asset-028", "relevance": 2 }
+      ]
+    },
+    {
+      "id": "en-nat-042",
+      "language": "en",
+      "kind": "natural",
+      "text": "third person character locomotion controller camera",
+      "judgments": [
+        { "documentKey": "asset-033", "relevance": 3 },
+        { "documentKey": "asset-034", "relevance": 2 }
+      ]
+    },
+    {
+      "id": "en-nat-043",
+      "language": "en",
+      "kind": "natural",
+      "text": "mocap sword combat humanoid animations",
+      "judgments": [
+        { "documentKey": "asset-037", "relevance": 3 },
+        { "documentKey": "asset-038", "relevance": 2 }
+      ]
+    },
+    {
+      "id": "en-nat-044",
+      "language": "en",
+      "kind": "natural",
+      "text": "stylized cartoon ocean water shader with foam",
+      "judgments": [
+        { "documentKey": "asset-041", "relevance": 3 },
+        { "documentKey": "asset-042", "relevance": 2 }
+      ]
+    },
+    {
+      "id": "en-nat-045",
+      "language": "en",
+      "kind": "natural",
+      "text": "magic fireball and lightning spell particle effects",
+      "judgments": [
+        { "documentKey": "asset-043", "relevance": 3 },
+        { "documentKey": "asset-044", "relevance": 2 },
+        { "documentKey": "asset-059", "relevance": 1 }
+      ]
+    },
+    {
+      "id": "en-nat-046",
+      "language": "en",
+      "kind": "natural",
+      "text": "blacksmith workshop anvil and forge props",
+      "judgments": [
+        { "documentKey": "asset-047", "relevance": 3 },
+        { "documentKey": "asset-048", "relevance": 2 }
+      ]
+    },
+    {
+      "id": "en-nat-047",
+      "language": "en",
+      "kind": "natural",
+      "text": "underground dungeon crypt sarcophagus and skeletons",
+      "judgments": [
+        { "documentKey": "asset-049", "relevance": 3 },
+        { "documentKey": "asset-050", "relevance": 2 },
+        { "documentKey": "asset-053", "relevance": 1 }
+      ]
+    },
+    {
+      "id": "en-key-048",
+      "language": "en",
+      "kind": "keyword",
+      "text": "pixel art cave tileset character",
+      "judgments": [
+        { "documentKey": "asset-029", "relevance": 3 },
+        { "documentKey": "asset-030", "relevance": 2 }
+      ]
+    },
+    {
+      "id": "en-key-049",
+      "language": "en",
+      "kind": "keyword",
+      "text": "grid inventory system drag drop",
+      "judgments": [
+        { "documentKey": "asset-031", "relevance": 3 },
+        { "documentKey": "asset-032", "relevance": 2 }
+      ]
+    },
+    {
+      "id": "en-key-050",
+      "language": "en",
+      "kind": "keyword",
+      "text": "hand painted wood planks floor",
+      "judgments": [
+        { "documentKey": "asset-015", "relevance": 3 },
+        { "documentKey": "asset-016", "relevance": 2 }
+      ]
+    },
+    {
+      "id": "en-key-051",
+      "language": "en",
+      "kind": "keyword",
+      "text": "quadruped animal rig walk cycle",
+      "judgments": [
+        { "documentKey": "asset-039", "relevance": 3 },
+        { "documentKey": "asset-040", "relevance": 2 }
+      ]
+    },
+    {
+      "id": "en-key-052",
+      "language": "en",
+      "kind": "keyword",
+      "text": "cyberpunk street neon hologram props",
+      "judgments": [
+        { "documentKey": "asset-009", "relevance": 3 },
+        { "documentKey": "asset-010", "relevance": 2 }
+      ]
+    },
+    {
+      "id": "en-typ-053",
+      "language": "en",
+      "kind": "typo",
+      "text": "lowpoly fantsy sward shild",
+      "judgments": [
+        { "documentKey": "asset-001", "relevance": 3 },
+        { "documentKey": "asset-002", "relevance": 2 }
+      ]
+    },
+    {
+      "id": "en-typ-054",
+      "language": "en",
+      "kind": "typo",
+      "text": "scifi plazma rifel blaster",
+      "judgments": [
+        { "documentKey": "asset-003", "relevance": 3 },
+        { "documentKey": "asset-004", "relevance": 2 }
+      ]
+    },
+    {
+      "id": "en-typ-055",
+      "language": "en",
+      "kind": "typo",
+      "text": "medival modular castel kit",
+      "judgments": [
+        { "documentKey": "asset-005", "relevance": 3 },
+        { "documentKey": "asset-006", "relevance": 2 }
+      ]
+    },
+    {
+      "id": "en-typ-056",
+      "language": "en",
+      "kind": "typo",
+      "text": "stylised ocan watr shadr",
+      "judgments": [
+        { "documentKey": "asset-041", "relevance": 3 },
+        { "documentKey": "asset-042", "relevance": 2 }
+      ]
+    },
+    {
+      "id": "en-typ-057",
+      "language": "en",
+      "kind": "typo",
+      "text": "explsion fir blast fx",
+      "judgments": [
+        { "documentKey": "asset-059", "relevance": 3 },
+        { "documentKey": "asset-060", "relevance": 2 }
+      ]
+    },
+    {
+      "id": "en-crs-058",
+      "language": "en",
+      "kind": "cross-language",
+      "text": "carpathian nature forest wind sounds",
+      "judgments": [
+        { "documentKey": "asset-021", "relevance": 3 },
+        { "documentKey": "asset-022", "relevance": 3 }
+      ]
+    },
+    {
+      "id": "en-crs-059",
+      "language": "en",
+      "kind": "cross-language",
+      "text": "knight sword model лицарський меч",
+      "judgments": [
+        { "documentKey": "asset-001", "relevance": 3 },
+        { "documentKey": "asset-002", "relevance": 3 }
+      ]
+    },
+    {
+      "id": "en-crs-060",
+      "language": "en",
+      "kind": "cross-language",
+      "text": "medieval fortress замок фортеця",
+      "judgments": [
+        { "documentKey": "asset-005", "relevance": 3 },
+        { "documentKey": "asset-006", "relevance": 3 }
+      ]
+    },
+    {
+      "id": "en-crs-061",
+      "language": "en",
+      "kind": "cross-language",
+      "text": "grid inventory system інвентар для гри",
+      "judgments": [
+        { "documentKey": "asset-031", "relevance": 3 },
+        { "documentKey": "asset-032", "relevance": 3 }
+      ]
+    },
+    {
+      "id": "en-crs-062",
+      "language": "en",
+      "kind": "cross-language",
+      "text": "stylized water shader шейдер води",
+      "judgments": [
+        { "documentKey": "asset-041", "relevance": 3 },
+        { "documentKey": "asset-042", "relevance": 3 }
+      ]
+    },
+    {
+      "id": "tech-063",
+      "language": "technical",
+      "kind": "natural",
+      "text": "Unity C# grid inventory drag and drop item stacking",
+      "judgments": [
+        { "documentKey": "asset-031", "relevance": 3 },
+        { "documentKey": "asset-032", "relevance": 3 }
+      ]
+    },
+    {
+      "id": "tech-064",
+      "language": "technical",
+      "kind": "natural",
+      "text": "4K PBR seamless cobblestone normal roughness height maps",
+      "judgments": [
+        { "documentKey": "asset-011", "relevance": 3 },
+        { "documentKey": "asset-012", "relevance": 3 }
+      ]
+    },
+    {
+      "id": "tech-065",
+      "language": "technical",
+      "kind": "natural",
+      "text": "FBX humanoid mocap combat attack animation cycles",
+      "judgments": [
+        { "documentKey": "asset-037", "relevance": 3 },
+        { "documentKey": "asset-038", "relevance": 3 }
+      ]
+    },
+    {
+      "id": "tech-066",
+      "language": "technical",
+      "kind": "natural",
+      "text": "HLSL cel shading outline post-processing anime shader",
+      "judgments": [
+        { "documentKey": "asset-045", "relevance": 3 },
+        { "documentKey": "asset-046", "relevance": 3 }
+      ]
+    },
+    {
+      "id": "tech-067",
+      "language": "technical",
+      "kind": "natural",
+      "text": "A* pathfinding dynamic navmesh local avoidance C#",
+      "judgments": [
+        { "documentKey": "asset-035", "relevance": 3 },
+        { "documentKey": "asset-036", "relevance": 3 }
+      ]
+    },
+    {
+      "id": "tech-068",
+      "language": "technical",
+      "kind": "natural",
+      "text": "FPS procedural recoil aim down sights camera sway script",
+      "judgments": [
+        { "documentKey": "asset-057", "relevance": 3 },
+        { "documentKey": "asset-058", "relevance": 3 }
+      ]
+    },
+    {
+      "id": "tech-069",
+      "language": "technical",
+      "kind": "natural",
+      "text": "Sci-fi 4K PBR metal hull panels normal emissive",
+      "judgments": [
+        { "documentKey": "asset-013", "relevance": 3 },
+        { "documentKey": "asset-014", "relevance": 3 }
+      ]
+    },
+    {
+      "id": "tech-070",
+      "language": "technical",
+      "kind": "natural",
+      "text": "Mobile on-screen virtual joystick touch input script",
+      "judgments": [
+        { "documentKey": "asset-055", "relevance": 3 },
+        { "documentKey": "asset-056", "relevance": 3 }
+      ]
+    },
+    {
+      "id": "tech-071",
+      "language": "technical",
+      "kind": "natural",
+      "text": "96kHz 24-bit WAV field recordings nature wind",
+      "judgments": [
+        { "documentKey": "asset-021", "relevance": 3 },
+        { "documentKey": "asset-022", "relevance": 3 }
+      ]
+    },
+    {
+      "id": "tech-072",
+      "language": "technical",
+      "kind": "natural",
+      "text": "Third person locomotion controller root motion camera orbit",
+      "judgments": [
+        { "documentKey": "asset-033", "relevance": 3 },
+        { "documentKey": "asset-034", "relevance": 3 }
+      ]
+    },
+    {
+      "id": "tech-073",
+      "language": "technical",
+      "kind": "natural",
+      "text": "Volumetric particle VFX explosion shockwave fire smoke",
+      "judgments": [
+        { "documentKey": "asset-059", "relevance": 3 },
+        { "documentKey": "asset-060", "relevance": 3 }
+      ]
+    },
+    {
+      "id": "tech-074",
+      "language": "technical",
+      "kind": "natural",
+      "text": "16x16 pixel art tileset spritesheet animated hero",
+      "judgments": [
+        { "documentKey": "asset-029", "relevance": 3 },
+        { "documentKey": "asset-030", "relevance": 3 }
+      ]
+    },
+    {
+      "id": "tech-075",
+      "language": "technical",
+      "kind": "natural",
+      "text": "Node graph dialogue quest system branching story",
+      "judgments": [
+        { "documentKey": "asset-065", "relevance": 3 }
+      ]
+    },
+    {
+      "id": "tech-076",
+      "language": "technical",
+      "kind": "natural",
+      "text": "Procedural rust patina copper iron PBR substance materials",
+      "judgments": [
+        { "documentKey": "asset-051", "relevance": 3 },
+        { "documentKey": "asset-052", "relevance": 3 }
+      ]
+    },
+    {
+      "id": "tech-077",
+      "language": "technical",
+      "kind": "natural",
+      "text": "Quadruped creature rigged bones walk gallop cycle FBX",
+      "judgments": [
+        { "documentKey": "asset-039", "relevance": 3 },
+        { "documentKey": "asset-040", "relevance": 3 }
+      ]
+    },
+    {
+      "id": "tech-078",
+      "language": "technical",
+      "kind": "natural",
+      "text": "Stylized water vertex displacement wave foam depth fade shader",
+      "judgments": [
+        { "documentKey": "asset-041", "relevance": 3 },
+        { "documentKey": "asset-042", "relevance": 3 }
+      ]
+    },
+    {
+      "id": "tech-typ-079",
+      "language": "technical",
+      "kind": "typo",
+      "text": "untiy csharp grid ivnentory stystem",
+      "judgments": [
+        { "documentKey": "asset-031", "relevance": 3 },
+        { "documentKey": "asset-032", "relevance": 3 }
+      ]
+    },
+    {
+      "id": "tech-typ-080",
+      "language": "technical",
+      "kind": "typo",
+      "text": "4k pbr coblestone norml ruffness",
+      "judgments": [
+        { "documentKey": "asset-011", "relevance": 3 },
+        { "documentKey": "asset-012", "relevance": 3 }
+      ]
+    },
+    {
+      "id": "tech-typ-081",
+      "language": "technical",
+      "kind": "typo",
+      "text": "fbx humanod mocap combat animaton",
+      "judgments": [
+        { "documentKey": "asset-037", "relevance": 3 },
+        { "documentKey": "asset-038", "relevance": 3 }
+      ]
+    },
+    {
+      "id": "tech-typ-082",
+      "language": "technical",
+      "kind": "typo",
+      "text": "hlsl cel shadin outlin anim shader",
+      "judgments": [
+        { "documentKey": "asset-045", "relevance": 3 },
+        { "documentKey": "asset-046", "relevance": 3 }
+      ]
+    },
+    {
+      "id": "tech-typ-083",
+      "language": "technical",
+      "kind": "typo",
+      "text": "fps recoil aming down sights camra",
+      "judgments": [
+        { "documentKey": "asset-057", "relevance": 3 },
+        { "documentKey": "asset-058", "relevance": 3 }
+      ]
+    },
+    {
+      "id": "tech-typ-084",
+      "language": "technical",
+      "kind": "typo",
+      "text": "astar pathfnding navmesh dynamc ai",
+      "judgments": [
+        { "documentKey": "asset-035", "relevance": 3 },
+        { "documentKey": "asset-036", "relevance": 3 }
+      ]
+    },
+    {
+      "id": "tech-typ-085",
+      "language": "technical",
+      "kind": "typo",
+      "text": "mobl virtual joystck touch ipnut",
+      "judgments": [
+        { "documentKey": "asset-055", "relevance": 3 },
+        { "documentKey": "asset-056", "relevance": 3 }
+      ]
+    },
+    {
+      "id": "mix-crs-086",
+      "language": "mixed",
+      "kind": "cross-language",
+      "text": "текстури PBR 4K метал обшивка spaceship",
+      "judgments": [
+        { "documentKey": "asset-013", "relevance": 3 },
+        { "documentKey": "asset-014", "relevance": 3 }
+      ]
+    },
+    {
+      "id": "mix-crs-087",
+      "language": "mixed",
+      "kind": "cross-language",
+      "text": "C# скрипт інвентаря inventory grid drag drop",
+      "judgments": [
+        { "documentKey": "asset-031", "relevance": 3 },
+        { "documentKey": "asset-032", "relevance": 3 }
+      ]
+    },
+    {
+      "id": "mix-crs-088",
+      "language": "mixed",
+      "kind": "cross-language",
+      "text": "3D модель лицарський меч sword fbx lowpoly",
+      "judgments": [
+        { "documentKey": "asset-001", "relevance": 3 },
+        { "documentKey": "asset-002", "relevance": 3 }
+      ]
+    },
+    {
+      "id": "mix-crs-089",
+      "language": "mixed",
+      "kind": "cross-language",
+      "text": "шейдер води water ocean shader hlsl vfx",
+      "judgments": [
+        { "documentKey": "asset-041", "relevance": 3 },
+        { "documentKey": "asset-042", "relevance": 3 }
+      ]
+    },
+    {
+      "id": "mix-crs-090",
+      "language": "mixed",
+      "kind": "cross-language",
+      "text": "бойові анімації mocap combat animations fbx",
+      "judgments": [
+        { "documentKey": "asset-037", "relevance": 3 },
+        { "documentKey": "asset-038", "relevance": 3 }
+      ]
+    },
+    {
+      "id": "mix-crs-091",
+      "language": "mixed",
+      "kind": "cross-language",
+      "text": "вибух частки explosion vfx particle fire shockwave",
+      "judgments": [
+        { "documentKey": "asset-059", "relevance": 3 },
+        { "documentKey": "asset-060", "relevance": 3 }
+      ]
+    },
+    {
+      "id": "mix-crs-092",
+      "language": "mixed",
+      "kind": "cross-language",
+      "text": "лазерні звуки blaster laser sound effects sfx",
+      "judgments": [
+        { "documentKey": "asset-023", "relevance": 3 },
+        { "documentKey": "asset-024", "relevance": 3 }
+      ]
+    }
+  ]
+}
