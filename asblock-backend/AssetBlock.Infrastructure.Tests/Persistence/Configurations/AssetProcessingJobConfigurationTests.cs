@@ -37,7 +37,11 @@ public sealed class AssetProcessingJobConfigurationTests
 
         ICheckConstraint? typeCheck = entityType.GetCheckConstraints().FirstOrDefault(c => c.Name == "CK_asset_processing_jobs_type");
         typeCheck.Should().NotBeNull();
-        typeCheck.Sql.Should().Be("\"Type\" IN ('ARCHIVE_INSPECTION', 'MALWARE_SCAN', 'LISTING_COPILOT')");
+        typeCheck.Sql.Should().Be("\"Type\" IN ('ARCHIVE_INSPECTION', 'MALWARE_SCAN', 'LISTING_COPILOT', 'EMBEDDING_GENERATION')");
+
+        ICheckConstraint? embeddingHashesCheck = entityType.GetCheckConstraints().FirstOrDefault(c => c.Name == "CK_asset_processing_jobs_embedding_hashes");
+        embeddingHashesCheck.Should().NotBeNull();
+        embeddingHashesCheck.Sql.Should().Be("(\"Type\" = 'EMBEDDING_GENERATION' AND \"InputHash\" IS NOT NULL AND \"InputHash\" ~ '^[0-9a-f]{64}$' AND \"ModelKey\" IS NOT NULL AND \"ModelKey\" ~ '^[0-9a-f]{64}$') OR (\"Type\" <> 'EMBEDDING_GENERATION' AND \"InputHash\" IS NULL AND \"ModelKey\" IS NULL)");
 
         ICheckConstraint? statusCheck = entityType.GetCheckConstraints().FirstOrDefault(c => c.Name == "CK_asset_processing_jobs_status");
         statusCheck.Should().NotBeNull();
@@ -85,11 +89,25 @@ public sealed class AssetProcessingJobConfigurationTests
         resultAnnotation.Should().NotBeNull();
         resultAnnotation.Value.Should().Be("jsonb");
         entityType.FindProperty(nameof(AssetProcessingJob.TraceParent))!.GetMaxLength().Should().Be(128);
+        IAnnotation? inputHashAnnotation = entityType.FindProperty(nameof(AssetProcessingJob.InputHash))!.GetAnnotations().FirstOrDefault(a => a.Name == "Relational:ColumnType");
+        inputHashAnnotation.Should().NotBeNull();
+        inputHashAnnotation.Value.Should().Be("char(64)");
+
+        IAnnotation? modelKeyAnnotation = entityType.FindProperty(nameof(AssetProcessingJob.ModelKey))!.GetAnnotations().FirstOrDefault(a => a.Name == "Relational:ColumnType");
+        modelKeyAnnotation.Should().NotBeNull();
+        modelKeyAnnotation.Value.Should().Be("char(64)");
 
         IIndex? idempotencyIndex = entityType.GetIndexes().FirstOrDefault(i => i.GetDatabaseName() == "UIX_asset_processing_jobs_idempotency");
         idempotencyIndex.Should().NotBeNull();
         idempotencyIndex.IsUnique.Should().BeTrue();
+        idempotencyIndex.GetFilter().Should().Be("\"Type\" <> 'EMBEDDING_GENERATION'");
         idempotencyIndex.Properties.Select(p => p.Name).Should().BeEquivalentTo("AssetVersionId", "Type", "DefinitionVersion");
+
+        IIndex? embeddingActiveIndex = entityType.GetIndexes().FirstOrDefault(i => i.GetDatabaseName() == "UIX_asset_processing_jobs_embedding_active");
+        embeddingActiveIndex.Should().NotBeNull();
+        embeddingActiveIndex.IsUnique.Should().BeTrue();
+        embeddingActiveIndex.GetFilter().Should().Be("\"Type\" = 'EMBEDDING_GENERATION' AND \"Status\" IN ('QUEUED', 'RUNNING', 'RETRY_SCHEDULED')");
+        embeddingActiveIndex.Properties.Select(p => p.Name).Should().BeEquivalentTo("AssetId", "Type", "DefinitionVersion", "ModelKey", "InputHash");
 
         IIndex? claimIndex = entityType.GetIndexes().FirstOrDefault(i => i.GetDatabaseName() == "IX_asset_processing_jobs_claim");
         claimIndex.Should().NotBeNull();

@@ -19,7 +19,11 @@ internal sealed class GetAssetsQueryHandler(
 
     public async Task<Result<Domain.Core.Dto.Paging.PagedResult<AssetListItem>>> Handle(GetAssetsQuery request, CancellationToken cancellationToken)
     {
-        GetAssetsRequest normalizedRequest = request.Request with { Tags = AssetListNormalization.NormalizeTags(request.Request.Tags) };
+        GetAssetsRequest normalizedRequest = request.Request with
+        {
+            Search = CatalogSearchNormalization.NormalizeSearchQuery(request.Request.Search),
+            Tags = AssetListNormalization.NormalizeTags(request.Request.Tags)
+        };
         var key = CacheKeys.AssetsList(normalizedRequest);
         Domain.Core.Dto.Paging.PagedResult<AssetListItem>? cached = await cache.Get<Domain.Core.Dto.Paging.PagedResult<AssetListItem>>(key, cancellationToken);
         if (cached is not null)

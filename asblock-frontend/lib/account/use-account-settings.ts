@@ -66,14 +66,14 @@ export function useAccountSettings() {
   const queryClient = useQueryClient()
   const profileQuery = useQuery({
     queryKey: accountKeys.me(),
-    queryFn: fetchAccountProfile,
+    queryFn: () => fetchAccountProfile(),
     retry: false,
   })
   const profile = profileQuery.data ?? null
 
   const socialPlatformsQuery = useQuery({
     queryKey: accountKeys.socialPlatforms(),
-    queryFn: fetchAccountSocialPlatforms,
+    queryFn: () => fetchAccountSocialPlatforms(),
     enabled: Boolean(profile?.id),
   })
   const socialPlatforms = socialPlatformsQuery.data ?? EMPTY_SOCIAL_PLATFORMS

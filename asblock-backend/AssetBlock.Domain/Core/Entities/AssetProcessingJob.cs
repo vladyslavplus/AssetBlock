@@ -44,4 +44,8 @@ public class AssetProcessingJob : BaseEntity
     public string? Result { get; set; }
 
     public string? TraceParent { get; set; }
+
+    public string? InputHash { get; set; }
+
+    public string? ModelKey { get; set; }
 }

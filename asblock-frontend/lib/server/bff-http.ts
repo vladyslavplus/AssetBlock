@@ -37,6 +37,13 @@ export function problemResponse(
   })
 }
 
+/** A browser disconnected before the Route Handler could return a response. */
+export function clientClosedRequestResponse(): Response {
+  return problemResponse(499, 'ERR_CLIENT_CLOSED_REQUEST', 'Client closed request.', undefined, {
+    'Cache-Control': 'no-store',
+  })
+}
+
 export function invalidJsonResponse(): Response {
   return problemResponse(400, 'ERR_VALIDATION_FAILED', 'The request body must be valid JSON.', {
     body: ['Invalid JSON body.'],

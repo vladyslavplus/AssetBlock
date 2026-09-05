@@ -22,6 +22,9 @@ public class Asset : BaseEntity
     /// <summary>Denormalized review count updated atomically on review changes.</summary>
     public int RatingCount { get; set; }
 
+    /// <summary>Revision counter incremented when canonical searchable metadata changes.</summary>
+    public long SearchRevision { get; set; } = 1;
+
     public User Author { get; set; } = null!;
     public Category Category { get; set; } = null!;
     public ICollection<AssetVersion> Versions { get; set; } = new List<AssetVersion>();

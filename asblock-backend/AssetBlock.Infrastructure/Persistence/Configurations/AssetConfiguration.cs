@@ -11,7 +11,10 @@ internal sealed class AssetConfiguration : IEntityTypeConfiguration<Asset>
 
     public void Configure(EntityTypeBuilder<Asset> builder)
     {
-        builder.ToTable("assets");
+        builder.ToTable("assets", table =>
+        {
+            table.HasCheckConstraint("CK_assets_search_revision", "\"SearchRevision\" > 0");
+        });
 
         builder.HasKey(a => a.Id);
         builder.Property(a => a.AuthorId).IsRequired();
@@ -26,6 +29,7 @@ internal sealed class AssetConfiguration : IEntityTypeConfiguration<Asset>
         builder.Property(a => a.DeletedAt);
         builder.Property(a => a.RatingAverage).HasDefaultValue(0d);
         builder.Property(a => a.RatingCount).HasDefaultValue(0);
+        builder.Property(a => a.SearchRevision).IsRequired().HasDefaultValue(1L);
 
         builder.HasOne(a => a.Author)
             .WithMany(u => u.AuthoredAssets)

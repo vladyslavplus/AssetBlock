@@ -5,6 +5,7 @@
     <InternalsVisibleTo Include="AssetBlock.Infrastructure.Tests" />
     <InternalsVisibleTo Include="AssetBlock.Infrastructure.IntegrationTests" />
     <InternalsVisibleTo Include="AssetBlock.WebApi.IntegrationTests" />
+    <InternalsVisibleTo Include="AssetBlock.SearchEvaluation" />
   </ItemGroup>
 
   <ItemGroup>
@@ -24,6 +25,7 @@
     <PackageReference Include="Minio" Version="7.0.0" />
     <PackageReference Include="Npgsql" Version="10.0.1" />
     <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="10.0.0" />
+    <PackageReference Include="Pgvector.EntityFrameworkCore" Version="0.3.0" />
     <PackageReference Include="Polly" Version="8.6.5" />
     <PackageReference Include="Polly.Core" Version="8.6.5" />
     <PackageReference Include="SharpCompress" Version="0.50.0" />

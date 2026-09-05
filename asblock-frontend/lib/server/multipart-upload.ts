@@ -1,6 +1,6 @@
 import 'server-only'
 
-import { problemResponse } from '@/lib/server/bff-http'
+import { clientClosedRequestResponse, problemResponse } from '@/lib/server/bff-http'
 import { ASSET_UPLOAD_MAX_BYTES } from '@/lib/seller/seller-schemas'
 
 const MULTIPART_OVERHEAD_BYTES = 1024 * 1024
@@ -124,6 +124,10 @@ async function parseMetadataPrefix(
 export async function prepareMultipartUpload(
   request: Request,
 ): Promise<PrepareMultipartUploadResult> {
+  if (request.signal.aborted) {
+    return { ok: false, response: clientClosedRequestResponse() }
+  }
+
   const contentType = request.headers.get('content-type') ?? ''
   if (!contentType.toLowerCase().startsWith('multipart/form-data')) {
     return validationProblem('The request body must be multipart form data.')
@@ -241,6 +245,9 @@ export async function prepareMultipartUpload(
     }
   } catch {
     await reader.cancel()
+    if (request.signal.aborted) {
+      return { ok: false, response: clientClosedRequestResponse() }
+    }
     return validationProblem('The multipart request body is malformed.')
   }
 

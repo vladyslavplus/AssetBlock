@@ -6,7 +6,7 @@ public sealed class IntegrationTestFixture : IAsyncLifetime, IDisposable
 {
     private static readonly TimeSpan _startTimeout = TimeSpan.FromMinutes(2);
 
-    private readonly PostgreSqlContainer _postgres = new PostgreSqlBuilder("postgres:16.14-alpine3.24@sha256:57c72fd2a128e416c7fcc499958864df5301e940bca0a56f58fddf30ffc07777").Build();
+    private readonly PostgreSqlContainer _postgres = new PostgreSqlBuilder("pgvector/pgvector:0.8.6-pg16-bookworm@sha256:ccc6e83d6e35e931dc7c5def2022729d5a6c370318d099181995567ff1fb4d6b").Build();
 
     private AssetBlockWebApplicationFactory? _factory;
 
@@ -18,6 +18,7 @@ public sealed class IntegrationTestFixture : IAsyncLifetime, IDisposable
         try
         {
             await _postgres.StartAsync(cts.Token);
+            await _postgres.ExecScriptAsync("CREATE EXTENSION IF NOT EXISTS vector WITH SCHEMA public;", cts.Token);
         }
         catch (OperationCanceledException) when (!cts.IsCancellationRequested)
         {

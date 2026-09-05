@@ -126,4 +126,32 @@ describe('GET /api/auth/signalr-access', () => {
     const body = await res.json()
     expect(body.code).toBe('ERR_GATEWAY_ERROR')
   })
+
+  it('returns 499 when the browser cancels the hub-token request', async () => {
+    const sessionToken = makeJwt(Math.floor(Date.now() / 1000) + 3600)
+    cookieStore.set(AUTH_COOKIE_ACCESS, sessionToken)
+    const controller = new AbortController()
+
+    vi.stubGlobal('fetch', async (_url: RequestInfo | URL, init?: RequestInit) => {
+      if (init?.signal?.aborted) {
+        throw new DOMException('Caller aborted', 'AbortError')
+      }
+      return new Promise<Response>((_, reject) => {
+        init?.signal?.addEventListener('abort', () => {
+          reject(new DOMException('Caller aborted', 'AbortError'))
+        })
+      })
+    })
+
+    const promise = GET(
+      new Request('http://localhost:3000/api/auth/signalr-access', {
+        signal: controller.signal,
+      }),
+    )
+    controller.abort()
+
+    const response = await promise
+    expect(response.status).toBe(499)
+    expect((await response.json()).code).toBe('ERR_CLIENT_CLOSED_REQUEST')
+  })
 })

@@ -88,13 +88,13 @@ public static class DependencyInjection
 
         services.AddDbContext<ApplicationDbContext>((sp, options) =>
         {
-            options.UseNpgsql(connectionString);
+            options.UseNpgsql(connectionString, npgsql => npgsql.UseVector());
             options.AddInterceptors(sp.GetRequiredService<Persistence.Interceptors.AuditTimestampsInterceptor>());
         });
         services.AddDbContextFactory<ApplicationDbContext>(
             (sp, options) =>
             {
-                options.UseNpgsql(connectionString);
+                options.UseNpgsql(connectionString, npgsql => npgsql.UseVector());
                 options.AddInterceptors(sp.GetRequiredService<Persistence.Interceptors.AuditTimestampsInterceptor>());
             },
             ServiceLifetime.Scoped);
@@ -123,6 +123,10 @@ public static class DependencyInjection
             .Bind(configuration.GetSection(OllamaOptions.CONFIGURATION_PATH))
             .ValidateOnStart();
         services.AddSingleton<IValidateOptions<OllamaOptions>, OllamaOptionsValidator>();
+        services.AddOptions<EmbeddingOptions>()
+            .Bind(configuration.GetSection(EmbeddingOptions.CONFIGURATION_PATH))
+            .ValidateOnStart();
+        services.AddSingleton<IValidateOptions<EmbeddingOptions>, EmbeddingOptionsValidator>();
         services.AddHttpClient(OpenRouterAiGenerationProvider.HTTP_CLIENT_NAME, (sp, client) =>
         {
             OpenRouterOptions options = sp.GetRequiredService<IOptions<OpenRouterOptions>>().Value;
@@ -190,6 +194,7 @@ public static class DependencyInjection
         services.AddScoped<IAuditContextAccessor, NullAuditContextAccessor>();
         services.AddScoped<IPaymentService, StripePaymentService>();
         services.AddScoped<IDownloadService, DownloadService>();
+        services.AddScoped<IVectorSearchCapability, VectorSearchCapability>();
         services.AddAssetStorage(configuration);
         services.AddSingleton<IEncryptionService, AesGcmEncryptionService>();
         services.AddSingleton<IPasswordHasher, PasswordHasher>();
