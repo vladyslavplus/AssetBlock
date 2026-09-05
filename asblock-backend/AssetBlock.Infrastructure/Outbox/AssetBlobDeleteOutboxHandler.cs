@@ -21,6 +21,6 @@ internal sealed class AssetBlobDeleteOutboxHandler(
             ?? throw new InvalidOperationException("Invalid AssetBlobDelete payload.");
 
         await storageService.Delete(payload.StorageKey, cancellationToken);
-        logger.LogInformation("Deleted blob {StorageKey} for asset {AssetId} via outbox", payload.StorageKey, payload.AssetId);
+        logger.LogInformation("Deleted blob for asset {AssetId} via outbox", payload.AssetId);
     }
 }

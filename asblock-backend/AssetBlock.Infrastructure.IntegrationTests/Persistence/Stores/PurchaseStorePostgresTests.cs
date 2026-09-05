@@ -1,6 +1,7 @@
 using AssetBlock.Domain.Core.Dto.Paging;
 using AssetBlock.Domain.Core.Dto.Users;
 using AssetBlock.Domain.Core.Entities;
+using AssetBlock.Domain.Core.Enums;
 using AssetBlock.Domain.Core.Exceptions;
 using AssetBlock.Infrastructure.IntegrationTests.Support;
 using AssetBlock.Infrastructure.Persistence;
@@ -265,6 +266,98 @@ public sealed class PurchaseStorePostgresTests(PostgresFixture fixture)
         result.Items[0].AssetTitle.Should().Be("Soft Deleted Pack");
         result.Items[0].Price.Should().Be(19.99m);
         result.Items[0].AuthorUsername.Should().Be(author.Username);
+    }
+
+    [Fact]
+    public async Task ListForUser_WhenNewerVersionsArePendingOrRejected_ShouldOnlyProjectLatestReadyVersion()
+    {
+        await using ApplicationDbContext db = await fixture.CreateCleanDbContext();
+        (User author, Category category) = await TestData.SeedAuthorAndCategory(db);
+        User buyer = TestData.CreateUser("candidate-buyer", "candidate-buyer@example.test");
+        db.Users.Add(buyer);
+        await db.SaveChangesAsync();
+
+        Asset asset = TestData.CreateAsset(author.Id, category.Id, title: "Versioned Pack", price: 25.00m);
+        db.Assets.Add(asset);
+
+        // v1: purchased and READY
+        AssetVersion v1 = TestData.CreateAssetVersion(
+            asset.Id,
+            versionNumber: 1,
+            isCurrent: true,
+            processingStatus: AssetVersionProcessingStatus.READY);
+        db.AssetVersions.Add(v1);
+        await db.SaveChangesAsync();
+
+        TestData.AddCompletedPurchase(
+            db,
+            TestData.CreatePurchase(buyer.Id, asset.Id, v1.Id),
+            asset.Title,
+            author.Id,
+            pricePaid: 25.00m);
+        await db.SaveChangesAsync();
+
+        // v2: PENDING_MALWARE_SCAN (quarantined)
+        AssetVersion v2 = TestData.CreateAssetVersion(
+            asset.Id,
+            versionNumber: 2,
+            isCurrent: false,
+            processingStatus: AssetVersionProcessingStatus.PENDING_MALWARE_SCAN);
+
+        // v3: REJECTED with error
+        AssetVersion v3 = TestData.CreateAssetVersion(
+            asset.Id,
+            versionNumber: 3,
+            isCurrent: false,
+            processingStatus: AssetVersionProcessingStatus.REJECTED);
+        v3.ProcessingErrorCode = "MALWARE_DETECTED";
+        v3.ProcessingErrorSummary = "Threat identified";
+
+        db.AssetVersions.AddRange(v2, v3);
+        await db.SaveChangesAsync();
+
+        var store = new PurchaseStore(db);
+        PagedResult<PurchaseLibraryItemDto> resultBeforeReady = await store.ListForUser(buyer.Id, new ListMyPurchasesRequest
+        {
+            Page = 1,
+            PageSize = 10,
+            SortBy = "PurchasedAt",
+            SortDirection = SortDirection.DESC
+        });
+
+        resultBeforeReady.TotalCount.Should().Be(1);
+        PurchaseLibraryItemDto itemBefore = resultBeforeReady.Items[0];
+        itemBefore.PurchasedVersionNumber.Should().Be(1);
+        itemBefore.PurchasedVersionId.Should().Be(v1.Id);
+        itemBefore.LatestEntitledVersionNumber.Should().Be(1);
+        itemBefore.LatestEntitledVersionId.Should().Be(v1.Id);
+        itemBefore.HasUpdate.Should().BeFalse();
+
+        // v4: Promoted to READY
+        AssetVersion v4 = TestData.CreateAssetVersion(
+            asset.Id,
+            versionNumber: 4,
+            isCurrent: true,
+            processingStatus: AssetVersionProcessingStatus.READY);
+        v1.IsCurrent = false;
+        db.AssetVersions.Add(v4);
+        await db.SaveChangesAsync();
+
+        PagedResult<PurchaseLibraryItemDto> resultAfterReady = await store.ListForUser(buyer.Id, new ListMyPurchasesRequest
+        {
+            Page = 1,
+            PageSize = 10,
+            SortBy = "PurchasedAt",
+            SortDirection = SortDirection.DESC
+        });
+
+        resultAfterReady.TotalCount.Should().Be(1);
+        PurchaseLibraryItemDto itemAfter = resultAfterReady.Items[0];
+        itemAfter.PurchasedVersionNumber.Should().Be(1);
+        itemAfter.PurchasedVersionId.Should().Be(v1.Id);
+        itemAfter.LatestEntitledVersionNumber.Should().Be(4);
+        itemAfter.LatestEntitledVersionId.Should().Be(v4.Id);
+        itemAfter.HasUpdate.Should().BeTrue();
     }
 }
 

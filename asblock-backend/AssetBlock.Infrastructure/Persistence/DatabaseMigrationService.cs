@@ -247,7 +247,7 @@ internal sealed class DatabaseMigrationService(
         try
         {
             await context.SaveChangesAsync(cancellationToken);
-            logger.LogInformation("Dev admin seeded -> email: {Email}, password: {Password}", DEV_ADMIN_EMAIL, DEV_ADMIN_PASSWORD);
+            logger.LogInformation("Dev admin seeded -> email: {Email}", DEV_ADMIN_EMAIL);
         }
         catch (DbUpdateException ex) when (ex.InnerException is Npgsql.PostgresException { SqlState: Npgsql.PostgresErrorCodes.UniqueViolation })
         {
@@ -307,9 +307,8 @@ internal sealed class DatabaseMigrationService(
             {
                 await context.SaveChangesAsync(cancellationToken);
                 logger.LogInformation(
-                    "Demo vendor seeded → username: {Username}, password: {Password}",
-                    DEMO_VENDOR_USERNAME,
-                    DEMO_VENDOR_PASSWORD);
+                    "Demo vendor seeded → username: {Username}",
+                    DEMO_VENDOR_USERNAME);
             }
             catch (DbUpdateException ex) when (ex.InnerException is Npgsql.PostgresException { SqlState: Npgsql.PostgresErrorCodes.UniqueViolation })
             {
@@ -400,7 +399,7 @@ internal sealed class DatabaseMigrationService(
                 }
                 catch (Exception ex)
                 {
-                    logger.LogWarning(ex, "Failed to remove demo seed blob {StorageKey}", key);
+                    logger.LogWarning(ex, "Failed to remove demo seed blob");
                 }
             }
 
@@ -558,9 +557,8 @@ internal sealed class DatabaseMigrationService(
             {
                 await context.SaveChangesAsync(cancellationToken);
                 logger.LogInformation(
-                    "Demo reviewer seeded -> username: {Username}, password: {Password}",
-                    username,
-                    DEMO_REVIEWER_PASSWORD);
+                    "Demo reviewer seeded -> username: {Username}",
+                    username);
             }
             catch (DbUpdateException ex) when (ex.InnerException is Npgsql.PostgresException { SqlState: Npgsql.PostgresErrorCodes.UniqueViolation })
             {

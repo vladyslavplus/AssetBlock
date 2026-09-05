@@ -59,8 +59,9 @@ export function AssetEditForm({ asset }: AssetEditFormProps) {
     control,
     setError,
     setValue,
+    getValues,
     handleSubmit,
-    formState: { errors, isSubmitting },
+    formState: { errors, isSubmitting, dirtyFields },
   } = useForm<AssetEditFormValues>({
     resolver: zodResolver(assetEditFormSchema),
     defaultValues: {
@@ -234,6 +235,8 @@ export function AssetEditForm({ asset }: AssetEditFormProps) {
             categories={categories}
             catalogTags={facetsQuery.data?.tags ?? []}
             setValue={setValue}
+            getValues={getValues}
+            dirtyFields={dirtyFields}
           />
         ) : null}
 

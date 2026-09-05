@@ -67,7 +67,7 @@ internal sealed class S3CompatibleObjectStore(
                 ct).ConfigureAwait(false),
             cancellationToken);
 
-        logger.LogDebug("Uploaded object {Key} to bucket {Bucket}", key, bucket);
+        logger.LogDebug("Uploaded object to bucket {Bucket}", bucket);
     }
 
     public async Task OpenRead(string key, Func<Stream, CancellationToken, Task> consumer, CancellationToken cancellationToken = default)
@@ -93,7 +93,7 @@ internal sealed class S3CompatibleObjectStore(
                 ct).ConfigureAwait(false),
             cancellationToken);
 
-        logger.LogDebug("Deleted object {Key} from bucket {Bucket}", key, bucket);
+        logger.LogDebug("Deleted object from bucket {Bucket}", bucket);
     }
 
     public async IAsyncEnumerable<StorageObjectInfo> ListObjects(

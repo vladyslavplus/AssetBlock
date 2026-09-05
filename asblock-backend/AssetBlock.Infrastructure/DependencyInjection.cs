@@ -89,13 +89,13 @@ public static class DependencyInjection
         services.AddDbContext<ApplicationDbContext>((sp, options) =>
         {
             options.UseNpgsql(connectionString);
-            options.AddInterceptors(sp.GetRequiredService<AssetBlock.Infrastructure.Persistence.Interceptors.AuditTimestampsInterceptor>());
+            options.AddInterceptors(sp.GetRequiredService<Persistence.Interceptors.AuditTimestampsInterceptor>());
         });
         services.AddDbContextFactory<ApplicationDbContext>(
             (sp, options) =>
             {
                 options.UseNpgsql(connectionString);
-                options.AddInterceptors(sp.GetRequiredService<AssetBlock.Infrastructure.Persistence.Interceptors.AuditTimestampsInterceptor>());
+                options.AddInterceptors(sp.GetRequiredService<Persistence.Interceptors.AuditTimestampsInterceptor>());
             },
             ServiceLifetime.Scoped);
         services.AddHostedService<DatabaseMigrationService>();

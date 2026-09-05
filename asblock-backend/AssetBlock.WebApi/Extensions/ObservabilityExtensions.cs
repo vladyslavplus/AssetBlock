@@ -11,6 +11,14 @@ namespace AssetBlock.WebApi.Extensions;
 
 public static class ObservabilityExtensions
 {
+    private static readonly string _processInstanceId = Guid.NewGuid().ToString("N");
+
+    private static string ResolveServiceInstanceId()
+    {
+        var envInstanceId = Environment.GetEnvironmentVariable("OTEL_SERVICE_INSTANCE_ID");
+        return !string.IsNullOrWhiteSpace(envInstanceId) ? envInstanceId.Trim() : _processInstanceId;
+    }
+
     public static IServiceCollection AddAssetBlockObservability(
         this IServiceCollection services,
         IConfiguration configuration,
@@ -23,8 +31,7 @@ public static class ObservabilityExtensions
             return services;
         }
 
-        var instanceId = Environment.GetEnvironmentVariable("WEBSITE_INSTANCE_ID")
-            ?? Environment.MachineName;
+        var instanceId = ResolveServiceInstanceId();
 
         OpenTelemetryBuilder otel = services.AddOpenTelemetry()
             .ConfigureResource(r => r
@@ -92,8 +99,7 @@ public static class ObservabilityExtensions
             return logging;
         }
 
-        var instanceId = Environment.GetEnvironmentVariable("WEBSITE_INSTANCE_ID")
-            ?? Environment.MachineName;
+        var instanceId = ResolveServiceInstanceId();
 
         logging.AddOpenTelemetry(otelOpts =>
         {
@@ -110,6 +116,7 @@ public static class ObservabilityExtensions
             otelOpts.SetResourceBuilder(resourceBuilder);
             otelOpts.IncludeFormattedMessage = true;
             otelOpts.IncludeScopes = true;
+            otelOpts.AddProcessor(new Observability.OpenTelemetryLoggingPrivacyProcessor());
             otelOpts.AddOtlpExporter(exporterOpts =>
             {
                 exporterOpts.Endpoint = new Uri(options.OtlpEndpoint);

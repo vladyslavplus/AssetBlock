@@ -120,18 +120,17 @@ internal sealed class PurchaseStore(ApplicationDbContext dbContext) : IPurchaseS
                 p.AssetVersion.VersionNumber,
                 p.AssetVersionId,
                 p.Asset.Versions
-                    .Where(v => v.VersionNumber >= p.AssetVersion.VersionNumber)
+                    .Where(v => v.VersionNumber >= p.AssetVersion.VersionNumber && v.ProcessingStatus == AssetVersionProcessingStatus.READY)
                     .OrderByDescending(v => v.VersionNumber)
-                    .Select(v => v.VersionNumber)
-                    .First(),
+                    .Select(v => (int?)v.VersionNumber)
+                    .FirstOrDefault() ?? p.AssetVersion.VersionNumber,
                 p.Asset.Versions
-                    .Where(v => v.VersionNumber >= p.AssetVersion.VersionNumber)
+                    .Where(v => v.VersionNumber >= p.AssetVersion.VersionNumber && v.ProcessingStatus == AssetVersionProcessingStatus.READY)
                     .OrderByDescending(v => v.VersionNumber)
-                    .Select(v => v.Id)
-                    .First(),
+                    .Select(v => (Guid?)v.Id)
+                    .FirstOrDefault() ?? p.AssetVersionId,
                 p.Asset.Versions
-                    .Where(v => v.IsCurrent)
-                    .Any(v => v.VersionNumber > p.AssetVersion.VersionNumber),
+                    .Any(v => v.VersionNumber > p.AssetVersion.VersionNumber && v.ProcessingStatus == AssetVersionProcessingStatus.READY),
                 p.OrderLine.PricePaid,
                 p.OrderLine.Order.Currency,
                 p.OrderLine.Order.BundleId != null ? PurchaseSource.BUNDLE : PurchaseSource.ASSET,

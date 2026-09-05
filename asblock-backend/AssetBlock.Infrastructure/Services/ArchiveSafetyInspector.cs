@@ -535,7 +535,7 @@ internal sealed partial class ArchiveSafetyInspector(
         }
         catch (Exception ex)
         {
-            logger.LogDebug(ex, "Ignoring malformed optional manifest {Path}", canonicalPath);
+            logger.LogDebug(ex, "Ignoring malformed optional manifest of type {ManifestType}", ResolveManifestType(baseName));
             return null;
         }
     }

@@ -75,7 +75,7 @@ describe('seller-processing-query', () => {
     expect(jobs[0].assetVersionId).toBe(sampleJob.assetVersionId)
   })
 
-  it('evaluates polling logic: active jobs poll on disconnected/connecting/reconnecting and pause on connected', () => {
+  it('evaluates polling logic: active jobs poll every 5s even when connected (resilient to missed events)', () => {
     const activeJobs = [
       { ...sampleJob, status: 'SUCCEEDED' as const },
       { ...sampleJob, id: '22222222-2222-4222-8222-222222222222', status: 'RUNNING' as const },
@@ -88,10 +88,8 @@ describe('seller-processing-query', () => {
 
     const emptyJobs: AssetProcessingJobDto[] = []
 
-    // When connected, active jobs pause HTTP polling
-    expect(resolveProcessingPollInterval(activeJobs, 'connected')).toBe(false)
-
-    // When disconnected, connecting, or reconnecting, active jobs poll every 5s
+    // Even when connected, active jobs poll every 5s so missed SignalR events are safely recovered
+    expect(resolveProcessingPollInterval(activeJobs, 'connected')).toBe(5000)
     expect(resolveProcessingPollInterval(activeJobs, 'disconnected')).toBe(5000)
     expect(resolveProcessingPollInterval(activeJobs, 'connecting')).toBe(5000)
     expect(resolveProcessingPollInterval(activeJobs, 'reconnecting')).toBe(5000)
@@ -102,6 +100,16 @@ describe('seller-processing-query', () => {
     expect(resolveProcessingPollInterval(emptyJobs, 'disconnected')).toBe(false)
     expect(resolveProcessingPollInterval(emptyJobs, 'connected')).toBe(false)
     expect(resolveProcessingPollInterval(undefined, 'disconnected')).toBe(false)
+  })
+
+  it('recovers from missed SignalR events by continuously polling until job reaches terminal status', () => {
+    const jobInProgress: AssetProcessingJobDto = { ...sampleJob, status: 'RUNNING' }
+    // Missed SignalR event: connection is 'connected' but event was dropped or missed
+    expect(resolveProcessingPollInterval([jobInProgress], 'connected')).toBe(5000)
+
+    // Once polled query returns terminal status, polling stops
+    const completedJob: AssetProcessingJobDto = { ...sampleJob, status: 'SUCCEEDED' }
+    expect(resolveProcessingPollInterval([completedJob], 'connected')).toBe(false)
   })
 
   it('constructs correct query keys', () => {

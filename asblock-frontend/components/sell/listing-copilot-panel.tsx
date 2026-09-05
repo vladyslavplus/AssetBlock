@@ -1,7 +1,8 @@
 'use client'
 
+import { useState } from 'react'
 import { Sparkles, Loader2, AlertCircle } from 'lucide-react'
-import type { UseFormSetValue } from 'react-hook-form'
+import type { UseFormGetValues, UseFormSetValue } from 'react-hook-form'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -15,12 +16,16 @@ import { useAssetVersionProcessingJobsQuery } from '@/lib/seller/seller-processi
 import { isNonTerminalStatus } from '@/lib/seller/seller-processing-schemas'
 import { runQueryInBackground } from '@/lib/query/query-refresh'
 
+export type CopilotFieldKey = 'title' | 'description' | 'category' | 'tags'
+
 interface ListingCopilotPanelProps {
   assetId: string
   assetVersionId: string | undefined
   categories: Array<{ id: string; name: string }>
   catalogTags: string[]
   setValue: UseFormSetValue<AssetEditFormValues>
+  getValues?: UseFormGetValues<AssetEditFormValues>
+  dirtyFields?: Partial<Readonly<Record<keyof AssetEditFormValues, boolean>>>
 }
 
 export function ListingCopilotPanel({
@@ -29,7 +34,17 @@ export function ListingCopilotPanel({
   categories,
   catalogTags,
   setValue,
+  getValues,
+  dirtyFields,
 }: ListingCopilotPanelProps) {
+  const [selectedFields, setSelectedFields] = useState<Record<CopilotFieldKey, boolean>>({
+    title: true,
+    description: true,
+    category: true,
+    tags: true,
+  })
+  const [overwriteDirty, setOverwriteDirty] = useState<boolean>(false)
+
   const jobsQuery = useAssetVersionProcessingJobsQuery(assetVersionId)
   const suggestionQuery = useListingCopilotSuggestionQuery(assetVersionId)
   const enqueue = useEnqueueListingCopilotMutation(assetId, assetVersionId)
@@ -51,7 +66,18 @@ export function ListingCopilotPanel({
   const staleTags =
     suggestion != null && suggestion.tags.some((tag) => !catalogTags.some((name) => name === tag))
   const staleTaxonomy = staleCategory || staleTags
-  const canApply = suggestion != null && !staleTaxonomy
+
+  const isFieldDirty = (key: CopilotFieldKey): boolean => {
+    if (!dirtyFields) return false
+    if (key === 'category') return Boolean(dirtyFields.categoryId)
+    return Boolean(dirtyFields[key])
+  }
+
+  const hasSelectedFields = Object.values(selectedFields).some(Boolean)
+  const hasDirtySelectedField = (Object.keys(selectedFields) as CopilotFieldKey[]).some(
+    (key) => selectedFields[key] && isFieldDirty(key),
+  )
+  const canApply = suggestion != null && !staleTaxonomy && hasSelectedFields
 
   if (!assetVersionId) {
     return null
@@ -64,6 +90,75 @@ export function ListingCopilotPanel({
         <Skeleton className="h-16 w-full bg-muted-foreground/20 animate-pulse motion-reduce:animate-none" />
       </div>
     )
+  }
+
+  const currentCategoryName = categories.find((c) => c.id === getValues?.('categoryId'))?.name
+  const fieldsConfig: Array<{
+    key: CopilotFieldKey
+    label: string
+    current: string
+    suggested: string
+  }> = [
+    {
+      key: 'title',
+      label: 'Title',
+      current: getValues?.('title') ?? '',
+      suggested: suggestion?.title ?? '',
+    },
+    {
+      key: 'description',
+      label: 'Description',
+      current: getValues?.('description') ?? '',
+      suggested: suggestion?.description ?? '',
+    },
+    {
+      key: 'category',
+      label: 'Category',
+      current: currentCategoryName ?? 'None',
+      suggested: suggestion?.category ?? '',
+    },
+    {
+      key: 'tags',
+      label: 'Tags',
+      current: getValues?.('tags') ?? '',
+      suggested: suggestion?.tags.length ? suggestion.tags.join(', ') : 'None',
+    },
+  ]
+
+  const handleApply = () => {
+    if (!suggestion || !canApply) {
+      return
+    }
+
+    const shouldApplyField = (key: CopilotFieldKey) => {
+      if (!selectedFields[key]) return false
+      if (isFieldDirty(key) && !overwriteDirty) {
+        return false
+      }
+      return true
+    }
+
+    if (shouldApplyField('title')) {
+      setValue('title', suggestion.title, { shouldDirty: true, shouldValidate: true })
+    }
+    if (shouldApplyField('description')) {
+      setValue('description', suggestion.description, {
+        shouldDirty: true,
+        shouldValidate: true,
+      })
+    }
+    if (shouldApplyField('category')) {
+      const categoryId = categories.find((c) => c.name === suggestion.category)?.id
+      if (categoryId) {
+        setValue('categoryId', categoryId, { shouldDirty: true, shouldValidate: true })
+      }
+    }
+    if (shouldApplyField('tags')) {
+      setValue('tags', suggestion.tags.join(', '), {
+        shouldDirty: true,
+        shouldValidate: true,
+      })
+    }
   }
 
   return (
@@ -129,15 +224,80 @@ export function ListingCopilotPanel({
       ) : null}
 
       {suggestion ? (
-        <div className="space-y-2 text-sm">
-          <p className="font-medium">{suggestion.title}</p>
-          <p className="text-xs text-muted-foreground whitespace-pre-wrap">
-            {suggestion.description}
-          </p>
-          <p className="text-xs">Category: {suggestion.category}</p>
-          <p className="text-xs">
-            Tags: {suggestion.tags.length > 0 ? suggestion.tags.join(', ') : 'None'}
-          </p>
+        <div className="space-y-3 text-sm">
+          <div className="space-y-2">
+            <p className="text-xs font-semibold text-foreground/80">
+              Review and select suggested fields to apply:
+            </p>
+            {fieldsConfig.map((field) => {
+              const dirty = isFieldDirty(field.key)
+              return (
+                <div
+                  key={field.key}
+                  className="p-2.5 rounded-md border border-border bg-card-elevated space-y-1.5 text-xs"
+                >
+                  <div className="flex items-center justify-between">
+                    <label className="flex items-center gap-2 font-medium cursor-pointer">
+                      <input
+                        type="checkbox"
+                        aria-label={`Select ${field.label}`}
+                        checked={selectedFields[field.key]}
+                        onChange={(e) =>
+                          setSelectedFields((prev) => ({
+                            ...prev,
+                            [field.key]: e.target.checked,
+                          }))
+                        }
+                        className="rounded border-input text-primary focus:ring-primary"
+                      />
+                      <span>{field.label}</span>
+                      {dirty ? (
+                        <span className="text-[10px] bg-amber-500/20 text-amber-700 dark:text-amber-300 px-1.5 py-0.2 rounded">
+                          Modified
+                        </span>
+                      ) : null}
+                    </label>
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-muted-foreground pt-1 border-t border-border/50">
+                    <div>
+                      <span className="font-semibold block text-[11px] text-foreground/70">
+                        Current:
+                      </span>
+                      <span className="break-words line-clamp-2">{field.current || '(empty)'}</span>
+                    </div>
+                    <div>
+                      <span className="font-semibold block text-[11px] text-foreground/70">
+                        Suggested:
+                      </span>
+                      <span className="text-foreground break-words line-clamp-2">
+                        {field.suggested || '(empty)'}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+
+          {hasDirtySelectedField ? (
+            <div className="p-2.5 rounded border border-amber-500/40 bg-amber-500/10 text-xs text-amber-900 dark:text-amber-200 space-y-1">
+              <label className="flex items-center gap-2 cursor-pointer font-medium">
+                <input
+                  type="checkbox"
+                  aria-label="Overwrite modified fields"
+                  checked={overwriteDirty}
+                  onChange={(e) => setOverwriteDirty(e.target.checked)}
+                  className="rounded border-input text-primary focus:ring-primary"
+                />
+                <span>Overwrite modified fields</span>
+              </label>
+              <p className="text-[11px] text-muted-foreground ml-5">
+                One or more selected fields have unsaved edits. By default, modified fields are
+                preserved.
+              </p>
+            </div>
+          ) : null}
+
           <p className="text-[11px] text-muted-foreground">AI-generated — review before saving</p>
           {staleTaxonomy ? (
             <p className="text-xs text-amber-800 dark:text-amber-200">
@@ -145,27 +305,7 @@ export function ListingCopilotPanel({
               disabled.
             </p>
           ) : null}
-          <Button
-            type="button"
-            variant="secondary"
-            disabled={!canApply}
-            onClick={() => {
-              const categoryId = categories.find((c) => c.name === suggestion.category)?.id
-              if (!categoryId) {
-                return
-              }
-              setValue('title', suggestion.title, { shouldDirty: true, shouldValidate: true })
-              setValue('description', suggestion.description, {
-                shouldDirty: true,
-                shouldValidate: true,
-              })
-              setValue('categoryId', categoryId, { shouldDirty: true, shouldValidate: true })
-              setValue('tags', suggestion.tags.join(', '), {
-                shouldDirty: true,
-                shouldValidate: true,
-              })
-            }}
-          >
+          <Button type="button" variant="secondary" disabled={!canApply} onClick={handleApply}>
             Apply suggestion
           </Button>
         </div>

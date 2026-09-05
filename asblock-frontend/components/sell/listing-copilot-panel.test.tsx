@@ -50,7 +50,13 @@ function copilotJob(status: AssetProcessingJobDto['status']): AssetProcessingJob
   }
 }
 
-function FormHost({ stale }: { stale?: boolean }) {
+function FormHost({
+  stale,
+  dirtyFields,
+}: {
+  stale?: boolean
+  dirtyFields?: Partial<Readonly<Record<keyof AssetEditFormValues, boolean>>>
+}) {
   const form = useForm<AssetEditFormValues>({
     defaultValues: {
       title: 'Old',
@@ -80,6 +86,8 @@ function FormHost({ stale }: { stale?: boolean }) {
         categories={[{ id: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb', name: '3D' }]}
         catalogTags={stale ? ['other'] : ['lowpoly']}
         setValue={form.setValue}
+        getValues={form.getValues}
+        dirtyFields={dirtyFields}
       />
     </div>
   )
@@ -201,6 +209,74 @@ describe('ListingCopilotPanel', () => {
     expect(screen.getByTestId('category')).toHaveTextContent('bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb')
     expect(screen.getByTestId('tags')).toHaveTextContent('lowpoly')
     expect(screen.getByTestId('price')).toHaveTextContent('1')
+  })
+
+  it('applies only selected fields when seller unchecks specific fields', async () => {
+    const user = userEvent.setup()
+    mockFetch({ suggestion })
+
+    renderWithProviders(<FormHost />)
+
+    expect(await screen.findByText('Oak Chair')).toBeInTheDocument()
+
+    // Uncheck title and tags
+    await user.click(screen.getByRole('checkbox', { name: /select title/i }))
+    await user.click(screen.getByRole('checkbox', { name: /select tags/i }))
+
+    await user.click(screen.getByRole('button', { name: /apply suggestion/i }))
+
+    // Title and tags should remain unchanged
+    expect(screen.getByTestId('title')).toHaveTextContent('Old')
+    expect(screen.getByTestId('tags')).toHaveTextContent('')
+
+    // Description and category should be applied
+    expect(screen.getByTestId('description')).toHaveTextContent('A wooden chair')
+    expect(screen.getByTestId('category')).toHaveTextContent('bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb')
+  })
+
+  it('preserves dirty fields by default when seller has not checked overwrite', async () => {
+    const user = userEvent.setup()
+    mockFetch({ suggestion })
+
+    // Title is marked as dirty
+    renderWithProviders(<FormHost dirtyFields={{ title: true }} />)
+
+    expect(await screen.findByText('Oak Chair')).toBeInTheDocument()
+    expect(screen.getByText('Modified')).toBeInTheDocument()
+    expect(screen.getByRole('checkbox', { name: /overwrite modified fields/i })).toBeInTheDocument()
+
+    // Apply suggestion without checking overwrite
+    await user.click(screen.getByRole('button', { name: /apply suggestion/i }))
+
+    // Title is preserved
+    expect(screen.getByTestId('title')).toHaveTextContent('Old')
+
+    // Non-dirty fields are applied
+    expect(screen.getByTestId('description')).toHaveTextContent('A wooden chair')
+    expect(screen.getByTestId('category')).toHaveTextContent('bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb')
+    expect(screen.getByTestId('tags')).toHaveTextContent('lowpoly')
+  })
+
+  it('overwrites dirty fields when seller explicitly checks overwrite', async () => {
+    const user = userEvent.setup()
+    mockFetch({ suggestion })
+
+    // Title is marked as dirty
+    renderWithProviders(<FormHost dirtyFields={{ title: true }} />)
+
+    expect(await screen.findByText('Oak Chair')).toBeInTheDocument()
+    const overwriteCheckbox = screen.getByRole('checkbox', { name: /overwrite modified fields/i })
+
+    // Explicitly check overwrite
+    await user.click(overwriteCheckbox)
+
+    await user.click(screen.getByRole('button', { name: /apply suggestion/i }))
+
+    // Title is now overwritten
+    expect(screen.getByTestId('title')).toHaveTextContent('Oak Chair')
+    expect(screen.getByTestId('description')).toHaveTextContent('A wooden chair')
+    expect(screen.getByTestId('category')).toHaveTextContent('bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb')
+    expect(screen.getByTestId('tags')).toHaveTextContent('lowpoly')
   })
 
   it('disables apply when a suggested tag is missing from the catalog', async () => {

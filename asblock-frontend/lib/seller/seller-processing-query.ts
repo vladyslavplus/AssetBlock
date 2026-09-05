@@ -21,21 +21,20 @@ export const PROCESSING_POLL_INTERVAL_MS = 5000
 
 /**
  * Pure policy function for determining processing jobs polling interval.
- * When SignalR hub is reliably connected, events drive cache invalidations, so polling is paused.
- * When disconnected, connecting, or reconnecting, active jobs fall back to HTTP polling.
+ * Keep 5-second polling for every non-terminal job even while SignalR reports 'connected'.
+ * SignalR remains an optimization for immediate updates, while polling ensures reliability
+ * even if notification events are missed or dropped.
+ * Stops polling (returns false) when all jobs reach a terminal state, or if jobs list is empty.
  */
 export function resolveProcessingPollInterval(
   jobs: AssetProcessingJobDto[] | undefined,
-  hubState: HubConnectionState,
+  _hubState?: HubConnectionState,
 ): number | false {
   if (!jobs || jobs.length === 0) {
     return false
   }
   const hasActive = jobs.some((j) => isNonTerminalStatus(j.status))
   if (!hasActive) {
-    return false
-  }
-  if (hubState === 'connected') {
     return false
   }
   return PROCESSING_POLL_INTERVAL_MS
