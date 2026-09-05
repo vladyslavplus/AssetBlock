@@ -102,10 +102,11 @@ public sealed class OpenTelemetryLoggingPrivacyProcessorTests
             ILogger logger = factory.CreateLogger("PrivacyTest");
 
             logger.LogInformation(
-                "Diagnostic: SafeId={SafeId}, GenericString={GenericString}, AuthHeader={AuthHeader}, PathField={PathField}",
+                "Diagnostic: SafeId={SafeId}, GenericString={GenericString}, AuthHeader={AuthHeader}, JwtField={JwtField}, PathField={PathField}",
                 Guid.NewGuid().ToString(),
                 "sk_test_51Mz00000000000000000000000000",
-                "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.dozjgNryP4J3jVmNHl0w5N_XgL0n3I9PlFUP0THsR8U",
+                "Bearer test_synthetic_bearer_token_12345",
+                "test_synthetic_jwt_header_0000000.test_synthetic_jwt_payload_000000.test_synthetic_jwt_signature_0000",
                 "assets/11111111222233334444555566667777/22222222333344445555666677778888.zip");
         }
 
@@ -116,6 +117,7 @@ public sealed class OpenTelemetryLoggingPrivacyProcessorTests
         remainingKeys.Should().Contain("SafeId");
         remainingKeys.Should().NotContain("GenericString");
         remainingKeys.Should().NotContain("AuthHeader");
+        remainingKeys.Should().NotContain("JwtField");
         remainingKeys.Should().NotContain("PathField");
     }
 
