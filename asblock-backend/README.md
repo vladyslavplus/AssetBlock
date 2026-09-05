@@ -11,6 +11,41 @@ Tracked `appsettings.json` keeps **placeholders only** (no real secrets). Local 
 
 The API validates required options at startup (`ValidateOnStart`) and fails fast when mandatory configuration is missing or invalid.
 
+### Native PostgreSQL with pgvector on Windows
+
+The database migrations use the PostgreSQL `vector` extension. For a native Windows PostgreSQL 18 installation, install the extension once for that PostgreSQL server, then enable it once for every database that AssetBlock uses.
+
+1. Install [Git for Windows](https://git-scm.com/download/win) and [Visual Studio Build Tools 2022](https://aka.ms/vs/17/release/vs_BuildTools.exe). In Build Tools, select **Desktop development with C++**, including **MSVC v143 C++ x64/x86 build tools** and a **Windows SDK**.
+2. Open **x64 Native Tools Command Prompt for VS 2022** as Administrator and verify the PostgreSQL 18 server headers:
+
+   ```cmd
+   set "PGROOT=C:\Program Files\PostgreSQL\18"
+   dir "%PGROOT%\include\server\postgres.h"
+   ```
+
+3. Build and install the project-pinned pgvector release:
+
+   ```cmd
+   cd /d %TEMP%
+   git clone --branch v0.8.6 --depth 1 https://github.com/pgvector/pgvector.git
+   cd pgvector
+   nmake /F Makefile.win
+   nmake /F Makefile.win install
+   ```
+
+4. Restart the PostgreSQL 18 Windows service in `services.msc`.
+5. In pgAdmin Query Tool, connected to the target database (for example `assetblock`), run:
+
+   ```sql
+   CREATE EXTENSION IF NOT EXISTS vector WITH SCHEMA public;
+
+   SELECT extname, extversion
+   FROM pg_extension
+   WHERE extname = 'vector';
+   ```
+
+The expected extension version is `0.8.6`. After this, start the API with `Database:AutoMigrate=true`; EF applies the schema migrations automatically. Creating or recreating a database does **not** require rebuilding pgvector: repeat only step 5. Reinstall pgvector only after replacing the local PostgreSQL server or changing its major version.
+
 ### 1. User Secrets (optional alternative to Development JSON)
 
 From `asblock-backend/`:

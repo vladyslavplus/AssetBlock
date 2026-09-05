@@ -88,13 +88,13 @@ public static class DependencyInjection
 
         services.AddDbContext<ApplicationDbContext>((sp, options) =>
         {
-            options.UseNpgsql(connectionString);
+            options.UseNpgsql(connectionString, npgsql => npgsql.UseVector());
             options.AddInterceptors(sp.GetRequiredService<Persistence.Interceptors.AuditTimestampsInterceptor>());
         });
         services.AddDbContextFactory<ApplicationDbContext>(
             (sp, options) =>
             {
-                options.UseNpgsql(connectionString);
+                options.UseNpgsql(connectionString, npgsql => npgsql.UseVector());
                 options.AddInterceptors(sp.GetRequiredService<Persistence.Interceptors.AuditTimestampsInterceptor>());
             },
             ServiceLifetime.Scoped);
@@ -194,6 +194,7 @@ public static class DependencyInjection
         services.AddScoped<IAuditContextAccessor, NullAuditContextAccessor>();
         services.AddScoped<IPaymentService, StripePaymentService>();
         services.AddScoped<IDownloadService, DownloadService>();
+        services.AddScoped<IVectorSearchCapability, VectorSearchCapability>();
         services.AddAssetStorage(configuration);
         services.AddSingleton<IEncryptionService, AesGcmEncryptionService>();
         services.AddSingleton<IPasswordHasher, PasswordHasher>();

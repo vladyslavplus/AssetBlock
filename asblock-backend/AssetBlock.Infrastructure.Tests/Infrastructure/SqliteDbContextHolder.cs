@@ -51,12 +51,14 @@ internal sealed class SqliteTestMigrationsSqlGenerator(
     {
         if (operation.Name == "asset_processing_jobs")
         {
-            AddCheckConstraintOperation? targetConstraint = operation.CheckConstraints
-                .FirstOrDefault(c => c.Name == "CK_asset_processing_jobs_error_code");
+            var targetConstraints = operation.CheckConstraints
+                .Where(c => c.Name is "CK_asset_processing_jobs_error_code"
+                    or "CK_asset_processing_jobs_embedding_hashes")
+                .ToList();
 
-            if (targetConstraint is not null)
+            foreach (AddCheckConstraintOperation? constraint in targetConstraints)
             {
-                operation.CheckConstraints.Remove(targetConstraint);
+                operation.CheckConstraints.Remove(constraint);
             }
         }
 
@@ -81,7 +83,7 @@ internal sealed class SqliteTestMigrationsSqlGenerator(
                     or AssetListingSuggestionConfiguration.CK_TAGS_SIZE)
                 .ToList();
 
-            foreach (AddCheckConstraintOperation? constraint in targetConstraints)
+            foreach (AddCheckConstraintOperation constraint in targetConstraints)
             {
                 operation.CheckConstraints.Remove(constraint);
             }

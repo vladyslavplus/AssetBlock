@@ -3,19 +3,21 @@ using System;
 using AssetBlock.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using NpgsqlTypes;
-using Pgvector;
 
 #nullable disable
 
 namespace AssetBlock.Infrastructure.Migrations
 {
     [DbContext(typeof(ApplicationDbContext))]
-    partial class ApplicationDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260905104609_AddEmbeddingJobState")]
+    partial class AddEmbeddingJobState
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -2121,91 +2123,6 @@ namespace AssetBlock.Infrastructure.Migrations
                     b.ToTable("user_social_links", (string)null);
                 });
 
-            modelBuilder.Entity("AssetBlock.Infrastructure.Persistence.Entities.AssetEmbedding", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
-
-                    b.Property<Guid>("AssetId")
-                        .HasColumnType("uuid");
-
-                    b.Property<string>("ContentHash")
-                        .IsRequired()
-                        .HasColumnType("char(64)")
-                        .IsFixedLength();
-
-                    b.Property<string>("ContentSchemaVersion")
-                        .IsRequired()
-                        .HasMaxLength(64)
-                        .HasColumnType("character varying(64)");
-
-                    b.Property<DateTimeOffset>("CreatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<int>("Dimension")
-                        .HasColumnType("integer");
-
-                    b.Property<Vector>("Embedding")
-                        .IsRequired()
-                        .HasColumnType("vector(768)");
-
-                    b.Property<string>("ModelDigest")
-                        .IsRequired()
-                        .HasMaxLength(71)
-                        .HasColumnType("character varying(71)");
-
-                    b.Property<string>("ModelId")
-                        .IsRequired()
-                        .HasMaxLength(200)
-                        .HasColumnType("character varying(200)");
-
-                    b.Property<string>("ModelKey")
-                        .IsRequired()
-                        .HasColumnType("char(64)")
-                        .IsFixedLength();
-
-                    b.Property<string>("ModelRevision")
-                        .IsRequired()
-                        .HasMaxLength(200)
-                        .HasColumnType("character varying(200)");
-
-                    b.Property<string>("Provider")
-                        .IsRequired()
-                        .HasMaxLength(32)
-                        .HasColumnType("character varying(32)");
-
-                    b.Property<long>("SourceRevision")
-                        .HasColumnType("bigint");
-
-                    b.Property<DateTimeOffset>("UpdatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("AssetId", "ModelKey")
-                        .IsUnique()
-                        .HasDatabaseName("UIX_asset_embeddings_asset_id_model_key");
-
-                    b.HasIndex("ModelKey", "AssetId")
-                        .HasDatabaseName("IX_asset_embeddings_model_key_asset_id");
-
-                    b.ToTable("asset_embeddings", null, t =>
-                        {
-                            t.HasCheckConstraint("CK_asset_embeddings_content_hash", "\"ContentHash\" ~ '^[0-9a-f]{64}$'");
-
-                            t.HasCheckConstraint("CK_asset_embeddings_dimension", "\"Dimension\" = 768");
-
-                            t.HasCheckConstraint("CK_asset_embeddings_model_digest", "\"ModelDigest\" ~ '^sha256:[0-9a-f]{64}$'");
-
-                            t.HasCheckConstraint("CK_asset_embeddings_model_key", "\"ModelKey\" ~ '^[0-9a-f]{64}$'");
-
-                            t.HasCheckConstraint("CK_asset_embeddings_source_revision", "\"SourceRevision\" > 0");
-
-                            t.HasCheckConstraint("CK_asset_embeddings_vector_dims", "vector_dims(\"Embedding\") = \"Dimension\"");
-                        });
-                });
-
             modelBuilder.Entity("AssetBlock.Domain.Core.Entities.Asset", b =>
                 {
                     b.HasOne("AssetBlock.Domain.Core.Entities.User", "Author")
@@ -2643,17 +2560,6 @@ namespace AssetBlock.Infrastructure.Migrations
                     b.Navigation("Platform");
 
                     b.Navigation("User");
-                });
-
-            modelBuilder.Entity("AssetBlock.Infrastructure.Persistence.Entities.AssetEmbedding", b =>
-                {
-                    b.HasOne("AssetBlock.Domain.Core.Entities.Asset", "Asset")
-                        .WithMany()
-                        .HasForeignKey("AssetId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("Asset");
                 });
 
             modelBuilder.Entity("AssetBlock.Domain.Core.Entities.Asset", b =>

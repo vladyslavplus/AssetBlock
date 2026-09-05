@@ -41,6 +41,7 @@ public sealed class ApplicationDbContext(DbContextOptions<ApplicationDbContext> 
     public DbSet<AssetListingSuggestion> AssetListingSuggestions => Set<AssetListingSuggestion>();
     public DbSet<OutboxEmailDelivery> OutboxEmailDeliveries => Set<OutboxEmailDelivery>();
     public DbSet<ProcessedStripeWebhookEvent> ProcessedStripeWebhookEvents => Set<ProcessedStripeWebhookEvent>();
+    public DbSet<Entities.AssetEmbedding> AssetEmbeddings => Set<Entities.AssetEmbedding>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -50,6 +51,7 @@ public sealed class ApplicationDbContext(DbContextOptions<ApplicationDbContext> 
         if (Database.ProviderName is null
             || !Database.ProviderName.Contains("Npgsql", StringComparison.OrdinalIgnoreCase))
         {
+            modelBuilder.Ignore<Entities.AssetEmbedding>();
             return;
         }
 

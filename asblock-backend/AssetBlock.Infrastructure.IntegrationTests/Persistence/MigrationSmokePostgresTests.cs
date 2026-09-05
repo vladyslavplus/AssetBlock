@@ -39,11 +39,13 @@ public sealed class MigrationSmokePostgresTests(PostgresFixture fixture)
             "bundle_revisions",
             "bundle_revision_items",
             "asset_listing_suggestions",
-            "processed_stripe_webhook_events"
+            "processed_stripe_webhook_events",
+            "asset_embeddings"
         ]);
 
         (await db.Assets.CountAsync()).Should().Be(0);
         (await db.ProcessedStripeWebhookEvents.CountAsync()).Should().Be(0);
+        (await db.AssetEmbeddings.CountAsync()).Should().Be(0);
     }
 
     [Fact]

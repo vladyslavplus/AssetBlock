@@ -7,5 +7,6 @@ public enum AssetProcessingJobType
 {
     ARCHIVE_INSPECTION,
     MALWARE_SCAN,
-    LISTING_COPILOT
+    LISTING_COPILOT,
+    EMBEDDING_GENERATION
 }
