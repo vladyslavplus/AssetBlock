@@ -19,7 +19,7 @@ export async function syncQueryCacheAfterAuth(queryClient: QueryClient): Promise
   runQueryInBackground(
     queryClient.prefetchQuery({
       queryKey: accountKeys.me(),
-      queryFn: fetchAccountProfile,
+      queryFn: () => fetchAccountProfile(),
     }),
   )
 

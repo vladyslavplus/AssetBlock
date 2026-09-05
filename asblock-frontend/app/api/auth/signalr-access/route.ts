@@ -1,5 +1,5 @@
 import { cookies } from 'next/headers'
-import { problemResponse } from '@/lib/server/bff-http'
+import { clientClosedRequestResponse, problemResponse } from '@/lib/server/bff-http'
 import { fetchBackendAuthorized } from '@/lib/server/backend-authorized'
 
 /**
@@ -19,14 +19,17 @@ export async function GET(request?: Request) {
       method: 'POST',
       signal: request?.signal,
     })
-  } catch (err: unknown) {
+  } catch (_err: unknown) {
     if (request?.signal?.aborted) {
-      throw err
+      return clientClosedRequestResponse()
     }
     return problemResponse(502, 'ERR_GATEWAY_ERROR', 'Could not reach the authentication service.')
   }
 
   if (!res.ok) {
+    if (res.status === 499) {
+      return clientClosedRequestResponse()
+    }
     if (res.status === 401) {
       return problemResponse(401, 'ERR_UNAUTHORIZED', 'Unauthorized')
     }

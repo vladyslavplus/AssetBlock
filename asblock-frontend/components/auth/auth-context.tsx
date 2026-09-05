@@ -26,7 +26,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const sessionQuery = useQuery({
     queryKey: authKeys.session(),
-    queryFn: fetchSessionUser,
+    queryFn: () => fetchSessionUser(),
     staleTime: 30 * 1000,
     gcTime: 30 * 60 * 1000,
     retry: 1,

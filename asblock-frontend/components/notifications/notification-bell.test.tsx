@@ -36,12 +36,11 @@ describe('NotificationBell hub invalidation', () => {
       hubCb = cb
       return () => {}
     })
-    vi.stubGlobal(
-      'fetch',
-      vi.fn(
-        async () => new Response(JSON.stringify({ items: [], totalCount: 0 }), { status: 200 }),
-      ),
-    )
+    const fetchMock = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+      expect(init?.signal).toBeUndefined()
+      return new Response(JSON.stringify({ items: [], totalCount: 0 }), { status: 200 })
+    })
+    vi.stubGlobal('fetch', fetchMock)
     const queryClient = createTestQueryClient()
     const invalidate = vi.spyOn(queryClient, 'invalidateQueries')
     render(
@@ -50,6 +49,7 @@ describe('NotificationBell hub invalidation', () => {
       </QueryClientProvider>,
     )
     await screen.findByRole('button', { name: /notifications/i })
+    expect(fetchMock).toHaveBeenCalled()
     expect(subscribeNotificationHub).toHaveBeenCalledWith(expect.any(Function), verifiedSeller().id)
 
     hubCb?.()

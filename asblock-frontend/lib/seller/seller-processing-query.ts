@@ -49,9 +49,9 @@ export function useAssetProcessingJobsQuery(
 
   return useQuery({
     queryKey: assetId ? sellerProcessingKeys.asset(assetId) : sellerProcessingKeys.all,
-    queryFn: ({ signal }) => {
+    queryFn: () => {
       if (!assetId) return Promise.resolve([])
-      return fetchAssetProcessingJobs(assetId, signal)
+      return fetchAssetProcessingJobs(assetId)
     },
     enabled,
     refetchInterval: (query) => resolveProcessingPollInterval(query.state.data, hubState),
@@ -71,9 +71,9 @@ export function useAssetVersionProcessingJobsQuery(
     queryKey: assetVersionId
       ? sellerProcessingKeys.version(assetVersionId)
       : sellerProcessingKeys.all,
-    queryFn: ({ signal }) => {
+    queryFn: () => {
       if (!assetVersionId) return Promise.resolve([])
-      return fetchAssetVersionProcessingJobs(assetVersionId, signal)
+      return fetchAssetVersionProcessingJobs(assetVersionId)
     },
     enabled,
     refetchInterval: (query) => resolveProcessingPollInterval(query.state.data, hubState),

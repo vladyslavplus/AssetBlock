@@ -20,7 +20,11 @@ function multipartBody(
   return `${body}--${boundary}--\r\n`
 }
 
-function uploadRequest(body: string, contentLength = new TextEncoder().encode(body).byteLength) {
+function uploadRequest(
+  body: string,
+  contentLength = new TextEncoder().encode(body).byteLength,
+  signal?: AbortSignal,
+) {
   return new Request('http://localhost:3000/api/seller/upload', {
     method: 'POST',
     headers: {
@@ -28,10 +32,29 @@ function uploadRequest(body: string, contentLength = new TextEncoder().encode(bo
       'Content-Length': String(contentLength),
     },
     body,
+    signal,
   })
 }
 
 describe('prepareMultipartUpload', () => {
+  it('returns 499 without reading a request already cancelled by the browser', async () => {
+    const controller = new AbortController()
+    controller.abort()
+
+    const result = await prepareMultipartUpload(
+      uploadRequest(
+        multipartBody([{ name: 'file', filename: 'asset.zip', value: 'bytes' }]),
+        undefined,
+        controller.signal,
+      ),
+    )
+
+    expect(result.ok).toBe(false)
+    if (result.ok) return
+    expect(result.response.status).toBe(499)
+    expect((await result.response.json()).code).toBe('ERR_CLIENT_CLOSED_REQUEST')
+  })
+
   it('parses bounded metadata and preserves the original body for streaming', async () => {
     const body = multipartBody([
       { name: 'title', value: 'Український asset' },
