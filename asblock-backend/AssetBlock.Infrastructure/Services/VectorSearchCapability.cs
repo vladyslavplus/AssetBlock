@@ -26,7 +26,7 @@ public sealed class VectorSearchCapability(
         {
             await using ApplicationDbContext context = await dbContextFactory.CreateDbContextAsync(cancellationToken);
             var hasExtension = await context.Database
-                .SqlQueryRaw<int>("""SELECT 1 AS "Value" FROM pg_extension WHERE extname = 'vector' LIMIT 1;""")
+                .SqlQueryRaw<int>("""SELECT 1 AS "Value" FROM pg_extension WHERE extname = 'vector' LIMIT 1""")
                 .AnyAsync(cancellationToken);
 
             if (!hasExtension)

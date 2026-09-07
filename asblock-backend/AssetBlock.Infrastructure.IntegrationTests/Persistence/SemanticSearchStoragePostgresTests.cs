@@ -384,7 +384,7 @@ public sealed class SemanticSearchStoragePostgresTests(PostgresFixture fixture)
             NullLogger<VectorSearchCapability>.Instance);
 
         VectorSearchCapabilityResult result = await capability.CheckCapability();
-        result.IsAvailable.Should().BeTrue();
+        result.IsAvailable.Should().BeTrue(result.Reason);
         result.HasExtension.Should().BeTrue();
         result.ModelKey.Should().NotBeNullOrWhiteSpace();
 
@@ -397,9 +397,194 @@ public sealed class SemanticSearchStoragePostgresTests(PostgresFixture fixture)
             PageSize = 10
         };
 
-        PagedResult<AssetListItem> pagedResult = await assetStore.GetPaged(request);
+        CatalogPageResult<AssetListItem> pagedResult = await assetStore.GetPaged(request);
         pagedResult.Items.Should().BeEmpty();
         pagedResult.TotalCount.Should().Be(0);
+    }
+
+    [Fact]
+    public async Task GetPaged_WithHybridRrf_ShouldRankByRrfScoreAndDeterministicTieBreakers()
+    {
+        await using ApplicationDbContext db = await fixture.CreateCleanDbContext();
+        (User author, Category category) = await TestData.SeedAuthorAndCategory(db);
+        var assetStore = new AssetStore(db);
+
+        var queryVector = new float[DIMENSION_768];
+        queryVector[0] = 1.0f;
+
+        Asset assetSem = TestData.CreateAsset(author.Id, category.Id, title: "Sci-Fi Katana Blade", price: 10m);
+        Asset assetLex = TestData.CreateAsset(author.Id, category.Id, title: "Cyberpunk Katana", price: 20m);
+        Asset assetBoth = TestData.CreateAsset(author.Id, category.Id, title: "Cyberpunk Katana Sword", price: 30m);
+
+        db.Assets.AddRange(assetSem, assetLex, assetBoth);
+        db.AssetVersions.AddRange(
+            TestData.CreateAssetVersion(assetSem.Id, isCurrent: true, processingStatus: AssetVersionProcessingStatus.READY),
+            TestData.CreateAssetVersion(assetLex.Id, isCurrent: true, processingStatus: AssetVersionProcessingStatus.READY),
+            TestData.CreateAssetVersion(assetBoth.Id, isCurrent: true, processingStatus: AssetVersionProcessingStatus.READY));
+
+        var vecSem = new float[DIMENSION_768];
+        vecSem[0] = 0.99f;
+        vecSem[1] = 0.1f;
+
+        var vecLex = new float[DIMENSION_768];
+        vecLex[1] = 1.0f;
+
+        var vecBoth = new float[DIMENSION_768];
+        vecBoth[0] = 1.0f;
+
+        AssetEmbedding embSem = CreateValidEmbedding(assetSem.Id);
+        embSem.Embedding = new Vector(vecSem);
+
+        AssetEmbedding embLex = CreateValidEmbedding(assetLex.Id);
+        embLex.Embedding = new Vector(vecLex);
+
+        AssetEmbedding embBoth = CreateValidEmbedding(assetBoth.Id);
+        embBoth.Embedding = new Vector(vecBoth);
+
+        db.AssetEmbeddings.AddRange(embSem, embLex, embBoth);
+        await db.SaveChangesAsync();
+
+        var request = new GetAssetsRequest
+        {
+            Search = "Cyberpunk Katana",
+            Page = 1,
+            PageSize = 10
+        };
+
+        CatalogPageResult<AssetListItem> result = await assetStore.GetPaged(request, queryVector, VALID_HEX_64);
+
+        result.Items.Should().NotBeEmpty();
+        result.IsTruncated.Should().BeFalse();
+        result.Items[0].Id.Should().Be(assetBoth.Id);
+    }
+
+    [Fact]
+    public async Task GetPaged_WithSentinels_WhenCandidatesExceed200_ShouldSetIsTruncatedTrue()
+    {
+        await using ApplicationDbContext db = await fixture.CreateCleanDbContext();
+        (User author, Category category) = await TestData.SeedAuthorAndCategory(db);
+        var assetStore = new AssetStore(db);
+
+        var queryVector = new float[DIMENSION_768];
+        queryVector[0] = 1.0f;
+
+        var assets = new List<Asset>(202);
+        var versions = new List<AssetVersion>(202);
+        DateTimeOffset now = DateTimeOffset.UtcNow;
+        for (var i = 0; i < 202; i++)
+        {
+            Asset asset = TestData.CreateAsset(author.Id, category.Id, title: $"SentinelPack Item {i}", createdAt: now.AddSeconds(i));
+            assets.Add(asset);
+            versions.Add(TestData.CreateAssetVersion(asset.Id, isCurrent: true, processingStatus: AssetVersionProcessingStatus.READY));
+        }
+
+        db.Assets.AddRange(assets);
+        db.AssetVersions.AddRange(versions);
+        await db.SaveChangesAsync();
+
+        var request = new GetAssetsRequest
+        {
+            Search = "SentinelPack",
+            Page = 1,
+            PageSize = 10
+        };
+
+        CatalogPageResult<AssetListItem> result = await assetStore.GetPaged(request, queryVector, VALID_HEX_64);
+
+        result.IsTruncated.Should().BeTrue();
+        result.TotalCount.Should().Be(200);
+        result.Items.Count.Should().Be(10);
+    }
+
+    [Fact]
+    public async Task GetPaged_WithNonReadyVersionOrDeletedAsset_ShouldExcludeFromBothLexicalAndSemantic()
+    {
+        await using ApplicationDbContext db = await fixture.CreateCleanDbContext();
+        (User author, Category category) = await TestData.SeedAuthorAndCategory(db);
+        var assetStore = new AssetStore(db);
+
+        var queryVector = new float[DIMENSION_768];
+        queryVector[0] = 1.0f;
+
+        Asset readyAsset = TestData.CreateAsset(author.Id, category.Id, title: "Laser Blaster Ready");
+        Asset pendingAsset = TestData.CreateAsset(author.Id, category.Id, title: "Laser Blaster Pending");
+        Asset deletedAsset = TestData.CreateAsset(author.Id, category.Id, title: "Laser Blaster Deleted");
+
+        db.Assets.AddRange(readyAsset, pendingAsset, deletedAsset);
+        db.AssetVersions.AddRange(
+            TestData.CreateAssetVersion(readyAsset.Id, isCurrent: true, processingStatus: AssetVersionProcessingStatus.READY),
+            TestData.CreateAssetVersion(pendingAsset.Id, isCurrent: false, processingStatus: AssetVersionProcessingStatus.PENDING_INSPECTION),
+            TestData.CreateAssetVersion(deletedAsset.Id, isCurrent: true, processingStatus: AssetVersionProcessingStatus.READY));
+
+        AssetEmbedding embReady = CreateValidEmbedding(readyAsset.Id);
+        embReady.Embedding = new Vector(queryVector);
+        AssetEmbedding embPending = CreateValidEmbedding(pendingAsset.Id);
+        embPending.Embedding = new Vector(queryVector);
+        AssetEmbedding embDeleted = CreateValidEmbedding(deletedAsset.Id);
+        embDeleted.Embedding = new Vector(queryVector);
+
+        db.AssetEmbeddings.AddRange(embReady, embPending, embDeleted);
+        await db.SaveChangesAsync();
+
+        await assetStore.SoftDelete(deletedAsset.Id, DateTimeOffset.UtcNow);
+
+        var request = new GetAssetsRequest
+        {
+            Search = "Laser Blaster",
+            Page = 1,
+            PageSize = 10
+        };
+
+        CatalogPageResult<AssetListItem> result = await assetStore.GetPaged(request, queryVector, VALID_HEX_64);
+
+        result.Items.Should().ContainSingle();
+        result.Items[0].Id.Should().Be(readyAsset.Id);
+        result.TotalCount.Should().Be(1);
+    }
+
+    [Fact]
+    public async Task GetPaged_WithExplicitSort_ShouldBypassSemanticRetrieval()
+    {
+        await using ApplicationDbContext db = await fixture.CreateCleanDbContext();
+        (User author, Category category) = await TestData.SeedAuthorAndCategory(db);
+        var assetStore = new AssetStore(db);
+
+        var queryVector = new float[DIMENSION_768];
+        queryVector[0] = 1.0f;
+
+        Asset cheap = TestData.CreateAsset(author.Id, category.Id, title: "Space Drone Alpha", price: 5m);
+        Asset expensive = TestData.CreateAsset(author.Id, category.Id, title: "Space Drone Beta", price: 50m);
+
+        db.Assets.AddRange(cheap, expensive);
+        db.AssetVersions.AddRange(
+            TestData.CreateAssetVersion(cheap.Id, isCurrent: true, processingStatus: AssetVersionProcessingStatus.READY),
+            TestData.CreateAssetVersion(expensive.Id, isCurrent: true, processingStatus: AssetVersionProcessingStatus.READY));
+
+        AssetEmbedding embExpensive = CreateValidEmbedding(expensive.Id);
+        embExpensive.Embedding = new Vector(queryVector);
+        var cheapVec = new float[DIMENSION_768];
+        cheapVec[1] = 1.0f;
+        AssetEmbedding embCheap = CreateValidEmbedding(cheap.Id);
+        embCheap.Embedding = new Vector(cheapVec);
+
+        db.AssetEmbeddings.AddRange(embExpensive, embCheap);
+        await db.SaveChangesAsync();
+
+        var request = new GetAssetsRequest
+        {
+            Search = "Space Drone",
+            SortBy = "Price",
+            SortDirection = SortDirection.ASC,
+            Page = 1,
+            PageSize = 10
+        };
+
+        CatalogPageResult<AssetListItem> result = await assetStore.GetPaged(request, queryVector, VALID_HEX_64);
+
+        result.Items.Should().HaveCount(2);
+        result.Items[0].Id.Should().Be(cheap.Id);
+        result.Items[1].Id.Should().Be(expensive.Id);
+        result.IsTruncated.Should().BeFalse();
     }
 
     private static AssetEmbedding CreateValidEmbedding(Guid assetId)

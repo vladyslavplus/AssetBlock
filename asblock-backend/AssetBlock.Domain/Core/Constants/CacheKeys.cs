@@ -37,22 +37,68 @@ public static class CacheKeys
 
     public static string AssetsList(GetAssetsRequest request)
     {
+        var searchHash = HashSearchQuery(request.Search);
+        var filterHash = HashFilterComponent(request);
+        return $"{ASSETS_LIST_PREFIX}:{request.Page}:{request.PageSize}:{searchHash}:{filterHash}";
+    }
+
+    public static string AssetsListHybrid(GetAssetsRequest request, string modelKey, string rankingVersion = "hybrid-rrf-v1")
+    {
+        var searchHash = HashSearchQuery(request.Search);
+        var filterHash = HashFilterComponent(request);
+        var sanitizedModel = string.IsNullOrWhiteSpace(modelKey) ? "default" : modelKey.Trim().Replace(":", "_", StringComparison.Ordinal);
+        return $"{ASSETS_LIST_PREFIX}:hybrid:{sanitizedModel}:{rankingVersion}:{request.Page}:{request.PageSize}:{searchHash}:{filterHash}";
+    }
+
+    public static string AssetsListLexicalFallback(GetAssetsRequest request)
+    {
+        var searchHash = HashSearchQuery(request.Search);
+        var filterHash = HashFilterComponent(request);
+        return $"{ASSETS_LIST_PREFIX}:lexical-fallback:{request.Page}:{request.PageSize}:{searchHash}:{filterHash}";
+    }
+
+    public static string HashFilterComponent(GetAssetsRequest request)
+    {
         var authorId = request.AuthorId.HasValue ? request.AuthorId.Value.ToString() : "none";
-        var search = NormalizeSearch(request.Search);
         var categoryId = request.CategoryId.HasValue ? request.CategoryId.Value.ToString() : "none";
-        var sortBy = string.IsNullOrWhiteSpace(request.SortBy) ? "none" : request.SortBy.Trim();
         var minPrice = request.MinPrice.HasValue ? request.MinPrice.Value.ToString("F2", CultureInfo.InvariantCulture) : "none";
         var maxPrice = request.MaxPrice.HasValue ? request.MaxPrice.Value.ToString("F2", CultureInfo.InvariantCulture) : "none";
-        var tags = request.Tags is { Count: > 0 }
+        var tags = FormatTags(request.Tags);
+        var sortBy = string.IsNullOrWhiteSpace(request.SortBy) ? "none" : request.SortBy.Trim();
+        var raw = $"{authorId}|{categoryId}|{minPrice}|{maxPrice}|{tags}|{sortBy}|{request.SortDirection}";
+        var bytes = System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(raw));
+        return Convert.ToHexString(bytes).ToLowerInvariant();
+    }
+
+    public static string QueryVector(string modelKey, string searchHash)
+    {
+        var sanitizedModel = string.IsNullOrWhiteSpace(modelKey) ? "default" : modelKey.Trim().Replace(":", "_", StringComparison.Ordinal);
+        return $"{PREFIX}:query-vector:{sanitizedModel}:{searchHash}";
+    }
+
+    public static string HashSearchQuery(string? search)
+    {
+        if (string.IsNullOrWhiteSpace(search))
+        {
+            return "none";
+        }
+
+        var normalized = search.Trim().ToLowerInvariant();
+        var bytes = System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(normalized));
+        return Convert.ToHexString(bytes).ToLowerInvariant();
+    }
+
+    private static string FormatTags(IReadOnlyList<string>? tags)
+    {
+        return tags is { Count: > 0 }
             ? string.Join(",",
-                request.Tags
+                tags
                     .SelectMany(t => t.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
                     .Select(t => t.Trim().ToLowerInvariant())
                     .Where(t => t.Length > 0)
                     .Distinct()
                     .OrderBy(t => t))
             : "none";
-        return $"{ASSETS_LIST_PREFIX}:{request.Page}:{request.PageSize}:{authorId}:{search}:{categoryId}:{minPrice}:{maxPrice}:{tags}:{sortBy}:{request.SortDirection}";
     }
 
     public static string CategoriesList(GetCategoriesRequest request)

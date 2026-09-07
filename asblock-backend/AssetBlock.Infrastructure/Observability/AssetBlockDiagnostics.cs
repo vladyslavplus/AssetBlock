@@ -357,6 +357,49 @@ public static class AssetBlockDiagnostics
         }
     }
 
+    // --- Search Diagnostics ---
+    private static readonly Counter<long> _searchRequests = _meter.CreateCounter<long>(
+        "assetblock.search.requests",
+        description: "Count of catalog search requests by retrieval mode and outcome");
+
+    private static readonly Histogram<double> _searchDuration = _meter.CreateHistogram<double>(
+        "assetblock.search.duration",
+        unit: "s",
+        description: "Duration of catalog search request execution");
+
+    private static readonly Histogram<long> _searchCandidates = _meter.CreateHistogram<long>(
+        "assetblock.search.candidates",
+        description: "Count of fused candidate items produced for search query");
+
+    private static readonly Histogram<double> _searchQueryEmbeddingDuration = _meter.CreateHistogram<double>(
+        "assetblock.search.query_embedding.duration",
+        unit: "s",
+        description: "Duration of query embedding generation");
+
+    public static void RecordSearchRequest(string mode, string outcome, TimeSpan duration, int candidateCount = 0)
+    {
+        var tags = new TagList
+        {
+            { "search.mode", mode },
+            { "search.outcome", outcome }
+        };
+        _searchRequests.Add(1, in tags);
+        _searchDuration.Record(Math.Max(0.0, duration.TotalSeconds), in tags);
+        if (candidateCount > 0)
+        {
+            _searchCandidates.Record(candidateCount, in tags);
+        }
+    }
+
+    public static void RecordSearchQueryEmbedding(string outcome, TimeSpan duration)
+    {
+        var tags = new TagList
+        {
+            { "query_embedding.outcome", outcome }
+        };
+        _searchQueryEmbeddingDuration.Record(Math.Max(0.0, duration.TotalSeconds), in tags);
+    }
+
     private static string ToTagValue(AiDiagnosticsOutcome outcome) => outcome switch
     {
         AiDiagnosticsOutcome.SUCCESS => "SUCCESS",
@@ -401,4 +444,12 @@ public static class EmailActionSkipReasons
 {
     public const string STALE_OR_INVALID_ACTION = "stale_or_invalid_action";
     public const string UNAVAILABLE_RECIPIENT = "unavailable_recipient";
+}
+
+public static class SearchDiagnosticsOutcomes
+{
+    public const string SUCCESS = "SUCCESS";
+    public const string FALLBACK = "FALLBACK";
+    public const string FAILED = "FAILED";
+    public const string TIMEOUT = "TIMEOUT";
 }

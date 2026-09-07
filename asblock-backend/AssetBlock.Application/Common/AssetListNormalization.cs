@@ -41,6 +41,18 @@ public static class AssetListNormalization
     }
 
     /// <summary>
+    /// Aligns catalog page result with DB/detail: whitespace-only or empty description becomes null.
+    /// Preserves IsTruncated flag.
+    /// </summary>
+    public static CatalogPageResult<AssetListItem> NormalizeDescriptions(CatalogPageResult<AssetListItem> paged)
+    {
+        var items = paged.Items
+            .Select(i => i with { Description = string.IsNullOrWhiteSpace(i.Description) ? null : i.Description })
+            .ToList();
+        return new CatalogPageResult<AssetListItem>(items, paged.TotalCount, paged.Page, paged.PageSize, paged.IsTruncated);
+    }
+
+    /// <summary>
     /// Aligns seller listings list API with DB/detail: whitespace-only or empty description becomes null.
     /// </summary>
     public static PagedResult<SellerAssetListItem> NormalizeDescriptions(PagedResult<SellerAssetListItem> paged)

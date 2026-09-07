@@ -18,6 +18,7 @@ using AssetBlock.WebApi.Tests.Common;
 using AwesomeAssertions;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using NSubstitute;
@@ -37,10 +38,22 @@ public sealed class AssetsControllerTests : ControllerTestBase
     }
 
     [Fact]
+    public void List_ShouldHaveCatalogSearchRateLimitingAttribute()
+    {
+        System.Reflection.MethodInfo? method = typeof(AssetsController).GetMethod(nameof(AssetsController.List));
+        EnableRateLimitingAttribute? attribute = method!.GetCustomAttributes(typeof(EnableRateLimitingAttribute), inherit: true)
+            .Cast<EnableRateLimitingAttribute>()
+            .SingleOrDefault();
+
+        attribute.Should().NotBeNull();
+        attribute.PolicyName.Should().Be(RateLimitingConstants.Policies.CATALOG_SEARCH);
+    }
+
+    [Fact]
     public async Task List_ShouldReturnOk()
     {
         Sender.Send(Arg.Any<GetAssetsQuery>(), Arg.Any<CancellationToken>())
-            .Returns(Task.FromResult(Result.Success(new DomainPaging.PagedResult<AssetListItem>([], 0, 1, 10))));
+            .Returns(Task.FromResult(Result.Success(new CatalogPageResult<AssetListItem>([], 0, 1, 10))));
 
         AssetsController controller = CreateController();
         IActionResult result = await controller.List(new GetAssetsRequest(), CancellationToken.None);

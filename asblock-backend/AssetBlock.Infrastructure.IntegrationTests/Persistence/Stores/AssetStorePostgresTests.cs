@@ -33,7 +33,7 @@ public sealed class AssetStorePostgresTests(PostgresFixture fixture)
         DateTimeOffset deletedAt = DateTimeOffset.UtcNow;
         await store.SoftDelete(asset.Id, deletedAt);
 
-        PagedResult<AssetListItem> paged = await store.GetPaged(new GetAssetsRequest { Page = 1, PageSize = 10 });
+        CatalogPageResult<AssetListItem> paged = await store.GetPaged(new GetAssetsRequest { Page = 1, PageSize = 10 });
         paged.Items.Should().BeEmpty();
         paged.TotalCount.Should().Be(0);
 
@@ -202,7 +202,7 @@ public sealed class AssetStorePostgresTests(PostgresFixture fixture)
         await AddWithReadyVersion(store, TestData.CreateAsset(author.Id, category.Id, title: "Gamma Pack", price: 25m, createdAt: t0.AddMinutes(2)));
         await AddWithReadyVersion(store, TestData.CreateAsset(author.Id, otherCategory.Id, title: "Other Tool", price: 1m, createdAt: t0.AddMinutes(3)));
 
-        PagedResult<AssetListItem> page1 = await store.GetPaged(new GetAssetsRequest
+        CatalogPageResult<AssetListItem> page1 = await store.GetPaged(new GetAssetsRequest
         {
             Page = 1,
             PageSize = 2,
@@ -217,7 +217,7 @@ public sealed class AssetStorePostgresTests(PostgresFixture fixture)
         page1.Page.Should().Be(1);
         page1.PageSize.Should().Be(2);
 
-        PagedResult<AssetListItem> page2 = await store.GetPaged(new GetAssetsRequest
+        CatalogPageResult<AssetListItem> page2 = await store.GetPaged(new GetAssetsRequest
         {
             Page = 2,
             PageSize = 2,
@@ -247,7 +247,7 @@ public sealed class AssetStorePostgresTests(PostgresFixture fixture)
         await AddWithReadyVersion(store, TestData.CreateAsset(
             author.Id, category.Id, title: "Same Title", createdAt: sharedCreatedAt, id: idLow));
 
-        PagedResult<AssetListItem> page = await store.GetPaged(new GetAssetsRequest
+        CatalogPageResult<AssetListItem> page = await store.GetPaged(new GetAssetsRequest
         {
             Page = 1,
             PageSize = 10,
@@ -266,7 +266,7 @@ public sealed class AssetStorePostgresTests(PostgresFixture fixture)
         var store = new AssetStore(db);
         await AddWithReadyVersion(store, TestData.CreateAsset(author.Id, category.Id, title: "Celestial Shader Pack"));
 
-        PagedResult<AssetListItem> page = await store.GetPaged(new GetAssetsRequest
+        CatalogPageResult<AssetListItem> page = await store.GetPaged(new GetAssetsRequest
         {
             Page = 1,
             PageSize = 10,
@@ -289,7 +289,7 @@ public sealed class AssetStorePostgresTests(PostgresFixture fixture)
             title: "Utility Bundle",
             description: "Includes a modular inventory system for RPG games"));
 
-        PagedResult<AssetListItem> page = await store.GetPaged(new GetAssetsRequest
+        CatalogPageResult<AssetListItem> page = await store.GetPaged(new GetAssetsRequest
         {
             Page = 1,
             PageSize = 10,
@@ -309,7 +309,7 @@ public sealed class AssetStorePostgresTests(PostgresFixture fixture)
         await AddWithReadyVersion(store, TestData.CreateAsset(author.Id, category.Id, title: "Procedural Pack"));
 
         // similarity('Procedural Pack', 'Procedurl') >= 0.30 with pg_trgm
-        PagedResult<AssetListItem> typo = await store.GetPaged(new GetAssetsRequest
+        CatalogPageResult<AssetListItem> typo = await store.GetPaged(new GetAssetsRequest
         {
             Page = 1,
             PageSize = 10,
@@ -317,7 +317,7 @@ public sealed class AssetStorePostgresTests(PostgresFixture fixture)
         });
         typo.Items.Should().ContainSingle(a => a.Title == "Procedural Pack");
 
-        PagedResult<AssetListItem> partial = await store.GetPaged(new GetAssetsRequest
+        CatalogPageResult<AssetListItem> partial = await store.GetPaged(new GetAssetsRequest
         {
             Page = 1,
             PageSize = 10,
@@ -343,7 +343,7 @@ public sealed class AssetStorePostgresTests(PostgresFixture fixture)
         await AddWithReadyVersion(store, both, [tagUi, tagKit]);
         await AddWithReadyVersion(store, onlyUi, [tagUi]);
 
-        PagedResult<AssetListItem> page = await store.GetPaged(new GetAssetsRequest
+        CatalogPageResult<AssetListItem> page = await store.GetPaged(new GetAssetsRequest
         {
             Page = 1,
             PageSize = 10,
@@ -378,7 +378,7 @@ public sealed class AssetStorePostgresTests(PostgresFixture fixture)
         await AddWithReadyVersion(store, wrongAuthor, [tagFx]);
         await AddWithReadyVersion(store, wrongPrice, [tagFx]);
 
-        PagedResult<AssetListItem> page = await store.GetPaged(new GetAssetsRequest
+        CatalogPageResult<AssetListItem> page = await store.GetPaged(new GetAssetsRequest
         {
             Page = 1,
             PageSize = 1,
@@ -410,7 +410,7 @@ public sealed class AssetStorePostgresTests(PostgresFixture fixture)
         await AddWithReadyVersion(store, asset);
         await store.SoftDelete(asset.Id, DateTimeOffset.UtcNow);
 
-        PagedResult<AssetListItem> page = await store.GetPaged(new GetAssetsRequest
+        CatalogPageResult<AssetListItem> page = await store.GetPaged(new GetAssetsRequest
         {
             Page = 1,
             PageSize = 10,
@@ -468,7 +468,7 @@ public sealed class AssetStorePostgresTests(PostgresFixture fixture)
         var reviewStore = new ReviewStore(db, NullLogger<ReviewStore>.Instance);
         await reviewStore.Create(TestData.CreateReview(buyer.Id, asset.Id, rating: 4));
 
-        PagedResult<AssetListItem> page = await store.GetPaged(new GetAssetsRequest { Page = 1, PageSize = 10 });
+        CatalogPageResult<AssetListItem> page = await store.GetPaged(new GetAssetsRequest { Page = 1, PageSize = 10 });
 
         AssetListItem item = page.Items.Should().ContainSingle().Subject;
         item.CategoryName.Should().Be(category.Name);
@@ -671,7 +671,7 @@ public sealed class AssetStorePostgresTests(PostgresFixture fixture)
         var store = new AssetStore(db);
         await AddWithReadyVersion(store, asset);
 
-        PagedResult<AssetListItem> catalog = await store.GetPaged(new GetAssetsRequest { Page = 1, PageSize = 10 });
+        CatalogPageResult<AssetListItem> catalog = await store.GetPaged(new GetAssetsRequest { Page = 1, PageSize = 10 });
         AssetListItem item = catalog.Items.Should().ContainSingle().Subject;
         item.Id.Should().Be(asset.Id);
         item.AverageRating.Should().Be(4.75d);
@@ -700,7 +700,7 @@ public sealed class AssetStorePostgresTests(PostgresFixture fixture)
         await AddWithReadyVersion(store, descMatch);
         await AddWithReadyVersion(store, typoMatch);
 
-        PagedResult<AssetListItem> paged = await store.GetPaged(new GetAssetsRequest
+        CatalogPageResult<AssetListItem> paged = await store.GetPaged(new GetAssetsRequest
         {
             Page = 1,
             PageSize = 10,
@@ -729,7 +729,7 @@ public sealed class AssetStorePostgresTests(PostgresFixture fixture)
             description: "Knight hero armor model with textures");
         await AddWithReadyVersion(store, multiMatch);
 
-        PagedResult<AssetListItem> paged = await store.GetPaged(new GetAssetsRequest
+        CatalogPageResult<AssetListItem> paged = await store.GetPaged(new GetAssetsRequest
         {
             Page = 1,
             PageSize = 10,
@@ -760,21 +760,21 @@ public sealed class AssetStorePostgresTests(PostgresFixture fixture)
         await AddWithReadyVersion(store, a4);
         await AddWithReadyVersion(store, a5);
 
-        PagedResult<AssetListItem> p1 = await store.GetPaged(new GetAssetsRequest
+        CatalogPageResult<AssetListItem> p1 = await store.GetPaged(new GetAssetsRequest
         {
             Page = 1,
             PageSize = 2,
             Search = "Space Fighter"
         });
 
-        PagedResult<AssetListItem> p2 = await store.GetPaged(new GetAssetsRequest
+        CatalogPageResult<AssetListItem> p2 = await store.GetPaged(new GetAssetsRequest
         {
             Page = 2,
             PageSize = 2,
             Search = "Space Fighter"
         });
 
-        PagedResult<AssetListItem> p3 = await store.GetPaged(new GetAssetsRequest
+        CatalogPageResult<AssetListItem> p3 = await store.GetPaged(new GetAssetsRequest
         {
             Page = 3,
             PageSize = 2,
@@ -810,7 +810,7 @@ public sealed class AssetStorePostgresTests(PostgresFixture fixture)
         await AddWithReadyVersion(store, a2);
         await AddWithReadyVersion(store, a3);
 
-        PagedResult<AssetListItem> paged = await store.GetPaged(new GetAssetsRequest
+        CatalogPageResult<AssetListItem> paged = await store.GetPaged(new GetAssetsRequest
         {
             Page = 1,
             PageSize = 10,
@@ -840,7 +840,7 @@ public sealed class AssetStorePostgresTests(PostgresFixture fixture)
         await AddWithReadyVersion(store, underscoreMatch);
         await AddWithReadyVersion(store, underscoreNonMatch);
 
-        PagedResult<AssetListItem> percentResult = await store.GetPaged(new GetAssetsRequest
+        CatalogPageResult<AssetListItem> percentResult = await store.GetPaged(new GetAssetsRequest
         {
             Page = 1,
             PageSize = 10,
@@ -848,7 +848,7 @@ public sealed class AssetStorePostgresTests(PostgresFixture fixture)
         });
         percentResult.Items.Should().ContainSingle(a => a.Title == "100% Procedural");
 
-        PagedResult<AssetListItem> underscoreResult = await store.GetPaged(new GetAssetsRequest
+        CatalogPageResult<AssetListItem> underscoreResult = await store.GetPaged(new GetAssetsRequest
         {
             Page = 1,
             PageSize = 10,
@@ -879,7 +879,7 @@ public sealed class AssetStorePostgresTests(PostgresFixture fixture)
         await AddWithReadyVersion(store, percentPartial);
 
         // Trailing backslash search: must not throw SQL escape error
-        PagedResult<AssetListItem> trailingResult = await store.GetPaged(new GetAssetsRequest
+        CatalogPageResult<AssetListItem> trailingResult = await store.GetPaged(new GetAssetsRequest
         {
             Page = 1,
             PageSize = 10,
@@ -888,7 +888,7 @@ public sealed class AssetStorePostgresTests(PostgresFixture fixture)
         trailingResult.Items.Should().ContainSingle(a => a.Title == @"Tools\Bin\");
 
         // Interior backslash search
-        PagedResult<AssetListItem> interiorResult = await store.GetPaged(new GetAssetsRequest
+        CatalogPageResult<AssetListItem> interiorResult = await store.GetPaged(new GetAssetsRequest
         {
             Page = 1,
             PageSize = 10,
@@ -897,7 +897,7 @@ public sealed class AssetStorePostgresTests(PostgresFixture fixture)
         interiorResult.Items.Should().ContainSingle(a => a.Title == @"Shader\Core\V1");
 
         // Underscore search: should match underscore literally, not as single-character wildcard
-        PagedResult<AssetListItem> underscoreResult = await store.GetPaged(new GetAssetsRequest
+        CatalogPageResult<AssetListItem> underscoreResult = await store.GetPaged(new GetAssetsRequest
         {
             Page = 1,
             PageSize = 10,
@@ -906,7 +906,7 @@ public sealed class AssetStorePostgresTests(PostgresFixture fixture)
         underscoreResult.Items.Should().ContainSingle(a => a.Title == "My_Custom_Asset");
 
         // Exact-title relevance with percent: exact title "50% Discount Pack" outranks "Special 50% Discount Pack Bundle"
-        PagedResult<AssetListItem> percentResult = await store.GetPaged(new GetAssetsRequest
+        CatalogPageResult<AssetListItem> percentResult = await store.GetPaged(new GetAssetsRequest
         {
             Page = 1,
             PageSize = 10,
@@ -933,7 +933,7 @@ public sealed class AssetStorePostgresTests(PostgresFixture fixture)
         await AddWithReadyVersion(store, deletedAsset);
         await store.SoftDelete(deletedAsset.Id, DateTimeOffset.UtcNow);
 
-        PagedResult<AssetListItem> result = await store.GetPaged(new GetAssetsRequest
+        CatalogPageResult<AssetListItem> result = await store.GetPaged(new GetAssetsRequest
         {
             Page = 1,
             PageSize = 10,

@@ -202,6 +202,7 @@ public static class DependencyInjection
         services.AddScoped<IPaymentService, StripePaymentService>();
         services.AddScoped<IDownloadService, DownloadService>();
         services.AddScoped<IVectorSearchCapability, VectorSearchCapability>();
+        services.AddSingleton<IQueryVectorCache>(sp => new BoundedQueryVectorCache(sp.GetRequiredService<TimeProvider>()));
         services.AddAssetStorage(configuration);
         services.AddSingleton<IEncryptionService, AesGcmEncryptionService>();
         services.AddSingleton<IPasswordHasher, PasswordHasher>();

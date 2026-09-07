@@ -45,7 +45,7 @@ public sealed class AssetCatalogVisibilityPostgresTests(PostgresFixture fixture)
         var assetStore = new AssetStore(db);
 
         // Act 1: Public catalog query WITH authorId filter (unauthenticated public browser browsing seller profile)
-        PagedResult<AssetListItem> publicResult = await assetStore.GetPaged(new GetAssetsRequest
+        CatalogPageResult<AssetListItem> publicResult = await assetStore.GetPaged(new GetAssetsRequest
         {
             AuthorId = author.Id,
             Page = 1,

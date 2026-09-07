@@ -15,7 +15,7 @@ internal sealed class GetCategoriesQueryHandler(
     ILogger<GetCategoriesQueryHandler> logger)
     : IRequestHandler<GetCategoriesQuery, Result<Domain.Core.Dto.Paging.PagedResult<CategoryListItem>>>
 {
-    private static readonly TimeSpan _cacheExpiration = CatalogCacheConstants.CATEGORIES_LIST_TTL;
+    private static readonly TimeSpan _cacheExpiration = CatalogCacheConstants.CategoriesListTtl;
 
     public async Task<Result<Domain.Core.Dto.Paging.PagedResult<CategoryListItem>>> Handle(GetCategoriesQuery request, CancellationToken cancellationToken)
     {

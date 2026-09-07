@@ -23,6 +23,7 @@ public static class RateLimitingConstants
         public const string LISTING_COPILOT_ENQUEUE = "listing-copilot-enqueue";
         public const string ADMIN_OUTBOX_REPLAY = "admin-outbox-replay";
         public const string AUTH_SIGNALR_TOKEN = "auth-signalr-token";
+        public const string CATALOG_SEARCH = "catalog-search";
     }
 
     public static class Windows
@@ -73,6 +74,9 @@ public static class RateLimitingConstants
 
         public const int ADMIN_OUTBOX_REPLAY_LIMIT = 10;
         public const int ADMIN_OUTBOX_REPLAY_PERIOD_SECONDS = 60;
+
+        public const int CATALOG_SEARCH_LIMIT = 60;
+        public const int CATALOG_SEARCH_PERIOD_SECONDS = 60;
 
         public const int AUTH_SIGNALR_TOKEN_LIMIT = 60;
         public const int AUTH_SIGNALR_TOKEN_PERIOD_SECONDS = 60;

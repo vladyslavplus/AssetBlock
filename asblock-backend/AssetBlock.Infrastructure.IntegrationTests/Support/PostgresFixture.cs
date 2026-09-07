@@ -45,7 +45,8 @@ public sealed class PostgresFixture : IAsyncLifetime
         Action<DbContextOptionsBuilder<ApplicationDbContext>>? configure = null)
     {
         DbContextOptionsBuilder<ApplicationDbContext> optionsBuilder = new DbContextOptionsBuilder<ApplicationDbContext>()
-            .UseNpgsql(ConnectionString, npgsql => npgsql.UseVector());
+            .UseNpgsql(ConnectionString, npgsql => npgsql.UseVector())
+            .AddInterceptors(new AssetBlock.Infrastructure.Persistence.Interceptors.AuditTimestampsInterceptor(TimeProvider.System));
         configure?.Invoke(optionsBuilder);
         return new ApplicationDbContext(optionsBuilder.Options);
     }

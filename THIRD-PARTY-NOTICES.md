@@ -3639,6 +3639,14 @@ from the npm registry (canonical, OS-independent). Reviewed exceptions may set
   - copyright/author: James Newton-King
   - source: https://www.newtonsoft.com/json
   - license-url: https://licenses.nuget.org/MIT
+- `nuget` Pgvector@0.3.2
+  - copyright/author: ankane
+  - source: https://github.com/pgvector/pgvector-dotnet
+  - license-url: https://licenses.nuget.org/MIT
+- `nuget` Pgvector.EntityFrameworkCore@0.3.0
+  - copyright/author: ankane
+  - source: https://github.com/pgvector/pgvector-dotnet
+  - license-url: https://licenses.nuget.org/MIT
 - `nuget` Pipelines.Sockets.Unofficial@2.2.8
   - copyright/author: Pipelines.Sockets.Unofficial
   - source: https://github.com/mgravell/Pipelines.Sockets.Unofficial
