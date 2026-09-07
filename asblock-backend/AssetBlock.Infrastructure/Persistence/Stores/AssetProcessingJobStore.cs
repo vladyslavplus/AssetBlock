@@ -20,6 +20,128 @@ internal sealed partial class AssetProcessingJobStore(ApplicationDbContext dbCon
     private readonly AssetProcessingOptions _options = options.Value;
     private const int MAX_ERROR_SUMMARY_RUNES = 2000;
 
+    private const string SQL_ENQUEUE_EMBEDDING = """
+        WITH inserted AS (
+            INSERT INTO asset_processing_jobs (
+                "Id",
+                "AssetId",
+                "AssetVersionId",
+                "Type",
+                "DefinitionVersion",
+                "Status",
+                "Stage",
+                "AttemptCount",
+                "MaxAttempts",
+                "AvailableAt",
+                "Payload",
+                "TraceParent",
+                "InputHash",
+                "ModelKey",
+                "CreatedAt"
+            )
+            VALUES (
+                @id,
+                @assetId,
+                @assetVersionId,
+                @type,
+                @defVer,
+                'QUEUED',
+                'QUEUED',
+                0,
+                @maxAttempts,
+                clock_timestamp() + @initialDelay,
+                CAST(@payload AS jsonb),
+                @traceParent,
+                @inputHash,
+                @modelKey,
+                clock_timestamp()
+            )
+            ON CONFLICT ("AssetId", "Type", "DefinitionVersion", "ModelKey", "InputHash")
+            WHERE "Type" = 'EMBEDDING_GENERATION' AND "Status" IN ('QUEUED', 'RUNNING', 'RETRY_SCHEDULED')
+            DO NOTHING
+            RETURNING "Id"
+        )
+        SELECT "Id" FROM inserted
+        UNION ALL
+        SELECT j."Id"
+        FROM asset_processing_jobs j
+        WHERE j."AssetId" = @assetId
+          AND j."Type" = @type
+          AND j."DefinitionVersion" = @defVer
+          AND j."ModelKey" = @modelKey
+          AND j."InputHash" = @inputHash
+          AND j."Status" IN ('QUEUED', 'RUNNING', 'RETRY_SCHEDULED')
+        LIMIT 1;
+        """;
+
+    private const string SQL_ENQUEUE_STANDARD = """
+        WITH inserted AS (
+            INSERT INTO asset_processing_jobs (
+                "Id",
+                "AssetId",
+                "AssetVersionId",
+                "Type",
+                "DefinitionVersion",
+                "Status",
+                "Stage",
+                "AttemptCount",
+                "MaxAttempts",
+                "AvailableAt",
+                "Payload",
+                "TraceParent",
+                "CreatedAt"
+            )
+            VALUES (
+                @id,
+                @assetId,
+                @assetVersionId,
+                @type,
+                @defVer,
+                'QUEUED',
+                'QUEUED',
+                0,
+                @maxAttempts,
+                clock_timestamp() + @initialDelay,
+                CAST(@payload AS jsonb),
+                @traceParent,
+                clock_timestamp()
+            )
+            ON CONFLICT ("AssetVersionId", "Type", "DefinitionVersion")
+            WHERE "Type" <> 'EMBEDDING_GENERATION'
+            DO NOTHING
+            RETURNING "Id"
+        )
+        SELECT "Id" FROM inserted
+        UNION ALL
+        SELECT j."Id"
+        FROM asset_processing_jobs j
+        WHERE j."AssetVersionId" = @assetVersionId
+          AND j."Type" = @type
+          AND j."DefinitionVersion" = @defVer
+        LIMIT 1;
+        """;
+
+    private const string SQL_SELECT_CONFLICT_EMBEDDING = """
+        SELECT j."Id"
+        FROM asset_processing_jobs j
+        WHERE j."AssetId" = @assetId
+          AND j."Type" = @type
+          AND j."DefinitionVersion" = @defVer
+          AND j."ModelKey" = @modelKey
+          AND j."InputHash" = @inputHash
+          AND j."Status" IN ('QUEUED', 'RUNNING', 'RETRY_SCHEDULED')
+        LIMIT 1;
+        """;
+
+    private const string SQL_SELECT_CONFLICT_STANDARD = """
+        SELECT j."Id"
+        FROM asset_processing_jobs j
+        WHERE j."AssetVersionId" = @assetVersionId
+          AND j."Type" = @type
+          AND j."DefinitionVersion" = @defVer
+        LIMIT 1;
+        """;
+
     [GeneratedRegex("^[A-Z0-9_]{1,64}$")]
     private static partial Regex ErrorCodeRegex();
 
@@ -65,9 +187,16 @@ internal sealed partial class AssetProcessingJobStore(ApplicationDbContext dbCon
         }
 
         var serializedPayload = AssetProcessingSerializer.SerializePayload(type, payload);
-        var newId = Guid.NewGuid();
-        var typeString = type.ToString();
         var maxAttempts = _options.MaxAttempts;
+
+        var isEmbedding = type == AssetProcessingJobType.EMBEDDING_GENERATION;
+        string? inputHash = null;
+        string? modelKey = null;
+        if (isEmbedding && payload is EmbeddingGenerationPayload embeddingPayload)
+        {
+            inputHash = embeddingPayload.ContentHash;
+            modelKey = embeddingPayload.ModelKey;
+        }
 
         DbConnection connection = dbContext.Database.GetDbConnection();
         if (connection.State != ConnectionState.Open)
@@ -77,54 +206,18 @@ internal sealed partial class AssetProcessingJobStore(ApplicationDbContext dbCon
 
         await using DbCommand cmd = connection.CreateCommand();
         cmd.Transaction = dbContext.Database.CurrentTransaction?.GetDbTransaction();
-        cmd.CommandText = """
-            WITH inserted AS (
-                INSERT INTO asset_processing_jobs (
-                    "Id",
-                    "AssetId",
-                    "AssetVersionId",
-                    "Type",
-                    "DefinitionVersion",
-                    "Status",
-                    "Stage",
-                    "AttemptCount",
-                    "MaxAttempts",
-                    "AvailableAt",
-                    "Payload",
-                    "TraceParent",
-                    "CreatedAt"
-                )
-                VALUES (
-                    @id,
-                    @assetId,
-                    @assetVersionId,
-                    @type,
-                    @defVer,
-                    'QUEUED',
-                    'QUEUED',
-                    0,
-                    @maxAttempts,
-                    clock_timestamp() + @initialDelay,
-                    CAST(@payload AS jsonb),
-                    @traceParent,
-                    clock_timestamp()
-                )
-                ON CONFLICT ("AssetVersionId", "Type", "DefinitionVersion") DO NOTHING
-                RETURNING "Id"
-            )
-            SELECT "Id" FROM inserted
-            UNION ALL
-            SELECT j."Id"
-            FROM asset_processing_jobs j
-            WHERE j."AssetVersionId" = @assetVersionId
-              AND j."Type" = @type
-              AND j."DefinitionVersion" = @defVer
-            LIMIT 1;
-            """;
+        if (isEmbedding)
+        {
+            cmd.CommandText = SQL_ENQUEUE_EMBEDDING;
+        }
+        else
+        {
+            cmd.CommandText = SQL_ENQUEUE_STANDARD;
+        }
 
         DbParameter pId = cmd.CreateParameter();
         pId.ParameterName = "@id";
-        pId.Value = newId;
+        pId.Value = Guid.NewGuid();
         cmd.Parameters.Add(pId);
 
         DbParameter pAssetId = cmd.CreateParameter();
@@ -132,14 +225,14 @@ internal sealed partial class AssetProcessingJobStore(ApplicationDbContext dbCon
         pAssetId.Value = assetId;
         cmd.Parameters.Add(pAssetId);
 
-        DbParameter pVersionId = cmd.CreateParameter();
-        pVersionId.ParameterName = "@assetVersionId";
-        pVersionId.Value = assetVersionId;
-        cmd.Parameters.Add(pVersionId);
+        DbParameter pAssetVersionId = cmd.CreateParameter();
+        pAssetVersionId.ParameterName = "@assetVersionId";
+        pAssetVersionId.Value = assetVersionId;
+        cmd.Parameters.Add(pAssetVersionId);
 
         DbParameter pType = cmd.CreateParameter();
         pType.ParameterName = "@type";
-        pType.Value = typeString;
+        pType.Value = type.ToString();
         cmd.Parameters.Add(pType);
 
         DbParameter pDefVer = cmd.CreateParameter();
@@ -152,32 +245,45 @@ internal sealed partial class AssetProcessingJobStore(ApplicationDbContext dbCon
         pMaxAttempts.Value = maxAttempts;
         cmd.Parameters.Add(pMaxAttempts);
 
-        DbParameter pDelay = cmd.CreateParameter();
-        pDelay.ParameterName = "@initialDelay";
-        pDelay.Value = initialDelay;
-        cmd.Parameters.Add(pDelay);
+        DbParameter pInitialDelay = cmd.CreateParameter();
+        pInitialDelay.ParameterName = "@initialDelay";
+        pInitialDelay.Value = initialDelay;
+        cmd.Parameters.Add(pInitialDelay);
 
         DbParameter pPayload = cmd.CreateParameter();
         pPayload.ParameterName = "@payload";
         pPayload.Value = serializedPayload;
         cmd.Parameters.Add(pPayload);
 
-        DbParameter pTrace = cmd.CreateParameter();
-        pTrace.ParameterName = "@traceParent";
-        pTrace.Value = (object?)traceParent ?? DBNull.Value;
-        cmd.Parameters.Add(pTrace);
+        DbParameter pTraceParent = cmd.CreateParameter();
+        pTraceParent.ParameterName = "@traceParent";
+        pTraceParent.Value = (object?)traceParent ?? DBNull.Value;
+        cmd.Parameters.Add(pTraceParent);
+
+        if (isEmbedding)
+        {
+            DbParameter pInputHash = cmd.CreateParameter();
+            pInputHash.ParameterName = "@inputHash";
+            pInputHash.Value = (object?)inputHash ?? DBNull.Value;
+            cmd.Parameters.Add(pInputHash);
+
+            DbParameter pModelKey = cmd.CreateParameter();
+            pModelKey.ParameterName = "@modelKey";
+            pModelKey.Value = (object?)modelKey ?? DBNull.Value;
+            cmd.Parameters.Add(pModelKey);
+        }
 
         var result = await cmd.ExecuteScalarAsync(cancellationToken);
         if (result is null or DBNull)
         {
-            cmd.CommandText = """
-                SELECT j."Id"
-                FROM asset_processing_jobs j
-                WHERE j."AssetVersionId" = @assetVersionId
-                  AND j."Type" = @type
-                  AND j."DefinitionVersion" = @defVer
-                LIMIT 1;
-                """;
+            if (isEmbedding)
+            {
+                cmd.CommandText = SQL_SELECT_CONFLICT_EMBEDDING;
+            }
+            else
+            {
+                cmd.CommandText = SQL_SELECT_CONFLICT_STANDARD;
+            }
             result = await cmd.ExecuteScalarAsync(cancellationToken);
         }
 
@@ -578,7 +684,10 @@ internal sealed partial class AssetProcessingJobStore(ApplicationDbContext dbCon
 
         return await dbContext.AssetProcessingJobs
             .AsNoTracking()
-            .Where(j => j.AssetId == assetId && j.Asset.AuthorId == ownerUserId && j.Asset.DeletedAt == null)
+            .Where(j => j.AssetId == assetId
+                        && j.Asset.AuthorId == ownerUserId
+                        && j.Asset.DeletedAt == null
+                        && j.Type != AssetProcessingJobType.EMBEDDING_GENERATION)
             .OrderByDescending(j => j.CreatedAt)
             .ThenByDescending(j => j.Id)
             .Select(j => new AssetProcessingJobDto(
@@ -619,7 +728,10 @@ internal sealed partial class AssetProcessingJobStore(ApplicationDbContext dbCon
 
         return await dbContext.AssetProcessingJobs
             .AsNoTracking()
-            .Where(j => j.AssetVersionId == assetVersionId && j.Asset.AuthorId == ownerUserId && j.Asset.DeletedAt == null)
+            .Where(j => j.AssetVersionId == assetVersionId
+                        && j.Asset.AuthorId == ownerUserId
+                        && j.Asset.DeletedAt == null
+                        && j.Type != AssetProcessingJobType.EMBEDDING_GENERATION)
             .OrderByDescending(j => j.CreatedAt)
             .ThenByDescending(j => j.Id)
             .Select(j => new AssetProcessingJobDto(
@@ -650,7 +762,7 @@ internal sealed partial class AssetProcessingJobStore(ApplicationDbContext dbCon
     {
         return await dbContext.AssetProcessingJobs
             .AsNoTracking()
-            .Where(j => j.Id == jobId)
+            .Where(j => j.Id == jobId && j.Type != AssetProcessingJobType.EMBEDDING_GENERATION)
             .Select(j => new AssetProcessingJobRealtimeState(
                 j.Id,
                 j.AssetId,

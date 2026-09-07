@@ -1,7 +1,7 @@
 using System.Security.Cryptography;
 using System.Text;
 
-namespace AssetBlock.Application.Common;
+namespace AssetBlock.Domain.Core;
 
 /// <summary>
 /// Result of public listing metadata canonicalization.
@@ -20,15 +20,16 @@ public sealed record CanonicalPublicMetadataResult(
 public static class AssetPublicMetadataCanonicalizer
 {
     public const string CONTENT_SCHEMA_VERSION = "asset-public-metadata-v1";
+    public const string SCHEMA_VERSION = CONTENT_SCHEMA_VERSION;
 
-    public const int TITLE_MAX_CHARS = 500;
-    public const int DESCRIPTION_MAX_CHARS = 5000;
-    public const int CATEGORY_MAX_CHARS = 200;
-    public const int TAG_MAX_CHARS = 50;
-    public const int TAG_MAX_COUNT = 50;
+    private const int TITLE_MAX_CHARS = 500;
+    private const int DESCRIPTION_MAX_CHARS = 5000;
+    private const int CATEGORY_MAX_CHARS = 200;
+    private const int TAG_MAX_CHARS = 50;
+    private const int TAG_MAX_COUNT = 50;
 
-    public const int MAX_COMPOSED_CHARS = 8192;
-    public const int MAX_COMPOSED_UTF8_BYTES = 32768; // 32 KiB
+    private const int MAX_COMPOSED_CHARS = 8192;
+    private const int MAX_COMPOSED_UTF8_BYTES = 32768; // 32 KiB
 
     /// <summary>
     /// Produces deterministic canonical text and lowercase SHA-256 hash for public listing metadata.
@@ -132,6 +133,22 @@ public static class AssetPublicMetadataCanonicalizer
         return new CanonicalPublicMetadataResult(finalText, contentHash, truncated);
     }
 
+    public static string BuildCanonicalMetadata(
+        string? title,
+        string? description,
+        string? categoryName,
+        IEnumerable<string>? tags)
+    {
+        return Canonicalize(title, description, categoryName, tags).CanonicalText;
+    }
+
+    public static string ComputeContentHash(string canonicalText)
+    {
+        var utf8Bytes = Encoding.UTF8.GetBytes(canonicalText);
+        var hashBytes = SHA256.HashData(utf8Bytes);
+        return Convert.ToHexStringLower(hashBytes);
+    }
+
     private static string NormalizeSingleLineField(string? text)
     {
         if (string.IsNullOrWhiteSpace(text))
@@ -182,7 +199,7 @@ public static class AssetPublicMetadataCanonicalizer
         var nfkc = text.Normalize(NormalizationForm.FormKC);
 
         // 2. CRLF and CR to LF
-        var lfText = nfkc.Replace("\r\n", "\n").Replace('\r', '\n');
+        var lfText = nfkc.Replace("\r\n", "\n", StringComparison.Ordinal).Replace('\r', '\n');
 
         // 3. Trim outer whitespace, collapse horizontal whitespace on each line
         var lines = lfText.Split('\n');

@@ -149,6 +149,8 @@ public static class DependencyInjection
         services.AddHostedService<OutboxRetentionWorker>();
         services.AddHostedService<AnalyticsAggregationWorker>();
         services.AddHostedService<AssetProcessingWorker>();
+        services.AddHostedService<EmbeddingBackfillCoordinatorWorker>();
+        services.AddHttpClient(OllamaTextEmbeddingGenerator.HTTP_CLIENT_NAME);
         services.AddScoped<IAssetProcessingJobRegistry, AssetProcessingJobRegistry>();
         services.AddAssetProcessingJobHandler<ArchiveInspectionJobHandler, ArchiveInspectionPayload, ArchiveInspectionResult>(
             AssetProcessingJobType.ARCHIVE_INSPECTION);
@@ -156,6 +158,11 @@ public static class DependencyInjection
             AssetProcessingJobType.MALWARE_SCAN);
         services.AddAssetProcessingJobHandler<ListingCopilotJobHandler, ListingCopilotPayload, ListingCopilotResult>(
             AssetProcessingJobType.LISTING_COPILOT);
+        services.AddAssetProcessingJobHandler<EmbeddingGenerationJobHandler, EmbeddingGenerationPayload, EmbeddingGenerationResult>(
+            AssetProcessingJobType.EMBEDDING_GENERATION);
+        services.AddScoped<ITextEmbeddingGenerator, OllamaTextEmbeddingGenerator>();
+        services.AddScoped<IAssetEmbeddingFinalizer, AssetEmbeddingFinalizer>();
+        services.AddScoped<IEmbeddingBackfillCoordinator, EmbeddingBackfillCoordinator>();
         services.AddSingleton<IArchiveSafetyInspector, ArchiveSafetyInspector>();
         services.AddSingleton<IContentMalwareScanner, ClamAvContentMalwareScanner>();
         services.AddScoped<IUnitOfWork, EfUnitOfWork>();

@@ -13,4 +13,5 @@ public interface ITagStore
     Task<Tag> Add(Tag tag, CancellationToken cancellationToken = default);
     Task<Tag> Update(Tag tag, CancellationToken cancellationToken = default);
     Task Delete(Tag tag, CancellationToken cancellationToken = default);
+    Task<int> BulkIncrementAssetSearchRevision(Guid tagId, CancellationToken cancellationToken = default);
 }

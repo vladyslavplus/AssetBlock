@@ -1,5 +1,5 @@
 using System.Text;
-using AssetBlock.Application.Common;
+using AssetBlock.Domain.Core;
 using AssetBlock.Domain.Core.Primitives.AppSettingsOptions;
 using AssetBlock.Infrastructure.Options;
 using AssetBlock.SearchEvaluation.Evaluation;

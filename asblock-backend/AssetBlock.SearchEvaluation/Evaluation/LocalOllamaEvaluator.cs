@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using AssetBlock.Application.Common;
+using AssetBlock.Domain.Core;
 using AssetBlock.Domain.Core.Primitives.AppSettingsOptions;
 using AssetBlock.SearchEvaluation.Metrics;
 using AssetBlock.SearchEvaluation.Ollama;

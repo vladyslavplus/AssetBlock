@@ -1,6 +1,6 @@
 using System.Security.Cryptography;
 using System.Text;
-using AssetBlock.Application.Common;
+using AssetBlock.Domain.Core;
 using AwesomeAssertions;
 
 namespace AssetBlock.Application.Tests.Common;

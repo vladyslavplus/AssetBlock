@@ -56,7 +56,7 @@ internal sealed class SqliteTestMigrationsSqlGenerator(
                     or "CK_asset_processing_jobs_embedding_hashes")
                 .ToList();
 
-            foreach (AddCheckConstraintOperation? constraint in targetConstraints)
+            foreach (AddCheckConstraintOperation constraint in targetConstraints)
             {
                 operation.CheckConstraints.Remove(constraint);
             }
@@ -81,6 +81,21 @@ internal sealed class SqliteTestMigrationsSqlGenerator(
                     or AssetListingSuggestionConfiguration.CK_TAGS_LENGTH
                     or AssetListingSuggestionConfiguration.CK_TAGS_ITEMS
                     or AssetListingSuggestionConfiguration.CK_TAGS_SIZE)
+                .ToList();
+
+            foreach (AddCheckConstraintOperation constraint in targetConstraints)
+            {
+                operation.CheckConstraints.Remove(constraint);
+            }
+        }
+
+        if (operation.Name == "asset_embeddings")
+        {
+            var targetConstraints = operation.CheckConstraints
+                .Where(c => c.Name is "CK_asset_embeddings_model_key"
+                    or "CK_asset_embeddings_content_hash"
+                    or "CK_asset_embeddings_model_digest"
+                    or "CK_asset_embeddings_vector_dims")
                 .ToList();
 
             foreach (AddCheckConstraintOperation constraint in targetConstraints)

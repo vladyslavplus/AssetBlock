@@ -1,15 +1,23 @@
 using AssetBlock.Domain.Abstractions.Services;
+using AssetBlock.Domain.Core;
+using AssetBlock.Domain.Core.Dto;
 using AssetBlock.Domain.Core.Dto.Assets;
 using AssetBlock.Domain.Core.Dto.Paging;
 using AssetBlock.Domain.Core.Entities;
 using AssetBlock.Domain.Core.Enums;
+using AssetBlock.Domain.Core.Primitives.AppSettingsOptions;
 using AssetBlock.Infrastructure.Persistence.Configurations;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 using NpgsqlTypes;
 
 namespace AssetBlock.Infrastructure.Persistence.Stores;
 
-internal sealed class AssetStore(ApplicationDbContext dbContext, TimeProvider? timeProvider = null) : IAssetStore
+internal sealed class AssetStore(
+    ApplicationDbContext dbContext,
+    IAssetProcessingJobStore? jobStore = null,
+    IOptions<EmbeddingOptions>? embeddingOptions = null,
+    TimeProvider? timeProvider = null) : IAssetStore
 {
     private const float TRIGRAM_SIMILARITY_THRESHOLD = 0.30f;
     private const int MIN_TRIGRAM_QUERY_LENGTH = 3;
@@ -921,6 +929,37 @@ internal sealed class AssetStore(ApplicationDbContext dbContext, TimeProvider? t
             $"INSERT INTO asset_tags (\"AssetId\", \"TagId\") VALUES ({assetId}, {tagId}) ON CONFLICT (\"AssetId\", \"TagId\") DO NOTHING",
             cancellationToken);
 
+        if (rows > 0)
+        {
+            Guid? readyVersionId = await dbContext.AssetVersions
+                .AsNoTracking()
+                .Where(v => v.AssetId == assetId && v.IsCurrent && v.ProcessingStatus == AssetVersionProcessingStatus.READY)
+                .Select(v => (Guid?)v.Id)
+                .FirstOrDefaultAsync(cancellationToken);
+
+            if (readyVersionId.HasValue)
+            {
+                DateTimeOffset now = (timeProvider ?? TimeProvider.System).GetUtcNow();
+                var affected = await dbContext.Database.ExecuteSqlInterpolatedAsync($"""
+                    UPDATE assets
+                    SET "SearchRevision" = "SearchRevision" + 1,
+                        "UpdatedAt" = {now}
+                    WHERE "Id" = {assetId} AND "DeletedAt" IS NULL
+                    """, cancellationToken);
+
+                if (affected > 0 && jobStore != null && embeddingOptions?.Value is { Enabled: true })
+                {
+                    var newRevision = await dbContext.Assets
+                        .AsNoTracking()
+                        .Where(a => a.Id == assetId)
+                        .Select(a => a.SearchRevision)
+                        .FirstOrDefaultAsync(cancellationToken);
+
+                    await EnqueueEmbeddingJobIfEligible(assetId, readyVersionId.Value, newRevision, cancellationToken);
+                }
+            }
+        }
+
         return rows > 0;
     }
 
@@ -936,6 +975,38 @@ internal sealed class AssetStore(ApplicationDbContext dbContext, TimeProvider? t
         var deleted = await dbContext.Set<AssetTag>()
             .Where(at => at.AssetId == assetId && at.TagId == tagId)
             .ExecuteDeleteAsync(cancellationToken);
+
+        if (deleted > 0)
+        {
+            Guid? readyVersionId = await dbContext.AssetVersions
+                .AsNoTracking()
+                .Where(v => v.AssetId == assetId && v.IsCurrent && v.ProcessingStatus == AssetVersionProcessingStatus.READY)
+                .Select(v => (Guid?)v.Id)
+                .FirstOrDefaultAsync(cancellationToken);
+
+            if (readyVersionId.HasValue)
+            {
+                DateTimeOffset now = (timeProvider ?? TimeProvider.System).GetUtcNow();
+                var affected = await dbContext.Database.ExecuteSqlInterpolatedAsync($"""
+                    UPDATE assets
+                    SET "SearchRevision" = "SearchRevision" + 1,
+                        "UpdatedAt" = {now}
+                    WHERE "Id" = {assetId} AND "DeletedAt" IS NULL
+                    """, cancellationToken);
+
+                if (affected > 0 && jobStore != null && embeddingOptions?.Value is { Enabled: true })
+                {
+                    var newRevision = await dbContext.Assets
+                        .AsNoTracking()
+                        .Where(a => a.Id == assetId)
+                        .Select(a => a.SearchRevision)
+                        .FirstOrDefaultAsync(cancellationToken);
+
+                    await EnqueueEmbeddingJobIfEligible(assetId, readyVersionId.Value, newRevision, cancellationToken);
+                }
+            }
+        }
+
         return deleted > 0;
     }
 
@@ -946,6 +1017,11 @@ internal sealed class AssetStore(ApplicationDbContext dbContext, TimeProvider? t
         {
             return false;
         }
+
+        var titleChanged = title is not null && !string.Equals(asset.Title, title, StringComparison.Ordinal);
+        var descriptionChanged = description is not null && !string.Equals(asset.Description, description, StringComparison.Ordinal);
+        var categoryChanged = categoryId.HasValue && asset.CategoryId != categoryId.Value;
+        var hasSearchableMetadataChange = titleChanged || descriptionChanged || categoryChanged;
 
         if (title is not null)
         {
@@ -964,9 +1040,87 @@ internal sealed class AssetStore(ApplicationDbContext dbContext, TimeProvider? t
             asset.CategoryId = categoryId.Value;
         }
 
+        Guid? readyVersionId = null;
+        if (hasSearchableMetadataChange)
+        {
+            readyVersionId = await dbContext.AssetVersions
+                .AsNoTracking()
+                .Where(v => v.AssetId == id && v.IsCurrent && v.ProcessingStatus == AssetVersionProcessingStatus.READY)
+                .Select(v => (Guid?)v.Id)
+                .FirstOrDefaultAsync(cancellationToken);
+
+            if (readyVersionId.HasValue)
+            {
+                asset.SearchRevision += 1;
+            }
+        }
+
         asset.UpdatedAt = (timeProvider ?? TimeProvider.System).GetUtcNow();
         await dbContext.SaveChangesAsync(cancellationToken);
+
+        if (hasSearchableMetadataChange && readyVersionId.HasValue)
+        {
+            await EnqueueEmbeddingJobIfEligible(id, readyVersionId.Value, asset.SearchRevision, cancellationToken);
+        }
+
         return true;
+    }
+
+    private async Task EnqueueEmbeddingJobIfEligible(Guid assetId, Guid currentVersionId, long searchRevision, CancellationToken cancellationToken)
+    {
+        if (jobStore == null || embeddingOptions?.Value is not { Enabled: true } options)
+        {
+            return;
+        }
+
+        var assetMetadata = await dbContext.Assets
+            .AsNoTracking()
+            .Where(a => a.Id == assetId && a.DeletedAt == null)
+            .Select(a => new
+            {
+                a.Title,
+                a.Description,
+                CategoryName = a.Category.Name
+            })
+            .FirstOrDefaultAsync(cancellationToken);
+
+        if (assetMetadata == null)
+        {
+            return;
+        }
+
+        List<string> tagNames = await dbContext.AssetTags
+            .AsNoTracking()
+            .Where(at => at.AssetId == assetId)
+            .OrderBy(at => at.Tag.Name)
+            .Select(at => at.Tag.Name)
+            .ToListAsync(cancellationToken);
+
+        var canonicalText = AssetPublicMetadataCanonicalizer.BuildCanonicalMetadata(
+            assetMetadata.Title,
+            assetMetadata.Description,
+            assetMetadata.CategoryName,
+            tagNames);
+
+        var contentHash = AssetPublicMetadataCanonicalizer.ComputeContentHash(canonicalText);
+
+        var payload = new EmbeddingGenerationPayload(
+            assetId,
+            currentVersionId,
+            searchRevision,
+            contentHash,
+            EmbeddingModelKey.Compute(options),
+            AssetPublicMetadataCanonicalizer.SCHEMA_VERSION);
+
+        await jobStore.Enqueue(
+            assetId,
+            currentVersionId,
+            AssetProcessingJobType.EMBEDDING_GENERATION,
+            definitionVersion: 1,
+            initialDelay: TimeSpan.Zero,
+            payload,
+            traceParent: null,
+            cancellationToken);
     }
 
     public Task<Guid?> GetPublicAnalyticsSellerId(Guid assetId, CancellationToken cancellationToken = default)

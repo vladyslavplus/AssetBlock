@@ -38,6 +38,7 @@ internal sealed class UpdateCategoryCommandHandler(
                 }
             }
 
+            var nameChanged = request.Name is not null && !string.Equals(request.Name, category.Name, StringComparison.Ordinal);
             var changedFields = new List<string>();
             if (request.Name is not null)
             {
@@ -62,6 +63,10 @@ internal sealed class UpdateCategoryCommandHandler(
             await unitOfWork.ExecuteInTransaction(async ct =>
             {
                 await categoryStore.Update(category, ct);
+                if (nameChanged)
+                {
+                    await categoryStore.BulkIncrementAssetSearchRevision(category.Id, ct);
+                }
                 await auditWriter.Write(new AuditEvent(
                     AuditActions.CATEGORY_UPDATE,
                     AuditOutcome.SUCCESS,
@@ -71,6 +76,17 @@ internal sealed class UpdateCategoryCommandHandler(
             }, cancellationToken);
 
             await cache.RemoveByPrefix(CacheKeys.CATEGORIES_LIST_PREFIX, cancellationToken);
+            if (nameChanged)
+            {
+                try
+                {
+                    await cache.RemoveByPrefix(CacheKeys.ASSETS_LIST_PREFIX, cancellationToken);
+                }
+                catch (Exception ex)
+                {
+                    logger.LogWarning(ex, "Failed to invalidate assets list cache after category rename {CategoryId}", request.Id);
+                }
+            }
             return Result.Success();
         }
         catch (DuplicateSlugException)

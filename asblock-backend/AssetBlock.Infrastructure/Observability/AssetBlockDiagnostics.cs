@@ -315,6 +315,48 @@ public static class AssetBlockDiagnostics
         }
     }
 
+    private static readonly Counter<long> _documentEmbeddingsCount = _meter.CreateCounter<long>(
+        "assetblock.embedding.documents",
+        description: "Count of document embedding generations by outcome");
+
+    private static readonly Histogram<double> _documentEmbeddingDuration = _meter.CreateHistogram<double>(
+        "assetblock.embedding.documents.duration",
+        unit: "s",
+        description: "Duration of document embedding generation");
+
+    public static void RecordDocumentEmbedding(string outcome, TimeSpan duration)
+    {
+        var tags = new TagList
+        {
+            { "embedding.outcome", outcome }
+        };
+        _documentEmbeddingsCount.Add(1, in tags);
+        _documentEmbeddingDuration.Record(Math.Max(0.0, duration.TotalSeconds), in tags);
+    }
+
+    // --- Document Embedding Backfill ---
+    private static readonly Histogram<double> _embeddingBackfillDuration = _meter.CreateHistogram<double>(
+        "assetblock.embedding.backfill.duration",
+        unit: "s",
+        description: "Duration of document embedding backfill cycles");
+
+    private static readonly Counter<long> _embeddingBackfillEnqueuedCount = _meter.CreateCounter<long>(
+        "assetblock.embedding.backfill.enqueued.count",
+        description: "Count of embedding generation jobs enqueued by backfill coordinator");
+
+    public static void RecordEmbeddingBackfillCycle(TimeSpan duration, int enqueuedCount, string outcome)
+    {
+        var tags = new TagList
+        {
+            { "backfill.outcome", outcome }
+        };
+        _embeddingBackfillDuration.Record(Math.Max(0.0, duration.TotalSeconds), in tags);
+        if (enqueuedCount > 0)
+        {
+            _embeddingBackfillEnqueuedCount.Add(enqueuedCount, in tags);
+        }
+    }
+
     private static string ToTagValue(AiDiagnosticsOutcome outcome) => outcome switch
     {
         AiDiagnosticsOutcome.SUCCESS => "SUCCESS",
@@ -337,6 +379,22 @@ public static class JobOutcomeNames
     public const string INVALID_RESULT = "INVALID_RESULT";
     public const string LEASE_LOST = "LEASE_LOST";
     public const string SHUTDOWN = "SHUTDOWN";
+}
+
+public static class EmbeddingDiagnosticsOutcomes
+{
+    public const string SUCCESS = "SUCCESS";
+    public const string NO_OP_STALE = "NO_OP_STALE";
+    public const string FAILED = "FAILED";
+}
+
+public static class EmbeddingBackfillOutcomes
+{
+    public const string SUCCESS = "SUCCESS";
+    public const string DISABLED = "DISABLED";
+    public const string UNAVAILABLE = "UNAVAILABLE";
+    public const string LOCKED = "LOCKED";
+    public const string NO_CANDIDATES = "NO_CANDIDATES";
 }
 
 public static class EmailActionSkipReasons
