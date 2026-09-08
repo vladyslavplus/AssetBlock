@@ -1,18 +1,37 @@
 using System.Diagnostics;
 using AssetBlock.Application.Common;
 using AssetBlock.Domain.Core;
+using AssetBlock.Domain.Core.Constants;
+using AssetBlock.Domain.Core.Dto.Assets;
+using AssetBlock.Domain.Core.Entities;
+using AssetBlock.Domain.Core.Enums;
 using AssetBlock.Domain.Core.Primitives.AppSettingsOptions;
+using AssetBlock.Infrastructure.Persistence;
+using AssetBlock.Infrastructure.Persistence.Entities;
+using AssetBlock.Infrastructure.Persistence.Stores;
+using AssetBlock.SearchEvaluation.Infrastructure;
 using AssetBlock.SearchEvaluation.Metrics;
 using AssetBlock.SearchEvaluation.Ollama;
+using AssetBlock.SearchEvaluation.Reporting;
 using AssetBlock.SearchEvaluation.Validation;
-using AssetBlock.SearchEvaluation.VectorOperations;
+using Pgvector;
 
 namespace AssetBlock.SearchEvaluation.Evaluation;
 
 public static class LocalOllamaEvaluator
 {
+    public static Task<int> RunEvaluationAsync(
+        DatasetV1Dto dataset,
+        EmbeddingOptions options,
+        IOllamaEmbeddingClient client,
+        CancellationToken cancellationToken = default)
+    {
+        return RunEvaluationAsync(dataset, qrelsPath: null, options, client, cancellationToken);
+    }
+
     public static async Task<int> RunEvaluationAsync(
         DatasetV1Dto dataset,
+        string? qrelsPath,
         EmbeddingOptions options,
         IOllamaEmbeddingClient client,
         CancellationToken cancellationToken = default)
@@ -30,7 +49,56 @@ public static class LocalOllamaEvaluator
         Console.WriteLine("----------------------------------------------------------");
         Console.WriteLine();
 
-        // 1. Verify model availability in local Ollama daemon
+        // 1. Enforce adjudicated human qrels prerequisite
+        if (string.IsNullOrWhiteSpace(qrelsPath) || !File.Exists(qrelsPath))
+        {
+            Console.ForegroundColor = ConsoleColor.Yellow;
+            Console.WriteLine("[BLOCKED / HUMAN RELEVANCE JUDGMENTS REQUIRED]");
+            Console.WriteLine("Release-quality evaluation requires independent, adjudicated human relevance judgments (qrels).");
+            Console.WriteLine("Tracked synthetic fixtures cannot be used for release-quality evaluation.");
+            if (string.IsNullOrWhiteSpace(qrelsPath))
+            {
+                Console.WriteLine("No qrels file was specified. Pass --qrels <path-to-human-qrels.json>.");
+            }
+            else
+            {
+                Console.WriteLine($"Qrels file not found at: {qrelsPath}");
+            }
+            Console.WriteLine();
+            Console.WriteLine("Prerequisites for release-quality evaluation:");
+            Console.WriteLine("  1. Independent human relevance judgments adhering to qrels.schema.json.");
+            Console.WriteLine("  2. Provenance must be 'human-adjudicated' (not synthetic-fixtures).");
+            Console.WriteLine("  3. Judgments must NOT contain reviewer identities or personal data.");
+            Console.WriteLine("  4. At least one query with relevance grade >= 2.");
+            Console.WriteLine("No judgments are fabricated, relabeled, or deterministically derived.");
+            Console.ResetColor();
+            return Program.EXIT_MANUAL_EVALUATION_REQUIRED;
+        }
+
+        Console.WriteLine($"--> Validating human-adjudicated qrels file: {qrelsPath}...");
+        QrelsValidationResult qrelsValidation = QrelsValidator.ValidateFile(qrelsPath, dataset);
+        if (!qrelsValidation.IsValid || qrelsValidation.Qrels == null)
+        {
+            Console.ForegroundColor = ConsoleColor.Yellow;
+            Console.WriteLine("[BLOCKED / QRELS VALIDATION FAILED]");
+            Console.WriteLine("Provided qrels file failed validation:");
+            foreach (var err in qrelsValidation.Errors)
+            {
+                Console.WriteLine($"  - {err}");
+            }
+            Console.WriteLine();
+            Console.WriteLine("Release-quality evaluation remains blocked until valid human-adjudicated qrels are provided.");
+            Console.ResetColor();
+            return Program.EXIT_MANUAL_EVALUATION_REQUIRED;
+        }
+
+        QrelsV1Dto qrels = qrelsValidation.Qrels;
+        Console.ForegroundColor = ConsoleColor.Green;
+        Console.WriteLine($"[PASS] Validated human-adjudicated qrels: {qrels.Queries.Count} queries (Adjudication: {qrels.AdjudicationVersion}, Date: {qrels.AdjudicationDate}).");
+        Console.ResetColor();
+        Console.WriteLine();
+
+        // 2. Verify model availability in local Ollama daemon
         Console.WriteLine($"--> Verifying local availability of candidate model '{options.Model}'...");
         ModelVerificationResult verification = await client.CheckModelAvailability(cancellationToken);
         if (!verification.IsAvailable)
@@ -51,7 +119,7 @@ public static class LocalOllamaEvaluator
         }
 
         Console.ForegroundColor = ConsoleColor.Green;
-        Console.WriteLine($"[PASS] Candidate model verified in local Ollama daemon.");
+        Console.WriteLine("[PASS] Candidate model verified in local Ollama daemon.");
         if (!string.IsNullOrWhiteSpace(verification.ActualDigest))
         {
             Console.WriteLine($"  Verified digest: {verification.ActualDigest}");
@@ -59,146 +127,322 @@ public static class LocalOllamaEvaluator
         Console.ResetColor();
         Console.WriteLine();
 
-        // 2. Canonicalize documents and generate document embeddings
-        Console.WriteLine($"--> Canonicalizing and sequentially embedding {dataset.Documents.Count} documents (1-by-1)...");
-        var docVectors = new Dictionary<string, float[]>(StringComparer.Ordinal);
-        var docLatencies = new List<double>();
-        var docStopwatch = new Stopwatch();
+        // 3. Initialize isolated disposable pgvector Testcontainer
+        Console.WriteLine("--> Initializing isolated disposable pgvector Testcontainer...");
+        await using var fixture = new SearchEvaluationDbFixture();
+        await fixture.InitializeAsync(cancellationToken);
 
-        foreach (DatasetDocumentDto doc in dataset.Documents)
-        {
-            CanonicalPublicMetadataResult canonical = AssetPublicMetadataCanonicalizer.Canonicalize(
-                doc.Title,
-                doc.Description,
-                doc.Category,
-                doc.Tags);
-
-            docStopwatch.Restart();
-            var vector = await client.GenerateEmbedding(canonical.CanonicalText, cancellationToken);
-            docStopwatch.Stop();
-
-            docLatencies.Add(docStopwatch.Elapsed.TotalMilliseconds);
-            docVectors[doc.Key] = vector;
-        }
-
+        SystemEnvironmentProvenance provenance = await fixture.CollectProvenance(cancellationToken);
         Console.ForegroundColor = ConsoleColor.Green;
-        Console.WriteLine($"[PASS] Generated sequential embeddings for {docVectors.Count} documents.");
+        Console.WriteLine($"[PASS] Isolated PostgreSQL container initialized (pgvector: {provenance.PgVectorVersion}, HNSW: {provenance.HnswState}).");
         Console.ResetColor();
         Console.WriteLine();
 
-        // 3. Normalize and generate query embeddings
-        Console.WriteLine($"--> Normalizing and sequentially embedding {dataset.Queries.Count} queries (1-by-1)...");
-        var queryVectors = new Dictionary<string, float[]>(StringComparer.Ordinal);
-        var queryLatencies = new List<double>();
-        var queryStopwatch = new Stopwatch();
+        var modelKey = EmbeddingModelKey.Compute(options);
 
-        foreach (DatasetQueryDto query in dataset.Queries)
+        // 4. Seed dataset into disposable database
+        Console.WriteLine($"--> Seeding {dataset.Documents.Count} documents into isolated database...");
+        var docIdMap = new Dictionary<string, Guid>(StringComparer.Ordinal);
+        var idToDocMap = new Dictionary<Guid, string>();
+
+        await using (ApplicationDbContext db = fixture.CreateDbContext())
         {
-            var normalizedQuery = CatalogSearchNormalization.NormalizeSearchQuery(query.Text) ?? query.Text;
-
-            queryStopwatch.Restart();
-            var vector = await client.GenerateEmbedding(normalizedQuery, cancellationToken);
-            queryStopwatch.Stop();
-
-            queryLatencies.Add(queryStopwatch.Elapsed.TotalMilliseconds);
-            queryVectors[query.Id] = vector;
-        }
-
-        Console.ForegroundColor = ConsoleColor.Green;
-        Console.WriteLine($"[PASS] Generated sequential embeddings for {queryVectors.Count} queries.");
-        Console.ResetColor();
-        Console.WriteLine();
-
-        // 4. Compute cosine similarity ranking and IR metrics
-        Console.WriteLine("--> Computing semantic cosine similarity ranking and evaluation metrics...");
-        var allQueryMetrics = new List<QueryEvaluationMetrics>();
-
-        foreach (DatasetQueryDto query in dataset.Queries)
-        {
-            var qVector = queryVectors[query.Id];
-
-            var rankedDocs = new List<(string DocKey, double Similarity)>(docVectors.Count);
-            foreach (KeyValuePair<string, float[]> entry in docVectors)
+            var author = new User
             {
-                var sim = VectorMath.CosineSimilarity(qVector, entry.Value);
-                rankedDocs.Add((entry.Key, sim));
+                Id = Guid.NewGuid(),
+                Username = "eval_author",
+                Email = "eval_author@example.com",
+                PasswordHash = "hash",
+                Role = AppRoles.USER,
+                CreatedAt = DateTimeOffset.UtcNow
+            };
+            db.Users.Add(author);
+            Guid authorId = author.Id;
+
+            DateTimeOffset now = DateTimeOffset.UtcNow;
+
+            // Seed unique categories and tags from dataset documents
+            var categoryLookup = new Dictionary<string, Category>(StringComparer.OrdinalIgnoreCase);
+            var tagLookup = new Dictionary<string, Tag>(StringComparer.OrdinalIgnoreCase);
+
+            foreach (DatasetDocumentDto doc in dataset.Documents)
+            {
+                var catName = string.IsNullOrWhiteSpace(doc.Category) ? "General" : doc.Category.Trim();
+                if (!categoryLookup.TryGetValue(catName, out Category? cat))
+                {
+                    cat = new Category
+                    {
+                        Id = Guid.NewGuid(),
+                        Name = catName,
+                        Slug = catName.ToLowerInvariant().Replace(' ', '-'),
+                        CreatedAt = now
+                    };
+                    categoryLookup[catName] = cat;
+                    db.Categories.Add(cat);
+                }
+
+                foreach (var tagName in doc.Tags)
+                {
+                    var cleanTag = tagName.Trim();
+                    if (!string.IsNullOrEmpty(cleanTag) && !tagLookup.TryGetValue(cleanTag, out Tag? tag))
+                    {
+                        tag = new Tag
+                        {
+                            Id = Guid.NewGuid(),
+                            Name = cleanTag
+                        };
+                        tagLookup[cleanTag] = tag;
+                        db.Tags.Add(tag);
+                    }
+                }
             }
 
-            // Order by descending similarity, tie-break by document key ordinal
-            var orderedKeys = rankedDocs
-                .OrderByDescending(d => d.Similarity)
-                .ThenBy(d => d.DocKey, StringComparer.Ordinal)
-                .Take(20)
-                .Select(d => d.DocKey)
-                .ToList();
+            var docStopwatch = new Stopwatch();
+            var docLatencies = new List<double>();
 
-            var groundTruth = query.Judgments.ToDictionary(j => j.DocumentKey, j => j.Relevance);
-            var ndcgAt10 = SearchMetrics.CalculateNdcgAt10(orderedKeys, groundTruth);
-            var recallAt20 = SearchMetrics.CalculateRecallAt20(orderedKeys, groundTruth);
-            var mrr = SearchMetrics.CalculateMrr(orderedKeys, groundTruth);
+            foreach (DatasetDocumentDto doc in dataset.Documents)
+            {
+                var assetId = Guid.NewGuid();
+                docIdMap[doc.Key] = assetId;
+                idToDocMap[assetId] = doc.Key;
 
-            allQueryMetrics.Add(new QueryEvaluationMetrics(
-                query.Id,
-                query.Language,
-                query.Kind,
-                ndcgAt10,
-                recallAt20,
-                mrr));
+                var catName = string.IsNullOrWhiteSpace(doc.Category) ? "General" : doc.Category.Trim();
+                Category assetCat = categoryLookup[catName];
+
+                var asset = new Asset
+                {
+                    Id = assetId,
+                    AuthorId = authorId,
+                    CategoryId = assetCat.Id,
+                    Title = doc.Title,
+                    Description = doc.Description,
+                    Price = 9.99m,
+                    CreatedAt = now,
+                    UpdatedAt = now,
+                    SearchRevision = 1L
+                };
+
+                foreach (var tagName in doc.Tags)
+                {
+                    var cleanTag = tagName.Trim();
+                    if (tagLookup.TryGetValue(cleanTag, out Tag? tag))
+                    {
+                        db.AssetTags.Add(new AssetTag
+                        {
+                            AssetId = assetId,
+                            TagId = tag.Id
+                        });
+                    }
+                }
+
+                var version = new AssetVersion
+                {
+                    Id = Guid.NewGuid(),
+                    AssetId = assetId,
+                    VersionNumber = 1,
+                    IsCurrent = true,
+                    StorageKey = $"storage/{doc.Key}/v1.zip",
+                    FileName = $"{doc.Key}.zip",
+                    ContentLength = 1024,
+                    ContentSha256 = new string('0', 64),
+                    ReleaseNotes = "Initial",
+                    LicenseCode = AssetLicenseCode.PERSONAL,
+                    LicenseTemplateVersion = "1.0",
+                    LicenseDisplayName = "Personal",
+                    LicenseTerms = "Terms",
+                    ProcessingStatus = AssetVersionProcessingStatus.READY,
+                    ProcessingUpdatedAt = now,
+                    CreatedAt = now
+                };
+
+                CanonicalPublicMetadataResult canonical = AssetPublicMetadataCanonicalizer.Canonicalize(
+                    doc.Title,
+                    doc.Description,
+                    doc.Category,
+                    doc.Tags);
+
+                docStopwatch.Restart();
+                var vector = await client.GenerateEmbedding(canonical.CanonicalText, cancellationToken);
+                docStopwatch.Stop();
+                docLatencies.Add(docStopwatch.Elapsed.TotalMilliseconds);
+
+                var embedding = new AssetEmbedding
+                {
+                    Id = Guid.NewGuid(),
+                    AssetId = assetId,
+                    ModelKey = modelKey,
+                    Provider = options.Provider,
+                    ModelId = options.Model,
+                    ModelRevision = options.Revision,
+                    ModelDigest = options.Digest,
+                    Dimension = options.Dimension,
+                    ContentSchemaVersion = options.ContentSchemaVersion,
+                    SourceRevision = 1L,
+                    ContentHash = canonical.ContentHash,
+                    Embedding = new Vector(vector),
+                    CreatedAt = now,
+                    UpdatedAt = now
+                };
+
+                db.Assets.Add(asset);
+                db.AssetVersions.Add(version);
+                db.AssetEmbeddings.Add(embedding);
+            }
+
+            await db.SaveChangesAsync(cancellationToken);
+
+            (var meanDocLat, _, var p95DocLat, _, _) = CalculateLatencyStats(docLatencies);
+            Console.ForegroundColor = ConsoleColor.Green;
+            Console.WriteLine($"[PASS] Embedded and seeded {dataset.Documents.Count} documents (Mean latency: {meanDocLat:F1} ms, p95: {p95DocLat:F1} ms).");
+            Console.ResetColor();
+            Console.WriteLine();
         }
 
-        MacroMetricsSummary overallSummary = SearchMetrics.CalculateMacroAverage(allQueryMetrics);
+        // 5. Evaluate Lexical and Hybrid Retrieval through production AssetStore
+        Console.WriteLine("--> Evaluating production Lexical and Hybrid/RRF retrieval against human judgments...");
+        if (qrels.Queries.Count != dataset.Queries.Count)
+        {
+            Console.ForegroundColor = ConsoleColor.Red;
+            Console.WriteLine($"[ERROR] Qrels queries count ({qrels.Queries.Count}) does not match dataset queries count ({dataset.Queries.Count}). Full one-to-one coverage is required.");
+            Console.ResetColor();
+            return Program.EXIT_MANUAL_EVALUATION_REQUIRED;
+        }
 
-        // 5. Output Summary Report
+        var queryLookup = dataset.Queries.ToDictionary(q => q.Id, StringComparer.Ordinal);
+
+        var lexicalMetrics = new List<QueryEvaluationMetrics>();
+        var hybridMetrics = new List<QueryEvaluationMetrics>();
+
+        await using (ApplicationDbContext db = fixture.CreateDbContext())
+        {
+            var store = new AssetStore(db);
+
+            foreach (HumanQueryQrelsDto adjudicatedQuery in qrels.Queries)
+            {
+                if (!queryLookup.TryGetValue(adjudicatedQuery.QueryId, out DatasetQueryDto? queryInfo))
+                {
+                    Console.ForegroundColor = ConsoleColor.Red;
+                    Console.WriteLine($"[ERROR] Query '{adjudicatedQuery.QueryId}' in qrels is unknown in dataset.");
+                    Console.ResetColor();
+                    return Program.EXIT_MANUAL_EVALUATION_REQUIRED;
+                }
+
+                var normalizedQuery = CatalogSearchNormalization.NormalizeSearchQuery(queryInfo.Text) ?? queryInfo.Text;
+                var queryVector = await client.GenerateEmbedding(normalizedQuery, cancellationToken);
+
+                var groundTruth = adjudicatedQuery.Judgments.ToDictionary(j => j.DocumentKey, j => j.Relevance);
+
+                // A. Lexical Retrieval
+                var lexicalReq = new GetAssetsRequest { Search = normalizedQuery, Page = 1, PageSize = 20 };
+                CatalogPageResult<AssetListItem> lexicalResult = await store.GetPaged(lexicalReq, null, null, cancellationToken);
+                var lexicalKeys = lexicalResult.Items
+                    .Select(item => idToDocMap.GetValueOrDefault(item.Id, string.Empty))
+                    .Where(k => !string.IsNullOrEmpty(k))
+                    .ToList();
+
+                var lexNdcg = SearchMetrics.CalculateNdcgAt10(lexicalKeys, groundTruth);
+                var lexRecall = SearchMetrics.CalculateRecallAt20(lexicalKeys, groundTruth);
+                var lexMrr = SearchMetrics.CalculateMrr(lexicalKeys, groundTruth);
+
+                lexicalMetrics.Add(new QueryEvaluationMetrics(
+                    queryInfo.Id,
+                    queryInfo.Language,
+                    queryInfo.Kind,
+                    lexNdcg,
+                    lexRecall,
+                    lexMrr));
+
+                // B. Hybrid / RRF Retrieval
+                var hybridReq = new GetAssetsRequest { Search = normalizedQuery, Page = 1, PageSize = 20 };
+                CatalogPageResult<AssetListItem> hybridResult = await store.GetPaged(hybridReq, queryVector, modelKey, cancellationToken);
+                var hybridKeys = hybridResult.Items
+                    .Select(item => idToDocMap.GetValueOrDefault(item.Id, string.Empty))
+                    .Where(k => !string.IsNullOrEmpty(k))
+                    .ToList();
+
+                var hybNdcg = SearchMetrics.CalculateNdcgAt10(hybridKeys, groundTruth);
+                var hybRecall = SearchMetrics.CalculateRecallAt20(hybridKeys, groundTruth);
+                var hybMrr = SearchMetrics.CalculateMrr(hybridKeys, groundTruth);
+
+                hybridMetrics.Add(new QueryEvaluationMetrics(
+                    queryInfo.Id,
+                    queryInfo.Language,
+                    queryInfo.Kind,
+                    hybNdcg,
+                    hybRecall,
+                    hybMrr));
+            }
+        }
+
+        MacroMetricsSummary lexicalSummary = SearchMetrics.CalculateMacroAverage(lexicalMetrics);
+        MacroMetricsSummary hybridSummary = SearchMetrics.CalculateMacroAverage(hybridMetrics);
+
+        // 6. Print Comparison and Quality Gates
         Console.WriteLine();
         Console.WriteLine("==========================================================");
-        Console.WriteLine(" Candidate Model Evaluation Results Summary");
+        Console.WriteLine(" Production Retrieval Quality Evaluation (Human Qrels)");
         Console.WriteLine("==========================================================");
-        Console.WriteLine($"Model:             {options.Model}");
-        Console.WriteLine($"Revision:          {options.Revision}");
-        Console.WriteLine($"Digest:            {options.Digest}");
-        Console.WriteLine($"Dimension:         {options.Dimension}");
-        Console.WriteLine($"Total Queries:     {overallSummary.QueryCount}");
-        Console.WriteLine($"Macro nDCG@10:     {overallSummary.MeanNdcgAt10:F4}");
-        Console.WriteLine($"Macro Recall@20:   {overallSummary.MeanRecallAt20:F4}");
-        Console.WriteLine($"Macro MRR:         {overallSummary.MeanMrr:F4}");
+        Console.WriteLine($"Total Queries:       {hybridSummary.QueryCount}");
+        Console.WriteLine($"Lexical Macro nDCG@10: {lexicalSummary.MeanNdcgAt10:F4} | Hybrid: {hybridSummary.MeanNdcgAt10:F4} (Delta: {hybridSummary.MeanNdcgAt10 - lexicalSummary.MeanNdcgAt10:+0.0000;-0.0000;0.0000})");
+        Console.WriteLine($"Lexical Macro Recall@20: {lexicalSummary.MeanRecallAt20:F4} | Hybrid: {hybridSummary.MeanRecallAt20:F4} (Delta: {hybridSummary.MeanRecallAt20 - lexicalSummary.MeanRecallAt20:+0.0000;-0.0000;0.0000})");
+        Console.WriteLine($"Lexical Macro MRR:     {lexicalSummary.MeanMrr:F4} | Hybrid: {hybridSummary.MeanMrr:F4} (Delta: {hybridSummary.MeanMrr - lexicalSummary.MeanMrr:+0.0000;-0.0000;0.0000})");
         Console.WriteLine("----------------------------------------------------------");
 
-        // Group by Language Slice
+        // Language breakdown
         Console.WriteLine();
-        Console.WriteLine("By Language Slice:");
-        foreach (IGrouping<string, QueryEvaluationMetrics> group in allQueryMetrics.GroupBy(m => m.Language).OrderBy(g => g.Key))
+        Console.WriteLine("By Language Slice (Hybrid vs Lexical):");
+        IOrderedEnumerable<IGrouping<string, QueryEvaluationMetrics>> langGroups = hybridMetrics.GroupBy(m => m.Language).OrderBy(g => g.Key);
+        foreach (IGrouping<string, QueryEvaluationMetrics> group in langGroups)
         {
-            MacroMetricsSummary summary = SearchMetrics.CalculateMacroAverage(group.ToList());
-            Console.WriteLine($"  [{group.Key,-9}] Count: {summary.QueryCount,-3} | nDCG@10: {summary.MeanNdcgAt10:F4} | Recall@20: {summary.MeanRecallAt20:F4} | MRR: {summary.MeanMrr:F4}");
+            MacroMetricsSummary hybGroupSummary = SearchMetrics.CalculateMacroAverage(group.ToList());
+            var lexGroupMetrics = lexicalMetrics.Where(m => m.Language == group.Key).ToList();
+            MacroMetricsSummary lexGroupSummary = SearchMetrics.CalculateMacroAverage(lexGroupMetrics);
+            Console.WriteLine($"  [{group.Key,-9}] Count: {hybGroupSummary.QueryCount,-3} | Hybrid nDCG: {hybGroupSummary.MeanNdcgAt10:F4} (Lex: {lexGroupSummary.MeanNdcgAt10:F4}) | Hybrid Recall: {hybGroupSummary.MeanRecallAt20:F4} (Lex: {lexGroupSummary.MeanRecallAt20:F4})");
         }
 
-        // Group by Query Kind
+        // Kind breakdown
         Console.WriteLine();
-        Console.WriteLine("By Query Kind:");
-        foreach (IGrouping<string, QueryEvaluationMetrics> group in allQueryMetrics.GroupBy(m => m.Kind).OrderBy(g => g.Key))
+        Console.WriteLine("By Query Kind (Hybrid vs Lexical):");
+        IOrderedEnumerable<IGrouping<string, QueryEvaluationMetrics>> kindGroups = hybridMetrics.GroupBy(m => m.Kind).OrderBy(g => g.Key);
+        foreach (IGrouping<string, QueryEvaluationMetrics> group in kindGroups)
         {
-            MacroMetricsSummary summary = SearchMetrics.CalculateMacroAverage(group.ToList());
-            Console.WriteLine($"  [{group.Key,-14}] Count: {summary.QueryCount,-3} | nDCG@10: {summary.MeanNdcgAt10:F4} | Recall@20: {summary.MeanRecallAt20:F4} | MRR: {summary.MeanMrr:F4}");
+            MacroMetricsSummary hybGroupSummary = SearchMetrics.CalculateMacroAverage(group.ToList());
+            var lexGroupMetrics = lexicalMetrics.Where(m => m.Kind == group.Key).ToList();
+            MacroMetricsSummary lexGroupSummary = SearchMetrics.CalculateMacroAverage(lexGroupMetrics);
+            Console.WriteLine($"  [{group.Key,-14}] Count: {hybGroupSummary.QueryCount,-3} | Hybrid nDCG: {hybGroupSummary.MeanNdcgAt10:F4} (Lex: {lexGroupSummary.MeanNdcgAt10:F4}) | Hybrid Recall: {hybGroupSummary.MeanRecallAt20:F4} (Lex: {lexGroupSummary.MeanRecallAt20:F4})");
         }
 
-        // Latency Percentiles
-        Console.WriteLine();
-        Console.WriteLine("Latency Profile (Sequential 1-by-1 Evaluation):");
-        (double Mean, double P50, double P95, double Min, double Max) docStats = CalculateLatencyStats(docLatencies);
-        (double Mean, double P50, double P95, double Min, double Max) queryStats = CalculateLatencyStats(queryLatencies);
-
-        Console.WriteLine($"  Doc Embedding   (Sequential, N={docLatencies.Count}): Mean: {docStats.Mean:F1} ms | p50: {docStats.P50:F1} ms | p95: {docStats.P95:F1} ms | Min: {docStats.Min:F1} ms | Max: {docStats.Max:F1} ms");
-        Console.WriteLine($"  Query Embedding (Sequential, N={queryLatencies.Count}): Mean: {queryStats.Mean:F1} ms | p50: {queryStats.P50:F1} ms | p95: {queryStats.P95:F1} ms | Min: {queryStats.Min:F1} ms | Max: {queryStats.Max:F1} ms");
+        // Quality Gate Check (Approved Release Gates)
+        QualityEvaluationGateSummary gateSummary = QualityGateEvaluator.Evaluate(lexicalMetrics, hybridMetrics);
 
         Console.WriteLine();
-        Console.WriteLine("----------------------------------------------------------");
-        Console.ForegroundColor = ConsoleColor.Yellow;
-        Console.WriteLine("NOTE: Candidate model cannot be declared accepted without independent human-reviewed relevance judgments.");
-        Console.ResetColor();
-        Console.WriteLine("Automated validation complete.");
-        Console.WriteLine("----------------------------------------------------------");
+        Console.WriteLine("Approved Release Quality Gates:");
+        foreach (QualityGateResult gate in gateSummary.GateResults)
+        {
+            var statusStr = gate.Passed ? "PASS" : "FAIL";
+            Console.WriteLine($"  - [{statusStr,-4}] {gate.Name,-35} | Requirement: {gate.Requirement,-20} | Lex: {gate.LexicalValue:F4} | Hyb: {gate.HybridValue:F4} (Delta: {gate.Delta:+0.0000;-0.0000;0.0000})");
+        }
+        Console.WriteLine();
 
-        return Program.EXIT_SUCCESS;
+        // Write Quality Evaluation Report (JSON & Markdown)
+        var reportData = new QualityEvaluationReportData(
+            provenance,
+            options,
+            qrels.Queries.Count,
+            qrels.AdjudicationVersion,
+            qrels.AdjudicationDate,
+            lexicalSummary,
+            hybridSummary,
+            gateSummary.GateResults,
+            gateSummary.AllGatesPassed);
+
+        (var jsonPath, var mdPath) = SearchEvaluationReportWriter.WriteQualityEvaluationReport(reportData);
+
+        Console.WriteLine("Reports emitted:");
+        Console.WriteLine($"  - JSON:     {jsonPath}");
+        Console.WriteLine($"  - Markdown: {mdPath}");
+
+        return gateSummary.AllGatesPassed ? Program.EXIT_SUCCESS : Program.EXIT_MANUAL_EVALUATION_REQUIRED;
     }
 
     public static (double Mean, double P50, double P95, double Min, double Max) CalculateLatencyStats(List<double> latencies)

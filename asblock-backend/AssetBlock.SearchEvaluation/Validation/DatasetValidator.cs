@@ -162,9 +162,10 @@ public static class DatasetValidator
             errors.Add($"Expected dataset version 1, got {dataset.Version}.");
         }
 
-        if (!string.Equals(dataset.Provenance, "synthetic-and-reviewed", StringComparison.Ordinal))
+        if (!string.Equals(dataset.Provenance, "synthetic-fixtures", StringComparison.Ordinal)
+            && !string.Equals(dataset.Provenance, "synthetic-and-reviewed", StringComparison.Ordinal))
         {
-            errors.Add($"Expected provenance 'synthetic-and-reviewed', got '{dataset.Provenance}'.");
+            errors.Add($"Expected provenance 'synthetic-fixtures' or 'synthetic-and-reviewed', got '{dataset.Provenance}'.");
         }
 
         if (dataset.Documents.Count < MIN_DOCUMENTS)
@@ -333,7 +334,7 @@ public static class DatasetValidator
         return new ValidationResult(errors.Count == 0, errors, dataset);
     }
 
-    private static void ValidateJsonAgainstSchema(JsonElement element, JsonElement schema, string path, List<string> errors)
+    internal static void ValidateJsonAgainstSchema(JsonElement element, JsonElement schema, string path, List<string> errors)
     {
         if (schema.ValueKind != JsonValueKind.Object)
         {

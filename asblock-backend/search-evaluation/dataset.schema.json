@@ -11,7 +11,7 @@
     },
     "provenance": {
       "type": "string",
-      "const": "synthetic-and-reviewed"
+      "enum": ["synthetic-fixtures", "synthetic-and-reviewed"]
     },
     "documents": {
       "type": "array",

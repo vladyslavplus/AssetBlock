@@ -1,7 +1,9 @@
 using System.Net;
 using System.Text;
+using System.Text.Json;
 using AssetBlock.Domain.Core.Primitives.AppSettingsOptions;
 using AssetBlock.SearchEvaluation;
+using AssetBlock.SearchEvaluation.Benchmark;
 using AssetBlock.SearchEvaluation.Evaluation;
 using AssetBlock.SearchEvaluation.Metrics;
 using AssetBlock.SearchEvaluation.Ollama;
@@ -219,11 +221,11 @@ public class LocalOllamaEvaluationTests
     }
 
     [Fact]
-    public async Task LocalOllamaEvaluator_RunWithMockClient_ShouldProduceValidMetricsAndExitZero()
+    public async Task LocalOllamaEvaluator_WhenQrelsMissing_ShouldReturnBlockedExitCode()
     {
         var dataset = new DatasetV1Dto(
             1,
-            "synthetic-and-reviewed",
+            "synthetic-fixtures",
             [
                 new DatasetDocumentDto("asset-001", "Sword", "Steel sword", "Weapons", ["sword"]),
                 new DatasetDocumentDto("asset-002", "Shield", "Wooden shield", "Armor", ["shield"])
@@ -243,16 +245,70 @@ public class LocalOllamaEvaluationTests
 
         var fakeClient = new FakeOllamaEmbeddingClient(new Dictionary<string, float[]>
         {
-            // Query vector
-            ["sword"] = [1.0f, 0.0f],
-            // Canonical texts (starts with "title: ...")
-            ["title: Sword\ndescription: Steel sword\ncategory: Weapons\ntags: sword"] = [0.95f, 0.05f],
-            ["title: Shield\ndescription: Wooden shield\ncategory: Armor\ntags: shield"] = [0.05f, 0.95f]
+            ["sword"] = [1.0f, 0.0f]
         });
 
         var exitCode = await LocalOllamaEvaluator.RunEvaluationAsync(dataset, options, fakeClient);
 
-        exitCode.Should().Be(Program.EXIT_SUCCESS);
+        exitCode.Should().Be(Program.EXIT_MANUAL_EVALUATION_REQUIRED);
+    }
+
+    [Fact]
+    public async Task LocalOllamaEvaluator_WhenQrelsProvenanceIsSynthetic_ShouldReturnBlockedExitCode()
+    {
+        var tempFile = Path.GetTempFileName();
+        try
+        {
+            var invalidQrels = """
+            {
+              "schemaVersion": 1,
+              "provenance": "synthetic-fixtures",
+              "adjudicationVersion": "1.0",
+              "adjudicationDate": "2026-09-08",
+              "queries": [
+                {
+                  "queryId": "q-1",
+                  "judgments": [
+                    { "documentId": "asset-001", "relevance": 3 }
+                  ]
+                }
+              ]
+            }
+            """;
+            await File.WriteAllTextAsync(tempFile, invalidQrels);
+
+            var dataset = new DatasetV1Dto(
+                1,
+                "synthetic-fixtures",
+                [
+                    new DatasetDocumentDto("asset-001", "Sword", "Steel sword", "Weapons", ["sword"])
+                ],
+                [
+                    new DatasetQueryDto("q-1", "en", "natural", "sword", [new QueryJudgmentDto("asset-001", 3)])
+                ]);
+
+            var options = new EmbeddingOptions
+            {
+                BaseUrl = "http://127.0.0.1:11434",
+                Model = "bge-m3:q8_0",
+                Revision = "rev-1",
+                Digest = VALID_DIGEST,
+                Dimension = 2
+            };
+
+            var fakeClient = new FakeOllamaEmbeddingClient([]);
+
+            var exitCode = await LocalOllamaEvaluator.RunEvaluationAsync(dataset, tempFile, options, fakeClient);
+
+            exitCode.Should().Be(Program.EXIT_MANUAL_EVALUATION_REQUIRED);
+        }
+        finally
+        {
+            if (File.Exists(tempFile))
+            {
+                File.Delete(tempFile);
+            }
+        }
     }
 
     [Fact]
@@ -260,7 +316,7 @@ public class LocalOllamaEvaluationTests
     {
         var dataset = new DatasetV1Dto(
             1,
-            "synthetic-and-reviewed",
+            "synthetic-fixtures",
             [
                 new DatasetDocumentDto("asset-001", "Sword of Light", "Steel blade with radiant glow", "Weapons", ["sword", "light"]),
                 new DatasetDocumentDto("asset-002", "Shield of Iron", "Heavy shield forged with dark iron", "Armor", ["shield", "iron"]),
@@ -348,7 +404,7 @@ public class LocalOllamaEvaluationTests
     }
 
     [Fact]
-    public void ResolveEmbeddingOptions_EnforcesPrecedence_AppsettingsUnderEnvironmentUnderCli()
+    public void ResolveEmbeddingOptions_LoadsStrictlyFromAppsettings()
     {
         var tempFile = Path.GetTempFileName();
         try
@@ -357,63 +413,26 @@ public class LocalOllamaEvaluationTests
                 {
                   "Ai": {
                     "Embeddings": {
-                      "Model": "model-appsettings",
-                      "Revision": "rev-appsettings",
+                      "Model": "embeddinggemma:300m-qat-q8_0",
+                      "Revision": "pinned-rev",
                       "Digest": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
-                      "Dimension": 512
+                      "Dimension": 768,
+                      "BaseUrl": "http://127.0.0.1:11434",
+                      "RequestTimeoutSeconds": 15
                     }
                   }
                 }
                 """;
             File.WriteAllText(tempFile, jsonContent);
 
-            // 1. Appsettings baseline
-            EmbeddingOptions baseOptions = Program.ResolveEmbeddingOptions(
-                tempFile,
-                modelOverride: null,
-                revisionOverride: null,
-                digestOverride: null,
-                dimensionOverride: null,
-                baseUrlOverride: null,
-                timeoutOverride: null);
+            EmbeddingOptions options = Program.ResolveEmbeddingOptions(tempFile);
 
-            baseOptions.Model.Should().Be("model-appsettings");
-            baseOptions.Revision.Should().Be("rev-appsettings");
-            baseOptions.Dimension.Should().Be(512);
-
-            // 2. Environment variable overrides appsettings
-            Environment.SetEnvironmentVariable("Ai__Embeddings__Model", "model-env");
-            try
-            {
-                EmbeddingOptions envOptions = Program.ResolveEmbeddingOptions(
-                    tempFile,
-                    modelOverride: null,
-                    revisionOverride: null,
-                    digestOverride: null,
-                    dimensionOverride: null,
-                    baseUrlOverride: null,
-                    timeoutOverride: null);
-
-                envOptions.Model.Should().Be("model-env");
-                envOptions.Revision.Should().Be("rev-appsettings");
-
-                // 3. CLI override takes highest precedence over environment variable
-                EmbeddingOptions cliOptions = Program.ResolveEmbeddingOptions(
-                    tempFile,
-                    modelOverride: "model-cli",
-                    revisionOverride: null,
-                    digestOverride: null,
-                    dimensionOverride: null,
-                    baseUrlOverride: null,
-                    timeoutOverride: null);
-
-                cliOptions.Model.Should().Be("model-cli");
-                cliOptions.Revision.Should().Be("rev-appsettings");
-            }
-            finally
-            {
-                Environment.SetEnvironmentVariable("Ai__Embeddings__Model", null);
-            }
+            options.Model.Should().Be("embeddinggemma:300m-qat-q8_0");
+            options.Revision.Should().Be("pinned-rev");
+            options.Digest.Should().Be("sha256:0000000000000000000000000000000000000000000000000000000000000000");
+            options.Dimension.Should().Be(768);
+            options.BaseUrl.Should().Be("http://127.0.0.1:11434");
+            options.RequestTimeoutSeconds.Should().Be(15);
         }
         finally
         {
@@ -422,6 +441,448 @@ public class LocalOllamaEvaluationTests
                 File.Delete(tempFile);
             }
         }
+    }
+
+    [Fact]
+    public void QrelsValidator_WhenHumanAdjudicatedAndMatchesDocuments_PassesValidation()
+    {
+        var dataset = new DatasetV1Dto(
+            1,
+            "synthetic-fixtures",
+            [
+                new DatasetDocumentDto("doc-1", "Title", "Desc", "Category", ["tag"])
+            ],
+            [
+                new DatasetQueryDto("q-1", "en", "natural", "test", [new QueryJudgmentDto("doc-1", 3)])
+            ]);
+
+        var tempFile = Path.GetTempFileName();
+        try
+        {
+            var validQrels = """
+            {
+              "version": 1,
+              "provenance": "human-adjudicated",
+              "adjudicationVersion": "2026-09-08-v1",
+              "adjudicationDate": "2026-09-08",
+              "queries": [
+                {
+                  "queryId": "q-1",
+                  "judgments": [
+                    { "documentKey": "doc-1", "relevance": 3 }
+                  ]
+                }
+              ]
+            }
+            """;
+            File.WriteAllText(tempFile, validQrels);
+
+            QrelsValidationResult result = QrelsValidator.ValidateFile(tempFile, dataset);
+            result.IsValid.Should().BeTrue();
+            result.Qrels.Should().NotBeNull();
+            result.Qrels!.Queries.Should().HaveCount(1);
+        }
+        finally
+        {
+            if (File.Exists(tempFile))
+            {
+                File.Delete(tempFile);
+            }
+        }
+    }
+
+    [Fact]
+    public void QrelsValidator_WhenMissingQueryId_FailsValidation()
+    {
+        var dataset = new DatasetV1Dto(
+            1,
+            "synthetic-fixtures",
+            [new DatasetDocumentDto("doc-1", "Title", "Desc", "Category", ["tag"])],
+            [
+                new DatasetQueryDto("q-1", "en", "natural", "query 1", [new QueryJudgmentDto("doc-1", 3)]),
+                new DatasetQueryDto("q-2", "en", "natural", "query 2", [new QueryJudgmentDto("doc-1", 3)])
+            ]);
+
+        var tempFile = Path.GetTempFileName();
+        try
+        {
+            var qrelsOnlyOneQuery = """
+            {
+              "version": 1,
+              "provenance": "human-adjudicated",
+              "adjudicationVersion": "2026-09-08-v1",
+              "adjudicationDate": "2026-09-08",
+              "queries": [
+                {
+                  "queryId": "q-1",
+                  "judgments": [
+                    { "documentKey": "doc-1", "relevance": 3 }
+                  ]
+                }
+              ]
+            }
+            """;
+            File.WriteAllText(tempFile, qrelsOnlyOneQuery);
+
+            QrelsValidationResult result = QrelsValidator.ValidateFile(tempFile, dataset);
+            result.IsValid.Should().BeFalse();
+            result.Errors.Should().Contain(e => e.Contains("missing 1 queries") && e.Contains("q-2"));
+        }
+        finally
+        {
+            if (File.Exists(tempFile))
+            {
+                File.Delete(tempFile);
+            }
+        }
+    }
+
+    [Fact]
+    public void QrelsValidator_WhenUnknownQueryId_FailsValidation()
+    {
+        var dataset = new DatasetV1Dto(
+            1,
+            "synthetic-fixtures",
+            [new DatasetDocumentDto("doc-1", "Title", "Desc", "Category", ["tag"])],
+            [new DatasetQueryDto("q-1", "en", "natural", "query 1", [new QueryJudgmentDto("doc-1", 3)])]);
+
+        var tempFile = Path.GetTempFileName();
+        try
+        {
+            var qrelsUnknownQuery = """
+            {
+              "version": 1,
+              "provenance": "human-adjudicated",
+              "adjudicationVersion": "2026-09-08-v1",
+              "adjudicationDate": "2026-09-08",
+              "queries": [
+                {
+                  "queryId": "q-1",
+                  "judgments": [{ "documentKey": "doc-1", "relevance": 3 }]
+                },
+                {
+                  "queryId": "q-unknown",
+                  "judgments": [{ "documentKey": "doc-1", "relevance": 3 }]
+                }
+              ]
+            }
+            """;
+            File.WriteAllText(tempFile, qrelsUnknownQuery);
+
+            QrelsValidationResult result = QrelsValidator.ValidateFile(tempFile, dataset);
+            result.IsValid.Should().BeFalse();
+            result.Errors.Should().Contain(e => e.Contains("unknown queries") && e.Contains("q-unknown"));
+        }
+        finally
+        {
+            if (File.Exists(tempFile))
+            {
+                File.Delete(tempFile);
+            }
+        }
+    }
+
+    [Fact]
+    public void QrelsValidator_WhenDuplicateQueryId_FailsValidation()
+    {
+        var dataset = new DatasetV1Dto(
+            1,
+            "synthetic-fixtures",
+            [new DatasetDocumentDto("doc-1", "Title", "Desc", "Category", ["tag"])],
+            [new DatasetQueryDto("q-1", "en", "natural", "query 1", [new QueryJudgmentDto("doc-1", 3)])]);
+
+        var tempFile = Path.GetTempFileName();
+        try
+        {
+            var qrelsDuplicateQuery = """
+            {
+              "version": 1,
+              "provenance": "human-adjudicated",
+              "adjudicationVersion": "2026-09-08-v1",
+              "adjudicationDate": "2026-09-08",
+              "queries": [
+                {
+                  "queryId": "q-1",
+                  "judgments": [{ "documentKey": "doc-1", "relevance": 3 }]
+                },
+                {
+                  "queryId": "q-1",
+                  "judgments": [{ "documentKey": "doc-1", "relevance": 2 }]
+                }
+              ]
+            }
+            """;
+            File.WriteAllText(tempFile, qrelsDuplicateQuery);
+
+            QrelsValidationResult result = QrelsValidator.ValidateFile(tempFile, dataset);
+            result.IsValid.Should().BeFalse();
+            result.Errors.Should().Contain(e => e.Contains("Duplicate queryId") && e.Contains("q-1"));
+        }
+        finally
+        {
+            if (File.Exists(tempFile))
+            {
+                File.Delete(tempFile);
+            }
+        }
+    }
+
+    private static (List<QueryEvaluationMetrics> Lex, List<QueryEvaluationMetrics> Hyb) CreatePassingMetricFixtures()
+    {
+        var lexMetrics = new List<QueryEvaluationMetrics>
+        {
+            new("q1", "en", "natural", 0.80, 0.88, 0.75),
+            new("q2", "uk", "natural", 0.80, 0.88, 0.75),
+            new("q3", "technical", "keyword", 0.60, 0.88, 0.75),
+            new("q4", "mixed", "cross-language", 0.60, 0.88, 0.75)
+        };
+
+        var hybMetrics = new List<QueryEvaluationMetrics>
+        {
+            new("q1", "en", "natural", 0.80, 0.88, 0.75),
+            new("q2", "uk", "natural", 0.80, 0.88, 0.75),
+            new("q3", "technical", "keyword", 0.70, 0.88, 0.75), // +0.10 improvement on technical language slice (>= +0.05)
+            new("q4", "mixed", "cross-language", 0.70, 0.88, 0.75) // +0.10 improvement on cross-language kind slice (>= +0.05)
+        };
+
+        return (lexMetrics, hybMetrics);
+    }
+
+    [Fact]
+    public void QualityGateEvaluator_WhenAllApprovedGatesPass_ReturnsAllGatesPassedTrue()
+    {
+        (List<QueryEvaluationMetrics> lexMetrics, List<QueryEvaluationMetrics> hybMetrics) = CreatePassingMetricFixtures();
+
+        QualityEvaluationGateSummary result = QualityGateEvaluator.Evaluate(lexMetrics, hybMetrics);
+
+        result.AllGatesPassed.Should().BeTrue();
+        result.GateResults.Should().AllSatisfy(g => g.Passed.Should().BeTrue());
+    }
+
+    [Theory]
+    [InlineData("Overall Macro nDCG@10 Absolute", 0.750, 0.88, 0.75, true)]
+    [InlineData("Overall Macro nDCG@10 Absolute", 0.749, 0.88, 0.75, false)]
+    [InlineData("Overall Macro Recall@20 Absolute", 0.80, 0.850, 0.75, true)]
+    [InlineData("Overall Macro Recall@20 Absolute", 0.80, 0.849, 0.75, false)]
+    [InlineData("Overall Macro MRR Absolute", 0.80, 0.88, 0.700, true)]
+    [InlineData("Overall Macro MRR Absolute", 0.80, 0.88, 0.699, false)]
+    public void QualityGateEvaluator_AbsoluteOverallGates_BoundaryChecks(
+        string gateName,
+        double hybNdcg,
+        double hybRecall,
+        double hybMrr,
+        bool expectedPass)
+    {
+        (List<QueryEvaluationMetrics> lexMetrics, List<QueryEvaluationMetrics> hybMetrics) = CreatePassingMetricFixtures();
+        for (var i = 0; i < hybMetrics.Count; i++)
+        {
+            QueryEvaluationMetrics old = hybMetrics[i];
+            hybMetrics[i] = new QueryEvaluationMetrics(old.QueryId, old.Language, old.Kind, hybNdcg, hybRecall, hybMrr);
+        }
+
+        QualityEvaluationGateSummary result = QualityGateEvaluator.Evaluate(lexMetrics, hybMetrics);
+        QualityGateResult targetGate = result.GateResults.First(g => g.Name == gateName);
+        targetGate.Passed.Should().Be(expectedPass);
+    }
+
+    [Theory]
+    [InlineData("English Slice Absolute nDCG@10", "en", 0.650, 0.88, 0.75, true)]
+    [InlineData("English Slice Absolute nDCG@10", "en", 0.649, 0.88, 0.75, false)]
+    [InlineData("English Slice Absolute Recall@20", "en", 0.80, 0.750, 0.75, true)]
+    [InlineData("English Slice Absolute Recall@20", "en", 0.80, 0.749, 0.75, false)]
+    [InlineData("English Slice Absolute MRR", "en", 0.80, 0.88, 0.600, true)]
+    [InlineData("English Slice Absolute MRR", "en", 0.80, 0.88, 0.599, false)]
+    [InlineData("Technical Slice Absolute nDCG@10", "technical", 0.650, 0.88, 0.75, true)]
+    [InlineData("Technical Slice Absolute nDCG@10", "technical", 0.649, 0.88, 0.75, false)]
+    [InlineData("Mixed Slice Absolute Recall@20", "mixed", 0.80, 0.750, 0.75, true)]
+    [InlineData("Mixed Slice Absolute Recall@20", "mixed", 0.80, 0.749, 0.75, false)]
+    [InlineData("Ukrainian Slice Absolute MRR", "uk", 0.80, 0.88, 0.600, true)]
+    [InlineData("Ukrainian Slice Absolute MRR", "uk", 0.80, 0.88, 0.599, false)]
+    public void QualityGateEvaluator_AbsoluteSliceGates_BoundaryChecks(
+        string gateName,
+        string lang,
+        double hybNdcg,
+        double hybRecall,
+        double hybMrr,
+        bool expectedPass)
+    {
+        (List<QueryEvaluationMetrics> lexMetrics, List<QueryEvaluationMetrics> hybMetrics) = CreatePassingMetricFixtures();
+        var idx = hybMetrics.FindIndex(m => m.Language == lang);
+        QueryEvaluationMetrics old = hybMetrics[idx];
+        hybMetrics[idx] = new QueryEvaluationMetrics(old.QueryId, old.Language, old.Kind, hybNdcg, hybRecall, hybMrr);
+
+        QualityEvaluationGateSummary result = QualityGateEvaluator.Evaluate(lexMetrics, hybMetrics);
+        QualityGateResult targetGate = result.GateResults.First(g => g.Name == gateName);
+        targetGate.Passed.Should().Be(expectedPass);
+    }
+
+    [Theory]
+    [InlineData("Overall Macro nDCG@10 Regression", 0.80, 0.780, 0.88, 0.88, 0.75, 0.75, true)] // -0.020 regression exactly
+    [InlineData("Overall Macro nDCG@10 Regression", 0.80, 0.779, 0.88, 0.88, 0.75, 0.75, false)] // -0.021 regression
+    [InlineData("Overall Macro Recall@20 Comparative", 0.80, 0.80, 0.88, 0.880, 0.75, 0.75, true)] // 0 regression
+    [InlineData("Overall Macro Recall@20 Comparative", 0.80, 0.80, 0.88, 0.879, 0.75, 0.75, false)] // negative regression
+    [InlineData("Overall Macro MRR Comparative", 0.80, 0.80, 0.88, 0.88, 0.75, 0.750, true)] // 0 regression
+    [InlineData("Overall Macro MRR Comparative", 0.80, 0.80, 0.88, 0.88, 0.75, 0.749, false)] // negative regression
+    public void QualityGateEvaluator_ComparativeOverallRegression_BoundaryChecks(
+        string gateName,
+        double lexNdcg, double hybNdcg,
+        double lexRecall, double hybRecall,
+        double lexMrr, double hybMrr,
+        bool expectedPass)
+    {
+        (List<QueryEvaluationMetrics> lexMetrics, List<QueryEvaluationMetrics> hybMetrics) = CreatePassingMetricFixtures();
+        for (var i = 0; i < lexMetrics.Count; i++)
+        {
+            QueryEvaluationMetrics l = lexMetrics[i];
+            lexMetrics[i] = new QueryEvaluationMetrics(l.QueryId, l.Language, l.Kind, lexNdcg, lexRecall, lexMrr);
+            QueryEvaluationMetrics h = hybMetrics[i];
+            hybMetrics[i] = new QueryEvaluationMetrics(h.QueryId, h.Language, h.Kind, hybNdcg, hybRecall, hybMrr);
+        }
+
+        QualityEvaluationGateSummary result = QualityGateEvaluator.Evaluate(lexMetrics, hybMetrics);
+        QualityGateResult targetGate = result.GateResults.First(g => g.Name == gateName);
+        targetGate.Passed.Should().Be(expectedPass);
+    }
+
+    [Theory]
+    [InlineData("English Slice nDCG@10 Regression", "en", 0.80, 0.780, true)] // -0.020 regression
+    [InlineData("English Slice nDCG@10 Regression", "en", 0.80, 0.779, false)] // -0.021 regression
+    [InlineData("Ukrainian Slice nDCG@10 Regression", "uk", 0.80, 0.780, true)] // -0.020 regression
+    [InlineData("Ukrainian Slice nDCG@10 Regression", "uk", 0.80, 0.779, false)] // -0.021 regression
+    public void QualityGateEvaluator_ComparativeSliceRegression_BoundaryChecks(
+        string gateName,
+        string lang,
+        double lexNdcg,
+        double hybNdcg,
+        bool expectedPass)
+    {
+        (List<QueryEvaluationMetrics> lexMetrics, List<QueryEvaluationMetrics> hybMetrics) = CreatePassingMetricFixtures();
+        var lIdx = lexMetrics.FindIndex(m => m.Language == lang);
+        QueryEvaluationMetrics oldL = lexMetrics[lIdx];
+        lexMetrics[lIdx] = new QueryEvaluationMetrics(oldL.QueryId, oldL.Language, oldL.Kind, lexNdcg, oldL.RecallAt20, oldL.Mrr);
+
+        var hIdx = hybMetrics.FindIndex(m => m.Language == lang);
+        QueryEvaluationMetrics oldH = hybMetrics[hIdx];
+        hybMetrics[hIdx] = new QueryEvaluationMetrics(oldH.QueryId, oldH.Language, oldH.Kind, hybNdcg, oldH.RecallAt20, oldH.Mrr);
+
+        QualityEvaluationGateSummary result = QualityGateEvaluator.Evaluate(lexMetrics, hybMetrics);
+        QualityGateResult targetGate = result.GateResults.First(g => g.Name == gateName);
+        targetGate.Passed.Should().Be(expectedPass);
+    }
+
+    [Theory]
+    [InlineData("Cross-Language Kind Slice Improvement", "mixed", "cross-language", 0.60, 0.650, true)] // +0.050 exactly
+    [InlineData("Cross-Language Kind Slice Improvement", "mixed", "cross-language", 0.60, 0.649, false)] // +0.049
+    [InlineData("Technical Language Slice Improvement", "technical", "keyword", 0.60, 0.650, true)] // +0.050 exactly
+    [InlineData("Technical Language Slice Improvement", "technical", "keyword", 0.60, 0.649, false)] // +0.049
+    public void QualityGateEvaluator_ImprovementGates_BoundaryChecks(
+        string gateName,
+        string lang,
+        string kind,
+        double lexNdcg,
+        double hybNdcg,
+        bool expectedPass)
+    {
+        (List<QueryEvaluationMetrics> lexMetrics, List<QueryEvaluationMetrics> hybMetrics) = CreatePassingMetricFixtures();
+        var lIdx = lexMetrics.FindIndex(m => m.Language == lang && m.Kind == kind);
+        QueryEvaluationMetrics oldL = lexMetrics[lIdx];
+        lexMetrics[lIdx] = new QueryEvaluationMetrics(oldL.QueryId, oldL.Language, oldL.Kind, lexNdcg, oldL.RecallAt20, oldL.Mrr);
+
+        var hIdx = hybMetrics.FindIndex(m => m.Language == lang && m.Kind == kind);
+        QueryEvaluationMetrics oldH = hybMetrics[hIdx];
+        hybMetrics[hIdx] = new QueryEvaluationMetrics(oldH.QueryId, oldH.Language, oldH.Kind, hybNdcg, oldH.RecallAt20, oldH.Mrr);
+
+        QualityEvaluationGateSummary result = QualityGateEvaluator.Evaluate(lexMetrics, hybMetrics);
+        QualityGateResult targetGate = result.GateResults.First(g => g.Name == gateName);
+        targetGate.Passed.Should().Be(expectedPass);
+    }
+
+    [Fact]
+    public void QualityGateEvaluator_TrackedDataset_HasValidSlicesAndEvaluatesWithoutMissingSlices()
+    {
+        var basePath = AppContext.BaseDirectory;
+        var datasetPath = Path.GetFullPath(Path.Combine(basePath, "..", "..", "..", "..", "search-evaluation", "dataset.v1.json"));
+        if (!File.Exists(datasetPath))
+        {
+            var dir = Directory.GetCurrentDirectory();
+            while (!string.IsNullOrEmpty(dir))
+            {
+                var candidate = Path.Combine(dir, "asblock-backend", "search-evaluation", "dataset.v1.json");
+                if (File.Exists(candidate))
+                {
+                    datasetPath = candidate;
+                    break;
+                }
+                DirectoryInfo? parent = Directory.GetParent(dir);
+                if (parent == null)
+                {
+                    break;
+                }
+                dir = parent.FullName;
+            }
+        }
+
+        File.Exists(datasetPath).Should().BeTrue("dataset.v1.json must exist in the repository");
+
+        using var doc = JsonDocument.Parse(File.ReadAllText(datasetPath));
+        JsonElement queries = doc.RootElement.GetProperty("queries");
+        queries.GetArrayLength().Should().Be(92);
+
+        var queryList = new List<(string Id, string Language, string Kind)>();
+        foreach (JsonElement q in queries.EnumerateArray())
+        {
+            queryList.Add((
+                q.GetProperty("id").GetString()!,
+                q.GetProperty("language").GetString()!,
+                q.GetProperty("kind").GetString()!));
+        }
+
+        queryList.Count(q => q.Language == "en").Should().Be(31);
+        queryList.Count(q => q.Language == "uk").Should().Be(31);
+        queryList.Count(q => q.Language == "technical").Should().Be(23);
+        queryList.Count(q => q.Language == "mixed").Should().Be(7);
+        queryList.Count(q => q.Kind == "cross-language").Should().Be(17);
+
+        // Build valid metrics for all 92 queries
+        var lexMetrics = new List<QueryEvaluationMetrics>(92);
+        var hybMetrics = new List<QueryEvaluationMetrics>(92);
+        foreach ((var id, var language, var kind) in queryList)
+        {
+            var isTech = language == "technical";
+            var isCross = kind == "cross-language";
+
+            var lexNdcg = (isTech || isCross) ? 0.65 : 0.80;
+            var hybNdcg = (isTech || isCross) ? 0.72 : 0.80; // >= +0.05 improvement
+            lexMetrics.Add(new QueryEvaluationMetrics(id, language, kind, lexNdcg, 0.88, 0.75));
+            hybMetrics.Add(new QueryEvaluationMetrics(id, language, kind, hybNdcg, 0.88, 0.75));
+        }
+
+        QualityEvaluationGateSummary result = QualityGateEvaluator.Evaluate(lexMetrics, hybMetrics);
+        result.AllGatesPassed.Should().BeTrue();
+        result.GateResults.Should().AllSatisfy(g => g.Passed.Should().BeTrue());
+    }
+
+    [Fact]
+    public void SearchBenchmarkRunner_IsPrescribedDecisionProtocol_ValidatesExactCriteria()
+    {
+        SearchBenchmarkRunner.IsPrescribedDecisionProtocol([1000, 10000, 50000], 100, 1000, [1, 10])
+            .Should().BeTrue();
+
+        // Warmup differs
+        SearchBenchmarkRunner.IsPrescribedDecisionProtocol([1000, 10000, 50000], 10, 1000, [1, 10])
+            .Should().BeFalse();
+
+        // Samples differ
+        SearchBenchmarkRunner.IsPrescribedDecisionProtocol([1000, 10000, 50000], 100, 50, [1, 10])
+            .Should().BeFalse();
+
+        // Concurrency differs
+        SearchBenchmarkRunner.IsPrescribedDecisionProtocol([1000, 10000, 50000], 100, 1000, [1])
+            .Should().BeFalse();
+
+        // Sizes differ
+        SearchBenchmarkRunner.IsPrescribedDecisionProtocol([1000, 10000], 100, 1000, [1, 10])
+            .Should().BeFalse();
     }
 
     private sealed class FakeOllamaEmbeddingClient(Dictionary<string, float[]> mapping) : IOllamaEmbeddingClient

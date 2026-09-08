@@ -1,7 +1,10 @@
+using System.Globalization;
 using System.Text;
 using AssetBlock.Domain.Core;
 using AssetBlock.Domain.Core.Primitives.AppSettingsOptions;
 using AssetBlock.Infrastructure.Options;
+using AssetBlock.SearchEvaluation.Backfill;
+using AssetBlock.SearchEvaluation.Benchmark;
 using AssetBlock.SearchEvaluation.Evaluation;
 using AssetBlock.SearchEvaluation.Metrics;
 using AssetBlock.SearchEvaluation.Ollama;
@@ -26,13 +29,13 @@ public static class Program
 
         var mode = "deterministic";
         string? datasetPath = null;
+        string? qrelsPath = null;
         string? configPath = null;
-        string? modelOverride = null;
-        string? revisionOverride = null;
-        string? digestOverride = null;
-        int? dimensionOverride = null;
-        string? baseUrlOverride = null;
-        int? timeoutOverride = null;
+
+        var benchmarkSizes = new List<int> { 1000, 10000, 50000 };
+        var warmupCount = 100;
+        var sampleCount = 1000;
+        var concurrencyLevels = new List<int> { 1, 10 };
 
         for (var i = 0; i < args.Length; i++)
         {
@@ -44,90 +47,107 @@ public static class Program
             {
                 datasetPath = args[++i];
             }
+            else if (args[i] is "--qrels" or "-q" && i + 1 < args.Length)
+            {
+                qrelsPath = args[++i];
+            }
             else if (args[i] is "--config" or "-c" && i + 1 < args.Length)
             {
                 configPath = args[++i];
             }
-            else if (args[i] is "--model" && i + 1 < args.Length)
+            else if (args[i] is "--sizes" && i + 1 < args.Length)
             {
-                modelOverride = args[++i];
+                benchmarkSizes = args[++i]
+                    .Split(',', StringSplitOptions.RemoveEmptyEntries)
+                    .Select(int.Parse)
+                    .ToList();
             }
-            else if (args[i] is "--revision" && i + 1 < args.Length)
+            else if (args[i] is "--warmup" && i + 1 < args.Length)
             {
-                revisionOverride = args[++i];
-            }
-            else if (args[i] is "--digest" && i + 1 < args.Length)
-            {
-                digestOverride = args[++i];
-            }
-            else if (args[i] is "--dimension" && i + 1 < args.Length)
-            {
-                if (int.TryParse(args[++i], out var dim))
+                if (int.TryParse(args[++i], CultureInfo.InvariantCulture, out var w))
                 {
-                    dimensionOverride = dim;
+                    warmupCount = w;
                 }
             }
-            else if (args[i] is "--base-url" && i + 1 < args.Length)
+            else if (args[i] is "--samples" && i + 1 < args.Length)
             {
-                baseUrlOverride = args[++i];
-            }
-            else if (args[i] is "--timeout-seconds" && i + 1 < args.Length)
-            {
-                if (int.TryParse(args[++i], out var timeoutSec))
+                if (int.TryParse(args[++i], CultureInfo.InvariantCulture, out var s))
                 {
-                    timeoutOverride = timeoutSec;
+                    sampleCount = s;
                 }
+            }
+            else if (args[i] is "--concurrency" && i + 1 < args.Length)
+            {
+                concurrencyLevels = args[++i]
+                    .Split(',', StringSplitOptions.RemoveEmptyEntries)
+                    .Select(int.Parse)
+                    .ToList();
             }
         }
 
-        datasetPath ??= FindDatasetPath();
-        if (datasetPath is null)
-        {
-            Console.ForegroundColor = ConsoleColor.Red;
-            Console.WriteLine("ERROR: Could not locate dataset.v1.json file.");
-            Console.ResetColor();
-            return EXIT_FAILURE;
-        }
-
-        Console.WriteLine($"Dataset path: {datasetPath}");
         Console.WriteLine($"Mode: {mode}");
-        Console.WriteLine();
-
-        // 1. Validate dataset schema and integrity
-        Console.WriteLine("--> Validating dataset schema and integrity...");
-        ValidationResult validation = DatasetValidator.ValidateFile(datasetPath);
-        if (!validation.IsValid || validation.Dataset is null)
-        {
-            Console.ForegroundColor = ConsoleColor.Red;
-            Console.WriteLine("Dataset validation failed with errors:");
-            foreach (var err in validation.Errors)
-            {
-                Console.WriteLine($"  - {err}");
-            }
-            Console.ResetColor();
-            return EXIT_FAILURE;
-        }
-
-        DatasetV1Dto dataset = validation.Dataset;
-        Console.ForegroundColor = ConsoleColor.Green;
-        Console.WriteLine($"[PASS] Dataset valid: {dataset.Documents.Count} documents, {dataset.Queries.Count} queries.");
-        Console.ResetColor();
         Console.WriteLine();
 
         if (mode is "deterministic")
         {
+            datasetPath ??= FindDatasetPath();
+            if (datasetPath is null)
+            {
+                Console.ForegroundColor = ConsoleColor.Red;
+                Console.WriteLine("ERROR: Could not locate dataset.v1.json file.");
+                Console.ResetColor();
+                return EXIT_FAILURE;
+            }
+
+            Console.WriteLine($"Dataset path: {datasetPath}");
+            Console.WriteLine("--> Validating dataset schema and integrity...");
+            ValidationResult validation = DatasetValidator.ValidateFile(datasetPath);
+            if (!validation.IsValid || validation.Dataset is null)
+            {
+                Console.ForegroundColor = ConsoleColor.Red;
+                Console.WriteLine("Dataset validation failed with errors:");
+                foreach (var err in validation.Errors)
+                {
+                    Console.WriteLine($"  - {err}");
+                }
+                Console.ResetColor();
+                return EXIT_FAILURE;
+            }
+
+            DatasetV1Dto dataset = validation.Dataset;
+            Console.ForegroundColor = ConsoleColor.Green;
+            Console.WriteLine($"[PASS] Dataset valid: {dataset.Documents.Count} documents, {dataset.Queries.Count} queries (Provenance: {dataset.Provenance}).");
+            Console.ResetColor();
+            Console.WriteLine();
+
             return RunDeterministicEvaluation(dataset);
         }
         else if (mode is "local-ollama")
         {
-            EmbeddingOptions options = ResolveEmbeddingOptions(
-                configPath,
-                modelOverride,
-                revisionOverride,
-                digestOverride,
-                dimensionOverride,
-                baseUrlOverride,
-                timeoutOverride);
+            datasetPath ??= FindDatasetPath();
+            if (datasetPath is null)
+            {
+                Console.ForegroundColor = ConsoleColor.Red;
+                Console.WriteLine("ERROR: Could not locate dataset.v1.json file.");
+                Console.ResetColor();
+                return EXIT_FAILURE;
+            }
+
+            ValidationResult validation = DatasetValidator.ValidateFile(datasetPath);
+            if (!validation.IsValid || validation.Dataset is null)
+            {
+                Console.ForegroundColor = ConsoleColor.Red;
+                Console.WriteLine("Dataset validation failed with errors:");
+                foreach (var err in validation.Errors)
+                {
+                    Console.WriteLine($"  - {err}");
+                }
+                Console.ResetColor();
+                return EXIT_FAILURE;
+            }
+
+            DatasetV1Dto dataset = validation.Dataset;
+            EmbeddingOptions options = ResolveEmbeddingOptions(configPath);
 
             var validator = new EmbeddingOptionsValidator();
             ValidateOptionsResult validationResult = validator.Validate(null, options);
@@ -144,7 +164,7 @@ public static class Program
                         Console.WriteLine($"  - {failure}");
                     }
                 }
-                else if (!string.IsNullOrWhiteSpace(validationResult.FailureMessage))
+                else
                 {
                     Console.WriteLine($"  - {validationResult.FailureMessage}");
                 }
@@ -164,69 +184,66 @@ public static class Program
             httpClient.Timeout = TimeSpan.FromSeconds(options.RequestTimeoutSeconds);
             var client = new LocalOllamaEmbeddingClient(httpClient, options);
 
-            return await LocalOllamaEvaluator.RunEvaluationAsync(dataset, options, client);
+            return await LocalOllamaEvaluator.RunEvaluationAsync(dataset, qrelsPath, options, client);
+        }
+        else if (mode is "benchmark")
+        {
+            EmbeddingOptions options = ResolveEmbeddingOptions(configPath);
+            using var httpClient = new HttpClient();
+            httpClient.Timeout = TimeSpan.FromSeconds(options.RequestTimeoutSeconds);
+            var client = new LocalOllamaEmbeddingClient(httpClient, options);
+
+            return await SearchBenchmarkRunner.RunBenchmarkAsync(
+                benchmarkSizes,
+                warmupCount,
+                sampleCount,
+                concurrencyLevels,
+                options,
+                client);
+        }
+        else if (mode is "backfill-evidence")
+        {
+            EmbeddingOptions options = ResolveEmbeddingOptions(configPath);
+            return await BackfillEvidenceRunner.RunBackfillEvidenceAsync(options);
         }
         else
         {
             Console.ForegroundColor = ConsoleColor.Red;
-            Console.WriteLine($"Unknown mode: {mode}. Supported modes: deterministic, local-ollama");
+            Console.WriteLine($"Unknown mode: {mode}. Supported modes: deterministic, local-ollama, benchmark, backfill-evidence");
             Console.ResetColor();
             return EXIT_FAILURE;
         }
     }
 
-    public static EmbeddingOptions ResolveEmbeddingOptions(
-        string? configPath,
-        string? modelOverride,
-        string? revisionOverride,
-        string? digestOverride,
-        int? dimensionOverride,
-        string? baseUrlOverride,
-        int? timeoutOverride)
+    public static EmbeddingOptions ResolveEmbeddingOptions(string? configPath)
     {
         ConfigurationBuilder configBuilder = new();
 
         configPath ??= FindAppSettingsPath();
-        if (!string.IsNullOrEmpty(configPath) && File.Exists(configPath))
+        if (string.IsNullOrEmpty(configPath) || !File.Exists(configPath))
         {
-            configBuilder.AddJsonFile(configPath, optional: true);
+            throw new FileNotFoundException($"AppSettings configuration file not found at: '{configPath}'");
         }
 
-        configBuilder.AddEnvironmentVariables();
+        configPath = Path.GetFullPath(configPath);
+        Console.WriteLine($"Loading embedding configuration from: {configPath}");
+        configBuilder.AddJsonFile(configPath, optional: false);
 
         IConfiguration configuration = configBuilder.Build();
         EmbeddingOptions options = new();
         configuration.GetSection(EmbeddingOptions.CONFIGURATION_PATH).Bind(options);
 
-        // Apply CLI overrides if specified
-        if (!string.IsNullOrWhiteSpace(modelOverride))
-        {
-            options.Model = modelOverride.Trim();
-        }
-        if (!string.IsNullOrWhiteSpace(revisionOverride))
-        {
-            options.Revision = revisionOverride.Trim();
-        }
-        if (!string.IsNullOrWhiteSpace(digestOverride))
-        {
-            options.Digest = digestOverride.Trim();
-        }
-        if (dimensionOverride is > 0)
-        {
-            options.Dimension = dimensionOverride.Value;
-        }
-        if (!string.IsNullOrWhiteSpace(baseUrlOverride))
-        {
-            options.BaseUrl = baseUrlOverride.Trim();
-        }
-        if (timeoutOverride is > 0)
-        {
-            options.RequestTimeoutSeconds = timeoutOverride.Value;
-        }
-
-        // When evaluating local-ollama, provider is Ollama and mode is enabled
+        // Explicitly enforce that provenance is defined in appsettings
         options.Provider = "Ollama";
         options.Enabled = true;
+
+        Console.WriteLine("Pinned Model Provenance (Loaded from AppSettings):");
+        Console.WriteLine($"  Model:     {options.Model}");
+        Console.WriteLine($"  Revision:  {options.Revision}");
+        Console.WriteLine($"  Digest:    {options.Digest}");
+        Console.WriteLine($"  Dimension: {options.Dimension}");
+        Console.WriteLine($"  BaseUrl:   {options.BaseUrl}");
+        Console.WriteLine();
 
         return options;
     }
@@ -238,7 +255,8 @@ public static class Program
             Path.Combine(AppContext.BaseDirectory, "appsettings.json"),
             Path.Combine(Directory.GetCurrentDirectory(), "asblock-backend", "AssetBlock.WebApi", "appsettings.json"),
             Path.Combine(Directory.GetCurrentDirectory(), "AssetBlock.WebApi", "appsettings.json"),
-            Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "AssetBlock.WebApi", "appsettings.json")
+            Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "AssetBlock.WebApi", "appsettings.json"),
+            Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "..", "asblock-backend", "AssetBlock.WebApi", "appsettings.json")
         };
 
         foreach (var path in candidates)
@@ -361,12 +379,10 @@ public static class Program
         Console.WriteLine();
         Console.WriteLine("----------------------------------------------------------");
         Console.ForegroundColor = ConsoleColor.Cyan;
-        Console.WriteLine("Automated validation complete.");
+        Console.WriteLine("Automated deterministic simulation complete.");
         Console.ResetColor();
-        Console.WriteLine("Pending Manual Work:");
-        Console.WriteLine("  1. Candidate multilingual model selection (installed locally via Ollama by operator).");
-        Console.WriteLine("  2. Exact model tag, revision, digest, and dimension verification.");
-        Console.WriteLine("  3. Independent human-reviewed relevance judgments.");
+        Console.WriteLine("Pending Quality Gate Prerequisite:");
+        Console.WriteLine("  1. Release-quality evaluation requires independent human-adjudicated qrels.");
         Console.WriteLine("----------------------------------------------------------");
 
         return EXIT_SUCCESS;
