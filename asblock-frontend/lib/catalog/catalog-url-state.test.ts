@@ -59,6 +59,27 @@ describe('parseCatalogUrlParams', () => {
     )
     expect(parseCatalogUrlParams(new URLSearchParams({ page: 'abc' })).page).toBe(1)
   })
+
+  it('maps search without an explicit sort to relevance mode', () => {
+    const parsed = parseCatalogUrlParams(new URLSearchParams({ search: 'spaceship' }))
+    expect(parsed.search).toBe('spaceship')
+    expect(parsed.sortBy).toBe('Relevance')
+    expect(parsed.sortDirection).toBe('DESC')
+  })
+
+  it('keeps a search with an explicit CreatedAt sort as explicit, not relevance', () => {
+    const parsed = parseCatalogUrlParams(
+      new URLSearchParams({ search: 'spaceship', sortBy: 'CreatedAt' }),
+    )
+    expect(parsed.sortBy).toBe('CreatedAt')
+    expect(parsed.sortDirection).toBe('DESC')
+  })
+
+  it('falls back to browse default (CreatedAt DESC) when there is no search and no sort', () => {
+    const parsed = parseCatalogUrlParams(new URLSearchParams({}))
+    expect(parsed.sortBy).toBe('CreatedAt')
+    expect(parsed.sortDirection).toBe('DESC')
+  })
 })
 
 describe('serializeCatalogUrlParams', () => {

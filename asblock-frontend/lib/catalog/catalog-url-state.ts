@@ -3,6 +3,8 @@ import {
   DEFAULT_CATALOG_FILTERS,
   sortDirectionForSortBy,
   type CatalogFilters,
+  type CatalogSortBy,
+  UI_ONLY_SORT,
 } from '@/lib/catalog/catalog-filters'
 
 export type SearchParamsSource =
@@ -35,7 +37,7 @@ export function normalizeSearchParamsSource(sp: SearchParamsSource): {
   return params
 }
 
-const VALID_SORT_BY = new Set<CatalogFilters['sortBy']>(['CreatedAt', 'Title', 'Price'])
+const VALID_SORT_BY = new Set<CatalogSortBy>(['CreatedAt', 'Title', 'Price'])
 const VALID_SORT_DIR = new Set<CatalogFilters['sortDirection']>(['ASC', 'DESC'])
 const POSITIVE_INT_RE = /^[1-9]\d*$/
 const UUID_RE = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/
@@ -89,13 +91,23 @@ export function parseCatalogUrlParams(rawSource: SearchParamsSource): CatalogFil
   const maxPrice =
     maxPriceNum !== null && Number.isFinite(maxPriceNum) && maxPriceNum >= 0 ? maxPriceNum : null
 
-  const rawSortBy = sp.get('sortBy') as CatalogFilters['sortBy'] | null
-  const sortBy: CatalogFilters['sortBy'] =
-    rawSortBy && VALID_SORT_BY.has(rawSortBy) ? rawSortBy : DEFAULT_CATALOG_FILTERS.sortBy
+  const rawSortBy = sp.get('sortBy') as CatalogSortBy | null
+  let sortBy: CatalogSortBy | typeof UI_ONLY_SORT
+  if (rawSortBy && VALID_SORT_BY.has(rawSortBy)) {
+    sortBy = rawSortBy
+  } else if (search) {
+    sortBy = UI_ONLY_SORT
+  } else {
+    sortBy = DEFAULT_CATALOG_FILTERS.sortBy
+  }
 
   const rawSortDir = sp.get('sortDirection') as CatalogFilters['sortDirection'] | null
   const sortDirection: CatalogFilters['sortDirection'] =
-    rawSortDir && VALID_SORT_DIR.has(rawSortDir) ? rawSortDir : sortDirectionForSortBy(sortBy)
+    rawSortDir && VALID_SORT_DIR.has(rawSortDir)
+      ? rawSortDir
+      : sortBy === UI_ONLY_SORT
+        ? 'DESC'
+        : sortDirectionForSortBy(sortBy as CatalogSortBy)
 
   const page = parsePositiveIntParam(sp.get('page'), 1)
 
@@ -136,13 +148,25 @@ export function serializeCatalogUrlParams(filters: Partial<CatalogFilters>): URL
     sp.set('maxPrice', String(filters.maxPrice))
   }
 
-  if (filters.sortBy && filters.sortBy !== DEFAULT_CATALOG_FILTERS.sortBy) {
-    sp.set('sortBy', filters.sortBy)
+  // Relevance is UI-only: never serialize it.
+  // Explicit sorts are shareable, including CreatedAt when the user picks it with a search
+  // active (absent sortBy + search means Relevance, so persisting sortBy=CreatedAt preserves
+  // the explicit choice). Without a search, CreatedAt is the browse default and is omitted.
+  const hasSearch = Boolean(filters.search?.trim())
+  const sortBy = filters.sortBy
+  if (sortBy && sortBy !== UI_ONLY_SORT) {
+    if (sortBy !== DEFAULT_CATALOG_FILTERS.sortBy || hasSearch) {
+      sp.set('sortBy', sortBy)
+    }
   }
 
-  const expectedDir = sortDirectionForSortBy(filters.sortBy ?? DEFAULT_CATALOG_FILTERS.sortBy)
-  if (filters.sortDirection && filters.sortDirection !== expectedDir) {
-    sp.set('sortDirection', filters.sortDirection)
+  // Only serialize sortDirection when it differs from the expected default for the sort field.
+  // For relevance mode (UI-only) and browse default, never serialize sortDirection.
+  if (sortBy && sortBy !== UI_ONLY_SORT) {
+    const expectedDir = sortDirectionForSortBy(sortBy as CatalogSortBy)
+    if (filters.sortDirection && filters.sortDirection !== expectedDir) {
+      sp.set('sortDirection', filters.sortDirection)
+    }
   }
 
   if (filters.page && filters.page > 1) {

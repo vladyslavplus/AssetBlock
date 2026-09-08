@@ -59,6 +59,7 @@ describe('AssetsBrowsePage UI Component', () => {
     page: 1,
     pageSize: 12,
     totalPages: 1,
+    isTruncated: false,
   }
 
   const sampleFacets: CatalogFacets = {
@@ -109,13 +110,19 @@ describe('AssetsBrowsePage UI Component', () => {
 
     renderWithProviders(
       <AssetsBrowsePage
-        initialFilters={{ ...sampleInitialFilters, search: 'nonexistent' }}
+        initialFilters={{
+          ...sampleInitialFilters,
+          search: 'nonexistent',
+          sortBy: 'Relevance',
+          sortDirection: 'DESC',
+        }}
         initialAssetsResult={{
           items: [],
           totalCount: 0,
           page: 1,
           pageSize: 12,
           totalPages: 0,
+          isTruncated: false,
         }}
         initialFacets={sampleFacets}
       />,
@@ -125,5 +132,181 @@ describe('AssetsBrowsePage UI Component', () => {
     expect(clearBtns.length).toBeGreaterThanOrEqual(1)
     await user.click(clearBtns[0])
     expect(pushMock).toHaveBeenCalledWith('/assets')
+  })
+
+  it('shows a best-results notice only for a truncated relevance search', () => {
+    mockSearchParamsString = 'search=cyberpunk'
+
+    renderWithProviders(
+      <AssetsBrowsePage
+        initialFilters={{
+          ...sampleInitialFilters,
+          search: 'cyberpunk',
+          sortBy: 'Relevance',
+          sortDirection: 'DESC',
+        }}
+        initialAssetsResult={{ ...sampleInitialAssets, isTruncated: true }}
+        initialFacets={sampleFacets}
+      />,
+    )
+
+    expect(
+      screen.getAllByText(/showing the best matches for your search/i).length,
+    ).toBeGreaterThanOrEqual(1)
+  })
+
+  it('does not show the best-results notice when relevance search is not truncated', () => {
+    mockSearchParamsString = 'search=cyberpunk'
+
+    renderWithProviders(
+      <AssetsBrowsePage
+        initialFilters={{
+          ...sampleInitialFilters,
+          search: 'cyberpunk',
+          sortBy: 'Relevance',
+          sortDirection: 'DESC',
+        }}
+        initialAssetsResult={{ ...sampleInitialAssets, isTruncated: false }}
+        initialFacets={sampleFacets}
+      />,
+    )
+
+    expect(screen.queryByText(/showing the best matches for your search/i)).not.toBeInTheDocument()
+  })
+
+  it('does not show the best-results notice for an explicit-sort search', () => {
+    mockSearchParamsString = 'search=cyberpunk&sortBy=CreatedAt'
+
+    renderWithProviders(
+      <AssetsBrowsePage
+        initialFilters={{
+          ...sampleInitialFilters,
+          search: 'cyberpunk',
+          sortBy: 'CreatedAt',
+        }}
+        initialAssetsResult={{ ...sampleInitialAssets, isTruncated: true }}
+        initialFacets={sampleFacets}
+      />,
+    )
+
+    expect(screen.queryByText(/showing the best matches for your search/i)).not.toBeInTheDocument()
+  })
+
+  it('promotes a typed search to relevance mode by omitting sort params from the URL', async () => {
+    renderWithProviders(
+      <AssetsBrowsePage
+        initialFilters={sampleInitialFilters}
+        initialAssetsResult={sampleInitialAssets}
+        initialFacets={sampleFacets}
+      />,
+    )
+
+    const searchInput = screen.getAllByLabelText(/search/i)[0]
+    const user = userEvent.setup({ delay: null })
+    await user.type(searchInput, 'sword')
+
+    // The 300ms debounce must fire for the URL to update.
+    await vi.waitFor(() => {
+      expect(pushMock).toHaveBeenCalledWith('/assets?search=sword')
+    })
+  })
+
+  it('resets pagination to page 1 when the search term changes', async () => {
+    mockSearchParamsString = 'page=3'
+
+    renderWithProviders(
+      <AssetsBrowsePage
+        initialFilters={{ ...sampleInitialFilters, page: 3 }}
+        initialAssetsResult={sampleInitialAssets}
+        initialFacets={sampleFacets}
+      />,
+    )
+
+    const searchInput = screen.getAllByLabelText(/search/i)[0]
+    const user = userEvent.setup({ delay: null })
+    await user.type(searchInput, 'sword')
+
+    await vi.waitFor(() => {
+      // Changing the search term resets the page to 1 (no page param) and keeps relevance mode.
+      expect(pushMock).toHaveBeenCalledWith('/assets?search=sword')
+    })
+  })
+
+  it('keeps an explicitly chosen sort in the URL during a search', async () => {
+    const user = userEvent.setup({ delay: null })
+    mockSearchParamsString = 'search=cyberpunk'
+
+    renderWithProviders(
+      <AssetsBrowsePage
+        initialFilters={{
+          ...sampleInitialFilters,
+          search: 'cyberpunk',
+          sortBy: 'Relevance',
+          sortDirection: 'DESC',
+        }}
+        initialAssetsResult={sampleInitialAssets}
+        initialFacets={sampleFacets}
+      />,
+    )
+
+    // Open the sort dropdown in the filters sidebar and choose "Newest" (explicit CreatedAt).
+    const sortTriggers = screen.getAllByLabelText(/sort by/i)
+    await user.click(sortTriggers[0])
+    const newestOption = screen.getByRole('menuitem', { name: /newest/i })
+    await user.click(newestOption)
+
+    await vi.waitFor(() => {
+      expect(pushMock).toHaveBeenCalledWith('/assets?search=cyberpunk&sortBy=CreatedAt')
+    })
+  })
+
+  it('preserves explicit CreatedAt sort when search term is refined', async () => {
+    const user = userEvent.setup({ delay: null })
+    mockSearchParamsString = 'search=cyberpunk&sortBy=CreatedAt'
+
+    renderWithProviders(
+      <AssetsBrowsePage
+        initialFilters={{
+          ...sampleInitialFilters,
+          search: 'cyberpunk',
+          sortBy: 'CreatedAt',
+          sortDirection: 'DESC',
+        }}
+        initialAssetsResult={sampleInitialAssets}
+        initialFacets={sampleFacets}
+      />,
+    )
+
+    const searchInput = screen.getAllByLabelText(/search/i)[0]
+    await user.type(searchInput, ' refined')
+
+    await vi.waitFor(() => {
+      expect(pushMock).toHaveBeenCalledWith('/assets?search=cyberpunk+refined&sortBy=CreatedAt')
+    })
+  })
+
+  it('preserves explicit Price sort when search term is refined', async () => {
+    const user = userEvent.setup({ delay: null })
+    mockSearchParamsString = 'search=blade&sortBy=Price'
+
+    renderWithProviders(
+      <AssetsBrowsePage
+        initialFilters={{
+          ...sampleInitialFilters,
+          search: 'blade',
+          sortBy: 'Price',
+          sortDirection: 'ASC',
+        }}
+        initialAssetsResult={sampleInitialAssets}
+        initialFacets={sampleFacets}
+      />,
+    )
+
+    const searchInput = screen.getAllByLabelText(/search/i)[0]
+    await user.type(searchInput, ' refined')
+
+    await vi.waitFor(() => {
+      expect(pushMock).toHaveBeenCalledWith('/assets?search=blade+refined&sortBy=Price')
+    })
   })
 })

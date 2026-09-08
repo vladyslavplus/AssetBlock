@@ -14,8 +14,8 @@ import { Checkbox } from '@/components/ui/checkbox'
 import { Skeleton } from '@/components/ui/skeleton'
 import { ChevronDown } from 'lucide-react'
 import {
-  CATALOG_SORT_OPTIONS,
   getCatalogSortLabel,
+  getCatalogSortOptions,
   type CatalogFilters,
 } from '@/lib/catalog/catalog-filters'
 import { useCatalogFilterState } from '@/lib/catalog/use-catalog-filter-state'
@@ -52,6 +52,13 @@ export function CatalogFiltersUI({
   const categoryLabel = filters.categoryId
     ? (categories.find((c) => c.id === filters.categoryId)?.name ?? 'Category')
     : 'All categories'
+
+  const hasSearch = filters.search.trim().length > 0
+  const sortOptions = getCatalogSortOptions(hasSearch)
+
+  const handleSortChange = (value: (typeof sortOptions)[number]['value']) => {
+    onFilterChange({ sortBy: value })
+  }
 
   return (
     <div className="space-y-4">
@@ -168,11 +175,8 @@ export function CatalogFiltersUI({
             align="start"
             className="w-[var(--radix-dropdown-menu-trigger-width)] z-[100]"
           >
-            {CATALOG_SORT_OPTIONS.map((opt) => (
-              <DropdownMenuItem
-                key={opt.value}
-                onSelect={() => onFilterChange({ sortBy: opt.value })}
-              >
+            {sortOptions.map((opt) => (
+              <DropdownMenuItem key={opt.value} onSelect={() => handleSortChange(opt.value)}>
                 {opt.label}
               </DropdownMenuItem>
             ))}

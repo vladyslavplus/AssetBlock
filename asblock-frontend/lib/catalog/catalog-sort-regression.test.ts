@@ -4,26 +4,38 @@ import { DEFAULT_CATALOG_FILTERS, type CatalogFilters } from './catalog-filters'
 import { parseCatalogUrlParams, serializeCatalogUrlParams } from './catalog-url-state'
 
 describe('Catalog sort and search regression contracts', () => {
-  it('captures current API query parameter construction when search is present', () => {
+  it('omits sort params for a relevance search (no explicit sort)', () => {
     const filters: CatalogFilters = {
       ...DEFAULT_CATALOG_FILTERS,
       search: 'lowpoly sword',
+      sortBy: 'Relevance',
       page: 1,
     }
 
     const qs = buildAssetsQueryParams(filters)
     const params = new URLSearchParams(qs)
 
-    // Current contract: buildAssetsQueryParams always serializes sortBy and sortDirection,
-    // even when search is active.
+    // Relevance mode is UI-only: backend decides ranking, so no explicit sort is sent.
     expect(params.get('search')).toBe('lowpoly sword')
-    expect(params.get('sortBy')).toBe('CreatedAt')
-    expect(params.get('sortDirection')).toBe('DESC')
+    expect(params.get('sortBy')).toBeNull()
+    expect(params.get('sortDirection')).toBeNull()
     expect(params.get('page')).toBe('1')
     expect(params.get('pageSize')).toBe('12')
   })
 
-  it('captures current explicit sort behavior when custom sortBy is selected', () => {
+  it('omits sort params when search is active without an explicit sort from URL', () => {
+    const parsed = parseCatalogUrlParams(new URLSearchParams('search=lowpoly+sword'))
+    expect(parsed.search).toBe('lowpoly sword')
+    expect(parsed.sortBy).toBe('Relevance')
+    expect(parsed.sortDirection).toBe('DESC')
+
+    // Serializing the parsed relevance state keeps the URL clean (no sort params).
+    const serialized = serializeCatalogUrlParams(parsed)
+    expect(serialized.get('sortBy')).toBeNull()
+    expect(serialized.get('sortDirection')).toBeNull()
+  })
+
+  it('sends explicit sort behavior when a custom sortBy is selected', () => {
     const filters: CatalogFilters = {
       ...DEFAULT_CATALOG_FILTERS,
       search: 'plasma rifle',
@@ -41,7 +53,27 @@ describe('Catalog sort and search regression contracts', () => {
     expect(params.get('page')).toBe('2')
   })
 
-  it('captures URL parameter serialization and parsing for search and sort', () => {
+  it('preserves an explicitly chosen CreatedAt sort in the URL during a search', () => {
+    const filters: CatalogFilters = {
+      ...DEFAULT_CATALOG_FILTERS,
+      search: 'castle',
+      sortBy: 'CreatedAt',
+      sortDirection: 'DESC',
+      page: 1,
+    }
+
+    const serialized = serializeCatalogUrlParams(filters)
+    // Explicit CreatedAt during search is shareable, even though it equals the browse default.
+    expect(serialized.get('sortBy')).toBe('CreatedAt')
+    expect(serialized.get('sortDirection')).toBeNull() // DESC is the default for CreatedAt
+
+    const parsed = parseCatalogUrlParams(serialized)
+    expect(parsed.sortBy).toBe('CreatedAt')
+    expect(parsed.sortDirection).toBe('DESC')
+    expect(parsed.search).toBe('castle')
+  })
+
+  it('round-trips explicit URL sort and preserves shareability', () => {
     const initialFilters: Partial<CatalogFilters> = {
       search: 'medieval castle',
       sortBy: 'Title',
@@ -70,12 +102,37 @@ describe('Catalog sort and search regression contracts', () => {
     expect(descParsed.sortDirection).toBe('DESC')
   })
 
-  it('preserves default sorting (CreatedAt DESC) when URL has no sort parameters', () => {
-    const emptyParams = new URLSearchParams('search=tree')
-    const parsed = parseCatalogUrlParams(emptyParams)
+  it('uses relevance for a search URL that carries only search, and browse default without search', () => {
+    // Search with no sort params -> relevance mode.
+    const searchOnly = new URLSearchParams('search=tree')
+    const parsedSearch = parseCatalogUrlParams(searchOnly)
+    expect(parsedSearch.search).toBe('tree')
+    expect(parsedSearch.sortBy).toBe('Relevance')
+    expect(parsedSearch.sortDirection).toBe('DESC')
 
-    expect(parsed.search).toBe('tree')
-    expect(parsed.sortBy).toBe('CreatedAt')
-    expect(parsed.sortDirection).toBe('DESC')
+    // No search, no sort params -> browse default (CreatedAt DESC).
+    const emptyParams = new URLSearchParams('')
+    const parsedDefault = parseCatalogUrlParams(emptyParams)
+    expect(parsedDefault.sortBy).toBe('CreatedAt')
+    expect(parsedDefault.sortDirection).toBe('DESC')
+
+    // No search but an explicit non-default sort remains shareable.
+    const titleOnly = parseCatalogUrlParams(new URLSearchParams('sortBy=Title'))
+    expect(titleOnly.sortBy).toBe('Title')
+    expect(titleOnly.sortDirection).toBe('ASC')
+  })
+
+  it('clearing search falls back to browse default and never leaves relevance behind', () => {
+    const relevance = parseCatalogUrlParams(new URLSearchParams('search=sword'))
+    expect(relevance.sortBy).toBe('Relevance')
+
+    // Simulate the UI resetting search with a relevance-mode filter object.
+    const cleared = serializeCatalogUrlParams({ ...DEFAULT_CATALOG_FILTERS, sortBy: 'Relevance' })
+    expect(cleared.get('sortBy')).toBeNull()
+    expect(cleared.toString()).toBe('')
+
+    const parsedCleared = parseCatalogUrlParams(cleared)
+    expect(parsedCleared.sortBy).toBe('CreatedAt')
+    expect(parsedCleared.sortDirection).toBe('DESC')
   })
 })

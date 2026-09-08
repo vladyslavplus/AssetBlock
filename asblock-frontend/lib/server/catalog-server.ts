@@ -90,7 +90,7 @@ export const getCatalogPageCached = cache(
       if (!res.ok) {
         return null
       }
-      const data = await readJson<PagedResultDto<AssetListItemApi>>(res)
+      const data = await readJson<PagedResultDto<AssetListItemApi> & { isTruncated?: boolean }>(res)
       if (!data) return null
       const totalPages =
         CATALOG_ASSETS_PAGE_SIZE > 0 ? Math.ceil(data.totalCount / CATALOG_ASSETS_PAGE_SIZE) : 0
@@ -100,6 +100,7 @@ export const getCatalogPageCached = cache(
         page: data.page,
         pageSize: CATALOG_ASSETS_PAGE_SIZE,
         totalPages,
+        isTruncated: data.isTruncated ?? false,
       }
     } catch {
       return null
