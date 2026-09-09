@@ -167,7 +167,9 @@ public sealed partial class AssetProcessingLifecycleStore(
                 {nextJobId}, {assetId}, {assetVersionId}, 'MALWARE_SCAN', 1, 'QUEUED', 'QUEUED',
                 0, {maxAttempts}, {dbNow}, {dbNow}, {dbNow}, CAST({malwarePayload} AS jsonb)
             )
-            ON CONFLICT ("AssetVersionId", "Type", "DefinitionVersion") DO NOTHING
+            ON CONFLICT ("AssetVersionId", "Type", "DefinitionVersion")
+            WHERE "Type" <> 'EMBEDDING_GENERATION'
+            DO NOTHING
             """, cancellationToken);
 
         // 7. Mark ARCHIVE_INSPECTION job as SUCCEEDED

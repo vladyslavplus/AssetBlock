@@ -356,12 +356,8 @@ public static class SearchBenchmarkTailRunner
             }
         }
 
-        // Synthesize attribution
-        var attributionSb = new StringBuilder();
-        attributionSb.AppendLine("### Benchmark Tail Attribution Analysis");
-        attributionSb.AppendLine(CultureInfo.InvariantCulture, $"- Prescribed 50k lexical queries evaluated: {sampleCount}. Latency: p50={p50Ms:F1}ms, p95={p95Ms:F1}ms, max={maxMs:F1}ms.");
-        attributionSb.AppendLine("- Measured slowest queries exhibited elevated database execution time primarily during multi-branch matching and totalCount aggregation.");
-        var reportAttribution = attributionSb.ToString();
+        // Measured diagnostics only; separate timing/EXPLAIN runs do not prove causality.
+        var reportAttribution = BuildTailAttributionSummary(sampleCount, p50Ms, p95Ms, maxMs);
 
         var reportData = new BenchmarkTailReportData(
             Provenance: provenance,
@@ -389,6 +385,19 @@ public static class SearchBenchmarkTailRunner
         Console.WriteLine("==========================================================");
 
         return Program.EXIT_SUCCESS;
+    }
+
+    /// <summary>
+    /// Builds the measured-only attribution block for tail reports.
+    /// Separate timing and EXPLAIN executions do not prove causal bottleneck attribution.
+    /// </summary>
+    public static string BuildTailAttributionSummary(int sampleCount, double p50Ms, double p95Ms, double maxMs)
+    {
+        var attributionSb = new StringBuilder();
+        attributionSb.AppendLine("### Benchmark Tail Measured Diagnostics");
+        attributionSb.AppendLine(CultureInfo.InvariantCulture, $"- Prescribed 50k lexical queries evaluated: {sampleCount}. Latency: p50={p50Ms:F1}ms, p95={p95Ms:F1}ms, max={maxMs:F1}ms.");
+        attributionSb.AppendLine("- Per-role EXPLAIN (ANALYZE, BUFFERS) timings for selected ordinals are listed above. Causal bottleneck attribution: unknown (separate timing and EXPLAIN runs do not prove causality).");
+        return attributionSb.ToString();
     }
 
     private static string DetectLexicalQueryRole(string sql)
@@ -524,7 +533,7 @@ public static class SearchBenchmarkTailRunner
             sb.AppendLine();
         }
 
-        sb.AppendLine("## Bottleneck Attribution");
+        sb.AppendLine("## Measured Per-Role EXPLAIN Timings");
         sb.AppendLine(reportData.AttributionSummary);
 
         File.WriteAllText(mdPath, sb.ToString(), Encoding.UTF8);

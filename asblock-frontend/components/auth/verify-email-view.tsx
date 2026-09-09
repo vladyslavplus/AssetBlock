@@ -49,7 +49,9 @@ export function VerifyEmailView() {
   })
 
   useEffect(() => {
-    confirmFromHash()
+    queueMicrotask(() => {
+      confirmFromHash()
+    })
   }, [])
 
   return (

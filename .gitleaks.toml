@@ -6,6 +6,21 @@ title = "AssetBlock gitleaks"
 [extend]
 useDefault = true
 
+# Public Ollama model digest used as MODEL_KEY fixture (canonical appsettings Digest), not a credential.
+# Narrow rule+file+exact-value allowlist; does not suppress other generic-api-key findings.
+[[rules]]
+id = "generic-api-key"
+
+    [[rules.allowlists]]
+    description = "Confirmed false positive: embeddinggemma model digest fixture in BoundedQueryVectorCacheTests"
+    condition = "AND"
+    paths = [
+      '''asblock-backend/AssetBlock\.Infrastructure\.Tests/Services/BoundedQueryVectorCacheTests\.cs'''
+    ]
+    regexes = [
+      '''e84a7acc23943b7a589852cf6da122f0b925631b7884f297a001303dff54ffe6'''
+    ]
+
 [allowlist]
 description = "Test fixtures"
 regexes = [

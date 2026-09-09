@@ -226,7 +226,7 @@ public sealed class SearchBenchmarkTailTests
                 LexicalP95Ms: 750.0,
                 LexicalMaxMs: 1100.0,
                 SelectedDiagnostics: [diag],
-                AttributionSummary: "Correlated with result count.");
+                AttributionSummary: SearchBenchmarkTailRunner.BuildTailAttributionSummary(1000, 34.2, 750.0, 1100.0));
 
             // Act
             (var jsonPath, var mdPath) = SearchBenchmarkTailRunner.WriteTailReport(reportData, tempDir);
@@ -239,11 +239,93 @@ public sealed class SearchBenchmarkTailTests
             mdContent.Should().Contain("AssetBlock Benchmark-Tail Exploratory Diagnostic Evidence");
             mdContent.Should().Contain("Ordinal 42 (Slowest Tail)");
             mdContent.Should().Contain("450.20 ms");
+            mdContent.Should().Contain("## Measured Per-Role EXPLAIN Timings");
+            mdContent.Should().Contain("Causal bottleneck attribution: unknown");
             mdContent.Should().NotContain("SELECT ");
             mdContent.Should().NotContain("password");
             mdContent.Should().NotContain("secret");
             mdContent.Should().NotContain("PERFORMANCE_TARGETS_MET");
             mdContent.Should().NotContain("Rollout Verdict"); // Diagnostic mode must not have rollout verdict
+            mdContent.Should().NotContain("primarily");
+            mdContent.Should().NotContain("multi-branch");
+        }
+        finally
+        {
+            if (Directory.Exists(tempDir))
+            {
+                Directory.Delete(tempDir, recursive: true);
+            }
+        }
+    }
+
+    [Fact]
+    public void BuildTailAttributionSummary_WhenEmittingDiagnostics_DoesNotClaimCausalBottleneck()
+    {
+        var summary = SearchBenchmarkTailRunner.BuildTailAttributionSummary(
+            sampleCount: 1000,
+            p50Ms: 33.6,
+            p95Ms: 418.5,
+            maxMs: 726.7);
+
+        summary.Should().Contain("Causal bottleneck attribution: unknown");
+        summary.Should().Contain("p50=33.6ms");
+        summary.Should().Contain("p95=418.5ms");
+        summary.Should().NotContain("primarily");
+        summary.Should().NotContain("multi-branch");
+        summary.Should().NotContain("totalCount aggregation");
+        summary.Should().NotContain("ANN");
+        summary.Should().NotContain("HNSW");
+    }
+
+    [Fact]
+    public void WriteTailReport_WhenAttributionProvided_PreservesMeasuredOnlyLanguage()
+    {
+        var tempDir = Path.Combine(Path.GetTempPath(), $"tail-report-attr-{Guid.NewGuid():N}");
+        try
+        {
+            var provenance = new SystemEnvironmentProvenance(
+                OperatingSystem: "Windows",
+                Architecture: "X64",
+                CpuCores: 8,
+                TotalRamBytes: 32_000_000_000,
+                GitCommit: "45df74412f8cc195d1da43acabcf2ed86f50da74",
+                PostgresVersion: "PostgreSQL 16",
+                PgVectorVersion: "0.8.6",
+                ContainerImageDigest: "sha256:abc123",
+                HnswState: "absent",
+                SourceFingerprint: "45df744-test");
+
+            var options = new EmbeddingOptions
+            {
+                Provider = "Ollama",
+                Model = "embeddinggemma:300m-qat-q8_0",
+                Revision = "manifest-e84a",
+                Digest = "sha256:e84a",
+                Dimension = 768,
+                ContentSchemaVersion = "asset-public-metadata-v1"
+            };
+
+            var attribution = SearchBenchmarkTailRunner.BuildTailAttributionSummary(1000, 34.2, 750.0, 1100.0);
+            var reportData = new BenchmarkTailReportData(
+                Provenance: provenance,
+                PinnedModel: options,
+                CorpusSize: 50000,
+                WarmupCount: 100,
+                SampleCount: 1000,
+                Concurrency: 1,
+                LexicalP50Ms: 34.2,
+                LexicalP95Ms: 750.0,
+                LexicalMaxMs: 1100.0,
+                SelectedDiagnostics: [],
+                AttributionSummary: attribution);
+
+            (_, var mdPath) = SearchBenchmarkTailRunner.WriteTailReport(reportData, tempDir);
+            var mdContent = File.ReadAllText(mdPath);
+
+            mdContent.Should().Contain("## Measured Per-Role EXPLAIN Timings");
+            mdContent.Should().Contain("Causal bottleneck attribution: unknown");
+            mdContent.Should().NotContain("## Bottleneck Attribution");
+            mdContent.Should().NotContain("primarily during multi-branch");
         }
         finally
         {

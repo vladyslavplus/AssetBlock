@@ -49,7 +49,9 @@ export function ConfirmEmailChangeView() {
   })
 
   useEffect(() => {
-    confirmFromHash()
+    queueMicrotask(() => {
+      confirmFromHash()
+    })
   }, [])
 
   return (

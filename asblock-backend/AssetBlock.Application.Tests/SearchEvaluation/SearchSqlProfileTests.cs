@@ -216,6 +216,158 @@ public sealed class SearchSqlProfileTests
         markdown.Should().Contain("Seq Scan on assets");
         markdown.Should().Contain("Filter-Eligible: 50,000");
         markdown.Should().Contain("**Diagnostic Repetitions:** Warmup = 5, Samples = 20");
+        markdown.Should().Contain("## Next Evidence Required");
+        markdown.Should().Contain("prescribed exact-search benchmark");
+        markdown.Should().Contain("24/24");
+        markdown.Should().Contain("No ANN/HNSW recommendation");
+        markdown.Should().Contain("Attribution:** unknown");
+        markdown.Should().NotContain("isolated ANN evaluation");
+        markdown.Should().NotContain("Next Architecture Decision");
+        markdown.Should().NotContain("Dominant Bottleneck");
+    }
+
+    [Fact]
+    public void DetermineDominantBottleneck_WhenBothBranchesPresent_ReportsMeasuredTimesWithoutCausalClaim()
+    {
+        var dummyPlan = new SanitizedPlanNode(
+            NodeType: "Limit",
+            RelationName: null,
+            IndexName: null,
+            ParentRelationship: null,
+            JoinType: null,
+            SortMethod: null,
+            SortSpaceType: null,
+            SortSpaceUsedKb: null,
+            PeakMemoryUsageKb: null,
+            ParallelAware: false,
+            AsyncCapable: false,
+            StartupCost: 0,
+            TotalCost: 1,
+            PlanRows: 1,
+            PlanWidth: 1,
+            ActualStartupTimeMs: 0,
+            ActualTotalTimeMs: 1,
+            ActualRows: 1,
+            ActualLoops: 1,
+            SharedHitBlocks: 0,
+            SharedReadBlocks: 0,
+            SharedDirtiedBlocks: 0,
+            SharedWrittenBlocks: 0,
+            TempReadBlocks: 0,
+            TempWrittenBlocks: 0,
+            ChildPlans: []);
+
+        var hybridQueries = new List<QueryProfileResult>
+        {
+            new(
+                Role: "Semantic Candidates",
+                DatabaseExecutionTimeMs: 180.0,
+                DatabasePlanningTimeMs: 1.0,
+                ResultRows: 201,
+                TotalPlanNodes: 1,
+                SharedHitBlocks: 10,
+                SharedReadBlocks: 0,
+                TempBlocks: 0,
+                HasSortSpill: false,
+                SortMethod: null,
+                SortSpaceUsedKb: null,
+                PrimaryNodeSummary: "Limit",
+                Plan: dummyPlan),
+            new(
+                Role: "Hybrid Lexical Candidates",
+                DatabaseExecutionTimeMs: 90.0,
+                DatabasePlanningTimeMs: 1.0,
+                ResultRows: 201,
+                TotalPlanNodes: 1,
+                SharedHitBlocks: 10,
+                SharedReadBlocks: 0,
+                TempBlocks: 0,
+                HasSortSpill: false,
+                SortMethod: null,
+                SortSpaceUsedKb: null,
+                PrimaryNodeSummary: "Limit",
+                Plan: dummyPlan)
+        };
+
+        var note = SearchSqlProfiler.DetermineDominantBottleneck(hybridQueries);
+
+        note.Should().Contain("semantic=180.0ms");
+        note.Should().Contain("lexical=90.0ms");
+        note.Should().Contain("Causal attribution: unknown");
+        note.Should().NotContain("dominates");
+        note.Should().NotContain("full exact scan");
+        note.Should().NotContain("ANN");
+        note.Should().NotContain("HNSW");
+    }
+
+    [Fact]
+    public void SynthesizeBottleneckAttribution_WhenSummarizing_DoesNotRecommendAnnOrHnsw()
+    {
+        var semNode = new SanitizedPlanNode(
+            NodeType: "Seq Scan",
+            RelationName: "asset_embeddings",
+            IndexName: null,
+            ParentRelationship: null,
+            JoinType: null,
+            SortMethod: "quicksort",
+            SortSpaceType: "Memory",
+            SortSpaceUsedKb: 32,
+            PeakMemoryUsageKb: null,
+            ParallelAware: false,
+            AsyncCapable: false,
+            StartupCost: 0.0,
+            TotalCost: 100.0,
+            PlanRows: 201,
+            PlanWidth: 768,
+            ActualStartupTimeMs: 0.1,
+            ActualTotalTimeMs: 120.0,
+            ActualRows: 201,
+            ActualLoops: 1.0,
+            SharedHitBlocks: 1000,
+            SharedReadBlocks: 0,
+            SharedDirtiedBlocks: 0,
+            SharedWrittenBlocks: 0,
+            TempReadBlocks: 0,
+            TempWrittenBlocks: 0,
+            ChildPlans: []);
+
+        var query = new QueryProfileResult(
+            Role: "Semantic Candidates",
+            DatabaseExecutionTimeMs: 120.0,
+            DatabasePlanningTimeMs: 0.5,
+            ResultRows: 201,
+            TotalPlanNodes: 1,
+            SharedHitBlocks: 1000,
+            SharedReadBlocks: 0,
+            TempBlocks: 0,
+            HasSortSpill: false,
+            SortMethod: "quicksort",
+            SortSpaceUsedKb: 32,
+            PrimaryNodeSummary: "Seq Scan",
+            Plan: semNode);
+
+        var scenario = new ScenarioProfileResult(
+            ScenarioId: "NO-ANN",
+            Description: "No ANN recommendation scenario",
+            FilterEligibleCount: 50000,
+            SemanticEligibleCount: 50000,
+            FusedResultCount: 201,
+            HybridHandlerLatency: new ScenarioLatencyMetrics(10, 150.0, 150.0, 150.0, 150.0, 150.0),
+            HybridStoreLatency: new ScenarioLatencyMetrics(10, 140.0, 140.0, 140.0, 140.0, 140.0),
+            LexicalFallbackHandlerLatency: new ScenarioLatencyMetrics(0, 0, 0, 0, 0, 0),
+            LexicalFallbackStoreLatency: new ScenarioLatencyMetrics(0, 0, 0, 0, 0, 0),
+            HybridQueries: [query],
+            LexicalFallbackQueries: [],
+            DominantBottleneckSummary: "Measured hybrid branch DB times");
+
+        var summary = SearchSqlProfiler.SynthesizeBottleneckAttribution([scenario]);
+
+        summary.Should().Contain("Causal attribution: unknown");
+        summary.Should().Contain("prescribed exact-search benchmark");
+        summary.Should().Contain("24/24");
+        summary.Should().Contain("No ANN/HNSW recommendation");
+        summary.Should().NotContain("isolated ANN");
+        summary.Should().NotContain("Vector Distance Retrieval Bottleneck");
     }
 
     [Fact]

@@ -396,16 +396,17 @@ public static class SearchEvaluationReportWriter
                 sb.AppendLine(CultureInfo.InvariantCulture, $"| {q.Role} | {q.ResultRows} | {q.DatabaseExecutionTimeMs:F2} | {q.DatabasePlanningTimeMs:F2} | {q.TotalPlanNodes} | {q.SharedHitBlocks}/{q.SharedReadBlocks} | {spillStr} | {sortStr} | `{q.PrimaryNodeSummary}` |");
             }
             sb.AppendLine();
-            sb.AppendLine(CultureInfo.InvariantCulture, $"- **Dominant Bottleneck:** {scenario.DominantBottleneckSummary}");
+            sb.AppendLine(CultureInfo.InvariantCulture, $"- **Measured branch timings:** {scenario.DominantBottleneckSummary}");
             sb.AppendLine();
         }
 
-        sb.AppendLine("## Bottleneck Attribution & Technical Synthesis");
+        sb.AppendLine("## Observed Timings & Protocol Limits");
         sb.AppendLine(data.BottleneckAttributionSummary);
         sb.AppendLine();
-        sb.AppendLine("## Next Architecture Decision");
-        sb.AppendLine("- **Current State:** Exact pgvector scan on 50,000 documents; HNSW index is absent and unmigrated.");
-        sb.AppendLine("- **Recommendation:** Proceed with either targeted persistence refactoring or an isolated ANN evaluation benchmark.");
+        sb.AppendLine("## Next Evidence Required");
+        sb.AppendLine("- **Observed state:** Exact pgvector scan on 50,000 documents in this diagnostic; HNSW index is absent (observational only).");
+        sb.AppendLine("- **Required next evidence:** Complete prescribed exact-search benchmark (sizes 1000/10000/50000, warmup 100, samples 1000, concurrency 1/10) with 24/24 cells. Seven c1 diagnostic scenarios alone do not justify index or architecture changes.");
+        sb.AppendLine("- **Attribution:** unknown from this diagnostic. No ANN/HNSW recommendation.");
         sb.AppendLine("- **Release Prerequisite Reminder:** Human-adjudicated relevance judgments (qrels) are strictly mandatory for release-quality evaluation and sign-off.");
         sb.AppendLine();
         sb.AppendLine("> Note: Structural and numeric metrics only. Raw SQL, queries, parameter values, vectors, sort keys, and exception payloads are completely omitted.");

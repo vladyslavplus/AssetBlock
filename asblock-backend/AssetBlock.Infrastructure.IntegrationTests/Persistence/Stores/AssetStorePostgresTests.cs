@@ -1182,6 +1182,163 @@ public sealed class AssetStorePostgresTests(PostgresFixture fixture)
     }
 
     [Fact]
+    public async Task GetPaged_WhenPrimaryOverlapsDescTrigramAndDescOnlyExists_ShouldReturnExactDistinctTotalCount()
+    {
+        await using ApplicationDbContext db = await fixture.CreateCleanDbContext();
+        (User author, Category category) = await TestData.SeedAuthorAndCategory(db);
+        var store = new AssetStore(db);
+
+        // Primary (title) also has a description trigram hit for the same query — must count once.
+        Asset primaryAndDesc = TestData.CreateAsset(
+            author.Id,
+            category.Id,
+            title: "Excalibur",
+            description: "Excalbr legendary blade");
+        // Description-trigram-only — must still contribute to exact totalCount.
+        Asset descOnly = TestData.CreateAsset(
+            author.Id,
+            category.Id,
+            title: "Mystic Relic",
+            description: "Excalbr");
+        Asset nonMatch = TestData.CreateAsset(
+            author.Id,
+            category.Id,
+            title: "Wooden Shield",
+            description: "Sturdy defensive shield");
+
+        await AddWithReadyVersion(store, primaryAndDesc);
+        await AddWithReadyVersion(store, descOnly);
+        await AddWithReadyVersion(store, nonMatch);
+
+        CatalogPageResult<AssetListItem> result = await store.GetPaged(new GetAssetsRequest
+        {
+            Page = 1,
+            PageSize = 10,
+            Search = "Excalibur"
+        });
+
+        result.TotalCount.Should().Be(2);
+        result.Items.Select(a => a.Id).Should().BeEquivalentTo([primaryAndDesc.Id, descOnly.Id]);
+    }
+
+    [Fact]
+    public async Task GetPaged_WhenDescriptionIsNull_ShouldExcludeFromDescBranchesAndKeepExactTotal()
+    {
+        await using ApplicationDbContext db = await fixture.CreateCleanDbContext();
+        (User author, Category category) = await TestData.SeedAuthorAndCategory(db);
+        var store = new AssetStore(db);
+
+        Asset titleHit = TestData.CreateAsset(author.Id, category.Id, title: "Excalibur", description: null);
+        Asset nullDescOnly = TestData.CreateAsset(author.Id, category.Id, title: "Wooden Shield", description: null);
+        Asset descOnly = TestData.CreateAsset(author.Id, category.Id, title: "Mystic Relic", description: "Excalbr");
+
+        await AddWithReadyVersion(store, titleHit);
+        await AddWithReadyVersion(store, nullDescOnly);
+        await AddWithReadyVersion(store, descOnly);
+
+        CatalogPageResult<AssetListItem> result = await store.GetPaged(new GetAssetsRequest
+        {
+            Page = 1,
+            PageSize = 10,
+            Search = "Excalibur"
+        });
+
+        result.TotalCount.Should().Be(2);
+        result.Items.Select(a => a.Id).Should().BeEquivalentTo([titleHit.Id, descOnly.Id]);
+    }
+
+    [Fact]
+    public async Task GetPaged_WhenSearchMatchesNothing_ShouldReturnZeroTotalCount()
+    {
+        await using ApplicationDbContext db = await fixture.CreateCleanDbContext();
+        (User author, Category category) = await TestData.SeedAuthorAndCategory(db);
+        var store = new AssetStore(db);
+
+        Asset asset = TestData.CreateAsset(author.Id, category.Id, title: "Wooden Shield", description: "Sturdy oak");
+        await AddWithReadyVersion(store, asset);
+
+        CatalogPageResult<AssetListItem> result = await store.GetPaged(new GetAssetsRequest
+        {
+            Page = 1,
+            PageSize = 10,
+            Search = "zzzznotamatchtoken"
+        });
+
+        result.TotalCount.Should().Be(0);
+        result.Items.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task GetPaged_WhenDeepPagingAcrossPrimaryAndDescOnly_ShouldKeepExactTotalAndStablePages()
+    {
+        await using ApplicationDbContext db = await fixture.CreateCleanDbContext();
+        (User author, Category category) = await TestData.SeedAuthorAndCategory(db);
+        var store = new AssetStore(db);
+        DateTimeOffset t0 = DateTimeOffset.UtcNow.AddMinutes(-40);
+
+        Asset primary = TestData.CreateAsset(author.Id, category.Id, title: "Excalibur", createdAt: t0);
+        Asset descA = TestData.CreateAsset(author.Id, category.Id, title: "Relic A", description: "Excalbr", createdAt: t0.AddMinutes(1));
+        Asset descB = TestData.CreateAsset(author.Id, category.Id, title: "Relic B", description: "Excalbr", createdAt: t0.AddMinutes(2));
+
+        await AddWithReadyVersion(store, primary);
+        await AddWithReadyVersion(store, descA);
+        await AddWithReadyVersion(store, descB);
+
+        CatalogPageResult<AssetListItem> page1 = await store.GetPaged(new GetAssetsRequest
+        {
+            Page = 1,
+            PageSize = 2,
+            Search = "Excalibur"
+        });
+        CatalogPageResult<AssetListItem> page2 = await store.GetPaged(new GetAssetsRequest
+        {
+            Page = 2,
+            PageSize = 2,
+            Search = "Excalibur"
+        });
+
+        page1.TotalCount.Should().Be(3);
+        page2.TotalCount.Should().Be(3);
+        page1.Items.Should().HaveCount(2);
+        page2.Items.Should().HaveCount(1);
+
+        var allIds = page1.Items.Select(a => a.Id).Concat(page2.Items.Select(a => a.Id)).ToList();
+        allIds.Should().HaveCount(3);
+        allIds.Distinct().Should().HaveCount(3);
+        allIds.Should().BeEquivalentTo([primary.Id, descA.Id, descB.Id]);
+    }
+
+    [Fact]
+    public async Task GetPaged_WhenCategoryFilterWithMixedMatches_ShouldCountOnlyFilteredExactUniques()
+    {
+        await using ApplicationDbContext db = await fixture.CreateCleanDbContext();
+        (User author, Category category) = await TestData.SeedAuthorAndCategory(db);
+        Category otherCategory = TestData.CreateCategory("Other Category", "other-category");
+        db.Categories.Add(otherCategory);
+        await db.SaveChangesAsync();
+        var store = new AssetStore(db);
+
+        Asset inCategoryPrimary = TestData.CreateAsset(author.Id, category.Id, title: "Excalibur");
+        Asset inCategoryDescOnly = TestData.CreateAsset(author.Id, category.Id, title: "Relic", description: "Excalbr");
+        Asset outCategory = TestData.CreateAsset(author.Id, otherCategory.Id, title: "Excalibur Out");
+
+        await AddWithReadyVersion(store, inCategoryPrimary);
+        await AddWithReadyVersion(store, inCategoryDescOnly);
+        await AddWithReadyVersion(store, outCategory);
+
+        CatalogPageResult<AssetListItem> result = await store.GetPaged(new GetAssetsRequest
+        {
+            Page = 1,
+            PageSize = 10,
+            Search = "Excalibur",
+            CategoryId = category.Id
+        });
+
+        result.TotalCount.Should().Be(2);
+        result.Items.Select(a => a.Id).Should().BeEquivalentTo([inCategoryPrimary.Id, inCategoryDescOnly.Id]);
+    }
+
+    [Fact]
     public async Task GetPaged_WhenPrimaryCandidatesSaturatePage_ShouldRetainScoreHierarchyAndOrder()
     {
         await using ApplicationDbContext db = await fixture.CreateCleanDbContext();

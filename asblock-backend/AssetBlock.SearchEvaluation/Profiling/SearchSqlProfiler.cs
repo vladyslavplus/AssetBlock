@@ -222,11 +222,11 @@ public static class SearchSqlProfiler
             Console.WriteLine($"  Filter-Eligible: {profileResult.FilterEligibleCount:N0} | Semantic-Eligible: {profileResult.SemanticEligibleCount:N0} | Fused: {profileResult.FusedResultCount:N0}");
             Console.WriteLine($"  Hybrid Handler:  p50={profileResult.HybridHandlerLatency.P50Ms:F1}ms, p95={profileResult.HybridHandlerLatency.P95Ms:F1}ms | Store: p50={profileResult.HybridStoreLatency.P50Ms:F1}ms, p95={profileResult.HybridStoreLatency.P95Ms:F1}ms");
             Console.WriteLine($"  Lexical Handler: p50={profileResult.LexicalFallbackHandlerLatency.P50Ms:F1}ms, p95={profileResult.LexicalFallbackHandlerLatency.P95Ms:F1}ms | Store: p50={profileResult.LexicalFallbackStoreLatency.P50Ms:F1}ms, p95={profileResult.LexicalFallbackStoreLatency.P95Ms:F1}ms");
-            Console.WriteLine($"  Bottleneck:      {profileResult.DominantBottleneckSummary}");
+            Console.WriteLine($"  Timing note:    {profileResult.DominantBottleneckSummary}");
             Console.WriteLine();
         }
 
-        // 5. Synthesize bottleneck attribution
+        // 5. Synthesize observed timing summary (no causal ANN/HNSW recommendation)
         var attributionSummary = SynthesizeBottleneckAttribution(scenarioResults);
 
         var reportData = new SqlProfileReportData(
@@ -648,7 +648,7 @@ public static class SearchSqlProfiler
         return null;
     }
 
-    private static string DetermineDominantBottleneck(
+    public static string DetermineDominantBottleneck(
         List<QueryProfileResult> hybridQueries)
     {
         QueryProfileResult? sem = hybridQueries.FirstOrDefault(q => q.Role == "Semantic Candidates");
@@ -656,18 +656,10 @@ public static class SearchSqlProfiler
 
         if (sem != null && lex != null)
         {
-            if (sem.DatabaseExecutionTimeMs > lex.DatabaseExecutionTimeMs * 1.5)
-            {
-                return $"Semantic candidate retrieval dominates DB time ({sem.DatabaseExecutionTimeMs:F1}ms vs {lex.DatabaseExecutionTimeMs:F1}ms lexical) via full exact scan.";
-            }
-            if (lex.DatabaseExecutionTimeMs > sem.DatabaseExecutionTimeMs * 1.5)
-            {
-                return $"Lexical candidate retrieval dominates DB time ({lex.DatabaseExecutionTimeMs:F1}ms vs {sem.DatabaseExecutionTimeMs:F1}ms semantic).";
-            }
-            return $"Balanced candidate retrieval: semantic={sem.DatabaseExecutionTimeMs:F1}ms, lexical={lex.DatabaseExecutionTimeMs:F1}ms.";
+            return $"Measured hybrid branch DB times: semantic={sem.DatabaseExecutionTimeMs:F1}ms, lexical={lex.DatabaseExecutionTimeMs:F1}ms. Causal attribution: unknown.";
         }
 
-        return "Single candidate branch retrieval observed.";
+        return "Single candidate branch retrieval observed. Causal attribution: unknown.";
     }
 
     public static async Task<(int FilterEligible, int SemanticEligible)> CountEligibleAssetsAsync(
@@ -847,16 +839,20 @@ public static class SearchSqlProfiler
             : $"Sort Space Analysis confirmed: In-memory sorting observed across all evaluated queries (0 disk temp blocks; observed sort methods: {(allSortMethods.Count > 0 ? string.Join(", ", allSortMethods) : "none")}).";
 
         return $"""
-            1. Vector Distance Retrieval Bottleneck:
+            1. Observed Semantic Candidate Timings:
                Across evaluated scenarios, Semantic Candidate retrieval averaged {semMean:F1} ms in PostgreSQL execution time.
                {semPlanDesc}
-            2. Lexical Retrieval Performance:
+               Causal attribution: unknown.
+            2. Observed Lexical Candidate Timings:
                Hybrid Lexical Candidate retrieval averaged {lexMean:F1} ms in PostgreSQL execution time.
                {lexPlanDesc}
+               Causal attribution: unknown.
             3. Sort & Memory Spill:
                {sortDesc}
             4. Execution Breakdown:
                {handlerOverheadSummary}
+            5. Protocol Limits:
+               Seven c1 diagnostic scenarios are exploratory only. Required next evidence: complete prescribed exact-search benchmark (24/24 cells). No ANN/HNSW recommendation from this diagnostic.
             """;
     }
 
