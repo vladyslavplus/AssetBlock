@@ -1,5 +1,7 @@
 using System.Diagnostics;
 using System.Runtime.InteropServices;
+using System.Security.Cryptography;
+using System.Text;
 using AssetBlock.Infrastructure.Persistence;
 using AssetBlock.Infrastructure.Persistence.Interceptors;
 using Microsoft.EntityFrameworkCore;
@@ -17,7 +19,9 @@ public sealed record SystemEnvironmentProvenance(
     string ContainerImageDigest,
     string PostgresVersion,
     string PgVectorVersion,
-    string HnswState);
+    string HnswState,
+    bool IsGitDirty = false,
+    string? SourceFingerprint = null);
 
 public sealed class SearchEvaluationDbFixture : IAsyncDisposable
 {
@@ -25,9 +29,21 @@ public sealed class SearchEvaluationDbFixture : IAsyncDisposable
 
     private static readonly TimeSpan _startTimeout = TimeSpan.FromMinutes(2);
     private readonly PostgreSqlContainer _postgres = new PostgreSqlBuilder(PGVECTOR_IMAGE_DIGEST).Build();
+    private NpgsqlDataSource? _dataSource;
     private bool _initialized;
 
-    private string ConnectionString => _postgres.GetConnectionString();
+    public string ConnectionString => _postgres.GetConnectionString();
+
+    public NpgsqlConnection CreateConnection()
+    {
+        if (_dataSource == null)
+        {
+            var builder = new NpgsqlDataSourceBuilder(ConnectionString);
+            builder.UseVector();
+            _dataSource = builder.Build();
+        }
+        return _dataSource.CreateConnection();
+    }
 
     public async Task InitializeAsync(CancellationToken cancellationToken = default)
     {
@@ -105,6 +121,13 @@ public sealed class SearchEvaluationDbFixture : IAsyncDisposable
             hnswState = hnswIndexes.Count == 0 ? "absent" : $"present ({string.Join(", ", hnswIndexes)})";
         }
 
+        var isDirty = ResolveGitIsDirty();
+        if (gitCommit == "unknown-commit" || string.IsNullOrWhiteSpace(gitCommit))
+        {
+            gitCommit = "unknown";
+        }
+        var sourceFingerprint = ComputeSourceFingerprint();
+
         return new SystemEnvironmentProvenance(
             gitCommit,
             osDesc,
@@ -114,7 +137,126 @@ public sealed class SearchEvaluationDbFixture : IAsyncDisposable
             PGVECTOR_IMAGE_DIGEST,
             pgVersion,
             pgVectorVersion,
-            hnswState);
+            hnswState,
+            isDirty,
+            sourceFingerprint);
+    }
+
+    public static string ComputeSourceFingerprint(string? baseDirectory = null)
+    {
+        try
+        {
+            var root = baseDirectory ?? ResolveBackendSourceRoot();
+            if (string.IsNullOrEmpty(root) || !Directory.Exists(root))
+            {
+                return "unknown";
+            }
+
+            var allowedExtensions = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+            {
+                ".cs", ".json", ".csproj", ".sql"
+            };
+
+            var files = Directory.EnumerateFiles(root, "*.*", SearchOption.AllDirectories)
+                .Where(f => allowedExtensions.Contains(Path.GetExtension(f)))
+                .Where(f =>
+                {
+                    var normalized = f.Replace('/', Path.DirectorySeparatorChar).Replace('\\', Path.DirectorySeparatorChar);
+                    var sep = Path.DirectorySeparatorChar;
+                    return !normalized.Contains($"{sep}bin{sep}", StringComparison.OrdinalIgnoreCase)
+                        && !normalized.Contains($"{sep}obj{sep}", StringComparison.OrdinalIgnoreCase)
+                        && !normalized.Contains($"{sep}artifacts{sep}", StringComparison.OrdinalIgnoreCase)
+                        && !normalized.Contains($"{sep}.vs{sep}", StringComparison.OrdinalIgnoreCase)
+                        && !normalized.Contains($"{sep}.git{sep}", StringComparison.OrdinalIgnoreCase)
+                        && !normalized.Contains($"{sep}.idea{sep}", StringComparison.OrdinalIgnoreCase)
+                        && !normalized.Contains($"{sep}node_modules{sep}", StringComparison.OrdinalIgnoreCase)
+                        && !normalized.Contains($"{sep}TestResults{sep}", StringComparison.OrdinalIgnoreCase);
+                })
+                .Select(f => Path.GetRelativePath(root, f).Replace('\\', '/'))
+                .OrderBy(f => f, StringComparer.OrdinalIgnoreCase)
+                .ToList();
+
+            if (files.Count == 0)
+            {
+                return "unknown";
+            }
+
+            using var sha = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
+            foreach (var relPath in files)
+            {
+                var fullPath = Path.Combine(root, relPath);
+                sha.AppendData(Encoding.UTF8.GetBytes(relPath));
+                sha.AppendData(File.ReadAllBytes(fullPath));
+            }
+
+            var hashHex = Convert.ToHexString(sha.GetHashAndReset()).ToLowerInvariant();
+            var rawCommit = ResolveGitCommit();
+            var commitPrefix = (rawCommit == "unknown-commit" || string.IsNullOrWhiteSpace(rawCommit)) ? "unknown" : rawCommit;
+
+            return $"{commitPrefix}-src:{hashHex[..16]}";
+        }
+        catch
+        {
+            return "unknown";
+        }
+    }
+
+    private static string ResolveBackendSourceRoot()
+    {
+        var current = Directory.GetCurrentDirectory();
+        while (!string.IsNullOrEmpty(current))
+        {
+            var candidate = Path.Combine(current, "asblock-backend");
+            if (Directory.Exists(candidate))
+            {
+                return candidate;
+            }
+
+            if (File.Exists(Path.Combine(current, "AGENTS.md")))
+            {
+                return current;
+            }
+
+            DirectoryInfo? parent = Directory.GetParent(current);
+            if (parent == null)
+            {
+                break;
+            }
+
+            current = parent.FullName;
+        }
+
+        return AppContext.BaseDirectory;
+    }
+
+    private static bool ResolveGitIsDirty()
+    {
+        try
+        {
+            var psi = new ProcessStartInfo
+            {
+                FileName = "git",
+                Arguments = "status --porcelain",
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                UseShellExecute = false,
+                CreateNoWindow = true
+            };
+
+            using var process = Process.Start(psi);
+            if (process != null)
+            {
+                var output = process.StandardOutput.ReadToEnd();
+                process.WaitForExit(3000);
+                return !string.IsNullOrWhiteSpace(output);
+            }
+        }
+        catch
+        {
+            // ignored
+        }
+
+        return false;
     }
 
     private static string ResolveGitCommit()
@@ -152,6 +294,10 @@ public sealed class SearchEvaluationDbFixture : IAsyncDisposable
 
     public async ValueTask DisposeAsync()
     {
+        if (_dataSource != null)
+        {
+            await _dataSource.DisposeAsync();
+        }
         NpgsqlConnection.ClearAllPools();
         await _postgres.DisposeAsync();
     }

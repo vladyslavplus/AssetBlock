@@ -3,6 +3,7 @@ using System.Text;
 using System.Text.Json;
 using AssetBlock.Domain.Core.Primitives.AppSettingsOptions;
 using AssetBlock.SearchEvaluation.Infrastructure;
+using AssetBlock.SearchEvaluation.Profiling;
 
 namespace AssetBlock.SearchEvaluation.Reporting;
 
@@ -27,13 +28,48 @@ public sealed record CorpusBenchmarkResult(
     int SampleCount,
     List<ConcurrencyBenchmarkResult> ConcurrencyResults);
 
+public sealed record BenchmarkProtocolConformance(
+    bool IsPrescribed,
+    IReadOnlyList<int> PrescribedSizes,
+    IReadOnlyList<int> ActualSizes,
+    int PrescribedWarmup,
+    int ActualWarmup,
+    int PrescribedSamples,
+    int ActualSamples,
+    IReadOnlyList<int> PrescribedConcurrency,
+    IReadOnlyList<int> ActualConcurrency,
+    string Summary);
+
+public sealed record BenchmarkEvidenceCompleteness(
+    bool IsComplete,
+    bool SkipOllama,
+    int ExpectedCells,
+    int MeasuredCells,
+    int MissingOrFailedSamples,
+    int HiddenLexicalFallbacks,
+    int ProviderCallsInCachedPath,
+    int ResultCacheHitsInCachedPath,
+    IReadOnlyList<string> IncompletenessReasons);
+
+public sealed record BenchmarkPerformanceDecision(
+    bool Passed50KTargets,
+    bool IsPrescribedAndComplete,
+    bool ExactScanPassed,
+    bool HnswRecommended,
+    string RolloutVerdict,
+    string QualityGateRequirementNote,
+    IReadOnlyList<string> TargetDetails);
+
 public sealed record BenchmarkReportData(
     SystemEnvironmentProvenance Provenance,
     EmbeddingOptions PinnedModel,
     List<CorpusBenchmarkResult> CorpusResults,
     bool ExactScanPassed,
     string Conclusion,
-    bool IsPrescribedDecisionProtocol = true);
+    bool IsPrescribedDecisionProtocol = true,
+    BenchmarkProtocolConformance? ProtocolConformance = null,
+    BenchmarkEvidenceCompleteness? EvidenceCompleteness = null,
+    BenchmarkPerformanceDecision? PerformanceDecision = null);
 
 public sealed record BackfillEvidenceReportData(
     SystemEnvironmentProvenance Provenance,
@@ -215,19 +251,164 @@ public static class SearchEvaluationReportWriter
             }
         }
 
-        sb.AppendLine("## Benchmark Conclusion");
-        if (!data.IsPrescribedDecisionProtocol)
+        sb.AppendLine("## Benchmark Conclusion & Decisions");
+        if (data.ProtocolConformance != null)
         {
-            sb.AppendLine("- **Run Type:** `EXPLORATORY RUN (Non-prescribed parameters)`");
-            sb.AppendLine("- **Exact Scan Rollout Verdict:** `BLOCKED (Rollout decision not permitted)`");
+            sb.AppendLine("### Protocol Conformance");
+            sb.AppendLine(CultureInfo.InvariantCulture, $"- **Status:** {(data.ProtocolConformance.IsPrescribed ? "**PRESCRIBED PROTOCOL**" : "**EXPLORATORY PROTOCOL (Non-prescribed)**")}");
+            sb.AppendLine(CultureInfo.InvariantCulture, $"- **Prescribed Protocol:** Sizes=[{string.Join(", ", data.ProtocolConformance.PrescribedSizes)}], Warmup={data.ProtocolConformance.PrescribedWarmup}, Samples={data.ProtocolConformance.PrescribedSamples}, Concurrency=[{string.Join(", ", data.ProtocolConformance.PrescribedConcurrency)}]");
+            sb.AppendLine(CultureInfo.InvariantCulture, $"- **Actual Run Parameters:** Sizes=[{string.Join(", ", data.ProtocolConformance.ActualSizes)}], Warmup={data.ProtocolConformance.ActualWarmup}, Samples={data.ProtocolConformance.ActualSamples}, Concurrency=[{string.Join(", ", data.ProtocolConformance.ActualConcurrency)}]");
+            sb.AppendLine(CultureInfo.InvariantCulture, $"- **Protocol Summary:** {data.ProtocolConformance.Summary}");
+            sb.AppendLine();
+        }
+
+        if (data.EvidenceCompleteness != null)
+        {
+            sb.AppendLine("### Evidence Completeness");
+            sb.AppendLine(CultureInfo.InvariantCulture, $"- **Completeness Status:** {(data.EvidenceCompleteness.IsComplete ? "**COMPLETE**" : "**INCOMPLETE**")}");
+            sb.AppendLine(CultureInfo.InvariantCulture, $"- **Skip-Ollama Flag:** `{data.EvidenceCompleteness.SkipOllama}`");
+            sb.AppendLine(CultureInfo.InvariantCulture, $"- **Measured Cells:** {data.EvidenceCompleteness.MeasuredCells} / {data.EvidenceCompleteness.ExpectedCells}");
+            sb.AppendLine(CultureInfo.InvariantCulture, $"- **Missing or Failed Samples:** {data.EvidenceCompleteness.MissingOrFailedSamples}");
+            sb.AppendLine(CultureInfo.InvariantCulture, $"- **Hidden Lexical Fallbacks Observed:** {data.EvidenceCompleteness.HiddenLexicalFallbacks}");
+            sb.AppendLine(CultureInfo.InvariantCulture, $"- **Embedding Provider Calls in Cached Path:** {data.EvidenceCompleteness.ProviderCallsInCachedPath}");
+            sb.AppendLine(CultureInfo.InvariantCulture, $"- **Catalog Result Cache Hits in Cached Path:** {data.EvidenceCompleteness.ResultCacheHitsInCachedPath}");
+            if (data.EvidenceCompleteness.IncompletenessReasons.Count > 0)
+            {
+                sb.AppendLine("- **Incompleteness Reasons:**");
+                foreach (var reason in data.EvidenceCompleteness.IncompletenessReasons)
+                {
+                    sb.AppendLine(CultureInfo.InvariantCulture, $"  - {reason}");
+                }
+            }
+            sb.AppendLine();
+        }
+
+        if (data.PerformanceDecision != null)
+        {
+            sb.AppendLine("### Performance Decision & Rollout Verdict");
+            sb.AppendLine(CultureInfo.InvariantCulture, $"- **50k Target Thresholds Met:** {(data.PerformanceDecision.Passed50KTargets ? "**YES**" : "**NO**")}");
+            sb.AppendLine(CultureInfo.InvariantCulture, $"- **Exact Scan Sufficiency:** {(data.PerformanceDecision.ExactScanPassed ? "**PASSED**" : "**FAILED / NOT PASSING**")}");
+            sb.AppendLine(CultureInfo.InvariantCulture, $"- **HNSW Index Recommended:** {(data.PerformanceDecision.HnswRecommended ? "**YES (Vector retrieval bottleneck at 50k)**" : "**NO (Deferred / not indicated)**")}");
+            sb.AppendLine(CultureInfo.InvariantCulture, $"- **Rollout Verdict:** `{data.PerformanceDecision.RolloutVerdict}`");
+            sb.AppendLine(CultureInfo.InvariantCulture, $"- **Release Quality Requirement:** {data.PerformanceDecision.QualityGateRequirementNote}");
+            if (data.PerformanceDecision.TargetDetails.Count > 0)
+            {
+                sb.AppendLine("- **50k Target Details:**");
+                foreach (var detail in data.PerformanceDecision.TargetDetails)
+                {
+                    sb.AppendLine(CultureInfo.InvariantCulture, $"  - {detail}");
+                }
+            }
+            sb.AppendLine();
         }
         else
         {
-            sb.AppendLine(CultureInfo.InvariantCulture, $"- **Exact Scan Verdict:** {(data.ExactScanPassed ? "**PASSED**" : "**FAILED**")}");
+            if (!data.IsPrescribedDecisionProtocol)
+            {
+                sb.AppendLine("- **Run Type:** `EXPLORATORY RUN (Non-prescribed parameters)`");
+                sb.AppendLine("- **Exact Scan Rollout Verdict:** `BLOCKED (Rollout decision not permitted)`");
+            }
+            else
+            {
+                sb.AppendLine(CultureInfo.InvariantCulture, $"- **Exact Scan Verdict:** {(data.ExactScanPassed ? "**PASSED**" : "**FAILED**")}");
+            }
         }
+
         sb.AppendLine(CultureInfo.InvariantCulture, $"- **Summary:** {data.Conclusion}");
         sb.AppendLine();
-        sb.AppendLine("> Note: All benchmark measurements were performed against isolated disposable databases with zero production data access. No identifiers or query texts are included in this report.");
+        sb.AppendLine("> Note: All benchmark measurements were performed against isolated disposable databases with zero production data access. Performance pass is strictly retrieval latency evidence and does not substitute for human-adjudicated release quality gates.");
+
+        return sb.ToString();
+    }
+
+    public static (string JsonPath, string MarkdownPath) WriteSqlProfileReport(SqlProfileReportData data)
+    {
+        var reportDir = EnsureReportDirectory();
+        var timestamp = DateTime.UtcNow.ToString("yyyyMMdd-HHmmss", CultureInfo.InvariantCulture);
+        var jsonPath = Path.Combine(reportDir, $"sql-profile-{timestamp}.json");
+        var mdPath = Path.Combine(reportDir, $"sql-profile-{timestamp}.md");
+
+        var json = JsonSerializer.Serialize(data, _jsonOptions);
+        File.WriteAllText(jsonPath, json, Encoding.UTF8);
+
+        var md = GenerateSqlProfileMarkdown(data);
+        File.WriteAllText(mdPath, md, Encoding.UTF8);
+
+        return (jsonPath, mdPath);
+    }
+
+    public static string GenerateSqlProfileMarkdown(SqlProfileReportData data)
+    {
+        var sb = new StringBuilder();
+        sb.AppendLine("# AssetBlock Isolated SQL Profile Evidence");
+        sb.AppendLine();
+        sb.AppendLine("## System, Database & Model Provenance");
+        sb.AppendLine(CultureInfo.InvariantCulture, $"- **Git Commit:** `{data.Provenance.GitCommit}`");
+        sb.AppendLine(CultureInfo.InvariantCulture, $"- **Source Fingerprint:** `{data.Provenance.SourceFingerprint ?? data.Provenance.GitCommit}`");
+        sb.AppendLine(CultureInfo.InvariantCulture, $"- **OS / Architecture:** {data.Provenance.OperatingSystem} ({data.Provenance.Architecture})");
+        sb.AppendLine(CultureInfo.InvariantCulture, $"- **PostgreSQL Version:** {data.Provenance.PostgresVersion}");
+        sb.AppendLine(CultureInfo.InvariantCulture, $"- **pgvector Version:** {data.Provenance.PgVectorVersion}");
+        sb.AppendLine(CultureInfo.InvariantCulture, $"- **pgvector Container Digest:** `{data.Provenance.ContainerImageDigest}`");
+        sb.AppendLine(CultureInfo.InvariantCulture, $"- **Actual Index State:** `{data.ActualIndexState}`");
+        sb.AppendLine(CultureInfo.InvariantCulture, $"- **Pinned Model:** `{data.ModelOptions.Model}`");
+        sb.AppendLine(CultureInfo.InvariantCulture, $"- **Model Revision:** `{data.ModelOptions.Revision}`");
+        sb.AppendLine(CultureInfo.InvariantCulture, $"- **Model Digest:** `{data.ModelOptions.Digest}`");
+        sb.AppendLine(CultureInfo.InvariantCulture, $"- **Embedding Dimension:** {data.ModelOptions.Dimension}");
+        sb.AppendLine(CultureInfo.InvariantCulture, $"- **Measurement Scope:** {data.MeasurementScope}");
+        sb.AppendLine();
+        sb.AppendLine("## Diagnostic Protocol & Execution Parameters");
+        sb.AppendLine(CultureInfo.InvariantCulture, $"- **Corpus Size:** 50,000 documents (sequential diagnostic evaluation)");
+        sb.AppendLine(CultureInfo.InvariantCulture, $"- **Diagnostic Repetitions:** Warmup = {data.DiagnosticWarmupCount}, Samples = {data.DiagnosticSampleCount}");
+        sb.AppendLine(CultureInfo.InvariantCulture, $"- **Concurrency Level:** {data.DiagnosticConcurrency} (sequential single-thread diagnostic)");
+        sb.AppendLine();
+
+        sb.AppendLine("## Corpus & Negative Fixtures Seed");
+        sb.AppendLine("- **Corpus Seed:** 50,000 synthetic assets with READY versions and deterministic unit vectors.");
+        sb.AppendLine("- **Negative Fixtures Present:**");
+        foreach ((var k, var v) in data.NegativeFixtureCounts)
+        {
+            sb.AppendLine(CultureInfo.InvariantCulture, $"  - {k}: {v}");
+        }
+        sb.AppendLine("- **Planner Statistics:** Refreshed via `ANALYZE` after fixture seeding.");
+        sb.AppendLine();
+
+        sb.AppendLine("## Profiling Scenarios & Latency Breakdown");
+        foreach (ScenarioProfileResult scenario in data.Scenarios)
+        {
+            sb.AppendLine(CultureInfo.InvariantCulture, $"### Scenario: `{scenario.ScenarioId}`");
+            sb.AppendLine(CultureInfo.InvariantCulture, $"*{scenario.Description}* (Filter-Eligible: {scenario.FilterEligibleCount:N0} | Semantic-Eligible: {scenario.SemanticEligibleCount:N0} | Fused Window: {scenario.FusedResultCount:N0})");
+            sb.AppendLine();
+            sb.AppendLine("| Path | In-Process Handler p50/p95 (ms) | Store Execution p50/p95 (ms) | Dominant DB Query Time (ms) |");
+            sb.AppendLine("| :--- | :---: | :---: | :---: |");
+            var dominantHybridDb = scenario.HybridQueries.Count > 0 ? scenario.HybridQueries.Max(q => q.DatabaseExecutionTimeMs).ToString("F2", CultureInfo.InvariantCulture) : "N/A";
+            var dominantLexicalDb = scenario.LexicalFallbackQueries.Count > 0 ? scenario.LexicalFallbackQueries.Max(q => q.DatabaseExecutionTimeMs).ToString("F2", CultureInfo.InvariantCulture) : "N/A";
+            sb.AppendLine(CultureInfo.InvariantCulture, $"| Hybrid Retrieval | {scenario.HybridHandlerLatency.P50Ms:F2} / {scenario.HybridHandlerLatency.P95Ms:F2} | {scenario.HybridStoreLatency.P50Ms:F2} / {scenario.HybridStoreLatency.P95Ms:F2} | {dominantHybridDb} |");
+            sb.AppendLine(CultureInfo.InvariantCulture, $"| Lexical Fallback | {scenario.LexicalFallbackHandlerLatency.P50Ms:F2} / {scenario.LexicalFallbackHandlerLatency.P95Ms:F2} | {scenario.LexicalFallbackStoreLatency.P50Ms:F2} / {scenario.LexicalFallbackStoreLatency.P95Ms:F2} | {dominantLexicalDb} |");
+            sb.AppendLine();
+
+            sb.AppendLine("#### Executed Database Queries (Sanitized EXPLAIN ANALYZE)");
+            sb.AppendLine("| Role | Rows | DB Time (ms) | DB Plan (ms) | Plan Nodes | Buffer Hit/Read | Temp/Spill | Sort Details | Primary Plan Node |");
+            sb.AppendLine("| :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :--- |");
+            foreach (QueryProfileResult q in scenario.HybridQueries.Concat(scenario.LexicalFallbackQueries))
+            {
+                var sortStr = q.SortMethod != null ? $"{q.SortMethod} ({q.SortSpaceUsedKb ?? 0} kB)" : "none";
+                var spillStr = q.HasSortSpill ? "**SPILL TO DISK**" : "in-memory";
+                sb.AppendLine(CultureInfo.InvariantCulture, $"| {q.Role} | {q.ResultRows} | {q.DatabaseExecutionTimeMs:F2} | {q.DatabasePlanningTimeMs:F2} | {q.TotalPlanNodes} | {q.SharedHitBlocks}/{q.SharedReadBlocks} | {spillStr} | {sortStr} | `{q.PrimaryNodeSummary}` |");
+            }
+            sb.AppendLine();
+            sb.AppendLine(CultureInfo.InvariantCulture, $"- **Dominant Bottleneck:** {scenario.DominantBottleneckSummary}");
+            sb.AppendLine();
+        }
+
+        sb.AppendLine("## Bottleneck Attribution & Technical Synthesis");
+        sb.AppendLine(data.BottleneckAttributionSummary);
+        sb.AppendLine();
+        sb.AppendLine("## Next Architecture Decision");
+        sb.AppendLine("- **Current State:** Exact pgvector scan on 50,000 documents; HNSW index is absent and unmigrated.");
+        sb.AppendLine("- **Recommendation:** Proceed with either targeted persistence refactoring or an isolated ANN evaluation benchmark.");
+        sb.AppendLine("- **Release Prerequisite Reminder:** Human-adjudicated relevance judgments (qrels) are strictly mandatory for release-quality evaluation and sign-off.");
+        sb.AppendLine();
+        sb.AppendLine("> Note: Structural and numeric metrics only. Raw SQL, queries, parameter values, vectors, sort keys, and exception payloads are completely omitted.");
 
         return sb.ToString();
     }

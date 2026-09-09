@@ -3,6 +3,7 @@ using Ardalis.Result;
 using AssetBlock.Application.Common;
 using AssetBlock.Application.Common.Caching;
 using AssetBlock.Application.UseCases.Assets.GetAssets;
+using AssetBlock.Domain.Abstractions.Services;
 using AssetBlock.Domain.Core.Constants;
 using AssetBlock.Domain.Core.Dto.Assets;
 using AssetBlock.Domain.Core.Entities;
@@ -19,6 +20,9 @@ using AssetBlock.SearchEvaluation.Reporting;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using Pgvector;
+using DomainGeneratedEmbedding = AssetBlock.Domain.Abstractions.Services.GeneratedEmbedding;
+using DomainModelVerificationResult = AssetBlock.Domain.Abstractions.Services.ModelVerificationResult;
+using ITextEmbeddingGenerator = AssetBlock.Domain.Abstractions.Services.ITextEmbeddingGenerator;
 
 namespace AssetBlock.SearchEvaluation.Benchmark;
 
@@ -55,6 +59,7 @@ public static class SearchBenchmarkRunner
         List<int> concurrencyLevels,
         EmbeddingOptions embeddingOptions,
         IOllamaEmbeddingClient? ollamaClient,
+        bool skipOllama = false,
         CancellationToken cancellationToken = default)
     {
         Console.WriteLine("==========================================================");
@@ -64,6 +69,7 @@ public static class SearchBenchmarkRunner
         Console.WriteLine($"Warm-up Queries:  {warmupCount}");
         Console.WriteLine($"Sample Queries:   {sampleCount}");
         Console.WriteLine($"Concurrency:      {string.Join(", ", concurrencyLevels)}");
+        Console.WriteLine($"Skip Ollama:      {skipOllama}");
         Console.WriteLine($"Pinned Model:     {embeddingOptions.Model}");
         Console.WriteLine($"Dimension:        {embeddingOptions.Dimension}");
         Console.WriteLine("----------------------------------------------------------");
@@ -82,6 +88,7 @@ public static class SearchBenchmarkRunner
         Console.WriteLine($"  pgvector:       {provenance.PgVectorVersion}");
         Console.WriteLine($"  Container:      {provenance.ContainerImageDigest}");
         Console.WriteLine($"  HNSW state:     {provenance.HnswState}");
+        Console.WriteLine($"  Fingerprint:    {provenance.SourceFingerprint ?? provenance.GitCommit}");
         Console.ResetColor();
         Console.WriteLine();
 
@@ -124,6 +131,7 @@ public static class SearchBenchmarkRunner
 
         var corpusResults = new List<CorpusBenchmarkResult>();
         var currentCorpusSize = 0;
+        var tracker = new BenchmarkExecutionTracker();
 
         foreach (var targetCorpusSize in corpusSizes.OrderBy(x => x))
         {
@@ -162,6 +170,7 @@ public static class SearchBenchmarkRunner
                     modelKey,
                     embeddingOptions,
                     ollamaClient,
+                    tracker,
                     cancellationToken);
 
                 concurrencyResults.Add(result);
@@ -175,78 +184,32 @@ public static class SearchBenchmarkRunner
                 concurrencyResults));
         }
 
-        // 3. Evaluate Prescribed Protocol & 50k Target Gates
-        var isPrescribed = IsPrescribedDecisionProtocol(corpusSizes, warmupCount, sampleCount, concurrencyLevels);
-        var exactScanPassed = false;
-        string conclusion;
-
-        if (!isPrescribed)
-        {
-            exactScanPassed = false;
-            conclusion = $"Exploratory benchmark run completed with non-prescribed parameters (warmup={warmupCount}, samples={sampleCount}, sizes=[{string.Join(", ", corpusSizes)}], concurrency=[{string.Join(", ", concurrencyLevels)}]). Rollout / HNSW decision requires the exact prescribed protocol: warmup={PRESCRIBED_WARMUP}, samples={PRESCRIBED_SAMPLES}, sizes=[{string.Join(", ", _prescribedSizes)}], concurrency=[{string.Join(", ", _prescribedConcurrency)}]. No exact/HNSW rollout verdict permitted.";
-        }
-        else
-        {
-            CorpusBenchmarkResult? corpus50K = corpusResults.FirstOrDefault(c => c.CorpusSize == 50000);
-            if (corpus50K == null)
-            {
-                conclusion = "Corpus size 50,000 was not evaluated; cannot declare exact scan sufficiency.";
-            }
-            else
-            {
-                ConcurrencyBenchmarkResult? c1 = corpus50K.ConcurrencyResults.FirstOrDefault(c => c.Concurrency == 1);
-                ConcurrencyBenchmarkResult? c10 = corpus50K.ConcurrencyResults.FirstOrDefault(c => c.Concurrency == 10);
-
-                PathBenchmarkMetrics? hybrid1 = c1?.PathMetrics.FirstOrDefault(p => p.PathName == "DB Hybrid Retrieval");
-                PathBenchmarkMetrics? fullPath1 = c1?.PathMetrics.FirstOrDefault(p => p.PathName == "Full Catalog (Cached Vector)");
-                PathBenchmarkMetrics? lexical1 = c1?.PathMetrics.FirstOrDefault(p => p.PathName == "Lexical Fallback");
-                PathBenchmarkMetrics? ollama1 = c1?.PathMetrics.FirstOrDefault(p => p.PathName == "Uncached Ollama Query Generation");
-                PathBenchmarkMetrics? ollama10 = c10?.PathMetrics.FirstOrDefault(p => p.PathName == "Uncached Ollama Query Generation");
-
-                var passesDbHybrid = hybrid1 is { P95Ms: <= TARGET_DB_HYBRID_P95_MS };
-                var passesFullPath = fullPath1 is { P95Ms: <= TARGET_CACHED_FULL_PATH_P95_MS };
-                var passesLexical = lexical1 is { P95Ms: <= TARGET_LEXICAL_FALLBACK_P95_MS };
-                var hasCompleteOllama1 = ollama1 != null && ollama1.SampleCount == sampleCount && ollama1.SampleCount > 0;
-                var hasCompleteOllama10 = ollama10 != null && ollama10.SampleCount == sampleCount && ollama10.SampleCount > 0;
-
-                if (!hasCompleteOllama1 || !hasCompleteOllama10)
-                {
-                    exactScanPassed = false;
-                    conclusion = $"Cannot declare exact scan sufficiency: uncached Ollama generation evidence is incomplete (Concurrency 1: {ollama1?.SampleCount ?? 0}/{sampleCount}; Concurrency 10: {ollama10?.SampleCount ?? 0}/{sampleCount}). Ollama must be running and measured at all configured samples and concurrency levels.";
-                }
-                else if (passesDbHybrid && passesFullPath && passesLexical)
-                {
-                    exactScanPassed = true;
-                    conclusion = $"Exact scan PASSED target gates at 50,000 assets (DB Hybrid p95: {hybrid1?.P95Ms:F1} ms <= {TARGET_DB_HYBRID_P95_MS:F0} ms; Full Catalog p95: {fullPath1?.P95Ms:F1} ms <= {TARGET_CACHED_FULL_PATH_P95_MS:F0} ms; Lexical Fallback p95: {lexical1?.P95Ms:F1} ms <= {TARGET_LEXICAL_FALLBACK_P95_MS:F0} ms; Ollama c1 p95: {ollama1?.P95Ms:F1} ms, c10 p95: {ollama10?.P95Ms:F1} ms). Exact scan is sufficient; HNSW index is not currently required.";
-                }
-                else
-                {
-                    exactScanPassed = false;
-                    conclusion = $"Exact scan FAILED target gates at 50,000 assets (DB Hybrid p95: {hybrid1?.P95Ms:F1} ms, Full Catalog p95: {fullPath1?.P95Ms:F1} ms, Lexical Fallback p95: {lexical1?.P95Ms:F1} ms). HNSW evaluation is required. Do not implement HNSW, create an index, or generate a migration in this batch.";
-                }
-            }
-        }
+        // 3. Evaluate Prescribed Protocol, Completeness, & 50k Performance Gates
+        (BenchmarkProtocolConformance protocol, BenchmarkEvidenceCompleteness completeness, BenchmarkPerformanceDecision decision, var exactScanPassed, var conclusion) =
+            EvaluateBenchmarkDecision(corpusSizes, warmupCount, sampleCount, concurrencyLevels, skipOllama, corpusResults, tracker);
 
         Console.WriteLine();
         Console.WriteLine("==========================================================");
-        Console.WriteLine(" Exact-Search Decision");
+        Console.WriteLine(" Exact-Search Protocol, Completeness & Performance Decision");
         Console.WriteLine("==========================================================");
-        if (!isPrescribed)
+        Console.WriteLine($"Protocol:     {(protocol.IsPrescribed ? "[PRESCRIBED]" : "[NON-PRESCRIBED / EXPLORATORY]")}");
+        Console.WriteLine($"Completeness: {(completeness.IsComplete ? "[COMPLETE]" : "[INCOMPLETE]")}");
+        if (!completeness.IsComplete)
         {
-            Console.ForegroundColor = ConsoleColor.Yellow;
-            Console.WriteLine("[EXPLORATORY RUN - NO ROLLOUT DECISION PERMITTED]");
+            foreach (var reason in completeness.IncompletenessReasons)
+            {
+                Console.WriteLine($"  - Incomplete Reason: {reason}");
+            }
         }
-        else if (exactScanPassed)
+        Console.WriteLine($"50k Targets:  {(decision.Passed50KTargets ? "[MET]" : "[NOT MET]")}");
+        foreach (var detail in decision.TargetDetails)
         {
-            Console.ForegroundColor = ConsoleColor.Green;
-            Console.WriteLine("[PASS] EXACT SCAN IS SUFFICIENT FOR 50,000 ASSETS");
+            Console.WriteLine($"  - {detail}");
         }
-        else
-        {
-            Console.ForegroundColor = ConsoleColor.Yellow;
-            Console.WriteLine("[NOTICE] TARGETS NOT MET: HNSW EVALUATION REQUIRED");
-        }
-        Console.ResetColor();
+        Console.WriteLine($"Verdict:      {decision.RolloutVerdict}");
+        Console.WriteLine($"HNSW Needed:  {(decision.HnswRecommended ? "YES (DB Hybrid bottleneck at 50k)" : "NO")}");
+        Console.WriteLine($"Note:         {decision.QualityGateRequirementNote}");
+        Console.WriteLine("==========================================================");
         Console.WriteLine(conclusion);
         Console.WriteLine("==========================================================");
 
@@ -256,11 +219,14 @@ public static class SearchBenchmarkRunner
             corpusResults,
             exactScanPassed,
             conclusion,
-            isPrescribed);
+            protocol.IsPrescribed,
+            protocol,
+            completeness,
+            decision);
 
         (var jsonPath, var mdPath) = SearchEvaluationReportWriter.WriteBenchmarkReport(reportData);
         Console.WriteLine();
-        Console.WriteLine($"Reports emitted:");
+        Console.WriteLine("Reports emitted:");
         Console.WriteLine($"  - JSON:     {jsonPath}");
         Console.WriteLine($"  - Markdown: {mdPath}");
 
@@ -425,16 +391,17 @@ public static class SearchBenchmarkRunner
         string modelKey,
         EmbeddingOptions embeddingOptions,
         IOllamaEmbeddingClient? ollamaClient,
+        BenchmarkExecutionTracker? tracker,
         CancellationToken cancellationToken)
     {
         var dbHybridLatencies = new List<double>(queries.Count);
         var cachedFullPathLatencies = new List<double>(queries.Count);
         var lexicalLatencies = new List<double>(queries.Count);
 
-        // Real bounded local caches
+        // Query-vector cache is deliberately warm. The catalog-result cache is bypassed so this path measures retrieval.
         var queryVectorCache = new BoundedQueryVectorCache(TimeProvider.System, maxEntries: Math.Max(queries.Count * 2, 1000));
-        var memoryCacheService = new MemoryCacheService();
-        var typedCache = new JsonTypedCache(memoryCacheService, NullLogger<JsonTypedCache>.Instance);
+        ITypedCache resultCache = new ObservableResultCache(tracker);
+        var cachedVectorGenerator = new CachedVectorOnlyEmbeddingGenerator(tracker);
         var capability = new BenchmarkVectorSearchCapability(modelKey, isAvailable: true);
 
         // Pre-warm query vector cache with normalized hashes
@@ -462,24 +429,40 @@ public static class SearchBenchmarkRunner
             }
 
             // 2. Full Catalog Path (Cached Vector via GetAssetsQueryHandler)
+            var observingStore = new EvaluationObservingAssetStore(store, tracker);
             var handler = new GetAssetsQueryHandler(
-                store,
-                typedCache,
+                observingStore,
+                resultCache,
                 queryVectorCache,
                 capability,
-                embeddingGenerator: null,
+                cachedVectorGenerator,
                 Options.Create(embeddingOptions),
                 NullLogger<GetAssetsQueryHandler>.Instance);
 
             foreach ((var text, _) in queries)
             {
                 var req = new GetAssetsRequest { Search = text, Page = 1, PageSize = 20 };
+                var preLexical = tracker?.LexicalInvocations ?? 0;
+                var preHybrid = tracker?.HybridInvocations ?? 0;
+
                 sw.Restart();
                 Result<CatalogPageResult<AssetListItem>> result = await handler.Handle(new GetAssetsQuery(req), cancellationToken);
                 sw.Stop();
-                if (result.IsSuccess)
+
+                // Do not drop failures from denominator
+                cachedFullPathLatencies.Add(sw.Elapsed.TotalMilliseconds);
+
+                if (!result.IsSuccess)
                 {
-                    cachedFullPathLatencies.Add(sw.Elapsed.TotalMilliseconds);
+                    tracker?.RecordFailedSample();
+                }
+                if (tracker != null && tracker.LexicalInvocations > preLexical)
+                {
+                    // Hidden lexical fallback occurred
+                }
+                if (tracker != null && tracker.HybridInvocations == preHybrid)
+                {
+                    tracker.RecordFailedSample();
                 }
             }
 
@@ -525,23 +508,38 @@ public static class SearchBenchmarkRunner
             {
                 await using ApplicationDbContext db = fixture.CreateDbContext();
                 var store = new AssetStore(db);
+                var observingStore = new EvaluationObservingAssetStore(store, tracker);
                 var handler = new GetAssetsQueryHandler(
-                    store,
-                    typedCache,
+                    observingStore,
+                    resultCache,
                     queryVectorCache,
                     capability,
-                    embeddingGenerator: null,
+                    cachedVectorGenerator,
                     Options.Create(embeddingOptions),
                     NullLogger<GetAssetsQueryHandler>.Instance);
                 var req = new GetAssetsRequest { Search = q.Text, Page = 1, PageSize = 20 };
+
+                var preLexical = tracker?.LexicalInvocations ?? 0;
+                var preHybrid = tracker?.HybridInvocations ?? 0;
 
                 var sw = Stopwatch.StartNew();
                 Result<CatalogPageResult<AssetListItem>> result = await handler.Handle(new GetAssetsQuery(req), ct);
                 sw.Stop();
 
-                if (result.IsSuccess)
+                // Do not drop failures from denominator
+                cachedPathBag.Add(sw.Elapsed.TotalMilliseconds);
+
+                if (!result.IsSuccess)
                 {
-                    cachedPathBag.Add(sw.Elapsed.TotalMilliseconds);
+                    tracker?.RecordFailedSample();
+                }
+                if (tracker != null && tracker.LexicalInvocations > preLexical)
+                {
+                    // Hidden lexical fallback occurred
+                }
+                if (tracker != null && tracker.HybridInvocations == preHybrid)
+                {
+                    tracker.RecordFailedSample();
                 }
             });
 
@@ -562,6 +560,11 @@ public static class SearchBenchmarkRunner
             dbHybridLatencies.AddRange(dbHybridBag);
             cachedFullPathLatencies.AddRange(cachedPathBag);
             lexicalLatencies.AddRange(lexicalBag);
+        }
+
+        if (cachedVectorGenerator.InvocationCount != 0)
+        {
+            tracker?.RecordProviderCall();
         }
 
         // 4. Uncached Local-Ollama Query Generation (configured samples at current concurrency)
@@ -617,12 +620,216 @@ public static class SearchBenchmarkRunner
         var pathMetrics = new List<PathBenchmarkMetrics>
         {
             CreateMetrics("DB Hybrid Retrieval", dbHybridLatencies, queries.Count, corpusSize == 50000 ? TARGET_DB_HYBRID_P95_MS : null),
-            CreateMetrics("Full Catalog (Cached Vector)", cachedFullPathLatencies, queries.Count, corpusSize == 50000 ? TARGET_CACHED_FULL_PATH_P95_MS : null),
+            CreateMetrics("Full Catalog (Cached Query Vector)", cachedFullPathLatencies, queries.Count, corpusSize == 50000 ? TARGET_CACHED_FULL_PATH_P95_MS : null),
             CreateMetrics("Lexical Fallback", lexicalLatencies, queries.Count, corpusSize == 50000 ? TARGET_LEXICAL_FALLBACK_P95_MS : null),
             CreateMetrics("Uncached Ollama Query Generation", ollamaLatencies, queries.Count, null)
         };
 
         return new ConcurrencyBenchmarkResult(concurrency, pathMetrics);
+    }
+
+    public static (BenchmarkProtocolConformance Protocol, BenchmarkEvidenceCompleteness Completeness, BenchmarkPerformanceDecision Decision, bool ExactScanPassed, string Conclusion) EvaluateBenchmarkDecision(
+        IReadOnlyList<int> corpusSizes,
+        int warmupCount,
+        int sampleCount,
+        IReadOnlyList<int> concurrencyLevels,
+        bool skipOllama,
+        List<CorpusBenchmarkResult> corpusResults,
+        BenchmarkExecutionTracker? tracker = null)
+    {
+        var isPrescribed = IsPrescribedDecisionProtocol(corpusSizes.ToList(), warmupCount, sampleCount, concurrencyLevels.ToList());
+        var protocolSummary = isPrescribed
+            ? "Run matches the exact prescribed protocol: sizes=[1000, 10000, 50000], warmup=100, samples=1000, concurrency=[1, 10]."
+            : $"Run parameters deviate from prescribed protocol (sizes=[{string.Join(", ", corpusSizes)}], warmup={warmupCount}, samples={sampleCount}, concurrency=[{string.Join(", ", concurrencyLevels)}]). Exploratory diagnostics only.";
+        var protocol = new BenchmarkProtocolConformance(
+            isPrescribed,
+            _prescribedSizes,
+            corpusSizes,
+            PRESCRIBED_WARMUP,
+            warmupCount,
+            PRESCRIBED_SAMPLES,
+            sampleCount,
+            _prescribedConcurrency,
+            concurrencyLevels,
+            protocolSummary);
+
+        var reasons = new List<string>();
+        var expectedCells = corpusSizes.Count * concurrencyLevels.Count * 4;
+        var measuredCells = 0;
+        var missingOrFailedSamples = 0;
+
+        if (skipOllama)
+        {
+            reasons.Add("Explicit --skip-ollama was specified; uncached Ollama query generation was not evaluated.");
+        }
+
+        foreach (var size in corpusSizes)
+        {
+            CorpusBenchmarkResult? cResult = corpusResults.FirstOrDefault(c => c.CorpusSize == size);
+            if (cResult == null)
+            {
+                reasons.Add($"Corpus size {size} is missing from benchmark results.");
+                continue;
+            }
+
+            foreach (var conc in concurrencyLevels)
+            {
+                ConcurrencyBenchmarkResult? concResult = cResult.ConcurrencyResults.FirstOrDefault(c => c.Concurrency == conc);
+                if (concResult == null)
+                {
+                    reasons.Add($"Concurrency {conc} for corpus size {size} is missing.");
+                    continue;
+                }
+
+                foreach (var pathName in new[] { "DB Hybrid Retrieval", "Full Catalog (Cached Query Vector)", "Lexical Fallback" })
+                {
+                    PathBenchmarkMetrics? m = concResult.PathMetrics.FirstOrDefault(p => p.PathName == pathName);
+                    if (m == null || m.SampleCount < sampleCount)
+                    {
+                        var actual = m?.SampleCount ?? 0;
+                        missingOrFailedSamples += (sampleCount - actual);
+                        reasons.Add($"Path '{pathName}' at size {size}, concurrency {conc} has incomplete samples ({actual}/{sampleCount}).");
+                    }
+                    else
+                    {
+                        measuredCells++;
+                    }
+                }
+
+                PathBenchmarkMetrics? ollama = concResult.PathMetrics.FirstOrDefault(p => p.PathName == "Uncached Ollama Query Generation");
+                if (ollama == null || ollama.SampleCount < sampleCount)
+                {
+                    var actual = ollama?.SampleCount ?? 0;
+                    missingOrFailedSamples += (sampleCount - actual);
+                    if (!skipOllama)
+                    {
+                        reasons.Add($"Uncached Ollama at size {size}, concurrency {conc} has incomplete samples ({actual}/{sampleCount}).");
+                    }
+                }
+                else
+                {
+                    measuredCells++;
+                }
+            }
+        }
+
+        var hiddenFallbacks = tracker?.LexicalInvocations ?? 0;
+        var providerCalls = tracker?.ProviderCalls ?? 0;
+        var cacheHits = tracker?.ResultCacheHits ?? 0;
+        var failedSamples = tracker?.FailedSamples ?? 0;
+        missingOrFailedSamples += failedSamples;
+
+        if (hiddenFallbacks > 0)
+        {
+            reasons.Add($"Hidden lexical fallback detected: {hiddenFallbacks} cached-vector queries fell back to lexical search.");
+        }
+        if (providerCalls > 0)
+        {
+            reasons.Add($"Provider calls detected in cached-vector benchmark: {providerCalls} calls to embedding generator.");
+        }
+        if (cacheHits > 0)
+        {
+            reasons.Add($"Catalog-result cache hit detected: {cacheHits} queries reused catalog cache instead of evaluating retrieval.");
+        }
+
+        var isComplete = reasons.Count == 0 && missingOrFailedSamples == 0;
+        var completeness = new BenchmarkEvidenceCompleteness(
+            isComplete,
+            skipOllama,
+            expectedCells,
+            measuredCells,
+            missingOrFailedSamples,
+            hiddenFallbacks,
+            providerCalls,
+            cacheHits,
+            reasons);
+
+        var targetDetails = new List<string>();
+        bool exactScanPassed;
+        bool hnswRecommended;
+        string rolloutVerdict;
+        string conclusion;
+
+        const string qualityGateNote = "Performance pass confirms retrieval latency targets only and does not constitute release-quality or rollout approval. Release-quality sign-off strictly requires release quality evaluation with independent human-adjudicated relevance judgments (qrels).";
+
+        CorpusBenchmarkResult? corpus50K = corpusResults.FirstOrDefault(c => c.CorpusSize == 50000);
+        ConcurrencyBenchmarkResult? c1 = corpus50K?.ConcurrencyResults.FirstOrDefault(c => c.Concurrency == 1);
+        ConcurrencyBenchmarkResult? c10 = corpus50K?.ConcurrencyResults.FirstOrDefault(c => c.Concurrency == 10);
+
+        PathBenchmarkMetrics? hybrid1 = c1?.PathMetrics.FirstOrDefault(p => p.PathName == "DB Hybrid Retrieval");
+        PathBenchmarkMetrics? hybrid10 = c10?.PathMetrics.FirstOrDefault(p => p.PathName == "DB Hybrid Retrieval");
+
+        PathBenchmarkMetrics? fullPath1 = c1?.PathMetrics.FirstOrDefault(p => p.PathName == "Full Catalog (Cached Query Vector)");
+        PathBenchmarkMetrics? fullPath10 = c10?.PathMetrics.FirstOrDefault(p => p.PathName == "Full Catalog (Cached Query Vector)");
+
+        PathBenchmarkMetrics? lexical1 = c1?.PathMetrics.FirstOrDefault(p => p.PathName == "Lexical Fallback");
+        PathBenchmarkMetrics? lexical10 = c10?.PathMetrics.FirstOrDefault(p => p.PathName == "Lexical Fallback");
+
+        var dbHybridPass1 = hybrid1 is { P95Ms: <= TARGET_DB_HYBRID_P95_MS };
+        var dbHybridPass10 = hybrid10 is { P95Ms: <= TARGET_DB_HYBRID_P95_MS };
+        var fullPathPass1 = fullPath1 is { P95Ms: <= TARGET_CACHED_FULL_PATH_P95_MS };
+        var fullPathPass10 = fullPath10 is { P95Ms: <= TARGET_CACHED_FULL_PATH_P95_MS };
+        var lexicalPass1 = lexical1 is { P95Ms: <= TARGET_LEXICAL_FALLBACK_P95_MS };
+        var lexicalPass10 = lexical10 is { P95Ms: <= TARGET_LEXICAL_FALLBACK_P95_MS };
+
+        targetDetails.Add($"DB Hybrid Retrieval c1: p95={hybrid1?.P95Ms:F1}ms (Target <= {TARGET_DB_HYBRID_P95_MS:F0}ms) [{(dbHybridPass1 ? "PASS" : "FAIL")}]");
+        targetDetails.Add($"DB Hybrid Retrieval c10: p95={hybrid10?.P95Ms:F1}ms (Target <= {TARGET_DB_HYBRID_P95_MS:F0}ms) [{(dbHybridPass10 ? "PASS" : "FAIL")}]");
+        targetDetails.Add($"Full Catalog (Cached Vector) c1: p95={fullPath1?.P95Ms:F1}ms (Target <= {TARGET_CACHED_FULL_PATH_P95_MS:F0}ms) [{(fullPathPass1 ? "PASS" : "FAIL")}]");
+        targetDetails.Add($"Full Catalog (Cached Vector) c10: p95={fullPath10?.P95Ms:F1}ms (Target <= {TARGET_CACHED_FULL_PATH_P95_MS:F0}ms) [{(fullPathPass10 ? "PASS" : "FAIL")}]");
+        targetDetails.Add($"Lexical Fallback c1: p95={lexical1?.P95Ms:F1}ms (Target <= {TARGET_LEXICAL_FALLBACK_P95_MS:F0}ms) [{(lexicalPass1 ? "PASS" : "FAIL")}]");
+        targetDetails.Add($"Lexical Fallback c10: p95={lexical10?.P95Ms:F1}ms (Target <= {TARGET_LEXICAL_FALLBACK_P95_MS:F0}ms) [{(lexicalPass10 ? "PASS" : "FAIL")}]");
+
+        var passed50KTargets = dbHybridPass1 && dbHybridPass10 && fullPathPass1 && fullPathPass10 && lexicalPass1 && lexicalPass10;
+
+        if (!isPrescribed)
+        {
+            exactScanPassed = false;
+            hnswRecommended = false;
+            rolloutVerdict = "BLOCKED (Exploratory run with non-prescribed parameters; rollout verdict not permitted)";
+            conclusion = $"Exploratory benchmark run completed with non-prescribed parameters (warmup={warmupCount}, samples={sampleCount}, sizes=[{string.Join(", ", corpusSizes)}], concurrency=[{string.Join(", ", concurrencyLevels)}]). Rollout / HNSW decision requires the exact prescribed protocol: warmup={PRESCRIBED_WARMUP}, samples={PRESCRIBED_SAMPLES}, sizes=[{string.Join(", ", _prescribedSizes)}], concurrency=[{string.Join(", ", _prescribedConcurrency)}]. No exact/HNSW rollout verdict permitted.";
+        }
+        else if (!isComplete)
+        {
+            exactScanPassed = false;
+            hnswRecommended = false;
+            rolloutVerdict = "BLOCKED (Evidence incomplete; rollout verdict not permitted)";
+            conclusion = $"Cannot declare exact scan sufficiency: benchmark evidence is incomplete ({string.Join("; ", reasons)}). Complete prescribed measurements required.";
+        }
+        else if (passed50KTargets)
+        {
+            exactScanPassed = true;
+            hnswRecommended = false;
+            rolloutVerdict = "PERFORMANCE_TARGETS_MET (Exact scan meets retrieval latency targets at 50,000 documents; release rollout additionally requires release quality evaluation with human-adjudicated qrels)";
+            conclusion = $"Exact scan PASSED target gates at 50,000 assets (DB Hybrid c1 p95: {hybrid1?.P95Ms:F1}ms, c10 p95: {hybrid10?.P95Ms:F1}ms <= {TARGET_DB_HYBRID_P95_MS:F0}ms; Full Catalog c1 p95: {fullPath1?.P95Ms:F1}ms, c10 p95: {fullPath10?.P95Ms:F1}ms <= {TARGET_CACHED_FULL_PATH_P95_MS:F0}ms; Lexical Fallback c1 p95: {lexical1?.P95Ms:F1}ms, c10 p95: {lexical10?.P95Ms:F1}ms <= {TARGET_LEXICAL_FALLBACK_P95_MS:F0}ms). Exact scan is sufficient; HNSW index is not currently required.";
+        }
+        else
+        {
+            exactScanPassed = false;
+            hnswRecommended = false;
+            var hybridFailed = !dbHybridPass1 || !dbHybridPass10;
+
+            if (hybridFailed)
+            {
+                rolloutVerdict = "PERFORMANCE_TARGETS_FAILED (DB Hybrid retrieval exceeded 200 ms target at 50,000 documents; bottleneck attribution required via profile-sql. HNSW index cannot be recommended without isolated branch evidence. Release rollout additionally requires human-adjudicated qrels)";
+                conclusion = $"Exact scan FAILED target gates at 50,000 assets due to DB Hybrid retrieval latency (c1 p95: {hybrid1?.P95Ms:F1}ms, c10 p95: {hybrid10?.P95Ms:F1}ms > {TARGET_DB_HYBRID_P95_MS:F0}ms). Bottleneck attribution via profile-sql is required before considering index changes; aggregate retrieval includes lexical search and entity hydration. HNSW index is not automatically recommended for aggregate failure. Do not implement HNSW, create an index, or generate a migration in this batch.";
+            }
+            else
+            {
+                rolloutVerdict = "PERFORMANCE_TARGETS_FAILED (Targets not met due to non-vector bottleneck; HNSW index is not indicated for lexical/handler failure. Release rollout additionally requires human-adjudicated qrels)";
+                conclusion = $"Exact scan FAILED target gates at 50,000 assets due to non-vector retrieval bottleneck (Full Catalog c1 p95: {fullPath1?.P95Ms:F1}ms, c10 p95: {fullPath10?.P95Ms:F1}ms; Lexical Fallback c1 p95: {lexical1?.P95Ms:F1}ms, c10 p95: {lexical10?.P95Ms:F1}ms). DB Hybrid retrieval satisfied targets. Do not recommend HNSW for lexical/handler failure.";
+            }
+        }
+
+        var decision = new BenchmarkPerformanceDecision(
+            passed50KTargets,
+            isPrescribed && isComplete,
+            exactScanPassed,
+            hnswRecommended,
+            rolloutVerdict,
+            qualityGateNote,
+            targetDetails);
+
+        return (protocol, completeness, decision, exactScanPassed, conclusion);
     }
 
     private static PathBenchmarkMetrics CreateMetrics(string pathName, List<double> latencies, int expectedCount, double? targetP95)
@@ -684,23 +891,153 @@ public static class SearchBenchmarkRunner
             var t2 = terms[rng.Next(terms.Length)];
             var text = $"{t1} {t2}";
 
-            var vector = new float[dimension];
-            var normSq = 0.0;
-            for (var d = 0; d < dimension; d++)
-            {
-                var val = (float)(rng.NextDouble() * 2.0 - 1.0);
-                vector[d] = val;
-                normSq += val * val;
-            }
-            var norm = (float)Math.Sqrt(normSq);
-            for (var d = 0; d < dimension; d++)
-            {
-                vector[d] /= norm;
-            }
-
-            result.Add((text, vector));
+            result.Add((text, GenerateDeterministicVector(text, dimension)));
         }
 
         return result;
+    }
+
+    public static float[] GenerateDeterministicVector(string text, int dimension)
+    {
+        var seed = 0;
+        foreach (var character in text)
+        {
+            seed = unchecked(seed * 31 + character);
+        }
+
+        var rng = new Random(seed);
+        var vector = new float[dimension];
+        var normSq = 0.0;
+        for (var d = 0; d < dimension; d++)
+        {
+            var value = (float)(rng.NextDouble() * 2.0 - 1.0);
+            vector[d] = value;
+            normSq += value * value;
+        }
+
+        var norm = (float)Math.Sqrt(normSq);
+        for (var d = 0; d < dimension; d++)
+        {
+            vector[d] /= norm;
+        }
+
+        return vector;
+    }
+
+    public sealed class BenchmarkExecutionTracker
+    {
+        private int _hybridInvocations;
+        private int _lexicalInvocations;
+        private int _providerCalls;
+        private int _resultCacheHits;
+        private int _failedSamples;
+
+        public int HybridInvocations => Volatile.Read(ref _hybridInvocations);
+        public int LexicalInvocations => Volatile.Read(ref _lexicalInvocations);
+        public int ProviderCalls => Volatile.Read(ref _providerCalls);
+        public int ResultCacheHits => Volatile.Read(ref _resultCacheHits);
+        public int FailedSamples => Volatile.Read(ref _failedSamples);
+
+        public void RecordHybridInvocation() => Interlocked.Increment(ref _hybridInvocations);
+        public void RecordLexicalInvocation() => Interlocked.Increment(ref _lexicalInvocations);
+        public void RecordProviderCall() => Interlocked.Increment(ref _providerCalls);
+        public void RecordResultCacheHit() => Interlocked.Increment(ref _resultCacheHits);
+        public void RecordFailedSample() => Interlocked.Increment(ref _failedSamples);
+    }
+
+    public sealed class EvaluationObservingAssetStore : IAssetStore
+    {
+        private readonly IAssetStore _inner;
+        private readonly BenchmarkExecutionTracker? _tracker;
+
+        public EvaluationObservingAssetStore(IAssetStore inner, BenchmarkExecutionTracker? tracker)
+        {
+            _inner = inner;
+            _tracker = tracker;
+        }
+
+        public async Task<CatalogPageResult<AssetListItem>> GetPaged(
+            GetAssetsRequest request,
+            float[]? queryEmbedding = null,
+            string? modelKey = null,
+            CancellationToken cancellationToken = default)
+        {
+            if (queryEmbedding is not null && !string.IsNullOrWhiteSpace(modelKey))
+            {
+                _tracker?.RecordHybridInvocation();
+            }
+            else
+            {
+                _tracker?.RecordLexicalInvocation();
+            }
+
+            return await _inner.GetPaged(request, queryEmbedding, modelKey, cancellationToken);
+        }
+
+        public Task<Asset> Add(Asset asset, CancellationToken cancellationToken = default) => _inner.Add(asset, cancellationToken);
+        public Task<Asset> AddWithTags(Asset asset, List<Tag> tags, CancellationToken cancellationToken = default) => _inner.AddWithTags(asset, tags, cancellationToken);
+        public Task<Asset> AddWithVersion(Asset asset, AssetVersion version, List<Tag>? tags, CancellationToken cancellationToken = default) => _inner.AddWithVersion(asset, version, tags, cancellationToken);
+        public Task<Asset?> GetById(Guid id, CancellationToken cancellationToken = default) => _inner.GetById(id, cancellationToken);
+        public Task<Asset?> GetById(Guid id, bool includeDeleted, CancellationToken cancellationToken = default) => _inner.GetById(id, includeDeleted, cancellationToken);
+        public Task<Asset?> GetForUpdate(Guid id, CancellationToken cancellationToken = default) => _inner.GetForUpdate(id, cancellationToken);
+        public Task<AssetCurrentVersionSnapshot?> GetCurrentVersionSnapshot(Guid assetId, CancellationToken cancellationToken = default) => _inner.GetCurrentVersionSnapshot(assetId, cancellationToken);
+        public Task<AssetVersion?> GetVersion(Guid assetId, Guid versionId, CancellationToken cancellationToken = default) => _inner.GetVersion(assetId, versionId, cancellationToken);
+        public Task<AssetOwnershipDto?> GetOwnership(Guid assetId, CancellationToken cancellationToken = default) => _inner.GetOwnership(assetId, cancellationToken);
+        public Task<IReadOnlyList<AssetVersionSummaryDto>?> ListVersions(Guid assetId, Guid? requesterUserId, CancellationToken cancellationToken = default) => _inner.ListVersions(assetId, requesterUserId, cancellationToken);
+        public Task<AssetVersion> CreateNextCandidateVersion(Guid assetId, Guid authorId, AssetVersion draft, CancellationToken cancellationToken = default) => _inner.CreateNextCandidateVersion(assetId, authorId, draft, cancellationToken);
+        public Task<IReadOnlyList<string>> GetAllStorageKeys(Guid assetId, CancellationToken cancellationToken = default) => _inner.GetAllStorageKeys(assetId, cancellationToken);
+        public Task<bool> ExistsByStorageKey(string storageKey, CancellationToken cancellationToken = default) => _inner.ExistsByStorageKey(storageKey, cancellationToken);
+        public Task<AssetBlock.Domain.Core.Dto.Paging.PagedResult<SellerAssetListItem>> GetMyListings(Guid authorId, GetAssetsRequest request, CancellationToken cancellationToken = default) => _inner.GetMyListings(authorId, request, cancellationToken);
+        public Task<SellerAssetDetailItem?> GetOwnedSellerDetail(Guid assetId, Guid ownerUserId, CancellationToken cancellationToken = default) => _inner.GetOwnedSellerDetail(assetId, ownerUserId, cancellationToken);
+        public Task SoftDelete(Guid id, DateTimeOffset deletedAt, CancellationToken cancellationToken = default) => _inner.SoftDelete(id, deletedAt, cancellationToken);
+        public Task Delete(Guid id, CancellationToken cancellationToken = default) => _inner.Delete(id, cancellationToken);
+        public Task AddTag(Guid assetId, Guid tagId, CancellationToken cancellationToken = default) => _inner.AddTag(assetId, tagId, cancellationToken);
+        public Task<bool> TryAddTag(Guid assetId, Guid tagId, CancellationToken cancellationToken = default) => _inner.TryAddTag(assetId, tagId, cancellationToken);
+        public Task<bool> HasAssetTag(Guid assetId, Guid tagId, CancellationToken cancellationToken = default) => _inner.HasAssetTag(assetId, tagId, cancellationToken);
+        public Task<bool> RemoveTag(Guid assetId, Guid tagId, CancellationToken cancellationToken = default) => _inner.RemoveTag(assetId, tagId, cancellationToken);
+        public Task<bool> Update(Guid id, string? title, string? description, decimal? price, Guid? categoryId, CancellationToken cancellationToken = default) => _inner.Update(id, title, description, price, categoryId, cancellationToken);
+        public Task<Guid?> GetPublicAnalyticsSellerId(Guid assetId, CancellationToken cancellationToken = default) => _inner.GetPublicAnalyticsSellerId(assetId, cancellationToken);
+        public Task<Guid?> ResolveDownloadAnalyticsSellerId(Guid assetId, Guid assetVersionId, Guid actorUserId, CancellationToken cancellationToken = default) => _inner.ResolveDownloadAnalyticsSellerId(assetId, assetVersionId, actorUserId, cancellationToken);
+    }
+
+    public sealed class ObservableResultCache(BenchmarkExecutionTracker? tracker = null) : ITypedCache
+    {
+        private readonly BenchmarkExecutionTracker? _tracker = tracker;
+
+        public Task<T?> Get<T>(string key, CancellationToken cancellationToken = default)
+            where T : class
+        {
+            return Task.FromResult<T?>(null);
+        }
+
+        public Task Set<T>(string key, T value, TimeSpan expiration, CancellationToken cancellationToken = default)
+            where T : class => Task.CompletedTask;
+    }
+
+    public sealed class CachedVectorOnlyEmbeddingGenerator : ITextEmbeddingGenerator
+    {
+        private readonly BenchmarkExecutionTracker? _tracker;
+        private int _invocationCount;
+
+        public int InvocationCount => _invocationCount;
+
+        public CachedVectorOnlyEmbeddingGenerator(BenchmarkExecutionTracker? tracker = null)
+        {
+            _tracker = tracker;
+        }
+
+        public Task<DomainModelVerificationResult> CheckModelAvailability(CancellationToken cancellationToken = default)
+        {
+            Interlocked.Increment(ref _invocationCount);
+            _tracker?.RecordProviderCall();
+            return Task.FromResult(new DomainModelVerificationResult(true));
+        }
+
+        public Task<DomainGeneratedEmbedding> Generate(string text, CancellationToken cancellationToken = default)
+        {
+            Interlocked.Increment(ref _invocationCount);
+            _tracker?.RecordProviderCall();
+            throw new InvalidOperationException("Cached-query-vector benchmark must not generate an embedding.");
+        }
     }
 }

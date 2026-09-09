@@ -8,6 +8,7 @@ using AssetBlock.SearchEvaluation.Benchmark;
 using AssetBlock.SearchEvaluation.Evaluation;
 using AssetBlock.SearchEvaluation.Metrics;
 using AssetBlock.SearchEvaluation.Ollama;
+using AssetBlock.SearchEvaluation.Profiling;
 using AssetBlock.SearchEvaluation.Validation;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Options;
@@ -36,6 +37,7 @@ public static class Program
         var warmupCount = 100;
         var sampleCount = 1000;
         var concurrencyLevels = new List<int> { 1, 10 };
+        var skipOllama = false;
 
         for (var i = 0; i < args.Length; i++)
         {
@@ -82,6 +84,10 @@ public static class Program
                     .Split(',', StringSplitOptions.RemoveEmptyEntries)
                     .Select(int.Parse)
                     .ToList();
+            }
+            else if (args[i] is "--skip-ollama")
+            {
+                skipOllama = true;
             }
         }
 
@@ -189,9 +195,13 @@ public static class Program
         else if (mode is "benchmark")
         {
             EmbeddingOptions options = ResolveEmbeddingOptions(configPath);
-            using var httpClient = new HttpClient();
-            httpClient.Timeout = TimeSpan.FromSeconds(options.RequestTimeoutSeconds);
-            var client = new LocalOllamaEmbeddingClient(httpClient, options);
+            using HttpClient? httpClient = skipOllama ? null : new HttpClient();
+            IOllamaEmbeddingClient? client = null;
+            if (httpClient is not null)
+            {
+                httpClient.Timeout = TimeSpan.FromSeconds(options.RequestTimeoutSeconds);
+                client = new LocalOllamaEmbeddingClient(httpClient, options);
+            }
 
             return await SearchBenchmarkRunner.RunBenchmarkAsync(
                 benchmarkSizes,
@@ -199,7 +209,35 @@ public static class Program
                 sampleCount,
                 concurrencyLevels,
                 options,
-                client);
+                client,
+                skipOllama);
+        }
+        else if (mode is "profile-sql")
+        {
+            try
+            {
+                SearchSqlProfiler.ValidateProfilingArguments(
+                    benchmarkSizes,
+                    warmupCount,
+                    sampleCount,
+                    concurrencyLevels);
+            }
+            catch (ArgumentException ex)
+            {
+                Console.ForegroundColor = ConsoleColor.Red;
+                Console.WriteLine($"[ERROR] Invalid profiling CLI arguments: {ex.Message}");
+                Console.ResetColor();
+                return EXIT_FAILURE;
+            }
+
+            EmbeddingOptions options = ResolveEmbeddingOptions(configPath);
+            return await SearchSqlProfiler.RunProfilingAsync(
+                benchmarkSizes,
+                warmupCount,
+                sampleCount,
+                concurrencyLevels,
+                skipOllama,
+                options);
         }
         else if (mode is "backfill-evidence")
         {
@@ -209,7 +247,7 @@ public static class Program
         else
         {
             Console.ForegroundColor = ConsoleColor.Red;
-            Console.WriteLine($"Unknown mode: {mode}. Supported modes: deterministic, local-ollama, benchmark, backfill-evidence");
+            Console.WriteLine($"Unknown mode: {mode}. Supported modes: deterministic, local-ollama, benchmark, backfill-evidence, profile-sql");
             Console.ResetColor();
             return EXIT_FAILURE;
         }
