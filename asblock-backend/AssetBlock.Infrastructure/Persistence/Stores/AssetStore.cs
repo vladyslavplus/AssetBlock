@@ -521,6 +521,7 @@ internal sealed class AssetStore(
         }
 
         var totalCount = await allMatchingIds.CountAsync(cancellationToken);
+
         if (totalCount == 0 || (page - 1) * pageSize >= totalCount)
         {
             return new CatalogPageResult<AssetListItem>([], totalCount, page, pageSize);
@@ -644,7 +645,7 @@ internal sealed class AssetStore(
             .ThenBy(x => x.Id)
             .Take(candidateLimit);
 
-        var allCandidates = ftsBranch
+        var primaryCandidates = ftsBranch
             .Concat(titleIlikeBranch)
             .Concat(descIlikeBranch);
 
@@ -664,8 +665,43 @@ internal sealed class AssetStore(
                 .ThenBy(x => x.Id)
                 .Take(candidateLimit);
 
-            var descTrgmBranch = filteredBase
+            primaryCandidates = primaryCandidates.Concat(titleTrgmBranch);
+        }
+
+        var primaryDeduplicated = primaryCandidates
+            .GroupBy(x => new { x.Id, x.CreatedAt })
+            .Select(g => new
+            {
+                g.Key.Id,
+                g.Key.CreatedAt,
+                Score = g.Max(x => x.Score)
+            });
+
+        List<Guid> primaryPageIds = await primaryDeduplicated
+            .OrderByDescending(x => x.Score)
+            .ThenByDescending(x => x.CreatedAt)
+            .ThenBy(x => x.Id)
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
+            .Select(x => x.Id)
+            .ToListAsync(cancellationToken);
+
+        // Score floor of primary branches is >= 11.0f (title trigram min = 5.0 + 0.3*20 = 11.0f).
+        // Description trigram score ceiling is <= 6.0f (1.0 + 1.0*5.0 = 6.0f).
+        // If primary candidates saturate the page slice, descTrgm cannot displace any page item.
+        if (primaryPageIds.Count == pageSize || !isLongEnoughForTrigram)
+        {
+            return primaryPageIds;
+        }
+
+        // For page 1 when underfilled: primaryPageIds contains all existing primary candidates.
+        // Retrieve only the missing quota from descTrgm without re-evaluating primary branches.
+        if (page == 1)
+        {
+            var missingCount = pageSize - primaryPageIds.Count;
+            List<Guid> descTrgmPageIds = await filteredBase
                 .Where(a => a.Description != null
+                    && !primaryPageIds.Contains(a.Id)
                     && EF.Functions.TrigramsAreSimilar(a.Description, searchText)
                     && PostgresDbFunctions.TrigramsSimilarity(a.Description, searchText) >= TRIGRAM_SIMILARITY_THRESHOLD)
                 .Select(a => new
@@ -677,12 +713,30 @@ internal sealed class AssetStore(
                 .OrderByDescending(x => x.Score)
                 .ThenByDescending(x => x.CreatedAt)
                 .ThenBy(x => x.Id)
-                .Take(candidateLimit);
+                .Take(missingCount)
+                .Select(x => x.Id)
+                .ToListAsync(cancellationToken);
 
-            allCandidates = allCandidates
-                .Concat(titleTrgmBranch)
-                .Concat(descTrgmBranch);
+            primaryPageIds.AddRange(descTrgmPageIds);
+            return primaryPageIds;
         }
+
+        var descTrgmBranch = filteredBase
+            .Where(a => a.Description != null
+                && EF.Functions.TrigramsAreSimilar(a.Description, searchText)
+                && PostgresDbFunctions.TrigramsSimilarity(a.Description, searchText) >= TRIGRAM_SIMILARITY_THRESHOLD)
+            .Select(a => new
+            {
+                a.Id,
+                a.CreatedAt,
+                Score = 1.0f + (PostgresDbFunctions.TrigramsSimilarity(a.Description!, searchText) * 5.0f)
+            })
+            .OrderByDescending(x => x.Score)
+            .ThenByDescending(x => x.CreatedAt)
+            .ThenBy(x => x.Id)
+            .Take(candidateLimit);
+
+        var allCandidates = primaryCandidates.Concat(descTrgmBranch);
 
         var deduplicated = allCandidates
             .GroupBy(x => new { x.Id, x.CreatedAt })
@@ -764,7 +818,7 @@ internal sealed class AssetStore(
             .ThenBy(x => x.Id)
             .Take(branchLimit);
 
-        var lexicalCandidates = ftsBranch
+        var primaryCandidates = ftsBranch
             .Concat(titleIlikeBranch)
             .Concat(descIlikeBranch);
 
@@ -784,8 +838,38 @@ internal sealed class AssetStore(
                 .ThenBy(x => x.Id)
                 .Take(branchLimit);
 
-            var descTrgmBranch = filteredBase
+            primaryCandidates = primaryCandidates.Concat(titleTrgmBranch);
+        }
+
+        var primaryDeduplicated = primaryCandidates
+            .GroupBy(x => new { x.Id, x.CreatedAt })
+            .Select(g => new
+            {
+                g.Key.Id,
+                g.Key.CreatedAt,
+                Score = g.Max(x => x.Score)
+            });
+
+        var lexicalRaw = await primaryDeduplicated
+            .OrderByDescending(x => x.Score)
+            .ThenByDescending(x => x.CreatedAt)
+            .ThenBy(x => x.Id)
+            .Take(branchLimit)
+            .Select(x => new { x.Id, x.CreatedAt })
+            .ToListAsync(cancellationToken);
+
+        // Score floor of primary branches is >= 11.0f vs descTrgm ceiling <= 6.0f.
+        // Only evaluate descTrgm if primary branches could not fill the 201 candidate quota.
+        // When underfilled, all database primary matches are already in lexicalRaw; retrieve only the
+        // missing quota from descTrgm without re-evaluating primary branches.
+        if (isLongEnoughForTrigram && lexicalRaw.Count < branchLimit)
+        {
+            var primaryIds = lexicalRaw.Select(x => x.Id).ToList();
+            var missingCount = branchLimit - lexicalRaw.Count;
+
+            var descCandidates = await filteredBase
                 .Where(a => a.Description != null
+                    && !primaryIds.Contains(a.Id)
                     && EF.Functions.TrigramsAreSimilar(a.Description, searchText)
                     && PostgresDbFunctions.TrigramsSimilarity(a.Description, searchText) >= TRIGRAM_SIMILARITY_THRESHOLD)
                 .Select(a => new
@@ -797,29 +881,12 @@ internal sealed class AssetStore(
                 .OrderByDescending(x => x.Score)
                 .ThenByDescending(x => x.CreatedAt)
                 .ThenBy(x => x.Id)
-                .Take(branchLimit);
+                .Take(missingCount)
+                .Select(x => new { x.Id, x.CreatedAt })
+                .ToListAsync(cancellationToken);
 
-            lexicalCandidates = lexicalCandidates
-                .Concat(titleTrgmBranch)
-                .Concat(descTrgmBranch);
+            lexicalRaw.AddRange(descCandidates);
         }
-
-        var lexicalDeduplicated = lexicalCandidates
-            .GroupBy(x => new { x.Id, x.CreatedAt })
-            .Select(g => new
-            {
-                g.Key.Id,
-                g.Key.CreatedAt,
-                Score = g.Max(x => x.Score)
-            });
-
-        var lexicalRaw = await lexicalDeduplicated
-            .OrderByDescending(x => x.Score)
-            .ThenByDescending(x => x.CreatedAt)
-            .ThenBy(x => x.Id)
-            .Take(branchLimit)
-            .Select(x => new { x.Id, x.CreatedAt })
-            .ToListAsync(cancellationToken);
 
         // 2. Semantic branch candidates: up to 201
         var targetVector = new Vector(queryEmbedding);

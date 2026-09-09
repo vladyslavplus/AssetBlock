@@ -1123,7 +1123,7 @@ public sealed class AssetStorePostgresTests(PostgresFixture fixture)
         Asset missingTag = TestData.CreateAsset(author1.Id, cat1.Id, title: "Legendary Excalibur Longsword", price: 20m);
         await AddWithReadyVersion(store, missingTag, [tagVerified]);
 
-        // Soft deleted
+        // Softly deleted
         Asset softDeleted = TestData.CreateAsset(author1.Id, cat1.Id, title: "Legendary Excalibur Longsword", price: 20m);
         await AddWithReadyVersion(store, softDeleted, [tagVerified, tagFeatured]);
         await store.SoftDelete(softDeleted.Id, DateTimeOffset.UtcNow);
@@ -1147,5 +1147,215 @@ public sealed class AssetStorePostgresTests(PostgresFixture fixture)
         filteredResult.TotalCount.Should().Be(1);
         filteredResult.Items.Should().ContainSingle(a => a.Id == target.Id);
     }
+
+    [Fact]
+    public async Task GetPaged_WhenAssetMatchesOnlyViaDescriptionTrigram_ShouldIncludeInTotalCountAndReturnItem()
+    {
+        await using ApplicationDbContext db = await fixture.CreateCleanDbContext();
+        (User author, Category category) = await TestData.SeedAuthorAndCategory(db);
+        var store = new AssetStore(db);
+
+        // "Excalbr" has trigram similarity > 0.30 with "Excalibur" in pg_trgm, but does not match FTS or ILIKE substring.
+        Asset descTrigramOnly = TestData.CreateAsset(
+            author.Id,
+            category.Id,
+            title: "Mystic Relic",
+            description: "Excalbr");
+        await AddWithReadyVersion(store, descTrigramOnly);
+
+        Asset other = TestData.CreateAsset(
+            author.Id,
+            category.Id,
+            title: "Wooden Shield",
+            description: "Sturdy defensive shield");
+        await AddWithReadyVersion(store, other);
+
+        CatalogPageResult<AssetListItem> result = await store.GetPaged(new GetAssetsRequest
+        {
+            Page = 1,
+            PageSize = 10,
+            Search = "Excalibur"
+        });
+
+        result.TotalCount.Should().Be(1);
+        result.Items.Should().ContainSingle(a => a.Id == descTrigramOnly.Id);
+    }
+
+    [Fact]
+    public async Task GetPaged_WhenPrimaryCandidatesSaturatePage_ShouldRetainScoreHierarchyAndOrder()
+    {
+        await using ApplicationDbContext db = await fixture.CreateCleanDbContext();
+        (User author, Category category) = await TestData.SeedAuthorAndCategory(db);
+        var store = new AssetStore(db);
+        DateTimeOffset t0 = DateTimeOffset.UtcNow.AddMinutes(-30);
+
+        // Primary match (FTS + Title exact): score >= 150
+        Asset primary1 = TestData.CreateAsset(author.Id, category.Id, title: "Excalibur", createdAt: t0);
+        // Primary match (Title partial ILIKE): score >= 40
+        Asset primary2 = TestData.CreateAsset(author.Id, category.Id, title: "Excalibur Replica", createdAt: t0.AddMinutes(1));
+        // Desc trigram match only (typo in description): score <= 6
+        Asset descTrigram = TestData.CreateAsset(author.Id, category.Id, title: "Ancient Blade", description: "Excalbr", createdAt: t0.AddMinutes(2));
+
+        await AddWithReadyVersion(store, primary1);
+        await AddWithReadyVersion(store, primary2);
+        await AddWithReadyVersion(store, descTrigram);
+
+        // Page 1 with pageSize = 2: should be saturated by the 2 primary matches (scores >= 40), descTrigram omitted
+        CatalogPageResult<AssetListItem> page1 = await store.GetPaged(new GetAssetsRequest
+        {
+            Page = 1,
+            PageSize = 2,
+            Search = "Excalibur"
+        });
+
+        page1.TotalCount.Should().Be(3);
+        page1.Items.Should().HaveCount(2);
+        page1.Items.Select(a => a.Id).Should().Equal(primary1.Id, primary2.Id);
+
+        // Page 2 with pageSize = 2: should contain the lower-scoring descTrigram match
+        CatalogPageResult<AssetListItem> page2 = await store.GetPaged(new GetAssetsRequest
+        {
+            Page = 2,
+            PageSize = 2,
+            Search = "Excalibur"
+        });
+
+        page2.TotalCount.Should().Be(3);
+        page2.Items.Should().ContainSingle(a => a.Id == descTrigram.Id);
+    }
+
+    private static async Task<(List<Asset> Primaries, Asset DescOnly)> SeedHybridBoundaryAssets(
+        ApplicationDbContext db,
+        Guid authorId,
+        Guid categoryId,
+        int primaryCount)
+    {
+        var primaries = new List<Asset>(primaryCount);
+        var assets = new List<Asset>(primaryCount + 1);
+        var versions = new List<AssetVersion>(primaryCount + 1);
+        DateTimeOffset baseTime = DateTimeOffset.UtcNow.AddMinutes(-primaryCount * 2);
+
+        for (var i = 0; i < primaryCount; i++)
+        {
+            DateTimeOffset t = baseTime.AddMinutes(i);
+            // Alternate between FTS+Title ILIKE duplicates and Title ILIKE matches to test duplicate handling across branches
+            var title = (i % 2 == 0)
+                ? $"Excalibur Primary Model {i:D4}"
+                : $"Excalibur Replica {i:D4}";
+            var desc = (i % 2 == 0)
+                ? $"Excalibur high quality 3D model asset {i:D4}"
+                : $"Standard weapon asset {i:D4}";
+
+            Asset asset = TestData.CreateAsset(authorId, categoryId, title: title, description: desc, createdAt: t);
+            AssetVersion version = TestData.CreateAssetVersion(asset.Id, isCurrent: true, processingStatus: AssetVersionProcessingStatus.READY);
+            primaries.Add(asset);
+            assets.Add(asset);
+            versions.Add(version);
+        }
+
+        // Description trigram-only asset: "Excalbr" has similarity >= 0.3 with "Excalibur", no FTS or ILIKE substring match
+        Asset descOnly = TestData.CreateAsset(
+            authorId,
+            categoryId,
+            title: "Ancient Blade Description Trigram",
+            description: "Excalbr",
+            createdAt: baseTime.AddMinutes(-10));
+        AssetVersion descVersion = TestData.CreateAssetVersion(descOnly.Id, isCurrent: true, processingStatus: AssetVersionProcessingStatus.READY);
+        assets.Add(descOnly);
+        versions.Add(descVersion);
+
+        db.Assets.AddRange(assets);
+        db.AssetVersions.AddRange(versions);
+        await db.SaveChangesAsync();
+
+        return (primaries, descOnly);
+    }
+
+    [Fact]
+    public async Task QueryPagedHybrid_When199PrimaryAnd1DescTrigram_FillsTop200WithoutTruncation()
+    {
+        await using ApplicationDbContext db = await fixture.CreateCleanDbContext();
+        (User author, Category category) = await TestData.SeedAuthorAndCategory(db);
+        var store = new AssetStore(db);
+
+        (List<Asset> _, Asset descOnly) = await SeedHybridBoundaryAssets(db, author.Id, category.Id, 199);
+
+        var queryVector = new float[768];
+        const string modelKey = "test_boundary_model";
+
+        CatalogPageResult<AssetListItem> page1 = await store.GetPaged(new GetAssetsRequest
+        {
+            Page = 1,
+            PageSize = 100,
+            Search = "Excalibur"
+        }, queryVector, modelKey);
+
+        CatalogPageResult<AssetListItem> page2 = await store.GetPaged(new GetAssetsRequest
+        {
+            Page = 2,
+            PageSize = 100,
+            Search = "Excalibur"
+        }, queryVector, modelKey);
+
+        page1.TotalCount.Should().Be(200);
+        page1.Items.Should().HaveCount(100);
+        page1.IsTruncated.Should().BeFalse();
+
+        page2.TotalCount.Should().Be(200);
+        page2.Items.Should().HaveCount(100);
+        page2.IsTruncated.Should().BeFalse();
+        page2.Items[^1].Id.Should().Be(descOnly.Id);
+    }
+
+    [Fact]
+    public async Task QueryPagedHybrid_When200PrimaryAnd1DescTrigram_DetectsSentinelAndSetsIsTruncatedTrue()
+    {
+        await using ApplicationDbContext db = await fixture.CreateCleanDbContext();
+        (User author, Category category) = await TestData.SeedAuthorAndCategory(db);
+        var store = new AssetStore(db);
+
+        (List<Asset> _, Asset descOnly) = await SeedHybridBoundaryAssets(db, author.Id, category.Id, 200);
+
+        var queryVector = new float[768];
+        const string modelKey = "test_boundary_model";
+
+        CatalogPageResult<AssetListItem> result = await store.GetPaged(new GetAssetsRequest
+        {
+            Page = 1,
+            PageSize = 100,
+            Search = "Excalibur"
+        }, queryVector, modelKey);
+
+        result.TotalCount.Should().Be(200);
+        result.Items.Should().HaveCount(100);
+        result.IsTruncated.Should().BeTrue();
+        result.Items.Should().NotContain(a => a.Id == descOnly.Id);
+    }
+
+    [Fact]
+    public async Task QueryPagedHybrid_When201PrimaryAnd1DescTrigram_AllowsPruningAndSetsIsTruncatedTrue()
+    {
+        await using ApplicationDbContext db = await fixture.CreateCleanDbContext();
+        (User author, Category category) = await TestData.SeedAuthorAndCategory(db);
+        var store = new AssetStore(db);
+
+        (List<Asset> _, Asset descOnly) = await SeedHybridBoundaryAssets(db, author.Id, category.Id, 201);
+
+        var queryVector = new float[768];
+        const string modelKey = "test_boundary_model";
+
+        CatalogPageResult<AssetListItem> result = await store.GetPaged(new GetAssetsRequest
+        {
+            Page = 1,
+            PageSize = 100,
+            Search = "Excalibur"
+        }, queryVector, modelKey);
+
+        result.TotalCount.Should().Be(200);
+        result.Items.Should().HaveCount(100);
+        result.IsTruncated.Should().BeTrue();
+        result.Items.Should().NotContain(a => a.Id == descOnly.Id);
+    }
 }
+
 

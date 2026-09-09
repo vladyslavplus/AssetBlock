@@ -37,6 +37,7 @@ public static class Program
         var warmupCount = 100;
         var sampleCount = 1000;
         var concurrencyLevels = new List<int> { 1, 10 };
+        var concurrencySpecified = false;
         var skipOllama = false;
 
         for (var i = 0; i < args.Length; i++)
@@ -84,6 +85,7 @@ public static class Program
                     .Split(',', StringSplitOptions.RemoveEmptyEntries)
                     .Select(int.Parse)
                     .ToList();
+                concurrencySpecified = true;
             }
             else if (args[i] is "--skip-ollama")
             {
@@ -239,6 +241,37 @@ public static class Program
                 skipOllama,
                 options);
         }
+        else if (mode is "benchmark-tail")
+        {
+            if (!concurrencySpecified)
+            {
+                concurrencyLevels = [1];
+            }
+
+            try
+            {
+                SearchBenchmarkTailRunner.ValidateTailArguments(
+                    benchmarkSizes,
+                    warmupCount,
+                    sampleCount,
+                    concurrencyLevels);
+            }
+            catch (ArgumentException ex)
+            {
+                Console.ForegroundColor = ConsoleColor.Red;
+                Console.WriteLine($"[ERROR] Invalid benchmark-tail CLI arguments: {ex.Message}");
+                Console.ResetColor();
+                return EXIT_FAILURE;
+            }
+
+            EmbeddingOptions options = ResolveEmbeddingOptions(configPath);
+            return await SearchBenchmarkTailRunner.RunTailDiagnosticAsync(
+                benchmarkSizes,
+                warmupCount,
+                sampleCount,
+                concurrencyLevels,
+                options);
+        }
         else if (mode is "backfill-evidence")
         {
             EmbeddingOptions options = ResolveEmbeddingOptions(configPath);
@@ -247,7 +280,7 @@ public static class Program
         else
         {
             Console.ForegroundColor = ConsoleColor.Red;
-            Console.WriteLine($"Unknown mode: {mode}. Supported modes: deterministic, local-ollama, benchmark, backfill-evidence, profile-sql");
+            Console.WriteLine($"Unknown mode: {mode}. Supported modes: deterministic, local-ollama, benchmark, benchmark-tail, backfill-evidence, profile-sql");
             Console.ResetColor();
             return EXIT_FAILURE;
         }

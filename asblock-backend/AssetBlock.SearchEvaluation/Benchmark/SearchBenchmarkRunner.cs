@@ -233,7 +233,7 @@ public static class SearchBenchmarkRunner
         return exactScanPassed ? Program.EXIT_SUCCESS : Program.EXIT_MANUAL_EVALUATION_REQUIRED;
     }
 
-    private static async Task SeedAssetsAsync(
+    internal static async Task SeedAssetsAsync(
         SearchEvaluationDbFixture fixture,
         int startIndex,
         int count,
@@ -282,7 +282,7 @@ public static class SearchBenchmarkRunner
                     var titleTemplate = titles[idx % titles.Length];
                     var title = $"{titleTemplate} #{idx:D6}";
                     var description = $"High quality production asset {idx} optimized for game engines with modular components and clean textures.";
-
+                    var price = 10m + (idx % 90);
                     DateTimeOffset now = DateTimeOffset.UtcNow.AddMinutes(-idx);
 
                     assets.Add(new Asset
@@ -292,11 +292,9 @@ public static class SearchBenchmarkRunner
                         CategoryId = categoryId,
                         Title = title,
                         Description = description,
-                        Price = 19.99m,
+                        Price = price,
                         CreatedAt = now,
-                        UpdatedAt = now,
                         SearchRevision = 1L,
-                        DeletedAt = null,
                         RatingAverage = 4.5,
                         RatingCount = 10
                     });
@@ -366,7 +364,7 @@ public static class SearchBenchmarkRunner
         }
     }
 
-    private static async Task ExecuteWarmupAsync(
+    internal static async Task ExecuteWarmupAsync(
         SearchEvaluationDbFixture fixture,
         List<(string Text, float[] Vector)> queries,
         string modelKey,
@@ -873,7 +871,7 @@ public static class SearchBenchmarkRunner
         Console.WriteLine();
     }
 
-    private static List<(string Text, float[] Vector)> GenerateBenchmarkQueries(int count, int dimension)
+    public static List<(string Text, float[] Vector)> GenerateBenchmarkQueries(int count, int dimension)
     {
         var terms = new[]
         {
@@ -945,17 +943,9 @@ public static class SearchBenchmarkRunner
         public void RecordFailedSample() => Interlocked.Increment(ref _failedSamples);
     }
 
-    public sealed class EvaluationObservingAssetStore : IAssetStore
+    public sealed class EvaluationObservingAssetStore(IAssetStore inner, BenchmarkExecutionTracker? tracker)
+        : IAssetStore
     {
-        private readonly IAssetStore _inner;
-        private readonly BenchmarkExecutionTracker? _tracker;
-
-        public EvaluationObservingAssetStore(IAssetStore inner, BenchmarkExecutionTracker? tracker)
-        {
-            _inner = inner;
-            _tracker = tracker;
-        }
-
         public async Task<CatalogPageResult<AssetListItem>> GetPaged(
             GetAssetsRequest request,
             float[]? queryEmbedding = null,
@@ -964,40 +954,40 @@ public static class SearchBenchmarkRunner
         {
             if (queryEmbedding is not null && !string.IsNullOrWhiteSpace(modelKey))
             {
-                _tracker?.RecordHybridInvocation();
+                tracker?.RecordHybridInvocation();
             }
             else
             {
-                _tracker?.RecordLexicalInvocation();
+                tracker?.RecordLexicalInvocation();
             }
 
-            return await _inner.GetPaged(request, queryEmbedding, modelKey, cancellationToken);
+            return await inner.GetPaged(request, queryEmbedding, modelKey, cancellationToken);
         }
 
-        public Task<Asset> Add(Asset asset, CancellationToken cancellationToken = default) => _inner.Add(asset, cancellationToken);
-        public Task<Asset> AddWithTags(Asset asset, List<Tag> tags, CancellationToken cancellationToken = default) => _inner.AddWithTags(asset, tags, cancellationToken);
-        public Task<Asset> AddWithVersion(Asset asset, AssetVersion version, List<Tag>? tags, CancellationToken cancellationToken = default) => _inner.AddWithVersion(asset, version, tags, cancellationToken);
-        public Task<Asset?> GetById(Guid id, CancellationToken cancellationToken = default) => _inner.GetById(id, cancellationToken);
-        public Task<Asset?> GetById(Guid id, bool includeDeleted, CancellationToken cancellationToken = default) => _inner.GetById(id, includeDeleted, cancellationToken);
-        public Task<Asset?> GetForUpdate(Guid id, CancellationToken cancellationToken = default) => _inner.GetForUpdate(id, cancellationToken);
-        public Task<AssetCurrentVersionSnapshot?> GetCurrentVersionSnapshot(Guid assetId, CancellationToken cancellationToken = default) => _inner.GetCurrentVersionSnapshot(assetId, cancellationToken);
-        public Task<AssetVersion?> GetVersion(Guid assetId, Guid versionId, CancellationToken cancellationToken = default) => _inner.GetVersion(assetId, versionId, cancellationToken);
-        public Task<AssetOwnershipDto?> GetOwnership(Guid assetId, CancellationToken cancellationToken = default) => _inner.GetOwnership(assetId, cancellationToken);
-        public Task<IReadOnlyList<AssetVersionSummaryDto>?> ListVersions(Guid assetId, Guid? requesterUserId, CancellationToken cancellationToken = default) => _inner.ListVersions(assetId, requesterUserId, cancellationToken);
-        public Task<AssetVersion> CreateNextCandidateVersion(Guid assetId, Guid authorId, AssetVersion draft, CancellationToken cancellationToken = default) => _inner.CreateNextCandidateVersion(assetId, authorId, draft, cancellationToken);
-        public Task<IReadOnlyList<string>> GetAllStorageKeys(Guid assetId, CancellationToken cancellationToken = default) => _inner.GetAllStorageKeys(assetId, cancellationToken);
-        public Task<bool> ExistsByStorageKey(string storageKey, CancellationToken cancellationToken = default) => _inner.ExistsByStorageKey(storageKey, cancellationToken);
-        public Task<AssetBlock.Domain.Core.Dto.Paging.PagedResult<SellerAssetListItem>> GetMyListings(Guid authorId, GetAssetsRequest request, CancellationToken cancellationToken = default) => _inner.GetMyListings(authorId, request, cancellationToken);
-        public Task<SellerAssetDetailItem?> GetOwnedSellerDetail(Guid assetId, Guid ownerUserId, CancellationToken cancellationToken = default) => _inner.GetOwnedSellerDetail(assetId, ownerUserId, cancellationToken);
-        public Task SoftDelete(Guid id, DateTimeOffset deletedAt, CancellationToken cancellationToken = default) => _inner.SoftDelete(id, deletedAt, cancellationToken);
-        public Task Delete(Guid id, CancellationToken cancellationToken = default) => _inner.Delete(id, cancellationToken);
-        public Task AddTag(Guid assetId, Guid tagId, CancellationToken cancellationToken = default) => _inner.AddTag(assetId, tagId, cancellationToken);
-        public Task<bool> TryAddTag(Guid assetId, Guid tagId, CancellationToken cancellationToken = default) => _inner.TryAddTag(assetId, tagId, cancellationToken);
-        public Task<bool> HasAssetTag(Guid assetId, Guid tagId, CancellationToken cancellationToken = default) => _inner.HasAssetTag(assetId, tagId, cancellationToken);
-        public Task<bool> RemoveTag(Guid assetId, Guid tagId, CancellationToken cancellationToken = default) => _inner.RemoveTag(assetId, tagId, cancellationToken);
-        public Task<bool> Update(Guid id, string? title, string? description, decimal? price, Guid? categoryId, CancellationToken cancellationToken = default) => _inner.Update(id, title, description, price, categoryId, cancellationToken);
-        public Task<Guid?> GetPublicAnalyticsSellerId(Guid assetId, CancellationToken cancellationToken = default) => _inner.GetPublicAnalyticsSellerId(assetId, cancellationToken);
-        public Task<Guid?> ResolveDownloadAnalyticsSellerId(Guid assetId, Guid assetVersionId, Guid actorUserId, CancellationToken cancellationToken = default) => _inner.ResolveDownloadAnalyticsSellerId(assetId, assetVersionId, actorUserId, cancellationToken);
+        public Task<Asset> Add(Asset asset, CancellationToken cancellationToken = default) => inner.Add(asset, cancellationToken);
+        public Task<Asset> AddWithTags(Asset asset, List<Tag> tags, CancellationToken cancellationToken = default) => inner.AddWithTags(asset, tags, cancellationToken);
+        public Task<Asset> AddWithVersion(Asset asset, AssetVersion version, List<Tag>? tags, CancellationToken cancellationToken = default) => inner.AddWithVersion(asset, version, tags, cancellationToken);
+        public Task<Asset?> GetById(Guid id, CancellationToken cancellationToken = default) => inner.GetById(id, cancellationToken);
+        public Task<Asset?> GetById(Guid id, bool includeDeleted, CancellationToken cancellationToken = default) => inner.GetById(id, includeDeleted, cancellationToken);
+        public Task<Asset?> GetForUpdate(Guid id, CancellationToken cancellationToken = default) => inner.GetForUpdate(id, cancellationToken);
+        public Task<AssetCurrentVersionSnapshot?> GetCurrentVersionSnapshot(Guid assetId, CancellationToken cancellationToken = default) => inner.GetCurrentVersionSnapshot(assetId, cancellationToken);
+        public Task<AssetVersion?> GetVersion(Guid assetId, Guid versionId, CancellationToken cancellationToken = default) => inner.GetVersion(assetId, versionId, cancellationToken);
+        public Task<AssetOwnershipDto?> GetOwnership(Guid assetId, CancellationToken cancellationToken = default) => inner.GetOwnership(assetId, cancellationToken);
+        public Task<IReadOnlyList<AssetVersionSummaryDto>?> ListVersions(Guid assetId, Guid? requesterUserId, CancellationToken cancellationToken = default) => inner.ListVersions(assetId, requesterUserId, cancellationToken);
+        public Task<AssetVersion> CreateNextCandidateVersion(Guid assetId, Guid authorId, AssetVersion draft, CancellationToken cancellationToken = default) => inner.CreateNextCandidateVersion(assetId, authorId, draft, cancellationToken);
+        public Task<IReadOnlyList<string>> GetAllStorageKeys(Guid assetId, CancellationToken cancellationToken = default) => inner.GetAllStorageKeys(assetId, cancellationToken);
+        public Task<bool> ExistsByStorageKey(string storageKey, CancellationToken cancellationToken = default) => inner.ExistsByStorageKey(storageKey, cancellationToken);
+        public Task<AssetBlock.Domain.Core.Dto.Paging.PagedResult<SellerAssetListItem>> GetMyListings(Guid authorId, GetAssetsRequest request, CancellationToken cancellationToken = default) => inner.GetMyListings(authorId, request, cancellationToken);
+        public Task<SellerAssetDetailItem?> GetOwnedSellerDetail(Guid assetId, Guid ownerUserId, CancellationToken cancellationToken = default) => inner.GetOwnedSellerDetail(assetId, ownerUserId, cancellationToken);
+        public Task SoftDelete(Guid id, DateTimeOffset deletedAt, CancellationToken cancellationToken = default) => inner.SoftDelete(id, deletedAt, cancellationToken);
+        public Task Delete(Guid id, CancellationToken cancellationToken = default) => inner.Delete(id, cancellationToken);
+        public Task AddTag(Guid assetId, Guid tagId, CancellationToken cancellationToken = default) => inner.AddTag(assetId, tagId, cancellationToken);
+        public Task<bool> TryAddTag(Guid assetId, Guid tagId, CancellationToken cancellationToken = default) => inner.TryAddTag(assetId, tagId, cancellationToken);
+        public Task<bool> HasAssetTag(Guid assetId, Guid tagId, CancellationToken cancellationToken = default) => inner.HasAssetTag(assetId, tagId, cancellationToken);
+        public Task<bool> RemoveTag(Guid assetId, Guid tagId, CancellationToken cancellationToken = default) => inner.RemoveTag(assetId, tagId, cancellationToken);
+        public Task<bool> Update(Guid id, string? title, string? description, decimal? price, Guid? categoryId, CancellationToken cancellationToken = default) => inner.Update(id, title, description, price, categoryId, cancellationToken);
+        public Task<Guid?> GetPublicAnalyticsSellerId(Guid assetId, CancellationToken cancellationToken = default) => inner.GetPublicAnalyticsSellerId(assetId, cancellationToken);
+        public Task<Guid?> ResolveDownloadAnalyticsSellerId(Guid assetId, Guid assetVersionId, Guid actorUserId, CancellationToken cancellationToken = default) => inner.ResolveDownloadAnalyticsSellerId(assetId, assetVersionId, actorUserId, cancellationToken);
     }
 
     public sealed class ObservableResultCache(BenchmarkExecutionTracker? tracker = null) : ITypedCache
@@ -1014,29 +1004,24 @@ public static class SearchBenchmarkRunner
             where T : class => Task.CompletedTask;
     }
 
-    public sealed class CachedVectorOnlyEmbeddingGenerator : ITextEmbeddingGenerator
+    public sealed class CachedVectorOnlyEmbeddingGenerator(BenchmarkExecutionTracker? tracker = null)
+        : ITextEmbeddingGenerator
     {
-        private readonly BenchmarkExecutionTracker? _tracker;
         private int _invocationCount;
 
         public int InvocationCount => _invocationCount;
 
-        public CachedVectorOnlyEmbeddingGenerator(BenchmarkExecutionTracker? tracker = null)
-        {
-            _tracker = tracker;
-        }
-
         public Task<DomainModelVerificationResult> CheckModelAvailability(CancellationToken cancellationToken = default)
         {
             Interlocked.Increment(ref _invocationCount);
-            _tracker?.RecordProviderCall();
+            tracker?.RecordProviderCall();
             return Task.FromResult(new DomainModelVerificationResult(true));
         }
 
         public Task<DomainGeneratedEmbedding> Generate(string text, CancellationToken cancellationToken = default)
         {
             Interlocked.Increment(ref _invocationCount);
-            _tracker?.RecordProviderCall();
+            tracker?.RecordProviderCall();
             throw new InvalidOperationException("Cached-query-vector benchmark must not generate an embedding.");
         }
     }
