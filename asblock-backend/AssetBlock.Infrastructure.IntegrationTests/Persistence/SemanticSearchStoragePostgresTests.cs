@@ -587,6 +587,48 @@ public sealed class SemanticSearchStoragePostgresTests(PostgresFixture fixture)
         result.IsTruncated.Should().BeFalse();
     }
 
+    [Fact]
+    public async Task GetPaged_WhenHybridQueryExecuted_ShouldFuseLexicalAndSemanticRankingsWithTrigramMatches()
+    {
+        await using ApplicationDbContext db = await fixture.CreateCleanDbContext();
+        (User author, Category category) = await TestData.SeedAuthorAndCategory(db);
+        var assetStore = new AssetStore(db);
+
+        var queryVector = new float[DIMENSION_768];
+        queryVector[0] = 1.0f;
+
+        // Asset 1: strong semantic match (vector matches queryVector), weak title match
+        Asset semanticStrong = TestData.CreateAsset(author.Id, category.Id, title: "Galaxy Starship Explorer", price: 10m);
+        // Asset 2: typo title match (Celestil Blade -> Celestial via trigram similarity ~0.39), has NO embedding
+        Asset trigramLexical = TestData.CreateAsset(author.Id, category.Id, title: "Celestil Blade", price: 20m);
+
+        db.Assets.AddRange(semanticStrong, trigramLexical);
+        db.AssetVersions.AddRange(
+            TestData.CreateAssetVersion(semanticStrong.Id, isCurrent: true, processingStatus: AssetVersionProcessingStatus.READY),
+            TestData.CreateAssetVersion(trigramLexical.Id, isCurrent: true, processingStatus: AssetVersionProcessingStatus.READY));
+
+        AssetEmbedding embSemantic = CreateValidEmbedding(semanticStrong.Id);
+        embSemantic.Embedding = new Vector(queryVector); // cosine distance = 0
+
+        // Only semanticStrong has an embedding; trigramLexical has NO embedding and must be retrieved via trigram lexical candidate branch
+        db.AssetEmbeddings.Add(embSemantic);
+        await db.SaveChangesAsync();
+
+        var request = new GetAssetsRequest
+        {
+            Search = "Celestial",
+            Page = 1,
+            PageSize = 10
+        };
+
+        CatalogPageResult<AssetListItem> result = await assetStore.GetPaged(request, queryVector, VALID_HEX_64);
+
+        result.TotalCount.Should().Be(2);
+        result.Items.Should().HaveCount(2);
+        result.Items.Select(a => a.Id).Should().Contain([semanticStrong.Id, trigramLexical.Id]);
+        result.IsTruncated.Should().BeFalse();
+    }
+
     private static AssetEmbedding CreateValidEmbedding(Guid assetId)
     {
         return new AssetEmbedding
