@@ -2,7 +2,7 @@ import { AUTH_COOKIE_ACCESS, AUTH_COOKIE_REFRESH } from '@/lib/auth/constants'
 import { getServerApiBaseUrl } from '@/lib/http/api-config'
 import { isAccessTokenExpired } from '@/lib/server/access-token'
 import { clearAuthCookies, type AuthCookieStore } from '@/lib/server/auth-cookies'
-import { problemResponse } from '@/lib/server/bff-http'
+import { clientClosedRequestResponse, problemResponse } from '@/lib/server/bff-http'
 import { tryRefreshFromCookies } from '@/lib/server/refresh-session'
 
 export const DEFAULT_BACKEND_TIMEOUT_MS = 30_000
@@ -102,13 +102,13 @@ export async function fetchBackendPublic(
       cache: 'no-store',
       signal: timeoutCtx.signal,
     })
-  } catch (error: unknown) {
+  } catch (_error: unknown) {
     if (timeoutCtx.isTimeout()) {
       return problemResponse(504, 'ERR_GATEWAY_TIMEOUT', 'The backend request timed out.')
     }
 
     if (init.signal?.aborted) {
-      throw error
+      return clientClosedRequestResponse()
     }
 
     return problemResponse(502, 'ERR_GATEWAY_ERROR', 'The service is temporarily unavailable.')
@@ -238,14 +238,15 @@ export async function fetchBackend(
     }
 
     return res
-  } catch (error: unknown) {
+  } catch (_error: unknown) {
     if (timeoutCtx.isTimeout()) {
       return problemResponse(504, 'ERR_GATEWAY_TIMEOUT', 'The backend request timed out.')
     }
 
-    // If caller explicitly aborted the request, propagate the abort
+    // The upstream request was already cancelled through the linked signal.
+    // Resolve the Route Handler instead of leaving Next.js with a rejected promise.
     if (init.signal?.aborted) {
-      throw error
+      return clientClosedRequestResponse()
     }
 
     return problemResponse(502, 'ERR_GATEWAY_ERROR', 'The service is temporarily unavailable.')

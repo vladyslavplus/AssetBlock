@@ -3,6 +3,7 @@ using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using AssetBlock.Domain.Abstractions.Services;
+using AssetBlock.Domain.Core;
 using AssetBlock.Domain.Core.Constants;
 using AssetBlock.Domain.Core.Dto;
 using AssetBlock.Domain.Core.Dto.Notifications;
@@ -18,7 +19,9 @@ namespace AssetBlock.Infrastructure.Persistence.Stores;
 
 public sealed partial class AssetProcessingLifecycleStore(
     ApplicationDbContext dbContext,
-    IOptions<AssetProcessingOptions> options)
+    IOptions<AssetProcessingOptions> options,
+    IAssetProcessingJobStore? jobStore = null,
+    IOptions<EmbeddingOptions>? embeddingOptions = null)
     : IAssetProcessingLifecycleStore
 {
     private static readonly Regex _errorCodeRegex = MyRegex();
@@ -164,7 +167,9 @@ public sealed partial class AssetProcessingLifecycleStore(
                 {nextJobId}, {assetId}, {assetVersionId}, 'MALWARE_SCAN', 1, 'QUEUED', 'QUEUED',
                 0, {maxAttempts}, {dbNow}, {dbNow}, {dbNow}, CAST({malwarePayload} AS jsonb)
             )
-            ON CONFLICT ("AssetVersionId", "Type", "DefinitionVersion") DO NOTHING
+            ON CONFLICT ("AssetVersionId", "Type", "DefinitionVersion")
+            WHERE "Type" <> 'EMBEDDING_GENERATION'
+            DO NOTHING
             """, cancellationToken);
 
         // 7. Mark ARCHIVE_INSPECTION job as SUCCEEDED
@@ -364,6 +369,57 @@ public sealed partial class AssetProcessingLifecycleStore(
             AssetVersionProcessingStatus.READY,
             dbNow,
             cancellationToken);
+
+        if (shouldPromote && jobStore != null && embeddingOptions?.Value is { Enabled: true } embOptions)
+        {
+            var assetData = await dbContext.Assets
+                .AsNoTracking()
+                .Where(a => a.Id == assetId && a.DeletedAt == null)
+                .Select(a => new
+                {
+                    a.SearchRevision,
+                    a.Title,
+                    a.Description,
+                    CategoryName = a.Category.Name
+                })
+                .FirstOrDefaultAsync(cancellationToken);
+
+            if (assetData != null)
+            {
+                List<string> tagNames = await dbContext.AssetTags
+                    .AsNoTracking()
+                    .Where(at => at.AssetId == assetId)
+                    .OrderBy(at => at.Tag.Name)
+                    .Select(at => at.Tag.Name)
+                    .ToListAsync(cancellationToken);
+
+                var canonicalText = AssetPublicMetadataCanonicalizer.BuildCanonicalMetadata(
+                    assetData.Title,
+                    assetData.Description,
+                    assetData.CategoryName,
+                    tagNames);
+
+                var contentHash = AssetPublicMetadataCanonicalizer.ComputeContentHash(canonicalText);
+
+                var payload = new EmbeddingGenerationPayload(
+                    assetId,
+                    assetVersionId,
+                    assetData.SearchRevision,
+                    contentHash,
+                    EmbeddingModelKey.Compute(embOptions),
+                    AssetPublicMetadataCanonicalizer.SCHEMA_VERSION);
+
+                await jobStore.Enqueue(
+                    assetId,
+                    assetVersionId,
+                    AssetProcessingJobType.EMBEDDING_GENERATION,
+                    definitionVersion: 1,
+                    initialDelay: TimeSpan.Zero,
+                    payload,
+                    traceParent: null,
+                    cancellationToken);
+            }
+        }
 
         await tx.CommitAsync(cancellationToken);
         return true;
@@ -589,7 +645,7 @@ public sealed partial class AssetProcessingLifecycleStore(
 
     private async Task<bool> RecoverOneExpiredExhaustedSecurityJob(CancellationToken cancellationToken)
     {
-        var errorCode = ErrorCodes.LEASE_EXPIRED;
+        const string errorCode = ErrorCodes.LEASE_EXPIRED;
         var boundedSummary = AssetProcessingJobStore.BoundErrorSummary(
             ErrorCodesToErrorMessages.GetMessage(ErrorCodes.LEASE_EXPIRED));
 
@@ -620,7 +676,7 @@ public sealed partial class AssetProcessingLifecycleStore(
         var expectedSourceStatus = job.Type == AssetProcessingJobType.ARCHIVE_INSPECTION
             ? nameof(AssetVersionProcessingStatus.PENDING_INSPECTION)
             : nameof(AssetVersionProcessingStatus.PENDING_MALWARE_SCAN);
-        var failedStatus = nameof(AssetVersionProcessingStatus.PROCESSING_FAILED);
+        const string failedStatus = nameof(AssetVersionProcessingStatus.PROCESSING_FAILED);
 
         DateTimeOffset dbNow = await dbContext.Database.SqlQueryRaw<DateTimeOffset>(
             """SELECT clock_timestamp() AS "Value" """).FirstAsync(cancellationToken);

@@ -40,10 +40,11 @@ public sealed class AssetsController(
     /// </summary>
     [HttpGet(ApiRoutes.Assets.LIST)]
     [AllowAnonymous]
+    [EnableRateLimiting(RateLimitingConstants.Policies.CATALOG_SEARCH)]
     [ProducesResponseType(StatusCodes.Status200OK)]
     public async Task<IActionResult> List([FromQuery] GetAssetsRequest request, CancellationToken cancellationToken)
     {
-        Result<Domain.Core.Dto.Paging.PagedResult<AssetListItem>> result = await Sender.Send(new GetAssetsQuery(request), cancellationToken);
+        Result<CatalogPageResult<AssetListItem>> result = await Sender.Send(new GetAssetsQuery(request), cancellationToken);
         return MapResultToActionResult(result);
     }
 

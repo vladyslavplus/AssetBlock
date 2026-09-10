@@ -47,6 +47,7 @@ internal sealed class UpdateTagCommandHandler(
             await unitOfWork.ExecuteInTransaction(async ct =>
             {
                 await tagStore.Update(tag, ct);
+                await tagStore.BulkIncrementAssetSearchRevision(tag.Id, ct);
                 await auditWriter.Write(new AuditEvent(
                     AuditActions.TAG_UPDATE,
                     AuditOutcome.SUCCESS,

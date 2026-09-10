@@ -88,13 +88,13 @@ public static class DependencyInjection
 
         services.AddDbContext<ApplicationDbContext>((sp, options) =>
         {
-            options.UseNpgsql(connectionString);
+            options.UseNpgsql(connectionString, npgsql => npgsql.UseVector());
             options.AddInterceptors(sp.GetRequiredService<Persistence.Interceptors.AuditTimestampsInterceptor>());
         });
         services.AddDbContextFactory<ApplicationDbContext>(
             (sp, options) =>
             {
-                options.UseNpgsql(connectionString);
+                options.UseNpgsql(connectionString, npgsql => npgsql.UseVector());
                 options.AddInterceptors(sp.GetRequiredService<Persistence.Interceptors.AuditTimestampsInterceptor>());
             },
             ServiceLifetime.Scoped);
@@ -123,6 +123,10 @@ public static class DependencyInjection
             .Bind(configuration.GetSection(OllamaOptions.CONFIGURATION_PATH))
             .ValidateOnStart();
         services.AddSingleton<IValidateOptions<OllamaOptions>, OllamaOptionsValidator>();
+        services.AddOptions<EmbeddingOptions>()
+            .Bind(configuration.GetSection(EmbeddingOptions.CONFIGURATION_PATH))
+            .ValidateOnStart();
+        services.AddSingleton<IValidateOptions<EmbeddingOptions>, EmbeddingOptionsValidator>();
         services.AddHttpClient(OpenRouterAiGenerationProvider.HTTP_CLIENT_NAME, (sp, client) =>
         {
             OpenRouterOptions options = sp.GetRequiredService<IOptions<OpenRouterOptions>>().Value;
@@ -145,6 +149,8 @@ public static class DependencyInjection
         services.AddHostedService<OutboxRetentionWorker>();
         services.AddHostedService<AnalyticsAggregationWorker>();
         services.AddHostedService<AssetProcessingWorker>();
+        services.AddHostedService<EmbeddingBackfillCoordinatorWorker>();
+        services.AddHttpClient(OllamaTextEmbeddingGenerator.HTTP_CLIENT_NAME);
         services.AddScoped<IAssetProcessingJobRegistry, AssetProcessingJobRegistry>();
         services.AddAssetProcessingJobHandler<ArchiveInspectionJobHandler, ArchiveInspectionPayload, ArchiveInspectionResult>(
             AssetProcessingJobType.ARCHIVE_INSPECTION);
@@ -152,6 +158,11 @@ public static class DependencyInjection
             AssetProcessingJobType.MALWARE_SCAN);
         services.AddAssetProcessingJobHandler<ListingCopilotJobHandler, ListingCopilotPayload, ListingCopilotResult>(
             AssetProcessingJobType.LISTING_COPILOT);
+        services.AddAssetProcessingJobHandler<EmbeddingGenerationJobHandler, EmbeddingGenerationPayload, EmbeddingGenerationResult>(
+            AssetProcessingJobType.EMBEDDING_GENERATION);
+        services.AddScoped<ITextEmbeddingGenerator, OllamaTextEmbeddingGenerator>();
+        services.AddScoped<IAssetEmbeddingFinalizer, AssetEmbeddingFinalizer>();
+        services.AddScoped<IEmbeddingBackfillCoordinator, EmbeddingBackfillCoordinator>();
         services.AddSingleton<IArchiveSafetyInspector, ArchiveSafetyInspector>();
         services.AddSingleton<IContentMalwareScanner, ClamAvContentMalwareScanner>();
         services.AddScoped<IUnitOfWork, EfUnitOfWork>();
@@ -190,6 +201,8 @@ public static class DependencyInjection
         services.AddScoped<IAuditContextAccessor, NullAuditContextAccessor>();
         services.AddScoped<IPaymentService, StripePaymentService>();
         services.AddScoped<IDownloadService, DownloadService>();
+        services.AddScoped<IVectorSearchCapability, VectorSearchCapability>();
+        services.AddSingleton<IQueryVectorCache>(sp => new BoundedQueryVectorCache(sp.GetRequiredService<TimeProvider>()));
         services.AddAssetStorage(configuration);
         services.AddSingleton<IEncryptionService, AesGcmEncryptionService>();
         services.AddSingleton<IPasswordHasher, PasswordHasher>();

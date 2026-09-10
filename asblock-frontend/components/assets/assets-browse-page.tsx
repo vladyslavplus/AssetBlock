@@ -24,7 +24,9 @@ import { AlertCircle, ChevronLeft, ChevronRight } from 'lucide-react'
 import {
   CATALOG_ASSETS_PAGE_SIZE,
   DEFAULT_CATALOG_FILTERS,
+  deriveEffectiveSort,
   sortDirectionForSortBy,
+  UI_ONLY_SORT,
   type CatalogFilters,
 } from '@/lib/catalog/catalog-filters'
 import { parseCatalogUrlParams, serializeCatalogUrlParams } from '@/lib/catalog/catalog-url-state'
@@ -104,11 +106,29 @@ function AssetsCatalogContent({
     : null
 
   const handleFilterChange = (updates: Partial<CatalogFilters>) => {
-    const next: CatalogFilters = { ...filters, ...updates }
+    let next: CatalogFilters = { ...filters, ...updates }
     next.pageSize = CATALOG_ASSETS_PAGE_SIZE
-    if (updates.sortBy !== undefined && updates.sortDirection === undefined) {
-      next.sortDirection = sortDirectionForSortBy(updates.sortBy)
+
+    if (updates.sortBy === undefined && updates.search !== undefined) {
+      const startsSearchFromBrowseDefault =
+        filters.search.trim().length === 0 &&
+        updates.search.trim().length > 0 &&
+        filters.sortBy === DEFAULT_CATALOG_FILTERS.sortBy &&
+        filters.sortDirection === DEFAULT_CATALOG_FILTERS.sortDirection
+
+      if (startsSearchFromBrowseDefault) {
+        next.sortBy = UI_ONLY_SORT
+      }
     }
+    if (updates.sortBy !== undefined && updates.sortDirection === undefined) {
+      // Relevance is UI-only with no backend sort direction.
+      next.sortDirection =
+        updates.sortBy === UI_ONLY_SORT ? 'DESC' : sortDirectionForSortBy(updates.sortBy)
+    }
+    // Clearing the search must not leave a misleading relevance mode behind;
+    // fall back to the browse default (CreatedAt DESC).
+    next = deriveEffectiveSort(next)
+
     const shouldResetPage =
       updates.page === undefined &&
       (updates.search !== undefined ||
@@ -149,6 +169,9 @@ function AssetsCatalogContent({
     filters.tags.length > 0 ||
     filters.minPrice !== null ||
     filters.maxPrice !== null
+
+  const relevanceSearchActive = filters.sortBy === 'Relevance' && Boolean(filters.search.trim())
+  const showBestResultsNotice = listQuery.data?.isTruncated === true && relevanceSearchActive
 
   return (
     <div className="min-h-screen flex flex-col bg-background text-foreground">
@@ -262,6 +285,12 @@ function AssetsCatalogContent({
                     </div>
                   )}
                 </div>
+              )}
+
+              {showBestResultsNotice && (
+                <p className="text-xs text-muted-foreground" role="status">
+                  Showing the best matches for your search.
+                </p>
               )}
 
               {listLoading && items.length === 0 ? (
@@ -414,6 +443,12 @@ function AssetsCatalogContent({
                 </div>
               </SheetContent>
             </Sheet>
+
+            {showBestResultsNotice && (
+              <p className="text-xs text-muted-foreground" role="status">
+                Showing the best matches for your search.
+              </p>
+            )}
 
             {listLoading && items.length === 0 ? (
               <AssetCardGridSkeleton variant="catalog-mobile" />

@@ -43,7 +43,7 @@ export function AssetEditForm({ asset }: AssetEditFormProps) {
 
   const facetsQuery = useQuery({
     queryKey: catalogKeys.facets(),
-    queryFn: ({ signal }) => fetchCatalogFacets({ signal }),
+    queryFn: () => fetchCatalogFacets(),
     staleTime: 5 * 60 * 1000,
   })
 

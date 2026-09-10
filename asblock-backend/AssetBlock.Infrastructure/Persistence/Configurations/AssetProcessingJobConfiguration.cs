@@ -14,9 +14,12 @@ internal sealed class AssetProcessingJobConfiguration : IEntityTypeConfiguration
             table.HasCheckConstraint("CK_asset_processing_jobs_attempt_count", "\"AttemptCount\" >= 0 AND \"AttemptCount\" <= \"MaxAttempts\"");
             table.HasCheckConstraint("CK_asset_processing_jobs_max_attempts", "\"MaxAttempts\" > 0 AND \"MaxAttempts\" <= 10");
             table.HasCheckConstraint("CK_asset_processing_jobs_definition_version", "\"DefinitionVersion\" > 0");
-            table.HasCheckConstraint("CK_asset_processing_jobs_type", "\"Type\" IN ('ARCHIVE_INSPECTION', 'MALWARE_SCAN', 'LISTING_COPILOT')");
+            table.HasCheckConstraint("CK_asset_processing_jobs_type", "\"Type\" IN ('ARCHIVE_INSPECTION', 'MALWARE_SCAN', 'LISTING_COPILOT', 'EMBEDDING_GENERATION')");
             table.HasCheckConstraint("CK_asset_processing_jobs_status", "\"Status\" IN ('QUEUED', 'RUNNING', 'RETRY_SCHEDULED', 'SUCCEEDED', 'FAILED', 'CANCELLED')");
             table.HasCheckConstraint("CK_asset_processing_jobs_error_code", "\"ErrorCode\" IS NULL OR \"ErrorCode\" ~ '^[A-Z0-9_]{1,64}$'");
+            table.HasCheckConstraint(
+                "CK_asset_processing_jobs_embedding_hashes",
+                "(\"Type\" = 'EMBEDDING_GENERATION' AND \"InputHash\" IS NOT NULL AND \"InputHash\" ~ '^[0-9a-f]{64}$' AND \"ModelKey\" IS NOT NULL AND \"ModelKey\" ~ '^[0-9a-f]{64}$') OR (\"Type\" <> 'EMBEDDING_GENERATION' AND \"InputHash\" IS NULL AND \"ModelKey\" IS NULL)");
 
             // RUNNING requires lease fields; non-RUNNING must not have active lease
             table.HasCheckConstraint("CK_asset_processing_jobs_running_lease",
@@ -75,6 +78,13 @@ internal sealed class AssetProcessingJobConfiguration : IEntityTypeConfiguration
         builder.Property(j => j.Result).HasColumnType("jsonb");
         builder.Property(j => j.TraceParent).HasMaxLength(128);
 
+        builder.Property(j => j.InputHash)
+            .HasColumnType("char(64)")
+            .IsFixedLength();
+        builder.Property(j => j.ModelKey)
+            .HasColumnType("char(64)")
+            .IsFixedLength();
+
         builder.Property(j => j.CreatedAt).IsRequired();
         builder.Property(j => j.UpdatedAt);
 
@@ -93,7 +103,14 @@ internal sealed class AssetProcessingJobConfiguration : IEntityTypeConfiguration
         // Idempotency: exact same job cannot be enqueued twice for the same version
         builder.HasIndex(j => new { j.AssetVersionId, j.Type, j.DefinitionVersion })
             .IsUnique()
+            .HasFilter("\"Type\" <> 'EMBEDDING_GENERATION'")
             .HasDatabaseName("UIX_asset_processing_jobs_idempotency");
+
+        // Active embedding job unique index
+        builder.HasIndex(j => new { j.AssetId, j.Type, j.DefinitionVersion, j.ModelKey, j.InputHash })
+            .IsUnique()
+            .HasFilter("\"Type\" = 'EMBEDDING_GENERATION' AND \"Status\" IN ('QUEUED', 'RUNNING', 'RETRY_SCHEDULED')")
+            .HasDatabaseName("UIX_asset_processing_jobs_embedding_active");
 
         // Queue order and claim index
         builder.HasIndex(j => new { j.Status, j.AvailableAt, j.Id })

@@ -110,4 +110,19 @@ internal sealed class TagStore(ApplicationDbContext dbContext) : ITagStore
         dbContext.Tags.Remove(tag);
         await dbContext.SaveChangesAsync(cancellationToken);
     }
+
+    public async Task<int> BulkIncrementAssetSearchRevision(Guid tagId, CancellationToken cancellationToken = default)
+    {
+        return await dbContext.Database.ExecuteSqlInterpolatedAsync($"""
+            UPDATE assets
+            SET "SearchRevision" = "SearchRevision" + 1,
+                "UpdatedAt" = clock_timestamp()
+            WHERE "Id" IN (
+                SELECT "AssetId"
+                FROM asset_tags
+                WHERE "TagId" = {tagId}
+            )
+            AND "DeletedAt" IS NULL
+            """, cancellationToken);
+    }
 }

@@ -49,7 +49,7 @@ export function SellMyListings() {
 
   const listingsQuery = useQuery({
     queryKey: sellerKeys.listings(),
-    queryFn: fetchSellerListingsQuery,
+    queryFn: () => fetchSellerListingsQuery(),
     enabled: authed,
   })
 

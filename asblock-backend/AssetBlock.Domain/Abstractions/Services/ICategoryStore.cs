@@ -12,4 +12,5 @@ public interface ICategoryStore
     Task<Category> Create(string name, string? description, string slug, CancellationToken cancellationToken = default);
     Task Update(Category category, CancellationToken cancellationToken = default);
     Task<bool> Delete(Guid id, CancellationToken cancellationToken = default);
+    Task<int> BulkIncrementAssetSearchRevision(Guid categoryId, CancellationToken cancellationToken = default);
 }

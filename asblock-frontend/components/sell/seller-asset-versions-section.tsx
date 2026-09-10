@@ -15,7 +15,7 @@ interface SellerAssetVersionsSectionProps {
 export function SellerAssetVersionsSection({ assetId }: SellerAssetVersionsSectionProps) {
   const versionsQuery = useQuery({
     queryKey: sellerKeys.versions(assetId),
-    queryFn: ({ signal }) => fetchSellerAssetVersions(assetId, signal),
+    queryFn: () => fetchSellerAssetVersions(assetId),
   })
 
   const versions = versionsQuery.data ?? []

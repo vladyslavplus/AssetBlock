@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { AUTH_COOKIE_ACCESS, AUTH_COOKIE_REFRESH } from '@/lib/auth/constants'
-import { fetchBackend } from '@/lib/server/fetch-backend'
+import { fetchBackend, fetchBackendPublic } from '@/lib/server/fetch-backend'
 import { tryRefreshFromCookies } from '@/lib/server/refresh-session'
 import { createMemoryCookieStore, makeJwt } from '@/test/cookie-store'
 
@@ -336,7 +336,7 @@ describe('fetchBackend session refresh', () => {
     expect(store.snapshot()[AUTH_COOKIE_REFRESH]).toBe('refresh-token')
   })
 
-  it('caller abort during preflight refresh propagates abort and does not wipe cookies', async () => {
+  it('caller abort during preflight refresh returns 499 and does not wipe cookies', async () => {
     const expiredAccess = makeJwt(Math.floor(Date.now() / 1000) - 60)
     const store = createMemoryCookieStore({
       [AUTH_COOKIE_ACCESS]: expiredAccess,
@@ -357,7 +357,9 @@ describe('fetchBackend session refresh', () => {
     )
 
     callerController.abort()
-    await expect(promise).rejects.toThrow()
+    const response = await promise
+    expect(response.status).toBe(499)
+    expect((await response.json()).code).toBe('ERR_CLIENT_CLOSED_REQUEST')
     expect(store.snapshot()[AUTH_COOKIE_REFRESH]).toBe('refresh-token')
   })
 
@@ -403,7 +405,8 @@ describe('fetchBackend session refresh', () => {
     // Abort caller 1 immediately while refresh is in flight
     caller1Controller.abort()
 
-    await expect(promise1).rejects.toThrow()
+    const res1 = await promise1
+    expect(res1.status).toBe(499)
 
     // Caller 2 should successfully finish and get rotated tokens
     const res2 = await promise2
@@ -448,7 +451,8 @@ describe('fetchBackend session refresh', () => {
     expect(underlyingSignal?.aborted).toBe(false)
 
     callerController.abort()
-    await expect(promise).rejects.toThrow()
+    const response = await promise
+    expect(response.status).toBe(499)
 
     // Underlying signal MUST be aborted when the last/only waiter aborts
     expect(underlyingSignal?.aborted).toBe(true)
@@ -511,7 +515,8 @@ describe('fetchBackend session refresh', () => {
 
     // 2. Caller A aborts
     controllerA.abort()
-    await expect(promiseA).rejects.toThrow()
+    const responseA = await promiseA
+    expect(responseA.status).toBe(499)
 
     // 3. Caller B starts immediately while A's aborted underlying promise is still settling
     const promiseB = fetchBackend(storeB, '/api/seller/listings', { method: 'GET' }, 'required')
@@ -731,7 +736,7 @@ describe('fetchBackend session refresh', () => {
     expect(body.detail).toBe('The backend request timed out.')
   })
 
-  it('propagates caller abort when caller aborts before timeout', async () => {
+  it('returns 499 when caller aborts before timeout', async () => {
     const access = makeJwt(Math.floor(Date.now() / 1000) + 3600)
     const store = createMemoryCookieStore({
       [AUTH_COOKIE_ACCESS]: access,
@@ -758,7 +763,29 @@ describe('fetchBackend session refresh', () => {
     )
 
     callerController.abort()
-    await expect(fetchPromise).rejects.toThrow()
+    const response = await fetchPromise
+    expect(response.status).toBe(499)
+    expect((await response.json()).code).toBe('ERR_CLIENT_CLOSED_REQUEST')
+  })
+
+  it('returns 499 for a cancelled public BFF request', async () => {
+    const callerController = new AbortController()
+    vi.stubGlobal('fetch', async (_input: RequestInfo | URL, init?: RequestInit) => {
+      return new Promise<Response>((_, reject) => {
+        init?.signal?.addEventListener('abort', () => {
+          reject(new DOMException('Caller aborted', 'AbortError'))
+        })
+      })
+    })
+
+    const promise = fetchBackendPublic('/api/payments/capabilities', {
+      signal: callerController.signal,
+    })
+    callerController.abort()
+
+    const response = await promise
+    expect(response.status).toBe(499)
+    expect((await response.json()).code).toBe('ERR_CLIENT_CLOSED_REQUEST')
   })
 
   it('returns 502 ProblemDetails when network error occurs', async () => {

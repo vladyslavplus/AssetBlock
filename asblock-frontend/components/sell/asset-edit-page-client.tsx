@@ -28,7 +28,7 @@ export function AssetEditPageClient({
 
   const detailQuery = useQuery({
     queryKey: sellerKeys.detail(assetId),
-    queryFn: ({ signal }) => fetchSellerAssetDetailQuery({ assetId, signal }),
+    queryFn: () => fetchSellerAssetDetailQuery({ assetId }),
     enabled: authed,
     initialData: initialAsset ?? undefined,
   })

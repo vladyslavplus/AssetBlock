@@ -42,20 +42,20 @@ export function useSellCollectionsController() {
 
   const listQuery = useQuery({
     queryKey: collectionKeys.sellerList(),
-    queryFn: fetchSellerCollectionsQuery,
+    queryFn: () => fetchSellerCollectionsQuery(),
     enabled: authed,
   })
   const detailQuery = useQuery({
     queryKey: collectionKeys.sellerDetail(selectedId ?? ''),
-    queryFn: ({ signal }) => {
+    queryFn: () => {
       if (!selectedId) throw new Error('Missing collection id')
-      return fetchSellerCollectionQuery(selectedId, signal)
+      return fetchSellerCollectionQuery(selectedId)
     },
     enabled: authed && Boolean(selectedId),
   })
   const listingsQuery = useQuery({
     queryKey: sellerKeys.listings(),
-    queryFn: fetchSellerListingsQuery,
+    queryFn: () => fetchSellerListingsQuery(),
     enabled: authed && verified,
   })
 

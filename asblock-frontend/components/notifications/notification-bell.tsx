@@ -88,14 +88,13 @@ export function NotificationBell() {
 
   const unreadQuery = useQuery({
     queryKey: notificationsKeys.unread(),
-    queryFn: ({ signal }) => fetchNotificationsUnreadCount(signal),
+    queryFn: () => fetchNotificationsUnreadCount(),
     enabled: status === 'authenticated',
   })
 
   const inboxQuery = useInfiniteQuery({
     queryKey: notificationsKeys.inbox(),
-    queryFn: ({ pageParam, signal }) =>
-      fetchNotificationsPage(pageParam, NOTIFICATIONS_PAGE_SIZE, signal),
+    queryFn: ({ pageParam }) => fetchNotificationsPage(pageParam, NOTIFICATIONS_PAGE_SIZE),
     initialPageParam: 1,
     getNextPageParam: (lastPage, allPages) => {
       const batch = lastPage.items ?? []

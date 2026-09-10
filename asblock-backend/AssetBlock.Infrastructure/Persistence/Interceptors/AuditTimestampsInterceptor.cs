@@ -55,12 +55,27 @@ internal sealed class AuditTimestampsInterceptor(TimeProvider timeProvider) : Sa
                 {
                     reservation.CreatedAt = now;
                 }
+                else if (entry.Entity is Entities.AssetEmbedding assetEmbedding)
+                {
+                    if (assetEmbedding.CreatedAt == default)
+                    {
+                        assetEmbedding.CreatedAt = now;
+                    }
+                    if (assetEmbedding.UpdatedAt == default)
+                    {
+                        assetEmbedding.UpdatedAt = now;
+                    }
+                }
             }
             else if (entry.State == EntityState.Modified)
             {
                 if (entry.Entity is BaseEntity baseEntity)
                 {
                     baseEntity.UpdatedAt = now;
+                }
+                else if (entry.Entity is Entities.AssetEmbedding assetEmbedding)
+                {
+                    assetEmbedding.UpdatedAt = now;
                 }
             }
         }

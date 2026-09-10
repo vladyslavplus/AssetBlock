@@ -10,8 +10,8 @@ import {
 import { ChevronDown, Filter } from 'lucide-react'
 import { Skeleton } from '@/components/ui/skeleton'
 import {
-  CATALOG_SORT_OPTIONS,
   getCatalogSortLabel,
+  getCatalogSortOptions,
   type CatalogFilters,
 } from '@/lib/catalog/catalog-filters'
 
@@ -36,6 +36,9 @@ export function CatalogToolbar({
   disabled = false,
   isCountsLoading = false,
 }: CatalogToolbarProps) {
+  const hasSearch = filters.search.trim().length > 0
+  const sortOptions = getCatalogSortOptions(hasSearch)
+
   return (
     <div className="flex items-center justify-between gap-3 flex-wrap">
       {isCountsLoading ? (
@@ -77,7 +80,7 @@ export function CatalogToolbar({
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="min-w-[8rem] z-[100]">
-            {CATALOG_SORT_OPTIONS.map((opt) => (
+            {sortOptions.map((opt) => (
               <DropdownMenuItem
                 key={opt.value}
                 onSelect={() => onFilterChange({ sortBy: opt.value })}

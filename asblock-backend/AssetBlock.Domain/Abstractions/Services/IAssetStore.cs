@@ -52,8 +52,13 @@ public interface IAssetStore
 
     /// <summary>
     /// Returns public catalog assets. Always filters for assets that have a current READY version.
+    /// Supports hybrid semantic retrieval when queryEmbedding and modelKey are provided without explicit sorting.
     /// </summary>
-    Task<PagedResult<AssetListItem>> GetPaged(GetAssetsRequest request, CancellationToken cancellationToken = default);
+    Task<CatalogPageResult<AssetListItem>> GetPaged(
+        GetAssetsRequest request,
+        float[]? queryEmbedding = null,
+        string? modelKey = null,
+        CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Returns listings for an authenticated seller dashboard, scoped by author,

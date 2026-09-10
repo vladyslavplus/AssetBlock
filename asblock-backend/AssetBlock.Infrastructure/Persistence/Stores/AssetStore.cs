@@ -1,15 +1,25 @@
 using AssetBlock.Domain.Abstractions.Services;
+using AssetBlock.Domain.Core;
+using AssetBlock.Domain.Core.Dto;
 using AssetBlock.Domain.Core.Dto.Assets;
 using AssetBlock.Domain.Core.Dto.Paging;
 using AssetBlock.Domain.Core.Entities;
 using AssetBlock.Domain.Core.Enums;
+using AssetBlock.Domain.Core.Primitives.AppSettingsOptions;
 using AssetBlock.Infrastructure.Persistence.Configurations;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 using NpgsqlTypes;
+using Pgvector;
+using Pgvector.EntityFrameworkCore;
 
 namespace AssetBlock.Infrastructure.Persistence.Stores;
 
-internal sealed class AssetStore(ApplicationDbContext dbContext, TimeProvider? timeProvider = null) : IAssetStore
+internal sealed class AssetStore(
+    ApplicationDbContext dbContext,
+    IAssetProcessingJobStore? jobStore = null,
+    IOptions<EmbeddingOptions>? embeddingOptions = null,
+    TimeProvider? timeProvider = null) : IAssetStore
 {
     private const float TRIGRAM_SIMILARITY_THRESHOLD = 0.30f;
     private const int MIN_TRIGRAM_QUERY_LENGTH = 3;
@@ -262,14 +272,18 @@ internal sealed class AssetStore(ApplicationDbContext dbContext, TimeProvider? t
             .AnyAsync(v => v.StorageKey == storageKey, cancellationToken);
     }
 
-    public async Task<PagedResult<AssetListItem>> GetPaged(GetAssetsRequest request, CancellationToken cancellationToken = default)
+    public async Task<CatalogPageResult<AssetListItem>> GetPaged(
+        GetAssetsRequest request,
+        float[]? queryEmbedding = null,
+        string? modelKey = null,
+        CancellationToken cancellationToken = default)
     {
         // Public catalog query: ALWAYS requires asset to have a current READY version.
         IQueryable<Asset> query = dbContext.Assets.AsNoTracking()
             .Where(a => a.DeletedAt == null
                 && a.Versions.Any(v => v.IsCurrent && v.ProcessingStatus == AssetVersionProcessingStatus.READY));
 
-        return await QueryPagedAssets(query, request, cancellationToken);
+        return await QueryPagedAssets(query, request, queryEmbedding, modelKey, cancellationToken);
     }
 
     public async Task<PagedResult<SellerAssetListItem>> GetMyListings(Guid authorId, GetAssetsRequest request, CancellationToken cancellationToken = default)
@@ -405,9 +419,11 @@ internal sealed class AssetStore(ApplicationDbContext dbContext, TimeProvider? t
             .FirstOrDefaultAsync(cancellationToken);
     }
 
-    private static async Task<PagedResult<AssetListItem>> QueryPagedAssets(
+    private async Task<CatalogPageResult<AssetListItem>> QueryPagedAssets(
         IQueryable<Asset> baseQuery,
         GetAssetsRequest request,
+        float[]? queryEmbedding,
+        string? modelKey,
         CancellationToken cancellationToken)
     {
         (var page, var pageSize) = NormalizePaging(request);
@@ -418,7 +434,7 @@ internal sealed class AssetStore(ApplicationDbContext dbContext, TimeProvider? t
             var totalCount = await filteredBase.CountAsync(cancellationToken);
             if (totalCount == 0 || (page - 1) * pageSize >= totalCount)
             {
-                return new PagedResult<AssetListItem>([], totalCount, page, pageSize);
+                return new CatalogPageResult<AssetListItem>([], totalCount, page, pageSize);
             }
 
             IQueryable<Asset> sortedQuery = ApplyAssetListSort(filteredBase, request);
@@ -442,13 +458,21 @@ internal sealed class AssetStore(ApplicationDbContext dbContext, TimeProvider? t
                     a.RatingAverage))
                 .ToListAsync(cancellationToken);
 
-            return new PagedResult<AssetListItem>(items, totalCount, page, pageSize);
+            return new CatalogPageResult<AssetListItem>(items, totalCount, page, pageSize);
+        }
+
+        var hasExplicitSort = !string.IsNullOrWhiteSpace(request.SortBy)
+            && GetAssetsRequest.AllowedSortBy.Contains(request.SortBy);
+
+        if (!hasExplicitSort && queryEmbedding is not null && !string.IsNullOrWhiteSpace(modelKey))
+        {
+            return await QueryPagedHybridRrfCatalog(filteredBase, request, queryEmbedding, modelKey, page, pageSize, cancellationToken);
         }
 
         return await QueryPagedSearchedCatalog(filteredBase, request, page, pageSize, cancellationToken);
     }
 
-    private static async Task<PagedResult<AssetListItem>> QueryPagedSearchedCatalog(
+    private static async Task<CatalogPageResult<AssetListItem>> QueryPagedSearchedCatalog(
         IQueryable<Asset> filteredBase,
         GetAssetsRequest request,
         int page,
@@ -497,9 +521,10 @@ internal sealed class AssetStore(ApplicationDbContext dbContext, TimeProvider? t
         }
 
         var totalCount = await allMatchingIds.CountAsync(cancellationToken);
+
         if (totalCount == 0 || (page - 1) * pageSize >= totalCount)
         {
-            return new PagedResult<AssetListItem>([], totalCount, page, pageSize);
+            return new CatalogPageResult<AssetListItem>([], totalCount, page, pageSize);
         }
 
         var hasExplicitSort = !string.IsNullOrWhiteSpace(request.SortBy)
@@ -536,7 +561,7 @@ internal sealed class AssetStore(ApplicationDbContext dbContext, TimeProvider? t
 
         if (pageAssetIds.Count == 0)
         {
-            return new PagedResult<AssetListItem>([], totalCount, page, pageSize);
+            return new CatalogPageResult<AssetListItem>([], totalCount, page, pageSize);
         }
 
         List<AssetListItem> items = await filteredBase
@@ -561,7 +586,7 @@ internal sealed class AssetStore(ApplicationDbContext dbContext, TimeProvider? t
         var orderMap = pageAssetIds.Select((id, index) => (id, index)).ToDictionary(x => x.id, x => x.index);
         items.Sort((a, b) => orderMap[a.Id].CompareTo(orderMap[b.Id]));
 
-        return new PagedResult<AssetListItem>(items, totalCount, page, pageSize);
+        return new CatalogPageResult<AssetListItem>(items, totalCount, page, pageSize);
     }
 
     private static async Task<List<Guid>> FetchRelevanceRankedPageAssetIds(
@@ -620,7 +645,7 @@ internal sealed class AssetStore(ApplicationDbContext dbContext, TimeProvider? t
             .ThenBy(x => x.Id)
             .Take(candidateLimit);
 
-        var allCandidates = ftsBranch
+        var primaryCandidates = ftsBranch
             .Concat(titleIlikeBranch)
             .Concat(descIlikeBranch);
 
@@ -640,8 +665,43 @@ internal sealed class AssetStore(ApplicationDbContext dbContext, TimeProvider? t
                 .ThenBy(x => x.Id)
                 .Take(candidateLimit);
 
-            var descTrgmBranch = filteredBase
+            primaryCandidates = primaryCandidates.Concat(titleTrgmBranch);
+        }
+
+        var primaryDeduplicated = primaryCandidates
+            .GroupBy(x => new { x.Id, x.CreatedAt })
+            .Select(g => new
+            {
+                g.Key.Id,
+                g.Key.CreatedAt,
+                Score = g.Max(x => x.Score)
+            });
+
+        List<Guid> primaryPageIds = await primaryDeduplicated
+            .OrderByDescending(x => x.Score)
+            .ThenByDescending(x => x.CreatedAt)
+            .ThenBy(x => x.Id)
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
+            .Select(x => x.Id)
+            .ToListAsync(cancellationToken);
+
+        // Score floor of primary branches is >= 11.0f (title trigram min = 5.0 + 0.3*20 = 11.0f).
+        // Description trigram score ceiling is <= 6.0f (1.0 + 1.0*5.0 = 6.0f).
+        // If primary candidates saturate the page slice, descTrgm cannot displace any page item.
+        if (primaryPageIds.Count == pageSize || !isLongEnoughForTrigram)
+        {
+            return primaryPageIds;
+        }
+
+        // For page 1 when underfilled: primaryPageIds contains all existing primary candidates.
+        // Retrieve only the missing quota from descTrgm without re-evaluating primary branches.
+        if (page == 1)
+        {
+            var missingCount = pageSize - primaryPageIds.Count;
+            List<Guid> descTrgmPageIds = await filteredBase
                 .Where(a => a.Description != null
+                    && !primaryPageIds.Contains(a.Id)
                     && EF.Functions.TrigramsAreSimilar(a.Description, searchText)
                     && PostgresDbFunctions.TrigramsSimilarity(a.Description, searchText) >= TRIGRAM_SIMILARITY_THRESHOLD)
                 .Select(a => new
@@ -653,12 +713,30 @@ internal sealed class AssetStore(ApplicationDbContext dbContext, TimeProvider? t
                 .OrderByDescending(x => x.Score)
                 .ThenByDescending(x => x.CreatedAt)
                 .ThenBy(x => x.Id)
-                .Take(candidateLimit);
+                .Take(missingCount)
+                .Select(x => x.Id)
+                .ToListAsync(cancellationToken);
 
-            allCandidates = allCandidates
-                .Concat(titleTrgmBranch)
-                .Concat(descTrgmBranch);
+            primaryPageIds.AddRange(descTrgmPageIds);
+            return primaryPageIds;
         }
+
+        var descTrgmBranch = filteredBase
+            .Where(a => a.Description != null
+                && EF.Functions.TrigramsAreSimilar(a.Description, searchText)
+                && PostgresDbFunctions.TrigramsSimilarity(a.Description, searchText) >= TRIGRAM_SIMILARITY_THRESHOLD)
+            .Select(a => new
+            {
+                a.Id,
+                a.CreatedAt,
+                Score = 1.0f + (PostgresDbFunctions.TrigramsSimilarity(a.Description!, searchText) * 5.0f)
+            })
+            .OrderByDescending(x => x.Score)
+            .ThenByDescending(x => x.CreatedAt)
+            .ThenBy(x => x.Id)
+            .Take(candidateLimit);
+
+        var allCandidates = primaryCandidates.Concat(descTrgmBranch);
 
         var deduplicated = allCandidates
             .GroupBy(x => new { x.Id, x.CreatedAt })
@@ -677,6 +755,251 @@ internal sealed class AssetStore(ApplicationDbContext dbContext, TimeProvider? t
             .Take(pageSize)
             .Select(x => x.Id)
             .ToListAsync(cancellationToken);
+    }
+
+    private async Task<CatalogPageResult<AssetListItem>> QueryPagedHybridRrfCatalog(
+        IQueryable<Asset> filteredBase,
+        GetAssetsRequest request,
+        float[] queryEmbedding,
+        string modelKey,
+        int page,
+        int pageSize,
+        CancellationToken cancellationToken)
+    {
+        var searchText = request.Search!.Trim();
+        var exactTitlePattern = EscapeLikePattern(searchText);
+        var likePattern = $"%{exactTitlePattern}%";
+        var isLongEnoughForTrigram = searchText.Length >= MIN_TRIGRAM_QUERY_LENGTH;
+        const int branchLimit = 201; // 200 candidates + 1 sentinel
+
+        // 1. Lexical branch candidates: up to 201
+        var ftsBranch = filteredBase
+            .Where(a => EF.Property<NpgsqlTsVector>(a, AssetConfiguration.SEARCH_VECTOR_PROPERTY)
+                .Matches(EF.Functions.WebSearchToTsQuery("simple", searchText)))
+            .Select(a => new
+            {
+                a.Id,
+                a.CreatedAt,
+                Score = 100.0f
+                    + (EF.Functions.ILike(a.Title, exactTitlePattern, LIKE_ESCAPE) ? 50.0f : (EF.Functions.ILike(a.Title, likePattern, LIKE_ESCAPE) ? 20.0f : 0.0f))
+                    + (EF.Property<NpgsqlTsVector>(a, AssetConfiguration.SEARCH_VECTOR_PROPERTY).Rank(EF.Functions.WebSearchToTsQuery("simple", searchText)) * 10.0f)
+            })
+            .OrderByDescending(x => x.Score)
+            .ThenByDescending(x => x.CreatedAt)
+            .ThenBy(x => x.Id)
+            .Take(branchLimit);
+
+        var titleIlikeBranch = filteredBase
+            .Where(a => EF.Functions.ILike(a.Title, likePattern, LIKE_ESCAPE))
+            .Select(a => new
+            {
+                a.Id,
+                a.CreatedAt,
+                Score = 40.0f
+                    + (EF.Functions.ILike(a.Title, exactTitlePattern, LIKE_ESCAPE) ? 30.0f : 0.0f)
+                    + (isLongEnoughForTrigram ? PostgresDbFunctions.TrigramsSimilarity(a.Title, searchText) * 10.0f : 0.0f)
+            })
+            .OrderByDescending(x => x.Score)
+            .ThenByDescending(x => x.CreatedAt)
+            .ThenBy(x => x.Id)
+            .Take(branchLimit);
+
+        var descIlikeBranch = filteredBase
+            .Where(a => a.Description != null && EF.Functions.ILike(a.Description, likePattern, LIKE_ESCAPE))
+            .Select(a => new
+            {
+                a.Id,
+                a.CreatedAt,
+                Score = 15.0f
+                    + (isLongEnoughForTrigram ? PostgresDbFunctions.TrigramsSimilarity(a.Description!, searchText) * 5.0f : 0.0f)
+            })
+            .OrderByDescending(x => x.Score)
+            .ThenByDescending(x => x.CreatedAt)
+            .ThenBy(x => x.Id)
+            .Take(branchLimit);
+
+        var primaryCandidates = ftsBranch
+            .Concat(titleIlikeBranch)
+            .Concat(descIlikeBranch);
+
+        if (isLongEnoughForTrigram)
+        {
+            var titleTrgmBranch = filteredBase
+                .Where(a => EF.Functions.TrigramsAreSimilar(a.Title, searchText)
+                    && PostgresDbFunctions.TrigramsSimilarity(a.Title, searchText) >= TRIGRAM_SIMILARITY_THRESHOLD)
+                .Select(a => new
+                {
+                    a.Id,
+                    a.CreatedAt,
+                    Score = 5.0f + (PostgresDbFunctions.TrigramsSimilarity(a.Title, searchText) * 20.0f)
+                })
+                .OrderByDescending(x => x.Score)
+                .ThenByDescending(x => x.CreatedAt)
+                .ThenBy(x => x.Id)
+                .Take(branchLimit);
+
+            primaryCandidates = primaryCandidates.Concat(titleTrgmBranch);
+        }
+
+        var primaryDeduplicated = primaryCandidates
+            .GroupBy(x => new { x.Id, x.CreatedAt })
+            .Select(g => new
+            {
+                g.Key.Id,
+                g.Key.CreatedAt,
+                Score = g.Max(x => x.Score)
+            });
+
+        var lexicalRaw = await primaryDeduplicated
+            .OrderByDescending(x => x.Score)
+            .ThenByDescending(x => x.CreatedAt)
+            .ThenBy(x => x.Id)
+            .Take(branchLimit)
+            .Select(x => new { x.Id, x.CreatedAt })
+            .ToListAsync(cancellationToken);
+
+        // Score floor of primary branches is >= 11.0f vs descTrgm ceiling <= 6.0f.
+        // Only evaluate descTrgm if primary branches could not fill the 201 candidate quota.
+        // When underfilled, all database primary matches are already in lexicalRaw; retrieve only the
+        // missing quota from descTrgm without re-evaluating primary branches.
+        if (isLongEnoughForTrigram && lexicalRaw.Count < branchLimit)
+        {
+            var primaryIds = lexicalRaw.Select(x => x.Id).ToList();
+            var missingCount = branchLimit - lexicalRaw.Count;
+
+            var descCandidates = await filteredBase
+                .Where(a => a.Description != null
+                    && !primaryIds.Contains(a.Id)
+                    && EF.Functions.TrigramsAreSimilar(a.Description, searchText)
+                    && PostgresDbFunctions.TrigramsSimilarity(a.Description, searchText) >= TRIGRAM_SIMILARITY_THRESHOLD)
+                .Select(a => new
+                {
+                    a.Id,
+                    a.CreatedAt,
+                    Score = 1.0f + (PostgresDbFunctions.TrigramsSimilarity(a.Description!, searchText) * 5.0f)
+                })
+                .OrderByDescending(x => x.Score)
+                .ThenByDescending(x => x.CreatedAt)
+                .ThenBy(x => x.Id)
+                .Take(missingCount)
+                .Select(x => new { x.Id, x.CreatedAt })
+                .ToListAsync(cancellationToken);
+
+            lexicalRaw.AddRange(descCandidates);
+        }
+
+        // 2. Semantic branch candidates: up to 201
+        var targetVector = new Vector(queryEmbedding);
+        var semanticRaw = await filteredBase
+            .Join(
+                dbContext.AssetEmbeddings.Where(e => e.ModelKey == modelKey),
+                a => a.Id,
+                e => e.AssetId,
+                (a, e) => new { Asset = a, Embedding = e })
+            .Where(x => x.Embedding.SourceRevision == x.Asset.SearchRevision)
+            .Select(x => new
+            {
+                x.Asset.Id,
+                x.Asset.CreatedAt,
+                Distance = x.Embedding.Embedding.CosineDistance(targetVector)
+            })
+            .OrderBy(x => x.Distance)
+            .ThenByDescending(x => x.CreatedAt)
+            .ThenBy(x => x.Id)
+            .Take(branchLimit)
+            .Select(x => new { x.Id, x.CreatedAt })
+            .ToListAsync(cancellationToken);
+
+        // 3. Sentinel detection
+        var lexicalTruncated = lexicalRaw.Count > 200;
+        var semanticTruncated = semanticRaw.Count > 200;
+        var isTruncated = lexicalTruncated || semanticTruncated;
+
+        var lexicalTop200 = lexicalRaw.Take(200).ToList();
+        var semanticTop200 = semanticRaw.Take(200).ToList();
+
+        // 4. RRF fusion over 1..200 ranks
+        const double k = 60.0;
+        var rrfMap = new Dictionary<Guid, (double rrfScore, int bestRank, DateTimeOffset createdAt)>();
+
+        for (var i = 0; i < lexicalTop200.Count; i++)
+        {
+            var rank = i + 1;
+            var item = lexicalTop200[i];
+            var rrfContribution = 1.0 / (k + rank);
+            rrfMap[item.Id] = (rrfContribution, rank, item.CreatedAt);
+        }
+
+        for (var i = 0; i < semanticTop200.Count; i++)
+        {
+            var rank = i + 1;
+            var item = semanticTop200[i];
+            var rrfContribution = 1.0 / (k + rank);
+
+            if (rrfMap.TryGetValue(item.Id, out (double rrfScore, int bestRank, DateTimeOffset createdAt) existing))
+            {
+                rrfMap[item.Id] = (
+                    existing.rrfScore + rrfContribution,
+                    Math.Min(existing.bestRank, rank),
+                    existing.createdAt);
+            }
+            else
+            {
+                rrfMap[item.Id] = (rrfContribution, rank, item.CreatedAt);
+            }
+        }
+
+        // 5. Deterministic tie-breaking order:
+        // RRF score desc, best non-null branch rank asc, CreatedAt desc, Id asc
+        var fusedRanked = rrfMap
+            .Select(kvp => new
+            {
+                Id = kvp.Key,
+                RrfScore = kvp.Value.rrfScore,
+                BestRank = kvp.Value.bestRank,
+                CreatedAt = kvp.Value.createdAt
+            })
+            .OrderByDescending(x => x.RrfScore)
+            .ThenBy(x => x.BestRank)
+            .ThenByDescending(x => x.CreatedAt)
+            .ThenBy(x => x.Id)
+            .ToList();
+
+        var totalCount = fusedRanked.Count;
+        if (totalCount == 0 || (page - 1) * pageSize >= totalCount)
+        {
+            return new CatalogPageResult<AssetListItem>([], totalCount, page, pageSize, isTruncated);
+        }
+
+        var pageSlice = fusedRanked
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
+            .Select(x => x.Id)
+            .ToList();
+
+        List<AssetListItem> items = await filteredBase
+            .Where(a => pageSlice.Contains(a.Id))
+            .Select(a => new AssetListItem(
+                a.Id,
+                a.Title,
+                a.Description,
+                a.Price,
+                a.CategoryId,
+                a.Category.Name,
+                a.AuthorId,
+                a.Author.Username,
+                a.CreatedAt,
+                a.AssetTags
+                    .Select(at => at.Tag.Name)
+                    .OrderBy(n => n)
+                    .ToList(),
+                a.RatingAverage))
+            .ToListAsync(cancellationToken);
+
+        var orderMap = pageSlice.Select((id, index) => (id, index)).ToDictionary(x => x.id, x => x.index);
+        items.Sort((a, b) => orderMap[a.Id].CompareTo(orderMap[b.Id]));
+
+        return new CatalogPageResult<AssetListItem>(items, totalCount, page, pageSize, isTruncated);
     }
 
     private static async Task<List<Guid>> FetchExplicitSortedPageAssetIds(
@@ -921,6 +1244,37 @@ internal sealed class AssetStore(ApplicationDbContext dbContext, TimeProvider? t
             $"INSERT INTO asset_tags (\"AssetId\", \"TagId\") VALUES ({assetId}, {tagId}) ON CONFLICT (\"AssetId\", \"TagId\") DO NOTHING",
             cancellationToken);
 
+        if (rows > 0)
+        {
+            Guid? readyVersionId = await dbContext.AssetVersions
+                .AsNoTracking()
+                .Where(v => v.AssetId == assetId && v.IsCurrent && v.ProcessingStatus == AssetVersionProcessingStatus.READY)
+                .Select(v => (Guid?)v.Id)
+                .FirstOrDefaultAsync(cancellationToken);
+
+            if (readyVersionId.HasValue)
+            {
+                DateTimeOffset now = (timeProvider ?? TimeProvider.System).GetUtcNow();
+                var affected = await dbContext.Database.ExecuteSqlInterpolatedAsync($"""
+                    UPDATE assets
+                    SET "SearchRevision" = "SearchRevision" + 1,
+                        "UpdatedAt" = {now}
+                    WHERE "Id" = {assetId} AND "DeletedAt" IS NULL
+                    """, cancellationToken);
+
+                if (affected > 0 && jobStore != null && embeddingOptions?.Value is { Enabled: true })
+                {
+                    var newRevision = await dbContext.Assets
+                        .AsNoTracking()
+                        .Where(a => a.Id == assetId)
+                        .Select(a => a.SearchRevision)
+                        .FirstOrDefaultAsync(cancellationToken);
+
+                    await EnqueueEmbeddingJobIfEligible(assetId, readyVersionId.Value, newRevision, cancellationToken);
+                }
+            }
+        }
+
         return rows > 0;
     }
 
@@ -936,6 +1290,38 @@ internal sealed class AssetStore(ApplicationDbContext dbContext, TimeProvider? t
         var deleted = await dbContext.Set<AssetTag>()
             .Where(at => at.AssetId == assetId && at.TagId == tagId)
             .ExecuteDeleteAsync(cancellationToken);
+
+        if (deleted > 0)
+        {
+            Guid? readyVersionId = await dbContext.AssetVersions
+                .AsNoTracking()
+                .Where(v => v.AssetId == assetId && v.IsCurrent && v.ProcessingStatus == AssetVersionProcessingStatus.READY)
+                .Select(v => (Guid?)v.Id)
+                .FirstOrDefaultAsync(cancellationToken);
+
+            if (readyVersionId.HasValue)
+            {
+                DateTimeOffset now = (timeProvider ?? TimeProvider.System).GetUtcNow();
+                var affected = await dbContext.Database.ExecuteSqlInterpolatedAsync($"""
+                    UPDATE assets
+                    SET "SearchRevision" = "SearchRevision" + 1,
+                        "UpdatedAt" = {now}
+                    WHERE "Id" = {assetId} AND "DeletedAt" IS NULL
+                    """, cancellationToken);
+
+                if (affected > 0 && jobStore != null && embeddingOptions?.Value is { Enabled: true })
+                {
+                    var newRevision = await dbContext.Assets
+                        .AsNoTracking()
+                        .Where(a => a.Id == assetId)
+                        .Select(a => a.SearchRevision)
+                        .FirstOrDefaultAsync(cancellationToken);
+
+                    await EnqueueEmbeddingJobIfEligible(assetId, readyVersionId.Value, newRevision, cancellationToken);
+                }
+            }
+        }
+
         return deleted > 0;
     }
 
@@ -946,6 +1332,11 @@ internal sealed class AssetStore(ApplicationDbContext dbContext, TimeProvider? t
         {
             return false;
         }
+
+        var titleChanged = title is not null && !string.Equals(asset.Title, title, StringComparison.Ordinal);
+        var descriptionChanged = description is not null && !string.Equals(asset.Description, description, StringComparison.Ordinal);
+        var categoryChanged = categoryId.HasValue && asset.CategoryId != categoryId.Value;
+        var hasSearchableMetadataChange = titleChanged || descriptionChanged || categoryChanged;
 
         if (title is not null)
         {
@@ -964,9 +1355,87 @@ internal sealed class AssetStore(ApplicationDbContext dbContext, TimeProvider? t
             asset.CategoryId = categoryId.Value;
         }
 
+        Guid? readyVersionId = null;
+        if (hasSearchableMetadataChange)
+        {
+            readyVersionId = await dbContext.AssetVersions
+                .AsNoTracking()
+                .Where(v => v.AssetId == id && v.IsCurrent && v.ProcessingStatus == AssetVersionProcessingStatus.READY)
+                .Select(v => (Guid?)v.Id)
+                .FirstOrDefaultAsync(cancellationToken);
+
+            if (readyVersionId.HasValue)
+            {
+                asset.SearchRevision += 1;
+            }
+        }
+
         asset.UpdatedAt = (timeProvider ?? TimeProvider.System).GetUtcNow();
         await dbContext.SaveChangesAsync(cancellationToken);
+
+        if (hasSearchableMetadataChange && readyVersionId.HasValue)
+        {
+            await EnqueueEmbeddingJobIfEligible(id, readyVersionId.Value, asset.SearchRevision, cancellationToken);
+        }
+
         return true;
+    }
+
+    private async Task EnqueueEmbeddingJobIfEligible(Guid assetId, Guid currentVersionId, long searchRevision, CancellationToken cancellationToken)
+    {
+        if (jobStore == null || embeddingOptions?.Value is not { Enabled: true } options)
+        {
+            return;
+        }
+
+        var assetMetadata = await dbContext.Assets
+            .AsNoTracking()
+            .Where(a => a.Id == assetId && a.DeletedAt == null)
+            .Select(a => new
+            {
+                a.Title,
+                a.Description,
+                CategoryName = a.Category.Name
+            })
+            .FirstOrDefaultAsync(cancellationToken);
+
+        if (assetMetadata == null)
+        {
+            return;
+        }
+
+        List<string> tagNames = await dbContext.AssetTags
+            .AsNoTracking()
+            .Where(at => at.AssetId == assetId)
+            .OrderBy(at => at.Tag.Name)
+            .Select(at => at.Tag.Name)
+            .ToListAsync(cancellationToken);
+
+        var canonicalText = AssetPublicMetadataCanonicalizer.BuildCanonicalMetadata(
+            assetMetadata.Title,
+            assetMetadata.Description,
+            assetMetadata.CategoryName,
+            tagNames);
+
+        var contentHash = AssetPublicMetadataCanonicalizer.ComputeContentHash(canonicalText);
+
+        var payload = new EmbeddingGenerationPayload(
+            assetId,
+            currentVersionId,
+            searchRevision,
+            contentHash,
+            EmbeddingModelKey.Compute(options),
+            AssetPublicMetadataCanonicalizer.SCHEMA_VERSION);
+
+        await jobStore.Enqueue(
+            assetId,
+            currentVersionId,
+            AssetProcessingJobType.EMBEDDING_GENERATION,
+            definitionVersion: 1,
+            initialDelay: TimeSpan.Zero,
+            payload,
+            traceParent: null,
+            cancellationToken);
     }
 
     public Task<Guid?> GetPublicAnalyticsSellerId(Guid assetId, CancellationToken cancellationToken = default)

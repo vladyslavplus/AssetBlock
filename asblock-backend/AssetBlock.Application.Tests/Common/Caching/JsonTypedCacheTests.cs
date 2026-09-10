@@ -132,7 +132,7 @@ public sealed class JsonTypedCacheTests
         Func<Task> act = () => _sut.Set("k", new ExplodingDto(), TimeSpan.FromSeconds(1));
         await act.Should().NotThrowAsync();
         await _raw.DidNotReceiveWithAnyArgs()
-            .SetString(null!, null!, default, CancellationToken.None);
+            .SetString(null!, null!, TimeSpan.Zero, CancellationToken.None);
     }
 
     [Fact]
@@ -143,6 +143,54 @@ public sealed class JsonTypedCacheTests
 
         Func<Task> act = () => _sut.Set("k", new SampleDto("a", 1), TimeSpan.FromSeconds(1));
         await act.Should().ThrowAsync<OperationCanceledException>();
+    }
+
+    [Fact]
+    public async Task PrivacyGuardrails_WhenCacheFails_LogsOnlyFamily_NeverFullKeyOrSentinelTag()
+    {
+        var testLogger = new TestLogger();
+        JsonTypedCache cache = new(_raw, testLogger);
+        const string sentinelTag = "secret-sentinel-tag-xyz";
+        const string fullKey = $"assetblock:assets:list:1:20:hash123:{sentinelTag}";
+
+        _raw.GetString(fullKey, Arg.Any<CancellationToken>())
+            .ThrowsAsync(new InvalidOperationException("Redis read timeout"));
+
+        SampleDto? readResult = await cache.Get<SampleDto>(fullKey);
+        readResult.Should().BeNull();
+
+        _raw.SetString(fullKey, Arg.Any<string>(), Arg.Any<TimeSpan>(), Arg.Any<CancellationToken>())
+            .ThrowsAsync(new InvalidOperationException("Redis write timeout"));
+
+        await cache.Set(fullKey, new SampleDto("val", 1), TimeSpan.FromMinutes(1));
+
+        testLogger.CapturedLogs.Should().NotBeEmpty();
+        foreach (var log in testLogger.CapturedLogs)
+        {
+            log.Should().NotContain(sentinelTag);
+            log.Should().Contain("assetblock:assets:list");
+        }
+    }
+
+    private sealed class TestLogger : Microsoft.Extensions.Logging.ILogger<JsonTypedCache>
+    {
+        public List<string> CapturedLogs { get; } = [];
+
+        public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
+        public bool IsEnabled(Microsoft.Extensions.Logging.LogLevel logLevel) => true;
+
+        public void Log<TState>(
+            Microsoft.Extensions.Logging.LogLevel logLevel,
+            Microsoft.Extensions.Logging.EventId eventId,
+            TState state,
+            Exception? exception,
+            Func<TState, Exception?, string> formatter)
+        {
+            if (state != null)
+            {
+                CapturedLogs.Add(state.ToString() ?? string.Empty);
+            }
+        }
     }
 }
 
@@ -257,7 +305,7 @@ public sealed class AssetEncryptUploadServiceTests
         var uploadCancelled = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
 
         _encryptionService.Encrypt(Arg.Any<Stream>(), Arg.Any<Stream>(), Arg.Any<CancellationToken>())
-            .Returns(async ci =>
+            .Returns(async _ =>
             {
                 await uploadStarted.Task;
                 throw new InvalidOperationException("Encryption error");
@@ -268,7 +316,7 @@ public sealed class AssetEncryptUploadServiceTests
             {
                 CancellationToken ct = ci.ArgAt<CancellationToken>(3);
                 uploadStarted.TrySetResult();
-                using CancellationTokenRegistration reg = ct.Register(() => uploadCancelled.TrySetResult());
+                await using CancellationTokenRegistration reg = ct.Register(() => uploadCancelled.TrySetResult());
                 await Task.Delay(Timeout.Infinite, ct);
             });
 
@@ -303,7 +351,7 @@ public sealed class AssetEncryptUploadServiceTests
             });
 
         _assetStorageService.Upload(Arg.Any<string>(), Arg.Any<Stream>(), Arg.Any<long>(), Arg.Any<CancellationToken>())
-            .Returns(async ci =>
+            .Returns(async _ =>
             {
                 await encryptionStarted.Task;
                 throw new InvalidOperationException("Storage error");

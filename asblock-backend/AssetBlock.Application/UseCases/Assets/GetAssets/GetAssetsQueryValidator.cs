@@ -1,3 +1,4 @@
+using AssetBlock.Application.Common;
 using AssetBlock.Application.Common.Validators;
 using AssetBlock.Domain.Core.Dto.Assets;
 using FluentValidation;
@@ -13,6 +14,12 @@ internal sealed class GetAssetsQueryValidator : AbstractValidator<GetAssetsQuery
             .DependentRules(() =>
             {
                 RuleFor(q => q.Request).SetValidator(new PagedRequestValidator());
+                RuleFor(q => q.Request.Search)
+                    .Must(CatalogSearchNormalization.BeWithinUnicodeScalarLimit)
+                    .WithMessage("Search query must not exceed 256 Unicode scalars.")
+                    .Must(CatalogSearchNormalization.NotContainInvalidControlCharacters)
+                    .WithMessage("Search query must not contain invalid control characters.")
+                    .When(q => !string.IsNullOrEmpty(q.Request.Search));
                 RuleFor(q => q.Request.SortBy)
                     .Must(sortBy => string.IsNullOrEmpty(sortBy) || GetAssetsRequest.AllowedSortBy.Contains(sortBy))
                     .WithMessage("SortBy must be one of: Title, Price, CreatedAt, Id.");

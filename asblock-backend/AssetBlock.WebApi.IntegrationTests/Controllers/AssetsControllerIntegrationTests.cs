@@ -21,6 +21,7 @@ public sealed class AssetsControllerIntegrationTests(IntegrationTestFixture fixt
         using var doc = JsonDocument.Parse(json);
         _ = doc.RootElement.GetProperty("items");
         doc.RootElement.GetProperty("totalCount").GetInt32().Should().BeGreaterThanOrEqualTo(0);
+        doc.RootElement.GetProperty("isTruncated").GetBoolean().Should().BeFalse();
     }
 
     [Fact]
@@ -108,7 +109,8 @@ public sealed class AssetsControllerIntegrationTests(IntegrationTestFixture fixt
         int TotalCount,
         int Page,
         int PageSize,
-        int TotalPages);
+        int TotalPages,
+        bool IsTruncated = false);
 
     private sealed record AssetListItemResponse(
         Guid Id,

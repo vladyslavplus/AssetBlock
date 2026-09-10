@@ -135,6 +135,17 @@ internal sealed class CategoryStore(
         }
     }
 
+    public async Task<int> BulkIncrementAssetSearchRevision(Guid categoryId, CancellationToken cancellationToken = default)
+    {
+        return await dbContext.Database.ExecuteSqlInterpolatedAsync($"""
+            UPDATE assets
+            SET "SearchRevision" = "SearchRevision" + 1,
+                "UpdatedAt" = clock_timestamp()
+            WHERE "CategoryId" = {categoryId}
+              AND "DeletedAt" IS NULL
+            """, cancellationToken);
+    }
+
     private static string EscapeLikePattern(string value)
     {
         return value

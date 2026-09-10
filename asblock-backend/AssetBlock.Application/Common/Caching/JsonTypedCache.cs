@@ -30,7 +30,7 @@ internal sealed class JsonTypedCache(
         }
         catch (Exception ex)
         {
-            logger.LogWarning(ex, "Failed to read cache key {Key}", key);
+            logger.LogWarning(ex, "Failed to read cache entry for family {Family}", GetCacheFamily(key));
             return null;
         }
 
@@ -45,7 +45,7 @@ internal sealed class JsonTypedCache(
         }
         catch (Exception ex) when (ex is JsonException or NotSupportedException)
         {
-            logger.LogWarning(ex, "Invalid cache payload for key {Key}; removing", key);
+            logger.LogWarning(ex, "Invalid cache payload for family {Family}; removing", GetCacheFamily(key));
             try
             {
                 await cache.Remove(key, cancellationToken);
@@ -56,7 +56,7 @@ internal sealed class JsonTypedCache(
             }
             catch (Exception removeEx)
             {
-                logger.LogWarning(removeEx, "Failed to remove invalid cache key {Key}", key);
+                logger.LogWarning(removeEx, "Failed to remove invalid cache entry for family {Family}", GetCacheFamily(key));
             }
 
             return null;
@@ -77,7 +77,28 @@ internal sealed class JsonTypedCache(
         }
         catch (Exception ex)
         {
-            logger.LogWarning(ex, "Failed to cache key {Key}", key);
+            logger.LogWarning(ex, "Failed to write cache entry for family {Family}", GetCacheFamily(key));
         }
+    }
+
+    private static string GetCacheFamily(string key)
+    {
+        if (string.IsNullOrEmpty(key))
+        {
+            return "unknown";
+        }
+
+        var parts = key.Split(':', StringSplitOptions.RemoveEmptyEntries);
+        if (parts.Length >= 3)
+        {
+            return $"{parts[0]}:{parts[1]}:{parts[2]}";
+        }
+
+        if (parts.Length == 2)
+        {
+            return $"{parts[0]}:{parts[1]}";
+        }
+
+        return parts[0];
     }
 }

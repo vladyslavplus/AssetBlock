@@ -178,23 +178,26 @@ public sealed class AssetProcessingWorker(
     private async Task ProcessJob(ClaimedAssetProcessingJob job, CancellationToken hostStoppingToken)
     {
         // 1. Monotonic real-time sequence: Publish initial RUNNING state first within the per-job flow
-        var initialMessage = new AssetProcessingUpdateMessage(
-            job.JobId,
-            job.AssetId,
-            job.AssetVersionId,
-            job.Type,
-            AssetProcessingJobStatus.RUNNING,
-            nameof(AssetProcessingJobStatus.RUNNING),
-            job.UpdatedAt ?? job.CreatedAt);
+        if (job.Type != AssetProcessingJobType.EMBEDDING_GENERATION)
+        {
+            var initialMessage = new AssetProcessingUpdateMessage(
+                job.JobId,
+                job.AssetId,
+                job.AssetVersionId,
+                job.Type,
+                AssetProcessingJobStatus.RUNNING,
+                nameof(AssetProcessingJobStatus.RUNNING),
+                job.UpdatedAt ?? job.CreatedAt);
 
-        try
-        {
-            using var publishCts = new CancellationTokenSource(_signalRPublishTimeout);
-            await realtimePublisher.PublishJobUpdated(job.OwnerUserId, initialMessage, publishCts.Token);
-        }
-        catch (Exception ex)
-        {
-            logger.LogWarning(ex, "Failed to publish initial real-time update for job {JobId}", job.JobId);
+            try
+            {
+                using var publishCts = new CancellationTokenSource(_signalRPublishTimeout);
+                await realtimePublisher.PublishJobUpdated(job.OwnerUserId, initialMessage, publishCts.Token);
+            }
+            catch (Exception ex)
+            {
+                logger.LogWarning(ex, "Failed to publish initial real-time update for job {JobId}", job.JobId);
+            }
         }
 
         AssetBlockDiagnostics.IncrementActiveJobs(job.Type);
@@ -525,7 +528,7 @@ public sealed class AssetProcessingWorker(
         finally
         {
             // 2. Monotonic real-time sequence: Publish final state update sequentially after committed DB transition
-            if (transitionSucceeded)
+            if (transitionSucceeded && job.Type != AssetProcessingJobType.EMBEDDING_GENERATION)
             {
                 try
                 {

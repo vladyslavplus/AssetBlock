@@ -100,6 +100,7 @@ internal static class RateLimitingExtensions
                 AddSlidingWindowPolicies(opts);
                 AddTelemetryPolicies(opts);
                 AddSellerAnalyticsPolicies(opts);
+                AddCatalogPolicies(opts);
             });
         }
 
@@ -121,6 +122,7 @@ internal static class RateLimitingExtensions
                 AddNoOpPolicy(RateLimitingConstants.Policies.USERS_PASSWORD_CHANGE);
                 AddNoOpPolicy(RateLimitingConstants.Policies.ASSETS_UPLOAD);
                 AddNoOpPolicy(RateLimitingConstants.Policies.ASSETS_DOWNLOAD);
+                AddNoOpPolicy(RateLimitingConstants.Policies.CATALOG_SEARCH);
                 AddNoOpPolicy(RateLimitingConstants.Policies.PAYMENTS_CHECKOUT);
                 AddNoOpPolicy(RateLimitingConstants.Policies.ANALYTICS_EVENTS);
                 AddNoOpPolicy(RateLimitingConstants.Policies.SELLER_ANALYTICS_SALES_EXPORT);
@@ -357,6 +359,34 @@ internal static class RateLimitingExtensions
                     AnalyticsRateLimitPolicy.SELLER_ANALYTICS_SALES_EXPORT,
                     partitionKey,
                     timeProvider));
+        });
+    }
+
+    private static void AddCatalogPolicies(RateLimiterOptions opts)
+    {
+        opts.AddPolicy(RateLimitingConstants.Policies.CATALOG_SEARCH, httpContext =>
+        {
+            var search = httpContext.Request.Query["search"].ToString();
+            if (string.IsNullOrWhiteSpace(search))
+            {
+                return RateLimitPartition.GetNoLimiter("catalog:browse");
+            }
+
+            if (httpContext.Connection.RemoteIpAddress is not { } remoteIp)
+            {
+                return RateLimitPartition.Get(
+                    "catalog-search:missing-client-ip",
+                    static _ => new MissingClientIpRateLimiter());
+            }
+
+            return RateLimitPartition.GetFixedWindowLimiter(
+                partitionKey: remoteIp.ToString(),
+                factory: _ => new FixedWindowRateLimiterOptions
+                {
+                    Window = TimeSpan.FromSeconds(RateLimitingConstants.Windows.CATALOG_SEARCH_PERIOD_SECONDS),
+                    PermitLimit = RateLimitingConstants.Windows.CATALOG_SEARCH_LIMIT,
+                    QueueLimit = 0
+                });
         });
     }
 }

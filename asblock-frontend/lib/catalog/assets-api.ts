@@ -2,7 +2,11 @@ import { apiFetch } from '@/lib/http/api-client'
 import type { AssetLicenseSummaryApi } from '@/lib/assets/license-types'
 import type { AssetListItem } from '@/lib/catalog/asset-types'
 import type { AssetReview } from '@/lib/catalog/catalog-utils'
-import { CATALOG_ASSETS_PAGE_SIZE, type CatalogFilters } from '@/lib/catalog/catalog-filters'
+import {
+  CATALOG_ASSETS_PAGE_SIZE,
+  toApiSortParams,
+  type CatalogFilters,
+} from '@/lib/catalog/catalog-filters'
 
 const API_MAX_PAGE_SIZE = 100
 
@@ -48,8 +52,14 @@ export function buildAssetsQueryParams(filters: CatalogFilters): string {
   p.set('page', String(filters.page))
   // Catalog always requests a fixed page size (API default may be 10).
   p.set('pageSize', String(CATALOG_ASSETS_PAGE_SIZE))
-  p.set('sortBy', filters.sortBy)
-  p.set('sortDirection', filters.sortDirection)
+
+  // Relevance mode: omit sortBy/sortDirection so backend uses relevance retrieval.
+  const apiSort = toApiSortParams(filters)
+  if (apiSort) {
+    p.set('sortBy', apiSort.sortBy)
+    p.set('sortDirection', apiSort.sortDirection)
+  }
+
   const q = filters.search.trim()
   if (q) p.set('search', q)
   if (filters.categoryId) p.set('categoryId', filters.categoryId)
@@ -68,6 +78,7 @@ export interface FetchAssetsPageResult {
   page: number
   pageSize: number
   totalPages: number
+  isTruncated: boolean
 }
 
 export type CatalogFetchInit = Pick<RequestInit, 'signal' | 'headers' | 'credentials'>
@@ -77,7 +88,7 @@ export async function fetchAssetsPage(
   init?: CatalogFetchInit,
 ): Promise<FetchAssetsPageResult> {
   const qs = buildAssetsQueryParams(filters)
-  const data = await apiFetch<PagedResultDto<AssetListItemApi>>({
+  const data = await apiFetch<PagedResultDto<AssetListItemApi> & { isTruncated?: boolean }>({
     path: `api/assets?${qs}`,
     method: 'GET',
     ...init,
@@ -90,6 +101,7 @@ export async function fetchAssetsPage(
     page: data.page,
     pageSize: CATALOG_ASSETS_PAGE_SIZE,
     totalPages,
+    isTruncated: data.isTruncated ?? false,
   }
 }
 

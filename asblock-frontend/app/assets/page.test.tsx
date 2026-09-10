@@ -61,6 +61,9 @@ describe('AssetsPage Server Component Shell', () => {
         page: 1,
         categoryId: '',
         search: 'dragon',
+        // Search without an explicit sort maps to the UI-only relevance mode (SSR parity).
+        sortBy: 'Relevance',
+        sortDirection: 'DESC',
       }),
     )
 
@@ -70,6 +73,7 @@ describe('AssetsPage Server Component Shell', () => {
       page: 1,
       pageSize: 12,
       totalPages: 0,
+      isTruncated: false,
     })
     resolveFacets({
       categories: [],

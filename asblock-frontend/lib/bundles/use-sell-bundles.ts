@@ -38,20 +38,20 @@ export function useSellBundlesController() {
 
   const listQuery = useQuery({
     queryKey: bundleKeys.sellerList(),
-    queryFn: fetchSellerBundlesQuery,
+    queryFn: () => fetchSellerBundlesQuery(),
     enabled: authed,
   })
   const detailQuery = useQuery({
     queryKey: bundleKeys.sellerDetail(selectedId ?? ''),
-    queryFn: ({ signal }) => {
+    queryFn: () => {
       if (!selectedId) throw new Error('Missing bundle id')
-      return fetchSellerBundleQuery(selectedId, signal)
+      return fetchSellerBundleQuery(selectedId)
     },
     enabled: authed && Boolean(selectedId) && mode === 'revise',
   })
   const listingsQuery = useQuery({
     queryKey: sellerKeys.listings(),
-    queryFn: fetchSellerListingsQuery,
+    queryFn: () => fetchSellerListingsQuery(),
     enabled: authed && verified,
   })
 

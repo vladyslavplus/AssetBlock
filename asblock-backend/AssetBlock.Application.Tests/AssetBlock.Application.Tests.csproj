@@ -25,6 +25,7 @@
     <ItemGroup>
       <ProjectReference Include="..\AssetBlock.Application\AssetBlock.Application.csproj" />
       <ProjectReference Include="..\AssetBlock.Infrastructure\AssetBlock.Infrastructure.csproj" />
+      <ProjectReference Include="..\AssetBlock.SearchEvaluation\AssetBlock.SearchEvaluation.csproj" />
     </ItemGroup>
 
 </Project>

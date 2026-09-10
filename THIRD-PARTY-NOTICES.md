@@ -62,7 +62,7 @@ from the npm registry (canonical, OS-independent). Reviewed exceptions may set
   - copyright/author: Microsoft Corporation
   - source: https://github.com/microsoft/playwright
   - license-url: https://spdx.org/licenses/Apache-2.0.html
-- `npm` @swc/helpers@0.5.15
+- `npm` @swc/helpers@0.5.23
   - copyright/author: 강동윤
   - source: https://github.com/swc-project/swc
   - license-url: https://spdx.org/licenses/Apache-2.0.html
@@ -81,7 +81,7 @@ from the npm registry (canonical, OS-independent). Reviewed exceptions may set
 - `npm` baseline-browser-mapping@2.11.20
   - source: https://github.com/web-platform-dx/baseline-browser-mapping
   - license-url: https://spdx.org/licenses/Apache-2.0.html
-- `npm` baseline-browser-mapping@2.9.19
+- `npm` baseline-browser-mapping@2.11.21
   - source: https://github.com/web-platform-dx/baseline-browser-mapping
   - license-url: https://spdx.org/licenses/Apache-2.0.html
 - `npm` class-variance-authority@0.7.1
@@ -118,7 +118,7 @@ from the npm registry (canonical, OS-independent). Reviewed exceptions may set
   - copyright/author: Microsoft Corporation
   - source: https://github.com/microsoft/playwright
   - license-url: https://spdx.org/licenses/Apache-2.0.html
-- `npm` sharp@0.35.3
+- `npm` sharp@0.35.4
   - copyright/author: Lovell Fuller
   - source: https://github.com/lovell/sharp
   - license-url: https://spdx.org/licenses/Apache-2.0.html
@@ -266,52 +266,52 @@ from the npm registry (canonical, OS-independent). Reviewed exceptions may set
 
 ## Apache-2.0 AND LGPL-3.0-or-later
 
-- `npm` @img/sharp-darwin-arm64@0.35.3
+- `npm` @img/sharp-darwin-arm64@0.35.4
   - copyright/author: Lovell Fuller
   - source: https://github.com/lovell/sharp
-- `npm` @img/sharp-darwin-x64@0.35.3
+- `npm` @img/sharp-darwin-x64@0.35.4
   - copyright/author: Lovell Fuller
   - source: https://github.com/lovell/sharp
-- `npm` @img/sharp-freebsd-wasm32@0.35.3
+- `npm` @img/sharp-freebsd-wasm32@0.35.4
   - copyright/author: Lovell Fuller
   - source: https://github.com/lovell/sharp
-- `npm` @img/sharp-linux-arm@0.35.3
+- `npm` @img/sharp-linux-arm@0.35.4
   - copyright/author: Lovell Fuller
   - source: https://github.com/lovell/sharp
-- `npm` @img/sharp-linux-arm64@0.35.3
+- `npm` @img/sharp-linux-arm64@0.35.4
   - copyright/author: Lovell Fuller
   - source: https://github.com/lovell/sharp
-- `npm` @img/sharp-linux-ppc64@0.35.3
+- `npm` @img/sharp-linux-ppc64@0.35.4
   - copyright/author: Lovell Fuller
   - source: https://github.com/lovell/sharp
-- `npm` @img/sharp-linux-riscv64@0.35.3
+- `npm` @img/sharp-linux-riscv64@0.35.4
   - copyright/author: Lovell Fuller
   - source: https://github.com/lovell/sharp
-- `npm` @img/sharp-linux-s390x@0.35.3
+- `npm` @img/sharp-linux-s390x@0.35.4
   - copyright/author: Lovell Fuller
   - source: https://github.com/lovell/sharp
-- `npm` @img/sharp-linux-x64@0.35.3
+- `npm` @img/sharp-linux-x64@0.35.4
   - copyright/author: Lovell Fuller
   - source: https://github.com/lovell/sharp
-- `npm` @img/sharp-linuxmusl-arm64@0.35.3
+- `npm` @img/sharp-linuxmusl-arm64@0.35.4
   - copyright/author: Lovell Fuller
   - source: https://github.com/lovell/sharp
-- `npm` @img/sharp-linuxmusl-x64@0.35.3
+- `npm` @img/sharp-linuxmusl-x64@0.35.4
   - copyright/author: Lovell Fuller
   - source: https://github.com/lovell/sharp
-- `npm` @img/sharp-wasm32@0.35.3
+- `npm` @img/sharp-wasm32@0.35.4
   - copyright/author: Lovell Fuller
   - source: https://github.com/lovell/sharp
-- `npm` @img/sharp-webcontainers-wasm32@0.35.3
+- `npm` @img/sharp-webcontainers-wasm32@0.35.4
   - copyright/author: Lovell Fuller
   - source: https://github.com/lovell/sharp
-- `npm` @img/sharp-win32-arm64@0.35.3
+- `npm` @img/sharp-win32-arm64@0.35.4
   - copyright/author: Lovell Fuller
   - source: https://github.com/lovell/sharp
-- `npm` @img/sharp-win32-ia32@0.35.3
+- `npm` @img/sharp-win32-ia32@0.35.4
   - copyright/author: Lovell Fuller
   - source: https://github.com/lovell/sharp
-- `npm` @img/sharp-win32-x64@0.35.3
+- `npm` @img/sharp-win32-x64@0.35.4
   - copyright/author: Lovell Fuller
   - source: https://github.com/lovell/sharp
 
@@ -322,6 +322,10 @@ from the npm registry (canonical, OS-independent). Reviewed exceptions may set
   - source: https://github.com/isaacs/jackspeak
   - license-url: https://spdx.org/licenses/BlueOak-1.0.0.html
 - `npm` minimatch@10.2.5
+  - copyright/author: Isaac Z. Schlueter
+  - source: ssh://git@github.com/isaacs/minimatch
+  - license-url: https://spdx.org/licenses/BlueOak-1.0.0.html
+- `npm` minimatch@10.2.6
   - copyright/author: Isaac Z. Schlueter
   - source: ssh://git@github.com/isaacs/minimatch
   - license-url: https://spdx.org/licenses/BlueOak-1.0.0.html
@@ -507,7 +511,7 @@ from the npm registry (canonical, OS-independent). Reviewed exceptions may set
   - copyright/author: Alex Gorbatchev
   - source: https://github.com/import-js/eslint-import-resolver-typescript
   - license-url: https://spdx.org/licenses/ISC.html
-- `npm` fastq@1.20.1
+- `npm` fastq@1.20.3
   - copyright/author: Matteo Collina
   - source: https://github.com/mcollina/fastq
   - license-url: https://spdx.org/licenses/ISC.html
@@ -605,43 +609,43 @@ from the npm registry (canonical, OS-independent). Reviewed exceptions may set
 
 ## LGPL-3.0-or-later
 
-- `npm` @img/sharp-libvips-darwin-arm64@1.3.2
+- `npm` @img/sharp-libvips-darwin-arm64@1.3.3
   - copyright/author: Lovell Fuller
   - source: https://github.com/lovell/sharp-libvips
   - license-url: https://spdx.org/licenses/LGPL-3.0-or-later.html
-- `npm` @img/sharp-libvips-darwin-x64@1.3.2
+- `npm` @img/sharp-libvips-darwin-x64@1.3.3
   - copyright/author: Lovell Fuller
   - source: https://github.com/lovell/sharp-libvips
   - license-url: https://spdx.org/licenses/LGPL-3.0-or-later.html
-- `npm` @img/sharp-libvips-linux-arm@1.3.2
+- `npm` @img/sharp-libvips-linux-arm@1.3.3
   - copyright/author: Lovell Fuller
   - source: https://github.com/lovell/sharp-libvips
   - license-url: https://spdx.org/licenses/LGPL-3.0-or-later.html
-- `npm` @img/sharp-libvips-linux-arm64@1.3.2
+- `npm` @img/sharp-libvips-linux-arm64@1.3.3
   - copyright/author: Lovell Fuller
   - source: https://github.com/lovell/sharp-libvips
   - license-url: https://spdx.org/licenses/LGPL-3.0-or-later.html
-- `npm` @img/sharp-libvips-linux-ppc64@1.3.2
+- `npm` @img/sharp-libvips-linux-ppc64@1.3.3
   - copyright/author: Lovell Fuller
   - source: https://github.com/lovell/sharp-libvips
   - license-url: https://spdx.org/licenses/LGPL-3.0-or-later.html
-- `npm` @img/sharp-libvips-linux-riscv64@1.3.2
+- `npm` @img/sharp-libvips-linux-riscv64@1.3.3
   - copyright/author: Lovell Fuller
   - source: https://github.com/lovell/sharp-libvips
   - license-url: https://spdx.org/licenses/LGPL-3.0-or-later.html
-- `npm` @img/sharp-libvips-linux-s390x@1.3.2
+- `npm` @img/sharp-libvips-linux-s390x@1.3.3
   - copyright/author: Lovell Fuller
   - source: https://github.com/lovell/sharp-libvips
   - license-url: https://spdx.org/licenses/LGPL-3.0-or-later.html
-- `npm` @img/sharp-libvips-linux-x64@1.3.2
+- `npm` @img/sharp-libvips-linux-x64@1.3.3
   - copyright/author: Lovell Fuller
   - source: https://github.com/lovell/sharp-libvips
   - license-url: https://spdx.org/licenses/LGPL-3.0-or-later.html
-- `npm` @img/sharp-libvips-linuxmusl-arm64@1.3.2
+- `npm` @img/sharp-libvips-linuxmusl-arm64@1.3.3
   - copyright/author: Lovell Fuller
   - source: https://github.com/lovell/sharp-libvips
   - license-url: https://spdx.org/licenses/LGPL-3.0-or-later.html
-- `npm` @img/sharp-libvips-linuxmusl-x64@1.3.2
+- `npm` @img/sharp-libvips-linuxmusl-x64@1.3.3
   - copyright/author: Lovell Fuller
   - source: https://github.com/lovell/sharp-libvips
   - license-url: https://spdx.org/licenses/LGPL-3.0-or-later.html
@@ -720,10 +724,6 @@ from the npm registry (canonical, OS-independent). Reviewed exceptions may set
   - copyright/author: The Babel Team (https://babel.dev/team)
   - source: https://github.com/babel/babel
   - license-url: https://spdx.org/licenses/MIT.html
-- `npm` @babel/parser@7.29.2
-  - copyright/author: The Babel Team (https://babel.dev/team)
-  - source: https://github.com/babel/babel
-  - license-url: https://spdx.org/licenses/MIT.html
 - `npm` @babel/parser@7.29.8
   - copyright/author: The Babel Team (https://babel.dev/team)
   - source: https://github.com/babel/babel
@@ -776,7 +776,11 @@ from the npm registry (canonical, OS-independent). Reviewed exceptions may set
   - copyright/author: Sasha Koss
   - source: https://github.com/date-fns/tz
   - license-url: https://spdx.org/licenses/MIT.html
-- `npm` @emnapi/core@1.9.2
+- `npm` @emnapi/core@1.10.0
+  - copyright/author: toyobayashi
+  - source: https://github.com/toyobayashi/emnapi
+  - license-url: https://spdx.org/licenses/MIT.html
+- `npm` @emnapi/runtime@1.10.0
   - copyright/author: toyobayashi
   - source: https://github.com/toyobayashi/emnapi
   - license-url: https://spdx.org/licenses/MIT.html
@@ -866,6 +870,10 @@ from the npm registry (canonical, OS-independent). Reviewed exceptions may set
 - `npm` @esbuild/win32-x64@0.28.2
   - source: https://github.com/evanw/esbuild
   - license-url: https://spdx.org/licenses/MIT.html
+- `npm` @eslint-community/eslint-utils@4.10.1
+  - copyright/author: Toru Nagashima
+  - source: https://github.com/eslint-community/eslint-utils
+  - license-url: https://spdx.org/licenses/MIT.html
 - `npm` @eslint-community/eslint-utils@4.9.1
   - copyright/author: Toru Nagashima
   - source: https://github.com/eslint-community/eslint-utils
@@ -935,39 +943,39 @@ from the npm registry (canonical, OS-independent). Reviewed exceptions may set
 - `npm` @napi-rs/lzma-linux-x64-gnu@1.5.1
   - source: https://github.com/Brooooooklyn/lzma
   - license-url: https://spdx.org/licenses/MIT.html
-- `npm` @napi-rs/wasm-runtime@0.2.12
+- `npm` @napi-rs/wasm-runtime@1.2.3
   - copyright/author: LongYinan
   - source: https://github.com/napi-rs/napi-rs
   - license-url: https://spdx.org/licenses/MIT.html
-- `npm` @next/env@16.2.11
+- `npm` @next/env@16.3.3
   - copyright/author: Next.js Team
   - source: https://github.com/vercel/next.js
   - license-url: https://spdx.org/licenses/MIT.html
-- `npm` @next/eslint-plugin-next@16.3.1
+- `npm` @next/eslint-plugin-next@16.3.3
   - source: https://github.com/vercel/next.js
   - license-url: https://spdx.org/licenses/MIT.html
-- `npm` @next/swc-darwin-arm64@16.2.11
+- `npm` @next/swc-darwin-arm64@16.3.3
   - source: https://github.com/vercel/next.js
   - license-url: https://spdx.org/licenses/MIT.html
-- `npm` @next/swc-darwin-x64@16.2.11
+- `npm` @next/swc-darwin-x64@16.3.3
   - source: https://github.com/vercel/next.js
   - license-url: https://spdx.org/licenses/MIT.html
-- `npm` @next/swc-linux-arm64-gnu@16.2.11
+- `npm` @next/swc-linux-arm64-gnu@16.3.3
   - source: https://github.com/vercel/next.js
   - license-url: https://spdx.org/licenses/MIT.html
-- `npm` @next/swc-linux-arm64-musl@16.2.11
+- `npm` @next/swc-linux-arm64-musl@16.3.3
   - source: https://github.com/vercel/next.js
   - license-url: https://spdx.org/licenses/MIT.html
-- `npm` @next/swc-linux-x64-gnu@16.2.11
+- `npm` @next/swc-linux-x64-gnu@16.3.3
   - source: https://github.com/vercel/next.js
   - license-url: https://spdx.org/licenses/MIT.html
-- `npm` @next/swc-linux-x64-musl@16.2.11
+- `npm` @next/swc-linux-x64-musl@16.3.3
   - source: https://github.com/vercel/next.js
   - license-url: https://spdx.org/licenses/MIT.html
-- `npm` @next/swc-win32-arm64-msvc@16.2.11
+- `npm` @next/swc-win32-arm64-msvc@16.3.3
   - source: https://github.com/vercel/next.js
   - license-url: https://spdx.org/licenses/MIT.html
-- `npm` @next/swc-win32-x64-msvc@16.2.11
+- `npm` @next/swc-win32-x64-msvc@16.3.3
   - source: https://github.com/vercel/next.js
   - license-url: https://spdx.org/licenses/MIT.html
 - `npm` @nodelib/fs.scandir@2.1.5
@@ -1354,7 +1362,7 @@ from the npm registry (canonical, OS-independent). Reviewed exceptions may set
   - copyright/author: Giorgio Polvara
   - source: https://github.com/testing-library/user-event
   - license-url: https://spdx.org/licenses/MIT.html
-- `npm` @tybys/wasm-util@0.10.1
+- `npm` @tybys/wasm-util@0.10.3
   - copyright/author: toyobayashi
   - source: https://github.com/toyobayashi/wasm-util
   - license-url: https://spdx.org/licenses/MIT.html
@@ -1431,110 +1439,100 @@ from the npm registry (canonical, OS-independent). Reviewed exceptions may set
 - `npm` @types/use-sync-external-store@0.0.6
   - source: https://github.com/DefinitelyTyped/DefinitelyTyped
   - license-url: https://spdx.org/licenses/MIT.html
-- `npm` @typescript-eslint/eslint-plugin@8.58.1
+- `npm` @typescript-eslint/eslint-plugin@8.70.0
   - source: https://github.com/typescript-eslint/typescript-eslint
   - license-url: https://spdx.org/licenses/MIT.html
-- `npm` @typescript-eslint/parser@8.58.1
+- `npm` @typescript-eslint/parser@8.70.0
   - source: https://github.com/typescript-eslint/typescript-eslint
   - license-url: https://spdx.org/licenses/MIT.html
-- `npm` @typescript-eslint/project-service@8.58.1
+- `npm` @typescript-eslint/project-service@8.70.0
   - source: https://github.com/typescript-eslint/typescript-eslint
   - license-url: https://spdx.org/licenses/MIT.html
-- `npm` @typescript-eslint/scope-manager@8.58.1
+- `npm` @typescript-eslint/scope-manager@8.70.0
   - source: https://github.com/typescript-eslint/typescript-eslint
   - license-url: https://spdx.org/licenses/MIT.html
-- `npm` @typescript-eslint/tsconfig-utils@8.58.1
+- `npm` @typescript-eslint/tsconfig-utils@8.70.0
   - source: https://github.com/typescript-eslint/typescript-eslint
   - license-url: https://spdx.org/licenses/MIT.html
-- `npm` @typescript-eslint/type-utils@8.58.1
+- `npm` @typescript-eslint/type-utils@8.70.0
   - source: https://github.com/typescript-eslint/typescript-eslint
   - license-url: https://spdx.org/licenses/MIT.html
-- `npm` @typescript-eslint/types@8.58.1
+- `npm` @typescript-eslint/types@8.70.0
   - source: https://github.com/typescript-eslint/typescript-eslint
   - license-url: https://spdx.org/licenses/MIT.html
-- `npm` @typescript-eslint/typescript-estree@8.58.1
+- `npm` @typescript-eslint/typescript-estree@8.70.0
   - source: https://github.com/typescript-eslint/typescript-eslint
   - license-url: https://spdx.org/licenses/MIT.html
-- `npm` @typescript-eslint/utils@8.58.1
+- `npm` @typescript-eslint/utils@8.70.0
   - source: https://github.com/typescript-eslint/typescript-eslint
   - license-url: https://spdx.org/licenses/MIT.html
-- `npm` @typescript-eslint/visitor-keys@8.58.1
+- `npm` @typescript-eslint/visitor-keys@8.70.0
   - source: https://github.com/typescript-eslint/typescript-eslint
   - license-url: https://spdx.org/licenses/MIT.html
-- `npm` @unrs/resolver-binding-android-arm-eabi@1.11.1
-  - copyright/author: JounQin
+- `npm` @unrs/resolver-binding-android-arm-eabi@1.12.2
   - source: https://github.com/unrs/unrs-resolver
   - license-url: https://spdx.org/licenses/MIT.html
-- `npm` @unrs/resolver-binding-android-arm64@1.11.1
-  - copyright/author: JounQin
+- `npm` @unrs/resolver-binding-android-arm64@1.12.2
   - source: https://github.com/unrs/unrs-resolver
   - license-url: https://spdx.org/licenses/MIT.html
-- `npm` @unrs/resolver-binding-darwin-arm64@1.11.1
-  - copyright/author: JounQin
+- `npm` @unrs/resolver-binding-darwin-arm64@1.12.2
   - source: https://github.com/unrs/unrs-resolver
   - license-url: https://spdx.org/licenses/MIT.html
-- `npm` @unrs/resolver-binding-darwin-x64@1.11.1
-  - copyright/author: JounQin
+- `npm` @unrs/resolver-binding-darwin-x64@1.12.2
   - source: https://github.com/unrs/unrs-resolver
   - license-url: https://spdx.org/licenses/MIT.html
-- `npm` @unrs/resolver-binding-freebsd-x64@1.11.1
-  - copyright/author: JounQin
+- `npm` @unrs/resolver-binding-freebsd-x64@1.12.2
   - source: https://github.com/unrs/unrs-resolver
   - license-url: https://spdx.org/licenses/MIT.html
-- `npm` @unrs/resolver-binding-linux-arm-gnueabihf@1.11.1
-  - copyright/author: JounQin
+- `npm` @unrs/resolver-binding-linux-arm-gnueabihf@1.12.2
   - source: https://github.com/unrs/unrs-resolver
   - license-url: https://spdx.org/licenses/MIT.html
-- `npm` @unrs/resolver-binding-linux-arm-musleabihf@1.11.1
-  - copyright/author: JounQin
+- `npm` @unrs/resolver-binding-linux-arm-musleabihf@1.12.2
   - source: https://github.com/unrs/unrs-resolver
   - license-url: https://spdx.org/licenses/MIT.html
-- `npm` @unrs/resolver-binding-linux-arm64-gnu@1.11.1
-  - copyright/author: JounQin
+- `npm` @unrs/resolver-binding-linux-arm64-gnu@1.12.2
   - source: https://github.com/unrs/unrs-resolver
   - license-url: https://spdx.org/licenses/MIT.html
-- `npm` @unrs/resolver-binding-linux-arm64-musl@1.11.1
-  - copyright/author: JounQin
+- `npm` @unrs/resolver-binding-linux-arm64-musl@1.12.2
   - source: https://github.com/unrs/unrs-resolver
   - license-url: https://spdx.org/licenses/MIT.html
-- `npm` @unrs/resolver-binding-linux-ppc64-gnu@1.11.1
-  - copyright/author: JounQin
+- `npm` @unrs/resolver-binding-linux-loong64-gnu@1.12.2
   - source: https://github.com/unrs/unrs-resolver
   - license-url: https://spdx.org/licenses/MIT.html
-- `npm` @unrs/resolver-binding-linux-riscv64-gnu@1.11.1
-  - copyright/author: JounQin
+- `npm` @unrs/resolver-binding-linux-loong64-musl@1.12.2
   - source: https://github.com/unrs/unrs-resolver
   - license-url: https://spdx.org/licenses/MIT.html
-- `npm` @unrs/resolver-binding-linux-riscv64-musl@1.11.1
-  - copyright/author: JounQin
+- `npm` @unrs/resolver-binding-linux-ppc64-gnu@1.12.2
   - source: https://github.com/unrs/unrs-resolver
   - license-url: https://spdx.org/licenses/MIT.html
-- `npm` @unrs/resolver-binding-linux-s390x-gnu@1.11.1
-  - copyright/author: JounQin
+- `npm` @unrs/resolver-binding-linux-riscv64-gnu@1.12.2
   - source: https://github.com/unrs/unrs-resolver
   - license-url: https://spdx.org/licenses/MIT.html
-- `npm` @unrs/resolver-binding-linux-x64-gnu@1.11.1
-  - copyright/author: JounQin
+- `npm` @unrs/resolver-binding-linux-riscv64-musl@1.12.2
   - source: https://github.com/unrs/unrs-resolver
   - license-url: https://spdx.org/licenses/MIT.html
-- `npm` @unrs/resolver-binding-linux-x64-musl@1.11.1
-  - copyright/author: JounQin
+- `npm` @unrs/resolver-binding-linux-s390x-gnu@1.12.2
   - source: https://github.com/unrs/unrs-resolver
   - license-url: https://spdx.org/licenses/MIT.html
-- `npm` @unrs/resolver-binding-wasm32-wasi@1.11.1
-  - copyright/author: JounQin
+- `npm` @unrs/resolver-binding-linux-x64-gnu@1.12.2
   - source: https://github.com/unrs/unrs-resolver
   - license-url: https://spdx.org/licenses/MIT.html
-- `npm` @unrs/resolver-binding-win32-arm64-msvc@1.11.1
-  - copyright/author: JounQin
+- `npm` @unrs/resolver-binding-linux-x64-musl@1.12.2
   - source: https://github.com/unrs/unrs-resolver
   - license-url: https://spdx.org/licenses/MIT.html
-- `npm` @unrs/resolver-binding-win32-ia32-msvc@1.11.1
-  - copyright/author: JounQin
+- `npm` @unrs/resolver-binding-openharmony-arm64@1.12.2
   - source: https://github.com/unrs/unrs-resolver
   - license-url: https://spdx.org/licenses/MIT.html
-- `npm` @unrs/resolver-binding-win32-x64-msvc@1.11.1
-  - copyright/author: JounQin
+- `npm` @unrs/resolver-binding-wasm32-wasi@1.12.2
+  - source: https://github.com/unrs/unrs-resolver
+  - license-url: https://spdx.org/licenses/MIT.html
+- `npm` @unrs/resolver-binding-win32-arm64-msvc@1.12.2
+  - source: https://github.com/unrs/unrs-resolver
+  - license-url: https://spdx.org/licenses/MIT.html
+- `npm` @unrs/resolver-binding-win32-ia32-msvc@1.12.2
+  - source: https://github.com/unrs/unrs-resolver
+  - license-url: https://spdx.org/licenses/MIT.html
+- `npm` @unrs/resolver-binding-win32-x64-msvc@1.12.2
   - source: https://github.com/unrs/unrs-resolver
   - license-url: https://spdx.org/licenses/MIT.html
 - `npm` @vitejs/plugin-react@4.7.0
@@ -1708,7 +1706,7 @@ from the npm registry (canonical, OS-independent). Reviewed exceptions may set
   - copyright/author: egoist
   - source: https://github.com/egoist/cac
   - license-url: https://spdx.org/licenses/MIT.html
-- `npm` call-bind@1.0.8
+- `npm` call-bind@1.0.9
   - copyright/author: Jordan Harband
   - source: https://github.com/ljharb/call-bind
   - license-url: https://spdx.org/licenses/MIT.html
@@ -1905,6 +1903,10 @@ from the npm registry (canonical, OS-independent). Reviewed exceptions may set
   - copyright/author: Jordan Harband
   - source: git://github.com/ljharb/es-abstract
   - license-url: https://spdx.org/licenses/MIT.html
+- `npm` es-abstract-get@1.0.0
+  - copyright/author: Jordan Harband
+  - source: https://github.com/ljharb/es-abstract-get
+  - license-url: https://spdx.org/licenses/MIT.html
 - `npm` es-define-property@1.0.1
   - copyright/author: Jordan Harband
   - source: https://github.com/ljharb/es-define-property
@@ -1913,7 +1915,7 @@ from the npm registry (canonical, OS-independent). Reviewed exceptions may set
   - copyright/author: Jordan Harband
   - source: https://github.com/ljharb/es-errors
   - license-url: https://spdx.org/licenses/MIT.html
-- `npm` es-iterator-helpers@1.3.1
+- `npm` es-iterator-helpers@1.4.0
   - copyright/author: Jordan Harband
   - source: https://github.com/es-shims/iterator-helpers
   - license-url: https://spdx.org/licenses/MIT.html
@@ -1921,7 +1923,7 @@ from the npm registry (canonical, OS-independent). Reviewed exceptions may set
   - copyright/author: Guy Bedford
   - source: https://github.com/guybedford/es-module-lexer
   - license-url: https://spdx.org/licenses/MIT.html
-- `npm` es-object-atoms@1.1.1
+- `npm` es-object-atoms@1.1.2
   - copyright/author: Jordan Harband
   - source: https://github.com/ljharb/es-object-atoms
   - license-url: https://spdx.org/licenses/MIT.html
@@ -1933,7 +1935,7 @@ from the npm registry (canonical, OS-independent). Reviewed exceptions may set
   - copyright/author: Jordan Harband
   - source: https://github.com/ljharb/es-shim-unscopables
   - license-url: https://spdx.org/licenses/MIT.html
-- `npm` es-to-primitive@1.3.0
+- `npm` es-to-primitive@1.3.4
   - copyright/author: Jordan Harband
   - source: git://github.com/ljharb/es-to-primitive
   - license-url: https://spdx.org/licenses/MIT.html
@@ -1955,7 +1957,7 @@ from the npm registry (canonical, OS-independent). Reviewed exceptions may set
   - copyright/author: Nicholas C. Zakas
   - source: https://github.com/eslint/eslint
   - license-url: https://spdx.org/licenses/MIT.html
-- `npm` eslint-config-next@16.3.1
+- `npm` eslint-config-next@16.3.3
   - source: https://github.com/vercel/next.js
   - license-url: https://spdx.org/licenses/MIT.html
 - `npm` eslint-config-prettier@10.1.8
@@ -1966,7 +1968,7 @@ from the npm registry (canonical, OS-independent). Reviewed exceptions may set
   - copyright/author: Ben Mosher
   - source: https://github.com/import-js/eslint-plugin-import
   - license-url: https://spdx.org/licenses/MIT.html
-- `npm` eslint-module-utils@2.12.1
+- `npm` eslint-module-utils@2.14.0
   - copyright/author: Ben Mosher
   - source: https://github.com/import-js/eslint-plugin-import
   - license-url: https://spdx.org/licenses/MIT.html
@@ -1982,7 +1984,7 @@ from the npm registry (canonical, OS-independent). Reviewed exceptions may set
   - copyright/author: Yannick Croissant
   - source: https://github.com/jsx-eslint/eslint-plugin-react
   - license-url: https://spdx.org/licenses/MIT.html
-- `npm` eslint-plugin-react-hooks@7.0.1
+- `npm` eslint-plugin-react-hooks@7.1.1
   - source: https://github.com/facebook/react
   - license-url: https://spdx.org/licenses/MIT.html
 - `npm` estree-walker@3.0.3
@@ -2055,7 +2057,7 @@ from the npm registry (canonical, OS-independent). Reviewed exceptions may set
   - copyright/author: Raynos
   - source: https://github.com/Raynos/function-bind
   - license-url: https://spdx.org/licenses/MIT.html
-- `npm` function.prototype.name@1.1.8
+- `npm` function.prototype.name@1.2.0
   - copyright/author: Jordan Harband
   - source: git://github.com/es-shims/Function.prototype.name
   - license-url: https://spdx.org/licenses/MIT.html
@@ -2091,7 +2093,7 @@ from the npm registry (canonical, OS-independent). Reviewed exceptions may set
   - copyright/author: Jordan Harband
   - source: https://github.com/inspect-js/get-symbol-description
   - license-url: https://spdx.org/licenses/MIT.html
-- `npm` get-tsconfig@4.13.7
+- `npm` get-tsconfig@4.14.3
   - copyright/author: Hiroki Osame
   - source: https://github.com/privatenumber/get-tsconfig
   - license-url: https://spdx.org/licenses/MIT.html
@@ -2135,7 +2137,7 @@ from the npm registry (canonical, OS-independent). Reviewed exceptions may set
   - copyright/author: Jordan Harband
   - source: https://github.com/inspect-js/has-tostringtag
   - license-url: https://spdx.org/licenses/MIT.html
-- `npm` hasown@2.0.2
+- `npm` hasown@2.0.4
   - copyright/author: Jordan Harband
   - source: https://github.com/inspect-js/hasOwn
   - license-url: https://spdx.org/licenses/MIT.html
@@ -2173,9 +2175,9 @@ from the npm registry (canonical, OS-independent). Reviewed exceptions may set
   - copyright/author: kael
   - source: ssh://git@github.com/kaelzhang/node-ignore
   - license-url: https://spdx.org/licenses/MIT.html
-- `npm` ignore@7.0.5
+- `npm` ignore@7.0.8
   - copyright/author: kael
-  - source: ssh://git@github.com/kaelzhang/node-ignore
+  - source: https://github.com/kaelzhang/node-ignore
   - license-url: https://spdx.org/licenses/MIT.html
 - `npm` immer@11.1.15
   - copyright/author: Michel Weststrate
@@ -2225,7 +2227,7 @@ from the npm registry (canonical, OS-independent). Reviewed exceptions may set
   - copyright/author: Jordan Harband
   - source: git://github.com/inspect-js/is-callable
   - license-url: https://spdx.org/licenses/MIT.html
-- `npm` is-core-module@2.16.1
+- `npm` is-core-module@2.16.2
   - copyright/author: Jordan Harband
   - source: https://github.com/inspect-js/is-core-module
   - license-url: https://spdx.org/licenses/MIT.html
@@ -2236,6 +2238,10 @@ from the npm registry (canonical, OS-independent). Reviewed exceptions may set
 - `npm` is-date-object@1.1.0
   - copyright/author: Jordan Harband
   - source: git://github.com/inspect-js/is-date-object
+  - license-url: https://spdx.org/licenses/MIT.html
+- `npm` is-document.all@1.0.0
+  - copyright/author: Jordan Harband
+  - source: https://github.com/inspect-js/is-document.all
   - license-url: https://spdx.org/licenses/MIT.html
 - `npm` is-extglob@2.1.1
   - copyright/author: Jon Schlinkert
@@ -2340,7 +2346,7 @@ from the npm registry (canonical, OS-independent). Reviewed exceptions may set
   - copyright/author: Simon Lydell
   - source: https://github.com/lydell/js-tokens
   - license-url: https://spdx.org/licenses/MIT.html
-- `npm` js-yaml@4.3.1
+- `npm` js-yaml@4.3.2
   - copyright/author: Vladimir Zapparov
   - source: https://github.com/nodeca/js-yaml
   - license-url: https://spdx.org/licenses/MIT.html
@@ -2472,13 +2478,13 @@ from the npm registry (canonical, OS-independent). Reviewed exceptions may set
   - copyright/author: Lauri Rooden
   - source: git://github.com/litejs/natural-compare-lite
   - license-url: https://spdx.org/licenses/MIT.html
-- `npm` next@16.2.11
+- `npm` next@16.3.3
   - source: https://github.com/vercel/next.js
   - license-url: https://spdx.org/licenses/MIT.html
 - `npm` next-themes@0.4.6
   - source: https://github.com/pacocoursey/next-themes
   - license-url: https://spdx.org/licenses/MIT.html
-- `npm` node-exports-info@1.6.0
+- `npm` node-exports-info@1.6.2
   - copyright/author: Jordan Harband
   - source: https://github.com/inspect-js/node-exports-info
   - license-url: https://spdx.org/licenses/MIT.html
@@ -2534,7 +2540,7 @@ from the npm registry (canonical, OS-independent). Reviewed exceptions may set
   - copyright/author: George Zahariev
   - source: git://github.com/gkz/optionator
   - license-url: https://spdx.org/licenses/MIT.html
-- `npm` own-keys@1.0.1
+- `npm` own-keys@1.0.2
   - copyright/author: Jordan Harband
   - source: https://github.com/ljharb/own-keys
   - license-url: https://spdx.org/licenses/MIT.html
@@ -2585,11 +2591,19 @@ from the npm registry (canonical, OS-independent). Reviewed exceptions may set
   - copyright/author: Jon Schlinkert
   - source: https://github.com/micromatch/picomatch
   - license-url: https://spdx.org/licenses/MIT.html
+- `npm` picomatch@4.0.7
+  - copyright/author: Jon Schlinkert
+  - source: https://github.com/micromatch/picomatch
+  - license-url: https://spdx.org/licenses/MIT.html
 - `npm` possible-typed-array-names@1.1.0
   - copyright/author: Jordan Harband
   - source: https://github.com/ljharb/possible-typed-array-names
   - license-url: https://spdx.org/licenses/MIT.html
 - `npm` postcss@8.5.26
+  - copyright/author: Andrey Sitnik
+  - source: https://github.com/postcss/postcss
+  - license-url: https://spdx.org/licenses/MIT.html
+- `npm` postcss@8.5.28
   - copyright/author: Andrey Sitnik
   - source: https://github.com/postcss/postcss
   - license-url: https://spdx.org/licenses/MIT.html
@@ -2704,7 +2718,7 @@ from the npm registry (canonical, OS-independent). Reviewed exceptions may set
 - `npm` reselect@5.2.0
   - source: https://github.com/reduxjs/reselect
   - license-url: https://spdx.org/licenses/MIT.html
-- `npm` resolve@2.0.0-next.6
+- `npm` resolve@2.0.0-next.7
   - copyright/author: James Halliday
   - source: ssh://git@github.com/browserify/resolve
   - license-url: https://spdx.org/licenses/MIT.html
@@ -2740,7 +2754,7 @@ from the npm registry (canonical, OS-independent). Reviewed exceptions may set
   - copyright/author: Feross Aboukhadijeh
   - source: git://github.com/feross/run-parallel
   - license-url: https://spdx.org/licenses/MIT.html
-- `npm` safe-array-concat@1.1.3
+- `npm` safe-array-concat@1.1.4
   - copyright/author: Jordan Harband
   - source: https://github.com/ljharb/safe-array-concat
   - license-url: https://spdx.org/licenses/MIT.html
@@ -2783,7 +2797,7 @@ from the npm registry (canonical, OS-independent). Reviewed exceptions may set
   - copyright/author: Sindre Sorhus
   - source: https://github.com/sindresorhus/shebang-regex
   - license-url: https://spdx.org/licenses/MIT.html
-- `npm` side-channel@1.1.0
+- `npm` side-channel@1.1.1
   - copyright/author: Jordan Harband
   - source: https://github.com/ljharb/side-channel
   - license-url: https://spdx.org/licenses/MIT.html
@@ -2848,7 +2862,7 @@ from the npm registry (canonical, OS-independent). Reviewed exceptions may set
   - copyright/author: Mathias Bynens
   - source: https://github.com/mathiasbynens/String.prototype.includes
   - license-url: https://spdx.org/licenses/MIT.html
-- `npm` string.prototype.matchall@4.0.12
+- `npm` string.prototype.matchall@4.1.0
   - copyright/author: Jordan Harband
   - source: https://github.com/es-shims/String.prototype.matchAll
   - license-url: https://spdx.org/licenses/MIT.html
@@ -2856,11 +2870,11 @@ from the npm registry (canonical, OS-independent). Reviewed exceptions may set
   - copyright/author: Mathias Bynens
   - source: https://github.com/mathiasbynens/String.prototype.repeat
   - license-url: https://spdx.org/licenses/MIT.html
-- `npm` string.prototype.trim@1.2.10
+- `npm` string.prototype.trim@1.2.11
   - copyright/author: Jordan Harband
   - source: git://github.com/es-shims/String.prototype.trim
   - license-url: https://spdx.org/licenses/MIT.html
-- `npm` string.prototype.trimend@1.0.9
+- `npm` string.prototype.trimend@1.0.10
   - copyright/author: Jordan Harband
   - source: git://github.com/es-shims/String.prototype.trimEnd
   - license-url: https://spdx.org/licenses/MIT.html
@@ -2937,6 +2951,10 @@ from the npm registry (canonical, OS-independent). Reviewed exceptions may set
   - copyright/author: Superchupu
   - source: https://github.com/SuperchupuDev/tinyglobby
   - license-url: https://spdx.org/licenses/MIT.html
+- `npm` tinyglobby@0.2.17
+  - copyright/author: Superchupu
+  - source: https://github.com/SuperchupuDev/tinyglobby
+  - license-url: https://spdx.org/licenses/MIT.html
 - `npm` tinypool@1.1.1
   - source: https://github.com/tinylibs/tinypool
   - license-url: https://spdx.org/licenses/MIT.html
@@ -2994,11 +3012,11 @@ from the npm registry (canonical, OS-independent). Reviewed exceptions may set
   - copyright/author: Jordan Harband
   - source: https://github.com/inspect-js/typed-array-byte-offset
   - license-url: https://spdx.org/licenses/MIT.html
-- `npm` typed-array-length@1.0.7
+- `npm` typed-array-length@1.0.8
   - copyright/author: Jordan Harband
   - source: https://github.com/inspect-js/typed-array-length
   - license-url: https://spdx.org/licenses/MIT.html
-- `npm` typescript-eslint@8.58.1
+- `npm` typescript-eslint@8.70.0
   - source: https://github.com/typescript-eslint/typescript-eslint
   - license-url: https://spdx.org/licenses/MIT.html
 - `npm` unbox-primitive@1.1.0
@@ -3012,8 +3030,7 @@ from the npm registry (canonical, OS-independent). Reviewed exceptions may set
   - copyright/author: Ryan Zimmerman
   - source: https://github.com/RyanZim/universalify
   - license-url: https://spdx.org/licenses/MIT.html
-- `npm` unrs-resolver@1.11.1
-  - copyright/author: JounQin
+- `npm` unrs-resolver@1.12.2
   - source: https://github.com/unrs/unrs-resolver
   - license-url: https://spdx.org/licenses/MIT.html
 - `npm` update-browserslist-db@1.2.3
@@ -3082,7 +3099,7 @@ from the npm registry (canonical, OS-independent). Reviewed exceptions may set
   - copyright/author: Jordan Harband
   - source: https://github.com/inspect-js/which-collection
   - license-url: https://spdx.org/licenses/MIT.html
-- `npm` which-typed-array@1.1.20
+- `npm` which-typed-array@1.1.22
   - copyright/author: Jordan Harband
   - source: git://github.com/inspect-js/which-typed-array
   - license-url: https://spdx.org/licenses/MIT.html
@@ -3639,6 +3656,14 @@ from the npm registry (canonical, OS-independent). Reviewed exceptions may set
   - copyright/author: James Newton-King
   - source: https://www.newtonsoft.com/json
   - license-url: https://licenses.nuget.org/MIT
+- `nuget` Pgvector@0.3.2
+  - copyright/author: ankane
+  - source: https://github.com/pgvector/pgvector-dotnet
+  - license-url: https://licenses.nuget.org/MIT
+- `nuget` Pgvector.EntityFrameworkCore@0.3.0
+  - copyright/author: ankane
+  - source: https://github.com/pgvector/pgvector-dotnet
+  - license-url: https://licenses.nuget.org/MIT
 - `nuget` Pipelines.Sockets.Unofficial@2.2.8
   - copyright/author: Pipelines.Sockets.Unofficial
   - source: https://github.com/mgravell/Pipelines.Sockets.Unofficial
@@ -3769,7 +3794,7 @@ from the npm registry (canonical, OS-independent). Reviewed exceptions may set
 
 ## MPL-2.0
 
-- `npm` axe-core@4.11.2
+- `npm` axe-core@4.13.0
   - source: https://github.com/dequelabs/axe-core
   - license-url: https://spdx.org/licenses/MPL-2.0.html
 - `npm` lightningcss@1.31.1

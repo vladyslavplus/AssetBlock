@@ -14,7 +14,7 @@ internal sealed class GetTagsQueryHandler(
     ITypedCache cache,
     ILogger<GetTagsQueryHandler> logger) : IRequestHandler<GetTagsQuery, Result<Domain.Core.Dto.Paging.PagedResult<TagDto>>>
 {
-    private static readonly TimeSpan _cacheExpiration = CatalogCacheConstants.TAGS_LIST_TTL;
+    private static readonly TimeSpan _cacheExpiration = CatalogCacheConstants.TagsListTtl;
 
     public async Task<Result<Domain.Core.Dto.Paging.PagedResult<TagDto>>> Handle(GetTagsQuery request, CancellationToken cancellationToken)
     {

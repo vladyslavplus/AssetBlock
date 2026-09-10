@@ -33,7 +33,7 @@ public sealed class AssetStorePostgresTests(PostgresFixture fixture)
         DateTimeOffset deletedAt = DateTimeOffset.UtcNow;
         await store.SoftDelete(asset.Id, deletedAt);
 
-        PagedResult<AssetListItem> paged = await store.GetPaged(new GetAssetsRequest { Page = 1, PageSize = 10 });
+        CatalogPageResult<AssetListItem> paged = await store.GetPaged(new GetAssetsRequest { Page = 1, PageSize = 10 });
         paged.Items.Should().BeEmpty();
         paged.TotalCount.Should().Be(0);
 
@@ -202,7 +202,7 @@ public sealed class AssetStorePostgresTests(PostgresFixture fixture)
         await AddWithReadyVersion(store, TestData.CreateAsset(author.Id, category.Id, title: "Gamma Pack", price: 25m, createdAt: t0.AddMinutes(2)));
         await AddWithReadyVersion(store, TestData.CreateAsset(author.Id, otherCategory.Id, title: "Other Tool", price: 1m, createdAt: t0.AddMinutes(3)));
 
-        PagedResult<AssetListItem> page1 = await store.GetPaged(new GetAssetsRequest
+        CatalogPageResult<AssetListItem> page1 = await store.GetPaged(new GetAssetsRequest
         {
             Page = 1,
             PageSize = 2,
@@ -217,7 +217,7 @@ public sealed class AssetStorePostgresTests(PostgresFixture fixture)
         page1.Page.Should().Be(1);
         page1.PageSize.Should().Be(2);
 
-        PagedResult<AssetListItem> page2 = await store.GetPaged(new GetAssetsRequest
+        CatalogPageResult<AssetListItem> page2 = await store.GetPaged(new GetAssetsRequest
         {
             Page = 2,
             PageSize = 2,
@@ -247,7 +247,7 @@ public sealed class AssetStorePostgresTests(PostgresFixture fixture)
         await AddWithReadyVersion(store, TestData.CreateAsset(
             author.Id, category.Id, title: "Same Title", createdAt: sharedCreatedAt, id: idLow));
 
-        PagedResult<AssetListItem> page = await store.GetPaged(new GetAssetsRequest
+        CatalogPageResult<AssetListItem> page = await store.GetPaged(new GetAssetsRequest
         {
             Page = 1,
             PageSize = 10,
@@ -266,7 +266,7 @@ public sealed class AssetStorePostgresTests(PostgresFixture fixture)
         var store = new AssetStore(db);
         await AddWithReadyVersion(store, TestData.CreateAsset(author.Id, category.Id, title: "Celestial Shader Pack"));
 
-        PagedResult<AssetListItem> page = await store.GetPaged(new GetAssetsRequest
+        CatalogPageResult<AssetListItem> page = await store.GetPaged(new GetAssetsRequest
         {
             Page = 1,
             PageSize = 10,
@@ -289,7 +289,7 @@ public sealed class AssetStorePostgresTests(PostgresFixture fixture)
             title: "Utility Bundle",
             description: "Includes a modular inventory system for RPG games"));
 
-        PagedResult<AssetListItem> page = await store.GetPaged(new GetAssetsRequest
+        CatalogPageResult<AssetListItem> page = await store.GetPaged(new GetAssetsRequest
         {
             Page = 1,
             PageSize = 10,
@@ -309,7 +309,7 @@ public sealed class AssetStorePostgresTests(PostgresFixture fixture)
         await AddWithReadyVersion(store, TestData.CreateAsset(author.Id, category.Id, title: "Procedural Pack"));
 
         // similarity('Procedural Pack', 'Procedurl') >= 0.30 with pg_trgm
-        PagedResult<AssetListItem> typo = await store.GetPaged(new GetAssetsRequest
+        CatalogPageResult<AssetListItem> typo = await store.GetPaged(new GetAssetsRequest
         {
             Page = 1,
             PageSize = 10,
@@ -317,7 +317,7 @@ public sealed class AssetStorePostgresTests(PostgresFixture fixture)
         });
         typo.Items.Should().ContainSingle(a => a.Title == "Procedural Pack");
 
-        PagedResult<AssetListItem> partial = await store.GetPaged(new GetAssetsRequest
+        CatalogPageResult<AssetListItem> partial = await store.GetPaged(new GetAssetsRequest
         {
             Page = 1,
             PageSize = 10,
@@ -343,7 +343,7 @@ public sealed class AssetStorePostgresTests(PostgresFixture fixture)
         await AddWithReadyVersion(store, both, [tagUi, tagKit]);
         await AddWithReadyVersion(store, onlyUi, [tagUi]);
 
-        PagedResult<AssetListItem> page = await store.GetPaged(new GetAssetsRequest
+        CatalogPageResult<AssetListItem> page = await store.GetPaged(new GetAssetsRequest
         {
             Page = 1,
             PageSize = 10,
@@ -378,7 +378,7 @@ public sealed class AssetStorePostgresTests(PostgresFixture fixture)
         await AddWithReadyVersion(store, wrongAuthor, [tagFx]);
         await AddWithReadyVersion(store, wrongPrice, [tagFx]);
 
-        PagedResult<AssetListItem> page = await store.GetPaged(new GetAssetsRequest
+        CatalogPageResult<AssetListItem> page = await store.GetPaged(new GetAssetsRequest
         {
             Page = 1,
             PageSize = 1,
@@ -410,7 +410,7 @@ public sealed class AssetStorePostgresTests(PostgresFixture fixture)
         await AddWithReadyVersion(store, asset);
         await store.SoftDelete(asset.Id, DateTimeOffset.UtcNow);
 
-        PagedResult<AssetListItem> page = await store.GetPaged(new GetAssetsRequest
+        CatalogPageResult<AssetListItem> page = await store.GetPaged(new GetAssetsRequest
         {
             Page = 1,
             PageSize = 10,
@@ -468,7 +468,7 @@ public sealed class AssetStorePostgresTests(PostgresFixture fixture)
         var reviewStore = new ReviewStore(db, NullLogger<ReviewStore>.Instance);
         await reviewStore.Create(TestData.CreateReview(buyer.Id, asset.Id, rating: 4));
 
-        PagedResult<AssetListItem> page = await store.GetPaged(new GetAssetsRequest { Page = 1, PageSize = 10 });
+        CatalogPageResult<AssetListItem> page = await store.GetPaged(new GetAssetsRequest { Page = 1, PageSize = 10 });
 
         AssetListItem item = page.Items.Should().ContainSingle().Subject;
         item.CategoryName.Should().Be(category.Name);
@@ -671,7 +671,7 @@ public sealed class AssetStorePostgresTests(PostgresFixture fixture)
         var store = new AssetStore(db);
         await AddWithReadyVersion(store, asset);
 
-        PagedResult<AssetListItem> catalog = await store.GetPaged(new GetAssetsRequest { Page = 1, PageSize = 10 });
+        CatalogPageResult<AssetListItem> catalog = await store.GetPaged(new GetAssetsRequest { Page = 1, PageSize = 10 });
         AssetListItem item = catalog.Items.Should().ContainSingle().Subject;
         item.Id.Should().Be(asset.Id);
         item.AverageRating.Should().Be(4.75d);
@@ -700,7 +700,7 @@ public sealed class AssetStorePostgresTests(PostgresFixture fixture)
         await AddWithReadyVersion(store, descMatch);
         await AddWithReadyVersion(store, typoMatch);
 
-        PagedResult<AssetListItem> paged = await store.GetPaged(new GetAssetsRequest
+        CatalogPageResult<AssetListItem> paged = await store.GetPaged(new GetAssetsRequest
         {
             Page = 1,
             PageSize = 10,
@@ -729,7 +729,7 @@ public sealed class AssetStorePostgresTests(PostgresFixture fixture)
             description: "Knight hero armor model with textures");
         await AddWithReadyVersion(store, multiMatch);
 
-        PagedResult<AssetListItem> paged = await store.GetPaged(new GetAssetsRequest
+        CatalogPageResult<AssetListItem> paged = await store.GetPaged(new GetAssetsRequest
         {
             Page = 1,
             PageSize = 10,
@@ -760,21 +760,21 @@ public sealed class AssetStorePostgresTests(PostgresFixture fixture)
         await AddWithReadyVersion(store, a4);
         await AddWithReadyVersion(store, a5);
 
-        PagedResult<AssetListItem> p1 = await store.GetPaged(new GetAssetsRequest
+        CatalogPageResult<AssetListItem> p1 = await store.GetPaged(new GetAssetsRequest
         {
             Page = 1,
             PageSize = 2,
             Search = "Space Fighter"
         });
 
-        PagedResult<AssetListItem> p2 = await store.GetPaged(new GetAssetsRequest
+        CatalogPageResult<AssetListItem> p2 = await store.GetPaged(new GetAssetsRequest
         {
             Page = 2,
             PageSize = 2,
             Search = "Space Fighter"
         });
 
-        PagedResult<AssetListItem> p3 = await store.GetPaged(new GetAssetsRequest
+        CatalogPageResult<AssetListItem> p3 = await store.GetPaged(new GetAssetsRequest
         {
             Page = 3,
             PageSize = 2,
@@ -810,7 +810,7 @@ public sealed class AssetStorePostgresTests(PostgresFixture fixture)
         await AddWithReadyVersion(store, a2);
         await AddWithReadyVersion(store, a3);
 
-        PagedResult<AssetListItem> paged = await store.GetPaged(new GetAssetsRequest
+        CatalogPageResult<AssetListItem> paged = await store.GetPaged(new GetAssetsRequest
         {
             Page = 1,
             PageSize = 10,
@@ -840,7 +840,7 @@ public sealed class AssetStorePostgresTests(PostgresFixture fixture)
         await AddWithReadyVersion(store, underscoreMatch);
         await AddWithReadyVersion(store, underscoreNonMatch);
 
-        PagedResult<AssetListItem> percentResult = await store.GetPaged(new GetAssetsRequest
+        CatalogPageResult<AssetListItem> percentResult = await store.GetPaged(new GetAssetsRequest
         {
             Page = 1,
             PageSize = 10,
@@ -848,7 +848,7 @@ public sealed class AssetStorePostgresTests(PostgresFixture fixture)
         });
         percentResult.Items.Should().ContainSingle(a => a.Title == "100% Procedural");
 
-        PagedResult<AssetListItem> underscoreResult = await store.GetPaged(new GetAssetsRequest
+        CatalogPageResult<AssetListItem> underscoreResult = await store.GetPaged(new GetAssetsRequest
         {
             Page = 1,
             PageSize = 10,
@@ -879,7 +879,7 @@ public sealed class AssetStorePostgresTests(PostgresFixture fixture)
         await AddWithReadyVersion(store, percentPartial);
 
         // Trailing backslash search: must not throw SQL escape error
-        PagedResult<AssetListItem> trailingResult = await store.GetPaged(new GetAssetsRequest
+        CatalogPageResult<AssetListItem> trailingResult = await store.GetPaged(new GetAssetsRequest
         {
             Page = 1,
             PageSize = 10,
@@ -888,7 +888,7 @@ public sealed class AssetStorePostgresTests(PostgresFixture fixture)
         trailingResult.Items.Should().ContainSingle(a => a.Title == @"Tools\Bin\");
 
         // Interior backslash search
-        PagedResult<AssetListItem> interiorResult = await store.GetPaged(new GetAssetsRequest
+        CatalogPageResult<AssetListItem> interiorResult = await store.GetPaged(new GetAssetsRequest
         {
             Page = 1,
             PageSize = 10,
@@ -897,7 +897,7 @@ public sealed class AssetStorePostgresTests(PostgresFixture fixture)
         interiorResult.Items.Should().ContainSingle(a => a.Title == @"Shader\Core\V1");
 
         // Underscore search: should match underscore literally, not as single-character wildcard
-        PagedResult<AssetListItem> underscoreResult = await store.GetPaged(new GetAssetsRequest
+        CatalogPageResult<AssetListItem> underscoreResult = await store.GetPaged(new GetAssetsRequest
         {
             Page = 1,
             PageSize = 10,
@@ -906,7 +906,7 @@ public sealed class AssetStorePostgresTests(PostgresFixture fixture)
         underscoreResult.Items.Should().ContainSingle(a => a.Title == "My_Custom_Asset");
 
         // Exact-title relevance with percent: exact title "50% Discount Pack" outranks "Special 50% Discount Pack Bundle"
-        PagedResult<AssetListItem> percentResult = await store.GetPaged(new GetAssetsRequest
+        CatalogPageResult<AssetListItem> percentResult = await store.GetPaged(new GetAssetsRequest
         {
             Page = 1,
             PageSize = 10,
@@ -933,7 +933,7 @@ public sealed class AssetStorePostgresTests(PostgresFixture fixture)
         await AddWithReadyVersion(store, deletedAsset);
         await store.SoftDelete(deletedAsset.Id, DateTimeOffset.UtcNow);
 
-        PagedResult<AssetListItem> result = await store.GetPaged(new GetAssetsRequest
+        CatalogPageResult<AssetListItem> result = await store.GetPaged(new GetAssetsRequest
         {
             Page = 1,
             PageSize = 10,
@@ -943,4 +943,576 @@ public sealed class AssetStorePostgresTests(PostgresFixture fixture)
         result.TotalCount.Should().Be(1);
         result.Items.Should().ContainSingle(a => a.Title == "Visible Searchable Item");
     }
+
+    [Fact]
+    public async Task GetPaged_WhenTitleMatchesTrigramOnlyAndOverlapWithFtsIlike_ShouldDeduplicateAndCountExactly()
+    {
+        await using ApplicationDbContext db = await fixture.CreateCleanDbContext();
+        (User author, Category category) = await TestData.SeedAuthorAndCategory(db);
+        var store = new AssetStore(db);
+
+        // Overlap asset: matches FTS 'Celestial', ILIKE '%Celestial%', and trigram
+        Asset overlapAsset = TestData.CreateAsset(author.Id, category.Id, title: "Celestial Mystic Portal");
+        // Trigram-only asset: typo 'Celestil' does not match FTS 'celestial' or ILIKE '%celestial%', but similarity('Celestil Mystic Gate', 'Celestial') >= 0.30
+        Asset trigramOnlyAsset = TestData.CreateAsset(author.Id, category.Id, title: "Celestil Mystic Gate");
+        // Non-matching asset
+        Asset unrelatedAsset = TestData.CreateAsset(author.Id, category.Id, title: "Ancient Iron Anvil");
+
+        await AddWithReadyVersion(store, overlapAsset);
+        await AddWithReadyVersion(store, trigramOnlyAsset);
+        await AddWithReadyVersion(store, unrelatedAsset);
+
+        CatalogPageResult<AssetListItem> searchResult = await store.GetPaged(new GetAssetsRequest
+        {
+            Page = 1,
+            PageSize = 10,
+            Search = "Celestial"
+        });
+
+        searchResult.TotalCount.Should().Be(2);
+        searchResult.Items.Should().HaveCount(2);
+        searchResult.Items.Select(a => a.Id).Should().Contain([overlapAsset.Id, trigramOnlyAsset.Id]);
+        searchResult.Items.Select(a => a.Id).Distinct().Should().HaveCount(2);
+
+        // Overlap asset ranks ahead of typo trigram-only asset due to FTS rank boost
+        searchResult.Items[0].Id.Should().Be(overlapAsset.Id);
+        searchResult.Items[1].Id.Should().Be(trigramOnlyAsset.Id);
+    }
+
+    [Fact]
+    public async Task GetPaged_WhenExactTotalExceedsPageSize_ShouldSupportDeduplicationAndDeepPaging()
+    {
+        await using ApplicationDbContext db = await fixture.CreateCleanDbContext();
+        (User author, Category category) = await TestData.SeedAuthorAndCategory(db);
+        var store = new AssetStore(db);
+
+        const int totalAssets = 12;
+        var seededIds = new List<Guid>(totalAssets);
+        DateTimeOffset baseTime = DateTimeOffset.UtcNow.AddMinutes(-totalAssets);
+
+        for (var i = 0; i < totalAssets; i++)
+        {
+            Asset asset = TestData.CreateAsset(
+                author.Id,
+                category.Id,
+                title: $"Corridor Module Part #{i:D2}",
+                createdAt: baseTime.AddMinutes(i));
+            await AddWithReadyVersion(store, asset);
+            seededIds.Add(asset.Id);
+        }
+
+        const int pageSize = 5;
+
+        // Page 1
+        CatalogPageResult<AssetListItem> page1 = await store.GetPaged(new GetAssetsRequest
+        {
+            Page = 1,
+            PageSize = pageSize,
+            Search = "Corridor Module"
+        });
+        page1.TotalCount.Should().Be(totalAssets);
+        page1.Items.Should().HaveCount(5);
+
+        // Page 2
+        CatalogPageResult<AssetListItem> page2 = await store.GetPaged(new GetAssetsRequest
+        {
+            Page = 2,
+            PageSize = pageSize,
+            Search = "Corridor Module"
+        });
+        page2.TotalCount.Should().Be(totalAssets);
+        page2.Items.Should().HaveCount(5);
+
+        // Page 3 (partial page)
+        CatalogPageResult<AssetListItem> page3 = await store.GetPaged(new GetAssetsRequest
+        {
+            Page = 3,
+            PageSize = pageSize,
+            Search = "Corridor Module"
+        });
+        page3.TotalCount.Should().Be(totalAssets);
+        page3.Items.Should().HaveCount(2);
+
+        // Deep paging verification: no overlaps across pages, distinct union equals full count
+        var allFetchedIds = page1.Items.Select(x => x.Id)
+            .Concat(page2.Items.Select(x => x.Id))
+            .Concat(page3.Items.Select(x => x.Id))
+            .ToList();
+
+        allFetchedIds.Should().HaveCount(totalAssets);
+        allFetchedIds.Distinct().Should().HaveCount(totalAssets);
+        allFetchedIds.Should().BeEquivalentTo(seededIds);
+    }
+
+    [Fact]
+    public async Task GetPaged_WhenQueryIsShortOrContainsLiteralWildcards_ShouldMatchAccuratelyWithoutError()
+    {
+        await using ApplicationDbContext db = await fixture.CreateCleanDbContext();
+        (User author, Category category) = await TestData.SeedAuthorAndCategory(db);
+        var store = new AssetStore(db);
+
+        // Assets for short query (< 3 chars): trigram branch is bypassed, FTS/ILIKE match
+        Asset shortA = TestData.CreateAsset(author.Id, category.Id, title: "Absolute Zero Engine");
+        Asset shortB = TestData.CreateAsset(author.Id, category.Id, title: "Lab Station");
+        Asset shortC = TestData.CreateAsset(author.Id, category.Id, title: "Completely Unrelated");
+
+        // Assets for literal wildcards
+        Asset literalWildcard = TestData.CreateAsset(author.Id, category.Id, title: @"SpecialItem_100%_Pack\V1");
+        Asset wildcardLookalike = TestData.CreateAsset(author.Id, category.Id, title: "UnrelatedLookalikeTitle");
+
+        await AddWithReadyVersion(store, shortA);
+        await AddWithReadyVersion(store, shortB);
+        await AddWithReadyVersion(store, shortC);
+        await AddWithReadyVersion(store, literalWildcard);
+        await AddWithReadyVersion(store, wildcardLookalike);
+
+        // Short query: 2 chars ("ab") -> trigram skipped, ILIKE matches shortA and shortB
+        CatalogPageResult<AssetListItem> shortResult = await store.GetPaged(new GetAssetsRequest
+        {
+            Page = 1,
+            PageSize = 10,
+            Search = "ab"
+        });
+        shortResult.TotalCount.Should().Be(2);
+        shortResult.Items.Select(a => a.Id).Should().Contain([shortA.Id, shortB.Id]);
+
+        // Literal wildcard with %, _, and backslash
+        CatalogPageResult<AssetListItem> literalResult = await store.GetPaged(new GetAssetsRequest
+        {
+            Page = 1,
+            PageSize = 10,
+            Search = @"100%_Pack\V1"
+        });
+        literalResult.TotalCount.Should().Be(1);
+        literalResult.Items.Should().ContainSingle(a => a.Id == literalWildcard.Id);
+    }
+
+    [Fact]
+    public async Task GetPaged_WhenCombinedFiltersAndStatusExclusionsApplied_ShouldEnforceAllPredicates()
+    {
+        await using ApplicationDbContext db = await fixture.CreateCleanDbContext();
+        (User author1, Category cat1) = await TestData.SeedAuthorAndCategory(db);
+        User author2 = TestData.CreateUser("other_author", "other_author@example.test");
+        Category cat2 = TestData.CreateCategory("Other Category", "other-category");
+        Tag tagVerified = TestData.CreateTag("verified");
+        Tag tagFeatured = TestData.CreateTag("featured");
+        db.Users.Add(author2);
+        db.Categories.Add(cat2);
+        db.Tags.AddRange(tagVerified, tagFeatured);
+        await db.SaveChangesAsync();
+
+        var store = new AssetStore(db);
+
+        // Target matching asset
+        Asset target = TestData.CreateAsset(author1.Id, cat1.Id, title: "Legendary Excalibur Longsword", price: 20m);
+        await AddWithReadyVersion(store, target, [tagVerified, tagFeatured]);
+
+        // Mismatched category
+        Asset wrongCat = TestData.CreateAsset(author1.Id, cat2.Id, title: "Legendary Excalibur Longsword", price: 20m);
+        await AddWithReadyVersion(store, wrongCat, [tagVerified, tagFeatured]);
+
+        // Mismatched author
+        Asset wrongAuthor = TestData.CreateAsset(author2.Id, cat1.Id, title: "Legendary Excalibur Longsword", price: 20m);
+        await AddWithReadyVersion(store, wrongAuthor, [tagVerified, tagFeatured]);
+
+        // Price out of range
+        Asset expensive = TestData.CreateAsset(author1.Id, cat1.Id, title: "Legendary Excalibur Longsword", price: 50m);
+        await AddWithReadyVersion(store, expensive, [tagVerified, tagFeatured]);
+
+        // Missing tag (only has 'verified', lacks 'featured')
+        Asset missingTag = TestData.CreateAsset(author1.Id, cat1.Id, title: "Legendary Excalibur Longsword", price: 20m);
+        await AddWithReadyVersion(store, missingTag, [tagVerified]);
+
+        // Softly deleted
+        Asset softDeleted = TestData.CreateAsset(author1.Id, cat1.Id, title: "Legendary Excalibur Longsword", price: 20m);
+        await AddWithReadyVersion(store, softDeleted, [tagVerified, tagFeatured]);
+        await store.SoftDelete(softDeleted.Id, DateTimeOffset.UtcNow);
+
+        // Non-READY version (cannot be current READY version)
+        Asset unready = TestData.CreateAsset(author1.Id, cat1.Id, title: "Legendary Excalibur Longsword", price: 20m);
+        await store.AddWithVersion(unready, TestData.CreateAssetVersion(unready.Id, isCurrent: false, processingStatus: AssetVersionProcessingStatus.PENDING_INSPECTION), [tagVerified, tagFeatured]);
+
+        CatalogPageResult<AssetListItem> filteredResult = await store.GetPaged(new GetAssetsRequest
+        {
+            Page = 1,
+            PageSize = 10,
+            Search = "Longsword",
+            CategoryId = cat1.Id,
+            AuthorId = author1.Id,
+            MinPrice = 15m,
+            MaxPrice = 25m,
+            Tags = ["verified", "featured"]
+        });
+
+        filteredResult.TotalCount.Should().Be(1);
+        filteredResult.Items.Should().ContainSingle(a => a.Id == target.Id);
+    }
+
+    [Fact]
+    public async Task GetPaged_WhenAssetMatchesOnlyViaDescriptionTrigram_ShouldIncludeInTotalCountAndReturnItem()
+    {
+        await using ApplicationDbContext db = await fixture.CreateCleanDbContext();
+        (User author, Category category) = await TestData.SeedAuthorAndCategory(db);
+        var store = new AssetStore(db);
+
+        // "Excalbr" has trigram similarity > 0.30 with "Excalibur" in pg_trgm, but does not match FTS or ILIKE substring.
+        Asset descTrigramOnly = TestData.CreateAsset(
+            author.Id,
+            category.Id,
+            title: "Mystic Relic",
+            description: "Excalbr");
+        await AddWithReadyVersion(store, descTrigramOnly);
+
+        Asset other = TestData.CreateAsset(
+            author.Id,
+            category.Id,
+            title: "Wooden Shield",
+            description: "Sturdy defensive shield");
+        await AddWithReadyVersion(store, other);
+
+        CatalogPageResult<AssetListItem> result = await store.GetPaged(new GetAssetsRequest
+        {
+            Page = 1,
+            PageSize = 10,
+            Search = "Excalibur"
+        });
+
+        result.TotalCount.Should().Be(1);
+        result.Items.Should().ContainSingle(a => a.Id == descTrigramOnly.Id);
+    }
+
+    [Fact]
+    public async Task GetPaged_WhenPrimaryOverlapsDescTrigramAndDescOnlyExists_ShouldReturnExactDistinctTotalCount()
+    {
+        await using ApplicationDbContext db = await fixture.CreateCleanDbContext();
+        (User author, Category category) = await TestData.SeedAuthorAndCategory(db);
+        var store = new AssetStore(db);
+
+        // Primary (title) also has a description trigram hit for the same query — must count once.
+        Asset primaryAndDesc = TestData.CreateAsset(
+            author.Id,
+            category.Id,
+            title: "Excalibur",
+            description: "Excalbr legendary blade");
+        // Description-trigram-only — must still contribute to exact totalCount.
+        Asset descOnly = TestData.CreateAsset(
+            author.Id,
+            category.Id,
+            title: "Mystic Relic",
+            description: "Excalbr");
+        Asset nonMatch = TestData.CreateAsset(
+            author.Id,
+            category.Id,
+            title: "Wooden Shield",
+            description: "Sturdy defensive shield");
+
+        await AddWithReadyVersion(store, primaryAndDesc);
+        await AddWithReadyVersion(store, descOnly);
+        await AddWithReadyVersion(store, nonMatch);
+
+        CatalogPageResult<AssetListItem> result = await store.GetPaged(new GetAssetsRequest
+        {
+            Page = 1,
+            PageSize = 10,
+            Search = "Excalibur"
+        });
+
+        result.TotalCount.Should().Be(2);
+        result.Items.Select(a => a.Id).Should().BeEquivalentTo([primaryAndDesc.Id, descOnly.Id]);
+    }
+
+    [Fact]
+    public async Task GetPaged_WhenDescriptionIsNull_ShouldExcludeFromDescBranchesAndKeepExactTotal()
+    {
+        await using ApplicationDbContext db = await fixture.CreateCleanDbContext();
+        (User author, Category category) = await TestData.SeedAuthorAndCategory(db);
+        var store = new AssetStore(db);
+
+        Asset titleHit = TestData.CreateAsset(author.Id, category.Id, title: "Excalibur", description: null);
+        Asset nullDescOnly = TestData.CreateAsset(author.Id, category.Id, title: "Wooden Shield", description: null);
+        Asset descOnly = TestData.CreateAsset(author.Id, category.Id, title: "Mystic Relic", description: "Excalbr");
+
+        await AddWithReadyVersion(store, titleHit);
+        await AddWithReadyVersion(store, nullDescOnly);
+        await AddWithReadyVersion(store, descOnly);
+
+        CatalogPageResult<AssetListItem> result = await store.GetPaged(new GetAssetsRequest
+        {
+            Page = 1,
+            PageSize = 10,
+            Search = "Excalibur"
+        });
+
+        result.TotalCount.Should().Be(2);
+        result.Items.Select(a => a.Id).Should().BeEquivalentTo([titleHit.Id, descOnly.Id]);
+    }
+
+    [Fact]
+    public async Task GetPaged_WhenSearchMatchesNothing_ShouldReturnZeroTotalCount()
+    {
+        await using ApplicationDbContext db = await fixture.CreateCleanDbContext();
+        (User author, Category category) = await TestData.SeedAuthorAndCategory(db);
+        var store = new AssetStore(db);
+
+        Asset asset = TestData.CreateAsset(author.Id, category.Id, title: "Wooden Shield", description: "Sturdy oak");
+        await AddWithReadyVersion(store, asset);
+
+        CatalogPageResult<AssetListItem> result = await store.GetPaged(new GetAssetsRequest
+        {
+            Page = 1,
+            PageSize = 10,
+            Search = "zzzznotamatchtoken"
+        });
+
+        result.TotalCount.Should().Be(0);
+        result.Items.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task GetPaged_WhenDeepPagingAcrossPrimaryAndDescOnly_ShouldKeepExactTotalAndStablePages()
+    {
+        await using ApplicationDbContext db = await fixture.CreateCleanDbContext();
+        (User author, Category category) = await TestData.SeedAuthorAndCategory(db);
+        var store = new AssetStore(db);
+        DateTimeOffset t0 = DateTimeOffset.UtcNow.AddMinutes(-40);
+
+        Asset primary = TestData.CreateAsset(author.Id, category.Id, title: "Excalibur", createdAt: t0);
+        Asset descA = TestData.CreateAsset(author.Id, category.Id, title: "Relic A", description: "Excalbr", createdAt: t0.AddMinutes(1));
+        Asset descB = TestData.CreateAsset(author.Id, category.Id, title: "Relic B", description: "Excalbr", createdAt: t0.AddMinutes(2));
+
+        await AddWithReadyVersion(store, primary);
+        await AddWithReadyVersion(store, descA);
+        await AddWithReadyVersion(store, descB);
+
+        CatalogPageResult<AssetListItem> page1 = await store.GetPaged(new GetAssetsRequest
+        {
+            Page = 1,
+            PageSize = 2,
+            Search = "Excalibur"
+        });
+        CatalogPageResult<AssetListItem> page2 = await store.GetPaged(new GetAssetsRequest
+        {
+            Page = 2,
+            PageSize = 2,
+            Search = "Excalibur"
+        });
+
+        page1.TotalCount.Should().Be(3);
+        page2.TotalCount.Should().Be(3);
+        page1.Items.Should().HaveCount(2);
+        page2.Items.Should().HaveCount(1);
+
+        var allIds = page1.Items.Select(a => a.Id).Concat(page2.Items.Select(a => a.Id)).ToList();
+        allIds.Should().HaveCount(3);
+        allIds.Distinct().Should().HaveCount(3);
+        allIds.Should().BeEquivalentTo([primary.Id, descA.Id, descB.Id]);
+    }
+
+    [Fact]
+    public async Task GetPaged_WhenCategoryFilterWithMixedMatches_ShouldCountOnlyFilteredExactUniques()
+    {
+        await using ApplicationDbContext db = await fixture.CreateCleanDbContext();
+        (User author, Category category) = await TestData.SeedAuthorAndCategory(db);
+        Category otherCategory = TestData.CreateCategory("Other Category", "other-category");
+        db.Categories.Add(otherCategory);
+        await db.SaveChangesAsync();
+        var store = new AssetStore(db);
+
+        Asset inCategoryPrimary = TestData.CreateAsset(author.Id, category.Id, title: "Excalibur");
+        Asset inCategoryDescOnly = TestData.CreateAsset(author.Id, category.Id, title: "Relic", description: "Excalbr");
+        Asset outCategory = TestData.CreateAsset(author.Id, otherCategory.Id, title: "Excalibur Out");
+
+        await AddWithReadyVersion(store, inCategoryPrimary);
+        await AddWithReadyVersion(store, inCategoryDescOnly);
+        await AddWithReadyVersion(store, outCategory);
+
+        CatalogPageResult<AssetListItem> result = await store.GetPaged(new GetAssetsRequest
+        {
+            Page = 1,
+            PageSize = 10,
+            Search = "Excalibur",
+            CategoryId = category.Id
+        });
+
+        result.TotalCount.Should().Be(2);
+        result.Items.Select(a => a.Id).Should().BeEquivalentTo([inCategoryPrimary.Id, inCategoryDescOnly.Id]);
+    }
+
+    [Fact]
+    public async Task GetPaged_WhenPrimaryCandidatesSaturatePage_ShouldRetainScoreHierarchyAndOrder()
+    {
+        await using ApplicationDbContext db = await fixture.CreateCleanDbContext();
+        (User author, Category category) = await TestData.SeedAuthorAndCategory(db);
+        var store = new AssetStore(db);
+        DateTimeOffset t0 = DateTimeOffset.UtcNow.AddMinutes(-30);
+
+        // Primary match (FTS + Title exact): score >= 150
+        Asset primary1 = TestData.CreateAsset(author.Id, category.Id, title: "Excalibur", createdAt: t0);
+        // Primary match (Title partial ILIKE): score >= 40
+        Asset primary2 = TestData.CreateAsset(author.Id, category.Id, title: "Excalibur Replica", createdAt: t0.AddMinutes(1));
+        // Desc trigram match only (typo in description): score <= 6
+        Asset descTrigram = TestData.CreateAsset(author.Id, category.Id, title: "Ancient Blade", description: "Excalbr", createdAt: t0.AddMinutes(2));
+
+        await AddWithReadyVersion(store, primary1);
+        await AddWithReadyVersion(store, primary2);
+        await AddWithReadyVersion(store, descTrigram);
+
+        // Page 1 with pageSize = 2: should be saturated by the 2 primary matches (scores >= 40), descTrigram omitted
+        CatalogPageResult<AssetListItem> page1 = await store.GetPaged(new GetAssetsRequest
+        {
+            Page = 1,
+            PageSize = 2,
+            Search = "Excalibur"
+        });
+
+        page1.TotalCount.Should().Be(3);
+        page1.Items.Should().HaveCount(2);
+        page1.Items.Select(a => a.Id).Should().Equal(primary1.Id, primary2.Id);
+
+        // Page 2 with pageSize = 2: should contain the lower-scoring descTrigram match
+        CatalogPageResult<AssetListItem> page2 = await store.GetPaged(new GetAssetsRequest
+        {
+            Page = 2,
+            PageSize = 2,
+            Search = "Excalibur"
+        });
+
+        page2.TotalCount.Should().Be(3);
+        page2.Items.Should().ContainSingle(a => a.Id == descTrigram.Id);
+    }
+
+    private static async Task<(List<Asset> Primaries, Asset DescOnly)> SeedHybridBoundaryAssets(
+        ApplicationDbContext db,
+        Guid authorId,
+        Guid categoryId,
+        int primaryCount)
+    {
+        var primaries = new List<Asset>(primaryCount);
+        var assets = new List<Asset>(primaryCount + 1);
+        var versions = new List<AssetVersion>(primaryCount + 1);
+        DateTimeOffset baseTime = DateTimeOffset.UtcNow.AddMinutes(-primaryCount * 2);
+
+        for (var i = 0; i < primaryCount; i++)
+        {
+            DateTimeOffset t = baseTime.AddMinutes(i);
+            // Alternate between FTS+Title ILIKE duplicates and Title ILIKE matches to test duplicate handling across branches
+            var title = (i % 2 == 0)
+                ? $"Excalibur Primary Model {i:D4}"
+                : $"Excalibur Replica {i:D4}";
+            var desc = (i % 2 == 0)
+                ? $"Excalibur high quality 3D model asset {i:D4}"
+                : $"Standard weapon asset {i:D4}";
+
+            Asset asset = TestData.CreateAsset(authorId, categoryId, title: title, description: desc, createdAt: t);
+            AssetVersion version = TestData.CreateAssetVersion(asset.Id, isCurrent: true, processingStatus: AssetVersionProcessingStatus.READY);
+            primaries.Add(asset);
+            assets.Add(asset);
+            versions.Add(version);
+        }
+
+        // Description trigram-only asset: "Excalbr" has similarity >= 0.3 with "Excalibur", no FTS or ILIKE substring match
+        Asset descOnly = TestData.CreateAsset(
+            authorId,
+            categoryId,
+            title: "Ancient Blade Description Trigram",
+            description: "Excalbr",
+            createdAt: baseTime.AddMinutes(-10));
+        AssetVersion descVersion = TestData.CreateAssetVersion(descOnly.Id, isCurrent: true, processingStatus: AssetVersionProcessingStatus.READY);
+        assets.Add(descOnly);
+        versions.Add(descVersion);
+
+        db.Assets.AddRange(assets);
+        db.AssetVersions.AddRange(versions);
+        await db.SaveChangesAsync();
+
+        return (primaries, descOnly);
+    }
+
+    [Fact]
+    public async Task QueryPagedHybrid_When199PrimaryAnd1DescTrigram_FillsTop200WithoutTruncation()
+    {
+        await using ApplicationDbContext db = await fixture.CreateCleanDbContext();
+        (User author, Category category) = await TestData.SeedAuthorAndCategory(db);
+        var store = new AssetStore(db);
+
+        (List<Asset> _, Asset descOnly) = await SeedHybridBoundaryAssets(db, author.Id, category.Id, 199);
+
+        var queryVector = new float[768];
+        const string modelKey = "test_boundary_model";
+
+        CatalogPageResult<AssetListItem> page1 = await store.GetPaged(new GetAssetsRequest
+        {
+            Page = 1,
+            PageSize = 100,
+            Search = "Excalibur"
+        }, queryVector, modelKey);
+
+        CatalogPageResult<AssetListItem> page2 = await store.GetPaged(new GetAssetsRequest
+        {
+            Page = 2,
+            PageSize = 100,
+            Search = "Excalibur"
+        }, queryVector, modelKey);
+
+        page1.TotalCount.Should().Be(200);
+        page1.Items.Should().HaveCount(100);
+        page1.IsTruncated.Should().BeFalse();
+
+        page2.TotalCount.Should().Be(200);
+        page2.Items.Should().HaveCount(100);
+        page2.IsTruncated.Should().BeFalse();
+        page2.Items[^1].Id.Should().Be(descOnly.Id);
+    }
+
+    [Fact]
+    public async Task QueryPagedHybrid_When200PrimaryAnd1DescTrigram_DetectsSentinelAndSetsIsTruncatedTrue()
+    {
+        await using ApplicationDbContext db = await fixture.CreateCleanDbContext();
+        (User author, Category category) = await TestData.SeedAuthorAndCategory(db);
+        var store = new AssetStore(db);
+
+        (List<Asset> _, Asset descOnly) = await SeedHybridBoundaryAssets(db, author.Id, category.Id, 200);
+
+        var queryVector = new float[768];
+        const string modelKey = "test_boundary_model";
+
+        CatalogPageResult<AssetListItem> result = await store.GetPaged(new GetAssetsRequest
+        {
+            Page = 1,
+            PageSize = 100,
+            Search = "Excalibur"
+        }, queryVector, modelKey);
+
+        result.TotalCount.Should().Be(200);
+        result.Items.Should().HaveCount(100);
+        result.IsTruncated.Should().BeTrue();
+        result.Items.Should().NotContain(a => a.Id == descOnly.Id);
+    }
+
+    [Fact]
+    public async Task QueryPagedHybrid_When201PrimaryAnd1DescTrigram_AllowsPruningAndSetsIsTruncatedTrue()
+    {
+        await using ApplicationDbContext db = await fixture.CreateCleanDbContext();
+        (User author, Category category) = await TestData.SeedAuthorAndCategory(db);
+        var store = new AssetStore(db);
+
+        (List<Asset> _, Asset descOnly) = await SeedHybridBoundaryAssets(db, author.Id, category.Id, 201);
+
+        var queryVector = new float[768];
+        const string modelKey = "test_boundary_model";
+
+        CatalogPageResult<AssetListItem> result = await store.GetPaged(new GetAssetsRequest
+        {
+            Page = 1,
+            PageSize = 100,
+            Search = "Excalibur"
+        }, queryVector, modelKey);
+
+        result.TotalCount.Should().Be(200);
+        result.Items.Should().HaveCount(100);
+        result.IsTruncated.Should().BeTrue();
+        result.Items.Should().NotContain(a => a.Id == descOnly.Id);
+    }
 }
+
+

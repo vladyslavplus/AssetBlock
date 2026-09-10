@@ -386,6 +386,72 @@ public sealed class AssetProcessingWorkerTests
     }
 
     [Fact]
+    public async Task Worker_WhenEmbeddingGenerationJob_DoesNotPublishSignalRUpdates()
+    {
+        AssetProcessingOptions options = CreateDefaultOptions();
+        AssetProcessingWorker worker = CreateWorker(options);
+
+        var jobId = Guid.NewGuid();
+        var leaseToken = Guid.NewGuid();
+        var ownerUserId = Guid.NewGuid();
+        DateTimeOffset updatedAt = DateTimeOffset.UtcNow;
+
+        var claimedJob = new ClaimedAssetProcessingJob(
+            jobId,
+            Guid.NewGuid(),
+            Guid.NewGuid(),
+            ownerUserId,
+            AssetProcessingJobType.EMBEDDING_GENERATION,
+            1,
+            1,
+            3,
+            "{}",
+            null,
+            leaseToken,
+            DateTimeOffset.UtcNow,
+            DateTimeOffset.UtcNow.AddMinutes(-5),
+            updatedAt);
+
+        IAssetProcessingJobHandlerAdapter adapter = Substitute.For<IAssetProcessingJobHandlerAdapter>();
+        var executedTcs = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        adapter.Execute(Arg.Any<ClaimedAssetProcessingJob>(), Arg.Any<CancellationToken>())
+            .Returns(_ =>
+            {
+                executedTcs.TrySetResult(true);
+                return Task.FromResult(AssetProcessingJobOutcome.CommittedSucceeded());
+            });
+
+        _registry.GetHandler(AssetProcessingJobType.EMBEDDING_GENERATION).Returns(adapter);
+
+        var callCount = 0;
+        _store.ClaimPendingBatch(Arg.Any<int>(), Arg.Any<TimeSpan>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(_ =>
+            {
+                if (Interlocked.Increment(ref callCount) == 1)
+                {
+                    return Task.FromResult<IReadOnlyList<ClaimedAssetProcessingJob>>([claimedJob]);
+                }
+                return Task.FromResult<IReadOnlyList<ClaimedAssetProcessingJob>>([]);
+            });
+
+        await worker.StartAsync(CancellationToken.None);
+        try
+        {
+            await executedTcs.Task.WaitAsync(TimeSpan.FromSeconds(5));
+            await Task.Delay(50);
+        }
+        finally
+        {
+            await worker.StopAsync(CancellationToken.None);
+        }
+
+        await _publisher.DidNotReceive().PublishJobUpdated(
+            Arg.Any<Guid>(),
+            Arg.Any<AssetProcessingUpdateMessage>(),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
     public async Task Worker_WhenListingCopilotCommitsAtomically_ShouldPublishFinalStateOnceWithoutMarkSucceeded()
     {
         AssetProcessingOptions options = CreateDefaultOptions();

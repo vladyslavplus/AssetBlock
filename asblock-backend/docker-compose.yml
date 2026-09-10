@@ -13,7 +13,7 @@
 services:
   # Uncomment when postgres is needed
   # postgres:
-  #   image: postgres:16.14-alpine3.24@sha256:57c72fd2a128e416c7fcc499958864df5301e940bca0a56f58fddf30ffc07777
+  #   image: pgvector/pgvector:0.8.6-pg16-bookworm@sha256:ccc6e83d6e35e931dc7c5def2022729d5a6c370318d099181995567ff1fb4d6b
   #   container_name: assetblock-postgres
   #   ports:
   #     - "${POSTGRES_PORT:-5432}:5432"

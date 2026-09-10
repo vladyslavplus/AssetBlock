@@ -32,11 +32,11 @@ export function useListingCopilotSuggestionQuery(
 
   return useQuery({
     queryKey: assetVersionId ? sellerCopilotKeys.version(assetVersionId) : sellerCopilotKeys.all,
-    queryFn: ({ signal }) => {
+    queryFn: () => {
       if (!assetVersionId) {
         return Promise.resolve(null)
       }
-      return fetchListingCopilotSuggestion(assetVersionId, signal)
+      return fetchListingCopilotSuggestion(assetVersionId)
     },
     enabled,
   })

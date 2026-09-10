@@ -52,6 +52,10 @@ public static partial class AssetProcessingSerializer
                 ? SerializeValidated(copilotPayload, ValidateListingCopilotPayload)
                 : throw WrongDto(type, nameof(ListingCopilotPayload)),
 
+            AssetProcessingJobType.EMBEDDING_GENERATION => payload is EmbeddingGenerationPayload embeddingPayload
+                ? SerializeValidated(embeddingPayload, ValidateEmbeddingGenerationPayload)
+                : throw WrongDto(type, nameof(EmbeddingGenerationPayload)),
+
             _ => throw UnknownType(type)
         };
 
@@ -70,6 +74,9 @@ public static partial class AssetProcessingSerializer
 
             AssetProcessingJobType.LISTING_COPILOT =>
                 DeserializeValidated(json, () => JsonSerializer.Deserialize<ListingCopilotPayload>(json, _options), ValidateListingCopilotPayload),
+
+            AssetProcessingJobType.EMBEDDING_GENERATION =>
+                DeserializeValidated(json, () => JsonSerializer.Deserialize<EmbeddingGenerationPayload>(json, _options), ValidateEmbeddingGenerationPayload),
 
             _ => throw UnknownType(type)
         };
@@ -91,6 +98,10 @@ public static partial class AssetProcessingSerializer
                 ? SerializeValidated(copilotResult, ValidateListingCopilotResult)
                 : throw WrongDto(type, nameof(ListingCopilotResult)),
 
+            AssetProcessingJobType.EMBEDDING_GENERATION => result is EmbeddingGenerationResult embeddingResult
+                ? SerializeValidated(embeddingResult, ValidateEmbeddingGenerationResult)
+                : throw WrongDto(type, nameof(EmbeddingGenerationResult)),
+
             _ => throw UnknownType(type)
         };
 
@@ -109,6 +120,9 @@ public static partial class AssetProcessingSerializer
 
             AssetProcessingJobType.LISTING_COPILOT =>
                 DeserializeValidated(json, () => JsonSerializer.Deserialize<ListingCopilotResult>(json, _options), ValidateListingCopilotResult),
+
+            AssetProcessingJobType.EMBEDDING_GENERATION =>
+                DeserializeValidated(json, () => JsonSerializer.Deserialize<EmbeddingGenerationResult>(json, _options), ValidateEmbeddingGenerationResult),
 
             _ => throw UnknownType(type)
         };
@@ -225,6 +239,67 @@ public static partial class AssetProcessingSerializer
         if (string.IsNullOrWhiteSpace(result.ContentHash) || !Sha256Regex().IsMatch(result.ContentHash))
         {
             throw Fail("ContentHash must be a valid lowercase SHA-256 hex string.");
+        }
+    }
+
+    private static void ValidateEmbeddingGenerationPayload(EmbeddingGenerationPayload payload)
+    {
+        if (payload.AssetId == Guid.Empty)
+        {
+            throw Fail("AssetId must not be empty.");
+        }
+
+        if (payload.AssetVersionId == Guid.Empty)
+        {
+            throw Fail("AssetVersionId must not be empty.");
+        }
+
+        if (payload.TargetRevision <= 0)
+        {
+            throw Fail("TargetRevision must be positive.");
+        }
+
+        if (string.IsNullOrWhiteSpace(payload.ContentHash) || !Sha256Regex().IsMatch(payload.ContentHash))
+        {
+            throw Fail("ContentHash must be a valid lowercase SHA-256 hex string.");
+        }
+
+        if (string.IsNullOrWhiteSpace(payload.ModelKey) || !Sha256Regex().IsMatch(payload.ModelKey))
+        {
+            throw Fail("ModelKey must be a valid lowercase SHA-256 hex string.");
+        }
+
+        if (!string.Equals(payload.ContentSchemaVersion, "asset-public-metadata-v1", StringComparison.Ordinal))
+        {
+            throw Fail("ContentSchemaVersion must be 'asset-public-metadata-v1'.");
+        }
+    }
+
+    private static void ValidateEmbeddingGenerationResult(EmbeddingGenerationResult result)
+    {
+        if (result.AssetId == Guid.Empty)
+        {
+            throw Fail("AssetId must not be empty.");
+        }
+
+        if (result.SourceRevision <= 0)
+        {
+            throw Fail("SourceRevision must be positive.");
+        }
+
+        if (string.IsNullOrWhiteSpace(result.ContentHash) || !Sha256Regex().IsMatch(result.ContentHash))
+        {
+            throw Fail("ContentHash must be a valid lowercase SHA-256 hex string.");
+        }
+
+        if (string.IsNullOrWhiteSpace(result.ModelKey) || !Sha256Regex().IsMatch(result.ModelKey))
+        {
+            throw Fail("ModelKey must be a valid lowercase SHA-256 hex string.");
+        }
+
+        if (result.Dimension <= 0)
+        {
+            throw Fail("Dimension must be positive.");
         }
     }
 }
