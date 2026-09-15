@@ -113,7 +113,7 @@ public abstract class StorageProviderFixture : IAsyncLifetime
 
 public sealed class MinioStorageFixture : StorageProviderFixture
 {
-    protected override string Image => "minio/minio:RELEASE.2025-09-07T16-13-09Z@sha256:14cea493d9a34af32f524e538b8346cf79f3321eff8e708c1e2960462bd8936e";
+    protected override string Image => "quay.io/minio/minio:RELEASE.2025-09-07T16-13-09Z@sha256:14cea493d9a34af32f524e538b8346cf79f3321eff8e708c1e2960462bd8936e";
     protected override int ContainerPort => 9000;
     protected override string AccessKey => "assetblock";
     protected override string SecretKey => "dev_minio_secret";
