@@ -77,9 +77,9 @@ internal sealed class RecommendationEventConfiguration : IEntityTypeConfiguratio
         builder.HasIndex(e => new { e.OccurredAt, e.Id })
             .HasDatabaseName("IX_recommendation_events_OccurredAt_Id");
 
-        // Phase B worker recompute sources one account's clicks in a rolling window.
+        // Worker recompute sources one account's clicks in a rolling window.
         // Equality-equality-range order matches that predicate; without it the per-user
-        // recompute scans the raw table (see EXPLAIN evidence in the delivery report).
+        // recompute scans the raw table.
         builder.HasIndex(e => new { e.ActorUserId, e.EventType, e.OccurredAt })
             .HasDatabaseName("IX_recommendation_events_ActorUserId_EventType_OccurredAt");
     }

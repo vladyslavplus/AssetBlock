@@ -120,7 +120,7 @@ public sealed class GetPersonalSimilarAssetsQueryHandlerTests
     }
 
     [Fact]
-    public async Task Handle_WhenPersonalizationNotApplied_ShouldFallBackToPhaseAVersion()
+    public async Task Handle_WhenPersonalizationNotApplied_ShouldFallBackToNonPersonalRankingVersion()
     {
         var assetId = Guid.NewGuid();
         var userId = Guid.NewGuid();
@@ -219,7 +219,7 @@ public sealed class GetPersonalSimilarAssetsQueryHandlerTests
     }
 
     [Fact]
-    public async Task Handle_WhenPhaseAFallbackFromPersonalRoute_ShouldNotUsePersonalReasons()
+    public async Task Handle_WhenPersonalizationNotAppliedFromPersonalRoute_ShouldNotUsePersonalReasons()
     {
         var assetId = Guid.NewGuid();
         var userId = Guid.NewGuid();

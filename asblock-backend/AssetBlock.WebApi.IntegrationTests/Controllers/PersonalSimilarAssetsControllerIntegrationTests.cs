@@ -78,7 +78,7 @@ public sealed class PersonalSimilarAssetsControllerIntegrationTests(IntegrationT
     }
 
     [Fact]
-    public async Task GetPersonalSimilar_WhenOptedOut_ShouldReturnPhaseAVersion()
+    public async Task GetPersonalSimilar_WhenOptedOut_ShouldReturnNonPersonalRankingVersion()
     {
         IServiceScopeFactory scopeFactory = fixture.Factory.Services.GetRequiredService<IServiceScopeFactory>();
         (Guid sourceId, Guid peerId) = await SimilarAssetsSeed.EnsurePublicPairAsync(scopeFactory);
@@ -96,7 +96,7 @@ public sealed class PersonalSimilarAssetsControllerIntegrationTests(IntegrationT
     }
 
     [Fact]
-    public async Task GetPersonalSimilar_WhenOptedInWithoutSignals_ShouldReturnPersonalVersionWithPhaseAOrder()
+    public async Task GetPersonalSimilar_WhenOptedInWithoutSignals_ShouldReturnPersonalVersionWithNonPersonalOrder()
     {
         IServiceScopeFactory scopeFactory = fixture.Factory.Services.GetRequiredService<IServiceScopeFactory>();
         (Guid sourceId, Guid peerId) = await SimilarAssetsSeed.EnsurePublicPairAsync(scopeFactory);
@@ -117,7 +117,7 @@ public sealed class PersonalSimilarAssetsControllerIntegrationTests(IntegrationT
         payload.Exposure.Should().NotBeNull();
         payload.Exposure!.RankingVersion.Should().Be("similar-assets-v1-personal");
         payload.Exposure.Token.Should().HaveLength(64);
-        // Opted in but signal-empty: personal version with Phase A order and no personal reason.
+        // Opted in but signal-empty: personal ranking version with non-personal order and no personal reason.
         payload.Explanations.Should().ContainSingle();
         payload.Explanations![0].AssetId.Should().Be(peerId);
         payload.Explanations[0].Code.Should().NotBe("PERSONAL_RECOMMENDATION_CHOICES");

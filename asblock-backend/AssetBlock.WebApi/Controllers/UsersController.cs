@@ -278,7 +278,7 @@ public sealed class UsersController(ISender sender) : ApiControllerBase(sender)
 
     /// <summary>
     /// Personal similar assets for the authenticated opted-in user.
-    /// Opted-out, preference-missing, or signal-empty callers receive Phase A ordering.
+    /// Opted-out, preference-missing, or signal-empty callers receive non-personal ordering.
     /// </summary>
     [HttpGet(ApiRoutes.Users.ME_ASSET_SIMILAR)]
     [Authorize]

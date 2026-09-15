@@ -503,7 +503,7 @@ describe('SimilarAssetsBlock', () => {
 
     renderWithProviders(<SimilarAssetsBlock assetId={sourceId} />, { authUser })
 
-    // Documented safe fallback: content stays available via Phase A order while
+    // Documented safe fallback: content stays available via public non-personal order while
     // personalization stays off; the error is never recorded as a saved opt-out.
     expect(await screen.findByText('Peer Pack')).toBeInTheDocument()
     expect(

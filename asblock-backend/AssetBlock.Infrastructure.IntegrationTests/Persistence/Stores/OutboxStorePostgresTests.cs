@@ -493,11 +493,11 @@ public sealed class OutboxStorePostgresTests(PostgresFixture fixture)
         db.OutboxMessages.AddRange(oldProcessed1, oldProcessed2, oldProcessed3, recentProcessed, pending, leased, retryable, deadLettered);
         await db.SaveChangesAsync();
 
-        // Batch 1: batch size 2 -> should delete 2 of the 3 old processed rows
+        // First pass: batch size 2 -> should delete 2 of the 3 old processed rows
         var deletedBatch1 = await store.CleanupProcessed(cutoff, batchSize: 2);
         deletedBatch1.Should().Be(2);
 
-        // Batch 2: batch size 2 -> should delete the remaining 1 old processed row
+        // Second pass: batch size 2 -> should delete the remaining 1 old processed row
         var deletedBatch2 = await store.CleanupProcessed(cutoff, batchSize: 2);
         deletedBatch2.Should().Be(1);
 

@@ -1,6 +1,4 @@
 using System.Diagnostics;
-using System.Security.Cryptography;
-using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using AssetBlock.Domain.Core.Constants;
@@ -16,10 +14,8 @@ using Npgsql;
 namespace AssetBlock.Infrastructure.IntegrationTests.Persistence.Stores;
 
 /// <summary>
-/// Focused query-plan/cost evidence for Phase A popularity ranking (P3 Batch 3 finding).
-/// Seeds a large unrelated corpus, then records actual plans (EXPLAIN ANALYZE), table
+/// Seeds a large unrelated corpus, then records EXPLAIN ANALYZE output, table
 /// cardinalities, existing indexes, and whole-request latency for metadata vs. popularity.
-/// No SLA or quality verdict is asserted.
 /// </summary>
 [Collection(nameof(PostgresStoreCollection))]
 public sealed class PopularityRankingQueryMeasurementPostgresTests(PostgresFixture fixture)
@@ -31,7 +27,6 @@ public sealed class PopularityRankingQueryMeasurementPostgresTests(PostgresFixtu
     private const int BULK_PRODUCTS = 1500;
     private const int WARMUP = 3;
     private const int SAMPLES = 21;
-    private const int CONCURRENCY = 1;
 
     [Fact]
     public async Task Measure_PopularityRankingQueries_ShouldRecordPlansCardinalitiesAndLatency()
@@ -143,58 +138,6 @@ public sealed class PopularityRankingQueryMeasurementPostgresTests(PostgresFixtu
         ModeMeasurement metadata = await MeasureMode(store, sourceId, SimilarAssetsQueryOptions.MetadataOnly, "metadata");
         ModeMeasurement popularity = await MeasureMode(store, sourceId, popularityOptions, "popularity");
 
-        var fingerprintInput = string.Join(
-            ",",
-            new[] { sourceId }.Concat(candidateIds).OrderBy(id => id).Select(id => id.ToString("N")));
-        var fingerprint = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(fingerprintInput))).ToLowerInvariant();
-
-        var report = new
-        {
-            generatedAtUtc = DateTimeOffset.UtcNow,
-            shortlistBound = SimilarAssetsConstants.SHORTLIST_SIZE,
-            candidateCount = CANDIDATE_COUNT,
-            unrelatedSources = UNRELATED_SOURCES,
-            unrelatedTargetsPerSource = UNRELATED_TARGETS_PER_SOURCE,
-            bulkProducts = BULK_PRODUCTS,
-            popularityWindowDays = SimilarAssetsConstants.POPULARITY_WINDOW_DAYS,
-            responseLimit = 6,
-            warmup = WARMUP,
-            samples = SAMPLES,
-            concurrency = CONCURRENCY,
-            percentileMethod = "nearest-rank ceiling, 1-based rank = ceil(p * n)",
-            sourceFingerprintSha256 = fingerprint,
-            gitCommit = TryGitHead(),
-            cardinalities,
-            existingIndexes,
-            requiredIndexes = new[]
-            {
-                "IX_recommendation_daily_source_target_day",
-                "IX_product_analytics_daily_type_product_day"
-            },
-            historicalPreIndex = ReadHistoricalPreIndex(),
-            plans = new
-            {
-                engagement = engagementPlan,
-                views = viewsPlan,
-                units = unitsPlan
-            },
-            generatedSql = new
-            {
-                engagementSql,
-                viewsSql,
-                unitsSql
-            },
-            modes = new[] { metadata, popularity },
-            sla = "none-numeric-p3-latency-sla-not-defined",
-            qualityVerdict = "not-evaluated"
-        };
-
-        var json = JsonSerializer.Serialize(report, new JsonSerializerOptions { WriteIndented = true });
-        var planDir = FindPlanDirectory();
-        planDir.Should().NotBeNull("measurement artifact should be written next to the P3 plan");
-        var path = Path.Combine(planDir, "p3_batch3_popularity_query_measurement.json");
-        await File.WriteAllTextAsync(path, json);
-
         metadata.ItemCount.Should().Be(6);
         popularity.ItemCount.Should().Be(6);
         cardinalities.recommendationDaily.Should().BeGreaterThan(40000);
@@ -206,67 +149,6 @@ public sealed class PopularityRankingQueryMeasurementPostgresTests(PostgresFixtu
         engagementPlan.NodeType.Should().NotBeNullOrWhiteSpace();
         viewsPlan.NodeType.Should().NotBeNullOrWhiteSpace();
         unitsPlan.NodeType.Should().NotBeNullOrWhiteSpace();
-    }
-
-    /// <summary>
-    /// Carries the prior artifact's pre-index plans forward as clearly labeled historical
-    /// evidence. Returns null on the first measured run.
-    /// </summary>
-    private static JsonElement? ReadHistoricalPreIndex()
-    {
-        try
-        {
-            var planDir = FindPlanDirectory();
-            if (planDir is null)
-            {
-                return null;
-            }
-
-            var path = Path.Combine(planDir, "p3_batch3_popularity_query_measurement.json");
-            if (!File.Exists(path))
-            {
-                return null;
-            }
-
-            using var doc = JsonDocument.Parse(File.ReadAllText(path));
-            if (!doc.RootElement.TryGetProperty("plans", out JsonElement plans))
-            {
-                return null;
-            }
-
-            var historical = new Dictionary<string, object?>();
-            if (plans.TryGetProperty("engagement", out JsonElement engagement)
-                && engagement.ValueKind == JsonValueKind.Object
-                && engagement.TryGetProperty("pre", out JsonElement engagementPre))
-            {
-                historical["engagementPre"] = engagementPre.Clone();
-            }
-
-            if (plans.TryGetProperty("views", out JsonElement views)
-                && views.ValueKind == JsonValueKind.Object
-                && views.TryGetProperty("pre", out JsonElement viewsPre))
-            {
-                historical["viewsPre"] = viewsPre.Clone();
-            }
-
-            if (historical.Count == 0)
-            {
-                return null;
-            }
-
-            historical["note"] = "Pre-index Seq Scan evidence from the prior artifact run; "
-                + "current plans above come from the migrated schema.";
-            using var snapshot = JsonDocument.Parse(JsonSerializer.Serialize(historical));
-            return snapshot.RootElement.Clone();
-        }
-        catch (IOException)
-        {
-            return null;
-        }
-        catch (JsonException)
-        {
-            return null;
-        }
     }
 
     private static void SeedRecommendationDaily(
@@ -669,56 +551,6 @@ public sealed class PopularityRankingQueryMeasurementPostgresTests(PostgresFixtu
             isCurrent: true,
             processingStatus: AssetVersionProcessingStatus.READY));
         return asset;
-    }
-
-    private static string? FindPlanDirectory()
-    {
-        var dir = new DirectoryInfo(AppContext.BaseDirectory);
-        while (dir is not null)
-        {
-            var candidate = Path.Combine(dir.FullName, ".cursor", "plans");
-            if (Directory.Exists(candidate))
-            {
-                return candidate;
-            }
-
-            dir = dir.Parent;
-        }
-
-        return null;
-    }
-
-    private static string? TryGitHead()
-    {
-        try
-        {
-            var dir = new DirectoryInfo(AppContext.BaseDirectory);
-            while (dir is not null)
-            {
-                var gitHead = Path.Combine(dir.FullName, ".git", "HEAD");
-                if (File.Exists(gitHead))
-                {
-                    var head = File.ReadAllText(gitHead).Trim();
-                    if (head.StartsWith("ref:", StringComparison.Ordinal))
-                    {
-                        var refPath = Path.Combine(dir.FullName, ".git", head[5..].Trim().Replace('/', Path.DirectorySeparatorChar));
-                        if (File.Exists(refPath))
-                        {
-                            return File.ReadAllText(refPath).Trim();
-                        }
-                    }
-
-                    return head;
-                }
-
-                dir = dir.Parent;
-            }
-        }
-        catch (IOException)
-        {
-        }
-
-        return null;
     }
 
     private sealed record IndexEvidence(string Table, string IndexName, string Definition);

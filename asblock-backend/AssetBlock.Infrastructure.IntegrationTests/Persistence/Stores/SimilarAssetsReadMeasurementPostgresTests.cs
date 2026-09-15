@@ -1,7 +1,4 @@
 using System.Diagnostics;
-using System.Security.Cryptography;
-using System.Text;
-using System.Text.Json;
 using AssetBlock.Domain.Core;
 using AssetBlock.Domain.Core.Dto.Assets;
 using AssetBlock.Domain.Core.Entities;
@@ -24,7 +21,6 @@ public sealed class SimilarAssetsReadMeasurementPostgresTests(PostgresFixture fi
     private const int CANDIDATE_COUNT = 120;
     private const int WARMUP = 3;
     private const int SAMPLES = 21;
-    private const int CONCURRENCY = 1;
 
     [Fact]
     public async Task Measure_SimilarAssetsRead_OnSyntheticCategory_ShouldRecordMetadataAndSemanticLatency()
@@ -78,37 +74,6 @@ public sealed class SimilarAssetsReadMeasurementPostgresTests(PostgresFixture fi
             SimilarAssetsQueryOptions.MetadataOnly,
             "metadata");
         ModeMeasurement semantic = await MeasureMode(store, source.Id, semanticOptions, "semantic-local-fixtures");
-
-        var fingerprintInput = string.Join(
-            ",",
-            new[] { source.Id }.Concat(candidateIds).OrderBy(id => id).Select(id => id.ToString("N")));
-        var fingerprint = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(fingerprintInput))).ToLowerInvariant();
-
-        var report = new
-        {
-            generatedAtUtc = DateTimeOffset.UtcNow,
-            corpusEligibleSameCategory = CANDIDATE_COUNT + 1,
-            categoryCandidateCount = CANDIDATE_COUNT,
-            otherCategoryCount = 8,
-            embeddingCoverage = 1.0,
-            shortlistBound = 100,
-            responseLimit = 6,
-            warmup = WARMUP,
-            samples = SAMPLES,
-            concurrency = CONCURRENCY,
-            percentileMethod = "nearest-rank ceiling, 1-based rank = ceil(p * n)",
-            sourceFingerprintSha256 = fingerprint,
-            gitCommit = TryGitHead(),
-            modes = new[] { metadata, semantic },
-            sla = "none-numeric-p3-latency-sla-not-defined",
-            qualityVerdict = "not-evaluated"
-        };
-
-        var json = JsonSerializer.Serialize(report, new JsonSerializerOptions { WriteIndented = true });
-        var planDir = FindPlanDirectory();
-        planDir.Should().NotBeNull("measurement artifact should be written next to the P3 plan");
-        var path = Path.Combine(planDir, "p3_batch1_similar_assets_read_measurement.json");
-        await File.WriteAllTextAsync(path, json);
 
         metadata.ItemCount.Should().Be(6);
         semantic.ItemCount.Should().Be(6);
@@ -205,56 +170,6 @@ public sealed class SimilarAssetsReadMeasurementPostgresTests(PostgresFixture fi
         vector[0] = MathF.Cos(angle);
         vector[1] = MathF.Sin(angle);
         return vector;
-    }
-
-    private static string? FindPlanDirectory()
-    {
-        var dir = new DirectoryInfo(AppContext.BaseDirectory);
-        while (dir is not null)
-        {
-            var candidate = Path.Combine(dir.FullName, ".cursor", "plans");
-            if (Directory.Exists(candidate))
-            {
-                return candidate;
-            }
-
-            dir = dir.Parent;
-        }
-
-        return null;
-    }
-
-    private static string? TryGitHead()
-    {
-        try
-        {
-            var dir = new DirectoryInfo(AppContext.BaseDirectory);
-            while (dir is not null)
-            {
-                var gitHead = Path.Combine(dir.FullName, ".git", "HEAD");
-                if (File.Exists(gitHead))
-                {
-                    var head = File.ReadAllText(gitHead).Trim();
-                    if (head.StartsWith("ref:", StringComparison.Ordinal))
-                    {
-                        var refPath = Path.Combine(dir.FullName, ".git", head[5..].Trim().Replace('/', Path.DirectorySeparatorChar));
-                        if (File.Exists(refPath))
-                        {
-                            return File.ReadAllText(refPath).Trim();
-                        }
-                    }
-
-                    return head;
-                }
-
-                dir = dir.Parent;
-            }
-        }
-        catch (IOException)
-        {
-        }
-
-        return null;
     }
 
     private sealed record ModeMeasurement(

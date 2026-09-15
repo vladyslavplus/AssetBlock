@@ -33,7 +33,7 @@ internal sealed class RecommendationDailyConfiguration : IEntityTypeConfiguratio
         builder.Property(e => e.ClickCount).IsRequired();
         builder.Property(e => e.UpdatedAt).IsRequired();
 
-        // Phase A popularity: source-scoped engagement lookup by (source, targets) over a
+        // Popularity ranking: source-scoped engagement lookup by (source, targets) over a
         // trailing UTC-day window. Equality predicates precede the DayUtc range.
         builder.HasIndex(e => new { e.SourceAssetId, e.TargetAssetId, e.DayUtc })
             .HasDatabaseName("IX_recommendation_daily_source_target_day");

@@ -43,7 +43,7 @@ export function SimilarAssetsBlock({
   // No similar request fires until auth and (for signed-in users) preferences resolve,
   // so a delayed opt-in never triggers an early public request or impression.
   // Preference errors fail closed for personalization (never personal) and fail open
-  // for content (public Phase A order); the error is never treated as a saved opt-out.
+  // for content (public non-personal order); the error is never treated as a saved opt-out.
   // Personal requires a successful opt-in read: stale cached data surviving a failed
   // refetch must not keep the personal query active.
   const ready =

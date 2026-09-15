@@ -366,12 +366,12 @@ internal sealed class AssetStore(
                 personalUserId,
                 sourceAssetId,
                 shortlist,
-                () => RankPhaseA(sourceAssetId, source.SearchRevision, shortlist, options, cancellationToken),
+                () => RankNonPersonal(sourceAssetId, source.SearchRevision, shortlist, options, cancellationToken),
                 cancellationToken);
         }
         else
         {
-            (ranked, popularitySignaled) = await RankPhaseA(sourceAssetId, source.SearchRevision, shortlist, options, cancellationToken);
+            (ranked, popularitySignaled) = await RankNonPersonal(sourceAssetId, source.SearchRevision, shortlist, options, cancellationToken);
         }
 
         var selectedIds = ranked.Rows
@@ -1699,7 +1699,7 @@ internal sealed class AssetStore(
                     || GetSignalOrZero(viewsById, r.Id) > 0)
                 .Select(r => r.Id));
 
-        // Lexicographic popularity order, then Batch 1 metadata tie-breakers.
+        // Lexicographic popularity order, then metadata tie-breakers.
         // Candidates without any signal carry zeros and fall back to metadata order.
         var ranked = shortlist
             .OrderByDescending(r => GetSignalOrZero(clicksById, r.Id))
@@ -1715,7 +1715,7 @@ internal sealed class AssetStore(
         return (new SimilarRankedShortlist(ranked, false), signaled);
     }
 
-    private async Task<(SimilarRankedShortlist Ranked, HashSet<Guid> PopularitySignaled)> RankPhaseA(
+    private async Task<(SimilarRankedShortlist Ranked, HashSet<Guid> PopularitySignaled)> RankNonPersonal(
         Guid sourceAssetId,
         long sourceSearchRevision,
         IReadOnlyList<SimilarShortlistRow> shortlist,
@@ -1744,13 +1744,13 @@ internal sealed class AssetStore(
         Guid userId,
         Guid sourceAssetId,
         IReadOnlyList<SimilarShortlistRow> shortlist,
-        Func<Task<(SimilarRankedShortlist Ranked, HashSet<Guid> PopularitySignaled)>> rankPhaseA,
+        Func<Task<(SimilarRankedShortlist Ranked, HashSet<Guid> PopularitySignaled)>> rankNonPersonal,
         CancellationToken cancellationToken)
     {
-        (SimilarRankedShortlist phaseA, HashSet<Guid> popularitySignaled) = await rankPhaseA();
+        (SimilarRankedShortlist baseline, HashSet<Guid> popularitySignaled) = await rankNonPersonal();
         if (personalizationStore is null || shortlist.Count == 0)
         {
-            return (phaseA, false, [], [], popularitySignaled);
+            return (baseline, false, [], [], popularitySignaled);
         }
 
         var ids = shortlist.Select(r => r.Id).ToList();
@@ -1758,13 +1758,13 @@ internal sealed class AssetStore(
             await personalizationStore.GetSignals(userId, sourceAssetId, ids, cancellationToken);
         if (signals is null)
         {
-            // Not opted in (or store unavailable): structural Phase A fallback.
-            return (phaseA, false, [], [], popularitySignaled);
+            // Not opted in (or store unavailable): keep non-personal order.
+            return (baseline, false, [], [], popularitySignaled);
         }
 
-        // Stable sort: full ties keep the Phase A order, so zero personal signals
-        // reduce exactly to Phase A ordering.
-        var reranked = phaseA.Rows
+        // Stable sort: full ties keep the incoming non-personal order, so zero personal
+        // signals reduce exactly to that ordering.
+        var reranked = baseline.Rows
             .OrderByDescending(r => GetSignalOrZero(signals.ClicksByTargetId, r.Id))
             .ThenByDescending(r => GetSignalOrZero(signals.TagScoreByCandidateId, r.Id))
             .ToList();
@@ -1772,7 +1772,7 @@ internal sealed class AssetStore(
             ids.Where(id => GetSignalOrZero(signals.ClicksByTargetId, id) > 0));
         var tagTargets = new HashSet<Guid>(
             ids.Where(id => GetSignalOrZero(signals.TagScoreByCandidateId, id) > 0));
-        return (new SimilarRankedShortlist(reranked, phaseA.UsedSemanticRefinement), true, clickTargets, tagTargets, popularitySignaled);
+        return (new SimilarRankedShortlist(reranked, baseline.UsedSemanticRefinement), true, clickTargets, tagTargets, popularitySignaled);
     }
 
     private static long GetSignalOrZero(IReadOnlyDictionary<Guid, long> signals, Guid assetId)

@@ -90,7 +90,7 @@ internal sealed class GetPersonalSimilarAssetsQueryHandler(
                     ? RecommendationTelemetryConstants.RANKING_VERSION_SIMILAR_SEMANTIC
                     : RecommendationTelemetryConstants.RANKING_VERSION_SIMILAR_METADATA;
         var exposureId = Guid.NewGuid();
-        // Audience-bound only for the personal version: Phase A fallback tokens stay
+        // Audience-bound only for the personal version: non-personal tokens stay
         // byte-identical to public-endpoint tokens regardless of which route issued them.
         var payload = new RecommendationExposurePayload(
             exposureId,

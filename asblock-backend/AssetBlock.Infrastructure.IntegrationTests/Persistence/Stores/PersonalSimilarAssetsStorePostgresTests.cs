@@ -16,7 +16,7 @@ public sealed class PersonalSimilarAssetsStorePostgresTests(PostgresFixture fixt
     private static readonly DateTimeOffset _now = new(2026, 9, 10, 12, 0, 0, TimeSpan.Zero);
 
     [Fact]
-    public async Task GetSimilarPublic_WhenOptedInWithoutSignals_ShouldMatchPhaseAOrder()
+    public async Task GetSimilarPublic_WhenOptedInWithoutSignals_ShouldMatchNonPersonalOrder()
     {
         await using ApplicationDbContext db = await fixture.CreateCleanDbContext();
         (User author, Category category) = await TestData.SeedAuthorAndCategory(db);
@@ -36,12 +36,12 @@ public sealed class PersonalSimilarAssetsStorePostgresTests(PostgresFixture fixt
         var options = new SimilarAssetsQueryOptions(false, null, 0, null, PersonalUserId: user.Id);
 
         SimilarPublicAssetsResult? personal = await store.GetSimilarPublic(source.Id, 12, options);
-        SimilarPublicAssetsResult? phaseA = await store.GetSimilarPublic(source.Id, 12, SimilarAssetsQueryOptions.MetadataOnly);
+        SimilarPublicAssetsResult? nonPersonal = await store.GetSimilarPublic(source.Id, 12, SimilarAssetsQueryOptions.MetadataOnly);
 
         personal.Should().NotBeNull();
         personal.UsedPersonalization.Should().BeTrue();
         personal.Items.Select(i => i.Title).Should().Equal("First", "Second");
-        personal.Items.Select(i => i.Id).Should().Equal(phaseA!.Items.Select(i => i.Id));
+        personal.Items.Select(i => i.Id).Should().Equal(nonPersonal!.Items.Select(i => i.Id));
     }
 
     [Fact]
@@ -117,7 +117,7 @@ public sealed class PersonalSimilarAssetsStorePostgresTests(PostgresFixture fixt
     }
 
     [Fact]
-    public async Task GetSimilarPublic_ShouldCountEachSharedTagOnceAndBreakTiesByPhaseA()
+    public async Task GetSimilarPublic_ShouldCountEachSharedTagOnceAndBreakTiesByMetadata()
     {
         await using ApplicationDbContext db = await fixture.CreateCleanDbContext();
         (User author, Category category) = await TestData.SeedAuthorAndCategory(db);
@@ -156,13 +156,13 @@ public sealed class PersonalSimilarAssetsStorePostgresTests(PostgresFixture fixt
         var options = new SimilarAssetsQueryOptions(false, null, 0, null, PersonalUserId: user.Id);
         SimilarPublicAssetsResult? result = await store.GetSimilarPublic(source.Id, 12, options);
 
-        // HistoryA/HistoryB carry tag score 1 each and tie with OneTag; Phase A keys
+        // HistoryA/HistoryB carry tag score 1 each and tie with OneTag; metadata keys
         // (Jaccard, then ratings) break the tie deterministically.
         result!.Items.Select(i => i.Title).Should().Equal("TwoTags", "OneTag", "HistoryA", "HistoryB");
     }
 
     [Fact]
-    public async Task GetSimilarPublic_WhenOptedOut_ShouldUsePhaseAOrderWithoutPersonalFlag()
+    public async Task GetSimilarPublic_WhenOptedOut_ShouldUseNonPersonalOrderWithoutPersonalFlag()
     {
         await using ApplicationDbContext db = await fixture.CreateCleanDbContext();
         (User author, Category category) = await TestData.SeedAuthorAndCategory(db);

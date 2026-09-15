@@ -62,7 +62,7 @@ internal sealed class RecommendationExposureSigner(IOptions<AnalyticsRateLimitin
             "\n",
             candidatePart);
         // Bound only when present: a null audience keeps the canonical form byte-identical
-        // to audience-less tokens, so public Phase A tokens stay backward-compatible.
+        // to audience-less tokens, so public non-personal tokens stay backward-compatible.
         if (payload.AudienceUserId is { } audience && audience != Guid.Empty)
         {
             canonical += "\n" + audience.ToString("D");

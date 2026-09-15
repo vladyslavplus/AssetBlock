@@ -44,7 +44,7 @@ public interface IRecommendationPersonalizationStore
 
     /// <summary>
     /// Bounded direct read for ranking, race-free against concurrent opt-out:
-    /// locks the preference row, returns null (Phase A fallback) unless still opted in.
+    /// locks the preference row, returns null unless still opted in.
     /// Pair clicks for (user, source, targets) and per-tag purchase/review totals
     /// for the candidate set's tags. Anonymous identifiers never participate.
     /// </summary>
