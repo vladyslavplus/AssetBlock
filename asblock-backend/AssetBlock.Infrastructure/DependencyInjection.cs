@@ -196,6 +196,9 @@ public static class DependencyInjection
         services.AddScoped<ITagStore, TagStore>();
         services.AddScoped<ISellerAnalyticsStore, SellerAnalyticsStore>();
         services.AddScoped<IAnalyticsEventStore, AnalyticsEventStore>();
+        services.AddScoped<IRecommendationEventStore, RecommendationEventStore>();
+        services.AddScoped<IRecommendationPersonalizationStore, RecommendationPersonalizationStore>();
+        services.AddSingleton<IRecommendationExposureSigner, RecommendationExposureSigner>();
         services.AddScoped<IAuditStore, AuditStore>();
         services.AddScoped<IAuditWriter, AuditWriter>();
         services.AddScoped<IAuditContextAccessor, NullAuditContextAccessor>();

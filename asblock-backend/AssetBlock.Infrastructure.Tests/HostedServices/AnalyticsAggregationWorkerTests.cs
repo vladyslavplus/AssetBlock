@@ -1,6 +1,7 @@
 using AssetBlock.Domain.Abstractions.Services;
 using AssetBlock.Domain.Core.Constants;
 using AssetBlock.Domain.Core.Dto.Analytics;
+using AssetBlock.Domain.Core.Dto.Recommendations;
 using AssetBlock.Domain.Core.Enums;
 using AssetBlock.Domain.Core.Primitives.AppSettingsOptions;
 using AssetBlock.Infrastructure.HostedServices;
@@ -15,13 +16,37 @@ public sealed class AnalyticsAggregationWorkerTests
 {
     private static readonly DateTimeOffset _fixedNow = new(2026, 7, 29, 12, 0, 0, TimeSpan.Zero);
 
-    private static (AnalyticsAggregationWorker Worker, ServiceProvider Provider, IAnalyticsEventStore Store) BuildWorker(
+    private static (AnalyticsAggregationWorker Worker, ServiceProvider Provider, IAnalyticsEventStore Store, IRecommendationEventStore RecommendationStore, IRecommendationPersonalizationStore PersonalizationStore) BuildWorker(
         AnalyticsAggregationOptions? options = null,
         DateOnly? lastRetentionDayUtc = null)
     {
         IAnalyticsEventStore store = Substitute.For<IAnalyticsEventStore>();
+        IRecommendationEventStore recommendationStore = Substitute.For<IRecommendationEventStore>();
+        IRecommendationPersonalizationStore personalizationStore = Substitute.For<IRecommendationPersonalizationStore>();
+        personalizationStore.TryRecomputeBatch(
+                Arg.Any<DateTimeOffset>(),
+                Arg.Any<int>(),
+                Arg.Any<int>(),
+                Arg.Any<CancellationToken>())
+            .Returns(new PersonalRecomputeBatchResult(AnalyticsDailyRecomputeOutcome.COMPLETED, 0));
+        recommendationStore.TryAcquireAndRecomputeDaily(
+                Arg.Any<DateOnly>(),
+                Arg.Any<DateOnly>(),
+                Arg.Any<DateTimeOffset>(),
+                Arg.Any<int>(),
+                Arg.Any<CancellationToken>())
+            .Returns(new RecommendationDailyRecomputeResult(AnalyticsDailyRecomputeOutcome.COMPLETED, 0));
+        recommendationStore.TryAcquireAndDeleteExpiredEvents(
+                Arg.Any<DateTimeOffset>(),
+                Arg.Any<int>(),
+                Arg.Any<int>(),
+                Arg.Any<int>(),
+                Arg.Any<CancellationToken>())
+            .Returns(new AnalyticsEventRetentionResult(0, false));
         var services = new ServiceCollection();
         services.AddScoped(_ => store);
+        services.AddScoped(_ => recommendationStore);
+        services.AddScoped(_ => personalizationStore);
         ServiceProvider provider = services.BuildServiceProvider();
 
         IHostEnvironment environment = Substitute.For<IHostEnvironment>();
@@ -44,15 +69,56 @@ public sealed class AnalyticsAggregationWorkerTests
                 .SetValue(worker, lastRetentionDayUtc.Value);
         }
 
-        return (worker, provider, store);
+        return (worker, provider, store, recommendationStore, personalizationStore);
+    }
+
+    [Fact]
+    public async Task RunIteration_ShouldRecomputePersonalizationBatch()
+    {
+        (AnalyticsAggregationWorker worker, ServiceProvider provider, IAnalyticsEventStore store, _, IRecommendationPersonalizationStore personalizationStore) = BuildWorker();
+        store.TryAcquireAndRecomputeDaily(
+                Arg.Any<DateOnly>(),
+                Arg.Any<DateOnly>(),
+                Arg.Any<DateTimeOffset>(),
+                Arg.Any<int>(),
+                Arg.Any<CancellationToken>())
+            .Returns(new AnalyticsDailyRecomputeResult(AnalyticsDailyRecomputeOutcome.COMPLETED, 0, 0, 0, 0));
+        store.TryAcquireAndDeleteExpiredEvents(
+                Arg.Any<DateTimeOffset>(),
+                Arg.Any<int>(),
+                Arg.Any<int>(),
+                Arg.Any<int>(),
+                Arg.Any<CancellationToken>())
+            .Returns(new AnalyticsEventRetentionResult(0, false));
+
+        await using (provider)
+        {
+            await worker.RunIteration(CancellationToken.None);
+        }
+
+        await personalizationStore.Received(1).TryRecomputeBatch(
+            _fixedNow,
+            RecommendationTelemetryConstants.PERSONAL_RECOMPUTE_MAX_USERS_PER_RUN,
+            Arg.Any<int>(),
+            Arg.Any<CancellationToken>());
     }
 
     [Fact]
     public async Task RunIteration_WhenLockAcquired_ShouldRecomputeCurrentAndPreviousUtcDays()
     {
         IAnalyticsEventStore store = Substitute.For<IAnalyticsEventStore>();
+        IRecommendationEventStore recommendationStore = Substitute.For<IRecommendationEventStore>();
+        IRecommendationPersonalizationStore personalizationStore = Substitute.For<IRecommendationPersonalizationStore>();
+        personalizationStore.TryRecomputeBatch(
+                Arg.Any<DateTimeOffset>(),
+                Arg.Any<int>(),
+                Arg.Any<int>(),
+                Arg.Any<CancellationToken>())
+            .Returns(new PersonalRecomputeBatchResult(AnalyticsDailyRecomputeOutcome.COMPLETED, 0));
         var services = new ServiceCollection();
         services.AddScoped(_ => store);
+        services.AddScoped(_ => recommendationStore);
+        services.AddScoped(_ => personalizationStore);
         ServiceProvider provider = services.BuildServiceProvider();
 
         store.TryAcquireAndRecomputeDaily(
@@ -63,6 +129,20 @@ public sealed class AnalyticsAggregationWorkerTests
                 Arg.Any<CancellationToken>())
             .Returns(new AnalyticsDailyRecomputeResult(AnalyticsDailyRecomputeOutcome.COMPLETED, 1, 2, 3, 4));
         store.TryAcquireAndDeleteExpiredEvents(
+                Arg.Any<DateTimeOffset>(),
+                Arg.Any<int>(),
+                Arg.Any<int>(),
+                Arg.Any<int>(),
+                Arg.Any<CancellationToken>())
+            .Returns(new AnalyticsEventRetentionResult(0, false));
+        recommendationStore.TryAcquireAndRecomputeDaily(
+                Arg.Any<DateOnly>(),
+                Arg.Any<DateOnly>(),
+                Arg.Any<DateTimeOffset>(),
+                Arg.Any<int>(),
+                Arg.Any<CancellationToken>())
+            .Returns(new RecommendationDailyRecomputeResult(AnalyticsDailyRecomputeOutcome.COMPLETED, 0));
+        recommendationStore.TryAcquireAndDeleteExpiredEvents(
                 Arg.Any<DateTimeOffset>(),
                 Arg.Any<int>(),
                 Arg.Any<int>(),
@@ -98,7 +178,7 @@ public sealed class AnalyticsAggregationWorkerTests
     [Fact]
     public async Task RunIteration_WhenRetentionAlreadyRanToday_ShouldSkipRetention()
     {
-        (AnalyticsAggregationWorker worker, ServiceProvider provider, IAnalyticsEventStore store) = BuildWorker(lastRetentionDayUtc: new DateOnly(2026, 7, 29));
+        (AnalyticsAggregationWorker worker, ServiceProvider provider, IAnalyticsEventStore store, _, _) = BuildWorker(lastRetentionDayUtc: new DateOnly(2026, 7, 29));
         store.TryAcquireAndRecomputeDaily(
                 Arg.Any<DateOnly>(),
                 Arg.Any<DateOnly>(),
@@ -123,7 +203,7 @@ public sealed class AnalyticsAggregationWorkerTests
     [Fact]
     public async Task RunIteration_WhenRetentionNotYetRunToday_ShouldDeleteBeforeRetentionCutoff()
     {
-        (AnalyticsAggregationWorker worker, ServiceProvider provider, IAnalyticsEventStore store) = BuildWorker();
+        (AnalyticsAggregationWorker worker, ServiceProvider provider, IAnalyticsEventStore store, IRecommendationEventStore recommendationStore, _) = BuildWorker();
         store.TryAcquireAndRecomputeDaily(
                 Arg.Any<DateOnly>(),
                 Arg.Any<DateOnly>(),
@@ -145,8 +225,15 @@ public sealed class AnalyticsAggregationWorkerTests
         }
 
         DateTimeOffset expectedCutoff = _fixedNow - TimeSpan.FromDays(AnalyticsAggregationConstants.RAW_EVENT_RETENTION_DAYS);
+        DateTimeOffset expectedRecommendationCutoff = _fixedNow - TimeSpan.FromDays(RecommendationTelemetryConstants.RAW_EVENT_RETENTION_DAYS);
         await store.Received(1).TryAcquireAndDeleteExpiredEvents(
             expectedCutoff,
+            10_000,
+            50,
+            120,
+            Arg.Any<CancellationToken>());
+        await recommendationStore.Received(1).TryAcquireAndDeleteExpiredEvents(
+            expectedRecommendationCutoff,
             10_000,
             50,
             120,
@@ -156,7 +243,7 @@ public sealed class AnalyticsAggregationWorkerTests
     [Fact]
     public async Task RunIteration_WhenRetentionHasBacklog_ShouldNotMarkDayComplete()
     {
-        (AnalyticsAggregationWorker worker, ServiceProvider provider, IAnalyticsEventStore store) = BuildWorker();
+        (AnalyticsAggregationWorker worker, ServiceProvider provider, IAnalyticsEventStore store, _, _) = BuildWorker();
         store.TryAcquireAndRecomputeDaily(
                 Arg.Any<DateOnly>(),
                 Arg.Any<DateOnly>(),
@@ -189,7 +276,7 @@ public sealed class AnalyticsAggregationWorkerTests
     [Fact]
     public async Task RunIteration_WhenDisabled_ShouldNotCallStore()
     {
-        (AnalyticsAggregationWorker worker, ServiceProvider provider, IAnalyticsEventStore store) = BuildWorker(new AnalyticsAggregationOptions { Enabled = false });
+        (AnalyticsAggregationWorker worker, ServiceProvider provider, IAnalyticsEventStore store, _, _) = BuildWorker(new AnalyticsAggregationOptions { Enabled = false });
 
         await using (provider)
         {

@@ -32,6 +32,8 @@ public sealed class ApplicationDbContext(DbContextOptions<ApplicationDbContext> 
     public DbSet<Order> Orders => Set<Order>();
     public DbSet<OrderLine> OrderLines => Set<OrderLine>();
     public DbSet<AnalyticsEvent> AnalyticsEvents => Set<AnalyticsEvent>();
+    public DbSet<RecommendationEvent> RecommendationEvents => Set<RecommendationEvent>();
+    public DbSet<RecommendationDaily> RecommendationDaily => Set<RecommendationDaily>();
     public DbSet<SellerAnalyticsDaily> SellerAnalyticsDaily => Set<SellerAnalyticsDaily>();
     public DbSet<ProductAnalyticsDaily> ProductAnalyticsDaily => Set<ProductAnalyticsDaily>();
     public DbSet<CollectionAnalyticsDaily> CollectionAnalyticsDaily => Set<CollectionAnalyticsDaily>();
@@ -42,6 +44,9 @@ public sealed class ApplicationDbContext(DbContextOptions<ApplicationDbContext> 
     public DbSet<OutboxEmailDelivery> OutboxEmailDeliveries => Set<OutboxEmailDelivery>();
     public DbSet<ProcessedStripeWebhookEvent> ProcessedStripeWebhookEvents => Set<ProcessedStripeWebhookEvent>();
     public DbSet<Entities.AssetEmbedding> AssetEmbeddings => Set<Entities.AssetEmbedding>();
+    public DbSet<UserRecommendationPreferences> UserRecommendationPreferences => Set<UserRecommendationPreferences>();
+    public DbSet<UserTagAffinity> UserTagAffinities => Set<UserTagAffinity>();
+    public DbSet<UserSourceClickAffinity> UserSourceClickAffinities => Set<UserSourceClickAffinity>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -66,6 +71,7 @@ public sealed class ApplicationDbContext(DbContextOptions<ApplicationDbContext> 
         ConfigurePostgresSecondarySearch(modelBuilder);
         ConfigurePostgresAudit(modelBuilder);
         ConfigurePostgresAnalyticsEvents(modelBuilder);
+        ConfigurePostgresRecommendationEvents(modelBuilder);
     }
 
     private static void ConfigurePostgresSecondarySearch(ModelBuilder modelBuilder)
@@ -150,6 +156,14 @@ public sealed class ApplicationDbContext(DbContextOptions<ApplicationDbContext> 
             .HasIndex(e => e.OccurredAt)
             .HasMethod("brin")
             .HasDatabaseName("IX_analytics_events_OccurredAt_brin");
+    }
+
+    private static void ConfigurePostgresRecommendationEvents(ModelBuilder modelBuilder)
+    {
+        modelBuilder.Entity<RecommendationEvent>()
+            .HasIndex(e => e.OccurredAt)
+            .HasMethod("brin")
+            .HasDatabaseName("IX_recommendation_events_OccurredAt_brin");
     }
 
     private static void ConfigurePostgresAudit(ModelBuilder modelBuilder)

@@ -68,5 +68,6 @@ describe('PublishVersionForm', () => {
     const calls = invalidate.mock.calls.map((c) => JSON.stringify(c[0]))
     expect(calls.some((k) => k.includes('library'))).toBe(false)
     expect(calls.some((k) => k.includes('seller'))).toBe(true)
+    expect(calls.some((k) => k.includes('similar'))).toBe(true)
   })
 })

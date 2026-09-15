@@ -66,6 +66,7 @@ export function LeaveReviewDialog({
     onSuccess: () => {
       toast.success('Thanks — your review was posted.')
       invalidateQueriesInBackground(queryClient, { queryKey: assetKeys.reviews(assetId) })
+      invalidateQueriesInBackground(queryClient, { queryKey: assetKeys.similarAll })
       invalidateQueriesInBackground(queryClient, { queryKey: libraryKeys.purchases() })
       onOpenChange(false)
       onSubmitted?.()

@@ -5,6 +5,7 @@ using AssetBlock.Application.UseCases.Assets.DeleteAsset;
 using AssetBlock.Application.UseCases.Assets.GetAssetById;
 using AssetBlock.Application.UseCases.Assets.GetAssets;
 using AssetBlock.Application.UseCases.Assets.GetAssetVersions;
+using AssetBlock.Application.UseCases.Assets.GetSimilarAssets;
 using AssetBlock.Application.UseCases.Assets.PublishAssetVersion;
 using AssetBlock.Application.UseCases.Assets.RemoveAssetTag;
 using AssetBlock.Application.UseCases.Assets.UpdateAsset;
@@ -58,6 +59,25 @@ public sealed class AssetsController(
     public async Task<IActionResult> GetById(Guid id, CancellationToken cancellationToken)
     {
         Result<AssetDetailItem> result = await Sender.Send(new GetAssetByIdQuery(id), cancellationToken);
+        return MapResultToActionResult(result);
+    }
+
+    /// <summary>
+    /// Public similar assets for a catalog listing. Independent of purchase and detail payloads.
+    /// </summary>
+    [HttpGet(ApiRoutes.Assets.SIMILAR)]
+    [AllowAnonymous]
+    [EnableRateLimiting(RateLimitingConstants.Policies.CATALOG_SEARCH)]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> GetSimilar(
+        Guid id,
+        [FromQuery] int limit = SimilarAssetsConstants.DEFAULT_LIMIT,
+        [FromQuery] string mode = SimilarAssetsConstants.MODE_SIMILARITY,
+        CancellationToken cancellationToken = default)
+    {
+        Result<SimilarAssetsResult> result = await Sender.Send(new GetSimilarAssetsQuery(id, limit, mode), cancellationToken);
         return MapResultToActionResult(result);
     }
 

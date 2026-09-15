@@ -1665,6 +1665,9 @@ namespace AssetBlock.Infrastructure.Migrations
 
                     b.HasKey("SellerId", "DayUtc", "ProductType", "ProductId");
 
+                    b.HasIndex("ProductType", "ProductId", "DayUtc")
+                        .HasDatabaseName("IX_product_analytics_daily_type_product_day");
+
                     b.ToTable("product_analytics_daily", null, t =>
                         {
                             t.HasCheckConstraint("CK_product_analytics_daily_ProductType", "\"ProductType\" IN ('ASSET', 'BUNDLE')");
@@ -1717,6 +1720,116 @@ namespace AssetBlock.Infrastructure.Migrations
                         .HasDatabaseName("IX_purchases_user_purchased_at_id");
 
                     b.ToTable("purchases", (string)null);
+                });
+
+            modelBuilder.Entity("AssetBlock.Domain.Core.Entities.RecommendationDaily", b =>
+                {
+                    b.Property<DateOnly>("DayUtc")
+                        .HasColumnType("date");
+
+                    b.Property<Guid>("SourceAssetId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("TargetAssetId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("RankingVersion")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<long>("ClickCount")
+                        .HasColumnType("bigint");
+
+                    b.Property<long>("ImpressionCount")
+                        .HasColumnType("bigint");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("DayUtc", "SourceAssetId", "TargetAssetId", "RankingVersion");
+
+                    b.HasIndex("SourceAssetId", "TargetAssetId", "DayUtc")
+                        .HasDatabaseName("IX_recommendation_daily_source_target_day");
+
+                    b.ToTable("recommendation_daily", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_recommendation_daily_RankingVersion_length", "length(\"RankingVersion\") > 0\r\nAND length(\"RankingVersion\") <= 64");
+
+                            t.HasCheckConstraint("CK_recommendation_daily_counters_non_negative", "\"ImpressionCount\" >= 0 AND \"ClickCount\" >= 0");
+                        });
+                });
+
+            modelBuilder.Entity("AssetBlock.Domain.Core.Entities.RecommendationEvent", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("ActorUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("DeviceClass")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<string>("EventType")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<Guid>("ExposureId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("OccurredAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("RankingVersion")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<Guid>("SessionId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("SlotPosition")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid>("SourceAssetId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("TargetAssetId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("VisitorId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("OccurredAt")
+                        .HasDatabaseName("IX_recommendation_events_OccurredAt_brin");
+
+                    NpgsqlIndexBuilderExtensions.HasMethod(b.HasIndex("OccurredAt"), "brin");
+
+                    b.HasIndex("OccurredAt", "Id")
+                        .HasDatabaseName("IX_recommendation_events_OccurredAt_Id");
+
+                    b.HasIndex("ActorUserId", "EventType", "OccurredAt")
+                        .HasDatabaseName("IX_recommendation_events_ActorUserId_EventType_OccurredAt");
+
+                    b.HasIndex("ExposureId", "EventType", "TargetAssetId")
+                        .IsUnique()
+                        .HasDatabaseName("UX_recommendation_events_ExposureId_EventType_TargetAssetId");
+
+                    b.ToTable("recommendation_events", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_recommendation_events_DeviceClass", "\"DeviceClass\" IN (\r\n    'MOBILE',\r\n    'TABLET',\r\n    'DESKTOP',\r\n    'UNKNOWN')");
+
+                            t.HasCheckConstraint("CK_recommendation_events_EventType", "\"EventType\" IN (\r\n    'IMPRESSION',\r\n    'CLICK')");
+
+                            t.HasCheckConstraint("CK_recommendation_events_RankingVersion_length", "length(\"RankingVersion\") > 0\r\nAND length(\"RankingVersion\") <= 64");
+
+                            t.HasCheckConstraint("CK_recommendation_events_SlotPosition", "\"SlotPosition\" >= 0\r\nAND \"SlotPosition\" <= 11");
+                        });
                 });
 
             modelBuilder.Entity("AssetBlock.Domain.Core.Entities.RefreshToken", b =>
@@ -2089,6 +2202,27 @@ namespace AssetBlock.Infrastructure.Migrations
                     b.ToTable("user_notifications", (string)null);
                 });
 
+            modelBuilder.Entity("AssetBlock.Domain.Core.Entities.UserRecommendationPreferences", b =>
+                {
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<bool>("IsPersonalized")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false);
+
+                    b.Property<DateTimeOffset?>("OptedInAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("UserId");
+
+                    b.ToTable("user_recommendation_preferences", (string)null);
+                });
+
             modelBuilder.Entity("AssetBlock.Domain.Core.Entities.UserSocialLink", b =>
                 {
                     b.Property<Guid>("Id")
@@ -2119,6 +2253,59 @@ namespace AssetBlock.Infrastructure.Migrations
                     b.HasIndex("UserId");
 
                     b.ToTable("user_social_links", (string)null);
+                });
+
+            modelBuilder.Entity("AssetBlock.Domain.Core.Entities.UserSourceClickAffinity", b =>
+                {
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("SourceAssetId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("TargetAssetId")
+                        .HasColumnType("uuid");
+
+                    b.Property<long>("Clicks")
+                        .HasColumnType("bigint");
+
+                    b.Property<DateTimeOffset>("LastClickedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("UserId", "SourceAssetId", "TargetAssetId");
+
+                    b.ToTable("user_source_click_affinity", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_user_source_click_affinity_clicks_non_negative", "\"Clicks\" >= 0");
+                        });
+                });
+
+            modelBuilder.Entity("AssetBlock.Domain.Core.Entities.UserTagAffinity", b =>
+                {
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("TagId")
+                        .HasColumnType("uuid");
+
+                    b.Property<long>("Purchases")
+                        .HasColumnType("bigint");
+
+                    b.Property<long>("Reviews")
+                        .HasColumnType("bigint");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("UserId", "TagId");
+
+                    b.ToTable("user_tag_affinity", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_user_tag_affinity_counters_non_negative", "\"Purchases\" >= 0 AND \"Reviews\" >= 0");
+                        });
                 });
 
             modelBuilder.Entity("AssetBlock.Infrastructure.Persistence.Entities.AssetEmbedding", b =>
@@ -2626,6 +2813,17 @@ namespace AssetBlock.Infrastructure.Migrations
                     b.Navigation("Recipient");
                 });
 
+            modelBuilder.Entity("AssetBlock.Domain.Core.Entities.UserRecommendationPreferences", b =>
+                {
+                    b.HasOne("AssetBlock.Domain.Core.Entities.User", "User")
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("User");
+                });
+
             modelBuilder.Entity("AssetBlock.Domain.Core.Entities.UserSocialLink", b =>
                 {
                     b.HasOne("AssetBlock.Domain.Core.Entities.SocialPlatform", "Platform")
@@ -2641,6 +2839,28 @@ namespace AssetBlock.Infrastructure.Migrations
                         .IsRequired();
 
                     b.Navigation("Platform");
+
+                    b.Navigation("User");
+                });
+
+            modelBuilder.Entity("AssetBlock.Domain.Core.Entities.UserSourceClickAffinity", b =>
+                {
+                    b.HasOne("AssetBlock.Domain.Core.Entities.User", "User")
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("User");
+                });
+
+            modelBuilder.Entity("AssetBlock.Domain.Core.Entities.UserTagAffinity", b =>
+                {
+                    b.HasOne("AssetBlock.Domain.Core.Entities.User", "User")
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
 
                     b.Navigation("User");
                 });

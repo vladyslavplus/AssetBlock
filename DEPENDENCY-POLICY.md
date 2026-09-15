@@ -56,7 +56,7 @@ Governance checks fail on **High** and **Critical** vulnerabilities reported by:
 | Aspire Dashboard | `mcr.microsoft.com/dotnet/aspire-dashboard:9.0.0` (MIT) | Local OTLP receiver/UI |
 | SeaweedFS (local compose) | `chrislusf/seaweedfs:4.42` (Apache-2.0) | Default local S3-compatible encrypted asset storage |
 | ClamAV (local compose) | `clamav/clamav:1.4.6` (GPL-2.0) | Local malware scanning daemon for asset processing |
-| MinIO (local compose profile `minio`) | `minio/minio:RELEASE.2025-09-07T16-13-09Z` | Compatibility S3-compatible storage for local A/B |
+| MinIO (local compose profile `minio`) | `quay.io/minio/minio:RELEASE.2025-09-07T16-13-09Z` | Compatibility S3-compatible storage for local A/B |
 | `pnpm-lock.yaml` parse | packageManager `pnpm@11.13.0` | Canonical OS-neutral npm inventory from root + `asblock-frontend` lockfiles |
 | npm registry metadata | canonical | Author/source/base license for every npm package (OS-independent); missing registry metadata fails generation |
 | `overrideDetectedLicense` exceptions | `dependency-exceptions.json` | Reviewed license corrections when registry under-reports distributed terms |

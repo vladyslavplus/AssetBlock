@@ -15,6 +15,7 @@ public static class AuditActions
     public const string USER_PASSWORD_CHANGE = "User.PasswordChange";
     public const string USER_PROFILE_UPDATE = "User.ProfileUpdate";
     public const string USER_SOCIAL_LINKS_UPDATE = "User.SocialLinksUpdate";
+    public const string USER_RECOMMENDATION_PREFERENCES_UPDATE = "User.RecommendationPreferencesUpdate";
 
     public const string ASSET_CREATE = "Asset.Create";
     public const string ASSET_UPDATE = "Asset.Update";

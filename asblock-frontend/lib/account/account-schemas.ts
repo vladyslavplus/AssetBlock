@@ -42,6 +42,14 @@ export const accountProfileUpdateSchema = z
 
 export type AccountProfileUpdateValues = z.infer<typeof accountProfileUpdateSchema>
 
+export const recommendationPreferencesSchema = z
+  .object({
+    isPersonalized: z.boolean(),
+  })
+  .strict()
+
+export type RecommendationPreferencesValues = z.infer<typeof recommendationPreferencesSchema>
+
 export const updateSocialLinksSchema = z.object({
   links: z.array(
     z.object({

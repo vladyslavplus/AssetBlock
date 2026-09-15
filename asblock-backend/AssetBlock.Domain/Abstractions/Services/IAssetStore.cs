@@ -61,6 +61,22 @@ public interface IAssetStore
         CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Returns public similar-asset cards for a visible source listing.
+    /// Missing or non-public sources return null. Visible sources with no candidates return an empty result.
+    /// Optional semantic reranking is applied only when <paramref name="options"/> allows it and every
+    /// shortlisted candidate has a compatible local vector; otherwise metadata ranking is used.
+    /// When <paramref name="options"/> requests popularity ranking, the same shortlist is reranked by
+    /// non-personal popularity signals instead; semantic refinement never applies in that mode.
+    /// When <paramref name="options"/> carries a personal user id, the same shortlist is reranked by
+    /// that opted-in account's affinity instead; the result reports whether personalization applied.
+    /// </summary>
+    Task<SimilarPublicAssetsResult?> GetSimilarPublic(
+        Guid sourceAssetId,
+        int limit,
+        SimilarAssetsQueryOptions options,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Returns listings for an authenticated seller dashboard, scoped by author,
     /// including the latest processing state without a per-row versions round-trip.
     /// </summary>

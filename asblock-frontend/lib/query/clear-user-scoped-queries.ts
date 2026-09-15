@@ -4,6 +4,7 @@ import { accountKeys } from '@/lib/account/account-query'
 import { adminAuditKeys } from '@/lib/admin/admin-audit-query'
 import { adminKeys } from '@/lib/admin/admin-query'
 import { bundleKeys } from '@/lib/bundles/bundles-query'
+import { isPersonalSimilarKey } from '@/lib/catalog/asset-detail-query'
 import { checkoutKeys } from '@/lib/payments/checkout-query'
 import { collectionKeys } from '@/lib/collections/collections-query'
 import { libraryKeys } from '@/lib/library/library-query'
@@ -13,6 +14,8 @@ import { sellerKeys } from '@/lib/seller/seller-query'
 /**
  * Drops private seller/library/account/notification/admin cache without touching `auth.session`.
  * Removing the session query here would refetch it and can loop after logout/session loss.
+ * Personal similar-asset payloads carry the user id in the key and are dropped via predicate
+ * so the shared identity-free public similar cache is preserved.
  */
 export function clearPrivateUserQueries(queryClient: QueryClient): void {
   queryClient.removeQueries({ queryKey: sellerKeys.all })
@@ -24,4 +27,5 @@ export function clearPrivateUserQueries(queryClient: QueryClient): void {
   queryClient.removeQueries({ queryKey: adminAuditKeys.all })
   queryClient.removeQueries({ queryKey: [...collectionKeys.all, 'seller'] })
   queryClient.removeQueries({ queryKey: [...bundleKeys.all, 'seller'] })
+  queryClient.removeQueries({ predicate: (query) => isPersonalSimilarKey(query.queryKey) })
 }

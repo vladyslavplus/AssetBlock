@@ -77,3 +77,8 @@ export function useAuth(): AuthContextValue {
   }
   return ctx
 }
+
+/** Null when rendered outside AuthProvider (e.g. anonymous-safe components and tests). */
+export function useOptionalAuth(): AuthContextValue | null {
+  return useContext(AuthContext)
+}

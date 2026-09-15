@@ -11,6 +11,7 @@ import { z } from 'zod'
 import {
   AccountRequestError,
   patchAccountProfile,
+  patchRecommendationPreferences,
   postChangeAccountPassword,
   postRequestEmailChange,
   postResendEmailVerification,
@@ -20,6 +21,7 @@ import {
   accountKeys,
   fetchAccountProfile,
   fetchAccountSocialPlatforms,
+  fetchRecommendationPreferences,
 } from '@/lib/account/account-query'
 import {
   accountProfileFormSchema,
@@ -37,6 +39,7 @@ import {
   parseApiErrorBody,
 } from '@/lib/http/api-errors'
 import { invalidateQueriesInBackground } from '@/lib/query/query-refresh'
+import { isPersonalSimilarKey } from '@/lib/catalog/asset-detail-query'
 
 export type AccountSection = 'profile' | 'password' | 'email'
 
@@ -59,6 +62,11 @@ const EMPTY_SOCIAL_PLATFORMS: Awaited<ReturnType<typeof fetchAccountSocialPlatfo
 interface SocialDraft {
   profileId: string | null
   values: Record<string, string>
+}
+
+interface PersonalizedDraft {
+  profileId: string | null
+  value: boolean | null
 }
 
 export function useAccountSettings() {
@@ -89,6 +97,40 @@ export function useAccountSettings() {
   const profileHydratedRef = useRef<string | null>(null)
   const [socialDraft, setSocialDraft] = useState<SocialDraft>({ profileId: null, values: {} })
   const [resendCooldown, setResendCooldown] = useState(false)
+  const [personalizedDraft, setPersonalizedDraft] = useState<PersonalizedDraft>({
+    profileId: null,
+    value: null,
+  })
+
+  const preferencesQuery = useQuery({
+    queryKey: accountKeys.recommendationPreferences(),
+    queryFn: () => fetchRecommendationPreferences(),
+    enabled: Boolean(profile?.id),
+    retry: false,
+  })
+  const savedPersonalized =
+    preferencesQuery.data != null ? preferencesQuery.data.isPersonalized : null
+  const preferencesLoading = preferencesQuery.isPending
+  const preferencesError = preferencesQuery.isError
+    ? preferencesQuery.error instanceof Error
+      ? preferencesQuery.error.message
+      : 'Could not load recommendation preferences.'
+    : null
+  const personalizedChoice =
+    personalizedDraft.profileId === profile?.id ? personalizedDraft.value : null
+  // Unknown baseline (loading or error) is not opt-out: the Switch reflects it as
+  // disabled, and dirty/PATCH stay gated on a known server value below.
+  const isPersonalized = personalizedChoice ?? savedPersonalized ?? false
+  const setPersonalized = (value: boolean) => {
+    setPersonalizedDraft({ profileId: profile?.id ?? null, value })
+  }
+  const isPersonalizedDirty =
+    personalizedChoice !== null &&
+    savedPersonalized !== null &&
+    personalizedChoice !== savedPersonalized
+  const retryPreferences = () => {
+    void preferencesQuery.refetch()
+  }
 
   const profileForm = useForm<AccountProfileFormValues>({
     resolver: zodResolver(accountProfileFormSchema),
@@ -168,6 +210,16 @@ export function useAccountSettings() {
   }, [profileQuery.isError, profileQuery.error, router])
 
   useEffect(() => {
+    if (
+      preferencesQuery.isError &&
+      preferencesQuery.error instanceof Error &&
+      preferencesQuery.error.message === 'UNAUTHORIZED'
+    ) {
+      router.push(routes.login(routes.account()))
+    }
+  }, [preferencesQuery.isError, preferencesQuery.error, router])
+
+  useEffect(() => {
     if (!profile) {
       profileHydratedRef.current = null
       return
@@ -211,6 +263,7 @@ export function useAccountSettings() {
 
   const patchProfileMutation = useMutation({ mutationFn: patchAccountProfile })
   const putSocialsMutation = useMutation({ mutationFn: putAccountSocials })
+  const patchPreferencesMutation = useMutation({ mutationFn: patchRecommendationPreferences })
   const changePasswordMutation = useMutation({
     mutationFn: postChangeAccountPassword,
     onSuccess: async () => {
@@ -287,7 +340,10 @@ export function useAccountSettings() {
       toast.error('Network error. Try again.')
     },
   })
-  const savingProfile = patchProfileMutation.isPending || putSocialsMutation.isPending
+  const savingProfile =
+    patchProfileMutation.isPending ||
+    putSocialsMutation.isPending ||
+    patchPreferencesMutation.isPending
 
   const tryBuildSocialLinksPayload = () => {
     const links: Array<{ platformId: string; url: string }> = []
@@ -320,7 +376,8 @@ export function useAccountSettings() {
   const saveProfile = async (values: AccountProfileFormValues) => {
     const dirtyProfile = profileForm.formState.isDirty
     const dirtySocial = isSocialDirty
-    if (!dirtyProfile && !dirtySocial) return
+    const dirtyPreferences = isPersonalizedDirty
+    if (!dirtyProfile && !dirtySocial && !dirtyPreferences) return
     if (dirtySocial && !canPersistSocialLinks) {
       toast.error('Social platforms are not ready. Fix loading errors or try again.')
       return
@@ -390,6 +447,32 @@ export function useAccountSettings() {
         }
       }
 
+      if (dirtyPreferences && personalizedChoice !== null && savedPersonalized !== null) {
+        try {
+          const saved = await patchPreferencesMutation.mutateAsync(personalizedChoice)
+          queryClient.setQueryData(accountKeys.recommendationPreferences(), saved)
+          // Personal payloads are user-scoped: drop them immediately so an opt-out
+          // never serves a stale personalized response.
+          queryClient.removeQueries({
+            predicate: (query) => isPersonalSimilarKey(query.queryKey),
+          })
+          setPersonalizedDraft({ profileId: profile?.id ?? null, value: null })
+        } catch (error) {
+          if (error instanceof AccountRequestError) {
+            if (error.status === 401) {
+              router.push(routes.login(routes.account()))
+              return
+            }
+            toast.error(
+              getApiErrorMessage(error.body, 'Could not save recommendation preferences.'),
+            )
+            return
+          }
+          toast.error('Network error. Try again.')
+          return
+        }
+      }
+
       toast.success('Changes saved.')
       router.refresh()
     } catch {
@@ -404,6 +487,7 @@ export function useAccountSettings() {
   const onCancelProfile = () => {
     if (lastSavedRef.current) profileForm.reset(lastSavedRef.current)
     setSocialDraft({ profileId: profile?.id ?? null, values: {} })
+    setPersonalizedDraft({ profileId: profile?.id ?? null, value: null })
   }
   const openPasswordSection = () => {
     passwordForm.reset(PASSWORD_FORM_EMPTY)
@@ -445,8 +529,14 @@ export function useAccountSettings() {
     passwordValues,
     emailChangeValues,
     savingProfile,
-    hasProfileOrSocialChanges: profileForm.formState.isDirty || isSocialDirty,
+    hasProfileOrSocialChanges:
+      profileForm.formState.isDirty || isSocialDirty || isPersonalizedDirty,
     saveBlockedBySocial: isSocialDirty && !canPersistSocialLinks,
+    isPersonalized,
+    setPersonalized,
+    preferencesLoading,
+    preferencesError,
+    retryPreferences,
     changingPassword: changePasswordMutation.isPending,
     requestingEmailChange: requestEmailChangeMutation.isPending,
     resendingVerification: resendVerificationMutation.isPending,

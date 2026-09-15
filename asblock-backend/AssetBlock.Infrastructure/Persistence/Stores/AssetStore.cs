@@ -1,8 +1,10 @@
 using AssetBlock.Domain.Abstractions.Services;
 using AssetBlock.Domain.Core;
+using AssetBlock.Domain.Core.Constants;
 using AssetBlock.Domain.Core.Dto;
 using AssetBlock.Domain.Core.Dto.Assets;
 using AssetBlock.Domain.Core.Dto.Paging;
+using AssetBlock.Domain.Core.Dto.Recommendations;
 using AssetBlock.Domain.Core.Entities;
 using AssetBlock.Domain.Core.Enums;
 using AssetBlock.Domain.Core.Primitives.AppSettingsOptions;
@@ -19,7 +21,8 @@ internal sealed class AssetStore(
     ApplicationDbContext dbContext,
     IAssetProcessingJobStore? jobStore = null,
     IOptions<EmbeddingOptions>? embeddingOptions = null,
-    TimeProvider? timeProvider = null) : IAssetStore
+    TimeProvider? timeProvider = null,
+    IRecommendationPersonalizationStore? personalizationStore = null) : IAssetStore
 {
     private const float TRIGRAM_SIMILARITY_THRESHOLD = 0.30f;
     private const int MIN_TRIGRAM_QUERY_LENGTH = 3;
@@ -284,6 +287,155 @@ internal sealed class AssetStore(
                 && a.Versions.Any(v => v.IsCurrent && v.ProcessingStatus == AssetVersionProcessingStatus.READY));
 
         return await QueryPagedAssets(query, request, queryEmbedding, modelKey, cancellationToken);
+    }
+
+    public async Task<SimilarPublicAssetsResult?> GetSimilarPublic(
+        Guid sourceAssetId,
+        int limit,
+        SimilarAssetsQueryOptions options,
+        CancellationToken cancellationToken = default)
+    {
+        limit = Math.Clamp(limit, SimilarAssetsConstants.MIN_LIMIT, SimilarAssetsConstants.MAX_LIMIT);
+
+        var source = await PublicVisibleAssets()
+            .Where(a => a.Id == sourceAssetId)
+            .Select(a => new
+            {
+                a.Id,
+                a.CategoryId,
+                a.SearchRevision,
+                TagIds = a.AssetTags.Select(at => at.TagId).Distinct().ToList()
+            })
+            .FirstOrDefaultAsync(cancellationToken);
+
+        if (source is null)
+        {
+            return null;
+        }
+
+        List<Guid> sourceTagIds = source.TagIds;
+        var sourceTagCount = sourceTagIds.Count;
+
+        var rankedRows = await PublicVisibleAssets()
+            .Where(a => a.Id != sourceAssetId && a.CategoryId == source.CategoryId)
+            .Select(a => new
+            {
+                a.Id,
+                a.RatingAverage,
+                a.RatingCount,
+                a.SearchRevision,
+                CandidateTagCount = a.AssetTags.Count(),
+                IntersectCount = a.AssetTags.Count(at => sourceTagIds.Contains(at.TagId))
+            })
+            .Select(x => new
+            {
+                x.Id,
+                x.RatingAverage,
+                x.RatingCount,
+                x.SearchRevision,
+                x.IntersectCount,
+                Jaccard = x.CandidateTagCount + sourceTagCount == x.IntersectCount
+                    ? 0d
+                    : x.IntersectCount * 1.0 / (x.CandidateTagCount + sourceTagCount - x.IntersectCount)
+            })
+            .OrderByDescending(x => x.Jaccard)
+            .ThenByDescending(x => x.RatingAverage)
+            .ThenByDescending(x => x.RatingCount)
+            .ThenBy(x => x.Id)
+            .Take(SimilarAssetsConstants.SHORTLIST_SIZE)
+            .ToListAsync(cancellationToken);
+
+        var shortlist = rankedRows
+            .Select(x => new SimilarShortlistRow(
+                x.Id,
+                x.RatingAverage,
+                x.RatingCount,
+                x.SearchRevision,
+                x.Jaccard,
+                x.IntersectCount))
+            .ToList();
+
+        SimilarRankedShortlist ranked;
+        var usedPersonalization = false;
+        HashSet<Guid> popularitySignaled;
+        HashSet<Guid> personalClicks = [];
+        HashSet<Guid> personalTags = [];
+        if (options.PersonalUserId is { } personalUserId)
+        {
+            (ranked, usedPersonalization, personalClicks, personalTags, popularitySignaled) = await ApplyPersonalRanking(
+                personalUserId,
+                sourceAssetId,
+                shortlist,
+                () => RankNonPersonal(sourceAssetId, source.SearchRevision, shortlist, options, cancellationToken),
+                cancellationToken);
+        }
+        else
+        {
+            (ranked, popularitySignaled) = await RankNonPersonal(sourceAssetId, source.SearchRevision, shortlist, options, cancellationToken);
+        }
+
+        var selectedIds = ranked.Rows
+            .Select(r => r.Id)
+            .Distinct()
+            .Take(limit)
+            .ToList();
+
+        var sourceStillVisible = await PublicVisibleAssets()
+            .AnyAsync(a => a.Id == sourceAssetId, cancellationToken);
+        if (!sourceStillVisible)
+        {
+            return null;
+        }
+
+        if (selectedIds.Count == 0)
+        {
+            return new SimilarPublicAssetsResult(
+                [],
+                ranked.UsedSemanticRefinement,
+                usedPersonalization,
+                new Dictionary<Guid, SimilarCandidateEvidence>());
+        }
+
+        List<AssetListItem> hydrated = await PublicVisibleAssets()
+            .Where(a => selectedIds.Contains(a.Id))
+            .Select(a => new AssetListItem(
+                a.Id,
+                a.Title,
+                a.Description,
+                a.Price,
+                a.CategoryId,
+                a.Category.Name,
+                a.AuthorId,
+                a.Author.Username,
+                a.CreatedAt,
+                a.AssetTags
+                    .Select(at => at.Tag.Name)
+                    .OrderBy(n => n)
+                    .ToList(),
+                a.RatingAverage))
+            .ToListAsync(cancellationToken);
+
+        var byId = hydrated.ToDictionary(i => i.Id);
+        var sharedTagsById = shortlist
+            .GroupBy(r => r.Id)
+            .ToDictionary(g => g.Key, g => g.First().IntersectCount);
+        var evidence = selectedIds
+            .Distinct()
+            .ToDictionary(
+                id => id,
+                id => new SimilarCandidateEvidence(
+                    personalClicks.Contains(id),
+                    personalTags.Contains(id),
+                    popularitySignaled.Contains(id),
+                    sharedTagsById.GetValueOrDefault(id)));
+        return new SimilarPublicAssetsResult(
+            selectedIds
+                .Where(byId.ContainsKey)
+                .Select(id => byId[id])
+                .ToList(),
+            ranked.UsedSemanticRefinement,
+            usedPersonalization,
+            evidence);
     }
 
     public async Task<PagedResult<SellerAssetListItem>> GetMyListings(Guid authorId, GetAssetsRequest request, CancellationToken cancellationToken = default)
@@ -1471,6 +1623,288 @@ internal sealed class AssetStore(
             .Select(a => (Guid?)a.AuthorId)
             .FirstOrDefaultAsync(cancellationToken);
     }
+
+    private IQueryable<Asset> PublicVisibleAssets()
+    {
+        return dbContext.Assets.AsNoTracking()
+            .Where(a => a.DeletedAt == null
+                && a.Versions.Any(v => v.IsCurrent && v.ProcessingStatus == AssetVersionProcessingStatus.READY));
+    }
+
+    private async Task<(SimilarRankedShortlist Ranked, HashSet<Guid> Signaled)> ApplyPopularityRanking(
+        Guid sourceAssetId,
+        IReadOnlyList<SimilarShortlistRow> shortlist,
+        CancellationToken cancellationToken)
+    {
+        if (shortlist.Count == 0)
+        {
+            return (new SimilarRankedShortlist(shortlist, false), []);
+        }
+
+        DateTimeOffset now = (timeProvider ?? TimeProvider.System).GetUtcNow();
+        var windowStart = DateOnly.FromDateTime(
+            now.AddDays(1 - SimilarAssetsConstants.POPULARITY_WINDOW_DAYS).UtcDateTime);
+        var ids = shortlist.Select(r => r.Id).ToList();
+
+        // Source-scoped recommendation engagement: clean impression/click aggregates only.
+        var engagement = await dbContext.RecommendationDaily.AsNoTracking()
+            .Where(d => d.SourceAssetId == sourceAssetId
+                && d.DayUtc >= windowStart
+                && ids.Contains(d.TargetAssetId))
+            .GroupBy(d => d.TargetAssetId)
+            .Select(g => new
+            {
+                TargetAssetId = g.Key,
+                Clicks = g.Sum(x => x.ClickCount),
+                Impressions = g.Sum(x => x.ImpressionCount)
+            })
+            .ToListAsync(cancellationToken);
+
+        // Asset view counts are additive across days. Daily unique visitors are deliberately
+        // not summed: daily distincts do not compose into period-unique counts.
+        var views = await dbContext.ProductAnalyticsDaily.AsNoTracking()
+            .Where(p => p.ProductType == AnalyticsProductKind.ASSET
+                && p.DayUtc >= windowStart
+                && ids.Contains(p.ProductId))
+            .GroupBy(p => p.ProductId)
+            .Select(g => new
+            {
+                ProductId = g.Key,
+                ViewCount = g.Sum(x => x.Views)
+            })
+            .ToListAsync(cancellationToken);
+
+        // Paid commerce as gross entitlement counts. No refund/dispute lifecycle exists
+        // in source, so this is gross units sold, never net sales.
+        var units = await dbContext.Purchases.AsNoTracking()
+            .Where(p => ids.Contains(p.AssetId))
+            .GroupBy(p => p.AssetId)
+            .Select(g => new
+            {
+                AssetId = g.Key,
+                GrossUnits = g.LongCount()
+            })
+            .ToListAsync(cancellationToken);
+
+        var clicksById = engagement.ToDictionary(x => x.TargetAssetId, x => x.Clicks);
+        var impressionsById = engagement.ToDictionary(x => x.TargetAssetId, x => x.Impressions);
+        var viewsById = views.ToDictionary(x => x.ProductId, x => x.ViewCount);
+        var unitsById = units.ToDictionary(x => x.AssetId, x => x.GrossUnits);
+        var signaled = new HashSet<Guid>(
+            shortlist
+                .Where(r =>
+                    GetSignalOrZero(clicksById, r.Id) > 0
+                    || GetSignalOrZero(unitsById, r.Id) > 0
+                    || GetSignalOrZero(impressionsById, r.Id) > 0
+                    || GetSignalOrZero(viewsById, r.Id) > 0)
+                .Select(r => r.Id));
+
+        // Lexicographic popularity order, then metadata tie-breakers.
+        // Candidates without any signal carry zeros and fall back to metadata order.
+        var ranked = shortlist
+            .OrderByDescending(r => GetSignalOrZero(clicksById, r.Id))
+            .ThenByDescending(r => GetSignalOrZero(unitsById, r.Id))
+            .ThenByDescending(r => GetSignalOrZero(impressionsById, r.Id))
+            .ThenByDescending(r => GetSignalOrZero(viewsById, r.Id))
+            .ThenByDescending(r => r.Jaccard)
+            .ThenByDescending(r => r.RatingAverage)
+            .ThenByDescending(r => r.RatingCount)
+            .ThenBy(r => r.Id)
+            .ToList();
+
+        return (new SimilarRankedShortlist(ranked, false), signaled);
+    }
+
+    private async Task<(SimilarRankedShortlist Ranked, HashSet<Guid> PopularitySignaled)> RankNonPersonal(
+        Guid sourceAssetId,
+        long sourceSearchRevision,
+        IReadOnlyList<SimilarShortlistRow> shortlist,
+        SimilarAssetsQueryOptions options,
+        CancellationToken cancellationToken)
+    {
+        if (options.UsePopularityRanking)
+        {
+            return await ApplyPopularityRanking(sourceAssetId, shortlist, cancellationToken);
+        }
+
+        return (await TryRefineByCosine(
+            sourceAssetId,
+            sourceSearchRevision,
+            shortlist,
+            options,
+            cancellationToken), []);
+    }
+
+    private async Task<(
+        SimilarRankedShortlist Ranked,
+        bool UsedPersonalization,
+        HashSet<Guid> ClickTargets,
+        HashSet<Guid> TagTargets,
+        HashSet<Guid> PopularitySignaled)> ApplyPersonalRanking(
+        Guid userId,
+        Guid sourceAssetId,
+        IReadOnlyList<SimilarShortlistRow> shortlist,
+        Func<Task<(SimilarRankedShortlist Ranked, HashSet<Guid> PopularitySignaled)>> rankNonPersonal,
+        CancellationToken cancellationToken)
+    {
+        (SimilarRankedShortlist baseline, HashSet<Guid> popularitySignaled) = await rankNonPersonal();
+        if (personalizationStore is null || shortlist.Count == 0)
+        {
+            return (baseline, false, [], [], popularitySignaled);
+        }
+
+        var ids = shortlist.Select(r => r.Id).ToList();
+        PersonalAffinitySignals? signals =
+            await personalizationStore.GetSignals(userId, sourceAssetId, ids, cancellationToken);
+        if (signals is null)
+        {
+            // Not opted in (or store unavailable): keep non-personal order.
+            return (baseline, false, [], [], popularitySignaled);
+        }
+
+        // Stable sort: full ties keep the incoming non-personal order, so zero personal
+        // signals reduce exactly to that ordering.
+        var reranked = baseline.Rows
+            .OrderByDescending(r => GetSignalOrZero(signals.ClicksByTargetId, r.Id))
+            .ThenByDescending(r => GetSignalOrZero(signals.TagScoreByCandidateId, r.Id))
+            .ToList();
+        var clickTargets = new HashSet<Guid>(
+            ids.Where(id => GetSignalOrZero(signals.ClicksByTargetId, id) > 0));
+        var tagTargets = new HashSet<Guid>(
+            ids.Where(id => GetSignalOrZero(signals.TagScoreByCandidateId, id) > 0));
+        return (new SimilarRankedShortlist(reranked, baseline.UsedSemanticRefinement), true, clickTargets, tagTargets, popularitySignaled);
+    }
+
+    private static long GetSignalOrZero(IReadOnlyDictionary<Guid, long> signals, Guid assetId)
+    {
+        return signals.GetValueOrDefault(assetId, 0);
+    }
+
+    private readonly record struct SimilarRankedShortlist(
+        IReadOnlyList<SimilarShortlistRow> Rows,
+        bool UsedSemanticRefinement);
+
+    private async Task<SimilarRankedShortlist> TryRefineByCosine(
+        Guid sourceAssetId,
+        long sourceRevision,
+        IReadOnlyList<SimilarShortlistRow> shortlist,
+        SimilarAssetsQueryOptions options,
+        CancellationToken cancellationToken)
+    {
+        if (!options.AllowSemanticRefinement
+            || string.IsNullOrWhiteSpace(options.CanonicalModelKey)
+            || options.ExpectedDimension <= 0
+            || string.IsNullOrWhiteSpace(options.ContentSchemaVersion)
+            || shortlist.Count == 0)
+        {
+            return new SimilarRankedShortlist(shortlist, false);
+        }
+
+        var ids = new List<Guid>(shortlist.Count + 1) { sourceAssetId };
+        ids.AddRange(shortlist.Select(row => row.Id));
+
+        var embeddings = await dbContext.AssetEmbeddings.AsNoTracking()
+            .Where(e => ids.Contains(e.AssetId)
+                && e.ModelKey == options.CanonicalModelKey
+                && e.Dimension == options.ExpectedDimension
+                && e.ContentSchemaVersion == options.ContentSchemaVersion)
+            .Select(e => new { e.AssetId, e.SourceRevision, e.Embedding })
+            .ToListAsync(cancellationToken);
+
+        var byAsset = embeddings
+            .GroupBy(e => e.AssetId)
+            .ToDictionary(g => g.Key, g => (g.First().SourceRevision, g.First().Embedding));
+
+        if (!byAsset.TryGetValue(sourceAssetId, out (long SourceRevision, Vector Embedding) sourceEmbedding)
+            || sourceEmbedding.SourceRevision != sourceRevision
+            || !TryGetValidVector(sourceEmbedding.Embedding, options.ExpectedDimension, out var sourceVector))
+        {
+            return new SimilarRankedShortlist(shortlist, false);
+        }
+
+        var refined = new List<(SimilarShortlistRow Row, double Cosine)>(shortlist.Count);
+        foreach (SimilarShortlistRow row in shortlist)
+        {
+            if (!byAsset.TryGetValue(row.Id, out (long SourceRevision, Vector Embedding) candidateEmbedding)
+                || candidateEmbedding.SourceRevision != row.SearchRevision
+                || !TryGetValidVector(candidateEmbedding.Embedding, options.ExpectedDimension, out var candidateVector))
+            {
+                return new SimilarRankedShortlist(shortlist, false);
+            }
+
+            refined.Add((row, CosineSimilarity(sourceVector, candidateVector)));
+        }
+
+        return new SimilarRankedShortlist(
+            refined
+                .OrderByDescending(x => x.Row.Jaccard)
+                .ThenByDescending(x => x.Cosine)
+                .ThenByDescending(x => x.Row.RatingAverage)
+                .ThenByDescending(x => x.Row.RatingCount)
+                .ThenBy(x => x.Row.Id)
+                .Select(x => x.Row)
+                .ToList(),
+            true);
+    }
+
+    private static bool TryGetValidVector(Vector? embedding, int expectedDimension, out float[] vector)
+    {
+        vector = [];
+        if (embedding is null)
+        {
+            return false;
+        }
+
+        var values = embedding.ToArray();
+        if (values.Length != expectedDimension)
+        {
+            return false;
+        }
+
+        var sumSq = 0.0;
+        foreach (var val in values)
+        {
+            if (float.IsNaN(val) || float.IsInfinity(val))
+            {
+                return false;
+            }
+
+            sumSq += (double)val * val;
+        }
+
+        if (sumSq < 1e-12)
+        {
+            return false;
+        }
+
+        vector = values;
+        return true;
+    }
+
+    private static double CosineSimilarity(float[] left, float[] right)
+    {
+        var dot = 0.0;
+        var leftNorm = 0.0;
+        var rightNorm = 0.0;
+        for (var i = 0; i < left.Length; i++)
+        {
+            var l = (double)left[i];
+            var r = (double)right[i];
+            dot += l * r;
+            leftNorm += l * l;
+            rightNorm += r * r;
+        }
+
+        return dot / Math.Sqrt(leftNorm * rightNorm);
+    }
+
+    private sealed record SimilarShortlistRow(
+        Guid Id,
+        double RatingAverage,
+        int RatingCount,
+        long SearchRevision,
+        double Jaccard,
+        int IntersectCount);
 
     private static string EscapeLikePattern(string value)
     {

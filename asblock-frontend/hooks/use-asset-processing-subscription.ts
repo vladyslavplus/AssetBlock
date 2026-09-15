@@ -89,6 +89,9 @@ export function useAssetProcessingSubscription(enabled = true, userId?: string |
         invalidateQueriesInBackground(queryClient, {
           queryKey: assetKeys.detail(msg.assetId),
         })
+        invalidateQueriesInBackground(queryClient, {
+          queryKey: assetKeys.similarAll,
+        })
       }
     }, userId)
   }, [queryClient, enabled, userId])

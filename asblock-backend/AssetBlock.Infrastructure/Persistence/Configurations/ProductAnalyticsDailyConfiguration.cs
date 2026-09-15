@@ -27,6 +27,11 @@ internal sealed class ProductAnalyticsDailyConfiguration : IEntityTypeConfigurat
 
         builder.HasKey(e => new { e.SellerId, e.DayUtc, e.ProductType, e.ProductId });
 
+        // Popularity: asset view lookup by (type, products) over a trailing UTC-day
+        // window. Equality predicates precede the DayUtc range.
+        builder.HasIndex(e => new { e.ProductType, e.ProductId, e.DayUtc })
+            .HasDatabaseName("IX_product_analytics_daily_type_product_day");
+
         builder.Property(e => e.ProductType)
             .IsRequired()
             .HasConversion<string>()

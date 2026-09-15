@@ -74,6 +74,7 @@ export function PublishVersionForm({ assetId }: PublishVersionFormProps) {
     invalidateQueriesInBackground(queryClient, { queryKey: sellerProcessingKeys.all })
     invalidateQueriesInBackground(queryClient, { queryKey: assetKeys.detail(assetId) })
     invalidateQueriesInBackground(queryClient, { queryKey: assetKeys.versions(assetId) })
+    invalidateQueriesInBackground(queryClient, { queryKey: assetKeys.similarAll })
     invalidateQueriesInBackground(queryClient, { queryKey: catalogKeys.all })
   })
 

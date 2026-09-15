@@ -4,6 +4,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { SellMyListings } from '@/components/sell/sell-my-listings'
 import type * as sellerApi from '@/lib/seller/seller-api'
+import { catalogKeys } from '@/lib/catalog/catalog-query'
+import { assetKeys } from '@/lib/catalog/asset-detail-query'
 import { sellerKeys } from '@/lib/seller/seller-query'
 import { renderWithQueryClient } from '@/test/render'
 import { verifiedSeller } from '@/test/session-user'
@@ -123,6 +125,14 @@ describe('SellMyListings', () => {
         expect.anything(),
       )
     })
+    expect(invalidate).toHaveBeenCalledWith(
+      expect.objectContaining({ queryKey: catalogKeys.all }),
+      expect.anything(),
+    )
+    expect(invalidate).toHaveBeenCalledWith(
+      expect.objectContaining({ queryKey: assetKeys.similarAll }),
+      expect.anything(),
+    )
   })
 
   it('shows View for a READY listing and Manage for a pending listing', async () => {

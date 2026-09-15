@@ -13,6 +13,7 @@ const specializedAuthenticatedRoutes = [
 const publicAndAuthRoutes = [
   'account/social-platforms/route.ts',
   'analytics/events/route.ts',
+  'analytics/recommendation-events/route.ts',
   'auth/email-change/confirm/route.ts',
   'auth/email-verification/confirm/route.ts',
   'auth/login/route.ts',

@@ -964,6 +964,13 @@ public static class SearchBenchmarkRunner
             return await inner.GetPaged(request, queryEmbedding, modelKey, cancellationToken);
         }
 
+        public Task<SimilarPublicAssetsResult?> GetSimilarPublic(
+            Guid sourceAssetId,
+            int limit,
+            SimilarAssetsQueryOptions options,
+            CancellationToken cancellationToken = default) =>
+            inner.GetSimilarPublic(sourceAssetId, limit, options, cancellationToken);
+
         public Task<Asset> Add(Asset asset, CancellationToken cancellationToken = default) => inner.Add(asset, cancellationToken);
         public Task<Asset> AddWithTags(Asset asset, List<Tag> tags, CancellationToken cancellationToken = default) => inner.AddWithTags(asset, tags, cancellationToken);
         public Task<Asset> AddWithVersion(Asset asset, AssetVersion version, List<Tag>? tags, CancellationToken cancellationToken = default) => inner.AddWithVersion(asset, version, tags, cancellationToken);

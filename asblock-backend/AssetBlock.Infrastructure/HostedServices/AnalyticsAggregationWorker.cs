@@ -2,6 +2,7 @@ using System.Diagnostics;
 using AssetBlock.Domain.Abstractions.Services;
 using AssetBlock.Domain.Core.Constants;
 using AssetBlock.Domain.Core.Dto.Analytics;
+using AssetBlock.Domain.Core.Dto.Recommendations;
 using AssetBlock.Domain.Core.Enums;
 using AssetBlock.Domain.Core.Primitives.AppSettingsOptions;
 using AssetBlock.Infrastructure.Observability;
@@ -81,6 +82,8 @@ internal sealed class AnalyticsAggregationWorker(
 
         await using AsyncServiceScope scope = scopeFactory.CreateAsyncScope();
         IAnalyticsEventStore store = scope.ServiceProvider.GetRequiredService<IAnalyticsEventStore>();
+        IRecommendationEventStore recommendationStore = scope.ServiceProvider.GetRequiredService<IRecommendationEventStore>();
+        IRecommendationPersonalizationStore personalizationStore = scope.ServiceProvider.GetRequiredService<IRecommendationPersonalizationStore>();
 
         var rollupStopwatch = Stopwatch.StartNew();
         DiagnosticsOutcome outcome = DiagnosticsOutcome.SUCCESS;
@@ -129,12 +132,39 @@ internal sealed class AnalyticsAggregationWorker(
             AssetBlockDiagnostics.RecordAnalyticsAggregation(rollupStopwatch.Elapsed, outcome);
         }
 
+        var recommendationRollupStopwatch = Stopwatch.StartNew();
+        RecommendationDailyRecomputeResult recommendationRollup = await recommendationStore.TryAcquireAndRecomputeDaily(
+            currentDayUtc,
+            previousDayUtc,
+            now,
+            opts.CommandTimeoutSeconds,
+            cancellationToken);
+
+        if (recommendationRollup.Outcome == AnalyticsDailyRecomputeOutcome.COMPLETED)
+        {
+            logger.LogInformation(
+                "Recommendation daily rollup completed in {DurationMs}ms for days {PreviousDayUtc} and {CurrentDayUtc}; upserted={RowsUpserted}",
+                recommendationRollupStopwatch.ElapsedMilliseconds,
+                previousDayUtc,
+                currentDayUtc,
+                recommendationRollup.RowsUpserted);
+        }
+        else
+        {
+            logger.LogDebug(
+                "Recommendation daily rollup skipped after {DurationMs}ms; advisory lock held by another worker",
+                recommendationRollupStopwatch.ElapsedMilliseconds);
+        }
+
+        await RecomputePersonalizationAffinities(personalizationStore, now, opts, cancellationToken);
+
         if (_lastRetentionDayUtc == currentDayUtc)
         {
             return;
         }
 
         DateTimeOffset cutoffExclusive = now - TimeSpan.FromDays(AnalyticsAggregationConstants.RAW_EVENT_RETENTION_DAYS);
+        DateTimeOffset recommendationCutoffExclusive = now - TimeSpan.FromDays(RecommendationTelemetryConstants.RAW_EVENT_RETENTION_DAYS);
         var retentionStopwatch = Stopwatch.StartNew();
         AnalyticsEventRetentionResult retention = await store.TryAcquireAndDeleteExpiredEvents(
             cutoffExclusive,
@@ -143,7 +173,15 @@ internal sealed class AnalyticsAggregationWorker(
             opts.CommandTimeoutSeconds,
             cancellationToken);
 
-        if (retention is { LockAcquired: true, HasBacklog: false })
+        AnalyticsEventRetentionResult recommendationRetention = await recommendationStore.TryAcquireAndDeleteExpiredEvents(
+            recommendationCutoffExclusive,
+            opts.RetentionBatchSize,
+            opts.MaxRetentionBatchesPerRun,
+            opts.CommandTimeoutSeconds,
+            cancellationToken);
+
+        if (retention is { LockAcquired: true, HasBacklog: false }
+            && recommendationRetention is { LockAcquired: true, HasBacklog: false })
         {
             _lastRetentionDayUtc = currentDayUtc;
         }
@@ -162,6 +200,48 @@ internal sealed class AnalyticsAggregationWorker(
                 retention.DeletedCount,
                 cutoffExclusive,
                 retention.HasBacklog);
+        }
+
+        if (!recommendationRetention.LockAcquired)
+        {
+            logger.LogDebug(
+                "Recommendation raw event retention skipped; advisory lock held by another worker");
+        }
+        else if (recommendationRetention.DeletedCount > 0 || recommendationRetention.HasBacklog)
+        {
+            logger.LogInformation(
+                "Recommendation raw event retention completed; deleted={DeletedCount} cutoffExclusive={CutoffExclusive}; backlog={HasBacklog}",
+                recommendationRetention.DeletedCount,
+                recommendationCutoffExclusive,
+                recommendationRetention.HasBacklog);
+        }
+    }
+
+    private async Task RecomputePersonalizationAffinities(
+        IRecommendationPersonalizationStore personalizationStore,
+        DateTimeOffset now,
+        AnalyticsAggregationOptions opts,
+        CancellationToken cancellationToken)
+    {
+        var stopwatch = Stopwatch.StartNew();
+        PersonalRecomputeBatchResult batch = await personalizationStore.TryRecomputeBatch(
+            now,
+            RecommendationTelemetryConstants.PERSONAL_RECOMPUTE_MAX_USERS_PER_RUN,
+            opts.CommandTimeoutSeconds,
+            cancellationToken);
+
+        if (batch is { Outcome: AnalyticsDailyRecomputeOutcome.COMPLETED, UsersRecomputed: > 0 })
+        {
+            logger.LogInformation(
+                "Personalization affinity recompute completed in {DurationMs}ms; users={UsersRecomputed}",
+                stopwatch.ElapsedMilliseconds,
+                batch.UsersRecomputed);
+        }
+        else if (batch.Outcome == AnalyticsDailyRecomputeOutcome.SKIPPED)
+        {
+            logger.LogDebug(
+                "Personalization affinity recompute skipped after {DurationMs}ms; advisory lock held by another worker",
+                stopwatch.ElapsedMilliseconds);
         }
     }
 }
