@@ -31,6 +31,7 @@ public static class ApiRoutes
         public const string LIST = "";
         public const string UPLOAD = "upload";
         public const string ID = "{id:guid}";
+        public const string SIMILAR = "{id:guid}/similar";
         public const string DOWNLOAD = "{id:guid}/download";
         public const string TAGS = "{id:guid}/tags";
         public const string TAGS_ID = "{id:guid}/tags/{tagId:guid}";
@@ -111,6 +112,8 @@ public static class ApiRoutes
         public const string ME_PURCHASES = "me/purchases";
         public const string ME_ASSETS = "me/assets";
         public const string ME_ASSET = "me/assets/{assetId:guid}";
+        public const string ME_ASSET_SIMILAR = "me/assets/{assetId:guid}/similar";
+        public const string ME_RECOMMENDATION_PREFERENCES = "me/recommendation-preferences";
         public const string ME_ASSET_PROCESSING_JOBS = "me/assets/{assetId:guid}/processing-jobs";
         public const string ME_ASSET_VERSION_PROCESSING_JOBS = "me/asset-versions/{assetVersionId:guid}/processing-jobs";
         public const string ME_ASSET_VERSION_LISTING_COPILOT = "me/asset-versions/{assetVersionId:guid}/listing-copilot";
@@ -120,6 +123,7 @@ public static class ApiRoutes
     {
         public const string BASE = "api/analytics";
         public const string EVENTS = "events";
+        public const string RECOMMENDATION_EVENTS = "recommendation-events";
     }
 
     public static class SellerAnalytics

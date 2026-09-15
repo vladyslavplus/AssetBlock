@@ -107,6 +107,7 @@ export function AssetEditForm({ asset }: AssetEditFormProps) {
     invalidateQueriesInBackground(queryClient, { queryKey: sellerKeys.all })
     invalidateQueriesInBackground(queryClient, { queryKey: catalogKeys.all })
     invalidateQueriesInBackground(queryClient, { queryKey: assetKeys.detail(assetId) })
+    invalidateQueriesInBackground(queryClient, { queryKey: assetKeys.similarAll })
     if (publiclyReady) {
       router.push(routes.assetDetail(assetId))
     }

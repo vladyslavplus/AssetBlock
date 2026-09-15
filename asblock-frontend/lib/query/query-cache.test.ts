@@ -2,6 +2,7 @@ import { QueryClient } from '@tanstack/react-query'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { DEFAULT_CATALOG_FILTERS } from '@/lib/catalog/catalog-filters'
+import { assetKeys } from '@/lib/catalog/asset-detail-query'
 import { catalogKeys, fetchCatalogPage } from '@/lib/catalog/catalog-query'
 import { collectionKeys } from '@/lib/collections/collections-query'
 import { bundleKeys } from '@/lib/bundles/bundles-query'
@@ -97,6 +98,10 @@ describe('session cache isolation', () => {
     client.setQueryData(adminKeys.categories(), { items: ['admin-cat'] })
     client.setQueryData(adminAuditKeys.all, { items: ['audit-log'] })
     client.setQueryData(checkoutKeys.status('intent-1'), { status: 'pending' })
+    client.setQueryData(assetKeys.similar('asset-1', 6, 'similarity'), { items: ['public'] })
+    client.setQueryData(assetKeys.personalSimilar('user-1', 'asset-1', 6, 'similarity'), {
+      items: ['personal'],
+    })
 
     clearPrivateUserQueries(client)
 
@@ -115,6 +120,12 @@ describe('session cache isolation', () => {
     expect(client.getQueryData(collectionKeys.sellerList())).toBeUndefined()
     expect(client.getQueryData(adminKeys.categories())).toBeUndefined()
     expect(client.getQueryData(adminAuditKeys.all)).toBeUndefined()
+    expect(client.getQueryData(assetKeys.similar('asset-1', 6, 'similarity'))).toEqual({
+      items: ['public'],
+    })
+    expect(
+      client.getQueryData(assetKeys.personalSimilar('user-1', 'asset-1', 6, 'similarity')),
+    ).toBeUndefined()
   })
 })
 

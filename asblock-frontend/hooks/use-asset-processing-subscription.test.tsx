@@ -245,7 +245,8 @@ describe('useAssetProcessingSubscription', () => {
         key.includes(JSON.stringify(assetKeys.detail('22222222-2222-4222-8222-222222222222'))),
       ),
     ).toHaveLength(1)
-    expect(invalidate).toHaveBeenCalledTimes(7)
+    expect(keys.filter((key) => key.includes(JSON.stringify(assetKeys.similarAll)))).toHaveLength(1)
+    expect(invalidate).toHaveBeenCalledTimes(8)
   })
 
   it('triggers catch-up invalidations when SignalR transitions to connected state', async () => {

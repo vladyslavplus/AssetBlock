@@ -12,6 +12,7 @@ import { AssetPurchaseCard } from '@/components/assets/asset-purchase-card'
 import { AssetReviewsList } from '@/components/assets/asset-reviews-list'
 import { AssetVersionHistory } from '@/components/assets/asset-version-history'
 import { ContentHashDisplay } from '@/components/assets/content-hash-display'
+import { SimilarAssetsBlock } from '@/components/assets/similar-assets-block'
 import { useAnalyticsPageView } from '@/hooks/use-analytics-page-view'
 import {
   buildCheckoutAttributionFromPage,
@@ -152,6 +153,8 @@ export function AssetDetailView({
             </div>
           </div>
         </div>
+
+        <SimilarAssetsBlock assetId={assetId} />
       </SitePageContainer>
     </SiteMain>
   )

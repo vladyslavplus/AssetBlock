@@ -58,8 +58,10 @@ internal sealed class AnalyticsBffSignatureMiddleware(RequestDelegate next, IAna
         }
 
         var normalizedPath = path.Value!.TrimEnd('/');
-        var expectedPath = $"/{ApiRoutes.Analytics.BASE}/{ApiRoutes.Analytics.EVENTS}".TrimEnd('/');
-        return string.Equals(normalizedPath, expectedPath, StringComparison.OrdinalIgnoreCase);
+        var expectedEventsPath = $"/{ApiRoutes.Analytics.BASE}/{ApiRoutes.Analytics.EVENTS}".TrimEnd('/');
+        var expectedRecommendationPath = $"/{ApiRoutes.Analytics.BASE}/{ApiRoutes.Analytics.RECOMMENDATION_EVENTS}".TrimEnd('/');
+        return string.Equals(normalizedPath, expectedEventsPath, StringComparison.OrdinalIgnoreCase)
+            || string.Equals(normalizedPath, expectedRecommendationPath, StringComparison.OrdinalIgnoreCase);
     }
 
     private static bool HasStableDirectClientIdentifier(HttpContext context) =>

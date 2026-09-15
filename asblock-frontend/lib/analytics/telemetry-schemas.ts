@@ -56,6 +56,36 @@ export const ingestAnalyticsEventBrowserSchema = z.discriminatedUnion('eventType
 
 export type IngestAnalyticsEventBrowserBody = z.infer<typeof ingestAnalyticsEventBrowserSchema>
 
+const recommendationEventBaseSchema = z.object({
+  eventId: z.string().uuid(),
+  sourceAssetId: z.string().uuid(),
+  targetAssetId: z.string().uuid(),
+  slotPosition: z.number().int().min(0).max(11),
+  exposureId: z.string().uuid(),
+  rankingVersion: z.string().min(1).max(64),
+  expiresAt: z.string().min(1),
+  exposureToken: z.string().length(64),
+  candidateIds: z.array(z.string().uuid()).min(1).max(12),
+  deviceClass: analyticsDeviceClassSchema,
+})
+
+export const ingestRecommendationEventBrowserSchema = z.discriminatedUnion('eventType', [
+  recommendationEventBaseSchema
+    .extend({
+      eventType: z.literal('IMPRESSION'),
+    })
+    .strict(),
+  recommendationEventBaseSchema
+    .extend({
+      eventType: z.literal('CLICK'),
+    })
+    .strict(),
+])
+
+export type IngestRecommendationEventBrowserBody = z.infer<
+  typeof ingestRecommendationEventBrowserSchema
+>
+
 export const checkoutAttributionBrowserSchema = z
   .object({
     source: analyticsTrafficSourceSchema.optional(),

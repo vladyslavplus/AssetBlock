@@ -3,11 +3,13 @@ using AssetBlock.Application.UseCases.Assets.EnqueueListingCopilot;
 using AssetBlock.Application.UseCases.Assets.GetListingCopilotSuggestion;
 using AssetBlock.Application.UseCases.Assets.GetMyAssetProcessingJobs;
 using AssetBlock.Application.UseCases.Assets.GetMyAssetVersionProcessingJobs;
+using AssetBlock.Application.UseCases.Assets.GetPersonalSimilarAssets;
 using AssetBlock.Application.UseCases.Assets.GetSellerAssetDetail;
 using AssetBlock.Application.UseCases.Auth.ResendEmailVerification;
 using AssetBlock.Application.UseCases.Users.ChangePassword;
 using AssetBlock.Application.UseCases.Users.GetMyListings;
 using AssetBlock.Application.UseCases.Users.GetProfile;
+using AssetBlock.Application.UseCases.Users.GetRecommendationPreferences;
 using AssetBlock.Application.UseCases.Users.ListMyPurchases;
 using AssetBlock.Application.UseCases.Users.ListNotifications;
 using AssetBlock.Application.UseCases.Users.ListSocialPlatforms;
@@ -16,6 +18,7 @@ using AssetBlock.Application.UseCases.Users.MarkNotificationRead;
 using AssetBlock.Application.UseCases.Users.MarkNotificationUnread;
 using AssetBlock.Application.UseCases.Users.RequestEmailChange;
 using AssetBlock.Application.UseCases.Users.UpdateProfile;
+using AssetBlock.Application.UseCases.Users.UpdateRecommendationPreferences;
 using AssetBlock.Application.UseCases.Users.UpdateSocialLinks;
 using AssetBlock.Domain.Core.Constants;
 using AssetBlock.Domain.Core.Dto;
@@ -228,6 +231,74 @@ public sealed class UsersController(ISender sender) : ApiControllerBase(sender)
             request.Bio,
             request.IsPublicProfile);
         Ardalis.Result.Result<UpdateUserProfileResponse> result = await Sender.Send(command, cancellationToken);
+        return MapResultToActionResult(result);
+    }
+
+    /// <summary>
+    /// Get the authenticated user's recommendation personalization preference (default-off).
+    /// </summary>
+    [HttpGet(ApiRoutes.Users.ME_RECOMMENDATION_PREFERENCES)]
+    [Authorize]
+    [ProducesResponseType(typeof(RecommendationPreferencesDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> GetRecommendationPreferences(CancellationToken cancellationToken)
+    {
+        if (!User.TryGetUserId(out Guid userId))
+        {
+            return UnauthorizedProblem();
+        }
+
+        Ardalis.Result.Result<RecommendationPreferencesDto> result = await Sender.Send(new GetRecommendationPreferencesQuery(userId), cancellationToken);
+        return MapResultToActionResult(result);
+    }
+
+    /// <summary>
+    /// Opt the authenticated user in or out of personalized recommendations.
+    /// Opting out deletes the account's affinity rows in the same transaction.
+    /// </summary>
+    [HttpPatch(ApiRoutes.Users.ME_RECOMMENDATION_PREFERENCES)]
+    [Authorize]
+    [ProducesResponseType(typeof(RecommendationPreferencesDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> UpdateRecommendationPreferences(
+        [FromBody] UpdateRecommendationPreferencesRequest request,
+        CancellationToken cancellationToken)
+    {
+        if (!User.TryGetUserId(out Guid userId))
+        {
+            return UnauthorizedProblem();
+        }
+
+        var command = new UpdateRecommendationPreferencesCommand(userId, request.IsPersonalized);
+        Ardalis.Result.Result<RecommendationPreferencesDto> result = await Sender.Send(command, cancellationToken);
+        return MapResultToActionResult(result);
+    }
+
+    /// <summary>
+    /// Personal similar assets for the authenticated opted-in user.
+    /// Opted-out, preference-missing, or signal-empty callers receive Phase A ordering.
+    /// </summary>
+    [HttpGet(ApiRoutes.Users.ME_ASSET_SIMILAR)]
+    [Authorize]
+    [EnableRateLimiting(RateLimitingConstants.Policies.CATALOG_SEARCH)]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> GetPersonalSimilar(
+        Guid assetId,
+        [FromQuery] int limit = SimilarAssetsConstants.DEFAULT_LIMIT,
+        [FromQuery] string mode = SimilarAssetsConstants.MODE_SIMILARITY,
+        CancellationToken cancellationToken = default)
+    {
+        if (!User.TryGetUserId(out Guid userId))
+        {
+            return UnauthorizedProblem();
+        }
+
+        Ardalis.Result.Result<SimilarAssetsResult> result = await Sender.Send(new GetPersonalSimilarAssetsQuery(assetId, userId, limit, mode), cancellationToken);
         return MapResultToActionResult(result);
     }
 

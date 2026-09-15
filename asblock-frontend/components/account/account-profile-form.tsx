@@ -154,6 +154,34 @@ export function AccountProfileForm({ controller }: AccountProfileFormProps) {
         />
       </div>
 
+      <div className="flex items-center justify-between gap-4 rounded-lg border p-3">
+        <div>
+          <p className="text-sm font-medium">Personalized recommendations</p>
+          <p className="text-muted-foreground text-xs">
+            Use my purchases, reviews and recommendation clicks on this account to reorder Similar
+            assets. Off by default.
+          </p>
+        </div>
+        <Switch
+          checked={controller.isPersonalized}
+          disabled={
+            profileLocked || controller.preferencesLoading || controller.preferencesError !== null
+          }
+          onCheckedChange={controller.setPersonalized}
+          aria-label="Personalized recommendations"
+        />
+      </div>
+      {controller.preferencesError !== null ? (
+        <div className="flex items-center justify-between gap-4 rounded-lg border p-3">
+          <p className="text-destructive text-xs" role="alert">
+            {controller.preferencesError}
+          </p>
+          <Button type="button" size="sm" variant="outline" onClick={controller.retryPreferences}>
+            Retry
+          </Button>
+        </div>
+      ) : null}
+
       <div className="space-y-4 border-t border-border/60 pt-6">
         <div>
           <p className="text-sm font-medium text-foreground">Social links</p>

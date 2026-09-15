@@ -71,6 +71,39 @@ export async function putAccountSocials(
   return json as AccountProfile['socialLinks']
 }
 
+export async function patchRecommendationPreferences(
+  isPersonalized: boolean,
+): Promise<{ isPersonalized: boolean; optedInAt: string | null }> {
+  const res = await fetch('/api/account/recommendation-preferences', {
+    method: 'PATCH',
+    credentials: 'include',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ isPersonalized }),
+  })
+  const json: unknown = await res.json().catch(() => null)
+  if (res.status === 401) {
+    throw new AccountRequestError(401, 'UNAUTHORIZED', json)
+  }
+  if (!res.ok) {
+    throw new AccountRequestError(
+      res.status,
+      getApiErrorMessage(json, 'Could not save recommendation preferences.'),
+      json,
+    )
+  }
+  if (typeof json !== 'object' || json === null) {
+    throw new AccountRequestError(res.status, 'Unexpected response from server.', json)
+  }
+  const { isPersonalized: saved, optedInAt } = json as {
+    isPersonalized?: unknown
+    optedInAt?: unknown
+  }
+  if (typeof saved !== 'boolean') {
+    throw new AccountRequestError(res.status, 'Unexpected response from server.', json)
+  }
+  return { isPersonalized: saved, optedInAt: typeof optedInAt === 'string' ? optedInAt : null }
+}
+
 export async function postChangeAccountPassword(values: ChangePasswordFormValues): Promise<void> {
   const res = await fetch('/api/account/password', {
     method: 'POST',

@@ -9,6 +9,7 @@ import type { z } from 'zod'
 import { adminDelete } from '@/lib/admin/admin-bff'
 import { adminReviewDeleteSchema } from '@/lib/admin/admin-schemas'
 import { catalogKeys } from '@/lib/catalog/catalog-query'
+import { assetKeys } from '@/lib/catalog/asset-detail-query'
 import { invalidateQueriesInBackground } from '@/lib/query/query-refresh'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -29,6 +30,7 @@ export function AdminReviewsSection() {
       toast.success('Review deleted.')
       form.reset({ reviewId: '' })
       invalidateQueriesInBackground(queryClient, { queryKey: catalogKeys.all })
+      invalidateQueriesInBackground(queryClient, { queryKey: assetKeys.similarAll })
     },
     onError: (e: Error) => toast.error(e.message),
   })

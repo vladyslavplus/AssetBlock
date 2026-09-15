@@ -35,6 +35,7 @@ import {
 } from '@/lib/seller/seller-processing-status'
 import { Badge } from '@/components/ui/badge'
 import { catalogKeys } from '@/lib/catalog/catalog-query'
+import { assetKeys } from '@/lib/catalog/asset-detail-query'
 import { fetchSellerListingsQuery, sellerKeys } from '@/lib/seller/seller-query'
 import { invalidateQueriesInBackground, runQueryInBackground } from '@/lib/query/query-refresh'
 import { useState } from 'react'
@@ -64,6 +65,7 @@ export function SellMyListings() {
       setDeleteTarget(null)
       invalidateQueriesInBackground(queryClient, { queryKey: sellerKeys.all })
       invalidateQueriesInBackground(queryClient, { queryKey: catalogKeys.all })
+      invalidateQueriesInBackground(queryClient, { queryKey: assetKeys.similarAll })
       router.refresh()
     },
   })

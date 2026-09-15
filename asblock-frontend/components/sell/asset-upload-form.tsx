@@ -28,6 +28,7 @@ import {
 } from '@/lib/seller/seller-schemas'
 import { uploadSellerAsset } from '@/lib/seller/seller-api'
 import { catalogKeys, fetchCatalogFacets } from '@/lib/catalog/catalog-query'
+import { assetKeys } from '@/lib/catalog/asset-detail-query'
 import { sellerKeys } from '@/lib/seller/seller-query'
 import { sellerProcessingKeys } from '@/lib/seller/seller-processing-query'
 import { invalidateQueriesInBackground } from '@/lib/query/query-refresh'
@@ -110,6 +111,7 @@ export function AssetUploadForm() {
     invalidateQueriesInBackground(queryClient, { queryKey: sellerKeys.all })
     invalidateQueriesInBackground(queryClient, { queryKey: sellerProcessingKeys.all })
     invalidateQueriesInBackground(queryClient, { queryKey: catalogKeys.all })
+    invalidateQueriesInBackground(queryClient, { queryKey: assetKeys.similarAll })
     router.push('/sell?tab=listings')
   })
 

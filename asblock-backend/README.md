@@ -179,10 +179,11 @@ dotnet run --project AssetBlock.WebApi
 - **Gross revenue** only (integer USD cents); commerce from completed `Order`/`OrderLine` rows after Stripe webhook fulfillment.
 - **UTC ranges:** `from` inclusive, `to` exclusive, 1–366 days; `engagementAvailableFrom` marks first retained telemetry.
 - **Engagement:** append-only `analytics_events`, 400-day retention, daily rollups recomputed by `AnalyticsAggregationWorker` (advisory lock).
+- **Recommendations:** append-only `recommendation_events` (impressions/clicks with server-issued exposure context), 90-day retention independent of the visitor cookie, daily `recommendation_daily` counts without visitor/actor IDs. Ingest at `POST /api/analytics/recommendation-events` with the same BFF/DNT/rate-limit controls as analytics events. These signals are measurement-only, not billing truth.
 - **Rate limits:** `ANALYTICS_EVENTS` (120/min/partition) and `SELLER_ANALYTICS_SALES_EXPORT` (10/hour/seller) use Redis-protocol fixed windows in Staging/Production (`ConnectionStrings:Redis` required; Valkey locally). Development/IntegrationTesting fall back to in-memory limiters when Redis connection is unset. During Redis outages the API logs once, returns 202 for telemetry and 503 for CSV export for a short backoff window without per-request Redis calls.
 - **BFF signing:** `AnalyticsRateLimiting:BffSigningSecret` (min 32 chars) + frontend `ASSETBLOCK_ANALYTICS_BFF_SIGNING_SECRET`.
-- **Routes:** `GET /api/seller/analytics/*`, `POST /api/analytics/events`, CSV at `GET /api/seller/analytics/sales/export`.
-- **Worker:** `AnalyticsAggregationWorker` recomputes UTC daily rollups every five minutes (advisory lock) and deletes raw events older than 400 days.
+- **Routes:** `GET /api/seller/analytics/*`, `POST /api/analytics/events`, `POST /api/analytics/recommendation-events`, CSV at `GET /api/seller/analytics/sales/export`.
+- **Worker:** `AnalyticsAggregationWorker` recomputes UTC daily rollups every five minutes (advisory lock), deletes analytics raw events older than 400 days, and deletes recommendation raw events older than 90 days.
 - **Stripe local webhook:** `stripe listen --forward-to http://localhost:5088/api/payments/webhook`
 
 ### Tests

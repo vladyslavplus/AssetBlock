@@ -1,8 +1,10 @@
 using Ardalis.Result;
 using AssetBlock.Application.Messaging;
 using AssetBlock.Application.UseCases.Analytics.IngestAnalyticsEvent;
+using AssetBlock.Application.UseCases.Recommendations.IngestRecommendationEvent;
 using AssetBlock.Domain.Core.Constants;
 using AssetBlock.Domain.Core.Dto.Analytics;
+using AssetBlock.Domain.Core.Dto.Recommendations;
 using AssetBlock.WebApi.Constants;
 using AssetBlock.WebApi.Extensions;
 using Microsoft.AspNetCore.Authorization;
@@ -36,6 +38,27 @@ public sealed class AnalyticsController(ISender sender) : ApiControllerBase(send
         CancellationToken cancellationToken)
     {
         var command = new IngestAnalyticsEventCommand(request, User.GetUserIdOrNull());
+        Result result = await Sender.Send(command, cancellationToken);
+        return result.IsSuccess ? Accepted() : MapResultToActionResult(result);
+    }
+
+    /// <summary>
+    /// Records one recommendation impression or click. Authentication is optional and only used to
+    /// attribute the actor and to suppress self-activity. A malformed envelope is rejected; any
+    /// well-formed envelope is accepted with 202 whether or not a row was written.
+    /// </summary>
+    [HttpPost(ApiRoutes.Analytics.RECOMMENDATION_EVENTS)]
+    [AllowAnonymous]
+    [EnableRateLimiting(RateLimitingConstants.Policies.ANALYTICS_EVENTS)]
+    [ProducesResponseType(StatusCodes.Status202Accepted)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status429TooManyRequests)]
+    public async Task<IActionResult> IngestRecommendationEvent(
+        [FromBody] IngestRecommendationEventRequest request,
+        CancellationToken cancellationToken)
+    {
+        var command = new IngestRecommendationEventCommand(request, User.GetUserIdOrNull());
         Result result = await Sender.Send(command, cancellationToken);
         return result.IsSuccess ? Accepted() : MapResultToActionResult(result);
     }

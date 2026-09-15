@@ -14,6 +14,7 @@ export interface AssetCardProps {
   variant?: 'grid' | 'carousel'
   linkSource?: AnalyticsSourceQuery
   collectionId?: string
+  onViewDetailsClick?: () => void
 }
 
 export function AssetCard({
@@ -21,6 +22,7 @@ export function AssetCard({
   variant = 'grid',
   linkSource = 'catalog',
   collectionId,
+  onViewDetailsClick,
 }: AssetCardProps) {
   const assetHref = appendAnalyticsQuery(routes.assetDetail(asset.id), linkSource, { collectionId })
   const visibleTags = asset.tags.slice(0, 3)
@@ -113,6 +115,7 @@ export function AssetCard({
         </div>
         <Link
           href={assetHref}
+          onClick={onViewDetailsClick}
           className="w-full px-3 py-2 rounded-lg border border-border text-foreground bg-transparent hover:bg-secondary/50 hover:border-foreground/40 hover:text-foreground transition-smooth text-xs font-medium text-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-card"
         >
           View details

@@ -16,6 +16,7 @@ import {
 } from '@/lib/admin/admin-schemas'
 import type { CategoryListItemApi } from '@/lib/catalog/assets-api'
 import { catalogKeys } from '@/lib/catalog/catalog-query'
+import { assetKeys } from '@/lib/catalog/asset-detail-query'
 import { invalidateQueriesInBackground } from '@/lib/query/query-refresh'
 
 const SEARCH_DEBOUNCE_MS = 320
@@ -81,6 +82,7 @@ export function useAdminCategories() {
   const invalidateLists = () => {
     invalidateQueriesInBackground(queryClient, { queryKey: adminKeys.categories() })
     invalidateQueriesInBackground(queryClient, { queryKey: catalogKeys.all })
+    invalidateQueriesInBackground(queryClient, { queryKey: assetKeys.similarAll })
   }
 
   const createMutation = useMutation({
