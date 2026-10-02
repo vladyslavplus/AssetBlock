@@ -38,7 +38,7 @@ jobs:
       - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ${{ env.STORE_PATH }}
-          key: ${{ runner.os }}-pnpm-store-${{ hashFiles('pnpm-lock.yaml', 'asblock-frontend/pnpm-lock.yaml') }}
+          key: ${{ runner.os }}-pnpm-store-${{ hashFiles('pnpm-lock.yaml', 'asblock-frontend/pnpm-lock.yaml', 'scripts/agents/pnpm-lock.yaml') }}
           restore-keys: |
             ${{ runner.os }}-pnpm-store-
 
@@ -50,6 +50,10 @@ jobs:
 
       - name: Install root tooling
         run: pnpm install --frozen-lockfile
+
+      - name: Install agent tooling dependencies
+        working-directory: scripts/agents
+        run: pnpm install --frozen-lockfile --ignore-scripts
 
       - name: Restore frontend dependencies
         working-directory: asblock-frontend

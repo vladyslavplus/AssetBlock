@@ -113,7 +113,10 @@ public abstract class StorageProviderFixture : IAsyncLifetime
 
 public sealed class MinioStorageFixture : StorageProviderFixture
 {
-    protected override string Image => "quay.io/minio/minio:RELEASE.2025-09-07T16-13-09Z@sha256:14cea493d9a34af32f524e538b8346cf79f3321eff8e708c1e2960462bd8936e";
+    // quay.io/minio/minio no longer allows anonymous pulls on CI runners; pgsty/minio is a
+    // community rebuild of the same MinIO server API used for local A/B compatibility testing.
+    protected override string Image =>
+        "docker.io/pgsty/minio:RELEASE.2026-08-04T00-00-00Z@sha256:b6bfe7239bfc83fb90d31612d9704d86039dd714f7904b3f1ad68f211e602372";
     protected override int ContainerPort => 9000;
     protected override string AccessKey => "assetblock";
     protected override string SecretKey => "dev_minio_secret";

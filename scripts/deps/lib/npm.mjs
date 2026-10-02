@@ -284,10 +284,9 @@ export function parseNpmAuditJson(stdout) {
 export function interpretNpmAuditResult({ status, stdout, stderr, cwd }) {
   const out = (stdout ?? "").trim();
   if (!out) {
-    if (status === 0) {
-      return [];
-    }
-    throw new Error(`pnpm audit failed in ${cwd}:\n${stderr ?? ""}`);
+    throw new Error(
+      `pnpm audit returned empty output in ${cwd} (status ${status ?? "unknown"})`,
+    );
   }
 
   let findings;
@@ -335,32 +334,36 @@ function sleepSync(ms) {
 
 export function listNpmVulnerabilities({
   maxAttempts = 3,
-  allowRegistryFailures = true,
+  allowRegistryFailures = false,
+  projectDirs = NPM_PROJECT_DIRS,
+  runAudit = (cwd) => {
+    const result = runPnpmAllowFail(["audit", "--json"], {
+      cwd,
+      env: {
+        ...process.env,
+        npm_config_fetch_timeout: "120000",
+        npm_config_fetch_retries: "4",
+      },
+    });
+    return interpretNpmAuditResult({
+      status: result.status ?? 1,
+      stdout: result.stdout,
+      stderr: result.stderr,
+      cwd,
+    });
+  },
 } = {}) {
   // Audit full graphs (prod + dev) for every pnpm root in the monorepo.
   const findings = [];
   const seen = new Set();
 
-  for (const cwd of NPM_PROJECT_DIRS) {
+  for (const cwd of projectDirs) {
     let auditFindings = null;
     let lastError = null;
 
     for (let attempt = 1; attempt <= maxAttempts; attempt++) {
       try {
-        const result = runPnpmAllowFail(["audit", "--json"], {
-          cwd,
-          env: {
-            ...process.env,
-            npm_config_fetch_timeout: "120000",
-            npm_config_fetch_retries: "4",
-          },
-        });
-        auditFindings = interpretNpmAuditResult({
-          status: result.status ?? 1,
-          stdout: result.stdout,
-          stderr: result.stderr,
-          cwd,
-        });
+        auditFindings = runAudit(cwd);
         break;
       } catch (error) {
         lastError = error;
@@ -379,7 +382,7 @@ export function listNpmVulnerabilities({
         );
         continue;
       }
-      throw lastError;
+      throw lastError ?? new Error(`pnpm audit did not complete for ${cwd}`);
     }
 
     for (const finding of auditFindings) {
