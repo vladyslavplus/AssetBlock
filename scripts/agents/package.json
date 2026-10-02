@@ -1,0 +1,8 @@
+{
+  "name": "assetblock-agent-tools",
+  "private": true,
+  "description": "Local context packaging tools; not application dependencies",
+  "dependencies": {
+    "repomix": "1.18.1"
+  }
+}

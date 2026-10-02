@@ -97,6 +97,22 @@
       "license": "Unlicense",
       "reason": "Public-domain equivalent (Unlicense) transitive helper; accepted.",
       "reviewedOn": "2026-08-20"
+    },
+    {
+      "ecosystem": "npm",
+      "name": "@repomix/tree-sitter-wasms",
+      "versions": ["0.1.17"],
+      "license": "Unlicense",
+      "reason": "Repomix agent-tooling dependency bundling tree-sitter WASM binaries under Unlicense; used only for local context packaging, not runtime.",
+      "reviewedOn": "2026-10-02"
+    },
+    {
+      "ecosystem": "npm",
+      "name": "jschardet",
+      "versions": ["3.1.4"],
+      "license": "LGPL-2.1+",
+      "reason": "Repomix transitive charset-detection library (LGPL-2.1+); retained for scripts/agents packaging only with notices.",
+      "reviewedOn": "2026-10-02"
     }
   ]
 }

@@ -36,7 +36,7 @@ jobs:
         name: Setup pnpm cache
         with:
           path: ${{ env.STORE_PATH }}
-          key: ${{ runner.os }}-pnpm-store-${{ hashFiles('**/pnpm-lock.yaml') }}
+          key: ${{ runner.os }}-pnpm-store-${{ hashFiles('asblock-frontend/pnpm-lock.yaml') }}
           restore-keys: |
             ${{ runner.os }}-pnpm-store-
 
@@ -51,6 +51,15 @@ jobs:
       - name: Unit and component tests
         working-directory: asblock-frontend
         run: pnpm run test:coverage
+
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        name: Setup Next.js build cache
+        with:
+          path: asblock-frontend/.next/cache
+          key: ${{ runner.os }}-nextjs-cache-${{ hashFiles('asblock-frontend/pnpm-lock.yaml', 'asblock-frontend/package.json', 'asblock-frontend/next.config.mjs', 'asblock-frontend/tsconfig.json') }}-${{ hashFiles('asblock-frontend/app/**', 'asblock-frontend/components/**', 'asblock-frontend/hooks/**', 'asblock-frontend/lib/**', 'asblock-frontend/proxy.ts') }}
+          restore-keys: |
+            ${{ runner.os }}-nextjs-cache-${{ hashFiles('asblock-frontend/pnpm-lock.yaml', 'asblock-frontend/package.json', 'asblock-frontend/next.config.mjs', 'asblock-frontend/tsconfig.json') }}-
+            ${{ runner.os }}-nextjs-cache-
 
       - name: Upload Vitest coverage
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
@@ -71,7 +80,9 @@ jobs:
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: frontend-next-build
-          path: asblock-frontend/.next
+          path: |
+            asblock-frontend/.next
+            !asblock-frontend/.next/cache/**
           include-hidden-files: true
           if-no-files-found: error
           retention-days: 1
@@ -102,7 +113,7 @@ jobs:
         name: Setup pnpm cache
         with:
           path: ${{ env.STORE_PATH }}
-          key: ${{ runner.os }}-pnpm-store-${{ hashFiles('**/pnpm-lock.yaml') }}
+          key: ${{ runner.os }}-pnpm-store-${{ hashFiles('asblock-frontend/pnpm-lock.yaml') }}
           restore-keys: |
             ${{ runner.os }}-pnpm-store-
 

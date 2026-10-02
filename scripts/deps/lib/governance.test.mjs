@@ -6,12 +6,18 @@ import test from "node:test";
 import {
   interpretNpmAuditResult,
   isTransientAuditError,
+  listNpmVulnerabilities,
   parseNpmAuditJson,
   resolveCanonicalNpmMetadata,
 } from "./npm.mjs";
 import { evaluatePackages, filterSevereVulnerabilities } from "./notices.mjs";
 import { validateExceptionEntry } from "./policy.mjs";
-import { listPackagesFromPnpmLock, listPackagesFromPnpmLocks } from "./pnpm-lock.mjs";
+import {
+  listPackagesFromPnpmLock,
+  listPackagesFromPnpmLocks,
+  NPM_LOCKFILES,
+  NPM_PROJECT_DIRS,
+} from "./pnpm-lock.mjs";
 import { buildBoundedLineDiff } from "./diff.mjs";
 
 test("parseNpmAuditJson_WhenHighDevAdvisory_ShouldSurfaceFinding", () => {
@@ -152,6 +158,98 @@ test("isTransientAuditError_WhenPermanentError_ShouldReturnFalse", () => {
     false,
   );
   assert.equal(isTransientAuditError(null), false);
+});
+
+test("interpretNpmAuditResult_WhenEmptySuccessfulOutput_ShouldThrow", () => {
+  assert.throws(
+    () =>
+      interpretNpmAuditResult({
+        status: 0,
+        stdout: "",
+        stderr: "",
+        cwd: "/tmp/demo",
+      }),
+    /empty output/,
+  );
+});
+
+test("listNpmVulnerabilities_WhenRegistryUnavailableAfterRetries_ShouldThrow", () => {
+  assert.throws(
+    () =>
+      listNpmVulnerabilities({
+        projectDirs: ["/tmp/demo-root"],
+        maxAttempts: 1,
+        allowRegistryFailures: false,
+        runAudit: () => {
+          throw new Error("pnpm audit failed: ERR_PNPM_META_FETCH_FAIL: registry unavailable");
+        },
+      }),
+    /ERR_PNPM_META_FETCH_FAIL/,
+  );
+});
+
+test("listNpmVulnerabilities_WhenRegistryUnavailableByDefaultAfterRetries_ShouldThrow", () => {
+  let attempts = 0;
+  assert.throws(
+    () =>
+      listNpmVulnerabilities({
+        projectDirs: ["/tmp/demo-root"],
+        maxAttempts: 3,
+        runAudit: () => {
+          attempts += 1;
+          throw new Error("pnpm audit failed: ERR_PNPM_META_FETCH_FAIL: registry unavailable");
+        },
+      }),
+    /ERR_PNPM_META_FETCH_FAIL/,
+  );
+  assert.equal(attempts, 3);
+});
+
+test("listNpmVulnerabilities_WhenHighFindingReported_ShouldReturnFinding", () => {
+  const findings = listNpmVulnerabilities({
+    projectDirs: ["/tmp/demo-root"],
+    maxAttempts: 1,
+    runAudit: () =>
+      interpretNpmAuditResult({
+        status: 1,
+        stdout: JSON.stringify({
+          vulnerabilities: {
+            eslint: {
+              name: "eslint",
+              severity: "high",
+              via: [],
+              range: "9.0.0",
+              versions: ["9.0.0"],
+              url: "https://example.test/advisory",
+              dev: true,
+            },
+          },
+        }),
+        stderr: "",
+        cwd: "/tmp/demo-root",
+      }),
+  });
+
+  assert.equal(findings.length, 1);
+  assert.equal(findings[0].severity, "high");
+});
+
+test("listNpmVulnerabilities_WhenAllowRegistryFailuresAndTransientError_ShouldSkipRoot", () => {
+  const findings = listNpmVulnerabilities({
+    projectDirs: ["/tmp/demo-root"],
+    maxAttempts: 1,
+    allowRegistryFailures: true,
+    runAudit: () => {
+      throw new Error("pnpm audit failed: ERR_PNPM_META_FETCH_FAIL: registry unavailable");
+    },
+  });
+
+  assert.deepEqual(findings, []);
+});
+
+test("npmGovernanceRoots_WhenConfigured_ShouldIncludeAgentsLockfile", () => {
+  assert.ok(NPM_PROJECT_DIRS.some((dir) => dir.replace(/\\/g, "/").endsWith("scripts/agents")));
+  assert.ok(NPM_LOCKFILES.some((file) => file.replace(/\\/g, "/").endsWith("scripts/agents/pnpm-lock.yaml")));
 });
 
 test("validateExceptionEntry_WhenWildcardWithoutFlag_ShouldFail", () => {

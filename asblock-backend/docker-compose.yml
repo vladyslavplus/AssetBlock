@@ -53,7 +53,7 @@ services:
   # Compatibility profile: keep pinned MinIO for local A/B against SeaweedFS.
   minio:
     profiles: ["minio"]
-    image: quay.io/minio/minio:RELEASE.2025-09-07T16-13-09Z@sha256:14cea493d9a34af32f524e538b8346cf79f3321eff8e708c1e2960462bd8936e
+    image: docker.io/pgsty/minio:RELEASE.2026-08-04T00-00-00Z@sha256:b6bfe7239bfc83fb90d31612d9704d86039dd714f7904b3f1ad68f211e602372
     container_name: assetblock-minio
     ports:
       - "127.0.0.1:${MINIO_API_PORT:-9000}:9000"

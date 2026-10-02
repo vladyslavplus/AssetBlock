@@ -20,7 +20,7 @@
 ## Business invariants
 
 - Assets are encrypted before storage. A purchaser or the asset author may download; all other users must be denied.
-- Asset deletion is conditional: assets with purchases are delisted by soft delete and their blobs remain available to existing purchasers; assets without purchases may be hard deleted with blob cleanup.
+- Asset deletion is conditional: assets with purchases or active checkouts are delisted by soft delete; buyer blobs remain available. Hard delete with blob cleanup is allowed only without purchases/active checkouts, following the existing checkout-reference cleanup rules.
 - Stripe webhook verification, not a browser redirect, is the source of truth for payment completion. Purchase creation must be idempotent.
 - Reviews are limited to eligible purchasers and follow the existing ownership/time-window rules.
 - Categories, tags, and review moderation are admin-controlled. Do not weaken role checks.
@@ -56,7 +56,7 @@ Use these current, well-tested paths as canonical architectural examples:
   - Verification: `AssetBlock.Application.Tests/UseCases/Assets/PublishAssetVersionCommandHandlerTests.cs`
 - **Read / Query:** `GetAssets`
   - Handler & Validator: `AssetBlock.Application/UseCases/Assets/GetAssets/GetAssetsQueryHandler.cs`, `GetAssetsQueryValidator.cs`
-  - Endpoint & Mapping: `AssetBlock.WebApi/Controllers/AssetsController.cs` (`GetAssets`)
+  - Endpoint & Mapping: `AssetBlock.WebApi/Controllers/AssetsController.cs` (`List`)
   - Verification: `AssetBlock.Application.Tests/UseCases/Assets/GetAssetsQueryHandlerTests.cs`
 
 ## Files, external services, cache, and performance
@@ -97,5 +97,6 @@ Use these current, well-tested paths as canonical architectural examples:
 - Mirror application structure in tests. Name tests `Handle_When<Condition>_Should<Expected>` or `Validate_When<Condition>_Should<Expected>`.
 - Cover happy paths plus validation, not-found, authorization, conflict, external failure, cancellation, and idempotency when relevant. Assert store/cache/event interactions with `Received` and `DidNotReceive`.
 - Test handlers and validators first; add WebApi/integration tests when HTTP pipeline, auth, configuration, persistence, or DI behavior changes.
-- Run the narrowest affected test project first, using focused test projects and/or filtered tests covering changed logic; do not run `dotnet test asblock-backend.slnx` for ordinary changes. Run `dotnet build asblock-backend.slnx` when the full solution has restored assets.
+- Test risk, not line count. The implementer runs the narrowest affected test project/filter first; do not run `dotnet test asblock-backend.slnx` for ordinary changes. Add relevant PostgreSQL/WebApi integration checks for persistence, contracts, auth, payments, concurrency, or DI. Build the solution for broad changes or project/DI boundaries when restored assets are available.
+- Markdown/instruction-only changes need document/skill validation, not application tests/builds. Reuse checks for unchanged source; repeat only after relevant edits, failure, or an unresolved risk.
 - If verification cannot run, state precisely what was not verified and why.

@@ -6,6 +6,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 export const ROOT = path.resolve(__dirname, "../../..");
 export const BACKEND_DIR = path.join(ROOT, "asblock-backend");
 export const FRONTEND_DIR = path.join(ROOT, "asblock-frontend");
+export const AGENTS_DIR = path.join(ROOT, "scripts", "agents");
 export const BACKEND_SLN = path.join(BACKEND_DIR, "asblock-backend.slnx");
 export const POLICY_JSON = path.join(ROOT, "dependency-policy.json");
 export const EXCEPTIONS_JSON = path.join(ROOT, "dependency-exceptions.json");

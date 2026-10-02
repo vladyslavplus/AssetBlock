@@ -45,7 +45,7 @@ non-allowlisted license without rewriting detected metadata.
 Governance checks fail on **High** and **Critical** vulnerabilities reported by:
 
 - `dotnet list package --vulnerable --include-transitive` (NuGet)
-- `pnpm audit` for each npm root (repository root tooling and `asblock-frontend/`; full graph including devDependencies)
+- `pnpm audit` for each npm root (repository root tooling, `asblock-frontend/`, and `scripts/agents/`; full graph including devDependencies)
 
 ## Tooling (pinned, FOSS)
 
@@ -56,8 +56,8 @@ Governance checks fail on **High** and **Critical** vulnerabilities reported by:
 | Aspire Dashboard | `mcr.microsoft.com/dotnet/aspire-dashboard:9.0.0` (MIT) | Local OTLP receiver/UI |
 | SeaweedFS (local compose) | `chrislusf/seaweedfs:4.42` (Apache-2.0) | Default local S3-compatible encrypted asset storage |
 | ClamAV (local compose) | `clamav/clamav:1.4.6` (GPL-2.0) | Local malware scanning daemon for asset processing |
-| MinIO (local compose profile `minio`) | `quay.io/minio/minio:RELEASE.2025-09-07T16-13-09Z` | Compatibility S3-compatible storage for local A/B |
-| `pnpm-lock.yaml` parse | packageManager `pnpm@11.13.0` | Canonical OS-neutral npm inventory from root + `asblock-frontend` lockfiles |
+| MinIO (local compose profile `minio`) | `docker.io/pgsty/minio:RELEASE.2026-08-04T00-00-00Z` (anonymous-pullable rebuild; upstream `quay.io/minio/minio` is no longer anonymously pullable) | Compatibility S3-compatible storage for local A/B |
+| `pnpm-lock.yaml` parse | packageManager `pnpm@11.13.0` | Canonical OS-neutral npm inventory from root, `asblock-frontend`, and `scripts/agents` lockfiles |
 | npm registry metadata | canonical | Author/source/base license for every npm package (OS-independent); missing registry metadata fails generation |
 | `overrideDetectedLicense` exceptions | `dependency-exceptions.json` | Reviewed license corrections when registry under-reports distributed terms |
 | `scripts/deps` CycloneDX writer | repo scripts | Combined npm (app + tooling) SBOM |
@@ -70,7 +70,7 @@ bounded `.diff` for CI inspection.
 
 ## Commands
 
-From the repository root (after `pnpm install`, `pnpm install` in `asblock-frontend/`, and `dotnet restore` / `dotnet tool restore` in `asblock-backend/`):
+From the repository root (after `pnpm install`, `pnpm install` in `asblock-frontend/` and `scripts/agents/` (`--ignore-scripts`), and `dotnet restore` / `dotnet tool restore` in `asblock-backend/`):
 
 ```bash
 pnpm deps:generate   # refresh THIRD-PARTY-NOTICES.md and artifacts/sbom/*

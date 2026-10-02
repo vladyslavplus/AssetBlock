@@ -78,7 +78,7 @@ GitHub Actions run all backend projects, frontend `check`/production build, depe
 
 **License:** this repository is licensed under the Apache License 2.0 (`LICENSE`). Third-party notices are generated into `THIRD-PARTY-NOTICES.md`.
 
-**Dependency governance** (from the repository root, after `pnpm install` and frontend/backend restores):
+**Dependency governance** (from the repository root, after `pnpm install`, `pnpm install --frozen-lockfile` in `asblock-frontend/` and `scripts/agents/` (`--ignore-scripts`), and backend restores):
 
 ```bash
 pnpm deps:generate   # refresh THIRD-PARTY-NOTICES.md + artifacts/sbom/*

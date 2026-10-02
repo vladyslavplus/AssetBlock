@@ -6,16 +6,17 @@ description: Implement a complete end-to-end vertical feature slice across backe
 # Add Feature Slice
 
 This skill coordinates the vertical touchpoints required to implement an end-to-end feature slice across the AssetBlock monorepo.
+Read root and applicable nested guides and follow [implement-change](../implement-change/SKILL.md). Apply only the touchpoints needed by the authorized slice; a checklist does not authorize new persistence, dependencies, or contracts.
 
 ## 1. Golden References
 
 Before designing a new slice, consult the maintained golden references:
 
 - **Backend:**
-  - Command / Write: `PublishAssetVersion` (see [backend guide](../../asblock-backend/AGENTS.md#golden-references))
-  - Read / Query: `GetAssets` (see [backend guide](../../asblock-backend/AGENTS.md#golden-references))
+  - Command / Write: `PublishAssetVersion` (see [backend guide](../../../asblock-backend/AGENTS.md#golden-references))
+  - Read / Query: `GetAssets` (see [backend guide](../../../asblock-backend/AGENTS.md#golden-references))
 - **Frontend:**
-  - Feature Slice: `Library` (`lib/library/`, `app/library/`, `components/library/`, see [frontend guide](../../asblock-frontend/AGENTS.md#golden-references))
+  - Feature Slice: `Library` (`lib/library/`, `app/library/`, `components/library/`, see [frontend guide](../../../asblock-frontend/AGENTS.md#golden-references))
   - Authenticated BFF Route: `app/api/account/library/route.ts`
 
 ## 2. Backend Touchpoints
@@ -30,7 +31,7 @@ Implement the backend slice in dependency order:
    - Create a dedicated folder under `AssetBlock.Application/UseCases/<Area>/<UseCaseName>/`.
    - Define sealed Command/Query record.
    - Define co-located `*Validator` inheriting `AbstractValidator<T>`.
-   - Implement sealed handler returning `Result<T>` or `Result`.
+   - Implement internal sealed handler returning `Result<T>` or `Result`.
    - Use `IUnitOfWork` for transactional writes, `IAuditWriter` for audit events, and `TimeProvider` for timestamps.
 3. **Persistence (Infrastructure):**
    - Implement store methods in `AssetBlock.Infrastructure/Persistence/Stores/`.
@@ -64,12 +65,16 @@ Implement the client-side slice matching backend contracts:
 Keep contracts strictly synchronized:
 - Wire casing: camelCase JSON across both backend and frontend.
 - Error codes: Frontend must parse and match the backend `ERR_*` identifiers.
-- Pagination: Standard `{ page, pageSize, total, items }` contract.
+- Pagination: preserve `PagedResult<T>` wire fields `{ items, totalCount, page, pageSize, totalPages }`. Catalog results additionally expose `isTruncated`; do not impose pagination on endpoints with a different existing contract.
 - Status codes: 200 OK, 201 Created, 400 Validation Problem, 401 Unauthorized, 403 Forbidden, 404 Not Found, 409 Conflict.
 
 ## 5. Verification
 
-Execute focused verification on both sides:
-1. Backend: `dotnet test asblock-backend/AssetBlock.Application.Tests --filter "FullyQualifiedName~<Feature>"`
-2. Frontend: `pnpm --dir asblock-frontend run check && pnpm --dir asblock-frontend run test:unit <feature>`
-3. Build check: `pnpm --dir asblock-frontend run build` and `dotnet build asblock-backend/asblock-backend.slnx`
+The implementer executes checks selected by affected boundaries; reviewers inspect the resulting evidence only. Commands below run from repository root. Replace placeholders with actual feature/test paths.
+
+- Backend business logic: `dotnet test asblock-backend/AssetBlock.Application.Tests --filter "FullyQualifiedName~<Feature>"`.
+- Add focused real PostgreSQL tests for constraints, transactions, search, or locking; WebApi integration tests for HTTP/auth/DI behavior. Select the matching existing test project and filter.
+- Frontend source: `pnpm --dir asblock-frontend run check` and `pnpm --dir asblock-frontend run test <test-file-path>`; the test-file path is relative to `asblock-frontend/`.
+- Frontend routing, Server Components, configuration, or TypeScript boundaries: `pnpm --dir asblock-frontend run build`.
+- Backend project/DI changes or broad cross-stack work: `dotnet build asblock-backend/asblock-backend.slnx` when restored assets are available.
+- Browser-only critical behavior: the relevant Playwright flow or explicit manual acceptance. Do not require full suites for an isolated slice by default.

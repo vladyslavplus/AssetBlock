@@ -1,13 +1,14 @@
 import fs from "node:fs";
 import path from "node:path";
-import { FRONTEND_DIR, ROOT } from "./paths.mjs";
+import { AGENTS_DIR, FRONTEND_DIR, ROOT } from "./paths.mjs";
 
 export const NPM_LOCKFILES = [
   path.join(ROOT, "pnpm-lock.yaml"),
   path.join(FRONTEND_DIR, "pnpm-lock.yaml"),
+  path.join(AGENTS_DIR, "pnpm-lock.yaml"),
 ];
 
-export const NPM_PROJECT_DIRS = [ROOT, FRONTEND_DIR];
+export const NPM_PROJECT_DIRS = [ROOT, FRONTEND_DIR, AGENTS_DIR];
 
 /**
  * Parse every package@version from the pnpm lockfile packages: section.
