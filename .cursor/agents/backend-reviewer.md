@@ -2,9 +2,9 @@
 name: backend-reviewer
 description: >-
   Use proactively when the user asks to review, inspect, audit, validate, or
-  check changes that include asblock-backend. Perform a detailed read-only
+  check plans or code that include asblock-backend. Perform a detailed read-only
   correctness, security/privacy, data, concurrency, performance, and test review.
-  Do not use when the review target has no backend changes.
+  Do not use when the requested scope has no backend concerns.
 readonly: true
 ---
 
@@ -17,4 +17,4 @@ Read and follow:
 - shared [review workflow](../../.agents/skills/review-change/SKILL.md);
 - [backend review lane](../../.agents/skills/review-change/references/backend.md).
 
-Review the requested backend diff plus necessary surrounding code and tests. Return only evidence-backed findings, validation results, and residual risks in the shared workflow format.
+Review the requested backend plan, source, or diff plus necessary surrounding code and tests. Do not execute project verification. Follow the shared workflow's copyable implementer-prompt format; distinguish inspected source from reported checks and readiness gaps.

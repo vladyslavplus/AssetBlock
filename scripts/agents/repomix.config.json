@@ -1,0 +1,18 @@
+{
+  "input": { "maxFileSize": 262144 },
+  "output": {
+    "filePath": "artifacts/agent-context/context.xml",
+    "style": "xml",
+    "parsableStyle": true,
+    "showLineNumbers": true,
+    "compress": false,
+    "removeComments": false,
+    "git": { "sortByChanges": false, "includeDiffs": false, "includeLogs": false }
+  },
+  "ignore": {
+    "useGitignore": true,
+    "useDefaultPatterns": true,
+    "customPatterns": ["**/.env*", "**/*.private.*", "**/*.pem", "**/*.key", "**/*.pfx", "**/secrets.json", "**/appsettings.*.json", "**/node_modules/**", "**/bin/**", "**/obj/**", "**/.next/**", "**/coverage/**", ".agent-tools/**", "artifacts/**"]
+  },
+  "security": { "enableSecurityCheck": true }
+}

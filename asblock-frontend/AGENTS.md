@@ -83,5 +83,6 @@ Use these current, well-tested paths as canonical architectural examples:
 - Import production modules in tests. Mock `fetch` narrowly (`vi.stubGlobal`) rather than copying wrappers.
 - Add focused tests for behavior changes: happy path, validation/error behavior, auth/session behavior, mutation invalidation, and regression-prone edge cases.
 - Scripts from `asblock-frontend/`: `pnpm run test`, `pnpm run test:watch`, `pnpm run test:coverage`, `pnpm run test:e2e`.
-- Don't Run `pnpm run lint` after code changes - only if really needed; run `pnpm run check` for formatting; run `pnpm run build` when routing, server rendering, configuration, or TypeScript boundaries change.
+- For frontend source changes, run `pnpm run check` (typecheck, lint, and formatting verification); do not run `pnpm run lint` separately unless investigating a lint failure. Run `pnpm run build` when routing, server rendering, configuration, or TypeScript boundaries change.
+- Test risk, not line count. Use focused Vitest files first; reserve Playwright or full suites for browser behavior, shared boundaries, or critical journeys that smaller checks do not cover. Markdown/instruction-only changes need document/skill validation, not application tests/builds.
 - Keep new tests feature-local. If verification cannot run, state precisely what was not verified and why.

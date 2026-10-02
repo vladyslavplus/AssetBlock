@@ -14,3 +14,11 @@ artifacts/
 
 # Local agent-orchestration runs (prompts, diffs, transcripts, state)
 .agentflow/
+
+# Local agent runtimes and client launch paths
+.agent-tools/
+.codex/config.toml
+.cursor/mcp.json
+.serena/cache/
+.serena/logs/
+.serena/memories/
