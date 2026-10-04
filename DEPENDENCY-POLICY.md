@@ -55,6 +55,24 @@ Governance checks fail on **High** and **Critical** vulnerabilities reported by:
 - `dotnet list package --vulnerable --include-transitive` (NuGet)
 - `pnpm audit` for each npm root (repository root tooling, `asblock-frontend/`, and `scripts/agents/`; full graph including devDependencies)
 
+`braces@3.0.3` has no upstream patched release for
+[GHSA-vfj7-8cjw-p6xm](https://github.com/advisories/GHSA-vfj7-8cjw-p6xm).
+Both consuming npm roots apply `patches/braces@3.0.3.patch` through pnpm
+`patchedDependencies`. The patch bounds parser nesting and recursive AST walks
+in compile, expand, and stringify to 64 levels, including direct AST inputs.
+Excessive nesting throws `SyntaxError`; normal glob syntax remains supported.
+The `.patch` file must retain LF line endings so frozen installs use the same hash
+on Windows and Linux.
+
+Raw audit results retain this advisory. `deps:check` treats only this exact npm
+package/version/advisory as locally remediated after checking the shared patch
+hash, both lockfiles and workspace configurations, every braces dependency edge,
+and hashes of the four installed source files resolved by the pinned micromatch
+consumer. Missing, changed, or unpatched evidence fails the check. Other advisories
+(including new braces advisories) still fail at High/Critical. This is a verified
+source remediation, not a vulnerability or license exception. Re-review and remove
+the local patch when an upstream fix becomes available.
+
 ## Tooling (pinned, FOSS)
 
 | Tool | Version / pin | Role |

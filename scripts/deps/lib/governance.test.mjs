@@ -3,6 +3,8 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
+import { createRequire } from "node:module";
+import { BRACES_ADVISORY, verifyBracesRemediation, isVerifiedBracesFinding } from "./braces-remediation.mjs";
 import {
   interpretNpmAuditResult,
   isTransientAuditError,
@@ -19,6 +21,81 @@ import {
   NPM_PROJECT_DIRS,
 } from "./pnpm-lock.mjs";
 import { buildBoundedLineDiff } from "./diff.mjs";
+
+test("braces remediation verifies both installed consumers and preserves glob behavior", async (t) => {
+  const proof = verifyBracesRemediation();
+  assert.equal(proof.projects.length, 2);
+  for (const projectDir of proof.projects) {
+    await t.test(path.basename(projectDir), () => {
+      const require = createRequire(path.join(projectDir, "node_modules/.pnpm/micromatch@4.0.8/node_modules/micromatch/package.json"));
+      const braces = require("braces");
+      const micromatch = require("micromatch");
+      assert.deepEqual(braces.expand("src/{a,b}/{1..3}.ts"), ["src/a/1.ts", "src/a/2.ts", "src/a/3.ts", "src/b/1.ts", "src/b/2.ts", "src/b/3.ts"]);
+      assert.deepEqual(braces.expand("{a,{b,c}}"), ["a", "b", "c"]);
+      assert.equal(braces.stringify(braces.parse("a/{b,c}/d")), "a/{b,c}/d");
+      assert.deepEqual(micromatch(["src/a.ts", "src/b.js", "src/c.py"], "src/*.{js,ts}"), ["src/a.ts", "src/b.js"]);
+      const depthError = { name: "SyntaxError", message: "Brace AST exceeds maximum nesting depth of 64" };
+      for (const method of ["parse", "compile", "expand", "stringify"]) {
+        for (const [open, close] of [["{", "}"], ["(", ")"]]) {
+          assert.throws(() => braces[method](open.repeat(4900) + "a,b" + close.repeat(4900)), depthError);
+        }
+      }
+      for (const method of ["compile", "expand", "stringify"]) {
+        const root = { type: "root", nodes: [] };
+        let current = root;
+        for (let i = 0; i < 5000; i++) {
+          const child = { type: "root", nodes: [], parent: current };
+          current.nodes.push(child);
+          current = child;
+        }
+        assert.throws(() => braces[method](root), depthError);
+        const cyclic = { type: "root", nodes: [] };
+        cyclic.nodes.push(cyclic);
+        assert.throws(() => braces[method](cyclic), depthError);
+      }
+    });
+  }
+});
+
+test("braces remediation fails closed for patch, lock, configuration and installed source drift", (t) => {
+  const original = verifyBracesRemediation().projects[0];
+  const temp = fs.mkdtempSync(path.join(os.tmpdir(), "braces-remediation-"));
+  t.after(() => fs.rmSync(temp, { recursive: true, force: true }));
+  const patchPath = path.join(temp, "braces.patch");
+  fs.copyFileSync(path.resolve(original, "../patches/braces@3.0.3.patch"), patchPath);
+  const lockPath = path.join(temp, "pnpm-lock.yaml");
+  fs.copyFileSync(path.join(original, "pnpm-lock.yaml"), lockPath);
+  const workspacePath = path.join(temp, "pnpm-workspace.yaml");
+  fs.writeFileSync(workspacePath, "patchedDependencies:\n  braces@3.0.3: braces.patch\n");
+  const parentDir = path.join(temp, "node_modules/.pnpm/micromatch@4.0.8/node_modules");
+  fs.mkdirSync(path.join(parentDir, "micromatch"), { recursive: true });
+  fs.writeFileSync(path.join(parentDir, "micromatch/package.json"), '{"name":"micromatch","version":"4.0.8"}');
+  const require = createRequire(path.join(original, "node_modules/.pnpm/micromatch@4.0.8/node_modules/micromatch/package.json"));
+  fs.cpSync(path.dirname(require.resolve("braces/package.json")), path.join(parentDir, "braces"), { recursive: true });
+  const verify = () => verifyBracesRemediation({ projectDirs: [temp], patchPath });
+  assert.equal(verify().verified, true);
+  for (const [file, mutate, error] of [
+    [patchPath, (text) => text + "tampered", /patch hash mismatch/],
+    [lockPath, (text) => text.replaceAll("braces: 3.0.3(patch_hash=", "braces: 3.0.3(unpatched="), /Unverified braces dependency/],
+    [workspacePath, () => "patchedDependencies: {}", /patch configuration/],
+    [path.join(parentDir, "braces/lib/compile.js"), (text) => text.replace("depth > 64", "false"), /Unpatched or modified/],
+  ]) {
+    const before = fs.readFileSync(file, "utf8");
+    fs.writeFileSync(file, mutate(before));
+    assert.throws(verify, error);
+    fs.writeFileSync(file, before);
+  }
+});
+
+test("local braces fix never suppresses other advisories or unverified evidence", () => {
+  const finding = { ecosystem: "npm", name: "braces", version: "3.0.3", advisoryUrl: BRACES_ADVISORY };
+  const proof = verifyBracesRemediation();
+  assert.equal(isVerifiedBracesFinding(finding, proof), true);
+  assert.equal(isVerifiedBracesFinding(finding, { verified: false }), false);
+  for (const change of [{ ecosystem: "nuget" }, { name: "micromatch" }, { version: "3.0.2" }, { advisoryUrl: "https://example.test/new-advisory" }]) {
+    assert.equal(isVerifiedBracesFinding({ ...finding, ...change }, proof), false);
+  }
+});
 
 test("parseNpmAuditJson_WhenHighDevAdvisory_ShouldSurfaceFinding", () => {
   const findings = parseNpmAuditJson(
