@@ -1,0 +1,56 @@
+"""Path allowlisting for fixture and artifact roots."""
+
+from __future__ import annotations
+
+import os
+from pathlib import Path
+
+REPO_ROOT = Path(__file__).resolve().parents[2]
+PILOT_ROOT = Path(__file__).resolve().parent
+FIXTURE_ROOT = PILOT_ROOT / "fixtures"
+CONFIG_ROOT = PILOT_ROOT / "config"
+ARTIFACT_ROOT = REPO_ROOT / "artifacts" / "feasibility_pilot"
+
+
+class PathEscapeError(ValueError):
+    pass
+
+
+def _is_reparse_point(path: Path) -> bool:
+    try:
+        st = path.lstat()
+    except FileNotFoundError:
+        return False
+    if os.path.islink(path):
+        return True
+    # Windows reparse points (symlinks, junctions, mount points).
+    return bool(getattr(st, "st_file_attributes", 0) & 0x400)
+
+
+def ensure_inside(path: Path, *roots: Path) -> Path:
+    resolved = path.resolve()
+    candidates = [root.resolve() for root in roots]
+    if not any(resolved == root or root in resolved.parents for root in candidates):
+        raise PathEscapeError(f"path escapes allowed roots: {path}")
+    for current in [resolved, *resolved.parents]:
+        if current == resolved.anchor or current == Path(resolved.anchor):
+            break
+        if _is_reparse_point(current):
+            raise PathEscapeError(f"reparse point or symlink rejected: {current}")
+        if current in candidates:
+            break
+    return resolved
+
+
+def run_dir(run_id: str) -> Path:
+    if not run_id or any(ch in run_id for ch in r'\/:*?"<>|') or run_id in {".", ".."}:
+        raise PathEscapeError("invalid run id")
+    return ensure_inside(ARTIFACT_ROOT / "runs" / run_id, ARTIFACT_ROOT)
+
+
+def env_dir(name: str) -> Path:
+    return ensure_inside(ARTIFACT_ROOT / "env" / name, ARTIFACT_ROOT)
+
+
+def cache_dir() -> Path:
+    return ensure_inside(ARTIFACT_ROOT / "cache" / "models", ARTIFACT_ROOT)

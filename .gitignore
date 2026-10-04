@@ -2,6 +2,11 @@
 [Oo]bj/
 [Bb]in/
 
+# Python bytecode caches
+__pycache__/
+*.pyc
+*.pyo
+
 # Root tooling (husky / lint-staged)
 node_modules/
 .pnpm-store/

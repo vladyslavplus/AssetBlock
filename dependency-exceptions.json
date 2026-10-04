@@ -113,6 +113,86 @@
       "license": "LGPL-2.1+",
       "reason": "Repomix transitive charset-detection library (LGPL-2.1+); retained for scripts/agents packaging only with notices.",
       "reviewedOn": "2026-10-02"
+    },
+    {
+      "ecosystem": "pypi",
+      "name": "scancode-toolkit",
+      "versions": ["32.5.0"],
+      "license": "Apache-2.0 AND CC-BY-4.0 AND LicenseRef-scancode-other-permissive AND LicenseRef-scancode-other-copyleft",
+      "reason": "Isolated feasibility-pilot license-signal scanner only, installed into artifacts/feasibility_pilot/env/scancode. Not a product, backend, frontend, CI, or application runtime dependency. Software is Apache-2.0; reference datasets are CC-BY-4.0 with NOTICE attribution; PyPI also declares LicenseRef bundled third-party terms. Archive-extraction extras are not installed. Adding pypi to the exception schema does not add pip inventory or pip-audit to pnpm deps:check.",
+      "reviewedOn": "2026-10-04"
+    },
+    {
+      "ecosystem": "pypi",
+      "name": "intbitset",
+      "versions": ["4.1.2"],
+      "license": "LGPL-3.0-or-later",
+      "reason": "Exact resolved copyleft transitive of scancode-toolkit 32.5.0 for the isolated feasibility-pilot scanner prefix only. Dynamic linking stays inside artifacts/feasibility_pilot/env/scancode. Not a product runtime dependency.",
+      "reviewedOn": "2026-10-04"
+    },
+    {
+      "ecosystem": "pypi",
+      "name": "publicsuffix2",
+      "versions": ["2.20191221"],
+      "license": "MIT AND MPL-2.0",
+      "reason": "Exact resolved transitive of scancode-toolkit 32.5.0. Combined MIT AND MPL-2.0 requires an exception for MPL-2.0. Isolated feasibility-pilot scanner prefix only; not a product runtime dependency.",
+      "reviewedOn": "2026-10-04"
+    },
+    {
+      "ecosystem": "pypi",
+      "name": "text-unidecode",
+      "versions": ["1.3"],
+      "license": "Artistic-1.0 OR GPL-2.0-or-later",
+      "reason": "Exact resolved transitive of scancode-toolkit 32.5.0. Dual-licensed; the isolated pilot uses the Artistic alternative recorded in the wheel License field. Isolated scanner prefix only; not a product runtime dependency. GPL is not selected as the operating term.",
+      "reviewedOn": "2026-10-04"
+    },
+    {
+      "ecosystem": "pypi",
+      "name": "certifi",
+      "versions": ["2026.7.22"],
+      "license": "MPL-2.0",
+      "reason": "Isolated feasibility-pilot ScanCode prefix only (artifacts/feasibility_pilot/env/scancode). Reviewed wheel certifi-2026.7.22-py3-none-any.whl lock sha256 62f22742b58a1a33014a2b6b706588a8d7e2a88ae7bd1a6ebe8c992928483775. Distributed METADATA and licenses/LICENSE are MPL-2.0. Not a product, backend, frontend, CI, deployment, or distributable-image dependency. Exact version and wheel only; other versions are not authorized. This recording authorizes further local isolated use; the earlier out-of-scope install was not retroactively approved before this date.",
+      "reviewedOn": "2026-10-04"
+    },
+    {
+      "ecosystem": "pypi",
+      "name": "typing-extensions",
+      "versions": ["4.16.0"],
+      "license": "PSF-2.0",
+      "reason": "Isolated feasibility-pilot ScanCode prefix only. Reviewed wheel typing_extensions-4.16.0-py3-none-any.whl lock sha256 481caa481374e813c1b176ada14e97f1f67a4539ce9cfeb3f350d78d6370c2e8. Distributed License-Expression is PSF-2.0 with dist-info/licenses/LICENSE. Not a product runtime. Exact version and wheel only.",
+      "reviewedOn": "2026-10-04"
+    },
+    {
+      "ecosystem": "pypi",
+      "name": "commoncode",
+      "versions": ["33.0.0"],
+      "license": "Apache-2.0 AND CC-BY-4.0 AND Python-2.0",
+      "reason": "Isolated feasibility-pilot ScanCode prefix only. Reviewed wheel commoncode-33.0.0-py3-none-any.whl lock sha256 2f2d5470d3b9d1000a6a848170683e60d592a8630204b6f6fbab4303d16bd857. Distributed NOTICE is Apache-2.0 AND CC-BY-4.0 (apache-2.0.LICENSE, cc-by-4.0.LICENSE); dict_utils.ABOUT and fileutils.py.ABOUT also require Python-2.0 (python.LICENSE). Empty METADATA License is not treated as Apache-only. Not a product runtime. Exact version and wheel only.",
+      "reviewedOn": "2026-10-04"
+    },
+    {
+      "ecosystem": "pypi",
+      "name": "pyahocorasick",
+      "versions": ["2.3.1"],
+      "license": "BSD-3-Clause AND LicenseRef-public-domain",
+      "reason": "Isolated feasibility-pilot ScanCode prefix only. Reviewed wheel pyahocorasick-2.3.1-cp312-cp312-win_amd64.whl lock sha256 f5cc3c021be241fe9317c5991f8efba2b876e3956691322ad9e55c0d9ff7c599. METADATA License is BSD-3-Clause and Public-Domain; licenses/LICENSE is the BSD-3-Clause text. AND requires both conjuncts. Not a product runtime. Exact version and wheel only.",
+      "reviewedOn": "2026-10-04"
+    },
+    {
+      "ecosystem": "pypi",
+      "name": "extractcode-libarchive",
+      "versions": ["3.5.1.210531"],
+      "license": "Apache-2.0 AND BSD-2-Clause AND LicenseRef-other-permissive AND LicenseRef-other-copyleft",
+      "reason": "Isolated feasibility-pilot ScanCode prefix only; native libarchive plugin. Reviewed wheel extractcode_libarchive-3.5.1.210531-py3-none-win_amd64.whl lock sha256 164d3f6b1127154dacc7f15f05b37fbc775438a6c62a815376eab7095e4a6159. METADATA License is apache-2.0 AND bsd-simplified AND other-permissive AND other-copyleft. Bundled Windows licenses/ disclose GPL-3.0 (gcc-libs COPYING3; xz COPYING.GPLv3; gettext/libiconv/mpfr COPYING), LGPL-2.1 (gcc-libs COPYING.LIB; libiconv COPYING.LIB; xz COPYING.LGPLv2.1; mpfr COPYING.LESSER), GPL-2.0 (xz COPYING.GPLv2), and gmp LGPL. other-copyleft is those GPL/LGPL natives. Do not include this native bundle in a product image, deployment, or distributable package. extractcode-7z is not authorized. Exact version and wheel only.",
+      "reviewedOn": "2026-10-04"
+    },
+    {
+      "ecosystem": "pypi",
+      "name": "typecode-libmagic",
+      "versions": ["5.39.210531"],
+      "license": "Apache-2.0 AND LicenseRef-bsd-simplified-darwin AND BSD-2-Clause AND LicenseRef-public-domain AND BSD-3-Clause AND ISC AND (BSD-3-Clause OR GPL-1.0-or-later) AND BSD-4-Clause AND LicenseRef-other-permissive AND LicenseRef-other-copyleft",
+      "reason": "Isolated feasibility-pilot ScanCode prefix only; native libmagic plugin. Reviewed wheel typecode_libmagic-5.39.210531-py3-none-win_amd64.whl lock sha256 24ceecb5c1249ddbdb6a471a0d35fbc11008cbd3b71cad0966f94ff94918a1fa. METADATA and typecode-libmagic.ABOUT declare the combined expression including BSD-4-Clause and (BSD-3-Clause OR GPL-1.0-or-later); gpl-1.0-plus.LICENSE and libmagic.NOTICE/.ABOUT are distributed. Bundled licenses/ disclose GPL-3.0 (gcc-libs COPYING3; xz COPYING.GPLv3), LGPL-2.1 (COPYING.LIB; xz COPYING.LGPLv2.1), GPL (gettext, libiconv), GPL-2.0 (xz COPYING.GPLv2). other-copyleft is those GPL/LGPL natives. Do not include this native bundle in a product image, deployment, or distributable package. Exact version and wheel only.",
+      "reviewedOn": "2026-10-04"
     }
   ]
 }

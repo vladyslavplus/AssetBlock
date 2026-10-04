@@ -270,6 +270,22 @@ test("validateExceptionEntry_WhenWildcardWithoutFlag_ShouldFail", () => {
   assert.ok(errors.some((error) => error.includes("reviewedOn")));
 });
 
+test("validateExceptionEntry_WhenPypiPinnedEntry_ShouldPass", () => {
+  const errors = validateExceptionEntry(
+    {
+      ecosystem: "pypi",
+      name: "scancode-toolkit",
+      versions: ["32.5.0"],
+      license: "Apache-2.0 AND CC-BY-4.0 AND LicenseRef-scancode-other-permissive AND LicenseRef-scancode-other-copyleft",
+      reason: "Isolated feasibility-pilot license-signal scanner only; not a product runtime.",
+      reviewedOn: "2026-10-04",
+    },
+    0,
+  );
+
+  assert.deepEqual(errors, []);
+});
+
 test("validateExceptionEntry_WhenPinnedValidEntry_ShouldPass", () => {
   const errors = validateExceptionEntry(
     {
@@ -521,6 +537,31 @@ test("evaluatePackages_WhenExceptionWithoutOverrideAndDifferentLicense_ShouldNot
   assert.deepEqual(errors, []);
   assert.equal(packages[0].license, "Apache-2.0");
   assert.equal(packages[0].licenseOverridden, undefined);
+});
+
+test("evaluatePackages_WhenPypiExceptionUnusedByNpmInventory_ShouldNotFail", () => {
+  const errors = evaluatePackages(
+    [
+      {
+        ecosystem: "npm",
+        name: "left-pad",
+        version: "1.3.0",
+        license: "MIT",
+      },
+    ],
+    { allowedLicenses: ["MIT"] },
+    [
+      {
+        ecosystem: "pypi",
+        name: "scancode-toolkit",
+        versions: ["32.5.0"],
+        license: "Apache-2.0 AND CC-BY-4.0 AND LicenseRef-scancode-other-permissive AND LicenseRef-scancode-other-copyleft",
+        reason: "Isolated feasibility-pilot scanner documented in exception schema only.",
+        reviewedOn: "2026-10-04",
+      },
+    ],
+  );
+  assert.deepEqual(errors, []);
 });
 
 test("buildBoundedLineDiff_WhenTextsDiffer_ShouldIncludeChangedLines", () => {

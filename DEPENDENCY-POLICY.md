@@ -21,6 +21,14 @@ SPDX expressions are evaluated as follows:
 - `A OR B` is allowed when at least one alternative is allowed (or excepted).
 - `A AND B` is allowed when every required license is allowed (or excepted).
 
+Exception schema ecosystems are `nuget`, `npm`, and `pypi`. Adding `pypi` to the
+schema does **not** add pip inventory, pip-audit, or SBOM coverage to
+`pnpm deps:check`. Those checks still cover NuGet and npm only. A `pypi`
+exception documents reviewed terms for an isolated install (for example the
+feasibility-pilot ScanCode prefix); it is not product-runtime authorization and
+is not treated as unused merely because pip packages are absent from the npm/NuGet
+inventories.
+
 ## Requires an explicit exception
 
 Document an entry in `dependency-exceptions.json` before adding or retaining:

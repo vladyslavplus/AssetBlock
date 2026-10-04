@@ -6,7 +6,7 @@ export function loadPolicy() {
 }
 
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
-const ECOSYSTEMS = new Set(["nuget", "npm"]);
+const ECOSYSTEMS = new Set(["nuget", "npm", "pypi"]);
 
 export function validateExceptionEntry(entry, index) {
   const prefix = `dependency-exceptions.json exceptions[${index}]`;
@@ -17,7 +17,7 @@ export function validateExceptionEntry(entry, index) {
   }
 
   if (!ECOSYSTEMS.has(entry.ecosystem)) {
-    errors.push(`${prefix}: ecosystem must be nuget|npm`);
+    errors.push(`${prefix}: ecosystem must be nuget|npm|pypi`);
   }
 
   const hasName = typeof entry.name === "string" && entry.name.trim().length > 0;

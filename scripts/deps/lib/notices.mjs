@@ -162,6 +162,11 @@ export function evaluatePackages(packages, policy, exceptions) {
       Boolean(findException([exception], pkg.ecosystem, pkg.name, pkg.version)),
     );
     if (!stillPresent) {
+      if (exception.ecosystem === "pypi") {
+        // pypi is a valid exception schema only. Current deps:check inventories
+        // nuget and npm; it does not scan pip graphs or run pip-audit.
+        continue;
+      }
       errors.push(
         `exception ${key} is unused (package no longer present at a listed version); remove or update dependency-exceptions.json`,
       );

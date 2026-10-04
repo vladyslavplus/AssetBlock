@@ -1,0 +1,4 @@
+scancode-toolkit==32.5.0
+intbitset==4.1.2
+publicsuffix2==2.20191221
+text-unidecode==1.3
