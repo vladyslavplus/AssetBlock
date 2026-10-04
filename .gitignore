@@ -22,3 +22,6 @@ artifacts/
 .serena/cache/
 .serena/logs/
 .serena/memories/
+
+# Local coursework reference documents and plans
+/docs/ignored/
