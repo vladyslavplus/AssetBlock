@@ -1,0 +1,21 @@
+{
+  "modelId": "microsoft/unixcoder-base-nine",
+  "modelRevision": "5f0dc256eb0904af496d427451da5d7f90261676",
+  "modelLocalDir": "artifacts/feasibility_pilot/cache/models/unixcoder-base-nine",
+  "weightFile": "pytorch_model.bin",
+  "weightSha256": "e28385bb916434983692dfdd57f5c78c64f92d4a26614965d1e9d150b4a37145",
+  "loading": {
+    "trustRemoteCode": false,
+    "localFilesOnly": true,
+    "preferSafetensorsIfPresent": true,
+    "binNote": "Upstream publishes pickle weights. First load is hash-pinned official LFS blob; convert to model.safetensors in the artifact cache for later loads."
+  },
+  "retrievalMaxLength": 256,
+  "pairMaxLength": 512,
+  "seed": 42,
+  "temperature": 0.07,
+  "adamWLearningRate": 1e-5,
+  "purpose": "FEASIBILITY",
+  "canAuthorizePublication": false,
+  "securityEvidence": "NOT_RUN"
+}

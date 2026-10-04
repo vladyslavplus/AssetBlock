@@ -20,6 +20,9 @@ overrides:
   sharp@^0.34.0: '>=0.35.4 <0.36.0-0'
   sharp@^0.35.0: '>=0.35.4 <0.36.0-0'
 
+patchedDependencies:
+  braces@3.0.3: 9d9b16d472a54763f75309f1aaf3cfc4a7b8d035b0d40e28173db4f68138821a
+
 importers:
 
   .:
@@ -6245,7 +6248,7 @@ snapshots:
     dependencies:
       balanced-match: 4.0.4
 
-  braces@3.0.3:
+  braces@3.0.3(patch_hash=9d9b16d472a54763f75309f1aaf3cfc4a7b8d035b0d40e28173db4f68138821a):
     dependencies:
       fill-range: 7.1.1
 
@@ -7411,7 +7414,7 @@ snapshots:
 
   micromatch@4.0.8:
     dependencies:
-      braces: 3.0.3
+      braces: 3.0.3(patch_hash=9d9b16d472a54763f75309f1aaf3cfc4a7b8d035b0d40e28173db4f68138821a)
       picomatch: 2.3.2
 
   min-indent@1.0.1: {}

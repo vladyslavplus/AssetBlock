@@ -1,0 +1,93 @@
+#nullable enable
+using System;
+using System.Linq;
+
+public static class SumRange {
+    public static int Total(int[] values) {
+        int Local() {
+            return values.Sum();
+        }
+        return Local();
+    }
+    public static int TotalFn(int[] values) => values.Aggregate(0, (a, b) => a + b);
+}
+    // padding
+    // padding
+    // padding
+    // padding
+    // padding
+    // padding
+    // padding
+    // padding
+    // padding
+    // padding
+    // padding
+    // padding
+    // padding
+    // padding
+    // padding
+    // padding
+    // padding
+    // padding
+    // padding
+    // padding
+    // padding
+    // padding
+    // padding
+    // padding
+    // padding
+    // padding
+    // padding
+    // padding
+    // padding
+    // padding
+    // padding
+    // padding
+    // padding
+    // padding
+    // padding
+    // padding
+    // padding
+    // padding
+    // padding
+    // padding
+    // padding
+    // padding
+    // padding
+    // padding
+    // padding
+    // padding
+    // padding
+    // padding
+    // padding
+    // padding
+    // padding
+    // padding
+    // padding
+    // padding
+    // padding
+    // padding
+    // padding
+    // padding
+    // padding
+    // padding
+    // padding
+    // padding
+    // padding
+    // padding
+    // padding
+    // padding
+    // padding
+    // padding
+    // padding
+    // padding
+    // padding
+    // padding
+    // padding
+    // padding
+    // padding
+    // padding
+    // padding
+    // padding
+    // padding
+    // padding

@@ -1,0 +1,8 @@
+{
+  "name": "feasibility-pilot-dolos",
+  "private": true,
+  "description": "Isolated Dolos prefix; not a product dependency.",
+  "dependencies": {
+    "@dodona/dolos": "2.9.3"
+  }
+}

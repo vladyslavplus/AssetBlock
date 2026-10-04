@@ -1,0 +1,1448 @@
+{
+  "author": "Repository owner",
+  "createdFor": "isolated feasibility pilot",
+  "trainingPolicy": "Only fixtures with trainingAllowed=true and successful VALID_EXTRACTED may enter training.",
+  "code": [
+    {
+      "id": "javascript-base",
+      "relativePath": "code/javascript/sumRange_base.js",
+      "sha256": "e1433a4bfe3bccaaa21ab9b6b298f672c0a8b173b2d1f826d272ed375f3fdf05",
+      "sizeBytes": 254,
+      "newline": "lf",
+      "language": "javascript",
+      "dialect": "javascript",
+      "origin": "Newly authored for this isolated feasibility pilot. Permission granted for analysis and training.",
+      "rights": "Original work of the repository owner; analysis and training allowed for this pilot only.",
+      "sourceFamily": "javascript-sum",
+      "variant": "base",
+      "expectedOutcome": "VALID_EXTRACTED",
+      "expectedFragmentIds": [
+        "sumRange"
+      ],
+      "expectedDiagnostics": [],
+      "expectedOmissions": [],
+      "requiredCase": true,
+      "diagnosticOnly": false,
+      "trainingAllowed": true,
+      "vendorOrGenerated": false,
+      "notes": "Reviewed authored fixture. Shared-origin labels in this smoke experiment are not infringement or a legal conclusion."
+    },
+    {
+      "id": "javascript-copy",
+      "relativePath": "code/javascript/sumRange_copy.js",
+      "sha256": "e1433a4bfe3bccaaa21ab9b6b298f672c0a8b173b2d1f826d272ed375f3fdf05",
+      "sizeBytes": 254,
+      "newline": "lf",
+      "language": "javascript",
+      "dialect": "javascript",
+      "origin": "Newly authored for this isolated feasibility pilot. Permission granted for analysis and training.",
+      "rights": "Original work of the repository owner; analysis and training allowed for this pilot only.",
+      "sourceFamily": "javascript-sum",
+      "variant": "copy",
+      "expectedOutcome": "VALID_EXTRACTED",
+      "expectedFragmentIds": [
+        "sumRange"
+      ],
+      "expectedDiagnostics": [],
+      "expectedOmissions": [],
+      "requiredCase": true,
+      "diagnosticOnly": false,
+      "trainingAllowed": true,
+      "vendorOrGenerated": false,
+      "notes": "Reviewed authored fixture. Shared-origin labels in this smoke experiment are not infringement or a legal conclusion."
+    },
+    {
+      "id": "javascript-rename",
+      "relativePath": "code/javascript/sumRange_rename.js",
+      "sha256": "18aa01f7ca1d4d4702bf538c65f6dab52df7ad9bba16c85f9001fc0770a29511",
+      "sizeBytes": 260,
+      "newline": "lf",
+      "language": "javascript",
+      "dialect": "javascript",
+      "origin": "Newly authored for this isolated feasibility pilot. Permission granted for analysis and training.",
+      "rights": "Original work of the repository owner; analysis and training allowed for this pilot only.",
+      "sourceFamily": "javascript-sum",
+      "variant": "rename",
+      "expectedOutcome": "VALID_EXTRACTED",
+      "expectedFragmentIds": [
+        "accumulate"
+      ],
+      "expectedDiagnostics": [],
+      "expectedOmissions": [],
+      "requiredCase": true,
+      "diagnosticOnly": false,
+      "trainingAllowed": true,
+      "vendorOrGenerated": false,
+      "notes": "Reviewed authored fixture. Shared-origin labels in this smoke experiment are not infringement or a legal conclusion."
+    },
+    {
+      "id": "javascript-structural",
+      "relativePath": "code/javascript/sumRange_structural.js",
+      "sha256": "251fcd8907eb3372f48f207658f457e1a10f7176099431d934cc211ee8062e6c",
+      "sizeBytes": 258,
+      "newline": "lf",
+      "language": "javascript",
+      "dialect": "javascript",
+      "origin": "Newly authored for this isolated feasibility pilot. Permission granted for analysis and training.",
+      "rights": "Original work of the repository owner; analysis and training allowed for this pilot only.",
+      "sourceFamily": "javascript-sum",
+      "variant": "structural",
+      "expectedOutcome": "VALID_EXTRACTED",
+      "expectedFragmentIds": [
+        "sumRange"
+      ],
+      "expectedDiagnostics": [],
+      "expectedOmissions": [],
+      "requiredCase": true,
+      "diagnosticOnly": true,
+      "trainingAllowed": false,
+      "vendorOrGenerated": false,
+      "notes": "Shared-origin structural variation of the sum helper for this smoke experiment; diagnostic example, not an independent negative and not a legal conclusion."
+    },
+    {
+      "id": "javascript-unrelated",
+      "relativePath": "code/javascript/sumRange_unrelated.js",
+      "sha256": "89938ef27bfaf74e2f2f68606f43131ea7015573f11435a7813c7d699910896e",
+      "sizeBytes": 93,
+      "newline": "lf",
+      "language": "javascript",
+      "dialect": "javascript",
+      "origin": "Newly authored for this isolated feasibility pilot. Permission granted for analysis and training.",
+      "rights": "Original work of the repository owner; analysis and training allowed for this pilot only.",
+      "sourceFamily": "javascript-unrelated",
+      "variant": "unrelated",
+      "expectedOutcome": "VALID_EXTRACTED",
+      "expectedFragmentIds": [
+        "parseQuery"
+      ],
+      "expectedDiagnostics": [],
+      "expectedOmissions": [],
+      "requiredCase": true,
+      "diagnosticOnly": false,
+      "trainingAllowed": true,
+      "vendorOrGenerated": false,
+      "notes": "Independently authored unrelated fixture for this smoke experiment; label is not a legal conclusion."
+    },
+    {
+      "id": "javascript-unrelated2",
+      "relativePath": "code/javascript/sumRange_unrelated2.js",
+      "sha256": "6eb1ecef2fb91f75a95d12d702c18cdb8835ddfd9ec754314393fed8431a952f",
+      "sizeBytes": 119,
+      "newline": "lf",
+      "language": "javascript",
+      "dialect": "javascript",
+      "origin": "Independently authored second unrelated fixture for this isolated feasibility pilot. Distinct from the sum helper and the first unrelated fixtures. Permission granted for analysis and training.",
+      "rights": "Original independent work of the repository owner in a separate source family from the sum helper and first unrelated fixtures; analysis and training allowed for this pilot only.",
+      "sourceFamily": "javascript-unrelated2",
+      "variant": "unrelated2",
+      "expectedOutcome": "VALID_EXTRACTED",
+      "expectedFragmentIds": [
+        "formatIsoDate"
+      ],
+      "expectedDiagnostics": [],
+      "expectedOmissions": [],
+      "requiredCase": true,
+      "diagnosticOnly": false,
+      "trainingAllowed": true,
+      "vendorOrGenerated": false,
+      "notes": "Second independently authored unrelated fixture; distinct source family from the sum helper and first unrelated fixture. Smoke label only, not a legal conclusion."
+    },
+    {
+      "id": "javascript-boilerplate",
+      "relativePath": "code/javascript/sumRange_boilerplate.js",
+      "sha256": "233c1336c9db8677d3a928649c2a9d43f53c4a458056afe190b0f2763659172a",
+      "sizeBytes": 121,
+      "newline": "lf",
+      "language": "javascript",
+      "dialect": "javascript",
+      "origin": "Newly authored for this isolated feasibility pilot. Permission granted for analysis and training.",
+      "rights": "Original work of the repository owner; analysis and training allowed for this pilot only.",
+      "sourceFamily": "javascript-sum",
+      "variant": "boilerplate",
+      "expectedOutcome": "VALID_EXTRACTED",
+      "expectedFragmentIds": [
+        "noop"
+      ],
+      "expectedDiagnostics": [],
+      "expectedOmissions": [],
+      "requiredCase": true,
+      "diagnosticOnly": true,
+      "trainingAllowed": false,
+      "vendorOrGenerated": false,
+      "notes": "Reviewed authored fixture. Shared-origin labels in this smoke experiment are not infringement or a legal conclusion."
+    },
+    {
+      "id": "javascript-long",
+      "relativePath": "code/javascript/sumRange_long.js",
+      "sha256": "4d79f68f9e908ce20732e455757e401b0e88d596540ee2238071e7b1c8513333",
+      "sizeBytes": 1454,
+      "newline": "lf",
+      "language": "javascript",
+      "dialect": "javascript",
+      "origin": "Newly authored for this isolated feasibility pilot. Permission granted for analysis and training.",
+      "rights": "Original work of the repository owner; analysis and training allowed for this pilot only.",
+      "sourceFamily": "javascript-sum",
+      "variant": "long",
+      "expectedOutcome": "VALID_EXTRACTED",
+      "expectedFragmentIds": [
+        "sumRange"
+      ],
+      "expectedDiagnostics": [],
+      "expectedOmissions": [],
+      "requiredCase": true,
+      "diagnosticOnly": true,
+      "trainingAllowed": false,
+      "vendorOrGenerated": false,
+      "notes": "Reviewed authored fixture. Shared-origin labels in this smoke experiment are not infringement or a legal conclusion."
+    },
+    {
+      "id": "javascript-modern",
+      "relativePath": "code/javascript/sumRange_modern.js",
+      "sha256": "a7ae5477aa4be2469de466779a7e9906b4e2b01e028c8405e381acf643e3b11f",
+      "sizeBytes": 154,
+      "newline": "lf",
+      "language": "javascript",
+      "dialect": "javascript",
+      "origin": "Newly authored for this isolated feasibility pilot. Permission granted for analysis and training.",
+      "rights": "Original work of the repository owner; analysis and training allowed for this pilot only.",
+      "sourceFamily": "javascript-sum",
+      "variant": "modern",
+      "expectedOutcome": "VALID_EXTRACTED",
+      "expectedFragmentIds": [
+        "Box"
+      ],
+      "expectedDiagnostics": [],
+      "expectedOmissions": [],
+      "requiredCase": true,
+      "diagnosticOnly": true,
+      "trainingAllowed": false,
+      "vendorOrGenerated": false,
+      "notes": "Reviewed authored fixture. Shared-origin labels in this smoke experiment are not infringement or a legal conclusion."
+    },
+    {
+      "id": "javascript-broken",
+      "relativePath": "code/javascript/broken.js",
+      "sha256": "382ef7a200b1dc1e9e387bf280dc1cc5d390e68213b6243672a114eabc88d5c2",
+      "sizeBytes": 107,
+      "newline": "lf",
+      "language": "javascript",
+      "dialect": "javascript",
+      "origin": "Newly authored for this isolated feasibility pilot. Permission granted for analysis and training.",
+      "rights": "Original work of the repository owner; analysis and training allowed for this pilot only.",
+      "sourceFamily": "javascript-broken",
+      "variant": "broken",
+      "expectedOutcome": "INVALID_PARSE",
+      "expectedFragmentIds": [],
+      "expectedDiagnostics": [
+        {
+          "kind": "PARSE_ERROR",
+          "startLine": 3
+        }
+      ],
+      "expectedOmissions": [
+        {
+          "reason": "PARSE_ERROR"
+        }
+      ],
+      "requiredCase": true,
+      "diagnosticOnly": true,
+      "trainingAllowed": false,
+      "vendorOrGenerated": false,
+      "notes": "Intentionally malformed; remains invalid even if diagnostic matches"
+    },
+    {
+      "id": "typescript-base",
+      "relativePath": "code/typescript/sumRange_base.ts",
+      "sha256": "f08e5dbbe23c823d9aaa382821321ef1b0f355b5272afc7515c3bd6ebb908d37",
+      "sizeBytes": 318,
+      "newline": "lf",
+      "language": "typescript",
+      "dialect": "typescript",
+      "origin": "Newly authored for this isolated feasibility pilot. Permission granted for analysis and training.",
+      "rights": "Original work of the repository owner; analysis and training allowed for this pilot only.",
+      "sourceFamily": "typescript-sum",
+      "variant": "base",
+      "expectedOutcome": "VALID_EXTRACTED",
+      "expectedFragmentIds": [
+        "sumRange"
+      ],
+      "expectedDiagnostics": [],
+      "expectedOmissions": [],
+      "requiredCase": true,
+      "diagnosticOnly": false,
+      "trainingAllowed": true,
+      "vendorOrGenerated": false,
+      "notes": "Reviewed authored fixture. Shared-origin labels in this smoke experiment are not infringement or a legal conclusion."
+    },
+    {
+      "id": "typescript-copy",
+      "relativePath": "code/typescript/sumRange_copy.ts",
+      "sha256": "f08e5dbbe23c823d9aaa382821321ef1b0f355b5272afc7515c3bd6ebb908d37",
+      "sizeBytes": 318,
+      "newline": "lf",
+      "language": "typescript",
+      "dialect": "typescript",
+      "origin": "Newly authored for this isolated feasibility pilot. Permission granted for analysis and training.",
+      "rights": "Original work of the repository owner; analysis and training allowed for this pilot only.",
+      "sourceFamily": "typescript-sum",
+      "variant": "copy",
+      "expectedOutcome": "VALID_EXTRACTED",
+      "expectedFragmentIds": [
+        "sumRange"
+      ],
+      "expectedDiagnostics": [],
+      "expectedOmissions": [],
+      "requiredCase": true,
+      "diagnosticOnly": false,
+      "trainingAllowed": true,
+      "vendorOrGenerated": false,
+      "notes": "Reviewed authored fixture. Shared-origin labels in this smoke experiment are not infringement or a legal conclusion."
+    },
+    {
+      "id": "typescript-rename",
+      "relativePath": "code/typescript/sumRange_rename.ts",
+      "sha256": "cf7dfc0223a25b0581d8fda97b5975e072945abd6c5fecd72877f21b9db8cd6e",
+      "sizeBytes": 324,
+      "newline": "lf",
+      "language": "typescript",
+      "dialect": "typescript",
+      "origin": "Newly authored for this isolated feasibility pilot. Permission granted for analysis and training.",
+      "rights": "Original work of the repository owner; analysis and training allowed for this pilot only.",
+      "sourceFamily": "typescript-sum",
+      "variant": "rename",
+      "expectedOutcome": "VALID_EXTRACTED",
+      "expectedFragmentIds": [
+        "accumulate"
+      ],
+      "expectedDiagnostics": [],
+      "expectedOmissions": [],
+      "requiredCase": true,
+      "diagnosticOnly": false,
+      "trainingAllowed": true,
+      "vendorOrGenerated": false,
+      "notes": "Reviewed authored fixture. Shared-origin labels in this smoke experiment are not infringement or a legal conclusion."
+    },
+    {
+      "id": "typescript-structural",
+      "relativePath": "code/typescript/sumRange_structural.ts",
+      "sha256": "e6f6aa21e9014dd02ba9792e76682c908da574bfaed593c626a07f3f09da0fa5",
+      "sizeBytes": 322,
+      "newline": "lf",
+      "language": "typescript",
+      "dialect": "typescript",
+      "origin": "Newly authored for this isolated feasibility pilot. Permission granted for analysis and training.",
+      "rights": "Original work of the repository owner; analysis and training allowed for this pilot only.",
+      "sourceFamily": "typescript-sum",
+      "variant": "structural",
+      "expectedOutcome": "VALID_EXTRACTED",
+      "expectedFragmentIds": [
+        "sumRange"
+      ],
+      "expectedDiagnostics": [],
+      "expectedOmissions": [],
+      "requiredCase": true,
+      "diagnosticOnly": true,
+      "trainingAllowed": false,
+      "vendorOrGenerated": false,
+      "notes": "Shared-origin structural variation of the sum helper for this smoke experiment; diagnostic example, not an independent negative and not a legal conclusion."
+    },
+    {
+      "id": "typescript-unrelated",
+      "relativePath": "code/typescript/sumRange_unrelated.ts",
+      "sha256": "0ecc8166a4c4f54395f83a3b39d33470262d99c01fbf6e7f7e73186d4699347d",
+      "sizeBytes": 125,
+      "newline": "lf",
+      "language": "typescript",
+      "dialect": "typescript",
+      "origin": "Newly authored for this isolated feasibility pilot. Permission granted for analysis and training.",
+      "rights": "Original work of the repository owner; analysis and training allowed for this pilot only.",
+      "sourceFamily": "typescript-unrelated",
+      "variant": "unrelated",
+      "expectedOutcome": "VALID_EXTRACTED",
+      "expectedFragmentIds": [
+        "parseQuery"
+      ],
+      "expectedDiagnostics": [],
+      "expectedOmissions": [],
+      "requiredCase": true,
+      "diagnosticOnly": false,
+      "trainingAllowed": true,
+      "vendorOrGenerated": false,
+      "notes": "Independently authored unrelated fixture for this smoke experiment; label is not a legal conclusion."
+    },
+    {
+      "id": "typescript-unrelated2",
+      "relativePath": "code/typescript/sumRange_unrelated2.ts",
+      "sha256": "7ca369f340fd2d032cd85f31a6f40edb85b1d9eb0ef919e1982be98d380bc30a",
+      "sizeBytes": 114,
+      "newline": "lf",
+      "language": "typescript",
+      "dialect": "typescript",
+      "origin": "Independently authored second unrelated fixture for this isolated feasibility pilot. Distinct from the sum helper and the first unrelated fixtures. Permission granted for analysis and training.",
+      "rights": "Original independent work of the repository owner in a separate source family from the sum helper and first unrelated fixtures; analysis and training allowed for this pilot only.",
+      "sourceFamily": "typescript-unrelated2",
+      "variant": "unrelated2",
+      "expectedOutcome": "VALID_EXTRACTED",
+      "expectedFragmentIds": [
+        "formatIsoDate"
+      ],
+      "expectedDiagnostics": [],
+      "expectedOmissions": [],
+      "requiredCase": true,
+      "diagnosticOnly": false,
+      "trainingAllowed": true,
+      "vendorOrGenerated": false,
+      "notes": "Second independently authored unrelated fixture; distinct source family from the sum helper and first unrelated fixture. Smoke label only, not a legal conclusion."
+    },
+    {
+      "id": "typescript-boilerplate",
+      "relativePath": "code/typescript/sumRange_boilerplate.ts",
+      "sha256": "233c1336c9db8677d3a928649c2a9d43f53c4a458056afe190b0f2763659172a",
+      "sizeBytes": 121,
+      "newline": "lf",
+      "language": "typescript",
+      "dialect": "typescript",
+      "origin": "Newly authored for this isolated feasibility pilot. Permission granted for analysis and training.",
+      "rights": "Original work of the repository owner; analysis and training allowed for this pilot only.",
+      "sourceFamily": "typescript-sum",
+      "variant": "boilerplate",
+      "expectedOutcome": "VALID_EXTRACTED",
+      "expectedFragmentIds": [
+        "noop"
+      ],
+      "expectedDiagnostics": [],
+      "expectedOmissions": [],
+      "requiredCase": true,
+      "diagnosticOnly": true,
+      "trainingAllowed": false,
+      "vendorOrGenerated": false,
+      "notes": "Reviewed authored fixture. Shared-origin labels in this smoke experiment are not infringement or a legal conclusion."
+    },
+    {
+      "id": "typescript-long",
+      "relativePath": "code/typescript/sumRange_long.ts",
+      "sha256": "5ef21d76c2c0f46b568609164c1d52d5e48c40a950cada6996a87f9bf6c8e8ed",
+      "sizeBytes": 1518,
+      "newline": "lf",
+      "language": "typescript",
+      "dialect": "typescript",
+      "origin": "Newly authored for this isolated feasibility pilot. Permission granted for analysis and training.",
+      "rights": "Original work of the repository owner; analysis and training allowed for this pilot only.",
+      "sourceFamily": "typescript-sum",
+      "variant": "long",
+      "expectedOutcome": "VALID_EXTRACTED",
+      "expectedFragmentIds": [
+        "sumRange"
+      ],
+      "expectedDiagnostics": [],
+      "expectedOmissions": [],
+      "requiredCase": true,
+      "diagnosticOnly": true,
+      "trainingAllowed": false,
+      "vendorOrGenerated": false,
+      "notes": "Reviewed authored fixture. Shared-origin labels in this smoke experiment are not infringement or a legal conclusion."
+    },
+    {
+      "id": "typescript-modern",
+      "relativePath": "code/typescript/sumRange_modern.ts",
+      "sha256": "0a0845c9174c7886ad08e1f2f67966ab07b72339ed5758950ece73134f7e5dcd",
+      "sizeBytes": 141,
+      "newline": "lf",
+      "language": "typescript",
+      "dialect": "typescript",
+      "origin": "Newly authored for this isolated feasibility pilot. Permission granted for analysis and training.",
+      "rights": "Original work of the repository owner; analysis and training allowed for this pilot only.",
+      "sourceFamily": "typescript-sum",
+      "variant": "modern",
+      "expectedOutcome": "VALID_EXTRACTED",
+      "expectedFragmentIds": [
+        "wrap"
+      ],
+      "expectedDiagnostics": [],
+      "expectedOmissions": [],
+      "requiredCase": true,
+      "diagnosticOnly": true,
+      "trainingAllowed": false,
+      "vendorOrGenerated": false,
+      "notes": "Reviewed authored fixture. Shared-origin labels in this smoke experiment are not infringement or a legal conclusion."
+    },
+    {
+      "id": "typescript-broken",
+      "relativePath": "code/typescript/broken.ts",
+      "sha256": "08758c87279b6939234f309bfadbee950b71eac2725a5f0992b83e78f586ee63",
+      "sizeBytes": 88,
+      "newline": "lf",
+      "language": "typescript",
+      "dialect": "typescript",
+      "origin": "Newly authored for this isolated feasibility pilot. Permission granted for analysis and training.",
+      "rights": "Original work of the repository owner; analysis and training allowed for this pilot only.",
+      "sourceFamily": "typescript-broken",
+      "variant": "broken",
+      "expectedOutcome": "INVALID_PARSE",
+      "expectedFragmentIds": [],
+      "expectedDiagnostics": [
+        {
+          "kind": "PARSE_ERROR",
+          "startLine": 1
+        }
+      ],
+      "expectedOmissions": [
+        {
+          "reason": "PARSE_ERROR"
+        }
+      ],
+      "requiredCase": true,
+      "diagnosticOnly": true,
+      "trainingAllowed": false,
+      "vendorOrGenerated": false,
+      "notes": "Intentionally malformed; remains invalid even if diagnostic matches"
+    },
+    {
+      "id": "python-base",
+      "relativePath": "code/python/sum_range_base.py",
+      "sha256": "1d89959c98f7c349c6dfe65684c9be7fbe2569c3c36c73361b7e42100ffa805e",
+      "sizeBytes": 461,
+      "newline": "lf",
+      "language": "python",
+      "dialect": "python",
+      "origin": "Newly authored for this isolated feasibility pilot. Permission granted for analysis and training.",
+      "rights": "Original work of the repository owner; analysis and training allowed for this pilot only.",
+      "sourceFamily": "python-sum",
+      "variant": "base",
+      "expectedOutcome": "VALID_EXTRACTED",
+      "expectedFragmentIds": [
+        "sum_range"
+      ],
+      "expectedDiagnostics": [],
+      "expectedOmissions": [],
+      "requiredCase": true,
+      "diagnosticOnly": false,
+      "trainingAllowed": true,
+      "vendorOrGenerated": false,
+      "notes": "Reviewed authored fixture. Shared-origin labels in this smoke experiment are not infringement or a legal conclusion."
+    },
+    {
+      "id": "python-copy",
+      "relativePath": "code/python/sum_range_copy.py",
+      "sha256": "1d89959c98f7c349c6dfe65684c9be7fbe2569c3c36c73361b7e42100ffa805e",
+      "sizeBytes": 461,
+      "newline": "lf",
+      "language": "python",
+      "dialect": "python",
+      "origin": "Newly authored for this isolated feasibility pilot. Permission granted for analysis and training.",
+      "rights": "Original work of the repository owner; analysis and training allowed for this pilot only.",
+      "sourceFamily": "python-sum",
+      "variant": "copy",
+      "expectedOutcome": "VALID_EXTRACTED",
+      "expectedFragmentIds": [
+        "sum_range"
+      ],
+      "expectedDiagnostics": [],
+      "expectedOmissions": [],
+      "requiredCase": true,
+      "diagnosticOnly": false,
+      "trainingAllowed": true,
+      "vendorOrGenerated": false,
+      "notes": "Reviewed authored fixture. Shared-origin labels in this smoke experiment are not infringement or a legal conclusion."
+    },
+    {
+      "id": "python-rename",
+      "relativePath": "code/python/sum_range_rename.py",
+      "sha256": "da22c108fa2c636c1d78b8e761e6142ac513e0d701bbcb0bd1405c6c549dde35",
+      "sizeBytes": 489,
+      "newline": "lf",
+      "language": "python",
+      "dialect": "python",
+      "origin": "Newly authored for this isolated feasibility pilot. Permission granted for analysis and training.",
+      "rights": "Original work of the repository owner; analysis and training allowed for this pilot only.",
+      "sourceFamily": "python-sum",
+      "variant": "rename",
+      "expectedOutcome": "VALID_EXTRACTED",
+      "expectedFragmentIds": [
+        "accumulate_range"
+      ],
+      "expectedDiagnostics": [],
+      "expectedOmissions": [],
+      "requiredCase": true,
+      "diagnosticOnly": false,
+      "trainingAllowed": true,
+      "vendorOrGenerated": false,
+      "notes": "Reviewed authored fixture. Shared-origin labels in this smoke experiment are not infringement or a legal conclusion."
+    },
+    {
+      "id": "python-structural",
+      "relativePath": "code/python/sum_range_structural.py",
+      "sha256": "c4c5c5b516b241954c6cb208219e9fdde5c6694a69e7008efcb3c530c997119a",
+      "sizeBytes": 465,
+      "newline": "lf",
+      "language": "python",
+      "dialect": "python",
+      "origin": "Newly authored for this isolated feasibility pilot. Permission granted for analysis and training.",
+      "rights": "Original work of the repository owner; analysis and training allowed for this pilot only.",
+      "sourceFamily": "python-sum",
+      "variant": "structural",
+      "expectedOutcome": "VALID_EXTRACTED",
+      "expectedFragmentIds": [
+        "sum_range"
+      ],
+      "expectedDiagnostics": [],
+      "expectedOmissions": [],
+      "requiredCase": true,
+      "diagnosticOnly": true,
+      "trainingAllowed": false,
+      "vendorOrGenerated": false,
+      "notes": "Shared-origin structural variation of the sum helper for this smoke experiment; diagnostic example, not an independent negative and not a legal conclusion."
+    },
+    {
+      "id": "python-unrelated",
+      "relativePath": "code/python/sum_range_unrelated.py",
+      "sha256": "dd3c3522578ee1af8b5dd76f89171c52decee749269b13d25025f4ba793f87c2",
+      "sizeBytes": 84,
+      "newline": "lf",
+      "language": "python",
+      "dialect": "python",
+      "origin": "Newly authored for this isolated feasibility pilot. Permission granted for analysis and training.",
+      "rights": "Original work of the repository owner; analysis and training allowed for this pilot only.",
+      "sourceFamily": "python-unrelated",
+      "variant": "unrelated",
+      "expectedOutcome": "VALID_EXTRACTED",
+      "expectedFragmentIds": [
+        "parse_query"
+      ],
+      "expectedDiagnostics": [],
+      "expectedOmissions": [],
+      "requiredCase": true,
+      "diagnosticOnly": false,
+      "trainingAllowed": true,
+      "vendorOrGenerated": false,
+      "notes": "Independently authored unrelated fixture for this smoke experiment; label is not a legal conclusion."
+    },
+    {
+      "id": "python-unrelated2",
+      "relativePath": "code/python/sum_range_unrelated2.py",
+      "sha256": "8ae4d08f7dcd336e467c1c393604355c1878a31b02c9c78a81a6f71117300896",
+      "sizeBytes": 161,
+      "newline": "lf",
+      "language": "python",
+      "dialect": "python",
+      "origin": "Independently authored second unrelated fixture for this isolated feasibility pilot. Distinct from the sum helper and the first unrelated fixtures. Permission granted for analysis and training.",
+      "rights": "Original independent work of the repository owner in a separate source family from the sum helper and first unrelated fixtures; analysis and training allowed for this pilot only.",
+      "sourceFamily": "python-unrelated2",
+      "variant": "unrelated2",
+      "expectedOutcome": "VALID_EXTRACTED",
+      "expectedFragmentIds": [
+        "format_iso_date"
+      ],
+      "expectedDiagnostics": [],
+      "expectedOmissions": [],
+      "requiredCase": true,
+      "diagnosticOnly": false,
+      "trainingAllowed": true,
+      "vendorOrGenerated": false,
+      "notes": "Second independently authored unrelated fixture; distinct source family from the sum helper and first unrelated fixture. Smoke label only, not a legal conclusion."
+    },
+    {
+      "id": "python-boilerplate",
+      "relativePath": "code/python/sum_range_boilerplate.py",
+      "sha256": "8bffca067d5469e9c23082021fb2c96cd447309d40887858c2795da5daf6023e",
+      "sizeBytes": 76,
+      "newline": "lf",
+      "language": "python",
+      "dialect": "python",
+      "origin": "Newly authored for this isolated feasibility pilot. Permission granted for analysis and training.",
+      "rights": "Original work of the repository owner; analysis and training allowed for this pilot only.",
+      "sourceFamily": "python-sum",
+      "variant": "boilerplate",
+      "expectedOutcome": "VALID_EXTRACTED",
+      "expectedFragmentIds": [
+        "noop"
+      ],
+      "expectedDiagnostics": [],
+      "expectedOmissions": [],
+      "requiredCase": true,
+      "diagnosticOnly": true,
+      "trainingAllowed": false,
+      "vendorOrGenerated": false,
+      "notes": "Reviewed authored fixture. Shared-origin labels in this smoke experiment are not infringement or a legal conclusion."
+    },
+    {
+      "id": "python-long",
+      "relativePath": "code/python/sum_range_long.py",
+      "sha256": "d504f3a5aa7570228bce16a54a98d23e642865d08eeca3361a0a41e5da906e77",
+      "sizeBytes": 1261,
+      "newline": "lf",
+      "language": "python",
+      "dialect": "python",
+      "origin": "Newly authored for this isolated feasibility pilot. Permission granted for analysis and training.",
+      "rights": "Original work of the repository owner; analysis and training allowed for this pilot only.",
+      "sourceFamily": "python-sum",
+      "variant": "long",
+      "expectedOutcome": "VALID_EXTRACTED",
+      "expectedFragmentIds": [
+        "sum_range"
+      ],
+      "expectedDiagnostics": [],
+      "expectedOmissions": [],
+      "requiredCase": true,
+      "diagnosticOnly": true,
+      "trainingAllowed": false,
+      "vendorOrGenerated": false,
+      "notes": "Reviewed authored fixture. Shared-origin labels in this smoke experiment are not infringement or a legal conclusion."
+    },
+    {
+      "id": "python-modern",
+      "relativePath": "code/python/sum_range_modern.py",
+      "sha256": "31322c84540b866b3899df5e70c8f4819d3608387cba14f90e250c2e6fec9ec0",
+      "sizeBytes": 137,
+      "newline": "lf",
+      "language": "python",
+      "dialect": "python",
+      "origin": "Newly authored for this isolated feasibility pilot. Permission granted for analysis and training.",
+      "rights": "Original work of the repository owner; analysis and training allowed for this pilot only.",
+      "sourceFamily": "python-sum",
+      "variant": "modern",
+      "expectedOutcome": "VALID_EXTRACTED",
+      "expectedFragmentIds": [
+        "match_status"
+      ],
+      "expectedDiagnostics": [],
+      "expectedOmissions": [],
+      "requiredCase": true,
+      "diagnosticOnly": true,
+      "trainingAllowed": false,
+      "vendorOrGenerated": false,
+      "notes": "Reviewed authored fixture. Shared-origin labels in this smoke experiment are not infringement or a legal conclusion."
+    },
+    {
+      "id": "python-broken",
+      "relativePath": "code/python/broken.py",
+      "sha256": "956de8954d2cb86208d563c373b4ea31f3a0e92ea9312cd7f0309c212b03777f",
+      "sizeBytes": 98,
+      "newline": "lf",
+      "language": "python",
+      "dialect": "python",
+      "origin": "Newly authored for this isolated feasibility pilot. Permission granted for analysis and training.",
+      "rights": "Original work of the repository owner; analysis and training allowed for this pilot only.",
+      "sourceFamily": "python-broken",
+      "variant": "broken",
+      "expectedOutcome": "INVALID_PARSE",
+      "expectedFragmentIds": [],
+      "expectedDiagnostics": [
+        {
+          "kind": "PARSE_ERROR",
+          "startLine": 3
+        }
+      ],
+      "expectedOmissions": [
+        {
+          "reason": "PARSE_ERROR"
+        }
+      ],
+      "requiredCase": true,
+      "diagnosticOnly": true,
+      "trainingAllowed": false,
+      "vendorOrGenerated": false,
+      "notes": "Intentionally malformed; remains invalid even if diagnostic matches"
+    },
+    {
+      "id": "java-base",
+      "relativePath": "code/java/SumRange.java",
+      "sha256": "ab71905818a638263b723ff1031edfcb614581d0e02cb73e3748d321bd56dcd6",
+      "sizeBytes": 379,
+      "newline": "lf",
+      "language": "java",
+      "dialect": "java",
+      "origin": "Newly authored for this isolated feasibility pilot. Permission granted for analysis and training.",
+      "rights": "Original work of the repository owner; analysis and training allowed for this pilot only.",
+      "sourceFamily": "java-sum",
+      "variant": "base",
+      "expectedOutcome": "VALID_EXTRACTED",
+      "expectedFragmentIds": [
+        "SumRange"
+      ],
+      "expectedDiagnostics": [],
+      "expectedOmissions": [],
+      "requiredCase": true,
+      "diagnosticOnly": false,
+      "trainingAllowed": true,
+      "vendorOrGenerated": false,
+      "notes": "Reviewed authored fixture. Shared-origin labels in this smoke experiment are not infringement or a legal conclusion."
+    },
+    {
+      "id": "java-copy",
+      "relativePath": "code/java/SumRangeCopy.java",
+      "sha256": "03d710920c1668e171ed09f22c47f7982066e1761e751f73a193bdf10b0844e3",
+      "sizeBytes": 383,
+      "newline": "lf",
+      "language": "java",
+      "dialect": "java",
+      "origin": "Newly authored for this isolated feasibility pilot. Permission granted for analysis and training.",
+      "rights": "Original work of the repository owner; analysis and training allowed for this pilot only.",
+      "sourceFamily": "java-sum",
+      "variant": "copy",
+      "expectedOutcome": "VALID_EXTRACTED",
+      "expectedFragmentIds": [
+        "SumRangeCopy"
+      ],
+      "expectedDiagnostics": [],
+      "expectedOmissions": [],
+      "requiredCase": true,
+      "diagnosticOnly": false,
+      "trainingAllowed": true,
+      "vendorOrGenerated": false,
+      "notes": "Reviewed authored fixture. Shared-origin labels in this smoke experiment are not infringement or a legal conclusion."
+    },
+    {
+      "id": "java-rename",
+      "relativePath": "code/java/Accumulate_rename.java",
+      "sha256": "86e456723d32c38659d95240be72d082835bf72b4a75e73a392a5bd7e8a9b59c",
+      "sizeBytes": 383,
+      "newline": "lf",
+      "language": "java",
+      "dialect": "java",
+      "origin": "Newly authored for this isolated feasibility pilot. Permission granted for analysis and training.",
+      "rights": "Original work of the repository owner; analysis and training allowed for this pilot only.",
+      "sourceFamily": "java-sum",
+      "variant": "rename",
+      "expectedOutcome": "VALID_EXTRACTED",
+      "expectedFragmentIds": [
+        "Accumulate"
+      ],
+      "expectedDiagnostics": [],
+      "expectedOmissions": [],
+      "requiredCase": true,
+      "diagnosticOnly": false,
+      "trainingAllowed": true,
+      "vendorOrGenerated": false,
+      "notes": "Reviewed authored fixture. Shared-origin labels in this smoke experiment are not infringement or a legal conclusion."
+    },
+    {
+      "id": "java-structural",
+      "relativePath": "code/java/SumRange_structural.java",
+      "sha256": "973a328525472ea9b137c01ea50192d2374d1664703f7c3f935b94a6e7dc42fe",
+      "sizeBytes": 383,
+      "newline": "lf",
+      "language": "java",
+      "dialect": "java",
+      "origin": "Newly authored for this isolated feasibility pilot. Permission granted for analysis and training.",
+      "rights": "Original work of the repository owner; analysis and training allowed for this pilot only.",
+      "sourceFamily": "java-sum",
+      "variant": "structural",
+      "expectedOutcome": "VALID_EXTRACTED",
+      "expectedFragmentIds": [
+        "SumRange"
+      ],
+      "expectedDiagnostics": [],
+      "expectedOmissions": [],
+      "requiredCase": true,
+      "diagnosticOnly": true,
+      "trainingAllowed": false,
+      "vendorOrGenerated": false,
+      "notes": "Shared-origin structural variation of the sum helper for this smoke experiment; diagnostic example, not an independent negative and not a legal conclusion."
+    },
+    {
+      "id": "java-unrelated",
+      "relativePath": "code/java/WidgetFactory.java",
+      "sha256": "d7d895ec13d2f740a9adff607a9a3d826b88a3a8c5d0637190b0b23159d11c65",
+      "sizeBytes": 127,
+      "newline": "lf",
+      "language": "java",
+      "dialect": "java",
+      "origin": "Newly authored for this isolated feasibility pilot. Permission granted for analysis and training.",
+      "rights": "Original work of the repository owner; analysis and training allowed for this pilot only.",
+      "sourceFamily": "java-unrelated",
+      "variant": "unrelated",
+      "expectedOutcome": "VALID_EXTRACTED",
+      "expectedFragmentIds": [
+        "WidgetFactory"
+      ],
+      "expectedDiagnostics": [],
+      "expectedOmissions": [],
+      "requiredCase": true,
+      "diagnosticOnly": false,
+      "trainingAllowed": true,
+      "vendorOrGenerated": false,
+      "notes": "Independently authored unrelated fixture for this smoke experiment; label is not a legal conclusion."
+    },
+    {
+      "id": "java-unrelated2",
+      "relativePath": "code/java/LedgerHasher.java",
+      "sha256": "af0f85b3b42fe5c6b69737aadd6fd8cade5a7e032541dc3799c95fb5e0741ed0",
+      "sizeBytes": 176,
+      "newline": "lf",
+      "language": "java",
+      "dialect": "java",
+      "origin": "Independently authored second unrelated fixture for this isolated feasibility pilot. Distinct from the sum helper and the first unrelated fixtures. Permission granted for analysis and training.",
+      "rights": "Original independent work of the repository owner in a separate source family from the sum helper and first unrelated fixtures; analysis and training allowed for this pilot only.",
+      "sourceFamily": "java-unrelated2",
+      "variant": "unrelated2",
+      "expectedOutcome": "VALID_EXTRACTED",
+      "expectedFragmentIds": [
+        "LedgerHasher"
+      ],
+      "expectedDiagnostics": [],
+      "expectedOmissions": [],
+      "requiredCase": true,
+      "diagnosticOnly": false,
+      "trainingAllowed": true,
+      "vendorOrGenerated": false,
+      "notes": "Second independently authored unrelated fixture; distinct source family from the sum helper and first unrelated fixture. Smoke label only, not a legal conclusion."
+    },
+    {
+      "id": "java-boilerplate",
+      "relativePath": "code/java/LicenseHeaderDemo.java",
+      "sha256": "d8e5d3b7ddd276baf31c2cff4f56ca0cb283d430c5bf62a20e90e1979f975c4e",
+      "sizeBytes": 86,
+      "newline": "lf",
+      "language": "java",
+      "dialect": "java",
+      "origin": "Newly authored for this isolated feasibility pilot. Permission granted for analysis and training.",
+      "rights": "Original work of the repository owner; analysis and training allowed for this pilot only.",
+      "sourceFamily": "java-sum",
+      "variant": "boilerplate",
+      "expectedOutcome": "VALID_EXTRACTED",
+      "expectedFragmentIds": [
+        "LicenseHeaderDemo"
+      ],
+      "expectedDiagnostics": [],
+      "expectedOmissions": [],
+      "requiredCase": true,
+      "diagnosticOnly": true,
+      "trainingAllowed": false,
+      "vendorOrGenerated": false,
+      "notes": "Reviewed authored fixture. Shared-origin labels in this smoke experiment are not infringement or a legal conclusion."
+    },
+    {
+      "id": "java-long",
+      "relativePath": "code/java/SumRange_long.java",
+      "sha256": "376db63356ee17a88818801dc57c5292be110fd9b9b64d585e7d9688ecdfb96f",
+      "sizeBytes": 1579,
+      "newline": "lf",
+      "language": "java",
+      "dialect": "java",
+      "origin": "Newly authored for this isolated feasibility pilot. Permission granted for analysis and training.",
+      "rights": "Original work of the repository owner; analysis and training allowed for this pilot only.",
+      "sourceFamily": "java-sum",
+      "variant": "long",
+      "expectedOutcome": "VALID_EXTRACTED",
+      "expectedFragmentIds": [
+        "SumRange"
+      ],
+      "expectedDiagnostics": [],
+      "expectedOmissions": [],
+      "requiredCase": true,
+      "diagnosticOnly": true,
+      "trainingAllowed": false,
+      "vendorOrGenerated": false,
+      "notes": "Reviewed authored fixture. Shared-origin labels in this smoke experiment are not infringement or a legal conclusion."
+    },
+    {
+      "id": "java-modern",
+      "relativePath": "code/java/PointRecord.java",
+      "sha256": "d8565ada1eb789b1a1eef227bcaa8e0c23f0348fe817d402a95b874e14abfbeb",
+      "sizeBytes": 122,
+      "newline": "lf",
+      "language": "java",
+      "dialect": "java",
+      "origin": "Newly authored for this isolated feasibility pilot. Permission granted for analysis and training.",
+      "rights": "Original work of the repository owner; analysis and training allowed for this pilot only.",
+      "sourceFamily": "java-sum",
+      "variant": "modern",
+      "expectedOutcome": "VALID_EXTRACTED",
+      "expectedFragmentIds": [
+        "PointRecord"
+      ],
+      "expectedDiagnostics": [],
+      "expectedOmissions": [],
+      "requiredCase": true,
+      "diagnosticOnly": true,
+      "trainingAllowed": false,
+      "vendorOrGenerated": false,
+      "notes": "Reviewed authored fixture. Shared-origin labels in this smoke experiment are not infringement or a legal conclusion."
+    },
+    {
+      "id": "java-broken",
+      "relativePath": "code/java/broken.java",
+      "sha256": "8718d9d187dc0e341ee46df12c35eac09ed6607bd148f9b7074e95b0074e7f20",
+      "sizeBytes": 196,
+      "newline": "lf",
+      "language": "java",
+      "dialect": "java",
+      "origin": "Newly authored for this isolated feasibility pilot. Permission granted for analysis and training.",
+      "rights": "Original work of the repository owner; analysis and training allowed for this pilot only.",
+      "sourceFamily": "java-broken",
+      "variant": "broken",
+      "expectedOutcome": "INVALID_PARSE",
+      "expectedFragmentIds": [],
+      "expectedDiagnostics": [
+        {
+          "kind": "PARSE_ERROR",
+          "startLine": 5
+        }
+      ],
+      "expectedOmissions": [
+        {
+          "reason": "PARSE_ERROR"
+        }
+      ],
+      "requiredCase": true,
+      "diagnosticOnly": true,
+      "trainingAllowed": false,
+      "vendorOrGenerated": false,
+      "notes": "Intentionally malformed; remains invalid even if diagnostic matches"
+    },
+    {
+      "id": "csharp-base",
+      "relativePath": "code/csharp/SumRange_base.cs",
+      "sha256": "d72262dffffac1c10cbbf7f920b7d732f4e86f142d3eae228d36c57f011e5167",
+      "sizeBytes": 321,
+      "newline": "crlf",
+      "language": "csharp",
+      "dialect": "csharp",
+      "origin": "Newly authored for this isolated feasibility pilot. Permission granted for analysis and training.",
+      "rights": "Original work of the repository owner; analysis and training allowed for this pilot only.",
+      "sourceFamily": "csharp-sum",
+      "variant": "base",
+      "expectedOutcome": "VALID_EXTRACTED",
+      "expectedFragmentIds": [
+        "SumRange"
+      ],
+      "expectedDiagnostics": [],
+      "expectedOmissions": [],
+      "requiredCase": true,
+      "diagnosticOnly": false,
+      "trainingAllowed": true,
+      "vendorOrGenerated": false,
+      "notes": "Reviewed authored fixture. Shared-origin labels in this smoke experiment are not infringement or a legal conclusion."
+    },
+    {
+      "id": "csharp-copy",
+      "relativePath": "code/csharp/SumRange_copy.cs",
+      "sha256": "d72262dffffac1c10cbbf7f920b7d732f4e86f142d3eae228d36c57f011e5167",
+      "sizeBytes": 321,
+      "newline": "crlf",
+      "language": "csharp",
+      "dialect": "csharp",
+      "origin": "Newly authored for this isolated feasibility pilot. Permission granted for analysis and training.",
+      "rights": "Original work of the repository owner; analysis and training allowed for this pilot only.",
+      "sourceFamily": "csharp-sum",
+      "variant": "copy",
+      "expectedOutcome": "VALID_EXTRACTED",
+      "expectedFragmentIds": [
+        "SumRange"
+      ],
+      "expectedDiagnostics": [],
+      "expectedOmissions": [],
+      "requiredCase": true,
+      "diagnosticOnly": false,
+      "trainingAllowed": true,
+      "vendorOrGenerated": false,
+      "notes": "Reviewed authored fixture. Shared-origin labels in this smoke experiment are not infringement or a legal conclusion."
+    },
+    {
+      "id": "csharp-rename",
+      "relativePath": "code/csharp/SumRange_rename.cs",
+      "sha256": "cf3d0141430f33bd7b61a77df43ee191ebbfd0f0e964d2634363fcf93b06dfdf",
+      "sizeBytes": 323,
+      "newline": "crlf",
+      "language": "csharp",
+      "dialect": "csharp",
+      "origin": "Newly authored for this isolated feasibility pilot. Permission granted for analysis and training.",
+      "rights": "Original work of the repository owner; analysis and training allowed for this pilot only.",
+      "sourceFamily": "csharp-sum",
+      "variant": "rename",
+      "expectedOutcome": "VALID_EXTRACTED",
+      "expectedFragmentIds": [
+        "Accumulate"
+      ],
+      "expectedDiagnostics": [],
+      "expectedOmissions": [],
+      "requiredCase": true,
+      "diagnosticOnly": false,
+      "trainingAllowed": true,
+      "vendorOrGenerated": false,
+      "notes": "Reviewed authored fixture. Shared-origin labels in this smoke experiment are not infringement or a legal conclusion."
+    },
+    {
+      "id": "csharp-structural",
+      "relativePath": "code/csharp/SumRange_structural.cs",
+      "sha256": "a8de036c915b63eca4aa231501770128bd89602dbb2f8dcf315f91cedd78c2d0",
+      "sizeBytes": 325,
+      "newline": "crlf",
+      "language": "csharp",
+      "dialect": "csharp",
+      "origin": "Newly authored for this isolated feasibility pilot. Permission granted for analysis and training.",
+      "rights": "Original work of the repository owner; analysis and training allowed for this pilot only.",
+      "sourceFamily": "csharp-sum",
+      "variant": "structural",
+      "expectedOutcome": "VALID_EXTRACTED",
+      "expectedFragmentIds": [
+        "SumRange"
+      ],
+      "expectedDiagnostics": [],
+      "expectedOmissions": [],
+      "requiredCase": true,
+      "diagnosticOnly": true,
+      "trainingAllowed": false,
+      "vendorOrGenerated": false,
+      "notes": "Shared-origin structural variation of the sum helper for this smoke experiment; diagnostic example, not an independent negative and not a legal conclusion."
+    },
+    {
+      "id": "csharp-unrelated",
+      "relativePath": "code/csharp/SumRange_unrelated.cs",
+      "sha256": "0563b531f4b8dee7984641ed156421b50e55aeb99eade67325492ef16f541d58",
+      "sizeBytes": 99,
+      "newline": "crlf",
+      "language": "csharp",
+      "dialect": "csharp",
+      "origin": "Newly authored for this isolated feasibility pilot. Permission granted for analysis and training.",
+      "rights": "Original work of the repository owner; analysis and training allowed for this pilot only.",
+      "sourceFamily": "csharp-unrelated",
+      "variant": "unrelated",
+      "expectedOutcome": "VALID_EXTRACTED",
+      "expectedFragmentIds": [
+        "WidgetFactory"
+      ],
+      "expectedDiagnostics": [],
+      "expectedOmissions": [],
+      "requiredCase": true,
+      "diagnosticOnly": false,
+      "trainingAllowed": true,
+      "vendorOrGenerated": false,
+      "notes": "Independently authored unrelated fixture for this smoke experiment; label is not a legal conclusion."
+    },
+    {
+      "id": "csharp-unrelated2",
+      "relativePath": "code/csharp/SumRange_unrelated2.cs",
+      "sha256": "d0aebdca653baa1b77e4766b1c871216c80c9eadfd3ff2e3d26310c813809191",
+      "sizeBytes": 146,
+      "newline": "crlf",
+      "language": "csharp",
+      "dialect": "csharp",
+      "origin": "Independently authored second unrelated fixture for this isolated feasibility pilot. Distinct from the sum helper and the first unrelated fixtures. Permission granted for analysis and training.",
+      "rights": "Original independent work of the repository owner in a separate source family from the sum helper and first unrelated fixtures; analysis and training allowed for this pilot only.",
+      "sourceFamily": "csharp-unrelated2",
+      "variant": "unrelated2",
+      "expectedOutcome": "VALID_EXTRACTED",
+      "expectedFragmentIds": [
+        "LedgerHasher"
+      ],
+      "expectedDiagnostics": [],
+      "expectedOmissions": [],
+      "requiredCase": true,
+      "diagnosticOnly": false,
+      "trainingAllowed": true,
+      "vendorOrGenerated": false,
+      "notes": "Second independently authored unrelated fixture; distinct source family from the sum helper and first unrelated fixture. Smoke label only, not a legal conclusion."
+    },
+    {
+      "id": "csharp-boilerplate",
+      "relativePath": "code/csharp/SumRange_boilerplate.cs",
+      "sha256": "74bcb84f05fd343e09cfcb4b4433227fd0bd175ece3ca41491f0c7cd969953bd",
+      "sizeBytes": 155,
+      "newline": "crlf",
+      "language": "csharp",
+      "dialect": "csharp",
+      "origin": "Newly authored for this isolated feasibility pilot. Permission granted for analysis and training.",
+      "rights": "Original work of the repository owner; analysis and training allowed for this pilot only.",
+      "sourceFamily": "csharp-sum",
+      "variant": "boilerplate",
+      "expectedOutcome": "VALID_EXTRACTED",
+      "expectedFragmentIds": [
+        "LicenseHeaderDemo"
+      ],
+      "expectedDiagnostics": [],
+      "expectedOmissions": [],
+      "requiredCase": true,
+      "diagnosticOnly": true,
+      "trainingAllowed": false,
+      "vendorOrGenerated": false,
+      "notes": "Reviewed authored fixture. Shared-origin labels in this smoke experiment are not infringement or a legal conclusion."
+    },
+    {
+      "id": "csharp-long",
+      "relativePath": "code/csharp/SumRange_long.cs",
+      "sha256": "c4a0ce7d5fe099ab4798db09ea4cfe7278f90111ab0cdc95d0be8b6aa02267a1",
+      "sizeBytes": 1601,
+      "newline": "crlf",
+      "language": "csharp",
+      "dialect": "csharp",
+      "origin": "Newly authored for this isolated feasibility pilot. Permission granted for analysis and training.",
+      "rights": "Original work of the repository owner; analysis and training allowed for this pilot only.",
+      "sourceFamily": "csharp-sum",
+      "variant": "long",
+      "expectedOutcome": "VALID_EXTRACTED",
+      "expectedFragmentIds": [
+        "SumRange"
+      ],
+      "expectedDiagnostics": [],
+      "expectedOmissions": [],
+      "requiredCase": true,
+      "diagnosticOnly": true,
+      "trainingAllowed": false,
+      "vendorOrGenerated": false,
+      "notes": "Reviewed authored fixture. Shared-origin labels in this smoke experiment are not infringement or a legal conclusion."
+    },
+    {
+      "id": "csharp-modern",
+      "relativePath": "code/csharp/SumRange_modern.cs",
+      "sha256": "6fe4c655a61539e51b42792435480df02e39256f005fe147bbd9afb5624a54a2",
+      "sizeBytes": 151,
+      "newline": "crlf",
+      "language": "csharp",
+      "dialect": "csharp",
+      "origin": "Newly authored for this isolated feasibility pilot. Permission granted for analysis and training.",
+      "rights": "Original work of the repository owner; analysis and training allowed for this pilot only.",
+      "sourceFamily": "csharp-sum",
+      "variant": "modern",
+      "expectedOutcome": "VALID_EXTRACTED",
+      "expectedFragmentIds": [
+        "PointOps"
+      ],
+      "expectedDiagnostics": [],
+      "expectedOmissions": [],
+      "requiredCase": true,
+      "diagnosticOnly": true,
+      "trainingAllowed": false,
+      "vendorOrGenerated": false,
+      "notes": "Reviewed authored fixture. Shared-origin labels in this smoke experiment are not infringement or a legal conclusion."
+    },
+    {
+      "id": "csharp-broken",
+      "relativePath": "code/csharp/broken.cs",
+      "sha256": "5043e51aa127d7f3f04568559c1be0e296b62c118b62f5a24c61e84b2788b2a0",
+      "sizeBytes": 183,
+      "newline": "lf",
+      "language": "csharp",
+      "dialect": "csharp",
+      "origin": "Newly authored for this isolated feasibility pilot. Permission granted for analysis and training.",
+      "rights": "Original work of the repository owner; analysis and training allowed for this pilot only.",
+      "sourceFamily": "csharp-broken",
+      "variant": "broken",
+      "expectedOutcome": "INVALID_PARSE",
+      "expectedFragmentIds": [],
+      "expectedDiagnostics": [
+        {
+          "kind": "PARSE_ERROR",
+          "startLine": 4
+        }
+      ],
+      "expectedOmissions": [
+        {
+          "reason": "PARSE_ERROR"
+        }
+      ],
+      "requiredCase": true,
+      "diagnosticOnly": true,
+      "trainingAllowed": false,
+      "vendorOrGenerated": false,
+      "notes": "Intentionally malformed; remains invalid even if diagnostic matches"
+    },
+    {
+      "id": "tsx-panel",
+      "relativePath": "code/tsx/Panel.tsx",
+      "sha256": "e5292a85cb6201b26ee849ded486ea7fbd9dd328a27ab637d339e7eee23fa37e",
+      "sizeBytes": 133,
+      "newline": "lf",
+      "language": "typescript",
+      "dialect": "tsx",
+      "origin": "Newly authored for this isolated feasibility pilot. Permission granted for analysis and training.",
+      "rights": "Original work of the repository owner; analysis and training allowed for this pilot only.",
+      "sourceFamily": "tsx-ui",
+      "variant": "component",
+      "expectedOutcome": "VALID_EXTRACTED",
+      "expectedFragmentIds": [
+        "Panel"
+      ],
+      "expectedDiagnostics": [],
+      "expectedOmissions": [],
+      "requiredCase": true,
+      "diagnosticOnly": true,
+      "trainingAllowed": false,
+      "vendorOrGenerated": false,
+      "notes": "TSX diagnostic fixture; ML experimental"
+    },
+    {
+      "id": "tsx-badge",
+      "relativePath": "code/tsx/Badge.tsx",
+      "sha256": "f793536fe728d86db82f778bd2cbdc87c1706a60e91099119d372b4feba754e8",
+      "sizeBytes": 120,
+      "newline": "lf",
+      "language": "typescript",
+      "dialect": "tsx",
+      "origin": "Newly authored for this isolated feasibility pilot. Permission granted for analysis and training.",
+      "rights": "Original work of the repository owner; analysis and training allowed for this pilot only.",
+      "sourceFamily": "tsx-ui",
+      "variant": "component",
+      "expectedOutcome": "VALID_EXTRACTED",
+      "expectedFragmentIds": [
+        "Badge"
+      ],
+      "expectedDiagnostics": [],
+      "expectedOmissions": [],
+      "requiredCase": true,
+      "diagnosticOnly": true,
+      "trainingAllowed": false,
+      "vendorOrGenerated": false,
+      "notes": "TSX diagnostic fixture; ML experimental"
+    }
+  ],
+  "licenses": [
+    {
+      "id": "lic-mit",
+      "name": "mit-header",
+      "expectedSignals": {
+        "license": "MIT",
+        "noticePresent": true
+      },
+      "files": [
+        {
+          "relativePath": "licenses/mit/LICENSE",
+          "sha256": "8322b4c9589e43c4e9e6e398b45684df022229d06ce6c4e8e58c6ee79dd94d07",
+          "sizeBytes": 672,
+          "newline": "lf"
+        },
+        {
+          "relativePath": "licenses/mit/index.js",
+          "sha256": "ce7cd9709f0a40369042f8ed6898ff728fbf4c9eb6aa8fd5cca725e79f106d7e",
+          "sizeBytes": 55,
+          "newline": "lf"
+        },
+        {
+          "relativePath": "licenses/mit/package.json",
+          "sha256": "7aa9b4b6cfe07adf19b6e6df42024aaae8d85f8275d578ab416b19a57cbad87d",
+          "sizeBytes": 66,
+          "newline": "lf"
+        }
+      ]
+    },
+    {
+      "id": "lic-bsd",
+      "name": "bsd3",
+      "expectedSignals": {
+        "license": "BSD-3-Clause"
+      },
+      "files": [
+        {
+          "relativePath": "licenses/bsd3/LICENSE",
+          "sha256": "9c375747f82e9299e5a7e17cf2d293b6fd059514843a23e15d6e9b2fe78586cd",
+          "sizeBytes": 539,
+          "newline": "lf"
+        },
+        {
+          "relativePath": "licenses/bsd3/lib.py",
+          "sha256": "29b9c8cc0210fb92c819fec1edc91f56281aa3c8e7ea304c9ca8938942356e1f",
+          "sizeBytes": 50,
+          "newline": "lf"
+        },
+        {
+          "relativePath": "licenses/bsd3/package.json",
+          "sha256": "fa3c8cd8dbf4ab6d8ff1f9ef93d8cf8de8c09d7ff33c8180bf05db6f0238045f",
+          "sizeBytes": 75,
+          "newline": "lf"
+        }
+      ]
+    },
+    {
+      "id": "lic-apache",
+      "name": "apache-notice",
+      "expectedSignals": {
+        "license": "Apache-2.0",
+        "noticePresent": true
+      },
+      "files": [
+        {
+          "relativePath": "licenses/apache/LICENSE",
+          "sha256": "adca76239e49f11707683536bcb7425dac1f3f30f014e0347747992c1e92ce57",
+          "sizeBytes": 105,
+          "newline": "lf"
+        },
+        {
+          "relativePath": "licenses/apache/NOTICE",
+          "sha256": "377ab27bbd4a68592dbba6097500100a9eed262bed0611b822168dde1dbc0d85",
+          "sizeBytes": 117,
+          "newline": "lf"
+        },
+        {
+          "relativePath": "licenses/apache/src.java",
+          "sha256": "6c5f58a9f6eac194b3b0206d246981ae39496a2f24dc7362074be180adc9d44f",
+          "sizeBytes": 53,
+          "newline": "lf"
+        },
+        {
+          "relativePath": "licenses/apache/package.json",
+          "sha256": "0b587c60a68de7a62d0c56430012eb24c0e954452521f3038a4173b7f8bc142f",
+          "sizeBytes": 76,
+          "newline": "lf"
+        }
+      ]
+    },
+    {
+      "id": "lic-mit-missing-notice",
+      "name": "declared-mit-no-notice",
+      "expectedSignals": {
+        "declared": "MIT",
+        "noticePresent": false,
+        "concern": "missing-notice"
+      },
+      "files": [
+        {
+          "relativePath": "licenses/mit-declared/package.json",
+          "sha256": "b5dbded6299432465a4fcb9f20b283b4b12c9b1063fb9ec7d3724cb1d2ba2c1b",
+          "sizeBytes": 68,
+          "newline": "lf"
+        },
+        {
+          "relativePath": "licenses/mit-declared/main.js",
+          "sha256": "b40dedde60828bf61d1fadbfc3bb7ea2e0421e9511d22f1b5fb44ae5ba07dbb3",
+          "sizeBytes": 20,
+          "newline": "lf"
+        }
+      ]
+    },
+    {
+      "id": "lic-conflict",
+      "name": "conflict-header",
+      "expectedSignals": {
+        "declared": "MIT",
+        "header": "Apache-2.0",
+        "discrepancy": true
+      },
+      "files": [
+        {
+          "relativePath": "licenses/conflict/package.json",
+          "sha256": "310cabd5694d1b0620cf2cb6f72ef2762a814dd2096943c7be338985fc37469e",
+          "sizeBytes": 64,
+          "newline": "lf"
+        },
+        {
+          "relativePath": "licenses/conflict/app.py",
+          "sha256": "ac85b8c5c68ef7b2b1a86abe1498b0b131ed157c16b4ca0bf8fbafb4fdb1180b",
+          "sizeBytes": 44,
+          "newline": "lf"
+        }
+      ]
+    },
+    {
+      "id": "lic-custom",
+      "name": "custom-unknown",
+      "expectedSignals": {
+        "license": "UNKNOWN_OR_CUSTOM"
+      },
+      "files": [
+        {
+          "relativePath": "licenses/custom/LICENSE",
+          "sha256": "3eb54be920be08e6475f347226bb8db436d89d5914e8bcc587a2cd4f0458b4c0",
+          "sizeBytes": 63,
+          "newline": "lf"
+        },
+        {
+          "relativePath": "licenses/custom/package.json",
+          "sha256": "0b3afc266b9c90db02dae55430f724a0bb0fedf3fe597600ae0d75ba99932d28",
+          "sizeBytes": 81,
+          "newline": "lf"
+        }
+      ]
+    }
+  ]
+}

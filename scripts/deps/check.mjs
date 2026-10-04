@@ -5,6 +5,7 @@ import { generateAll } from "./generate.mjs";
 import { listNugetVulnerabilities } from "./lib/nuget.mjs";
 import { listNpmVulnerabilities } from "./lib/npm.mjs";
 import { filterSevereVulnerabilities } from "./lib/notices.mjs";
+import { verifyBracesRemediation, isVerifiedBracesFinding } from "./lib/braces-remediation.mjs";
 import { writeNoticesDiagnostics } from "./lib/diff.mjs";
 import {
   GENERATED_NOTICES_DIAG,
@@ -41,7 +42,7 @@ if (isDirectRun) {
 
   if (existingNotices === null) {
     errors.push(`Missing ${NOTICES_PATH}. Run pnpm deps:generate and commit the result.`);
-  } else if (existingNotices !== notices) {
+  } else if (existingNotices.replace(/\r\n/g, "\n") !== notices.replace(/\r\n/g, "\n")) {
     const { diff, generatedPath, diffPath } = writeNoticesDiagnostics({
       existingNotices,
       generatedNotices: notices,
@@ -62,7 +63,15 @@ if (isDirectRun) {
     ...listNugetVulnerabilities(),
     ...listNpmVulnerabilities(),
   ];
-  const severe = filterSevereVulnerabilities(vulns, policy);
+  // Audit still reports the upstream version. Accept only this mechanically
+  // verified local fix; missing/stale patches or installations fail closed.
+  const bracesProof = verifyBracesRemediation();
+  const remediated = vulns.filter((finding) => isVerifiedBracesFinding(finding, bracesProof));
+  for (const finding of remediated) {
+    console.log(`Verified local security patch: ${finding.name}@${finding.version} ${finding.advisoryUrl}`);
+  }
+  const unpatchedVulns = vulns.filter((finding) => !isVerifiedBracesFinding(finding, bracesProof));
+  const severe = filterSevereVulnerabilities(unpatchedVulns, policy);
   if (severe.length > 0) {
     errors.push("High/Critical vulnerabilities detected:");
     for (const finding of severe) {
@@ -77,6 +86,7 @@ if (isDirectRun) {
   } else {
     console.log("Dependency governance check passed.");
     console.log(`Packages reviewed via notices regeneration (${notices.split("\n").length} notice lines).`);
-    console.log(`Vulnerability findings below High/Critical: ${vulns.length - severe.length}`);
+    console.log(`Vulnerability findings below High/Critical: ${unpatchedVulns.length - severe.length}`);
+    console.log(`Verified locally patched findings: ${remediated.length}`);
   }
 }
