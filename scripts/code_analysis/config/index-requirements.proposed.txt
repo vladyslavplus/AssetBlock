@@ -1,0 +1,5 @@
+# Proposal only. Do not install before complete terms, scoped exceptions and explicit approval.
+psycopg==3.2.10 --hash=sha256:ab5caf09a9ec42e314a21f5216dbcceac528e0e05142e42eea83a3b28b320ac3
+psycopg-binary==3.2.10 --hash=sha256:e037aac8dc894d147ef33056fc826ee5072977107a3fdf06122224353a057598
+typing-extensions==4.15.0 --hash=sha256:f0fa19c6845758ab08074a0cfa8b7aecb71c999ca73d62883bc25cc018c4e548
+tzdata==2025.2 --hash=sha256:1a403fada01ff9221ca8044d701868fa132215d84beb92242d9acd2147f667a8

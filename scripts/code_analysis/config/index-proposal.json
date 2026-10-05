@@ -1,0 +1,206 @@
+{
+  "schema": "code-corpus-v1",
+  "status": "REVIEWED_SCOPED_INTERNAL_ONLY",
+  "environment": "artifacts/code_analysis/env/index",
+  "python": "CPython 3.12 x64 Windows",
+  "packages": [
+    {
+      "name": "psycopg",
+      "version": "3.2.10",
+      "terms": "LGPL-3.0-only",
+      "termsReviewed": true,
+      "requiresException": true,
+      "artifactSha256": "ab5caf09a9ec42e314a21f5216dbcceac528e0e05142e42eea83a3b28b320ac3",
+      "filename": "psycopg-3.2.10-py3-none-any.whl",
+      "url": "https://files.pythonhosted.org/packages/4a/90/422ffbbeeb9418c795dae2a768db860401446af0c6768bc061ce22325f58/psycopg-3.2.10-py3-none-any.whl",
+      "requiresPython": ">=3.8",
+      "requiresDist": [
+        "backports.zoneinfo>=0.2.0; python_version < \"3.9\"",
+        "typing-extensions>=4.6; python_version < \"3.13\"",
+        "tzdata; sys_platform == \"win32\"",
+        "psycopg-c==3.2.10; implementation_name != \"pypy\" and extra == \"c\"",
+        "psycopg-binary==3.2.10; implementation_name != \"pypy\" and extra == \"binary\"",
+        "psycopg-pool; extra == \"pool\"",
+        "anyio>=4.0; extra == \"test\"",
+        "mypy>=1.14; extra == \"test\"",
+        "pproxy>=2.7; extra == \"test\"",
+        "pytest>=6.2.5; extra == \"test\"",
+        "pytest-cov>=3.0; extra == \"test\"",
+        "pytest-randomly>=3.5; extra == \"test\"",
+        "ast-comments>=1.1.2; extra == \"dev\"",
+        "black>=24.1.0; extra == \"dev\"",
+        "codespell>=2.2; extra == \"dev\"",
+        "dnspython>=2.1; extra == \"dev\"",
+        "flake8>=4.0; extra == \"dev\"",
+        "isort[colors]>=6.0; extra == \"dev\"",
+        "isort-psycopg; extra == \"dev\"",
+        "mypy>=1.14; extra == \"dev\"",
+        "pre-commit>=4.0.1; extra == \"dev\"",
+        "types-setuptools>=57.4; extra == \"dev\"",
+        "types-shapely>=2.0; extra == \"dev\"",
+        "wheel>=0.37; extra == \"dev\"",
+        "Sphinx>=5.0; extra == \"docs\"",
+        "furo==2022.6.21; extra == \"docs\"",
+        "sphinx-autobuild>=2021.3.14; extra == \"docs\"",
+        "sphinx-autodoc-typehints>=1.12; extra == \"docs\""
+      ],
+      "scopedExceptionReference": "dependency-exceptions.json:psycopg@3.2.10",
+      "noticeInventory": {
+        "psycopg-3.2.10.dist-info/licenses/LICENSE.txt": "e3a994d82e644b03a792a930f574002658412f62407f5fee083f2555c5f23118"
+      }
+    },
+    {
+      "name": "psycopg-binary",
+      "version": "3.2.10",
+      "terms": "LGPL-3.0-only AND PostgreSQL AND Apache-2.0",
+      "termsReviewed": true,
+      "requiresException": true,
+      "artifactSha256": "e037aac8dc894d147ef33056fc826ee5072977107a3fdf06122224353a057598",
+      "filename": "psycopg_binary-3.2.10-cp312-cp312-win_amd64.whl",
+      "url": "https://files.pythonhosted.org/packages/c1/a8/a2c822fa06b0dbbb8ad4b0221da2534f77bac54332d2971dbf930f64be5a/psycopg_binary-3.2.10-cp312-cp312-win_amd64.whl",
+      "requiresPython": ">=3.8",
+      "requiresDist": null,
+      "scopedExceptionReference": "dependency-exceptions.json:psycopg-binary@3.2.10",
+      "noticeInventory": {
+        "psycopg_binary-3.2.10.dist-info/licenses/LICENSE.txt": "7d3a95e5e06978064ed3f8e2b7c8f845e7fd8a405294727cc708f94cb83b8059"
+      }
+    },
+    {
+      "name": "typing-extensions",
+      "version": "4.15.0",
+      "terms": "Complete supplied PSF/Python historical license text; no individual-heading applicability claim",
+      "termsReviewed": true,
+      "requiresException": true,
+      "artifactSha256": "f0fa19c6845758ab08074a0cfa8b7aecb71c999ca73d62883bc25cc018c4e548",
+      "filename": "typing_extensions-4.15.0-py3-none-any.whl",
+      "url": "https://files.pythonhosted.org/packages/18/67/36e9267722cc04a6b9f15c7f3441c2363321a3ea07da7ae0c0707beb2a9c/typing_extensions-4.15.0-py3-none-any.whl",
+      "requiresPython": ">=3.9",
+      "requiresDist": null,
+      "scopedExceptionReference": "dependency-exceptions.json:typing-extensions@4.15.0",
+      "noticeInventory": {
+        "typing_extensions-4.15.0.dist-info/licenses/LICENSE": "3b2f81fe21d181c499c59a256c8e1968455d6689d269aa85373bfb6af41da3bf"
+      }
+    },
+    {
+      "name": "tzdata",
+      "version": "2025.2",
+      "terms": "Apache-2.0 AND LicenseRef-public-domain-IANA-data",
+      "termsReviewed": true,
+      "requiresException": true,
+      "artifactSha256": "1a403fada01ff9221ca8044d701868fa132215d84beb92242d9acd2147f667a8",
+      "filename": "tzdata-2025.2-py2.py3-none-any.whl",
+      "url": "https://files.pythonhosted.org/packages/5c/23/c7abc0ca0a1526a0774eca151daeb8de62ec457e77262b66b359c3c7679e/tzdata-2025.2-py2.py3-none-any.whl",
+      "requiresPython": ">=2",
+      "requiresDist": null,
+      "scopedExceptionReference": "dependency-exceptions.json:tzdata@2025.2",
+      "noticeInventory": {
+        "tzdata-2025.2.dist-info/licenses/LICENSE": "33e8e5002d3512d3fcc2282b995e6bad9d334781b9c5ac31843f404900e1f3b4",
+        "tzdata-2025.2.dist-info/licenses/licenses/LICENSE_APACHE": "c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4"
+      }
+    }
+  ],
+  "nativeTermsComplete": true,
+  "bootstrap": {
+    "pip": "25.2",
+    "terms": "Finite supplied vendor aggregate MIT/BSD/Apache/MPL-2.0/Python license texts",
+    "includedInRuntimeLock": false,
+    "artifactSha256": "6d67a2b4e7f14d8b31b8b52648866fa717f45a1eb70e83002f4331d07e953717",
+    "termsReviewed": true,
+    "noticeInventory": {
+      "pip-25.2.dist-info/licenses/AUTHORS.txt": "8a811f3069248b37137083ddbe387e918ca63b513d23d76fcc78cb525292e66f",
+      "pip-25.2.dist-info/licenses/LICENSE.txt": "634300a669d49aeae65b12c6c48c924c51a4cdf3d1ff086dc3456dc8bcaa2104",
+      "pip-25.2.dist-info/licenses/src/pip/_vendor/cachecontrol/LICENSE.txt": "86eeee87be2a43f3ff1f56496f451f69243926f025fedbb033666c304c4c161b",
+      "pip-25.2.dist-info/licenses/src/pip/_vendor/certifi/LICENSE": "e93716da6b9c0d5a4a1df60fe695b370f0695603d21f6f83f053e42cfc10caf7",
+      "pip-25.2.dist-info/licenses/src/pip/_vendor/dependency_groups/LICENSE.txt": "1ab36e3e2a4ba8631625384f87e9e091db1faed034c5b23325b3239abf2cc525",
+      "pip-25.2.dist-info/licenses/src/pip/_vendor/distlib/LICENSE.txt": "808e10c8a6ab8deb149ff9b3fb19f447a808094606d712a9ca57fead3552599d",
+      "pip-25.2.dist-info/licenses/src/pip/_vendor/distro/LICENSE": "cb5e8e7e5f4a3988e1063c142c60dc2df75605f4c46515e776e3aca6df976e14",
+      "pip-25.2.dist-info/licenses/src/pip/_vendor/idna/LICENSE.md": "a59f0b0ef3635874109a4461ca44ff7a70d50696e814767bfaf721d4c9b0db0f",
+      "pip-25.2.dist-info/licenses/src/pip/_vendor/msgpack/COPYING": "492dedba85da5872f78e6091bcd1fea474d660d35acb4dee964b8aab3f007427",
+      "pip-25.2.dist-info/licenses/src/pip/_vendor/packaging/LICENSE": "cad1ef5bd340d73e074ba614d26f7deaca5c7940c3d8c34852e65c4909686c48",
+      "pip-25.2.dist-info/licenses/src/pip/_vendor/packaging/LICENSE.APACHE": "0d542e0c8804e39aa7f37eb00da5a762149dc682d7829451287e11b938e94594",
+      "pip-25.2.dist-info/licenses/src/pip/_vendor/packaging/LICENSE.BSD": "b70e7e9b742f1cc6f948b34c16aa39ffece94196364bc88ff0d2180f0028fac5",
+      "pip-25.2.dist-info/licenses/src/pip/_vendor/pkg_resources/LICENSE": "86da0f01aeae46348a3c3d465195dc1ceccde79f79e87769a64b8da04b2a4741",
+      "pip-25.2.dist-info/licenses/src/pip/_vendor/platformdirs/LICENSE": "29e0fd62e929850e86eb28c3fdccf0cefdf4fa94879011cffb3d0d4bed6d4db6",
+      "pip-25.2.dist-info/licenses/src/pip/_vendor/pygments/LICENSE": "a9d66f1d526df02e29dce73436d34e56e8632f46c275bbdffc70569e882f9f17",
+      "pip-25.2.dist-info/licenses/src/pip/_vendor/pyproject_hooks/LICENSE": "1b22b049b5267d6dfc23a67bf4a84d8ec04b9fdfb1a51d360e42b4342c8b4154",
+      "pip-25.2.dist-info/licenses/src/pip/_vendor/requests/LICENSE": "09e8a9bcec8067104652c168685ab0931e7868f9c8284b66f5ae6edae5f1130b",
+      "pip-25.2.dist-info/licenses/src/pip/_vendor/resolvelib/LICENSE": "f388fd38cad13112c1dc0f669bbe80e7f84541edbafb72f3030d2ca7642c3c9d",
+      "pip-25.2.dist-info/licenses/src/pip/_vendor/rich/LICENSE": "deed7c17a4318158190a3ea239cc879a5a50271cebb98ae7025f48fbe58dca15",
+      "pip-25.2.dist-info/licenses/src/pip/_vendor/tomli/LICENSE": "b80816b0d530b8accb4c2211783790984a6e3b61922c2b5ee92f3372ab2742fe",
+      "pip-25.2.dist-info/licenses/src/pip/_vendor/tomli/LICENSE-HEADER": "97ce9330905a172dde870ee0361d89beb95ba3bd0f4545796aa91a8c01a43531",
+      "pip-25.2.dist-info/licenses/src/pip/_vendor/tomli_w/LICENSE": "b80816b0d530b8accb4c2211783790984a6e3b61922c2b5ee92f3372ab2742fe",
+      "pip-25.2.dist-info/licenses/src/pip/_vendor/truststore/LICENSE": "33be7b7e8fa4fd19b1760e1a8ed8a668bdab852c91b692dd41424bcb725a9fca",
+      "pip-25.2.dist-info/licenses/src/pip/_vendor/urllib3/LICENSE.txt": "c37bf186e27cf9dbe9619e55edfe3cea7b30091ceb3da63c7dacbe0e6d77907b",
+      "pip/_vendor/packaging/licenses/__init__.py": "ddbc7e82bca8e2c46fe4bb2bc00a68bb2eb9548b37bba8ab48e449cc02e4af35",
+      "pip/_vendor/packaging/licenses/_spdx.py": "a009b5ced3c5c25b2608a7bb94002cbff38839f4b57160eef5b34191ebbeda7b"
+    },
+    "scopedExceptionReference": "dependency-exceptions.json:pip@25.2",
+    "bootstrapOnly": true
+  },
+  "references": [
+    "https://pypi.org/pypi/psycopg/3.2.10/json",
+    "https://pypi.org/pypi/psycopg-binary/3.2.10/json",
+    "https://www.psycopg.org/psycopg3/docs/basic/install.html"
+  ],
+  "blockers": [],
+  "provisioning": {
+    "image": "pgvector/pgvector:0.8.6-pg16-bookworm@sha256:ccc6e83d6e35e931dc7c5def2022729d5a6c370318d099181995567ff1fb4d6b",
+    "imageAvailability": "NOT_VERIFIED",
+    "bind": "127.0.0.1:55433",
+    "database": "assetblock_code_lab",
+    "role": "assetblock_code_index",
+    "dsnEnvironmentVariable": "ASSETBLOCK_CODE_INDEX_DSN",
+    "volume": "assetblock-code-index-data",
+    "scope": [
+      "dedicated container/volume/database/role only",
+      "explicit vector extension installation",
+      "sandbox marker",
+      "corpus_snapshots",
+      "code_fragments",
+      "code_indexes",
+      "code_embeddings"
+    ],
+    "constraints": [
+      "snapshot composite foreign keys",
+      "768 dimensions",
+      "finite nonzero normalized vectors",
+      "identity and span validation",
+      "BUILDING/READY/FAILED state",
+      "unique index/snapshot pair",
+      "ordinary identity/filter indexes only"
+    ],
+    "ddlExecuted": false,
+    "authority": "ROOT_REVIEWED_EXACT_SCOPE",
+    "container": "assetblock-code-index",
+    "ddlSha256": "92444bed78d030e9024b950991154952013e5e3f5f551ecfa9f49efe11bf159d"
+  },
+  "candidateMetadataLockSha256": "a9326effac491ea371602b25f6df00ea288a5de239f7aa55c0743211d039da5e",
+  "runtimeExtras": [
+    "binary"
+  ],
+  "excludedExtras": [
+    "pool",
+    "c",
+    "test",
+    "dev",
+    "docs"
+  ],
+  "compatibilityEvidence": "Exact offline installed runtime4 plus bootstrap1 graph and1191 original payload files verified; initial install preceded tracked exception recording. Native runtime use still requires current gate verification.",
+  "nativeEvidence": {
+    "binaryMembers": [
+      "libpq",
+      "libssl-3",
+      "libcrypto-3"
+    ],
+    "providedLicenseFiles": [
+      "LGPL-3.0 LICENSE.txt"
+    ],
+    "missing": [
+      "source-to-wheel reproducible build attestation unavailable"
+    ],
+    "wheelTermsEvidence": "artifacts/code_analysis/review/dependencies/wheel-terms.json",
+    "wheelTermsSha256": "975e9cd608c6666e4d20cb1c6dbebe421679d04898364260e9954a77b7d8e33d",
+    "reviewedEvidenceSha256": "c805e8f713a18af61174f9098e4bd09f16ddd11dac343d5f2614d5c45406193a",
+    "scopeSupplementSha256": "2746ffcdf0a1d801e5a9295662f06d23244b16069d13b1ed25aaf7c03afe7780"
+  }
+}

@@ -2,11 +2,11 @@
 
 from __future__ import annotations
 
-import os
+import stat
 from pathlib import Path
 
-REPO_ROOT = Path(__file__).resolve().parents[2]
-PILOT_ROOT = Path(__file__).resolve().parent
+PILOT_ROOT = Path(__file__).absolute().parent
+REPO_ROOT = PILOT_ROOT.parents[1]
 FIXTURE_ROOT = PILOT_ROOT / "fixtures"
 CONFIG_ROOT = PILOT_ROOT / "config"
 ARTIFACT_ROOT = REPO_ROOT / "artifacts" / "feasibility_pilot"
@@ -21,24 +21,35 @@ def _is_reparse_point(path: Path) -> bool:
         st = path.lstat()
     except FileNotFoundError:
         return False
-    if os.path.islink(path):
+    if stat.S_ISLNK(st.st_mode) or path.is_symlink():
         return True
     # Windows reparse points (symlinks, junctions, mount points).
     return bool(getattr(st, "st_file_attributes", 0) & 0x400)
 
 
 def ensure_inside(path: Path, *roots: Path) -> Path:
-    resolved = path.resolve()
-    candidates = [root.resolve() for root in roots]
+    def inspect_original(supplied: Path) -> Path:
+        supplied = Path(supplied)
+        if ".." in supplied.parts:
+            raise PathEscapeError(f"traversal rejected: {supplied}")
+        # absolute() retains links; reject traversal in cwd as well.
+        lexical = supplied.absolute()
+        if ".." in lexical.parts:
+            raise PathEscapeError(f"traversal rejected: {supplied}")
+        current = Path(lexical.anchor)
+        for part in ("", *lexical.parts[1:]):
+            if part:
+                current /= part
+            if _is_reparse_point(current):
+                raise PathEscapeError(f"reparse point or symlink rejected: {current}")
+        return lexical
+
+    original = inspect_original(path)
+    checked_roots = [inspect_original(root) for root in roots]
+    resolved = original.resolve()
+    candidates = [root.resolve() for root in checked_roots]
     if not any(resolved == root or root in resolved.parents for root in candidates):
         raise PathEscapeError(f"path escapes allowed roots: {path}")
-    for current in [resolved, *resolved.parents]:
-        if current == resolved.anchor or current == Path(resolved.anchor):
-            break
-        if _is_reparse_point(current):
-            raise PathEscapeError(f"reparse point or symlink rejected: {current}")
-        if current in candidates:
-            break
     return resolved
 
 

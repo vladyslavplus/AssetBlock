@@ -536,7 +536,7 @@ def reload_in_fresh_process(*, kind: str, checkpoint: Path, reference: Path, mod
             str(max_length),
         ],
         cwd=ARTIFACT_ROOT,
-        allowed_roots=[ARTIFACT_ROOT, Path(__file__).resolve().parent, model_dir],
+        allowed_roots=[ARTIFACT_ROOT, Path(__file__).absolute().parent, model_dir],
         timeout_s=300,
         extra_env_allow=("HF_HOME", "TRANSFORMERS_CACHE", "HF_HUB_OFFLINE", "TRANSFORMERS_OFFLINE"),
         env={

@@ -19,6 +19,15 @@ Backend paths after the first row are relative to `asblock-backend/AssetBlock.We
 
 Backend tests mirror production areas under `AssetBlock.Application.Tests`, `AssetBlock.Infrastructure.Tests`, `AssetBlock.Infrastructure.IntegrationTests`, `AssetBlock.WebApi.Tests`, and `AssetBlock.WebApi.IntegrationTests`. Frontend tests are feature-local `.test.ts`/`.test.tsx`; browser flows are in `asblock-frontend/e2e/`. Test existence is not passing evidence.
 
+## Isolated code analysis tooling
+
+`scripts/code_analysis/README.md` documents the corpus/extraction/baseline CLI and
+explicit parent-run, reviewed-label, and sandbox inputs. Local source snapshots,
+review records, environments, vectors, and measured evidence stay under ignored
+`artifacts/code_analysis/`. This tooling has no product publication authority;
+unit tests do not require historical runs. `scripts/feasibility_pilot/paths.py`
+provides shared lexical link/reparse rejection and resolved containment checks.
+
 ## Retrieval order
 
 1. Read root and applicable nested instructions once; choose the relevant feature above.
