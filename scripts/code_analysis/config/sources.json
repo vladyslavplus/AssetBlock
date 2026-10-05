@@ -1,0 +1,263 @@
+{
+  "pairReviews": [],
+  "schema": "code-corpus-v1",
+  "seeds": [],
+  "sources": [
+    {
+      "commit": "436bde0bcded312781cbe45dc2b0ef079a36d8e3",
+      "files": [
+        {
+          "language": "javascript",
+          "path": "src/plugin/isLeapYear/index.js",
+          "sha256": "d895da90e1a6a0ab7d5c573ff358b2742b6df5c91d14b64f09952d1cf40ba68a"
+        },
+        {
+          "language": "javascript",
+          "path": "src/plugin/isBetween/index.js",
+          "sha256": "fb95896767b153c3b3fe368ece65cbf6b82d519f2a8d4a4539571ac2700e8ec7"
+        }
+      ],
+      "lineage": [
+        "iamkun/dayjs"
+      ],
+      "notices": [
+        {
+          "path": "LICENSE",
+          "sha256": "5faab7526d055651be3aab769d58897be6bd91f3d39d137f25f12dba1b31d5dc"
+        }
+      ],
+      "partition": "train",
+      "partitionReviewed": false,
+      "repository": "iamkun/dayjs",
+      "rights": {
+        "grants": {},
+        "note": "Collected file-level terms evidence requires review; no human approval recorded.",
+        "reviewedOn": null,
+        "reviewer": null,
+        "status": "UNREVIEWED",
+        "terms": "MIT",
+        "noticeHashes": {
+          "LICENSE": "5faab7526d055651be3aab769d58897be6bd91f3d39d137f25f12dba1b31d5dc"
+        },
+        "fileHashes": {
+          "src/plugin/isLeapYear/index.js": "d895da90e1a6a0ab7d5c573ff358b2742b6df5c91d14b64f09952d1cf40ba68a",
+          "src/plugin/isBetween/index.js": "fb95896767b153c3b3fe368ece65cbf6b82d519f2a8d4a4539571ac2700e8ec7"
+        },
+        "commit": "436bde0bcded312781cbe45dc2b0ef079a36d8e3",
+        "rationale": "File-level notice evidence collected; grants pending independent rights review.",
+        "inspection": {
+          "actor": "Codex implementer",
+          "kind": "AUTOMATED_STATIC_INSPECTION",
+          "date": "2026-10-04",
+          "humanApprovalRecorded": false
+        }
+      },
+      "sourceId": "dayjs"
+    },
+    {
+      "commit": "0b216ef674e297ebe41d8bf902262e56f8755822",
+      "files": [
+        {
+          "language": "typescript",
+          "path": "packages/zod/src/v4/classic/parse.ts",
+          "sha256": "e68cc3082aba565ba2b9edb803a094720530f6c3924df841f581da03eccefe19"
+        },
+        {
+          "language": "typescript",
+          "path": "packages/zod/src/v4/classic/coerce.ts",
+          "sha256": "9cf6429965d7d55dc4e50999af50cbad5b57b5f3372bba13038133aba62ba600"
+        }
+      ],
+      "lineage": [
+        "colinhacks/zod"
+      ],
+      "notices": [
+        {
+          "path": "LICENSE",
+          "sha256": "3f1189b28e3866e0d979968d466b78f813f76827cfdca1fbb124cc0a5c8841f8"
+        }
+      ],
+      "partition": "validation",
+      "partitionReviewed": false,
+      "repository": "colinhacks/zod",
+      "rights": {
+        "grants": {},
+        "note": "Collected file-level terms evidence requires review; no human approval recorded.",
+        "reviewedOn": null,
+        "reviewer": null,
+        "status": "UNREVIEWED",
+        "terms": "MIT",
+        "noticeHashes": {
+          "LICENSE": "3f1189b28e3866e0d979968d466b78f813f76827cfdca1fbb124cc0a5c8841f8"
+        },
+        "fileHashes": {
+          "packages/zod/src/v4/classic/parse.ts": "e68cc3082aba565ba2b9edb803a094720530f6c3924df841f581da03eccefe19",
+          "packages/zod/src/v4/classic/coerce.ts": "9cf6429965d7d55dc4e50999af50cbad5b57b5f3372bba13038133aba62ba600"
+        },
+        "commit": "0b216ef674e297ebe41d8bf902262e56f8755822",
+        "rationale": "File-level notice evidence collected; grants pending independent rights review.",
+        "inspection": {
+          "actor": "Codex implementer",
+          "kind": "AUTOMATED_STATIC_INSPECTION",
+          "date": "2026-10-04",
+          "humanApprovalRecorded": false
+        }
+      },
+      "sourceId": "zod"
+    },
+    {
+      "commit": "a602f78ff670f22be90fb8aea501a6cc30e10fdd",
+      "files": [
+        {
+          "language": "python",
+          "path": "src/attr/converters.py",
+          "sha256": "be3ce4f8ee6feb27a881b13a734665690fe4c81cfe030089c648f428229a8ed7"
+        },
+        {
+          "language": "python",
+          "path": "src/attr/validators.py",
+          "sha256": "04df88cefdc8a7176b800c5d35df3bcae0a43d9c303362fc15b783cef53517c5"
+        }
+      ],
+      "lineage": [
+        "python-attrs/attrs"
+      ],
+      "notices": [
+        {
+          "path": "LICENSE",
+          "sha256": "882115c95dfc2af1eeb6714f8ec6d5cbcabf667caff8729f42420da63f714e9f"
+        }
+      ],
+      "partition": "final-test",
+      "partitionReviewed": false,
+      "repository": "python-attrs/attrs",
+      "rights": {
+        "grants": {},
+        "note": "Collected file-level terms evidence requires review; no human approval recorded.",
+        "reviewedOn": null,
+        "reviewer": null,
+        "status": "UNREVIEWED",
+        "terms": "MIT",
+        "noticeHashes": {
+          "LICENSE": "882115c95dfc2af1eeb6714f8ec6d5cbcabf667caff8729f42420da63f714e9f"
+        },
+        "fileHashes": {
+          "src/attr/converters.py": "be3ce4f8ee6feb27a881b13a734665690fe4c81cfe030089c648f428229a8ed7",
+          "src/attr/validators.py": "04df88cefdc8a7176b800c5d35df3bcae0a43d9c303362fc15b783cef53517c5"
+        },
+        "commit": "a602f78ff670f22be90fb8aea501a6cc30e10fdd",
+        "rationale": "File-level notice evidence collected; grants pending independent rights review.",
+        "inspection": {
+          "actor": "Codex implementer",
+          "kind": "AUTOMATED_STATIC_INSPECTION",
+          "date": "2026-10-04",
+          "humanApprovalRecorded": false
+        }
+      },
+      "sourceId": "attrs"
+    },
+    {
+      "commit": "854c8255b625cf1e13c701a83ea9ccb4caaa576a",
+      "files": [
+        {
+          "language": "java",
+          "path": "gson/src/main/java/com/google/gson/internal/bind/JsonTreeWriter.java",
+          "sha256": "bf752e76fcc0fe1ecb213f673e62eebf3dc258740c437ea4e0a7b1adc0f4f1fd"
+        },
+        {
+          "language": "java",
+          "path": "gson/src/main/java/com/google/gson/internal/bind/TypeAdapters.java",
+          "sha256": "0c3d558f7122b6278d8fb95173925c8cc7f08cd2210def4730cc7d309513c47c"
+        }
+      ],
+      "lineage": [
+        "google/gson"
+      ],
+      "notices": [
+        {
+          "path": "LICENSE",
+          "sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30"
+        }
+      ],
+      "partition": "train",
+      "partitionReviewed": false,
+      "repository": "google/gson",
+      "rights": {
+        "grants": {},
+        "note": "Collected file-level terms evidence requires review; no human approval recorded.",
+        "reviewedOn": null,
+        "reviewer": null,
+        "status": "UNREVIEWED",
+        "terms": "Apache-2.0",
+        "noticeHashes": {
+          "LICENSE": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30"
+        },
+        "fileHashes": {
+          "gson/src/main/java/com/google/gson/internal/bind/JsonTreeWriter.java": "bf752e76fcc0fe1ecb213f673e62eebf3dc258740c437ea4e0a7b1adc0f4f1fd",
+          "gson/src/main/java/com/google/gson/internal/bind/TypeAdapters.java": "0c3d558f7122b6278d8fb95173925c8cc7f08cd2210def4730cc7d309513c47c"
+        },
+        "commit": "854c8255b625cf1e13c701a83ea9ccb4caaa576a",
+        "rationale": "File-level notice evidence collected; grants pending independent rights review.",
+        "inspection": {
+          "actor": "Codex implementer",
+          "kind": "AUTOMATED_STATIC_INSPECTION",
+          "date": "2026-10-04",
+          "humanApprovalRecorded": false
+        }
+      },
+      "sourceId": "gson"
+    },
+    {
+      "commit": "e4da08c5e631975e15bb98ae020aede819d376ca",
+      "files": [
+        {
+          "language": "csharp",
+          "path": "src/Humanizer/Bytes/ByteSize.cs",
+          "sha256": "752b35eddf48ca8a00b5a5f1eda50b67680e04fc186f2f3a31db080a71a8ba87",
+          "normalizationExcludedReason": "Existing pinned C# parser reports syntax errors for current ByteSize.cs; exact intake retained, normalized grouping and eligible counts excluded."
+        },
+        {
+          "language": "csharp",
+          "path": "src/Humanizer/NumberToTimeSpanExtensions.cs",
+          "sha256": "335374e9f0bcbbb2ed596599443a1c833ace5083669566f8742078ac5e6599b4"
+        }
+      ],
+      "lineage": [
+        "humanizr/humanizer"
+      ],
+      "notices": [
+        {
+          "path": "license.txt",
+          "sha256": "e24ec7f2eea5c5f4b3e2c08308109ba99b49b4b56ea7ff0e0a178f2bdd4bbce8"
+        }
+      ],
+      "partition": "validation",
+      "partitionReviewed": false,
+      "repository": "Humanizr/Humanizer",
+      "rights": {
+        "grants": {},
+        "note": "Collected file-level terms evidence requires review; no human approval recorded.",
+        "reviewedOn": null,
+        "reviewer": null,
+        "status": "UNREVIEWED",
+        "terms": "MIT with ByteSize third-party copyright retained",
+        "noticeHashes": {
+          "license.txt": "e24ec7f2eea5c5f4b3e2c08308109ba99b49b4b56ea7ff0e0a178f2bdd4bbce8"
+        },
+        "fileHashes": {
+          "src/Humanizer/Bytes/ByteSize.cs": "752b35eddf48ca8a00b5a5f1eda50b67680e04fc186f2f3a31db080a71a8ba87",
+          "src/Humanizer/NumberToTimeSpanExtensions.cs": "335374e9f0bcbbb2ed596599443a1c833ace5083669566f8742078ac5e6599b4"
+        },
+        "commit": "e4da08c5e631975e15bb98ae020aede819d376ca",
+        "rationale": "File-level notice evidence collected; grants pending independent rights review.",
+        "inspection": {
+          "actor": "Codex implementer",
+          "kind": "AUTOMATED_STATIC_INSPECTION",
+          "date": "2026-10-04",
+          "humanApprovalRecorded": false
+        }
+      },
+      "sourceId": "humanizer"
+    }
+  ]
+}

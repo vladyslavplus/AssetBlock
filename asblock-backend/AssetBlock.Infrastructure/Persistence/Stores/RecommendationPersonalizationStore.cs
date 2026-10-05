@@ -346,11 +346,29 @@ internal sealed class RecommendationPersonalizationStore(ApplicationDbContext db
 
     private async Task<UserRecommendationPreferences?> LockPreferencesAsync(Guid userId, CancellationToken cancellationToken)
     {
-        return await dbContext.UserRecommendationPreferences
-            .FromSqlRaw(
-                """SELECT * FROM "user_recommendation_preferences" WHERE "UserId" = {0} FOR UPDATE""",
-                userId)
+        // SqlQuery keeps FOR UPDATE on the executed statement (FromSqlRaw + FirstOrDefault
+        // wraps it in a subquery). Reload tracked rows so a concurrent opt-out is visible
+        // after waiting on the lock — identity resolution would otherwise keep IsPersonalized=true
+        // and let recompute insert affinities after the user opted out.
+        Guid lockedId = await dbContext.Database
+            .SqlQuery<Guid>($"""SELECT "UserId" AS "Value" FROM "user_recommendation_preferences" WHERE "UserId" = {userId} FOR UPDATE""")
             .FirstOrDefaultAsync(cancellationToken);
+
+        if (lockedId == Guid.Empty)
+        {
+            return null;
+        }
+
+        UserRecommendationPreferences? tracked = dbContext.UserRecommendationPreferences.Local
+            .FirstOrDefault(p => p.UserId == userId);
+        if (tracked is not null)
+        {
+            await dbContext.Entry(tracked).ReloadAsync(cancellationToken);
+            return tracked;
+        }
+
+        return await dbContext.UserRecommendationPreferences
+            .FirstOrDefaultAsync(p => p.UserId == userId, cancellationToken);
     }
 
     private async Task DeleteUserAffinityAsync(Guid userId, CancellationToken cancellationToken)
