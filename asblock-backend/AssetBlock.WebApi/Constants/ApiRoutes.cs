@@ -143,6 +143,13 @@ public static class ApiRoutes
         public const string AUDIT_LOGS = "api/admin/audit-logs";
         public const string DEAD_LETTERS = "api/admin/outbox/dead-letters";
         public const string DEAD_LETTER_REPLAY = "api/admin/outbox/dead-letters/{id:guid}/replay";
+        public const string USERS = "api/admin/users";
+        public const string USER_ROLE = "api/admin/users/{id:guid}/role";
+    }
+
+    public static class Moderation
+    {
+        public const string SUBMISSION_BY_ID = "api/moderation/submissions/{id:guid}";
     }
 
     public static class Hubs

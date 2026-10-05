@@ -138,7 +138,16 @@ public static class ErrorCodesToErrorMessages
         { ErrorCodes.ERR_AI_ERROR, "AI generation failed." },
         { ErrorCodes.ERR_AI_VERSION_NOT_READY, "This version is not ready for AI listing suggestions." },
         { ErrorCodes.ERR_AI_ARCHIVE_ANALYSIS_MISSING, "Archive analysis is not available for this version." },
-        { ErrorCodes.ERR_AI_ALLOWLIST_OVERFLOW, "The catalog is too large for AI listing suggestions." }
+        { ErrorCodes.ERR_AI_ALLOWLIST_OVERFLOW, "The catalog is too large for AI listing suggestions." },
+        { ErrorCodes.ERR_ROLE_REVISION_STALE, "The user role changed. Refresh and try again." },
+        { ErrorCodes.ERR_USER_ROLE_ASSIGNMENT_FORBIDDEN, "This role assignment is not allowed." },
+        { ErrorCodes.ERR_MODERATION_WORKSPACE_STALE, "The draft workspace changed. Refresh and try again." },
+        { ErrorCodes.ERR_MODERATION_OPERATION_CONFLICT, "This operation was already used with different input." },
+        { ErrorCodes.ERR_MODERATION_SUBMISSION_BLOCKED, "Submission is not available for this version yet." },
+        { ErrorCodes.ERR_MODERATION_ACTIVE_CASE_EXISTS, "An active moderation case already exists for this version." },
+        { ErrorCodes.ERR_MODERATION_CROSS_ASSET, "Referenced records do not belong to the same asset." },
+        { ErrorCodes.ERR_ANALYSIS_REPORT_NOT_TRUSTED, "The analysis report cannot authorize submission." },
+        { ErrorCodes.ERR_MODERATION_CASE_NOT_FOUND, "The moderation case was not found." }
     };
 
     public static string GetMessage(string code) =>

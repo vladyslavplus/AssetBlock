@@ -10,6 +10,9 @@ public class User : BaseEntity
     public required string PasswordHash { get; set; }
     public required string Role { get; set; } = AppRoles.USER;
 
+    /// <summary>Monotonic CAS token for Admin User/Moderator assignment.</summary>
+    public long RoleRevision { get; set; } = 1;
+
     public string? AvatarUrl { get; set; }
     public string? Bio { get; set; }
     public bool IsPublicProfile { get; set; } = true;

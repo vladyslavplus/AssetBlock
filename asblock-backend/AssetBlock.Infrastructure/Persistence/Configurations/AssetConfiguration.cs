@@ -30,6 +30,13 @@ internal sealed class AssetConfiguration : IEntityTypeConfiguration<Asset>
         builder.Property(a => a.RatingAverage).HasDefaultValue(0d);
         builder.Property(a => a.RatingCount).HasDefaultValue(0);
         builder.Property(a => a.SearchRevision).IsRequired().HasDefaultValue(1L);
+        builder.Property(a => a.CurrentPublicationSnapshotId);
+
+        builder.HasOne(a => a.CurrentPublicationSnapshot)
+            .WithMany()
+            .HasForeignKey(a => new { a.Id, a.CurrentPublicationSnapshotId })
+            .HasPrincipalKey(p => new { p.AssetId, p.Id })
+            .OnDelete(DeleteBehavior.Restrict);
 
         builder.HasOne(a => a.Author)
             .WithMany(u => u.AuthoredAssets)

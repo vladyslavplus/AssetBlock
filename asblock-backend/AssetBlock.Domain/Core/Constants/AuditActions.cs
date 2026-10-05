@@ -56,4 +56,6 @@ public static class AuditActions
     public const string SELLER_ANALYTICS_EXPORTED = "SellerAnalytics.Exported";
 
     public const string OUTBOX_DEAD_LETTER_REPLAY = "Outbox.DeadLetterReplay";
+
+    public const string USER_ROLE_ASSIGN = "User.RoleAssign";
 }
