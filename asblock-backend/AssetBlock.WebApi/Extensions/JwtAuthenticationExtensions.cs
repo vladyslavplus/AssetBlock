@@ -85,7 +85,7 @@ internal static class JwtAuthenticationExtensions
 
                         ILogger<JwtBearerEvents> logger =
                             ctx.HttpContext.RequestServices.GetRequiredService<ILogger<JwtBearerEvents>>();
-                        logger.LogDebug("JWT validated for subject {Subject} with live role", sub);
+                        logger.LogDebug("JWT validated for user {UserId} with live role", userId);
                     },
                     OnAuthenticationFailed = ctx =>
                     {
@@ -105,8 +105,7 @@ internal static class JwtAuthenticationExtensions
                         {
                             var hasAuth = ctx.Request.Headers.Authorization.Count > 0;
                             logger.LogDebug(
-                                "JWT challenge: {Path}, HasAuthorizationHeader={HasAuth}, Reason=missing_token",
-                                ctx.Request.Path,
+                                "JWT challenge HasAuthorizationHeader={HasAuth} reason=missing_token",
                                 hasAuth);
                         }
 

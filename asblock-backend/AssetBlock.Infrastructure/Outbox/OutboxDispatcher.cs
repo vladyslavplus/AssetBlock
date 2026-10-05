@@ -108,11 +108,14 @@ internal sealed class OutboxDispatcher(
             DiagnosticsOutcome outcome = DiagnosticsOutcome.DEAD_LETTER;
             try
             {
-                logger.LogError("No handler found for outbox message {OutboxId} of type '{Type}'; moving to dead letter", message.Id, message.Type);
+                logger.LogError(
+                    "No handler found for outbox message {OutboxId} messageType {MessageType}; moving to dead letter",
+                    message.Id,
+                    message.Type);
                 if (!await outbox.MarkDeadLettered(
                         message.Id,
                         lockToken,
-                        $"No handler for outbox type '{message.Type}'.",
+                        OutboxHandlerFailureReasons.NO_HANDLER,
                         cancellationToken))
                 {
                     logger.LogWarning("Lost outbox lease for {OutboxId} while marking missing-handler dead-letter", message.Id);
@@ -185,15 +188,16 @@ internal sealed class OutboxDispatcher(
             if (maxAttemptsReached)
             {
                 processingOutcome = DiagnosticsOutcome.DEAD_LETTER;
+                var deadLetterReason = OutboxHandlerFailureReason.MaxAttempts(ex);
                 logger.LogError(
-                    ex,
-                    "Outbox message {OutboxId} of type {Type} reached max attempts ({Attempt}/{Max}); transitioning to dead-letter",
+                    "Outbox message {OutboxId} messageType {MessageType} reached max attempts ({Attempt}/{Max}) exceptionType {ExceptionType}; transitioning to dead-letter",
                     message.Id,
                     message.Type,
                     message.AttemptCount,
-                    OutboxMessageTypes.MAX_ATTEMPTS);
+                    OutboxMessageTypes.MAX_ATTEMPTS,
+                    ex.GetType().Name);
 
-                if (!await outbox.MarkDeadLettered(message.Id, lockToken, ex.Message, cancellationToken))
+                if (!await outbox.MarkDeadLettered(message.Id, lockToken, deadLetterReason, cancellationToken))
                 {
                     logger.LogWarning("Lost outbox lease for {OutboxId} while recording dead-letter failure", message.Id);
                     processingOutcome = DiagnosticsOutcome.LEASE_LOST;
@@ -204,13 +208,14 @@ internal sealed class OutboxDispatcher(
                 processingOutcome = DiagnosticsOutcome.HANDLER_FAILURE;
                 TimeSpan cappedDelay = CalculateRetryDelay(message.AttemptCount, jitterProvider);
                 DateTimeOffset next = _timeProvider.GetUtcNow().Add(cappedDelay);
+                var retryReason = OutboxHandlerFailureReason.FromException(ex);
                 logger.LogError(
-                    ex,
-                    "Outbox handler failed for {OutboxId} type {Type} attempt {Attempt}",
+                    "Outbox handler failed for {OutboxId} messageType {MessageType} attempt {Attempt} exceptionType {ExceptionType}",
                     message.Id,
                     message.Type,
-                    message.AttemptCount);
-                if (!await outbox.MarkFailed(message.Id, lockToken, ex.Message, next, cancellationToken))
+                    message.AttemptCount,
+                    ex.GetType().Name);
+                if (!await outbox.MarkFailed(message.Id, lockToken, retryReason, next, cancellationToken))
                 {
                     logger.LogWarning("Lost outbox lease for {OutboxId} while recording failure", message.Id);
                     processingOutcome = DiagnosticsOutcome.LEASE_LOST;

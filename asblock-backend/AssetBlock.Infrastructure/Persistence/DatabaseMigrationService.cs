@@ -247,7 +247,7 @@ internal sealed class DatabaseMigrationService(
         try
         {
             await context.SaveChangesAsync(cancellationToken);
-            logger.LogInformation("Dev admin seeded -> email: {Email}", DEV_ADMIN_EMAIL);
+            logger.LogInformation("Dev admin seeded userId={UserId}", admin.Id);
         }
         catch (DbUpdateException ex) when (ex.InnerException is Npgsql.PostgresException { SqlState: Npgsql.PostgresErrorCodes.UniqueViolation })
         {

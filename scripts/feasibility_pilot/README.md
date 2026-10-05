@@ -11,6 +11,15 @@ Isolated check of code extraction, token comparison, license signals, frozen enc
 
 ## Setup (online, once)
 
+For a dependency upgrade, use a fresh disposable environment; preserve historical
+pilot environments and evidence. Run the hash-bound CPU compatibility smoke
+`verify_transformers_5_17_smoke.py` and a full environment `pip-audit`; save outputs
+under ignored `artifacts/security-remediation/`. This is a development check, not
+publication authority or product license admission. Retain installed LICENSE/NOTICE
+files. A skipped audit package remains unverified. See the disposable research
+verification scope in `DEPENDENCY-POLICY.md`; no separate ML review framework is
+required. Ordinary unit tests must work offline and must not install packages.
+
 From the repository root, using 64-bit Python 3.12:
 
 ```powershell

@@ -19,10 +19,6 @@ from the npm registry (canonical, OS-independent). Reviewed exceptions may set
 
 ## Apache-2.0
 
-- `npm` @ampproject/remapping@2.3.0
-  - copyright/author: Justin Ridgewell
-  - source: https://github.com/ampproject/remapping
-  - license-url: https://spdx.org/licenses/Apache-2.0.html
 - `npm` @eslint/config-array@0.21.2
   - copyright/author: Nicholas C. Zakas
   - source: https://github.com/eslint/rewrite
@@ -42,11 +38,15 @@ from the npm registry (canonical, OS-independent). Reviewed exceptions may set
   - copyright/author: Nicholas C. Zakas
   - source: https://github.com/eslint/rewrite
   - license-url: https://spdx.org/licenses/Apache-2.0.html
-- `npm` @humanfs/core@0.19.1
+- `npm` @humanfs/core@0.19.2
   - copyright/author: Nicholas C. Zakas
   - source: https://github.com/humanwhocodes/humanfs
   - license-url: https://spdx.org/licenses/Apache-2.0.html
-- `npm` @humanfs/node@0.16.7
+- `npm` @humanfs/node@0.16.8
+  - copyright/author: Nicholas C. Zakas
+  - source: https://github.com/humanwhocodes/humanfs
+  - license-url: https://spdx.org/licenses/Apache-2.0.html
+- `npm` @humanfs/types@0.15.0
   - copyright/author: Nicholas C. Zakas
   - source: https://github.com/humanwhocodes/humanfs
   - license-url: https://spdx.org/licenses/Apache-2.0.html
@@ -321,14 +321,6 @@ from the npm registry (canonical, OS-independent). Reviewed exceptions may set
   - copyright/author: Isaac Z. Schlueter
   - source: git://github.com/isaacs/chownr
   - license-url: https://spdx.org/licenses/BlueOak-1.0.0.html
-- `npm` jackspeak@3.4.3
-  - copyright/author: Isaac Z. Schlueter
-  - source: https://github.com/isaacs/jackspeak
-  - license-url: https://spdx.org/licenses/BlueOak-1.0.0.html
-- `npm` minimatch@10.2.5
-  - copyright/author: Isaac Z. Schlueter
-  - source: ssh://git@github.com/isaacs/minimatch
-  - license-url: https://spdx.org/licenses/BlueOak-1.0.0.html
 - `npm` minimatch@10.2.6
   - copyright/author: Isaac Z. Schlueter
   - source: ssh://git@github.com/isaacs/minimatch
@@ -336,14 +328,6 @@ from the npm registry (canonical, OS-independent). Reviewed exceptions may set
 - `npm` minipass@7.1.3
   - copyright/author: Isaac Z. Schlueter
   - source: https://github.com/isaacs/minipass
-  - license-url: https://spdx.org/licenses/BlueOak-1.0.0.html
-- `npm` package-json-from-dist@1.0.1
-  - copyright/author: Isaac Z. Schlueter
-  - source: https://github.com/isaacs/package-json-from-dist
-  - license-url: https://spdx.org/licenses/BlueOak-1.0.0.html
-- `npm` path-scurry@1.11.1
-  - copyright/author: Isaac Z. Schlueter
-  - source: https://github.com/isaacs/path-scurry
   - license-url: https://spdx.org/licenses/BlueOak-1.0.0.html
 - `npm` tar@7.5.22
   - copyright/author: Isaac Z. Schlueter
@@ -431,10 +415,6 @@ from the npm registry (canonical, OS-independent). Reviewed exceptions may set
   - copyright/author: Krishnan Anantheswaran
   - source: ssh://git@github.com/istanbuljs/istanbuljs
   - license-url: https://spdx.org/licenses/BSD-3-Clause.html
-- `npm` istanbul-lib-source-maps@5.0.6
-  - copyright/author: Krishnan Anantheswaran
-  - source: ssh://git@github.com/istanbuljs/istanbuljs
-  - license-url: https://spdx.org/licenses/BSD-3-Clause.html
 - `npm` istanbul-reports@3.2.0
   - copyright/author: Krishnan Anantheswaran
   - source: ssh://git@github.com/istanbuljs/istanbuljs
@@ -498,10 +478,6 @@ from the npm registry (canonical, OS-independent). Reviewed exceptions may set
 
 ## ISC
 
-- `npm` @isaacs/cliui@8.0.2
-  - copyright/author: Ben Coe
-  - source: https://github.com/yargs/cliui
-  - license-url: https://spdx.org/licenses/ISC.html
 - `npm` @isaacs/fs-minipass@4.0.1
   - copyright/author: Isaac Z. Schlueter
   - source: https://github.com/npm/fs-minipass
@@ -562,14 +538,6 @@ from the npm registry (canonical, OS-independent). Reviewed exceptions may set
   - copyright/author: Andrea Giammarchi
   - source: https://github.com/WebReflection/flatted
   - license-url: https://spdx.org/licenses/ISC.html
-- `npm` foreground-child@3.3.1
-  - copyright/author: Isaac Z. Schlueter
-  - source: https://github.com/tapjs/foreground-child
-  - license-url: https://spdx.org/licenses/ISC.html
-- `npm` glob@10.5.0
-  - copyright/author: Isaac Z. Schlueter
-  - source: git://github.com/isaacs/node-glob
-  - license-url: https://spdx.org/licenses/ISC.html
 - `npm` glob-parent@5.1.2
   - copyright/author: Gulp Team
   - source: https://github.com/gulpjs/glob-parent
@@ -608,10 +576,6 @@ from the npm registry (canonical, OS-independent). Reviewed exceptions may set
   - copyright/author: Isaac Z. Schlueter
   - source: git://github.com/isaacs/minimatch
   - license-url: https://spdx.org/licenses/ISC.html
-- `npm` minimatch@9.0.9
-  - copyright/author: Isaac Z. Schlueter
-  - source: git://github.com/isaacs/minimatch
-  - license-url: https://spdx.org/licenses/ISC.html
 - `npm` once@1.4.0
   - copyright/author: Isaac Z. Schlueter
   - source: git://github.com/isaacs/once
@@ -643,10 +607,6 @@ from the npm registry (canonical, OS-independent). Reviewed exceptions may set
 - `npm` signal-exit@4.1.0
   - copyright/author: Ben Coe
   - source: https://github.com/tapjs/signal-exit
-  - license-url: https://spdx.org/licenses/ISC.html
-- `npm` test-exclude@7.0.2
-  - copyright/author: Ben Coe
-  - source: https://github.com/istanbuljs/test-exclude
   - license-url: https://spdx.org/licenses/ISC.html
 - `npm` which@2.0.2
   - copyright/author: Isaac Z. Schlueter
@@ -993,10 +953,6 @@ from the npm registry (canonical, OS-independent). Reviewed exceptions may set
 - `npm` @img/colour@1.1.0
   - source: https://github.com/lovell/colour
   - license-url: https://spdx.org/licenses/MIT.html
-- `npm` @istanbuljs/schema@0.1.6
-  - copyright/author: Corey Farrell
-  - source: https://github.com/istanbuljs/schema
-  - license-url: https://spdx.org/licenses/MIT.html
 - `npm` @jridgewell/gen-mapping@0.3.13
   - copyright/author: Justin Ridgewell
   - source: https://github.com/jridgewell/sourcemaps
@@ -1074,9 +1030,6 @@ from the npm registry (canonical, OS-independent). Reviewed exceptions may set
   - license-url: https://spdx.org/licenses/MIT.html
 - `npm` @nolyfill/is-core-module@1.0.39
   - source: https://github.com/SukkaW/nolyfill
-  - license-url: https://spdx.org/licenses/MIT.html
-- `npm` @pkgjs/parseargs@0.11.0
-  - source: ssh://git@github.com/pkgjs/parseargs
   - license-url: https://spdx.org/licenses/MIT.html
 - `npm` @radix-ui/number@1.1.1
   - source: https://github.com/radix-ui/primitives
@@ -1650,32 +1603,29 @@ from the npm registry (canonical, OS-independent). Reviewed exceptions may set
   - copyright/author: Evan You
   - source: https://github.com/vitejs/vite-plugin-react
   - license-url: https://spdx.org/licenses/MIT.html
-- `npm` @vitest/coverage-v8@3.2.6
-  - copyright/author: Anthony Fu
+- `npm` @vitest/coverage-v8@4.1.11
+  - copyright/author: Anthony Fu <anthonyfu117@hotmail.com>
   - source: https://github.com/vitest-dev/vitest
   - license-url: https://spdx.org/licenses/MIT.html
-- `npm` @vitest/expect@3.2.6
+- `npm` @vitest/expect@4.1.11
   - source: https://github.com/vitest-dev/vitest
   - license-url: https://spdx.org/licenses/MIT.html
-- `npm` @vitest/mocker@3.2.6
+- `npm` @vitest/mocker@4.1.11
   - source: https://github.com/vitest-dev/vitest
   - license-url: https://spdx.org/licenses/MIT.html
-- `npm` @vitest/pretty-format@3.2.6
+- `npm` @vitest/pretty-format@4.1.11
   - source: https://github.com/vitest-dev/vitest
   - license-url: https://spdx.org/licenses/MIT.html
-- `npm` @vitest/pretty-format@3.2.7
+- `npm` @vitest/runner@4.1.11
   - source: https://github.com/vitest-dev/vitest
   - license-url: https://spdx.org/licenses/MIT.html
-- `npm` @vitest/runner@3.2.6
+- `npm` @vitest/snapshot@4.1.11
   - source: https://github.com/vitest-dev/vitest
   - license-url: https://spdx.org/licenses/MIT.html
-- `npm` @vitest/snapshot@3.2.6
+- `npm` @vitest/spy@4.1.11
   - source: https://github.com/vitest-dev/vitest
   - license-url: https://spdx.org/licenses/MIT.html
-- `npm` @vitest/spy@3.2.6
-  - source: https://github.com/vitest-dev/vitest
-  - license-url: https://spdx.org/licenses/MIT.html
-- `npm` @vitest/utils@3.2.6
+- `npm` @vitest/utils@4.1.11
   - source: https://github.com/vitest-dev/vitest
   - license-url: https://spdx.org/licenses/MIT.html
 - `npm` abort-controller@3.0.0
@@ -1716,10 +1666,6 @@ from the npm registry (canonical, OS-independent). Reviewed exceptions may set
   - source: https://github.com/chalk/ansi-regex
   - license-url: https://spdx.org/licenses/MIT.html
 - `npm` ansi-regex@6.2.2
-  - copyright/author: Sindre Sorhus
-  - source: https://github.com/chalk/ansi-regex
-  - license-url: https://spdx.org/licenses/MIT.html
-- `npm` ansi-regex@6.3.0
   - copyright/author: Sindre Sorhus
   - source: https://github.com/chalk/ansi-regex
   - license-url: https://spdx.org/licenses/MIT.html
@@ -1779,7 +1725,7 @@ from the npm registry (canonical, OS-independent). Reviewed exceptions may set
   - copyright/author: kyldvs
   - source: https://github.com/kyldvs/ast-types-flow
   - license-url: https://spdx.org/licenses/MIT.html
-- `npm` ast-v8-to-istanbul@0.3.12
+- `npm` ast-v8-to-istanbul@1.0.7
   - copyright/author: Ari Perkkiö
   - source: https://github.com/AriPerkkio/ast-v8-to-istanbul
   - license-url: https://spdx.org/licenses/MIT.html
@@ -1816,10 +1762,6 @@ from the npm registry (canonical, OS-independent). Reviewed exceptions may set
   - copyright/author: Julian Gruber
   - source: git://github.com/juliangruber/brace-expansion
   - license-url: https://spdx.org/licenses/MIT.html
-- `npm` brace-expansion@2.1.7
-  - copyright/author: Julian Gruber
-  - source: git://github.com/juliangruber/brace-expansion
-  - license-url: https://spdx.org/licenses/MIT.html
 - `npm` brace-expansion@5.0.12
   - source: https://github.com/juliangruber/brace-expansion
   - license-url: https://spdx.org/licenses/MIT.html
@@ -1834,10 +1776,6 @@ from the npm registry (canonical, OS-independent). Reviewed exceptions may set
 - `npm` bytes@3.1.2
   - copyright/author: TJ Holowaychuk
   - source: https://github.com/visionmedia/bytes.js
-  - license-url: https://spdx.org/licenses/MIT.html
-- `npm` cac@6.7.14
-  - copyright/author: egoist
-  - source: https://github.com/egoist/cac
   - license-url: https://spdx.org/licenses/MIT.html
 - `npm` call-bind@1.0.9
   - copyright/author: Jordan Harband
@@ -1855,16 +1793,12 @@ from the npm registry (canonical, OS-independent). Reviewed exceptions may set
   - copyright/author: Sindre Sorhus
   - source: https://github.com/sindresorhus/callsites
   - license-url: https://spdx.org/licenses/MIT.html
-- `npm` chai@5.3.3
+- `npm` chai@6.3.0
   - copyright/author: Jake Luer
   - source: https://github.com/chaijs/chai
   - license-url: https://spdx.org/licenses/MIT.html
 - `npm` chalk@4.1.2
   - source: https://github.com/chalk/chalk
-  - license-url: https://spdx.org/licenses/MIT.html
-- `npm` check-error@2.1.3
-  - copyright/author: Jake Luer
-  - source: ssh://git@github.com/chaijs/check-error
   - license-url: https://spdx.org/licenses/MIT.html
 - `npm` chokidar@5.0.0
   - copyright/author: Paul Miller
@@ -1994,10 +1928,6 @@ from the npm registry (canonical, OS-independent). Reviewed exceptions may set
   - copyright/author: Michael Mclaughlin
   - source: https://github.com/MikeMcl/decimal.js-light
   - license-url: https://spdx.org/licenses/MIT.html
-- `npm` deep-eql@5.0.2
-  - copyright/author: Jake Luer
-  - source: ssh://git@github.com/chaijs/deep-eql
-  - license-url: https://spdx.org/licenses/MIT.html
 - `npm` deep-is@0.1.4
   - copyright/author: Thorsten Lorenz
   - source: ssh://git@github.com/thlorenz/deep-is
@@ -2032,10 +1962,6 @@ from the npm registry (canonical, OS-independent). Reviewed exceptions may set
   - copyright/author: Jordan Harband
   - source: https://github.com/es-shims/dunder-proto
   - license-url: https://spdx.org/licenses/MIT.html
-- `npm` eastasianwidth@0.2.0
-  - copyright/author: Masaki Komagata
-  - source: git://github.com/komagata/eastasianwidth
-  - license-url: https://spdx.org/licenses/MIT.html
 - `npm` ee-first@1.1.1
   - copyright/author: Jonathan Ong
   - source: https://github.com/jonathanong/ee-first
@@ -2053,10 +1979,6 @@ from the npm registry (canonical, OS-independent). Reviewed exceptions may set
   - source: https://github.com/davidjerleke/embla-carousel
   - license-url: https://spdx.org/licenses/MIT.html
 - `npm` emoji-regex@10.6.0
-  - copyright/author: Mathias Bynens
-  - source: https://github.com/mathiasbynens/emoji-regex
-  - license-url: https://spdx.org/licenses/MIT.html
-- `npm` emoji-regex@8.0.0
   - copyright/author: Mathias Bynens
   - source: https://github.com/mathiasbynens/emoji-regex
   - license-url: https://spdx.org/licenses/MIT.html
@@ -2095,7 +2017,7 @@ from the npm registry (canonical, OS-independent). Reviewed exceptions may set
   - copyright/author: Jordan Harband
   - source: https://github.com/es-shims/iterator-helpers
   - license-url: https://spdx.org/licenses/MIT.html
-- `npm` es-module-lexer@1.7.0
+- `npm` es-module-lexer@2.3.2
   - copyright/author: Guy Bedford
   - source: https://github.com/guybedford/es-module-lexer
   - license-url: https://spdx.org/licenses/MIT.html
@@ -2516,10 +2438,6 @@ from the npm registry (canonical, OS-independent). Reviewed exceptions may set
   - copyright/author: Jordan Harband
   - source: https://github.com/inspect-js/is-finalizationregistry
   - license-url: https://spdx.org/licenses/MIT.html
-- `npm` is-fullwidth-code-point@3.0.0
-  - copyright/author: Sindre Sorhus
-  - source: https://github.com/sindresorhus/is-fullwidth-code-point
-  - license-url: https://spdx.org/licenses/MIT.html
 - `npm` is-fullwidth-code-point@5.1.0
   - copyright/author: Sindre Sorhus
   - source: https://github.com/sindresorhus/is-fullwidth-code-point
@@ -2629,10 +2547,6 @@ from the npm registry (canonical, OS-independent). Reviewed exceptions may set
   - copyright/author: Simon Lydell
   - source: https://github.com/lydell/js-tokens
   - license-url: https://spdx.org/licenses/MIT.html
-- `npm` js-tokens@9.0.1
-  - copyright/author: Simon Lydell
-  - source: https://github.com/lydell/js-tokens
-  - license-url: https://spdx.org/licenses/MIT.html
 - `npm` js-yaml@4.3.2
   - copyright/author: Vladimir Zapparov
   - source: https://github.com/nodeca/js-yaml
@@ -2712,10 +2626,6 @@ from the npm registry (canonical, OS-independent). Reviewed exceptions may set
   - copyright/author: Andres Suarez
   - source: git://github.com/zertosh/loose-envify
   - license-url: https://spdx.org/licenses/MIT.html
-- `npm` loupe@3.2.1
-  - copyright/author: Veselin Todorov
-  - source: https://github.com/chaijs/loupe
-  - license-url: https://spdx.org/licenses/MIT.html
 - `npm` lz-string@1.5.0
   - copyright/author: pieroxy
   - source: https://github.com/pieroxy/lz-string
@@ -2724,8 +2634,8 @@ from the npm registry (canonical, OS-independent). Reviewed exceptions may set
   - copyright/author: Rich Harris
   - source: https://github.com/Rich-Harris/magic-string
   - license-url: https://spdx.org/licenses/MIT.html
-- `npm` magicast@0.3.5
-  - source: https://github.com/unjs/magicast
+- `npm` magicast@0.5.5
+  - source: unjs/magicast
   - license-url: https://spdx.org/licenses/MIT.html
 - `npm` make-dir@4.0.0
   - copyright/author: Sindre Sorhus
@@ -2846,6 +2756,10 @@ from the npm registry (canonical, OS-independent). Reviewed exceptions may set
   - copyright/author: Jordan Harband
   - source: git://github.com/es-shims/Object.values
   - license-url: https://spdx.org/licenses/MIT.html
+- `npm` obug@2.2.1
+  - copyright/author: Kevin Deng <sxzz@sxzz.moe>
+  - source: https://github.com/sxzz/obug
+  - license-url: https://spdx.org/licenses/MIT.html
 - `npm` on-finished@2.4.1
   - source: https://github.com/jshttp/on-finished
   - license-url: https://spdx.org/licenses/MIT.html
@@ -2910,15 +2824,7 @@ from the npm registry (canonical, OS-independent). Reviewed exceptions may set
 - `npm` pathe@2.0.3
   - source: https://github.com/unjs/pathe
   - license-url: https://spdx.org/licenses/MIT.html
-- `npm` pathval@2.0.1
-  - copyright/author: Veselin Todorov
-  - source: ssh://git@github.com/chaijs/pathval
-  - license-url: https://spdx.org/licenses/MIT.html
 - `npm` picomatch@2.3.2
-  - copyright/author: Jon Schlinkert
-  - source: https://github.com/micromatch/picomatch
-  - license-url: https://spdx.org/licenses/MIT.html
-- `npm` picomatch@4.0.4
   - copyright/author: Jon Schlinkert
   - source: https://github.com/micromatch/picomatch
   - license-url: https://spdx.org/licenses/MIT.html
@@ -3225,8 +3131,8 @@ from the npm registry (canonical, OS-independent). Reviewed exceptions may set
 - `npm` statuses@2.0.2
   - source: https://github.com/jshttp/statuses
   - license-url: https://spdx.org/licenses/MIT.html
-- `npm` std-env@3.10.0
-  - source: https://github.com/unjs/std-env
+- `npm` std-env@4.3.0
+  - source: unjs/std-env
   - license-url: https://spdx.org/licenses/MIT.html
 - `npm` stop-iteration-iterator@1.1.0
   - copyright/author: Jordan Harband
@@ -3235,14 +3141,6 @@ from the npm registry (canonical, OS-independent). Reviewed exceptions may set
 - `npm` string-argv@0.3.2
   - copyright/author: Anthony McCormick
   - source: https://github.com/mccormicka/string-argv
-  - license-url: https://spdx.org/licenses/MIT.html
-- `npm` string-width@4.2.3
-  - copyright/author: Sindre Sorhus
-  - source: https://github.com/sindresorhus/string-width
-  - license-url: https://spdx.org/licenses/MIT.html
-- `npm` string-width@5.1.2
-  - copyright/author: Sindre Sorhus
-  - source: https://github.com/sindresorhus/string-width
   - license-url: https://spdx.org/licenses/MIT.html
 - `npm` string-width@7.2.0
   - copyright/author: Sindre Sorhus
@@ -3276,10 +3174,6 @@ from the npm registry (canonical, OS-independent). Reviewed exceptions may set
   - copyright/author: Jordan Harband
   - source: git://github.com/es-shims/String.prototype.trimStart
   - license-url: https://spdx.org/licenses/MIT.html
-- `npm` strip-ansi@6.0.1
-  - copyright/author: Sindre Sorhus
-  - source: https://github.com/chalk/strip-ansi
-  - license-url: https://spdx.org/licenses/MIT.html
 - `npm` strip-ansi@7.2.0
   - copyright/author: Sindre Sorhus
   - source: https://github.com/chalk/strip-ansi
@@ -3295,10 +3189,6 @@ from the npm registry (canonical, OS-independent). Reviewed exceptions may set
 - `npm` strip-json-comments@3.1.1
   - copyright/author: Sindre Sorhus
   - source: https://github.com/sindresorhus/strip-json-comments
-  - license-url: https://spdx.org/licenses/MIT.html
-- `npm` strip-literal@3.1.0
-  - copyright/author: Anthony Fu
-  - source: https://github.com/antfu/strip-literal
   - license-url: https://spdx.org/licenses/MIT.html
 - `npm` styled-jsx@5.1.6
   - source: https://github.com/vercel/styled-jsx
@@ -3337,33 +3227,23 @@ from the npm registry (canonical, OS-independent). Reviewed exceptions may set
   - copyright/author: Tinylibs Maintainers
   - source: https://github.com/tinylibs/tinyclip
   - license-url: https://spdx.org/licenses/MIT.html
-- `npm` tinyexec@0.3.2
-  - copyright/author: James Garbutt
-  - source: https://github.com/tinylibs/tinyexec
-  - license-url: https://spdx.org/licenses/MIT.html
 - `npm` tinyexec@1.2.4
   - copyright/author: James Garbutt
   - source: https://github.com/tinylibs/tinyexec
   - license-url: https://spdx.org/licenses/MIT.html
-- `npm` tinyglobby@0.2.16
-  - copyright/author: Superchupu
-  - source: https://github.com/SuperchupuDev/tinyglobby
+- `npm` tinyexec@1.3.1
+  - copyright/author: James Garbutt
+  - source: https://github.com/tinylibs/tinyexec
   - license-url: https://spdx.org/licenses/MIT.html
 - `npm` tinyglobby@0.2.17
   - copyright/author: Superchupu
   - source: https://github.com/SuperchupuDev/tinyglobby
   - license-url: https://spdx.org/licenses/MIT.html
-- `npm` tinypool@1.1.1
-  - source: https://github.com/tinylibs/tinypool
-  - license-url: https://spdx.org/licenses/MIT.html
 - `npm` tinypool@2.2.0
   - source: https://github.com/tinylibs/tinypool
   - license-url: https://spdx.org/licenses/MIT.html
-- `npm` tinyrainbow@2.0.0
+- `npm` tinyrainbow@3.2.0
   - source: https://github.com/tinylibs/tinyrainbow
-  - license-url: https://spdx.org/licenses/MIT.html
-- `npm` tinyspy@4.0.4
-  - source: https://github.com/tinylibs/tinyspy
   - license-url: https://spdx.org/licenses/MIT.html
 - `npm` tldts@6.1.86
   - copyright/author: Rémi Berson
@@ -3484,12 +3364,8 @@ from the npm registry (canonical, OS-independent). Reviewed exceptions may set
   - copyright/author: Evan You
   - source: https://github.com/vitejs/vite
   - license-url: https://spdx.org/licenses/MIT.html
-- `npm` vite-node@3.2.4
-  - copyright/author: Anthony Fu
-  - source: https://github.com/vitest-dev/vitest
-  - license-url: https://spdx.org/licenses/MIT.html
-- `npm` vitest@3.2.6
-  - copyright/author: Anthony Fu
+- `npm` vitest@4.1.11
+  - copyright/author: Anthony Fu <anthonyfu117@hotmail.com>
   - source: https://github.com/vitest-dev/vitest
   - license-url: https://spdx.org/licenses/MIT.html
 - `npm` w3c-xmlserializer@5.0.0
@@ -3542,14 +3418,6 @@ from the npm registry (canonical, OS-independent). Reviewed exceptions may set
 - `npm` wordwrap@1.0.0
   - copyright/author: James Halliday
   - source: git://github.com/substack/node-wordwrap
-  - license-url: https://spdx.org/licenses/MIT.html
-- `npm` wrap-ansi@7.0.0
-  - copyright/author: Sindre Sorhus
-  - source: https://github.com/chalk/wrap-ansi
-  - license-url: https://spdx.org/licenses/MIT.html
-- `npm` wrap-ansi@8.1.0
-  - copyright/author: Sindre Sorhus
-  - source: https://github.com/chalk/wrap-ansi
   - license-url: https://spdx.org/licenses/MIT.html
 - `npm` wrap-ansi@9.0.2
   - copyright/author: Sindre Sorhus

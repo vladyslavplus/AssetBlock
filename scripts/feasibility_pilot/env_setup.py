@@ -19,9 +19,10 @@ REQUESTED_ML = {
     "python": "3.12",
     "torch": "2.14.1+cu130",
     "torchIndex": "https://download.pytorch.org/whl/cu130",
-    "transformers": "4.57.1",
-    "safetensors": "0.6.2",
-    "huggingface_hub": "0.36.0",
+    "transformers": "5.17.0",
+    "safetensors": "0.8.0",
+    "huggingface_hub": "1.33.0",
+    "tokenizers": "0.23.2",
     "tree_sitter": "0.25.2",
     "tree_sitter_javascript": "0.25.0",
     "tree_sitter_typescript": "0.23.2",
@@ -197,6 +198,121 @@ def download_model() -> dict[str, Any]:
         local_dir_use_symlinks=False,
     )
     return record_model_identity(Path(path))
+
+
+def load_trusted_model_identity() -> dict[str, Any]:
+    path = CONFIG_ROOT / "model-trusted-identity.json"
+    return json.loads(path.read_text(encoding="utf-8"))
+
+
+def _sha256_file(path: Path) -> str:
+    return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def verify_pinned_model_identity(model_dir: Path, *, trusted: dict[str, Any] | None = None) -> dict[str, Any]:
+    """Read-only identity gate for smoke/loads. Never converts or rewrites the cache."""
+    trusted = trusted or load_trusted_model_identity()
+    if trusted.get("modelId") != MODEL_ID or trusted.get("modelRevision") != MODEL_REVISION:
+        raise ValueError("trusted model identity metadata does not match env_setup pins")
+    if not model_dir.is_dir():
+        raise FileNotFoundError(f"model cache directory is missing: {model_dir}")
+
+    expected: dict[str, str] = dict(trusted.get("fileHashes") or {})
+    bound_config = list(trusted.get("boundTokenizerAndConfigFiles") or [])
+    observed: dict[str, str] = {}
+
+    bin_path = model_dir / "pytorch_model.bin"
+    if not bin_path.is_file():
+        raise FileNotFoundError("pytorch_model.bin is missing from the model cache")
+    observed["pytorch_model.bin"] = _sha256_file(bin_path)
+    if observed["pytorch_model.bin"] != PINNED_BIN_SHA256:
+        raise ValueError(
+            "pytorch_model.bin hash does not match the pinned revision blob "
+            f"(expected {PINNED_BIN_SHA256}, observed {observed['pytorch_model.bin']})"
+        )
+
+    for rel in bound_config:
+        path = model_dir / rel
+        if not path.is_file():
+            raise FileNotFoundError(f"bound tokenizer/config file is missing: {rel}")
+        observed[rel] = _sha256_file(path)
+        want = expected.get(rel)
+        if not want or observed[rel] != want:
+            raise ValueError(f"{rel} hash does not match trusted identity (expected {want}, observed {observed[rel]})")
+
+    safetensors_path = model_dir / "model.safetensors"
+    use_safetensors = False
+    selected_weights: dict[str, Any]
+    if safetensors_path.is_file():
+        observed["model.safetensors"] = _sha256_file(safetensors_path)
+        want_safe = expected.get("model.safetensors")
+        if not want_safe:
+            raise ValueError("model.safetensors present but no trusted conversion hash is recorded")
+        if observed["model.safetensors"] != want_safe:
+            raise ValueError(
+                "model.safetensors hash does not match trusted conversion evidence "
+                f"(expected {want_safe}, observed {observed['model.safetensors']})"
+            )
+        use_safetensors = True
+        selected_weights = {
+            "format": "model.safetensors",
+            "path": "model.safetensors",
+            "sha256": observed["model.safetensors"],
+        }
+    else:
+        selected_weights = {
+            "format": "pytorch_model.bin",
+            "path": "pytorch_model.bin",
+            "sha256": observed["pytorch_model.bin"],
+        }
+
+    return {
+        "outcome": "VERIFIED",
+        "modelId": MODEL_ID,
+        "modelRevision": MODEL_REVISION,
+        "localDir": str(model_dir),
+        "trustRemoteCode": bool(trusted.get("trustRemoteCode", False)),
+        "localFilesOnly": bool(trusted.get("localFilesOnly", True)),
+        "useSafetensors": use_safetensors,
+        "selectedWeights": selected_weights,
+        "fileHashes": observed,
+        "trustedIdentityPath": str(CONFIG_ROOT / "model-trusted-identity.json"),
+    }
+
+
+def parse_ml_requirement_pins() -> dict[str, str]:
+    req = CONFIG_ROOT / "requirements-ml.txt"
+    pins: dict[str, str] = {}
+    for raw in req.read_text(encoding="utf-8").splitlines():
+        line = raw.strip()
+        if not line or line.startswith("#") or "==" not in line:
+            continue
+        name, version = line.split("==", 1)
+        pins[name.strip()] = version.strip()
+    return pins
+
+
+def verify_ml_smoke_package_pins(*, torch_version: str | None = None) -> dict[str, str]:
+    """Exact pins for the transformers 5.17 compatibility smoke (torch base 2.14.1)."""
+    import importlib.metadata as metadata
+
+    pins = parse_ml_requirement_pins()
+    observed: dict[str, str] = {}
+    for pkg, want in pins.items():
+        dist_name = pkg.replace("_", "-")
+        try:
+            got = metadata.version(dist_name)
+        except metadata.PackageNotFoundError:
+            raise RuntimeError(f"required ML package is not installed: {dist_name}=={want}") from None
+        if got != want:
+            raise RuntimeError(f"{dist_name} version mismatch (expected {want}, observed {got})")
+        observed[dist_name] = got
+    if torch_version is not None:
+        base = torch_version.split("+", 1)[0]
+        if base != "2.14.1":
+            raise RuntimeError(f"torch version mismatch for smoke (expected 2.14.1 base, observed {torch_version})")
+        observed["torch"] = torch_version
+    return observed
 
 
 def record_model_identity(model_dir: Path) -> dict[str, Any]:

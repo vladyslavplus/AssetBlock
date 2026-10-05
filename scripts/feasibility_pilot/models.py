@@ -41,7 +41,11 @@ class PairVerifier(nn.Module):
 
 
 def load_tokenizer(model_dir: Path):
-    return RobertaTokenizerFast.from_pretrained(str(model_dir), local_files_only=True)
+    return RobertaTokenizerFast.from_pretrained(
+        str(model_dir),
+        local_files_only=True,
+        trust_remote_code=False,
+    )
 
 
 def load_encoder(model_dir: Path, *, trainable: bool) -> RobertaModel:

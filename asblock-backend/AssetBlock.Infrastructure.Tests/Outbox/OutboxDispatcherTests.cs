@@ -262,7 +262,7 @@ public sealed class OutboxDispatcherTests
         await outbox.Received(1).MarkFailed(
             message.Id,
             lockToken,
-            "transient error",
+            "HANDLER_EXCEPTION:InvalidOperationException",
             Arg.Is<DateTimeOffset>(next => next >= before.AddSeconds(1.5) && next <= after.AddSeconds(1.7)),
             Arg.Any<CancellationToken>());
     }
@@ -310,7 +310,7 @@ public sealed class OutboxDispatcherTests
         await outbox.Received(1).MarkFailed(
             message.Id,
             lockToken,
-            "dependency unavailable",
+            "HANDLER_EXCEPTION:InvalidOperationException",
             Arg.Is<DateTimeOffset>(next => next > now),
             Arg.Any<CancellationToken>());
         await outbox.DidNotReceive().MarkProcessed(
@@ -372,7 +372,11 @@ public sealed class OutboxDispatcherTests
 
         recordedOutcomes.Should().ContainSingle().Which.Should().Be("dead_letter");
         recordedDurations.Should().ContainSingle().Which.Should().BeGreaterThan(0);
-        await outbox.Received(1).MarkDeadLettered(message.Id, lockToken, Arg.Is<string>(s => s.Contains("test.missing")), Arg.Any<CancellationToken>());
+        await outbox.Received(1).MarkDeadLettered(
+            message.Id,
+            lockToken,
+            "NO_HANDLER",
+            Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -411,7 +415,7 @@ public sealed class OutboxDispatcherTests
         await outbox.Received(1).MarkDeadLettered(
             message.Id,
             lockToken,
-            "persistent failure",
+            "MAX_ATTEMPTS_EXCEEDED:InvalidOperationException",
             Arg.Any<CancellationToken>());
         await outbox.DidNotReceive().MarkFailed(
             Arg.Any<Guid>(),
@@ -472,5 +476,58 @@ public sealed class OutboxDispatcherTests
         listener.RecordObservableInstruments();
 
         recordedOutcomes.Should().ContainSingle().Which.Should().Be("failure");
+    }
+
+    [Fact]
+    public async Task DispatchBatch_WhenHandlerThrowsSensitiveMessage_ShouldPersistBoundedReasonOnly()
+    {
+        const string sentinel = "SuperSecretPassword!";
+        var lockToken = Guid.NewGuid();
+        var message = new OutboxMessage
+        {
+            Id = Guid.NewGuid(),
+            Type = "test.sensitive",
+            Payload = "{}",
+            LockToken = lockToken,
+            AttemptCount = 1,
+        };
+        IOutboxStore outbox = Substitute.For<IOutboxStore>();
+        outbox.ClaimPendingBatch(Arg.Any<int>(), Arg.Any<TimeSpan>(), Arg.Any<CancellationToken>())
+            .Returns([message]);
+        outbox.MarkFailed(
+                message.Id,
+                lockToken,
+                Arg.Any<string>(),
+                Arg.Any<DateTimeOffset>(),
+                Arg.Any<CancellationToken>())
+            .Returns(true);
+
+        IOutboxMessageHandler handler = Substitute.For<IOutboxMessageHandler>();
+        handler.MessageType.Returns(message.Type);
+        handler.Handle(message, Arg.Any<CancellationToken>())
+            .ThrowsAsync(new InvalidOperationException($"dependency failed password={sentinel}"));
+
+        var services = new ServiceCollection();
+        services.AddSingleton(outbox);
+        services.AddSingleton(handler);
+        await using ServiceProvider provider = services.BuildServiceProvider();
+        var dispatcher = new OutboxDispatcher(
+            provider.GetRequiredService<IServiceScopeFactory>(),
+            NullLogger<OutboxDispatcher>.Instance);
+
+        await dispatcher.DispatchBatch(CancellationToken.None);
+
+        await outbox.Received(1).MarkFailed(
+            message.Id,
+            lockToken,
+            "HANDLER_EXCEPTION:InvalidOperationException",
+            Arg.Any<DateTimeOffset>(),
+            Arg.Any<CancellationToken>());
+        await outbox.DidNotReceive().MarkFailed(
+            message.Id,
+            lockToken,
+            Arg.Is<string>(reason => reason.Contains(sentinel)),
+            Arg.Any<DateTimeOffset>(),
+            Arg.Any<CancellationToken>());
     }
 }

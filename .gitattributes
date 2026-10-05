@@ -1,1 +1,5 @@
 patches/*.patch text eol=lf
+
+# Fixture hashes include intentional LF/CRLF bytes; never normalize on checkout.
+scripts/feasibility_pilot/fixtures/code/** -text
+scripts/feasibility_pilot/fixtures/licenses/** -text

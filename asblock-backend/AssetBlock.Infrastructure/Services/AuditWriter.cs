@@ -40,10 +40,9 @@ internal sealed class AuditWriter(
         catch (Exception ex)
         {
             logger.LogError(
-                ex,
-                "Best-effort audit write failed for action {Action} outcome {Outcome}",
-                auditEvent.Action,
-                auditEvent.Outcome);
+                "Best-effort audit write failed outcome {Outcome} exceptionType {ExceptionType}",
+                auditEvent.Outcome,
+                ex.GetType().Name);
         }
     }
 

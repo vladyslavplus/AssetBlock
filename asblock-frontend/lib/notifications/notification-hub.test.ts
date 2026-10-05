@@ -34,12 +34,12 @@ const USER_B = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb'
 
 let customStartImplementation: ((conn: (typeof connections)[0]) => Promise<void>) | null = null
 
-vi.mock('@microsoft/signalr', () => ({
-  HubConnectionBuilder: vi.fn(() => ({
-    withUrl: vi.fn().mockReturnThis(),
-    withAutomaticReconnect: vi.fn().mockReturnThis(),
-    configureLogging: vi.fn().mockReturnThis(),
-    build: vi.fn(() => {
+vi.mock('@microsoft/signalr', () => {
+  class HubConnectionBuilder {
+    withUrl = vi.fn().mockReturnThis()
+    withAutomaticReconnect = vi.fn().mockReturnThis()
+    configureLogging = vi.fn().mockReturnThis()
+    build = vi.fn(() => {
       const connHandlers: Record<string, (payload: unknown) => void> = {}
       let reconnectingCb: (() => void) | null = null
       let reconnectedCb: (() => void) | null = null
@@ -86,27 +86,31 @@ vi.mock('@microsoft/signalr', () => ({
       }
       connections.push(conn)
       return conn
-    }),
-  })),
-  HttpTransportType: {
-    WebSockets: 1,
-    ServerSentEvents: 2,
-    LongPolling: 4,
-  },
-  LogLevel: {
-    Debug: 1,
-    Information: 2,
-    Warning: 3,
-    Error: 4,
-  },
-  HubConnectionState: {
-    Disconnected: 'Disconnected',
-    Connecting: 'Connecting',
-    Connected: 'Connected',
-    Disconnecting: 'Disconnecting',
-    Reconnecting: 'Reconnecting',
-  },
-}))
+    })
+  }
+
+  return {
+    HubConnectionBuilder,
+    HttpTransportType: {
+      WebSockets: 1,
+      ServerSentEvents: 2,
+      LongPolling: 4,
+    },
+    LogLevel: {
+      Debug: 1,
+      Information: 2,
+      Warning: 3,
+      Error: 4,
+    },
+    HubConnectionState: {
+      Disconnected: 'Disconnected',
+      Connecting: 'Connecting',
+      Connected: 'Connected',
+      Disconnecting: 'Disconnecting',
+      Reconnecting: 'Reconnecting',
+    },
+  }
+})
 
 vi.mock('@/lib/notifications/notifications-hub-url', () => ({
   getNotificationsHubUrl: () => 'http://localhost:5000/hubs/notifications',

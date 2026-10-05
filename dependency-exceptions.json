@@ -37,7 +37,7 @@
     {
       "ecosystem": "npm",
       "name": "minimatch",
-      "versions": ["10.2.5"],
+      "versions": ["10.2.6"],
       "license": "BlueOak-1.0.0",
       "reason": "Permissive BlueOak-1.0.0 transitive dependency; not on the default allowlist, reviewed and accepted.",
       "reviewedOn": "2026-08-20"
