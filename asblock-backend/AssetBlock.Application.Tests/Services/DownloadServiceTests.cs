@@ -234,6 +234,10 @@ public class DownloadServiceTests
             .Returns(MakeVersion(purchasedVersionId, 2, "assets/v2.bin", "v2.zip"));
         _assetStoreMock.GetVersion(_assetId, laterVersionId, Arg.Any<CancellationToken>())
             .Returns(MakeVersion(laterVersionId, 3, "assets/v3.bin", "v3.zip"));
+        _assetStoreMock.IsExactVersionSafeForDownload(_assetId, purchasedVersionId, Arg.Any<CancellationToken>())
+            .Returns(true);
+        _assetStoreMock.IsApprovedBuyerDownloadVersion(_assetId, laterVersionId, 2, Arg.Any<CancellationToken>())
+            .Returns(true);
 
         DownloadAuthorization purchased = await _service.AuthorizeDownload(_assetId, _userId, purchasedVersionId);
         DownloadAuthorization later = await _service.AuthorizeDownload(_assetId, _userId, laterVersionId);
@@ -262,6 +266,8 @@ public class DownloadServiceTests
             .Returns(MakeVersion(purchasedVersionId, 1, "assets/v1.bin", "v1.zip"));
         _assetStoreMock.GetVersion(_assetId, laterVersionId, Arg.Any<CancellationToken>())
             .Returns(MakeVersion(laterVersionId, 2, "assets/v2.bin", "v2.zip", processingStatus));
+        _assetStoreMock.IsApprovedBuyerDownloadVersion(_assetId, laterVersionId, 1, Arg.Any<CancellationToken>())
+            .Returns(false);
 
         DownloadAuthorization result = await _service.AuthorizeDownload(_assetId, _userId, laterVersionId);
 
@@ -269,8 +275,10 @@ public class DownloadServiceTests
         result.Permit.Should().BeNull();
     }
 
-    [Fact]
-    public async Task AuthorizeDownload_Author_CanDownloadPendingVersion()
+    [Theory]
+    [InlineData(AssetVersionProcessingStatus.PENDING_INSPECTION)]
+    [InlineData(AssetVersionProcessingStatus.PENDING_MALWARE_SCAN)]
+    public async Task AuthorizeDownload_Author_CannotDownloadPendingVersion(AssetVersionProcessingStatus processingStatus)
     {
         Asset asset = MakeAsset(authorId: _userId, downloadLimit: null);
         var versionId = Guid.NewGuid();
@@ -279,14 +287,14 @@ public class DownloadServiceTests
             versionNumber: 2,
             storageKey: "assets/pending.bin",
             fileName: "pending.zip",
-            processingStatus: AssetVersionProcessingStatus.PENDING_INSPECTION);
+            processingStatus: processingStatus);
         _assetStoreMock.GetById(_assetId, Arg.Any<bool>(), Arg.Any<CancellationToken>()).Returns(asset);
         _assetStoreMock.GetVersion(_assetId, versionId, Arg.Any<CancellationToken>()).Returns(version);
 
         DownloadAuthorization result = await _service.AuthorizeDownload(_assetId, _userId, versionId);
 
-        result.Status.Should().Be(AssetDownloadStatus.SUCCESS);
-        result.Permit!.StorageKey.Should().Be("assets/pending.bin");
+        result.Status.Should().Be(AssetDownloadStatus.NOT_FOUND);
+        result.Permit.Should().BeNull();
     }
 
     [Fact]
@@ -320,13 +328,19 @@ public class DownloadServiceTests
         _purchaseStoreMock.GetPurchase(_userId, _assetId, Arg.Any<CancellationToken>()).Returns(purchase);
         _assetStoreMock.GetVersion(_assetId, purchasedVersionId, Arg.Any<CancellationToken>())
             .Returns(MakeVersion(purchasedVersionId, 1, "assets/v1.bin", "v1.zip"));
+        _assetStoreMock.GetHighestEntitledApprovedVersion(_assetId, 1, Arg.Any<CancellationToken>())
+            .Returns(MakeVersion(currentVersionId, 2, "assets/v2.bin", "v2.zip"));
         _assetStoreMock.GetCurrentVersionSnapshot(_assetId, Arg.Any<CancellationToken>())
             .Returns(new AssetCurrentVersionSnapshot(
                 _assetId,
                 currentVersionId,
+                Guid.NewGuid(),
                 _authorId,
                 "Test",
                 null,
+                Guid.NewGuid(),
+                "Category",
+                [],
                 9.99m,
                 null,
                 2,
@@ -376,8 +390,13 @@ public class DownloadServiceTests
         string fileName = "file.zip",
         int versionNumber = 1)
     {
+        AssetVersion version = MakeVersion(assetVersionId, versionNumber, storageKey, fileName);
         _assetStoreMock.GetVersion(_assetId, assetVersionId, Arg.Any<CancellationToken>())
-            .Returns(MakeVersion(assetVersionId, versionNumber, storageKey, fileName));
+            .Returns(version);
+        _assetStoreMock.IsExactVersionSafeForDownload(_assetId, assetVersionId, Arg.Any<CancellationToken>())
+            .Returns(true);
+        _assetStoreMock.GetHighestEntitledApprovedVersion(_assetId, versionNumber, Arg.Any<CancellationToken>())
+            .Returns(version);
         _assetStoreMock.GetCurrentVersionSnapshot(_assetId, Arg.Any<CancellationToken>())
             .Returns(MakeSnapshot(assetVersionId, storageKey, fileName, versionNumber));
     }
@@ -403,9 +422,13 @@ public class DownloadServiceTests
         new(
             _assetId,
             versionId,
+            Guid.NewGuid(),
             _authorId,
             "Test Asset",
             null,
+            Guid.NewGuid(),
+            "Category",
+            [],
             9.99m,
             null,
             versionNumber,

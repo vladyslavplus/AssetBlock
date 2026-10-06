@@ -8,7 +8,9 @@ using AssetBlock.Domain.Core.Dto.Recommendations;
 using AssetBlock.Domain.Core.Entities;
 using AssetBlock.Domain.Core.Enums;
 using AssetBlock.Domain.Core.Primitives.AppSettingsOptions;
+using AssetBlock.Domain.Core.Publication;
 using AssetBlock.Infrastructure.Persistence.Configurations;
+using AssetBlock.Infrastructure.Persistence.Publication;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using NpgsqlTypes;
@@ -127,30 +129,120 @@ internal sealed class AssetStore(
             .FirstOrDefaultAsync(a => a.Id == id, cancellationToken);
     }
 
-    public Task<AssetCurrentVersionSnapshot?> GetCurrentVersionSnapshot(Guid assetId, CancellationToken cancellationToken = default)
+    public async Task<AssetCurrentVersionSnapshot?> GetCurrentVersionSnapshot(Guid assetId, CancellationToken cancellationToken = default)
+    {
+        var row = await (
+            from a in dbContext.Assets.AsNoTracking()
+            where a.Id == assetId && a.CurrentPublicationSnapshotId != null
+            join s in PublicationEligibilityQuery.TrustedApprovedSnapshots(dbContext)
+                on new { SnapshotId = a.CurrentPublicationSnapshotId!.Value, AssetId = a.Id }
+                equals new { SnapshotId = s.Id, AssetId = s.AssetId }
+            join v in dbContext.AssetVersions.AsNoTracking()
+                on new { VersionId = s.AssetVersionId, AssetId = s.AssetId, Hash = s.ContentSha256 }
+                equals new { VersionId = v.Id, AssetId = v.AssetId, Hash = v.ContentSha256 }
+            where v.ProcessingStatus == AssetVersionProcessingStatus.READY
+            select new
+            {
+                a.AuthorId,
+                a.Title,
+                a.Description,
+                a.Price,
+                a.DeletedAt,
+                Snapshot = s,
+                Version = v
+            })
+            .FirstOrDefaultAsync(cancellationToken);
+
+        if (row is null)
+        {
+            return null;
+        }
+
+        var approvedJson = row.Snapshot.ApprovedMetadataJson;
+        if (!ApprovedPublicationMetadata.TryReadPublicProjection(approvedJson, out ApprovedPublicationMetadata.PublicProjection publication))
+        {
+            return null;
+        }
+
+        var categoryName = await dbContext.Categories
+            .AsNoTracking()
+            .Where(c => c.Id == publication.CategoryId)
+            .Select(c => c.Name)
+            .FirstOrDefaultAsync(cancellationToken);
+        if (categoryName is null)
+        {
+            return null;
+        }
+
+        return new AssetCurrentVersionSnapshot(
+            assetId,
+            row.Version.Id,
+            row.Snapshot.Id,
+            row.AuthorId,
+            publication.Title,
+            publication.Description,
+            publication.CategoryId,
+            categoryName,
+            publication.Tags,
+            row.Price,
+            row.DeletedAt,
+            row.Version.VersionNumber,
+            row.Version.CreatedAt,
+            row.Version.FileName,
+            row.Version.StorageKey,
+            row.Version.ContentLength,
+            row.Version.ContentSha256,
+            row.Version.LicenseCode.ToString(),
+            row.Version.LicenseTemplateVersion,
+            row.Version.LicenseDisplayName,
+            row.Version.LicenseTerms);
+    }
+
+    public Task<bool> IsPinnedSaleOfferingValid(
+        Guid assetId,
+        Guid assetVersionId,
+        Guid publicationSnapshotId,
+        CancellationToken cancellationToken = default)
+    {
+        return PublicationEligibilityQuery
+            .SaleEligibleSnapshotById(dbContext, assetId, publicationSnapshotId, assetVersionId)
+            .AnyAsync(cancellationToken);
+    }
+
+    public Task<AssetVersion?> GetHighestEntitledApprovedVersion(
+        Guid assetId,
+        int purchasedVersionNumber,
+        CancellationToken cancellationToken = default)
+    {
+        return PublicationEligibilityQuery
+            .BuyerAccessibleVersions(dbContext, assetId, purchasedVersionNumber)
+            .OrderByDescending(v => v.VersionNumber)
+            .FirstOrDefaultAsync(cancellationToken);
+    }
+
+    public Task<bool> IsApprovedBuyerDownloadVersion(
+        Guid assetId,
+        Guid versionId,
+        int purchasedVersionNumber,
+        CancellationToken cancellationToken = default)
+    {
+        return PublicationEligibilityQuery
+            .BuyerAccessibleVersions(dbContext, assetId, purchasedVersionNumber)
+            .AnyAsync(v => v.Id == versionId, cancellationToken);
+    }
+
+    public Task<bool> IsExactVersionSafeForDownload(
+        Guid assetId,
+        Guid versionId,
+        CancellationToken cancellationToken = default)
     {
         return dbContext.AssetVersions
             .AsNoTracking()
-            .Where(v => v.AssetId == assetId && v.IsCurrent && v.ProcessingStatus == AssetVersionProcessingStatus.READY)
-            .Select(v => new AssetCurrentVersionSnapshot(
-                v.AssetId,
-                v.Id,
-                v.Asset.AuthorId,
-                v.Asset.Title,
-                v.Asset.Description,
-                v.Asset.Price,
-                v.Asset.DeletedAt,
-                v.VersionNumber,
-                v.CreatedAt,
-                v.FileName,
-                v.StorageKey,
-                v.ContentLength,
-                v.ContentSha256,
-                v.LicenseCode.ToString(),
-                v.LicenseTemplateVersion,
-                v.LicenseDisplayName,
-                v.LicenseTerms))
-            .FirstOrDefaultAsync(cancellationToken);
+            .AnyAsync(
+                v => v.AssetId == assetId
+                    && v.Id == versionId
+                    && v.ProcessingStatus == AssetVersionProcessingStatus.READY,
+                cancellationToken);
     }
 
     public Task<AssetVersion?> GetVersion(Guid assetId, Guid versionId, CancellationToken cancellationToken = default)
@@ -174,7 +266,7 @@ internal sealed class AssetStore(
         Guid? requesterUserId,
         CancellationToken cancellationToken = default)
     {
-        var result = await dbContext.Assets
+        var access = await dbContext.Assets
             .AsNoTracking()
             .Where(a => a.Id == assetId)
             .Select(a => new
@@ -182,44 +274,45 @@ internal sealed class AssetStore(
                 IsDeleted = a.DeletedAt != null,
                 IsAuthor = requesterUserId.HasValue && a.AuthorId == requesterUserId.Value,
                 HasPurchased = requesterUserId.HasValue && dbContext.Purchases
-                    .Any(p => p.AssetId == a.Id && p.UserId == requesterUserId.Value),
-                Versions = a.Versions
-                    .Where(v => (requesterUserId.HasValue && a.AuthorId == requesterUserId.Value)
-                                || v.ProcessingStatus == AssetVersionProcessingStatus.READY)
-                    .OrderByDescending(v => v.VersionNumber)
-                    .Select(v => new AssetVersionSummaryDto(
-                        v.Id,
-                        v.VersionNumber,
-                        v.IsCurrent,
-                        v.FileName,
-                        v.ContentLength,
-                        v.ContentSha256,
-                        v.ReleaseNotes,
-                        v.CreatedAt,
-                        new AssetLicenseSummaryDto(
-                            v.LicenseCode.ToString(),
-                            v.LicenseDisplayName,
-                            v.LicenseTemplateVersion,
-                            v.LicenseTerms),
-                        v.ProcessingStatus,
-                        v.ProcessingErrorCode,
-                        v.ProcessingErrorSummary,
-                        v.ProcessingUpdatedAt))
-                    .ToList()
+                    .Any(p => p.AssetId == a.Id && p.UserId == requesterUserId.Value)
             })
             .FirstOrDefaultAsync(cancellationToken);
 
-        if (result is null)
+        if (access is null)
         {
             return null;
         }
 
-        if (result.IsDeleted && !result.IsAuthor && !result.HasPurchased)
+        if (access.IsDeleted && !access.IsAuthor && !access.HasPurchased)
         {
             return null;
         }
 
-        return result.Versions;
+        IQueryable<AssetVersion> versionsQuery = access.IsAuthor
+            ? dbContext.AssetVersions.AsNoTracking().Where(v => v.AssetId == assetId)
+            : PublicationEligibilityQuery.ApprovedVersionHistoryForAsset(dbContext, assetId);
+
+        return await versionsQuery
+            .OrderByDescending(v => v.VersionNumber)
+            .Select(v => new AssetVersionSummaryDto(
+                v.Id,
+                v.VersionNumber,
+                v.IsCurrent,
+                v.FileName,
+                v.ContentLength,
+                v.ContentSha256,
+                v.ReleaseNotes,
+                v.CreatedAt,
+                new AssetLicenseSummaryDto(
+                    v.LicenseCode.ToString(),
+                    v.LicenseDisplayName,
+                    v.LicenseTemplateVersion,
+                    v.LicenseTerms),
+                v.ProcessingStatus,
+                v.ProcessingErrorCode,
+                v.ProcessingErrorSummary,
+                v.ProcessingUpdatedAt))
+            .ToListAsync(cancellationToken);
     }
 
     public async Task<AssetVersion> CreateNextCandidateVersion(Guid assetId, Guid authorId, AssetVersion draft, CancellationToken cancellationToken = default)
@@ -281,10 +374,7 @@ internal sealed class AssetStore(
         string? modelKey = null,
         CancellationToken cancellationToken = default)
     {
-        // Public catalog query: ALWAYS requires asset to have a current READY version.
-        IQueryable<Asset> query = dbContext.Assets.AsNoTracking()
-            .Where(a => a.DeletedAt == null
-                && a.Versions.Any(v => v.IsCurrent && v.ProcessingStatus == AssetVersionProcessingStatus.READY));
+        IQueryable<Asset> query = PublicationEligibilityQuery.PublicCatalogAssets(dbContext);
 
         return await QueryPagedAssets(query, request, queryEmbedding, modelKey, cancellationToken);
     }
@@ -396,24 +486,10 @@ internal sealed class AssetStore(
                 new Dictionary<Guid, SimilarCandidateEvidence>());
         }
 
-        List<AssetListItem> hydrated = await PublicVisibleAssets()
-            .Where(a => selectedIds.Contains(a.Id))
-            .Select(a => new AssetListItem(
-                a.Id,
-                a.Title,
-                a.Description,
-                a.Price,
-                a.CategoryId,
-                a.Category.Name,
-                a.AuthorId,
-                a.Author.Username,
-                a.CreatedAt,
-                a.AssetTags
-                    .Select(at => at.Tag.Name)
-                    .OrderBy(n => n)
-                    .ToList(),
-                a.RatingAverage))
+        List<PublicCatalogProjection.Row> similarRows = await PublicCatalogProjection.SelectRows(
+                PublicVisibleAssets().Where(a => selectedIds.Contains(a.Id)))
             .ToListAsync(cancellationToken);
+        List<AssetListItem> hydrated = await PublicCatalogProjection.MapRows(dbContext, similarRows, cancellationToken);
 
         var byId = hydrated.ToDictionary(i => i.Id);
         var sharedTagsById = shortlist
@@ -579,7 +655,7 @@ internal sealed class AssetStore(
         CancellationToken cancellationToken)
     {
         (var page, var pageSize) = NormalizePaging(request);
-        IQueryable<Asset> filteredBase = ApplyNonSearchFilters(baseQuery, request);
+        IQueryable<Asset> filteredBase = ApplyPublicCatalogNonSearchFilters(baseQuery, request);
 
         if (string.IsNullOrWhiteSpace(request.Search))
         {
@@ -589,26 +665,12 @@ internal sealed class AssetStore(
                 return new CatalogPageResult<AssetListItem>([], totalCount, page, pageSize);
             }
 
-            IQueryable<Asset> sortedQuery = ApplyAssetListSort(filteredBase, request);
-            List<AssetListItem> items = await sortedQuery
+            IQueryable<Asset> sortedQuery = ApplyPublicCatalogSort(filteredBase, request);
+            List<PublicCatalogProjection.Row> rows = await PublicCatalogProjection.SelectRows(sortedQuery)
                 .Skip((page - 1) * pageSize)
                 .Take(pageSize)
-                .Select(a => new AssetListItem(
-                    a.Id,
-                    a.Title,
-                    a.Description,
-                    a.Price,
-                    a.CategoryId,
-                    a.Category.Name,
-                    a.AuthorId,
-                    a.Author.Username,
-                    a.CreatedAt,
-                    a.AssetTags
-                        .Select(at => at.Tag.Name)
-                        .OrderBy(n => n)
-                        .ToList(),
-                    a.RatingAverage))
                 .ToListAsync(cancellationToken);
+            List<AssetListItem> items = await PublicCatalogProjection.MapRows(dbContext, rows, cancellationToken);
 
             return new CatalogPageResult<AssetListItem>(items, totalCount, page, pageSize);
         }
@@ -624,7 +686,7 @@ internal sealed class AssetStore(
         return await QueryPagedSearchedCatalog(filteredBase, request, page, pageSize, cancellationToken);
     }
 
-    private static async Task<CatalogPageResult<AssetListItem>> QueryPagedSearchedCatalog(
+    private async Task<CatalogPageResult<AssetListItem>> QueryPagedSearchedCatalog(
         IQueryable<Asset> filteredBase,
         GetAssetsRequest request,
         int page,
@@ -637,34 +699,46 @@ internal sealed class AssetStore(
         var isLongEnoughForTrigram = searchText.Length >= MIN_TRIGRAM_QUERY_LENGTH;
         var candidateLimit = page * pageSize;
 
-        IQueryable<Guid> ftsMatchingIds = filteredBase
-            .Where(a => EF.Property<NpgsqlTsVector>(a, AssetConfiguration.SEARCH_VECTOR_PROPERTY)
-                .Matches(EF.Functions.WebSearchToTsQuery("simple", searchText)))
-            .Select(a => a.Id);
-
         IQueryable<Guid> titleIlikeMatchingIds = filteredBase
-            .Where(a => EF.Functions.ILike(a.Title, likePattern, LIKE_ESCAPE))
+            .Where(a => a.CurrentPublicationSnapshot != null
+                && EF.Functions.ILike(
+                    PostgresDbFunctions.JsonbExtractPathText(a.CurrentPublicationSnapshot.ApprovedMetadataJson, "title") ?? string.Empty,
+                    likePattern,
+                    LIKE_ESCAPE))
             .Select(a => a.Id);
 
         IQueryable<Guid> descIlikeMatchingIds = filteredBase
-            .Where(a => a.Description != null && EF.Functions.ILike(a.Description, likePattern, LIKE_ESCAPE))
+            .Where(a => a.CurrentPublicationSnapshot != null
+                && PostgresDbFunctions.JsonbExtractPathText(a.CurrentPublicationSnapshot.ApprovedMetadataJson, "description") != null
+                && EF.Functions.ILike(
+                    PostgresDbFunctions.JsonbExtractPathText(a.CurrentPublicationSnapshot.ApprovedMetadataJson, "description")!,
+                    likePattern,
+                    LIKE_ESCAPE))
             .Select(a => a.Id);
 
-        IQueryable<Guid> allMatchingIds = ftsMatchingIds
-            .Union(titleIlikeMatchingIds)
-            .Union(descIlikeMatchingIds);
+        IQueryable<Guid> allMatchingIds = titleIlikeMatchingIds.Union(descIlikeMatchingIds);
 
         if (isLongEnoughForTrigram)
         {
             IQueryable<Guid> titleTrgmMatchingIds = filteredBase
-                .Where(a => EF.Functions.TrigramsAreSimilar(a.Title, searchText)
-                    && PostgresDbFunctions.TrigramsSimilarity(a.Title, searchText) >= TRIGRAM_SIMILARITY_THRESHOLD)
+                .Where(a => a.CurrentPublicationSnapshot != null
+                    && EF.Functions.TrigramsAreSimilar(
+                        PostgresDbFunctions.JsonbExtractPathText(a.CurrentPublicationSnapshot.ApprovedMetadataJson, "title") ?? string.Empty,
+                        searchText)
+                    && PostgresDbFunctions.TrigramsSimilarity(
+                        PostgresDbFunctions.JsonbExtractPathText(a.CurrentPublicationSnapshot.ApprovedMetadataJson, "title") ?? string.Empty,
+                        searchText) >= TRIGRAM_SIMILARITY_THRESHOLD)
                 .Select(a => a.Id);
 
             IQueryable<Guid> descTrgmMatchingIds = filteredBase
-                .Where(a => a.Description != null
-                    && EF.Functions.TrigramsAreSimilar(a.Description, searchText)
-                    && PostgresDbFunctions.TrigramsSimilarity(a.Description, searchText) >= TRIGRAM_SIMILARITY_THRESHOLD)
+                .Where(a => a.CurrentPublicationSnapshot != null
+                    && PostgresDbFunctions.JsonbExtractPathText(a.CurrentPublicationSnapshot.ApprovedMetadataJson, "description") != null
+                    && EF.Functions.TrigramsAreSimilar(
+                        PostgresDbFunctions.JsonbExtractPathText(a.CurrentPublicationSnapshot.ApprovedMetadataJson, "description")!,
+                        searchText)
+                    && PostgresDbFunctions.TrigramsSimilarity(
+                        PostgresDbFunctions.JsonbExtractPathText(a.CurrentPublicationSnapshot.ApprovedMetadataJson, "description")!,
+                        searchText) >= TRIGRAM_SIMILARITY_THRESHOLD)
                 .Select(a => a.Id);
 
             allMatchingIds = allMatchingIds
@@ -684,10 +758,17 @@ internal sealed class AssetStore(
 
         List<Guid> pageAssetIds;
 
+        IQueryable<Asset> searchableBase = ApprovedCatalogLexicalSearch.BuildSearchableBase(
+            filteredBase,
+            searchText,
+            likePattern,
+            isLongEnoughForTrigram,
+            LIKE_ESCAPE);
+
         if (hasExplicitSort)
         {
             pageAssetIds = await FetchExplicitSortedPageAssetIds(
-                filteredBase,
+                searchableBase,
                 request,
                 searchText,
                 likePattern,
@@ -700,7 +781,7 @@ internal sealed class AssetStore(
         else
         {
             pageAssetIds = await FetchRelevanceRankedPageAssetIds(
-                filteredBase,
+                searchableBase,
                 searchText,
                 exactTitlePattern,
                 likePattern,
@@ -716,24 +797,10 @@ internal sealed class AssetStore(
             return new CatalogPageResult<AssetListItem>([], totalCount, page, pageSize);
         }
 
-        List<AssetListItem> items = await filteredBase
-            .Where(a => pageAssetIds.Contains(a.Id))
-            .Select(a => new AssetListItem(
-                a.Id,
-                a.Title,
-                a.Description,
-                a.Price,
-                a.CategoryId,
-                a.Category.Name,
-                a.AuthorId,
-                a.Author.Username,
-                a.CreatedAt,
-                a.AssetTags
-                    .Select(at => at.Tag.Name)
-                    .OrderBy(n => n)
-                    .ToList(),
-                a.RatingAverage))
+        List<PublicCatalogProjection.Row> pageRows = await PublicCatalogProjection.SelectRows(
+                filteredBase.Where(a => pageAssetIds.Contains(a.Id)))
             .ToListAsync(cancellationToken);
+        List<AssetListItem> items = await PublicCatalogProjection.MapRows(dbContext, pageRows, cancellationToken);
 
         var orderMap = pageAssetIds.Select((id, index) => (id, index)).ToDictionary(x => x.id, x => x.index);
         items.Sort((a, b) => orderMap[a.Id].CompareTo(orderMap[b.Id]));
@@ -742,7 +809,7 @@ internal sealed class AssetStore(
     }
 
     private static async Task<List<Guid>> FetchRelevanceRankedPageAssetIds(
-        IQueryable<Asset> filteredBase,
+        IQueryable<Asset> searchableBase,
         string searchText,
         string exactTitlePattern,
         string likePattern,
@@ -750,86 +817,14 @@ internal sealed class AssetStore(
         int candidateLimit,
         int page,
         int pageSize,
-        CancellationToken cancellationToken)
-    {
-        var ftsBranch = filteredBase
-            .Where(a => EF.Property<NpgsqlTsVector>(a, AssetConfiguration.SEARCH_VECTOR_PROPERTY)
-                .Matches(EF.Functions.WebSearchToTsQuery("simple", searchText)))
-            .Select(a => new
-            {
-                a.Id,
-                a.CreatedAt,
-                Score = 100.0f
-                    + (EF.Functions.ILike(a.Title, exactTitlePattern, LIKE_ESCAPE) ? 50.0f : (EF.Functions.ILike(a.Title, likePattern, LIKE_ESCAPE) ? 20.0f : 0.0f))
-                    + (EF.Property<NpgsqlTsVector>(a, AssetConfiguration.SEARCH_VECTOR_PROPERTY).Rank(EF.Functions.WebSearchToTsQuery("simple", searchText)) * 10.0f)
-            })
-            .OrderByDescending(x => x.Score)
-            .ThenByDescending(x => x.CreatedAt)
-            .ThenBy(x => x.Id)
-            .Take(candidateLimit);
-
-        var titleIlikeBranch = filteredBase
-            .Where(a => EF.Functions.ILike(a.Title, likePattern, LIKE_ESCAPE))
-            .Select(a => new
-            {
-                a.Id,
-                a.CreatedAt,
-                Score = 40.0f
-                    + (EF.Functions.ILike(a.Title, exactTitlePattern, LIKE_ESCAPE) ? 30.0f : 0.0f)
-                    + (isLongEnoughForTrigram ? PostgresDbFunctions.TrigramsSimilarity(a.Title, searchText) * 10.0f : 0.0f)
-            })
-            .OrderByDescending(x => x.Score)
-            .ThenByDescending(x => x.CreatedAt)
-            .ThenBy(x => x.Id)
-            .Take(candidateLimit);
-
-        var descIlikeBranch = filteredBase
-            .Where(a => a.Description != null && EF.Functions.ILike(a.Description, likePattern, LIKE_ESCAPE))
-            .Select(a => new
-            {
-                a.Id,
-                a.CreatedAt,
-                Score = 15.0f
-                    + (isLongEnoughForTrigram ? PostgresDbFunctions.TrigramsSimilarity(a.Description!, searchText) * 5.0f : 0.0f)
-            })
-            .OrderByDescending(x => x.Score)
-            .ThenByDescending(x => x.CreatedAt)
-            .ThenBy(x => x.Id)
-            .Take(candidateLimit);
-
-        var primaryCandidates = ftsBranch
-            .Concat(titleIlikeBranch)
-            .Concat(descIlikeBranch);
-
-        if (isLongEnoughForTrigram)
-        {
-            var titleTrgmBranch = filteredBase
-                .Where(a => EF.Functions.TrigramsAreSimilar(a.Title, searchText)
-                    && PostgresDbFunctions.TrigramsSimilarity(a.Title, searchText) >= TRIGRAM_SIMILARITY_THRESHOLD)
-                .Select(a => new
-                {
-                    a.Id,
-                    a.CreatedAt,
-                    Score = 5.0f + (PostgresDbFunctions.TrigramsSimilarity(a.Title, searchText) * 20.0f)
-                })
-                .OrderByDescending(x => x.Score)
-                .ThenByDescending(x => x.CreatedAt)
-                .ThenBy(x => x.Id)
-                .Take(candidateLimit);
-
-            primaryCandidates = primaryCandidates.Concat(titleTrgmBranch);
-        }
-
-        var primaryDeduplicated = primaryCandidates
-            .GroupBy(x => new { x.Id, x.CreatedAt })
-            .Select(g => new
-            {
-                g.Key.Id,
-                g.Key.CreatedAt,
-                Score = g.Max(x => x.Score)
-            });
-
-        List<Guid> primaryPageIds = await primaryDeduplicated
+        CancellationToken cancellationToken) =>
+        await ApprovedCatalogLexicalSearch.ScoreCandidates(
+                searchableBase,
+                searchText,
+                exactTitlePattern,
+                likePattern,
+                isLongEnoughForTrigram,
+                LIKE_ESCAPE)
             .OrderByDescending(x => x.Score)
             .ThenByDescending(x => x.CreatedAt)
             .ThenBy(x => x.Id)
@@ -837,77 +832,6 @@ internal sealed class AssetStore(
             .Take(pageSize)
             .Select(x => x.Id)
             .ToListAsync(cancellationToken);
-
-        // Score floor of primary branches is >= 11.0f (title trigram min = 5.0 + 0.3*20 = 11.0f).
-        // Description trigram score ceiling is <= 6.0f (1.0 + 1.0*5.0 = 6.0f).
-        // If primary candidates saturate the page slice, descTrgm cannot displace any page item.
-        if (primaryPageIds.Count == pageSize || !isLongEnoughForTrigram)
-        {
-            return primaryPageIds;
-        }
-
-        // For page 1 when underfilled: primaryPageIds contains all existing primary candidates.
-        // Retrieve only the missing quota from descTrgm without re-evaluating primary branches.
-        if (page == 1)
-        {
-            var missingCount = pageSize - primaryPageIds.Count;
-            List<Guid> descTrgmPageIds = await filteredBase
-                .Where(a => a.Description != null
-                    && !primaryPageIds.Contains(a.Id)
-                    && EF.Functions.TrigramsAreSimilar(a.Description, searchText)
-                    && PostgresDbFunctions.TrigramsSimilarity(a.Description, searchText) >= TRIGRAM_SIMILARITY_THRESHOLD)
-                .Select(a => new
-                {
-                    a.Id,
-                    a.CreatedAt,
-                    Score = 1.0f + (PostgresDbFunctions.TrigramsSimilarity(a.Description!, searchText) * 5.0f)
-                })
-                .OrderByDescending(x => x.Score)
-                .ThenByDescending(x => x.CreatedAt)
-                .ThenBy(x => x.Id)
-                .Take(missingCount)
-                .Select(x => x.Id)
-                .ToListAsync(cancellationToken);
-
-            primaryPageIds.AddRange(descTrgmPageIds);
-            return primaryPageIds;
-        }
-
-        var descTrgmBranch = filteredBase
-            .Where(a => a.Description != null
-                && EF.Functions.TrigramsAreSimilar(a.Description, searchText)
-                && PostgresDbFunctions.TrigramsSimilarity(a.Description, searchText) >= TRIGRAM_SIMILARITY_THRESHOLD)
-            .Select(a => new
-            {
-                a.Id,
-                a.CreatedAt,
-                Score = 1.0f + (PostgresDbFunctions.TrigramsSimilarity(a.Description!, searchText) * 5.0f)
-            })
-            .OrderByDescending(x => x.Score)
-            .ThenByDescending(x => x.CreatedAt)
-            .ThenBy(x => x.Id)
-            .Take(candidateLimit);
-
-        var allCandidates = primaryCandidates.Concat(descTrgmBranch);
-
-        var deduplicated = allCandidates
-            .GroupBy(x => new { x.Id, x.CreatedAt })
-            .Select(g => new
-            {
-                g.Key.Id,
-                g.Key.CreatedAt,
-                Score = g.Max(x => x.Score)
-            });
-
-        return await deduplicated
-            .OrderByDescending(x => x.Score)
-            .ThenByDescending(x => x.CreatedAt)
-            .ThenBy(x => x.Id)
-            .Skip((page - 1) * pageSize)
-            .Take(pageSize)
-            .Select(x => x.Id)
-            .ToListAsync(cancellationToken);
-    }
 
     private async Task<CatalogPageResult<AssetListItem>> QueryPagedHybridRrfCatalog(
         IQueryable<Asset> filteredBase,
@@ -924,121 +848,26 @@ internal sealed class AssetStore(
         var isLongEnoughForTrigram = searchText.Length >= MIN_TRIGRAM_QUERY_LENGTH;
         const int branchLimit = 201; // 200 candidates + 1 sentinel
 
-        // 1. Lexical branch candidates: up to 201
-        var ftsBranch = filteredBase
-            .Where(a => EF.Property<NpgsqlTsVector>(a, AssetConfiguration.SEARCH_VECTOR_PROPERTY)
-                .Matches(EF.Functions.WebSearchToTsQuery("simple", searchText)))
-            .Select(a => new
-            {
-                a.Id,
-                a.CreatedAt,
-                Score = 100.0f
-                    + (EF.Functions.ILike(a.Title, exactTitlePattern, LIKE_ESCAPE) ? 50.0f : (EF.Functions.ILike(a.Title, likePattern, LIKE_ESCAPE) ? 20.0f : 0.0f))
-                    + (EF.Property<NpgsqlTsVector>(a, AssetConfiguration.SEARCH_VECTOR_PROPERTY).Rank(EF.Functions.WebSearchToTsQuery("simple", searchText)) * 10.0f)
-            })
-            .OrderByDescending(x => x.Score)
-            .ThenByDescending(x => x.CreatedAt)
-            .ThenBy(x => x.Id)
-            .Take(branchLimit);
+        IQueryable<Asset> searchableBase = ApprovedCatalogLexicalSearch.BuildSearchableBase(
+            filteredBase,
+            searchText,
+            likePattern,
+            isLongEnoughForTrigram,
+            LIKE_ESCAPE);
 
-        var titleIlikeBranch = filteredBase
-            .Where(a => EF.Functions.ILike(a.Title, likePattern, LIKE_ESCAPE))
-            .Select(a => new
-            {
-                a.Id,
-                a.CreatedAt,
-                Score = 40.0f
-                    + (EF.Functions.ILike(a.Title, exactTitlePattern, LIKE_ESCAPE) ? 30.0f : 0.0f)
-                    + (isLongEnoughForTrigram ? PostgresDbFunctions.TrigramsSimilarity(a.Title, searchText) * 10.0f : 0.0f)
-            })
-            .OrderByDescending(x => x.Score)
-            .ThenByDescending(x => x.CreatedAt)
-            .ThenBy(x => x.Id)
-            .Take(branchLimit);
-
-        var descIlikeBranch = filteredBase
-            .Where(a => a.Description != null && EF.Functions.ILike(a.Description, likePattern, LIKE_ESCAPE))
-            .Select(a => new
-            {
-                a.Id,
-                a.CreatedAt,
-                Score = 15.0f
-                    + (isLongEnoughForTrigram ? PostgresDbFunctions.TrigramsSimilarity(a.Description!, searchText) * 5.0f : 0.0f)
-            })
-            .OrderByDescending(x => x.Score)
-            .ThenByDescending(x => x.CreatedAt)
-            .ThenBy(x => x.Id)
-            .Take(branchLimit);
-
-        var primaryCandidates = ftsBranch
-            .Concat(titleIlikeBranch)
-            .Concat(descIlikeBranch);
-
-        if (isLongEnoughForTrigram)
-        {
-            var titleTrgmBranch = filteredBase
-                .Where(a => EF.Functions.TrigramsAreSimilar(a.Title, searchText)
-                    && PostgresDbFunctions.TrigramsSimilarity(a.Title, searchText) >= TRIGRAM_SIMILARITY_THRESHOLD)
-                .Select(a => new
-                {
-                    a.Id,
-                    a.CreatedAt,
-                    Score = 5.0f + (PostgresDbFunctions.TrigramsSimilarity(a.Title, searchText) * 20.0f)
-                })
-                .OrderByDescending(x => x.Score)
-                .ThenByDescending(x => x.CreatedAt)
-                .ThenBy(x => x.Id)
-                .Take(branchLimit);
-
-            primaryCandidates = primaryCandidates.Concat(titleTrgmBranch);
-        }
-
-        var primaryDeduplicated = primaryCandidates
-            .GroupBy(x => new { x.Id, x.CreatedAt })
-            .Select(g => new
-            {
-                g.Key.Id,
-                g.Key.CreatedAt,
-                Score = g.Max(x => x.Score)
-            });
-
-        var lexicalRaw = await primaryDeduplicated
+        var lexicalRaw = await ApprovedCatalogLexicalSearch.ScoreCandidates(
+                searchableBase,
+                searchText,
+                exactTitlePattern,
+                likePattern,
+                isLongEnoughForTrigram,
+                LIKE_ESCAPE)
             .OrderByDescending(x => x.Score)
             .ThenByDescending(x => x.CreatedAt)
             .ThenBy(x => x.Id)
             .Take(branchLimit)
             .Select(x => new { x.Id, x.CreatedAt })
             .ToListAsync(cancellationToken);
-
-        // Score floor of primary branches is >= 11.0f vs descTrgm ceiling <= 6.0f.
-        // Only evaluate descTrgm if primary branches could not fill the 201 candidate quota.
-        // When underfilled, all database primary matches are already in lexicalRaw; retrieve only the
-        // missing quota from descTrgm without re-evaluating primary branches.
-        if (isLongEnoughForTrigram && lexicalRaw.Count < branchLimit)
-        {
-            var primaryIds = lexicalRaw.Select(x => x.Id).ToList();
-            var missingCount = branchLimit - lexicalRaw.Count;
-
-            var descCandidates = await filteredBase
-                .Where(a => a.Description != null
-                    && !primaryIds.Contains(a.Id)
-                    && EF.Functions.TrigramsAreSimilar(a.Description, searchText)
-                    && PostgresDbFunctions.TrigramsSimilarity(a.Description, searchText) >= TRIGRAM_SIMILARITY_THRESHOLD)
-                .Select(a => new
-                {
-                    a.Id,
-                    a.CreatedAt,
-                    Score = 1.0f + (PostgresDbFunctions.TrigramsSimilarity(a.Description!, searchText) * 5.0f)
-                })
-                .OrderByDescending(x => x.Score)
-                .ThenByDescending(x => x.CreatedAt)
-                .ThenBy(x => x.Id)
-                .Take(missingCount)
-                .Select(x => new { x.Id, x.CreatedAt })
-                .ToListAsync(cancellationToken);
-
-            lexicalRaw.AddRange(descCandidates);
-        }
 
         // 2. Semantic branch candidates: up to 201
         var targetVector = new Vector(queryEmbedding);
@@ -1129,24 +958,10 @@ internal sealed class AssetStore(
             .Select(x => x.Id)
             .ToList();
 
-        List<AssetListItem> items = await filteredBase
-            .Where(a => pageSlice.Contains(a.Id))
-            .Select(a => new AssetListItem(
-                a.Id,
-                a.Title,
-                a.Description,
-                a.Price,
-                a.CategoryId,
-                a.Category.Name,
-                a.AuthorId,
-                a.Author.Username,
-                a.CreatedAt,
-                a.AssetTags
-                    .Select(at => at.Tag.Name)
-                    .OrderBy(n => n)
-                    .ToList(),
-                a.RatingAverage))
+        List<PublicCatalogProjection.Row> hybridRows = await PublicCatalogProjection.SelectRows(
+                filteredBase.Where(a => pageSlice.Contains(a.Id)))
             .ToListAsync(cancellationToken);
+        List<AssetListItem> items = await PublicCatalogProjection.MapRows(dbContext, hybridRows, cancellationToken);
 
         var orderMap = pageSlice.Select((id, index) => (id, index)).ToDictionary(x => x.id, x => x.index);
         items.Sort((a, b) => orderMap[a.Id].CompareTo(orderMap[b.Id]));
@@ -1155,7 +970,7 @@ internal sealed class AssetStore(
     }
 
     private static async Task<List<Guid>> FetchExplicitSortedPageAssetIds(
-        IQueryable<Asset> filteredBase,
+        IQueryable<Asset> searchableBase,
         GetAssetsRequest request,
         string searchText,
         string likePattern,
@@ -1168,67 +983,24 @@ internal sealed class AssetStore(
         var sortBy = request.SortBy!.Trim().ToUpperInvariant();
         var isDesc = request.SortDirection == SortDirection.DESC;
 
-        IQueryable<Guid> ftsBranch = BoundSortedBranch(
-            filteredBase.Where(a => EF.Property<NpgsqlTsVector>(a, AssetConfiguration.SEARCH_VECTOR_PROPERTY)
-                .Matches(EF.Functions.WebSearchToTsQuery("simple", searchText))),
-            sortBy,
-            isDesc,
-            candidateLimit);
-
-        IQueryable<Guid> titleIlikeBranch = BoundSortedBranch(
-            filteredBase.Where(a => EF.Functions.ILike(a.Title, likePattern, LIKE_ESCAPE)),
-            sortBy,
-            isDesc,
-            candidateLimit);
-
-        IQueryable<Guid> descIlikeBranch = BoundSortedBranch(
-            filteredBase.Where(a => a.Description != null && EF.Functions.ILike(a.Description, likePattern, LIKE_ESCAPE)),
-            sortBy,
-            isDesc,
-            candidateLimit);
-
-        IQueryable<Guid> mergedCandidateIds = ftsBranch
-            .Union(titleIlikeBranch)
-            .Union(descIlikeBranch);
-
-        if (isLongEnoughForTrigram)
-        {
-            IQueryable<Guid> titleTrgmBranch = BoundSortedBranch(
-                filteredBase.Where(a => EF.Functions.TrigramsAreSimilar(a.Title, searchText)
-                    && PostgresDbFunctions.TrigramsSimilarity(a.Title, searchText) >= TRIGRAM_SIMILARITY_THRESHOLD),
-                sortBy,
-                isDesc,
-                candidateLimit);
-
-            IQueryable<Guid> descTrgmBranch = BoundSortedBranch(
-                filteredBase.Where(a => a.Description != null
-                    && EF.Functions.TrigramsAreSimilar(a.Description, searchText)
-                    && PostgresDbFunctions.TrigramsSimilarity(a.Description, searchText) >= TRIGRAM_SIMILARITY_THRESHOLD),
-                sortBy,
-                isDesc,
-                candidateLimit);
-
-            mergedCandidateIds = mergedCandidateIds
-                .Union(titleTrgmBranch)
-                .Union(descTrgmBranch);
-        }
-
-        IQueryable<Asset> candidateAssets = filteredBase.Where(a => mergedCandidateIds.Contains(a.Id));
-
         IQueryable<Asset> sorted = sortBy switch
         {
             "TITLE" => isDesc
-                ? candidateAssets.OrderByDescending(a => a.Title).ThenBy(a => a.Id)
-                : candidateAssets.OrderBy(a => a.Title).ThenBy(a => a.Id),
+                ? searchableBase.OrderByDescending(a =>
+                        PostgresDbFunctions.JsonbExtractPathText(a.CurrentPublicationSnapshot!.ApprovedMetadataJson, "title"))
+                    .ThenBy(a => a.Id)
+                : searchableBase.OrderBy(a =>
+                        PostgresDbFunctions.JsonbExtractPathText(a.CurrentPublicationSnapshot!.ApprovedMetadataJson, "title"))
+                    .ThenBy(a => a.Id),
             "PRICE" => isDesc
-                ? candidateAssets.OrderByDescending(a => a.Price).ThenBy(a => a.Id)
-                : candidateAssets.OrderBy(a => a.Price).ThenBy(a => a.Id),
+                ? searchableBase.OrderByDescending(a => a.Price).ThenBy(a => a.Id)
+                : searchableBase.OrderBy(a => a.Price).ThenBy(a => a.Id),
             "ID" => isDesc
-                ? candidateAssets.OrderByDescending(a => a.Id)
-                : candidateAssets.OrderBy(a => a.Id),
+                ? searchableBase.OrderByDescending(a => a.Id)
+                : searchableBase.OrderBy(a => a.Id),
             _ => isDesc
-                ? candidateAssets.OrderByDescending(a => a.CreatedAt).ThenBy(a => a.Id)
-                : candidateAssets.OrderBy(a => a.CreatedAt).ThenBy(a => a.Id)
+                ? searchableBase.OrderByDescending(a => a.CreatedAt).ThenBy(a => a.Id)
+                : searchableBase.OrderBy(a => a.CreatedAt).ThenBy(a => a.Id)
         };
 
         return await sorted
@@ -1238,29 +1010,90 @@ internal sealed class AssetStore(
             .ToListAsync(cancellationToken);
     }
 
-    private static IQueryable<Guid> BoundSortedBranch(
-        IQueryable<Asset> branch,
-        string sortBy,
-        bool isDesc,
-        int candidateLimit)
+    public async Task<IReadOnlySet<Guid>> FilterPublicCatalogAssetIds(
+        IReadOnlyList<Guid> assetIds,
+        CancellationToken cancellationToken = default)
     {
-        IQueryable<Asset> sorted = sortBy switch
+        if (assetIds.Count == 0)
+        {
+            return new HashSet<Guid>();
+        }
+
+        List<Guid> visible = await PublicationEligibilityQuery.PublicCatalogAssets(dbContext)
+            .Where(a => assetIds.Contains(a.Id))
+            .Select(a => a.Id)
+            .ToListAsync(cancellationToken);
+
+        return visible.ToHashSet();
+    }
+
+    private static IQueryable<Asset> ApplyPublicCatalogNonSearchFilters(IQueryable<Asset> query, GetAssetsRequest request)
+    {
+        if (request.CategoryId is { } categoryId)
+        {
+            var categoryJson = $"{{\"categoryId\":\"{categoryId:D}\"}}";
+            query = query.Where(a =>
+                a.CurrentPublicationSnapshot != null
+                && EF.Functions.JsonContains(a.CurrentPublicationSnapshot.ApprovedMetadataJson, categoryJson));
+        }
+
+        if (request.AuthorId is { } authorId)
+        {
+            query = query.Where(a => a.AuthorId == authorId);
+        }
+
+        if (request.MinPrice is { } minPrice)
+        {
+            query = query.Where(a => a.Price >= minPrice);
+        }
+
+        if (request.MaxPrice is { } maxPrice)
+        {
+            query = query.Where(a => a.Price <= maxPrice);
+        }
+
+        if (request.Tags is { Count: > 0 })
+        {
+            foreach (var tag in request.Tags)
+            {
+                var escapedTag = tag.Replace("\\", "\\\\", StringComparison.Ordinal).Replace("\"", "\\\"", StringComparison.Ordinal);
+                var tagJson = $"{{\"tags\":[\"{escapedTag}\"]}}";
+                query = query.Where(a =>
+                    a.CurrentPublicationSnapshot != null
+                    && EF.Functions.JsonContains(a.CurrentPublicationSnapshot.ApprovedMetadataJson, tagJson));
+            }
+        }
+
+        return query;
+    }
+
+    private static IQueryable<Asset> ApplyPublicCatalogSort(IQueryable<Asset> query, GetAssetsRequest request)
+    {
+        var sortBy = string.IsNullOrWhiteSpace(request.SortBy) || !GetAssetsRequest.AllowedSortBy.Contains(request.SortBy)
+            ? "CreatedAt"
+            : request.SortBy.Trim();
+        var sortKey = sortBy.ToUpperInvariant();
+        var isDesc = request.SortDirection == SortDirection.DESC;
+
+        return sortKey switch
         {
             "TITLE" => isDesc
-                ? branch.OrderByDescending(a => a.Title).ThenBy(a => a.Id)
-                : branch.OrderBy(a => a.Title).ThenBy(a => a.Id),
+                ? query.OrderByDescending(a =>
+                        PostgresDbFunctions.JsonbExtractPathText(a.CurrentPublicationSnapshot!.ApprovedMetadataJson, "title"))
+                    .ThenBy(a => a.Id)
+                : query.OrderBy(a =>
+                        PostgresDbFunctions.JsonbExtractPathText(a.CurrentPublicationSnapshot!.ApprovedMetadataJson, "title"))
+                    .ThenBy(a => a.Id),
             "PRICE" => isDesc
-                ? branch.OrderByDescending(a => a.Price).ThenBy(a => a.Id)
-                : branch.OrderBy(a => a.Price).ThenBy(a => a.Id),
+                ? query.OrderByDescending(a => a.Price).ThenBy(a => a.Id)
+                : query.OrderBy(a => a.Price).ThenBy(a => a.Id),
             "ID" => isDesc
-                ? branch.OrderByDescending(a => a.Id)
-                : branch.OrderBy(a => a.Id),
+                ? query.OrderByDescending(a => a.Id)
+                : query.OrderBy(a => a.Id),
             _ => isDesc
-                ? branch.OrderByDescending(a => a.CreatedAt).ThenBy(a => a.Id)
-                : branch.OrderBy(a => a.CreatedAt).ThenBy(a => a.Id)
+                ? query.OrderByDescending(a => a.CreatedAt).ThenBy(a => a.Id)
+                : query.OrderBy(a => a.CreatedAt).ThenBy(a => a.Id)
         };
-
-        return sorted.Take(candidateLimit).Select(a => a.Id);
     }
 
     private static IQueryable<Asset> ApplyNonSearchFilters(IQueryable<Asset> query, GetAssetsRequest request)
@@ -1362,6 +1195,14 @@ internal sealed class AssetStore(
         return (page, pageSize);
     }
 
+    public async Task<bool> HasRetainedModerationOrPublicationHistory(
+        Guid assetId,
+        CancellationToken cancellationToken = default)
+    {
+        return await dbContext.ModerationSubmissions.AsNoTracking().AnyAsync(s => s.AssetId == assetId, cancellationToken)
+            || await dbContext.PublicationSnapshots.AsNoTracking().AnyAsync(s => s.AssetId == assetId, cancellationToken);
+    }
+
     public async Task SoftDelete(Guid id, DateTimeOffset deletedAt, CancellationToken cancellationToken = default)
     {
         await dbContext.Assets
@@ -1398,33 +1239,7 @@ internal sealed class AssetStore(
 
         if (rows > 0)
         {
-            Guid? readyVersionId = await dbContext.AssetVersions
-                .AsNoTracking()
-                .Where(v => v.AssetId == assetId && v.IsCurrent && v.ProcessingStatus == AssetVersionProcessingStatus.READY)
-                .Select(v => (Guid?)v.Id)
-                .FirstOrDefaultAsync(cancellationToken);
-
-            if (readyVersionId.HasValue)
-            {
-                DateTimeOffset now = (timeProvider ?? TimeProvider.System).GetUtcNow();
-                var affected = await dbContext.Database.ExecuteSqlInterpolatedAsync($"""
-                    UPDATE assets
-                    SET "SearchRevision" = "SearchRevision" + 1,
-                        "UpdatedAt" = {now}
-                    WHERE "Id" = {assetId} AND "DeletedAt" IS NULL
-                    """, cancellationToken);
-
-                if (affected > 0 && jobStore != null && embeddingOptions?.Value is { Enabled: true })
-                {
-                    var newRevision = await dbContext.Assets
-                        .AsNoTracking()
-                        .Where(a => a.Id == assetId)
-                        .Select(a => a.SearchRevision)
-                        .FirstOrDefaultAsync(cancellationToken);
-
-                    await EnqueueEmbeddingJobIfEligible(assetId, readyVersionId.Value, newRevision, cancellationToken);
-                }
-            }
+            await BumpSearchRevisionAndMaybeEnqueueEmbedding(assetId, cancellationToken);
         }
 
         return rows > 0;
@@ -1445,33 +1260,7 @@ internal sealed class AssetStore(
 
         if (deleted > 0)
         {
-            Guid? readyVersionId = await dbContext.AssetVersions
-                .AsNoTracking()
-                .Where(v => v.AssetId == assetId && v.IsCurrent && v.ProcessingStatus == AssetVersionProcessingStatus.READY)
-                .Select(v => (Guid?)v.Id)
-                .FirstOrDefaultAsync(cancellationToken);
-
-            if (readyVersionId.HasValue)
-            {
-                DateTimeOffset now = (timeProvider ?? TimeProvider.System).GetUtcNow();
-                var affected = await dbContext.Database.ExecuteSqlInterpolatedAsync($"""
-                    UPDATE assets
-                    SET "SearchRevision" = "SearchRevision" + 1,
-                        "UpdatedAt" = {now}
-                    WHERE "Id" = {assetId} AND "DeletedAt" IS NULL
-                    """, cancellationToken);
-
-                if (affected > 0 && jobStore != null && embeddingOptions?.Value is { Enabled: true })
-                {
-                    var newRevision = await dbContext.Assets
-                        .AsNoTracking()
-                        .Where(a => a.Id == assetId)
-                        .Select(a => a.SearchRevision)
-                        .FirstOrDefaultAsync(cancellationToken);
-
-                    await EnqueueEmbeddingJobIfEligible(assetId, readyVersionId.Value, newRevision, cancellationToken);
-                }
-            }
+            await BumpSearchRevisionAndMaybeEnqueueEmbedding(assetId, cancellationToken);
         }
 
         return deleted > 0;
@@ -1507,31 +1296,65 @@ internal sealed class AssetStore(
             asset.CategoryId = categoryId.Value;
         }
 
-        Guid? readyVersionId = null;
+        var bumpedSearchRevision = false;
         if (hasSearchableMetadataChange)
         {
-            readyVersionId = await dbContext.AssetVersions
-                .AsNoTracking()
-                .Where(v => v.AssetId == id && v.IsCurrent && v.ProcessingStatus == AssetVersionProcessingStatus.READY)
-                .Select(v => (Guid?)v.Id)
-                .FirstOrDefaultAsync(cancellationToken);
-
-            if (readyVersionId.HasValue)
+            Guid? publicVersionId = await GetApprovedPublicVersionIdForEmbedding(id, cancellationToken);
+            if (publicVersionId.HasValue)
             {
                 asset.SearchRevision += 1;
+                bumpedSearchRevision = true;
             }
         }
 
         asset.UpdatedAt = (timeProvider ?? TimeProvider.System).GetUtcNow();
         await dbContext.SaveChangesAsync(cancellationToken);
 
-        if (hasSearchableMetadataChange && readyVersionId.HasValue)
+        if (bumpedSearchRevision)
         {
-            await EnqueueEmbeddingJobIfEligible(id, readyVersionId.Value, asset.SearchRevision, cancellationToken);
+            Guid? publicVersionId = await GetApprovedPublicVersionIdForEmbedding(id, cancellationToken);
+            if (publicVersionId.HasValue)
+            {
+                await EnqueueEmbeddingJobIfEligible(id, publicVersionId.Value, asset.SearchRevision, cancellationToken);
+            }
         }
 
         return true;
     }
+
+    private async Task BumpSearchRevisionAndMaybeEnqueueEmbedding(Guid assetId, CancellationToken cancellationToken)
+    {
+        Guid? publicVersionId = await GetApprovedPublicVersionIdForEmbedding(assetId, cancellationToken);
+        if (!publicVersionId.HasValue)
+        {
+            return;
+        }
+
+        DateTimeOffset now = (timeProvider ?? TimeProvider.System).GetUtcNow();
+        var affected = await dbContext.Database.ExecuteSqlInterpolatedAsync($"""
+            UPDATE assets
+            SET "SearchRevision" = "SearchRevision" + 1,
+                "UpdatedAt" = {now}
+            WHERE "Id" = {assetId} AND "DeletedAt" IS NULL
+            """, cancellationToken);
+
+        if (affected > 0 && jobStore != null && embeddingOptions?.Value is { Enabled: true })
+        {
+            var newRevision = await dbContext.Assets
+                .AsNoTracking()
+                .Where(a => a.Id == assetId)
+                .Select(a => a.SearchRevision)
+                .FirstOrDefaultAsync(cancellationToken);
+
+            await EnqueueEmbeddingJobIfEligible(assetId, publicVersionId.Value, newRevision, cancellationToken);
+        }
+    }
+
+    private Task<Guid?> GetApprovedPublicVersionIdForEmbedding(Guid assetId, CancellationToken cancellationToken) =>
+        PublicationEligibilityQuery.PublicCatalogAssets(dbContext)
+            .Where(a => a.Id == assetId)
+            .Select(a => (Guid?)a.CurrentPublicationSnapshot!.AssetVersionId)
+            .FirstOrDefaultAsync(cancellationToken);
 
     private async Task EnqueueEmbeddingJobIfEligible(Guid assetId, Guid currentVersionId, long searchRevision, CancellationToken cancellationToken)
     {
@@ -1540,48 +1363,55 @@ internal sealed class AssetStore(
             return;
         }
 
-        var assetMetadata = await dbContext.Assets
-            .AsNoTracking()
-            .Where(a => a.Id == assetId && a.DeletedAt == null)
-            .Select(a => new
+        var approvedTarget = await (
+            from asset in PublicationEligibilityQuery.PublicCatalogAssets(dbContext)
+            where asset.Id == assetId
+            select new
             {
-                a.Title,
-                a.Description,
-                CategoryName = a.Category.Name
+                asset.SearchRevision,
+                MetadataJson = asset.CurrentPublicationSnapshot!.ApprovedMetadataJson,
+                VersionId = asset.CurrentPublicationSnapshot!.AssetVersionId
             })
             .FirstOrDefaultAsync(cancellationToken);
 
-        if (assetMetadata == null)
+        if (approvedTarget is null
+            || currentVersionId != approvedTarget.VersionId
+            || !ApprovedPublicationMetadata.TryReadPublicProjection(
+                approvedTarget.MetadataJson,
+                out ApprovedPublicationMetadata.PublicProjection publication))
         {
             return;
         }
 
-        List<string> tagNames = await dbContext.AssetTags
+        var categoryName = await dbContext.Categories
             .AsNoTracking()
-            .Where(at => at.AssetId == assetId)
-            .OrderBy(at => at.Tag.Name)
-            .Select(at => at.Tag.Name)
-            .ToListAsync(cancellationToken);
+            .Where(c => c.Id == publication.CategoryId)
+            .Select(c => c.Name)
+            .FirstOrDefaultAsync(cancellationToken);
+        if (categoryName is null)
+        {
+            return;
+        }
 
         var canonicalText = AssetPublicMetadataCanonicalizer.BuildCanonicalMetadata(
-            assetMetadata.Title,
-            assetMetadata.Description,
-            assetMetadata.CategoryName,
-            tagNames);
+            publication.Title,
+            publication.Description,
+            categoryName,
+            publication.Tags);
 
         var contentHash = AssetPublicMetadataCanonicalizer.ComputeContentHash(canonicalText);
 
         var payload = new EmbeddingGenerationPayload(
             assetId,
-            currentVersionId,
-            searchRevision,
+            approvedTarget.VersionId,
+            approvedTarget.SearchRevision,
             contentHash,
             EmbeddingModelKey.Compute(options),
             AssetPublicMetadataCanonicalizer.SCHEMA_VERSION);
 
         await jobStore.Enqueue(
             assetId,
-            currentVersionId,
+            approvedTarget.VersionId,
             AssetProcessingJobType.EMBEDDING_GENERATION,
             definitionVersion: 1,
             initialDelay: TimeSpan.Zero,
@@ -1592,44 +1422,61 @@ internal sealed class AssetStore(
 
     public Task<Guid?> GetPublicAnalyticsSellerId(Guid assetId, CancellationToken cancellationToken = default)
     {
-        return dbContext.Assets
-            .AsNoTracking()
-            .Where(a => a.Id == assetId && a.DeletedAt == null)
+        return PublicationEligibilityQuery.PublicCatalogAssets(dbContext)
+            .Where(a => a.Id == assetId)
             .Select(a => (Guid?)a.AuthorId)
             .FirstOrDefaultAsync(cancellationToken);
     }
 
-    public Task<Guid?> ResolveDownloadAnalyticsSellerId(
+    public async Task<Guid?> ResolveDownloadAnalyticsSellerId(
         Guid assetId,
         Guid assetVersionId,
         Guid actorUserId,
         CancellationToken cancellationToken = default)
     {
-        return dbContext.Assets
+        Guid? authorId = await dbContext.Assets
             .AsNoTracking()
-            .Where(a => a.Id == assetId
-                && a.AuthorId != actorUserId
-                && dbContext.AssetVersions.Any(rv =>
-                    rv.AssetId == assetId
-                    && rv.Id == assetVersionId
-                    && rv.ProcessingStatus == AssetVersionProcessingStatus.READY
-                    && dbContext.Purchases.Any(p =>
-                        p.UserId == actorUserId
-                        && p.AssetId == assetId
-                        && dbContext.AssetVersions.Any(pv =>
-                            pv.AssetId == assetId
-                            && pv.Id == p.AssetVersionId
-                            && rv.VersionNumber >= pv.VersionNumber))))
+            .Where(a => a.Id == assetId)
             .Select(a => (Guid?)a.AuthorId)
             .FirstOrDefaultAsync(cancellationToken);
+        if (authorId is null || authorId.Value == actorUserId)
+        {
+            return null;
+        }
+
+        Purchase? purchase = await dbContext.Purchases
+            .AsNoTracking()
+            .FirstOrDefaultAsync(p => p.UserId == actorUserId && p.AssetId == assetId, cancellationToken);
+        if (purchase is null)
+        {
+            return null;
+        }
+
+        AssetVersion? purchasedVersion = await GetVersion(assetId, purchase.AssetVersionId, cancellationToken);
+        AssetVersion? requestedVersion = await GetVersion(assetId, assetVersionId, cancellationToken);
+        if (purchasedVersion is null || requestedVersion is null
+            || requestedVersion.VersionNumber < purchasedVersion.VersionNumber)
+        {
+            return null;
+        }
+
+        if (requestedVersion.Id == purchase.AssetVersionId)
+        {
+            return await IsExactVersionSafeForDownload(assetId, assetVersionId, cancellationToken)
+                ? authorId
+                : null;
+        }
+
+        return await IsApprovedBuyerDownloadVersion(
+                assetId,
+                assetVersionId,
+                purchasedVersion.VersionNumber,
+                cancellationToken)
+            ? authorId
+            : null;
     }
 
-    private IQueryable<Asset> PublicVisibleAssets()
-    {
-        return dbContext.Assets.AsNoTracking()
-            .Where(a => a.DeletedAt == null
-                && a.Versions.Any(v => v.IsCurrent && v.ProcessingStatus == AssetVersionProcessingStatus.READY));
-    }
+    private IQueryable<Asset> PublicVisibleAssets() => PublicationEligibilityQuery.PublicCatalogAssets(dbContext);
 
     private async Task<(SimilarRankedShortlist Ranked, HashSet<Guid> Signaled)> ApplyPopularityRanking(
         Guid sourceAssetId,

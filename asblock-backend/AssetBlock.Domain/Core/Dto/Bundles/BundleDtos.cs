@@ -115,6 +115,7 @@ public sealed record BundleCheckoutSnapshot(
 public sealed record BundleCheckoutItemSnapshot(
     Guid AssetId,
     Guid AssetVersionId,
+    Guid PublicationSnapshotId,
     int Position,
     string AssetTitle,
     decimal ListPrice,

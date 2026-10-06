@@ -119,9 +119,13 @@ public sealed class DownloadServiceTests
                 new Domain.Core.Dto.Assets.AssetCurrentVersionSnapshot(
                     asset.Id,
                     versionId,
+                    Guid.NewGuid(),
                     userId,
                     asset.Title,
                     null,
+                    asset.CategoryId,
+                    "Category",
+                    [],
                     asset.Price,
                     null,
                     1,

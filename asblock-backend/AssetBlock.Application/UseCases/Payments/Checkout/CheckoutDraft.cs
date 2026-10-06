@@ -16,6 +16,7 @@ internal sealed record CheckoutDraft(
 internal sealed record CheckoutDraftItem(
     Guid AssetId,
     Guid AssetVersionId,
+    Guid PublicationSnapshotId,
     Guid SellerId,
     int Position,
     string AssetTitleSnapshot,

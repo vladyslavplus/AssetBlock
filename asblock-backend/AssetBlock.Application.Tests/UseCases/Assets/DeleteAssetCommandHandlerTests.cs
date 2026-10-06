@@ -32,6 +32,9 @@ public class DeleteAssetCommandHandlerTests
         _cacheMock = Substitute.For<ICacheService>();
         _purchaseStoreMock.HasPurchasesForAsset(Arg.Any<Guid>(), Arg.Any<CancellationToken>()).Returns(false);
         checkoutIntentStoreMock.HasActiveForAsset(Arg.Any<Guid>(), Arg.Any<DateTimeOffset>(), Arg.Any<CancellationToken>()).Returns(false);
+        ICheckoutReconciliationHoldStore reconciliationHoldStoreMock = Substitute.For<ICheckoutReconciliationHoldStore>();
+        reconciliationHoldStoreMock.HasUnresolvedHoldForAsset(Arg.Any<Guid>(), Arg.Any<CancellationToken>()).Returns(false);
+        _assetStoreMock.HasRetainedModerationOrPublicationHistory(Arg.Any<Guid>(), Arg.Any<CancellationToken>()).Returns(false);
 
         unitOfWorkMock.ExecuteInTransaction(Arg.Any<Func<CancellationToken, Task>>(), Arg.Any<CancellationToken>())
             .Returns(ci => ci.Arg<Func<CancellationToken, Task>>()(CancellationToken.None));
@@ -40,6 +43,7 @@ public class DeleteAssetCommandHandlerTests
             _assetStoreMock,
             _purchaseStoreMock,
             checkoutIntentStoreMock,
+            reconciliationHoldStoreMock,
             unitOfWorkMock,
             _outboxStoreMock,
             _auditWriterMock,
@@ -175,10 +179,13 @@ public class DeleteAssetCommandHandlerTests
         IUnitOfWork unitOfWorkMock = Substitute.For<IUnitOfWork>();
         unitOfWorkMock.ExecuteInTransaction(Arg.Any<Func<CancellationToken, Task>>(), Arg.Any<CancellationToken>())
             .Returns(ci => ci.Arg<Func<CancellationToken, Task>>()(CancellationToken.None));
+        ICheckoutReconciliationHoldStore reconciliationHoldStoreMock = Substitute.For<ICheckoutReconciliationHoldStore>();
+        reconciliationHoldStoreMock.HasUnresolvedHoldForAsset(Arg.Any<Guid>(), Arg.Any<CancellationToken>()).Returns(false);
         var handler = new DeleteAssetCommandHandler(
             _assetStoreMock,
             _purchaseStoreMock,
             checkoutIntentStoreMock,
+            reconciliationHoldStoreMock,
             unitOfWorkMock,
             _outboxStoreMock,
             _auditWriterMock,
@@ -206,10 +213,12 @@ public class DeleteAssetCommandHandlerTests
         IUnitOfWork unitOfWorkMock = Substitute.For<IUnitOfWork>();
         unitOfWorkMock.ExecuteInTransaction(Arg.Any<Func<CancellationToken, Task>>(), Arg.Any<CancellationToken>())
             .Returns(ci => ci.Arg<Func<CancellationToken, Task>>()(CancellationToken.None));
+        ICheckoutReconciliationHoldStore reconciliationHoldStoreMock = Substitute.For<ICheckoutReconciliationHoldStore>();
         var handler = new DeleteAssetCommandHandler(
             _assetStoreMock,
             _purchaseStoreMock,
             checkoutIntentStoreMock,
+            reconciliationHoldStoreMock,
             unitOfWorkMock,
             _outboxStoreMock,
             _auditWriterMock,
@@ -241,10 +250,12 @@ public class DeleteAssetCommandHandlerTests
         IUnitOfWork unitOfWorkMock = Substitute.For<IUnitOfWork>();
         unitOfWorkMock.ExecuteInTransaction(Arg.Any<Func<CancellationToken, Task>>(), Arg.Any<CancellationToken>())
             .Returns(ci => ci.Arg<Func<CancellationToken, Task>>()(CancellationToken.None));
+        ICheckoutReconciliationHoldStore reconciliationHoldStoreMock = Substitute.For<ICheckoutReconciliationHoldStore>();
         var handler = new DeleteAssetCommandHandler(
             _assetStoreMock,
             _purchaseStoreMock,
             checkoutIntentStoreMock,
+            reconciliationHoldStoreMock,
             unitOfWorkMock,
             _outboxStoreMock,
             _auditWriterMock,

@@ -80,6 +80,7 @@ internal sealed class CreateCheckoutSessionCommandHandler(
                 new CheckoutDraftItem(
                     snapshot.AssetId,
                     snapshot.AssetVersionId,
+                    snapshot.PublicationSnapshotId,
                     snapshot.AuthorId,
                     Position: 1,
                     snapshot.Title,

@@ -188,6 +188,8 @@ public static class DependencyInjection
         services.AddScoped<IAssetProcessingLifecycleStore, AssetProcessingLifecycleStore>();
         services.AddScoped<IPurchaseStore, PurchaseStore>();
         services.AddScoped<ICheckoutIntentStore, CheckoutIntentStore>();
+        services.AddScoped<ICheckoutReconciliationHoldStore, CheckoutReconciliationHoldStore>();
+        services.AddScoped<ICheckoutReconciliationHoldStore, CheckoutReconciliationHoldStore>();
         services.AddScoped<ICollectionStore, CollectionStore>();
         services.AddScoped<IBundleStore, BundleStore>();
         services.AddScoped<IOrderStore, OrderStore>();

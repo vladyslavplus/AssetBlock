@@ -29,10 +29,6 @@ internal sealed class GetAssetByIdQueryHandler(IAssetStore assetStore, IReviewSt
             return Result.NotFound(ErrorCodes.ERR_ASSET_NOT_FOUND);
         }
 
-        var tags = asset.AssetTags
-            .Select(at => at.Tag.Name)
-            .OrderBy(n => n, StringComparer.OrdinalIgnoreCase)
-            .ToList();
         var averageRating = await reviewStore.GetAverageRatingForAsset(asset.Id, cancellationToken);
         var authorUsername = asset.Author.Username;
 
@@ -44,16 +40,16 @@ internal sealed class GetAssetByIdQueryHandler(IAssetStore assetStore, IReviewSt
 
         var item = new AssetDetailItem(
             asset.Id,
-            asset.Title,
-            asset.Description,
+            snapshot.Title,
+            snapshot.Description,
             asset.Price,
-            asset.CategoryId,
-            asset.Category.Name,
+            snapshot.CategoryId,
+            snapshot.CategoryName,
             asset.AuthorId,
             authorUsername,
             asset.CreatedAt,
             asset.UpdatedAt,
-            tags,
+            snapshot.Tags.OrderBy(n => n, StringComparer.OrdinalIgnoreCase).ToList(),
             averageRating,
             snapshot.VersionNumber,
             snapshot.AssetVersionId,

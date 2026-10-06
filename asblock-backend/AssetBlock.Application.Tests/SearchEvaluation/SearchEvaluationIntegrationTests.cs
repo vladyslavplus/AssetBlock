@@ -6,12 +6,14 @@ using AssetBlock.Domain.Core.Dto.Assets;
 using AssetBlock.Domain.Core.Entities;
 using AssetBlock.Domain.Core.Enums;
 using AssetBlock.Domain.Core.Primitives.AppSettingsOptions;
+using AssetBlock.Domain.Core.Publication;
 using AssetBlock.Infrastructure.Persistence;
 using AssetBlock.Infrastructure.Persistence.Entities;
 using AssetBlock.Infrastructure.Persistence.Stores;
 using AssetBlock.Infrastructure.Services;
 using AssetBlock.SearchEvaluation.Infrastructure;
 using AwesomeAssertions;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
 using Pgvector;
 using MsOptions = Microsoft.Extensions.Options.Options;
@@ -136,6 +138,19 @@ public class SearchEvaluationIntegrationTests
             });
 
             await db.SaveChangesAsync();
+
+            Asset asset = await db.Assets.SingleAsync(a => a.Id == assetId);
+            AssetVersion version = await db.AssetVersions.SingleAsync(v => v.Id == versionId);
+            Category category = await db.Categories.SingleAsync(c => c.Id == categoryId);
+            await TrustedPublicationFixtureSeed.AttachAsync(
+                db,
+                asset,
+                version,
+                authorId,
+                category,
+                "Generic Mesh Object 42",
+                "Unrelated geometric object description.",
+                ["neonkatana"]);
         }
 
         // Test retrieval via AssetStore
@@ -193,11 +208,11 @@ public class SearchEvaluationIntegrationTests
                 CreatedAt = now
             });
 
-            // Seed 5 eligible assets
+            var seeded = new List<(Asset Asset, AssetVersion Version)>();
             for (var i = 0; i < 5; i++)
             {
                 var aId = Guid.NewGuid();
-                db.Assets.Add(new Asset
+                var asset = new Asset
                 {
                     Id = aId,
                     AuthorId = authorId,
@@ -208,9 +223,8 @@ public class SearchEvaluationIntegrationTests
                     SearchRevision = 1L,
                     CreatedAt = now,
                     UpdatedAt = now
-                });
-
-                db.AssetVersions.Add(new AssetVersion
+                };
+                var version = new AssetVersion
                 {
                     Id = Guid.NewGuid(),
                     AssetId = aId,
@@ -228,10 +242,27 @@ public class SearchEvaluationIntegrationTests
                     ProcessingStatus = AssetVersionProcessingStatus.READY,
                     ProcessingUpdatedAt = now,
                     CreatedAt = now
-                });
+                };
+                db.Assets.Add(asset);
+                db.AssetVersions.Add(version);
+                seeded.Add((asset, version));
             }
 
             await db.SaveChangesAsync();
+
+            Category category = await db.Categories.SingleAsync(c => c.Id == categoryId);
+            foreach ((Asset asset, AssetVersion version) in seeded)
+            {
+                await TrustedPublicationFixtureSeed.AttachAsync(
+                    db,
+                    asset,
+                    version,
+                    authorId,
+                    category,
+                    asset.Title,
+                    asset.Description,
+                    []);
+            }
         }
 
         MemoryCacheService cacheService = new();
@@ -308,11 +339,16 @@ public class SearchEvaluationIntegrationTests
             foreach (ClaimedAssetProcessingJob claim in claimed)
             {
                 Asset? asset = await db.Assets.FindAsync(claim.AssetId);
+                PublicationSnapshot? snapshot = await db.PublicationSnapshots.AsNoTracking()
+                    .SingleAsync(s => s.AssetId == claim.AssetId && s.AssetVersionId == claim.AssetVersionId);
+                ApprovedPublicationMetadata.TryReadPublicProjection(
+                    snapshot.ApprovedMetadataJson,
+                    out ApprovedPublicationMetadata.PublicProjection publication).Should().BeTrue();
                 CanonicalPublicMetadataResult canonical = AssetPublicMetadataCanonicalizer.Canonicalize(
-                    asset!.Title,
-                    asset.Description,
+                    publication.Title,
+                    publication.Description,
                     "BackfillCategory",
-                    []);
+                    publication.Tags);
 
                 var validParams = new FinalizeEmbeddingParameters(
                     claim.JobId,
@@ -369,11 +405,16 @@ public class SearchEvaluationIntegrationTests
             foreach (ClaimedAssetProcessingJob claim in claimed)
             {
                 Asset? asset = await db.Assets.FindAsync(claim.AssetId);
+                PublicationSnapshot? snapshot = await db.PublicationSnapshots.AsNoTracking()
+                    .SingleAsync(s => s.AssetId == claim.AssetId && s.AssetVersionId == claim.AssetVersionId);
+                ApprovedPublicationMetadata.TryReadPublicProjection(
+                    snapshot.ApprovedMetadataJson,
+                    out ApprovedPublicationMetadata.PublicProjection publication).Should().BeTrue();
                 CanonicalPublicMetadataResult canonical = AssetPublicMetadataCanonicalizer.Canonicalize(
-                    asset!.Title,
-                    asset.Description,
+                    publication.Title,
+                    publication.Description,
                     "BackfillCategory",
-                    []);
+                    publication.Tags);
 
                 var validParams = new FinalizeEmbeddingParameters(
                     claim.JobId,

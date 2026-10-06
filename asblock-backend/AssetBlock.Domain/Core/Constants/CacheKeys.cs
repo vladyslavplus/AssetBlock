@@ -21,6 +21,9 @@ public static class CacheKeys
     /// <summary>Prefix for all assets list cache keys. Use with RemoveByPrefix to invalidate list cache.</summary>
     public const string ASSETS_LIST_PREFIX = PREFIX + ":assets:list";
 
+    /// <summary>Bump when publication guard semantics change so stale READY-era list entries are not reused.</summary>
+    private const string ASSETS_LIST_PUBLICATION_EPOCH = "pub-guard-v1";
+
     /// <summary>Prefix for all categories list cache keys.</summary>
     public const string CATEGORIES_LIST_PREFIX = PREFIX + ":categories:list";
 
@@ -39,7 +42,7 @@ public static class CacheKeys
     {
         var searchHash = HashSearchQuery(request.Search);
         var filterHash = HashFilterComponent(request);
-        return $"{ASSETS_LIST_PREFIX}:{request.Page}:{request.PageSize}:{searchHash}:{filterHash}";
+        return $"{ASSETS_LIST_PREFIX}:{ASSETS_LIST_PUBLICATION_EPOCH}:{request.Page}:{request.PageSize}:{searchHash}:{filterHash}";
     }
 
     public static string AssetsListHybrid(GetAssetsRequest request, string modelKey, string rankingVersion = "hybrid-rrf-v1")
@@ -47,14 +50,14 @@ public static class CacheKeys
         var searchHash = HashSearchQuery(request.Search);
         var filterHash = HashFilterComponent(request);
         var sanitizedModel = string.IsNullOrWhiteSpace(modelKey) ? "default" : modelKey.Trim().Replace(":", "_", StringComparison.Ordinal);
-        return $"{ASSETS_LIST_PREFIX}:hybrid:{sanitizedModel}:{rankingVersion}:{request.Page}:{request.PageSize}:{searchHash}:{filterHash}";
+        return $"{ASSETS_LIST_PREFIX}:{ASSETS_LIST_PUBLICATION_EPOCH}:hybrid:{sanitizedModel}:{rankingVersion}:{request.Page}:{request.PageSize}:{searchHash}:{filterHash}";
     }
 
     public static string AssetsListLexicalFallback(GetAssetsRequest request)
     {
         var searchHash = HashSearchQuery(request.Search);
         var filterHash = HashFilterComponent(request);
-        return $"{ASSETS_LIST_PREFIX}:lexical-fallback:{request.Page}:{request.PageSize}:{searchHash}:{filterHash}";
+        return $"{ASSETS_LIST_PREFIX}:{ASSETS_LIST_PUBLICATION_EPOCH}:lexical-fallback:{request.Page}:{request.PageSize}:{searchHash}:{filterHash}";
     }
 
     public static string HashFilterComponent(GetAssetsRequest request)

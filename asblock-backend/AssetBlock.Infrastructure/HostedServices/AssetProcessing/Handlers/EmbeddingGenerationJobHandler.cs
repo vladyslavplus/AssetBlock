@@ -4,10 +4,11 @@ using AssetBlock.Domain.Core;
 using AssetBlock.Domain.Core.Constants;
 using AssetBlock.Domain.Core.Dto;
 using AssetBlock.Domain.Core.Entities;
-using AssetBlock.Domain.Core.Enums;
 using AssetBlock.Domain.Core.Primitives.AppSettingsOptions;
+using AssetBlock.Domain.Core.Publication;
 using AssetBlock.Infrastructure.Observability;
 using AssetBlock.Infrastructure.Persistence;
+using AssetBlock.Infrastructure.Persistence.Publication;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -55,7 +56,6 @@ public sealed class EmbeddingGenerationJobHandler(
                 ErrorCodesToErrorMessages.GetMessage(ErrorCodes.INVALID_JOB_PAYLOAD));
         }
 
-        // Re-read asset and its current READY state
         Asset? asset = await assetStore.GetById(context.AssetId, includeDeleted: true, cancellationToken);
         if (asset is null || asset.DeletedAt != null)
         {
@@ -70,38 +70,43 @@ public sealed class EmbeddingGenerationJobHandler(
             return await CompleteNoOp(context, cancellationToken);
         }
 
-        AssetVersion? currentVersion = await dbContext.AssetVersions
-            .AsNoTracking()
-            .FirstOrDefaultAsync(v => v.AssetId == context.AssetId && v.IsCurrent && v.ProcessingStatus == AssetVersionProcessingStatus.READY, cancellationToken);
+        var approvedTarget = await PublicationEligibilityQuery.PublicCatalogAssets(dbContext)
+            .Where(a => a.Id == context.AssetId)
+            .Select(a => new
+            {
+                VersionId = a.CurrentPublicationSnapshot!.AssetVersionId,
+                MetadataJson = a.CurrentPublicationSnapshot!.ApprovedMetadataJson,
+                a.SearchRevision
+            })
+            .FirstOrDefaultAsync(cancellationToken);
 
-        if (currentVersion is null)
+        if (approvedTarget is null
+            || approvedTarget.VersionId != context.Payload.AssetVersionId
+            || approvedTarget.VersionId != context.AssetVersionId
+            || !ApprovedPublicationMetadata.TryReadPublicProjection(
+                approvedTarget.MetadataJson,
+                out ApprovedPublicationMetadata.PublicProjection publication))
         {
-            logger.LogInformation("Asset has no current READY version. Job {JobId} completed as no-op.", context.JobId);
+            logger.LogInformation("No approved public offering for embedding job {JobId}. Completed as no-op.", context.JobId);
             return await CompleteNoOp(context, cancellationToken);
         }
 
-        // Reconstruct canonical metadata
-        string? categoryName = null;
-        if (asset.CategoryId != Guid.Empty)
+        var categoryName = await dbContext.Categories
+            .AsNoTracking()
+            .Where(c => c.Id == publication.CategoryId)
+            .Select(c => c.Name)
+            .FirstOrDefaultAsync(cancellationToken);
+        if (categoryName is null)
         {
-            categoryName = await dbContext.Categories
-                .AsNoTracking()
-                .Where(c => c.Id == asset.CategoryId)
-                .Select(c => c.Name)
-                .FirstOrDefaultAsync(cancellationToken);
+            logger.LogInformation("Approved category missing for embedding job {JobId}. Completed as no-op.", context.JobId);
+            return await CompleteNoOp(context, cancellationToken);
         }
 
-        List<string> tagNames = await dbContext.Set<AssetTag>()
-            .AsNoTracking()
-            .Where(at => at.AssetId == context.AssetId)
-            .Select(at => at.Tag.Name)
-            .ToListAsync(cancellationToken);
-
         CanonicalPublicMetadataResult canonical = AssetPublicMetadataCanonicalizer.Canonicalize(
-            asset.Title,
-            asset.Description,
+            publication.Title,
+            publication.Description,
             categoryName,
-            tagNames);
+            publication.Tags);
 
         if (!string.Equals(canonical.ContentHash, context.Payload.ContentHash, StringComparison.OrdinalIgnoreCase))
         {
@@ -109,7 +114,6 @@ public sealed class EmbeddingGenerationJobHandler(
             return await CompleteNoOp(context, cancellationToken);
         }
 
-        // Call Ollama outside DB transaction
         GeneratedEmbedding generated;
         var sw = Stopwatch.StartNew();
         using (AssetBlockDiagnostics.ActivitySource.StartActivity("embedding.document.generate"))
@@ -143,13 +147,12 @@ public sealed class EmbeddingGenerationJobHandler(
             }
         }
 
-        // Atomic finalization inside DB transaction
         EmbeddingFinalizationStatus finalizationStatus = await finalizer.Finalize(new FinalizeEmbeddingParameters(
             context.JobId,
             context.LeaseToken,
             context.AssetId,
-            currentVersion.Id,
-            context.Payload.TargetRevision,
+            approvedTarget.VersionId,
+            approvedTarget.SearchRevision,
             canonical.ContentHash,
             expectedModelKey,
             embeddingOptions.Provider,

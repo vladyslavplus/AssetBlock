@@ -77,6 +77,11 @@ public sealed class ApplicationDbContext(DbContextOptions<ApplicationDbContext> 
                     nameof(PostgresDbFunctions.TrigramsSimilarity),
                     [typeof(string), typeof(string)])!)
             .HasName("similarity");
+        modelBuilder.HasDbFunction(
+                typeof(PostgresDbFunctions).GetMethod(
+                    nameof(PostgresDbFunctions.JsonbExtractPathText),
+                    [typeof(string), typeof(string)])!)
+            .HasName("jsonb_extract_path_text");
 
         ConfigurePostgresAssetSearch(modelBuilder);
         ConfigurePostgresSecondarySearch(modelBuilder);

@@ -288,6 +288,7 @@ public sealed class PurchaseStorePostgresTests(PostgresFixture fixture)
             processingStatus: AssetVersionProcessingStatus.READY);
         db.AssetVersions.Add(v1);
         await db.SaveChangesAsync();
+        await ApprovedPublicationTestBuilder.AttachTrustedApprovedPublicationAsync(db, asset, v1, author, category);
 
         TestData.AddCompletedPurchase(
             db,
@@ -342,6 +343,7 @@ public sealed class PurchaseStorePostgresTests(PostgresFixture fixture)
         v1.IsCurrent = false;
         db.AssetVersions.Add(v4);
         await db.SaveChangesAsync();
+        await ApprovedPublicationTestBuilder.AttachTrustedApprovedPublicationAsync(db, asset, v4, author, category);
 
         PagedResult<PurchaseLibraryItemDto> resultAfterReady = await store.ListForUser(buyer.Id, new ListMyPurchasesRequest
         {

@@ -38,6 +38,10 @@ public class HandleStripeWebhookCommandHandlerTests
         IBundleStore bundleStoreMock = Substitute.For<IBundleStore>();
         _orderStoreMock = Substitute.For<IOrderStore>();
         _checkoutIntentStoreMock = Substitute.For<ICheckoutIntentStore>();
+        _checkoutIntentStoreMock.LockForFulfillment(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
+            .Returns(callInfo => _checkoutIntentStoreMock.GetByIdWithItems(
+                callInfo.ArgAt<Guid>(0),
+                callInfo.ArgAt<CancellationToken>(1)));
         _userStoreMock = Substitute.For<IUserStore>();
         _unitOfWorkMock = Substitute.For<IUnitOfWork>();
         _outboxStoreMock = Substitute.For<IOutboxStore>();
@@ -47,6 +51,14 @@ public class HandleStripeWebhookCommandHandlerTests
         _processedEventStoreMock.TryRecordEvent(
                 Arg.Any<string>(), Arg.Any<string>(), Arg.Any<DateTimeOffset>(), Arg.Any<CancellationToken>())
             .Returns(true);
+        _assetStoreMock.IsPinnedSaleOfferingValid(
+                Arg.Any<Guid>(),
+                Arg.Any<Guid>(),
+                Arg.Any<Guid>(),
+                Arg.Any<CancellationToken>())
+            .Returns(true);
+        _assetStoreMock.GetVersion(Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<CancellationToken>())
+            .Returns(call => CreateVersion(call.ArgAt<Guid>(0), call.ArgAt<Guid>(1)));
 
         _unitOfWorkMock.ExecuteInTransaction(Arg.Any<Func<CancellationToken, Task>>(), Arg.Any<CancellationToken>())
             .Returns(async callInfo =>
@@ -76,6 +88,7 @@ public class HandleStripeWebhookCommandHandlerTests
             bundleStoreMock,
             _orderStoreMock,
             _checkoutIntentStoreMock,
+            Substitute.For<ICheckoutReconciliationHoldStore>(),
             _userStoreMock,
             _processedEventStoreMock,
             _unitOfWorkMock,
@@ -92,7 +105,7 @@ public class HandleStripeWebhookCommandHandlerTests
     }
 
     [Fact]
-    public async Task Handle_WhenAssetVersionMissing_ShouldReturnMismatchError()
+    public async Task Handle_WhenAssetVersionMissing_ShouldRecordReconciliationHoldWithoutGrantingEntitlements()
     {
         var userId = Guid.NewGuid();
         var sellerId = Guid.NewGuid();
@@ -109,15 +122,17 @@ public class HandleStripeWebhookCommandHandlerTests
 
         Result<OrderCompletedPayload?> result = await _handler.Handle(command, CancellationToken.None);
 
-        result.IsSuccess.Should().BeFalse();
-        result.ValidationErrors.Select(v => v.Identifier).Should().Contain(ErrorCodes.ERR_PAYMENT_WEBHOOK_MISMATCH);
+        result.IsSuccess.Should().BeTrue();
+        result.Value.Should().BeNull();
         await _orderStoreMock.DidNotReceiveWithAnyArgs()
             .CreateWithLinesAndPurchases(
                 Arg.Any<Order>(),
                 Arg.Any<IReadOnlyList<OrderLine>>(),
                 Arg.Any<IReadOnlyList<Purchase>>(),
                 Arg.Any<CancellationToken>());
-        await _auditWriterMock.DidNotReceiveWithAnyArgs().Write(Arg.Any<AuditEvent>(), Arg.Any<CancellationToken>());
+        await _auditWriterMock.Received(1).Write(
+            Arg.Is<AuditEvent>(e => e.Outcome == AuditOutcome.DENIED),
+            Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -399,7 +414,7 @@ public class HandleStripeWebhookCommandHandlerTests
     }
 
     [Fact]
-    public async Task Handle_WhenCheckoutCompletedButVersionMissing_ShouldReturnMismatchError()
+    public async Task Handle_WhenCheckoutCompletedButVersionMissing_ShouldRecordHoldWithoutOrder()
     {
         var userId = Guid.NewGuid();
         var sellerId = Guid.NewGuid();
@@ -407,23 +422,24 @@ public class HandleStripeWebhookCommandHandlerTests
         var versionId = Guid.NewGuid();
         var sessionId = "cs_missing";
         var command = new HandleStripeWebhookCommand("payload", "sig");
+        ICheckoutReconciliationHoldStore holdStoreMock = Substitute.For<ICheckoutReconciliationHoldStore>();
         _paymentServiceMock.VerifyCheckoutCompleted(command.Payload, command.Signature, Arg.Any<CancellationToken>())
             .Returns(_ => Completed(userId, sellerId, assetId, versionId, sessionId, 9.99m, "usd"));
         _orderStoreMock.GetByStripeSessionId(sessionId, Arg.Any<CancellationToken>()).Returns((Order?)null);
         _assetStoreMock.GetVersion(assetId, versionId, Arg.Any<CancellationToken>()).Returns((AssetVersion?)null);
 
-        Result<OrderCompletedPayload?> result = await _handler.Handle(command, CancellationToken.None);
+        HandleStripeWebhookCommandHandler handler = BuildHandler(holdStoreMock);
+        Result<OrderCompletedPayload?> result = await handler.Handle(command, CancellationToken.None);
 
-        result.IsSuccess.Should().BeFalse();
-        result.ValidationErrors.Select(v => v.Identifier).Should().Contain(ErrorCodes.ERR_PAYMENT_WEBHOOK_MISMATCH);
+        result.IsSuccess.Should().BeTrue();
+        result.Value.Should().BeNull();
         await _orderStoreMock.DidNotReceiveWithAnyArgs()
             .CreateWithLinesAndPurchases(
                 Arg.Any<Order>(),
                 Arg.Any<IReadOnlyList<OrderLine>>(),
                 Arg.Any<IReadOnlyList<Purchase>>(),
                 Arg.Any<CancellationToken>());
-        await _outboxStoreMock.DidNotReceiveWithAnyArgs().Enqueue(Arg.Any<string>(), Arg.Any<object>(), Arg.Any<CancellationToken>());
-        await _auditWriterMock.DidNotReceiveWithAnyArgs().Write(Arg.Any<AuditEvent>(), Arg.Any<CancellationToken>());
+        holdStoreMock.Received(1).StageHold(Arg.Any<PaidCheckoutReconciliationHold>());
     }
 
     [Fact]
@@ -652,6 +668,41 @@ public class HandleStripeWebhookCommandHandlerTests
             .Returns(ci => Task.FromResult(ci.Arg<Order>()));
     }
 
+    private HandleStripeWebhookCommandHandler BuildHandler(ICheckoutReconciliationHoldStore? holdStore = null)
+    {
+        var composer = new TransactionalEmailComposer(Microsoft.Extensions.Options.Options.Create(new EmailOptions
+        {
+            Provider = "Smtp",
+            FromName = "AssetBlock",
+            FromAddress = "noreply@localhost",
+            PublicAppBaseUrl = "http://localhost:3000",
+            MessageIdDomain = "mail.localhost",
+            Smtp = new EmailSmtpOptions { Host = "localhost", Port = 1025, Security = SmtpSecurityMode.NONE, TimeoutSeconds = 30 }
+        }));
+        var publisher = new CheckoutNotificationPublisher(
+            _outboxStoreMock,
+            composer,
+            NullLogger<CheckoutNotificationPublisher>.Instance);
+        var orchestrator = new CheckoutCompletionOrchestrator(
+            _assetStoreMock,
+            Substitute.For<IBundleStore>(),
+            _orderStoreMock,
+            _checkoutIntentStoreMock,
+            holdStore ?? Substitute.For<ICheckoutReconciliationHoldStore>(),
+            _userStoreMock,
+            _processedEventStoreMock,
+            _unitOfWorkMock,
+            _auditWriterMock,
+            new CheckoutOrderFactory(),
+            publisher,
+            TimeProvider.System,
+            NullLogger<CheckoutCompletionOrchestrator>.Instance);
+        return new HandleStripeWebhookCommandHandler(
+            _paymentServiceMock,
+            orchestrator,
+            NullLogger<HandleStripeWebhookCommandHandler>.Instance);
+    }
+
     private StripeCheckoutCompleted Completed(
         Guid userId,
         Guid sellerId,
@@ -683,6 +734,7 @@ public class HandleStripeWebhookCommandHandlerTests
                         CheckoutIntentId = intentId,
                         AssetId = assetId,
                         AssetVersionId = assetVersionId,
+                        PublicationSnapshotId = Guid.NewGuid(),
                         SellerId = sellerId,
                         Position = 1,
                         AssetTitleSnapshot = "Pack",
@@ -753,15 +805,48 @@ public class HandleStripeWebhookCommandHandlerTests
                 Arg.Any<CancellationToken>())
             .Returns(false);
 
+        var existingOrder = new Order
+        {
+            Id = Guid.NewGuid(),
+            UserId = userId,
+            CheckoutIntentId = verified.CheckoutIntentId,
+            AssetId = assetId,
+            ProductTitle = "Pack",
+            StripeSessionId = sessionId,
+            AmountPaid = 9.99m,
+            Currency = "usd",
+            PurchasedAt = DateTimeOffset.UtcNow,
+            Lines =
+            [
+                new OrderLine
+                {
+                    Id = Guid.NewGuid(),
+                    OrderId = Guid.NewGuid(),
+                    AssetId = assetId,
+                    AssetVersionId = versionId,
+                    SellerId = sellerId,
+                    Position = 1,
+                    AssetTitleSnapshot = "Pack",
+                    VersionNumber = 1,
+                    ListPrice = 9.99m,
+                    PricePaid = 9.99m,
+                    LicenseCode = AssetLicenseCode.PERSONAL,
+                    LicenseTemplateVersion = "1.0",
+                    LicenseDisplayName = "Personal use",
+                    LicenseTerms = "terms"
+                }
+            ]
+        };
         _orderStoreMock.GetByStripeSessionId(sessionId, Arg.Any<CancellationToken>())
-            .Returns((Order?)null);
+            .Returns((Order?)null, existingOrder);
         _orderStoreMock.GetByCheckoutIntentId(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
-            .Returns((Order?)null);
+            .Returns(existingOrder);
 
         Result<OrderCompletedPayload?> result = await _handler.Handle(command, CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
-        result.Value.Should().BeNull();
+        result.Value.Should().NotBeNull();
+        result.Value!.OrderId.Should().Be(existingOrder.Id);
 
         await _orderStoreMock.DidNotReceiveWithAnyArgs()
             .CreateWithLinesAndPurchases(
@@ -859,6 +944,7 @@ public class HandleStripeWebhookCommandHandlerTests
             Substitute.For<IBundleStore>(),
             _orderStoreMock,
             _checkoutIntentStoreMock,
+            Substitute.For<ICheckoutReconciliationHoldStore>(),
             _userStoreMock,
             _processedEventStoreMock,
             _unitOfWorkMock,

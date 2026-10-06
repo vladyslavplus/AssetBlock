@@ -3,7 +3,6 @@ using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using AssetBlock.Domain.Abstractions.Services;
-using AssetBlock.Domain.Core;
 using AssetBlock.Domain.Core.Constants;
 using AssetBlock.Domain.Core.Dto;
 using AssetBlock.Domain.Core.Dto.Notifications;
@@ -19,9 +18,7 @@ namespace AssetBlock.Infrastructure.Persistence.Stores;
 
 public sealed partial class AssetProcessingLifecycleStore(
     ApplicationDbContext dbContext,
-    IOptions<AssetProcessingOptions> options,
-    IAssetProcessingJobStore? jobStore = null,
-    IOptions<EmbeddingOptions>? embeddingOptions = null)
+    IOptions<AssetProcessingOptions> options)
     : IAssetProcessingLifecycleStore
 {
     private static readonly Regex _errorCodeRegex = MyRegex();
@@ -303,40 +300,14 @@ public sealed partial class AssetProcessingLifecycleStore(
             return false;
         }
 
-        var candidateVersionNumber = candidateVersionNumbers[0];
-
-        // Get current version number if exists
-        List<int> currentVersionNumbers = await dbContext.Database.SqlQueryRaw<int>(
-            """
-            SELECT "VersionNumber" AS "Value"
-            FROM asset_versions
-            WHERE "AssetId" = {0} AND "IsCurrent" = true
-            """, assetId).ToListAsync(cancellationToken);
-
-        var currentVersionNumber = currentVersionNumbers.Count > 0 ? (int?)currentVersionNumbers[0] : null;
-
-        var shouldPromote = currentVersionNumber == null || candidateVersionNumber > currentVersionNumber.Value;
-
-        if (shouldPromote)
-        {
-            // Demote previous current version before promoting the candidate
-            await dbContext.Database.ExecuteSqlInterpolatedAsync($"""
-                UPDATE asset_versions
-                SET "IsCurrent" = false
-                WHERE "AssetId" = {assetId}
-                  AND "IsCurrent" = true
-                  AND "Id" != {assetVersionId}
-                """, cancellationToken);
-        }
-
-        // 5. Update candidate version to READY — only from PENDING_MALWARE_SCAN
+        // 5. Update candidate version to READY — only from PENDING_MALWARE_SCAN.
+        // Publication guards: do not change IsCurrent or enqueue public metadata embeddings here.
         var versionRowsUpdated = await dbContext.Database.ExecuteSqlInterpolatedAsync($"""
             UPDATE asset_versions
             SET "ProcessingStatus" = 'READY',
                 "ProcessingErrorCode" = NULL,
                 "ProcessingErrorSummary" = NULL,
-                "ProcessingUpdatedAt" = {dbNow},
-                "IsCurrent" = CASE WHEN {shouldPromote} THEN true ELSE "IsCurrent" END
+                "ProcessingUpdatedAt" = {dbNow}
             WHERE "Id" = {assetVersionId}
               AND "AssetId" = {assetId}
               AND "ProcessingStatus" = 'PENDING_MALWARE_SCAN'
@@ -369,57 +340,6 @@ public sealed partial class AssetProcessingLifecycleStore(
             AssetVersionProcessingStatus.READY,
             dbNow,
             cancellationToken);
-
-        if (shouldPromote && jobStore != null && embeddingOptions?.Value is { Enabled: true } embOptions)
-        {
-            var assetData = await dbContext.Assets
-                .AsNoTracking()
-                .Where(a => a.Id == assetId && a.DeletedAt == null)
-                .Select(a => new
-                {
-                    a.SearchRevision,
-                    a.Title,
-                    a.Description,
-                    CategoryName = a.Category.Name
-                })
-                .FirstOrDefaultAsync(cancellationToken);
-
-            if (assetData != null)
-            {
-                List<string> tagNames = await dbContext.AssetTags
-                    .AsNoTracking()
-                    .Where(at => at.AssetId == assetId)
-                    .OrderBy(at => at.Tag.Name)
-                    .Select(at => at.Tag.Name)
-                    .ToListAsync(cancellationToken);
-
-                var canonicalText = AssetPublicMetadataCanonicalizer.BuildCanonicalMetadata(
-                    assetData.Title,
-                    assetData.Description,
-                    assetData.CategoryName,
-                    tagNames);
-
-                var contentHash = AssetPublicMetadataCanonicalizer.ComputeContentHash(canonicalText);
-
-                var payload = new EmbeddingGenerationPayload(
-                    assetId,
-                    assetVersionId,
-                    assetData.SearchRevision,
-                    contentHash,
-                    EmbeddingModelKey.Compute(embOptions),
-                    AssetPublicMetadataCanonicalizer.SCHEMA_VERSION);
-
-                await jobStore.Enqueue(
-                    assetId,
-                    assetVersionId,
-                    AssetProcessingJobType.EMBEDDING_GENERATION,
-                    definitionVersion: 1,
-                    initialDelay: TimeSpan.Zero,
-                    payload,
-                    traceParent: null,
-                    cancellationToken);
-            }
-        }
 
         await tx.CommitAsync(cancellationToken);
         return true;

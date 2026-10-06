@@ -16,6 +16,7 @@ internal sealed class CheckoutCompletionOrchestrator(
     IBundleStore bundleStore,
     IOrderStore orderStore,
     ICheckoutIntentStore checkoutIntentStore,
+    ICheckoutReconciliationHoldStore reconciliationHoldStore,
     IUserStore userStore,
     IProcessedStripeWebhookEventStore processedEventStore,
     IUnitOfWork unitOfWork,
@@ -40,22 +41,22 @@ internal sealed class CheckoutCompletionOrchestrator(
         CheckoutIntent? checkoutIntent = await checkoutIntentStore.GetByIdWithItems(
             verified.CheckoutIntentId,
             cancellationToken);
-        if (checkoutIntent is null
-            || checkoutIntent.Status != CheckoutIntentStatus.PENDING
-            || checkoutIntent.UserId != verified.UserId
-            || checkoutIntent.AmountTotal != verified.AmountTotal
-            || !string.Equals(checkoutIntent.Currency, verified.Currency, StringComparison.Ordinal)
-            || (checkoutIntent.StripeSessionId is not null
-                && !string.Equals(
-                    checkoutIntent.StripeSessionId,
-                    verified.StripeSessionId,
-                    StringComparison.Ordinal)))
+        if (checkoutIntent is null)
         {
             logger.LogError(
-                "Paid Stripe checkout does not match a pending intent. Intent {CheckoutIntentId}, session {SessionId}",
+                "Paid Stripe checkout references missing intent {CheckoutIntentId}; session {SessionId}",
                 verified.CheckoutIntentId,
                 verified.StripeSessionId);
-            throw new PaymentWebhookMismatchException("Paid Stripe checkout does not match its pending checkout intent.");
+            throw new PaymentWebhookMismatchException("Paid Stripe checkout references a missing checkout intent.");
+        }
+
+        if (!PaymentMatchesIntent(verified, checkoutIntent))
+        {
+            logger.LogError(
+                "Paid Stripe checkout identity mismatch for intent {CheckoutIntentId}; session {SessionId}",
+                verified.CheckoutIntentId,
+                verified.StripeSessionId);
+            throw new PaymentWebhookMismatchException("Paid Stripe checkout does not match its checkout intent.");
         }
 
         var items = checkoutIntent.Items.OrderBy(i => i.Position).ToList();
@@ -68,20 +69,6 @@ internal sealed class CheckoutCompletionOrchestrator(
             throw new PaymentWebhookMismatchException("Paid Stripe checkout references an empty checkout intent.");
         }
 
-        foreach (CheckoutIntentItem item in items)
-        {
-            AssetVersion? assetVersion = await assetStore.GetVersion(item.AssetId, item.AssetVersionId, cancellationToken);
-            if (assetVersion is null)
-            {
-                logger.LogError(
-                    "Paid Stripe checkout references missing AssetVersion {AssetVersionId} on asset {AssetId}; session {SessionId}",
-                    item.AssetVersionId,
-                    item.AssetId,
-                    verified.StripeSessionId);
-                throw new PaymentWebhookMismatchException("Paid Stripe checkout references a missing asset version.");
-            }
-        }
-
         Guid sellerId = items[0].SellerId;
         EmailRecipient? buyer = await userStore.GetEmailRecipientById(verified.UserId, cancellationToken);
         EmailRecipient? seller = null;
@@ -92,14 +79,40 @@ internal sealed class CheckoutCompletionOrchestrator(
 
         var orderId = Guid.NewGuid();
         DateTimeOffset purchasedAt = timeProvider.GetUtcNow();
-        var lostCompletionRace = false;
-        var isDuplicateEvent = false;
-        Order? createdOrder = null;
-
+        FulfillmentTransactionResult txResult = new();
         try
         {
             await unitOfWork.ExecuteInTransaction(async ct =>
             {
+                Guid[] assetIds = items.Select(i => i.AssetId).OrderBy(id => id).ToArray();
+                await bundleStore.LockAssetsInOrder(assetIds, ct);
+
+                CheckoutIntent? lockedIntent = await checkoutIntentStore.LockForFulfillment(verified.CheckoutIntentId, ct);
+                if (lockedIntent is null)
+                {
+                    throw new PaymentWebhookMismatchException("Paid Stripe checkout references a missing checkout intent.");
+                }
+
+                var lockedItems = lockedIntent.Items.OrderBy(i => i.Position).ToList();
+                if (!PaymentMatchesIntent(verified, lockedIntent) || lockedItems.Count == 0)
+                {
+                    throw new PaymentWebhookMismatchException("Paid Stripe checkout does not match its checkout intent.");
+                }
+
+                Order? existingOrder = await orderStore.GetByStripeSessionId(verified.StripeSessionId, ct)
+                    ?? await orderStore.GetByCheckoutIntentId(verified.CheckoutIntentId, ct);
+                if (existingOrder is not null)
+                {
+                    txResult.ExistingOrder = existingOrder;
+                    return;
+                }
+
+                if (await reconciliationHoldStore.HasUnresolvedHoldForCheckoutIntent(verified.CheckoutIntentId, ct))
+                {
+                    txResult.IdempotentHoldExists = true;
+                    return;
+                }
+
                 if (!string.IsNullOrWhiteSpace(verified.StripeEventId))
                 {
                     var isNewEvent = await processedEventStore.TryRecordEvent(
@@ -109,13 +122,31 @@ internal sealed class CheckoutCompletionOrchestrator(
                         ct);
                     if (!isNewEvent)
                     {
-                        isDuplicateEvent = true;
-                        return;
+                        txResult.DuplicateStripeEvent = true;
+                        Order? orderAfterDuplicate = await orderStore.GetByStripeSessionId(verified.StripeSessionId, ct)
+                            ?? await orderStore.GetByCheckoutIntentId(verified.CheckoutIntentId, ct);
+                        if (orderAfterDuplicate is not null)
+                        {
+                            txResult.ExistingOrder = orderAfterDuplicate;
+                            return;
+                        }
+
+                        if (await reconciliationHoldStore.HasUnresolvedHoldForCheckoutIntent(verified.CheckoutIntentId, ct))
+                        {
+                            txResult.IdempotentHoldExists = true;
+                            return;
+                        }
                     }
                 }
 
-                // Claim completion first so concurrent webhooks serialize on the intent row.
-                // Then take asset locks before inserting entitlements.
+                if (lockedIntent.Status != CheckoutIntentStatus.PENDING)
+                {
+                    StageHold(verified, lockedIntent, lockedItems, "intent_not_pending", purchasedAt);
+                    txResult.FulfillmentHeld = true;
+                    await WriteHoldAudit(verified, lockedIntent, "intent_not_pending", ct);
+                    return;
+                }
+
                 var completed = await checkoutIntentStore.TryCompleteAndRelease(
                     verified.CheckoutIntentId,
                     verified.UserId,
@@ -124,20 +155,31 @@ internal sealed class CheckoutCompletionOrchestrator(
                     ct);
                 if (!completed)
                 {
-                    lostCompletionRace = true;
+                    StageHold(verified, lockedIntent, lockedItems, "intent_completion_race", purchasedAt);
+                    txResult.FulfillmentHeld = true;
+                    await WriteHoldAudit(verified, lockedIntent, "intent_completion_race", ct);
                     return;
                 }
 
-                Guid[] assetIds = items.Select(i => i.AssetId).OrderBy(id => id).ToArray();
-                await bundleStore.LockAssetsInOrder(assetIds, ct);
+                CheckoutFulfillmentSafety.FulfillmentSafetyResult safety = await CheckoutFulfillmentSafety.ValidateItems(
+                    assetStore,
+                    lockedItems,
+                    ct);
+                if (!safety.IsSafe)
+                {
+                    StageHold(verified, lockedIntent, lockedItems, safety.BlockReason ?? "unsafe_fulfillment", purchasedAt);
+                    txResult.FulfillmentHeld = true;
+                    await WriteHoldAudit(verified, lockedIntent, safety.BlockReason ?? "unsafe_fulfillment", ct);
+                    return;
+                }
 
                 (Order order, IReadOnlyList<OrderLine> lines, IReadOnlyList<Purchase> purchases) =
-                    orderFactory.CreateOrderWithPurchases(orderId, checkoutIntent, items, verified, purchasedAt);
+                    orderFactory.CreateOrderWithPurchases(orderId, lockedIntent, lockedItems, verified, purchasedAt);
 
-                createdOrder = await orderStore.CreateWithLinesAndPurchases(order, lines, purchases, ct);
+                txResult.CreatedOrder = await orderStore.CreateWithLinesAndPurchases(order, lines, purchases, ct);
 
                 await notificationPublisher.EnqueueOrderCompletionSideEffects(
-                    createdOrder,
+                    txResult.CreatedOrder,
                     lines,
                     buyer,
                     seller,
@@ -150,14 +192,14 @@ internal sealed class CheckoutCompletionOrchestrator(
                     AuditActions.PAYMENT_ORDER_COMPLETED,
                     AuditOutcome.SUCCESS,
                     AuditResourceTypes.ORDER,
-                    createdOrder.Id.ToString(),
+                    txResult.CreatedOrder.Id.ToString(),
                     new Dictionary<string, object?>
                     {
                         ["checkoutIntentId"] = verified.CheckoutIntentId.ToString(),
                         ["stripeSessionId"] = verified.StripeSessionId,
                         ["itemCount"] = lines.Count,
-                        ["assetId"] = createdOrder.AssetId?.ToString(),
-                        ["bundleId"] = createdOrder.BundleId?.ToString()
+                        ["assetId"] = txResult.CreatedOrder.AssetId?.ToString(),
+                        ["bundleId"] = txResult.CreatedOrder.BundleId?.ToString()
                     },
                     ActorTypeOverride: AuditActorType.USER,
                     ActorUserIdOverride: verified.UserId), ct);
@@ -179,38 +221,32 @@ internal sealed class CheckoutCompletionOrchestrator(
             throw;
         }
 
-        if (isDuplicateEvent || lostCompletionRace)
+        if (txResult.CreatedOrder is not null)
         {
-            Order? existingAfterRace = await orderStore.GetByStripeSessionId(
-                verified.StripeSessionId,
-                cancellationToken) ?? await orderStore.GetByCheckoutIntentId(
-                verified.CheckoutIntentId,
-                cancellationToken);
-
-            if (existingAfterRace is not null)
-            {
-                logger.LogInformation(
-                    "Resolved duplicate event or race for session {SessionId}, order {OrderId}",
-                    verified.StripeSessionId,
-                    existingAfterRace.Id);
-                return ToPayload(existingAfterRace);
-            }
-
-            if (isDuplicateEvent)
-            {
-                logger.LogInformation(
-                    "Stripe webhook event {EventId} was previously processed; returning success no-op",
-                    verified.StripeEventId);
-                return null;
-            }
-
-            throw new InvalidOperationException(
-                $"Checkout intent {verified.CheckoutIntentId} could not be completed for session {verified.StripeSessionId}.");
+            return ToPayload(txResult.CreatedOrder, sellerId);
         }
 
-        if (createdOrder is not null)
+        if (txResult.ExistingOrder is not null)
         {
-            return ToPayload(createdOrder, sellerId);
+            return ToPayload(txResult.ExistingOrder, sellerId);
+        }
+
+        if (txResult.FulfillmentHeld || txResult.IdempotentHoldExists)
+        {
+            logger.LogWarning(
+                "Recorded or reused paid checkout reconciliation hold for intent {CheckoutIntentId}, session {SessionId}",
+                verified.CheckoutIntentId,
+                verified.StripeSessionId);
+            return null;
+        }
+
+        if (txResult.DuplicateStripeEvent)
+        {
+            logger.LogInformation(
+                "Stripe webhook event {EventId} was previously processed without a resolvable durable outcome; session {SessionId}",
+                verified.StripeEventId,
+                verified.StripeSessionId);
+            return null;
         }
 
         Order? existingAfterDuplicate = await orderStore.GetByStripeSessionId(
@@ -221,11 +257,70 @@ internal sealed class CheckoutCompletionOrchestrator(
 
         if (existingAfterDuplicate is not null)
         {
-            return ToPayload(existingAfterDuplicate);
+            return ToPayload(existingAfterDuplicate, sellerId);
         }
 
         throw new InvalidOperationException(
             $"Order unique conflict for session {verified.StripeSessionId} but no durable order was found. Requires reconciliation.");
+    }
+
+    private static bool PaymentMatchesIntent(StripeCheckoutCompleted verified, CheckoutIntent checkoutIntent)
+    {
+        if (checkoutIntent.UserId != verified.UserId
+            || checkoutIntent.AmountTotal != verified.AmountTotal
+            || !string.Equals(checkoutIntent.Currency, verified.Currency, StringComparison.Ordinal))
+        {
+            return false;
+        }
+
+        if (checkoutIntent.StripeSessionId is not null
+            && !string.Equals(checkoutIntent.StripeSessionId, verified.StripeSessionId, StringComparison.Ordinal))
+        {
+            return false;
+        }
+
+        return true;
+    }
+
+    private async Task WriteHoldAudit(
+        StripeCheckoutCompleted verified,
+        CheckoutIntent checkoutIntent,
+        string reason,
+        CancellationToken cancellationToken)
+    {
+        await auditWriter.Write(new AuditEvent(
+            AuditActions.PAYMENT_ORDER_COMPLETED,
+            AuditOutcome.DENIED,
+            AuditResourceTypes.ORDER,
+            checkoutIntent.Id.ToString(),
+            new Dictionary<string, object?>
+            {
+                ["reason"] = reason,
+                ["stripeSessionId"] = verified.StripeSessionId,
+                ["held"] = true
+            },
+            ActorTypeOverride: AuditActorType.USER,
+            ActorUserIdOverride: verified.UserId), cancellationToken);
+    }
+
+    private void StageHold(
+        StripeCheckoutCompleted verified,
+        CheckoutIntent checkoutIntent,
+        IReadOnlyList<CheckoutIntentItem> items,
+        string reason,
+        DateTimeOffset now)
+    {
+        reconciliationHoldStore.StageHold(new PaidCheckoutReconciliationHold
+        {
+            Id = Guid.NewGuid(),
+            CheckoutIntentId = checkoutIntent.Id,
+            StripeSessionId = verified.StripeSessionId,
+            StripeEventId = verified.StripeEventId,
+            State = PaidCheckoutReconciliationState.HELD,
+            SafePaymentFactsJson = CheckoutFulfillmentSafety.SerializeSafePaymentFacts(verified),
+            ItemIdentitiesJson = CheckoutFulfillmentSafety.SerializeItemIdentities(items),
+            CreatedAt = now
+        });
     }
 
     private static OrderCompletedPayload ToPayload(Order order, Guid? sellerId = null)
@@ -240,5 +335,14 @@ internal sealed class CheckoutCompletionOrchestrator(
             order.ProductTitle,
             order.Lines.Count,
             resolvedSellerId);
+    }
+
+    private sealed class FulfillmentTransactionResult
+    {
+        public Order? CreatedOrder { get; set; }
+        public Order? ExistingOrder { get; set; }
+        public bool FulfillmentHeld { get; set; }
+        public bool IdempotentHoldExists { get; set; }
+        public bool DuplicateStripeEvent { get; set; }
     }
 }

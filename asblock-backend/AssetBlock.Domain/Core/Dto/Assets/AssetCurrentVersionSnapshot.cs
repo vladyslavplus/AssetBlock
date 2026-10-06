@@ -4,9 +4,13 @@ namespace AssetBlock.Domain.Core.Dto.Assets;
 public sealed record AssetCurrentVersionSnapshot(
     Guid AssetId,
     Guid AssetVersionId,
+    Guid PublicationSnapshotId,
     Guid AuthorId,
     string Title,
     string? Description,
+    Guid CategoryId,
+    string CategoryName,
+    IReadOnlyList<string> Tags,
     decimal Price,
     DateTimeOffset? DeletedAt,
     int VersionNumber,

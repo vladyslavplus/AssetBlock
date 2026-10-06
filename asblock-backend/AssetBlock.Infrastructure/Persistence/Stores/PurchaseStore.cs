@@ -5,6 +5,7 @@ using AssetBlock.Domain.Core.Entities;
 using AssetBlock.Domain.Core.Enums;
 using AssetBlock.Domain.Core.Exceptions;
 using AssetBlock.Infrastructure.Persistence.Configurations;
+using AssetBlock.Infrastructure.Persistence.Publication;
 using Microsoft.EntityFrameworkCore;
 using Npgsql;
 
@@ -105,43 +106,77 @@ internal sealed class PurchaseStore(ApplicationDbContext dbContext) : IPurchaseS
         var page = Math.Max(PagedRequest.DEFAULT_PAGE, request.Page);
         var pageSize = Math.Clamp(request.PageSize, PagedRequest.MIN_PAGE_SIZE, PagedRequest.MAX_PAGE_SIZE);
 
-        List<PurchaseLibraryItemDto> items = await query
+        List<PurchasePageRow> rows = await query
             .Skip((page - 1) * pageSize)
             .Take(pageSize)
-            .Select(p => new PurchaseLibraryItemDto(
+            .Select(p => new PurchasePageRow(
                 p.Id,
                 p.OrderLine.OrderId,
                 p.AssetId,
-                p.Asset.Title,
+                p.OrderLine.AssetTitleSnapshot,
                 p.Asset.Price,
                 p.PurchasedAt,
                 p.Asset.Author.Username,
                 p.Asset.Reviews.Any(r => r.UserId == userId),
                 p.AssetVersion.VersionNumber,
                 p.AssetVersionId,
-                p.Asset.Versions
-                    .Where(v => v.VersionNumber >= p.AssetVersion.VersionNumber && v.ProcessingStatus == AssetVersionProcessingStatus.READY)
-                    .OrderByDescending(v => v.VersionNumber)
-                    .Select(v => (int?)v.VersionNumber)
-                    .FirstOrDefault() ?? p.AssetVersion.VersionNumber,
-                p.Asset.Versions
-                    .Where(v => v.VersionNumber >= p.AssetVersion.VersionNumber && v.ProcessingStatus == AssetVersionProcessingStatus.READY)
-                    .OrderByDescending(v => v.VersionNumber)
-                    .Select(v => (Guid?)v.Id)
-                    .FirstOrDefault() ?? p.AssetVersionId,
-                p.Asset.Versions
-                    .Any(v => v.VersionNumber > p.AssetVersion.VersionNumber && v.ProcessingStatus == AssetVersionProcessingStatus.READY),
                 p.OrderLine.PricePaid,
                 p.OrderLine.Order.Currency,
-                p.OrderLine.Order.BundleId != null ? PurchaseSource.BUNDLE : PurchaseSource.ASSET,
                 p.OrderLine.Order.BundleId,
-                p.OrderLine.Order.BundleId != null
-                    ? p.OrderLine.Order.BundleRevision != null
-                        ? p.OrderLine.Order.BundleRevision.Title
-                        : p.OrderLine.Order.ProductTitle
-                    : null))
+                p.OrderLine.Order.BundleRevision != null
+                    ? p.OrderLine.Order.BundleRevision.Title
+                    : p.OrderLine.Order.ProductTitle))
             .ToListAsync(cancellationToken);
+
+        var items = new List<PurchaseLibraryItemDto>(rows.Count);
+        foreach (PurchasePageRow row in rows)
+        {
+            AssetVersion? latestApproved = await PublicationEligibilityQuery
+                .BuyerAccessibleVersions(dbContext, row.AssetId, row.PurchasedVersionNumber)
+                .OrderByDescending(v => v.VersionNumber)
+                .FirstOrDefaultAsync(cancellationToken);
+
+            var latestVersionNumber = latestApproved?.VersionNumber ?? row.PurchasedVersionNumber;
+            Guid latestVersionId = latestApproved?.Id ?? row.PurchasedVersionId;
+            var hasUpdate = latestVersionNumber > row.PurchasedVersionNumber;
+
+            items.Add(new PurchaseLibraryItemDto(
+                row.PurchaseId,
+                row.OrderId,
+                row.AssetId,
+                row.AssetTitle,
+                row.AssetPrice,
+                row.PurchasedAt,
+                row.AuthorUsername,
+                row.HasUserReviewed,
+                row.PurchasedVersionNumber,
+                row.PurchasedVersionId,
+                latestVersionNumber,
+                latestVersionId,
+                hasUpdate,
+                row.PricePaid,
+                row.Currency,
+                row.BundleId != null ? PurchaseSource.BUNDLE : PurchaseSource.ASSET,
+                row.BundleId,
+                row.BundleId != null ? row.BundleTitle : null));
+        }
 
         return new PagedResult<PurchaseLibraryItemDto>(items, total, page, pageSize);
     }
+
+    private sealed record PurchasePageRow(
+        Guid PurchaseId,
+        Guid OrderId,
+        Guid AssetId,
+        string AssetTitle,
+        decimal AssetPrice,
+        DateTimeOffset PurchasedAt,
+        string AuthorUsername,
+        bool HasUserReviewed,
+        int PurchasedVersionNumber,
+        Guid PurchasedVersionId,
+        decimal PricePaid,
+        string Currency,
+        Guid? BundleId,
+        string? BundleTitle);
 }

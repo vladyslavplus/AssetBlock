@@ -18,8 +18,32 @@ public interface IAssetStore
     /// <summary>Locks one asset row for a short lifecycle transaction.</summary>
     Task<Asset?> GetForUpdate(Guid id, CancellationToken cancellationToken = default);
 
-    /// <summary>Returns the current version projection used for checkout and detail views.</summary>
+    /// <summary>Returns the approved public offering used for checkout and buyer-facing detail views.</summary>
     Task<AssetCurrentVersionSnapshot?> GetCurrentVersionSnapshot(Guid assetId, CancellationToken cancellationToken = default);
+
+    /// <summary>True when the pinned snapshot still matches a trusted approved READY offering.</summary>
+    Task<bool> IsPinnedSaleOfferingValid(
+        Guid assetId,
+        Guid assetVersionId,
+        Guid publicationSnapshotId,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>Highest READY approved version at or above the purchased version number, if any.</summary>
+    Task<AssetVersion?> GetHighestEntitledApprovedVersion(
+        Guid assetId,
+        int purchasedVersionNumber,
+        CancellationToken cancellationToken = default);
+
+    Task<bool> IsExactVersionSafeForDownload(
+        Guid assetId,
+        Guid versionId,
+        CancellationToken cancellationToken = default);
+
+    Task<bool> IsApprovedBuyerDownloadVersion(
+        Guid assetId,
+        Guid versionId,
+        int purchasedVersionNumber,
+        CancellationToken cancellationToken = default);
 
     /// <summary>Returns a specific version of an asset (used for version-pinned downloads).</summary>
     Task<AssetVersion?> GetVersion(Guid assetId, Guid versionId, CancellationToken cancellationToken = default);
@@ -60,6 +84,11 @@ public interface IAssetStore
         string? modelKey = null,
         CancellationToken cancellationToken = default);
 
+    /// <summary>Returns the subset of <paramref name="assetIds"/> that are currently public-catalog visible.</summary>
+    Task<IReadOnlySet<Guid>> FilterPublicCatalogAssetIds(
+        IReadOnlyList<Guid> assetIds,
+        CancellationToken cancellationToken = default);
+
     /// <summary>
     /// Returns public similar-asset cards for a visible source listing.
     /// Missing or non-public sources return null. Visible sources with no candidates return an empty result.
@@ -90,6 +119,9 @@ public interface IAssetStore
         Guid assetId,
         Guid ownerUserId,
         CancellationToken cancellationToken = default);
+    /// <summary>True when moderation submissions or publication snapshots must be retained on delete.</summary>
+    Task<bool> HasRetainedModerationOrPublicationHistory(Guid assetId, CancellationToken cancellationToken = default);
+
     Task SoftDelete(Guid id, DateTimeOffset deletedAt, CancellationToken cancellationToken = default);
     Task Delete(Guid id, CancellationToken cancellationToken = default);
     Task AddTag(Guid assetId, Guid tagId, CancellationToken cancellationToken = default);

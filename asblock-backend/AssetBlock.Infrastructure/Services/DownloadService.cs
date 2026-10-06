@@ -2,8 +2,8 @@ using AssetBlock.Domain.Abstractions.Services;
 using AssetBlock.Domain.Core.Constants;
 using AssetBlock.Domain.Core.Dto.Assets;
 using AssetBlock.Domain.Core.Entities;
-using AssetBlock.Domain.Core.Enums;
 using AssetBlock.Domain.Core.Primitives.Api;
+using AssetBlock.Infrastructure.Persistence.Publication;
 
 namespace AssetBlock.Infrastructure.Services;
 
@@ -20,7 +20,6 @@ internal sealed class DownloadService(
     public async Task<DownloadAuthorization> AuthorizeDownload(Guid assetId, Guid userId, Guid? versionId = null,
         CancellationToken cancellationToken = default)
     {
-        // Load the asset for ownership check and download-rate-limit value.
         Asset? asset = await assetStore.GetById(assetId, includeDeleted: true, cancellationToken);
         if (asset is null)
         {
@@ -37,7 +36,6 @@ internal sealed class DownloadService(
                 return new DownloadAuthorization(AssetDownloadStatus.FORBIDDEN);
             }
 
-            // Resolve the version to serve. Purchasers may access their purchased version and all higher versions.
             VersionResolution? targetVersion = await ResolveEntitledVersion(assetId, versionId, purchase, cancellationToken);
             if (targetVersion is null)
             {
@@ -58,7 +56,6 @@ internal sealed class DownloadService(
             return new DownloadAuthorization(AssetDownloadStatus.SUCCESS, new DownloadPermit(targetVersion.StorageKey!, targetVersion.FileName!));
         }
 
-        // Authors may download any version.
         (string StorageKey, string FileName)? authorVersion = await ResolveAuthorVersion(assetId, versionId, cancellationToken);
         if (authorVersion is null)
         {
@@ -82,11 +79,27 @@ internal sealed class DownloadService(
         if (versionId.HasValue)
         {
             AssetVersion? v = await assetStore.GetVersion(assetId, versionId.Value, cancellationToken);
-            return v is null ? null : (v.StorageKey, v.FileName);
+            if (v is null || !PublicationEligibilityQuery.IsAuthorSafePreviewVersion(v))
+            {
+                return null;
+            }
+
+            return (v.StorageKey, v.FileName);
         }
 
         AssetCurrentVersionSnapshot? snapshot = await assetStore.GetCurrentVersionSnapshot(assetId, cancellationToken);
-        return snapshot is null ? null : (snapshot.StorageKey, snapshot.FileName);
+        if (snapshot is not null)
+        {
+            return (snapshot.StorageKey, snapshot.FileName);
+        }
+
+        AssetVersion? highestApproved = await assetStore.GetHighestEntitledApprovedVersion(assetId, 1, cancellationToken);
+        if (highestApproved is not null)
+        {
+            return (highestApproved.StorageKey, highestApproved.FileName);
+        }
+
+        return null;
     }
 
     private async Task<VersionResolution?> ResolveEntitledVersion(
@@ -105,6 +118,16 @@ internal sealed class DownloadService(
 
         if (versionId.HasValue)
         {
+            if (versionId.Value == purchase.AssetVersionId)
+            {
+                if (!await assetStore.IsExactVersionSafeForDownload(assetId, versionId.Value, cancellationToken))
+                {
+                    return null;
+                }
+
+                return new VersionResolution(purchasedVersion.StorageKey, purchasedVersion.FileName);
+            }
+
             AssetVersion? requested = await assetStore.GetVersion(assetId, versionId.Value, cancellationToken);
             if (requested is null)
             {
@@ -116,7 +139,11 @@ internal sealed class DownloadService(
                 return VersionResolution.Forbidden;
             }
 
-            if (requested.ProcessingStatus != AssetVersionProcessingStatus.READY)
+            if (!await assetStore.IsApprovedBuyerDownloadVersion(
+                    assetId,
+                    versionId.Value,
+                    purchasedVersionNumber,
+                    cancellationToken))
             {
                 return null;
             }
@@ -124,19 +151,21 @@ internal sealed class DownloadService(
             return new VersionResolution(requested.StorageKey, requested.FileName);
         }
 
-        // Default — serve current version if entitled.
-        AssetCurrentVersionSnapshot? snapshot = await assetStore.GetCurrentVersionSnapshot(assetId, cancellationToken);
-        if (snapshot is null)
+        AssetVersion? highestApproved = await assetStore.GetHighestEntitledApprovedVersion(
+            assetId,
+            purchasedVersionNumber,
+            cancellationToken);
+        if (highestApproved is not null)
         {
-            return null;
+            return new VersionResolution(highestApproved.StorageKey, highestApproved.FileName);
         }
 
-        if (snapshot.VersionNumber < purchasedVersionNumber)
+        if (await assetStore.IsExactVersionSafeForDownload(assetId, purchase.AssetVersionId, cancellationToken))
         {
-            return VersionResolution.Forbidden;
+            return new VersionResolution(purchasedVersion.StorageKey, purchasedVersion.FileName);
         }
 
-        return new VersionResolution(snapshot.StorageKey, snapshot.FileName);
+        return null;
     }
 
     private sealed class VersionResolution(string? storageKey, string? fileName)
@@ -147,7 +176,6 @@ internal sealed class DownloadService(
         public string? FileName { get; } = fileName;
         public bool Denied { get; private init; }
     }
-
 
     public async Task CopyDecrypted(string storageKey, Stream destination, CancellationToken cancellationToken = default)
     {

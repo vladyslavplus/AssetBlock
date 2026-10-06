@@ -15,10 +15,17 @@ namespace AssetBlock.Infrastructure.IntegrationTests.Persistence.Stores;
 [Collection(nameof(PostgresStoreCollection))]
 public sealed class AssetStorePostgresTests(PostgresFixture fixture)
 {
-    private static async Task AddWithReadyVersion(AssetStore store, Asset asset, List<Tag>? tags = null)
+    private static async Task AddWithReadyVersion(
+        ApplicationDbContext db,
+        AssetStore store,
+        User author,
+        Category category,
+        Asset asset,
+        List<Tag>? tags = null)
     {
         AssetVersion version = TestData.CreateAssetVersion(asset.Id, isCurrent: true, processingStatus: AssetVersionProcessingStatus.READY);
         await store.AddWithVersion(asset, version, tags);
+        await ApprovedPublicationTestBuilder.AttachTrustedApprovedPublicationAsync(db, asset, version, author, category);
     }
 
     [Fact]
@@ -28,7 +35,7 @@ public sealed class AssetStorePostgresTests(PostgresFixture fixture)
         (User author, Category category) = await TestData.SeedAuthorAndCategory(db);
         Asset asset = TestData.CreateAsset(author.Id, category.Id, title: "Soft-deleted listing");
         var store = new AssetStore(db);
-        await AddWithReadyVersion(store, asset);
+        await AddWithReadyVersion(db, store, author, category, asset);
 
         DateTimeOffset deletedAt = DateTimeOffset.UtcNow;
         await store.SoftDelete(asset.Id, deletedAt);
@@ -197,10 +204,10 @@ public sealed class AssetStorePostgresTests(PostgresFixture fixture)
 
         var store = new AssetStore(db);
         DateTimeOffset t0 = DateTimeOffset.UtcNow.AddMinutes(-30);
-        await AddWithReadyVersion(store, TestData.CreateAsset(author.Id, category.Id, title: "Alpha Tool", price: 5m, createdAt: t0));
-        await AddWithReadyVersion(store, TestData.CreateAsset(author.Id, category.Id, title: "Beta Tool", price: 15m, createdAt: t0.AddMinutes(1)));
-        await AddWithReadyVersion(store, TestData.CreateAsset(author.Id, category.Id, title: "Gamma Pack", price: 25m, createdAt: t0.AddMinutes(2)));
-        await AddWithReadyVersion(store, TestData.CreateAsset(author.Id, otherCategory.Id, title: "Other Tool", price: 1m, createdAt: t0.AddMinutes(3)));
+        await AddWithReadyVersion(db, store, author, category, TestData.CreateAsset(author.Id, category.Id, title: "Alpha Tool", price: 5m, createdAt: t0));
+        await AddWithReadyVersion(db, store, author, category, TestData.CreateAsset(author.Id, category.Id, title: "Beta Tool", price: 15m, createdAt: t0.AddMinutes(1)));
+        await AddWithReadyVersion(db, store, author, category, TestData.CreateAsset(author.Id, category.Id, title: "Gamma Pack", price: 25m, createdAt: t0.AddMinutes(2)));
+        await AddWithReadyVersion(db, store, author, otherCategory, TestData.CreateAsset(author.Id, otherCategory.Id, title: "Other Tool", price: 1m, createdAt: t0.AddMinutes(3)));
 
         CatalogPageResult<AssetListItem> page1 = await store.GetPaged(new GetAssetsRequest
         {
@@ -242,9 +249,9 @@ public sealed class AssetStorePostgresTests(PostgresFixture fixture)
         var idHigh = Guid.Parse("22222222-2222-2222-2222-222222222222");
         DateTimeOffset sharedCreatedAt = DateTimeOffset.UtcNow.AddMinutes(-5);
 
-        await AddWithReadyVersion(store, TestData.CreateAsset(
+        await AddWithReadyVersion(db, store, author, category, TestData.CreateAsset(
             author.Id, category.Id, title: "Same Title", createdAt: sharedCreatedAt, id: idHigh));
-        await AddWithReadyVersion(store, TestData.CreateAsset(
+        await AddWithReadyVersion(db, store, author, category, TestData.CreateAsset(
             author.Id, category.Id, title: "Same Title", createdAt: sharedCreatedAt, id: idLow));
 
         CatalogPageResult<AssetListItem> page = await store.GetPaged(new GetAssetsRequest
@@ -264,7 +271,7 @@ public sealed class AssetStorePostgresTests(PostgresFixture fixture)
         await using ApplicationDbContext db = await fixture.CreateCleanDbContext();
         (User author, Category category) = await TestData.SeedAuthorAndCategory(db);
         var store = new AssetStore(db);
-        await AddWithReadyVersion(store, TestData.CreateAsset(author.Id, category.Id, title: "Celestial Shader Pack"));
+        await AddWithReadyVersion(db, store, author, category, TestData.CreateAsset(author.Id, category.Id, title: "Celestial Shader Pack"));
 
         CatalogPageResult<AssetListItem> page = await store.GetPaged(new GetAssetsRequest
         {
@@ -283,7 +290,7 @@ public sealed class AssetStorePostgresTests(PostgresFixture fixture)
         await using ApplicationDbContext db = await fixture.CreateCleanDbContext();
         (User author, Category category) = await TestData.SeedAuthorAndCategory(db);
         var store = new AssetStore(db);
-        await AddWithReadyVersion(store, TestData.CreateAsset(
+        await AddWithReadyVersion(db, store, author, category, TestData.CreateAsset(
             author.Id,
             category.Id,
             title: "Utility Bundle",
@@ -306,7 +313,7 @@ public sealed class AssetStorePostgresTests(PostgresFixture fixture)
         await using ApplicationDbContext db = await fixture.CreateCleanDbContext();
         (User author, Category category) = await TestData.SeedAuthorAndCategory(db);
         var store = new AssetStore(db);
-        await AddWithReadyVersion(store, TestData.CreateAsset(author.Id, category.Id, title: "Procedural Pack"));
+        await AddWithReadyVersion(db, store, author, category, TestData.CreateAsset(author.Id, category.Id, title: "Procedural Pack"));
 
         // similarity('Procedural Pack', 'Procedurl') >= 0.30 with pg_trgm
         CatalogPageResult<AssetListItem> typo = await store.GetPaged(new GetAssetsRequest
@@ -340,8 +347,8 @@ public sealed class AssetStorePostgresTests(PostgresFixture fixture)
 
         Asset both = TestData.CreateAsset(author.Id, category.Id, title: "UI Kit Pro");
         Asset onlyUi = TestData.CreateAsset(author.Id, category.Id, title: "UI Only");
-        await AddWithReadyVersion(store, both, [tagUi, tagKit]);
-        await AddWithReadyVersion(store, onlyUi, [tagUi]);
+        await AddWithReadyVersion(db, store, author, category, both, [tagUi, tagKit]);
+        await AddWithReadyVersion(db, store, author, category, onlyUi, [tagUi]);
 
         CatalogPageResult<AssetListItem> page = await store.GetPaged(new GetAssetsRequest
         {
@@ -373,10 +380,10 @@ public sealed class AssetStorePostgresTests(PostgresFixture fixture)
         Asset match2 = TestData.CreateAsset(authorA.Id, category.Id, title: "FX Loop B", price: 18m, createdAt: t0.AddMinutes(1), description: "cinematic fx pack");
         Asset wrongAuthor = TestData.CreateAsset(authorB.Id, category.Id, title: "FX Loop C", price: 15m, createdAt: t0.AddMinutes(2), description: "cinematic fx pack");
         Asset wrongPrice = TestData.CreateAsset(authorA.Id, category.Id, title: "FX Loop D", price: 50m, createdAt: t0.AddMinutes(3), description: "cinematic fx pack");
-        await AddWithReadyVersion(store, match1, [tagFx]);
-        await AddWithReadyVersion(store, match2, [tagFx]);
-        await AddWithReadyVersion(store, wrongAuthor, [tagFx]);
-        await AddWithReadyVersion(store, wrongPrice, [tagFx]);
+        await AddWithReadyVersion(db, store, authorA, category, match1, [tagFx]);
+        await AddWithReadyVersion(db, store, authorA, category, match2, [tagFx]);
+        await AddWithReadyVersion(db, store, authorB, category, wrongAuthor, [tagFx]);
+        await AddWithReadyVersion(db, store, authorA, category, wrongPrice, [tagFx]);
 
         CatalogPageResult<AssetListItem> page = await store.GetPaged(new GetAssetsRequest
         {
@@ -407,7 +414,7 @@ public sealed class AssetStorePostgresTests(PostgresFixture fixture)
         (User author, Category category) = await TestData.SeedAuthorAndCategory(db);
         var store = new AssetStore(db);
         Asset asset = TestData.CreateAsset(author.Id, category.Id, title: "Hidden Nebula Asset");
-        await AddWithReadyVersion(store, asset);
+        await AddWithReadyVersion(db, store, author, category, asset);
         await store.SoftDelete(asset.Id, DateTimeOffset.UtcNow);
 
         CatalogPageResult<AssetListItem> page = await store.GetPaged(new GetAssetsRequest
@@ -428,7 +435,7 @@ public sealed class AssetStorePostgresTests(PostgresFixture fixture)
         (User author, Category category) = await TestData.SeedAuthorAndCategory(db);
         var store = new AssetStore(db);
         Asset asset = TestData.CreateAsset(author.Id, category.Id, title: "Original Name", description: "alpha content");
-        await AddWithReadyVersion(store, asset);
+        await AddWithReadyVersion(db, store, author, category, asset);
 
         (await store.GetPaged(new GetAssetsRequest { Page = 1, PageSize = 10, Search = "Original" }))
             .Items.Should().ContainSingle();
@@ -437,12 +444,10 @@ public sealed class AssetStorePostgresTests(PostgresFixture fixture)
 
         await store.Update(asset.Id, title: "Renamed Pack", description: "omega content", price: null, categoryId: null);
 
-        (await store.GetPaged(new GetAssetsRequest { Page = 1, PageSize = 10, Search = "Original" }))
-            .Items.Should().BeEmpty();
+        (await store.GetPaged(new GetAssetsRequest { Page = 1, PageSize = 10 }))
+            .Items.Should().ContainSingle(a => a.Title == "Original Name");
         (await store.GetPaged(new GetAssetsRequest { Page = 1, PageSize = 10, Search = "Renamed" }))
-            .Items.Should().ContainSingle(a => a.Title == "Renamed Pack");
-        (await store.GetPaged(new GetAssetsRequest { Page = 1, PageSize = 10, Search = "omega" }))
-            .Items.Should().ContainSingle(a => a.Title == "Renamed Pack");
+            .Items.Should().BeEmpty();
     }
 
     [Fact]
@@ -464,6 +469,7 @@ public sealed class AssetStorePostgresTests(PostgresFixture fixture)
         AssetVersion version = TestData.CreateAssetVersion(asset.Id);
         db.AssetVersions.Add(version);
         await db.SaveChangesAsync();
+        await ApprovedPublicationTestBuilder.AttachTrustedApprovedPublicationAsync(db, asset, version, author, category);
         TestData.AddCompletedPurchase(db, TestData.CreatePurchase(buyer.Id, asset.Id, version.Id), asset.Title, author.Id);
         var reviewStore = new ReviewStore(db, NullLogger<ReviewStore>.Instance);
         await reviewStore.Create(TestData.CreateReview(buyer.Id, asset.Id, rating: 4));
@@ -669,7 +675,7 @@ public sealed class AssetStorePostgresTests(PostgresFixture fixture)
         asset.RatingAverage = 4.75d;
         asset.RatingCount = 12;
         var store = new AssetStore(db);
-        await AddWithReadyVersion(store, asset);
+        await AddWithReadyVersion(db, store, author, category, asset);
 
         CatalogPageResult<AssetListItem> catalog = await store.GetPaged(new GetAssetsRequest { Page = 1, PageSize = 10 });
         AssetListItem item = catalog.Items.Should().ContainSingle().Subject;
@@ -695,10 +701,10 @@ public sealed class AssetStorePostgresTests(PostgresFixture fixture)
         Asset descMatch = TestData.CreateAsset(author.Id, category.Id, title: "Modular Castle", description: "Contains a complete dungeon interior", createdAt: t0.AddMinutes(2));
         Asset typoMatch = TestData.CreateAsset(author.Id, category.Id, title: "Dungon Kit", createdAt: t0.AddMinutes(3));
 
-        await AddWithReadyVersion(store, exactTitle);
-        await AddWithReadyVersion(store, partialTitle);
-        await AddWithReadyVersion(store, descMatch);
-        await AddWithReadyVersion(store, typoMatch);
+        await AddWithReadyVersion(db, store, author, category, exactTitle);
+        await AddWithReadyVersion(db, store, author, category, partialTitle);
+        await AddWithReadyVersion(db, store, author, category, descMatch);
+        await AddWithReadyVersion(db, store, author, category, typoMatch);
 
         CatalogPageResult<AssetListItem> paged = await store.GetPaged(new GetAssetsRequest
         {
@@ -727,7 +733,7 @@ public sealed class AssetStorePostgresTests(PostgresFixture fixture)
             category.Id,
             title: "Knight Hero Armor",
             description: "Knight hero armor model with textures");
-        await AddWithReadyVersion(store, multiMatch);
+        await AddWithReadyVersion(db, store, author, category, multiMatch);
 
         CatalogPageResult<AssetListItem> paged = await store.GetPaged(new GetAssetsRequest
         {
@@ -754,11 +760,11 @@ public sealed class AssetStorePostgresTests(PostgresFixture fixture)
         Asset a4 = TestData.CreateAsset(author.Id, category.Id, title: "Spce Fighter Delta", createdAt: t0.AddMinutes(3));
         Asset a5 = TestData.CreateAsset(author.Id, category.Id, title: "Deep Space Station", description: "docking for fighter", createdAt: t0.AddMinutes(4));
 
-        await AddWithReadyVersion(store, a1);
-        await AddWithReadyVersion(store, a2);
-        await AddWithReadyVersion(store, a3);
-        await AddWithReadyVersion(store, a4);
-        await AddWithReadyVersion(store, a5);
+        await AddWithReadyVersion(db, store, author, category, a1);
+        await AddWithReadyVersion(db, store, author, category, a2);
+        await AddWithReadyVersion(db, store, author, category, a3);
+        await AddWithReadyVersion(db, store, author, category, a4);
+        await AddWithReadyVersion(db, store, author, category, a5);
 
         CatalogPageResult<AssetListItem> p1 = await store.GetPaged(new GetAssetsRequest
         {
@@ -806,9 +812,9 @@ public sealed class AssetStorePostgresTests(PostgresFixture fixture)
         Asset a2 = TestData.CreateAsset(author.Id, category.Id, title: "Gold Ingot", price: 10m);
         Asset a3 = TestData.CreateAsset(author.Id, category.Id, title: "Gold Chest", price: 30m);
 
-        await AddWithReadyVersion(store, a1);
-        await AddWithReadyVersion(store, a2);
-        await AddWithReadyVersion(store, a3);
+        await AddWithReadyVersion(db, store, author, category, a1);
+        await AddWithReadyVersion(db, store, author, category, a2);
+        await AddWithReadyVersion(db, store, author, category, a3);
 
         CatalogPageResult<AssetListItem> paged = await store.GetPaged(new GetAssetsRequest
         {
@@ -835,10 +841,10 @@ public sealed class AssetStorePostgresTests(PostgresFixture fixture)
         Asset underscoreMatch = TestData.CreateAsset(author.Id, category.Id, title: "Shader_Pack_V1");
         Asset underscoreNonMatch = TestData.CreateAsset(author.Id, category.Id, title: "ShaderXPackXV1");
 
-        await AddWithReadyVersion(store, percentMatch);
-        await AddWithReadyVersion(store, percentNonMatch);
-        await AddWithReadyVersion(store, underscoreMatch);
-        await AddWithReadyVersion(store, underscoreNonMatch);
+        await AddWithReadyVersion(db, store, author, category, percentMatch);
+        await AddWithReadyVersion(db, store, author, category, percentNonMatch);
+        await AddWithReadyVersion(db, store, author, category, underscoreMatch);
+        await AddWithReadyVersion(db, store, author, category, underscoreNonMatch);
 
         CatalogPageResult<AssetListItem> percentResult = await store.GetPaged(new GetAssetsRequest
         {
@@ -871,12 +877,12 @@ public sealed class AssetStorePostgresTests(PostgresFixture fixture)
         Asset percentExact = TestData.CreateAsset(author.Id, category.Id, title: "50% Discount Pack");
         Asset percentPartial = TestData.CreateAsset(author.Id, category.Id, title: "Special 50% Discount Pack Bundle");
 
-        await AddWithReadyVersion(store, trailingSlash);
-        await AddWithReadyVersion(store, interiorSlash);
-        await AddWithReadyVersion(store, underscore);
-        await AddWithReadyVersion(store, underscoreMismatch);
-        await AddWithReadyVersion(store, percentExact);
-        await AddWithReadyVersion(store, percentPartial);
+        await AddWithReadyVersion(db, store, author, category, trailingSlash);
+        await AddWithReadyVersion(db, store, author, category, interiorSlash);
+        await AddWithReadyVersion(db, store, author, category, underscore);
+        await AddWithReadyVersion(db, store, author, category, underscoreMismatch);
+        await AddWithReadyVersion(db, store, author, category, percentExact);
+        await AddWithReadyVersion(db, store, author, category, percentPartial);
 
         // Trailing backslash search: must not throw SQL escape error
         CatalogPageResult<AssetListItem> trailingResult = await store.GetPaged(new GetAssetsRequest
@@ -928,9 +934,9 @@ public sealed class AssetStorePostgresTests(PostgresFixture fixture)
         Asset pendingAsset = TestData.CreateAsset(author.Id, category.Id, title: "Pending Searchable Item");
         Asset deletedAsset = TestData.CreateAsset(author.Id, category.Id, title: "Deleted Searchable Item");
 
-        await AddWithReadyVersion(store, readyAsset);
+        await AddWithReadyVersion(db, store, author, category, readyAsset);
         await store.AddWithVersion(pendingAsset, TestData.CreateAssetVersion(pendingAsset.Id, isCurrent: false, processingStatus: AssetVersionProcessingStatus.PENDING_INSPECTION), null);
-        await AddWithReadyVersion(store, deletedAsset);
+        await AddWithReadyVersion(db, store, author, category, deletedAsset);
         await store.SoftDelete(deletedAsset.Id, DateTimeOffset.UtcNow);
 
         CatalogPageResult<AssetListItem> result = await store.GetPaged(new GetAssetsRequest
@@ -958,9 +964,9 @@ public sealed class AssetStorePostgresTests(PostgresFixture fixture)
         // Non-matching asset
         Asset unrelatedAsset = TestData.CreateAsset(author.Id, category.Id, title: "Ancient Iron Anvil");
 
-        await AddWithReadyVersion(store, overlapAsset);
-        await AddWithReadyVersion(store, trigramOnlyAsset);
-        await AddWithReadyVersion(store, unrelatedAsset);
+        await AddWithReadyVersion(db, store, author, category, overlapAsset);
+        await AddWithReadyVersion(db, store, author, category, trigramOnlyAsset);
+        await AddWithReadyVersion(db, store, author, category, unrelatedAsset);
 
         CatalogPageResult<AssetListItem> searchResult = await store.GetPaged(new GetAssetsRequest
         {
@@ -997,7 +1003,7 @@ public sealed class AssetStorePostgresTests(PostgresFixture fixture)
                 category.Id,
                 title: $"Corridor Module Part #{i:D2}",
                 createdAt: baseTime.AddMinutes(i));
-            await AddWithReadyVersion(store, asset);
+            await AddWithReadyVersion(db, store, author, category, asset);
             seededIds.Add(asset.Id);
         }
 
@@ -1060,11 +1066,11 @@ public sealed class AssetStorePostgresTests(PostgresFixture fixture)
         Asset literalWildcard = TestData.CreateAsset(author.Id, category.Id, title: @"SpecialItem_100%_Pack\V1");
         Asset wildcardLookalike = TestData.CreateAsset(author.Id, category.Id, title: "UnrelatedLookalikeTitle");
 
-        await AddWithReadyVersion(store, shortA);
-        await AddWithReadyVersion(store, shortB);
-        await AddWithReadyVersion(store, shortC);
-        await AddWithReadyVersion(store, literalWildcard);
-        await AddWithReadyVersion(store, wildcardLookalike);
+        await AddWithReadyVersion(db, store, author, category, shortA);
+        await AddWithReadyVersion(db, store, author, category, shortB);
+        await AddWithReadyVersion(db, store, author, category, shortC);
+        await AddWithReadyVersion(db, store, author, category, literalWildcard);
+        await AddWithReadyVersion(db, store, author, category, wildcardLookalike);
 
         // Short query: 2 chars ("ab") -> trigram skipped, ILIKE matches shortA and shortB
         CatalogPageResult<AssetListItem> shortResult = await store.GetPaged(new GetAssetsRequest
@@ -1105,27 +1111,27 @@ public sealed class AssetStorePostgresTests(PostgresFixture fixture)
 
         // Target matching asset
         Asset target = TestData.CreateAsset(author1.Id, cat1.Id, title: "Legendary Excalibur Longsword", price: 20m);
-        await AddWithReadyVersion(store, target, [tagVerified, tagFeatured]);
+        await AddWithReadyVersion(db, store, author1, cat1, target, [tagVerified, tagFeatured]);
 
         // Mismatched category
         Asset wrongCat = TestData.CreateAsset(author1.Id, cat2.Id, title: "Legendary Excalibur Longsword", price: 20m);
-        await AddWithReadyVersion(store, wrongCat, [tagVerified, tagFeatured]);
+        await AddWithReadyVersion(db, store, author1, cat2, wrongCat, [tagVerified, tagFeatured]);
 
         // Mismatched author
         Asset wrongAuthor = TestData.CreateAsset(author2.Id, cat1.Id, title: "Legendary Excalibur Longsword", price: 20m);
-        await AddWithReadyVersion(store, wrongAuthor, [tagVerified, tagFeatured]);
+        await AddWithReadyVersion(db, store, author2, cat1, wrongAuthor, [tagVerified, tagFeatured]);
 
         // Price out of range
         Asset expensive = TestData.CreateAsset(author1.Id, cat1.Id, title: "Legendary Excalibur Longsword", price: 50m);
-        await AddWithReadyVersion(store, expensive, [tagVerified, tagFeatured]);
+        await AddWithReadyVersion(db, store, author1, cat1, expensive, [tagVerified, tagFeatured]);
 
         // Missing tag (only has 'verified', lacks 'featured')
         Asset missingTag = TestData.CreateAsset(author1.Id, cat1.Id, title: "Legendary Excalibur Longsword", price: 20m);
-        await AddWithReadyVersion(store, missingTag, [tagVerified]);
+        await AddWithReadyVersion(db, store, author1, cat1, missingTag, [tagVerified]);
 
         // Softly deleted
         Asset softDeleted = TestData.CreateAsset(author1.Id, cat1.Id, title: "Legendary Excalibur Longsword", price: 20m);
-        await AddWithReadyVersion(store, softDeleted, [tagVerified, tagFeatured]);
+        await AddWithReadyVersion(db, store, author1, cat1, softDeleted, [tagVerified, tagFeatured]);
         await store.SoftDelete(softDeleted.Id, DateTimeOffset.UtcNow);
 
         // Non-READY version (cannot be current READY version)
@@ -1161,14 +1167,14 @@ public sealed class AssetStorePostgresTests(PostgresFixture fixture)
             category.Id,
             title: "Mystic Relic",
             description: "Excalbr");
-        await AddWithReadyVersion(store, descTrigramOnly);
+        await AddWithReadyVersion(db, store, author, category, descTrigramOnly);
 
         Asset other = TestData.CreateAsset(
             author.Id,
             category.Id,
             title: "Wooden Shield",
             description: "Sturdy defensive shield");
-        await AddWithReadyVersion(store, other);
+        await AddWithReadyVersion(db, store, author, category, other);
 
         CatalogPageResult<AssetListItem> result = await store.GetPaged(new GetAssetsRequest
         {
@@ -1206,9 +1212,9 @@ public sealed class AssetStorePostgresTests(PostgresFixture fixture)
             title: "Wooden Shield",
             description: "Sturdy defensive shield");
 
-        await AddWithReadyVersion(store, primaryAndDesc);
-        await AddWithReadyVersion(store, descOnly);
-        await AddWithReadyVersion(store, nonMatch);
+        await AddWithReadyVersion(db, store, author, category, primaryAndDesc);
+        await AddWithReadyVersion(db, store, author, category, descOnly);
+        await AddWithReadyVersion(db, store, author, category, nonMatch);
 
         CatalogPageResult<AssetListItem> result = await store.GetPaged(new GetAssetsRequest
         {
@@ -1232,9 +1238,9 @@ public sealed class AssetStorePostgresTests(PostgresFixture fixture)
         Asset nullDescOnly = TestData.CreateAsset(author.Id, category.Id, title: "Wooden Shield", description: null);
         Asset descOnly = TestData.CreateAsset(author.Id, category.Id, title: "Mystic Relic", description: "Excalbr");
 
-        await AddWithReadyVersion(store, titleHit);
-        await AddWithReadyVersion(store, nullDescOnly);
-        await AddWithReadyVersion(store, descOnly);
+        await AddWithReadyVersion(db, store, author, category, titleHit);
+        await AddWithReadyVersion(db, store, author, category, nullDescOnly);
+        await AddWithReadyVersion(db, store, author, category, descOnly);
 
         CatalogPageResult<AssetListItem> result = await store.GetPaged(new GetAssetsRequest
         {
@@ -1255,7 +1261,7 @@ public sealed class AssetStorePostgresTests(PostgresFixture fixture)
         var store = new AssetStore(db);
 
         Asset asset = TestData.CreateAsset(author.Id, category.Id, title: "Wooden Shield", description: "Sturdy oak");
-        await AddWithReadyVersion(store, asset);
+        await AddWithReadyVersion(db, store, author, category, asset);
 
         CatalogPageResult<AssetListItem> result = await store.GetPaged(new GetAssetsRequest
         {
@@ -1280,9 +1286,9 @@ public sealed class AssetStorePostgresTests(PostgresFixture fixture)
         Asset descA = TestData.CreateAsset(author.Id, category.Id, title: "Relic A", description: "Excalbr", createdAt: t0.AddMinutes(1));
         Asset descB = TestData.CreateAsset(author.Id, category.Id, title: "Relic B", description: "Excalbr", createdAt: t0.AddMinutes(2));
 
-        await AddWithReadyVersion(store, primary);
-        await AddWithReadyVersion(store, descA);
-        await AddWithReadyVersion(store, descB);
+        await AddWithReadyVersion(db, store, author, category, primary);
+        await AddWithReadyVersion(db, store, author, category, descA);
+        await AddWithReadyVersion(db, store, author, category, descB);
 
         CatalogPageResult<AssetListItem> page1 = await store.GetPaged(new GetAssetsRequest
         {
@@ -1322,9 +1328,9 @@ public sealed class AssetStorePostgresTests(PostgresFixture fixture)
         Asset inCategoryDescOnly = TestData.CreateAsset(author.Id, category.Id, title: "Relic", description: "Excalbr");
         Asset outCategory = TestData.CreateAsset(author.Id, otherCategory.Id, title: "Excalibur Out");
 
-        await AddWithReadyVersion(store, inCategoryPrimary);
-        await AddWithReadyVersion(store, inCategoryDescOnly);
-        await AddWithReadyVersion(store, outCategory);
+        await AddWithReadyVersion(db, store, author, category, inCategoryPrimary);
+        await AddWithReadyVersion(db, store, author, category, inCategoryDescOnly);
+        await AddWithReadyVersion(db, store, author, otherCategory, outCategory);
 
         CatalogPageResult<AssetListItem> result = await store.GetPaged(new GetAssetsRequest
         {
@@ -1353,9 +1359,9 @@ public sealed class AssetStorePostgresTests(PostgresFixture fixture)
         // Desc trigram match only (typo in description): score <= 6
         Asset descTrigram = TestData.CreateAsset(author.Id, category.Id, title: "Ancient Blade", description: "Excalbr", createdAt: t0.AddMinutes(2));
 
-        await AddWithReadyVersion(store, primary1);
-        await AddWithReadyVersion(store, primary2);
-        await AddWithReadyVersion(store, descTrigram);
+        await AddWithReadyVersion(db, store, author, category, primary1);
+        await AddWithReadyVersion(db, store, author, category, primary2);
+        await AddWithReadyVersion(db, store, author, category, descTrigram);
 
         // Page 1 with pageSize = 2: should be saturated by the 2 primary matches (scores >= 40), descTrigram omitted
         CatalogPageResult<AssetListItem> page1 = await store.GetPaged(new GetAssetsRequest
@@ -1383,10 +1389,12 @@ public sealed class AssetStorePostgresTests(PostgresFixture fixture)
 
     private static async Task<(List<Asset> Primaries, Asset DescOnly)> SeedHybridBoundaryAssets(
         ApplicationDbContext db,
-        Guid authorId,
-        Guid categoryId,
+        User author,
+        Category category,
         int primaryCount)
     {
+        Guid authorId = author.Id;
+        Guid categoryId = category.Id;
         var primaries = new List<Asset>(primaryCount);
         var assets = new List<Asset>(primaryCount + 1);
         var versions = new List<AssetVersion>(primaryCount + 1);
@@ -1425,6 +1433,17 @@ public sealed class AssetStorePostgresTests(PostgresFixture fixture)
         db.AssetVersions.AddRange(versions);
         await db.SaveChangesAsync();
 
+        foreach (Asset asset in assets)
+        {
+            AssetVersion version = versions.First(v => v.AssetId == asset.Id);
+            await ApprovedPublicationTestBuilder.AttachTrustedApprovedPublicationAsync(
+                db,
+                asset,
+                version,
+                author,
+                category);
+        }
+
         return (primaries, descOnly);
     }
 
@@ -1435,7 +1454,7 @@ public sealed class AssetStorePostgresTests(PostgresFixture fixture)
         (User author, Category category) = await TestData.SeedAuthorAndCategory(db);
         var store = new AssetStore(db);
 
-        (List<Asset> _, Asset descOnly) = await SeedHybridBoundaryAssets(db, author.Id, category.Id, 199);
+        (List<Asset> _, Asset descOnly) = await SeedHybridBoundaryAssets(db, author, category, 199);
 
         var queryVector = new float[768];
         const string modelKey = "test_boundary_model";
@@ -1471,7 +1490,7 @@ public sealed class AssetStorePostgresTests(PostgresFixture fixture)
         (User author, Category category) = await TestData.SeedAuthorAndCategory(db);
         var store = new AssetStore(db);
 
-        (List<Asset> _, Asset descOnly) = await SeedHybridBoundaryAssets(db, author.Id, category.Id, 200);
+        (List<Asset> _, Asset descOnly) = await SeedHybridBoundaryAssets(db, author, category, 200);
 
         var queryVector = new float[768];
         const string modelKey = "test_boundary_model";
@@ -1496,7 +1515,7 @@ public sealed class AssetStorePostgresTests(PostgresFixture fixture)
         (User author, Category category) = await TestData.SeedAuthorAndCategory(db);
         var store = new AssetStore(db);
 
-        (List<Asset> _, Asset descOnly) = await SeedHybridBoundaryAssets(db, author.Id, category.Id, 201);
+        (List<Asset> _, Asset descOnly) = await SeedHybridBoundaryAssets(db, author, category, 201);
 
         var queryVector = new float[768];
         const string modelKey = "test_boundary_model";
@@ -1512,6 +1531,88 @@ public sealed class AssetStorePostgresTests(PostgresFixture fixture)
         result.Items.Should().HaveCount(100);
         result.IsTruncated.Should().BeTrue();
         result.Items.Should().NotContain(a => a.Id == descOnly.Id);
+    }
+
+    [Fact]
+    public async Task GetPaged_WhenVersionReadyWithoutApprovedSnapshot_ShouldExcludeAsset()
+    {
+        await using ApplicationDbContext db = await fixture.CreateCleanDbContext();
+        (User author, Category category) = await TestData.SeedAuthorAndCategory(db);
+        Asset readyOnly = TestData.CreateAsset(author.Id, category.Id, title: "Ready but private");
+        var store = new AssetStore(db);
+        AssetVersion readyVersion = TestData.CreateAssetVersion(
+            readyOnly.Id,
+            isCurrent: true,
+            processingStatus: AssetVersionProcessingStatus.READY);
+        await store.AddWithVersion(readyOnly, readyVersion, tags: null);
+
+        CatalogPageResult<AssetListItem> paged = await store.GetPaged(new GetAssetsRequest { Page = 1, PageSize = 10 });
+        paged.Items.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task GetPaged_WhenWorkingMetadataDiffersFromApproved_ShouldSearchApprovedTextOnly()
+    {
+        await using ApplicationDbContext db = await fixture.CreateCleanDbContext();
+        (User author, Category category) = await TestData.SeedAuthorAndCategory(db);
+        const string approvedToken = "ZephyrApprovedToken";
+        const string workingOnlyToken = "WorkingOnlyNoise";
+        (Asset asset, _, _) = await ApprovedPublicationTestBuilder.SeedApprovedListingAsync(
+            db,
+            author,
+            category,
+            $"Catalog {approvedToken} Item");
+        asset.Title = $"Mutated {workingOnlyToken} Title";
+        asset.Description = $"Mutated {workingOnlyToken} description";
+        await db.SaveChangesAsync();
+
+        var store = new AssetStore(db);
+
+        CatalogPageResult<AssetListItem> approvedSearch = await store.GetPaged(new GetAssetsRequest
+        {
+            Page = 1,
+            PageSize = 10,
+            Search = approvedToken
+        });
+        approvedSearch.TotalCount.Should().Be(1);
+        approvedSearch.Items.Should().ContainSingle(i => i.Id == asset.Id);
+
+        CatalogPageResult<AssetListItem> workingOnlySearch = await store.GetPaged(new GetAssetsRequest
+        {
+            Page = 1,
+            PageSize = 10,
+            Search = workingOnlyToken
+        });
+        workingOnlySearch.TotalCount.Should().Be(0);
+        workingOnlySearch.Items.Should().BeEmpty();
+
+        CatalogPageResult<AssetListItem> explicitSort = await store.GetPaged(new GetAssetsRequest
+        {
+            Page = 1,
+            PageSize = 10,
+            Search = approvedToken,
+            SortBy = "Title",
+            SortDirection = SortDirection.ASC
+        });
+        explicitSort.TotalCount.Should().Be(1);
+        explicitSort.Items.Should().ContainSingle(i => i.Id == asset.Id && i.Title.Contains(approvedToken, StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task GetPaged_WhenApprovedPublicationFixture_ShouldIncludeAsset()
+    {
+        await using ApplicationDbContext db = await fixture.CreateCleanDbContext();
+        (User author, Category category) = await TestData.SeedAuthorAndCategory(db);
+        (Asset asset, _, _) = await ApprovedPublicationTestBuilder.SeedApprovedListingAsync(
+            db,
+            author,
+            category,
+            "Approved catalog item");
+        var store = new AssetStore(db);
+
+        CatalogPageResult<AssetListItem> paged = await store.GetPaged(new GetAssetsRequest { Page = 1, PageSize = 10 });
+        paged.Items.Should().ContainSingle(i => i.Id == asset.Id);
+        paged.Items[0].Title.Should().Be("Approved catalog item");
     }
 }
 

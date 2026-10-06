@@ -946,6 +946,11 @@ public static class SearchBenchmarkRunner
     public sealed class EvaluationObservingAssetStore(IAssetStore inner, BenchmarkExecutionTracker? tracker)
         : IAssetStore
     {
+        public Task<IReadOnlySet<Guid>> FilterPublicCatalogAssetIds(
+            IReadOnlyList<Guid> assetIds,
+            CancellationToken cancellationToken = default) =>
+            inner.FilterPublicCatalogAssetIds(assetIds, cancellationToken);
+
         public async Task<CatalogPageResult<AssetListItem>> GetPaged(
             GetAssetsRequest request,
             float[]? queryEmbedding = null,
@@ -978,6 +983,16 @@ public static class SearchBenchmarkRunner
         public Task<Asset?> GetById(Guid id, bool includeDeleted, CancellationToken cancellationToken = default) => inner.GetById(id, includeDeleted, cancellationToken);
         public Task<Asset?> GetForUpdate(Guid id, CancellationToken cancellationToken = default) => inner.GetForUpdate(id, cancellationToken);
         public Task<AssetCurrentVersionSnapshot?> GetCurrentVersionSnapshot(Guid assetId, CancellationToken cancellationToken = default) => inner.GetCurrentVersionSnapshot(assetId, cancellationToken);
+        public Task<bool> IsPinnedSaleOfferingValid(Guid assetId, Guid assetVersionId, Guid publicationSnapshotId, CancellationToken cancellationToken = default) =>
+            inner.IsPinnedSaleOfferingValid(assetId, assetVersionId, publicationSnapshotId, cancellationToken);
+        public Task<AssetVersion?> GetHighestEntitledApprovedVersion(Guid assetId, int purchasedVersionNumber, CancellationToken cancellationToken = default) =>
+            inner.GetHighestEntitledApprovedVersion(assetId, purchasedVersionNumber, cancellationToken);
+        public Task<bool> IsApprovedBuyerDownloadVersion(Guid assetId, Guid versionId, int purchasedVersionNumber, CancellationToken cancellationToken = default) =>
+            inner.IsApprovedBuyerDownloadVersion(assetId, versionId, purchasedVersionNumber, cancellationToken);
+        public Task<bool> IsExactVersionSafeForDownload(Guid assetId, Guid versionId, CancellationToken cancellationToken = default) =>
+            inner.IsExactVersionSafeForDownload(assetId, versionId, cancellationToken);
+        public Task<bool> HasRetainedModerationOrPublicationHistory(Guid assetId, CancellationToken cancellationToken = default) =>
+            inner.HasRetainedModerationOrPublicationHistory(assetId, cancellationToken);
         public Task<AssetVersion?> GetVersion(Guid assetId, Guid versionId, CancellationToken cancellationToken = default) => inner.GetVersion(assetId, versionId, cancellationToken);
         public Task<AssetOwnershipDto?> GetOwnership(Guid assetId, CancellationToken cancellationToken = default) => inner.GetOwnership(assetId, cancellationToken);
         public Task<IReadOnlyList<AssetVersionSummaryDto>?> ListVersions(Guid assetId, Guid? requesterUserId, CancellationToken cancellationToken = default) => inner.ListVersions(assetId, requesterUserId, cancellationToken);

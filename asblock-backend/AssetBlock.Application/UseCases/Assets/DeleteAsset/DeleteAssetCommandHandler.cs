@@ -15,6 +15,7 @@ internal sealed class DeleteAssetCommandHandler(
     IAssetStore assetStore,
     IPurchaseStore purchaseStore,
     ICheckoutIntentStore checkoutIntentStore,
+    ICheckoutReconciliationHoldStore reconciliationHoldStore,
     IUnitOfWork unitOfWork,
     IOutboxStore outboxStore,
     IAuditWriter auditWriter,
@@ -62,7 +63,10 @@ internal sealed class DeleteAssetCommandHandler(
                 DateTimeOffset now = (timeProvider ?? TimeProvider.System).GetUtcNow();
                 var hasPurchases = await purchaseStore.HasPurchasesForAsset(request.Id, ct);
                 var hasActiveCheckout = await checkoutIntentStore.HasActiveForAsset(request.Id, now, ct);
-                softDeleted = hasPurchases || hasActiveCheckout;
+                var hasUnresolvedHold = await reconciliationHoldStore.HasUnresolvedHoldForAsset(request.Id, ct);
+                var hasRetainedHistory = await assetStore.HasRetainedModerationOrPublicationHistory(request.Id, ct);
+                var hasProviderBoundCheckout = await checkoutIntentStore.HasProviderBoundUnresolvedCheckoutReference(request.Id, ct);
+                softDeleted = hasPurchases || hasActiveCheckout || hasUnresolvedHold || hasRetainedHistory || hasProviderBoundCheckout;
 
                 if (softDeleted)
                 {

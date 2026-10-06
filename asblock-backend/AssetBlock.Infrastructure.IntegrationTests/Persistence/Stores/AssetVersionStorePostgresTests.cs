@@ -207,6 +207,7 @@ public sealed class AssetVersionStorePostgresTests(PostgresFixture fixture)
         var store = new AssetStore(db);
         AssetVersion v1 = TestData.CreateAssetVersion(asset.Id, storageKey: "assets/snap/v1.bin", fileName: "v1.zip", versionNumber: 1);
         await store.AddWithVersion(asset, v1, null);
+        await ApprovedPublicationTestBuilder.AttachTrustedApprovedPublicationAsync(db, asset, v1, author, category);
 
         AssetCurrentVersionSnapshot? snapshot = await store.GetCurrentVersionSnapshot(asset.Id);
 
@@ -258,6 +259,7 @@ public sealed class AssetVersionStorePostgresTests(PostgresFixture fixture)
         var store = new AssetStore(db);
         AssetVersion v1 = TestData.CreateAssetVersion(asset.Id, storageKey: "assets/vis/v1.bin", versionNumber: 1, processingStatus: AssetVersionProcessingStatus.READY);
         await store.AddWithVersion(asset, v1, null);
+        await ApprovedPublicationTestBuilder.AttachTrustedApprovedPublicationAsync(db, asset, v1, author, category);
         AssetVersion v2 = TestData.CreateAssetVersion(
             asset.Id,
             storageKey: "assets/vis/v2.bin",
@@ -293,6 +295,7 @@ public sealed class AssetVersionStorePostgresTests(PostgresFixture fixture)
         var store = new AssetStore(db);
         AssetVersion v1 = TestData.CreateAssetVersion(asset.Id, storageKey: "assets/history/v1.bin", versionNumber: 1);
         await store.AddWithVersion(asset, v1, null);
+        await ApprovedPublicationTestBuilder.AttachTrustedApprovedPublicationAsync(db, asset, v1, author, category);
         TestData.AddCompletedPurchase(db, TestData.CreatePurchase(buyer.Id, asset.Id, v1.Id), asset.Title, author.Id);
         await db.SaveChangesAsync();
         await store.SoftDelete(asset.Id, DateTimeOffset.UtcNow);
@@ -341,10 +344,16 @@ public sealed class AssetVersionStorePostgresTests(PostgresFixture fixture)
         var seedStore = new AssetStore(seedDb);
         AssetVersion v1 = TestData.CreateAssetVersion(asset.Id, storageKey: "assets/pin/v1.bin", versionNumber: 1);
         await seedStore.AddWithVersion(asset, v1, null);
+        PublicationSnapshot pinnedSnapshot = await ApprovedPublicationTestBuilder.AttachTrustedApprovedPublicationAsync(
+            seedDb,
+            asset,
+            v1,
+            author,
+            category);
 
         var intentId = Guid.NewGuid();
         const string sessionId = "cs_pin_v1_price_10";
-        SeedPendingAssetCheckout(seedDb, intentId, buyer.Id, author.Id, asset.Id, v1.Id, asset.Title, 10m);
+        SeedPendingAssetCheckout(seedDb, intentId, buyer.Id, author.Id, asset.Id, v1.Id, asset.Title, 10m, pinnedSnapshot.Id);
         await seedDb.SaveChangesAsync();
 
         AssetVersion v2 = await seedStore.CreateNextCandidateVersion(
@@ -417,10 +426,16 @@ public sealed class AssetVersionStorePostgresTests(PostgresFixture fixture)
         var seedStore = new AssetStore(seedDb);
         AssetVersion version = TestData.CreateAssetVersion(asset.Id, storageKey: "assets/race/v1.bin", versionNumber: 1);
         await seedStore.AddWithVersion(asset, version, null);
+        PublicationSnapshot offeringSnapshot = await ApprovedPublicationTestBuilder.AttachTrustedApprovedPublicationAsync(
+            seedDb,
+            asset,
+            version,
+            author,
+            category);
 
         var intentId = Guid.NewGuid();
         const string sessionId = "cs_race_condition";
-        SeedPendingAssetCheckout(seedDb, intentId, buyer.Id, author.Id, asset.Id, version.Id, asset.Title, asset.Price);
+        SeedPendingAssetCheckout(seedDb, intentId, buyer.Id, author.Id, asset.Id, version.Id, asset.Title, asset.Price, offeringSnapshot.Id);
         await seedDb.SaveChangesAsync();
 
         var verifiedA = new StripeCheckoutCompleted(intentId, buyer.Id, sessionId, asset.Price, "usd", "evt_intent_race_a");
@@ -481,11 +496,17 @@ public sealed class AssetVersionStorePostgresTests(PostgresFixture fixture)
         var seedStore = new AssetStore(seedDb);
         AssetVersion version = TestData.CreateAssetVersion(asset.Id, storageKey: "assets/dup-webhook/v1.bin", versionNumber: 1);
         await seedStore.AddWithVersion(asset, version, null);
+        PublicationSnapshot offeringSnapshot = await ApprovedPublicationTestBuilder.AttachTrustedApprovedPublicationAsync(
+            seedDb,
+            asset,
+            version,
+            author,
+            category);
 
         var intentId = Guid.NewGuid();
         const string sessionId = "cs_dup_webhook_concurrent";
         const string eventId = "evt_dup_webhook_concurrent_123";
-        SeedPendingAssetCheckout(seedDb, intentId, buyer.Id, author.Id, asset.Id, version.Id, asset.Title, asset.Price);
+        SeedPendingAssetCheckout(seedDb, intentId, buyer.Id, author.Id, asset.Id, version.Id, asset.Title, asset.Price, offeringSnapshot.Id);
         await seedDb.SaveChangesAsync();
 
         var verified = new StripeCheckoutCompleted(intentId, buyer.Id, sessionId, asset.Price, "usd", eventId);
@@ -526,10 +547,16 @@ public sealed class AssetVersionStorePostgresTests(PostgresFixture fixture)
         var seedStore = new AssetStore(seedDb);
         AssetVersion version = TestData.CreateAssetVersion(asset.Id, storageKey: "assets/recon-race/v1.bin", versionNumber: 1);
         await seedStore.AddWithVersion(asset, version, null);
+        PublicationSnapshot offeringSnapshot = await ApprovedPublicationTestBuilder.AttachTrustedApprovedPublicationAsync(
+            seedDb,
+            asset,
+            version,
+            author,
+            category);
 
         var intentId = Guid.NewGuid();
         const string sessionId = "cs_webhook_recon_race";
-        SeedPendingAssetCheckout(seedDb, intentId, buyer.Id, author.Id, asset.Id, version.Id, asset.Title, asset.Price);
+        SeedPendingAssetCheckout(seedDb, intentId, buyer.Id, author.Id, asset.Id, version.Id, asset.Title, asset.Price, offeringSnapshot.Id);
         await seedDb.SaveChangesAsync();
         await seedDb.CheckoutIntents
             .Where(i => i.Id == intentId)
@@ -595,7 +622,8 @@ public sealed class AssetVersionStorePostgresTests(PostgresFixture fixture)
         Guid assetId,
         Guid assetVersionId,
         string title,
-        decimal amount)
+        decimal amount,
+        Guid publicationSnapshotId)
     {
         db.CheckoutIntents.Add(new CheckoutIntent
         {
@@ -615,6 +643,7 @@ public sealed class AssetVersionStorePostgresTests(PostgresFixture fixture)
             CheckoutIntentId = intentId,
             AssetId = assetId,
             AssetVersionId = assetVersionId,
+            PublicationSnapshotId = publicationSnapshotId,
             SellerId = sellerId,
             Position = 1,
             AssetTitleSnapshot = title,
@@ -648,6 +677,7 @@ public sealed class AssetVersionStorePostgresTests(PostgresFixture fixture)
             new BundleStore(db),
             new OrderStore(db),
             checkoutIntentStore ?? new CheckoutIntentStore(db),
+            new CheckoutReconciliationHoldStore(db),
             new UserStore(db),
             new ProcessedStripeWebhookEventStore(db, NullLogger<ProcessedStripeWebhookEventStore>.Instance),
             new EfUnitOfWork(db),
@@ -759,5 +789,11 @@ public sealed class AssetVersionStorePostgresTests(PostgresFixture fixture)
 
         public Task DeleteTerminalUnpaidReferencingAsset(Guid assetId, CancellationToken cancellationToken = default) =>
             inner.DeleteTerminalUnpaidReferencingAsset(assetId, cancellationToken);
+
+        public Task<CheckoutIntent?> LockForFulfillment(Guid id, CancellationToken cancellationToken = default) =>
+            inner.LockForFulfillment(id, cancellationToken);
+
+        public Task<bool> HasProviderBoundUnresolvedCheckoutReference(Guid assetId, CancellationToken cancellationToken = default) =>
+            inner.HasProviderBoundUnresolvedCheckoutReference(assetId, cancellationToken);
     }
 }

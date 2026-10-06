@@ -121,9 +121,13 @@ public class GetAssetByIdQueryHandlerTests
         var snapshot = new AssetCurrentVersionSnapshot(
             AssetId: assetId,
             AssetVersionId: versionId,
+            PublicationSnapshotId: Guid.NewGuid(),
             AuthorId: authorId,
             Title: "Beat Pack vol. 1",
             Description: "A great pack",
+            CategoryId: categoryId,
+            CategoryName: category.Name,
+            Tags: [],
             Price: 14.99m,
             DeletedAt: null,
             VersionNumber: 1,
