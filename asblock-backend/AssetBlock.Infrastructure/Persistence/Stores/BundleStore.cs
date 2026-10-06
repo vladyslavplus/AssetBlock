@@ -111,14 +111,10 @@ internal sealed class BundleStore(ApplicationDbContext dbContext, TimeProvider? 
                                         .FirstOrDefault(),
                                 SaleEligible = i.Asset != null
                                     && i.AssetId != null
-                                    && i.Asset.CurrentPublicationSnapshotId != null
                                     && i.Asset.DeletedAt == null
                                     && i.Asset.AuthorId == b.SellerId
-                                    && PublicationEligibilityQuery.SaleEligibleSnapshotById(
-                                        dbContext,
-                                        i.AssetId.Value,
-                                        i.Asset.CurrentPublicationSnapshotId.Value,
-                                        i.Asset.CurrentPublicationSnapshot!.AssetVersionId).Any()
+                                    && PublicationEligibilityQuery.PublicCatalogAssets(dbContext)
+                                        .Any(a => a.Id == i.AssetId!.Value)
                             })
                             .ToList()
                     })
@@ -452,12 +448,8 @@ internal sealed class BundleStore(ApplicationDbContext dbContext, TimeProvider? 
                                                 PublicationSnapshotId = i.Asset.CurrentPublicationSnapshotId!.Value
                                             })
                                             .FirstOrDefault(),
-                                    SaleEligible = i.Asset.CurrentPublicationSnapshotId != null
-                                        && PublicationEligibilityQuery.SaleEligibleSnapshotById(
-                                            dbContext,
-                                            i.AssetId!.Value,
-                                            i.Asset.CurrentPublicationSnapshotId.Value,
-                                            i.Asset.CurrentPublicationSnapshot!.AssetVersionId).Any()
+                                    SaleEligible = PublicationEligibilityQuery.PublicCatalogAssets(dbContext)
+                                        .Any(a => a.Id == i.AssetId!.Value)
                                 }
                             })
                             .ToList()
@@ -570,12 +562,8 @@ internal sealed class BundleStore(ApplicationDbContext dbContext, TimeProvider? 
                     || i.Asset == null
                     || i.Asset.DeletedAt != null
                     || i.Asset.AuthorId != b.SellerId
-                    || i.Asset.CurrentPublicationSnapshotId == null
-                    || !PublicationEligibilityQuery.SaleEligibleSnapshotById(
-                        dbContext,
-                        i.AssetId.Value,
-                        i.Asset.CurrentPublicationSnapshotId.Value,
-                        i.Asset.CurrentPublicationSnapshot!.AssetVersionId).Any())));
+                    || !PublicationEligibilityQuery.PublicCatalogAssets(dbContext)
+                        .Any(a => a.Id == i.AssetId!.Value))));
     }
 
     private async Task<bool> IsCurrentRevisionAvailable(Guid bundleId, CancellationToken cancellationToken)

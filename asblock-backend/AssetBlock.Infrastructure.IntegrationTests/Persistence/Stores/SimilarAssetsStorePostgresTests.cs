@@ -46,6 +46,7 @@ public sealed class SimilarAssetsStorePostgresTests(PostgresFixture fixture)
         db.Assets.Add(pending);
         db.AssetVersions.Add(TestData.CreateAssetVersion(pending.Id, isCurrent: false, processingStatus: AssetVersionProcessingStatus.PENDING_INSPECTION));
         await db.SaveChangesAsync();
+        await CatalogTestPublicationSupport.AttachTrustedPublicationForAllReadyAssets(db);
         var store = new AssetStore(db);
 
         (await store.GetSimilarPublic(deleted.Id, 6, SimilarAssetsQueryOptions.MetadataOnly)).Should().BeNull();
@@ -64,6 +65,7 @@ public sealed class SimilarAssetsStorePostgresTests(PostgresFixture fixture)
         Asset deletedPeer = AddReadyAsset(db, author, category, "Deleted peer");
         deletedPeer.DeletedAt = DateTimeOffset.UtcNow;
         await db.SaveChangesAsync();
+        await CatalogTestPublicationSupport.AttachTrustedPublicationForAllReadyAssets(db);
         var store = new AssetStore(db);
 
         SimilarPublicAssetsResult? result = await store.GetSimilarPublic(source.Id, 6, SimilarAssetsQueryOptions.MetadataOnly);
@@ -87,6 +89,7 @@ public sealed class SimilarAssetsStorePostgresTests(PostgresFixture fixture)
         db.Assets.Add(pending);
         db.AssetVersions.Add(TestData.CreateAssetVersion(pending.Id, isCurrent: false, processingStatus: AssetVersionProcessingStatus.PENDING_INSPECTION));
         await db.SaveChangesAsync();
+        await CatalogTestPublicationSupport.AttachTrustedPublicationForAllReadyAssets(db);
         var store = new AssetStore(db);
 
         SimilarPublicAssetsResult? result = await store.GetSimilarPublic(source.Id, 12, SimilarAssetsQueryOptions.MetadataOnly);
@@ -137,6 +140,7 @@ public sealed class SimilarAssetsStorePostgresTests(PostgresFixture fixture)
             ratingCount: 2,
             id: Guid.Parse("00000000-0000-4000-8000-000000000011"));
         await db.SaveChangesAsync();
+        await CatalogTestPublicationSupport.AttachTrustedPublicationForAllReadyAssets(db);
         var store = new AssetStore(db);
 
         SimilarPublicAssetsResult? result = await store.GetSimilarPublic(source.Id, 12, SimilarAssetsQueryOptions.MetadataOnly);
@@ -159,6 +163,7 @@ public sealed class SimilarAssetsStorePostgresTests(PostgresFixture fixture)
         Asset partial = AddReadyAsset(db, author, category, "Partial", ratingAverage: 5, tags: [alpha]);
         Asset none = AddReadyAsset(db, author, category, "None", ratingAverage: 5, tags: [gamma]);
         await db.SaveChangesAsync();
+        await CatalogTestPublicationSupport.AttachTrustedPublicationForAllReadyAssets(db);
         var store = new AssetStore(db);
 
         SimilarPublicAssetsResult? result = await store.GetSimilarPublic(source.Id, 12, SimilarAssetsQueryOptions.MetadataOnly);
@@ -179,6 +184,7 @@ public sealed class SimilarAssetsStorePostgresTests(PostgresFixture fixture)
         }
 
         await db.SaveChangesAsync();
+        await CatalogTestPublicationSupport.AttachTrustedPublicationForAllReadyAssets(db);
         var store = new AssetStore(db);
 
         SimilarPublicAssetsResult? limit12 = await store.GetSimilarPublic(source.Id, 12, SimilarAssetsQueryOptions.MetadataOnly);
@@ -214,6 +220,7 @@ public sealed class SimilarAssetsStorePostgresTests(PostgresFixture fixture)
         AddEmbedding(db, closer.Id, modelKey, embOptions, CreateUnitVector(0.1f));
         AddEmbedding(db, farther.Id, modelKey, embOptions, CreateUnitVector(1.2f));
         await db.SaveChangesAsync();
+        await CatalogTestPublicationSupport.AttachTrustedPublicationForAllReadyAssets(db);
         var store = new AssetStore(db);
 
         SimilarPublicAssetsResult? semantic = await store.GetSimilarPublic(
@@ -277,6 +284,7 @@ public sealed class SimilarAssetsStorePostgresTests(PostgresFixture fixture)
         }
 
         await db.SaveChangesAsync();
+        await CatalogTestPublicationSupport.AttachTrustedPublicationForAllReadyAssets(db);
         var store = new AssetStore(db);
         var expectedDimension = mode == "dimension" ? 767 : DIMENSION;
         SimilarPublicAssetsResult? result = await store.GetSimilarPublic(
@@ -300,6 +308,7 @@ public sealed class SimilarAssetsStorePostgresTests(PostgresFixture fixture)
         Asset units = AddReadyAsset(db, author, category, "Units", id: Guid.Parse("00000000-0000-4000-8000-000000000103"));
         Asset clicks = AddReadyAsset(db, author, category, "Clicks", id: Guid.Parse("00000000-0000-4000-8000-000000000104"));
         await db.SaveChangesAsync();
+        await CatalogTestPublicationSupport.AttachTrustedPublicationForAllReadyAssets(db);
 
         var today = DateOnly.FromDateTime(DateTime.UtcNow);
         db.RecommendationDaily.Add(new RecommendationDaily
@@ -335,6 +344,7 @@ public sealed class SimilarAssetsStorePostgresTests(PostgresFixture fixture)
         });
         await db.SaveChangesAsync();
         await SeedPurchases(db, units, buyerCount: 2, assetTitle: "Units");
+        await CatalogTestPublicationSupport.AttachTrustedPublicationForAllReadyAssets(db);
         var store = new AssetStore(db);
 
         SimilarPublicAssetsResult? result = await store.GetSimilarPublic(
@@ -356,6 +366,7 @@ public sealed class SimilarAssetsStorePostgresTests(PostgresFixture fixture)
         AddReadyAsset(db, author, category, "Low", ratingAverage: 1, ratingCount: 10);
         AddReadyAsset(db, author, category, "High", ratingAverage: 5, ratingCount: 1);
         await db.SaveChangesAsync();
+        await CatalogTestPublicationSupport.AttachTrustedPublicationForAllReadyAssets(db);
         var store = new AssetStore(db);
 
         SimilarPublicAssetsResult? popularity = await store.GetSimilarPublic(
@@ -383,6 +394,7 @@ public sealed class SimilarAssetsStorePostgresTests(PostgresFixture fixture)
         Asset stale = AddReadyAsset(db, author, category, "Stale", id: Guid.Parse("00000000-0000-4000-8000-000000000201"));
         Asset fresh = AddReadyAsset(db, author, category, "Fresh", id: Guid.Parse("00000000-0000-4000-8000-000000000202"));
         await db.SaveChangesAsync();
+        await CatalogTestPublicationSupport.AttachTrustedPublicationForAllReadyAssets(db);
 
         DateOnly staleDay = DateOnly.FromDateTime(DateTime.UtcNow).AddDays(-SimilarAssetsConstants.POPULARITY_WINDOW_DAYS - 1);
         db.RecommendationDaily.Add(new RecommendationDaily
@@ -407,6 +419,7 @@ public sealed class SimilarAssetsStorePostgresTests(PostgresFixture fixture)
             UpdatedAt = DateTimeOffset.UtcNow
         });
         await db.SaveChangesAsync();
+        await CatalogTestPublicationSupport.AttachTrustedPublicationForAllReadyAssets(db);
         var store = new AssetStore(db);
 
         SimilarPublicAssetsResult? result = await store.GetSimilarPublic(
@@ -427,6 +440,7 @@ public sealed class SimilarAssetsStorePostgresTests(PostgresFixture fixture)
         Asset candidate = AddReadyAsset(db, author, category, "Candidate", id: Guid.Parse("00000000-0000-4000-8000-000000000301"));
         Asset plain = AddReadyAsset(db, author, category, "Plain", id: Guid.Parse("00000000-0000-4000-8000-000000000302"));
         await db.SaveChangesAsync();
+        await CatalogTestPublicationSupport.AttachTrustedPublicationForAllReadyAssets(db);
 
         var today = DateOnly.FromDateTime(DateTime.UtcNow);
         // Engagement recorded for another source must not leak into this source ranking.
@@ -465,6 +479,7 @@ public sealed class SimilarAssetsStorePostgresTests(PostgresFixture fixture)
             UpdatedAt = DateTimeOffset.UtcNow
         });
         await db.SaveChangesAsync();
+        await CatalogTestPublicationSupport.AttachTrustedPublicationForAllReadyAssets(db);
         var store = new AssetStore(db);
 
         SimilarPublicAssetsResult? result = await store.GetSimilarPublic(
@@ -490,6 +505,7 @@ public sealed class SimilarAssetsStorePostgresTests(PostgresFixture fixture)
         Asset second = AddReadyAsset(db, author, category, "Second");
         Asset third = AddReadyAsset(db, author, category, "Third");
         await db.SaveChangesAsync();
+        await CatalogTestPublicationSupport.AttachTrustedPublicationForAllReadyAssets(db);
 
         var today = DateOnly.FromDateTime(DateTime.UtcNow);
         db.RecommendationDaily.AddRange(
@@ -524,6 +540,7 @@ public sealed class SimilarAssetsStorePostgresTests(PostgresFixture fixture)
                 UpdatedAt = DateTimeOffset.UtcNow
             });
         await db.SaveChangesAsync();
+        await CatalogTestPublicationSupport.AttachTrustedPublicationForAllReadyAssets(db);
         var store = new AssetStore(db);
         var options = new SimilarAssetsQueryOptions(false, null, 0, null, UsePopularityRanking: true);
 
@@ -546,6 +563,7 @@ public sealed class SimilarAssetsStorePostgresTests(PostgresFixture fixture)
         Asset twoTags = AddReadyAsset(db, author, category, "TwoTags", tags: [alpha, beta]);
         Asset noTags = AddReadyAsset(db, author, category, "NoTags", ratingAverage: 5);
         await db.SaveChangesAsync();
+        await CatalogTestPublicationSupport.AttachTrustedPublicationForAllReadyAssets(db);
         var store = new AssetStore(db);
 
         SimilarPublicAssetsResult? result = await store.GetSimilarPublic(
@@ -567,6 +585,7 @@ public sealed class SimilarAssetsStorePostgresTests(PostgresFixture fixture)
         Asset bought = AddReadyAsset(db, author, category, "Bought");
         Asset plain = AddReadyAsset(db, author, category, "Plain");
         await db.SaveChangesAsync();
+        await CatalogTestPublicationSupport.AttachTrustedPublicationForAllReadyAssets(db);
         await SeedPurchases(db, bought, buyerCount: 2, assetTitle: "Bought");
         var store = new AssetStore(db);
         var options = new SimilarAssetsQueryOptions(false, null, 0, null, UsePopularityRanking: true);
@@ -592,6 +611,7 @@ public sealed class SimilarAssetsStorePostgresTests(PostgresFixture fixture)
         AddReadyAsset(db, author, category, "Second", ratingAverage: 4, tags: [alpha]);
         AddReadyAsset(db, author, category, "Third", ratingAverage: 3, tags: [alpha]);
         await db.SaveChangesAsync();
+        await CatalogTestPublicationSupport.AttachTrustedPublicationForAllReadyAssets(db);
         var store = new AssetStore(db);
 
         SimilarPublicAssetsResult? narrow = await store.GetSimilarPublic(source.Id, 2, SimilarAssetsQueryOptions.MetadataOnly);
@@ -619,6 +639,7 @@ public sealed class SimilarAssetsStorePostgresTests(PostgresFixture fixture)
         peer.Description = payload;
         AddReadyAsset(db, author, category, "Plain");
         await db.SaveChangesAsync();
+        await CatalogTestPublicationSupport.AttachTrustedPublicationForAllReadyAssets(db);
         var store = new AssetStore(db);
 
         SimilarPublicAssetsResult? result = await store.GetSimilarPublic(
@@ -650,6 +671,7 @@ public sealed class SimilarAssetsStorePostgresTests(PostgresFixture fixture)
         (User author, Category category) = await TestData.SeedAuthorAndCategory(db);
         Asset source = AddReadyAsset(db, author, category, "Only listing");
         await db.SaveChangesAsync();
+        await CatalogTestPublicationSupport.AttachTrustedPublicationForAllReadyAssets(db);
         var store = new AssetStore(db);
 
         SimilarPublicAssetsResult? result = await store.GetSimilarPublic(

@@ -25,7 +25,7 @@ public sealed class AssetStorePostgresTests(PostgresFixture fixture)
     {
         AssetVersion version = TestData.CreateAssetVersion(asset.Id, isCurrent: true, processingStatus: AssetVersionProcessingStatus.READY);
         await store.AddWithVersion(asset, version, tags);
-        await ApprovedPublicationTestBuilder.AttachTrustedApprovedPublicationAsync(db, asset, version, author, category);
+        await ApprovedPublicationTestBuilder.AttachTrustedApprovedPublication(db, asset, version, author, category);
     }
 
     [Fact]
@@ -469,7 +469,7 @@ public sealed class AssetStorePostgresTests(PostgresFixture fixture)
         AssetVersion version = TestData.CreateAssetVersion(asset.Id);
         db.AssetVersions.Add(version);
         await db.SaveChangesAsync();
-        await ApprovedPublicationTestBuilder.AttachTrustedApprovedPublicationAsync(db, asset, version, author, category);
+        await ApprovedPublicationTestBuilder.AttachTrustedApprovedPublication(db, asset, version, author, category);
         TestData.AddCompletedPurchase(db, TestData.CreatePurchase(buyer.Id, asset.Id, version.Id), asset.Title, author.Id);
         var reviewStore = new ReviewStore(db, NullLogger<ReviewStore>.Instance);
         await reviewStore.Create(TestData.CreateReview(buyer.Id, asset.Id, rating: 4));
@@ -1436,7 +1436,7 @@ public sealed class AssetStorePostgresTests(PostgresFixture fixture)
         foreach (Asset asset in assets)
         {
             AssetVersion version = versions.First(v => v.AssetId == asset.Id);
-            await ApprovedPublicationTestBuilder.AttachTrustedApprovedPublicationAsync(
+            await ApprovedPublicationTestBuilder.AttachTrustedApprovedPublication(
                 db,
                 asset,
                 version,
@@ -1557,7 +1557,7 @@ public sealed class AssetStorePostgresTests(PostgresFixture fixture)
         (User author, Category category) = await TestData.SeedAuthorAndCategory(db);
         const string approvedToken = "ZephyrApprovedToken";
         const string workingOnlyToken = "WorkingOnlyNoise";
-        (Asset asset, _, _) = await ApprovedPublicationTestBuilder.SeedApprovedListingAsync(
+        (Asset asset, _, _) = await ApprovedPublicationTestBuilder.SeedApprovedListing(
             db,
             author,
             category,
@@ -1603,7 +1603,7 @@ public sealed class AssetStorePostgresTests(PostgresFixture fixture)
     {
         await using ApplicationDbContext db = await fixture.CreateCleanDbContext();
         (User author, Category category) = await TestData.SeedAuthorAndCategory(db);
-        (Asset asset, _, _) = await ApprovedPublicationTestBuilder.SeedApprovedListingAsync(
+        (Asset asset, _, _) = await ApprovedPublicationTestBuilder.SeedApprovedListing(
             db,
             author,
             category,

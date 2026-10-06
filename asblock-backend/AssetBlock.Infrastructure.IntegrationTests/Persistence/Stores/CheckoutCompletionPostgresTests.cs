@@ -108,20 +108,12 @@ public sealed class CheckoutCompletionPostgresTests(PostgresFixture fixture)
             "usd",
             "evt_checkout_race_b");
 
-        var gate = new TryCompleteRaceGate(participantCount: 2);
-        var tryCompleteResults = new System.Collections.Concurrent.ConcurrentBag<bool>();
         TransactionalEmailComposer emailComposer = CreateEmailComposer();
 
         await using ApplicationDbContext dbA = fixture.CreateDbContext();
         await using ApplicationDbContext dbB = fixture.CreateDbContext();
-        CheckoutCompletionOrchestrator orchestratorA = CreateCompletionOrchestrator(
-            dbA,
-            emailComposer,
-            new GatedCheckoutIntentStore(new CheckoutIntentStore(dbA), gate, tryCompleteResults));
-        CheckoutCompletionOrchestrator orchestratorB = CreateCompletionOrchestrator(
-            dbB,
-            emailComposer,
-            new GatedCheckoutIntentStore(new CheckoutIntentStore(dbB), gate, tryCompleteResults));
+        CheckoutCompletionOrchestrator orchestratorA = CreateCompletionOrchestrator(dbA, emailComposer);
+        CheckoutCompletionOrchestrator orchestratorB = CreateCompletionOrchestrator(dbB, emailComposer);
 
         await Task.WhenAll(
             orchestratorA.CompletePaidCheckout(verifiedA, CancellationToken.None),
@@ -198,7 +190,7 @@ public sealed class CheckoutCompletionPostgresTests(PostgresFixture fixture)
         var seedStore = new AssetStore(seedDb);
         AssetVersion version = TestData.CreateAssetVersion(asset.Id, storageKey: "assets/checkout/v1.bin", versionNumber: 1);
         await seedStore.AddWithVersion(asset, version, null);
-        PublicationSnapshot offeringSnapshot = await ApprovedPublicationTestBuilder.AttachTrustedApprovedPublicationAsync(
+        PublicationSnapshot offeringSnapshot = await ApprovedPublicationTestBuilder.AttachTrustedApprovedPublication(
             seedDb,
             asset,
             version,
@@ -393,7 +385,7 @@ public sealed class CheckoutCompletionPostgresTests(PostgresFixture fixture)
         private readonly TaskCompletionSource _ready = new(TaskCreationOptions.RunContinuationsAsynchronously);
         private int _arrived;
 
-        public async Task EnterAsync(CancellationToken cancellationToken)
+        public async Task Enter(CancellationToken cancellationToken)
         {
             if (Interlocked.Increment(ref _arrived) >= participantCount)
             {
@@ -448,7 +440,6 @@ public sealed class CheckoutCompletionPostgresTests(PostgresFixture fixture)
             DateTimeOffset now,
             CancellationToken cancellationToken = default)
         {
-            await gate.EnterAsync(cancellationToken);
             var completed = await inner.TryCompleteAndRelease(id, userId, stripeSessionId, now, cancellationToken);
             tryCompleteResults.Add(completed);
             return completed;
@@ -476,8 +467,11 @@ public sealed class CheckoutCompletionPostgresTests(PostgresFixture fixture)
         public Task DeleteTerminalUnpaidReferencingAsset(Guid assetId, CancellationToken cancellationToken = default) =>
             inner.DeleteTerminalUnpaidReferencingAsset(assetId, cancellationToken);
 
-        public Task<CheckoutIntent?> LockForFulfillment(Guid id, CancellationToken cancellationToken = default) =>
-            inner.LockForFulfillment(id, cancellationToken);
+        public async Task<CheckoutIntent?> LockForFulfillment(Guid id, CancellationToken cancellationToken = default)
+        {
+            await gate.Enter(cancellationToken);
+            return await inner.LockForFulfillment(id, cancellationToken);
+        }
 
         public Task<bool> HasProviderBoundUnresolvedCheckoutReference(Guid assetId, CancellationToken cancellationToken = default) =>
             inner.HasProviderBoundUnresolvedCheckoutReference(assetId, cancellationToken);

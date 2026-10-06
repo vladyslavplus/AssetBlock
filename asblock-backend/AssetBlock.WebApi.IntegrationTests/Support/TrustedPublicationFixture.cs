@@ -4,41 +4,11 @@ using AssetBlock.Domain.Core.Publication;
 using AssetBlock.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 
-namespace AssetBlock.Infrastructure.IntegrationTests.Support;
+namespace AssetBlock.WebApi.IntegrationTests.Support;
 
-/// <summary>Test-only trusted publication fixture; never used in demo seeding.</summary>
-internal static class ApprovedPublicationTestBuilder
+internal static class TrustedPublicationFixture
 {
-    public static async Task<(Asset Asset, AssetVersion Version, PublicationSnapshot Snapshot)> SeedApprovedListing(
-        ApplicationDbContext db,
-        User author,
-        Category category,
-        string title,
-        AssetVersionProcessingStatus versionStatus = AssetVersionProcessingStatus.READY)
-    {
-        Asset asset = TestData.CreateAsset(author.Id, category.Id, title: title);
-        AssetVersion version = TestData.CreateAssetVersion(
-            asset.Id,
-            versionNumber: 1,
-            isCurrent: false,
-            processingStatus: versionStatus);
-
-        db.Assets.Add(asset);
-        db.AssetVersions.Add(version);
-        await db.SaveChangesAsync();
-
-        PublicationSnapshot snapshot = await AttachTrustedApprovedPublication(
-            db,
-            asset,
-            version,
-            author,
-            category,
-            title);
-
-        return (asset, version, snapshot);
-    }
-
-    public static async Task<PublicationSnapshot> AttachTrustedApprovedPublication(
+    public static async Task AttachTrustedApprovedPublication(
         ApplicationDbContext db,
         Asset asset,
         AssetVersion version,
@@ -48,6 +18,16 @@ internal static class ApprovedPublicationTestBuilder
         IReadOnlyList<string>? approvedTags = null)
     {
         var title = approvedTitle ?? asset.Title;
+        var alreadyApprovedForVersion = await db.ModerationDecisionRecords.AsNoTracking()
+            .AnyAsync(d =>
+                d.AssetId == asset.Id
+                && d.AssetVersionId == version.Id
+                && d.Outcome == ModerationSubmissionState.APPROVED);
+        if (alreadyApprovedForVersion)
+        {
+            return;
+        }
+
         List<string> tags = approvedTags?.ToList()
             ?? await db.AssetTags
                 .AsNoTracking()
@@ -133,6 +113,29 @@ internal static class ApprovedPublicationTestBuilder
         db.ModerationDecisionRecords.Add(decision);
         asset.CurrentPublicationSnapshotId = snapshot.Id;
         await db.SaveChangesAsync();
-        return snapshot;
+    }
+
+    public static async Task AttachTrustedPublicationForAllReadyAssets(ApplicationDbContext db)
+    {
+        List<Asset> assets = await db.Assets
+            .Where(a => a.DeletedAt == null && a.CurrentPublicationSnapshotId == null)
+            .ToListAsync();
+
+        foreach (Asset asset in assets)
+        {
+            AssetVersion? version = await db.AssetVersions
+                .Where(v => v.AssetId == asset.Id && v.ProcessingStatus == AssetVersionProcessingStatus.READY)
+                .OrderByDescending(v => v.IsCurrent)
+                .ThenByDescending(v => v.VersionNumber)
+                .FirstOrDefaultAsync();
+            if (version is null)
+            {
+                continue;
+            }
+
+            User author = await db.Users.FirstAsync(u => u.Id == asset.AuthorId);
+            Category category = await db.Categories.FirstAsync(c => c.Id == asset.CategoryId);
+            await AttachTrustedApprovedPublication(db, asset, version, author, category, asset.Title);
+        }
     }
 }

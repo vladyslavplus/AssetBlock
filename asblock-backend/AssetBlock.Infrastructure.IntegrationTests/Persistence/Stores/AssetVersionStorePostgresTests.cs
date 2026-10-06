@@ -4,6 +4,7 @@ using AssetBlock.Application.UseCases.Payments.HandleStripeWebhook;
 using AssetBlock.Domain.Abstractions.Services;
 using AssetBlock.Domain.Core.Constants;
 using AssetBlock.Domain.Core.Dto.Assets;
+using AssetBlock.Domain.Core.Dto.Bundles;
 using AssetBlock.Domain.Core.Dto.Outbox;
 using AssetBlock.Domain.Core.Dto.Payments;
 using AssetBlock.Domain.Core.Entities;
@@ -207,7 +208,7 @@ public sealed class AssetVersionStorePostgresTests(PostgresFixture fixture)
         var store = new AssetStore(db);
         AssetVersion v1 = TestData.CreateAssetVersion(asset.Id, storageKey: "assets/snap/v1.bin", fileName: "v1.zip", versionNumber: 1);
         await store.AddWithVersion(asset, v1, null);
-        await ApprovedPublicationTestBuilder.AttachTrustedApprovedPublicationAsync(db, asset, v1, author, category);
+        await ApprovedPublicationTestBuilder.AttachTrustedApprovedPublication(db, asset, v1, author, category);
 
         AssetCurrentVersionSnapshot? snapshot = await store.GetCurrentVersionSnapshot(asset.Id);
 
@@ -259,7 +260,7 @@ public sealed class AssetVersionStorePostgresTests(PostgresFixture fixture)
         var store = new AssetStore(db);
         AssetVersion v1 = TestData.CreateAssetVersion(asset.Id, storageKey: "assets/vis/v1.bin", versionNumber: 1, processingStatus: AssetVersionProcessingStatus.READY);
         await store.AddWithVersion(asset, v1, null);
-        await ApprovedPublicationTestBuilder.AttachTrustedApprovedPublicationAsync(db, asset, v1, author, category);
+        await ApprovedPublicationTestBuilder.AttachTrustedApprovedPublication(db, asset, v1, author, category);
         AssetVersion v2 = TestData.CreateAssetVersion(
             asset.Id,
             storageKey: "assets/vis/v2.bin",
@@ -295,7 +296,7 @@ public sealed class AssetVersionStorePostgresTests(PostgresFixture fixture)
         var store = new AssetStore(db);
         AssetVersion v1 = TestData.CreateAssetVersion(asset.Id, storageKey: "assets/history/v1.bin", versionNumber: 1);
         await store.AddWithVersion(asset, v1, null);
-        await ApprovedPublicationTestBuilder.AttachTrustedApprovedPublicationAsync(db, asset, v1, author, category);
+        await ApprovedPublicationTestBuilder.AttachTrustedApprovedPublication(db, asset, v1, author, category);
         TestData.AddCompletedPurchase(db, TestData.CreatePurchase(buyer.Id, asset.Id, v1.Id), asset.Title, author.Id);
         await db.SaveChangesAsync();
         await store.SoftDelete(asset.Id, DateTimeOffset.UtcNow);
@@ -344,7 +345,7 @@ public sealed class AssetVersionStorePostgresTests(PostgresFixture fixture)
         var seedStore = new AssetStore(seedDb);
         AssetVersion v1 = TestData.CreateAssetVersion(asset.Id, storageKey: "assets/pin/v1.bin", versionNumber: 1);
         await seedStore.AddWithVersion(asset, v1, null);
-        PublicationSnapshot pinnedSnapshot = await ApprovedPublicationTestBuilder.AttachTrustedApprovedPublicationAsync(
+        PublicationSnapshot pinnedSnapshot = await ApprovedPublicationTestBuilder.AttachTrustedApprovedPublication(
             seedDb,
             asset,
             v1,
@@ -426,7 +427,7 @@ public sealed class AssetVersionStorePostgresTests(PostgresFixture fixture)
         var seedStore = new AssetStore(seedDb);
         AssetVersion version = TestData.CreateAssetVersion(asset.Id, storageKey: "assets/race/v1.bin", versionNumber: 1);
         await seedStore.AddWithVersion(asset, version, null);
-        PublicationSnapshot offeringSnapshot = await ApprovedPublicationTestBuilder.AttachTrustedApprovedPublicationAsync(
+        PublicationSnapshot offeringSnapshot = await ApprovedPublicationTestBuilder.AttachTrustedApprovedPublication(
             seedDb,
             asset,
             version,
@@ -454,14 +455,18 @@ public sealed class AssetVersionStorePostgresTests(PostgresFixture fixture)
 
         await using ApplicationDbContext dbA = fixture.CreateDbContext();
         await using ApplicationDbContext dbB = fixture.CreateDbContext();
+        var bundleA = new FulfillmentRaceBundleStore(new BundleStore(dbA));
+        var bundleB = new FulfillmentRaceBundleStore(new BundleStore(dbB));
         CheckoutCompletionOrchestrator completionA = CreateCompletionOrchestrator(
             dbA,
             emailComposer,
-            new GatedCheckoutIntentStore(new CheckoutIntentStore(dbA), gate, tryCompleteResults));
+            new GatedCheckoutIntentStore(new CheckoutIntentStore(dbA), gate, tryCompleteResults),
+            bundleA);
         CheckoutCompletionOrchestrator completionB = CreateCompletionOrchestrator(
             dbB,
             emailComposer,
-            new GatedCheckoutIntentStore(new CheckoutIntentStore(dbB), gate, tryCompleteResults));
+            new GatedCheckoutIntentStore(new CheckoutIntentStore(dbB), gate, tryCompleteResults),
+            bundleB);
         HandleStripeWebhookCommandHandler handlerA = CreateWebhookHandler(paymentServiceA, completionA);
         HandleStripeWebhookCommandHandler handlerB = CreateWebhookHandler(paymentServiceB, completionB);
 
@@ -496,7 +501,7 @@ public sealed class AssetVersionStorePostgresTests(PostgresFixture fixture)
         var seedStore = new AssetStore(seedDb);
         AssetVersion version = TestData.CreateAssetVersion(asset.Id, storageKey: "assets/dup-webhook/v1.bin", versionNumber: 1);
         await seedStore.AddWithVersion(asset, version, null);
-        PublicationSnapshot offeringSnapshot = await ApprovedPublicationTestBuilder.AttachTrustedApprovedPublicationAsync(
+        PublicationSnapshot offeringSnapshot = await ApprovedPublicationTestBuilder.AttachTrustedApprovedPublication(
             seedDb,
             asset,
             version,
@@ -547,7 +552,7 @@ public sealed class AssetVersionStorePostgresTests(PostgresFixture fixture)
         var seedStore = new AssetStore(seedDb);
         AssetVersion version = TestData.CreateAssetVersion(asset.Id, storageKey: "assets/recon-race/v1.bin", versionNumber: 1);
         await seedStore.AddWithVersion(asset, version, null);
-        PublicationSnapshot offeringSnapshot = await ApprovedPublicationTestBuilder.AttachTrustedApprovedPublicationAsync(
+        PublicationSnapshot offeringSnapshot = await ApprovedPublicationTestBuilder.AttachTrustedApprovedPublication(
             seedDb,
             asset,
             version,
@@ -591,11 +596,13 @@ public sealed class AssetVersionStorePostgresTests(PostgresFixture fixture)
         CheckoutCompletionOrchestrator completionWebhook = CreateCompletionOrchestrator(
             dbWebhook,
             emailComposer,
-            gatedStoreWebhook);
+            gatedStoreWebhook,
+            new FulfillmentRaceBundleStore(new BundleStore(dbWebhook)));
         CheckoutCompletionOrchestrator reconcileCompletion = CreateCompletionOrchestrator(
             dbReconcile,
             emailComposer,
-            gatedStoreReconcile);
+            gatedStoreReconcile,
+            new FulfillmentRaceBundleStore(new BundleStore(dbReconcile)));
         HandleStripeWebhookCommandHandler webhookHandler = CreateWebhookHandler(paymentService, completionWebhook);
 
         Task<Result<OrderCompletedPayload?>> webhookTask = webhookHandler.Handle(
@@ -671,10 +678,11 @@ public sealed class AssetVersionStorePostgresTests(PostgresFixture fixture)
     private static CheckoutCompletionOrchestrator CreateCompletionOrchestrator(
         ApplicationDbContext db,
         TransactionalEmailComposer emailComposer,
-        ICheckoutIntentStore? checkoutIntentStore = null) =>
+        ICheckoutIntentStore? checkoutIntentStore = null,
+        IBundleStore? bundleStore = null) =>
         new(
             new AssetStore(db),
-            new BundleStore(db),
+            bundleStore ?? new BundleStore(db),
             new OrderStore(db),
             checkoutIntentStore ?? new CheckoutIntentStore(db),
             new CheckoutReconciliationHoldStore(db),
@@ -699,7 +707,7 @@ public sealed class AssetVersionStorePostgresTests(PostgresFixture fixture)
             NullLogger<HandleStripeWebhookCommandHandler>.Instance);
 
     /// <summary>
-    /// Holds both webhook handlers at TryCompleteAndRelease until both arrive, so the test exercises the
+    /// Holds concurrent fulfillers at TryCompleteAndRelease until both arrive, so the test exercises the
     /// PostgreSQL conditional-update race instead of a sequential early-idempotent hit.
     /// </summary>
     private sealed class TryCompleteRaceGate(int participantCount)
@@ -707,7 +715,7 @@ public sealed class AssetVersionStorePostgresTests(PostgresFixture fixture)
         private readonly TaskCompletionSource _ready = new(TaskCreationOptions.RunContinuationsAsynchronously);
         private int _arrived;
 
-        public async Task EnterAsync(CancellationToken cancellationToken)
+        public async Task Enter(CancellationToken cancellationToken)
         {
             if (Interlocked.Increment(ref _arrived) >= participantCount)
             {
@@ -716,6 +724,68 @@ public sealed class AssetVersionStorePostgresTests(PostgresFixture fixture)
 
             await _ready.Task.WaitAsync(TimeSpan.FromSeconds(30), cancellationToken);
         }
+    }
+
+    /// <summary>Skips asset row locks so two fulfillment transactions can race TryCompleteAndRelease.</summary>
+    private sealed class FulfillmentRaceBundleStore(IBundleStore inner) : IBundleStore
+    {
+        public Task<Bundle?> GetById(Guid id, CancellationToken cancellationToken = default) =>
+            inner.GetById(id, cancellationToken);
+
+        public Task<Bundle?> LockForUpdate(Guid id, CancellationToken cancellationToken = default) =>
+            inner.LockForUpdate(id, cancellationToken);
+
+        public Task<BundleDetailDto?> GetPublicDetail(Guid id, CancellationToken cancellationToken = default) =>
+            inner.GetPublicDetail(id, cancellationToken);
+
+        public Task<BundleDetailDto?> GetSellerDetail(Guid id, Guid sellerId, CancellationToken cancellationToken = default) =>
+            inner.GetSellerDetail(id, sellerId, cancellationToken);
+
+        public Task<Domain.Core.Dto.Paging.PagedResult<BundleListItemDto>> ListPublic(ListBundlesRequest request, CancellationToken cancellationToken = default) =>
+            inner.ListPublic(request, cancellationToken);
+
+        public Task<Domain.Core.Dto.Paging.PagedResult<BundleListItemDto>> ListForSeller(
+            Guid sellerId,
+            ListMyBundlesRequest request,
+            CancellationToken cancellationToken = default) =>
+            inner.ListForSeller(sellerId, request, cancellationToken);
+
+        public Task<(Bundle Bundle, BundleRevision Revision)> CreateWithRevision(
+            Guid sellerId,
+            string title,
+            string? description,
+            decimal price,
+            string currency,
+            decimal listPriceTotal,
+            IReadOnlyList<BundleRevisionItemDraft> items,
+            CancellationToken cancellationToken = default) =>
+            inner.CreateWithRevision(sellerId, title, description, price, currency, listPriceTotal, items, cancellationToken);
+
+        public Task<BundleRevision> PublishNextRevision(
+            Guid bundleId,
+            string title,
+            string? description,
+            decimal price,
+            string currency,
+            decimal listPriceTotal,
+            IReadOnlyList<BundleRevisionItemDraft> items,
+            CancellationToken cancellationToken = default) =>
+            inner.PublishNextRevision(bundleId, title, description, price, currency, listPriceTotal, items, cancellationToken);
+
+        public Task<bool> TryArchive(Guid id, Guid sellerId, DateTimeOffset now, CancellationToken cancellationToken = default) =>
+            inner.TryArchive(id, sellerId, now, cancellationToken);
+
+        public Task<bool> TryRestore(Guid id, Guid sellerId, DateTimeOffset now, CancellationToken cancellationToken = default) =>
+            inner.TryRestore(id, sellerId, now, cancellationToken);
+
+        public Task<BundleCheckoutSnapshot?> GetCheckoutSnapshot(Guid bundleId, CancellationToken cancellationToken = default) =>
+            inner.GetCheckoutSnapshot(bundleId, cancellationToken);
+
+        public Task LockAssetsInOrder(IReadOnlyList<Guid> assetIds, CancellationToken cancellationToken = default) =>
+            Task.CompletedTask;
+
+        public Task<Guid?> GetPublicAnalyticsSellerId(Guid bundleId, CancellationToken cancellationToken = default) =>
+            inner.GetPublicAnalyticsSellerId(bundleId, cancellationToken);
     }
 
     private sealed class GatedCheckoutIntentStore(
@@ -762,7 +832,7 @@ public sealed class AssetVersionStorePostgresTests(PostgresFixture fixture)
             DateTimeOffset now,
             CancellationToken cancellationToken = default)
         {
-            await gate.EnterAsync(cancellationToken);
+            await gate.Enter(cancellationToken);
             var completed = await inner.TryCompleteAndRelease(id, userId, stripeSessionId, now, cancellationToken);
             tryCompleteResults.Add(completed);
             return completed;
@@ -791,7 +861,7 @@ public sealed class AssetVersionStorePostgresTests(PostgresFixture fixture)
             inner.DeleteTerminalUnpaidReferencingAsset(assetId, cancellationToken);
 
         public Task<CheckoutIntent?> LockForFulfillment(Guid id, CancellationToken cancellationToken = default) =>
-            inner.LockForFulfillment(id, cancellationToken);
+            inner.GetByIdWithItems(id, cancellationToken);
 
         public Task<bool> HasProviderBoundUnresolvedCheckoutReference(Guid assetId, CancellationToken cancellationToken = default) =>
             inner.HasProviderBoundUnresolvedCheckoutReference(assetId, cancellationToken);

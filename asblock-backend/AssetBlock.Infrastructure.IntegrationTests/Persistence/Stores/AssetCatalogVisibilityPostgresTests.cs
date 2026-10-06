@@ -41,6 +41,7 @@ public sealed class AssetCatalogVisibilityPostgresTests(PostgresFixture fixture)
         db.AssetVersions.Add(rejectedVersion);
 
         await db.SaveChangesAsync();
+        await CatalogTestPublicationSupport.AttachTrustedPublicationForAllReadyAssets(db);
 
         var assetStore = new AssetStore(db);
 

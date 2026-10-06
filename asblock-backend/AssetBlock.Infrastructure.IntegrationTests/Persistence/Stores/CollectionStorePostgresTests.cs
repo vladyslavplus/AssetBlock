@@ -80,6 +80,7 @@ public sealed class CollectionStorePostgresTests(PostgresFixture fixture)
             TestData.CreateCollectionItem(collection.Id, gone.Id, position: 1),
             TestData.CreateCollectionItem(collection.Id, kept.Id, position: 2));
         await db.SaveChangesAsync();
+        await CatalogTestPublicationSupport.AttachTrustedPublicationForAllReadyAssets(db);
 
         await new AssetStore(db).SoftDelete(gone.Id, DateTimeOffset.UtcNow);
 

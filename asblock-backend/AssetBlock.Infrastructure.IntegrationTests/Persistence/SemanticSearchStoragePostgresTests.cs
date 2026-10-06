@@ -443,6 +443,7 @@ public sealed class SemanticSearchStoragePostgresTests(PostgresFixture fixture)
 
         db.AssetEmbeddings.AddRange(embSem, embLex, embBoth);
         await db.SaveChangesAsync();
+        await CatalogTestPublicationSupport.AttachTrustedPublicationForAllReadyAssets(db);
 
         var request = new GetAssetsRequest
         {
@@ -481,6 +482,7 @@ public sealed class SemanticSearchStoragePostgresTests(PostgresFixture fixture)
         db.Assets.AddRange(assets);
         db.AssetVersions.AddRange(versions);
         await db.SaveChangesAsync();
+        await CatalogTestPublicationSupport.AttachTrustedPublicationForAllReadyAssets(db);
 
         var request = new GetAssetsRequest
         {
@@ -525,6 +527,7 @@ public sealed class SemanticSearchStoragePostgresTests(PostgresFixture fixture)
 
         db.AssetEmbeddings.AddRange(embReady, embPending, embDeleted);
         await db.SaveChangesAsync();
+        await CatalogTestPublicationSupport.AttachTrustedPublicationForAllReadyAssets(db);
 
         await assetStore.SoftDelete(deletedAsset.Id, DateTimeOffset.UtcNow);
 
@@ -569,6 +572,7 @@ public sealed class SemanticSearchStoragePostgresTests(PostgresFixture fixture)
 
         db.AssetEmbeddings.AddRange(embExpensive, embCheap);
         await db.SaveChangesAsync();
+        await CatalogTestPublicationSupport.AttachTrustedPublicationForAllReadyAssets(db);
 
         var request = new GetAssetsRequest
         {
@@ -613,6 +617,7 @@ public sealed class SemanticSearchStoragePostgresTests(PostgresFixture fixture)
         // Only semanticStrong has an embedding; trigramLexical has NO embedding and must be retrieved via trigram lexical candidate branch
         db.AssetEmbeddings.Add(embSemantic);
         await db.SaveChangesAsync();
+        await CatalogTestPublicationSupport.AttachTrustedPublicationForAllReadyAssets(db);
 
         var request = new GetAssetsRequest
         {

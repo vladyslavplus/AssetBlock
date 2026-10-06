@@ -42,7 +42,7 @@ public sealed class CatalogCacheValidationPostgresTests(PostgresFixture fixture)
     {
         await using ApplicationDbContext db = await fixture.CreateCleanDbContext();
         (User author, Category category) = await TestData.SeedAuthorAndCategory(db);
-        (Asset asset, _, _) = await ApprovedPublicationTestBuilder.SeedApprovedListingAsync(
+        (Asset asset, _, _) = await ApprovedPublicationTestBuilder.SeedApprovedListing(
             db,
             author,
             category,
@@ -85,7 +85,7 @@ public sealed class CatalogCacheValidationPostgresTests(PostgresFixture fixture)
     {
         await using ApplicationDbContext db = await fixture.CreateCleanDbContext();
         (User author, Category category) = await TestData.SeedAuthorAndCategory(db);
-        (Asset asset, _, _) = await ApprovedPublicationTestBuilder.SeedApprovedListingAsync(
+        (Asset asset, _, _) = await ApprovedPublicationTestBuilder.SeedApprovedListing(
             db,
             author,
             category,
@@ -126,7 +126,7 @@ public sealed class CatalogCacheValidationPostgresTests(PostgresFixture fixture)
     {
         await using ApplicationDbContext db = await fixture.CreateCleanDbContext();
         (User author, Category category) = await TestData.SeedAuthorAndCategory(db);
-        (Asset asset, AssetVersion version, _) = await ApprovedPublicationTestBuilder.SeedApprovedListingAsync(
+        (Asset asset, AssetVersion version, _) = await ApprovedPublicationTestBuilder.SeedApprovedListing(
             db,
             author,
             category,

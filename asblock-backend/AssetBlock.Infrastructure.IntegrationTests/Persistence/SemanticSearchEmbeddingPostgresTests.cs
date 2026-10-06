@@ -495,7 +495,7 @@ public sealed class SemanticSearchEmbeddingPostgresTests(PostgresFixture fixture
                 StorageKey = $"key_{i}",
                 FileName = $"file_{i}",
                 ContentLength = 100,
-                ContentSha256 = $"hash_{i}",
+                ContentSha256 = ContentSha256ForSeed(i),
                 ReleaseNotes = "notes",
                 LicenseCode = AssetLicenseCode.PERSONAL,
                 LicenseTemplateVersion = "1.0",
@@ -507,6 +507,7 @@ public sealed class SemanticSearchEmbeddingPostgresTests(PostgresFixture fixture
             });
         }
         await db.SaveChangesAsync();
+        await CatalogTestPublicationSupport.AttachTrustedPublicationForAllReadyAssets(db);
 
         // 1. Run backfill cycle: should enqueue exactly 50 jobs (bounded limit)
         var enqueued = await coordinator.RunBackfillCycle();
@@ -533,7 +534,7 @@ public sealed class SemanticSearchEmbeddingPostgresTests(PostgresFixture fixture
             StorageKey = "failed_key",
             FileName = "failed_file",
             ContentLength = 100,
-            ContentSha256 = "failed_hash",
+            ContentSha256 = ContentSha256ForSeed(999_999),
             ReleaseNotes = "notes",
             LicenseCode = AssetLicenseCode.PERSONAL,
             LicenseTemplateVersion = "1.0",
@@ -702,7 +703,7 @@ public sealed class SemanticSearchEmbeddingPostgresTests(PostgresFixture fixture
                 StorageKey = $"key_{i}",
                 FileName = $"file_{i}",
                 ContentLength = 100,
-                ContentSha256 = $"hash_{i}",
+                ContentSha256 = ContentSha256ForSeed(i),
                 ReleaseNotes = "notes",
                 LicenseCode = AssetLicenseCode.PERSONAL,
                 LicenseTemplateVersion = "1.0",
@@ -757,7 +758,7 @@ public sealed class SemanticSearchEmbeddingPostgresTests(PostgresFixture fixture
             StorageKey = "eligible_key",
             FileName = "eligible_file",
             ContentLength = 100,
-            ContentSha256 = "eligible_hash",
+            ContentSha256 = ContentSha256ForSeed(888_888),
             ReleaseNotes = "notes",
             LicenseCode = AssetLicenseCode.PERSONAL,
             LicenseTemplateVersion = "1.0",
@@ -772,6 +773,7 @@ public sealed class SemanticSearchEmbeddingPostgresTests(PostgresFixture fixture
         db.AssetVersions.AddRange(versions);
         db.AssetProcessingJobs.AddRange(jobs);
         await db.SaveChangesAsync();
+        await CatalogTestPublicationSupport.AttachTrustedPublicationForAllReadyAssets(db);
 
         // 1. First cycle: scans up to 500 candidates. All 500 have active jobs and are skipped.
         var firstCycleEnqueued = await coordinator.RunBackfillCycle();
@@ -1133,6 +1135,9 @@ public sealed class SemanticSearchEmbeddingPostgresTests(PostgresFixture fixture
         }
     }
 
+    private static string ContentSha256ForSeed(int seed) =>
+        seed.ToString("x").PadLeft(64, '0');
+
     private static async Task<SeedData> SeedAsset(ApplicationDbContext db)
     {
         DateTimeOffset now = DateTimeOffset.UtcNow;
@@ -1179,7 +1184,7 @@ public sealed class SemanticSearchEmbeddingPostgresTests(PostgresFixture fixture
             StorageKey = "key",
             FileName = "file",
             ContentLength = 100,
-            ContentSha256 = "abc",
+            ContentSha256 = new string('0', 64),
             ReleaseNotes = "notes",
             LicenseCode = AssetLicenseCode.PERSONAL,
             LicenseTemplateVersion = "1.0",
@@ -1195,6 +1200,13 @@ public sealed class SemanticSearchEmbeddingPostgresTests(PostgresFixture fixture
         db.Assets.Add(asset);
         db.AssetVersions.Add(version);
         await db.SaveChangesAsync();
+        await ApprovedPublicationTestBuilder.AttachTrustedApprovedPublication(
+            db,
+            asset,
+            version,
+            author,
+            category,
+            asset.Title);
 
         return new SeedData(author, category, asset, version);
     }

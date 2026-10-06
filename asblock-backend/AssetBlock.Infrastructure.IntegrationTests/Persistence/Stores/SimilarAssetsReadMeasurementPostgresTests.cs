@@ -61,6 +61,7 @@ public sealed class SimilarAssetsReadMeasurementPostgresTests(PostgresFixture fi
         }
 
         await db.SaveChangesAsync();
+        await CatalogTestPublicationSupport.AttachTrustedPublicationForAllReadyAssets(db);
         var store = new AssetStore(db);
         var semanticOptions = new SimilarAssetsQueryOptions(
             true,
