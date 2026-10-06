@@ -426,7 +426,7 @@ from the npm registry (canonical, OS-independent). Reviewed exceptions may set
   - copyright/author: Nick Fitzgerald
   - source: ssh://git@github.com/mozilla/source-map
   - license-url: https://spdx.org/licenses/BSD-3-Clause.html
-- `npm` source-map-js@1.2.1
+- `npm` source-map-js@1.2.2
   - copyright/author: Valentin 7rulnik Semirulnik
   - source: https://github.com/7rulnik/source-map-js
   - license-url: https://spdx.org/licenses/BSD-3-Clause.html
