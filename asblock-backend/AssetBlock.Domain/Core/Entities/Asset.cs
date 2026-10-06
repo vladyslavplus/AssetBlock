@@ -25,6 +25,11 @@ public class Asset : BaseEntity
     /// <summary>Revision counter incremented when canonical searchable metadata changes.</summary>
     public long SearchRevision { get; set; } = 1;
 
+    /// <summary>Approved public snapshot head for the asset. Null until a real approval exists.</summary>
+    public Guid? CurrentPublicationSnapshotId { get; set; }
+
+    public PublicationSnapshot? CurrentPublicationSnapshot { get; set; }
+
     public User Author { get; set; } = null!;
     public Category Category { get; set; } = null!;
     public ICollection<AssetVersion> Versions { get; set; } = new List<AssetVersion>();

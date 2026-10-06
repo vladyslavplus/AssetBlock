@@ -1,3 +1,4 @@
+using AssetBlock.Domain.Core.Enums;
 using AssetBlock.Domain.Core.Primitives.BaseEntities;
 
 namespace AssetBlock.Domain.Core.Entities;
@@ -18,6 +19,9 @@ public class Purchase : BaseEntity
 
     public DateTimeOffset PurchasedAt { get; init; }
 
+    public Guid? PublicationSnapshotId { get; set; }
+
+    public PublicationSnapshot? PublicationSnapshot { get; set; }
     public User User { get; set; } = null!;
     public Asset Asset { get; set; } = null!;
     public AssetVersion AssetVersion { get; set; } = null!;

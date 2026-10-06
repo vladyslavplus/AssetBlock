@@ -177,6 +177,8 @@ public static class DependencyInjection
         services.AddScoped<IEmailActionStore, EmailActionStore>();
         services.AddScoped<IJwtTokenService, JwtTokenService>();
         services.AddScoped<IUserStore, UserStore>();
+        services.AddScoped<IAuthenticatedUserRoleResolver, AuthenticatedUserRoleResolver>();
+        services.AddScoped<IModerationFoundationStore, ModerationFoundationStore>();
         services.AddScoped<IUserVerificationStore, UserVerificationStore>();
 
         services.AddScoped<ICategoryStore, CategoryStore>();

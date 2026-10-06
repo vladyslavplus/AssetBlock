@@ -126,7 +126,6 @@ namespace AssetBlock.Infrastructure.Migrations
             modelBuilder.Entity("AssetBlock.Domain.Core.Entities.Asset", b =>
                 {
                     b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
                     b.Property<Guid>("AuthorId")
@@ -137,6 +136,9 @@ namespace AssetBlock.Infrastructure.Migrations
 
                     b.Property<DateTimeOffset>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("CurrentPublicationSnapshotId")
+                        .HasColumnType("uuid");
 
                     b.Property<DateTimeOffset?>("DeletedAt")
                         .HasColumnType("timestamp with time zone");
@@ -207,6 +209,8 @@ namespace AssetBlock.Infrastructure.Migrations
                         .HasDatabaseName("IX_assets_catalog_CreatedAt_Id")
                         .HasFilter("\"DeletedAt\" IS NULL");
 
+                    b.HasIndex("Id", "CurrentPublicationSnapshotId");
+
                     b.HasIndex("AuthorId", "CreatedAt", "Id")
                         .HasDatabaseName("IX_assets_catalog_AuthorId_CreatedAt_Id")
                         .HasFilter("\"DeletedAt\" IS NULL");
@@ -258,6 +262,67 @@ namespace AssetBlock.Infrastructure.Migrations
                             t.HasCheckConstraint("CK_asset_archive_analyses_readme_content_size", "\"ReadmeContent\" IS NULL OR octet_length(\"ReadmeContent\") <= 16384");
 
                             t.HasCheckConstraint("CK_asset_archive_analyses_total_expanded_bytes", "\"TotalExpandedBytes\" >= 0");
+                        });
+                });
+
+            modelBuilder.Entity("AssetBlock.Domain.Core.Entities.AssetDraftWorkspace", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("AssetId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("AssetVersionId")
+                        .HasColumnType("uuid");
+
+                    b.Property<long>("CaseRevision")
+                        .HasColumnType("bigint");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("MaterialMetadataHeadRevision")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid>("ScopeId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("SellerEvidenceHeadRevision")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("SourceDeclarationHeadRevision")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTimeOffset?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<long>("WorkspaceRevision")
+                        .HasColumnType("bigint");
+
+                    b.Property<Guid>("WorkspaceVersionScopeKey")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AssetId")
+                        .IsUnique()
+                        .HasDatabaseName("UIX_asset_draft_workspaces_asset_pre_upload")
+                        .HasFilter("\"AssetVersionId\" IS NULL");
+
+                    b.HasIndex("AssetId", "AssetVersionId")
+                        .IsUnique()
+                        .HasDatabaseName("UIX_asset_draft_workspaces_asset_version")
+                        .HasFilter("\"AssetVersionId\" IS NOT NULL");
+
+                    b.ToTable("asset_draft_workspaces", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_asset_draft_workspaces_case_revision", "\"CaseRevision\" > 0");
+
+                            t.HasCheckConstraint("CK_asset_draft_workspaces_revision", "\"WorkspaceRevision\" > 0");
+
+                            t.HasCheckConstraint("CK_asset_draft_workspaces_version_scope_key", "((\"AssetVersionId\" IS NULL AND \"WorkspaceVersionScopeKey\" = '00000000-0000-0000-0000-000000000000'::uuid)\r\nOR (\"AssetVersionId\" IS NOT NULL AND \"WorkspaceVersionScopeKey\" = \"AssetVersionId\"))");
                         });
                 });
 
@@ -346,6 +411,72 @@ namespace AssetBlock.Infrastructure.Migrations
                             t.HasCheckConstraint("CK_asset_listing_suggestions_tags_size", "octet_length(CAST(\"Tags\" AS text)) <= 4000");
 
                             t.HasCheckConstraint("CK_asset_listing_suggestions_tags_type", "jsonb_typeof(\"Tags\") = 'array'");
+                        });
+                });
+
+            modelBuilder.Entity("AssetBlock.Domain.Core.Entities.AssetMaterialMetadataRevision", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("AssetId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("AssetVersionId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("AuthorUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ContentDigest")
+                        .IsRequired()
+                        .HasColumnType("char(64)");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<bool>("IsSubmitted")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("PayloadJson")
+                        .IsRequired()
+                        .HasColumnType("jsonb");
+
+                    b.Property<int>("Revision")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("SchemaVersion")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTimeOffset?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("WorkspaceId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("WorkspaceVersionScopeKey")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AssetId", "AssetVersionId");
+
+                    b.HasIndex("WorkspaceId", "Revision")
+                        .IsUnique();
+
+                    b.HasIndex("AssetId", "WorkspaceId", "Revision")
+                        .IsUnique();
+
+                    b.HasIndex("AssetId", "WorkspaceId", "WorkspaceVersionScopeKey");
+
+                    b.ToTable("asset_material_metadata_revisions", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_asset_material_metadata_revisions_digest", "length(\"ContentDigest\") = 64");
+
+                            t.HasCheckConstraint("CK_asset_material_metadata_revisions_revision", "\"Revision\" > 0");
+
+                            t.HasCheckConstraint("CK_asset_material_metadata_revisions_revision_scope", "((\"AssetVersionId\" IS NULL AND \"WorkspaceVersionScopeKey\" = '00000000-0000-0000-0000-000000000000'::uuid)\r\nOR (\"AssetVersionId\" IS NOT NULL AND \"WorkspaceVersionScopeKey\" = \"AssetVersionId\"))");
                         });
                 });
 
@@ -484,6 +615,132 @@ namespace AssetBlock.Infrastructure.Migrations
                             t.HasCheckConstraint("CK_asset_processing_jobs_terminal_completed_at", "(\"Status\" IN ('SUCCEEDED', 'FAILED', 'CANCELLED') AND \"CompletedAt\" IS NOT NULL) OR (\"Status\" NOT IN ('SUCCEEDED', 'FAILED', 'CANCELLED') AND \"CompletedAt\" IS NULL)");
 
                             t.HasCheckConstraint("CK_asset_processing_jobs_type", "\"Type\" IN ('ARCHIVE_INSPECTION', 'MALWARE_SCAN', 'LISTING_COPILOT', 'EMBEDDING_GENERATION')");
+                        });
+                });
+
+            modelBuilder.Entity("AssetBlock.Domain.Core.Entities.AssetSellerEvidenceRevision", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("AssetId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("AssetVersionId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("AuthorUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ContentDigest")
+                        .IsRequired()
+                        .HasColumnType("char(64)");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<bool>("IsSubmitted")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("PayloadJson")
+                        .IsRequired()
+                        .HasColumnType("jsonb");
+
+                    b.Property<int>("Revision")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("SchemaVersion")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTimeOffset?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("WorkspaceId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("WorkspaceVersionScopeKey")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AssetId", "AssetVersionId");
+
+                    b.HasIndex("WorkspaceId", "Revision")
+                        .IsUnique();
+
+                    b.HasIndex("AssetId", "WorkspaceId", "WorkspaceVersionScopeKey");
+
+                    b.ToTable("asset_seller_evidence_revisions", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_asset_seller_evidence_revisions_digest", "length(\"ContentDigest\") = 64");
+
+                            t.HasCheckConstraint("CK_asset_seller_evidence_revisions_revision", "\"Revision\" > 0");
+
+                            t.HasCheckConstraint("CK_asset_seller_evidence_revisions_revision_scope", "((\"AssetVersionId\" IS NULL AND \"WorkspaceVersionScopeKey\" = '00000000-0000-0000-0000-000000000000'::uuid)\r\nOR (\"AssetVersionId\" IS NOT NULL AND \"WorkspaceVersionScopeKey\" = \"AssetVersionId\"))");
+                        });
+                });
+
+            modelBuilder.Entity("AssetBlock.Domain.Core.Entities.AssetSourceDeclarationRevision", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("AssetId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("AssetVersionId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("AuthorUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ContentDigest")
+                        .IsRequired()
+                        .HasColumnType("char(64)");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<bool>("IsSubmitted")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("PayloadJson")
+                        .IsRequired()
+                        .HasColumnType("jsonb");
+
+                    b.Property<int>("Revision")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("SchemaVersion")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTimeOffset?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("WorkspaceId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("WorkspaceVersionScopeKey")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AssetId", "AssetVersionId");
+
+                    b.HasIndex("WorkspaceId", "Revision")
+                        .IsUnique();
+
+                    b.HasIndex("AssetId", "WorkspaceId", "WorkspaceVersionScopeKey");
+
+                    b.ToTable("asset_source_declaration_revisions", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_asset_source_declaration_revisions_digest", "length(\"ContentDigest\") = 64");
+
+                            t.HasCheckConstraint("CK_asset_source_declaration_revisions_revision", "\"Revision\" > 0");
+
+                            t.HasCheckConstraint("CK_asset_source_declaration_revisions_revision_scope", "((\"AssetVersionId\" IS NULL AND \"WorkspaceVersionScopeKey\" = '00000000-0000-0000-0000-000000000000'::uuid)\r\nOR (\"AssetVersionId\" IS NOT NULL AND \"WorkspaceVersionScopeKey\" = \"AssetVersionId\"))");
                         });
                 });
 
@@ -1081,6 +1338,9 @@ namespace AssetBlock.Infrastructure.Migrations
                     b.Property<int>("Position")
                         .HasColumnType("integer");
 
+                    b.Property<Guid?>("PublicationSnapshotId")
+                        .HasColumnType("uuid");
+
                     b.Property<Guid>("SellerId")
                         .HasColumnType("uuid");
 
@@ -1091,6 +1351,8 @@ namespace AssetBlock.Infrastructure.Migrations
 
                     b.HasIndex("AssetId")
                         .HasDatabaseName("IX_checkout_intent_items_asset");
+
+                    b.HasIndex("PublicationSnapshotId");
 
                     b.HasIndex("AssetId", "AssetVersionId");
 
@@ -1156,6 +1418,64 @@ namespace AssetBlock.Infrastructure.Migrations
                     b.ToTable("checkout_reservations", null, t =>
                         {
                             t.HasCheckConstraint("CK_checkout_reservations_expires_after_created", "\"ExpiresAt\" > \"CreatedAt\"");
+                        });
+                });
+
+            modelBuilder.Entity("AssetBlock.Domain.Core.Entities.CodeAnalysisReportHeader", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("AssetId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("AssetVersionId")
+                        .HasColumnType("uuid");
+
+                    b.Property<bool>("CanAuthorizePublication")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("ContentSha256")
+                        .IsRequired()
+                        .HasColumnType("char(64)");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTimeOffset?>("FinalizedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("InputRevision")
+                        .HasColumnType("integer");
+
+                    b.Property<bool>("IsFinalized")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("PolicyVersion")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("Purpose")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<int>("ReportSchemaVersion")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTimeOffset?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AssetId", "AssetVersionId", "ContentSha256", "PolicyVersion", "InputRevision")
+                        .IsUnique();
+
+                    b.ToTable("code_analysis_report_headers", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_code_analysis_report_headers_sha", "length(\"ContentSha256\") = 64");
                         });
                 });
 
@@ -1325,6 +1645,238 @@ namespace AssetBlock.Infrastructure.Migrations
                         });
                 });
 
+            modelBuilder.Entity("AssetBlock.Domain.Core.Entities.JsonMutationIdempotencyRecord", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("ActorUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("OperationId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("OperationKind")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("RequestDigest")
+                        .IsRequired()
+                        .HasColumnType("char(64)");
+
+                    b.Property<string>("ResultJson")
+                        .IsRequired()
+                        .HasColumnType("jsonb");
+
+                    b.Property<DateTimeOffset?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ActorUserId", "OperationKind", "OperationId")
+                        .IsUnique()
+                        .HasDatabaseName("IX_json_mutation_idempotency_ActorUserId_OperationKind_OperationId");
+
+                    b.HasIndex("ActorUserId", "OperationKind", "RequestDigest");
+
+                    b.ToTable("json_mutation_idempotency", (string)null);
+                });
+
+            modelBuilder.Entity("AssetBlock.Domain.Core.Entities.ModerationDecisionRecord", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("AssetId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("AssetVersionId")
+                        .HasColumnType("uuid");
+
+                    b.Property<long>("CaseRevision")
+                        .HasColumnType("bigint");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Message")
+                        .IsRequired()
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)");
+
+                    b.Property<Guid>("ModeratorUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Outcome")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<Guid?>("PublicationSnapshotId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("SubmissionId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("PublicationSnapshotId");
+
+                    b.HasIndex("SubmissionId")
+                        .IsUnique();
+
+                    b.ToTable("moderation_decisions", (string)null);
+                });
+
+            modelBuilder.Entity("AssetBlock.Domain.Core.Entities.ModerationSubmission", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("AssetId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("AssetVersionId")
+                        .HasColumnType("uuid");
+
+                    b.Property<long>("CaseRevision")
+                        .HasColumnType("bigint");
+
+                    b.Property<Guid?>("CodeAnalysisReportHeaderId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ContentSha256")
+                        .IsRequired()
+                        .HasColumnType("char(64)");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("DeclarationRevision")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("MaterialMetadataRevision")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid>("OwnerUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("PolicyVersion")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<Guid?>("PreviousSubmissionId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("SellerEvidenceDigest")
+                        .IsRequired()
+                        .HasColumnType("char(64)");
+
+                    b.Property<int>("SellerEvidenceRevision")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("State")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<DateTimeOffset?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("WithdrawalReason")
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<Guid>("WorkspaceId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("WorkspaceVersionScopeKey")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AssetVersionId")
+                        .IsUnique()
+                        .HasDatabaseName("UIX_moderation_submissions_active_case")
+                        .HasFilter("\"State\" IN ('SUBMITTED', 'IN_REVIEW')");
+
+                    b.HasIndex("AssetId", "AssetVersionId", "CodeAnalysisReportHeaderId");
+
+                    b.HasIndex("AssetId", "AssetVersionId", "PreviousSubmissionId");
+
+                    b.HasIndex("AssetId", "WorkspaceId", "WorkspaceVersionScopeKey");
+
+                    b.ToTable("moderation_submissions", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_moderation_submissions_case_revision", "\"CaseRevision\" > 0");
+
+                            t.HasCheckConstraint("CK_moderation_submissions_content_sha", "length(\"ContentSha256\") = 64");
+
+                            t.HasCheckConstraint("CK_moderation_submissions_evidence_digest", "length(\"SellerEvidenceDigest\") = 64");
+
+                            t.HasCheckConstraint("CK_moderation_submissions_workspace_scope", "\"AssetVersionId\" = \"WorkspaceVersionScopeKey\"");
+                        });
+                });
+
+            modelBuilder.Entity("AssetBlock.Domain.Core.Entities.ModerationSubmissionHistoryEntry", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("ActorUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("AssetId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("AssetVersionId")
+                        .HasColumnType("uuid");
+
+                    b.Property<long>("CaseRevision")
+                        .HasColumnType("bigint");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("State")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<Guid>("SubmissionId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Summary")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<DateTimeOffset?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("WithdrawalReason")
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("SubmissionId", "CreatedAt", "Id");
+
+                    b.ToTable("moderation_submission_history", (string)null);
+                });
+
             modelBuilder.Entity("AssetBlock.Domain.Core.Entities.Order", b =>
                 {
                     b.Property<Guid>("Id")
@@ -1461,6 +2013,9 @@ namespace AssetBlock.Infrastructure.Migrations
                         .HasPrecision(18, 2)
                         .HasColumnType("numeric(18,2)");
 
+                    b.Property<Guid?>("PublicationSnapshotId")
+                        .HasColumnType("uuid");
+
                     b.Property<Guid>("SellerId")
                         .HasColumnType("uuid");
 
@@ -1468,6 +2023,8 @@ namespace AssetBlock.Infrastructure.Migrations
                         .HasColumnType("integer");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("PublicationSnapshotId");
 
                     b.HasIndex("AssetId", "AssetVersionId");
 
@@ -1608,6 +2165,52 @@ namespace AssetBlock.Infrastructure.Migrations
                     b.ToTable("outbox_messages", (string)null);
                 });
 
+            modelBuilder.Entity("AssetBlock.Domain.Core.Entities.PaidCheckoutReconciliationHold", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("CheckoutIntentId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("ItemIdentitiesJson")
+                        .IsRequired()
+                        .HasColumnType("jsonb");
+
+                    b.Property<string>("SafePaymentFactsJson")
+                        .IsRequired()
+                        .HasColumnType("jsonb");
+
+                    b.Property<string>("State")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<string>("StripeEventId")
+                        .HasColumnType("text");
+
+                    b.Property<string>("StripeSessionId")
+                        .HasColumnType("text");
+
+                    b.Property<DateTimeOffset?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CheckoutIntentId")
+                        .IsUnique();
+
+                    b.HasIndex("StripeEventId")
+                        .IsUnique()
+                        .HasFilter("\"StripeEventId\" IS NOT NULL");
+
+                    b.ToTable("paid_checkout_reconciliation_holds", (string)null);
+                });
+
             modelBuilder.Entity("AssetBlock.Domain.Core.Entities.ProcessedStripeWebhookEvent", b =>
                 {
                     b.Property<Guid>("Id")
@@ -1676,6 +2279,62 @@ namespace AssetBlock.Infrastructure.Migrations
                         });
                 });
 
+            modelBuilder.Entity("AssetBlock.Domain.Core.Entities.PublicationSnapshot", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ApprovedMetadataJson")
+                        .IsRequired()
+                        .HasColumnType("jsonb");
+
+                    b.Property<Guid>("AssetId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("AssetVersionId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("CodeAnalysisReportHeaderId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ContentSha256")
+                        .IsRequired()
+                        .HasColumnType("char(64)");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("ModerationSubmissionId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("PolicyVersion")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("RightsReferenceJson")
+                        .IsRequired()
+                        .HasColumnType("jsonb");
+
+                    b.Property<DateTimeOffset?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ModerationSubmissionId")
+                        .IsUnique();
+
+                    b.HasIndex("AssetId", "AssetVersionId", "CodeAnalysisReportHeaderId");
+
+                    b.HasIndex("AssetId", "AssetVersionId", "ModerationSubmissionId");
+
+                    b.ToTable("publication_snapshots", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_publication_snapshots_sha", "length(\"ContentSha256\") = 64");
+                        });
+                });
+
             modelBuilder.Entity("AssetBlock.Domain.Core.Entities.Purchase", b =>
                 {
                     b.Property<Guid>("Id")
@@ -1694,6 +2353,9 @@ namespace AssetBlock.Infrastructure.Migrations
                     b.Property<Guid>("OrderLineId")
                         .HasColumnType("uuid");
 
+                    b.Property<Guid?>("PublicationSnapshotId")
+                        .HasColumnType("uuid");
+
                     b.Property<DateTimeOffset>("PurchasedAt")
                         .HasColumnType("timestamp with time zone");
 
@@ -1708,6 +2370,8 @@ namespace AssetBlock.Infrastructure.Migrations
                     b.HasIndex("OrderLineId")
                         .IsUnique()
                         .HasDatabaseName("UIX_purchases_order_line");
+
+                    b.HasIndex("PublicationSnapshotId");
 
                     b.HasIndex("AssetId", "AssetVersionId");
 
@@ -2136,6 +2800,11 @@ namespace AssetBlock.Infrastructure.Migrations
                         .HasColumnType("character varying(50)")
                         .HasDefaultValue("User");
 
+                    b.Property<long>("RoleRevision")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint")
+                        .HasDefaultValue(1L);
+
                     b.Property<DateTimeOffset?>("UpdatedAt")
                         .HasColumnType("timestamp with time zone");
 
@@ -2407,9 +3076,17 @@ namespace AssetBlock.Infrastructure.Migrations
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
+                    b.HasOne("AssetBlock.Domain.Core.Entities.PublicationSnapshot", "CurrentPublicationSnapshot")
+                        .WithMany()
+                        .HasForeignKey("Id", "CurrentPublicationSnapshotId")
+                        .HasPrincipalKey("AssetId", "Id")
+                        .OnDelete(DeleteBehavior.Restrict);
+
                     b.Navigation("Author");
 
                     b.Navigation("Category");
+
+                    b.Navigation("CurrentPublicationSnapshot");
                 });
 
             modelBuilder.Entity("AssetBlock.Domain.Core.Entities.AssetArchiveAnalysis", b =>
@@ -2423,6 +3100,25 @@ namespace AssetBlock.Infrastructure.Migrations
                     b.Navigation("AssetVersion");
                 });
 
+            modelBuilder.Entity("AssetBlock.Domain.Core.Entities.AssetDraftWorkspace", b =>
+                {
+                    b.HasOne("AssetBlock.Domain.Core.Entities.Asset", "Asset")
+                        .WithMany()
+                        .HasForeignKey("AssetId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("AssetBlock.Domain.Core.Entities.AssetVersion", "AssetVersion")
+                        .WithMany()
+                        .HasForeignKey("AssetId", "AssetVersionId")
+                        .HasPrincipalKey("AssetId", "Id")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.Navigation("Asset");
+
+                    b.Navigation("AssetVersion");
+                });
+
             modelBuilder.Entity("AssetBlock.Domain.Core.Entities.AssetListingSuggestion", b =>
                 {
                     b.HasOne("AssetBlock.Domain.Core.Entities.AssetProcessingJob", "Job")
@@ -2432,6 +3128,34 @@ namespace AssetBlock.Infrastructure.Migrations
                         .IsRequired();
 
                     b.Navigation("Job");
+                });
+
+            modelBuilder.Entity("AssetBlock.Domain.Core.Entities.AssetMaterialMetadataRevision", b =>
+                {
+                    b.HasOne("AssetBlock.Domain.Core.Entities.Asset", "Asset")
+                        .WithMany()
+                        .HasForeignKey("AssetId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("AssetBlock.Domain.Core.Entities.AssetVersion", "AssetVersion")
+                        .WithMany()
+                        .HasForeignKey("AssetId", "AssetVersionId")
+                        .HasPrincipalKey("AssetId", "Id")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("AssetBlock.Domain.Core.Entities.AssetDraftWorkspace", "Workspace")
+                        .WithMany()
+                        .HasForeignKey("AssetId", "WorkspaceId", "WorkspaceVersionScopeKey")
+                        .HasPrincipalKey("AssetId", "Id", "WorkspaceVersionScopeKey")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Asset");
+
+                    b.Navigation("AssetVersion");
+
+                    b.Navigation("Workspace");
                 });
 
             modelBuilder.Entity("AssetBlock.Domain.Core.Entities.AssetProcessingJob", b =>
@@ -2452,6 +3176,62 @@ namespace AssetBlock.Infrastructure.Migrations
                     b.Navigation("Asset");
 
                     b.Navigation("AssetVersion");
+                });
+
+            modelBuilder.Entity("AssetBlock.Domain.Core.Entities.AssetSellerEvidenceRevision", b =>
+                {
+                    b.HasOne("AssetBlock.Domain.Core.Entities.Asset", "Asset")
+                        .WithMany()
+                        .HasForeignKey("AssetId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("AssetBlock.Domain.Core.Entities.AssetVersion", "AssetVersion")
+                        .WithMany()
+                        .HasForeignKey("AssetId", "AssetVersionId")
+                        .HasPrincipalKey("AssetId", "Id")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("AssetBlock.Domain.Core.Entities.AssetDraftWorkspace", "Workspace")
+                        .WithMany()
+                        .HasForeignKey("AssetId", "WorkspaceId", "WorkspaceVersionScopeKey")
+                        .HasPrincipalKey("AssetId", "Id", "WorkspaceVersionScopeKey")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Asset");
+
+                    b.Navigation("AssetVersion");
+
+                    b.Navigation("Workspace");
+                });
+
+            modelBuilder.Entity("AssetBlock.Domain.Core.Entities.AssetSourceDeclarationRevision", b =>
+                {
+                    b.HasOne("AssetBlock.Domain.Core.Entities.Asset", "Asset")
+                        .WithMany()
+                        .HasForeignKey("AssetId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("AssetBlock.Domain.Core.Entities.AssetVersion", "AssetVersion")
+                        .WithMany()
+                        .HasForeignKey("AssetId", "AssetVersionId")
+                        .HasPrincipalKey("AssetId", "Id")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("AssetBlock.Domain.Core.Entities.AssetDraftWorkspace", "Workspace")
+                        .WithMany()
+                        .HasForeignKey("AssetId", "WorkspaceId", "WorkspaceVersionScopeKey")
+                        .HasPrincipalKey("AssetId", "Id", "WorkspaceVersionScopeKey")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Asset");
+
+                    b.Navigation("AssetVersion");
+
+                    b.Navigation("Workspace");
                 });
 
             modelBuilder.Entity("AssetBlock.Domain.Core.Entities.AssetTag", b =>
@@ -2570,6 +3350,11 @@ namespace AssetBlock.Infrastructure.Migrations
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
+                    b.HasOne("AssetBlock.Domain.Core.Entities.PublicationSnapshot", "PublicationSnapshot")
+                        .WithMany()
+                        .HasForeignKey("PublicationSnapshotId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
                     b.HasOne("AssetBlock.Domain.Core.Entities.User", "Seller")
                         .WithMany()
                         .HasForeignKey("SellerId")
@@ -2588,6 +3373,8 @@ namespace AssetBlock.Infrastructure.Migrations
                     b.Navigation("AssetVersion");
 
                     b.Navigation("CheckoutIntent");
+
+                    b.Navigation("PublicationSnapshot");
 
                     b.Navigation("Seller");
                 });
@@ -2617,6 +3404,26 @@ namespace AssetBlock.Infrastructure.Migrations
                     b.Navigation("CheckoutIntent");
 
                     b.Navigation("User");
+                });
+
+            modelBuilder.Entity("AssetBlock.Domain.Core.Entities.CodeAnalysisReportHeader", b =>
+                {
+                    b.HasOne("AssetBlock.Domain.Core.Entities.Asset", "Asset")
+                        .WithMany()
+                        .HasForeignKey("AssetId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("AssetBlock.Domain.Core.Entities.AssetVersion", "AssetVersion")
+                        .WithMany()
+                        .HasForeignKey("AssetId", "AssetVersionId")
+                        .HasPrincipalKey("AssetId", "Id")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Asset");
+
+                    b.Navigation("AssetVersion");
                 });
 
             modelBuilder.Entity("AssetBlock.Domain.Core.Entities.Collection", b =>
@@ -2658,6 +3465,91 @@ namespace AssetBlock.Infrastructure.Migrations
                         .IsRequired();
 
                     b.Navigation("User");
+                });
+
+            modelBuilder.Entity("AssetBlock.Domain.Core.Entities.JsonMutationIdempotencyRecord", b =>
+                {
+                    b.HasOne("AssetBlock.Domain.Core.Entities.User", "ActorUser")
+                        .WithMany()
+                        .HasForeignKey("ActorUserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("ActorUser");
+                });
+
+            modelBuilder.Entity("AssetBlock.Domain.Core.Entities.ModerationDecisionRecord", b =>
+                {
+                    b.HasOne("AssetBlock.Domain.Core.Entities.PublicationSnapshot", "PublicationSnapshot")
+                        .WithMany()
+                        .HasForeignKey("PublicationSnapshotId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("AssetBlock.Domain.Core.Entities.ModerationSubmission", "Submission")
+                        .WithMany()
+                        .HasForeignKey("SubmissionId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("PublicationSnapshot");
+
+                    b.Navigation("Submission");
+                });
+
+            modelBuilder.Entity("AssetBlock.Domain.Core.Entities.ModerationSubmission", b =>
+                {
+                    b.HasOne("AssetBlock.Domain.Core.Entities.Asset", "Asset")
+                        .WithMany()
+                        .HasForeignKey("AssetId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("AssetBlock.Domain.Core.Entities.AssetVersion", "AssetVersion")
+                        .WithMany()
+                        .HasForeignKey("AssetId", "AssetVersionId")
+                        .HasPrincipalKey("AssetId", "Id")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("AssetBlock.Domain.Core.Entities.CodeAnalysisReportHeader", "CodeAnalysisReportHeader")
+                        .WithMany()
+                        .HasForeignKey("AssetId", "AssetVersionId", "CodeAnalysisReportHeaderId")
+                        .HasPrincipalKey("AssetId", "AssetVersionId", "Id")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("AssetBlock.Domain.Core.Entities.ModerationSubmission", "PreviousSubmission")
+                        .WithMany()
+                        .HasForeignKey("AssetId", "AssetVersionId", "PreviousSubmissionId")
+                        .HasPrincipalKey("AssetId", "AssetVersionId", "Id")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("AssetBlock.Domain.Core.Entities.AssetDraftWorkspace", "Workspace")
+                        .WithMany()
+                        .HasForeignKey("AssetId", "WorkspaceId", "WorkspaceVersionScopeKey")
+                        .HasPrincipalKey("AssetId", "Id", "WorkspaceVersionScopeKey")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Asset");
+
+                    b.Navigation("AssetVersion");
+
+                    b.Navigation("CodeAnalysisReportHeader");
+
+                    b.Navigation("PreviousSubmission");
+
+                    b.Navigation("Workspace");
+                });
+
+            modelBuilder.Entity("AssetBlock.Domain.Core.Entities.ModerationSubmissionHistoryEntry", b =>
+                {
+                    b.HasOne("AssetBlock.Domain.Core.Entities.ModerationSubmission", "Submission")
+                        .WithMany()
+                        .HasForeignKey("SubmissionId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Submission");
                 });
 
             modelBuilder.Entity("AssetBlock.Domain.Core.Entities.Order", b =>
@@ -2714,6 +3606,11 @@ namespace AssetBlock.Infrastructure.Migrations
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
+                    b.HasOne("AssetBlock.Domain.Core.Entities.PublicationSnapshot", "PublicationSnapshot")
+                        .WithMany()
+                        .HasForeignKey("PublicationSnapshotId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
                     b.HasOne("AssetBlock.Domain.Core.Entities.User", "Seller")
                         .WithMany()
                         .HasForeignKey("SellerId")
@@ -2733,7 +3630,58 @@ namespace AssetBlock.Infrastructure.Migrations
 
                     b.Navigation("Order");
 
+                    b.Navigation("PublicationSnapshot");
+
                     b.Navigation("Seller");
+                });
+
+            modelBuilder.Entity("AssetBlock.Domain.Core.Entities.PaidCheckoutReconciliationHold", b =>
+                {
+                    b.HasOne("AssetBlock.Domain.Core.Entities.CheckoutIntent", "CheckoutIntent")
+                        .WithMany()
+                        .HasForeignKey("CheckoutIntentId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("CheckoutIntent");
+                });
+
+            modelBuilder.Entity("AssetBlock.Domain.Core.Entities.PublicationSnapshot", b =>
+                {
+                    b.HasOne("AssetBlock.Domain.Core.Entities.Asset", "Asset")
+                        .WithMany()
+                        .HasForeignKey("AssetId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("AssetBlock.Domain.Core.Entities.AssetVersion", "AssetVersion")
+                        .WithMany()
+                        .HasForeignKey("AssetId", "AssetVersionId")
+                        .HasPrincipalKey("AssetId", "Id")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("AssetBlock.Domain.Core.Entities.CodeAnalysisReportHeader", "CodeAnalysisReportHeader")
+                        .WithMany()
+                        .HasForeignKey("AssetId", "AssetVersionId", "CodeAnalysisReportHeaderId")
+                        .HasPrincipalKey("AssetId", "AssetVersionId", "Id")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("AssetBlock.Domain.Core.Entities.ModerationSubmission", "ModerationSubmission")
+                        .WithMany()
+                        .HasForeignKey("AssetId", "AssetVersionId", "ModerationSubmissionId")
+                        .HasPrincipalKey("AssetId", "AssetVersionId", "Id")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Asset");
+
+                    b.Navigation("AssetVersion");
+
+                    b.Navigation("CodeAnalysisReportHeader");
+
+                    b.Navigation("ModerationSubmission");
                 });
 
             modelBuilder.Entity("AssetBlock.Domain.Core.Entities.Purchase", b =>
@@ -2749,6 +3697,11 @@ namespace AssetBlock.Infrastructure.Migrations
                         .HasForeignKey("AssetBlock.Domain.Core.Entities.Purchase", "OrderLineId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
+
+                    b.HasOne("AssetBlock.Domain.Core.Entities.PublicationSnapshot", "PublicationSnapshot")
+                        .WithMany()
+                        .HasForeignKey("PublicationSnapshotId")
+                        .OnDelete(DeleteBehavior.Restrict);
 
                     b.HasOne("AssetBlock.Domain.Core.Entities.User", "User")
                         .WithMany("Purchases")
@@ -2768,6 +3721,8 @@ namespace AssetBlock.Infrastructure.Migrations
                     b.Navigation("AssetVersion");
 
                     b.Navigation("OrderLine");
+
+                    b.Navigation("PublicationSnapshot");
 
                     b.Navigation("User");
                 });

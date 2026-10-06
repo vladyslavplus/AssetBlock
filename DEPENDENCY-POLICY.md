@@ -1,7 +1,8 @@
 # Dependency policy
 
-AssetBlock allows third-party dependencies only when their licenses are approved
-by default or covered by an explicit, reviewed exception.
+AssetBlock admits product and retained runtime dependencies only when their
+licenses are approved by default or covered by an explicit, reviewed exception.
+Disposable local verification follows the bounded research scope below.
 
 ## Allowed by default (SPDX)
 
@@ -49,6 +50,20 @@ terms that appear in the distributed package). Ordinary exceptions authorize a
 non-allowlisted license without rewriting detected metadata.
 
 ## Security
+
+### Disposable research verification
+
+Local, disposable ML compatibility environments are development tools, not product
+dependency admission. Keep their requirements pinned, retain upstream license and
+notice files, and record a full environment audit under ignored `artifacts/`.
+Do not create per-install exception grants or commit machine-specific inventory,
+wheel reports, or audit snapshots for these environments. Unknown audit coverage
+must remain explicit; a skipped package is not a clean result.
+
+This scope excludes distribution, deployment, product images, private asset
+training, source-corpus rights, and the existing ScanCode approval gate. Before
+moving a dependency into those scopes, apply the ordinary license/exception
+policy above. Noncommercial use does not waive upstream license obligations.
 
 Governance checks fail on **High** and **Critical** vulnerabilities reported by:
 

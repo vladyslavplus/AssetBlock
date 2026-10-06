@@ -23,6 +23,9 @@ public class OrderLine
     public required string LicenseDisplayName { get; set; }
     public required string LicenseTerms { get; set; }
 
+    public Guid? PublicationSnapshotId { get; set; }
+
+    public PublicationSnapshot? PublicationSnapshot { get; set; }
     public Order Order { get; set; } = null!;
     public Asset Asset { get; set; } = null!;
     public AssetVersion AssetVersion { get; set; } = null!;

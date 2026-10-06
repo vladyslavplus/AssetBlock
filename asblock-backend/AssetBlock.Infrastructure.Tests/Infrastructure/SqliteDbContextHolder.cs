@@ -43,12 +43,28 @@ internal sealed class SqliteTestMigrationsSqlGenerator(
     IRelationalAnnotationProvider relationalAnnotationProvider)
     : SqliteMigrationsSqlGenerator(dependencies, relationalAnnotationProvider)
 {
+    private static readonly HashSet<string> _postgresScopeCheckConstraints =
+    [
+        "CK_asset_draft_workspaces_version_scope_key",
+        "CK_asset_material_metadata_revisions_revision_scope",
+        "CK_asset_source_declaration_revisions_revision_scope",
+        "CK_asset_seller_evidence_revisions_revision_scope"
+    ];
+
     protected override void Generate(
         CreateTableOperation operation,
         IModel? model,
         MigrationCommandListBuilder builder,
         bool terminate = true)
     {
+        var scopeChecks = operation.CheckConstraints
+            .Where(c => _postgresScopeCheckConstraints.Contains(c.Name))
+            .ToList();
+        foreach (AddCheckConstraintOperation constraint in scopeChecks)
+        {
+            operation.CheckConstraints.Remove(constraint);
+        }
+
         if (operation.Name == "asset_processing_jobs")
         {
             var targetConstraints = operation.CheckConstraints

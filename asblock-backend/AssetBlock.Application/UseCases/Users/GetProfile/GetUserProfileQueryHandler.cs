@@ -85,7 +85,8 @@ internal sealed class GetUserProfileQueryHandler(
             IsPublicProfile = user.IsPublicProfile,
             CreatedAt = user.CreatedAt,
             SocialLinks = links,
-            Role = includeEmail ? user.Role : null
+            Role = includeEmail ? user.Role : null,
+            RoleRevision = includeEmail ? user.RoleRevision : null
         };
     }
 }

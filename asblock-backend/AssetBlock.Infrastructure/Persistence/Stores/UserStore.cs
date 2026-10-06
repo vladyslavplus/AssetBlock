@@ -1,6 +1,8 @@
 using AssetBlock.Domain.Abstractions.Services;
 using AssetBlock.Domain.Core.Constants;
 using AssetBlock.Domain.Core.Dto.Email;
+using AssetBlock.Domain.Core.Dto.Paging;
+using AssetBlock.Domain.Core.Dto.Users;
 using AssetBlock.Domain.Core.Entities;
 using AssetBlock.Domain.Core.Exceptions;
 using Microsoft.EntityFrameworkCore;
@@ -170,5 +172,97 @@ internal sealed class UserStore(
         }
         dbContext.Users.Remove(user);
         await dbContext.SaveChangesAsync(cancellationToken);
+    }
+
+    public Task<UserPersistedRole?> GetPersistedRole(Guid userId, CancellationToken cancellationToken = default)
+    {
+        return dbContext.Users
+            .AsNoTracking()
+            .Where(u => u.Id == userId)
+            .Select(u => new UserPersistedRole(u.Id, u.Role, u.RoleRevision))
+            .FirstOrDefaultAsync(cancellationToken);
+    }
+
+    public async Task<UserPersistedRole?> LockAndReadPersistedRole(Guid userId, CancellationToken cancellationToken = default)
+    {
+        Guid lockedId = await dbContext.Database
+            .SqlQuery<Guid>($"""SELECT "Id" AS "Value" FROM users WHERE "Id" = {userId} FOR UPDATE""")
+            .FirstOrDefaultAsync(cancellationToken);
+
+        if (lockedId == Guid.Empty)
+        {
+            return null;
+        }
+
+        return await GetPersistedRole(userId, cancellationToken);
+    }
+
+    public async Task<(UserPersistedRole? First, UserPersistedRole? Second)> LockUsersForRoleUpdateInOrder(
+        Guid userIdA,
+        Guid userIdB,
+        CancellationToken cancellationToken = default)
+    {
+        (Guid firstId, Guid secondId) = userIdA.CompareTo(userIdB) <= 0
+            ? (userIdA, userIdB)
+            : (userIdB, userIdA);
+
+        UserPersistedRole? first = await LockAndReadPersistedRole(firstId, cancellationToken);
+        if (first is null)
+        {
+            return (null, null);
+        }
+
+        if (firstId == secondId)
+        {
+            return (first, first);
+        }
+
+        UserPersistedRole? second = await LockAndReadPersistedRole(secondId, cancellationToken);
+        return (first, second);
+    }
+
+    public async Task<bool> TryAssignRole(
+        Guid targetUserId,
+        string newRole,
+        long expectedRoleRevision,
+        CancellationToken cancellationToken = default)
+    {
+        DateTimeOffset now = _timeProvider.GetUtcNow();
+        var affected = await dbContext.Users
+            .Where(u => u.Id == targetUserId && u.RoleRevision == expectedRoleRevision)
+            .ExecuteUpdateAsync(s => s
+                .SetProperty(u => u.Role, newRole)
+                .SetProperty(u => u.RoleRevision, expectedRoleRevision + 1)
+                .SetProperty(u => u.UpdatedAt, now),
+                cancellationToken);
+
+        return affected > 0;
+    }
+
+    public async Task<PagedResult<AdminUserListItem>> ListForAdmin(
+        string? search,
+        int page,
+        int pageSize,
+        CancellationToken cancellationToken = default)
+    {
+        IQueryable<User> query = dbContext.Users.AsNoTracking();
+        if (!string.IsNullOrWhiteSpace(search))
+        {
+            var term = search.Trim();
+            query = query.Where(u =>
+                EF.Functions.ILike(u.Username, $"%{term}%")
+                || EF.Functions.ILike(u.Email, $"%{term}%"));
+        }
+
+        var total = await query.CountAsync(cancellationToken);
+        List<AdminUserListItem> items = await query
+            .OrderBy(u => u.Username)
+            .ThenBy(u => u.Id)
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
+            .Select(u => new AdminUserListItem(u.Id, u.Username, u.Email, u.Role, u.RoleRevision))
+            .ToListAsync(cancellationToken);
+
+        return new PagedResult<AdminUserListItem>(items, total, page, pageSize);
     }
 }

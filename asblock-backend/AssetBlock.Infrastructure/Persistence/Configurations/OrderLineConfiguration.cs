@@ -37,6 +37,12 @@ internal sealed class OrderLineConfiguration : IEntityTypeConfiguration<OrderLin
         builder.Property(l => l.LicenseTemplateVersion).IsRequired().HasMaxLength(32);
         builder.Property(l => l.LicenseDisplayName).IsRequired().HasMaxLength(128);
         builder.Property(l => l.LicenseTerms).IsRequired().HasMaxLength(16000);
+        builder.Property(l => l.PublicationSnapshotId);
+
+        builder.HasOne(l => l.PublicationSnapshot)
+            .WithMany()
+            .HasForeignKey(l => l.PublicationSnapshotId)
+            .OnDelete(DeleteBehavior.Restrict);
 
         foreach (var property in new[]
                  {

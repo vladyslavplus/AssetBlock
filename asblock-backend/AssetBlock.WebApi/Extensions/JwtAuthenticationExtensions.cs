@@ -1,6 +1,8 @@
 using System.Security.Claims;
 using System.Text;
+using AssetBlock.Domain.Abstractions.Services;
 using AssetBlock.Domain.Core.Constants;
+using AssetBlock.Domain.Core.Dto.Users;
 using AssetBlock.Domain.Core.Primitives.AppSettingsOptions;
 using AssetBlock.WebApi.Constants;
 using AssetBlock.WebApi.ProblemDetails;
@@ -44,22 +46,46 @@ internal static class JwtAuthenticationExtensions
 
                 options.Events = new JwtBearerEvents
                 {
-                    OnTokenValidated = ctx =>
+                    OnTokenValidated = async ctx =>
                     {
-                        // Reject hub-only tokens even if audience accidentally matches a future config change.
                         var tokenUse = ctx.Principal?.FindFirstValue(JwtClaimTypes.TOKEN_USE);
                         if (tokenUse == JwtClaimValues.TOKEN_USE_SIGNALR)
                         {
                             ctx.Fail("Hub tokens are not accepted by the REST API scheme.");
-                        }
-                        else
-                        {
-                            ILogger<JwtBearerEvents> logger = ctx.HttpContext.RequestServices.GetRequiredService<ILogger<JwtBearerEvents>>();
-                            var sub = ctx.Principal?.FindFirstValue(ClaimTypes.NameIdentifier);
-                            logger.LogDebug("JWT validated for subject {Subject}", sub);
+                            return;
                         }
 
-                        return Task.CompletedTask;
+                        var sub = ctx.Principal?.FindFirstValue(JwtClaimTypes.SUB)
+                            ?? ctx.Principal?.FindFirstValue(ClaimTypes.NameIdentifier);
+                        if (!Guid.TryParse(sub, out Guid userId))
+                        {
+                            ctx.Fail("Invalid token subject.");
+                            return;
+                        }
+
+                        IAuthenticatedUserRoleResolver roleResolver =
+                            ctx.HttpContext.RequestServices.GetRequiredService<IAuthenticatedUserRoleResolver>();
+                        UserPersistedRole? liveRole = await roleResolver.Resolve(userId, ctx.HttpContext.RequestAborted);
+                        if (liveRole is null)
+                        {
+                            ctx.Fail("User not found.");
+                            return;
+                        }
+
+                        if (ctx.Principal?.Identity is ClaimsIdentity identity)
+                        {
+                            Claim? existingRole = identity.FindFirst(JwtClaimTypes.ROLE);
+                            if (existingRole is not null)
+                            {
+                                identity.RemoveClaim(existingRole);
+                            }
+
+                            identity.AddClaim(new Claim(JwtClaimTypes.ROLE, liveRole.Role));
+                        }
+
+                        ILogger<JwtBearerEvents> logger =
+                            ctx.HttpContext.RequestServices.GetRequiredService<ILogger<JwtBearerEvents>>();
+                        logger.LogDebug("JWT validated for user {UserId} with live role", userId);
                     },
                     OnAuthenticationFailed = ctx =>
                     {
@@ -79,8 +105,7 @@ internal static class JwtAuthenticationExtensions
                         {
                             var hasAuth = ctx.Request.Headers.Authorization.Count > 0;
                             logger.LogDebug(
-                                "JWT challenge: {Path}, HasAuthorizationHeader={HasAuth}, Reason=missing_token",
-                                ctx.Request.Path,
+                                "JWT challenge HasAuthorizationHeader={HasAuth} reason=missing_token",
                                 hasAuth);
                         }
 

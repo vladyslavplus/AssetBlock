@@ -70,7 +70,8 @@ public sealed class JwtAuthenticationExtensionsTests
         (LogLevel Level, Exception? Exception, string Message) entry = recordingLogger.Entries.Single();
         entry.Level.Should().Be(LogLevel.Debug);
         entry.Exception.Should().BeNull();
-        entry.Message.Should().Contain("Reason=missing_token");
+        entry.Message.Should().Contain("reason=missing_token");
+        entry.Message.Should().NotContain("/api/protected");
     }
 
     private static WebApplication CreateApp(ILogger<JwtBearerEvents> logger)

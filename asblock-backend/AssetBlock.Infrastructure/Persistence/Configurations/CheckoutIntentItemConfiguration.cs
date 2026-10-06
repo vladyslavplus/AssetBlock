@@ -37,6 +37,12 @@ internal sealed class CheckoutIntentItemConfiguration : IEntityTypeConfiguration
         builder.Property(i => i.LicenseTemplateVersion).IsRequired().HasMaxLength(32);
         builder.Property(i => i.LicenseDisplayName).IsRequired().HasMaxLength(128);
         builder.Property(i => i.LicenseTerms).IsRequired().HasMaxLength(16000);
+        builder.Property(i => i.PublicationSnapshotId);
+
+        builder.HasOne(i => i.PublicationSnapshot)
+            .WithMany()
+            .HasForeignKey(i => i.PublicationSnapshotId)
+            .OnDelete(DeleteBehavior.Restrict);
 
         foreach (var property in new[]
                  {

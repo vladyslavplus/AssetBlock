@@ -1,4 +1,5 @@
 using AssetBlock.Domain.Core.Entities;
+using AssetBlock.Domain.Core.Enums;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 
@@ -19,6 +20,12 @@ internal sealed class PurchaseConfiguration : IEntityTypeConfiguration<Purchase>
         builder.Property(p => p.AssetVersionId).IsRequired();
         builder.Property(p => p.OrderLineId).IsRequired();
         builder.Property(p => p.PurchasedAt).IsRequired();
+        builder.Property(p => p.PublicationSnapshotId);
+
+        builder.HasOne(p => p.PublicationSnapshot)
+            .WithMany()
+            .HasForeignKey(p => p.PublicationSnapshotId)
+            .OnDelete(DeleteBehavior.Restrict);
 
         builder.HasOne(p => p.User)
             .WithMany(u => u.Purchases)

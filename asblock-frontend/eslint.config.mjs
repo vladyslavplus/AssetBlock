@@ -73,6 +73,7 @@ const eslintConfig = [
       'playwright-report/**',
       'test-results/**',
       'blob-report/**',
+      'artifacts/**',
     ],
   },
   ...nextCoreWebVitals,

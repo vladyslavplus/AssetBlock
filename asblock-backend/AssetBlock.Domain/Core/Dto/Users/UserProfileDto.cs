@@ -28,4 +28,7 @@ public record UserProfileDto
 
     /// <summary>Application role (e.g. Admin, User). Only when the caller views their own profile; otherwise null.</summary>
     public string? Role { get; init; }
+
+    /// <summary>Role assignment revision for optimistic concurrency. Own profile only.</summary>
+    public long? RoleRevision { get; init; }
 }

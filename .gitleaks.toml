@@ -12,6 +12,23 @@ useDefault = true
 id = "generic-api-key"
 
     [[rules.allowlists]]
+    description = "Synthetic nonfunctional token used to assert audit logs do not leak test input"
+    condition = "AND"
+    regexTarget = "secret"
+    paths = ['''(^|/)asblock-backend/AssetBlock\.Infrastructure\.Tests/Services/AuditWriterTests\.cs$''']
+    regexes = ['''^eyJhbGciOiJIUzI1NiJ9\.sentinel$''']
+
+    [[rules.allowlists]]
+    description = "Public tokenizer file SHA-256 values bound to the pinned UniXcoder revision, not credentials"
+    condition = "AND"
+    regexTarget = "secret"
+    paths = ['''(^|/)scripts/feasibility_pilot/config/model-trusted-identity\.json$''']
+    regexes = [
+      '''^44b6e7a4fd703a619b6f8c297a8799f71ac14fdcb7f2d1ad8d8211649abed5e4$''',
+      '''^c611b1f7d416eb001ee4f293d903ea8c88e703463f1d403f1866a0352743fd00$'''
+    ]
+
+    [[rules.allowlists]]
     description = "Confirmed false positive: embeddinggemma model digest fixture in BoundedQueryVectorCacheTests"
     condition = "AND"
     paths = [

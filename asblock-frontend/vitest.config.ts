@@ -16,7 +16,14 @@ export default defineConfig({
   test: {
     globals: false,
     setupFiles: ['./test/setup.ts'],
-    exclude: ['node_modules', '.next', 'e2e/**', 'playwright-report/**', 'test-results/**'],
+    exclude: [
+      'node_modules',
+      '.next',
+      'e2e/**',
+      'playwright-report/**',
+      'test-results/**',
+      'artifacts/**',
+    ],
     restoreMocks: true,
     clearMocks: true,
     mockReset: true,

@@ -1,0 +1,4 @@
+name: "AssetBlock CodeQL"
+paths-ignore:
+  - scripts/feasibility_pilot/fixtures/code/typescript/broken.ts
+  - scripts/feasibility_pilot/fixtures/code/javascript/broken.js

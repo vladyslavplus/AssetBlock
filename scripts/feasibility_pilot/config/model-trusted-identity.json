@@ -1,0 +1,25 @@
+{
+  "modelId": "microsoft/unixcoder-base-nine",
+  "modelRevision": "5f0dc256eb0904af496d427451da5d7f90261676",
+  "scope": "artifacts/feasibility_pilot/cache/models/unixcoder-base-nine",
+  "trustRemoteCode": false,
+  "localFilesOnly": true,
+  "pytorchModelBinSha256": "e28385bb916434983692dfdd57f5c78c64f92d4a26614965d1e9d150b4a37145",
+  "safetensorsConversionEvidence": "model.safetensors SHA-256 recorded after torch.load(weights_only=True) conversion from the pinned pytorch_model.bin above; not an independent upstream artifact.",
+  "fileHashes": {
+    "pytorch_model.bin": "e28385bb916434983692dfdd57f5c78c64f92d4a26614965d1e9d150b4a37145",
+    "model.safetensors": "d21f43dce25a2a87ed1e14826e68b0467f262926b6e5a9cf4c008a2518aa7ef9",
+    "config.json": "a7c07558348da020fb6055541fd593f21a6f0142a398da17bc452d50d3aef927",
+    "vocab.json": "81c76e8f61bb1df102044d9b3d72070e3b2ac4d484b087ecb23b8633d6874f4b",
+    "merges.txt": "3b84414c9f8804a621da0fd4bfe77104ef536c350baaaf3c99003356b0cc85f4",
+    "tokenizer_config.json": "44b6e7a4fd703a619b6f8c297a8799f71ac14fdcb7f2d1ad8d8211649abed5e4",
+    "special_tokens_map.json": "c611b1f7d416eb001ee4f293d903ea8c88e703463f1d403f1866a0352743fd00"
+  },
+  "boundTokenizerAndConfigFiles": [
+    "config.json",
+    "vocab.json",
+    "merges.txt",
+    "tokenizer_config.json",
+    "special_tokens_map.json"
+  ]
+}

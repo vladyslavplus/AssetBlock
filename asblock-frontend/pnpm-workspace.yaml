@@ -7,6 +7,7 @@ allowBuilds:
   unrs-resolver: true
 
 overrides:
+  'source-map-js@<1.2.2': '1.2.2'
   'browserslist@<=4.28.6': '4.28.7'
   'lodash@^4.0.0': '>=4.17.24 <5.0.0-0'
   'ws@^7.0.0': '>=7.5.11 <8.0.0-0'
@@ -21,6 +22,7 @@ overrides:
   'nanoid@^3.0.0': '>=3.3.18 <4.0.0-0'
   'sharp@^0.34.0': '>=0.35.4 <0.36.0-0'
   'sharp@^0.35.0': '>=0.35.4 <0.36.0-0'
+  '@humanfs/node': '0.16.8'
 
 patchedDependencies:
   braces@3.0.3: ../patches/braces@3.0.3.patch

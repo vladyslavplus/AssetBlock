@@ -47,6 +47,17 @@ public sealed class ApplicationDbContext(DbContextOptions<ApplicationDbContext> 
     public DbSet<UserRecommendationPreferences> UserRecommendationPreferences => Set<UserRecommendationPreferences>();
     public DbSet<UserTagAffinity> UserTagAffinities => Set<UserTagAffinity>();
     public DbSet<UserSourceClickAffinity> UserSourceClickAffinities => Set<UserSourceClickAffinity>();
+    public DbSet<AssetDraftWorkspace> AssetDraftWorkspaces => Set<AssetDraftWorkspace>();
+    public DbSet<AssetMaterialMetadataRevision> AssetMaterialMetadataRevisions => Set<AssetMaterialMetadataRevision>();
+    public DbSet<AssetSourceDeclarationRevision> AssetSourceDeclarationRevisions => Set<AssetSourceDeclarationRevision>();
+    public DbSet<AssetSellerEvidenceRevision> AssetSellerEvidenceRevisions => Set<AssetSellerEvidenceRevision>();
+    public DbSet<CodeAnalysisReportHeader> CodeAnalysisReportHeaders => Set<CodeAnalysisReportHeader>();
+    public DbSet<ModerationSubmission> ModerationSubmissions => Set<ModerationSubmission>();
+    public DbSet<ModerationSubmissionHistoryEntry> ModerationSubmissionHistoryEntries => Set<ModerationSubmissionHistoryEntry>();
+    public DbSet<PublicationSnapshot> PublicationSnapshots => Set<PublicationSnapshot>();
+    public DbSet<ModerationDecisionRecord> ModerationDecisionRecords => Set<ModerationDecisionRecord>();
+    public DbSet<JsonMutationIdempotencyRecord> JsonMutationIdempotencyRecords => Set<JsonMutationIdempotencyRecord>();
+    public DbSet<PaidCheckoutReconciliationHold> PaidCheckoutReconciliationHolds => Set<PaidCheckoutReconciliationHold>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
