@@ -3,6 +3,7 @@ using AssetBlock.Domain.Core.Dto.Bundles;
 using AssetBlock.Domain.Core.Dto.Paging;
 using AssetBlock.Domain.Core.Entities;
 using AssetBlock.Domain.Core.Enums;
+using AssetBlock.Infrastructure.Persistence.Publication;
 using Microsoft.EntityFrameworkCore;
 
 namespace AssetBlock.Infrastructure.Persistence.Stores;
@@ -88,15 +89,32 @@ internal sealed class BundleStore(ApplicationDbContext dbContext, TimeProvider? 
                                 i.Position,
                                 AssetAuthorId = i.Asset == null ? (Guid?)null : i.Asset.AuthorId,
                                 AssetDeletedAt = i.Asset == null ? null : i.Asset.DeletedAt,
-                                CurrentVersionNumber = i.Asset == null
+                                CurrentPublicationSnapshotId = i.Asset == null ? null : i.Asset.CurrentPublicationSnapshotId,
+                                CurrentVersionNumber = i.Asset == null || i.Asset.CurrentPublicationSnapshotId == null
                                     ? null
-                                    : i.Asset.Versions.Where(v => v.IsCurrent).Select(v => (int?)v.VersionNumber).FirstOrDefault(),
-                                LicenseCode = i.Asset == null
+                                    : i.Asset.Versions
+                                        .Where(v => v.Id == i.Asset.CurrentPublicationSnapshot!.AssetVersionId
+                                            && v.ProcessingStatus == AssetVersionProcessingStatus.READY)
+                                        .Select(v => (int?)v.VersionNumber)
+                                        .FirstOrDefault(),
+                                LicenseCode = i.Asset == null || i.Asset.CurrentPublicationSnapshotId == null
                                     ? null
-                                    : i.Asset.Versions.Where(v => v.IsCurrent).Select(v => (AssetLicenseCode?)v.LicenseCode).FirstOrDefault(),
-                                LicenseDisplayName = i.Asset == null
+                                    : i.Asset.Versions
+                                        .Where(v => v.Id == i.Asset.CurrentPublicationSnapshot!.AssetVersionId)
+                                        .Select(v => (AssetLicenseCode?)v.LicenseCode)
+                                        .FirstOrDefault(),
+                                LicenseDisplayName = i.Asset == null || i.Asset.CurrentPublicationSnapshotId == null
                                     ? null
-                                    : i.Asset.Versions.Where(v => v.IsCurrent).Select(v => v.LicenseDisplayName).FirstOrDefault()
+                                    : i.Asset.Versions
+                                        .Where(v => v.Id == i.Asset.CurrentPublicationSnapshot!.AssetVersionId)
+                                        .Select(v => v.LicenseDisplayName)
+                                        .FirstOrDefault(),
+                                SaleEligible = i.Asset != null
+                                    && i.AssetId != null
+                                    && i.Asset.DeletedAt == null
+                                    && i.Asset.AuthorId == b.SellerId
+                                    && PublicationEligibilityQuery.PublicCatalogAssets(dbContext)
+                                        .Any(a => a.Id == i.AssetId!.Value)
                             })
                             .ToList()
                     })
@@ -130,13 +148,17 @@ internal sealed class BundleStore(ApplicationDbContext dbContext, TimeProvider? 
             {
                 reason = "Asset owner mismatch";
             }
-            else if (i.CurrentVersionNumber is null)
+            else if (i.CurrentVersionNumber is null || i.CurrentPublicationSnapshotId is null)
             {
-                reason = "Current version missing";
+                reason = "Offering not approved for sale";
+            }
+            else if (!publicOnly || i.SaleEligible)
+            {
+                available = true;
             }
             else
             {
-                available = true;
+                reason = "Offering not approved for sale";
             }
 
             return new BundleItemDto(
@@ -408,18 +430,26 @@ internal sealed class BundleStore(ApplicationDbContext dbContext, TimeProvider? 
                                 {
                                     i.Asset.AuthorId,
                                     i.Asset.DeletedAt,
-                                    CurrentVersion = i.Asset.Versions
-                                        .Where(v => v.IsCurrent)
-                                        .Select(v => new
-                                        {
-                                            v.Id,
-                                            v.VersionNumber,
-                                            v.LicenseCode,
-                                            v.LicenseTemplateVersion,
-                                            v.LicenseDisplayName,
-                                            v.LicenseTerms
-                                        })
-                                        .FirstOrDefault()
+                                    i.Asset.CurrentPublicationSnapshotId,
+                                    OfferingVersion = i.Asset.CurrentPublicationSnapshotId == null
+                                        ? null
+                                        : i.Asset.Versions
+                                            .Where(v => v.Id == i.Asset.CurrentPublicationSnapshot!.AssetVersionId
+                                                && v.ProcessingStatus == AssetVersionProcessingStatus.READY
+                                                && v.ContentSha256 == i.Asset.CurrentPublicationSnapshot.ContentSha256)
+                                            .Select(v => new
+                                            {
+                                                v.Id,
+                                                v.VersionNumber,
+                                                v.LicenseCode,
+                                                v.LicenseTemplateVersion,
+                                                v.LicenseDisplayName,
+                                                v.LicenseTerms,
+                                                PublicationSnapshotId = i.Asset.CurrentPublicationSnapshotId!.Value
+                                            })
+                                            .FirstOrDefault(),
+                                    SaleEligible = PublicationEligibilityQuery.PublicCatalogAssets(dbContext)
+                                        .Any(a => a.Id == i.AssetId!.Value)
                                 }
                             })
                             .ToList()
@@ -442,7 +472,8 @@ internal sealed class BundleStore(ApplicationDbContext dbContext, TimeProvider? 
                 || i.Asset is null
                 || i.Asset.DeletedAt != null
                 || i.Asset.AuthorId != snapshot.SellerId
-                || i.Asset.CurrentVersion is null))
+                || i.Asset.OfferingVersion is null
+                || !i.Asset.SaleEligible))
         {
             return null;
         }
@@ -457,15 +488,16 @@ internal sealed class BundleStore(ApplicationDbContext dbContext, TimeProvider? 
             revision.ListPriceTotal,
             items.Select(i => new BundleCheckoutItemSnapshot(
                 i.AssetId!.Value,
-                i.Asset!.CurrentVersion!.Id,
+                i.Asset!.OfferingVersion!.Id,
+                i.Asset.OfferingVersion.PublicationSnapshotId,
                 i.Position,
                 i.AssetTitleSnapshot,
                 i.ListPriceSnapshot,
-                i.Asset.CurrentVersion.VersionNumber,
-                i.Asset.CurrentVersion.LicenseCode,
-                i.Asset.CurrentVersion.LicenseTemplateVersion,
-                i.Asset.CurrentVersion.LicenseDisplayName,
-                i.Asset.CurrentVersion.LicenseTerms)).ToList());
+                i.Asset.OfferingVersion.VersionNumber,
+                i.Asset.OfferingVersion.LicenseCode,
+                i.Asset.OfferingVersion.LicenseTemplateVersion,
+                i.Asset.OfferingVersion.LicenseDisplayName,
+                i.Asset.OfferingVersion.LicenseTerms)).ToList());
     }
 
     public async Task<bool> TryRestore(Guid id, Guid sellerId, DateTimeOffset now, CancellationToken cancellationToken = default)
@@ -530,7 +562,8 @@ internal sealed class BundleStore(ApplicationDbContext dbContext, TimeProvider? 
                     || i.Asset == null
                     || i.Asset.DeletedAt != null
                     || i.Asset.AuthorId != b.SellerId
-                    || !i.Asset.Versions.Any(v => v.IsCurrent))));
+                    || !PublicationEligibilityQuery.PublicCatalogAssets(dbContext)
+                        .Any(a => a.Id == i.AssetId!.Value))));
     }
 
     private async Task<bool> IsCurrentRevisionAvailable(Guid bundleId, CancellationToken cancellationToken)

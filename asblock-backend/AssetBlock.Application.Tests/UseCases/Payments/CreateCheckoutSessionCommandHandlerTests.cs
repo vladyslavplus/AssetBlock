@@ -41,6 +41,12 @@ public class CreateCheckoutSessionCommandHandlerTests
                 Arg.Any<string>(),
                 Arg.Any<CancellationToken>())
             .Returns(true);
+        _assetStoreMock.IsPinnedSaleOfferingValid(
+                Arg.Any<Guid>(),
+                Arg.Any<Guid>(),
+                Arg.Any<Guid>(),
+                Arg.Any<CancellationToken>())
+            .Returns(true);
         _assetStoreMock.GetForUpdate(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
             .Returns(ci => new Asset
             {
@@ -49,12 +55,19 @@ public class CreateCheckoutSessionCommandHandlerTests
                 CategoryId = Guid.NewGuid(),
                 Title = "locked"
             });
+        _assetStoreMock.IsPinnedSaleOfferingValid(
+                Arg.Any<Guid>(),
+                Arg.Any<Guid>(),
+                Arg.Any<Guid>(),
+                Arg.Any<CancellationToken>())
+            .Returns(true);
         unitOfWorkMock.ExecuteInTransaction(Arg.Any<Func<CancellationToken, Task>>(), Arg.Any<CancellationToken>())
             .Returns(call => call.Arg<Func<CancellationToken, Task>>()(CancellationToken.None));
 
         var orchestrator = new CheckoutSessionOrchestrator(
             _paymentServiceMock,
             _checkoutIntentStoreMock,
+            _assetStoreMock,
             unitOfWorkMock,
             NullLogger<CheckoutSessionOrchestrator>.Instance);
 
@@ -397,6 +410,7 @@ public class CreateCheckoutSessionCommandHandlerTests
                     CheckoutIntentId = intentId,
                     AssetId = snapshot.AssetId,
                     AssetVersionId = snapshot.AssetVersionId,
+                    PublicationSnapshotId = snapshot.PublicationSnapshotId,
                     SellerId = snapshot.AuthorId,
                     Position = 1,
                     AssetTitleSnapshot = snapshot.Title,
@@ -420,9 +434,13 @@ public class CreateCheckoutSessionCommandHandlerTests
         new(
             AssetId: assetId,
             AssetVersionId: Guid.NewGuid(),
+            PublicationSnapshotId: Guid.NewGuid(),
             AuthorId: authorId ?? Guid.NewGuid(),
             Title: "Test Asset",
             Description: null,
+            CategoryId: Guid.NewGuid(),
+            CategoryName: "Category",
+            Tags: [],
             Price: price,
             DeletedAt: deletedAt,
             VersionNumber: 1,

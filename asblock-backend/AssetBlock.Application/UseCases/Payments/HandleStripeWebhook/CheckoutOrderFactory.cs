@@ -24,6 +24,7 @@ internal sealed class CheckoutOrderFactory : ICheckoutOrderFactory
                 OrderId = orderId,
                 AssetId = item.AssetId,
                 AssetVersionId = item.AssetVersionId,
+                PublicationSnapshotId = item.PublicationSnapshotId,
                 SellerId = item.SellerId,
                 Position = item.Position,
                 AssetTitleSnapshot = item.AssetTitleSnapshot,
@@ -42,6 +43,7 @@ internal sealed class CheckoutOrderFactory : ICheckoutOrderFactory
                 UserId = verified.UserId,
                 AssetId = item.AssetId,
                 AssetVersionId = item.AssetVersionId,
+                PublicationSnapshotId = item.PublicationSnapshotId,
                 OrderLineId = lineId,
                 PurchasedAt = purchasedAt
             });

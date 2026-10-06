@@ -82,4 +82,12 @@ public interface ICheckoutIntentStore
     /// Never deletes pending intents or intents linked to orders.
     /// </summary>
     Task DeleteTerminalUnpaidReferencingAsset(Guid assetId, CancellationToken cancellationToken = default);
+
+    /// <summary>Locks the checkout intent row for paid fulfillment within the caller's transaction.</summary>
+    Task<CheckoutIntent?> LockForFulfillment(Guid id, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// True when a provider-attached checkout intent still references the asset without a completed order or open hold.
+    /// </summary>
+    Task<bool> HasProviderBoundUnresolvedCheckoutReference(Guid assetId, CancellationToken cancellationToken = default);
 }

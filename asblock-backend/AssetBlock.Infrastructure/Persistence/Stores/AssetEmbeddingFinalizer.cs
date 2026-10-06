@@ -5,6 +5,8 @@ using AssetBlock.Domain.Core;
 using AssetBlock.Domain.Core.Constants;
 using AssetBlock.Domain.Core.Dto;
 using AssetBlock.Domain.Core.Enums;
+using AssetBlock.Domain.Core.Publication;
+using AssetBlock.Infrastructure.Persistence.Publication;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Storage;
 using Microsoft.Extensions.Logging;
@@ -121,47 +123,38 @@ public sealed class AssetEmbeddingFinalizer(
             return EmbeddingFinalizationStatus.NO_OP_STALE_OR_SUPERCEDED;
         }
 
-        // 3. Verify current version is READY
-        List<Guid> readyVersions = await dbContext.Database.SqlQueryRaw<Guid>(
-            """
-            SELECT "Id" AS "Value"
-            FROM asset_versions
-            WHERE "AssetId" = {0} AND "IsCurrent" = true AND "ProcessingStatus" = {1}
-            """, parameters.AssetId, VERSION_STATUS_READY).ToListAsync(cancellationToken);
+        var approvedTarget = await PublicationEligibilityQuery.PublicCatalogAssets(dbContext)
+            .Where(a => a.Id == parameters.AssetId)
+            .Select(a => new
+            {
+                VersionId = a.CurrentPublicationSnapshot!.AssetVersionId,
+                MetadataJson = a.CurrentPublicationSnapshot!.ApprovedMetadataJson
+            })
+            .FirstOrDefaultAsync(cancellationToken);
 
-        if (readyVersions.Count == 0)
+        if (approvedTarget is null
+            || approvedTarget.VersionId != parameters.AssetVersionId
+            || approvedTarget.VersionId != job.AssetVersionId
+            || !ApprovedPublicationMetadata.TryReadPublicProjection(
+                approvedTarget.MetadataJson,
+                out ApprovedPublicationMetadata.PublicProjection publication))
         {
             await MarkJobSucceededInternal(parameters.JobId, parameters, dbNow, cancellationToken);
             await tx.CommitAsync(cancellationToken);
             return EmbeddingFinalizationStatus.NO_OP_STALE_OR_SUPERCEDED;
         }
 
-        // 4. Re-verify canonical metadata hash from database
-        string? categoryName = null;
-        if (asset.CategoryId.HasValue)
-        {
-            categoryName = await dbContext.Database.SqlQueryRaw<string>(
-                """
-                SELECT "Name" AS "Value"
-                FROM categories
-                WHERE "Id" = {0}
-                """, asset.CategoryId.Value).FirstOrDefaultAsync(cancellationToken);
-        }
-
-        List<string> tagNames = await dbContext.Database.SqlQueryRaw<string>(
-            """
-            SELECT t."Name" AS "Value"
-            FROM tags t
-            JOIN asset_tags at ON at."TagId" = t."Id"
-            WHERE at."AssetId" = {0}
-            ORDER BY t."Name"
-            """, parameters.AssetId).ToListAsync(cancellationToken);
+        var categoryName = await dbContext.Categories
+            .AsNoTracking()
+            .Where(c => c.Id == publication.CategoryId)
+            .Select(c => c.Name)
+            .FirstOrDefaultAsync(cancellationToken);
 
         CanonicalPublicMetadataResult canonical = AssetPublicMetadataCanonicalizer.Canonicalize(
-            asset.Title,
-            asset.Description,
+            publication.Title,
+            publication.Description,
             categoryName,
-            tagNames);
+            publication.Tags);
 
         if (!string.Equals(canonical.ContentHash, parameters.ContentHash, StringComparison.OrdinalIgnoreCase))
         {

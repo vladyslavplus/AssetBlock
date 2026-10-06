@@ -106,6 +106,7 @@ internal sealed class CreateBundleCheckoutSessionCommandHandler(
                 return new CheckoutDraftItem(
                     i.AssetId,
                     i.AssetVersionId,
+                    i.PublicationSnapshotId,
                     snapshot.SellerId,
                     i.Position,
                     i.AssetTitle,

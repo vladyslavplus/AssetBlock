@@ -7,8 +7,10 @@ using AssetBlock.Domain.Core;
 using AssetBlock.Domain.Core.Dto;
 using AssetBlock.Domain.Core.Enums;
 using AssetBlock.Domain.Core.Primitives.AppSettingsOptions;
+using AssetBlock.Domain.Core.Publication;
 using AssetBlock.Infrastructure.Observability;
 using AssetBlock.Infrastructure.Persistence;
+using AssetBlock.Infrastructure.Persistence.Publication;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Storage;
 using Microsoft.Extensions.Logging;
@@ -133,27 +135,18 @@ internal sealed class EmbeddingBackfillCoordinator(
         while (enqueuedCount < batchLimit && candidatesScannedThisCycle < maxCandidatesToScan)
         {
             var limit = Math.Min(batchLimit, maxCandidatesToScan - candidatesScannedThisCycle);
-            List<Guid> eligibleAssetIds = await dbContext.Database.SqlQueryRaw<Guid>(
-                """
-                SELECT a."Id" AS "Value"
-                FROM assets a
-                JOIN asset_versions v ON v."AssetId" = a."Id" AND v."IsCurrent" = true AND v."ProcessingStatus" = {0}
-                WHERE a."DeletedAt" IS NULL
-                  AND NOT EXISTS (
-                      SELECT 1
-                      FROM asset_embeddings ae
-                      WHERE ae."AssetId" = a."Id"
-                        AND ae."ModelKey" = {1}
-                        AND ae."SourceRevision" >= a."SearchRevision"
-                  )
-                ORDER BY a."SearchRevision" DESC, a."UpdatedAt" DESC, a."Id" DESC
-                OFFSET {2}
-                LIMIT {3}
-                """,
-                VERSION_STATUS_READY,
-                modelKey,
-                currentOffset,
-                limit).ToListAsync(cancellationToken);
+            List<Guid> eligibleAssetIds = await PublicationEligibilityQuery.PublicCatalogAssets(dbContext)
+                .Where(a => !dbContext.AssetEmbeddings.Any(ae =>
+                    ae.AssetId == a.Id
+                    && ae.ModelKey == modelKey
+                    && ae.SourceRevision >= a.SearchRevision))
+                .OrderByDescending(a => a.SearchRevision)
+                .ThenByDescending(a => a.UpdatedAt)
+                .ThenByDescending(a => a.Id)
+                .Skip(currentOffset)
+                .Take(limit)
+                .Select(a => a.Id)
+                .ToListAsync(cancellationToken);
 
             if (eligibleAssetIds.Count == 0)
             {
@@ -178,46 +171,39 @@ internal sealed class EmbeddingBackfillCoordinator(
                     break;
                 }
 
-                var assetData = await dbContext.Assets
-                    .AsNoTracking()
-                    .Where(a => a.Id == assetId && a.DeletedAt == null)
+                var approvedTarget = await PublicationEligibilityQuery.PublicCatalogAssets(dbContext)
+                    .Where(a => a.Id == assetId)
                     .Select(a => new
                     {
                         a.SearchRevision,
-                        a.Title,
-                        a.Description,
-                        CategoryName = a.Category.Name
+                        VersionId = a.CurrentPublicationSnapshot!.AssetVersionId,
+                        MetadataJson = a.CurrentPublicationSnapshot!.ApprovedMetadataJson
                     })
                     .FirstOrDefaultAsync(cancellationToken);
 
-                if (assetData == null)
+                if (approvedTarget is null
+                    || !ApprovedPublicationMetadata.TryReadPublicProjection(
+                        approvedTarget.MetadataJson,
+                        out ApprovedPublicationMetadata.PublicProjection publication))
                 {
                     continue;
                 }
 
-                Guid? readyVersionId = await dbContext.AssetVersions
+                var categoryName = await dbContext.Categories
                     .AsNoTracking()
-                    .Where(v => v.AssetId == assetId && v.IsCurrent && v.ProcessingStatus == AssetVersionProcessingStatus.READY)
-                    .Select(v => (Guid?)v.Id)
+                    .Where(c => c.Id == publication.CategoryId)
+                    .Select(c => c.Name)
                     .FirstOrDefaultAsync(cancellationToken);
-
-                if (!readyVersionId.HasValue)
+                if (categoryName is null)
                 {
                     continue;
                 }
-
-                List<string> tagNames = await dbContext.AssetTags
-                    .AsNoTracking()
-                    .Where(at => at.AssetId == assetId)
-                    .OrderBy(at => at.Tag.Name)
-                    .Select(at => at.Tag.Name)
-                    .ToListAsync(cancellationToken);
 
                 CanonicalPublicMetadataResult canonical = AssetPublicMetadataCanonicalizer.Canonicalize(
-                    assetData.Title,
-                    assetData.Description,
-                    assetData.CategoryName,
-                    tagNames);
+                    publication.Title,
+                    publication.Description,
+                    categoryName,
+                    publication.Tags);
 
                 // 1. Check if there is already an active job for this exact (AssetId, ModelKey, ContentHash) identity tuple
                 var hasActiveJob = await dbContext.AssetProcessingJobs
@@ -256,15 +242,15 @@ internal sealed class EmbeddingBackfillCoordinator(
 
                 var payload = new EmbeddingGenerationPayload(
                     assetId,
-                    readyVersionId.Value,
-                    assetData.SearchRevision,
+                    approvedTarget.VersionId,
+                    approvedTarget.SearchRevision,
                     canonical.ContentHash,
                     modelKey,
                     AssetPublicMetadataCanonicalizer.CONTENT_SCHEMA_VERSION);
 
                 Guid jobId = await jobStore.Enqueue(
                     assetId,
-                    readyVersionId.Value,
+                    approvedTarget.VersionId,
                     AssetProcessingJobType.EMBEDDING_GENERATION,
                     definitionVersion: 1,
                     initialDelay: TimeSpan.Zero,

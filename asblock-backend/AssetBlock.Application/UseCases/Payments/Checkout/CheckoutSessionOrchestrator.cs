@@ -14,6 +14,7 @@ namespace AssetBlock.Application.UseCases.Payments.Checkout;
 internal sealed class CheckoutSessionOrchestrator(
     IPaymentService paymentService,
     ICheckoutIntentStore checkoutIntentStore,
+    IAssetStore assetStore,
     IUnitOfWork unitOfWork,
     ILogger<CheckoutSessionOrchestrator> logger,
     TimeProvider? timeProvider = null)
@@ -68,6 +69,7 @@ internal sealed class CheckoutSessionOrchestrator(
                         CheckoutIntentId = intentId,
                         AssetId = i.AssetId,
                         AssetVersionId = i.AssetVersionId,
+                        PublicationSnapshotId = i.PublicationSnapshotId,
                         SellerId = i.SellerId,
                         Position = i.Position,
                         AssetTitleSnapshot = i.AssetTitleSnapshot,
@@ -175,6 +177,28 @@ internal sealed class CheckoutSessionOrchestrator(
         DateTimeOffset now,
         CancellationToken cancellationToken)
     {
+        foreach (CheckoutIntentItem item in intent.Items)
+        {
+            if (!item.PublicationSnapshotId.HasValue)
+            {
+                logger.LogWarning(
+                    "Checkout intent {CheckoutIntentId} item {AssetId} has no pinned publication snapshot",
+                    intent.Id,
+                    item.AssetId);
+                return Result.NotFound(ErrorCodes.ERR_ASSET_NOT_FOUND);
+            }
+
+            var stillValid = await assetStore.IsPinnedSaleOfferingValid(
+                item.AssetId,
+                item.AssetVersionId,
+                item.PublicationSnapshotId.Value,
+                cancellationToken);
+            if (!stillValid)
+            {
+                return Result.NotFound(ErrorCodes.ERR_ASSET_NOT_FOUND);
+            }
+        }
+
         if (!string.IsNullOrWhiteSpace(intent.StripeSessionId))
         {
             StripeCheckoutSessionSnapshot session;

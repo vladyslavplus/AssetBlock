@@ -6,6 +6,7 @@ using AssetBlock.Domain.Core.Enums;
 using AssetBlock.Infrastructure.Persistence;
 using AssetBlock.Infrastructure.Persistence.Stores;
 using AssetBlock.Infrastructure.Tests.Infrastructure;
+using Microsoft.EntityFrameworkCore;
 
 namespace AssetBlock.Infrastructure.Tests.Persistence.Stores;
 
@@ -69,6 +70,9 @@ public sealed class AssetStoreTests
         };
         db.AssetVersions.Add(version);
         await db.SaveChangesAsync();
+        User author = await db.Users.SingleAsync(u => u.Id == authorId);
+        Category category = await db.Categories.SingleAsync(c => c.Id == catId);
+        await TrustedPublicationFixture.AttachTrustedApprovedPublication(db, asset, version, author, category);
 
         Asset? loaded = await sut.GetById(asset.Id);
         loaded!.Title.Should().Be("Title");
@@ -89,7 +93,7 @@ public sealed class AssetStoreTests
         (await sut.HasAssetTag(asset.Id, tag.Id)).Should().BeTrue();
         (await sut.RemoveTag(asset.Id, tag.Id)).Should().BeTrue();
 
-        await sut.Delete(asset.Id);
+        await sut.SoftDelete(asset.Id, DateTimeOffset.UtcNow);
         (await sut.GetById(asset.Id)).Should().BeNull();
     }
 

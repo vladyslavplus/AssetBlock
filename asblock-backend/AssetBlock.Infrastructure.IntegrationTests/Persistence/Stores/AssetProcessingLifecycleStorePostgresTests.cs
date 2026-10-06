@@ -248,14 +248,13 @@ public sealed class AssetProcessingLifecycleStorePostgresTests(PostgresFixture f
 
         success.Should().BeTrue();
 
-        // Candidate (v2) should be READY and IsCurrent = true
+        // Candidate (v2) should be READY without automatic publication promotion.
         AssetVersion candidate = await db.AssetVersions.AsNoTracking().FirstAsync(v => v.Id == v2.Id);
         candidate.ProcessingStatus.Should().Be(AssetVersionProcessingStatus.READY);
-        candidate.IsCurrent.Should().BeTrue();
+        candidate.IsCurrent.Should().BeFalse();
 
-        // Previous current (v1) should now be IsCurrent = false
         AssetVersion previous = await db.AssetVersions.AsNoTracking().FirstAsync(v => v.Id == v1.Id);
-        previous.IsCurrent.Should().BeFalse();
+        previous.IsCurrent.Should().BeTrue();
 
         // MALWARE_SCAN job is SUCCEEDED
         AssetProcessingJob job = await db.AssetProcessingJobs.AsNoTracking().FirstAsync(j => j.Id == claimedJob.JobId);

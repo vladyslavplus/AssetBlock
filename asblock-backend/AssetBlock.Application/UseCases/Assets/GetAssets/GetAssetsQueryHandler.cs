@@ -54,7 +54,7 @@ internal sealed class GetAssetsQueryHandler(
         CancellationToken cancellationToken)
     {
         var key = CacheKeys.AssetsList(request);
-        CatalogPageResult<AssetListItem>? cached = await cache.Get<CatalogPageResult<AssetListItem>>(key, cancellationToken);
+        CatalogPageResult<AssetListItem>? cached = await TryGetValidatedCatalogCache(key, cancellationToken);
         if (cached is not null)
         {
             logger?.LogDebug("Asset list cache hit for mode {Mode}", "lexical");
@@ -101,7 +101,7 @@ internal sealed class GetAssetsQueryHandler(
         var hybridKey = CacheKeys.AssetsListHybrid(request, modelKey);
 
         // Check cached hybrid result (2 min)
-        CatalogPageResult<AssetListItem>? cachedHybrid = await cache.Get<CatalogPageResult<AssetListItem>>(hybridKey, cancellationToken);
+        CatalogPageResult<AssetListItem>? cachedHybrid = await TryGetValidatedCatalogCache(hybridKey, cancellationToken);
         if (cachedHybrid is not null)
         {
             logger?.LogDebug("Asset list cache hit for mode {Mode}", "hybrid");
@@ -211,7 +211,7 @@ internal sealed class GetAssetsQueryHandler(
     {
         var fallbackKey = CacheKeys.AssetsListLexicalFallback(request);
 
-        CatalogPageResult<AssetListItem>? cached = await cache.Get<CatalogPageResult<AssetListItem>>(fallbackKey, cancellationToken);
+        CatalogPageResult<AssetListItem>? cached = await TryGetValidatedCatalogCache(fallbackKey, cancellationToken);
         if (cached is not null)
         {
             logger?.LogDebug("Asset list cache hit for mode {Mode}", "lexical-fallback");
@@ -223,5 +223,31 @@ internal sealed class GetAssetsQueryHandler(
 
         await cache.Set(fallbackKey, normalized, _lexicalFallbackCacheExpiration, cancellationToken);
         return Result.Success(normalized);
+    }
+
+    private async Task<CatalogPageResult<AssetListItem>?> TryGetValidatedCatalogCache(
+        string key,
+        CancellationToken cancellationToken)
+    {
+        CatalogPageResult<AssetListItem>? cached = await cache.Get<CatalogPageResult<AssetListItem>>(key, cancellationToken);
+        if (cached is null)
+        {
+            return null;
+        }
+
+        if (cached.Items.Count == 0)
+        {
+            return cached;
+        }
+
+        IReadOnlySet<Guid> visibleIds = await assetStore.FilterPublicCatalogAssetIds(
+            cached.Items.Select(i => i.Id).ToList(),
+            cancellationToken);
+        if (visibleIds.Count == cached.Items.Count && cached.Items.All(i => visibleIds.Contains(i.Id)))
+        {
+            return cached;
+        }
+
+        return null;
     }
 }

@@ -85,6 +85,16 @@ internal static class AssetVersionsSeed
         }
 
         await db.SaveChangesAsync();
+        User author = await db.Users.SingleAsync(u => u.Id == authorId);
+        List<AssetVersion> readyVersions = await db.AssetVersions
+            .Where(v => v.AssetId == assetId && v.ProcessingStatus == AssetVersionProcessingStatus.READY)
+            .OrderBy(v => v.VersionNumber)
+            .ToListAsync();
+        foreach (AssetVersion readyVersion in readyVersions)
+        {
+            await TrustedPublicationFixture.AttachTrustedApprovedPublication(db, asset, readyVersion, author, category);
+        }
+
         return (assetId, versionIds);
     }
 

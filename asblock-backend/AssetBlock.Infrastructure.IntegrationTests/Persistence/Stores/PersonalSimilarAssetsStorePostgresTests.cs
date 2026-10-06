@@ -26,6 +26,7 @@ public sealed class PersonalSimilarAssetsStorePostgresTests(PostgresFixture fixt
         AddReadyAsset(db, author, category, "First", ratingAverage: 5, tags: [shared]);
         AddReadyAsset(db, author, category, "Second", ratingAverage: 1, tags: [shared]);
         await db.SaveChangesAsync();
+        await EnsurePublicCatalog(db);
         User user = TestData.CreateUser("buyer", "buyer@example.test");
         db.Users.Add(user);
         await db.SaveChangesAsync();
@@ -54,6 +55,7 @@ public sealed class PersonalSimilarAssetsStorePostgresTests(PostgresFixture fixt
         Asset less = AddReadyAsset(db, author, category, "Less");
         Asset foreign = AddReadyAsset(db, author, category, "Foreign");
         await db.SaveChangesAsync();
+        await EnsurePublicCatalog(db);
         User user = TestData.CreateUser("buyer", "buyer@example.test");
         db.Users.Add(user);
         await db.SaveChangesAsync();
@@ -93,6 +95,7 @@ public sealed class PersonalSimilarAssetsStorePostgresTests(PostgresFixture fixt
         AddReadyAsset(db, author, category, "HistoryMatch", ratingAverage: 1, tags: [historyTag]);
         Asset historySource = AddReadyAsset(db, author, category, "HistorySource", tags: [historyTag]);
         await db.SaveChangesAsync();
+        await EnsurePublicCatalog(db);
         User user = TestData.CreateUser("buyer", "buyer@example.test");
         db.Users.Add(user);
         await db.SaveChangesAsync();
@@ -130,6 +133,7 @@ public sealed class PersonalSimilarAssetsStorePostgresTests(PostgresFixture fixt
         Asset historyA = AddReadyAsset(db, author, category, "HistoryA", ratingAverage: 1, tags: [tagA]);
         Asset historyB = AddReadyAsset(db, author, category, "HistoryB", tags: [tagB]);
         await db.SaveChangesAsync();
+        await EnsurePublicCatalog(db);
         User user = TestData.CreateUser("buyer", "buyer@example.test");
         db.Users.Add(user);
         await db.SaveChangesAsync();
@@ -170,6 +174,7 @@ public sealed class PersonalSimilarAssetsStorePostgresTests(PostgresFixture fixt
         AddReadyAsset(db, author, category, "First", ratingAverage: 5);
         Asset second = AddReadyAsset(db, author, category, "Second", ratingAverage: 1);
         await db.SaveChangesAsync();
+        await EnsurePublicCatalog(db);
         User user = TestData.CreateUser("buyer", "buyer@example.test");
         db.Users.Add(user);
         await db.SaveChangesAsync();
@@ -200,6 +205,7 @@ public sealed class PersonalSimilarAssetsStorePostgresTests(PostgresFixture fixt
         Asset alpha = AddReadyAsset(db, author, category, "Alpha");
         Asset beta = AddReadyAsset(db, author, category, "Beta");
         await db.SaveChangesAsync();
+        await EnsurePublicCatalog(db);
         User first = TestData.CreateUser("first", "first@example.test");
         User second = TestData.CreateUser("second", "second@example.test");
         db.Users.AddRange(first, second);
@@ -233,6 +239,7 @@ public sealed class PersonalSimilarAssetsStorePostgresTests(PostgresFixture fixt
         Asset clicked = AddReadyAsset(db, author, category, "Clicked", ratingAverage: 1);
         AddReadyAsset(db, author, category, "Rated", ratingAverage: 5);
         await db.SaveChangesAsync();
+        await EnsurePublicCatalog(db);
         User user = TestData.CreateUser("buyer", "buyer@example.test");
         db.Users.Add(user);
         await db.SaveChangesAsync();
@@ -260,6 +267,7 @@ public sealed class PersonalSimilarAssetsStorePostgresTests(PostgresFixture fixt
         Asset personal = AddReadyAsset(db, author, category, "Personal");
         AddReadyAsset(db, author, category, "Other");
         await db.SaveChangesAsync();
+        await EnsurePublicCatalog(db);
         User user = TestData.CreateUser("buyer", "buyer@example.test");
         db.Users.Add(user);
         await db.SaveChangesAsync();
@@ -288,6 +296,7 @@ public sealed class PersonalSimilarAssetsStorePostgresTests(PostgresFixture fixt
         Asset source = AddReadyAsset(db, author, category, "Source");
         Asset clicked = AddReadyAsset(db, author, category, "Clicked");
         await db.SaveChangesAsync();
+        await EnsurePublicCatalog(db);
         User user = TestData.CreateUser("buyer", "buyer@example.test");
         db.Users.Add(user);
         await db.SaveChangesAsync();
@@ -321,6 +330,7 @@ public sealed class PersonalSimilarAssetsStorePostgresTests(PostgresFixture fixt
         Asset tagged = AddReadyAsset(db, author, category, "Tagged", tags: [historyTag]);
         Asset historySource = AddReadyAsset(db, author, category, "HistorySource", tags: [historyTag]);
         await db.SaveChangesAsync();
+        await EnsurePublicCatalog(db);
         User user = TestData.CreateUser("buyer", "buyer@example.test");
         db.Users.Add(user);
         await db.SaveChangesAsync();
@@ -353,6 +363,7 @@ public sealed class PersonalSimilarAssetsStorePostgresTests(PostgresFixture fixt
         Asset source = AddReadyAsset(db, author, category, "Source");
         Asset peer = AddReadyAsset(db, author, category, "Peer");
         await db.SaveChangesAsync();
+        await EnsurePublicCatalog(db);
         User user = TestData.CreateUser("buyer", "buyer@example.test");
         db.Users.Add(user);
         await db.SaveChangesAsync();
@@ -373,6 +384,9 @@ public sealed class PersonalSimilarAssetsStorePostgresTests(PostgresFixture fixt
         result.Evidence!.Values.Should().OnlyContain(e =>
             !e.HasPersonalClick && !e.HasPersonalTagScore);
     }
+
+    private static Task EnsurePublicCatalog(ApplicationDbContext db) =>
+        CatalogTestPublicationSupport.AttachTrustedPublicationForAllReadyAssets(db);
 
     private static Asset AddReadyAsset(
         ApplicationDbContext db,

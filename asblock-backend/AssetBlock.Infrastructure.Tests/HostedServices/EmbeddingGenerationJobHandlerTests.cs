@@ -5,6 +5,7 @@ using AssetBlock.Domain.Core.Dto;
 using AssetBlock.Domain.Core.Entities;
 using AssetBlock.Domain.Core.Enums;
 using AssetBlock.Domain.Core.Primitives.AppSettingsOptions;
+using AssetBlock.Domain.Core.Publication;
 using AssetBlock.Infrastructure.HostedServices.AssetProcessing.Handlers;
 using AssetBlock.Infrastructure.Persistence;
 using AssetBlock.Infrastructure.Tests.Infrastructure;
@@ -153,19 +154,22 @@ public sealed class EmbeddingGenerationJobHandlerTests : IAsyncDisposable
     }
 
     [Fact]
-    public async Task Process_WhenNoReadyVersion_ShouldMarkNoOpAndSucceed()
+    public async Task Process_WhenNoApprovedPublication_ShouldMarkNoOpAndSucceed()
     {
-        AssetProcessingJobContext<EmbeddingGenerationPayload> context = CreateContext();
-        _assetStore.GetById(context.AssetId, includeDeleted: true, Arg.Any<CancellationToken>())
+        var assetId = Guid.NewGuid();
+        var categoryId = Guid.NewGuid();
+        await SeedAssetWithoutPublication(assetId, categoryId, "Category A");
+
+        AssetProcessingJobContext<EmbeddingGenerationPayload> context = CreateContext(assetId: assetId);
+        _assetStore.GetById(assetId, includeDeleted: true, Arg.Any<CancellationToken>())
             .Returns(new Asset
             {
-                Id = context.AssetId,
+                Id = assetId,
                 AuthorId = Guid.NewGuid(),
-                CategoryId = Guid.NewGuid(),
+                CategoryId = categoryId,
                 Title = "Test",
                 SearchRevision = 1
             });
-        // No ready version in _dbContext
 
         AssetProcessingJobOutcome outcome = await _sut.Process(context, CancellationToken.None);
 
@@ -179,7 +183,7 @@ public sealed class EmbeddingGenerationJobHandlerTests : IAsyncDisposable
     {
         var assetId = Guid.NewGuid();
         var categoryId = Guid.NewGuid();
-        await SeedAssetAndVersion(assetId, categoryId, "Category A");
+        (Guid versionId, _) = await SeedApprovedPublication(assetId, categoryId, "Category A", "Approved Sword", isCurrent: false);
 
         _assetStore.GetById(assetId, includeDeleted: true, Arg.Any<CancellationToken>())
             .Returns(new Asset
@@ -191,7 +195,10 @@ public sealed class EmbeddingGenerationJobHandlerTests : IAsyncDisposable
                 SearchRevision = 1
             });
 
-        AssetProcessingJobContext<EmbeddingGenerationPayload> context = CreateContext(assetId: assetId, contentHash: "stale-hash");
+        AssetProcessingJobContext<EmbeddingGenerationPayload> context = CreateContext(
+            assetId: assetId,
+            assetVersionId: versionId,
+            contentHash: "stale-hash");
 
         AssetProcessingJobOutcome outcome = await _sut.Process(context, CancellationToken.None);
 
@@ -274,7 +281,7 @@ public sealed class EmbeddingGenerationJobHandlerTests : IAsyncDisposable
     {
         var assetId = Guid.NewGuid();
         var categoryId = Guid.NewGuid();
-        await SeedAssetAndVersion(assetId, categoryId, "Category A");
+        (Guid versionId, _) = await SeedApprovedPublication(assetId, categoryId, "Category A", "Approved Sword", isCurrent: false);
 
         _assetStore.GetById(assetId, includeDeleted: true, Arg.Any<CancellationToken>())
             .Returns(new Asset
@@ -288,7 +295,10 @@ public sealed class EmbeddingGenerationJobHandlerTests : IAsyncDisposable
         _finalizer.MarkJobNoOp(Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<CancellationToken>())
             .Returns(false);
 
-        AssetProcessingJobContext<EmbeddingGenerationPayload> context = CreateContext(assetId: assetId, contentHash: "stale-hash");
+        AssetProcessingJobContext<EmbeddingGenerationPayload> context = CreateContext(
+            assetId: assetId,
+            assetVersionId: versionId,
+            contentHash: "stale-hash");
 
         AssetProcessingJobOutcome outcome = await _sut.Process(context, CancellationToken.None);
 
@@ -302,9 +312,12 @@ public sealed class EmbeddingGenerationJobHandlerTests : IAsyncDisposable
     {
         var assetId = Guid.NewGuid();
         var categoryId = Guid.NewGuid();
-        await SeedAssetAndVersion(assetId, categoryId, "3D Assets");
-
-        CanonicalPublicMetadataResult canonical = AssetPublicMetadataCanonicalizer.Canonicalize("Sword", null, "3D Assets", null);
+        (Guid versionId, CanonicalPublicMetadataResult canonical) = await SeedApprovedPublication(
+            assetId,
+            categoryId,
+            "3D Assets",
+            "Sword",
+            isCurrent: false);
 
         _assetStore.GetById(assetId, includeDeleted: true, Arg.Any<CancellationToken>())
             .Returns(new Asset
@@ -321,6 +334,7 @@ public sealed class EmbeddingGenerationJobHandlerTests : IAsyncDisposable
 
         AssetProcessingJobContext<EmbeddingGenerationPayload> context = CreateContext(
             assetId: assetId,
+            assetVersionId: versionId,
             contentHash: canonical.ContentHash,
             targetRevision: 1);
 
@@ -339,9 +353,12 @@ public sealed class EmbeddingGenerationJobHandlerTests : IAsyncDisposable
     {
         var assetId = Guid.NewGuid();
         var categoryId = Guid.NewGuid();
-        await SeedAssetAndVersion(assetId, categoryId, "3D Assets");
-
-        CanonicalPublicMetadataResult canonical = AssetPublicMetadataCanonicalizer.Canonicalize("Sword", null, "3D Assets", null);
+        (Guid versionId, CanonicalPublicMetadataResult canonical) = await SeedApprovedPublication(
+            assetId,
+            categoryId,
+            "3D Assets",
+            "Sword",
+            isCurrent: false);
 
         _assetStore.GetById(assetId, includeDeleted: true, Arg.Any<CancellationToken>())
             .Returns(new Asset
@@ -356,7 +373,10 @@ public sealed class EmbeddingGenerationJobHandlerTests : IAsyncDisposable
         _generator.Generate(Arg.Any<string>(), Arg.Any<CancellationToken>())
             .Returns<Task<GeneratedEmbedding>>(_ => Task.FromException<GeneratedEmbedding>(new HttpRequestException("Connection refused")));
 
-        AssetProcessingJobContext<EmbeddingGenerationPayload> context = CreateContext(assetId: assetId, contentHash: canonical.ContentHash);
+        AssetProcessingJobContext<EmbeddingGenerationPayload> context = CreateContext(
+            assetId: assetId,
+            assetVersionId: versionId,
+            contentHash: canonical.ContentHash);
 
         AssetProcessingJobOutcome outcome = await _sut.Process(context, CancellationToken.None);
 
@@ -364,13 +384,59 @@ public sealed class EmbeddingGenerationJobHandlerTests : IAsyncDisposable
     }
 
     [Fact]
+    public async Task Process_WhenApprovedVersionIsNotCurrent_ShouldFinalizeWithApprovedVersionId()
+    {
+        var assetId = Guid.NewGuid();
+        var categoryId = Guid.NewGuid();
+        (Guid versionId, CanonicalPublicMetadataResult canonical) = await SeedApprovedPublication(
+            assetId,
+            categoryId,
+            "3D Assets",
+            "Sword",
+            isCurrent: false);
+
+        _assetStore.GetById(assetId, includeDeleted: true, Arg.Any<CancellationToken>())
+            .Returns(new Asset
+            {
+                Id = assetId,
+                AuthorId = Guid.NewGuid(),
+                CategoryId = categoryId,
+                Title = "Working title must not affect provider input",
+                SearchRevision = 1
+            });
+
+        var mockVector = new float[768];
+        mockVector[0] = 1.0f;
+        _generator.Generate(Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(new GeneratedEmbedding(mockVector, EmbeddingModelKey.Compute(_options), 768));
+
+        _finalizer.Finalize(Arg.Any<FinalizeEmbeddingParameters>(), Arg.Any<CancellationToken>())
+            .Returns(EmbeddingFinalizationStatus.COMMITTED);
+
+        AssetProcessingJobContext<EmbeddingGenerationPayload> context = CreateContext(
+            assetId: assetId,
+            assetVersionId: versionId,
+            contentHash: canonical.ContentHash);
+
+        AssetProcessingJobOutcome outcome = await _sut.Process(context, CancellationToken.None);
+
+        outcome.Should().BeOfType<AssetProcessingJobOutcome.AtomicCommitted>();
+        await _generator.Received(1).Generate(canonical.CanonicalText, Arg.Any<CancellationToken>());
+        await _finalizer.Received(1).Finalize(Arg.Is<FinalizeEmbeddingParameters>(p =>
+            p.AssetVersionId == versionId && p.ContentHash == canonical.ContentHash), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
     public async Task Process_WhenSuccessful_ShouldFinalizeAndReturnCommittedSucceeded()
     {
         var assetId = Guid.NewGuid();
         var categoryId = Guid.NewGuid();
-        await SeedAssetAndVersion(assetId, categoryId, "3D Assets");
-
-        CanonicalPublicMetadataResult canonical = AssetPublicMetadataCanonicalizer.Canonicalize("Sword", null, "3D Assets", null);
+        (Guid versionId, CanonicalPublicMetadataResult canonical) = await SeedApprovedPublication(
+            assetId,
+            categoryId,
+            "3D Assets",
+            "Sword",
+            isCurrent: true);
 
         _assetStore.GetById(assetId, includeDeleted: true, Arg.Any<CancellationToken>())
             .Returns(new Asset
@@ -390,20 +456,36 @@ public sealed class EmbeddingGenerationJobHandlerTests : IAsyncDisposable
         _finalizer.Finalize(Arg.Any<FinalizeEmbeddingParameters>(), Arg.Any<CancellationToken>())
             .Returns(EmbeddingFinalizationStatus.COMMITTED);
 
-        AssetProcessingJobContext<EmbeddingGenerationPayload> context = CreateContext(assetId: assetId, contentHash: canonical.ContentHash);
+        AssetProcessingJobContext<EmbeddingGenerationPayload> context = CreateContext(
+            assetId: assetId,
+            assetVersionId: versionId,
+            contentHash: canonical.ContentHash);
 
         AssetProcessingJobOutcome outcome = await _sut.Process(context, CancellationToken.None);
 
         outcome.Should().BeOfType<AssetProcessingJobOutcome.AtomicCommitted>();
         await _finalizer.Received(1).Finalize(Arg.Is<FinalizeEmbeddingParameters>(p =>
             p.AssetId == assetId &&
+            p.AssetVersionId == versionId &&
             p.SourceRevision == 1 &&
             p.ContentHash == canonical.ContentHash), Arg.Any<CancellationToken>());
     }
 
-    private async Task SeedAssetAndVersion(Guid assetId, Guid categoryId, string categoryName)
+    private async Task SeedAssetWithoutPublication(Guid assetId, Guid categoryId, string categoryName)
+    {
+        await SeedApprovedPublication(assetId, categoryId, categoryName, "Unused", isCurrent: true, attachPublication: false);
+    }
+
+    private async Task<(Guid VersionId, CanonicalPublicMetadataResult Canonical)> SeedApprovedPublication(
+        Guid assetId,
+        Guid categoryId,
+        string categoryName,
+        string approvedTitle,
+        bool isCurrent,
+        bool attachPublication = true)
     {
         var authorId = Guid.NewGuid();
+        var versionId = Guid.NewGuid();
         _dbContext.Users.Add(new User
         {
             Id = authorId,
@@ -420,25 +502,27 @@ public sealed class EmbeddingGenerationJobHandlerTests : IAsyncDisposable
             Slug = categoryName.ToLowerInvariant().Replace(' ', '-'),
             CreatedAt = DateTimeOffset.UtcNow
         });
-        _dbContext.Assets.Add(new Asset
+        var asset = new Asset
         {
             Id = assetId,
             AuthorId = authorId,
             CategoryId = categoryId,
-            Title = "Asset Title",
+            Title = "Working draft title",
             Price = 10m,
+            SearchRevision = 1,
             CreatedAt = DateTimeOffset.UtcNow
-        });
-        _dbContext.AssetVersions.Add(new AssetVersion
+        };
+        _dbContext.Assets.Add(asset);
+        var version = new AssetVersion
         {
-            Id = Guid.NewGuid(),
+            Id = versionId,
             AssetId = assetId,
             VersionNumber = 1,
-            IsCurrent = true,
+            IsCurrent = isCurrent,
             StorageKey = "key",
             FileName = "file",
             ContentLength = 100,
-            ContentSha256 = "abc",
+            ContentSha256 = new string('a', 64),
             ReleaseNotes = "notes",
             LicenseCode = AssetLicenseCode.PERSONAL,
             LicenseTemplateVersion = "1.0",
@@ -447,19 +531,115 @@ public sealed class EmbeddingGenerationJobHandlerTests : IAsyncDisposable
             ProcessingStatus = AssetVersionProcessingStatus.READY,
             ProcessingUpdatedAt = DateTimeOffset.UtcNow,
             CreatedAt = DateTimeOffset.UtcNow
-        });
+        };
+        _dbContext.AssetVersions.Add(version);
+
+        CanonicalPublicMetadataResult canonical = AssetPublicMetadataCanonicalizer.Canonicalize(
+            approvedTitle,
+            null,
+            categoryName,
+            null);
+
+        Guid snapshotId = Guid.Empty;
+        if (attachPublication)
+        {
+            var workspaceId = Guid.NewGuid();
+            var submissionId = Guid.NewGuid();
+            var reportId = Guid.NewGuid();
+            snapshotId = Guid.NewGuid();
+            _dbContext.AssetDraftWorkspaces.Add(new AssetDraftWorkspace
+            {
+                Id = workspaceId,
+                AssetId = assetId,
+                AssetVersionId = versionId,
+                WorkspaceVersionScopeKey = versionId,
+                ScopeId = Guid.NewGuid(),
+                CreatedAt = DateTimeOffset.UtcNow,
+                WorkspaceRevision = 1,
+                CaseRevision = 1
+            });
+            _dbContext.ModerationSubmissions.Add(new ModerationSubmission
+            {
+                Id = submissionId,
+                AssetId = assetId,
+                AssetVersionId = versionId,
+                WorkspaceId = workspaceId,
+                WorkspaceVersionScopeKey = versionId,
+                OwnerUserId = authorId,
+                ContentSha256 = version.ContentSha256,
+                DeclarationRevision = 1,
+                MaterialMetadataRevision = 1,
+                SellerEvidenceRevision = 1,
+                PolicyVersion = "policy-v1",
+                SellerEvidenceDigest = new string('d', 64),
+                State = ModerationSubmissionState.SUBMITTED,
+                CaseRevision = 1,
+                CreatedAt = DateTimeOffset.UtcNow
+            });
+            _dbContext.CodeAnalysisReportHeaders.Add(new CodeAnalysisReportHeader
+            {
+                Id = reportId,
+                AssetId = assetId,
+                AssetVersionId = versionId,
+                ContentSha256 = version.ContentSha256,
+                PolicyVersion = "policy-v1",
+                InputRevision = 1,
+                Purpose = CodeAnalysisReportPurpose.PRODUCTION,
+                CanAuthorizePublication = true,
+                IsFinalized = true,
+                FinalizedAt = DateTimeOffset.UtcNow,
+                ReportSchemaVersion = 1,
+                CreatedAt = DateTimeOffset.UtcNow
+            });
+            _dbContext.PublicationSnapshots.Add(new PublicationSnapshot
+            {
+                Id = snapshotId,
+                AssetId = assetId,
+                AssetVersionId = versionId,
+                ContentSha256 = version.ContentSha256,
+                CodeAnalysisReportHeaderId = reportId,
+                ModerationSubmissionId = submissionId,
+                PolicyVersion = "policy-v1",
+                ApprovedMetadataJson = ApprovedPublicationMetadata.BuildJson(approvedTitle, null, categoryId, []),
+                RightsReferenceJson = "{}",
+                CreatedAt = DateTimeOffset.UtcNow
+            });
+            _dbContext.ModerationDecisionRecords.Add(new ModerationDecisionRecord
+            {
+                Id = Guid.NewGuid(),
+                SubmissionId = submissionId,
+                AssetId = assetId,
+                AssetVersionId = versionId,
+                ModeratorUserId = authorId,
+                Outcome = ModerationSubmissionState.APPROVED,
+                PublicationSnapshotId = snapshotId,
+                CaseRevision = 1,
+                Message = "fixture",
+                CreatedAt = DateTimeOffset.UtcNow
+            });
+        }
+
         await _dbContext.SaveChangesAsync();
+
+        if (attachPublication)
+        {
+            asset.CurrentPublicationSnapshotId = snapshotId;
+            await _dbContext.SaveChangesAsync();
+        }
+
+        return (versionId, canonical);
     }
 
     private AssetProcessingJobContext<EmbeddingGenerationPayload> CreateContext(
         Guid? assetId = null,
+        Guid? assetVersionId = null,
         long targetRevision = 1,
         string? contentHash = null,
         string? modelKey = null,
         string? schemaVersion = null)
     {
         Guid resolvedAssetId = assetId ?? Guid.NewGuid();
-        var versionId = Guid.NewGuid();
+        Guid versionId = assetVersionId ?? Guid.NewGuid();
         var resolvedModelKey = modelKey ?? EmbeddingModelKey.Compute(_options);
         var resolvedContentHash = contentHash ?? "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
         var resolvedSchema = schemaVersion ?? AssetPublicMetadataCanonicalizer.CONTENT_SCHEMA_VERSION;

@@ -54,6 +54,7 @@ public sealed class PopularityRankingQueryMeasurementPostgresTests(PostgresFixtu
         }
 
         await db.SaveChangesAsync();
+        await CatalogTestPublicationSupport.AttachTrustedPublicationForAllReadyAssets(db);
         db.ChangeTracker.Clear();
 
         var today = DateOnly.FromDateTime(DateTime.UtcNow);

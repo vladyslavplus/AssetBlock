@@ -109,6 +109,7 @@ public sealed class BundleStorePostgresTests(PostgresFixture fixture)
             TestData.CreateAssetVersion(assetA.Id),
             TestData.CreateAssetVersion(assetB.Id));
         await db.SaveChangesAsync();
+        await CatalogTestPublicationSupport.AttachTrustedPublicationForAllReadyAssets(db);
 
         var store = new BundleStore(db);
         (Bundle bundle, _) = await store.CreateWithRevision(
@@ -145,6 +146,7 @@ public sealed class BundleStorePostgresTests(PostgresFixture fixture)
             TestData.CreateAssetVersion(assetPersonal.Id),
             commercialVersion);
         await db.SaveChangesAsync();
+        await CatalogTestPublicationSupport.AttachTrustedPublicationForAllReadyAssets(db);
 
         var store = new BundleStore(db);
         (Bundle bundle, _) = await store.CreateWithRevision(
@@ -180,10 +182,17 @@ public sealed class BundleStorePostgresTests(PostgresFixture fixture)
         Asset assetB = TestData.CreateAsset(author.Id, category.Id, title: "Drop", price: 20m);
         db.Assets.AddRange(assetA, assetB);
         await db.SaveChangesAsync();
-        db.AssetVersions.AddRange(
-            TestData.CreateAssetVersion(assetA.Id),
-            TestData.CreateAssetVersion(assetB.Id));
+        AssetVersion versionA = TestData.CreateAssetVersion(assetA.Id);
+        AssetVersion versionB = TestData.CreateAssetVersion(assetB.Id);
+        db.AssetVersions.AddRange(versionA, versionB);
         await db.SaveChangesAsync();
+        await ApprovedPublicationTestBuilder.AttachTrustedApprovedPublication(
+            db,
+            assetA,
+            versionA,
+            author,
+            category,
+            assetA.Title);
 
         var store = new BundleStore(db);
         (Bundle bundle, _) = await store.CreateWithRevision(
@@ -227,6 +236,7 @@ public sealed class BundleStorePostgresTests(PostgresFixture fixture)
             TestData.CreateAssetVersion(midA.Id),
             TestData.CreateAssetVersion(midB.Id));
         await db.SaveChangesAsync();
+        await CatalogTestPublicationSupport.AttachTrustedPublicationForAllReadyAssets(db);
 
         var store = new BundleStore(db);
         (Bundle cheap, _) = await store.CreateWithRevision(seller1.Id, "Cheap Bundle", null, 5m, "usd", 7m,
@@ -273,6 +283,7 @@ public sealed class BundleStorePostgresTests(PostgresFixture fixture)
             TestData.CreateAssetVersion(asset1.Id),
             TestData.CreateAssetVersion(asset2.Id));
         await db.SaveChangesAsync();
+        await CatalogTestPublicationSupport.AttachTrustedPublicationForAllReadyAssets(db);
 
         var store = new BundleStore(db);
         (Bundle b1, _) = await store.CreateWithRevision(author.Id, "Super 100% Deal", "Mega pack", 5m, "usd", 10m,
@@ -323,7 +334,7 @@ public sealed class BundleStorePostgresTests(PostgresFixture fixture)
         private readonly TaskCompletionSource _ready = new(TaskCreationOptions.RunContinuationsAsynchronously);
         private int _arrived;
 
-        public async Task EnterAsync(CancellationToken cancellationToken)
+        public async Task Enter(CancellationToken cancellationToken)
         {
             if (Interlocked.Increment(ref _arrived) >= participantCount)
             {
@@ -341,7 +352,7 @@ public sealed class BundleStorePostgresTests(PostgresFixture fixture)
 
         public async Task<Bundle?> LockForUpdate(Guid id, CancellationToken cancellationToken = default)
         {
-            await gate.EnterAsync(cancellationToken);
+            await gate.Enter(cancellationToken);
             return await inner.LockForUpdate(id, cancellationToken);
         }
 

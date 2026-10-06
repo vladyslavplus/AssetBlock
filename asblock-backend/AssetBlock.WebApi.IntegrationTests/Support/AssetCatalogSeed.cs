@@ -85,6 +85,7 @@ internal static class AssetCatalogSeed
         db.Assets.Add(asset);
         db.AssetVersions.Add(version);
         await db.SaveChangesAsync();
+        await TrustedPublicationFixture.AttachTrustedApprovedPublication(db, asset, version, user, category);
 
         return _sampleAssetId;
     }

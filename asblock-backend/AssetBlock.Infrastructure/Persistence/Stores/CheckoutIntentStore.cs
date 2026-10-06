@@ -286,6 +286,36 @@ internal sealed class CheckoutIntentStore(
                 cancellationToken);
     }
 
+    public async Task<CheckoutIntent?> LockForFulfillment(Guid id, CancellationToken cancellationToken = default)
+    {
+        Guid lockedId = await dbContext.Database
+            .SqlQuery<Guid>($"""SELECT "Id" AS "Value" FROM checkout_intents WHERE "Id" = {id} FOR UPDATE""")
+            .FirstOrDefaultAsync(cancellationToken);
+
+        if (lockedId == Guid.Empty)
+        {
+            return null;
+        }
+
+        return await GetByIdWithItems(id, cancellationToken);
+    }
+
+    public Task<bool> HasProviderBoundUnresolvedCheckoutReference(
+        Guid assetId,
+        CancellationToken cancellationToken = default)
+    {
+        return dbContext.CheckoutIntentItems
+            .AsNoTracking()
+            .AnyAsync(
+                i => i.AssetId == assetId
+                    && i.CheckoutIntent.StripeSessionId != null
+                    && i.CheckoutIntent.Order == null
+                    && !dbContext.PaidCheckoutReconciliationHolds.Any(h =>
+                        h.CheckoutIntentId == i.CheckoutIntentId
+                        && h.State == PaidCheckoutReconciliationState.HELD),
+                cancellationToken);
+    }
+
     public async Task DeleteTerminalUnpaidReferencingAsset(Guid assetId, CancellationToken cancellationToken = default)
     {
         DateTimeOffset now = _timeProvider.GetUtcNow();
@@ -294,6 +324,11 @@ internal sealed class CheckoutIntentStore(
             .Where(i => i.AssetId == assetId)
             .Where(i =>
                 i.CheckoutIntent.Order == null
+                && !dbContext.PaidCheckoutReconciliationHolds.Any(h =>
+                    h.CheckoutIntentId == i.CheckoutIntentId
+                    && h.State == PaidCheckoutReconciliationState.HELD)
+                && !(i.CheckoutIntent.Status == CheckoutIntentStatus.CANCELLED
+                     && i.CheckoutIntent.StripeSessionId != null)
                 && (i.CheckoutIntent.Status == CheckoutIntentStatus.CANCELLED
                     || (i.CheckoutIntent.Status == CheckoutIntentStatus.PENDING
                         && i.CheckoutIntent.ExpiresAt <= now

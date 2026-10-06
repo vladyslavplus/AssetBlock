@@ -4,6 +4,9 @@ using AssetBlock.Domain.Core.Dto.Paging;
 using AssetBlock.Domain.Core.Entities;
 using AssetBlock.Domain.Core.Enums;
 using AssetBlock.Domain.Core.Exceptions;
+using AssetBlock.Domain.Core.Publication;
+using AssetBlock.Infrastructure.Persistence;
+using AssetBlock.Infrastructure.Persistence.Publication;
 using Microsoft.EntityFrameworkCore;
 using Npgsql;
 
@@ -66,18 +69,7 @@ internal sealed class CollectionStore(
             return null;
         }
 
-        List<CollectionItemDto> items = await dbContext.CollectionItems
-            .AsNoTracking()
-            .Where(i => i.CollectionId == id && i.Asset.DeletedAt == null)
-            .OrderBy(i => i.Position)
-            .Select(i => new CollectionItemDto(
-                i.AssetId,
-                i.Asset.Title,
-                i.Asset.Price,
-                i.Position,
-                true,
-                null))
-            .ToListAsync(cancellationToken);
+        List<CollectionItemDto> items = await LoadPublicCollectionItems(id, cancellationToken);
 
         if (items.Count == 0)
         {
@@ -162,7 +154,8 @@ internal sealed class CollectionStore(
         IQueryable<Collection> query = dbContext.Collections
             .AsNoTracking()
             .Where(c => c.Status == CollectionStatus.PUBLISHED)
-            .Where(c => c.Items.Any(i => i.Asset.DeletedAt == null));
+            .Where(c => c.Items.Any(i =>
+                PublicationEligibilityQuery.PublicCatalogAssets(dbContext).Any(a => a.Id == i.AssetId)));
 
         if (!string.IsNullOrWhiteSpace(request.Search))
         {
@@ -207,16 +200,19 @@ internal sealed class CollectionStore(
                 c.CreatedAt,
                 c.SellerId,
                 c.Seller.Username,
-                c.Items.Count(i => i.Asset.DeletedAt == null),
+                c.Items.Count(i =>
+                    PublicationEligibilityQuery.PublicCatalogAssets(dbContext).Any(a => a.Id == i.AssetId)),
                 c.Items
-                    .Where(i => i.Asset.DeletedAt == null)
+                    .Where(i => PublicationEligibilityQuery.PublicCatalogAssets(dbContext).Any(a => a.Id == i.AssetId))
                     .OrderBy(i => i.Position)
                     .Select(i => (Guid?)i.AssetId)
                     .FirstOrDefault(),
                 c.Items
-                    .Where(i => i.Asset.DeletedAt == null)
+                    .Where(i => PublicationEligibilityQuery.PublicCatalogAssets(dbContext).Any(a => a.Id == i.AssetId))
                     .OrderBy(i => i.Position)
-                    .Select(i => i.Asset.Title)
+                    .Select(i => PostgresDbFunctions.JsonbExtractPathText(
+                        i.Asset.CurrentPublicationSnapshot!.ApprovedMetadataJson,
+                        "title"))
                     .FirstOrDefault()))
             .ToListAsync(cancellationToken);
 
@@ -534,10 +530,45 @@ internal sealed class CollectionStore(
             .AsNoTracking()
             .Where(i => i.CollectionId == collectionId
                         && i.AssetId == assetId
-                        && i.Asset.DeletedAt == null
-                        && i.Collection.Status == CollectionStatus.PUBLISHED)
+                        && i.Collection.Status == CollectionStatus.PUBLISHED
+                        && PublicationEligibilityQuery.PublicCatalogAssets(dbContext).Any(a => a.Id == i.AssetId))
             .Select(i => (Guid?)i.Collection.SellerId)
             .FirstOrDefaultAsync(cancellationToken);
+    }
+
+    private async Task<List<CollectionItemDto>> LoadPublicCollectionItems(
+        Guid collectionId,
+        CancellationToken cancellationToken)
+    {
+        IQueryable<Asset> publicAssets = PublicationEligibilityQuery.PublicCatalogAssets(dbContext);
+        var rows = await (
+                from item in dbContext.CollectionItems.AsNoTracking()
+                where item.CollectionId == collectionId
+                join asset in publicAssets on item.AssetId equals asset.Id
+                orderby item.Position
+                select new
+                {
+                    item.AssetId,
+                    item.Position,
+                    asset.Price,
+                    asset.CurrentPublicationSnapshot!.ApprovedMetadataJson
+                })
+            .ToListAsync(cancellationToken);
+
+        var items = new List<CollectionItemDto>(rows.Count);
+        foreach (var row in rows)
+        {
+            if (!ApprovedPublicationMetadata.TryReadPublicProjection(
+                row.ApprovedMetadataJson,
+                out ApprovedPublicationMetadata.PublicProjection projection))
+            {
+                continue;
+            }
+
+            items.Add(new CollectionItemDto(row.AssetId, projection.Title, row.Price, row.Position, true, null));
+        }
+
+        return items;
     }
 
     private static string EscapeLikePattern(string value)

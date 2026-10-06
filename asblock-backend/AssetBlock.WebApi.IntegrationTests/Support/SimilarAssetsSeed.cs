@@ -29,6 +29,7 @@ internal static class SimilarAssetsSeed
         await EnsureCategory(db, _emptyCategoryId, "Similar empty", "similar-empty");
         await AddReadyAsset(db, _emptySourceId, author.Id, _emptyCategoryId, "Similar empty source");
         await db.SaveChangesAsync();
+        await TrustedPublicationFixture.AttachTrustedPublicationForAllReadyAssets(db);
         return _emptySourceId;
     }
 
@@ -46,6 +47,7 @@ internal static class SimilarAssetsSeed
         await AddReadyAsset(db, _pairSourceId, author.Id, _pairCategoryId, "Similar pair source");
         await AddReadyAsset(db, _pairPeerId, author.Id, _pairCategoryId, "Similar pair peer");
         await db.SaveChangesAsync();
+        await TrustedPublicationFixture.AttachTrustedPublicationForAllReadyAssets(db);
         return (_pairSourceId, _pairPeerId);
     }
 

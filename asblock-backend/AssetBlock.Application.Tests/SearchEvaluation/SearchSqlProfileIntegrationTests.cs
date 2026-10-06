@@ -64,6 +64,7 @@ public sealed class SearchSqlProfileIntegrationTests
 
             // Eligible Asset
             var assetId = Guid.NewGuid();
+            var versionId = Guid.NewGuid();
             db.Assets.Add(new Asset
             {
                 Id = assetId,
@@ -78,7 +79,7 @@ public sealed class SearchSqlProfileIntegrationTests
             });
             db.AssetVersions.Add(new AssetVersion
             {
-                Id = Guid.NewGuid(),
+                Id = versionId,
                 AssetId = assetId,
                 VersionNumber = 1,
                 IsCurrent = true,
@@ -130,6 +131,19 @@ public sealed class SearchSqlProfileIntegrationTests
             });
 
             await db.SaveChangesAsync();
+
+            Asset eligibleAsset = await db.Assets.SingleAsync(a => a.Id == assetId);
+            AssetVersion eligibleVersion = await db.AssetVersions.SingleAsync(v => v.Id == versionId);
+            Category category = await db.Categories.SingleAsync(c => c.Id == categoryId);
+            await TrustedPublicationFixtureSeed.AttachAsync(
+                db,
+                eligibleAsset,
+                eligibleVersion,
+                authorId,
+                category,
+                "Medieval Broadsword",
+                "Steel broadsword 3D model");
+
             await db.Database.ExecuteSqlRawAsync("ANALYZE;");
         }
 
