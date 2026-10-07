@@ -118,7 +118,7 @@ from the npm registry (canonical, OS-independent). Reviewed exceptions may set
   - copyright/author: Microsoft Corporation
   - source: https://github.com/microsoft/playwright
   - license-url: https://spdx.org/licenses/Apache-2.0.html
-- `npm` sharp@0.35.4
+- `npm` sharp@0.35.5
   - copyright/author: Lovell Fuller
   - source: https://github.com/lovell/sharp
   - license-url: https://spdx.org/licenses/Apache-2.0.html
@@ -266,52 +266,52 @@ from the npm registry (canonical, OS-independent). Reviewed exceptions may set
 
 ## Apache-2.0 AND LGPL-3.0-or-later
 
-- `npm` @img/sharp-darwin-arm64@0.35.4
+- `npm` @img/sharp-darwin-arm64@0.35.5
   - copyright/author: Lovell Fuller
   - source: https://github.com/lovell/sharp
-- `npm` @img/sharp-darwin-x64@0.35.4
+- `npm` @img/sharp-darwin-x64@0.35.5
   - copyright/author: Lovell Fuller
   - source: https://github.com/lovell/sharp
-- `npm` @img/sharp-freebsd-wasm32@0.35.4
+- `npm` @img/sharp-freebsd-wasm32@0.35.5
   - copyright/author: Lovell Fuller
   - source: https://github.com/lovell/sharp
-- `npm` @img/sharp-linux-arm@0.35.4
+- `npm` @img/sharp-linux-arm@0.35.5
   - copyright/author: Lovell Fuller
   - source: https://github.com/lovell/sharp
-- `npm` @img/sharp-linux-arm64@0.35.4
+- `npm` @img/sharp-linux-arm64@0.35.5
   - copyright/author: Lovell Fuller
   - source: https://github.com/lovell/sharp
-- `npm` @img/sharp-linux-ppc64@0.35.4
+- `npm` @img/sharp-linux-ppc64@0.35.5
   - copyright/author: Lovell Fuller
   - source: https://github.com/lovell/sharp
-- `npm` @img/sharp-linux-riscv64@0.35.4
+- `npm` @img/sharp-linux-riscv64@0.35.5
   - copyright/author: Lovell Fuller
   - source: https://github.com/lovell/sharp
-- `npm` @img/sharp-linux-s390x@0.35.4
+- `npm` @img/sharp-linux-s390x@0.35.5
   - copyright/author: Lovell Fuller
   - source: https://github.com/lovell/sharp
-- `npm` @img/sharp-linux-x64@0.35.4
+- `npm` @img/sharp-linux-x64@0.35.5
   - copyright/author: Lovell Fuller
   - source: https://github.com/lovell/sharp
-- `npm` @img/sharp-linuxmusl-arm64@0.35.4
+- `npm` @img/sharp-linuxmusl-arm64@0.35.5
   - copyright/author: Lovell Fuller
   - source: https://github.com/lovell/sharp
-- `npm` @img/sharp-linuxmusl-x64@0.35.4
+- `npm` @img/sharp-linuxmusl-x64@0.35.5
   - copyright/author: Lovell Fuller
   - source: https://github.com/lovell/sharp
-- `npm` @img/sharp-wasm32@0.35.4
+- `npm` @img/sharp-wasm32@0.35.5
   - copyright/author: Lovell Fuller
   - source: https://github.com/lovell/sharp
-- `npm` @img/sharp-webcontainers-wasm32@0.35.4
+- `npm` @img/sharp-webcontainers-wasm32@0.35.5
   - copyright/author: Lovell Fuller
   - source: https://github.com/lovell/sharp
-- `npm` @img/sharp-win32-arm64@0.35.4
+- `npm` @img/sharp-win32-arm64@0.35.5
   - copyright/author: Lovell Fuller
   - source: https://github.com/lovell/sharp
-- `npm` @img/sharp-win32-ia32@0.35.4
+- `npm` @img/sharp-win32-ia32@0.35.5
   - copyright/author: Lovell Fuller
   - source: https://github.com/lovell/sharp
-- `npm` @img/sharp-win32-x64@0.35.4
+- `npm` @img/sharp-win32-x64@0.35.5
   - copyright/author: Lovell Fuller
   - source: https://github.com/lovell/sharp
 
@@ -638,43 +638,43 @@ from the npm registry (canonical, OS-independent). Reviewed exceptions may set
 
 ## LGPL-3.0-or-later
 
-- `npm` @img/sharp-libvips-darwin-arm64@1.3.3
+- `npm` @img/sharp-libvips-darwin-arm64@1.3.4
   - copyright/author: Lovell Fuller
   - source: https://github.com/lovell/sharp-libvips
   - license-url: https://spdx.org/licenses/LGPL-3.0-or-later.html
-- `npm` @img/sharp-libvips-darwin-x64@1.3.3
+- `npm` @img/sharp-libvips-darwin-x64@1.3.4
   - copyright/author: Lovell Fuller
   - source: https://github.com/lovell/sharp-libvips
   - license-url: https://spdx.org/licenses/LGPL-3.0-or-later.html
-- `npm` @img/sharp-libvips-linux-arm@1.3.3
+- `npm` @img/sharp-libvips-linux-arm@1.3.4
   - copyright/author: Lovell Fuller
   - source: https://github.com/lovell/sharp-libvips
   - license-url: https://spdx.org/licenses/LGPL-3.0-or-later.html
-- `npm` @img/sharp-libvips-linux-arm64@1.3.3
+- `npm` @img/sharp-libvips-linux-arm64@1.3.4
   - copyright/author: Lovell Fuller
   - source: https://github.com/lovell/sharp-libvips
   - license-url: https://spdx.org/licenses/LGPL-3.0-or-later.html
-- `npm` @img/sharp-libvips-linux-ppc64@1.3.3
+- `npm` @img/sharp-libvips-linux-ppc64@1.3.4
   - copyright/author: Lovell Fuller
   - source: https://github.com/lovell/sharp-libvips
   - license-url: https://spdx.org/licenses/LGPL-3.0-or-later.html
-- `npm` @img/sharp-libvips-linux-riscv64@1.3.3
+- `npm` @img/sharp-libvips-linux-riscv64@1.3.4
   - copyright/author: Lovell Fuller
   - source: https://github.com/lovell/sharp-libvips
   - license-url: https://spdx.org/licenses/LGPL-3.0-or-later.html
-- `npm` @img/sharp-libvips-linux-s390x@1.3.3
+- `npm` @img/sharp-libvips-linux-s390x@1.3.4
   - copyright/author: Lovell Fuller
   - source: https://github.com/lovell/sharp-libvips
   - license-url: https://spdx.org/licenses/LGPL-3.0-or-later.html
-- `npm` @img/sharp-libvips-linux-x64@1.3.3
+- `npm` @img/sharp-libvips-linux-x64@1.3.4
   - copyright/author: Lovell Fuller
   - source: https://github.com/lovell/sharp-libvips
   - license-url: https://spdx.org/licenses/LGPL-3.0-or-later.html
-- `npm` @img/sharp-libvips-linuxmusl-arm64@1.3.3
+- `npm` @img/sharp-libvips-linuxmusl-arm64@1.3.4
   - copyright/author: Lovell Fuller
   - source: https://github.com/lovell/sharp-libvips
   - license-url: https://spdx.org/licenses/LGPL-3.0-or-later.html
-- `npm` @img/sharp-libvips-linuxmusl-x64@1.3.3
+- `npm` @img/sharp-libvips-linuxmusl-x64@1.3.4
   - copyright/author: Lovell Fuller
   - source: https://github.com/lovell/sharp-libvips
   - license-url: https://spdx.org/licenses/LGPL-3.0-or-later.html
