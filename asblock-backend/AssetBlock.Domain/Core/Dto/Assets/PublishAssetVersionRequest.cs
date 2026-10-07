@@ -2,4 +2,6 @@ namespace AssetBlock.Domain.Core.Dto.Assets;
 
 public sealed record PublishAssetVersionRequest(
     string LicenseCode,
-    string ReleaseNotes);
+    string ReleaseNotes,
+    Guid? WorkspaceId = null,
+    long? ExpectedWorkspaceRevision = null);

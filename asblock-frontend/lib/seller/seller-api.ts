@@ -191,7 +191,6 @@ export interface PatchSellerAssetBody {
   title: string
   /** Empty string clears description on the server. Omit undefined fields only if we sent partial — here we send full shape. */
   description: string | null
-  price: number
   categoryId: string
 }
 
@@ -206,7 +205,6 @@ export async function patchSellerAsset(
     body: JSON.stringify({
       title: body.title,
       description: body.description,
-      price: body.price,
       categoryId: body.categoryId,
     }),
   })
@@ -218,6 +216,30 @@ export async function patchSellerAsset(
     return {
       ok: false,
       message: p?.summary ?? `Could not update asset (${res.status})`,
+      ...(keys.length > 0 && fe ? { fieldErrors: fe } : {}),
+    }
+  }
+  return { ok: true }
+}
+
+export async function patchSellerAssetPrice(
+  assetId: string,
+  price: number,
+): Promise<SellerMutationResult> {
+  const res = await fetch(`/api/seller/assets/${encodeURIComponent(assetId)}/price`, {
+    method: 'PATCH',
+    credentials: 'include',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ price }),
+  })
+  const parsed = parseMaybeJson(await res.text())
+  if (!res.ok) {
+    const p = parseApiErrorBody(parsed)
+    const fe = p?.fieldErrors
+    const keys = fe ? Object.keys(fe) : []
+    return {
+      ok: false,
+      message: p?.summary ?? `Could not update price (${res.status})`,
       ...(keys.length > 0 && fe ? { fieldErrors: fe } : {}),
     }
   }

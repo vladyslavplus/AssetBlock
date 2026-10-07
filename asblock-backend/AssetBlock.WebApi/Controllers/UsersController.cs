@@ -3,6 +3,7 @@ using AssetBlock.Application.UseCases.Assets.EnqueueListingCopilot;
 using AssetBlock.Application.UseCases.Assets.GetListingCopilotSuggestion;
 using AssetBlock.Application.UseCases.Assets.GetMyAssetProcessingJobs;
 using AssetBlock.Application.UseCases.Assets.GetMyAssetVersionProcessingJobs;
+using AssetBlock.Application.UseCases.Assets.GetMyAssetVersionReview;
 using AssetBlock.Application.UseCases.Assets.GetPersonalSimilarAssets;
 using AssetBlock.Application.UseCases.Assets.GetSellerAssetDetail;
 using AssetBlock.Application.UseCases.Auth.ResendEmailVerification;
@@ -445,6 +446,28 @@ public sealed class UsersController(ISender sender) : ApiControllerBase(sender)
         }
 
         Ardalis.Result.Result<IReadOnlyList<AssetProcessingJobDto>> result = await Sender.Send(new GetMyAssetVersionProcessingJobsQuery(assetVersionId, userId), cancellationToken);
+        return MapResultToActionResult(result);
+    }
+
+    /// <summary>
+    /// Owner-safe review status for an owned asset version: processing, analysis availability,
+    /// moderation state and publication eligibility with blocked reasons. Contains no private
+    /// evidence, matches, or storage locators.
+    /// </summary>
+    [HttpGet(ApiRoutes.Users.ME_ASSET_VERSION_REVIEW)]
+    [Authorize]
+    [ProducesResponseType(typeof(SellerVersionReviewDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> GetMyAssetVersionReview([FromRoute] Guid assetVersionId, CancellationToken cancellationToken)
+    {
+        if (!User.TryGetUserId(out Guid userId))
+        {
+            return UnauthorizedProblem();
+        }
+
+        Ardalis.Result.Result<SellerVersionReviewDto> result = await Sender.Send(new GetMyAssetVersionReviewQuery(assetVersionId, userId), cancellationToken);
         return MapResultToActionResult(result);
     }
 

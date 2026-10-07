@@ -147,7 +147,15 @@ public static class ErrorCodesToErrorMessages
         { ErrorCodes.ERR_MODERATION_ACTIVE_CASE_EXISTS, "An active moderation case already exists for this version." },
         { ErrorCodes.ERR_MODERATION_CROSS_ASSET, "Referenced records do not belong to the same asset." },
         { ErrorCodes.ERR_ANALYSIS_REPORT_NOT_TRUSTED, "The analysis report cannot authorize submission." },
-        { ErrorCodes.ERR_MODERATION_CASE_NOT_FOUND, "The moderation case was not found." }
+        { ErrorCodes.ERR_MODERATION_CASE_NOT_FOUND, "The moderation case was not found." },
+        { ErrorCodes.ERR_ASSET_DRAFT_NOT_FOUND, "The seller draft was not found for this asset." },
+        { ErrorCodes.ERR_DECLARATION_TOO_LARGE, "The declaration payload is too large." },
+        { ErrorCodes.ERR_PRICE_OPERATION_ONLY, "Price changes must use the dedicated price operation." },
+        { ErrorCodes.ERR_DECLARATION_REQUIRED, "A complete source declaration is required before submission." },
+        { ErrorCodes.ERR_SUBMISSION_WITHDRAW_CONFLICT, "The submission case changed. Refresh and try again." },
+        { ErrorCodes.ERR_VERSION_FILE_CHECKS_INCOMPLETE, "File checks are not complete for this version yet." },
+        { ErrorCodes.ERR_ANALYSIS_NOT_AVAILABLE, "Code analysis is not available yet for this version." },
+        { ErrorCodes.ERR_DECLARATION_INCOMPLETE, "The source declaration is incomplete for this version." }
     };
 
     public static string GetMessage(string code) =>

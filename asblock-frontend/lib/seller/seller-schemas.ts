@@ -68,7 +68,6 @@ export const sellerAssetPatchSchema = z.object({
     )
     .nullable()
     .optional(),
-  price: marketplacePriceSchema.optional(),
   categoryId: z.string().uuid('Select a category').optional(),
 })
 

@@ -2,7 +2,9 @@ using Ardalis.Result;
 using AssetBlock.Application.UseCases.Assets.UpdateAsset;
 using AssetBlock.Domain.Abstractions.Services;
 using AssetBlock.Domain.Core.Constants;
+using AssetBlock.Domain.Core.Dto.Assets;
 using AssetBlock.Domain.Core.Dto.Audit;
+using AssetBlock.Domain.Core.Dto.Moderation;
 using AssetBlock.Domain.Core.Entities;
 using AssetBlock.Domain.Core.Enums;
 using AwesomeAssertions;
@@ -14,293 +16,153 @@ namespace AssetBlock.Application.Tests.UseCases.Assets;
 
 public class UpdateAssetCommandHandlerTests
 {
-    private readonly IAssetStore _assetStoreMock;
+    private readonly IModerationFoundationStore _moderationStoreMock;
     private readonly ICategoryStore _categoryStoreMock;
     private readonly IAuditWriter _auditWriterMock;
-    private readonly ICacheService _cacheMock;
     private readonly UpdateAssetCommandHandler _handler;
+    private readonly Guid _assetId = Guid.NewGuid();
+    private readonly Guid _userId = Guid.NewGuid();
+    private readonly Guid _categoryId = Guid.NewGuid();
 
     public UpdateAssetCommandHandlerTests()
     {
-        _assetStoreMock = Substitute.For<IAssetStore>();
+        _moderationStoreMock = Substitute.For<IModerationFoundationStore>();
         _categoryStoreMock = Substitute.For<ICategoryStore>();
-        IUnitOfWork unitOfWorkMock = Substitute.For<IUnitOfWork>();
         _auditWriterMock = Substitute.For<IAuditWriter>();
-        _cacheMock = Substitute.For<ICacheService>();
 
-        unitOfWorkMock.ExecuteInTransaction(Arg.Any<Func<CancellationToken, Task>>(), Arg.Any<CancellationToken>())
-            .Returns(ci => ci.Arg<Func<CancellationToken, Task>>()(CancellationToken.None));
+        _moderationStoreMock.EnsurePreUploadWorkspace(Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<CancellationToken>())
+            .Returns(WorkspaceSnapshot(3));
+        _moderationStoreMock.GetOwnerDraftSnapshot(Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<CancellationToken>())
+            .Returns(DraftSnapshot());
+        _moderationStoreMock.SaveDraftRevision(Arg.Any<DraftRevisionSaveRequest>(), Arg.Any<CancellationToken>())
+            .Returns(new ModerationDraftSaveResult(ModerationDraftSaveStatus.SUCCEEDED, 4, 4));
 
         _handler = new UpdateAssetCommandHandler(
-            _assetStoreMock,
+            _moderationStoreMock,
             _categoryStoreMock,
-            unitOfWorkMock,
             _auditWriterMock,
-            _cacheMock,
             NullLogger<UpdateAssetCommandHandler>.Instance);
     }
 
+    private SellerDraftSnapshotDto DraftSnapshot() =>
+        new(
+            _assetId,
+            Guid.NewGuid(),
+            3,
+            1,
+            new SellerDraftMaterialPayload("Old Title", "Old Desc", _categoryId, ["tag1"]),
+            Declaration: null,
+            DeclarationComplete: false,
+            LatestVersionId: null,
+            LatestVersionNumber: null);
+
+    private static AssetDraftWorkspaceSnapshot WorkspaceSnapshot(long revision) =>
+        new(Guid.NewGuid(), Guid.NewGuid(), null, Guid.NewGuid(), revision, 1, 0, 0, 0);
+
     [Fact]
-    public async Task Handle_WhenAssetNotFound_ShouldReturnNotFound()
+    public async Task Handle_WhenPriceIsProvided_ShouldReturnConflict()
     {
-        var command = new UpdateAssetCommand(Guid.NewGuid(), Guid.NewGuid(), "New Title", null, null, null);
-        _assetStoreMock.GetById(command.AssetId).Returns((Asset?)null);
+        var command = new UpdateAssetCommand(_assetId, _userId, "New Title", null, 25m, null);
 
         Result result = await _handler.Handle(command, CancellationToken.None);
 
         result.IsSuccess.Should().BeFalse();
-        result.Errors.Should().Contain(ErrorCodes.ERR_ASSET_NOT_FOUND);
-        await _assetStoreMock.DidNotReceive().Update(Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<decimal?>(), Arg.Any<Guid?>(), Arg.Any<CancellationToken>());
+        result.Status.Should().Be(ResultStatus.Conflict);
+        result.Errors.Should().Contain(ErrorCodes.ERR_PRICE_OPERATION_ONLY);
+        await _moderationStoreMock.DidNotReceive().EnsurePreUploadWorkspace(
+            Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]
-    public async Task Handle_WhenUserIsNotAuthor_ShouldReturnForbidden()
+    public async Task Handle_WhenWorkspaceLockFails_ShouldReturnForbiddenAndWriteDeniedAudit()
     {
-        var command = new UpdateAssetCommand(Guid.NewGuid(), Guid.NewGuid(), "New Title", null, null, null);
-        var asset = new Asset { Id = command.AssetId, AuthorId = Guid.NewGuid(), CategoryId = Guid.NewGuid(), Title = "t" };
-        _assetStoreMock.GetById(command.AssetId).Returns(asset);
+        var command = new UpdateAssetCommand(_assetId, _userId, "New Title", null, null, null);
+        _moderationStoreMock.EnsurePreUploadWorkspace(Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<CancellationToken>())
+            .ThrowsAsync(new InvalidOperationException("locked by another owner"));
 
         Result result = await _handler.Handle(command, CancellationToken.None);
 
         result.IsSuccess.Should().BeFalse();
+        result.Status.Should().Be(ResultStatus.Forbidden);
         result.Errors.Should().Contain(ErrorCodes.ERR_FORBIDDEN);
         await _auditWriterMock.Received(1).WriteBestEffort(
             Arg.Is<AuditEvent>(e =>
-                e.Action == AuditActions.ASSET_UPDATE
-                && e.Outcome == AuditOutcome.DENIED
-                && e.ResourceId == command.AssetId.ToString()),
+                e.Action == AuditActions.ASSET_UPDATE &&
+                e.Outcome == AuditOutcome.DENIED &&
+                e.ResourceId == _assetId.ToString()),
             Arg.Any<CancellationToken>());
-        await _assetStoreMock.DidNotReceive().Update(Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<decimal?>(), Arg.Any<Guid?>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]
-    public async Task Handle_WhenCategoryIdProvidedAndNotFound_ShouldReturnNotFound()
+    public async Task Handle_WhenCategoryProvidedAndNotFound_ShouldReturnNotFound()
     {
-        var authorId = Guid.NewGuid();
         var categoryId = Guid.NewGuid();
-        var command = new UpdateAssetCommand(Guid.NewGuid(), authorId, null, null, null, categoryId);
-        var asset = new Asset { Id = command.AssetId, AuthorId = authorId, CategoryId = Guid.NewGuid(), Title = "t" };
-
-        _assetStoreMock.GetById(command.AssetId).Returns(asset);
-        _categoryStoreMock.GetById(categoryId).Returns((Category?)null);
+        var command = new UpdateAssetCommand(_assetId, _userId, null, null, null, categoryId);
+        _categoryStoreMock.GetById(categoryId, Arg.Any<CancellationToken>()).Returns((Category?)null);
 
         Result result = await _handler.Handle(command, CancellationToken.None);
 
         result.IsSuccess.Should().BeFalse();
+        result.Status.Should().Be(ResultStatus.NotFound);
         result.Errors.Should().Contain(ErrorCodes.ERR_CATEGORY_NOT_FOUND);
-        await _assetStoreMock.DidNotReceive().Update(Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<decimal?>(), Arg.Any<Guid?>(), Arg.Any<CancellationToken>());
+        await _moderationStoreMock.DidNotReceive().SaveDraftRevision(Arg.Any<DraftRevisionSaveRequest>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]
-    public async Task Handle_WithPartialUpdate_ShouldUpdateAndClearCache()
+    public async Task Handle_WhenDraftSnapshotNotFound_ShouldReturnNotFound()
     {
-        var authorId = Guid.NewGuid();
-        var command = new UpdateAssetCommand(Guid.NewGuid(), authorId, "Updated Title", null, null, null);
-        var asset = new Asset { Id = command.AssetId, AuthorId = authorId, CategoryId = Guid.NewGuid(), Title = "t" };
+        var command = new UpdateAssetCommand(_assetId, _userId, "New Title", null, null, null);
+        _moderationStoreMock.GetOwnerDraftSnapshot(_assetId, _userId, Arg.Any<CancellationToken>())
+            .Returns((SellerDraftSnapshotDto?)null);
 
-        _assetStoreMock.GetById(command.AssetId).Returns(asset);
-        _assetStoreMock.Update(command.AssetId, "Updated Title", null, null, null, Arg.Any<CancellationToken>()).Returns(true);
+        Result result = await _handler.Handle(command, CancellationToken.None);
+
+        result.IsSuccess.Should().BeFalse();
+        result.Status.Should().Be(ResultStatus.NotFound);
+        result.Errors.Should().Contain(ErrorCodes.ERR_ASSET_NOT_FOUND);
+    }
+
+    [Fact]
+    public async Task Handle_WhenDraftRevisionIsStale_ShouldReturnConflict()
+    {
+        var command = new UpdateAssetCommand(_assetId, _userId, "New Title", null, null, null);
+        _moderationStoreMock.SaveDraftRevision(Arg.Any<DraftRevisionSaveRequest>(), Arg.Any<CancellationToken>())
+            .Returns(new ModerationDraftSaveResult(ModerationDraftSaveStatus.STALE_WORKSPACE, 9));
+
+        Result result = await _handler.Handle(command, CancellationToken.None);
+
+        result.IsSuccess.Should().BeFalse();
+        result.Status.Should().Be(ResultStatus.Conflict);
+        result.Errors.Should().Contain(ErrorCodes.ERR_MODERATION_WORKSPACE_STALE);
+    }
+
+    [Fact]
+    public async Task Handle_WithPartialUpdate_ShouldMergeFieldsIntoDraftRevision()
+    {
+        var newCategoryId = Guid.NewGuid();
+        var command = new UpdateAssetCommand(_assetId, _userId, "Updated Title", null, null, newCategoryId);
+        _categoryStoreMock.GetById(newCategoryId, Arg.Any<CancellationToken>())
+            .Returns(new Category { Id = newCategoryId, Name = "Cat", Slug = "cat" });
 
         Result result = await _handler.Handle(command, CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
-        await _assetStoreMock.Received(1).Update(command.AssetId, "Updated Title", null, null, null, Arg.Any<CancellationToken>());
-        await _auditWriterMock.Received(1).Write(
-            Arg.Is<AuditEvent>(e =>
-                e.Action == AuditActions.ASSET_UPDATE
-                && e.Outcome == AuditOutcome.SUCCESS
-                && e.ResourceId == command.AssetId.ToString()
-                && e.Metadata != null),
+        await _moderationStoreMock.Received(1).SaveDraftRevision(
+            Arg.Is<DraftRevisionSaveRequest>(r =>
+                r.ActorUserId == _userId &&
+                r.AssetId == _assetId &&
+                r.AssetVersionId == null &&
+                r.OperationKind == ModerationOperationKinds.DRAFT_SAVE &&
+                r.ExpectedWorkspaceRevision == 3 &&
+                r.PayloadJson.Contains("Updated Title") &&
+                r.PayloadJson.Contains("Old Desc") &&
+                !r.PayloadJson.Contains("Old Title")),
             Arg.Any<CancellationToken>());
-        await _cacheMock.Received(1).RemoveByPrefix(CacheKeys.ASSETS_LIST_PREFIX, Arg.Any<CancellationToken>());
-    }
-
-    [Fact]
-    public async Task Handle_WhenUpdateReturnsFalse_ShouldReturnNotFound()
-    {
-        var authorId = Guid.NewGuid();
-        var command = new UpdateAssetCommand(Guid.NewGuid(), authorId, "Title", null, null, null);
-        var asset = new Asset { Id = command.AssetId, AuthorId = authorId, CategoryId = Guid.NewGuid(), Title = "t" };
-
-        _assetStoreMock.GetById(command.AssetId).Returns(asset);
-        _assetStoreMock.Update(Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<decimal?>(), Arg.Any<Guid?>(), Arg.Any<CancellationToken>()).Returns(false);
-
-        Result result = await _handler.Handle(command, CancellationToken.None);
-
-        result.IsSuccess.Should().BeFalse();
-        result.Errors.Should().Contain(ErrorCodes.ERR_ASSET_NOT_FOUND);
-    }
-
-    [Fact]
-    public async Task Handle_WhenExceptionThrown_ShouldLogSafeContextAndRethrow()
-    {
-        var testLogger = new TestLogger<UpdateAssetCommandHandler>();
-        ICategoryStore categoryStoreMock = Substitute.For<ICategoryStore>();
-        IUnitOfWork unitOfWorkMock = Substitute.For<IUnitOfWork>();
-        IAuditWriter auditWriterMock = Substitute.For<IAuditWriter>();
-        ICacheService cacheMock = Substitute.For<ICacheService>();
-        unitOfWorkMock.ExecuteInTransaction(Arg.Any<Func<CancellationToken, Task>>(), Arg.Any<CancellationToken>())
-            .Returns(ci => ci.Arg<Func<CancellationToken, Task>>()(CancellationToken.None));
-        var handler = new UpdateAssetCommandHandler(
-            _assetStoreMock,
-            categoryStoreMock,
-            unitOfWorkMock,
-            auditWriterMock,
-            cacheMock,
-            testLogger);
-
-        var authorId = Guid.NewGuid();
-        var command = new UpdateAssetCommand(Guid.NewGuid(), authorId, "Title", null, null, null);
-        var asset = new Asset { Id = command.AssetId, AuthorId = authorId, CategoryId = Guid.NewGuid(), Title = "t" };
-
-        _assetStoreMock.GetById(command.AssetId).Returns(asset);
-        _assetStoreMock.Update(Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<decimal?>(), Arg.Any<Guid?>(), Arg.Any<CancellationToken>())
-            .ThrowsAsync(new InvalidOperationException("DB failed"));
-
-        Func<Task<Result>> act = () => handler.Handle(command, CancellationToken.None);
-
-        await act.Should().ThrowAsync<InvalidOperationException>().WithMessage("DB failed");
-        testLogger.Logs.Should().Contain(l =>
-            l.Level == Microsoft.Extensions.Logging.LogLevel.Error
-            && l.Message.Contains(command.AssetId.ToString())
-            && l.Exception is InvalidOperationException);
-    }
-
-    [Fact]
-    public async Task Handle_WhenAssetLookupThrows_ShouldLogSafeContextAndRethrow()
-    {
-        var testLogger = new TestLogger<UpdateAssetCommandHandler>();
-        ICategoryStore categoryStoreMock = Substitute.For<ICategoryStore>();
-        IUnitOfWork unitOfWorkMock = Substitute.For<IUnitOfWork>();
-        IAuditWriter auditWriterMock = Substitute.For<IAuditWriter>();
-        ICacheService cacheMock = Substitute.For<ICacheService>();
-        var handler = new UpdateAssetCommandHandler(
-            _assetStoreMock,
-            categoryStoreMock,
-            unitOfWorkMock,
-            auditWriterMock,
-            cacheMock,
-            testLogger);
-
-        var command = new UpdateAssetCommand(Guid.NewGuid(), Guid.NewGuid(), "Title", null, null, null);
-        _assetStoreMock.GetById(command.AssetId, Arg.Any<CancellationToken>())
-            .ThrowsAsync(new InvalidOperationException("DB lookup failed"));
-
-        Func<Task<Result>> act = () => handler.Handle(command, CancellationToken.None);
-
-        await act.Should().ThrowAsync<InvalidOperationException>().WithMessage("DB lookup failed");
-        testLogger.Logs.Should().ContainSingle(l =>
-            l.Level == Microsoft.Extensions.Logging.LogLevel.Error
-            && l.Message.Contains(command.AssetId.ToString())
-            && l.Exception is InvalidOperationException);
-    }
-
-    [Fact]
-    public async Task Handle_WhenCategoryLookupThrows_ShouldLogSafeContextAndRethrow()
-    {
-        var testLogger = new TestLogger<UpdateAssetCommandHandler>();
-        ICategoryStore categoryStoreMock = Substitute.For<ICategoryStore>();
-        IUnitOfWork unitOfWorkMock = Substitute.For<IUnitOfWork>();
-        IAuditWriter auditWriterMock = Substitute.For<IAuditWriter>();
-        ICacheService cacheMock = Substitute.For<ICacheService>();
-        var handler = new UpdateAssetCommandHandler(
-            _assetStoreMock,
-            categoryStoreMock,
-            unitOfWorkMock,
-            auditWriterMock,
-            cacheMock,
-            testLogger);
-
-        var authorId = Guid.NewGuid();
-        var categoryId = Guid.NewGuid();
-        var command = new UpdateAssetCommand(Guid.NewGuid(), authorId, "Title", null, null, categoryId);
-        var asset = new Asset { Id = command.AssetId, AuthorId = authorId, CategoryId = Guid.NewGuid(), Title = "t" };
-
-        _assetStoreMock.GetById(command.AssetId, Arg.Any<CancellationToken>()).Returns(asset);
-        categoryStoreMock.GetById(categoryId, Arg.Any<CancellationToken>())
-            .ThrowsAsync(new InvalidOperationException("Category lookup failed"));
-
-        Func<Task<Result>> act = () => handler.Handle(command, CancellationToken.None);
-
-        await act.Should().ThrowAsync<InvalidOperationException>().WithMessage("Category lookup failed");
-        testLogger.Logs.Should().ContainSingle(l =>
-            l.Level == Microsoft.Extensions.Logging.LogLevel.Error
-            && l.Message.Contains(command.AssetId.ToString())
-            && l.Exception is InvalidOperationException);
-    }
-
-    [Fact]
-    public async Task Handle_WhenAssetLookupCancelled_ShouldRethrowWithoutErrorLogging()
-    {
-        var testLogger = new TestLogger<UpdateAssetCommandHandler>();
-        ICategoryStore categoryStoreMock = Substitute.For<ICategoryStore>();
-        IUnitOfWork unitOfWorkMock = Substitute.For<IUnitOfWork>();
-        IAuditWriter auditWriterMock = Substitute.For<IAuditWriter>();
-        ICacheService cacheMock = Substitute.For<ICacheService>();
-        var handler = new UpdateAssetCommandHandler(
-            _assetStoreMock,
-            categoryStoreMock,
-            unitOfWorkMock,
-            auditWriterMock,
-            cacheMock,
-            testLogger);
-
-        var command = new UpdateAssetCommand(Guid.NewGuid(), Guid.NewGuid(), "Title", null, null, null);
-        _assetStoreMock.GetById(command.AssetId, Arg.Any<CancellationToken>())
-            .ThrowsAsync(new OperationCanceledException());
-
-        Func<Task<Result>> act = () => handler.Handle(command, CancellationToken.None);
-
-        await act.Should().ThrowAsync<OperationCanceledException>();
-        testLogger.Logs.Should().NotContain(l => l.Level == Microsoft.Extensions.Logging.LogLevel.Error);
-    }
-
-    [Fact]
-    public async Task Handle_WhenCancelled_ShouldRethrowWithoutErrorLogging()
-    {
-        var testLogger = new TestLogger<UpdateAssetCommandHandler>();
-        ICategoryStore categoryStoreMock = Substitute.For<ICategoryStore>();
-        IUnitOfWork unitOfWorkMock = Substitute.For<IUnitOfWork>();
-        IAuditWriter auditWriterMock = Substitute.For<IAuditWriter>();
-        ICacheService cacheMock = Substitute.For<ICacheService>();
-        unitOfWorkMock.ExecuteInTransaction(Arg.Any<Func<CancellationToken, Task>>(), Arg.Any<CancellationToken>())
-            .Returns(ci => ci.Arg<Func<CancellationToken, Task>>()(CancellationToken.None));
-        var handler = new UpdateAssetCommandHandler(
-            _assetStoreMock,
-            categoryStoreMock,
-            unitOfWorkMock,
-            auditWriterMock,
-            cacheMock,
-            testLogger);
-
-        var authorId = Guid.NewGuid();
-        var command = new UpdateAssetCommand(Guid.NewGuid(), authorId, "Title", null, null, null);
-        var asset = new Asset { Id = command.AssetId, AuthorId = authorId, CategoryId = Guid.NewGuid(), Title = "t" };
-
-        _assetStoreMock.GetById(command.AssetId).Returns(asset);
-        _assetStoreMock.Update(Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<decimal?>(), Arg.Any<Guid?>(), Arg.Any<CancellationToken>())
-            .ThrowsAsync(new OperationCanceledException());
-
-        Func<Task<Result>> act = () => handler.Handle(command, CancellationToken.None);
-
-        await act.Should().ThrowAsync<OperationCanceledException>();
-        testLogger.Logs.Should().NotContain(l => l.Level == Microsoft.Extensions.Logging.LogLevel.Error);
-    }
-
-    private sealed class TestLogger<T> : Microsoft.Extensions.Logging.ILogger<T>
-    {
-        public List<(Microsoft.Extensions.Logging.LogLevel Level, string Message, Exception? Exception)> Logs { get; } = new();
-
-        public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
-        public bool IsEnabled(Microsoft.Extensions.Logging.LogLevel logLevel) => true;
-        public void Log<TState>(
-            Microsoft.Extensions.Logging.LogLevel logLevel,
-            Microsoft.Extensions.Logging.EventId eventId,
-            TState state,
-            Exception? exception,
-            Func<TState, Exception?, string> formatter)
-        {
-            Logs.Add((logLevel, formatter(state, exception), exception));
-        }
+        await _auditWriterMock.Received(1).WriteBestEffort(
+            Arg.Is<AuditEvent>(e =>
+                e.Action == AuditActions.ASSET_DRAFT_SAVE &&
+                e.Outcome == AuditOutcome.SUCCESS &&
+                e.ResourceId == _assetId.ToString()),
+            Arg.Any<CancellationToken>());
     }
 }

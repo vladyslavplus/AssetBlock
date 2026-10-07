@@ -38,6 +38,12 @@ public static class ApiRoutes
         public const string VERSIONS = "{id:guid}/versions";
         public const string VERSION_PUBLISH = "{id:guid}/versions";
         public const string VERSION_DOWNLOAD = "{id:guid}/versions/{versionId:guid}/download";
+        public const string DRAFT_CREATE = "drafts";
+        public const string DRAFT = "{id:guid}/draft";
+        public const string DECLARATION = "{id:guid}/declaration";
+        public const string VERSION_DECLARATION = "{id:guid}/versions/{versionId:guid}/declaration";
+        public const string PRICE = "{id:guid}/price";
+        public const string VERSION_SUBMISSIONS = "{id:guid}/versions/{versionId:guid}/submissions";
     }
 
     public static class Payments
@@ -117,6 +123,7 @@ public static class ApiRoutes
         public const string ME_ASSET_PROCESSING_JOBS = "me/assets/{assetId:guid}/processing-jobs";
         public const string ME_ASSET_VERSION_PROCESSING_JOBS = "me/asset-versions/{assetVersionId:guid}/processing-jobs";
         public const string ME_ASSET_VERSION_LISTING_COPILOT = "me/asset-versions/{assetVersionId:guid}/listing-copilot";
+        public const string ME_ASSET_VERSION_REVIEW = "me/asset-versions/{assetVersionId:guid}/review";
     }
 
     public static class Analytics
@@ -150,6 +157,7 @@ public static class ApiRoutes
     public static class Moderation
     {
         public const string SUBMISSION_BY_ID = "api/moderation/submissions/{id:guid}";
+        public const string SUBMISSION_WITHDRAW = "api/submissions/{id:guid}/withdraw";
     }
 
     public static class Hubs

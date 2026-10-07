@@ -7,11 +7,15 @@ import { PUT as tagPut } from '@/app/api/admin/tags/[id]/route'
 import { PATCH as accountMePatch } from '@/app/api/account/me/route'
 import { PUT as accountSocialsPut } from '@/app/api/account/socials/route'
 import { PATCH as sellerAssetPatch } from '@/app/api/seller/assets/[id]/route'
+import { PATCH as sellerDraftPatch } from '@/app/api/seller/assets/[id]/draft/route'
+import { PUT as sellerDeclarationPut } from '@/app/api/seller/assets/[id]/declaration/route'
+import { PATCH as sellerAssetPricePatch } from '@/app/api/seller/assets/[id]/price/route'
 import { POST as sellerAssetTagsPost } from '@/app/api/seller/assets/[id]/tags/route'
 import { POST as reviewsPost } from '@/app/api/reviews/assets/[assetId]/reviews/route'
 import { GET as adminAuditLogsGet } from '@/app/api/admin/audit-logs/route'
 import { GET as sellerCollectionsGet } from '@/app/api/seller/collections/route'
 import { GET as sellerListingsGet } from '@/app/api/seller/listings/route'
+import { POST as sellerWithdrawPost } from '@/app/api/seller/submissions/[submissionId]/withdraw/route'
 import { AUTH_COOKIE_ACCESS } from '@/lib/auth/constants'
 import { createMemoryCookieStore, makeJwt } from '@/test/cookie-store'
 
@@ -152,18 +156,18 @@ describe('BFF Mutating Routes Zod Validation (E3)', () => {
     expect(fetchSpy).not.toHaveBeenCalled()
   })
 
-  it('seller asset PATCH rejects invalid price with 400 ProblemDetails', async () => {
+  it('seller asset PATCH rejects an invalid title with 400 ProblemDetails', async () => {
     vi.stubGlobal('fetch', fetchSpy)
     const validId = '123e4567-e89b-12d3-a456-426614174000'
     const res = await sellerAssetPatch(
-      makeReq(`http://localhost:3000/api/seller/assets/${validId}`, 'PATCH', { price: -5 }),
+      makeReq(`http://localhost:3000/api/seller/assets/${validId}`, 'PATCH', { title: '' }),
       { params: Promise.resolve({ id: validId }) },
     )
     expect(res.status).toBe(400)
     expect(res.headers.get('Content-Type')).toBe('application/problem+json')
     const json = await res.json()
     expect(json.code).toBe('ERR_VALIDATION_FAILED')
-    expect(json.errors?.price).toBeDefined()
+    expect(json.errors?.title).toBeDefined()
     expect(fetchSpy).not.toHaveBeenCalled()
   })
 
@@ -275,6 +279,108 @@ describe('BFF Mutating Routes Zod Validation (E3)', () => {
       const body = await res.json()
       expect(body.code).toBe('ERR_VALIDATION_FAILED')
       expect(body.errors?.minPrice).toBeDefined()
+      expect(fetchSpy).not.toHaveBeenCalled()
+    })
+
+    const uuid = '123e4567-e89b-12d3-a456-426614174000'
+
+    it('seller draft PATCH rejects invalid payload with 400 ProblemDetails', async () => {
+      vi.stubGlobal('fetch', fetchSpy)
+      const res = await sellerDraftPatch(
+        makeReq(`http://localhost:3000/api/seller/assets/${uuid}/draft`, 'PATCH', {
+          operationId: 'not-a-uuid',
+          expectedWorkspaceRevision: -1,
+          material: { title: '', categoryId: 'nope', tags: [], description: null },
+        }),
+        { params: Promise.resolve({ id: uuid }) },
+      )
+      expect(res.status).toBe(400)
+      expect(res.headers.get('Content-Type')).toBe('application/problem+json')
+      const body = await res.json()
+      expect(body.code).toBe('ERR_VALIDATION_FAILED')
+      expect(fetchSpy).not.toHaveBeenCalled()
+    })
+
+    it('seller draft PATCH forwards a valid payload to the backend draft route', async () => {
+      cookieStore.set(AUTH_COOKIE_ACCESS, makeJwt(Math.floor(Date.now() / 1000) + 3600))
+      fetchSpy.mockResolvedValue(new Response('{}', { status: 200 }))
+      vi.stubGlobal('fetch', fetchSpy)
+      const res = await sellerDraftPatch(
+        makeReq(`http://localhost:3000/api/seller/assets/${uuid}/draft`, 'PATCH', {
+          operationId: uuid,
+          expectedWorkspaceRevision: 3,
+          material: {
+            title: 'Draft asset',
+            description: null,
+            categoryId: uuid,
+            tags: ['tools'],
+          },
+        }),
+        { params: Promise.resolve({ id: uuid }) },
+      )
+      expect(res.status).toBe(200)
+      const calledUrl = String(fetchSpy.mock.calls[0][0])
+      expect(calledUrl).toContain(`/api/assets/${uuid}/draft`)
+    })
+
+    it('seller declaration PUT rejects non-https source URLs with 400 ProblemDetails', async () => {
+      vi.stubGlobal('fetch', fetchSpy)
+      const res = await sellerDeclarationPut(
+        makeReq(`http://localhost:3000/api/seller/assets/${uuid}/declaration`, 'PUT', {
+          operationId: uuid,
+          expectedWorkspaceRevision: 2,
+          declaration: {
+            ownContributionSummary: 'Authored by me.',
+            ownChanges: null,
+            earlierWork: null,
+            redistributionAcknowledged: true,
+            disclosurePolicyVersion: '1',
+            components: [
+              {
+                componentId: 'c1',
+                name: 'left-pad',
+                packagePathOrRange: null,
+                sourceUrl: 'http://example.com/left-pad',
+                knownVersion: null,
+                license: 'MIT',
+                noticeLocations: [],
+                modifications: null,
+                permissionEvidenceReferences: [],
+                origin: 'THIRD_PARTY',
+              },
+            ],
+          },
+        }),
+        { params: Promise.resolve({ id: uuid }) },
+      )
+      expect(res.status).toBe(400)
+      const body = await res.json()
+      expect(body.code).toBe('ERR_VALIDATION_FAILED')
+      expect(fetchSpy).not.toHaveBeenCalled()
+    })
+
+    it('seller price PATCH rejects a missing price with 400 ProblemDetails', async () => {
+      vi.stubGlobal('fetch', fetchSpy)
+      const res = await sellerAssetPricePatch(
+        makeReq(`http://localhost:3000/api/seller/assets/${uuid}/price`, 'PATCH', {}),
+        { params: Promise.resolve({ id: uuid }) },
+      )
+      expect(res.status).toBe(400)
+      expect(fetchSpy).not.toHaveBeenCalled()
+    })
+
+    it('seller withdraw POST rejects a negative case revision with 400 ProblemDetails', async () => {
+      vi.stubGlobal('fetch', fetchSpy)
+      const res = await sellerWithdrawPost(
+        makeReq(`http://localhost:3000/api/seller/submissions/${uuid}/withdraw`, 'POST', {
+          expectedCaseRevision: -1,
+          operationId: uuid,
+        }),
+        { params: Promise.resolve({ submissionId: uuid }) },
+      )
+      expect(res.status).toBe(400)
+      const body = await res.json()
+      expect(body.code).toBe('ERR_VALIDATION_FAILED')
       expect(fetchSpy).not.toHaveBeenCalled()
     })
   })

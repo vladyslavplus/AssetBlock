@@ -22,6 +22,16 @@ internal sealed class PublishAssetVersionCommandValidator : AbstractValidator<Pu
                     .MaximumLength(64).WithMessage("LicenseCode must not exceed 64 characters.")
                     .Must(code => AssetLicenseCatalog.TryParseCode(code, out _))
                     .WithMessage("LicenseCode is invalid.");
+                RuleFor(c => c.Request.WorkspaceId)
+                    .NotEmpty().WithMessage("WorkspaceId must be a non-empty UUID when specified.")
+                    .When(c => c.Request.WorkspaceId.HasValue);
+                RuleFor(c => c.Request)
+                    .Must(r => r.WorkspaceId.HasValue == r.ExpectedWorkspaceRevision.HasValue)
+                    .WithMessage("WorkspaceId and ExpectedWorkspaceRevision must be provided together.")
+                    .WithName("Request");
+                RuleFor(c => c.Request.ExpectedWorkspaceRevision)
+                    .GreaterThan(0).WithMessage("ExpectedWorkspaceRevision must be greater than zero when specified.")
+                    .When(c => c.Request.ExpectedWorkspaceRevision.HasValue);
                 RuleFor(c => c.Request.ReleaseNotes)
                     .Cascade(CascadeMode.Stop)
                     .Must(notes => !string.IsNullOrWhiteSpace(notes)).WithMessage("ReleaseNotes are required.")

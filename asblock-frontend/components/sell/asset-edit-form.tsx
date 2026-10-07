@@ -16,7 +16,12 @@ import { Badge } from '@/components/ui/badge'
 import type { SellerAssetDetail } from '@/lib/seller/seller-asset-schemas'
 import { applyApiFieldErrorsToForm } from '@/lib/http/api-errors'
 import { assetEditFormSchema, type AssetEditFormValues } from '@/lib/seller/seller-schemas'
-import { fetchTagNameToIdMap, patchSellerAsset, syncSellerAssetTags } from '@/lib/seller/seller-api'
+import {
+  fetchTagNameToIdMap,
+  patchSellerAsset,
+  patchSellerAssetPrice,
+  syncSellerAssetTags,
+} from '@/lib/seller/seller-api'
 import { assetKeys } from '@/lib/catalog/asset-detail-query'
 import { catalogKeys, fetchCatalogFacets } from '@/lib/catalog/catalog-query'
 import { sellerKeys } from '@/lib/seller/seller-query'
@@ -78,7 +83,6 @@ export function AssetEditForm({ asset }: AssetEditFormProps) {
     const patch = await patchSellerAsset(assetId, {
       title: values.title.trim(),
       description: desc.length > 0 ? desc : '',
-      price: values.price,
       categoryId: values.categoryId,
     })
     if (!patch.ok) {
@@ -86,6 +90,15 @@ export function AssetEditForm({ asset }: AssetEditFormProps) {
         applyApiFieldErrorsToForm(setError, patch.fieldErrors)
       }
       toast.error(patch.message)
+      return
+    }
+
+    const pricePatch = await patchSellerAssetPrice(assetId, values.price)
+    if (!pricePatch.ok) {
+      if (pricePatch.fieldErrors) {
+        applyApiFieldErrorsToForm(setError, pricePatch.fieldErrors)
+      }
+      toast.error(pricePatch.message)
       return
     }
 

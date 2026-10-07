@@ -1,3 +1,5 @@
+using System.Text.Json;
+using System.Text.Json.Serialization;
 using AssetBlock.Domain.Abstractions.Services;
 using AssetBlock.Domain.Core;
 using AssetBlock.Domain.Core.Constants;
@@ -28,6 +30,14 @@ internal sealed class AssetStore(
 {
     private const float TRIGRAM_SIMILARITY_THRESHOLD = 0.30f;
     private const int MIN_TRIGRAM_QUERY_LENGTH = 3;
+
+    // Working draft payload reader: property names camelCase, enum members canonical UPPER_SNAKE_CASE
+    // (same convention the moderation foundation store writes with).
+    private static readonly JsonSerializerOptions _draftPayloadJsonOptions = new()
+    {
+        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+        Converters = { new JsonStringEnumConverter() }
+    };
     private const string LIKE_ESCAPE = "\\";
 
     public async Task<Asset> Add(Asset asset, CancellationToken cancellationToken = default)
@@ -136,10 +146,10 @@ internal sealed class AssetStore(
             where a.Id == assetId && a.CurrentPublicationSnapshotId != null
             join s in PublicationEligibilityQuery.TrustedApprovedSnapshots(dbContext)
                 on new { SnapshotId = a.CurrentPublicationSnapshotId!.Value, AssetId = a.Id }
-                equals new { SnapshotId = s.Id, AssetId = s.AssetId }
+                equals new { SnapshotId = s.Id, s.AssetId }
             join v in dbContext.AssetVersions.AsNoTracking()
-                on new { VersionId = s.AssetVersionId, AssetId = s.AssetId, Hash = s.ContentSha256 }
-                equals new { VersionId = v.Id, AssetId = v.AssetId, Hash = v.ContentSha256 }
+                on new { VersionId = s.AssetVersionId, s.AssetId, Hash = s.ContentSha256 }
+                equals new { VersionId = v.Id, v.AssetId, Hash = v.ContentSha256 }
             where v.ProcessingStatus == AssetVersionProcessingStatus.READY
             select new
             {
@@ -573,8 +583,8 @@ internal sealed class AssetStore(
                 x.CreatedAt,
                 x.Tags,
                 x.AverageRating,
-                x.LatestVersion != null ? x.LatestVersion.Id : Guid.Empty,
-                x.LatestVersion != null ? x.LatestVersion.VersionNumber : 0,
+                x.LatestVersion != null ? x.LatestVersion.Id : null,
+                x.LatestVersion != null ? x.LatestVersion.VersionNumber : null,
                 x.CurrentReadyVersionId,
                 x.LatestVersion != null ? x.LatestVersion.ProcessingStatus : AssetVersionProcessingStatus.PENDING_INSPECTION,
                 x.LatestVersion != null ? x.LatestVersion.ProcessingUpdatedAt : default,
@@ -582,7 +592,22 @@ internal sealed class AssetStore(
                 x.LatestVersion != null ? x.LatestVersion.ProcessingErrorSummary : null))
             .ToListAsync(cancellationToken);
 
-        return new PagedResult<SellerAssetListItem>(items, totalCount, page, pageSize);
+        return new PagedResult<SellerAssetListItem>(
+            await ApplyWorkingMaterialFields(
+                items,
+                i => i.Id,
+                (i, material, categoryName) => i with
+                {
+                    Title = material.Title,
+                    Description = material.Description,
+                    CategoryId = material.CategoryId,
+                    CategoryName = categoryName,
+                    Tags = material.Tags
+                },
+                cancellationToken),
+            totalCount,
+            page,
+            pageSize);
     }
 
     public async Task<SellerAssetDetailItem?> GetOwnedSellerDetail(
@@ -590,8 +615,8 @@ internal sealed class AssetStore(
         Guid ownerUserId,
         CancellationToken cancellationToken = default)
     {
-        return await dbContext.Assets.AsNoTracking()
-            .Where(a => a.Id == assetId && a.AuthorId == ownerUserId && a.DeletedAt == null && a.Versions.Any())
+        SellerAssetDetailItem? item = await dbContext.Assets.AsNoTracking()
+            .Where(a => a.Id == assetId && a.AuthorId == ownerUserId && a.DeletedAt == null)
             .Select(a => new
             {
                 a.Id,
@@ -637,14 +662,98 @@ internal sealed class AssetStore(
                 x.CreatedAt,
                 x.UpdatedAt,
                 x.Tags,
-                x.LatestVersion != null ? x.LatestVersion.Id : Guid.Empty,
-                x.LatestVersion != null ? x.LatestVersion.VersionNumber : 0,
+                x.LatestVersion != null ? x.LatestVersion.Id : null,
+                x.LatestVersion != null ? x.LatestVersion.VersionNumber : null,
                 x.CurrentReadyVersionId,
                 x.LatestVersion != null ? x.LatestVersion.ProcessingStatus : AssetVersionProcessingStatus.PENDING_INSPECTION,
                 x.LatestVersion != null ? x.LatestVersion.ProcessingUpdatedAt : default,
                 x.LatestVersion != null ? x.LatestVersion.ProcessingErrorCode : null,
                 x.LatestVersion != null ? x.LatestVersion.ProcessingErrorSummary : null))
             .FirstOrDefaultAsync(cancellationToken);
+
+        if (item is null)
+        {
+            return null;
+        }
+
+        return (await ApplyWorkingMaterialFields(
+            [item],
+            i => i.Id,
+            (i, material, categoryName) => i with
+            {
+                Title = material.Title,
+                Description = material.Description,
+                CategoryId = material.CategoryId,
+                CategoryName = categoryName,
+                Tags = material.Tags
+            },
+            cancellationToken))[0];
+    }
+
+    /// <summary>
+    /// Overrides seller-facing metadata with the latest pre-upload (draft) material revision heads.
+    /// Public projections stay approval-bound; price remains the authoritative Asset.Price.
+    /// </summary>
+    private async Task<List<T>> ApplyWorkingMaterialFields<T>(
+        List<T> items,
+        Func<T, Guid> idSelector,
+        Func<T, SellerDraftMaterialPayload, string?, T> map,
+        CancellationToken cancellationToken)
+    {
+        Dictionary<Guid, SellerDraftMaterialPayload> working =
+            await LoadWorkingMaterialHeads(items.Select(idSelector).ToList(), cancellationToken);
+        if (working.Count == 0)
+        {
+            return items;
+        }
+
+        var categoryIds = working.Values.Select(m => m.CategoryId).Distinct().ToList();
+        Dictionary<Guid, string> categoryNames = await dbContext.Categories.AsNoTracking()
+            .Where(c => categoryIds.Contains(c.Id))
+            .Select(c => new { c.Id, c.Name })
+            .ToDictionaryAsync(c => c.Id, c => c.Name, cancellationToken);
+
+        return items
+            .Select(i => working.TryGetValue(idSelector(i), out SellerDraftMaterialPayload? material)
+                ? map(i, material, categoryNames.GetValueOrDefault(material.CategoryId))
+                : i)
+            .ToList();
+    }
+
+    private async Task<Dictionary<Guid, SellerDraftMaterialPayload>> LoadWorkingMaterialHeads(
+        List<Guid> assetIds,
+        CancellationToken cancellationToken)
+    {
+        if (assetIds.Count == 0)
+        {
+            return [];
+        }
+
+        var rows = await dbContext.AssetMaterialMetadataRevisions
+            .AsNoTracking()
+            .Where(r => assetIds.Contains(r.AssetId) && r.AssetVersionId == null)
+            .OrderByDescending(r => r.Revision)
+            .Select(r => new { r.AssetId, r.PayloadJson })
+            .ToListAsync(cancellationToken);
+
+        var result = new Dictionary<Guid, SellerDraftMaterialPayload>();
+        foreach (var group in rows.GroupBy(r => r.AssetId))
+        {
+            try
+            {
+                if (JsonSerializer.Deserialize<SellerDraftMaterialPayload>(group.First().PayloadJson, _draftPayloadJsonOptions)
+                    is { } material)
+                {
+                    result[group.Key] = material;
+                }
+            }
+            catch (JsonException)
+            {
+                // Unreadable head: fall back to the asset's own columns.
+            }
+        }
+
+        return result;
     }
 
     private async Task<CatalogPageResult<AssetListItem>> QueryPagedAssets(

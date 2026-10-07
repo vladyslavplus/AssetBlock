@@ -15,6 +15,12 @@ public sealed class PublishAssetVersionFormWithFile
     [Required]
     public string ReleaseNotes { get; set; } = string.Empty;
 
+    /// <summary>Optional owned pre-upload draft workspace the bytes bind to.</summary>
+    public Guid? WorkspaceId { get; set; }
+
+    /// <summary>Required with WorkspaceId: the workspace revision the client saw before streaming.</summary>
+    public long? ExpectedWorkspaceRevision { get; set; }
+
     /// <summary>New version file. Form field name: "file".</summary>
     [FromForm(Name = "file")]
     [Required]

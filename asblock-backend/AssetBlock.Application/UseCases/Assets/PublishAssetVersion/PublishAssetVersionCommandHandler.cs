@@ -4,7 +4,9 @@ using AssetBlock.Application.Messaging;
 using AssetBlock.Domain.Abstractions.Services;
 using AssetBlock.Domain.Core.Constants;
 using AssetBlock.Domain.Core.Dto;
+using AssetBlock.Domain.Core.Dto.Assets;
 using AssetBlock.Domain.Core.Dto.Audit;
+using AssetBlock.Domain.Core.Dto.Moderation;
 using AssetBlock.Domain.Core.Entities;
 using AssetBlock.Domain.Core.Enums;
 using AssetBlock.Domain.Core.Exceptions;
@@ -21,6 +23,7 @@ internal sealed class PublishAssetVersionCommandHandler(
     IEncryptionService encryptionService,
     IAssetEncryptUploadService encryptUploadService,
     IAssetProcessingJobStore processingJobStore,
+    IModerationFoundationStore moderationFoundationStore,
     IOptions<FileUploadOptions> fileUploadOptions,
     IUnitOfWork unitOfWork,
     IAuditWriter auditWriter,
@@ -45,6 +48,37 @@ internal sealed class PublishAssetVersionCommandHandler(
         if (asset.AuthorId != request.AuthorId)
         {
             return Result.Forbidden(ErrorCodes.ERR_FORBIDDEN);
+        }
+
+        // Input identity is fixed before streaming: a concurrent metadata/declaration edit
+        // invalidates the pre-storage workspace revision and the upload cannot bind silently.
+        // When the client names the workspace, its identity and revision are verified exactly;
+        // otherwise the server resolves the owned pre-upload workspace (legacy path).
+        Guid workspaceId;
+        long expectedWorkspaceRevision;
+        if (request.Request.WorkspaceId is { } clientWorkspaceId)
+        {
+            SellerDraftSnapshotDto? snapshot = await moderationFoundationStore.GetOwnerDraftSnapshotByWorkspace(
+                clientWorkspaceId, request.AuthorId, cancellationToken);
+            if (snapshot is null || snapshot.AssetId != request.AssetId)
+            {
+                return Result.NotFound(ErrorCodes.ERR_ASSET_DRAFT_NOT_FOUND);
+            }
+
+            if (snapshot.WorkspaceRevision != request.Request.ExpectedWorkspaceRevision)
+            {
+                return Result.Conflict(ErrorCodes.ERR_MODERATION_WORKSPACE_STALE);
+            }
+
+            workspaceId = clientWorkspaceId;
+            expectedWorkspaceRevision = snapshot.WorkspaceRevision;
+        }
+        else
+        {
+            AssetDraftWorkspaceSnapshot workspace = await moderationFoundationStore.EnsurePreUploadWorkspace(
+                request.AssetId, request.AuthorId, cancellationToken);
+            workspaceId = workspace.WorkspaceId;
+            expectedWorkspaceRevision = workspace.WorkspaceRevision;
         }
 
         var versionId = Guid.NewGuid();
@@ -95,6 +129,20 @@ internal sealed class PublishAssetVersionCommandHandler(
             {
                 await assetStore.CreateNextCandidateVersion(request.AssetId, request.AuthorId, draft, ct);
 
+                // Freeze the selected metadata/declaration heads into a new version workspace;
+                // the uploaded bytes bind to the workspace revision observed before streaming.
+                VersionAttachResult attach = await moderationFoundationStore.AttachUploadedVersionToWorkspace(
+                    request.AssetId,
+                    versionId,
+                    request.AuthorId,
+                    workspaceId,
+                    expectedWorkspaceRevision,
+                    ct);
+                if (attach.Status != VersionAttachStatus.ATTACHED)
+                {
+                    throw new AssetDraftWorkspaceStaleException();
+                }
+
                 // Enqueue archive inspection job atomically with the version insert.
                 // Keeps the version from staying permanently in PENDING_INSPECTION.
                 await processingJobStore.Enqueue(
@@ -123,6 +171,12 @@ internal sealed class PublishAssetVersionCommandHandler(
         {
             // Do not delete storage: commit outcome may be indeterminate.
             throw;
+        }
+        catch (AssetDraftWorkspaceStaleException)
+        {
+            // Guaranteed pre-commit failure: nothing was attached, clean the uploaded object.
+            await TryDeletePartialObject(storageKey);
+            return Result.Conflict(ErrorCodes.ERR_MODERATION_WORKSPACE_STALE);
         }
         catch (AssetNotFoundException)
         {

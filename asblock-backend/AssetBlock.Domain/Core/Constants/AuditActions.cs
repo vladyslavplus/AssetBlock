@@ -25,6 +25,11 @@ public static class AuditActions
     public const string ASSET_TAG_ADD = "Asset.TagAdd";
     public const string ASSET_TAG_REMOVE = "Asset.TagRemove";
     public const string ASSET_VERSION_PUBLISH = "Asset.VersionPublish";
+    public const string ASSET_DRAFT_CREATE = "Asset.DraftCreate";
+    public const string ASSET_DRAFT_SAVE = "Asset.DraftSave";
+    public const string ASSET_DECLARATION_SAVE = "Asset.DeclarationSave";
+    public const string ASSET_PRICE_UPDATE = "Asset.PriceUpdate";
+    public const string ASSET_SUBMISSION_WITHDRAW = "Asset.SubmissionWithdraw";
 
     public const string CATEGORY_CREATE = "Category.Create";
     public const string CATEGORY_UPDATE = "Category.Update";

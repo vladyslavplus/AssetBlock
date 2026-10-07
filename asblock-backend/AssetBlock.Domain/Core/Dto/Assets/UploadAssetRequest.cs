@@ -7,4 +7,6 @@ public sealed record UploadAssetRequest(
     Guid CategoryId,
     string LicenseCode,
     int? DownloadLimitPerHour = null,
-    List<string>? Tags = null);
+    List<string>? Tags = null,
+    Guid? WorkspaceId = null,
+    long? ExpectedWorkspaceRevision = null);
