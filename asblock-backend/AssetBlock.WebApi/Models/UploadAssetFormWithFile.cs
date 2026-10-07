@@ -22,6 +22,12 @@ public sealed class UploadAssetFormWithFile
     /// <summary>Optional list of tag names to assign to the asset.</summary>
     public List<string>? Tags { get; set; }
 
+    /// <summary>Optional owned pre-upload draft workspace: bytes bind to it instead of creating a new asset.</summary>
+    public Guid? WorkspaceId { get; set; }
+
+    /// <summary>Required with WorkspaceId: the workspace revision the client saw before streaming.</summary>
+    public long? ExpectedWorkspaceRevision { get; set; }
+
     /// <summary>Asset file (any extension allowed). Form field name: "file".</summary>
     [FromForm(Name = "file")]
     [Required]

@@ -14,6 +14,8 @@ export const assetUploadMultipartSchema = z.object({
   categoryId: z.string().uuid('Select a category'),
   licenseCode: licenseCodeFieldSchema,
   tags: z.array(z.string().trim().min(1)).optional(),
+  workspaceId: z.string().uuid('workspaceId must be a UUID').optional(),
+  expectedWorkspaceRevision: z.coerce.number().int().nonnegative().optional(),
 })
 
 export const publishVersionMultipartSchema = z.object({
@@ -23,6 +25,8 @@ export const publishVersionMultipartSchema = z.object({
     .trim()
     .min(1, 'Release notes are required')
     .max(RELEASE_NOTES_MAX, `Release notes must be at most ${RELEASE_NOTES_MAX} characters`),
+  workspaceId: z.string().uuid('workspaceId must be a UUID').optional(),
+  expectedWorkspaceRevision: z.coerce.number().int().nonnegative().optional(),
 })
 
 function hasAllowedArchiveExtension(fileName: string): boolean {
@@ -61,6 +65,8 @@ export function parseAssetUploadMetadata(formData: FormData) {
     categoryId: readOptionalString(formData, 'categoryId') ?? '',
     licenseCode: readOptionalString(formData, 'licenseCode') ?? '',
     tags: tags.length > 0 ? tags : undefined,
+    workspaceId: readOptionalString(formData, 'workspaceId'),
+    expectedWorkspaceRevision: readOptionalString(formData, 'expectedWorkspaceRevision'),
   })
 
   return parsed
@@ -70,5 +76,7 @@ export function parsePublishVersionMetadata(formData: FormData) {
   return publishVersionMultipartSchema.safeParse({
     licenseCode: readOptionalString(formData, 'licenseCode') ?? '',
     releaseNotes: readOptionalString(formData, 'releaseNotes') ?? '',
+    workspaceId: readOptionalString(formData, 'workspaceId'),
+    expectedWorkspaceRevision: readOptionalString(formData, 'expectedWorkspaceRevision'),
   })
 }

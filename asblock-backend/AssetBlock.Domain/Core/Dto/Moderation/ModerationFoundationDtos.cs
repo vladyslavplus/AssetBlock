@@ -34,7 +34,9 @@ public sealed record ModerationDraftSaveResult(
     ModerationDraftSaveStatus Status,
     long WorkspaceRevision,
     long? MetadataRevision = null,
-    string? IdempotentResultJson = null);
+    string? IdempotentResultJson = null,
+    Guid? WorkspaceId = null,
+    bool Replayed = false);
 
 public sealed record JsonIdempotencyReplay(string ResultJson);
 

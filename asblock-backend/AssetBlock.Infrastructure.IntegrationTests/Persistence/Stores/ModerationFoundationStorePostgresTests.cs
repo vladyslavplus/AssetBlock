@@ -1,4 +1,5 @@
 using AssetBlock.Domain.Core.Constants;
+using AssetBlock.Domain.Core.Dto.Assets;
 using AssetBlock.Domain.Core.Dto.Moderation;
 using AssetBlock.Domain.Core.Dto.Users;
 using AssetBlock.Domain.Core.Entities;
@@ -22,7 +23,7 @@ public sealed class ModerationFoundationStorePostgresTests(PostgresFixture fixtu
         await using ApplicationDbContext db = await fixture.CreateCleanDbContext();
         (User author, Category _, Asset asset) = await SeedAssetAsync(db);
 
-        var store = new ModerationFoundationStore(db, new AssetStore(db), new UserStore(db));
+        var store = new ModerationFoundationStore(db, new AssetStore(db), new UserStore(db), new EfUnitOfWork(db));
         AssetDraftWorkspaceSnapshot workspace = await store.EnsurePreUploadWorkspace(asset.Id, author.Id);
 
         workspace.AssetVersionId.Should().BeNull();
@@ -37,7 +38,7 @@ public sealed class ModerationFoundationStorePostgresTests(PostgresFixture fixtu
         db.Users.Add(user);
         await db.SaveChangesAsync();
 
-        var store = new ModerationFoundationStore(db, new AssetStore(db), new UserStore(db));
+        var store = new ModerationFoundationStore(db, new AssetStore(db), new UserStore(db), new EfUnitOfWork(db));
         var operationId = Guid.NewGuid();
         IdempotentMutationResult first = await store.TryCommitIdempotentMutation(
             user.Id,
@@ -65,7 +66,7 @@ public sealed class ModerationFoundationStorePostgresTests(PostgresFixture fixtu
         (User author, Category _, Asset asset) = await SeedAssetAsync(db);
         (AssetVersion version, AssetDraftWorkspace workspaceEntity) = await SeedVersionWorkspaceAsync(db, asset);
         await db.SaveChangesAsync();
-        var store = new ModerationFoundationStore(db, new AssetStore(db), new UserStore(db));
+        var store = new ModerationFoundationStore(db, new AssetStore(db), new UserStore(db), new EfUnitOfWork(db));
         var workspace = new AssetDraftWorkspaceSnapshot(
             workspaceEntity.Id,
             workspaceEntity.AssetId,
@@ -106,7 +107,7 @@ public sealed class ModerationFoundationStorePostgresTests(PostgresFixture fixtu
         (User author, Category _, Asset asset) = await SeedAssetAsync(db);
         (AssetVersion version, AssetDraftWorkspace workspaceEntity) = await SeedVersionWorkspaceAsync(db, asset);
         await db.SaveChangesAsync();
-        var store = new ModerationFoundationStore(db, new AssetStore(db), new UserStore(db));
+        var store = new ModerationFoundationStore(db, new AssetStore(db), new UserStore(db), new EfUnitOfWork(db));
         var operationId = Guid.NewGuid();
         var firstRequest = new GuardedSubmissionRequest(
             author.Id,
@@ -139,7 +140,7 @@ public sealed class ModerationFoundationStorePostgresTests(PostgresFixture fixtu
 
         (AssetVersion version, AssetDraftWorkspace workspaceEntity) = await SeedVersionWorkspaceAsync(db, asset);
         await db.SaveChangesAsync();
-        var store = new ModerationFoundationStore(db, new AssetStore(db), new UserStore(db));
+        var store = new ModerationFoundationStore(db, new AssetStore(db), new UserStore(db), new EfUnitOfWork(db));
 
         GuardedSubmissionResult result = await store.AttemptGuardedSubmission(
             new GuardedSubmissionRequest(
@@ -175,7 +176,7 @@ public sealed class ModerationFoundationStorePostgresTests(PostgresFixture fixtu
         db.ModerationSubmissions.Add(submission);
         await db.SaveChangesAsync();
 
-        var store = new ModerationFoundationStore(db, new AssetStore(db), new UserStore(db));
+        var store = new ModerationFoundationStore(db, new AssetStore(db), new UserStore(db), new EfUnitOfWork(db));
         ModerationCaseAccessResult access = await store.GetCaseSummaryForModerator(author.Id, submission.Id);
 
         access.Status.Should().Be(ModerationCaseAccessStatus.SELF_OWNED_DENIED);
@@ -186,12 +187,12 @@ public sealed class ModerationFoundationStorePostgresTests(PostgresFixture fixtu
     {
         await using ApplicationDbContext db = await fixture.CreateCleanDbContext();
         (User author, Category _, Asset asset) = await SeedAssetAsync(db);
-        AssetDraftWorkspaceSnapshot preUpload = await new ModerationFoundationStore(db, new AssetStore(db), new UserStore(db))
+        AssetDraftWorkspaceSnapshot preUpload = await new ModerationFoundationStore(db, new AssetStore(db), new UserStore(db), new EfUnitOfWork(db))
             .EnsurePreUploadWorkspace(asset.Id, author.Id);
         (AssetVersion version, _) = await SeedVersionWorkspaceAsync(db, asset);
         await db.SaveChangesAsync();
 
-        var store = new ModerationFoundationStore(db, new AssetStore(db), new UserStore(db));
+        var store = new ModerationFoundationStore(db, new AssetStore(db), new UserStore(db), new EfUnitOfWork(db));
         GuardedSubmissionResult result = await store.AttemptGuardedSubmission(
             new GuardedSubmissionRequest(
                 author.Id,
@@ -304,7 +305,7 @@ public sealed class ModerationFoundationStorePostgresTests(PostgresFixture fixtu
     {
         await using ApplicationDbContext db = await fixture.CreateCleanDbContext();
         (User author, Category _, Asset asset) = await SeedAssetAsync(db);
-        AssetDraftWorkspaceSnapshot preUpload = await new ModerationFoundationStore(db, new AssetStore(db), new UserStore(db))
+        AssetDraftWorkspaceSnapshot preUpload = await new ModerationFoundationStore(db, new AssetStore(db), new UserStore(db), new EfUnitOfWork(db))
             .EnsurePreUploadWorkspace(asset.Id, author.Id);
         db.AssetSourceDeclarationRevisions.Add(new AssetSourceDeclarationRevision
         {
@@ -384,7 +385,7 @@ public sealed class ModerationFoundationStorePostgresTests(PostgresFixture fixtu
     {
         await using ApplicationDbContext db = await fixture.CreateCleanDbContext();
         (User author, Category _, Asset asset) = await SeedAssetAsync(db);
-        AssetDraftWorkspaceSnapshot preUpload = await new ModerationFoundationStore(db, new AssetStore(db), new UserStore(db))
+        AssetDraftWorkspaceSnapshot preUpload = await new ModerationFoundationStore(db, new AssetStore(db), new UserStore(db), new EfUnitOfWork(db))
             .EnsurePreUploadWorkspace(asset.Id, author.Id);
         AssetVersion version = TestData.CreateAssetVersion(asset.Id);
         db.AssetVersions.Add(version);
@@ -418,7 +419,7 @@ public sealed class ModerationFoundationStorePostgresTests(PostgresFixture fixtu
     {
         await using ApplicationDbContext db = await fixture.CreateCleanDbContext();
         (User author, Category _, Asset asset) = await SeedAssetAsync(db);
-        AssetDraftWorkspaceSnapshot preUpload = await new ModerationFoundationStore(db, new AssetStore(db), new UserStore(db))
+        AssetDraftWorkspaceSnapshot preUpload = await new ModerationFoundationStore(db, new AssetStore(db), new UserStore(db), new EfUnitOfWork(db))
             .EnsurePreUploadWorkspace(asset.Id, author.Id);
         AssetVersion version = TestData.CreateAssetVersion(asset.Id);
         db.AssetVersions.Add(version);
@@ -499,7 +500,7 @@ public sealed class ModerationFoundationStorePostgresTests(PostgresFixture fixtu
         (User author, Category _, Asset asset) = await SeedAssetAsync(db);
         (AssetVersion version, AssetDraftWorkspace workspaceEntity) = await SeedVersionWorkspaceAsync(db, asset);
         await db.SaveChangesAsync();
-        var store = new ModerationFoundationStore(db, new AssetStore(db), new UserStore(db));
+        var store = new ModerationFoundationStore(db, new AssetStore(db), new UserStore(db), new EfUnitOfWork(db));
 
         GuardedSubmissionResult result = await store.AttemptGuardedSubmission(
             new GuardedSubmissionRequest(
@@ -549,7 +550,7 @@ public sealed class ModerationFoundationStorePostgresTests(PostgresFixture fixtu
         db.Users.Add(moderator);
         await db.SaveChangesAsync();
 
-        AssetDraftWorkspaceSnapshot workspace = await new ModerationFoundationStore(db, new AssetStore(db), new UserStore(db))
+        AssetDraftWorkspaceSnapshot workspace = await new ModerationFoundationStore(db, new AssetStore(db), new UserStore(db), new EfUnitOfWork(db))
             .EnsurePreUploadWorkspace(asset.Id, author.Id);
         var beforeRevision = workspace.WorkspaceRevision;
 
@@ -575,7 +576,7 @@ public sealed class ModerationFoundationStorePostgresTests(PostgresFixture fixtu
             revokeHoldsUserLock.Wait(syncTimeout).Should().BeTrue();
             await using ApplicationDbContext probeDb = fixture.CreateDbContext();
             await using IDbContextTransaction probeTx = await probeDb.Database.BeginTransactionAsync();
-            var probeStore = new ModerationFoundationStore(probeDb, new AssetStore(probeDb), new UserStore(probeDb));
+            var probeStore = new ModerationFoundationStore(probeDb, new AssetStore(probeDb), new UserStore(probeDb), new EfUnitOfWork(probeDb));
             AssetDraftWorkspaceSnapshot? lockedWorkspace = await probeStore.LockAssetAndWorkspaceForUpdate(
                 asset.Id,
                 workspace.WorkspaceId,
@@ -593,6 +594,227 @@ public sealed class ModerationFoundationStorePostgresTests(PostgresFixture fixtu
         await using ApplicationDbContext verifyDb = fixture.CreateDbContext();
         AssetDraftWorkspace reloaded = await verifyDb.AssetDraftWorkspaces.FirstAsync(w => w.Id == workspace.WorkspaceId);
         reloaded.WorkspaceRevision.Should().Be(beforeRevision);
+    }
+
+    [Fact]
+    public async Task SaveDraftRevision_WhenSubmissionRowIsConcurrentlyLocked_ShouldWaitWithoutDeadlockAndSucceed()
+    {
+        // Save (workspace -> submission) and withdrawal (asset -> workspace -> submission) share one
+        // lock order; a submission row held by another transaction must only delay the save.
+        await using ApplicationDbContext db = await fixture.CreateCleanDbContext();
+        (User author, Category _, Asset asset) = await SeedAssetAsync(db);
+        (AssetVersion version, AssetDraftWorkspace workspace) = await SeedVersionWorkspaceAsync(db, asset);
+        ModerationSubmission submission = CreateSubmission(asset, version, workspace, author);
+        db.ModerationSubmissions.Add(submission);
+        await db.SaveChangesAsync();
+
+        var material = new AssetBlock.Domain.Core.Dto.Assets.SellerDraftMaterialPayload(
+            "T", null, asset.CategoryId, ["tools"]);
+        var payloadJson = AssetBlock.Application.Common.DraftPayloadJson.Serialize(material);
+        var contentDigest = AssetBlock.Application.Common.DraftPayloadJson.ComputeDigest(payloadJson);
+        var requestDigest = AssetBlock.Application.Common.DraftPayloadJson.ComputeRequestDigest(
+            asset.Id, version.Id, ModerationOperationKinds.DRAFT_SAVE, workspace.WorkspaceRevision, payloadJson);
+
+        using ManualResetEventSlim holderHoldsSubmissionLock = new(false);
+        var syncTimeout = TimeSpan.FromSeconds(10);
+
+        var holderTask = Task.Run(async () =>
+        {
+            await using ApplicationDbContext holderDb = fixture.CreateDbContext();
+            await using IDbContextTransaction holderTx = await holderDb.Database.BeginTransactionAsync();
+            await holderDb.Database.ExecuteSqlAsync(
+                $"SELECT \"Id\" FROM moderation_submissions WHERE \"Id\" = {submission.Id} FOR UPDATE");
+            holderHoldsSubmissionLock.Set();
+            // Give the save attempt time to reach the submission lock and block.
+            await Task.Delay(300);
+            await holderTx.CommitAsync();
+        });
+
+        Task<ModerationDraftSaveResult> saveTask = Task.Run(async () =>
+        {
+            holderHoldsSubmissionLock.Wait(syncTimeout).Should().BeTrue();
+            await using ApplicationDbContext saveDb = fixture.CreateDbContext();
+            var saveStore = new ModerationFoundationStore(saveDb, new AssetStore(saveDb), new UserStore(saveDb), new EfUnitOfWork(saveDb));
+            return await saveStore.SaveDraftRevision(
+                new DraftRevisionSaveRequest(
+                    author.Id,
+                    asset.Id,
+                    version.Id,
+                    ModerationOperationKinds.DRAFT_SAVE,
+                    Guid.NewGuid(),
+                    requestDigest,
+                    payloadJson,
+                    AssetBlock.Domain.Core.Constants.SellerDraftLimits.MATERIAL_METADATA_SCHEMA_VERSION,
+                    contentDigest,
+                    workspace.WorkspaceRevision),
+                CancellationToken.None);
+        });
+
+        await Task.WhenAll(holderTask, saveTask);
+        (await saveTask).Status.Should().Be(ModerationDraftSaveStatus.SUCCEEDED);
+    }
+
+    [Fact]
+    public async Task SaveDraftRevision_WhenAssetIsSoftDeletedBeforeLock_ShouldRejectWithoutSideEffects()
+    {
+        await using ApplicationDbContext db = await fixture.CreateCleanDbContext();
+        (User author, Category _, Asset asset) = await SeedAssetAsync(db);
+        var store = new ModerationFoundationStore(db, new AssetStore(db), new UserStore(db), new EfUnitOfWork(db));
+        AssetDraftWorkspaceSnapshot workspace = await store.EnsurePreUploadWorkspace(asset.Id, author.Id);
+
+        var material = new AssetBlock.Domain.Core.Dto.Assets.SellerDraftMaterialPayload(
+            "T", null, asset.CategoryId, []);
+        var payloadJson = AssetBlock.Application.Common.DraftPayloadJson.Serialize(material);
+        var contentDigest = AssetBlock.Application.Common.DraftPayloadJson.ComputeDigest(payloadJson);
+        var requestDigest = AssetBlock.Application.Common.DraftPayloadJson.ComputeRequestDigest(
+            asset.Id, null, ModerationOperationKinds.DRAFT_SAVE, workspace.WorkspaceRevision, payloadJson);
+        var operationId = Guid.NewGuid();
+
+        using ManualResetEventSlim deleteHoldsAssetLock = new(false);
+        var syncTimeout = TimeSpan.FromSeconds(10);
+
+        var deleteTask = Task.Run(async () =>
+        {
+            await using ApplicationDbContext deleteDb = fixture.CreateDbContext();
+            await using IDbContextTransaction deleteTx = await deleteDb.Database.BeginTransactionAsync();
+            await deleteDb.Database.ExecuteSqlAsync(
+                $"UPDATE assets SET \"DeletedAt\" = NOW() WHERE \"Id\" = {asset.Id}");
+            deleteHoldsAssetLock.Set();
+            // Let the save block on the asset row lock before committing the delete.
+            await Task.Delay(300);
+            await deleteTx.CommitAsync();
+        });
+
+        Task<ModerationDraftSaveResult> saveTask = Task.Run(async () =>
+        {
+            deleteHoldsAssetLock.Wait(syncTimeout).Should().BeTrue();
+            await using ApplicationDbContext saveDb = fixture.CreateDbContext();
+            var saveStore = new ModerationFoundationStore(saveDb, new AssetStore(saveDb), new UserStore(saveDb), new EfUnitOfWork(saveDb));
+            return await saveStore.SaveDraftRevision(
+                new DraftRevisionSaveRequest(
+                    author.Id,
+                    asset.Id,
+                    null,
+                    ModerationOperationKinds.DRAFT_SAVE,
+                    operationId,
+                    requestDigest,
+                    payloadJson,
+                    AssetBlock.Domain.Core.Constants.SellerDraftLimits.MATERIAL_METADATA_SCHEMA_VERSION,
+                    contentDigest,
+                    workspace.WorkspaceRevision),
+                CancellationToken.None);
+        });
+
+        await Task.WhenAll(deleteTask, saveTask);
+        ModerationDraftSaveResult save = await saveTask;
+        save.Status.Should().BeOneOf(ModerationDraftSaveStatus.FORBIDDEN, ModerationDraftSaveStatus.NOT_FOUND);
+        (await db.AssetMaterialMetadataRevisions.CountAsync(r => r.AssetId == asset.Id)).Should().Be(0);
+        (await db.JsonMutationIdempotencyRecords.CountAsync()).Should().Be(0);
+    }
+
+    [Fact]
+    public async Task SaveDraftRevision_WhenSameOperationIdTargetsDifferentAsset_ShouldNotReplayForeignReceipt()
+    {
+        await using ApplicationDbContext db = await fixture.CreateCleanDbContext();
+        (User author, Category _, Asset assetA) = await SeedAssetAsync(db);
+        User authorB = TestData.CreateUser("author-b", "b@example.test");
+        db.Users.Add(authorB);
+        Category categoryB = TestData.CreateCategory("cat-b", "cat-b");
+        db.Categories.Add(categoryB);
+        Asset assetB = TestData.CreateAsset(authorB.Id, categoryB.Id);
+        db.Assets.Add(assetB);
+        await db.SaveChangesAsync();
+
+        var store = new ModerationFoundationStore(db, new AssetStore(db), new UserStore(db), new EfUnitOfWork(db));
+        AssetDraftWorkspaceSnapshot workspaceA = await store.EnsurePreUploadWorkspace(assetA.Id, author.Id);
+        AssetDraftWorkspaceSnapshot workspaceB = await store.EnsurePreUploadWorkspace(assetB.Id, authorB.Id);
+        var operationId = Guid.NewGuid();
+
+        DraftRevisionSaveRequest firstRequest = MakeScopedSaveRequest(author.Id, assetA.Id, null, operationId, workspaceA.WorkspaceRevision, "Title A");
+        DraftRevisionSaveRequest secondRequest = MakeScopedSaveRequest(authorB.Id, assetB.Id, null, operationId, workspaceB.WorkspaceRevision, "Title A");
+        ModerationDraftSaveResult first = await store.SaveDraftRevision(firstRequest, CancellationToken.None);
+        // Same actor, same operation kind, same operationId, identical payload - but a different asset scope.
+        ModerationDraftSaveResult second = await store.SaveDraftRevision(secondRequest, CancellationToken.None);
+        // Exact replay of the second request: served from the receipt even though the CAS revision moved.
+        ModerationDraftSaveResult replay = await store.SaveDraftRevision(secondRequest, CancellationToken.None);
+
+        first.Status.Should().Be(ModerationDraftSaveStatus.SUCCEEDED);
+        first.Replayed.Should().BeFalse();
+        second.Status.Should().Be(ModerationDraftSaveStatus.SUCCEEDED);
+        second.Replayed.Should().BeFalse();
+        replay.Status.Should().Be(ModerationDraftSaveStatus.SUCCEEDED);
+        replay.Replayed.Should().BeTrue();
+        (await db.JsonMutationIdempotencyRecords.CountAsync()).Should().Be(2);
+    }
+
+    private static DraftRevisionSaveRequest MakeScopedSaveRequest(
+        Guid actorId,
+        Guid assetId,
+        Guid? assetVersionId,
+        Guid operationId,
+        long expectedRevision,
+        string title) =>
+        new(
+            actorId,
+            assetId,
+            assetVersionId,
+            ModerationOperationKinds.DRAFT_SAVE,
+            operationId,
+            AssetBlock.Application.Common.DraftPayloadJson.ComputeRequestDigest(
+                assetId,
+                assetVersionId,
+                ModerationOperationKinds.DRAFT_SAVE,
+                expectedRevision,
+                AssetBlock.Application.Common.DraftPayloadJson.Serialize(
+                    new AssetBlock.Domain.Core.Dto.Assets.SellerDraftMaterialPayload(title, null, Guid.NewGuid(), []))),
+            AssetBlock.Application.Common.DraftPayloadJson.Serialize(
+                new AssetBlock.Domain.Core.Dto.Assets.SellerDraftMaterialPayload(title, null, Guid.NewGuid(), [])),
+            AssetBlock.Domain.Core.Constants.SellerDraftLimits.MATERIAL_METADATA_SCHEMA_VERSION,
+            "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+            expectedRevision);
+
+    [Fact]
+    public async Task GetOwnerDeclarationSnapshot_WhenVersionWorkspaceIsMissing_ShouldReturnNullWhilePreUploadScopeWorks()
+    {
+        await using ApplicationDbContext db = await fixture.CreateCleanDbContext();
+        (User author, Category _, Asset asset) = await SeedAssetAsync(db);
+        var store = new ModerationFoundationStore(db, new AssetStore(db), new UserStore(db), new EfUnitOfWork(db));
+        await store.EnsurePreUploadWorkspace(asset.Id, author.Id);
+        AssetVersion foreignVersion = TestData.CreateAssetVersion(asset.Id);
+        db.AssetVersions.Add(foreignVersion);
+        await db.SaveChangesAsync();
+
+        // Unknown/cross-asset version workspace: missing -> null (mapped to 404 upstream).
+        SellerDeclarationSnapshotDto? missing =
+            await store.GetOwnerDeclarationSnapshot(asset.Id, foreignVersion.Id, author.Id);
+        missing.Should().BeNull();
+
+        // Existing pre-upload workspace without a stored declaration: present and empty.
+        SellerDeclarationSnapshotDto? empty =
+            await store.GetOwnerDeclarationSnapshot(asset.Id, null, author.Id);
+        empty.Should().NotBeNull();
+        empty!.Declaration.Should().BeNull();
+        empty.DeclarationComplete.Should().BeFalse();
+        empty.WorkspaceId.Should().NotBe(Guid.Empty);
+    }
+
+    [Fact]
+    public async Task GetOwnerVersionReview_WhenSubmissionIsTerminalAndNotApprovedPublicly_ShouldReportTerminalStateAndIneligibility()
+    {
+        await using ApplicationDbContext db = await fixture.CreateCleanDbContext();
+        (User author, Category _, Asset asset) = await SeedAssetAsync(db);
+        (AssetVersion version, AssetDraftWorkspace workspace) = await SeedVersionWorkspaceAsync(db, asset);
+        ModerationSubmission submission = CreateSubmission(asset, version, workspace, author);
+        submission.State = ModerationSubmissionState.WITHDRAWN;
+        db.ModerationSubmissions.Add(submission);
+        await db.SaveChangesAsync();
+
+        var store = new ModerationFoundationStore(db, new AssetStore(db), new UserStore(db), new EfUnitOfWork(db));
+        SellerVersionReviewDto? review = await store.GetOwnerVersionReview(version.Id, author.Id);
+
+        review.Should().NotBeNull();
+        review!.ModerationState.Should().Be(ModerationSubmissionState.WITHDRAWN);
+        review.PublicationEligible.Should().BeFalse();
     }
 
     private static async Task<(User Author, Category Category, Asset Asset)> SeedAssetAsync(ApplicationDbContext db)

@@ -5,6 +5,7 @@ using AssetBlock.Domain.Abstractions.Services;
 using AssetBlock.Domain.Core.Constants;
 using AssetBlock.Domain.Core.Dto.Assets;
 using AssetBlock.Domain.Core.Dto.Audit;
+using AssetBlock.Domain.Core.Dto.Moderation;
 using AssetBlock.Domain.Core.Entities;
 using AssetBlock.Domain.Core.Enums;
 using AssetBlock.Domain.Core.Primitives.AppSettingsOptions;
@@ -25,6 +26,7 @@ public class UploadAssetCommandHandlerTests
     private readonly IUnitOfWork _unitOfWorkMock;
     private readonly IAuditWriter _auditWriterMock;
     private readonly ICacheService _cacheMock;
+    private readonly IModerationFoundationStore _moderationStoreMock;
     private readonly UploadAssetCommandHandler _handler;
 
     public UploadAssetCommandHandlerTests()
@@ -38,10 +40,19 @@ public class UploadAssetCommandHandlerTests
         _unitOfWorkMock = Substitute.For<IUnitOfWork>();
         _auditWriterMock = Substitute.For<IAuditWriter>();
         _cacheMock = Substitute.For<ICacheService>();
+        _moderationStoreMock = Substitute.For<IModerationFoundationStore>();
 
         _encryptionServiceMock.ComputeCiphertextLength(Arg.Any<long>()).Returns(4L);
         _unitOfWorkMock.ExecuteInTransaction(Arg.Any<Func<CancellationToken, Task>>(), Arg.Any<CancellationToken>())
             .Returns(ci => ci.Arg<Func<CancellationToken, Task>>()(CancellationToken.None));
+
+        _moderationStoreMock.EnsurePreUploadWorkspace(Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<CancellationToken>())
+            .Returns(WorkspaceSnapshot(0));
+        _moderationStoreMock.SaveDraftRevision(Arg.Any<DraftRevisionSaveRequest>(), Arg.Any<CancellationToken>())
+            .Returns(new ModerationDraftSaveResult(ModerationDraftSaveStatus.SUCCEEDED, 1, 1));
+        _moderationStoreMock.AttachUploadedVersionToWorkspace(
+                Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<long>(), Arg.Any<CancellationToken>())
+            .Returns(new VersionAttachResult(VersionAttachStatus.ATTACHED, MaterialHeadRevision: 1));
 
         _handler = new UploadAssetCommandHandler(
             _categoryStoreMock,
@@ -51,6 +62,7 @@ public class UploadAssetCommandHandlerTests
             _encryptionServiceMock,
             new AssetEncryptUploadService(_encryptionServiceMock, _assetStorageServiceMock),
             processingJobStoreMock,
+            _moderationStoreMock,
             Microsoft.Extensions.Options.Options.Create(new FileUploadOptions()),
             _unitOfWorkMock,
             _auditWriterMock,
@@ -61,8 +73,152 @@ public class UploadAssetCommandHandlerTests
     private static UploadAssetRequest DefaultRequest(string title = "Title", string desc = "Desc", decimal price = 100m, string licenseCode = "PERSONAL") =>
         new(title, desc, price, Guid.NewGuid(), licenseCode);
 
+    private static AssetDraftWorkspaceSnapshot WorkspaceSnapshot(long revision) =>
+        new(Guid.NewGuid(), Guid.NewGuid(), null, Guid.NewGuid(), revision, 0, 0, 0, 0);
+
+    [Fact]
+    public async Task Handle_WhenDraftRevisionIsStale_ShouldCleanupUploadAndReturnConflict()
+    {
+        UploadAssetRequest request = DefaultRequest();
+        UploadAssetCommand command = CreateCommand(request);
+        var category = new Category { Id = request.CategoryId, Name = "Cat", Slug = "cat" };
+
+        _categoryStoreMock.GetById(request.CategoryId, Arg.Any<CancellationToken>()).Returns(category);
+        _moderationStoreMock.SaveDraftRevision(Arg.Any<DraftRevisionSaveRequest>(), Arg.Any<CancellationToken>())
+            .Returns(new ModerationDraftSaveResult(ModerationDraftSaveStatus.STALE_WORKSPACE, 5));
+
+        Result<Guid> result = await _handler.Handle(command, CancellationToken.None);
+
+        result.IsSuccess.Should().BeFalse();
+        result.Status.Should().Be(ResultStatus.Conflict);
+        result.Errors.Should().Contain(ErrorCodes.ERR_MODERATION_WORKSPACE_STALE);
+        await _assetStorageServiceMock.Received(1).Delete(Arg.Any<string>(), Arg.Any<CancellationToken>());
+    }
+
     private static UploadAssetCommand CreateCommand(UploadAssetRequest request, string fileName = "test.zip", long length = 1) =>
         new(Guid.NewGuid(), request, new MemoryStream([1]), fileName, length);
+
+    private static readonly Guid _authorId = Guid.NewGuid();
+
+    private static SellerDraftSnapshotDto DraftSnapshot(Guid assetId, Guid workspaceId, long revision) =>
+        new(
+            assetId,
+            workspaceId,
+            revision,
+            1,
+            new SellerDraftMaterialPayload("Draft title", null, Guid.NewGuid(), ["draft-tag"]),
+            Declaration: null,
+            DeclarationComplete: false,
+            LatestVersionId: null,
+            LatestVersionNumber: null);
+
+    [Fact]
+    public async Task Handle_WhenWorkspaceIsNamed_ShouldUploadIntoTheExistingDraftAsset()
+    {
+        var assetId = Guid.NewGuid();
+        var workspaceId = Guid.NewGuid();
+        UploadAssetRequest request = DefaultRequest() with { WorkspaceId = workspaceId, ExpectedWorkspaceRevision = 4 };
+        UploadAssetCommand command = new(_authorId, request, new MemoryStream([1]), "test.zip", 1);
+
+        _categoryStoreMock.GetById(request.CategoryId, Arg.Any<CancellationToken>())
+            .Returns(new Category { Id = request.CategoryId, Name = "Cat", Slug = "cat" });
+        _moderationStoreMock.GetOwnerDraftSnapshotByWorkspace(workspaceId, _authorId, Arg.Any<CancellationToken>())
+            .Returns(DraftSnapshot(assetId, workspaceId, 4));
+
+        Result<Guid> result = await _handler.Handle(command, CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.Should().Be(assetId);
+        await _assetStoreMock.Received(1).CreateNextCandidateVersion(assetId, _authorId, Arg.Any<AssetVersion>(), Arg.Any<CancellationToken>());
+        await _assetStoreMock.DidNotReceive().AddWithVersion(Arg.Any<Asset>(), Arg.Any<AssetVersion>(), Arg.Any<List<Tag>?>(), Arg.Any<CancellationToken>());
+        await _moderationStoreMock.Received(1).AttachUploadedVersionToWorkspace(
+            assetId, Arg.Any<Guid>(), _authorId, workspaceId, 4, Arg.Any<CancellationToken>());
+        await _moderationStoreMock.DidNotReceive().EnsurePreUploadWorkspace(
+            Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Handle_WhenNamedWorkspaceRevisionIsStale_ShouldRejectBeforeStreaming()
+    {
+        var workspaceId = Guid.NewGuid();
+        UploadAssetRequest request = DefaultRequest() with { ExpectedWorkspaceRevision = 3, WorkspaceId = workspaceId };
+        UploadAssetCommand command = new(_authorId, request, new MemoryStream([1]), "test.zip", 1);
+
+        _categoryStoreMock.GetById(request.CategoryId, Arg.Any<CancellationToken>())
+            .Returns(new Category { Id = request.CategoryId, Name = "Cat", Slug = "cat" });
+        _moderationStoreMock.GetOwnerDraftSnapshotByWorkspace(workspaceId, _authorId, Arg.Any<CancellationToken>())
+            .Returns(DraftSnapshot(Guid.NewGuid(), workspaceId, 4));
+
+        Result<Guid> result = await _handler.Handle(command, CancellationToken.None);
+
+        result.IsSuccess.Should().BeFalse();
+        result.Status.Should().Be(ResultStatus.Conflict);
+        result.Errors.Should().Contain(ErrorCodes.ERR_MODERATION_WORKSPACE_STALE);
+        await _assetStoreMock.DidNotReceive().CreateNextCandidateVersion(
+            Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<AssetVersion>(), Arg.Any<CancellationToken>());
+        await _moderationStoreMock.DidNotReceive().AttachUploadedVersionToWorkspace(
+            Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<long>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Handle_WhenNamedWorkspaceIsNotAnOwnedDraft_ShouldReturnNotFound()
+    {
+        var workspaceId = Guid.NewGuid();
+        UploadAssetRequest request = DefaultRequest() with { WorkspaceId = workspaceId, ExpectedWorkspaceRevision = 4 };
+        UploadAssetCommand command = new(_authorId, request, new MemoryStream([1]), "test.zip", 1);
+
+        _categoryStoreMock.GetById(request.CategoryId, Arg.Any<CancellationToken>())
+            .Returns(new Category { Id = request.CategoryId, Name = "Cat", Slug = "cat" });
+        _moderationStoreMock.GetOwnerDraftSnapshotByWorkspace(workspaceId, _authorId, Arg.Any<CancellationToken>())
+            .Returns((SellerDraftSnapshotDto?)null);
+
+        Result<Guid> result = await _handler.Handle(command, CancellationToken.None);
+
+        result.IsSuccess.Should().BeFalse();
+        result.Status.Should().Be(ResultStatus.NotFound);
+        result.Errors.Should().Contain(ErrorCodes.ERR_ASSET_DRAFT_NOT_FOUND);
+        await _assetStoreMock.DidNotReceive().CreateNextCandidateVersion(
+            Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<AssetVersion>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Handle_WhenDraftUploadCarriesTags_ShouldSaveVersionScopedMaterialAtAttachRevision()
+    {
+        var assetId = Guid.NewGuid();
+        var workspaceId = Guid.NewGuid();
+        UploadAssetRequest request = DefaultRequest() with
+        {
+            Tags = ["tools"],
+            WorkspaceId = workspaceId,
+            ExpectedWorkspaceRevision = 4
+        };
+        UploadAssetCommand command = new(_authorId, request, new MemoryStream([1]), "test.zip", 1);
+
+        _categoryStoreMock.GetById(request.CategoryId, Arg.Any<CancellationToken>())
+            .Returns(new Category { Id = request.CategoryId, Name = "Cat", Slug = "cat" });
+        _tagStoreMock.GetTagsByNames(Arg.Is<List<string>>(names => names.Count == 1 && names[0] == "tools"), Arg.Any<CancellationToken>())
+            .Returns([new Tag { Id = Guid.NewGuid(), Name = "tools" }]);
+        _moderationStoreMock.GetOwnerDraftSnapshotByWorkspace(workspaceId, _authorId, Arg.Any<CancellationToken>())
+            .Returns(DraftSnapshot(assetId, workspaceId, 4));
+        _moderationStoreMock.AttachUploadedVersionToWorkspace(
+                Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<long>(), Arg.Any<CancellationToken>())
+            .Returns(new VersionAttachResult(
+                VersionAttachStatus.ATTACHED,
+                WorkspaceSnapshot(7),
+                MaterialHeadRevision: 1));
+
+        Result<Guid> result = await _handler.Handle(command, CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        await _moderationStoreMock.Received(1).SaveDraftRevision(
+            Arg.Is<DraftRevisionSaveRequest>(r =>
+                r.AssetId == assetId &&
+                r.AssetVersionId != null &&
+                r.ExpectedWorkspaceRevision == 7 &&
+                r.PayloadJson.Contains("tools") &&
+                r.PayloadJson.Contains("Draft title")),
+            Arg.Any<CancellationToken>());
+    }
 
     [Fact]
     public async Task Handle_WhenFileIsExactlyAtConfiguredLimit_ShouldAcceptUpload()

@@ -12,8 +12,8 @@ export type SellerProcessingStatus = z.infer<typeof sellerProcessingStatusSchema
 const isoDateTimeSchema = z.string().datetime({ offset: true })
 
 const sellerProcessingFieldsSchema = {
-  latestVersionId: z.string().uuid(),
-  latestVersionNumber: z.number().int().nonnegative(),
+  latestVersionId: z.string().uuid().nullable(),
+  latestVersionNumber: z.number().int().nonnegative().nullable(),
   currentReadyVersionId: z.string().uuid().nullable(),
   latestProcessingStatus: sellerProcessingStatusSchema,
   latestProcessingUpdatedAt: isoDateTimeSchema,

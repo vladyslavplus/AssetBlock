@@ -1,14 +1,21 @@
 using Ardalis.Result;
 using AssetBlock.Application.Messaging;
 using AssetBlock.Application.UseCases.Assets.AddAssetTag;
+using AssetBlock.Application.UseCases.Assets.CreateAssetDraft;
 using AssetBlock.Application.UseCases.Assets.DeleteAsset;
 using AssetBlock.Application.UseCases.Assets.GetAssetById;
+using AssetBlock.Application.UseCases.Assets.GetAssetDeclaration;
+using AssetBlock.Application.UseCases.Assets.GetAssetDraft;
 using AssetBlock.Application.UseCases.Assets.GetAssets;
 using AssetBlock.Application.UseCases.Assets.GetAssetVersions;
 using AssetBlock.Application.UseCases.Assets.GetSimilarAssets;
 using AssetBlock.Application.UseCases.Assets.PublishAssetVersion;
 using AssetBlock.Application.UseCases.Assets.RemoveAssetTag;
+using AssetBlock.Application.UseCases.Assets.SaveAssetDeclaration;
+using AssetBlock.Application.UseCases.Assets.SaveAssetDraft;
+using AssetBlock.Application.UseCases.Assets.SubmitAssetVersion;
 using AssetBlock.Application.UseCases.Assets.UpdateAsset;
+using AssetBlock.Application.UseCases.Assets.UpdateAssetPrice;
 using AssetBlock.Application.UseCases.Assets.UploadAsset;
 using AssetBlock.Domain.Abstractions.Services;
 using AssetBlock.Domain.Core.Constants;
@@ -173,7 +180,9 @@ public sealed class AssetsController(
         logger.LogInformation("Upload started for user {UserId}, length {Length} bytes", userId, file.Length);
         var request = new UploadAssetRequest(form.Title, form.Description, form.Price, form.CategoryId, form.LicenseCode, form.DownloadLimitPerHour)
         {
-            Tags = form.Tags
+            Tags = form.Tags,
+            WorkspaceId = form.WorkspaceId,
+            ExpectedWorkspaceRevision = form.ExpectedWorkspaceRevision
         };
         await using Stream stream = file.OpenReadStream();
         var command = new UploadAssetCommand(userId, request, stream, file.FileName, file.Length);
@@ -283,7 +292,11 @@ public sealed class AssetsController(
             return ProblemFromCode(StatusCodes.Status400BadRequest, ErrorCodes.ERR_FILE_TOO_LARGE);
         }
 
-        var request = new PublishAssetVersionRequest(form.LicenseCode, form.ReleaseNotes);
+        var request = new PublishAssetVersionRequest(form.LicenseCode, form.ReleaseNotes)
+        {
+            WorkspaceId = form.WorkspaceId,
+            ExpectedWorkspaceRevision = form.ExpectedWorkspaceRevision
+        };
         await using Stream stream = file.OpenReadStream();
         var command = new PublishAssetVersionCommand(id, userId, request, stream, file.FileName, file.Length);
         Result<Guid> result = await Sender.Send(command, cancellationToken);
@@ -346,6 +359,225 @@ public sealed class AssetsController(
 
         await downloadService.CopyDecrypted(permit.StorageKey, Response.Body, cancellationToken);
         return new EmptyResult();
+    }
+
+    /// <summary>
+    /// Creates a private metadata-only draft workspace (no bytes, no version) for the authenticated seller.
+    /// </summary>
+    [HttpPost(ApiRoutes.Assets.DRAFT_CREATE)]
+    [Authorize(Policy = AuthorizationPolicies.VERIFIED_EMAIL)]
+    [ProducesResponseType(StatusCodes.Status201Created)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    public async Task<IActionResult> CreateDraft([FromBody] SellerDraftCreateRequest request, CancellationToken cancellationToken)
+    {
+        if (!User.TryGetUserId(out Guid userId))
+        {
+            return UnauthorizedProblem();
+        }
+
+        var command = new CreateAssetDraftCommand(
+            userId,
+            request.OperationId,
+            request.Title,
+            request.Description,
+            request.Price,
+            request.CategoryId,
+            request.DownloadLimitPerHour);
+        Result<SellerDraftCreatedDto> result = await Sender.Send(command, cancellationToken);
+
+        if (result.IsSuccess)
+        {
+            return CreatedAtAction(nameof(GetDraft), new { id = result.Value.AssetId }, result.Value);
+        }
+
+        return MapResultToActionResult(result);
+    }
+
+    /// <summary>
+    /// Reads the owner's private draft workspace: working metadata, declaration completeness and nullable latest version.
+    /// </summary>
+    [HttpGet(ApiRoutes.Assets.DRAFT)]
+    [Authorize(Policy = AuthorizationPolicies.VERIFIED_EMAIL)]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> GetDraft(Guid id, CancellationToken cancellationToken)
+    {
+        if (!User.TryGetUserId(out Guid userId))
+        {
+            return UnauthorizedProblem();
+        }
+
+        Result<SellerDraftSnapshotDto> result = await Sender.Send(new GetAssetDraftQuery(id, userId), cancellationToken);
+        return MapResultToActionResult(result);
+    }
+
+    /// <summary>
+    /// Saves owner draft material metadata as an immutable revision. Price is not accepted here;
+    /// use the dedicated price operation. Replays return the committed result; conflicting
+    /// payloads with the same operation id are rejected.
+    /// </summary>
+    [HttpPatch(ApiRoutes.Assets.DRAFT)]
+    [Authorize(Policy = AuthorizationPolicies.VERIFIED_EMAIL)]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
+    public async Task<IActionResult> SaveDraft(Guid id, [FromBody] SellerDraftSaveRequest request, CancellationToken cancellationToken)
+    {
+        if (!User.TryGetUserId(out Guid userId))
+        {
+            return UnauthorizedProblem();
+        }
+
+        var command = new SaveAssetDraftCommand(id, userId, request.OperationId, request.ExpectedWorkspaceRevision, request.Material);
+        Result<DraftSaveResult> result = await Sender.Send(command, cancellationToken);
+        return MapResultToActionResult(result);
+    }
+
+    /// <summary>
+    /// Reads the owner's source declaration for the pre-upload (or version-scoped) workspace.
+    /// </summary>
+    [HttpGet(ApiRoutes.Assets.DECLARATION)]
+    [Authorize(Policy = AuthorizationPolicies.VERIFIED_EMAIL)]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> GetDeclaration(Guid id, CancellationToken cancellationToken)
+    {
+        if (!User.TryGetUserId(out Guid userId))
+        {
+            return UnauthorizedProblem();
+        }
+
+        Result<SellerDeclarationSnapshotDto> result = await Sender.Send(new GetAssetDeclarationQuery(id, null, userId), cancellationToken);
+        return MapResultToActionResult(result);
+    }
+
+    /// <summary>
+    /// Saves the owner's source declaration for the pre-upload workspace. HTTPS source URLs are
+    /// stored as data only: nothing is fetched, executed, or installed.
+    /// </summary>
+    [HttpPut(ApiRoutes.Assets.DECLARATION)]
+    [Authorize(Policy = AuthorizationPolicies.VERIFIED_EMAIL)]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
+    public async Task<IActionResult> SaveDeclaration(Guid id, [FromBody] SellerDeclarationSaveRequest request, CancellationToken cancellationToken)
+    {
+        if (!User.TryGetUserId(out Guid userId))
+        {
+            return UnauthorizedProblem();
+        }
+
+        var command = new SaveAssetDeclarationCommand(id, null, userId, request.OperationId, request.ExpectedWorkspaceRevision, request.Declaration);
+        Result<DraftSaveResult> result = await Sender.Send(command, cancellationToken);
+        return MapResultToActionResult(result);
+    }
+
+    /// <summary>
+    /// Reads the owner's source declaration for a version-scoped workspace.
+    /// </summary>
+    [HttpGet(ApiRoutes.Assets.VERSION_DECLARATION)]
+    [Authorize(Policy = AuthorizationPolicies.VERIFIED_EMAIL)]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> GetVersionDeclaration(Guid id, Guid versionId, CancellationToken cancellationToken)
+    {
+        if (!User.TryGetUserId(out Guid userId))
+        {
+            return UnauthorizedProblem();
+        }
+
+        Result<SellerDeclarationSnapshotDto> result = await Sender.Send(new GetAssetDeclarationQuery(id, versionId, userId), cancellationToken);
+        return MapResultToActionResult(result);
+    }
+
+    /// <summary>
+    /// Saves the owner's source declaration for a version-scoped workspace. One version cannot
+    /// change another version's revisions.
+    /// </summary>
+    [HttpPut(ApiRoutes.Assets.VERSION_DECLARATION)]
+    [Authorize(Policy = AuthorizationPolicies.VERIFIED_EMAIL)]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
+    public async Task<IActionResult> SaveVersionDeclaration(
+        Guid id,
+        Guid versionId,
+        [FromBody] SellerDeclarationSaveRequest request,
+        CancellationToken cancellationToken)
+    {
+        if (!User.TryGetUserId(out Guid userId))
+        {
+            return UnauthorizedProblem();
+        }
+
+        var command = new SaveAssetDeclarationCommand(id, versionId, userId, request.OperationId, request.ExpectedWorkspaceRevision, request.Declaration);
+        Result<DraftSaveResult> result = await Sender.Send(command, cancellationToken);
+        return MapResultToActionResult(result);
+    }
+
+    /// <summary>
+    /// Bounded price-only update. Material fields are not accepted in this operation.
+    /// </summary>
+    [HttpPatch(ApiRoutes.Assets.PRICE)]
+    [Authorize(Policy = AuthorizationPolicies.VERIFIED_EMAIL)]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> UpdatePrice(Guid id, [FromBody] AssetPriceUpdateRequest request, CancellationToken cancellationToken)
+    {
+        if (!User.TryGetUserId(out Guid userId))
+        {
+            return UnauthorizedProblem();
+        }
+
+        Result result = await Sender.Send(new UpdateAssetPriceCommand(id, userId, request.Price), cancellationToken);
+        return result.IsSuccess ? Ok() : MapResultToActionResult(result);
+    }
+
+    /// <summary>
+    /// Requests moderation submission for a version. Until trusted analysis exists this returns
+    /// a truthful business conflict; no simulated success path exists.
+    /// </summary>
+    [HttpPost(ApiRoutes.Assets.VERSION_SUBMISSIONS)]
+    [Authorize(Policy = AuthorizationPolicies.VERIFIED_EMAIL)]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
+    public async Task<IActionResult> SubmitVersion(Guid id, Guid versionId, [FromBody] AssetVersionSubmissionRequest request, CancellationToken cancellationToken)
+    {
+        if (!User.TryGetUserId(out Guid userId))
+        {
+            return UnauthorizedProblem();
+        }
+
+        var command = new SubmitAssetVersionCommand(
+            userId, id, versionId, request.WorkspaceId, request.ExpectedWorkspaceRevision, request.ExpectedCaseRevision, request.OperationId);
+        Result<Guid> result = await Sender.Send(command, cancellationToken);
+
+        if (result.IsSuccess)
+        {
+            return Ok(new { submissionId = result.Value });
+        }
+
+        return MapResultToActionResult(result);
     }
 
     /// <summary>

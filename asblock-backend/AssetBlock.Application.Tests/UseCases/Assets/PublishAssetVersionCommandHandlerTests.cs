@@ -4,6 +4,7 @@ using AssetBlock.Application.UseCases.Assets.PublishAssetVersion;
 using AssetBlock.Domain.Abstractions.Services;
 using AssetBlock.Domain.Core.Constants;
 using AssetBlock.Domain.Core.Dto.Assets;
+using AssetBlock.Domain.Core.Dto.Moderation;
 using AssetBlock.Domain.Core.Entities;
 using AssetBlock.Domain.Core.Primitives.AppSettingsOptions;
 using AwesomeAssertions;
@@ -22,6 +23,7 @@ public class PublishAssetVersionCommandHandlerTests
     private readonly IUnitOfWork _unitOfWorkMock = Substitute.For<IUnitOfWork>();
     private readonly IAuditWriter _auditWriterMock = Substitute.For<IAuditWriter>();
     private readonly ICacheService _cacheMock = Substitute.For<ICacheService>();
+    private readonly IModerationFoundationStore _moderationStoreMock = Substitute.For<IModerationFoundationStore>();
     private readonly PublishAssetVersionCommandHandler _handler;
 
     private static readonly Guid _assetId = Guid.NewGuid();
@@ -34,6 +36,11 @@ public class PublishAssetVersionCommandHandlerTests
             .Returns(ci => ci.Arg<Func<CancellationToken, Task>>()(CancellationToken.None));
         _assetStoreMock.CreateNextCandidateVersion(Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<AssetVersion>(), Arg.Any<CancellationToken>())
             .Returns(ci => ci.Arg<AssetVersion>());
+        _moderationStoreMock.EnsurePreUploadWorkspace(Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<CancellationToken>())
+            .Returns(WorkspaceSnapshot(3));
+        _moderationStoreMock.AttachUploadedVersionToWorkspace(
+                Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<long>(), Arg.Any<CancellationToken>())
+            .Returns(new VersionAttachResult(VersionAttachStatus.ATTACHED, MaterialHeadRevision: 1));
 
         _handler = new PublishAssetVersionCommandHandler(
             _assetStoreMock,
@@ -41,6 +48,7 @@ public class PublishAssetVersionCommandHandlerTests
             _encryptionServiceMock,
             new AssetEncryptUploadService(_encryptionServiceMock, _assetStorageServiceMock),
             _processingJobStoreMock,
+            _moderationStoreMock,
             Microsoft.Extensions.Options.Options.Create(new FileUploadOptions()),
             _unitOfWorkMock,
             _auditWriterMock,
@@ -60,6 +68,81 @@ public class PublishAssetVersionCommandHandlerTests
             new MemoryStream([1]),
             fileName,
             length);
+
+    private static AssetDraftWorkspaceSnapshot WorkspaceSnapshot(long revision) =>
+        new(Guid.NewGuid(), Guid.NewGuid(), null, Guid.NewGuid(), revision, 1, 0, 0, 0);
+
+    [Fact]
+    public async Task Handle_WhenWorkspaceIsNamed_ShouldBindBytesToTheClientWorkspaceAndRevision()
+    {
+        var workspaceId = Guid.NewGuid();
+        StubOwnedAsset();
+        _moderationStoreMock.GetOwnerDraftSnapshotByWorkspace(workspaceId, _authorId, Arg.Any<CancellationToken>())
+            .Returns(new SellerDraftSnapshotDto(
+                _assetId, workspaceId, 4, 1,
+                new SellerDraftMaterialPayload("T", null, Guid.NewGuid(), []),
+                Declaration: null,
+                DeclarationComplete: false,
+                LatestVersionId: null,
+                LatestVersionNumber: null));
+
+        var command = new PublishAssetVersionCommand(
+            _assetId,
+            _authorId,
+            new PublishAssetVersionRequest("COMMERCIAL", "Bug fixes")
+            {
+                WorkspaceId = workspaceId,
+                ExpectedWorkspaceRevision = 4
+            },
+            new MemoryStream([1]),
+            "next.zip",
+            1);
+
+        Result<Guid> result = await _handler.Handle(command, CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        await _moderationStoreMock.Received(1).AttachUploadedVersionToWorkspace(
+            _assetId, Arg.Any<Guid>(), _authorId, workspaceId, 4, Arg.Any<CancellationToken>());
+        await _moderationStoreMock.DidNotReceive().EnsurePreUploadWorkspace(
+            Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Handle_WhenNamedWorkspaceRevisionIsStale_ShouldRejectBeforeStreaming()
+    {
+        var workspaceId = Guid.NewGuid();
+        StubOwnedAsset();
+        _moderationStoreMock.GetOwnerDraftSnapshotByWorkspace(workspaceId, _authorId, Arg.Any<CancellationToken>())
+            .Returns(new SellerDraftSnapshotDto(
+                _assetId, workspaceId, 5, 1,
+                new SellerDraftMaterialPayload("T", null, Guid.NewGuid(), []),
+                Declaration: null,
+                DeclarationComplete: false,
+                LatestVersionId: null,
+                LatestVersionNumber: null));
+
+        var command = new PublishAssetVersionCommand(
+            _assetId,
+            _authorId,
+            new PublishAssetVersionRequest("COMMERCIAL", "Bug fixes")
+            {
+                WorkspaceId = workspaceId,
+                ExpectedWorkspaceRevision = 4
+            },
+            new MemoryStream([1]),
+            "next.zip",
+            1);
+
+        Result<Guid> result = await _handler.Handle(command, CancellationToken.None);
+
+        result.IsSuccess.Should().BeFalse();
+        result.Status.Should().Be(ResultStatus.Conflict);
+        result.Errors.Should().Contain(ErrorCodes.ERR_MODERATION_WORKSPACE_STALE);
+        await _assetStoreMock.DidNotReceive().CreateNextCandidateVersion(
+            Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<AssetVersion>(), Arg.Any<CancellationToken>());
+        await _moderationStoreMock.DidNotReceive().AttachUploadedVersionToWorkspace(
+            Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<long>(), Arg.Any<CancellationToken>());
+    }
 
     private void StubOwnedAsset(DateTimeOffset? deletedAt = null)
     {

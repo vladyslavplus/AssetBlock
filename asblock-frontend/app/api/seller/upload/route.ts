@@ -53,6 +53,12 @@ export async function POST(request: Request) {
   for (const tag of parsed.data.tags ?? []) {
     fields.push(['tags', tag])
   }
+  if (parsed.data.workspaceId) {
+    fields.push(['workspaceId', parsed.data.workspaceId])
+  }
+  if (parsed.data.expectedWorkspaceRevision !== undefined) {
+    fields.push(['expectedWorkspaceRevision', String(parsed.data.expectedWorkspaceRevision)])
+  }
   const forward = incoming.createForwardBody(fields)
   if (!forward) {
     await incoming.cancel('invalid_multipart_value')

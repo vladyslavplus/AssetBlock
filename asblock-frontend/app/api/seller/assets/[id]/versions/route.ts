@@ -48,10 +48,17 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
   }
 
   const store = await cookies()
-  const forward = incoming.createForwardBody([
+  const fields: Array<readonly [string, string]> = [
     ['licenseCode', parsed.data.licenseCode],
     ['releaseNotes', parsed.data.releaseNotes],
-  ])
+  ]
+  if (parsed.data.workspaceId) {
+    fields.push(['workspaceId', parsed.data.workspaceId])
+  }
+  if (parsed.data.expectedWorkspaceRevision !== undefined) {
+    fields.push(['expectedWorkspaceRevision', String(parsed.data.expectedWorkspaceRevision)])
+  }
+  const forward = incoming.createForwardBody(fields)
   if (!forward) {
     await incoming.cancel('invalid_multipart_value')
     return problemResponse(
