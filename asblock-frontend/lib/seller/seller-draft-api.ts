@@ -42,7 +42,24 @@ async function readResponseText(res: Response, signal?: AbortSignal): Promise<st
 
 export type SellerApiResult<T> =
   | { ok: true; value: T }
-  | { ok: false; message: string; fieldErrors?: Record<string, string> }
+  | {
+      ok: false
+      message: string
+      fieldErrors?: Record<string, string>
+      code?: string
+    }
+
+function errorResult(parsed: unknown, fallback: string) {
+  const p = parseApiErrorBody(parsed)
+  const fe = p?.fieldErrors
+  const keys = fe ? Object.keys(fe) : []
+  return {
+    ok: false as const,
+    message: p?.summary ?? fallback,
+    ...(p?.code ? { code: p.code } : {}),
+    ...(keys.length > 0 && fe ? { fieldErrors: fe } : {}),
+  }
+}
 
 async function sendJson<T>(
   url: string,
@@ -58,14 +75,7 @@ async function sendJson<T>(
   })
   const parsed = parseMaybeJson(await res.text())
   if (!res.ok) {
-    const p = parseApiErrorBody(parsed)
-    const fe = p?.fieldErrors
-    const keys = fe ? Object.keys(fe) : []
-    return {
-      ok: false,
-      message: p?.summary ?? `Request failed (${res.status})`,
-      ...(keys.length > 0 && fe ? { fieldErrors: fe } : {}),
-    }
+    return errorResult(parsed, `Request failed (${res.status})`)
   }
   if (!schema.safeParse(parsed).success) {
     return { ok: false, message: 'Unexpected response from server.' }
@@ -91,14 +101,7 @@ export async function createSellerDraft(body: {
   })
   const parsed = parseMaybeJson(await res.text())
   if (!res.ok) {
-    const p = parseApiErrorBody(parsed)
-    const fe = p?.fieldErrors
-    const keys = fe ? Object.keys(fe) : []
-    return {
-      ok: false,
-      message: p?.summary ?? `Could not create draft (${res.status})`,
-      ...(keys.length > 0 && fe ? { fieldErrors: fe } : {}),
-    }
+    return errorResult(parsed, `Could not create draft (${res.status})`)
   }
   const created = sellerDraftCreatedSchema.safeParse(parsed)
   if (!created.success) {

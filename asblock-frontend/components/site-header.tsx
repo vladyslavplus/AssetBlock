@@ -12,6 +12,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
+import { routes } from '@/lib/routes'
 import { cn } from '@/lib/utils'
 import { siteShellClass } from '@/lib/site-layout'
 import { useAuth } from '@/components/auth/auth-context'
@@ -24,7 +25,7 @@ import { BrandLogo } from '@/components/brand-logo'
 
 export function SiteHeader() {
   const router = useRouter()
-  const { user, status, logout, isAdmin } = useAuth()
+  const { user, status, logout, isAdmin, isModerator } = useAuth()
   const [scrolled, setScrolled] = useState(false)
   const [menuOpen, setMenuOpen] = useState(false)
 
@@ -133,6 +134,11 @@ export function SiteHeader() {
                           <Link href="/admin">Admin panel</Link>
                         </DropdownMenuItem>
                       ) : null}
+                      {isModerator ? (
+                        <DropdownMenuItem asChild>
+                          <Link href={routes.moderation()}>Moderation</Link>
+                        </DropdownMenuItem>
+                      ) : null}
                       <DropdownMenuSeparator />
                       <DropdownMenuItem variant="destructive" onSelect={() => void handleSignOut()}>
                         Sign out
@@ -232,6 +238,17 @@ export function SiteHeader() {
                   >
                     <Link href="/admin" onClick={() => setMenuOpen(false)}>
                       Admin panel
+                    </Link>
+                  </Button>
+                ) : null}
+                {isModerator ? (
+                  <Button
+                    variant="outline"
+                    asChild
+                    className="w-full border-border text-foreground bg-transparent hover:bg-secondary/50 hover:border-foreground/40 transition-smooth"
+                  >
+                    <Link href={routes.moderation()} onClick={() => setMenuOpen(false)}>
+                      Moderation
                     </Link>
                   </Button>
                 ) : null}

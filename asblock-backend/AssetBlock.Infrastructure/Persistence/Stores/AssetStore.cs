@@ -592,6 +592,14 @@ internal sealed class AssetStore(
                 x.LatestVersion != null ? x.LatestVersion.ProcessingErrorSummary : null))
             .ToListAsync(cancellationToken);
 
+        Dictionary<Guid, Guid> publicVersionIds =
+            await LoadPublicVersionIds(items.Select(i => i.Id).ToList(), cancellationToken);
+        items = items
+            .Select(i => publicVersionIds.TryGetValue(i.Id, out Guid versionId)
+                ? i with { PublicVersionId = versionId }
+                : i)
+            .ToList();
+
         return new PagedResult<SellerAssetListItem>(
             await ApplyWorkingMaterialFields(
                 items,
@@ -676,6 +684,12 @@ internal sealed class AssetStore(
             return null;
         }
 
+        Dictionary<Guid, Guid> publicVersionIds =
+            await LoadPublicVersionIds([item.Id], cancellationToken);
+        item = publicVersionIds.TryGetValue(item.Id, out Guid publicVersionId)
+            ? item with { PublicVersionId = publicVersionId }
+            : item with { PublicVersionId = null };
+
         return (await ApplyWorkingMaterialFields(
             [item],
             i => i.Id,
@@ -688,6 +702,32 @@ internal sealed class AssetStore(
                 Tags = material.Tags
             },
             cancellationToken))[0];
+    }
+
+    /// <summary>
+    /// Resolves each asset's approved public version id, or null when none exists.
+    /// </summary>
+    private async Task<Dictionary<Guid, Guid>> LoadPublicVersionIds(
+        List<Guid> assetIds,
+        CancellationToken cancellationToken)
+    {
+        if (assetIds.Count == 0)
+        {
+            return new Dictionary<Guid, Guid>();
+        }
+
+        return await (
+            from a in dbContext.Assets.AsNoTracking()
+            where assetIds.Contains(a.Id) && a.CurrentPublicationSnapshotId != null
+            join s in PublicationEligibilityQuery.TrustedApprovedSnapshots(dbContext)
+                on new { SnapshotId = a.CurrentPublicationSnapshotId!.Value, AssetId = a.Id }
+                equals new { SnapshotId = s.Id, s.AssetId }
+            join v in dbContext.AssetVersions.AsNoTracking()
+                on new { VersionId = s.AssetVersionId, s.AssetId, Hash = s.ContentSha256 }
+                equals new { VersionId = v.Id, v.AssetId, Hash = v.ContentSha256 }
+            where v.ProcessingStatus == AssetVersionProcessingStatus.READY
+            select new { AssetId = a.Id, VersionId = v.Id })
+            .ToDictionaryAsync(x => x.AssetId, x => x.VersionId, cancellationToken);
     }
 
     /// <summary>

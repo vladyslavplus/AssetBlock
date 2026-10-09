@@ -102,6 +102,68 @@ const sessionUser = {
 }
 const refreshByToken = Object.create(null)
 
+// Draft-first seller flow state; mutated by the seller endpoints below so the
+// smoke test can exercise save → refetch → upload against one workspace.
+const workspaceId = '77777777-7777-4777-8777-777777777777'
+let workspaceRevision = 1
+let declaration = null
+let declarationComplete = false
+
+const sellerDetail = {
+  id: assetId,
+  title: 'Procedural Shader Kit',
+  description: 'A test asset',
+  price: 19,
+  categoryId,
+  categoryName: 'Shaders',
+  authorId: sessionUser.id,
+  authorUsername: 'seller',
+  createdAt: '2026-01-01T00:00:00.000Z',
+  updatedAt: '2026-01-01T00:00:00.000Z',
+  tags: ['unity'],
+  latestVersionId: null,
+  latestVersionNumber: null,
+  currentReadyVersionId: null,
+  publicVersionId: null,
+  latestProcessingStatus: 'READY',
+  latestProcessingUpdatedAt: '2026-01-01T00:00:00.000Z',
+  latestProcessingErrorCode: null,
+  latestProcessingErrorSummary: null,
+}
+
+const draftMaterial = {
+  title: 'Procedural Shader Kit',
+  description: 'A test asset',
+  categoryId,
+  tags: ['unity'],
+}
+
+function draftSnapshot() {
+  return {
+    assetId,
+    workspaceId,
+    workspaceRevision,
+    caseRevision: 0,
+    material: draftMaterial,
+    declaration,
+    declarationComplete,
+    latestVersionId: null,
+    latestVersionNumber: null,
+  }
+}
+
+function declarationSnapshot() {
+  return {
+    assetId,
+    assetVersionId: null,
+    workspaceId,
+    workspaceRevision,
+    headRevision: workspaceRevision,
+    declaration,
+    declarationComplete,
+  }
+}
+
 function bumpRefresh(token, ok) {
   if (!refreshByToken[token]) {
     refreshByToken[token] = { ok: 0, fail: 0 }
@@ -183,8 +245,79 @@ const server = http.createServer((req, res) => {
     return
   }
 
-  if (pathname === `/api/assets/${assetId}/versions`) {
+  if (pathname === `/api/assets/${assetId}/versions` && req.method === 'GET') {
     send(res, 200, { items: [], totalCount: 0, page: 1, pageSize: 50 })
+    return
+  }
+
+  if (pathname === `/api/users/me/assets/${assetId}`) {
+    send(res, 200, sellerDetail)
+    return
+  }
+
+  if (pathname === `/api/users/me/assets/${assetId}/processing-jobs`) {
+    send(res, 200, [])
+    return
+  }
+
+  if (pathname === '/api/assets/drafts' && req.method === 'POST') {
+    void readJson(req).then(() => {
+      workspaceRevision = 1
+      declaration = null
+      declarationComplete = false
+      send(res, 200, { assetId, workspaceId, workspaceRevision, replayed: false })
+    })
+    return
+  }
+
+  if (pathname === `/api/assets/${assetId}/draft` && req.method === 'GET') {
+    send(res, 200, draftSnapshot())
+    return
+  }
+
+  if (pathname === `/api/assets/${assetId}/draft` && req.method === 'PATCH') {
+    void readJson(req).then(() => {
+      workspaceRevision += 1
+      send(res, 200, {
+        workspaceId,
+        workspaceRevision,
+        headRevision: workspaceRevision,
+        replayed: false,
+      })
+    })
+    return
+  }
+
+  if (pathname === `/api/assets/${assetId}/declaration` && req.method === 'GET') {
+    send(res, 200, declarationSnapshot())
+    return
+  }
+
+  if (pathname === `/api/assets/${assetId}/declaration` && req.method === 'PUT') {
+    void readJson(req).then((body) => {
+      workspaceRevision += 1
+      declaration = body?.declaration ?? null
+      const summary =
+        typeof declaration?.ownContributionSummary === 'string'
+          ? declaration.ownContributionSummary.trim()
+          : ''
+      declarationComplete = Boolean(declaration?.redistributionAcknowledged) && summary.length > 0
+      send(res, 200, {
+        workspaceId,
+        workspaceRevision,
+        headRevision: workspaceRevision,
+        replayed: false,
+      })
+    })
+    return
+  }
+
+  if (pathname === `/api/assets/${assetId}/versions` && req.method === 'POST') {
+    // Multipart upload — drain the body and acknowledge the created version.
+    req.resume()
+    req.on('end', () => {
+      send(res, 200, { id: versionId, versionNumber: 1, processingStatus: 'PENDING_INSPECTION' })
+    })
     return
   }
 

@@ -1,7 +1,9 @@
 import { defineConfig, devices } from '@playwright/test'
 
 const port = Number(process.env.PLAYWRIGHT_PORT ?? 3100)
-const baseURL = `http://127.0.0.1:${port}`
+// localhost (not 127.0.0.1): next dev normalizes request.url to localhost, so
+// BFF same-origin checks only match when the browser origin is localhost too.
+const baseURL = `http://localhost:${port}`
 
 export default defineConfig({
   testDir: './e2e',

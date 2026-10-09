@@ -1,138 +1,156 @@
-import { fireEvent, screen, waitFor } from '@testing-library/react'
+import { screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { AssetUploadForm } from '@/components/sell/asset-upload-form'
-import type * as sellerApi from '@/lib/seller/seller-api'
 import { renderWithQueryClient } from '@/test/render'
 import { verifiedSeller } from '@/test/session-user'
+import type * as SellerDraftApiModule from '@/lib/seller/seller-draft-api'
+import type * as CatalogQueryModule from '@/lib/catalog/catalog-query'
 
-const uploadSellerAsset = vi.hoisted(() => vi.fn())
+const createSellerDraft = vi.hoisted(() => vi.fn())
+const fetchCatalogFacets = vi.hoisted(() => vi.fn())
 const useAuth = vi.hoisted(() => vi.fn())
 const routerPush = vi.hoisted(() => vi.fn())
-const routerRefresh = vi.hoisted(() => vi.fn())
-const toastError = vi.hoisted(() => vi.fn())
-const toastSuccess = vi.hoisted(() => vi.fn())
 
 vi.mock('next/navigation', () => ({
-  useRouter: () => ({ push: routerPush, refresh: routerRefresh, replace: vi.fn() }),
-  usePathname: () => '/sell',
-  useSearchParams: () => new URLSearchParams('tab=upload'),
+  useRouter: () => ({ push: routerPush, replace: vi.fn(), refresh: vi.fn() }),
 }))
 
 vi.mock('@/components/auth/auth-context', () => ({
   useAuth: () => useAuth(),
 }))
 
-vi.mock('@/lib/seller/seller-api', async () => {
-  const actual = await vi.importActual<typeof sellerApi>('@/lib/seller/seller-api')
-  return { ...actual, uploadSellerAsset }
+vi.mock('@/lib/seller/seller-draft-api', async () => {
+  const actual = await vi.importActual<typeof SellerDraftApiModule>('@/lib/seller/seller-draft-api')
+  return { ...actual, createSellerDraft }
 })
 
-vi.mock('sonner', () => ({
-  toast: { error: toastError, success: toastSuccess },
-}))
+vi.mock('@/lib/catalog/catalog-query', async () => {
+  const actual = await vi.importActual<typeof CatalogQueryModule>('@/lib/catalog/catalog-query')
+  return { ...actual, fetchCatalogFacets }
+})
 
-const categoryId = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'
+vi.mock('sonner', () => ({ toast: { error: vi.fn(), success: vi.fn(), info: vi.fn() } }))
 
-function renderUpload() {
+const UUID_CATEGORY = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb'
+const UUID_CREATED = '123e4567-e89b-12d3-a456-426614174999'
+
+function renderForm() {
   return renderWithQueryClient(<AssetUploadForm />)
 }
 
-function setPackageFile(file: File) {
-  const input = document.getElementById('upload-file')
-  if (!(input instanceof HTMLInputElement)) {
-    throw new Error('Package file input was not rendered.')
-  }
-  fireEvent.change(input, { target: { files: [file] } })
+async function fillForm(user: ReturnType<typeof userEvent.setup>) {
+  await user.type(screen.getByLabelText(/^title$/i), 'Forest Pack')
+  await user.type(screen.getByLabelText('Price in USD'), '15')
+  await user.selectOptions(screen.getByLabelText(/^category$/i), UUID_CATEGORY)
+}
+
+async function submitForm(user: ReturnType<typeof userEvent.setup>) {
+  await user.click(screen.getByRole('button', { name: /^create draft$/i }))
 }
 
 describe('AssetUploadForm', () => {
   beforeEach(() => {
+    vi.clearAllMocks()
     useAuth.mockReturnValue({
       user: verifiedSeller(),
       status: 'authenticated',
       isAdmin: false,
+      isModerator: false,
       refresh: vi.fn(),
       logout: vi.fn(),
     })
-    vi.stubGlobal(
-      'fetch',
-      vi.fn(async (input: RequestInfo | URL) => {
-        const url = String(input)
-        if (url.includes('api/categories')) {
-          return new Response(
-            JSON.stringify({
-              items: [{ id: categoryId, name: 'Scripts', slug: 'scripts', description: null }],
-              totalCount: 1,
-              page: 1,
-              pageSize: 100,
-            }),
-            { status: 200, headers: { 'Content-Type': 'application/json' } },
-          )
-        }
-        if (url.includes('api/tags')) {
-          return new Response(
-            JSON.stringify({ items: [], totalCount: 0, page: 1, pageSize: 100 }),
-            { status: 200, headers: { 'Content-Type': 'application/json' } },
-          )
-        }
-        return new Response('{}', { status: 200 })
-      }),
-    )
-  })
-
-  it('blocks invalid submit and does not call the API', async () => {
-    const user = userEvent.setup()
-    renderUpload()
-    await user.click(screen.getByRole('button', { name: /upload asset/i }))
-    expect(await screen.findByText(/title is required/i)).toBeInTheDocument()
-    expect(uploadSellerAsset).not.toHaveBeenCalled()
-  })
-
-  it('rejects disallowed file types', async () => {
-    renderUpload()
-    await screen.findByRole('option', { name: 'Scripts' })
-    setPackageFile(new File(['nope'], 'malware.exe', { type: 'application/octet-stream' }))
-    expect(await screen.findByText(/choose a \.zip/i)).toBeInTheDocument()
-  })
-
-  it('maps backend field errors, prevents double submit, then succeeds', async () => {
-    const user = userEvent.setup()
-    let resolveUpload: (value: unknown) => void = () => {}
-    uploadSellerAsset.mockImplementationOnce(
-      () =>
-        new Promise((resolve) => {
-          resolveUpload = resolve
-        }),
-    )
-    renderUpload()
-    await screen.findByRole('option', { name: 'Scripts' })
-    await user.type(screen.getByLabelText(/^title$/i), 'My pack')
-    await user.type(screen.getByRole('spinbutton', { name: 'Price in USD' }), '12')
-    await user.selectOptions(screen.getByLabelText('Category'), categoryId)
-    setPackageFile(new File(['zip'], 'pack.zip', { type: 'application/zip' }))
-
-    const submit = screen.getByRole('button', { name: /upload asset/i })
-    await user.click(submit)
-    expect(submit).toBeDisabled()
-    await user.click(submit)
-    expect(uploadSellerAsset).toHaveBeenCalledTimes(1)
-    resolveUpload({
-      ok: false,
-      message: 'Title is taken.',
-      fieldErrors: { title: 'Title is taken.' },
+    fetchCatalogFacets.mockResolvedValue({
+      categories: [{ id: UUID_CATEGORY, name: '3D' }],
+      tags: [],
     })
-    expect(await screen.findByText('Title is taken.')).toBeInTheDocument()
-    expect(toastError).toHaveBeenCalled()
-    expect(JSON.stringify(toastError.mock.calls)).not.toMatch(/ZodError/)
+  })
 
-    uploadSellerAsset.mockResolvedValueOnce({ ok: true, assetId: 'asset-1' })
-    await user.click(screen.getByRole('button', { name: /upload asset/i }))
+  it('creates a draft from metadata only, without a file', async () => {
+    const user = userEvent.setup()
+    createSellerDraft.mockResolvedValue({
+      ok: true,
+      value: {
+        assetId: UUID_CREATED,
+        workspaceId: '123e4567-e89b-12d3-a456-426614174001',
+        workspaceRevision: 1,
+        replayed: false,
+      },
+    })
+    renderForm()
+
+    await fillForm(user)
+    await submitForm(user)
+
     await waitFor(() => {
-      expect(routerPush).toHaveBeenCalledWith('/sell?tab=listings')
+      expect(createSellerDraft).toHaveBeenCalledTimes(1)
     })
-    expect(routerRefresh).not.toHaveBeenCalled()
-    expect(toastSuccess).toHaveBeenCalledWith('Asset uploaded. Security processing started.')
+    const body = createSellerDraft.mock.calls[0][0] as Record<string, unknown>
+    expect(body.title).toBe('Forest Pack')
+    expect(body.categoryId).toBe(UUID_CATEGORY)
+    expect(body.operationId).toMatch(
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/,
+    )
+    expect(routerPush).toHaveBeenCalledWith(`/sell/assets/${UUID_CREATED}/edit`)
+    expect(screen.queryByLabelText(/package file/i)).not.toBeInTheDocument()
+  })
+
+  it('reuses the operation ID when retrying the same logical creation', async () => {
+    const user = userEvent.setup()
+    createSellerDraft.mockRejectedValueOnce(new TypeError('Network failed'))
+    createSellerDraft.mockResolvedValueOnce({
+      ok: true,
+      value: {
+        assetId: UUID_CREATED,
+        workspaceId: '123e4567-e89b-12d3-a456-426614174001',
+        workspaceRevision: 1,
+        replayed: false,
+      },
+    })
+    renderForm()
+
+    await fillForm(user)
+    await submitForm(user)
+    await waitFor(() => expect(createSellerDraft).toHaveBeenCalledTimes(1))
+    await submitForm(user)
+    await waitFor(() => expect(createSellerDraft).toHaveBeenCalledTimes(2))
+
+    const firstId = (createSellerDraft.mock.calls[0][0] as Record<string, unknown>).operationId
+    const retryId = (createSellerDraft.mock.calls[1][0] as Record<string, unknown>).operationId
+    expect(retryId).toBe(firstId)
+  })
+
+  it('starts a new operation after the payload changes', async () => {
+    const user = userEvent.setup()
+    createSellerDraft.mockResolvedValue({
+      ok: false,
+      message: 'Network failed.',
+    })
+    renderForm()
+
+    await fillForm(user)
+    await submitForm(user)
+    await waitFor(() => expect(createSellerDraft).toHaveBeenCalledTimes(1))
+    await user.type(screen.getByLabelText(/^title$/i), ' v2')
+    await submitForm(user)
+    await waitFor(() => expect(createSellerDraft).toHaveBeenCalledTimes(2))
+
+    const firstId = (createSellerDraft.mock.calls[0][0] as Record<string, unknown>).operationId
+    const changedId = (createSellerDraft.mock.calls[1][0] as Record<string, unknown>).operationId
+    expect(changedId).not.toBe(firstId)
+  })
+
+  it('shows a sign-in prompt for anonymous users', () => {
+    useAuth.mockReturnValue({
+      user: null,
+      status: 'anonymous',
+      isAdmin: false,
+      isModerator: false,
+      refresh: vi.fn(),
+      logout: vi.fn(),
+    })
+    renderForm()
+    expect(screen.getByText(/sign in to create a listing/i)).toBeInTheDocument()
   })
 })

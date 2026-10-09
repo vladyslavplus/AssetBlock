@@ -16,6 +16,9 @@ import { GET as adminAuditLogsGet } from '@/app/api/admin/audit-logs/route'
 import { GET as sellerCollectionsGet } from '@/app/api/seller/collections/route'
 import { GET as sellerListingsGet } from '@/app/api/seller/listings/route'
 import { POST as sellerWithdrawPost } from '@/app/api/seller/submissions/[submissionId]/withdraw/route'
+import { POST as sellerDraftsPost } from '@/app/api/seller/drafts/route'
+import { GET as adminUsersGet } from '@/app/api/admin/users/route'
+import { PATCH as adminUserRolePatch } from '@/app/api/admin/users/[id]/role/route'
 import { AUTH_COOKIE_ACCESS } from '@/lib/auth/constants'
 import { createMemoryCookieStore, makeJwt } from '@/test/cookie-store'
 
@@ -383,5 +386,126 @@ describe('BFF Mutating Routes Zod Validation (E3)', () => {
       expect(body.code).toBe('ERR_VALIDATION_FAILED')
       expect(fetchSpy).not.toHaveBeenCalled()
     })
+  })
+})
+
+describe('BFF draft creation and admin users routes', () => {
+  const fetchSpy = vi.fn()
+
+  afterEach(() => {
+    vi.unstubAllGlobals()
+    fetchSpy.mockReset()
+    cookieStore.delete(AUTH_COOKIE_ACCESS)
+  })
+
+  const uuid = '123e4567-e89b-12d3-a456-426614174000'
+
+  it('seller drafts POST rejects a missing operationId with 400 ProblemDetails', async () => {
+    vi.stubGlobal('fetch', fetchSpy)
+    const res = await sellerDraftsPost(
+      makeReq('http://localhost:3000/api/seller/drafts', 'POST', {
+        title: 'Draft',
+        price: 10,
+        categoryId: uuid,
+      }),
+    )
+    expect(res.status).toBe(400)
+    const body = await res.json()
+    expect(body.code).toBe('ERR_VALIDATION_FAILED')
+    expect(body.errors?.operationId).toBeDefined()
+    expect(fetchSpy).not.toHaveBeenCalled()
+  })
+
+  it('seller drafts POST forwards the real payload including operationId to the backend', async () => {
+    cookieStore.set(AUTH_COOKIE_ACCESS, makeJwt(Math.floor(Date.now() / 1000) + 3600))
+    fetchSpy.mockResolvedValue(
+      new Response(
+        JSON.stringify({ assetId: uuid, workspaceId: uuid, workspaceRevision: 1, replayed: false }),
+        { status: 200 },
+      ),
+    )
+    vi.stubGlobal('fetch', fetchSpy)
+    const res = await sellerDraftsPost(
+      makeReq('http://localhost:3000/api/seller/drafts', 'POST', {
+        operationId: '123e4567-e89b-12d3-a456-426614174009',
+        title: 'Draft asset',
+        description: 'Some description',
+        price: 12,
+        categoryId: uuid,
+        downloadLimitPerHour: 5,
+      }),
+    )
+    expect(res.status).toBe(200)
+    expect(fetchSpy).toHaveBeenCalledTimes(1)
+    const calledUrl = String(fetchSpy.mock.calls[0][0])
+    expect(calledUrl).toContain('/api/assets/drafts')
+    const forwarded = JSON.parse(String(fetchSpy.mock.calls[0][1]?.body)) as Record<string, unknown>
+    expect(forwarded.operationId).toBe('123e4567-e89b-12d3-a456-426614174009')
+    expect(forwarded.title).toBe('Draft asset')
+    expect(forwarded.downloadLimitPerHour).toBe(5)
+  })
+
+  it('admin users GET forwards bounded search/paging to the backend', async () => {
+    cookieStore.set(AUTH_COOKIE_ACCESS, makeJwt(Math.floor(Date.now() / 1000) + 3600))
+    fetchSpy.mockResolvedValue(
+      new Response(JSON.stringify({ items: [], totalCount: 0, page: 1, pageSize: 20 }), {
+        status: 200,
+      }),
+    )
+    vi.stubGlobal('fetch', fetchSpy)
+    const res = await adminUsersGet(
+      new Request('http://localhost:3000/api/admin/users?search=mod&page=2&pageSize=20'),
+    )
+    expect(res.status).toBe(200)
+    const calledUrl = String(fetchSpy.mock.calls[0][0])
+    expect(calledUrl).toContain('/api/admin/users?search=mod')
+    expect(calledUrl).toContain('page=2')
+  })
+
+  it('admin users GET rejects an oversize pageSize with 400 ProblemDetails', async () => {
+    vi.stubGlobal('fetch', fetchSpy)
+    const res = await adminUsersGet(
+      new Request('http://localhost:3000/api/admin/users?pageSize=1000'),
+    )
+    expect(res.status).toBe(400)
+    expect(fetchSpy).not.toHaveBeenCalled()
+  })
+
+  it('admin users role PATCH rejects an Admin role grant with 400 ProblemDetails', async () => {
+    vi.stubGlobal('fetch', fetchSpy)
+    const res = await adminUserRolePatch(
+      makeReq(`http://localhost:3000/api/admin/users/${uuid}/role`, 'PATCH', {
+        role: 'Admin',
+        expectedRoleRevision: 1,
+      }),
+      { params: Promise.resolve({ id: uuid }) },
+    )
+    expect(res.status).toBe(400)
+    const body = await res.json()
+    expect(body.code).toBe('ERR_VALIDATION_FAILED')
+    expect(fetchSpy).not.toHaveBeenCalled()
+  })
+
+  it('admin users role PATCH forwards the real payload with expectedRoleRevision', async () => {
+    cookieStore.set(AUTH_COOKIE_ACCESS, makeJwt(Math.floor(Date.now() / 1000) + 3600))
+    fetchSpy.mockResolvedValue(
+      new Response(JSON.stringify({ userId: uuid, role: 'Moderator', roleRevision: 5 }), {
+        status: 200,
+      }),
+    )
+    vi.stubGlobal('fetch', fetchSpy)
+    const res = await adminUserRolePatch(
+      makeReq(`http://localhost:3000/api/admin/users/${uuid}/role`, 'PATCH', {
+        role: 'Moderator',
+        expectedRoleRevision: 4,
+      }),
+      { params: Promise.resolve({ id: uuid }) },
+    )
+    expect(res.status).toBe(200)
+    const calledUrl = String(fetchSpy.mock.calls[0][0])
+    expect(calledUrl).toContain(`/api/admin/users/${uuid}/role`)
+    const forwarded = JSON.parse(String(fetchSpy.mock.calls[0][1]?.body)) as Record<string, unknown>
+    expect(forwarded.role).toBe('Moderator')
+    expect(forwarded.expectedRoleRevision).toBe(4)
   })
 })

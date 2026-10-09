@@ -1,8 +1,9 @@
 'use client'
 
-import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { Controller, useForm, useWatch } from 'react-hook-form'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { Controller, useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { AlertCircle, Loader2 } from 'lucide-react'
 import { toast } from 'sonner'
@@ -19,21 +20,27 @@ import {
 } from '@/components/auth/email-verification-notice'
 import Link from 'next/link'
 import { routes } from '@/lib/routes'
-import { AssetLicenseSelector } from '@/components/assets/asset-license-selector'
 import { applyApiFieldErrorsToForm } from '@/lib/http/api-errors'
 import {
-  ASSET_UPLOAD_ALLOWED_EXTENSIONS,
-  assetUploadFormSchema,
-  type AssetUploadFormValues,
+  assetDraftCreateFormSchema,
+  type AssetDraftCreateFormValues,
 } from '@/lib/seller/seller-schemas'
-import { uploadSellerAsset } from '@/lib/seller/seller-api'
+import { createSellerDraft } from '@/lib/seller/seller-draft-api'
+import { createOperationTracker } from '@/lib/seller/draft-operations'
 import { catalogKeys, fetchCatalogFacets } from '@/lib/catalog/catalog-query'
-import { assetKeys } from '@/lib/catalog/asset-detail-query'
 import { sellerKeys } from '@/lib/seller/seller-query'
-import { sellerProcessingKeys } from '@/lib/seller/seller-processing-query'
 import { invalidateQueriesInBackground } from '@/lib/query/query-refresh'
 import { SellerPriceStepInput } from '@/components/sell/seller-price-step-input'
 import { SessionBlockSkeleton } from '@/components/skeletons/session-block-skeleton'
+
+function draftCreatePayloadKey(values: AssetDraftCreateFormValues): string {
+  return JSON.stringify([
+    values.title.trim(),
+    values.description?.trim() ?? '',
+    values.price,
+    values.categoryId,
+  ])
+}
 
 export function AssetUploadForm() {
   const router = useRouter()
@@ -42,6 +49,8 @@ export function AssetUploadForm() {
   const authed = status === 'authenticated'
   const pending = status === 'loading'
   const verified = isEmailVerified(user)
+  const [operationTracker] = useState(() => createOperationTracker())
+  const [failure, setFailure] = useState<string | null>(null)
 
   const facetsQuery = useQuery({
     queryKey: catalogKeys.facets(),
@@ -49,7 +58,6 @@ export function AssetUploadForm() {
     staleTime: 5 * 60 * 1000,
     enabled: authed,
   })
-
   const categories = facetsQuery.data?.categories ?? []
   const categoriesLoading = authed && facetsQuery.isPending
   const categoriesError = facetsQuery.isError ? 'Could not load categories.' : null
@@ -58,61 +66,49 @@ export function AssetUploadForm() {
     register,
     control,
     setError,
-    trigger,
     handleSubmit,
-    formState: { errors, isSubmitting, isValidating },
-    reset,
-  } = useForm<AssetUploadFormValues>({
-    resolver: zodResolver(assetUploadFormSchema),
+    formState: { errors, isSubmitting },
+  } = useForm<AssetDraftCreateFormValues>({
+    resolver: zodResolver(assetDraftCreateFormSchema),
     defaultValues: {
       title: '',
       description: '',
       price: undefined,
       categoryId: '',
-      licenseCode: 'PERSONAL',
-      tags: '',
     },
   })
 
-  const selectedFile = useWatch({ control, name: 'file' })
-  const fileDisplayName =
-    selectedFile instanceof File && selectedFile.name.length > 0
-      ? selectedFile.name
-      : 'No file chosen'
-
   const onSubmit = handleSubmit(async (values) => {
-    const fd = new FormData()
-    fd.set('title', values.title.trim())
-    const desc = values.description?.trim()
-    if (desc) fd.set('description', desc)
-    fd.set('price', String(values.price))
-    fd.set('categoryId', values.categoryId)
-    fd.set('licenseCode', values.licenseCode)
-    const tagParts = (values.tags ?? '')
-      .split(/[,;\n]+/)
-      .map((t) => t.trim())
-      .filter(Boolean)
-    for (const t of tagParts) {
-      fd.append('tags', t)
+    setFailure(null)
+    let result
+    try {
+      result = await createSellerDraft({
+        operationId: operationTracker.idFor(draftCreatePayloadKey(values)),
+        title: values.title.trim(),
+        description: values.description?.trim() || null,
+        price: values.price,
+        categoryId: values.categoryId,
+        downloadLimitPerHour: null,
+      })
+    } catch {
+      setFailure('Could not confirm draft creation. Your input is kept — retry to confirm it.')
+      return
     }
-    fd.set('file', values.file)
-
-    const result = await uploadSellerAsset(fd)
     if (!result.ok) {
       if (result.fieldErrors) {
         applyApiFieldErrorsToForm(setError, result.fieldErrors)
       }
+      setFailure(result.message)
       toast.error(result.message)
       return
     }
 
-    toast.success('Asset uploaded. Security processing started.')
-    reset()
+    toast.success(
+      result.value.replayed ? 'Draft restored.' : 'Draft saved. Upload files when you are ready.',
+    )
+    operationTracker.reset()
     invalidateQueriesInBackground(queryClient, { queryKey: sellerKeys.all })
-    invalidateQueriesInBackground(queryClient, { queryKey: sellerProcessingKeys.all })
-    invalidateQueriesInBackground(queryClient, { queryKey: catalogKeys.all })
-    invalidateQueriesInBackground(queryClient, { queryKey: assetKeys.similarAll })
-    router.push('/sell?tab=listings')
+    router.push(routes.sellerAssetEdit(result.value.assetId))
   })
 
   if (pending) {
@@ -122,7 +118,7 @@ export function AssetUploadForm() {
   if (!authed) {
     return (
       <div className="rounded-lg border border-border bg-card-elevated/50 px-4 py-8 text-center space-y-3">
-        <p className="text-sm text-muted-foreground">Sign in to upload assets.</p>
+        <p className="text-sm text-muted-foreground">Sign in to create a listing.</p>
         <Button asChild className="bg-primary text-primary-foreground hover:bg-[#6D28D9]">
           <Link href={routes.login(routes.sell())}>Sign in</Link>
         </Button>
@@ -141,6 +137,15 @@ export function AssetUploadForm() {
           <AlertCircle className="h-4 w-4 text-amber-600 dark:text-amber-400" />
           <AlertDescription className="text-amber-800 dark:text-amber-200 text-xs">
             {categoriesError}
+          </AlertDescription>
+        </Alert>
+      )}
+
+      {failure && (
+        <Alert className="border-destructive/40 bg-destructive/10 py-2">
+          <AlertCircle className="h-4 w-4 text-destructive" />
+          <AlertDescription className="text-xs text-destructive" role="alert">
+            {failure}
           </AlertDescription>
         </Alert>
       )}
@@ -227,90 +232,25 @@ export function AssetUploadForm() {
         </div>
       </div>
 
-      <div className="space-y-1.5">
-        <Label htmlFor="upload-tags" className="text-xs font-medium">
-          Tags <span className="text-muted-foreground font-normal">(optional)</span>
-        </Label>
-        <Input
-          id="upload-tags"
-          className="bg-input border-border"
-          placeholder="react, typescript, dashboard"
-          {...register('tags')}
-        />
-        <p className="text-[11px] text-muted-foreground">Comma-separated.</p>
-      </div>
-
-      <AssetLicenseSelector
-        control={control}
-        name="licenseCode"
-        errors={errors}
-        idPrefix="upload"
-      />
-
-      <div className="space-y-1.5">
-        <Label htmlFor="upload-file" className="text-xs font-medium">
-          Package file
-        </Label>
-        <Controller
-          name="file"
-          control={control}
-          render={({ field: { onChange, onBlur, name, ref } }) => (
-            <input
-              id="upload-file"
-              ref={ref}
-              type="file"
-              accept={ASSET_UPLOAD_ALLOWED_EXTENSIONS.join(',')}
-              name={name}
-              onBlur={onBlur}
-              className="sr-only"
-              onChange={(e) => {
-                const picked = e.target.files?.[0]
-                onChange(picked)
-                e.target.value = ''
-                void trigger('file')
-              }}
-            />
-          )}
-        />
-        <div className="flex min-h-9 w-full items-center gap-2 rounded-md border border-border bg-input px-3 py-1.5">
-          <Button
-            type="button"
-            variant="secondary"
-            className="h-8 shrink-0 px-3 text-xs"
-            onClick={() => document.getElementById('upload-file')?.click()}
-          >
-            Choose file
-          </Button>
-          <span
-            className="min-w-0 flex-1 truncate text-xs text-muted-foreground"
-            title={fileDisplayName}
-          >
-            {fileDisplayName}
-          </span>
-        </div>
-        {errors.file && <p className="text-xs text-destructive">{errors.file.message as string}</p>}
-        <p className="text-[11px] text-muted-foreground">
-          Max 250 MiB. Supported archives: zip, tar, tar.gz, tgz.
-        </p>
-      </div>
+      <p className="text-[11px] text-muted-foreground">
+        This creates a private draft — no file yet. You will pick the license and upload the package
+        from the draft page.
+      </p>
 
       <Button
         type="submit"
         disabled={
-          isSubmitting ||
-          isValidating ||
-          categoriesLoading ||
-          Boolean(categoriesError && categories.length === 0)
+          isSubmitting || categoriesLoading || Boolean(categoriesError && categories.length === 0)
         }
         className="bg-primary text-primary-foreground hover:bg-[#6D28D9] w-full sm:w-auto"
       >
         {isSubmitting ? (
           <>
             <Loader2 className="h-4 w-4 mr-2 animate-spin" aria-hidden />
-            Uploading…
+            Saving draft…
           </>
         ) : (
-          'Upload asset'
+          'Create draft'
         )}
       </Button>
     </form>

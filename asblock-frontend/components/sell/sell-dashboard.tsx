@@ -81,7 +81,7 @@ function SellDashboardInner() {
               Bundles
             </TabsTrigger>
             <TabsTrigger value="upload" className="text-xs sm:text-sm">
-              Upload asset
+              New listing
             </TabsTrigger>
           </TabsList>
 

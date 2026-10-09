@@ -45,6 +45,7 @@ const listing = {
   latestVersionId: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
   latestVersionNumber: 1,
   currentReadyVersionId: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
+  publicVersionId: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
   latestProcessingStatus: 'READY',
   latestProcessingUpdatedAt: '2026-01-01T00:00:00.000Z',
   latestProcessingErrorCode: null,
@@ -56,6 +57,7 @@ const pendingListing = {
   id: 'dddddddd-dddd-4ddd-8ddd-dddddddddddd',
   title: 'Pending Pack',
   currentReadyVersionId: null,
+  publicVersionId: null,
   latestProcessingStatus: 'PENDING_INSPECTION',
 }
 
@@ -161,7 +163,7 @@ describe('SellMyListings', () => {
       'href',
       '/sell/assets/dddddddd-dddd-4ddd-8ddd-dddddddddddd/edit',
     )
-    expect(screen.getByText('Live')).toBeInTheDocument()
+    expect(screen.getByText('Checks passed')).toBeInTheDocument()
     expect(screen.getByText('Inspecting archive')).toBeInTheDocument()
   })
 })

@@ -988,35 +988,35 @@ from the npm registry (canonical, OS-independent). Reviewed exceptions may set
   - copyright/author: LongYinan
   - source: https://github.com/napi-rs/napi-rs
   - license-url: https://spdx.org/licenses/MIT.html
-- `npm` @next/env@16.3.6
+- `npm` @next/env@16.3.8
   - copyright/author: Next.js Team
   - source: https://github.com/vercel/next.js
   - license-url: https://spdx.org/licenses/MIT.html
-- `npm` @next/eslint-plugin-next@16.3.6
+- `npm` @next/eslint-plugin-next@16.3.8
   - source: https://github.com/vercel/next.js
   - license-url: https://spdx.org/licenses/MIT.html
-- `npm` @next/swc-darwin-arm64@16.3.6
+- `npm` @next/swc-darwin-arm64@16.3.8
   - source: https://github.com/vercel/next.js
   - license-url: https://spdx.org/licenses/MIT.html
-- `npm` @next/swc-darwin-x64@16.3.6
+- `npm` @next/swc-darwin-x64@16.3.8
   - source: https://github.com/vercel/next.js
   - license-url: https://spdx.org/licenses/MIT.html
-- `npm` @next/swc-linux-arm64-gnu@16.3.6
+- `npm` @next/swc-linux-arm64-gnu@16.3.8
   - source: https://github.com/vercel/next.js
   - license-url: https://spdx.org/licenses/MIT.html
-- `npm` @next/swc-linux-arm64-musl@16.3.6
+- `npm` @next/swc-linux-arm64-musl@16.3.8
   - source: https://github.com/vercel/next.js
   - license-url: https://spdx.org/licenses/MIT.html
-- `npm` @next/swc-linux-x64-gnu@16.3.6
+- `npm` @next/swc-linux-x64-gnu@16.3.8
   - source: https://github.com/vercel/next.js
   - license-url: https://spdx.org/licenses/MIT.html
-- `npm` @next/swc-linux-x64-musl@16.3.6
+- `npm` @next/swc-linux-x64-musl@16.3.8
   - source: https://github.com/vercel/next.js
   - license-url: https://spdx.org/licenses/MIT.html
-- `npm` @next/swc-win32-arm64-msvc@16.3.6
+- `npm` @next/swc-win32-arm64-msvc@16.3.8
   - source: https://github.com/vercel/next.js
   - license-url: https://spdx.org/licenses/MIT.html
-- `npm` @next/swc-win32-x64-msvc@16.3.6
+- `npm` @next/swc-win32-x64-msvc@16.3.8
   - source: https://github.com/vercel/next.js
   - license-url: https://spdx.org/licenses/MIT.html
 - `npm` @nodelib/fs.scandir@2.1.5
@@ -2058,7 +2058,7 @@ from the npm registry (canonical, OS-independent). Reviewed exceptions may set
   - copyright/author: Nicholas C. Zakas
   - source: https://github.com/eslint/eslint
   - license-url: https://spdx.org/licenses/MIT.html
-- `npm` eslint-config-next@16.3.6
+- `npm` eslint-config-next@16.3.8
   - source: https://github.com/vercel/next.js
   - license-url: https://spdx.org/licenses/MIT.html
 - `npm` eslint-config-prettier@10.1.8
@@ -2268,7 +2268,7 @@ from the npm registry (canonical, OS-independent). Reviewed exceptions may set
   - copyright/author: Bazyli Brzoska
   - source: https://github.com/niieani/gpt-tokenizer
   - license-url: https://spdx.org/licenses/MIT.html
-- `npm` handlebars@4.7.9
+- `npm` handlebars@4.7.10
   - copyright/author: Yehuda Katz
   - source: https://github.com/handlebars-lang/handlebars.js
   - license-url: https://spdx.org/licenses/MIT.html
@@ -2702,7 +2702,7 @@ from the npm registry (canonical, OS-independent). Reviewed exceptions may set
 - `npm` neo-async@2.6.2
   - source: ssh://git@github.com/suguru03/neo-async
   - license-url: https://spdx.org/licenses/MIT.html
-- `npm` next@16.3.6
+- `npm` next@16.3.8
   - source: https://github.com/vercel/next.js
   - license-url: https://spdx.org/licenses/MIT.html
 - `npm` next-themes@0.4.6

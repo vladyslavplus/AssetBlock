@@ -28,7 +28,7 @@ import { deleteSellerAsset } from '@/lib/seller/seller-api'
 import { formatUsdWhole } from '@/lib/format-currency'
 import { routes } from '@/lib/routes'
 import type { SellerAssetListItem } from '@/lib/seller/seller-asset-schemas'
-import { isSellerListingPubliclyReady } from '@/lib/seller/seller-asset-schemas'
+import { isSellerListingPubliclyReady, isDraftOnlyListing } from '@/lib/seller/seller-asset-schemas'
 import {
   getSellerProcessingBadgeClass,
   getSellerProcessingStatusLabel,
@@ -159,7 +159,9 @@ export function SellMyListings() {
                   variant="outline"
                   className={getSellerProcessingBadgeClass(a.latestProcessingStatus)}
                 >
-                  {getSellerProcessingStatusLabel(a.latestProcessingStatus)}
+                  {isDraftOnlyListing(a)
+                    ? 'Draft'
+                    : getSellerProcessingStatusLabel(a.latestProcessingStatus)}
                 </Badge>
               </div>
               <p className="text-xs text-muted-foreground mt-0.5 font-mono tabular-nums">

@@ -20,4 +20,5 @@ public sealed record SellerAssetDetailItem(
     AssetVersionProcessingStatus LatestProcessingStatus,
     DateTimeOffset LatestProcessingUpdatedAt,
     string? LatestProcessingErrorCode,
-    string? LatestProcessingErrorSummary);
+    string? LatestProcessingErrorSummary,
+    Guid? PublicVersionId = null);

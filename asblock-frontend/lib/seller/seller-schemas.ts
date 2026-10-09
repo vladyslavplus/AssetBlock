@@ -58,6 +58,21 @@ export const assetEditFormSchema = z.object({
 
 export type AssetEditFormValues = z.infer<typeof assetEditFormSchema>
 
+export const assetDraftCreateFormSchema = z.object({
+  title: z.string().min(1, 'Title is required').max(ASSET_TITLE_MAX_LENGTH),
+  description: z
+    .string()
+    .max(
+      ASSET_DESCRIPTION_MAX_LENGTH,
+      `Description must be at most ${ASSET_DESCRIPTION_MAX_LENGTH} characters`,
+    )
+    .optional(),
+  price: marketplacePriceSchema,
+  categoryId: z.string().uuid('Select a category'),
+})
+
+export type AssetDraftCreateFormValues = z.infer<typeof assetDraftCreateFormSchema>
+
 export const sellerAssetPatchSchema = z.object({
   title: z.string().min(1, 'Title is required').max(ASSET_TITLE_MAX_LENGTH).optional(),
   description: z

@@ -149,7 +149,12 @@ export async function fetchSellerAssetVersions(
 
 export type PublishVersionResult =
   | { ok: true; versionId: string }
-  | { ok: false; message: string; fieldErrors?: Record<string, string> }
+  | {
+      ok: false
+      message: string
+      fieldErrors?: Record<string, string>
+      code?: string
+    }
 
 export async function publishSellerAssetVersion(
   assetId: string,
@@ -168,7 +173,8 @@ export async function publishSellerAssetVersion(
     const keys = fe ? Object.keys(fe) : []
     return {
       ok: false,
-      message: p?.summary ?? `Publish failed (${res.status})`,
+      message: p?.summary ?? `Upload failed (${res.status})`,
+      ...(p?.code ? { code: p.code } : {}),
       ...(keys.length > 0 && fe ? { fieldErrors: fe } : {}),
     }
   }

@@ -57,6 +57,7 @@ export const routes = {
   },
   library: () => '/library' as Route,
   account: () => '/account' as Route,
+  moderation: () => '/moderation' as Route,
   sell: () => '/sell' as Route,
   sellerAssetEdit: (id: string) => `/sell/assets/${encodeURIComponent(id)}/edit` as Route,
   sellerAssetAnalytics: (id: string) => `/sell/analytics/assets/${encodeURIComponent(id)}` as Route,

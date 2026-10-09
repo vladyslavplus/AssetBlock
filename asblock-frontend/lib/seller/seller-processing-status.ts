@@ -7,7 +7,7 @@ export function getSellerProcessingStatusLabel(status: SellerProcessingStatus): 
     case 'PENDING_MALWARE_SCAN':
       return 'Scanning for malware'
     case 'READY':
-      return 'Live'
+      return 'Checks passed'
     case 'REJECTED':
       return 'Rejected'
     case 'PROCESSING_FAILED':
@@ -18,11 +18,14 @@ export function getSellerProcessingStatusLabel(status: SellerProcessingStatus): 
 export function getSellerProcessingStatusDescription(status: SellerProcessingStatus): string {
   switch (status) {
     case 'PENDING_INSPECTION':
-      return 'This upload is being inspected before it can appear in the catalog.'
+      return 'This upload is being inspected before buyers can access it.'
     case 'PENDING_MALWARE_SCAN':
-      return 'This upload is being scanned before it can appear in the catalog.'
+      return 'This upload is being scanned before buyers can access it.'
     case 'READY':
-      return 'This listing is visible in the public catalog.'
+      return (
+        'Technical file checks passed. This version is not published yet — it needs an ' +
+        'approved review before new sales.'
+      )
     case 'REJECTED':
       return 'This upload did not pass security checks and is not publicly listed.'
     case 'PROCESSING_FAILED':

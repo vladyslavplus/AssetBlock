@@ -4,6 +4,9 @@ settings:
   autoInstallPeers: true
   excludeLinksFromLockfile: false
 
+overrides:
+  handlebars@<4.7.10: 4.7.10
+
 patchedDependencies:
   braces@3.0.3: 9d9b16d472a54763f75309f1aaf3cfc4a7b8d035b0d40e28173db4f68138821a
 
@@ -300,8 +303,8 @@ packages:
   gpt-tokenizer@4.0.0:
     resolution: {integrity: sha512-YAWIyzvuVUHEfW7tFfFAxH8qQb+Q3RU9nYOTy7skMNX5qzU6Q8jxTHZLyO56ug1vYvCR7wndzpd3jwD86/mhjQ==}
 
-  handlebars@4.7.9:
-    resolution: {integrity: sha512-4E71E0rpOaQuJR2A3xDZ+GM1HyWYv1clR58tC8emQNeQe3RH7MAzSbat+V0wG78LQBo6m6bzSG/L4pBuCsgnUQ==}
+  handlebars@4.7.10:
+    resolution: {integrity: sha512-P5VJMVM7qgBn6vjXMw8WG9uVI+ncf2pi72j4de4yz5ZULLj2RGqLYaKOYGsgyrViQ0tePOVlN1tDCCXXtFqXKg==}
     engines: {node: '>=0.4.7'}
     hasBin: true
 
@@ -1008,7 +1011,7 @@ snapshots:
 
   gpt-tokenizer@4.0.0: {}
 
-  handlebars@4.7.9:
+  handlebars@4.7.10:
     dependencies:
       minimist: 1.2.8
       neo-async: 2.6.2
@@ -1196,7 +1199,7 @@ snapshots:
       git-url-parse: 16.1.0
       globby: 16.2.4
       gpt-tokenizer: 4.0.0
-      handlebars: 4.7.9
+      handlebars: 4.7.10
       iconv-lite: 0.7.3
       is-binary-path: 3.0.0
       isbinaryfile: 5.0.7

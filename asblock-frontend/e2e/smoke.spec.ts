@@ -179,7 +179,7 @@ async function seedRefreshCookie(page: Page, value = 'playwright-refresh') {
     {
       name: 'assetblock_rt',
       value,
-      domain: '127.0.0.1',
+      domain: 'localhost',
       path: '/',
       httpOnly: true,
       sameSite: 'Lax',
@@ -269,43 +269,116 @@ test('failed refresh lands on signed-out UI without a redirect loop', async ({ p
   expect(stats.ok).toBe(0)
 })
 
-test('seller upload client validation and successful mocked publish', async ({ page }) => {
+test('seller draft-first flow: create draft, save declaration, upload version', async ({
+  page,
+}) => {
   await seedRefreshCookie(page)
+  // Access cookie lets the server-rendered edit page and authenticated BFF routes
+  // reach the stub backend (which does not validate the token value).
+  // Valid-shape JWT access cookie: the server-side detail fetch only refreshes
+  // (and would try to set cookies during RSC render) when the token is expired.
+  const e2eAccessToken =
+    'eyJhbGciOiJIUzI1NiJ9.' +
+    Buffer.from(JSON.stringify({ exp: 9999999999, role: 'User' })).toString('base64url') +
+    '.playwright-signature'
+  await page.context().addCookies([
+    {
+      name: 'assetblock_at',
+      value: e2eAccessToken,
+      domain: 'localhost',
+      path: '/',
+      httpOnly: true,
+      sameSite: 'Lax',
+    },
+  ])
   await interceptBrowserApi(page, sessionUser)
   await page.goto('/sell?tab=upload')
-  await page.getByRole('button', { name: /upload asset/i }).click()
+
+  await page.getByRole('button', { name: /create draft/i }).click()
   await expect(page.getByText(/title is required/i)).toBeVisible()
-  await page.getByRole('textbox', { name: /^title$/i }).fill('New Pack')
+
+  await page.getByRole('textbox', { name: /^title$/i }).fill('Draft Flow Pack')
   await page.getByRole('spinbutton', { name: 'Price in USD' }).fill('11')
   await page.getByLabel(/^category$/i).selectOption({ label: 'Shaders' })
-  await page.locator('#upload-file').setInputFiles({
-    name: 'pack.zip',
-    mimeType: 'application/zip',
-    buffer: Buffer.from('zip'),
-  })
-  await expect(page.getByText('pack.zip')).toBeVisible()
-  await expect(page.getByText(/choose a \.zip|file is required/i)).toHaveCount(0)
 
-  const uploadResponsePromise = page.waitForResponse((response) => {
+  const createResponsePromise = page.waitForResponse((response) => {
     try {
       const url = new URL(response.url())
-      return url.pathname === '/api/seller/upload' && response.request().method() === 'POST'
+      return url.pathname === '/api/seller/drafts' && response.request().method() === 'POST'
     } catch {
       return false
     }
   })
+  await page.getByRole('button', { name: /create draft/i }).click()
+  const createResponse = await createResponsePromise
+  if (!createResponse.ok()) {
+    throw new Error(
+      `Draft create failed: ${createResponse.status()} ${await createResponse.text()}`,
+    )
+  }
 
-  await page.getByRole('button', { name: /upload asset/i }).click()
+  await expect(page).toHaveURL(new RegExp(`/sell/assets/${assetId}/edit$`))
+  await expect(page.getByRole('heading', { name: /edit listing/i })).toBeVisible()
+  await expect(page.getByText(/own contribution summary/i)).toBeVisible()
 
-  const uploadResponse = await uploadResponsePromise
-  expect(uploadResponse.ok()).toBeTruthy()
+  // Declaration save through the real editor: checkbox + summary, then CAS save.
+  await page.locator('#declaration-own-summary').fill('Made entirely by me.')
+  await expect(page.getByText('Incomplete — saving is allowed')).toBeVisible()
+  await page
+    .getByText('I confirm the distribution rights and disclosure policy for this version.')
+    .click()
 
-  await expect(page.getByText(/asset uploaded\. security processing started\./i)).toBeVisible()
-  await expect(page).toHaveURL(/\/sell\?tab=listings/)
-  await expect(page.getByRole('tab', { name: /my listings/i })).toHaveAttribute(
-    'data-state',
-    'active',
-  )
+  const declarationSavePromise = page.waitForResponse((response) => {
+    try {
+      const url = new URL(response.url())
+      return (
+        url.pathname === `/api/seller/assets/${assetId}/declaration` &&
+        response.request().method() === 'PUT'
+      )
+    } catch {
+      return false
+    }
+  })
+  await page.getByRole('button', { name: /save sources/i }).click()
+  const declarationSave = await declarationSavePromise
+  expect(declarationSave.ok()).toBeTruthy()
+  const declarationBody = (await declarationSave.request().postDataJSON()) as {
+    expectedWorkspaceRevision: number
+    declaration: { redistributionAcknowledged: boolean }
+  }
+  expect(declarationBody.expectedWorkspaceRevision).toBe(1)
+  expect(declarationBody.declaration.redistributionAcknowledged).toBe(true)
+
+  // Completeness badge follows the backend snapshot, not the pre-save state.
+  await expect(page.getByText('Complete', { exact: true })).toBeVisible()
+
+  // Upload version with unsaved-sibling guard clear and real multipart POST.
+  await page.locator('#publish-version-file').setInputFiles({
+    name: 'pack.zip',
+    mimeType: 'application/zip',
+    buffer: Buffer.from('zip'),
+  })
+  await page.getByLabel('Release notes').fill('Initial version.')
+
+  const versionResponsePromise = page.waitForResponse((response) => {
+    try {
+      const url = new URL(response.url())
+      return (
+        url.pathname === `/api/seller/assets/${assetId}/versions` &&
+        response.request().method() === 'POST'
+      )
+    } catch {
+      return false
+    }
+  })
+  await page.getByRole('button', { name: /upload version/i }).click()
+  const versionResponse = await versionResponsePromise
+  expect(versionResponse.ok()).toBeTruthy()
+
+  await expect(
+    page.getByText(/new version uploaded\. security processing started\./i),
+  ).toBeVisible()
+  await expect(page.getByText('Incomplete — saving is allowed')).toHaveCount(0)
 })
 
 test('checkout unavailable never navigates to Stripe', async ({ page }) => {

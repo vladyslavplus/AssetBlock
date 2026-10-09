@@ -4,7 +4,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { createContext, useContext, useEffect, useRef, type ReactNode } from 'react'
 import type { SessionUser } from '@/lib/auth/auth-types'
 import { authKeys, fetchSessionUser } from '@/lib/auth/auth-query'
-import { isAdminRole } from '@/lib/auth/roles'
+import { isAdminRole, isModeratorRole } from '@/lib/auth/roles'
 import { clearPrivateUserQueries } from '@/lib/query/clear-user-scoped-queries'
 
 type AuthStatus = 'loading' | 'anonymous' | 'authenticated'
@@ -14,6 +14,7 @@ interface AuthContextValue {
   status: AuthStatus
   /** True when session user has backend Admin role (own profile only). */
   isAdmin: boolean
+  isModerator: boolean
   /** Re-fetch session from BFF (e.g. after login/register). */
   refresh: () => Promise<void>
   logout: () => Promise<void>
@@ -40,6 +41,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       ? 'authenticated'
       : 'anonymous'
   const isAdmin = isAdminRole(user?.role)
+  const isModerator = isModeratorRole(user?.role)
 
   const previousUserIdRef = useRef<string | null | undefined>(undefined)
 
@@ -65,7 +67,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     queryClient.setQueryData(authKeys.session(), null)
   }
 
-  const value = { user, status, isAdmin, refresh, logout }
+  const value = { user, status, isAdmin, isModerator, refresh, logout }
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
 }
