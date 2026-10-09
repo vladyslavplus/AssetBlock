@@ -1,4 +1,4 @@
-import { APP_ROLE_ADMIN, type AppRole } from '@/lib/auth/roles'
+import { APP_ROLE_ADMIN, APP_ROLE_MODERATOR, type AppRole } from '@/lib/auth/roles'
 
 export interface RoutePolicy {
   prefix: string
@@ -8,6 +8,7 @@ export interface RoutePolicy {
 
 export const ROUTE_POLICIES: readonly RoutePolicy[] = [
   { prefix: '/admin', sessionRequired: true, role: APP_ROLE_ADMIN },
+  { prefix: '/moderation', sessionRequired: true, role: APP_ROLE_MODERATOR },
   { prefix: '/library', sessionRequired: true },
   { prefix: '/account', sessionRequired: true },
   { prefix: '/sell', sessionRequired: true },

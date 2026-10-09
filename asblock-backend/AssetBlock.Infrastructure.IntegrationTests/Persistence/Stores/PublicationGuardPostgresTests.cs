@@ -1,4 +1,5 @@
 using AssetBlock.Domain.Core.Dto.Assets;
+using AssetBlock.Domain.Core.Dto.Paging;
 using AssetBlock.Domain.Core.Entities;
 using AssetBlock.Domain.Core.Enums;
 using AssetBlock.Domain.Core.Publication;
@@ -149,5 +150,50 @@ public sealed class PublicationGuardPostgresTests(PostgresFixture fixture)
 
         await db.SaveChangesAsync();
         return snapshot;
+    }
+
+    [Fact]
+    public async Task GetMyListings_WhenMixedPublicationState_ShouldExposePublicVersionIdOnlyForApproved()
+    {
+        await using ApplicationDbContext db = await fixture.CreateCleanDbContext();
+        (User author, Category category) = await TestData.SeedAuthorAndCategory(db);
+
+        Asset approvedAsset = TestData.CreateAsset(author.Id, category.Id, title: "Approved v1");
+        AssetVersion approvedVersion = TestData.CreateAssetVersion(
+            approvedAsset.Id,
+            isCurrent: true,
+            processingStatus: AssetVersionProcessingStatus.READY);
+        db.Assets.Add(approvedAsset);
+        db.AssetVersions.Add(approvedVersion);
+        PublicationSnapshot approvedSnapshot = await SeedTrustedApprovedSnapshotAsync(
+            db, approvedAsset, approvedVersion, author);
+        approvedAsset.CurrentPublicationSnapshotId = approvedSnapshot.Id;
+
+        Asset candidateAsset = TestData.CreateAsset(author.Id, category.Id, title: "Candidate only");
+        AssetVersion candidateVersion = TestData.CreateAssetVersion(
+            candidateAsset.Id,
+            isCurrent: true,
+            processingStatus: AssetVersionProcessingStatus.READY);
+        db.Assets.Add(candidateAsset);
+        db.AssetVersions.Add(candidateVersion);
+        await db.SaveChangesAsync();
+
+        var store = new AssetStore(db);
+        PagedResult<SellerAssetListItem> listings = await store.GetMyListings(
+            author.Id,
+            new GetAssetsRequest { Page = 1, PageSize = 10 });
+
+        listings.Items.Should().HaveCount(2);
+        listings.Items.Should().Contain(i => i.Id == approvedAsset.Id)
+            .Which.PublicVersionId.Should().Be(approvedVersion.Id);
+        listings.Items.Should().Contain(i => i.Id == candidateAsset.Id)
+            .Which.PublicVersionId.Should().BeNull();
+
+        SellerAssetDetailItem? detail = await store.GetOwnedSellerDetail(candidateAsset.Id, author.Id);
+        detail.Should().NotBeNull();
+        detail!.PublicVersionId.Should().BeNull();
+
+        SellerAssetDetailItem? approvedDetail = await store.GetOwnedSellerDetail(approvedAsset.Id, author.Id);
+        approvedDetail!.PublicVersionId.Should().Be(approvedVersion.Id);
     }
 }

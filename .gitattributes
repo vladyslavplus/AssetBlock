@@ -1,5 +1,8 @@
 patches/*.patch text eol=lf
 
+# Match frontend formatting on Windows without normalizing binary files.
+asblock-frontend/** text=auto eol=lf
+
 # Fixture hashes include intentional LF/CRLF bytes; never normalize on checkout.
 scripts/feasibility_pilot/fixtures/code/** -text
 scripts/feasibility_pilot/fixtures/licenses/** -text

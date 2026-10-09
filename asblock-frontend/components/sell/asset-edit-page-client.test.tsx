@@ -35,6 +35,7 @@ const pendingAsset: SellerAssetDetail = {
   latestVersionId: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
   latestVersionNumber: 1,
   currentReadyVersionId: null,
+  publicVersionId: null,
   latestProcessingStatus: 'PENDING_INSPECTION',
   latestProcessingUpdatedAt: '2026-01-01T00:00:00.000Z',
   latestProcessingErrorCode: null,
@@ -85,9 +86,7 @@ describe('AssetEditPageClient', () => {
     )
 
     expect(await screen.findByText('Inspecting archive')).toBeInTheDocument()
-    expect(
-      screen.getByText(/being inspected before it can appear in the catalog/i),
-    ).toBeInTheDocument()
+    expect(screen.getByText(/being inspected before buyers can access it/i)).toBeInTheDocument()
     expect(screen.queryByText(/not found/i)).not.toBeInTheDocument()
   })
 })

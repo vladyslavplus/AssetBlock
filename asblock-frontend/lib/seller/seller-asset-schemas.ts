@@ -15,6 +15,7 @@ const sellerProcessingFieldsSchema = {
   latestVersionId: z.string().uuid().nullable(),
   latestVersionNumber: z.number().int().nonnegative().nullable(),
   currentReadyVersionId: z.string().uuid().nullable(),
+  publicVersionId: z.string().uuid().nullable(),
   latestProcessingStatus: sellerProcessingStatusSchema,
   latestProcessingUpdatedAt: isoDateTimeSchema,
   latestProcessingErrorCode: z.string().min(1).max(64).nullable(),
@@ -67,7 +68,11 @@ export const sellerAssetDetailSchema = z
 export type SellerAssetDetail = z.infer<typeof sellerAssetDetailSchema>
 
 export function isSellerListingPubliclyReady(
-  item: Pick<SellerAssetListItem, 'currentReadyVersionId'>,
+  item: Pick<SellerAssetListItem, 'publicVersionId'>,
 ): boolean {
-  return item.currentReadyVersionId != null
+  return item.publicVersionId != null
+}
+
+export function isDraftOnlyListing(item: Pick<SellerAssetListItem, 'latestVersionId'>): boolean {
+  return item.latestVersionId == null
 }
