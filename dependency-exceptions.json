@@ -120,7 +120,8 @@
       "versions": ["32.5.0"],
       "license": "Apache-2.0 AND CC-BY-4.0 AND LicenseRef-scancode-other-permissive AND LicenseRef-scancode-other-copyleft",
       "reason": "Isolated feasibility-pilot license-signal scanner only, installed into artifacts/feasibility_pilot/env/scancode. Not a product, backend, frontend, CI, or application runtime dependency. Software is Apache-2.0; reference datasets are CC-BY-4.0 with NOTICE attribution; PyPI also declares LicenseRef bundled third-party terms. Archive-extraction extras are not installed. Adding pypi to the exception schema does not add pip inventory or pip-audit to pnpm deps:check.",
-      "reviewedOn": "2026-10-04"
+      "reviewedOn": "2026-10-04",
+      "scope": "artifacts/feasibility_pilot/env/scancode"
     },
     {
       "ecosystem": "pypi",
@@ -128,7 +129,8 @@
       "versions": ["4.1.2"],
       "license": "LGPL-3.0-or-later",
       "reason": "Exact resolved copyleft transitive of scancode-toolkit 32.5.0 for the isolated feasibility-pilot scanner prefix only. Dynamic linking stays inside artifacts/feasibility_pilot/env/scancode. Not a product runtime dependency.",
-      "reviewedOn": "2026-10-04"
+      "reviewedOn": "2026-10-04",
+      "scope": "artifacts/feasibility_pilot/env/scancode"
     },
     {
       "ecosystem": "pypi",
@@ -136,7 +138,8 @@
       "versions": ["2.20191221"],
       "license": "MIT AND MPL-2.0",
       "reason": "Exact resolved transitive of scancode-toolkit 32.5.0. Combined MIT AND MPL-2.0 requires an exception for MPL-2.0. Isolated feasibility-pilot scanner prefix only; not a product runtime dependency.",
-      "reviewedOn": "2026-10-04"
+      "reviewedOn": "2026-10-04",
+      "scope": "artifacts/feasibility_pilot/env/scancode"
     },
     {
       "ecosystem": "pypi",
@@ -144,7 +147,8 @@
       "versions": ["1.3"],
       "license": "Artistic-1.0 OR GPL-2.0-or-later",
       "reason": "Exact resolved transitive of scancode-toolkit 32.5.0. Dual-licensed; the isolated pilot uses the Artistic alternative recorded in the wheel License field. Isolated scanner prefix only; not a product runtime dependency. GPL is not selected as the operating term.",
-      "reviewedOn": "2026-10-04"
+      "reviewedOn": "2026-10-04",
+      "scope": "artifacts/feasibility_pilot/env/scancode"
     },
     {
       "ecosystem": "pypi",
@@ -152,7 +156,8 @@
       "versions": ["2026.7.22"],
       "license": "MPL-2.0",
       "reason": "Isolated feasibility-pilot ScanCode prefix only (artifacts/feasibility_pilot/env/scancode). Reviewed wheel certifi-2026.7.22-py3-none-any.whl lock sha256 62f22742b58a1a33014a2b6b706588a8d7e2a88ae7bd1a6ebe8c992928483775. Distributed METADATA and licenses/LICENSE are MPL-2.0. Not a product, backend, frontend, CI, deployment, or distributable-image dependency. Exact version and wheel only; other versions are not authorized. This recording authorizes further local isolated use; the earlier out-of-scope install was not retroactively approved before this date.",
-      "reviewedOn": "2026-10-04"
+      "reviewedOn": "2026-10-04",
+      "scope": "artifacts/feasibility_pilot/env/scancode"
     },
     {
       "ecosystem": "pypi",
@@ -160,7 +165,8 @@
       "versions": ["4.16.0"],
       "license": "PSF-2.0",
       "reason": "Isolated feasibility-pilot ScanCode prefix only. Reviewed wheel typing_extensions-4.16.0-py3-none-any.whl lock sha256 481caa481374e813c1b176ada14e97f1f67a4539ce9cfeb3f350d78d6370c2e8. Distributed License-Expression is PSF-2.0 with dist-info/licenses/LICENSE. Not a product runtime. Exact version and wheel only.",
-      "reviewedOn": "2026-10-04"
+      "reviewedOn": "2026-10-04",
+      "scope": "artifacts/feasibility_pilot/env/scancode"
     },
     {
       "ecosystem": "pypi",
@@ -168,7 +174,8 @@
       "versions": ["33.0.0"],
       "license": "Apache-2.0 AND CC-BY-4.0 AND Python-2.0",
       "reason": "Isolated feasibility-pilot ScanCode prefix only. Reviewed wheel commoncode-33.0.0-py3-none-any.whl lock sha256 2f2d5470d3b9d1000a6a848170683e60d592a8630204b6f6fbab4303d16bd857. Distributed NOTICE is Apache-2.0 AND CC-BY-4.0 (apache-2.0.LICENSE, cc-by-4.0.LICENSE); dict_utils.ABOUT and fileutils.py.ABOUT also require Python-2.0 (python.LICENSE). Empty METADATA License is not treated as Apache-only. Not a product runtime. Exact version and wheel only.",
-      "reviewedOn": "2026-10-04"
+      "reviewedOn": "2026-10-04",
+      "scope": "artifacts/feasibility_pilot/env/scancode"
     },
     {
       "ecosystem": "pypi",
@@ -176,7 +183,8 @@
       "versions": ["2.3.1"],
       "license": "BSD-3-Clause AND LicenseRef-public-domain",
       "reason": "Isolated feasibility-pilot ScanCode prefix only. Reviewed wheel pyahocorasick-2.3.1-cp312-cp312-win_amd64.whl lock sha256 f5cc3c021be241fe9317c5991f8efba2b876e3956691322ad9e55c0d9ff7c599. METADATA License is BSD-3-Clause and Public-Domain; licenses/LICENSE is the BSD-3-Clause text. AND requires both conjuncts. Not a product runtime. Exact version and wheel only.",
-      "reviewedOn": "2026-10-04"
+      "reviewedOn": "2026-10-04",
+      "scope": "artifacts/feasibility_pilot/env/scancode"
     },
     {
       "ecosystem": "pypi",
@@ -184,7 +192,8 @@
       "versions": ["3.5.1.210531"],
       "license": "Apache-2.0 AND BSD-2-Clause AND LicenseRef-other-permissive AND LicenseRef-other-copyleft",
       "reason": "Isolated feasibility-pilot ScanCode prefix only; native libarchive plugin. Reviewed wheel extractcode_libarchive-3.5.1.210531-py3-none-win_amd64.whl lock sha256 164d3f6b1127154dacc7f15f05b37fbc775438a6c62a815376eab7095e4a6159. METADATA License is apache-2.0 AND bsd-simplified AND other-permissive AND other-copyleft. Bundled Windows licenses/ disclose GPL-3.0 (gcc-libs COPYING3; xz COPYING.GPLv3; gettext/libiconv/mpfr COPYING), LGPL-2.1 (gcc-libs COPYING.LIB; libiconv COPYING.LIB; xz COPYING.LGPLv2.1; mpfr COPYING.LESSER), GPL-2.0 (xz COPYING.GPLv2), and gmp LGPL. other-copyleft is those GPL/LGPL natives. Do not include this native bundle in a product image, deployment, or distributable package. extractcode-7z is not authorized. Exact version and wheel only.",
-      "reviewedOn": "2026-10-04"
+      "reviewedOn": "2026-10-04",
+      "scope": "artifacts/feasibility_pilot/env/scancode"
     },
     {
       "ecosystem": "pypi",
@@ -192,14 +201,13 @@
       "versions": ["5.39.210531"],
       "license": "Apache-2.0 AND LicenseRef-bsd-simplified-darwin AND BSD-2-Clause AND LicenseRef-public-domain AND BSD-3-Clause AND ISC AND (BSD-3-Clause OR GPL-1.0-or-later) AND BSD-4-Clause AND LicenseRef-other-permissive AND LicenseRef-other-copyleft",
       "reason": "Isolated feasibility-pilot ScanCode prefix only; native libmagic plugin. Reviewed wheel typecode_libmagic-5.39.210531-py3-none-win_amd64.whl lock sha256 24ceecb5c1249ddbdb6a471a0d35fbc11008cbd3b71cad0966f94ff94918a1fa. METADATA and typecode-libmagic.ABOUT declare the combined expression including BSD-4-Clause and (BSD-3-Clause OR GPL-1.0-or-later); gpl-1.0-plus.LICENSE and libmagic.NOTICE/.ABOUT are distributed. Bundled licenses/ disclose GPL-3.0 (gcc-libs COPYING3; xz COPYING.GPLv3), LGPL-2.1 (COPYING.LIB; xz COPYING.LGPLv2.1), GPL (gettext, libiconv), GPL-2.0 (xz COPYING.GPLv2). other-copyleft is those GPL/LGPL natives. Do not include this native bundle in a product image, deployment, or distributable package. Exact version and wheel only.",
-      "reviewedOn": "2026-10-04"
+      "reviewedOn": "2026-10-04",
+      "scope": "artifacts/feasibility_pilot/env/scancode"
     },
     {
       "ecosystem": "pypi",
       "name": "psycopg",
-      "versions": [
-        "3.2.10"
-      ],
+      "versions": ["3.2.10"],
       "license": "LGPL-3.0-only",
       "reason": "Unmodified internal isolated experiment/bootstrapping only, redistribution denied, all supplied terms/notices preserved; exact root review accepted provenance limitations Tracked recording followed initial isolated install; this authorizes ongoing retention/use, not prior policy compliance.",
       "reviewedOn": "2026-10-05",
@@ -216,9 +224,7 @@
     {
       "ecosystem": "pypi",
       "name": "psycopg-binary",
-      "versions": [
-        "3.2.10"
-      ],
+      "versions": ["3.2.10"],
       "license": "LGPL-3.0-only AND PostgreSQL AND Apache-2.0",
       "reason": "Unmodified internal isolated experiment/bootstrapping only, redistribution denied, all supplied terms/notices preserved; exact root review accepted provenance limitations Tracked recording followed initial isolated install; this authorizes ongoing retention/use, not prior policy compliance.",
       "reviewedOn": "2026-10-05",
@@ -235,9 +241,7 @@
     {
       "ecosystem": "pypi",
       "name": "typing-extensions",
-      "versions": [
-        "4.15.0"
-      ],
+      "versions": ["4.15.0"],
       "license": "Complete supplied PSF/Python historical license text; no individual-heading applicability claim",
       "reason": "Unmodified internal isolated experiment/bootstrapping only, redistribution denied, all supplied terms/notices preserved; exact root review accepted provenance limitations Tracked recording followed initial isolated install; this authorizes ongoing retention/use, not prior policy compliance.",
       "reviewedOn": "2026-10-05",
@@ -254,9 +258,7 @@
     {
       "ecosystem": "pypi",
       "name": "tzdata",
-      "versions": [
-        "2025.2"
-      ],
+      "versions": ["2025.2"],
       "license": "Apache-2.0 AND LicenseRef-public-domain-IANA-data",
       "reason": "Unmodified internal isolated experiment/bootstrapping only, redistribution denied, all supplied terms/notices preserved; exact root review accepted provenance limitations Tracked recording followed initial isolated install; this authorizes ongoing retention/use, not prior policy compliance.",
       "reviewedOn": "2026-10-05",
@@ -274,9 +276,7 @@
     {
       "ecosystem": "pypi",
       "name": "pip",
-      "versions": [
-        "25.2"
-      ],
+      "versions": ["25.2"],
       "license": "Finite supplied vendor aggregate MIT/BSD/Apache/MPL-2.0/Python license texts",
       "reason": "Unmodified internal isolated experiment/bootstrapping only, redistribution denied, all supplied terms/notices preserved; exact root review accepted provenance limitations Tracked recording followed initial isolated install; this authorizes ongoing retention/use, not prior policy compliance.",
       "reviewedOn": "2026-10-05",
@@ -314,6 +314,96 @@
       "approvalEvidenceSha256": "ba2eee29f21403ba606116afc85badc557550646a55d65add9a8cec8051a7997",
       "bootstrapOnly": true,
       "redistributionAllowed": false
+    },
+    {
+      "ecosystem": "pypi",
+      "name": "certifi",
+      "versions": ["2026.7.22"],
+      "license": "MPL-2.0",
+      "reason": "Owner-approved exact isolated local code-analysis CPU runtime and verification only (2026-10-11). Preserve upstream LICENSE/NOTICE files. Not a product, backend, frontend, CI, deployment, distribution, image, or training grant; noncommercial status is not the basis. Terms bound to recorded wheel/source evidence; project-policy admission, not a legal conclusion.",
+      "reviewedOn": "2026-10-11",
+      "scope": "artifacts/code_analysis/env/ml",
+      "artifactSha256": "62f22742b58a1a33014a2b6b706588a8d7e2a88ae7bd1a6ebe8c992928483775"
+    },
+    {
+      "ecosystem": "pypi",
+      "name": "numpy",
+      "versions": ["2.5.3"],
+      "license": "BSD-3-Clause AND 0BSD AND MIT AND Zlib AND CC0-1.0 AND BSD-3-Clause-Open-MPI AND GPL-3.0-or-later WITH GCC-exception-3.1",
+      "reason": "Owner-approved exact isolated local code-analysis CPU runtime and verification only (2026-10-11). Preserve upstream LICENSE/NOTICE files. Not a product, backend, frontend, CI, deployment, distribution, image, or training grant; noncommercial status is not the basis. Includes shipped LAPACK/OpenBLAS and GCC-runtime terms. Preserve bundled notices and GCC exception; the distributed expression is not simplified.",
+      "reviewedOn": "2026-10-11",
+      "scope": "artifacts/code_analysis/env/ml",
+      "artifactSha256": "0a59a421a32580a009e8a1751345bf829631b990dc1794b80514ab722b435def"
+    },
+    {
+      "ecosystem": "pypi",
+      "name": "regex",
+      "versions": ["2026.9.29"],
+      "license": "Apache-2.0 AND CNRI-Python",
+      "reason": "Owner-approved exact isolated local code-analysis CPU runtime and verification only (2026-10-11). Preserve upstream LICENSE/NOTICE files. Not a product, backend, frontend, CI, deployment, distribution, image, or training grant; noncommercial status is not the basis. Terms bound to recorded wheel/source evidence; project-policy admission, not a legal conclusion.",
+      "reviewedOn": "2026-10-11",
+      "scope": "artifacts/code_analysis/env/ml",
+      "artifactSha256": "fdd88ed5e20b1bcdd234421e454962c971aa44b653bdb7f1ea9ef683e90fb649"
+    },
+    {
+      "ecosystem": "pypi",
+      "name": "torch",
+      "versions": ["2.13.0+cpu"],
+      "license": "Apache-2.0 AND Apache-2.0 WITH LLVM-exception AND BSD-2-Clause AND BSD-3-Clause AND BSL-1.0 AND MIT AND GPL-3.0-only",
+      "reason": "Owner-approved exact isolated local code-analysis CPU runtime and verification only (2026-10-11). Preserve upstream LICENSE/NOTICE files. Not a product, backend, frontend, CI, deployment, distribution, image, or training grant; noncommercial status is not the basis. Includes sleef/BSL, LLVM exception, and the shipped GPL-3.0 test-directory notice. Compiled GPL membership is not established. Preserve all component notices. No distribution is authorized.",
+      "reviewedOn": "2026-10-11",
+      "scope": "artifacts/code_analysis/env/ml",
+      "artifactSha256": "a8b450c1e58e5800e5b4691dac412f8d2d65a1dc3298166f91596603a3531e6f"
+    },
+    {
+      "ecosystem": "pypi",
+      "name": "tqdm",
+      "versions": ["4.70.1"],
+      "license": "MPL-2.0 AND MIT",
+      "reason": "Owner-approved exact isolated local code-analysis CPU runtime and verification only (2026-10-11). Preserve upstream LICENSE/NOTICE files. Not a product, backend, frontend, CI, deployment, distribution, image, or training grant; noncommercial status is not the basis. Terms bound to recorded wheel/source evidence; project-policy admission, not a legal conclusion.",
+      "reviewedOn": "2026-10-11",
+      "scope": "artifacts/code_analysis/env/ml",
+      "artifactSha256": "c293e525e6fef9c20e8728fd4612df02a0aa31bb5fe91ecd93e123b1b7bffa73"
+    },
+    {
+      "ecosystem": "pypi",
+      "name": "typing-extensions",
+      "versions": ["4.16.0"],
+      "license": "PSF-2.0",
+      "reason": "Owner-approved exact isolated local code-analysis CPU runtime and verification only (2026-10-11). Preserve upstream LICENSE/NOTICE files. Not a product, backend, frontend, CI, deployment, distribution, image, or training grant; noncommercial status is not the basis. Terms bound to recorded wheel/source evidence; project-policy admission, not a legal conclusion.",
+      "reviewedOn": "2026-10-11",
+      "scope": "artifacts/code_analysis/env/ml",
+      "artifactSha256": "481caa481374e813c1b176ada14e97f1f67a4539ce9cfeb3f350d78d6370c2e8"
+    },
+    {
+      "ecosystem": "pypi",
+      "name": "typing-extensions",
+      "versions": ["4.16.0"],
+      "license": "PSF-2.0",
+      "reason": "Owner-approved exact local service/reference dependency under the specified isolated prefix only. Preserve upstream notices. No deployment, distribution, product-image or training grant.",
+      "reviewedOn": "2026-10-11",
+      "scope": "artifacts/code_analysis/env/index",
+      "artifactSha256": "481caa481374e813c1b176ada14e97f1f67a4539ce9cfeb3f350d78d6370c2e8"
+    },
+    {
+      "ecosystem": "pypi",
+      "name": "typing-extensions",
+      "versions": ["4.16.0"],
+      "license": "PSF-2.0",
+      "reason": "Owner-approved exact local service/reference dependency under the specified isolated prefix only. Preserve upstream notices. No deployment, distribution, product-image or training grant.",
+      "reviewedOn": "2026-10-11",
+      "scope": "artifacts/code_analysis/env/service",
+      "artifactSha256": "481caa481374e813c1b176ada14e97f1f67a4539ce9cfeb3f350d78d6370c2e8"
+    },
+    {
+      "ecosystem": "pypi",
+      "name": "certifi",
+      "versions": ["2026.7.22"],
+      "license": "MPL-2.0",
+      "reason": "Owner-approved exact local service/reference dependency under the specified isolated prefix only. Preserve upstream notices. No deployment, distribution, product-image or training grant.",
+      "reviewedOn": "2026-10-11",
+      "scope": "artifacts/code_analysis/env/service",
+      "artifactSha256": "62f22742b58a1a33014a2b6b706588a8d7e2a88ae7bd1a6ebe8c992928483775"
     }
   ]
 }
