@@ -24,6 +24,8 @@ artifacts/
 .agent-tools/
 .codex/config.toml
 .cursor/mcp.json
+/opencode.json
+/opencode.jsonc
 .serena/cache/
 .serena/logs/
 .serena/memories/
