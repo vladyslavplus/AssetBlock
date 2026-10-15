@@ -200,7 +200,9 @@ public sealed class AnalysisCapacityPostgresTests(PostgresFixture fixture)
         await holderTx.CommitAsync();
         Func<Task> deleteOperation = () => deleteTask;
         await deleteOperation.Should().ThrowAsync<PostgresException>()
-            .Where(ex => ex.SqlState == "23001" && ex.ConstraintName == "FK_code_analysis_runs_assets_AssetId");
+            .Where(ex => (ex.SqlState == PostgresErrorCodes.ForeignKeyViolation
+                || ex.SqlState == PostgresErrorCodes.RestrictViolation)
+                && ex.ConstraintName == "FK_code_analysis_runs_assets_AssetId");
         (await CreateCapacity(recoveryDb).RecoverExpiredReservations()).Should().Be(1);
 
         (await setupDb.Assets.AsNoTracking().AnyAsync(a => a.Id == seed.AssetId)).Should().BeTrue();

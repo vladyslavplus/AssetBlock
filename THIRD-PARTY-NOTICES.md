@@ -4063,7 +4063,7 @@ from the npm registry (canonical, OS-independent). Reviewed exceptions may set
   - copyright/author: .NET Foundation and Contributors
   - source: https://github.com/dotnet/reactive
   - license-url: https://licenses.nuget.org/MIT
-- `nuget` System.Security.Cryptography.Pkcs@10.0.0
+- `nuget` System.Security.Cryptography.Pkcs@10.0.13
   - copyright/author: Microsoft
   - source: https://dot.net/
   - license-url: https://licenses.nuget.org/MIT
