@@ -306,6 +306,7 @@ internal sealed class UploadAssetCommandHandler(
             definitionVersion: AssetProcessingDefaults.DEFINITION_VERSION,
             initialDelay: TimeSpan.Zero,
             payload: new ArchiveInspectionPayload(),
+            scope: null,
             traceParent: null,
             ct);
     }

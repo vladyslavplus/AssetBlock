@@ -74,6 +74,127 @@ internal sealed partial class AssetProcessingJobStore(ApplicationDbContext dbCon
         LIMIT 1;
         """;
 
+    private const string SQL_ENQUEUE_ANALYSIS = """
+        WITH inserted AS (
+            INSERT INTO asset_processing_jobs (
+                "Id",
+                "AssetId",
+                "AssetVersionId",
+                "Type",
+                "DefinitionVersion",
+                "Status",
+                "Stage",
+                "AttemptCount",
+                "MaxAttempts",
+                "AvailableAt",
+                "Payload",
+                "TraceParent",
+                "AnalysisRunId",
+                "SecurityRecheckId",
+                "CreatedAt"
+            )
+            VALUES (
+                @id,
+                @assetId,
+                @assetVersionId,
+                @type,
+                @defVer,
+                'QUEUED',
+                'QUEUED',
+                0,
+                @maxAttempts,
+                clock_timestamp() + @initialDelay,
+                CAST(@payload AS jsonb),
+                @traceParent,
+                @analysisRunId,
+                NULL,
+                clock_timestamp()
+            )
+            ON CONFLICT ("AnalysisRunId", "Type", "DefinitionVersion")
+            DO NOTHING
+            RETURNING "Id"
+        )
+        SELECT "Id" FROM inserted
+        UNION ALL
+        SELECT j."Id"
+        FROM asset_processing_jobs j
+        WHERE j."AssetVersionId" = @assetVersionId
+          AND j."Type" = @type
+          AND j."DefinitionVersion" = @defVer
+          AND j."AnalysisRunId" = @analysisRunId
+        LIMIT 1;
+        """;
+
+    private const string SQL_SELECT_CONFLICT_ANALYSIS = """
+        SELECT j."Id"
+        FROM asset_processing_jobs j
+        WHERE j."AssetVersionId" = @assetVersionId
+          AND j."Type" = @type
+          AND j."DefinitionVersion" = @defVer
+          AND j."AnalysisRunId" = @analysisRunId
+        LIMIT 1;
+        """;
+
+    private const string SQL_ENQUEUE_RECHECK = """
+        WITH inserted AS (
+            INSERT INTO asset_processing_jobs (
+                "Id",
+                "AssetId",
+                "AssetVersionId",
+                "Type",
+                "DefinitionVersion",
+                "Status",
+                "Stage",
+                "AttemptCount",
+                "MaxAttempts",
+                "AvailableAt",
+                "Payload",
+                "TraceParent",
+                "AnalysisRunId",
+                "SecurityRecheckId",
+                "CreatedAt"
+            )
+            VALUES (
+                @id,
+                @assetId,
+                @assetVersionId,
+                @type,
+                @defVer,
+                'QUEUED',
+                'QUEUED',
+                0,
+                @maxAttempts,
+                clock_timestamp() + @initialDelay,
+                CAST(@payload AS jsonb),
+                @traceParent,
+                NULL,
+                @securityRecheckId,
+                clock_timestamp()
+            )
+            ON CONFLICT ("SecurityRecheckId", "Type", "DefinitionVersion")
+            DO NOTHING
+            RETURNING "Id"
+        )
+        SELECT "Id" FROM inserted
+        UNION ALL
+        SELECT j."Id"
+        FROM asset_processing_jobs j
+        WHERE j."AssetVersionId" = @assetVersionId
+          AND j."Type" = @type
+          AND j."DefinitionVersion" = @defVer
+          AND j."SecurityRecheckId" = @securityRecheckId
+        LIMIT 1;
+        """;
+
+    private const string SQL_SELECT_CONFLICT_RECHECK = """
+        SELECT j."Id"
+        FROM asset_processing_jobs j
+        WHERE j."AssetVersionId" = @assetVersionId
+          AND j."Type" = @type
+          AND j."DefinitionVersion" = @defVer
+          AND j."SecurityRecheckId" = @securityRecheckId
+        LIMIT 1;
+        """;
     private const string SQL_ENQUEUE_STANDARD = """
         WITH inserted AS (
             INSERT INTO asset_processing_jobs (
@@ -107,7 +228,7 @@ internal sealed partial class AssetProcessingJobStore(ApplicationDbContext dbCon
                 clock_timestamp()
             )
             ON CONFLICT ("AssetVersionId", "Type", "DefinitionVersion")
-            WHERE "Type" <> 'EMBEDDING_GENERATION'
+            WHERE "Type" NOT IN ('EMBEDDING_GENERATION', 'CODE_ANALYSIS') AND "SecurityRecheckId" IS NULL AND "AnalysisRunId" IS NULL
             DO NOTHING
             RETURNING "Id"
         )
@@ -118,6 +239,8 @@ internal sealed partial class AssetProcessingJobStore(ApplicationDbContext dbCon
         WHERE j."AssetVersionId" = @assetVersionId
           AND j."Type" = @type
           AND j."DefinitionVersion" = @defVer
+          AND j."SecurityRecheckId" IS NULL
+          AND j."AnalysisRunId" IS NULL
         LIMIT 1;
         """;
 
@@ -139,6 +262,8 @@ internal sealed partial class AssetProcessingJobStore(ApplicationDbContext dbCon
         WHERE j."AssetVersionId" = @assetVersionId
           AND j."Type" = @type
           AND j."DefinitionVersion" = @defVer
+          AND j."SecurityRecheckId" IS NULL
+          AND j."AnalysisRunId" IS NULL
         LIMIT 1;
         """;
 
@@ -173,6 +298,7 @@ internal sealed partial class AssetProcessingJobStore(ApplicationDbContext dbCon
         int definitionVersion,
         TimeSpan initialDelay,
         AssetProcessingPayload payload,
+        AssetProcessingJobScope? scope = null,
         string? traceParent = null,
         CancellationToken cancellationToken = default)
     {
@@ -184,6 +310,29 @@ internal sealed partial class AssetProcessingJobStore(ApplicationDbContext dbCon
         if (traceParent != null && !ActivityContext.TryParse(traceParent, null, out _))
         {
             throw new ArgumentException("TraceParent must be a valid W3C traceparent.", nameof(traceParent));
+        }
+
+        var isRunScoped = scope?.AnalysisRunId is { } runId && runId != Guid.Empty;
+        var isRecheckScoped = scope?.SecurityRecheckId is { } recheckId && recheckId != Guid.Empty;
+
+        if (isRunScoped && isRecheckScoped)
+        {
+            throw new ArgumentException("A job may be scoped to a run or a recheck, never both.", nameof(scope));
+        }
+
+        if (isRunScoped && type != AssetProcessingJobType.CODE_ANALYSIS)
+        {
+            throw new ArgumentException("Only CODE_ANALYSIS jobs may be bound to an analysis run.", nameof(scope));
+        }
+
+        if (isRecheckScoped && type is not (AssetProcessingJobType.ARCHIVE_INSPECTION or AssetProcessingJobType.MALWARE_SCAN))
+        {
+            throw new ArgumentException("Only archive inspection and malware scan jobs may be bound to a security recheck.", nameof(scope));
+        }
+
+        if (type == AssetProcessingJobType.CODE_ANALYSIS && !isRunScoped)
+        {
+            throw new ArgumentException("CODE_ANALYSIS jobs must be bound to an analysis run.", nameof(scope));
         }
 
         var serializedPayload = AssetProcessingSerializer.SerializePayload(type, payload);
@@ -206,9 +355,18 @@ internal sealed partial class AssetProcessingJobStore(ApplicationDbContext dbCon
 
         await using DbCommand cmd = connection.CreateCommand();
         cmd.Transaction = dbContext.Database.CurrentTransaction?.GetDbTransaction();
+
         if (isEmbedding)
         {
             cmd.CommandText = SQL_ENQUEUE_EMBEDDING;
+        }
+        else if (isRunScoped)
+        {
+            cmd.CommandText = SQL_ENQUEUE_ANALYSIS;
+        }
+        else if (isRecheckScoped)
+        {
+            cmd.CommandText = SQL_ENQUEUE_RECHECK;
         }
         else
         {
@@ -273,12 +431,36 @@ internal sealed partial class AssetProcessingJobStore(ApplicationDbContext dbCon
             cmd.Parameters.Add(pModelKey);
         }
 
+        if (isRunScoped)
+        {
+            DbParameter pRunId = cmd.CreateParameter();
+            pRunId.ParameterName = "@analysisRunId";
+            pRunId.Value = scope!.AnalysisRunId!.Value;
+            cmd.Parameters.Add(pRunId);
+        }
+
+        if (isRecheckScoped)
+        {
+            DbParameter pRecheckId = cmd.CreateParameter();
+            pRecheckId.ParameterName = "@securityRecheckId";
+            pRecheckId.Value = scope!.SecurityRecheckId!.Value;
+            cmd.Parameters.Add(pRecheckId);
+        }
+
         var result = await cmd.ExecuteScalarAsync(cancellationToken);
         if (result is null or DBNull)
         {
             if (isEmbedding)
             {
                 cmd.CommandText = SQL_SELECT_CONFLICT_EMBEDDING;
+            }
+            else if (isRunScoped)
+            {
+                cmd.CommandText = SQL_SELECT_CONFLICT_ANALYSIS;
+            }
+            else if (isRecheckScoped)
+            {
+                cmd.CommandText = SQL_SELECT_CONFLICT_RECHECK;
             }
             else
             {
@@ -312,6 +494,7 @@ internal sealed partial class AssetProcessingJobStore(ApplicationDbContext dbCon
                 WHERE j."Status" IN ('QUEUED', 'RETRY_SCHEDULED')
                   AND j."AvailableAt" <= clock_timestamp()
                   AND j."AttemptCount" < j."MaxAttempts"
+                  AND j."Type" <> 'CODE_ANALYSIS'
                 ORDER BY j."AvailableAt", j."Id"
                 FOR UPDATE SKIP LOCKED
                 LIMIT {batchSize}
@@ -354,7 +537,9 @@ internal sealed partial class AssetProcessingJobStore(ApplicationDbContext dbCon
                 j.LeaseToken!.Value,
                 j.AvailableAt,
                 j.CreatedAt,
-                j.UpdatedAt
+                j.UpdatedAt,
+                j.AnalysisRunId,
+                j.SecurityRecheckId
             ))
             .ToListAsync(cancellationToken);
 
@@ -637,6 +822,7 @@ internal sealed partial class AssetProcessingJobStore(ApplicationDbContext dbCon
                 WHERE j."Status" = 'RUNNING'
                   AND j."LeaseExpiresAt" IS NOT NULL
                   AND j."LeaseExpiresAt" <= clock_timestamp()
+                  AND j."Type" <> 'CODE_ANALYSIS'
                   AND NOT (
                       j."AttemptCount" >= j."MaxAttempts"
                       AND j."Type" IN ('ARCHIVE_INSPECTION', 'MALWARE_SCAN')

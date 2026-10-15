@@ -20,6 +20,12 @@ internal sealed partial class ArchiveSafetyInspector(
     IOptions<ArchiveInspectionOptions> options,
     ILogger<ArchiveSafetyInspector> logger) : IArchiveSafetyInspector
 {
+    /// <summary>
+    /// Observed implementation identity recorded on every archive validation proof this
+    /// inspector produces. It names this exact implementation, never a per-scan synthesis.
+    /// </summary>
+    public const string IMPLEMENTATION_IDENTITY = "assetblock-archive-inspector-v1";
+
     private readonly ArchiveInspectionOptions _options = options.Value;
 
     private static readonly HashSet<string> _readmeNames = new(StringComparer.OrdinalIgnoreCase)

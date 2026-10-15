@@ -38,6 +38,25 @@ public class AssetVersion : BaseEntity
     public string? ProcessingErrorSummary { get; set; }
     public required DateTimeOffset ProcessingUpdatedAt { get; set; }
 
+    /// <summary>
+    /// Exact-version safety restriction from an actual unsafe, infected, or integrity failure.
+    /// Denies byte delivery and reference use for this version without touching entitlement or proof.
+    /// </summary>
+    public AssetVersionSafetyRestriction SafetyRestriction { get; set; } = AssetVersionSafetyRestriction.NONE;
+
+    public string? SafetyRestrictionReason { get; set; }
+
+    public DateTimeOffset? SafetyRestrictedAt { get; set; }
+
+    /// <summary>Report currently selected for this version; null when no binding is valid.</summary>
+    public Guid? SelectedCodeAnalysisReportId { get; set; }
+
+    /// <summary>
+    /// Monotonic generation of this version's analysis selection binding. Bumped when material or
+    /// declaration input changes; price-only changes never bump it.
+    /// </summary>
+    public int AnalysisSelectionGeneration { get; set; } = 1;
+
     public Asset Asset { get; set; } = null!;
     public AssetArchiveAnalysis? ArchiveAnalysis { get; set; }
     public ICollection<Purchase> Purchases { get; set; } = new List<Purchase>();

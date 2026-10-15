@@ -152,6 +152,7 @@ internal sealed class PublishAssetVersionCommandHandler(
                     definitionVersion: AssetProcessingDefaults.DEFINITION_VERSION,
                     initialDelay: TimeSpan.Zero,
                     payload: new ArchiveInspectionPayload(),
+                    scope: null,
                     traceParent: null,
                     ct);
 

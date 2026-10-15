@@ -508,7 +508,7 @@ internal sealed class ModerationFoundationStore(
             return null;
         }
 
-        MaterialAndDeclaration? heads = await LoadLatestHeads(row.Workspace.AssetId, workspaceId, cancellationToken);
+        MaterialAndDeclaration? heads = await LoadLatestHeads(workspaceId, cancellationToken);
         var latestVersion = await dbContext.AssetVersions
             .AsNoTracking()
             .Where(v => v.AssetId == row.Workspace.AssetId)
@@ -549,7 +549,7 @@ internal sealed class ModerationFoundationStore(
             return null;
         }
 
-        MaterialAndDeclaration? heads = await LoadLatestHeads(assetId, workspace.Id, cancellationToken);
+        MaterialAndDeclaration? heads = await LoadLatestHeads(workspace.Id, cancellationToken);
 
         var assetRow = await dbContext.Assets
             .AsNoTracking()
@@ -704,6 +704,22 @@ internal sealed class ModerationFoundationStore(
 
             workspace.WorkspaceRevision++;
 
+            // A declaration/material edit supersedes the analysis selection bound to the old tuple.
+            // Bump generation and detach any selected report so late completion stays historical.
+            if (workspace.AssetVersionId is { } editedVersionId)
+            {
+                // The selected report pointer is immutable through ordinary EF updates. This
+                // transactional update advances the generation and clears the selection together.
+                await dbContext.AssetVersions
+                    .Where(v => v.Id == editedVersionId)
+                    .ExecuteUpdateAsync(
+                        updates => updates
+                            .SetProperty(v => v.AnalysisSelectionGeneration, v => v.AnalysisSelectionGeneration + 1)
+                            .SetProperty(v => v.SelectedCodeAnalysisReportId, (Guid?)null),
+                        ct)
+                    .ConfigureAwait(false);
+            }
+
             var result = new ModerationDraftSaveResult(
                 ModerationDraftSaveStatus.SUCCEEDED,
                 workspace.WorkspaceRevision,
@@ -760,7 +776,7 @@ internal sealed class ModerationFoundationStore(
             return null;
         }
 
-        MaterialAndDeclaration? heads = await LoadLatestHeads(assetId, workspace.Id, cancellationToken);
+        MaterialAndDeclaration? heads = await LoadLatestHeads(workspace.Id, cancellationToken);
         SourceDeclarationPayload? declaration = heads?.Declaration;
         return new SellerDeclarationSnapshotDto(
             assetId,
@@ -908,7 +924,7 @@ internal sealed class ModerationFoundationStore(
             CreatedAt = now
         };
 
-        MaterialAndDeclaration? heads = await LoadLatestHeads(assetId, preUpload.Id, cancellationToken);
+        MaterialAndDeclaration? heads = await LoadLatestHeads(preUpload.Id, cancellationToken);
 
         if (heads?.Material is not null)
         {
@@ -1188,11 +1204,11 @@ internal sealed class ModerationFoundationStore(
             return false;
         }
 
-        MaterialAndDeclaration? heads = await LoadLatestHeads(assetId, workspace.Id, cancellationToken);
+        MaterialAndDeclaration? heads = await LoadLatestHeads(workspace.Id, cancellationToken);
         return IsDeclarationComplete(heads?.Declaration);
     }
 
-    private async Task<MaterialAndDeclaration?> LoadLatestHeads(Guid assetId, Guid workspaceId, CancellationToken cancellationToken)
+    private async Task<MaterialAndDeclaration?> LoadLatestHeads(Guid workspaceId, CancellationToken cancellationToken)
     {
         var materialJson = await dbContext.AssetMaterialMetadataRevisions
             .AsNoTracking()

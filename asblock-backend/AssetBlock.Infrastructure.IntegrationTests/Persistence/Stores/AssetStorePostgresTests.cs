@@ -1,3 +1,4 @@
+using AssetBlock.Domain.Core.Dto;
 using AssetBlock.Domain.Core.Dto.Assets;
 using AssetBlock.Domain.Core.Dto.Paging;
 using AssetBlock.Domain.Core.Entities;
@@ -1614,6 +1615,111 @@ public sealed class AssetStorePostgresTests(PostgresFixture fixture)
         paged.Items.Should().ContainSingle(i => i.Id == asset.Id);
         paged.Items[0].Title.Should().Be("Approved catalog item");
     }
+    [Fact]
+    public async Task SoftDelete_WhenQueuedAnalysisExists_ShouldRetainImmutableReportSecurityAndCommerceHistory()
+    {
+        await using ApplicationDbContext db = await fixture.CreateCleanDbContext();
+        (User author, Category category) = await TestData.SeedAuthorAndCategory(db);
+        User buyer = TestData.CreateUser("delete-retention-buyer", "delete-retention-buyer@example.test");
+        User holder = TestData.CreateUser("delete-retention-holder", "delete-retention-holder@example.test");
+        db.Users.AddRange(buyer, holder);
+        Asset asset = TestData.CreateAsset(author.Id, category.Id, title: "Delete retention approved listing");
+        var store = new AssetStore(db);
+        await AddWithReadyVersion(db, store, author, category, asset);
+        AssetVersion version = await db.AssetVersions.SingleAsync(v => v.AssetId == asset.Id);
+
+        Purchase purchase = TestData.CreatePurchase(buyer.Id, asset.Id, version.Id);
+        TestData.AddCompletedPurchase(db, purchase, asset.Title, author.Id);
+        var holdIntentId = Guid.NewGuid();
+        db.CheckoutIntents.Add(new CheckoutIntent
+        {
+            Id = holdIntentId,
+            UserId = holder.Id,
+            AssetId = asset.Id,
+            ProductTitle = asset.Title,
+            AmountTotal = asset.Price,
+            Currency = "usd",
+            Status = CheckoutIntentStatus.PENDING,
+            CreatedAt = DateTimeOffset.UtcNow,
+            ExpiresAt = DateTimeOffset.UtcNow.AddHours(1)
+        });
+        db.CheckoutReservations.Add(TestData.CreateReservation(
+            holdIntentId, holder.Id, asset.Id, DateTimeOffset.UtcNow.AddHours(1)));
+        await db.SaveChangesAsync();
+
+        PublicationSnapshot snapshot = await db.PublicationSnapshots.AsNoTracking()
+            .SingleAsync(s => s.AssetId == asset.Id);
+        CodeAnalysisReportHeader report = await db.CodeAnalysisReportHeaders.AsNoTracking()
+            .SingleAsync(h => h.Id == snapshot.CodeAnalysisReportHeaderId);
+        CodeAnalysisRun completed = await db.CodeAnalysisRuns.AsNoTracking()
+            .SingleAsync(r => r.Id == report.AnalysisRunId);
+        CodeAnalysisPolicyVersion policy = await db.CodeAnalysisPolicyVersions.AsNoTracking()
+            .SingleAsync(p => p.Id == completed.PolicyVersionId);
+        var queuedRun = new CodeAnalysisRun
+        {
+            Id = Guid.NewGuid(),
+            AssetId = asset.Id,
+            AssetVersionId = version.Id,
+            ContentSha256 = version.ContentSha256,
+            PolicyVersionId = policy.Id,
+            PolicyDigest = policy.PolicyDigest,
+            DeclarationDigest = ProductDigests.EmptyProjectionDigest(nameof(AssetSourceDeclarationRevision)),
+            MaterialDigest = ProductDigests.EmptyProjectionDigest(nameof(AssetMaterialMetadataRevision)),
+            InputDigest = new string('a', 64),
+            SelectionGeneration = version.AnalysisSelectionGeneration,
+            ArchiveEvidenceId = completed.ArchiveEvidenceId,
+            MalwareEvidenceId = completed.MalwareEvidenceId,
+            SecurityGeneration = completed.SecurityGeneration,
+            ServiceKey = completed.ServiceKey,
+            State = CodeAnalysisRunState.QUEUED,
+            CreatedAt = DateTimeOffset.UtcNow
+        };
+        db.CodeAnalysisRuns.Add(queuedRun);
+        await db.SaveChangesAsync();
+        AssetProcessingJob queuedJob = new()
+        {
+            Id = Guid.NewGuid(),
+            AssetId = asset.Id,
+            AssetVersionId = version.Id,
+            Type = AssetProcessingJobType.CODE_ANALYSIS,
+            DefinitionVersion = 1,
+            Status = AssetProcessingJobStatus.QUEUED,
+            Stage = "QUEUED",
+            AttemptCount = 0,
+            MaxAttempts = 3,
+            AvailableAt = DateTimeOffset.UtcNow,
+            CreatedAt = DateTimeOffset.UtcNow,
+            AnalysisRunId = queuedRun.Id,
+            Payload = AssetProcessingSerializer.SerializePayload(
+                AssetProcessingJobType.CODE_ANALYSIS,
+                new CodeAnalysisPayload(
+                    queuedRun.Id, queuedRun.InputDigest, queuedRun.PolicyDigest, queuedRun.ContentSha256,
+                    queuedRun.ArchiveEvidenceId, queuedRun.MalwareEvidenceId, queuedRun.SecurityGeneration))
+        };
+        db.AssetProcessingJobs.Add(queuedJob);
+        await db.SaveChangesAsync();
+        await db.CodeAnalysisRuns.Where(r => r.Id == queuedRun.Id)
+            .ExecuteUpdateAsync(x => x.SetProperty(r => r.JobId, queuedJob.Id));
+        db.ChangeTracker.Clear();
+
+        await store.SoftDelete(asset.Id, DateTimeOffset.UtcNow);
+
+        (await db.CodeAnalysisRuns.AsNoTracking().SingleAsync(r => r.Id == queuedRun.Id)).State
+            .Should().Be(CodeAnalysisRunState.CANCELLED);
+        AssetProcessingJob cancelled = await db.AssetProcessingJobs.AsNoTracking().SingleAsync(j => j.Id == queuedJob.Id);
+        cancelled.Status.Should().Be(AssetProcessingJobStatus.CANCELLED);
+        cancelled.ErrorCode.Should().Be("ASSET_DELETED");
+        (await db.CodeAnalysisReportHeaders.AsNoTracking().CountAsync(h => h.Id == report.Id)).Should().Be(1);
+        (await db.CodeAnalysisReportAdmissions.AsNoTracking().CountAsync(a => a.ReportId == report.Id)).Should().Be(1);
+        (await db.SecurityEvidenceRecords.AsNoTracking()
+            .CountAsync(e => e.Id == completed.ArchiveEvidenceId || e.Id == completed.MalwareEvidenceId)).Should().Be(2);
+        (await db.PublicationSnapshots.AsNoTracking().CountAsync(s => s.Id == snapshot.Id)).Should().Be(1);
+        (await db.ModerationDecisionRecords.AsNoTracking()
+            .CountAsync(d => d.PublicationSnapshotId == snapshot.Id && d.Outcome == ModerationSubmissionState.APPROVED)).Should().Be(1);
+        (await db.Purchases.AsNoTracking().CountAsync(p => p.Id == purchase.Id)).Should().Be(1);
+        (await db.CheckoutReservations.AsNoTracking().CountAsync(r => r.CheckoutIntentId == holdIntentId)).Should().Be(1);
+    }
+
 }
 
 

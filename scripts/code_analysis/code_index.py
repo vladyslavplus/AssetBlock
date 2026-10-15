@@ -9,6 +9,8 @@ MARKER = 'assetblock-code-index-sandbox-v1'
 DATABASE = 'assetblock_code_lab'
 ROLE = 'assetblock_code_index'
 PORT = 55433
+SERVICE_RUNTIME_COMPATIBILITY = 'pg18-owned-sandbox-v1'
+SERVICE_RUNTIME_PORT = 55439
 
 
 def require_owned_transaction(connection):
@@ -29,6 +31,41 @@ def preflight(connection, *, initialized=True):
             if cursor.fetchall() != [(MARKER,)]: raise ValueError('sandbox marker mismatch')
             cursor.execute("SELECT extversion FROM pg_extension WHERE extname='vector'")
             if cursor.fetchone() != ('0.8.6',): raise ValueError('pgvector version mismatch')
+
+
+def service_runtime_preflight(connection, *, compatibility=None, initialized=True):
+    """Check the service's pinned research target; PG18 is opt-in for the owned local runtime only."""
+    if compatibility is None:
+        return preflight(connection, initialized=initialized)
+    if compatibility != SERVICE_RUNTIME_COMPATIBILITY:
+        raise ValueError('unknown service runtime compatibility mode')
+    if initialized is not True:
+        raise ValueError('service runtime requires the initialized, marked index')
+    require_owned_transaction(connection)
+    if (connection.info.host not in ('127.0.0.1', 'localhost', '::1')
+            or connection.info.port != SERVICE_RUNTIME_PORT):
+        raise ValueError('refusing unknown/nonloopback compatibility target')
+    with connection.cursor() as cursor:
+        cursor.execute('SELECT current_database(),current_user,current_setting(\'server_version_num\')')
+        database, role, server = cursor.fetchone()
+        if database != DATABASE or role != ROLE or not 180006 <= int(server) < 180007:
+            raise ValueError('refusing product/unknown database, role or compatibility version')
+        if initialized:
+            cursor.execute('SELECT marker FROM code_lab.sandbox_marker')
+            if cursor.fetchall() != [(MARKER,)]: raise ValueError('sandbox marker mismatch')
+            cursor.execute("SELECT extversion FROM pg_extension WHERE extname='vector'")
+            if cursor.fetchone() != ('0.8.6',): raise ValueError('pgvector version mismatch')
+            cursor.execute("""SELECT current_setting('transaction_read_only'),
+                bool_or(has_table_privilege(current_user, table_name, privilege))
+                FROM (SELECT unnest(ARRAY['code_lab.code_indexes','code_lab.code_fragments',
+                    'code_lab.code_embeddings','code_lab.sandbox_marker']) AS table_name) tables
+                CROSS JOIN unnest(ARRAY['INSERT','UPDATE','DELETE','TRUNCATE','REFERENCES','TRIGGER']) privileges(privilege)
+                GROUP BY current_setting('transaction_read_only')""")
+            readonly, has_write = cursor.fetchone()
+            cursor.execute("SELECT has_schema_privilege(current_user,'code_lab','CREATE')")
+            can_create = cursor.fetchone()[0]
+            if readonly != 'on' or has_write or can_create:
+                raise ValueError('service index identity is not enforced read-only')
 
 
 def initialize(connection, approval):
@@ -80,14 +117,15 @@ def index_key(model, snapshot, gallery, extraction):
     return digest(canonical([model,snapshot,gallery,extraction]))
 
 
-def exact_query(connection,index,vectors,gallery_ids,language,*,partition,limit=40):
+def exact_query(connection,index,vectors,gallery_ids,language,*,partition,limit=40,
+                runtime_compatibility=None):
     """Exhaustive query-chunk × gallery-chunk maximum, with exact winning spans."""
     if partition not in ('train','validation'):raise ValueError('final-test scoring prohibited in this phase')
     sha(index);vector_bytes(vectors)
     if not 0<len(vectors)<=80 or not 0<len(gallery_ids)<=1000 or len(set(gallery_ids))!=len(gallery_ids):raise ValueError('bounded unique full gallery/query required')
     for file_id in gallery_ids:sha(file_id)
     if type(limit)!=int or not 1<=limit<=40:raise ValueError('file candidate budget invalid')
-    preflight(connection)
+    service_runtime_preflight(connection, compatibility=runtime_compatibility)
     with connection.cursor() as cursor:
         cursor.execute('SELECT state,partition,expected_rows FROM code_lab.code_indexes WHERE index_key=%s',(index,));row=cursor.fetchone()
         if not row or row[:2]!=('READY',partition):raise ValueError('incomplete/wrong-partition index')

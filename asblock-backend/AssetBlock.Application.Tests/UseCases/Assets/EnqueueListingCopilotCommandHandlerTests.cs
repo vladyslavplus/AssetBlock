@@ -58,6 +58,7 @@ public sealed class EnqueueListingCopilotCommandHandlerTests
             Arg.Any<int>(),
             Arg.Any<TimeSpan>(),
             Arg.Any<AssetProcessingPayload>(),
+            Arg.Any<AssetProcessingJobScope?>(),
             Arg.Any<string?>(),
             Arg.Any<CancellationToken>());
     }
@@ -87,6 +88,7 @@ public sealed class EnqueueListingCopilotCommandHandlerTests
             Arg.Any<int>(),
             Arg.Any<TimeSpan>(),
             Arg.Any<AssetProcessingPayload>(),
+            Arg.Any<AssetProcessingJobScope?>(),
             Arg.Any<string?>(),
             Arg.Any<CancellationToken>());
     }
@@ -150,6 +152,7 @@ public sealed class EnqueueListingCopilotCommandHandlerTests
             Arg.Any<int>(),
             Arg.Any<TimeSpan>(),
             Arg.Any<AssetProcessingPayload>(),
+            Arg.Any<AssetProcessingJobScope?>(),
             Arg.Any<string?>(),
             Arg.Any<CancellationToken>());
     }
@@ -168,6 +171,7 @@ public sealed class EnqueueListingCopilotCommandHandlerTests
             AiPromptPolicies.LISTING_COPILOT_DEFINITION_VERSION,
             TimeSpan.Zero,
             Arg.Any<ListingCopilotPayload>(),
+            Arg.Any<AssetProcessingJobScope?>(),
             Arg.Any<string?>(),
             Arg.Any<CancellationToken>()).Returns(jobId);
 
@@ -193,6 +197,7 @@ public sealed class EnqueueListingCopilotCommandHandlerTests
                 Arg.Any<int>(),
                 Arg.Any<TimeSpan>(),
                 Arg.Any<AssetProcessingPayload>(),
+                Arg.Any<AssetProcessingJobScope?>(),
                 Arg.Any<string?>(),
                 Arg.Any<CancellationToken>())
             .Returns(jobId);

@@ -22,7 +22,6 @@ public sealed class AssetEmbeddingFinalizer(
     private const string JOB_TYPE_EMBEDDING = nameof(AssetProcessingJobType.EMBEDDING_GENERATION);
     private const string JOB_STATUS_SUCCEEDED = nameof(AssetProcessingJobStatus.SUCCEEDED);
     private const string JOB_STATUS_RUNNING = nameof(AssetProcessingJobStatus.RUNNING);
-    private const string VERSION_STATUS_READY = nameof(AssetVersionProcessingStatus.READY);
 
     private sealed class JobRow
     {

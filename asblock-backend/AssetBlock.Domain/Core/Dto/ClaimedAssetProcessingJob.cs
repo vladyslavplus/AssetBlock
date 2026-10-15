@@ -16,5 +16,7 @@ public sealed record ClaimedAssetProcessingJob(
     Guid LeaseToken,
     DateTimeOffset AvailableAt,
     DateTimeOffset CreatedAt,
-    DateTimeOffset? UpdatedAt = null
-);
+    DateTimeOffset? UpdatedAt = null,
+    Guid? AnalysisRunId = null,
+    Guid? SecurityRecheckId = null,
+    string? TransportLeaseToken = null);

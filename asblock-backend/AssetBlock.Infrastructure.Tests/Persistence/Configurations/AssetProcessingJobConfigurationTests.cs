@@ -37,7 +37,7 @@ public sealed class AssetProcessingJobConfigurationTests
 
         ICheckConstraint? typeCheck = entityType.GetCheckConstraints().FirstOrDefault(c => c.Name == "CK_asset_processing_jobs_type");
         typeCheck.Should().NotBeNull();
-        typeCheck.Sql.Should().Be("\"Type\" IN ('ARCHIVE_INSPECTION', 'MALWARE_SCAN', 'LISTING_COPILOT', 'EMBEDDING_GENERATION')");
+        typeCheck.Sql.Should().Be("\"Type\" IN ('ARCHIVE_INSPECTION', 'MALWARE_SCAN', 'LISTING_COPILOT', 'EMBEDDING_GENERATION', 'CODE_ANALYSIS')");
 
         ICheckConstraint? embeddingHashesCheck = entityType.GetCheckConstraints().FirstOrDefault(c => c.Name == "CK_asset_processing_jobs_embedding_hashes");
         embeddingHashesCheck.Should().NotBeNull();
@@ -100,7 +100,7 @@ public sealed class AssetProcessingJobConfigurationTests
         IIndex? idempotencyIndex = entityType.GetIndexes().FirstOrDefault(i => i.GetDatabaseName() == "UIX_asset_processing_jobs_idempotency");
         idempotencyIndex.Should().NotBeNull();
         idempotencyIndex.IsUnique.Should().BeTrue();
-        idempotencyIndex.GetFilter().Should().Be("\"Type\" <> 'EMBEDDING_GENERATION'");
+        idempotencyIndex.GetFilter().Should().Be("\"Type\" NOT IN ('EMBEDDING_GENERATION', 'CODE_ANALYSIS') AND \"SecurityRecheckId\" IS NULL AND \"AnalysisRunId\" IS NULL");
         idempotencyIndex.Properties.Select(p => p.Name).Should().BeEquivalentTo("AssetVersionId", "Type", "DefinitionVersion");
 
         IIndex? embeddingActiveIndex = entityType.GetIndexes().FirstOrDefault(i => i.GetDatabaseName() == "UIX_asset_processing_jobs_embedding_active");

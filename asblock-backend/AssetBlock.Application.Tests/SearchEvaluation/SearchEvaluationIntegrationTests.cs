@@ -142,7 +142,7 @@ public class SearchEvaluationIntegrationTests
             Asset asset = await db.Assets.SingleAsync(a => a.Id == assetId);
             AssetVersion version = await db.AssetVersions.SingleAsync(v => v.Id == versionId);
             Category category = await db.Categories.SingleAsync(c => c.Id == categoryId);
-            await TrustedPublicationFixtureSeed.AttachAsync(
+            await TrustedPublicationFixtureSeed.Attach(
                 db,
                 asset,
                 version,
@@ -253,7 +253,7 @@ public class SearchEvaluationIntegrationTests
             Category category = await db.Categories.SingleAsync(c => c.Id == categoryId);
             foreach ((Asset asset, AssetVersion version) in seeded)
             {
-                await TrustedPublicationFixtureSeed.AttachAsync(
+                await TrustedPublicationFixtureSeed.Attach(
                     db,
                     asset,
                     version,

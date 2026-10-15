@@ -27,4 +27,10 @@ public sealed class ClamAvOptions
     public long DaemonMaxStreamBytes { get; set; } = 280L * 1024 * 1024;
     public TimeSpan MaxSignatureAge { get; set; } = TimeSpan.FromHours(72);
     public int MaxResponseBytes { get; set; } = 4096;
+
+    /// <summary>
+    /// Time zone used by the clamd process to format the timezone-free ctime in VERSION.
+    /// This must match the daemon host/process configuration; it is not the API host zone.
+    /// </summary>
+    public string VersionTimeZoneId { get; set; } = "";
 }

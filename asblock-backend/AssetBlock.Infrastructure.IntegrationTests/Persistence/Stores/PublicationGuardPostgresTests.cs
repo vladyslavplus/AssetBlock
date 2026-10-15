@@ -46,7 +46,7 @@ public sealed class PublicationGuardPostgresTests(PostgresFixture fixture)
         db.AssetVersions.Add(version);
         await db.SaveChangesAsync();
 
-        PublicationSnapshot snapshot = await SeedTrustedApprovedSnapshotAsync(db, asset, version, author);
+        PublicationSnapshot snapshot = await SeedTrustedApprovedSnapshot(db, asset, version, author);
 
         asset.CurrentPublicationSnapshotId = snapshot.Id;
         await db.SaveChangesAsync();
@@ -63,7 +63,7 @@ public sealed class PublicationGuardPostgresTests(PostgresFixture fixture)
         offering.PublicationSnapshotId.Should().Be(snapshot.Id);
     }
 
-    private static async Task<PublicationSnapshot> SeedTrustedApprovedSnapshotAsync(
+    private static async Task<PublicationSnapshot> SeedTrustedApprovedSnapshot(
         ApplicationDbContext db,
         Asset asset,
         AssetVersion version,
@@ -102,22 +102,14 @@ public sealed class PublicationGuardPostgresTests(PostgresFixture fixture)
         };
         db.ModerationSubmissions.Add(submission);
 
-        var report = new CodeAnalysisReportHeader
-        {
-            Id = Guid.NewGuid(),
-            AssetId = asset.Id,
-            AssetVersionId = version.Id,
-            ContentSha256 = version.ContentSha256,
-            PolicyVersion = "policy-v1",
-            InputRevision = 1,
-            Purpose = CodeAnalysisReportPurpose.PRODUCTION,
-            CanAuthorizePublication = true,
-            IsFinalized = true,
-            FinalizedAt = DateTimeOffset.UtcNow,
-            ReportSchemaVersion = 1,
-            CreatedAt = DateTimeOffset.UtcNow
-        };
+        // Trusted publication needs the whole evidence chain, not a bare boolean header.
+        AdmittedReportTestEvidence.Chain chain = AdmittedReportTestEvidence.BuildChain();
+        db.CodeAnalysisPolicyVersions.Add(AdmittedReportTestEvidence.Policy(chain));
+        await AdmittedReportTestEvidence.SeedObservedProofAsync(db, version, chain);
+        db.CodeAnalysisRuns.Add(AdmittedReportTestEvidence.CompletedRun(version, chain));
+        CodeAnalysisReportHeader report = AdmittedReportTestEvidence.Header(version, chain);
         db.CodeAnalysisReportHeaders.Add(report);
+        db.CodeAnalysisReportAdmissions.Add(AdmittedReportTestEvidence.Admission(report, chain, canAuthorizePublication: true));
 
         var snapshot = new PublicationSnapshot
         {
@@ -165,7 +157,7 @@ public sealed class PublicationGuardPostgresTests(PostgresFixture fixture)
             processingStatus: AssetVersionProcessingStatus.READY);
         db.Assets.Add(approvedAsset);
         db.AssetVersions.Add(approvedVersion);
-        PublicationSnapshot approvedSnapshot = await SeedTrustedApprovedSnapshotAsync(
+        PublicationSnapshot approvedSnapshot = await SeedTrustedApprovedSnapshot(
             db, approvedAsset, approvedVersion, author);
         approvedAsset.CurrentPublicationSnapshotId = approvedSnapshot.Id;
 

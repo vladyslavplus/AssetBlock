@@ -65,9 +65,10 @@ dotnet_style_prefer_conditional_expression_over_return = true:silent
 ###############################
 # Style Definitions
 dotnet_naming_style.all_upper_case_style.capitalization           = all_upper
+dotnet_naming_style.all_upper_case_style.word_separator           = _
 
-dotnet_naming_style.prefix_cames_case_case_style.capitalization   = camel_case
-dotnet_naming_style.prefix_cames_case_case_style.required_prefix  = _
+dotnet_naming_style.private_field_style.capitalization   = camel_case
+dotnet_naming_style.private_field_style.required_prefix  = _
 
 dotnet_naming_style.pascal_case_style.capitalization              = pascal_case
 
@@ -77,7 +78,7 @@ dotnet_naming_style.i_pascal_case_style.required_prefix           = I
 dotnet_naming_style.t_pascal_case_style.capitalization            = pascal_case
 dotnet_naming_style.t_pascal_case_style.required_prefix           = T
 
-# Use ALL_UPPER for constant fields
+# Use ALL_UPPER_SNAKE_CASE for constant fields
 dotnet_naming_symbols.constant_fields.applicable_kinds            = field
 dotnet_naming_symbols.constant_fields.applicable_accessibilities  = *
 dotnet_naming_symbols.constant_fields.required_modifiers          = const
@@ -88,12 +89,12 @@ dotnet_naming_rule.constant_fields_should_be_all_upper.style      = all_upper_ca
 # Use _camelCase for private fields
 dotnet_naming_symbols.private_fields.applicable_kinds             = field
 dotnet_naming_symbols.private_fields.applicable_accessibilities   = private, internal
-dotnet_naming_rule.private_fields_should_be_cames_case.severity   = warning
-dotnet_naming_rule.private_fields_should_be_cames_case.symbols    = private_fields
-dotnet_naming_rule.private_fields_should_be_cames_case.style      = prefix_cames_case_case_style
+dotnet_naming_rule.private_fields_should_be_camel_case.severity   = warning
+dotnet_naming_rule.private_fields_should_be_camel_case.symbols    = private_fields
+dotnet_naming_rule.private_fields_should_be_camel_case.style      = private_field_style
 
-# Use PascalCase for namespace, class, struct, enum, property, method, field, event, delegate, local_function
-dotnet_naming_symbols.class_name.applicable_kinds                 = namespace, class, struct, enum, property, method, field, event, delegate, local_function
+# Use PascalCase for namespace, class, struct, enum, property, method, event, delegate, local_function
+dotnet_naming_symbols.class_name.applicable_kinds                 = namespace, class, struct, enum, property, method, event, delegate, local_function
 dotnet_naming_symbols.class_name.applicable_accessibilities       = *
 dotnet_naming_rule.class_name_should_be_pascal_case.severity      = warning
 dotnet_naming_rule.class_name_should_be_pascal_case.symbols       = class_name
@@ -120,6 +121,11 @@ dotnet_naming_rule.enum_members_should_be_all_upper.style         = all_upper_ca
 csharp_style_var_for_built_in_types = true:warning
 csharp_style_var_when_type_is_apparent = true:warning
 csharp_style_var_elsewhere = false:warning
+# Keep ReSharper/Rider aligned with the Roslyn var policy above.
+resharper_csharp_for_built_in_types = use_var
+resharper_csharp_for_simple_types = use_var_when_evident
+resharper_csharp_for_other_types = use_var_when_evident
+resharper_csharp_use_roslyn_logic_for_evident_types = true
 
 # Expression-bodied members
 csharp_style_expression_bodied_methods = false:silent

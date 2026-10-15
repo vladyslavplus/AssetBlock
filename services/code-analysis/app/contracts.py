@@ -262,6 +262,7 @@ class AnalysisMetadata:
     reservation: CapacityReservation
     security_evidence: SecurityEvidenceBinding
     declared_licenses: tuple = ()
+    reuse: dict | None = None
 
 
 def _require_mapping(value, what: str) -> dict:
@@ -275,7 +276,7 @@ def validate_metadata(raw: dict) -> AnalysisMetadata:
     data = _require_mapping(raw, "metadata")
     allowed = {"runId", "assetId", "versionId", "contentSha256", "inputDigest",
                "policyVersion", "declarationDigest", "materialDigest",
-               "reservation", "securityEvidence", "declaredLicenses"}
+               "reservation", "securityEvidence", "declaredLicenses", "reuse"}
     unknown = set(data) - allowed
     if unknown:
         raise ContractError("UNKNOWN_METADATA_FIELD", sorted(unknown)[0])
@@ -297,6 +298,7 @@ def validate_metadata(raw: dict) -> AnalysisMetadata:
     reservation = _validate_reservation(data["reservation"])
     evidence = _validate_security_evidence(data["securityEvidence"])
     declared = _validate_declared_licenses(data.get("declaredLicenses", []))
+    reuse = _validate_reuse(data.get("reuse"), data)
     return AnalysisMetadata(
         run_id=data["runId"],
         asset_id=data["assetId"],
@@ -309,7 +311,68 @@ def validate_metadata(raw: dict) -> AnalysisMetadata:
         reservation=reservation,
         security_evidence=evidence,
         declared_licenses=declared,
+        reuse=reuse,
     )
+
+
+def _validate_reuse(raw, metadata: dict) -> dict | None:
+    if raw is None:
+        return None
+    data = _require_mapping(raw, "reuse")
+    if set(data) != {"sourceRunId", "sourceInputDigest", "sourceDeclarationDigest",
+                     "sourceMaterialDigest", "artifacts"}:
+        raise ContractError("MALFORMED_METADATA", "reuse shape mismatch")
+    if (not is_uuid(data["sourceRunId"])
+            or not is_sha256(data["sourceInputDigest"])
+            or not is_sha256(data["sourceDeclarationDigest"])
+            or not is_sha256(data["sourceMaterialDigest"])
+            or data["sourceDeclarationDigest"] == metadata["declarationDigest"]
+            or data["sourceMaterialDigest"] != metadata["materialDigest"]):
+        raise ContractError("REFERENCE_MANIFEST_INVALID", "reuse source binding")
+    artifacts = data["artifacts"]
+    if not isinstance(artifacts, list) or len(artifacts) != 3:
+        raise ContractError("REFERENCE_MANIFEST_INVALID", "reuse artifact set")
+    expected = {"EXTRACTION", "TOKEN", "SEMANTIC"}
+    seen = set()
+    normalized = []
+    total_bytes = 0
+    for item in artifacts:
+        item = _require_mapping(item, "reuse artifact")
+        if set(item) != {"stage", "sourceReportId", "sourceStageId", "artifactDigest", "artifactJson"}:
+            raise ContractError("REFERENCE_MANIFEST_INVALID", "reuse artifact shape")
+        stage = item["stage"]
+        if stage not in expected or stage in seen:
+            raise ContractError("REFERENCE_MANIFEST_INVALID", "reuse artifact stage")
+        if not is_uuid(item["sourceReportId"]) or not is_uuid(item["sourceStageId"]):
+            raise ContractError("REFERENCE_MANIFEST_INVALID", "reuse artifact identity")
+        if not is_sha256(item["artifactDigest"]) or not isinstance(item["artifactJson"], str):
+            raise ContractError("REFERENCE_MANIFEST_INVALID", "reuse artifact digest")
+        artifact_raw = item["artifactJson"].encode("utf-8")
+        total_bytes += len(artifact_raw)
+        if total_bytes > 48 * 1024:
+            raise ContractError("REFERENCE_MANIFEST_INVALID", "reuse artifact budget")
+        try:
+            artifact = json.loads(item["artifactJson"])
+        except (ValueError, UnicodeError):
+            raise ContractError("REFERENCE_MANIFEST_INVALID", "reuse artifact JSON")
+        if not isinstance(artifact, dict) or sha256_hex(canonical(artifact)) != item["artifactDigest"]:
+            raise ContractError("REFERENCE_MANIFEST_INVALID", "reuse artifact hash")
+        binding = artifact.get("binding")
+        if not isinstance(binding, dict):
+            raise ContractError("REFERENCE_MANIFEST_INVALID", "reuse artifact binding")
+        for name, expected_value in (("sourceRunId", data["sourceRunId"]),
+                                     ("sourceInputDigest", data["sourceInputDigest"]),
+                                     ("contentSha256", metadata["contentSha256"]),
+                                     ("materialDigest", metadata["materialDigest"]),
+                                     ("declarationDigest", data["sourceDeclarationDigest"]),
+                                     ("stage", stage)):
+            if binding.get(name) != expected_value:
+                raise ContractError("REFERENCE_MANIFEST_INVALID", "reuse artifact binding mismatch")
+        seen.add(stage)
+        normalized.append({**item, "artifact": artifact})
+    if seen != expected:
+        raise ContractError("REFERENCE_MANIFEST_INVALID", "reuse artifact set incomplete")
+    return {**data, "artifacts": normalized}
 
 
 def _validate_reservation(raw) -> CapacityReservation:

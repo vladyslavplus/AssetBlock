@@ -85,6 +85,26 @@ internal sealed class ClamAvOptionsValidator(IConfiguration configuration) : IVa
             errors.Add("ClamAv:MaxResponseBytes must be between 1 and 65536.");
         }
 
+        if (string.IsNullOrWhiteSpace(options.VersionTimeZoneId))
+        {
+            errors.Add("ClamAv:VersionTimeZoneId must identify the timezone configured for the clamd process.");
+        }
+        else
+        {
+            try
+            {
+                _ = TimeZoneInfo.FindSystemTimeZoneById(options.VersionTimeZoneId);
+            }
+            catch (TimeZoneNotFoundException)
+            {
+                errors.Add("ClamAv:VersionTimeZoneId must identify an installed timezone.");
+            }
+            catch (InvalidTimeZoneException)
+            {
+                errors.Add("ClamAv:VersionTimeZoneId must identify a valid timezone.");
+            }
+        }
+
         return errors.Count > 0
             ? ValidateOptionsResult.Fail(errors)
             : ValidateOptionsResult.Success;

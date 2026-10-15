@@ -24,7 +24,14 @@ public static class PublicationEligibility
         version.ProcessingStatus is AssetVersionProcessingStatus.REJECTED
             or AssetVersionProcessingStatus.PROCESSING_FAILED;
 
-    /// <summary>Owner preview requires completed mandatory security checks (READY).</summary>
+    /// <summary>
+    /// An exact-version safety restriction denies byte delivery and reference use. Entitlement,
+    /// license proof and the encrypted blob are retained; only access is closed.
+    /// </summary>
+    private static bool IsSafetyRestricted(AssetVersion version) =>
+        version.SafetyRestriction != AssetVersionSafetyRestriction.NONE;
+
+    /// <summary>Owner preview requires completed mandatory security checks (READY) and no restriction.</summary>
     public static bool IsAuthorSafePreviewVersion(AssetVersion version) =>
-        IsSafeProcessedVersion(version);
+        IsSafeProcessedVersion(version) && !IsSafetyRestricted(version);
 }

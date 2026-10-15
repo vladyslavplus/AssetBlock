@@ -26,7 +26,7 @@ from .contracts import ContractError
 from .reference_index import load_manifest
 from .stages import ServiceConfig
 from .supervisor import (await_worker, close_job_handle,
-                         confirm_containment,
+                         confirm_containment, confirm_stopped, job_active_processes,
                          read_tool_pids, spawn_worker, stop_containment,
                          worker_env)
 
@@ -330,6 +330,7 @@ async def _run_supervised(request: Request, config: ServiceConfig, state: dict,
             "referenceManifest": str(config.reference_manifest) if config.reference_manifest else None,
             "galleryRoot": str(config.gallery_root) if config.gallery_root else None,
             "indexDsn": config.index_dsn,
+            "indexRuntimeCompatibility": config.index_runtime_compatibility,
             "overallDeadlineSeconds": config.overall_deadline_seconds,
             "tokenDeadlineSeconds": config.token_deadline_seconds,
             "scancodeDeadlineSeconds": config.scancode_deadline_seconds,
@@ -366,15 +367,20 @@ async def _run_supervised(request: Request, config: ServiceConfig, state: dict,
                 cancel.set()
                 stop_containment(proc)
                 reason = "CANCELLED"
-            if reason != "DONE":
+            if reason == "DONE":
+                # A completed worker must leave no descendants behind. Stop any
+                # residual members of its private containment before proving
+                # the tree empty and releasing the reservation.
+                stop_containment(proc)
+                if proc.returncode != 0:
+                    LOG.error("worker exited code=%s marker=%s", proc.returncode,
+                              _worker_exit_marker(run_workspace.path))
+                    envelope = _exception_envelope(metadata, "INTERNAL_ERROR")
+                else:
+                    envelope = _read_envelope(run_workspace.path, metadata)
+            else:
                 code = "DEADLINE_EXCEEDED" if reason == "TIMEOUT" else "CANCELLED"
                 envelope = _cancelled_envelope(metadata, code)
-            elif proc.returncode != 0:
-                LOG.error("worker exited code=%s marker=%s", proc.returncode,
-                          _worker_exit_marker(run_workspace.path))
-                envelope = _exception_envelope(metadata, "INTERNAL_ERROR")
-            else:
-                envelope = _read_envelope(run_workspace.path, metadata)
         tool_pids = read_tool_pids(run_workspace.path)
         job = getattr(proc, "service_job_handle", None)
         pgid = proc.pid if sys.platform != "win32" else None
@@ -383,7 +389,11 @@ async def _run_supervised(request: Request, config: ServiceConfig, state: dict,
             # stays, the sweeper must not clear the marker, and capacity is
             # not released. Only a confirmed stop unlocks cleanup.
             state["unconfirmed"].add(run_workspace.path)
-            LOG.error("worker termination unconfirmed tools=%d", len(tool_pids))
+            LOG.error(
+                "worker termination unconfirmed workerStopped=%s tools=%d toolsStopped=%s jobEmpty=%s",
+                confirm_stopped(proc.pid), len(tool_pids),
+                confirm_stopped(-1, tool_pids),
+                job_active_processes(job) if job is not None else None)
             if cancelled_exc is not None:
                 raise cancelled_exc
             raise _Wedged()
@@ -392,7 +402,8 @@ async def _run_supervised(request: Request, config: ServiceConfig, state: dict,
             envelope = _cancelled_envelope(metadata, "CANCELLED")
     finally:
         watcher.cancel()
-        close_job_handle(proc)
+        if run_workspace.path not in state["unconfirmed"]:
+            close_job_handle(proc)
         if run_workspace.path not in state["unconfirmed"]:
             try:
                 run_workspace.cleanup()
@@ -407,6 +418,21 @@ async def _run_supervised(request: Request, config: ServiceConfig, state: dict,
         envelope = _cleanup_failed_envelope(metadata, envelope)
     if cancelled_exc is not None:
         raise cancelled_exc
+    if envelope.get("outcome") != "COMPLETED":
+        failed_stages = [
+            (stage.get("stage"), stage.get("errorCode"))
+            for stage in envelope.get("stages", [])
+            if stage.get("outcome") != "SUCCEEDED"
+        ]
+        LOG.error(
+            "analysis worker result run=%s outcome=%s error=%s crashType=%s crashField=%s failedStages=%s",
+            metadata.run_id,
+            envelope.get("outcome"),
+            envelope.get("errorCode"),
+            envelope.get("crashType"),
+            envelope.get("crashField"),
+            failed_stages,
+        )
     return JSONResponse(status_code=200, content=json.loads(
         contracts.canonical(envelope).decode("utf-8")))
 
@@ -557,7 +583,7 @@ def _exception_envelope(metadata, code: str) -> dict:
 
 
 def _cleanup_failed_envelope(metadata, completed: dict) -> dict:
-    """A run whose plaintext could not be removed is a failure, not a success."""
+    """Withhold findings after cleanup failure while retaining observed run and stage evidence."""
     return {
         "schema": contracts.SCHEMA,
         "serviceVersion": contracts.SERVICE_VERSION,
@@ -567,6 +593,9 @@ def _cleanup_failed_envelope(metadata, completed: dict) -> dict:
         "contentSha256": metadata.content_sha256,
         "assetId": metadata.asset_id,
         "versionId": metadata.version_id,
+        "policy": completed.get("policy", {}),
+        "securityEvidence": completed.get("securityEvidence", {}),
+        "reservation": completed.get("reservation", {}),
         "stages": completed.get("stages", []),
         "coverage": completed.get("coverage", {}),
         "findings": [],
@@ -575,7 +604,7 @@ def _cleanup_failed_envelope(metadata, completed: dict) -> dict:
         "retryable": False,
         "failedStage": "REPORT",
         "admittedBy": None,
-        "cleanupError": None,
+        "cleanupError": "CLEANUP_FAILED",
     }
 
 

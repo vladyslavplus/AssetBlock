@@ -87,3 +87,54 @@ def test_digest_covers_declaration_and_evidence_not_reservation(make_metadata_ar
     revalidated_lease = contracts.validate_metadata(changed_lease)
     assert contracts.compute_analysis_digest(
         revalidated_lease, policy_module.POLICY_DIGEST, None) == base
+
+
+def _reuse_metadata(metadata):
+    from uuid import uuid4
+
+    source_run = str(uuid4())
+    source_report = str(uuid4())
+    source_declaration = "c" * 64 if metadata["declarationDigest"] != "c" * 64 else "d" * 64
+    artifacts = []
+    for stage in ("EXTRACTION", "TOKEN", "SEMANTIC"):
+        artifact = {"binding": {
+            "sourceRunId": source_run,
+            "sourceInputDigest": "b" * 64,
+            "contentSha256": metadata["contentSha256"],
+            "materialDigest": metadata["materialDigest"],
+            "declarationDigest": source_declaration,
+            "stage": stage,
+        }, "data": {"fixture": stage}}
+        encoded = contracts.canonical(artifact).decode().rstrip("\n")
+        artifacts.append({"stage": stage, "sourceReportId": source_report,
+                          "sourceStageId": str(uuid4()),
+                          "artifactDigest": contracts.sha256_hex(contracts.canonical(artifact)),
+                          "artifactJson": encoded})
+    metadata["reuse"] = {"sourceRunId": source_run,
+                         "sourceInputDigest": "b" * 64,
+                         "sourceDeclarationDigest": source_declaration,
+                         "sourceMaterialDigest": metadata["materialDigest"],
+                         "artifacts": artifacts}
+    return metadata
+
+
+def test_declaration_only_reuse_accepts_three_bound_immutable_artifacts(make_metadata_archive):
+    metadata, _archive = make_metadata_archive
+    validated = contracts.validate_metadata(_reuse_metadata(dict(metadata)))
+    assert validated.reuse is not None
+    assert {item["stage"] for item in validated.reuse["artifacts"]} == {
+        "EXTRACTION", "TOKEN", "SEMANTIC"}
+
+
+def test_declaration_only_reuse_rejects_tampered_artifact_digest(make_metadata_archive):
+    metadata, _archive = make_metadata_archive
+    tampered = _reuse_metadata(dict(metadata))
+    artifact = tampered["reuse"]["artifacts"][0]
+    artifact["artifactJson"] = artifact["artifactJson"].replace(
+        '"fixture":"EXTRACTION"', '"fixture":"ALTERED"')
+    try:
+        contracts.validate_metadata(tampered)
+    except contracts.ContractError as exc:
+        assert exc.code == "REFERENCE_MANIFEST_INVALID"
+    else:
+        raise AssertionError("tampered reuse artifact accepted")

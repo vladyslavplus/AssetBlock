@@ -1067,7 +1067,11 @@ public sealed class SemanticSearchEmbeddingPostgresTests(PostgresFixture fixture
         var currentOffset = await coordinator.GetCursorOffset(modelKey, CancellationToken.None);
         currentOffset.Should().Be(0);
 
-        List<AssetProcessingJob> jobs = await db.AssetProcessingJobs.AsNoTracking().ToListAsync();
+        // Only the backfill's own jobs must be gone: the trusted publication the seed attaches
+        // legitimately leaves its producing security jobs behind.
+        List<AssetProcessingJob> jobs = await db.AssetProcessingJobs.AsNoTracking()
+            .Where(j => j.Type == AssetProcessingJobType.EMBEDDING_GENERATION)
+            .ToListAsync();
         jobs.Should().BeEmpty();
     }
 

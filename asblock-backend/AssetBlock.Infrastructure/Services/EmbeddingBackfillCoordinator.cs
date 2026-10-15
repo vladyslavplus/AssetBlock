@@ -28,7 +28,6 @@ internal sealed class EmbeddingBackfillCoordinator(
     ICacheService? cacheService = null) : IEmbeddingBackfillCoordinator
 {
     private const long ADVISORY_LOCK_KEY = 0x4153424C4F434B03L;
-    private const string VERSION_STATUS_READY = nameof(AssetVersionProcessingStatus.READY);
     private const string CURSOR_CACHE_PREFIX = "embedding:backfill:cursor:";
     private static readonly ConcurrentDictionary<string, int> _fallbackCursors = new();
 
@@ -255,6 +254,7 @@ internal sealed class EmbeddingBackfillCoordinator(
                     definitionVersion: 1,
                     initialDelay: TimeSpan.Zero,
                     payload,
+                    scope: null,
                     traceParent: null,
                     cancellationToken);
 

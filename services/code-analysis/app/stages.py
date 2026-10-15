@@ -9,9 +9,12 @@ projection.
 
 from __future__ import annotations
 
+import base64
 import csv
 import json
 import logging
+import struct
+import math
 import time
 from dataclasses import dataclass, field
 from io import StringIO
@@ -51,6 +54,7 @@ class ServiceConfig:
     reference_manifest: Path | None = None
     gallery_root: Path | None = None
     index_dsn: str | None = None
+    index_runtime_compatibility: str | None = None
     overall_deadline_seconds: float = 18 * 60
     token_deadline_seconds: float = 3 * 60
     scancode_deadline_seconds: float = 12 * 60
@@ -102,6 +106,7 @@ class Pipeline:
     license_rows: list = field(default_factory=list)
     findings: list = field(default_factory=list)
     finding_overflow: int = 0
+    reuse_artifacts: dict = field(default_factory=dict)
 
     def omit(self, reason: str, path: str | None = None,
              file_id: str | None = None, detail: str = "") -> None:
@@ -120,6 +125,23 @@ class Pipeline:
         self.omissions.append(entry)
 
     def record(self, stage: StageRecord) -> None:
+        if stage.input_sha256 is None:
+            metadata = getattr(self.context, "metadata", None)
+            input_digest = getattr(metadata, "input_digest", None)
+            consumed = {
+                "stage": stage.stage,
+                "runInputDigest": input_digest,
+                "upstream": [
+                    {
+                        "stage": prior.stage,
+                        "outcome": prior.outcome,
+                        "outputSha256": prior.output_sha256,
+                        "errorCode": prior.error_code,
+                    }
+                    for prior in self.stages
+                ],
+            }
+            stage.input_sha256 = contracts.sha256_hex(contracts.canonical(consumed))
         self.stages.append(stage)
 
     def add_finding(self, ftype: str, path: str | None, file_id: str | None,
@@ -133,6 +155,86 @@ class Pipeline:
 def _retryable(code: str) -> bool:
     return code in {"TOOL_TIMEOUT", "SERVICE_BUSY", "DEADLINE_EXCEEDED",
                     "INDEX_UNAVAILABLE", "TOOL_MISSING"}
+
+
+def _reuse_binding(pipe: Pipeline, stage: str) -> dict:
+    metadata = pipe.context.metadata
+    snapshot = _require_snapshot(pipe)
+    return {
+        "sourceRunId": metadata.run_id,
+        "sourceInputDigest": metadata.input_digest,
+        "contentSha256": metadata.content_sha256,
+        "policyDigest": pipe.context.policy["policyDigest"],
+        "materialDigest": metadata.material_digest,
+        "declarationDigest": metadata.declaration_digest,
+        "securityGeneration": metadata.security_evidence.security_generation,
+        "archiveEvidenceId": metadata.security_evidence.archive_evidence_id,
+        "malwareEvidenceId": metadata.security_evidence.malware_evidence_id,
+        "stage": stage,
+        "snapshotId": snapshot.snapshot_id,
+        "snapshotRevision": snapshot.revision,
+        "modelKey": snapshot.model_key,
+        "indexKey": snapshot.index_key,
+        "modelIdentitySha256": contracts.sha256_hex(contracts.canonical(snapshot.model_identity)),
+    }
+
+
+def _create_reuse_artifact(pipe: Pipeline, stage: str, data: dict) -> str | None:
+    """Build bounded source-free cache artifact; oversized stage outputs stay valid but cannot be reused."""
+    try:
+        artifact = {"binding": _reuse_binding(pipe, stage), "data": data}
+        encoded = contracts.canonical(artifact)
+    except (ContractError, TypeError, ValueError):
+        return None
+    # Three artifacts plus metadata framing must fit the existing bounded request contract.
+    if len(encoded) > 15 * 1024 or sum(len(v["artifactJson"]) for v in pipe.reuse_artifacts.values()) + len(encoded) > 45 * 1024:
+        return None
+    digest = contracts.sha256_hex(encoded)
+    pipe.reuse_artifacts[stage] = {
+        "stage": stage,
+        "artifactDigest": digest,
+        "artifactJson": encoded.decode("utf-8").rstrip("\n"),
+    }
+    return digest
+
+
+def _reuse_input(pipe: Pipeline, stage: str) -> tuple[dict, str, dict] | None:
+    metadata = pipe.context.metadata
+    reuse = metadata.reuse
+    if reuse is None:
+        return None
+    item = next((entry for entry in reuse["artifacts"] if entry["stage"] == stage), None)
+    if item is None:
+        raise ContractError("REFERENCE_MANIFEST_INVALID", "reuse stage missing")
+    artifact = item["artifact"]
+    expected = _reuse_binding(pipe, stage)
+    binding = artifact.get("binding")
+    if not isinstance(binding, dict) or binding != {
+            **expected,
+            "sourceRunId": reuse["sourceRunId"],
+            "sourceInputDigest": reuse["sourceInputDigest"],
+            "declarationDigest": reuse["sourceDeclarationDigest"],
+    }:
+        raise ContractError("REFERENCE_MANIFEST_INVALID", "reuse binding is stale")
+    if not isinstance(artifact.get("data"), dict):
+        raise ContractError("REFERENCE_MANIFEST_INVALID", "reuse artifact data")
+    parent = {**item, "sourceRunId": reuse["sourceRunId"]}
+    return artifact["data"], item["artifactDigest"], parent
+
+
+def _reuse_tool_identity(data: dict, item: dict) -> dict:
+    tool = data.get("toolIdentity")
+    if not isinstance(tool, dict):
+        raise ContractError("REFERENCE_MANIFEST_INVALID", "reuse tool identity")
+    base = {key: value for key, value in tool.items()
+            if key not in {"reuseParentRunId", "reuseParentReportId", "reuseParentStageId",
+                           "reuseArtifactDigest", "reused"}}
+    return {**base,
+            "reuseParentRunId": item["sourceRunId"],
+            "reuseParentReportId": item["sourceReportId"],
+            "reuseParentStageId": item["sourceStageId"],
+            "reuseArtifactDigest": item["artifactDigest"],
+            "reused": True}
 
 
 def run_pipeline(ctx: RunContext) -> dict:
@@ -261,6 +363,19 @@ def _classify_file(path: str, size: int) -> tuple[str | None, str | None]:
     return dialect, None
 
 
+def _dialect_extraction_counts(coverage: dict) -> dict[str, int]:
+    if not isinstance(coverage, dict):
+        raise ContractError("REFERENCE_MANIFEST_INVALID", "extraction dialect coverage")
+    counts: dict[str, int] = {}
+    for dialect, values in coverage.items():
+        if (not isinstance(dialect, str) or not isinstance(values, dict)
+                or type(values.get("extracted")) is not int
+                or values["extracted"] < 0):
+            raise ContractError("REFERENCE_MANIFEST_INVALID", "extraction dialect coverage")
+        counts[dialect] = values["extracted"]
+    return counts
+
+
 def _stage_extraction(pipe: Pipeline) -> None:
     ctx = pipe.context
     started = time.perf_counter()
@@ -268,6 +383,73 @@ def _stage_extraction(pipe: Pipeline) -> None:
     total_units = 0
     coverage_by_dialect: dict[str, dict] = {}
     try:
+        cached = _reuse_input(pipe, STAGE.EXTRACTION.value)
+        if cached is not None:
+            data, _, parent = cached
+            cached_files = data.get("analyzed")
+            if not isinstance(cached_files, list):
+                raise ContractError("REFERENCE_MANIFEST_INVALID", "reuse extraction files")
+            inventory_by_path = {entry.canonical_path: entry for entry in pipe.inventory.files}
+            for entry in pipe.inventory.files:
+                raw = _entry_bytes(ctx, entry)
+                if contracts.sha256_hex(raw) != entry.sha256:
+                    raise ContractError("DIGEST_MISMATCH")
+                ctx.workspace.stage(entry.staged_name, raw)
+            for item in cached_files:
+                if not isinstance(item, dict):
+                    raise ContractError("REFERENCE_MANIFEST_INVALID", "reuse extraction file")
+                path = item.get("canonicalPath")
+                source = inventory_by_path.get(path)
+                if (source is None or item.get("sha256") != source.sha256
+                        or item.get("size") != source.size
+                        or item.get("fileId") != contracts.sha256_hex(
+                            contracts.canonical([source.sha256, source.canonical_path]))):
+                    raise ContractError("REFERENCE_MANIFEST_INVALID", "reuse extraction input changed")
+                fragments = item.get("fragments")
+                if not isinstance(fragments, list) or not fragments:
+                    raise ContractError("REFERENCE_MANIFEST_INVALID", "reuse extraction fragments")
+                for fragment in fragments:
+                    if (not isinstance(fragment, dict) or "name" in fragment
+                            or fragment.get("fileId") != item["fileId"]
+                            or fragment.get("sourceSha256") != item["sha256"]
+                            or type(fragment.get("startByte")) is not int
+                            or type(fragment.get("endByte")) is not int
+                            or fragment["startByte"] < 0
+                            or fragment["endByte"] <= fragment["startByte"]
+                            or fragment["endByte"] > item["size"]):
+                        raise ContractError("REFERENCE_MANIFEST_INVALID", "reuse extraction range")
+                pipe.analyzed.append(AnalyzedFile(
+                    file_id=item["fileId"], canonical_path=path, sha256=item["sha256"],
+                    language_group=item["languageGroup"], dialect=item["dialect"],
+                    size=item["size"], fragments=fragments,
+                    extraction_sha=item["extractionSha"], searchable=True))
+            omissions = data.get("omissions", [])
+            if not isinstance(omissions, list) or len(omissions) > contracts.MAX_OMISSIONS:
+                raise ContractError("REFERENCE_MANIFEST_INVALID", "reuse extraction omissions")
+            pipe.omissions.extend(omissions)
+            pipe.omission_overflow = data.get("omissionOverflow", 0)
+            total_units = sum(len(item.fragments) for item in pipe.analyzed)
+            coverage_by_dialect = data.get("coverageByDialect", {})
+            dialect_counts = _dialect_extraction_counts(coverage_by_dialect)
+            tool_identity = data.get("toolIdentity", {})
+            replacement = {"analyzed": cached_files, "omissions": omissions,
+                           "omissionOverflow": pipe.omission_overflow,
+                           "coverageByDialect": coverage_by_dialect,
+                           "toolIdentity": tool_identity}
+            output_digest = _create_reuse_artifact(pipe, STAGE.EXTRACTION.value, replacement)
+            if output_digest is None:
+                raise ContractError("REFERENCE_MANIFEST_INVALID", "reused extraction exceeds cache budget")
+            pipe.record(StageRecord(
+                stage=STAGE.EXTRACTION.value, applicability=APPLICABILITY.MANDATORY.value,
+                outcome=STAGE_OUTCOME.SUCCEEDED.value,
+                duration_seconds=time.perf_counter() - started,
+                output_sha256=output_digest,
+                tool_identity=_reuse_tool_identity(data, parent),
+                counts={"analyzedFiles": len(pipe.analyzed), "extractedUnits": total_units,
+                        "coverageByDialect": dialect_counts, "omissions": len(pipe.omissions)}))
+            LOG.info("run extraction outcome=SUCCEEDED reused=true analyzed=%d", len(pipe.analyzed))
+            return
+
         staged: dict[str, bytes] = {}
         for item in pipe.inventory.files:
             data = _entry_bytes(ctx, item)
@@ -329,16 +511,32 @@ def _stage_extraction(pipe: Pipeline) -> None:
             parsers = mechanisms.parser_identity()
         except Exception:
             parsers = {"unavailable": "unknown"}
+        artifact_files = []
+        for item in pipe.analyzed:
+            artifact_files.append({
+                "fileId": item.file_id, "canonicalPath": item.canonical_path,
+                "sha256": item.sha256, "languageGroup": item.language_group,
+                "dialect": item.dialect, "size": item.size,
+                "fragments": [{key: value for key, value in fragment.items() if key != "name"}
+                              for fragment in item.fragments],
+                "extractionSha": item.extraction_sha,
+            })
+        dialect_counts = _dialect_extraction_counts(coverage_by_dialect)
+        artifact_data = {"analyzed": artifact_files, "omissions": pipe.omissions,
+                         "omissionOverflow": pipe.omission_overflow,
+                         "coverageByDialect": coverage_by_dialect,
+                         "toolIdentity": {"parsers": parsers}}
+        artifact_digest = _create_reuse_artifact(pipe, STAGE.EXTRACTION.value, artifact_data)
         record = StageRecord(
             stage=STAGE.EXTRACTION.value, applicability=APPLICABILITY.MANDATORY.value,
             outcome=STAGE_OUTCOME.SUCCEEDED.value,
             duration_seconds=time.perf_counter() - started,
-            output_sha256=contracts.sha256_hex(contracts.canonical(
+            output_sha256=artifact_digest or contracts.sha256_hex(contracts.canonical(
                 [f.file_id for f in pipe.analyzed])),
-            tool_identity={"parsers": parsers},
+             tool_identity={"parsers": parsers},
             counts={"analyzedFiles": len(pipe.analyzed),
                     "extractedUnits": total_units,
-                    "coverageByDialect": coverage_by_dialect,
+                    "coverageByDialect": dialect_counts,
                     "omissions": len(pipe.omissions)})
     except ContractError as exc:
         record = StageRecord(
@@ -377,11 +575,50 @@ def _reference_identity(snapshot) -> dict | None:
             "indexKey": snapshot.index_key}
 
 
+def _token_stage_counts(counts: dict) -> dict[str, int]:
+    numeric = ("queryFiles", "batches", "rankedFiles")
+    if (not isinstance(counts, dict)
+            or any(type(counts.get(key)) is not int or counts[key] < 0 for key in numeric)):
+        raise ContractError("REFERENCE_MANIFEST_INVALID", "token stage counts")
+    groups = {}
+    for key in ("comparedGroups", "uncomparedGroups"):
+        value = counts.get(key)
+        if (not isinstance(value, list) or any(not isinstance(item, str) for item in value)
+                or len(value) != len(set(value))):
+            raise ContractError("REFERENCE_MANIFEST_INVALID", "token stage groups")
+        groups[key] = len(value)
+    return {"queryFiles": counts["queryFiles"], "batches": counts["batches"],
+            "rankedFiles": counts["rankedFiles"], **groups}
+
+
 def _stage_token(pipe: Pipeline) -> None:
     ctx = pipe.context
     started = time.perf_counter()
     try:
         snapshot = _require_snapshot(pipe)
+        cached = _reuse_input(pipe, STAGE.TOKEN.value)
+        if cached is not None:
+            data, _, parent = cached
+            ranked = data.get("ranked")
+            counts = data.get("counts")
+            if not isinstance(ranked, dict) or not isinstance(counts, dict):
+                raise ContractError("REFERENCE_MANIFEST_INVALID", "reuse token data")
+            pipe.token_ranked = ranked
+            tool_identity = data.get("toolIdentity", {})
+            output_digest = _create_reuse_artifact(
+                pipe, STAGE.TOKEN.value,
+                {"ranked": ranked, "counts": counts, "toolIdentity": tool_identity})
+            if output_digest is None:
+                raise ContractError("REFERENCE_MANIFEST_INVALID", "reused token output exceeds cache budget")
+            pipe.record(StageRecord(
+                stage=STAGE.TOKEN.value, applicability=APPLICABILITY.MANDATORY.value,
+                outcome=STAGE_OUTCOME.SUCCEEDED.value,
+                duration_seconds=time.perf_counter() - started,
+                output_sha256=output_digest,
+                tool_identity=_reuse_tool_identity(data, parent),
+                counts={**_token_stage_counts(counts), "reusedRankings": len(ranked)}))
+            LOG.info("run token outcome=SUCCEEDED reused=true ranked=%d", len(ranked))
+            return
         if not _tool_available(ctx, "dolos"):
             raise ContractError("TOOL_MISSING", "token runner unavailable")
         gallery_by_group: dict[str, list] = {}
@@ -408,14 +645,20 @@ def _stage_token(pipe: Pipeline) -> None:
         if not compared:
             raise ContractError("REFERENCE_GRANT_MISSING", "empty gallery for query languages")
         pipe.token_ranked = ranked
+        tool_identity = _tool_identity("dolos", ctx)
+        counts = {"queryFiles": len(query_files), "batches": batches,
+                  "rankedFiles": len(ranked), "comparedGroups": compared,
+                  "uncomparedGroups": uncompared}
+        artifact_digest = _create_reuse_artifact(
+            pipe, STAGE.TOKEN.value,
+            {"ranked": ranked, "counts": counts, "toolIdentity": tool_identity})
         record = StageRecord(
             stage=STAGE.TOKEN.value, applicability=APPLICABILITY.MANDATORY.value,
             outcome=STAGE_OUTCOME.SUCCEEDED.value,
             duration_seconds=time.perf_counter() - started,
-            tool_identity=_tool_identity("dolos", ctx),
-            counts={"queryFiles": len(query_files), "batches": batches,
-                    "rankedFiles": len(ranked),
-                    "comparedGroups": compared, "uncomparedGroups": uncompared})
+            output_sha256=artifact_digest or contracts.sha256_hex(contracts.canonical(ranked)),
+            tool_identity=tool_identity,
+            counts=_token_stage_counts(counts))
     except ContractError as exc:
         record = StageRecord(
             stage=STAGE.TOKEN.value, applicability=APPLICABILITY.MANDATORY.value,
@@ -558,12 +801,73 @@ def _staged_name_for(pipe: Pipeline, item: AnalyzedFile) -> str:
 
 # ----------------------------------------------------------------- semantic
 
+def _pack_semantic_vectors(vectors: list) -> str:
+    flattened = [float(value) for vector in vectors for value in vector]
+    if any(not math.isfinite(value) for value in flattened):
+        raise ContractError("REFERENCE_MANIFEST_INVALID", "semantic vector is not finite")
+    packed = struct.pack(f"<{len(flattened)}f", *flattened) if flattened else b""
+    return base64.b64encode(packed).decode("ascii")
+
+
+def _unpack_semantic_vectors(encoded: str, window_count: int) -> list[list[float]]:
+    if not isinstance(encoded, str) or type(window_count) is not int or window_count < 0:
+        raise ContractError("REFERENCE_MANIFEST_INVALID", "semantic vector payload")
+    try:
+        packed = base64.b64decode(encoded, validate=True)
+    except (ValueError, base64.binascii.Error):
+        raise ContractError("REFERENCE_MANIFEST_INVALID", "semantic vector encoding")
+    expected_bytes = window_count * 768 * 4
+    if len(packed) != expected_bytes:
+        raise ContractError("REFERENCE_MANIFEST_INVALID", "semantic vector dimensions")
+    if window_count == 0:
+        return []
+    values = struct.unpack(f"<{window_count * 768}f", packed)
+    if any(not math.isfinite(value) for value in values):
+        raise ContractError("REFERENCE_MANIFEST_INVALID", "semantic vector is not finite")
+    return [list(values[offset:offset + 768]) for offset in range(0, len(values), 768)]
+
 def _stage_semantic(pipe: Pipeline) -> None:
     ctx = pipe.context
     started = time.perf_counter()
     encoded_info: dict = {}
     try:
         snapshot = _require_snapshot(pipe)
+        cached = _reuse_input(pipe, STAGE.SEMANTIC.value)
+        if cached is not None:
+            data, _, parent = cached
+            windows = data.get("windows")
+            if "vectorsF32LeBase64" in data:
+                vectors = _unpack_semantic_vectors(
+                    data["vectorsF32LeBase64"], len(windows) if isinstance(windows, list) else -1)
+            else:
+                vectors = data.get("vectors")
+            counts = data.get("counts")
+            tool_identity = data.get("toolIdentity")
+            if (not isinstance(windows, list) or not isinstance(vectors, list)
+                    or not isinstance(counts, dict) or not isinstance(tool_identity, dict)
+                    or len(windows) != len(vectors)
+                    or any(not isinstance(vector, list) or len(vector) != 768
+                           or any(type(value) not in (int, float) or not math.isfinite(value)
+                                  for value in vector)
+                           for vector in vectors)):
+                raise ContractError("REFERENCE_MANIFEST_INVALID", "reuse semantic vectors")
+            ranked = _query_index(ctx, snapshot, windows, vectors)
+            pipe.semantic_ranked = ranked
+            output_digest = _create_reuse_artifact(
+                pipe, STAGE.SEMANTIC.value,
+                {"windows": windows, "vectorsF32LeBase64": _pack_semantic_vectors(vectors), "counts": counts,
+                 "toolIdentity": tool_identity})
+            if output_digest is None:
+                raise ContractError("REFERENCE_MANIFEST_INVALID", "reused vectors exceed cache budget")
+            pipe.record(StageRecord(
+                stage=STAGE.SEMANTIC.value, applicability=APPLICABILITY.MANDATORY.value,
+                outcome=STAGE_OUTCOME.SUCCEEDED.value,
+                duration_seconds=time.perf_counter() - started,
+                output_sha256=output_digest,
+                tool_identity=_reuse_tool_identity(data, parent),
+                counts={**counts, "rankedFiles": len(ranked), "encoderInvocations": 0}))
+            LOG.info("run semantic outcome=SUCCEEDED reused=true ranked=%d", len(ranked))
+            return
         tokenizer, model, loaded = _load_encoder(ctx)
         _verify_encoder_identity(loaded, snapshot)
         windows, _omitted_windows = _map_windows(pipe, tokenizer)
@@ -575,20 +879,30 @@ def _stage_semantic(pipe: Pipeline) -> None:
                         "loadedStateSha256": loaded["loadedFullStateSha256"]}
         ranked = _query_index(ctx, snapshot, windows, vectors)
         pipe.semantic_ranked = ranked
+        tool_identity = {"encoder": "unixcoder-base-nine",
+                         "modelKey": snapshot.model_key,
+                         "indexKey": snapshot.index_key,
+                         "loadedCheckpointSha256": loaded["checkpointSha256"],
+                         "loadedStateSha256": loaded["loadedFullStateSha256"],
+                         "tokenizerHashes": loaded["tokenizerHashes"],
+                         "selectionSha256": snapshot.model_identity["selectionSha256"],
+                         "framing": loaded["framing"], "pooling": loaded["pooling"],
+                         "mask": snapshot.model_identity["mask"],
+                         "preprocessing": snapshot.model_identity["preprocessing"],
+                         "chunking": snapshot.model_identity["chunking"],
+                         "dimension": loaded["dimension"], "device": loaded["device"]}
+        counts = {"queryWindows": len(windows), "rankedFiles": len(ranked)}
+        artifact_digest = _create_reuse_artifact(
+            pipe, STAGE.SEMANTIC.value,
+            {"windows": windows, "vectorsF32LeBase64": _pack_semantic_vectors(vectors), "counts": counts,
+             "toolIdentity": tool_identity})
         record = StageRecord(
             stage=STAGE.SEMANTIC.value, applicability=APPLICABILITY.MANDATORY.value,
             outcome=STAGE_OUTCOME.SUCCEEDED.value,
             duration_seconds=time.perf_counter() - started,
-            output_sha256=contracts.sha256_hex(contracts.canonical(ranked)),
-            tool_identity={"encoder": "unixcoder-base-nine",
-                           "modelKey": snapshot.model_key,
-                           "indexKey": snapshot.index_key,
-                           "loadedCheckpointSha256": loaded["checkpointSha256"],
-                           "loadedStateSha256": loaded["loadedFullStateSha256"],
-                           "framing": loaded["framing"],
-                           "pooling": loaded["pooling"],
-                           "device": loaded["device"]},
-            counts={"queryWindows": len(windows), "rankedFiles": len(ranked)})
+            output_sha256=artifact_digest or contracts.sha256_hex(contracts.canonical(ranked)),
+            tool_identity=tool_identity,
+            counts=counts)
     except ContractError as exc:
         record = StageRecord(
             stage=STAGE.SEMANTIC.value, applicability=APPLICABILITY.MANDATORY.value,
@@ -603,7 +917,8 @@ def _stage_semantic(pipe: Pipeline) -> None:
 def _load_encoder(ctx: RunContext):
     try:
         import transformers  # noqa: F401
-    except ImportError:
+    except ImportError as exc:
+        LOG.warning("transformers import unavailable module=%s", exc.name or "unknown")
         raise ContractError("TOKENIZER_UNAVAILABLE")
     if ctx.config.model_dir is None or ctx.config.model_manifest is None:
         raise ContractError("MODEL_UNAVAILABLE")
@@ -640,6 +955,7 @@ def _verify_encoder_identity(loaded: dict, snapshot: ReferenceSnapshot) -> None:
     except ImportError as exc:
         raise ContractError("MODEL_UNAVAILABLE", type(exc).__name__)
     if (loaded.get("checkpointSha256") != identity.get("checkpointSha256")
+            or loaded.get("loadedFullStateSha256") != identity.get("loadedStateSha256")
             or loaded.get("tokenizerHashes") != identity.get("tokenizerHashes")
             or loaded.get("dimension") != identity.get("dimension")
             or loaded.get("dimension") != 768
@@ -720,8 +1036,9 @@ def _query_index(ctx: RunContext, snapshot: ReferenceSnapshot,
         raise ContractError("REFERENCE_MANIFEST_INVALID", "modelKey")
     connection = _connect_readonly(ctx.config.index_dsn)
     try:
-        _verify_index_row(connection, snapshot)
-        return _exact_retrieval(connection, snapshot, windows, vectors)
+        _verify_index_row(connection, snapshot, ctx.config.index_runtime_compatibility)
+        return _exact_retrieval(connection, snapshot, windows, vectors,
+                                ctx.config.index_runtime_compatibility)
     finally:
         try:
             connection.close()
@@ -739,13 +1056,15 @@ def _connect_readonly(dsn: str):
     return connection
 
 
-def _verify_index_row(connection, snapshot: ReferenceSnapshot) -> None:
+def _verify_index_row(connection, snapshot: ReferenceSnapshot,
+                      runtime_compatibility: str | None = None) -> None:
     try:
         from scripts.code_analysis import code_index as research_index
     except ImportError as exc:
         raise ContractError("INDEX_UNAVAILABLE", type(exc).__name__)
     try:
-        research_index.preflight(connection)
+        research_index.service_runtime_preflight(
+            connection, compatibility=runtime_compatibility)
     except (ValueError, Exception) as exc:
         raise ContractError("INDEX_UNAVAILABLE", type(exc).__name__)
     try:
@@ -767,7 +1086,8 @@ def _verify_index_row(connection, snapshot: ReferenceSnapshot) -> None:
 
 
 def _exact_retrieval(connection, snapshot: ReferenceSnapshot,
-                     windows: list, vectors: list) -> dict:
+                     windows: list, vectors: list,
+                     runtime_compatibility: str | None = None) -> dict:
     try:
         from scripts.code_analysis import code_index as research_index
     except ImportError as exc:
@@ -792,7 +1112,8 @@ def _exact_retrieval(connection, snapshot: ReferenceSnapshot,
             try:
                 rows = research_index.exact_query(
                     connection, snapshot.index_key, batch, gallery_ids,
-                    group, partition=snapshot.partition, limit=contracts.SEMANTIC_TOP)
+                    group, partition=snapshot.partition, limit=contracts.SEMANTIC_TOP,
+                    runtime_compatibility=runtime_compatibility)
             except (ValueError, Exception) as exc:
                 raise ContractError("INDEX_UNAVAILABLE", type(exc).__name__)
             for row in rows:
@@ -911,6 +1232,13 @@ def _normalize_scancode(payload: dict, staged_map: dict) -> tuple[list, list]:
     return rows, sorted(set(scan_errors))
 
 
+def _inventory_file_identity(pipe: Pipeline, path: str) -> str | None:
+    for item in pipe.inventory.files:
+        if item.canonical_path == path:
+            return contracts.sha256_hex(contracts.canonical([item.sha256, item.canonical_path]))
+    return None
+
+
 def _reconcile_declaration(pipe: Pipeline) -> None:
     declared = pipe.context.metadata.declared_licenses
     if not declared:
@@ -921,22 +1249,29 @@ def _reconcile_declaration(pipe: Pipeline) -> None:
         matched = [r for p, r in by_path.items()
                    if p == scope or p.startswith(scope.rstrip("/") + "/")]
         if not matched:
-            pipe.add_finding(FINDING_TYPE.NOTICE_MISSING.value, None, None,
+            # No archive file represents this declared scope; preserve it without false file attribution.
+            pipe.add_finding(FINDING_TYPE.NOTICE_MISSING.value, scope[:128], None,
                              f"Declared license scope has no scanned files: {scope[:128]}")
             continue
         detected = {r["expression"] for r in matched} - {"UNKNOWN"}
         if not any(entry.spdx.lower() in expr.lower() for expr in detected):
             if all(r["expression"] == "UNKNOWN" for r in matched):
                 for row in matched:
+                    file_id = _inventory_file_identity(pipe, row["path"])
+                    if file_id is None:
+                        raise ContractError("TOOL_OUTPUT_INVALID", "license finding input identity unavailable")
                     pipe.add_finding(
-                        FINDING_TYPE.LICENSE_UNKNOWN.value, row["path"], None,
+                        FINDING_TYPE.LICENSE_UNKNOWN.value, row["path"], file_id,
                         "No license signal detected; a declaration alone is not a detection.")
             else:
+                anchor_path = matched[0]["path"]
+                anchor_id = _inventory_file_identity(pipe, anchor_path)
+                if anchor_id is None:
+                    raise ContractError("TOOL_OUTPUT_INVALID", "license finding input identity unavailable")
                 pipe.add_finding(
-                    FINDING_TYPE.LICENSE_CONTRADICTION.value, None, None,
+                    FINDING_TYPE.LICENSE_CONTRADICTION.value, anchor_path, anchor_id,
                     f"Declared {entry.spdx[:64]} is not among detected signals "
                     f"under scope {scope[:128]}.")
-
 
 # -------------------------------------------------------------------- union
 
@@ -1072,6 +1407,9 @@ def _success_envelope(pipe: Pipeline) -> dict:
         "admittedBy": None,
         "cleanupError": None,
     }
+    if set(pipe.reuse_artifacts) == {"EXTRACTION", "TOKEN", "SEMANTIC"}:
+        body["reuseArtifacts"] = [pipe.reuse_artifacts[name]
+                                 for name in ("EXTRACTION", "TOKEN", "SEMANTIC")]
     # The report digest binds the pre-REPORT payload; the REPORT record then
     # binds findings/coverage/stage evidence to that digest. This avoids
     # self-referential hashing while keeping all 8 mandatory records.
@@ -1211,23 +1549,28 @@ def _append_finding(pipe: Pipeline, ftype: str, path: str | None, file_id: str |
         return
     excerpt = ""
     start_line = end_line = None
+    start_byte = end_byte = None
     if file_id is not None:
-        excerpt, start_line, end_line = _own_excerpt(pipe, file_id)
-    pipe.findings.append({
+        excerpt, start_line, end_line, start_byte, end_byte = _own_excerpt(pipe, file_id)
+    finding = {
         "findingId": _finding_id(ftype, path, file_id, foreign_id, reason),
         "type": ftype,
         "path": path[:512] if path else None,
         "fileId": file_id,
         "startLine": start_line,
         "endLine": end_line,
+        "startByte": start_byte,
+        "endByte": end_byte,
         "ownExcerpt": excerpt,
         "foreign": ({"fileId": foreign_id, "sensitivity": sensitivity,
                       "origin": origin,
                       "attribution": attribution or {}} if foreign_id else None),
-        "channelScore": score,
         "reason": reason[:1024],
         "requestedAction": _requested_action(ftype),
-    })
+    }
+    if score is not None:
+        finding["channelScore"] = score
+    pipe.findings.append(finding)
 
 
 def _requested_action(ftype: str) -> str:
@@ -1245,11 +1588,12 @@ def _requested_action(ftype: str) -> str:
     }.get(ftype, "Review the reported concern.")
 
 
-def _own_excerpt(pipe: Pipeline, file_id: str) -> tuple[str, int | None, int | None]:
+def _own_excerpt(pipe: Pipeline, file_id: str) -> tuple[str, int | None, int | None, int | None, int | None]:
     for item in pipe.analyzed:
         if item.file_id == file_id and item.fragments:
             first = min(item.fragments, key=lambda f: (f["startByte"], f["endByte"]))
             raw = (pipe.context.workspace.path / _staged_name_for(pipe, item)).read_bytes()
             excerpt = raw[first["startByte"]:first["endByte"]].decode("utf-8", errors="replace")
-            return excerpt[:320], first.get("startLine"), first.get("endLine")
-    return "", None, None
+            return (excerpt[:320], first.get("startLine"), first.get("endLine"),
+                    first.get("startByte"), first.get("endByte"))
+    return "", None, None, None, None

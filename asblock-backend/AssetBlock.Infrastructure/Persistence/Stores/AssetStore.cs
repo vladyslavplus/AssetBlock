@@ -14,6 +14,7 @@ using AssetBlock.Domain.Core.Publication;
 using AssetBlock.Infrastructure.Persistence.Configurations;
 using AssetBlock.Infrastructure.Persistence.Publication;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Storage;
 using Microsoft.Extensions.Options;
 using NpgsqlTypes;
 using Pgvector;
@@ -846,7 +847,6 @@ internal sealed class AssetStore(
         var exactTitlePattern = EscapeLikePattern(searchText);
         var likePattern = $"%{exactTitlePattern}%";
         var isLongEnoughForTrigram = searchText.Length >= MIN_TRIGRAM_QUERY_LENGTH;
-        var candidateLimit = page * pageSize;
 
         IQueryable<Guid> titleIlikeMatchingIds = filteredBase
             .Where(a => a.CurrentPublicationSnapshot != null
@@ -919,10 +919,6 @@ internal sealed class AssetStore(
             pageAssetIds = await FetchExplicitSortedPageAssetIds(
                 searchableBase,
                 request,
-                searchText,
-                likePattern,
-                isLongEnoughForTrigram,
-                candidateLimit,
                 page,
                 pageSize,
                 cancellationToken);
@@ -935,7 +931,6 @@ internal sealed class AssetStore(
                 exactTitlePattern,
                 likePattern,
                 isLongEnoughForTrigram,
-                candidateLimit,
                 page,
                 pageSize,
                 cancellationToken);
@@ -963,7 +958,6 @@ internal sealed class AssetStore(
         string exactTitlePattern,
         string likePattern,
         bool isLongEnoughForTrigram,
-        int candidateLimit,
         int page,
         int pageSize,
         CancellationToken cancellationToken) =>
@@ -1121,10 +1115,6 @@ internal sealed class AssetStore(
     private static async Task<List<Guid>> FetchExplicitSortedPageAssetIds(
         IQueryable<Asset> searchableBase,
         GetAssetsRequest request,
-        string searchText,
-        string likePattern,
-        bool isLongEnoughForTrigram,
-        int candidateLimit,
         int page,
         int pageSize,
         CancellationToken cancellationToken)
@@ -1349,11 +1339,50 @@ internal sealed class AssetStore(
         CancellationToken cancellationToken = default)
     {
         return await dbContext.ModerationSubmissions.AsNoTracking().AnyAsync(s => s.AssetId == assetId, cancellationToken)
-            || await dbContext.PublicationSnapshots.AsNoTracking().AnyAsync(s => s.AssetId == assetId, cancellationToken);
+            || await dbContext.PublicationSnapshots.AsNoTracking().AnyAsync(s => s.AssetId == assetId, cancellationToken)
+            || await dbContext.CodeAnalysisRuns.AsNoTracking().AnyAsync(r => r.AssetId == assetId, cancellationToken)
+            || await dbContext.SecurityRechecks.AsNoTracking().AnyAsync(r => r.AssetId == assetId, cancellationToken)
+            || await dbContext.SecurityEvidenceRecords.AsNoTracking().AnyAsync(e => e.AssetId == assetId, cancellationToken);
     }
 
     public async Task SoftDelete(Guid id, DateTimeOffset deletedAt, CancellationToken cancellationToken = default)
     {
+        // The caller holds the asset row lock and an ambient transaction. Fence every live analysis
+        // attempt before the tombstone commits so a late response cannot become the selected result.
+        await dbContext.AssetVersions
+            .Where(v => v.AssetId == id)
+            .ExecuteUpdateAsync(setters => setters
+                .SetProperty(v => v.SelectedCodeAnalysisReportId, (Guid?)null)
+                .SetProperty(v => v.AnalysisSelectionGeneration, v => v.AnalysisSelectionGeneration + 1)
+                .SetProperty(v => v.ProcessingUpdatedAt, deletedAt), cancellationToken);
+
+        await dbContext.CodeAnalysisRuns
+            .Where(r => r.AssetId == id
+                && (r.State == CodeAnalysisRunState.QUEUED || r.State == CodeAnalysisRunState.RUNNING))
+            .ExecuteUpdateAsync(setters => setters
+                .SetProperty(r => r.State, CodeAnalysisRunState.CANCELLED)
+                .SetProperty(r => r.ErrorCode, "ASSET_DELETED")
+                .SetProperty(r => r.ErrorSummary, "Asset was deleted before analysis completed.")
+                .SetProperty(r => r.CompletedAt, deletedAt)
+                .SetProperty(r => r.UpdatedAt, deletedAt), cancellationToken);
+
+        await dbContext.AssetProcessingJobs
+            .Where(j => j.AssetId == id
+                && j.Type == AssetProcessingJobType.CODE_ANALYSIS
+                && (j.Status == AssetProcessingJobStatus.QUEUED
+                    || j.Status == AssetProcessingJobStatus.RUNNING
+                    || j.Status == AssetProcessingJobStatus.RETRY_SCHEDULED))
+            .ExecuteUpdateAsync(setters => setters
+                .SetProperty(j => j.Status, AssetProcessingJobStatus.CANCELLED)
+                .SetProperty(j => j.Stage, "CANCELLED")
+                .SetProperty(j => j.ErrorCode, "ASSET_DELETED")
+                .SetProperty(j => j.ErrorSummary, "Asset was deleted before analysis completed.")
+                .SetProperty(j => j.CompletedAt, deletedAt)
+                .SetProperty(j => j.LeaseOwner, (string?)null)
+                .SetProperty(j => j.LeaseToken, (Guid?)null)
+                .SetProperty(j => j.LeaseExpiresAt, (DateTimeOffset?)null)
+                .SetProperty(j => j.UpdatedAt, deletedAt), cancellationToken);
+
         await dbContext.Assets
             .Where(a => a.Id == id && a.DeletedAt == null)
             .ExecuteUpdateAsync(
@@ -1372,7 +1401,59 @@ internal sealed class AssetStore(
 
     public async Task Delete(Guid id, CancellationToken cancellationToken = default)
     {
-        await dbContext.Assets.Where(a => a.Id == id).ExecuteDeleteAsync(cancellationToken);
+        IDbContextTransaction? ownedTransaction = null;
+        if (dbContext.Database.CurrentTransaction is null)
+        {
+            ownedTransaction = await dbContext.Database.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
+        }
+
+        try
+        {
+            // Hard deletion follows the live capacity/finalization lock order. Capacity paths own
+            // slots before runs and jobs; deletion locks the asset and versions first, then the
+            // slots for each analysis service used by this asset (including free slots), then runs
+            // and jobs. Locking free slots too prevents a new claim from reserving one while the
+            // delete transaction owns a run row.
+            _ = await dbContext.Database.SqlQuery<Guid>(
+                    $"SELECT \"Id\" AS \"Value\" FROM assets WHERE \"Id\" = {id} FOR UPDATE")
+                .ToListAsync(cancellationToken).ConfigureAwait(false);
+            _ = await dbContext.Database.SqlQuery<Guid>(
+                    $"SELECT \"Id\" AS \"Value\" FROM asset_versions WHERE \"AssetId\" = {id} ORDER BY \"Id\" FOR UPDATE")
+                .ToListAsync(cancellationToken).ConfigureAwait(false);
+            _ = await dbContext.Database.SqlQueryRaw<Guid>(
+                    "SELECT s.\"Id\" AS \"Value\" FROM analysis_capacity_slots AS s " +
+                    "WHERE s.\"ServiceKey\" IN (SELECT DISTINCT r.\"ServiceKey\" FROM code_analysis_runs AS r " +
+                    "WHERE r.\"AssetId\" = {0}) ORDER BY s.\"ServiceKey\", s.\"SlotNumber\" FOR UPDATE OF s", id)
+                .ToListAsync(cancellationToken).ConfigureAwait(false);
+            _ = await dbContext.Database.SqlQuery<Guid>(
+                    $"SELECT \"Id\" AS \"Value\" FROM code_analysis_runs WHERE \"AssetId\" = {id} ORDER BY \"Id\" FOR UPDATE")
+                .ToListAsync(cancellationToken).ConfigureAwait(false);
+            _ = await dbContext.Database.SqlQuery<Guid>(
+                    $"SELECT \"Id\" AS \"Value\" FROM asset_processing_jobs WHERE \"AssetId\" = {id} ORDER BY \"Id\" FOR UPDATE")
+                .ToListAsync(cancellationToken).ConfigureAwait(false);
+
+            await dbContext.Assets.Where(a => a.Id == id).ExecuteDeleteAsync(cancellationToken).ConfigureAwait(false);
+            if (ownedTransaction is not null)
+            {
+                await ownedTransaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+            }
+        }
+        catch
+        {
+            if (ownedTransaction is not null)
+            {
+                await ownedTransaction.RollbackAsync(CancellationToken.None).ConfigureAwait(false);
+            }
+
+            throw;
+        }
+        finally
+        {
+            if (ownedTransaction is not null)
+            {
+                await ownedTransaction.DisposeAsync().ConfigureAwait(false);
+            }
+        }
     }
 
     public async Task AddTag(Guid assetId, Guid tagId, CancellationToken cancellationToken = default)
@@ -1464,7 +1545,7 @@ internal sealed class AssetStore(
             Guid? publicVersionId = await GetApprovedPublicVersionIdForEmbedding(id, cancellationToken);
             if (publicVersionId.HasValue)
             {
-                await EnqueueEmbeddingJobIfEligible(id, publicVersionId.Value, asset.SearchRevision, cancellationToken);
+                await EnqueueEmbeddingJobIfEligible(id, publicVersionId.Value, cancellationToken);
             }
         }
 
@@ -1489,13 +1570,7 @@ internal sealed class AssetStore(
 
         if (affected > 0 && jobStore != null && embeddingOptions?.Value is { Enabled: true })
         {
-            var newRevision = await dbContext.Assets
-                .AsNoTracking()
-                .Where(a => a.Id == assetId)
-                .Select(a => a.SearchRevision)
-                .FirstOrDefaultAsync(cancellationToken);
-
-            await EnqueueEmbeddingJobIfEligible(assetId, publicVersionId.Value, newRevision, cancellationToken);
+            await EnqueueEmbeddingJobIfEligible(assetId, publicVersionId.Value, cancellationToken);
         }
     }
 
@@ -1505,7 +1580,7 @@ internal sealed class AssetStore(
             .Select(a => (Guid?)a.CurrentPublicationSnapshot!.AssetVersionId)
             .FirstOrDefaultAsync(cancellationToken);
 
-    private async Task EnqueueEmbeddingJobIfEligible(Guid assetId, Guid currentVersionId, long searchRevision, CancellationToken cancellationToken)
+    private async Task EnqueueEmbeddingJobIfEligible(Guid assetId, Guid currentVersionId, CancellationToken cancellationToken)
     {
         if (jobStore == null || embeddingOptions?.Value is not { Enabled: true } options)
         {
@@ -1565,6 +1640,7 @@ internal sealed class AssetStore(
             definitionVersion: 1,
             initialDelay: TimeSpan.Zero,
             payload,
+            scope: null,
             traceParent: null,
             cancellationToken);
     }

@@ -84,21 +84,17 @@ internal static class ApprovedPublicationTestBuilder
             CaseRevision = 1,
             CreatedAt = DateTimeOffset.UtcNow
         };
-        CodeAnalysisReportHeader report = new()
-        {
-            Id = Guid.NewGuid(),
-            AssetId = asset.Id,
-            AssetVersionId = version.Id,
-            ContentSha256 = version.ContentSha256,
-            PolicyVersion = "policy-v1",
-            InputRevision = 1,
-            Purpose = CodeAnalysisReportPurpose.PRODUCTION,
-            CanAuthorizePublication = true,
-            IsFinalized = true,
-            FinalizedAt = DateTimeOffset.UtcNow,
-            ReportSchemaVersion = 1,
-            CreatedAt = DateTimeOffset.UtcNow
-        };
+        // Trusted publication requires the whole evidence chain: exact security evidence produced
+        // by real jobs, the completed analysis run that consumed it, the finalized header, and the
+        // server admission.
+        AdmittedReportTestEvidence.Chain chain = AdmittedReportTestEvidence.BuildChain();
+        db.CodeAnalysisPolicyVersions.Add(AdmittedReportTestEvidence.Policy(chain));
+        await AdmittedReportTestEvidence.SeedObservedProofAsync(db, version, chain);
+        db.CodeAnalysisRuns.Add(AdmittedReportTestEvidence.CompletedRun(version, chain));
+        CodeAnalysisReportHeader report = AdmittedReportTestEvidence.Header(version, chain);
+        db.CodeAnalysisReportHeaders.Add(report);
+        db.CodeAnalysisReportAdmissions.Add(AdmittedReportTestEvidence.Admission(report, chain, canAuthorizePublication: true));
+
         PublicationSnapshot snapshot = new()
         {
             Id = Guid.NewGuid(),
@@ -128,7 +124,6 @@ internal static class ApprovedPublicationTestBuilder
 
         db.AssetDraftWorkspaces.Add(workspace);
         db.ModerationSubmissions.Add(submission);
-        db.CodeAnalysisReportHeaders.Add(report);
         db.PublicationSnapshots.Add(snapshot);
         db.ModerationDecisionRecords.Add(decision);
         asset.CurrentPublicationSnapshotId = snapshot.Id;

@@ -6,6 +6,7 @@ import pytest
 
 from app import contracts
 from app.reference_index import load_manifest
+from app import stages
 from app.stages import _normalize_scancode
 
 
@@ -175,3 +176,48 @@ def test_traversal_staged_name_rejected(tmp_path):
     with pytest.raises(contracts.ContractError) as exc_info:
         load_manifest(path, gallery)
     assert exc_info.value.code == "REFERENCE_MANIFEST_INVALID"
+
+
+def test_semantic_reuse_queries_cached_vectors_without_loading_encoder(monkeypatch):
+    from types import SimpleNamespace
+
+    metadata = SimpleNamespace(
+        run_id="00000000-0000-0000-0000-000000000001",
+        input_digest="a" * 64,
+        content_sha256="b" * 64,
+        material_digest="c" * 64,
+        declaration_digest="d" * 64,
+        security_evidence=SimpleNamespace(
+            security_generation=1,
+            archive_evidence_id="00000000-0000-0000-0000-000000000002",
+            malware_evidence_id="00000000-0000-0000-0000-000000000003"),
+    )
+    snapshot = SimpleNamespace(snapshot_id="snapshot", revision="revision",
+                               model_key="model", index_key="index",
+                               model_identity={"weights": "frozen"})
+    context = SimpleNamespace(metadata=metadata, snapshot=snapshot,
+                               policy={"policyDigest": "e" * 64})
+    pipe = stages.Pipeline(context=context)
+    data = {"windows": ["cached-window"],
+            "vectors": [[0.0] * 768],
+            "counts": {"windows": 1},
+            "toolIdentity": {"encoder": {"key": "pinned"}}}
+    parent = {"sourceRunId": "00000000-0000-0000-0000-000000000004",
+              "sourceReportId": "00000000-0000-0000-0000-000000000005",
+              "sourceStageId": "00000000-0000-0000-0000-000000000006",
+              "artifactDigest": "f" * 64}
+    query_calls = []
+
+    monkeypatch.setattr(stages, "_reuse_input", lambda *_args: (data, "f" * 64, parent))
+    monkeypatch.setattr(stages, "_query_index",
+                        lambda *_args: query_calls.append("queried") or {"cached-file": []})
+    monkeypatch.setattr(stages, "_load_encoder",
+                        lambda *_args: (_ for _ in ()).throw(AssertionError("encoder reloaded")))
+
+    stages._stage_semantic(pipe)
+
+    assert query_calls == ["queried"]
+    assert pipe.stages[-1].outcome == "SUCCEEDED"
+    assert pipe.stages[-1].counts["encoderInvocations"] == 0
+    assert pipe.stages[-1].tool_identity["reused"] is True
+    assert pipe.reuse_artifacts["SEMANTIC"]["artifactDigest"] == pipe.stages[-1].output_sha256

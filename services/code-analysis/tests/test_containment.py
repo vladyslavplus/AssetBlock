@@ -193,7 +193,7 @@ def test_spawn_fails_closed_without_scope(tmp_path, monkeypatch):
 
 
 def test_host_without_job_runtime_is_blocked(tmp_path):
-    """BLOCKED verdict on hosts that forbid nested job assignment.
+    """A host without a verified per-run Job Object refuses worker startup.
 
     No silent outer success and no pipeline: either the spawn attaches to
     our own job (capable host) or it refuses before any worker code runs.

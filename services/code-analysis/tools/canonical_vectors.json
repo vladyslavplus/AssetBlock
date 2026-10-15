@@ -1,0 +1,104 @@
+[
+  {
+    "name": "ascii_flat",
+    "document": "{\"a\":1,\"b\":2}",
+    "canonicalUtf8": "{\"a\":1,\"b\":2}\n",
+    "digest": "e8d38819d39f705646bfb643368eca78f7db476c16471dbc33b941b27326410d"
+  },
+  {
+    "name": "key_order_reversed",
+    "document": "{\"alpha\":2,\"middle\":3,\"zebra\":1}",
+    "canonicalUtf8": "{\"alpha\":2,\"middle\":3,\"zebra\":1}\n",
+    "digest": "88bc7f51c6b3cbccbc1dece46c992bf2f94f66783a07d56f532a87f8f77e0061"
+  },
+  {
+    "name": "nested_objects",
+    "document": "{\"list\":[{\"a\":2,\"b\":1}],\"outer\":{\"a\":{\"b\":3,\"y\":2},\"z\":1}}",
+    "canonicalUtf8": "{\"list\":[{\"a\":2,\"b\":1}],\"outer\":{\"a\":{\"b\":3,\"y\":2},\"z\":1}}\n",
+    "digest": "aba76a6e02ec353228de317bb9ae514d5794742d2d0e5adf562d1eb60be1fd15"
+  },
+  {
+    "name": "cyrillic",
+    "document": "{\"scope\":\"скрипт/модуль.py\",\"spdx\":\"MIT\"}",
+    "canonicalUtf8": "{\"scope\":\"скрипт/модуль.py\",\"spdx\":\"MIT\"}\n",
+    "digest": "fa42f3303b4528af8d1e386a4b0485bfc680bf90ab1bd4ec92be0b12f27897a3"
+  },
+  {
+    "name": "non_bmp",
+    "document": "{\"emoji\":\"🔒📝\",\"family\":\"𝄞\"}",
+    "canonicalUtf8": "{\"emoji\":\"🔒📝\",\"family\":\"𝄞\"}\n",
+    "digest": "9cc44479a60d7a837a1f38a77f38d3f5e39ed776a48bad87449ca07fb5c55489"
+  },
+  {
+    "name": "quotes_and_backslash",
+    "document": "{\"path\":\"dir\\\\sub/\\\"quoted\\\".ts\"}",
+    "canonicalUtf8": "{\"path\":\"dir\\\\sub/\\\"quoted\\\".ts\"}\n",
+    "digest": "cbc77cf8c254a365762e21eedeee2cb5678338ee5f5c614faabb6fa6f97d572d"
+  },
+  {
+    "name": "control_characters",
+    "document": "{\"text\":\"tab\\tnewline\\nreturn\\rbackspace\\bformfeed\\fnull\\u0000unit\\u001f\"}",
+    "canonicalUtf8": "{\"text\":\"tab\\tnewline\\nreturn\\rbackspace\\bformfeed\\fnull\\u0000unit\\u001f\"}\n",
+    "digest": "c17c49910d45f0839060bc4fa6861c2de65a723f1973c9d2f2322ee7fc7174db"
+  },
+  {
+    "name": "html_sensitive",
+    "document": "{\"html\":\"<script>alert('x')&amp;</script>\"}",
+    "canonicalUtf8": "{\"html\":\"<script>alert('x')&amp;</script>\"}\n",
+    "digest": "1eae91e12ebef4e3ed06d1fefeeb0a7ee483cd6b2b70a933aef014e2f89e4ec6"
+  },
+  {
+    "name": "numbers_integers",
+    "document": "{\"i0\":0,\"i1\":-1,\"i2\":1234567890123456789}",
+    "canonicalUtf8": "{\"i0\":0,\"i1\":-1,\"i2\":1234567890123456789}\n",
+    "digest": "22fd12d28539ceb47c7fc0ee34fdbf8f47395bd251487028a6a2f3e942442a32"
+  },
+  {
+    "name": "numbers_float",
+    "document": "{\"f0\":1.5,\"f1\":-0.25,\"f2\":1.0,\"f3\":10000000000.0,\"f4\":1.5e-07}",
+    "canonicalUtf8": "{\"f0\":1.5,\"f1\":-0.25,\"f2\":1.0,\"f3\":10000000000.0,\"f4\":1.5e-07}\n",
+    "digest": "aa5f90313a66d49747618e2fceb372819044f9bf280c798e588a24609413e456"
+  },
+  {
+    "name": "numbers_precision",
+    "document": "{\"p0\":0.1,\"p1\":1234567890.1234567,\"p2\":3.141592653589793}",
+    "canonicalUtf8": "{\"p0\":0.1,\"p1\":1234567890.1234567,\"p2\":3.141592653589793}\n",
+    "digest": "60bb76ea28d146d3c7794c3e07bd25fc37e1894818fe87320be1aac5e3fa069e"
+  },
+  {
+    "name": "booleans_and_null",
+    "document": "{\"f\":false,\"n\":null,\"t\":true}",
+    "canonicalUtf8": "{\"f\":false,\"n\":null,\"t\":true}\n",
+    "digest": "787cb907535f09451785876ca93964365b9e1a7ba0a5e2314d1bd2b33e241e6a"
+  },
+  {
+    "name": "empty_containers",
+    "document": "{\"a\":[],\"o\":{}}",
+    "canonicalUtf8": "{\"a\":[],\"o\":{}}\n",
+    "digest": "1d313c5f7aa0d8c5776da9248a8f7e6e3a03b06f9c06bc7a493be58504245351"
+  },
+  {
+    "name": "unicode_keys",
+    "document": "{\"plain\":3,\"ключ\":1,\"🔒\":2}",
+    "canonicalUtf8": "{\"plain\":3,\"ключ\":1,\"🔒\":2}\n",
+    "digest": "4808d43c2e1955dd7818e57ac341621da2a88fe40b7b2d2dc4a3125042ee380e"
+  },
+  {
+    "name": "mixed_realistic",
+    "document": "{\"components\":[{\"componentId\":\"c1\",\"license\":\"Apache-2.0\",\"scopePath\":\"src/**\"},{\"componentId\":\"c2\",\"license\":\"UNKNOWN\",\"scopePath\":\"vendor/\"}],\"coverage\":{\"analyzedFiles\":42,\"level\":\"PARTIAL\"},\"note\":\"список — 📄\",\"policyDigest\":\"ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff\"}",
+    "canonicalUtf8": "{\"components\":[{\"componentId\":\"c1\",\"license\":\"Apache-2.0\",\"scopePath\":\"src/**\"},{\"componentId\":\"c2\",\"license\":\"UNKNOWN\",\"scopePath\":\"vendor/\"}],\"coverage\":{\"analyzedFiles\":42,\"level\":\"PARTIAL\"},\"note\":\"список — 📄\",\"policyDigest\":\"ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff\"}\n",
+    "digest": "1505027c84e88a970cc6c0e546e1a1bd518dfd39ab4e86f57707625fc8a5c645"
+  },
+  {
+    "name": "key_order_bmp_vs_non_bmp",
+    "document": "{\"\":\"bmp\",\"\":\"bmp2\",\"𐀀\":\"non-bmp\"}",
+    "canonicalUtf8": "{\"\":\"bmp\",\"\":\"bmp2\",\"𐀀\":\"non-bmp\"}\n",
+    "digest": "f227e190f78be8e1d510cba90b90b51e1e9449962fe75f3cdda9639a170367bf"
+  },
+  {
+    "name": "key_order_mixed_astral",
+    "document": "{\"\":2,\"￿\":3,\"𐀀\":4,\"😀\":1}",
+    "canonicalUtf8": "{\"\":2,\"￿\":3,\"𐀀\":4,\"😀\":1}\n",
+    "digest": "c76c8ef0f86eb96acef52ee4c8659f0930f708591d58b1bc4053dd11c8ae4716"
+  }
+]

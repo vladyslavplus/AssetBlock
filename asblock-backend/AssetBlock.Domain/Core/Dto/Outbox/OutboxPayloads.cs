@@ -19,6 +19,20 @@ public sealed record NotificationDispatchPayload(
     string HubMethod,
     string MetadataJson);
 
+/// <summary>
+/// Durable intent to schedule analysis for observed proof. Carries the exact immutable
+/// evidence identities and the security selection it belongs to, so recovery rereads them
+/// instead of reconstructing proof from READY state.
+/// </summary>
+public sealed record AnalysisSchedulingPayload(
+    Guid AssetId,
+    Guid AssetVersionId,
+    Guid ArchiveEvidenceId,
+    Guid MalwareEvidenceId,
+    int SecurityGeneration,
+    string ContentSha256,
+    Guid? SecurityRecheckId = null);
+
 public sealed record GetDeadLettersRequest(int Page = 1, int PageSize = 20);
 
 public sealed record DeadLetterOutboxListItemDto(

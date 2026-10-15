@@ -18,6 +18,8 @@ public sealed class AssetProcessingWorkerTests
     private readonly IAssetProcessingRealtimePublisher _publisher = Substitute.For<IAssetProcessingRealtimePublisher>();
     private readonly IAssetProcessingJobStore _store = Substitute.For<IAssetProcessingJobStore>();
     private readonly IAssetProcessingLifecycleStore _lifecycleStore = Substitute.For<IAssetProcessingLifecycleStore>();
+    private readonly IAnalysisCapacityStore _capacityStore = Substitute.For<IAnalysisCapacityStore>();
+    private readonly IAnalysisReadinessGate _gate = Substitute.For<IAnalysisReadinessGate>();
     private readonly TimeProvider _timeProvider = TimeProvider.System;
 
     private static AssetProcessingOptions CreateDefaultOptions(bool enabled = true) => new()
@@ -35,7 +37,8 @@ public sealed class AssetProcessingWorkerTests
 
     private AssetProcessingWorker CreateWorker(
         AssetProcessingOptions options,
-        Func<double>? jitterProvider = null)
+        Func<double>? jitterProvider = null,
+        CodeAnalysisOptions? analysisOptions = null)
     {
         IServiceProvider serviceProvider = Substitute.For<IServiceProvider>();
         IServiceScope scope = Substitute.For<IServiceScope>();
@@ -43,6 +46,10 @@ public sealed class AssetProcessingWorkerTests
         serviceProvider.GetService(typeof(IAssetProcessingJobStore)).Returns(_store);
         serviceProvider.GetService(typeof(IAssetProcessingLifecycleStore)).Returns(_lifecycleStore);
         serviceProvider.GetService(typeof(IAssetProcessingJobRegistry)).Returns(_registry);
+
+        // Analysis jobs are claimed only through the shared capacity reservation.
+        serviceProvider.GetService(typeof(IAnalysisCapacityStore)).Returns(_capacityStore);
+        serviceProvider.GetService(typeof(IAnalysisReadinessGate)).Returns(_gate);
         scope.ServiceProvider.Returns(serviceProvider);
         _scopeFactory.CreateScope().Returns(scope);
 
@@ -50,6 +57,7 @@ public sealed class AssetProcessingWorkerTests
             _scopeFactory,
             _publisher,
             Microsoft.Extensions.Options.Options.Create(options),
+            Microsoft.Extensions.Options.Options.Create(analysisOptions ?? new CodeAnalysisOptions()),
             _timeProvider,
             NullLogger<AssetProcessingWorker>.Instance,
             jitterProvider ?? (() => 0.5));
@@ -134,6 +142,127 @@ public sealed class AssetProcessingWorkerTests
             Arg.Any<TimeSpan>(),
             Arg.Any<string>(),
             Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Worker_WhenAnalysisNotReady_SkipsAnalysisClaimsButRecoversAndServesGeneralJobs()
+    {
+        AssetProcessingOptions options = CreateDefaultOptions();
+        AssetProcessingWorker worker = CreateWorker(options, analysisOptions: new CodeAnalysisOptions { Enabled = true });
+
+        _gate.EnsureReady(Arg.Any<CancellationToken>()).Returns(false);
+
+        var generalJobId = Guid.NewGuid();
+        var generalLease = Guid.NewGuid();
+        var generalJob = new ClaimedAssetProcessingJob(
+            generalJobId,
+            Guid.NewGuid(),
+            Guid.NewGuid(),
+            Guid.NewGuid(),
+            AssetProcessingJobType.ARCHIVE_INSPECTION,
+            1,
+            1,
+            3,
+            "{}",
+            null,
+            generalLease,
+            DateTimeOffset.UtcNow,
+            DateTimeOffset.UtcNow,
+            DateTimeOffset.UtcNow);
+
+        var callCount = 0;
+        _store.ClaimPendingBatch(Arg.Any<int>(), Arg.Any<TimeSpan>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(_ =>
+            {
+                if (Interlocked.Increment(ref callCount) == 1)
+                {
+                    return Task.FromResult<IReadOnlyList<ClaimedAssetProcessingJob>>([generalJob]);
+                }
+                return Task.FromResult<IReadOnlyList<ClaimedAssetProcessingJob>>([]);
+            });
+
+        IAssetProcessingJobHandlerAdapter adapter = Substitute.For<IAssetProcessingJobHandlerAdapter>();
+        adapter.Execute(Arg.Any<ClaimedAssetProcessingJob>(), Arg.Any<CancellationToken>())
+            .Returns(AssetProcessingJobOutcome.Succeeded(new ArchiveInspectionResult(0, 0)));
+        _registry.GetHandler(AssetProcessingJobType.ARCHIVE_INSPECTION).Returns(adapter);
+        _store.MarkSucceeded(
+                generalJobId, generalLease, Arg.Any<AssetProcessingResult>(), Arg.Any<CancellationToken>())
+            .Returns(true);
+        _capacityStore.RecoverExpiredReservations(Arg.Any<CancellationToken>()).Returns(0);
+
+        var generalDoneTcs = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        _store.MarkSucceeded(
+                Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<AssetProcessingResult>(), Arg.Any<CancellationToken>())
+            .Returns(_ =>
+            {
+                generalDoneTcs.TrySetResult(true);
+                return Task.FromResult(true);
+            });
+
+        await worker.StartAsync(CancellationToken.None);
+        try
+        {
+            await generalDoneTcs.Task.WaitAsync(TimeSpan.FromSeconds(5));
+            // Let at least one recovery pass run while the general job completes.
+            await Task.Delay(200);
+        }
+        finally
+        {
+            await worker.StopAsync(CancellationToken.None);
+        }
+
+        // No new analysis claim may burn attempts while readiness is closed ...
+        await _capacityStore.DidNotReceive().ClaimWithCapacity(
+            Arg.Any<int>(), Arg.Any<TimeSpan>(), Arg.Any<TimeSpan>(), Arg.Any<TimeSpan>(),
+            Arg.Any<string>(), Arg.Any<CancellationToken>());
+        // ... but occupied reservations are still reconciled and unrelated jobs flow.
+        await _capacityStore.Received().RecoverExpiredReservations(Arg.Any<CancellationToken>());
+        await _store.Received().ClaimPendingBatch(
+            Arg.Any<int>(), Arg.Any<TimeSpan>(), Arg.Any<string>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Worker_WhenReadinessIsProvenAfterStartup_ShouldOpenAnalysisClaimsWithoutRestart()
+    {
+        AssetProcessingOptions options = CreateDefaultOptions();
+        AssetProcessingWorker worker = CreateWorker(options, analysisOptions: new CodeAnalysisOptions { Enabled = true });
+
+        // Closed on the first evaluation, exactly as it is before the approved policy manifest is
+        // published, and proven afterwards without the worker being restarted.
+        var evaluations = 0;
+        _gate.EnsureReady(Arg.Any<CancellationToken>())
+            .Returns(_ => Task.FromResult(Interlocked.Increment(ref evaluations) >= 2));
+        _capacityStore.RecoverExpiredReservations(Arg.Any<CancellationToken>()).Returns(0);
+        _store.ClaimPendingBatch(Arg.Any<int>(), Arg.Any<TimeSpan>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<IReadOnlyList<ClaimedAssetProcessingJob>>([]));
+        _capacityStore.ClaimWithCapacity(
+                Arg.Any<int>(), Arg.Any<TimeSpan>(), Arg.Any<TimeSpan>(), Arg.Any<TimeSpan>(),
+                Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<IReadOnlyList<ClaimedAssetProcessingJob>>([]));
+
+        var claimedTcs = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        _capacityStore
+            .When(c => c.ClaimWithCapacity(
+                Arg.Any<int>(), Arg.Any<TimeSpan>(), Arg.Any<TimeSpan>(), Arg.Any<TimeSpan>(),
+                Arg.Any<string>(), Arg.Any<CancellationToken>()))
+            .Do(_ => claimedTcs.TrySetResult(true));
+
+        await worker.StartAsync(CancellationToken.None);
+        try
+        {
+            // Readiness is re-evaluated on the claim loop, so the recovered deployment opens claims
+            // on its own within one poll interval.
+            await claimedTcs.Task.WaitAsync(TimeSpan.FromSeconds(10));
+        }
+        finally
+        {
+            await worker.StopAsync(CancellationToken.None);
+        }
+
+        await _gate.Received(2).EnsureReady(Arg.Any<CancellationToken>());
+        await _capacityStore.Received().ClaimWithCapacity(
+            Arg.Any<int>(), Arg.Any<TimeSpan>(), Arg.Any<TimeSpan>(), Arg.Any<TimeSpan>(),
+            Arg.Any<string>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]

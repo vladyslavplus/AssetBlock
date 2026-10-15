@@ -7,7 +7,6 @@ using AssetBlock.Domain.Core.Constants;
 using AssetBlock.Domain.Core.Dto;
 using AssetBlock.Domain.Core.Dto.Notifications;
 using AssetBlock.Domain.Core.Dto.Outbox;
-using AssetBlock.Domain.Core.Entities;
 using AssetBlock.Domain.Core.Enums;
 using AssetBlock.Domain.Core.Primitives.AppSettingsOptions;
 using Microsoft.EntityFrameworkCore;
@@ -18,9 +17,18 @@ namespace AssetBlock.Infrastructure.Persistence.Stores;
 
 public sealed partial class AssetProcessingLifecycleStore(
     ApplicationDbContext dbContext,
-    IOptions<AssetProcessingOptions> options)
+    IOptions<AssetProcessingOptions> options,
+    IAnalysisRunEnqueuer? analysisRunEnqueuer = null,
+    IOptions<CodeAnalysisOptions>? analysisOptions = null)
     : IAssetProcessingLifecycleStore
 {
+    /// <summary>
+    /// Production analysis-enabled uploads must carry observed proof: the registered path always
+    /// wires the enqueuer, so a proof-less call there fails closed instead of committing a bare
+    /// READY. Explicitly legacy/test wiring without an enqueuer keeps the historical behavior.
+    /// </summary>
+    private bool RequiresObservedProof() =>
+        analysisRunEnqueuer is not null && analysisOptions?.Value.Enabled == true;
     private static readonly Regex _errorCodeRegex = MyRegex();
     private static readonly JsonSerializerOptions _jsonOptions = new()
     {
@@ -44,6 +52,70 @@ public sealed partial class AssetProcessingLifecycleStore(
         public DateTimeOffset? LeaseExpiresAt { get; init; }
     }
 
+    private sealed class VersionStatusRecord
+    {
+        public string ContentSha256 { get; init; } = "";
+        public long ContentLength { get; init; }
+        public string ProcessingStatus { get; init; } = "";
+        public string? ProcessingErrorCode { get; init; }
+        public string? SafetyRestriction { get; init; }
+        public Guid? SelectedCodeAnalysisReportId { get; init; }
+    }
+
+    private sealed class ExpiredSecurityJobCandidate
+    {
+        public Guid Id { get; init; }
+        public Guid AssetId { get; init; }
+        public Guid AssetVersionId { get; init; }
+        public string Type { get; init; } = "";
+        public Guid? SecurityRecheckId { get; init; }
+    }
+
+    /// <summary>
+    /// Takes the asset row lock that every security transition orders behind.
+    /// All security success, failure and recovery paths must acquire this before any job,
+    /// recheck or run lock so the global order stays Asset -> workspace -> submission -> recheck -> job.
+    /// </summary>
+    private async Task LockAssetForSecurityTransition(Guid assetId, CancellationToken cancellationToken)
+    {
+        List<Guid> locked = await dbContext.Database.SqlQueryRaw<Guid>(
+            """
+            SELECT "Id"
+            FROM assets
+            WHERE "Id" = {0}
+            FOR UPDATE
+            """, assetId).ToListAsync(cancellationToken);
+
+        if (locked.Count == 0)
+        {
+            throw new InvalidOperationException("Asset row disappeared while a security transition held its lock.");
+        }
+    }
+
+    /// <summary>
+    /// Re-reads version state after the locks are held. Persisted state is authoritative even for
+    /// rows already tracked by the change tracker.
+    /// </summary>
+    private async Task<VersionStatusRecord?> ReadVersionStatusFreshUnderLock(
+        Guid assetId,
+        Guid assetVersionId,
+        CancellationToken cancellationToken)
+    {
+        List<VersionStatusRecord> rows = await dbContext.Database.SqlQueryRaw<VersionStatusRecord>(
+            """
+            SELECT v."ContentSha256",
+                   v."ContentLength",
+                   v."ProcessingStatus",
+                   v."ProcessingErrorCode",
+                   v."SafetyRestriction"::text AS "SafetyRestriction",
+                   v."SelectedCodeAnalysisReportId"
+            FROM asset_versions v
+            WHERE v."Id" = {0} AND v."AssetId" = {1}
+            """, assetVersionId, assetId).ToListAsync(cancellationToken);
+
+        return rows.Count == 0 ? null : rows[0];
+    }
+
     public async Task<bool> TransitionArchiveInspectionAccepted(
         Guid jobId,
         Guid leaseToken,
@@ -51,6 +123,8 @@ public sealed partial class AssetProcessingLifecycleStore(
         Guid assetVersionId,
         ArchiveInspectionResult result,
         BoundedArchiveAnalysisRecord analysis,
+        ArchiveValidationEvidence? observedEvidence = null,
+        int? observedDefinitionVersion = null,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(result);
@@ -75,7 +149,10 @@ public sealed partial class AssetProcessingLifecycleStore(
 
         await using IDbContextTransaction tx = await dbContext.Database.BeginTransactionAsync(IsolationLevel.ReadCommitted, cancellationToken);
 
-        // 1. Lock job row and retrieve state
+        // 1. Lock the asset first; every other security path uses this same order.
+        await LockAssetForSecurityTransition(assetId, cancellationToken);
+
+        // 2. Lock job row and retrieve state
         List<JobValidationRecord> jobs = await dbContext.Database.SqlQueryRaw<JobValidationRecord>(
             """
             SELECT "Id", "AssetId", "AssetVersionId", "Type", "Status", "LeaseToken", "LeaseExpiresAt"
@@ -91,11 +168,11 @@ public sealed partial class AssetProcessingLifecycleStore(
 
         JobValidationRecord job = jobs[0];
 
-        // 2. Capture DB clock timestamp once after lock acquisition
+        // 3. Capture DB clock timestamp once after lock acquisition
         DateTimeOffset dbNow = await dbContext.Database.SqlQueryRaw<DateTimeOffset>(
             """SELECT clock_timestamp() AS "Value" """).FirstAsync(cancellationToken);
 
-        // 3. Revalidate fencing & job target
+        // 4. Revalidate fencing & job target
         if (job is { Status: "SUCCEEDED", Type: nameof(AssetProcessingJobType.ARCHIVE_INSPECTION) }
             && job.AssetId == assetId
             && job.AssetVersionId == assetVersionId)
@@ -115,7 +192,35 @@ public sealed partial class AssetProcessingLifecycleStore(
             return false;
         }
 
-        // 4. Upsert archive analysis record
+        // 5. Re-read the persisted version state under the asset lock.
+        VersionStatusRecord? freshVersion = await ReadVersionStatusFreshUnderLock(assetId, assetVersionId, cancellationToken);
+        if (freshVersion is null)
+        {
+            return false;
+        }
+
+        if (observedEvidence is null && RequiresObservedProof())
+        {
+            await tx.RollbackAsync(cancellationToken);
+            return false;
+        }
+
+        // 5b. Persist the observed archive proof atomically with this completion when the caller
+        // verified it. The proof must describe the exact advertised bytes; anything else fails
+        // closed with no transition and no proof row.
+        if (observedEvidence is not null && observedDefinitionVersion is { } archiveDefinitionVersion)
+        {
+            if (!IsObservedArchiveSufficient(observedEvidence, freshVersion))
+            {
+                await tx.RollbackAsync(cancellationToken);
+                return false;
+            }
+
+            await InsertInitialArchiveEvidence(
+                assetId, assetVersionId, jobId, observedEvidence, archiveDefinitionVersion, dbNow, cancellationToken);
+        }
+
+        // 6. Upsert archive analysis record
         await dbContext.Database.ExecuteSqlInterpolatedAsync($"""
             INSERT INTO asset_archive_analyses (
                 "AssetVersionId", "FileCount", "TotalExpandedBytes", "ReadmeContent", "ManifestMetadata", "CreatedAt", "UpdatedAt"
@@ -130,7 +235,7 @@ public sealed partial class AssetProcessingLifecycleStore(
                 "UpdatedAt" = EXCLUDED."UpdatedAt"
             """, cancellationToken);
 
-        // 5. Update asset version processing status — only from PENDING_INSPECTION
+        // 7. Update asset version processing status — only from PENDING_INSPECTION
         var versionRowsUpdated = await dbContext.Database.ExecuteSqlInterpolatedAsync($"""
             UPDATE asset_versions
             SET "ProcessingStatus" = 'PENDING_MALWARE_SCAN',
@@ -149,7 +254,7 @@ public sealed partial class AssetProcessingLifecycleStore(
             return false;
         }
 
-        // 6. Enqueue exactly one MALWARE_SCAN job idempotently
+        // 8. Enqueue exactly one MALWARE_SCAN job idempotently
         var nextJobId = Guid.NewGuid();
         var malwarePayload = AssetProcessingSerializer.SerializePayload(
             AssetProcessingJobType.MALWARE_SCAN,
@@ -165,11 +270,11 @@ public sealed partial class AssetProcessingLifecycleStore(
                 0, {maxAttempts}, {dbNow}, {dbNow}, {dbNow}, CAST({malwarePayload} AS jsonb)
             )
             ON CONFLICT ("AssetVersionId", "Type", "DefinitionVersion")
-            WHERE "Type" <> 'EMBEDDING_GENERATION'
+            WHERE "Type" NOT IN ('EMBEDDING_GENERATION', 'CODE_ANALYSIS') AND "SecurityRecheckId" IS NULL AND "AnalysisRunId" IS NULL
             DO NOTHING
             """, cancellationToken);
 
-        // 7. Mark ARCHIVE_INSPECTION job as SUCCEEDED
+        // 9. Mark ARCHIVE_INSPECTION job as SUCCEEDED
         await dbContext.Database.ExecuteSqlInterpolatedAsync($"""
             UPDATE asset_processing_jobs
             SET "Status" = 'SUCCEEDED',
@@ -229,6 +334,8 @@ public sealed partial class AssetProcessingLifecycleStore(
         Guid assetId,
         Guid assetVersionId,
         MalwareScanResult result,
+        MalwareScanEvidence? observedEvidence = null,
+        int? observedDefinitionVersion = null,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(result);
@@ -244,7 +351,12 @@ public sealed partial class AssetProcessingLifecycleStore(
 
         await using IDbContextTransaction tx = await dbContext.Database.BeginTransactionAsync(IsolationLevel.ReadCommitted, cancellationToken);
 
-        // 1. Lock job row and retrieve state
+        // 1. Lock the asset row first. Taking the job lock first and the asset lock afterwards is
+        //    the reverse of every other security path and deadlocks against Asset-first enqueue,
+        //    finalization and deletion.
+        await LockAssetForSecurityTransition(assetId, cancellationToken);
+
+        // 2. Lock job row and retrieve state
         List<JobValidationRecord> jobs = await dbContext.Database.SqlQueryRaw<JobValidationRecord>(
             """
             SELECT "Id", "AssetId", "AssetVersionId", "Type", "Status", "LeaseToken", "LeaseExpiresAt"
@@ -260,11 +372,11 @@ public sealed partial class AssetProcessingLifecycleStore(
 
         JobValidationRecord job = jobs[0];
 
-        // 2. Capture DB clock timestamp once after lock acquisition
+        // 3. Capture DB clock timestamp once after lock acquisition
         DateTimeOffset dbNow = await dbContext.Database.SqlQueryRaw<DateTimeOffset>(
             """SELECT clock_timestamp() AS "Value" """).FirstAsync(cancellationToken);
 
-        // 3. Revalidate fencing & job target
+        // 4. Revalidate fencing & job target
         if (job is { Status: "SUCCEEDED", Type: nameof(AssetProcessingJobType.MALWARE_SCAN) }
             && job.AssetId == assetId
             && job.AssetVersionId == assetVersionId)
@@ -283,24 +395,46 @@ public sealed partial class AssetProcessingLifecycleStore(
             return false;
         }
 
-        // 4. Lock asset row for atomic monotonic promotion
-        await dbContext.Database.ExecuteSqlInterpolatedAsync(
-            $"""SELECT "Id" FROM assets WHERE "Id" = {assetId} FOR UPDATE""", cancellationToken);
-
-        // Get candidate version number
-        List<int> candidateVersionNumbers = await dbContext.Database.SqlQueryRaw<int>(
-            """
-            SELECT "VersionNumber" AS "Value"
-            FROM asset_versions
-            WHERE "Id" = {0} AND "AssetId" = {1}
-            """, assetVersionId, assetId).ToListAsync(cancellationToken);
-
-        if (candidateVersionNumbers.Count == 0)
+        // 5. Re-read the persisted version state; the tracked copy is not authoritative here.
+        VersionStatusRecord? freshVersion = await ReadVersionStatusFreshUnderLock(assetId, assetVersionId, cancellationToken);
+        if (freshVersion is null)
         {
             return false;
         }
 
-        // 5. Update candidate version to READY — only from PENDING_MALWARE_SCAN.
+        if (observedEvidence is null && RequiresObservedProof())
+        {
+            await tx.RollbackAsync(cancellationToken);
+            return false;
+        }
+
+        // 5b. Atomic proof and scheduling: the observed malware proof, the READY promotion and
+        // the durable analysis run/job below commit together. A fault anywhere rolls everything
+        // back, so READY is never stranded without its proof and its scheduling. An insufficient
+        // observed identity throws for a bounded operational retry. When the pinned policy or the
+        // archive proof is absent, the security proof and READY still commit without fabricating
+        // analysis.
+        if (observedEvidence is not null
+            && observedDefinitionVersion is { } malwareDefinitionVersion
+            && analysisRunEnqueuer is not null)
+        {
+            InitialUploadProofResult proof = await analysisRunEnqueuer.EnqueueForInitialUpload(
+                assetId,
+                assetVersionId,
+                freshVersion.ContentSha256,
+                malwareDefinitionVersion,
+                observedEvidence,
+                jobId,
+                cancellationToken);
+
+            if (!proof.EvidencePersisted)
+            {
+                await tx.RollbackAsync(cancellationToken);
+                return false;
+            }
+        }
+
+        // 6. Update candidate version to READY — only from PENDING_MALWARE_SCAN.
         // Publication guards: do not change IsCurrent or enqueue public metadata embeddings here.
         var versionRowsUpdated = await dbContext.Database.ExecuteSqlInterpolatedAsync($"""
             UPDATE asset_versions
@@ -320,7 +454,7 @@ public sealed partial class AssetProcessingLifecycleStore(
             return false;
         }
 
-        // 6. Mark MALWARE_SCAN job as SUCCEEDED
+        // 7. Mark MALWARE_SCAN job as SUCCEEDED
         await dbContext.Database.ExecuteSqlInterpolatedAsync($"""
             UPDATE asset_processing_jobs
             SET "Status" = 'SUCCEEDED',
@@ -442,7 +576,10 @@ public sealed partial class AssetProcessingLifecycleStore(
 
         await using IDbContextTransaction tx = await dbContext.Database.BeginTransactionAsync(IsolationLevel.ReadCommitted, cancellationToken);
 
-        // 1. Lock job row and retrieve state
+        // 1. Lock the asset row first, matching every other security transition.
+        await LockAssetForSecurityTransition(assetId, cancellationToken);
+
+        // 2. Lock job row and retrieve state
         List<JobValidationRecord> jobs = await dbContext.Database.SqlQueryRaw<JobValidationRecord>(
             """
             SELECT "Id", "AssetId", "AssetVersionId", "Type", "Status", "LeaseToken", "LeaseExpiresAt"
@@ -458,11 +595,11 @@ public sealed partial class AssetProcessingLifecycleStore(
 
         JobValidationRecord job = jobs[0];
 
-        // 2. Capture DB clock timestamp once after lock acquisition
+        // 3. Capture DB clock timestamp once after lock acquisition
         DateTimeOffset dbNow = await dbContext.Database.SqlQueryRaw<DateTimeOffset>(
             """SELECT clock_timestamp() AS "Value" """).FirstAsync(cancellationToken);
 
-        // 3. Revalidate fencing & job target
+        // 4. Revalidate fencing & job target
         if (job.Status == "FAILED"
             && job.Type == expectedTypeStr
             && job.AssetId == assetId
@@ -497,7 +634,14 @@ public sealed partial class AssetProcessingLifecycleStore(
             return false;
         }
 
-        // 4. Update asset version from expected source state to rejected or failed
+        // 5. Re-read the persisted version state under the asset lock.
+        VersionStatusRecord? freshVersion = await ReadVersionStatusFreshUnderLock(assetId, assetVersionId, cancellationToken);
+        if (freshVersion is null)
+        {
+            return false;
+        }
+
+        // 6. Update asset version from expected source state to rejected or failed
         var versionRowsUpdated = await dbContext.Database.ExecuteSqlInterpolatedAsync($"""
             UPDATE asset_versions
             SET "ProcessingStatus" = {targetStatusStr},
@@ -571,48 +715,48 @@ public sealed partial class AssetProcessingLifecycleStore(
 
         await using IDbContextTransaction tx = await dbContext.Database.BeginTransactionAsync(IsolationLevel.ReadCommitted, cancellationToken);
 
-        List<AssetProcessingJob> jobs = await dbContext.AssetProcessingJobs
-            .FromSqlInterpolated($"""
-                SELECT *
-                FROM asset_processing_jobs AS j
-                WHERE j."Status" = 'RUNNING'
-                  AND j."LeaseExpiresAt" IS NOT NULL
-                  AND j."LeaseExpiresAt" <= clock_timestamp()
-                  AND j."AttemptCount" >= j."MaxAttempts"
-                  AND j."Type" IN ('ARCHIVE_INSPECTION', 'MALWARE_SCAN')
-                ORDER BY j."LeaseExpiresAt", j."Id"
-                FOR UPDATE SKIP LOCKED
-                LIMIT 1
-                """)
-            .AsNoTracking()
-            .ToListAsync(cancellationToken);
+        // Recovery follows the same Asset -> job order as every other security path. The candidate
+        // is discovered without a lock, then revalidated after both locks are held.
+        List<ExpiredSecurityJobCandidate> candidates = await dbContext.Database.SqlQueryRaw<ExpiredSecurityJobCandidate>(
+            """
+            SELECT "Id", "AssetId", "AssetVersionId", "Type", "SecurityRecheckId"
+            FROM asset_processing_jobs
+            WHERE "Status" = 'RUNNING'
+              AND "LeaseExpiresAt" IS NOT NULL
+              AND "LeaseExpiresAt" <= clock_timestamp()
+              AND "AttemptCount" >= "MaxAttempts"
+              AND "Type" IN ('ARCHIVE_INSPECTION', 'MALWARE_SCAN')
+            ORDER BY "LeaseExpiresAt", "Id"
+            LIMIT 1
+            """).ToListAsync(cancellationToken);
 
-        if (jobs.Count == 0)
+        if (candidates.Count == 0)
         {
             return false;
         }
 
-        AssetProcessingJob job = jobs[0];
-        var expectedSourceStatus = job.Type == AssetProcessingJobType.ARCHIVE_INSPECTION
-            ? nameof(AssetVersionProcessingStatus.PENDING_INSPECTION)
-            : nameof(AssetVersionProcessingStatus.PENDING_MALWARE_SCAN);
-        const string failedStatus = nameof(AssetVersionProcessingStatus.PROCESSING_FAILED);
+        ExpiredSecurityJobCandidate candidate = candidates[0];
+
+        await LockAssetForSecurityTransition(candidate.AssetId, cancellationToken);
+
+        List<JobValidationRecord> lockedJobs = await dbContext.Database.SqlQueryRaw<JobValidationRecord>(
+            """
+            SELECT "Id", "AssetId", "AssetVersionId", "Type", "Status", "LeaseToken", "LeaseExpiresAt"
+            FROM asset_processing_jobs
+            WHERE "Id" = {0}
+            FOR UPDATE
+            """, candidate.Id).ToListAsync(cancellationToken);
+
+        if (lockedJobs.Count == 0)
+        {
+            return false;
+        }
 
         DateTimeOffset dbNow = await dbContext.Database.SqlQueryRaw<DateTimeOffset>(
             """SELECT clock_timestamp() AS "Value" """).FirstAsync(cancellationToken);
 
-        var versionRowsUpdated = await dbContext.Database.ExecuteSqlInterpolatedAsync($"""
-            UPDATE asset_versions
-            SET "ProcessingStatus" = {failedStatus},
-                "ProcessingErrorCode" = {errorCode},
-                "ProcessingErrorSummary" = {boundedSummary},
-                "ProcessingUpdatedAt" = {dbNow}
-            WHERE "Id" = {job.AssetVersionId}
-              AND "AssetId" = {job.AssetId}
-              AND "ProcessingStatus" = {expectedSourceStatus}
-            """, cancellationToken);
-
-        var jobRowsUpdated = await dbContext.Database.ExecuteSqlInterpolatedAsync($"""
+        // Re-read persisted state after the locks; the candidate row may have moved on.
+        var recovered = await dbContext.Database.ExecuteSqlInterpolatedAsync($"""
             UPDATE asset_processing_jobs
             SET "Status" = 'FAILED',
                 "Stage" = 'FAILED_LEASE_EXPIRED',
@@ -623,20 +767,61 @@ public sealed partial class AssetProcessingLifecycleStore(
                 "LeaseOwner" = NULL,
                 "LeaseToken" = NULL,
                 "LeaseExpiresAt" = NULL
-            WHERE "Id" = {job.Id}
+            WHERE "Id" = {candidate.Id}
               AND "Status" = 'RUNNING'
+              AND "LeaseExpiresAt" IS NOT NULL
+              AND "LeaseExpiresAt" <= {dbNow}
+              AND "AttemptCount" >= "MaxAttempts"
             """, cancellationToken);
 
-        if (jobRowsUpdated != 1)
+        if (recovered != 1)
         {
             return false;
         }
 
+        var expectedSourceStatus = candidate.Type == nameof(AssetProcessingJobType.ARCHIVE_INSPECTION)
+            ? nameof(AssetVersionProcessingStatus.PENDING_INSPECTION)
+            : nameof(AssetVersionProcessingStatus.PENDING_MALWARE_SCAN);
+        const string failedStatus = nameof(AssetVersionProcessingStatus.PROCESSING_FAILED);
+
+        // Recheck-scoped jobs finalize their own recheck state and never rewrite the version.
+        if (candidate.SecurityRecheckId is { } recheckId)
+        {
+            var recheckRowsUpdated = await dbContext.Database.ExecuteSqlInterpolatedAsync($"""
+                UPDATE security_rechecks
+                SET "State" = 'ERROR',
+                    "ErrorCode" = {errorCode},
+                    "ErrorSummary" = {boundedSummary},
+                    "CompletedAt" = {dbNow},
+                    "UpdatedAt" = {dbNow}
+                WHERE "Id" = {recheckId}
+                  AND "State" NOT IN ('SUCCEEDED', 'UNSAFE', 'INFECTED', 'ERROR', 'CANCELLED')
+                """, cancellationToken);
+
+            if (recheckRowsUpdated == 1)
+            {
+                await tx.CommitAsync(cancellationToken);
+            }
+
+            return recheckRowsUpdated == 1;
+        }
+
+        var versionRowsUpdated = await dbContext.Database.ExecuteSqlInterpolatedAsync($"""
+            UPDATE asset_versions
+            SET "ProcessingStatus" = {failedStatus},
+                "ProcessingErrorCode" = {errorCode},
+                "ProcessingErrorSummary" = {boundedSummary},
+                "ProcessingUpdatedAt" = {dbNow}
+            WHERE "Id" = {candidate.AssetVersionId}
+              AND "AssetId" = {candidate.AssetId}
+              AND "ProcessingStatus" = {expectedSourceStatus}
+            """, cancellationToken);
+
         if (versionRowsUpdated == 1)
         {
             await EnqueueTerminalProcessingNotification(
-                job.AssetId,
-                job.AssetVersionId,
+                candidate.AssetId,
+                candidate.AssetVersionId,
                 AssetVersionProcessingStatus.PROCESSING_FAILED,
                 dbNow,
                 cancellationToken);
@@ -644,6 +829,48 @@ public sealed partial class AssetProcessingLifecycleStore(
 
         await tx.CommitAsync(cancellationToken);
         return true;
+    }
+
+    /// <summary>
+    /// Defense-in-depth bar for observed archive proof: the exact advertised hash over the exact
+    /// advertised byte scope, fully consumed, reported by the actual inspector implementation.
+    /// </summary>
+    private static bool IsObservedArchiveSufficient(ArchiveValidationEvidence evidence, VersionStatusRecord version) =>
+        evidence.ScopeComplete
+        && evidence.ScannedByteCount == version.ContentLength
+        && string.Equals(evidence.ContentSha256, version.ContentSha256, StringComparison.Ordinal)
+        && !string.IsNullOrWhiteSpace(evidence.ImplementationIdentity);
+
+    private async Task InsertInitialArchiveEvidence(
+        Guid assetId,
+        Guid assetVersionId,
+        Guid jobId,
+        ArchiveValidationEvidence evidence,
+        int definitionVersion,
+        DateTimeOffset dbNow,
+        CancellationToken cancellationToken)
+    {
+        var digest = ProductDigests.BuildArchiveEvidenceDigest(
+            assetId, assetVersionId, evidence, 1, definitionVersion,
+            AssetProcessingDefaults.MALWARE_POLICY_VERSION, dbNow);
+
+        var id = Guid.NewGuid();
+        await dbContext.Database.ExecuteSqlInterpolatedAsync($"""
+            INSERT INTO security_evidence_records (
+                "Id", "AssetId", "AssetVersionId", "ContentSha256", "SecurityRecheckId", "EvidenceKind",
+                "JobId", "Generation", "DefinitionVersion", "Outcome", "SecurityPolicyVersion",
+                "ImplementationIdentity", "IdentityAvailable", "ScannedByteCount", "ScannedEntryCount",
+                "ScopeComplete", "CompletedAt", "EvidenceDigest", "CreatedAt"
+            ) VALUES (
+                {id}, {assetId}, {assetVersionId}, {evidence.ContentSha256},
+                NULL, 'ARCHIVE_VALIDATION', {jobId}, 1,
+                {definitionVersion}, 'VALID', {AssetProcessingDefaults.MALWARE_POLICY_VERSION},
+                {evidence.ImplementationIdentity}, false, {evidence.ScannedByteCount}, {evidence.FileCount},
+                {evidence.ScopeComplete}, {dbNow}, {digest}, {dbNow}
+            )
+            ON CONFLICT ("AssetVersionId", "EvidenceKind") WHERE "SecurityRecheckId" IS NULL
+            DO NOTHING
+            """, cancellationToken).ConfigureAwait(false);
     }
 
     private async Task EnqueueTerminalProcessingNotification(

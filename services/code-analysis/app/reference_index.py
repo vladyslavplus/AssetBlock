@@ -42,7 +42,7 @@ class ReferenceSnapshot:
 
 
 MODEL_IDENTITY_FIELDS = frozenset({
-    "checkpointSha256", "tokenizerHashes", "framing", "pooling", "mask",
+    "checkpointSha256", "loadedStateSha256", "tokenizerHashes", "framing", "pooling", "mask",
     "preprocessing", "chunking", "dimension", "selectionSha256",
 })
 
@@ -107,6 +107,8 @@ def _validate_model_identity(raw) -> dict | None:
     if not isinstance(raw, dict) or set(raw) != MODEL_IDENTITY_FIELDS:
         raise ContractError("REFERENCE_MANIFEST_INVALID", "modelIdentity")
     if not contracts.is_sha256(raw["checkpointSha256"]):
+        raise ContractError("REFERENCE_MANIFEST_INVALID", "modelIdentity")
+    if not contracts.is_sha256(raw["loadedStateSha256"]):
         raise ContractError("REFERENCE_MANIFEST_INVALID", "modelIdentity")
     if not contracts.is_sha256(raw["selectionSha256"]):
         raise ContractError("REFERENCE_MANIFEST_INVALID", "modelIdentity")

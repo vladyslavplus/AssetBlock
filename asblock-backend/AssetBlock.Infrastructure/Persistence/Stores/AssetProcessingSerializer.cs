@@ -56,6 +56,10 @@ public static partial class AssetProcessingSerializer
                 ? SerializeValidated(embeddingPayload, ValidateEmbeddingGenerationPayload)
                 : throw WrongDto(type, nameof(EmbeddingGenerationPayload)),
 
+            AssetProcessingJobType.CODE_ANALYSIS => payload is CodeAnalysisPayload analysisPayload
+                ? SerializeValidated(analysisPayload, ValidateCodeAnalysisPayload)
+                : throw WrongDto(type, nameof(CodeAnalysisPayload)),
+
             _ => throw UnknownType(type)
         };
 
@@ -77,6 +81,9 @@ public static partial class AssetProcessingSerializer
 
             AssetProcessingJobType.EMBEDDING_GENERATION =>
                 DeserializeValidated(json, () => JsonSerializer.Deserialize<EmbeddingGenerationPayload>(json, _options), ValidateEmbeddingGenerationPayload),
+
+            AssetProcessingJobType.CODE_ANALYSIS =>
+                DeserializeValidated(json, () => JsonSerializer.Deserialize<CodeAnalysisPayload>(json, _options), ValidateCodeAnalysisPayload),
 
             _ => throw UnknownType(type)
         };
@@ -102,6 +109,10 @@ public static partial class AssetProcessingSerializer
                 ? SerializeValidated(embeddingResult, ValidateEmbeddingGenerationResult)
                 : throw WrongDto(type, nameof(EmbeddingGenerationResult)),
 
+            AssetProcessingJobType.CODE_ANALYSIS => result is CodeAnalysisResult analysisResult
+                ? SerializeValidated(analysisResult, ValidateCodeAnalysisResult)
+                : throw WrongDto(type, nameof(CodeAnalysisResult)),
+
             _ => throw UnknownType(type)
         };
 
@@ -123,6 +134,9 @@ public static partial class AssetProcessingSerializer
 
             AssetProcessingJobType.EMBEDDING_GENERATION =>
                 DeserializeValidated(json, () => JsonSerializer.Deserialize<EmbeddingGenerationResult>(json, _options), ValidateEmbeddingGenerationResult),
+
+            AssetProcessingJobType.CODE_ANALYSIS =>
+                DeserializeValidated(json, () => JsonSerializer.Deserialize<CodeAnalysisResult>(json, _options), ValidateCodeAnalysisResult),
 
             _ => throw UnknownType(type)
         };
@@ -300,6 +314,62 @@ public static partial class AssetProcessingSerializer
         if (result.Dimension <= 0)
         {
             throw Fail("Dimension must be positive.");
+        }
+    }
+
+    private static void ValidateCodeAnalysisPayload(CodeAnalysisPayload payload)
+    {
+        if (payload.AnalysisRunId == Guid.Empty)
+        {
+            throw Fail("AnalysisRunId must not be empty.");
+        }
+
+        if (payload.ArchiveEvidenceId == Guid.Empty || payload.MalwareEvidenceId == Guid.Empty)
+        {
+            throw Fail("Security evidence ids must not be empty.");
+        }
+
+        ValidateSha256(payload.InputDigest, nameof(payload.InputDigest));
+        ValidateSha256(payload.PolicyDigest, nameof(payload.PolicyDigest));
+        ValidateSha256(payload.ContentSha256, nameof(payload.ContentSha256));
+
+        if (payload.SecurityGeneration < 1)
+        {
+            throw Fail("SecurityGeneration must be positive.");
+        }
+    }
+
+    private static void ValidateCodeAnalysisResult(CodeAnalysisResult result)
+    {
+        if (result.ReportId == Guid.Empty || result.AnalysisRunId == Guid.Empty)
+        {
+            throw Fail("Report and run ids must not be empty.");
+        }
+
+        ValidateSha256(result.PythonReportId, nameof(result.PythonReportId));
+        ValidateSha256(result.ReportDigest, nameof(result.ReportDigest));
+
+        if (!Enum.TryParse(result.CoverageLevel, ignoreCase: false, out CodeAnalysisCoverageLevel _))
+        {
+            throw Fail("CoverageLevel is not a known coverage level.");
+        }
+
+        if (!Enum.TryParse(result.Disposition, ignoreCase: false, out CodeAnalysisReportDisposition _))
+        {
+            throw Fail("Disposition is not a known report disposition.");
+        }
+
+        if (result.AnalyzedFileCount < 0 || result.OmissionCount < 0 || result.FindingCount < 0)
+        {
+            throw Fail("Report counts cannot be negative.");
+        }
+    }
+
+    private static void ValidateSha256(string value, string name)
+    {
+        if (string.IsNullOrWhiteSpace(value) || !Sha256Regex().IsMatch(value))
+        {
+            throw Fail($"{name} must be a valid lowercase SHA-256 hex string.");
         }
     }
 }
