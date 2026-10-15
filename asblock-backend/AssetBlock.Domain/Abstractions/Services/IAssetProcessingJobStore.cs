@@ -12,6 +12,7 @@ public interface IAssetProcessingJobStore
         int definitionVersion,
         TimeSpan initialDelay,
         AssetProcessingPayload payload,
+        AssetProcessingJobScope? scope = null,
         string? traceParent = null,
         CancellationToken cancellationToken = default);
 

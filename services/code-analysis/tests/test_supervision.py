@@ -6,7 +6,8 @@ import time
 
 import pytest
 
-from conftest import TEST_SECRET, make_body, make_metadata, make_zip
+from conftest import (REPO_ROOT, SERVICE_DIR, TEST_SECRET, make_body,
+                      make_metadata, make_zip)
 
 from app import contracts
 from app import policy as policy_module
@@ -52,8 +53,10 @@ def test_pending_cleanup_blocks_new_work(service_app, workspace_root):
 
 
 def test_supervisor_kills_uncooperative_tree(tmp_path):
-    from app.supervisor import await_worker, confirm_stopped, spawn_worker, worker_env
+    from app.supervisor import (await_worker, close_job_handle,
+                                confirm_containment, spawn_worker, worker_env)
     import asyncio
+    from pathlib import Path
 
     async def scenario():
         pid_file = tmp_path / "grandchild.pid"
@@ -64,32 +67,85 @@ def test_supervisor_kills_uncooperative_tree(tmp_path):
             f"open(r'{pid_file}', 'w').write(str(grandchild.pid))\n"
             "time.sleep(120)\n"
         )
+        service_dir = tmp_path / "contained-service"
+        app_dir = service_dir / "app"
+        app_dir.mkdir(parents=True)
+        (app_dir / "worker.py").write_text(script, encoding="utf-8")
         work = tmp_path / "work"
         work.mkdir()
-        argv = [sys.executable, "-c", script]
-        import subprocess
-        if sys.platform == "win32":
-            proc = subprocess.Popen(argv, cwd=str(work), shell=False,
-                                    stdout=subprocess.DEVNULL,
-                                    stderr=subprocess.DEVNULL,
-                                    creationflags=subprocess.CREATE_NEW_PROCESS_GROUP)
-        else:
-            proc = subprocess.Popen(argv, cwd=str(work), shell=False,
-                                    stdout=subprocess.DEVNULL,
-                                    stderr=subprocess.DEVNULL,
-                                    start_new_session=True)
-        deadline = time.perf_counter() + 10
-        while not pid_file.exists() and time.perf_counter() < deadline:
-            await asyncio.sleep(0.05)
-        assert pid_file.exists(), "tree must be running before timeout"
-        reason = await await_worker(proc, time.time() - 1, lambda: False,
-                                    _never_disconnected)
-        assert reason == "TIMEOUT"
-        assert confirm_stopped(proc.pid)
-        grandchild_pid = int(pid_file.read_text())
-        assert not pid_alive(grandchild_pid)
-
+        proc, mode, job = spawn_worker(service_dir, work,
+                                       worker_env(service_dir, ()))
+        assert mode == ("job" if sys.platform == "win32" else "group")
+        try:
+            deadline = time.perf_counter() + 10
+            while not pid_file.exists() and time.perf_counter() < deadline:
+                await asyncio.sleep(0.05)
+            assert pid_file.exists(), "tree must be running before timeout"
+            reason = await await_worker(proc, time.time() - 1, lambda: False,
+                                        _never_disconnected)
+            assert reason == "TIMEOUT"
+            grandchild_pid = int(pid_file.read_text())
+            assert confirm_containment(
+                proc.pid, proc.pid if sys.platform != "win32" else None,
+                (grandchild_pid,), job) is True
+        finally:
+            if proc.poll() is None:
+                from app.supervisor import stop_containment
+                stop_containment(proc)
+            close_job_handle(proc)
     asyncio.run(scenario())
+
+
+def test_completed_worker_stops_leftover_contained_descendant(
+        tmp_path, service_app, workspace_root, monkeypatch):
+    from fastapi.testclient import TestClient
+    import app.service as service_module
+    from app.supervisor import spawn_worker as real_spawn_worker
+
+    pid_file = tmp_path / "grandchild.pid"
+    service_dir = tmp_path / "completed-service"
+    app_dir = service_dir / "app"
+    app_dir.mkdir(parents=True)
+    worker_script = """
+import json, pathlib, subprocess, sys, time
+workspace = pathlib.Path(sys.argv[1])
+while not (workspace / "request.json").exists():
+    time.sleep(0.01)
+request = json.loads((workspace / "request.json").read_text())
+metadata = request["metadata"]
+(workspace / "envelope.json").write_text(json.dumps({
+    "schema": "code-analysis-v1",
+    "runId": metadata["runId"],
+    "inputDigest": metadata["inputDigest"],
+}))
+child = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(120)"])
+""" + f"\npathlib.Path({str(pid_file)!r}).write_text(str(child.pid))\n"
+    (app_dir / "worker.py").write_text(worker_script, encoding="utf-8")
+
+    def spawn(_service_dir, workspace_dir, env):
+        return real_spawn_worker(service_dir, workspace_dir, env)
+
+    monkeypatch.setattr(service_module, "spawn_worker", spawn)
+    client = TestClient(service_app)
+    archive = make_zip({"src/a.js": b"function alpha() { return 1; }\n"})
+    response = _post(client, make_metadata(archive), archive)
+
+    assert response.status_code == 200
+    assert pid_file.exists()
+    assert not pid_alive(int(pid_file.read_text()))
+    assert service_app.state.pipeline_state["unconfirmed"] == set()
+
+
+def test_windows_worker_environment_uses_fixed_identity(tmp_path):
+    from app.supervisor import worker_env
+
+    service_dir = tmp_path / "service"
+    service_dir.mkdir()
+    env = worker_env(service_dir, ())
+    if sys.platform == "win32":
+        assert env["USERNAME"] == "code-analysis"
+    else:
+        assert "USERNAME" not in env
 
 
 async def _never_disconnected():
@@ -135,21 +191,134 @@ def test_worker_failure_keeps_sentinel_out_of_response_and_logs(client, caplog):
 
 def test_cleanup_failure_overrides_success_with_withheld_findings():
     from types import SimpleNamespace
+    from app.contracts import APPLICABILITY, STAGE_OUTCOME
+
     metadata = SimpleNamespace(run_id="r", input_digest="d", content_sha256="c",
                                asset_id="a", version_id="v")
-    completed = {"stages": [{"stage": "REPORT"}], "coverage": {"level": "FULL"},
-                 "findingOverflow": 0}
+    stages = [{"stage": name, "applicability": APPLICABILITY.MANDATORY.value,
+               "outcome": STAGE_OUTCOME.SUCCEEDED.value, "retryable": False,
+               "errorCode": None}
+              for name in ("INVENTORY", "EXTRACTION", "TOKEN", "SEMANTIC",
+                           "LICENSE", "UNION", "VERIFIER", "REPORT")]
+    completed = {"stages": stages, "coverage": {"level": "FULL", "analyzedFiles": 1,
+                 "omissions": [], "omissionOverflow": 0}, "findingOverflow": 2,
+                 "policy": {"policyVersion": "p", "policyDigest": "a" * 64,
+                            "verifierMode": "PENDING_RESEARCH_EVALUATION",
+                            "canAuthorizePublication": False},
+                 "securityEvidence": {"contentSha256": "c", "archiveEvidenceId": "archive",
+                                      "malwareEvidenceId": "malware", "securityGeneration": 3},
+                 "reservation": {"serviceKey": "code-analysis", "slotNumber": 0,
+                                 "generation": 2}}
     envelope = _cleanup_failed_envelope(metadata, completed)
     assert envelope["outcome"] == "FAILED"
     assert envelope["errorCode"] == "CLEANUP_FAILED"
+    assert envelope["failedStage"] == "REPORT"
+    assert envelope["retryable"] is False
+    assert [stage["outcome"] for stage in envelope["stages"]] == ["SUCCEEDED"] * 8
+    assert envelope["findings"] == []
+    assert envelope["findingOverflow"] == 2
+    assert envelope["securityEvidence"] == completed["securityEvidence"]
+    assert envelope["reservation"] == completed["reservation"]
+    assert envelope["admittedBy"] is None
+    assert envelope["policy"] == completed["policy"]
+    assert envelope["coverage"] == completed["coverage"]
+    assert envelope["cleanupError"] == "CLEANUP_FAILED"
+
+
+def test_cleanup_failure_preserves_an_already_failed_computational_stage():
+    from types import SimpleNamespace
+    from app.contracts import APPLICABILITY, STAGE_OUTCOME
+
+    metadata = SimpleNamespace(run_id="r", input_digest="d", content_sha256="c",
+                               asset_id="a", version_id="v")
+    stages = [{"stage": name, "applicability": APPLICABILITY.MANDATORY.value,
+               "outcome": STAGE_OUTCOME.SUCCEEDED.value, "retryable": False,
+               "errorCode": None}
+              for name in ("INVENTORY", "EXTRACTION", "TOKEN", "SEMANTIC",
+                           "LICENSE", "UNION", "VERIFIER", "REPORT")]
+    stages[2].update(outcome=STAGE_OUTCOME.FAILED.value, errorCode="TOKENIZER_UNAVAILABLE",
+                     retryable=True)
+    failed = {"outcome": "FAILED", "errorCode": "TOKENIZER_UNAVAILABLE",
+              "failedStage": "TOKEN", "retryable": True, "stages": stages,
+              "policy": {"policyVersion": "p", "policyDigest": "a" * 64,
+                         "verifierMode": "PENDING_RESEARCH_EVALUATION",
+                         "canAuthorizePublication": False},
+              "securityEvidence": {"contentSha256": "c", "archiveEvidenceId": "archive",
+                                   "malwareEvidenceId": "malware", "securityGeneration": 3},
+              "reservation": {"serviceKey": "code-analysis", "slotNumber": 0,
+                              "generation": 2},
+              "coverage": {"level": "PARTIAL", "analyzedFiles": 1,
+                           "omissions": [], "omissionOverflow": 0},
+              "findingOverflow": 0, "findings": [], "admittedBy": None,
+              "cleanupError": None}
+
+    envelope = _cleanup_failed_envelope(metadata, failed)
+
+    assert envelope["errorCode"] == "CLEANUP_FAILED"
+    assert envelope["failedStage"] == "REPORT"
+    assert envelope["retryable"] is False
+    assert envelope["stages"] == stages
+    assert envelope["stages"][2]["errorCode"] == "TOKENIZER_UNAVAILABLE"
+    assert envelope["stages"][2]["outcome"] == STAGE_OUTCOME.FAILED.value
+    assert envelope["coverage"] == failed["coverage"]
     assert envelope["findings"] == []
     assert envelope["admittedBy"] is None
+    assert envelope["cleanupError"] == "CLEANUP_FAILED"
 
 
-def test_parent_cleanup_failure_blocks_and_withholds(client, workspace_root,
+def _install_contract_faithful_cleanup_worker(app_config, tmp_path):
+    """Use a real supervised child with a production-built synthetic envelope.
+
+    This isolates parent cleanup behavior from host tool, model, and index
+    availability. The child is test-only and cannot publish or admit a report.
+    """
+    worker_root = tmp_path / "contract-worker"
+    worker_app = worker_root / "app"
+    worker_app.mkdir(parents=True)
+    (worker_app / "worker.py").write_text(
+        '''import json, sys
+from pathlib import Path
+from types import SimpleNamespace
+
+service_root = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(service_root))
+from app import contracts, policy
+from app.contracts import APPLICABILITY, STAGE_OUTCOME, StageRecord
+from app.stages import Pipeline, _success_envelope
+
+workdir = Path(sys.argv[1])
+request = json.loads((workdir / "request.json").read_text(encoding="utf-8"))
+metadata = contracts.validate_metadata(request["metadata"])
+context = SimpleNamespace(metadata=metadata, policy=policy.current_policy(), snapshot=None)
+pipe = Pipeline(context=context)
+for name in ("INVENTORY", "EXTRACTION", "TOKEN", "SEMANTIC", "LICENSE", "UNION", "VERIFIER"):
+    pipe.record(StageRecord(stage=name, applicability=APPLICABILITY.MANDATORY.value,
+                            outcome=STAGE_OUTCOME.SUCCEEDED.value,
+                            tool_identity={"fixture": "contract-faithful-supervised-child"}))
+envelope = _success_envelope(pipe)
+(workdir / "envelope.json").write_bytes(contracts.canonical(envelope))
+''', encoding="utf-8")
+    app_config.service_dir = worker_root
+    app_config.worker_path_entries = (str(SERVICE_DIR), str(REPO_ROOT))
+
+
+def test_parent_cleanup_failure_blocks_and_withholds(client, app_config,
+                                                     workspace_root, tmp_path,
                                                      monkeypatch):
     import app.workspace as workspace_module
     real_rmtree = workspace_module.shutil.rmtree
+
+    _install_contract_faithful_cleanup_worker(app_config, tmp_path)
+    archive = make_zip({"src/a.js": b"function alpha() { return 1; }\n"})
+
+    # Prove same supervised child graph succeeds before inducing cleanup fault.
+    baseline = _post(client, make_metadata(archive), archive)
+    assert baseline.status_code == 200
+    assert baseline.json()["outcome"] == "COMPLETED"
+    assert [stage["outcome"] for stage in baseline.json()["stages"]] == ["SUCCEEDED"] * 8
+    assert baseline.json()["policy"]["verifierMode"] == "PENDING_RESEARCH_EVALUATION"
+    assert baseline.json()["policy"]["canAuthorizePublication"] is False
+    assert baseline.json()["admittedBy"] is None
 
     def failing_rmtree(path, ignore_errors=False):
         real_rmtree(path, ignore_errors=ignore_errors)
@@ -157,12 +326,18 @@ def test_parent_cleanup_failure_blocks_and_withholds(client, workspace_root,
         Path(path).mkdir(parents=True, exist_ok=True)
 
     monkeypatch.setattr(workspace_module.shutil, "rmtree", failing_rmtree)
-    archive = make_zip({"src/a.js": b"function alpha() { return 1; }\n"})
     response = _post(client, make_metadata(archive), archive)
     assert response.status_code == 200
     assert response.json()["outcome"] == "FAILED"
     assert response.json()["errorCode"] == "CLEANUP_FAILED"
     assert response.json()["findings"] == []
+    assert response.json()["failedStage"] == "REPORT"
+    assert response.json()["retryable"] is False
+    assert [stage["outcome"] for stage in response.json()["stages"]] == ["SUCCEEDED"] * 8
+    assert response.json()["policy"]["verifierMode"] == "PENDING_RESEARCH_EVALUATION"
+    assert response.json()["policy"]["canAuthorizePublication"] is False
+    assert response.json()["admittedBy"] is None
+    assert response.json()["cleanupError"] == "CLEANUP_FAILED"
     # The stuck workspace blocks subsequent work until the sweeper retries.
     followup = _post(client, make_metadata(archive), archive)
     assert followup.status_code == 503
@@ -174,6 +349,7 @@ def test_unconfirmed_run_holds_gate_without_cleanup(service_app, workspace_root,
     import subprocess as _sp
     import app.service as service_module
     from fastapi.testclient import TestClient
+    spawned = []
     monkeypatch.setattr(service_module, "confirm_containment",
                         lambda *args, **kwargs: False)
 
@@ -183,6 +359,7 @@ def test_unconfirmed_run_holds_gate_without_cleanup(service_app, workspace_root,
             cwd=str(workspace_dir), shell=False,
             stdout=_sp.DEVNULL, stderr=_sp.DEVNULL,
             start_new_session=sys.platform != "win32")
+        spawned.append(proc)
         return proc, "test", None
 
     monkeypatch.setattr(service_module, "spawn_worker", stub_spawn)
@@ -201,19 +378,26 @@ def test_unconfirmed_run_holds_gate_without_cleanup(service_app, workspace_root,
     validated = _contracts.validate_metadata(metadata)
     metadata["inputDigest"] = _contracts.compute_analysis_digest(
         validated, _policy.POLICY_DIGEST, None)
-    first = _post(client, metadata, archive)
-    assert first.status_code == 500
-    state = service_app.state.pipeline_state
-    assert len(state["unconfirmed"]) == 1
-    # Workspace is fenced, not cleaned.
-    kept = [p for p in workspace_root.iterdir() if p.is_dir()]
-    assert len(kept) == 1
-    # The gate stays held: the next request cannot start.
-    second = _post(client, make_metadata(archive), archive)
-    assert second.status_code == 503
-    # The sweeper never clears fenced evidence.
-    from app import workspace as workspace_module
-    result = workspace_module.sweep_stale(workspace_root, set(state["unconfirmed"]))
-    assert kept[0].exists()
-    assert len(state["unconfirmed"]) == 1
-    assert result["removed"] == 0
+    try:
+        first = _post(client, metadata, archive)
+        assert first.status_code == 500
+        state = service_app.state.pipeline_state
+        assert len(state["unconfirmed"]) == 1
+        # This deliberately uncontained fixture models denied termination:
+        # workspace stays fenced while its known Popen handle remains live.
+        kept = [p for p in workspace_root.iterdir() if p.is_dir()]
+        assert len(kept) == 1
+        assert any(proc.poll() is None for proc in spawned)
+        second = _post(client, make_metadata(archive), archive)
+        assert second.status_code == 503
+        from app import workspace as workspace_module
+        result = workspace_module.sweep_stale(workspace_root, set(state["unconfirmed"]))
+        assert kept[0].exists()
+        assert len(state["unconfirmed"]) == 1
+        assert result["removed"] == 0
+    finally:
+        # Reap only the synthetic process handles created by this test.
+        for proc in spawned:
+            if proc.poll() is None:
+                proc.kill()
+                proc.wait(timeout=10)

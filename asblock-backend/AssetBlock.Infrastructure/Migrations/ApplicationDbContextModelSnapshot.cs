@@ -25,6 +25,137 @@ namespace AssetBlock.Infrastructure.Migrations
             NpgsqlModelBuilderExtensions.HasPostgresExtension(modelBuilder, "pg_trgm");
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
 
+            modelBuilder.Entity("AssetBlock.Domain.Core.Entities.AnalysisCapacitySlot", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("Capacity")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTimeOffset?>("CleanupGraceUntil")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTimeOffset?>("ConfirmedTerminationAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTimeOffset?>("HardDeadlineUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("LeaseToken")
+                        .HasColumnType("char(64)")
+                        .IsFixedLength();
+
+                    b.Property<DateTimeOffset?>("ReleasedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("ReleasedReason")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<int?>("ReservationGeneration")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTimeOffset?>("ReservedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("ReservedJobId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("ReservedRunId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ServiceKey")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.Property<int>("SlotNumber")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("State")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<DateTimeOffset?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("HardDeadlineUtc")
+                        .HasDatabaseName("IX_analysis_capacity_slots_hard_deadline");
+
+                    b.HasIndex("ReservedJobId");
+
+                    b.HasIndex("ReservedRunId");
+
+                    b.HasIndex("ServiceKey")
+                        .HasDatabaseName("IX_analysis_capacity_slots_service");
+
+                    b.HasIndex("ServiceKey", "SlotNumber")
+                        .IsUnique()
+                        .HasDatabaseName("UIX_analysis_capacity_slots_service_slot");
+
+                    b.HasIndex("ServiceKey", "State")
+                        .HasDatabaseName("IX_analysis_capacity_slots_service_state");
+
+                    b.ToTable("analysis_capacity_slots", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_analysis_capacity_slots_capacity", "\"Capacity\" > 0");
+
+                            t.HasCheckConstraint("CK_analysis_capacity_slots_lease_token", "\"LeaseToken\" IS NULL OR \"LeaseToken\" ~ '^[0-9a-f]{64}$'");
+
+                            t.HasCheckConstraint("CK_analysis_capacity_slots_release_reason", "(\"State\" = 'FREE' AND \"ReleasedReason\" IS NOT NULL AND length(\"ReleasedReason\") > 0) OR \"State\" <> 'FREE'");
+
+                            t.HasCheckConstraint("CK_analysis_capacity_slots_reservation", "(\"State\" = 'FREE' AND \"ReservedRunId\" IS NULL AND \"ReservedJobId\" IS NULL AND \"LeaseToken\" IS NULL AND \"ReservationGeneration\" IS NULL AND \"HardDeadlineUtc\" IS NULL) OR (\"State\" <> 'FREE' AND \"ReservedRunId\" IS NOT NULL AND \"ReservedJobId\" IS NOT NULL AND \"LeaseToken\" IS NOT NULL AND \"ReservationGeneration\" IS NOT NULL AND \"HardDeadlineUtc\" IS NOT NULL)");
+
+                            t.HasCheckConstraint("CK_analysis_capacity_slots_service_key", "\"ServiceKey\" ~ '^[A-Za-z0-9][A-Za-z0-9_.\\-]{0,127}$'");
+
+                            t.HasCheckConstraint("CK_analysis_capacity_slots_slot_number", "\"SlotNumber\" >= 0");
+
+                            t.HasCheckConstraint("CK_analysis_capacity_slots_state", "\"State\" IN ('FREE', 'RESERVED', 'RELEASING', 'RECOVERING')");
+                        });
+                });
+
+            modelBuilder.Entity("AssetBlock.Domain.Core.Entities.AnalysisServiceRegistration", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("Capacity")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTimeOffset?>("RegisteredAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("ServiceKey")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ServiceKey")
+                        .IsUnique()
+                        .HasDatabaseName("UIX_analysis_service_registrations_service_key");
+
+                    b.ToTable("analysis_service_registrations", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_analysis_service_registrations_capacity", "\"Capacity\" > 0");
+
+                            t.HasCheckConstraint("CK_analysis_service_registrations_service_key", "\"ServiceKey\" ~ '^[A-Za-z0-9][A-Za-z0-9_.\\-]{0,127}$'");
+                        });
+                });
+
             modelBuilder.Entity("AssetBlock.Domain.Core.Entities.AnalyticsEvent", b =>
                 {
                     b.Property<Guid>("Id")
@@ -486,6 +617,9 @@ namespace AssetBlock.Infrastructure.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
+                    b.Property<Guid?>("AnalysisRunId")
+                        .HasColumnType("uuid");
+
                     b.Property<Guid>("AssetId")
                         .HasColumnType("uuid");
 
@@ -543,6 +677,9 @@ namespace AssetBlock.Infrastructure.Migrations
                     b.Property<string>("Result")
                         .HasColumnType("jsonb");
 
+                    b.Property<Guid?>("SecurityRecheckId")
+                        .HasColumnType("uuid");
+
                     b.Property<string>("Stage")
                         .IsRequired()
                         .HasMaxLength(64)
@@ -560,6 +697,10 @@ namespace AssetBlock.Infrastructure.Migrations
                         .HasMaxLength(128)
                         .HasColumnType("character varying(128)");
 
+                    b.Property<string>("TransportLeaseToken")
+                        .HasColumnType("char(64)")
+                        .IsFixedLength();
+
                     b.Property<string>("Type")
                         .IsRequired()
                         .HasMaxLength(64)
@@ -573,12 +714,27 @@ namespace AssetBlock.Infrastructure.Migrations
                     b.HasIndex("LeaseExpiresAt")
                         .HasDatabaseName("IX_asset_processing_jobs_lease_expiry");
 
-                    b.HasIndex("AssetId", "AssetVersionId");
+                    b.HasIndex("AssetId", "AssetVersionId")
+                        .HasDatabaseName("IX_asset_processing_jobs_AssetId_AssetVersionId");
+
+                    b.HasIndex("AnalysisRunId", "Type", "DefinitionVersion")
+                        .IsUnique()
+                        .HasDatabaseName("UIX_asset_processing_jobs_run_idempotency")
+                        .HasFilter("\"AnalysisRunId\" IS NOT NULL");
+
+                    b.HasIndex("AssetId", "AssetVersionId", "AnalysisRunId");
+
+                    b.HasIndex("AssetId", "AssetVersionId", "SecurityRecheckId");
 
                     b.HasIndex("AssetVersionId", "Type", "DefinitionVersion")
                         .IsUnique()
                         .HasDatabaseName("UIX_asset_processing_jobs_idempotency")
-                        .HasFilter("\"Type\" <> 'EMBEDDING_GENERATION'");
+                        .HasFilter("\"Type\" NOT IN ('EMBEDDING_GENERATION', 'CODE_ANALYSIS') AND \"SecurityRecheckId\" IS NULL AND \"AnalysisRunId\" IS NULL");
+
+                    b.HasIndex("SecurityRecheckId", "Type", "DefinitionVersion")
+                        .IsUnique()
+                        .HasDatabaseName("UIX_asset_processing_jobs_recheck_idempotency")
+                        .HasFilter("\"SecurityRecheckId\" IS NOT NULL");
 
                     b.HasIndex("Status", "AvailableAt", "Id")
                         .HasDatabaseName("IX_asset_processing_jobs_claim");
@@ -610,11 +766,15 @@ namespace AssetBlock.Infrastructure.Migrations
 
                             t.HasCheckConstraint("CK_asset_processing_jobs_running_lease", "(\"Status\" = 'RUNNING' AND \"LeaseOwner\" IS NOT NULL AND \"LeaseToken\" IS NOT NULL AND \"LeaseExpiresAt\" IS NOT NULL) OR (\"Status\" != 'RUNNING' AND \"LeaseOwner\" IS NULL AND \"LeaseToken\" IS NULL AND \"LeaseExpiresAt\" IS NULL)");
 
+                            t.HasCheckConstraint("CK_asset_processing_jobs_scope_exclusivity", "\"Type\" NOT IN ('ARCHIVE_INSPECTION', 'MALWARE_SCAN', 'LISTING_COPILOT', 'EMBEDDING_GENERATION', 'CODE_ANALYSIS') OR ((\"Type\" = 'CODE_ANALYSIS' AND \"AnalysisRunId\" IS NOT NULL AND \"SecurityRecheckId\" IS NULL) OR (\"Type\" IN ('ARCHIVE_INSPECTION', 'MALWARE_SCAN') AND \"AnalysisRunId\" IS NULL) OR (\"Type\" IN ('LISTING_COPILOT', 'EMBEDDING_GENERATION') AND \"AnalysisRunId\" IS NULL AND \"SecurityRecheckId\" IS NULL))");
+
                             t.HasCheckConstraint("CK_asset_processing_jobs_status", "\"Status\" IN ('QUEUED', 'RUNNING', 'RETRY_SCHEDULED', 'SUCCEEDED', 'FAILED', 'CANCELLED')");
 
                             t.HasCheckConstraint("CK_asset_processing_jobs_terminal_completed_at", "(\"Status\" IN ('SUCCEEDED', 'FAILED', 'CANCELLED') AND \"CompletedAt\" IS NOT NULL) OR (\"Status\" NOT IN ('SUCCEEDED', 'FAILED', 'CANCELLED') AND \"CompletedAt\" IS NULL)");
 
-                            t.HasCheckConstraint("CK_asset_processing_jobs_type", "\"Type\" IN ('ARCHIVE_INSPECTION', 'MALWARE_SCAN', 'LISTING_COPILOT', 'EMBEDDING_GENERATION')");
+                            t.HasCheckConstraint("CK_asset_processing_jobs_transport_lease_token", "\"TransportLeaseToken\" IS NULL OR \"TransportLeaseToken\" ~ '^[0-9a-f]{64}$'");
+
+                            t.HasCheckConstraint("CK_asset_processing_jobs_type", "\"Type\" IN ('ARCHIVE_INSPECTION', 'MALWARE_SCAN', 'LISTING_COPILOT', 'EMBEDDING_GENERATION', 'CODE_ANALYSIS')");
                         });
                 });
 
@@ -766,6 +926,11 @@ namespace AssetBlock.Infrastructure.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
+                    b.Property<int>("AnalysisSelectionGeneration")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(1);
+
                     b.Property<Guid>("AssetId")
                         .HasColumnType("uuid");
 
@@ -829,6 +994,23 @@ namespace AssetBlock.Infrastructure.Migrations
                         .HasMaxLength(4000)
                         .HasColumnType("character varying(4000)");
 
+                    b.Property<DateTimeOffset?>("SafetyRestrictedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("SafetyRestriction")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(24)
+                        .HasColumnType("character varying(24)")
+                        .HasDefaultValue("NONE");
+
+                    b.Property<string>("SafetyRestrictionReason")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<Guid?>("SelectedCodeAnalysisReportId")
+                        .HasColumnType("uuid");
+
                     b.Property<string>("StorageKey")
                         .IsRequired()
                         .HasMaxLength(1024)
@@ -850,6 +1032,8 @@ namespace AssetBlock.Infrastructure.Migrations
                     b.HasIndex("ProcessingStatus")
                         .HasDatabaseName("IX_asset_versions_processing_status");
 
+                    b.HasIndex("SelectedCodeAnalysisReportId");
+
                     b.HasIndex("StorageKey")
                         .IsUnique()
                         .HasDatabaseName("UIX_asset_versions_storage_key");
@@ -860,6 +1044,8 @@ namespace AssetBlock.Infrastructure.Migrations
 
                     b.ToTable("asset_versions", null, t =>
                         {
+                            t.HasCheckConstraint("CK_asset_versions_analysis_selection_generation", "\"AnalysisSelectionGeneration\" > 0");
+
                             t.HasCheckConstraint("CK_asset_versions_content_length_positive", "\"ContentLength\" > 0");
 
                             t.HasCheckConstraint("CK_asset_versions_processing_error_code", "\"ProcessingErrorCode\" IS NULL OR \"ProcessingErrorCode\" ~ '^[A-Z0-9_]{1,64}$'");
@@ -867,6 +1053,10 @@ namespace AssetBlock.Infrastructure.Migrations
                             t.HasCheckConstraint("CK_asset_versions_processing_status", "\"ProcessingStatus\" IN ('PENDING_INSPECTION', 'PENDING_MALWARE_SCAN', 'READY', 'REJECTED', 'PROCESSING_FAILED')");
 
                             t.HasCheckConstraint("CK_asset_versions_ready_current", "\"IsCurrent\" = false OR (\"IsCurrent\" = true AND \"ProcessingStatus\" = 'READY')");
+
+                            t.HasCheckConstraint("CK_asset_versions_safety_restriction", "\"SafetyRestriction\" IN ('NONE', 'UNSAFE_ARCHIVE', 'INFECTED', 'INTEGRITY_MISMATCH')");
+
+                            t.HasCheckConstraint("CK_asset_versions_safety_restriction_reason", "(\"SafetyRestriction\" = 'NONE' AND \"SafetyRestrictionReason\" IS NULL AND \"SafetyRestrictedAt\" IS NULL) OR (\"SafetyRestriction\" <> 'NONE' AND \"SafetyRestrictionReason\" IS NOT NULL AND \"SafetyRestrictedAt\" IS NOT NULL)");
 
                             t.HasCheckConstraint("CK_asset_versions_state_error_consistency", "(\"ProcessingStatus\" IN ('PENDING_INSPECTION', 'PENDING_MALWARE_SCAN', 'READY') AND \"ProcessingErrorCode\" IS NULL AND \"ProcessingErrorSummary\" IS NULL) OR (\"ProcessingStatus\" IN ('REJECTED', 'PROCESSING_FAILED') AND \"ProcessingErrorCode\" IS NOT NULL AND \"ProcessingErrorSummary\" IS NOT NULL AND length(trim(\"ProcessingErrorSummary\")) > 0)");
 
@@ -1421,11 +1611,299 @@ namespace AssetBlock.Infrastructure.Migrations
                         });
                 });
 
+            modelBuilder.Entity("AssetBlock.Domain.Core.Entities.CodeAnalysisPolicyVersion", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("IndexKey")
+                        .HasColumnType("char(64)")
+                        .IsFixedLength();
+
+                    b.Property<string>("LimitsJson")
+                        .IsRequired()
+                        .HasColumnType("jsonb");
+
+                    b.Property<string>("ModelKey")
+                        .HasColumnType("char(64)")
+                        .IsFixedLength();
+
+                    b.Property<string>("PolicyDigest")
+                        .IsRequired()
+                        .HasColumnType("char(64)")
+                        .IsFixedLength();
+
+                    b.Property<string>("PolicyKey")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("ReferenceSnapshotId")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.Property<string>("SchemaName")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("SecurityValidityJson")
+                        .IsRequired()
+                        .HasColumnType("jsonb");
+
+                    b.Property<string>("StageMatrixJson")
+                        .IsRequired()
+                        .HasColumnType("jsonb");
+
+                    b.Property<string>("ToolIdentitiesJson")
+                        .IsRequired()
+                        .HasColumnType("jsonb");
+
+                    b.Property<DateTimeOffset?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("VerifierMode")
+                        .IsRequired()
+                        .HasMaxLength(48)
+                        .HasColumnType("character varying(48)");
+
+                    b.Property<string>("VerifierReason")
+                        .IsRequired()
+                        .HasMaxLength(512)
+                        .HasColumnType("character varying(512)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("PolicyKey", "PolicyDigest")
+                        .IsUnique()
+                        .HasDatabaseName("UIX_code_analysis_policy_versions_identity");
+
+                    b.ToTable("code_analysis_policy_versions", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_code_analysis_policy_versions_digest", "\"PolicyDigest\" ~ '^[0-9a-f]{64}$'");
+
+                            t.HasCheckConstraint("CK_code_analysis_policy_versions_limits", "jsonb_typeof(\"LimitsJson\") = 'object'");
+
+                            t.HasCheckConstraint("CK_code_analysis_policy_versions_security_validity", "jsonb_typeof(\"SecurityValidityJson\") = 'object'");
+
+                            t.HasCheckConstraint("CK_code_analysis_policy_versions_stage_matrix", "jsonb_typeof(\"StageMatrixJson\") = 'object'");
+
+                            t.HasCheckConstraint("CK_code_analysis_policy_versions_tool_identities", "jsonb_typeof(\"ToolIdentitiesJson\") = 'object'");
+                        });
+                });
+
+            modelBuilder.Entity("AssetBlock.Domain.Core.Entities.CodeAnalysisReportAdmission", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("AdmissionKind")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<DateTimeOffset>("AdmittedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("AdmittedBy")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<bool>("CanAuthorizePublication")
+                        .HasColumnType("boolean");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("InputDigest")
+                        .IsRequired()
+                        .HasColumnType("char(64)")
+                        .IsFixedLength();
+
+                    b.Property<string>("PublicationAuthorityReason")
+                        .IsRequired()
+                        .HasMaxLength(512)
+                        .HasColumnType("character varying(512)");
+
+                    b.Property<string>("PythonReportId")
+                        .IsRequired()
+                        .HasColumnType("char(64)")
+                        .IsFixedLength();
+
+                    b.Property<string>("ReportDigest")
+                        .IsRequired()
+                        .HasColumnType("char(64)")
+                        .IsFixedLength();
+
+                    b.Property<Guid>("ReportId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("ReservationGeneration")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("ReservationLeaseTokenDigest")
+                        .IsRequired()
+                        .HasColumnType("char(64)")
+                        .IsFixedLength();
+
+                    b.Property<int>("ReservationSlotNumber")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("ServiceKey")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.Property<DateTimeOffset?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ReportId")
+                        .IsUnique()
+                        .HasDatabaseName("UIX_code_analysis_report_admissions_report");
+
+                    b.ToTable("code_analysis_report_admissions", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_code_analysis_report_admissions_authority_reason", "\"PublicationAuthorityReason\" IS NOT NULL AND length(\"PublicationAuthorityReason\") > 0");
+
+                            t.HasCheckConstraint("CK_code_analysis_report_admissions_generation", "\"ReservationGeneration\" > 0");
+
+                            t.HasCheckConstraint("CK_code_analysis_report_admissions_input_digest", "\"InputDigest\" ~ '^[0-9a-f]{64}$'");
+
+                            t.HasCheckConstraint("CK_code_analysis_report_admissions_kind", "\"AdmissionKind\" = 'SERVER_VALIDATED'");
+
+                            t.HasCheckConstraint("CK_code_analysis_report_admissions_lease_token_digest", "\"ReservationLeaseTokenDigest\" ~ '^[0-9a-f]{64}$'");
+
+                            t.HasCheckConstraint("CK_code_analysis_report_admissions_python_report_id", "\"PythonReportId\" ~ '^[0-9a-f]{64}$'");
+
+                            t.HasCheckConstraint("CK_code_analysis_report_admissions_report_digest", "\"ReportDigest\" ~ '^[0-9a-f]{64}$'");
+
+                            t.HasCheckConstraint("CK_code_analysis_report_admissions_service_key", "\"ServiceKey\" ~ '^[A-Za-z0-9][A-Za-z0-9_.\\-]{0,127}$'");
+
+                            t.HasCheckConstraint("CK_code_analysis_report_admissions_slot_number", "\"ReservationSlotNumber\" >= 0");
+                        });
+                });
+
+            modelBuilder.Entity("AssetBlock.Domain.Core.Entities.CodeAnalysisReportFinding", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("FindingKey")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.Property<string>("FindingType")
+                        .IsRequired()
+                        .HasMaxLength(48)
+                        .HasColumnType("character varying(48)");
+
+                    b.Property<string>("ForeignSensitivity")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<string>("ForeignSourceId")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.Property<int?>("OwnEndByte")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("OwnEndLine")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("OwnScopePath")
+                        .IsRequired()
+                        .HasMaxLength(1024)
+                        .HasColumnType("character varying(1024)");
+
+                    b.Property<int?>("OwnStartByte")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("OwnStartLine")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("PublicAttributionJson")
+                        .HasColumnType("jsonb");
+
+                    b.Property<string>("ReasonText")
+                        .IsRequired()
+                        .HasMaxLength(1024)
+                        .HasColumnType("character varying(1024)");
+
+                    b.Property<Guid>("ReportId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("RequestedAction")
+                        .IsRequired()
+                        .HasMaxLength(512)
+                        .HasColumnType("character varying(512)");
+
+                    b.Property<int?>("SemanticRank")
+                        .HasColumnType("integer");
+
+                    b.Property<double?>("SemanticScore")
+                        .HasColumnType("double precision");
+
+                    b.Property<int?>("TokenRank")
+                        .HasColumnType("integer");
+
+                    b.Property<double?>("TokenScore")
+                        .HasColumnType("double precision");
+
+                    b.Property<DateTimeOffset?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ReportId", "FindingKey")
+                        .IsUnique()
+                        .HasDatabaseName("UIX_code_analysis_report_findings_report_key");
+
+                    b.ToTable("code_analysis_report_findings", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_code_analysis_report_findings_attribution", "\"ForeignSensitivity\" <> 'PRIVATE' OR \"PublicAttributionJson\" IS NULL");
+
+                            t.HasCheckConstraint("CK_code_analysis_report_findings_attribution_json", "\"PublicAttributionJson\" IS NULL OR jsonb_typeof(\"PublicAttributionJson\") = 'object'");
+
+                            t.HasCheckConstraint("CK_code_analysis_report_findings_key", "\"FindingKey\" ~ '^[A-Za-z0-9][A-Za-z0-9_.\\-]{0,127}$'");
+
+                            t.HasCheckConstraint("CK_code_analysis_report_findings_lines", "(\"OwnStartLine\" IS NULL AND \"OwnEndLine\" IS NULL) OR (\"OwnStartLine\" IS NOT NULL AND \"OwnEndLine\" IS NOT NULL AND \"OwnStartLine\" > 0 AND \"OwnEndLine\" >= \"OwnStartLine\")");
+
+                            t.HasCheckConstraint("CK_code_analysis_report_findings_scores", "\"TokenScore\" IS NULL OR \"TokenScore\" <> 'NaN'::double precision");
+
+                            t.HasCheckConstraint("CK_code_analysis_report_findings_scores_semantic", "\"SemanticScore\" IS NULL OR \"SemanticScore\" <> 'NaN'::double precision");
+
+                            t.HasCheckConstraint("CK_code_analysis_report_findings_sensitivity", "\"ForeignSensitivity\" IN ('PUBLIC', 'PRIVATE')");
+
+                            t.HasCheckConstraint("CK_code_analysis_report_findings_spans", "(\"OwnStartByte\" IS NULL AND \"OwnEndByte\" IS NULL) OR (\"OwnStartByte\" IS NOT NULL AND \"OwnEndByte\" IS NOT NULL AND \"OwnStartByte\" >= 0 AND \"OwnEndByte\" >= \"OwnStartByte\")");
+                        });
+                });
+
             modelBuilder.Entity("AssetBlock.Domain.Core.Entities.CodeAnalysisReportHeader", b =>
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
+
+                    b.Property<Guid?>("AnalysisRunId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int?>("AnalyzedFileCount")
+                        .HasColumnType("integer");
 
                     b.Property<Guid>("AssetId")
                         .HasColumnType("uuid");
@@ -1440,17 +1918,31 @@ namespace AssetBlock.Infrastructure.Migrations
                         .IsRequired()
                         .HasColumnType("char(64)");
 
+                    b.Property<string>("CoverageLevel")
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
                     b.Property<DateTimeOffset>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<string>("Disposition")
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
                     b.Property<DateTimeOffset?>("FinalizedAt")
                         .HasColumnType("timestamp with time zone");
+
+                    b.Property<int?>("FindingCount")
+                        .HasColumnType("integer");
 
                     b.Property<int>("InputRevision")
                         .HasColumnType("integer");
 
                     b.Property<bool>("IsFinalized")
                         .HasColumnType("boolean");
+
+                    b.Property<int?>("OmissionCount")
+                        .HasColumnType("integer");
 
                     b.Property<string>("PolicyVersion")
                         .IsRequired()
@@ -1462,7 +1954,18 @@ namespace AssetBlock.Infrastructure.Migrations
                         .HasMaxLength(32)
                         .HasColumnType("character varying(32)");
 
+                    b.Property<string>("PythonReportId")
+                        .HasColumnType("char(64)")
+                        .IsFixedLength();
+
+                    b.Property<string>("ReportDigest")
+                        .HasColumnType("char(64)")
+                        .IsFixedLength();
+
                     b.Property<int>("ReportSchemaVersion")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("SelectionGeneration")
                         .HasColumnType("integer");
 
                     b.Property<DateTimeOffset?>("UpdatedAt")
@@ -1470,12 +1973,374 @@ namespace AssetBlock.Infrastructure.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("AssetId", "AssetVersionId", "ContentSha256", "PolicyVersion", "InputRevision")
-                        .IsUnique();
+                    b.HasIndex("AnalysisRunId")
+                        .IsUnique()
+                        .HasDatabaseName("UIX_code_analysis_report_headers_finalized_run")
+                        .HasFilter("\"AnalysisRunId\" IS NOT NULL AND \"IsFinalized\"");
+
+                    b.HasIndex("PythonReportId")
+                        .IsUnique()
+                        .HasDatabaseName("UIX_code_analysis_report_headers_python_report_id")
+                        .HasFilter("\"PythonReportId\" IS NOT NULL");
+
+                    b.HasIndex("AssetId", "AssetVersionId")
+                        .HasDatabaseName("IX_code_analysis_report_headers_version");
 
                     b.ToTable("code_analysis_report_headers", null, t =>
                         {
+                            t.HasCheckConstraint("CK_code_analysis_report_headers_counts", "(\"AnalyzedFileCount\" IS NULL OR \"AnalyzedFileCount\" >= 0) AND (\"OmissionCount\" IS NULL OR \"OmissionCount\" >= 0) AND (\"FindingCount\" IS NULL OR \"FindingCount\" >= 0)");
+
+                            t.HasCheckConstraint("CK_code_analysis_report_headers_coverage", "\"CoverageLevel\" IS NULL OR \"CoverageLevel\" IN ('FULL', 'PARTIAL', 'UNSUPPORTED')");
+
+                            t.HasCheckConstraint("CK_code_analysis_report_headers_disposition", "\"Disposition\" IS NULL OR \"Disposition\" IN ('SELECTED', 'HISTORICAL_SUPERSEDED', 'HISTORICAL_STALE_INPUT', 'HISTORICAL_INCOMPLETE')");
+
+                            t.HasCheckConstraint("CK_code_analysis_report_headers_python_report_id", "\"PythonReportId\" IS NULL OR \"PythonReportId\" ~ '^[0-9a-f]{64}$'");
+
+                            t.HasCheckConstraint("CK_code_analysis_report_headers_report_digest", "\"ReportDigest\" IS NULL OR \"ReportDigest\" ~ '^[0-9a-f]{64}$'");
+
+                            t.HasCheckConstraint("CK_code_analysis_report_headers_selection_generation", "\"SelectionGeneration\" IS NULL OR \"SelectionGeneration\" > 0");
+
                             t.HasCheckConstraint("CK_code_analysis_report_headers_sha", "length(\"ContentSha256\") = 64");
+                        });
+                });
+
+            modelBuilder.Entity("AssetBlock.Domain.Core.Entities.CodeAnalysisReportStage", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Applicability")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<string>("CountsJson")
+                        .IsRequired()
+                        .HasColumnType("jsonb");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("DurationMilliseconds")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("ErrorCode")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("InputSha256")
+                        .HasColumnType("char(64)")
+                        .IsFixedLength();
+
+                    b.Property<string>("Outcome")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<string>("OutputSha256")
+                        .HasColumnType("char(64)")
+                        .IsFixedLength();
+
+                    b.Property<Guid>("ReportId")
+                        .HasColumnType("uuid");
+
+                    b.Property<bool>("Retryable")
+                        .HasColumnType("boolean");
+
+                    b.Property<Guid?>("ReuseParentRunId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("ReuseParentStageId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Stage")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<string>("ToolIdentityJson")
+                        .IsRequired()
+                        .HasColumnType("jsonb");
+
+                    b.Property<DateTimeOffset?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ReuseParentRunId");
+
+                    b.HasIndex("ReuseParentStageId");
+
+                    b.HasIndex("ReportId", "Stage")
+                        .IsUnique()
+                        .HasDatabaseName("UIX_code_analysis_report_stages_report_stage");
+
+                    b.ToTable("code_analysis_report_stages", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_code_analysis_report_stages_applicability", "\"Applicability\" IN ('MANDATORY', 'OPTIONAL')");
+
+                            t.HasCheckConstraint("CK_code_analysis_report_stages_counts", "jsonb_typeof(\"CountsJson\") = 'object'");
+
+                            t.HasCheckConstraint("CK_code_analysis_report_stages_duration", "\"DurationMilliseconds\" >= 0");
+
+                            t.HasCheckConstraint("CK_code_analysis_report_stages_input_sha", "\"InputSha256\" IS NULL OR \"InputSha256\" ~ '^[0-9a-f]{64}$'");
+
+                            t.HasCheckConstraint("CK_code_analysis_report_stages_outcome", "\"Outcome\" IN ('SUCCEEDED', 'FAILED')");
+
+                            t.HasCheckConstraint("CK_code_analysis_report_stages_output_sha", "\"OutputSha256\" IS NULL OR \"OutputSha256\" ~ '^[0-9a-f]{64}$'");
+
+                            t.HasCheckConstraint("CK_code_analysis_report_stages_stage", "\"Stage\" ~ '^[A-Z][A-Z0-9_]{0,31}$'");
+
+                            t.HasCheckConstraint("CK_code_analysis_report_stages_tool_identity", "jsonb_typeof(\"ToolIdentityJson\") = 'object'");
+                        });
+                });
+
+            modelBuilder.Entity("AssetBlock.Domain.Core.Entities.CodeAnalysisReuseArtifact", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ArtifactDigest")
+                        .IsRequired()
+                        .HasColumnType("char(64)")
+                        .IsFixedLength();
+
+                    b.Property<string>("ArtifactJson")
+                        .IsRequired()
+                        .HasColumnType("jsonb");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("PayloadBytes")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid>("SourceReportId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("SourceRunId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("SourceStageId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Stage")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<DateTimeOffset?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("SourceReportId");
+
+                    b.HasIndex("SourceStageId");
+
+                    b.HasIndex("SourceRunId", "Stage")
+                        .IsUnique()
+                        .HasDatabaseName("UIX_code_analysis_reuse_artifacts_run_stage");
+
+                    b.HasIndex("Stage", "ArtifactDigest")
+                        .HasDatabaseName("IX_code_analysis_reuse_artifacts_digest");
+
+                    b.ToTable("code_analysis_reuse_artifacts", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_code_analysis_reuse_artifacts_digest", "\"ArtifactDigest\" ~ '^[0-9a-f]{64}$'");
+
+                            t.HasCheckConstraint("CK_code_analysis_reuse_artifacts_payload", "jsonb_typeof(\"ArtifactJson\") = 'object'");
+
+                            t.HasCheckConstraint("CK_code_analysis_reuse_artifacts_size", "\"PayloadBytes\" > 0 AND octet_length(CAST(\"ArtifactJson\" AS text)) <= 262144");
+
+                            t.HasCheckConstraint("CK_code_analysis_reuse_artifacts_stage", "\"Stage\" ~ '^[A-Z][A-Z0-9_]{0,31}$'");
+                        });
+                });
+
+            modelBuilder.Entity("AssetBlock.Domain.Core.Entities.CodeAnalysisRun", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("ArchiveEvidenceId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("AssetDraftWorkspaceId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("AssetId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("AssetVersionId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset?>("CompletedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("ContentSha256")
+                        .IsRequired()
+                        .HasColumnType("char(64)")
+                        .IsFixedLength();
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("DeclarationDigest")
+                        .IsRequired()
+                        .HasColumnType("char(64)")
+                        .IsFixedLength();
+
+                    b.Property<Guid?>("DeclarationRevisionId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Disposition")
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<string>("ErrorCode")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("ErrorSummary")
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)");
+
+                    b.Property<DateTimeOffset?>("HardDeadlineUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("InputDigest")
+                        .IsRequired()
+                        .HasColumnType("char(64)")
+                        .IsFixedLength();
+
+                    b.Property<Guid?>("JobId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("MalwareEvidenceId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("MaterialDigest")
+                        .IsRequired()
+                        .HasColumnType("char(64)")
+                        .IsFixedLength();
+
+                    b.Property<Guid?>("MaterialRevisionId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("ParentRunId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("PolicyDigest")
+                        .IsRequired()
+                        .HasColumnType("char(64)")
+                        .IsFixedLength();
+
+                    b.Property<Guid>("PolicyVersionId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int?>("ReservationGeneration")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("SecurityGeneration")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid?>("SecurityRecheckId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("SelectionGeneration")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("ServiceKey")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.Property<DateTimeOffset?>("StartedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("State")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<string>("TransportLeaseToken")
+                        .HasColumnType("char(64)")
+                        .IsFixedLength();
+
+                    b.Property<DateTimeOffset?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ArchiveEvidenceId");
+
+                    b.HasIndex("AssetDraftWorkspaceId");
+
+                    b.HasIndex("DeclarationRevisionId");
+
+                    b.HasIndex("InputDigest")
+                        .IsUnique()
+                        .HasDatabaseName("UIX_code_analysis_runs_input_digest");
+
+                    b.HasIndex("JobId")
+                        .IsUnique()
+                        .HasDatabaseName("UIX_code_analysis_runs_job")
+                        .HasFilter("\"JobId\" IS NOT NULL");
+
+                    b.HasIndex("MalwareEvidenceId");
+
+                    b.HasIndex("MaterialRevisionId");
+
+                    b.HasIndex("ParentRunId");
+
+                    b.HasIndex("PolicyVersionId");
+
+                    b.HasIndex("SecurityRecheckId");
+
+                    b.HasIndex("AssetVersionId", "SelectionGeneration")
+                        .IsUnique()
+                        .HasDatabaseName("UIX_code_analysis_runs_active_generation")
+                        .HasFilter("\"State\" IN ('QUEUED', 'RUNNING')");
+
+                    b.HasIndex("AssetId", "AssetVersionId", "Id")
+                        .IsUnique()
+                        .HasDatabaseName("UIX_code_analysis_runs_scope");
+
+                    b.HasIndex("AssetId", "AssetVersionId", "ContentSha256", "PolicyDigest", "DeclarationDigest", "MaterialDigest", "SelectionGeneration", "SecurityGeneration", "ArchiveEvidenceId", "MalwareEvidenceId")
+                        .IsUnique()
+                        .HasDatabaseName("UIX_code_analysis_runs_active_input")
+                        .HasFilter("\"State\" IN ('QUEUED', 'RUNNING')");
+
+                    b.ToTable("code_analysis_runs", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_code_analysis_runs_content_sha", "\"ContentSha256\" ~ '^[0-9a-f]{64}$'");
+
+                            t.HasCheckConstraint("CK_code_analysis_runs_declaration_digest", "\"DeclarationDigest\" ~ '^[0-9a-f]{64}$'");
+
+                            t.HasCheckConstraint("CK_code_analysis_runs_disposition", "\"Disposition\" IS NULL OR \"Disposition\" IN ('SELECTED', 'HISTORICAL_SUPERSEDED', 'HISTORICAL_STALE_INPUT', 'HISTORICAL_INCOMPLETE')");
+
+                            t.HasCheckConstraint("CK_code_analysis_runs_input_digest", "\"InputDigest\" ~ '^[0-9a-f]{64}$'");
+
+                            t.HasCheckConstraint("CK_code_analysis_runs_material_digest", "\"MaterialDigest\" ~ '^[0-9a-f]{64}$'");
+
+                            t.HasCheckConstraint("CK_code_analysis_runs_policy_digest", "\"PolicyDigest\" ~ '^[0-9a-f]{64}$'");
+
+                            t.HasCheckConstraint("CK_code_analysis_runs_reservation", "((\"TransportLeaseToken\" IS NULL AND \"ReservationGeneration\" IS NULL AND \"HardDeadlineUtc\" IS NULL) OR (\"TransportLeaseToken\" IS NOT NULL AND \"ReservationGeneration\" IS NOT NULL AND \"HardDeadlineUtc\" IS NOT NULL))");
+
+                            t.HasCheckConstraint("CK_code_analysis_runs_security_generation", "\"SecurityGeneration\" > 0");
+
+                            t.HasCheckConstraint("CK_code_analysis_runs_selection_generation", "\"SelectionGeneration\" > 0");
+
+                            t.HasCheckConstraint("CK_code_analysis_runs_service_key", "\"ServiceKey\" ~ '^[A-Za-z0-9][A-Za-z0-9_.\\-]{0,127}$'");
+
+                            t.HasCheckConstraint("CK_code_analysis_runs_state", "\"State\" IN ('QUEUED', 'RUNNING', 'COMPLETED', 'FAILED', 'CANCELLED')");
+
+                            t.HasCheckConstraint("CK_code_analysis_runs_terminal_completed_at", "(\"State\" IN ('COMPLETED', 'FAILED', 'CANCELLED') AND \"CompletedAt\" IS NOT NULL) OR (\"State\" NOT IN ('COMPLETED', 'FAILED', 'CANCELLED') AND \"CompletedAt\" IS NULL)");
+
+                            t.HasCheckConstraint("CK_code_analysis_runs_transport_lease_token", "\"TransportLeaseToken\" IS NULL OR \"TransportLeaseToken\" ~ '^[0-9a-f]{64}$'");
                         });
                 });
 
@@ -2571,6 +3436,252 @@ namespace AssetBlock.Infrastructure.Migrations
                     b.ToTable("reviews", (string)null);
                 });
 
+            modelBuilder.Entity("AssetBlock.Domain.Core.Entities.SecurityEvidenceRecord", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("AssetId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("AssetVersionId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("CompletedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("ContentSha256")
+                        .IsRequired()
+                        .HasColumnType("char(64)")
+                        .IsFixedLength();
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("DefinitionVersion")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("EngineIdentity")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.Property<string>("EngineVersion")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("EvidenceDigest")
+                        .IsRequired()
+                        .HasColumnType("char(64)")
+                        .IsFixedLength();
+
+                    b.Property<string>("EvidenceKind")
+                        .IsRequired()
+                        .HasMaxLength(24)
+                        .HasColumnType("character varying(24)");
+
+                    b.Property<int>("Generation")
+                        .HasColumnType("integer");
+
+                    b.Property<bool>("IdentityAvailable")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("ImplementationIdentity")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.Property<Guid?>("JobId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Outcome")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<long>("ScannedByteCount")
+                        .HasColumnType("bigint");
+
+                    b.Property<int?>("ScannedEntryCount")
+                        .HasColumnType("integer");
+
+                    b.Property<bool>("ScopeComplete")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("SecurityPolicyVersion")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<Guid?>("SecurityRecheckId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("SignatureIdentity")
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)");
+
+                    b.Property<DateTimeOffset?>("SignatureObservedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTimeOffset?>("SignatureValidUntil")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("EvidenceDigest")
+                        .IsUnique()
+                        .HasDatabaseName("UIX_security_evidence_records_digest");
+
+                    b.HasIndex("JobId");
+
+                    b.HasIndex("AssetVersionId", "EvidenceKind")
+                        .IsUnique()
+                        .HasDatabaseName("UIX_security_evidence_records_upload_kind")
+                        .HasFilter("\"SecurityRecheckId\" IS NULL");
+
+                    b.HasIndex("SecurityRecheckId", "EvidenceKind")
+                        .IsUnique()
+                        .HasDatabaseName("UIX_security_evidence_records_recheck_kind")
+                        .HasFilter("\"SecurityRecheckId\" IS NOT NULL");
+
+                    b.ToTable("security_evidence_records", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_security_evidence_records_content_sha", "\"ContentSha256\" ~ '^[0-9a-f]{64}$'");
+
+                            t.HasCheckConstraint("CK_security_evidence_records_digest", "\"EvidenceDigest\" ~ '^[0-9a-f]{64}$'");
+
+                            t.HasCheckConstraint("CK_security_evidence_records_generation", "\"Generation\" > 0");
+
+                            t.HasCheckConstraint("CK_security_evidence_records_identity", "(\"EvidenceKind\" = 'ARCHIVE_VALIDATION' AND \"ImplementationIdentity\" IS NOT NULL AND \"EngineIdentity\" IS NULL) OR (\"EvidenceKind\" = 'MALWARE_SCAN' AND \"ImplementationIdentity\" IS NULL AND ((\"IdentityAvailable\" AND \"EngineIdentity\" IS NOT NULL) OR (NOT \"IdentityAvailable\" AND \"EngineIdentity\" IS NULL)))");
+
+                            t.HasCheckConstraint("CK_security_evidence_records_kind", "\"EvidenceKind\" IN ('ARCHIVE_VALIDATION', 'MALWARE_SCAN')");
+
+                            t.HasCheckConstraint("CK_security_evidence_records_outcome", "\"Outcome\" IN ('VALID', 'CLEAN', 'UNSAFE', 'INFECTED', 'ERROR')");
+
+                            t.HasCheckConstraint("CK_security_evidence_records_scanned_bytes", "\"ScannedByteCount\" >= 0");
+
+                            t.HasCheckConstraint("CK_security_evidence_records_signature_scope", "(\"IdentityAvailable\" AND \"SignatureObservedAt\" IS NOT NULL AND \"SignatureValidUntil\" IS NOT NULL) OR (NOT \"IdentityAvailable\" AND \"SignatureObservedAt\" IS NULL AND \"SignatureValidUntil\" IS NULL)");
+                        });
+                });
+
+            modelBuilder.Entity("AssetBlock.Domain.Core.Entities.SecurityRecheck", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("ArchiveEvidenceId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("AssetId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("AssetVersionId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset?>("CompletedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int?>("CompletedGeneration")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("ContentSha256")
+                        .IsRequired()
+                        .HasColumnType("char(64)")
+                        .IsFixedLength();
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("DefinitionVersion")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("ErrorCode")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("ErrorSummary")
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)");
+
+                    b.Property<Guid?>("MalwareEvidenceId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("OperationDigest")
+                        .IsRequired()
+                        .HasColumnType("char(64)")
+                        .IsFixedLength();
+
+                    b.Property<Guid>("OperationReceiptId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("ParentRecheckId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset?>("RequestedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("SecurityGeneration")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("SecurityPolicyVersion")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<int?>("SelectedGeneration")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("State")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<DateTimeOffset?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ArchiveEvidenceId");
+
+                    b.HasIndex("AssetVersionId")
+                        .IsUnique()
+                        .HasDatabaseName("UIX_security_rechecks_selected")
+                        .HasFilter("\"SelectedGeneration\" IS NOT NULL");
+
+                    b.HasIndex("MalwareEvidenceId");
+
+                    b.HasIndex("ParentRecheckId");
+
+                    b.HasIndex("AssetVersionId", "OperationReceiptId")
+                        .IsUnique()
+                        .HasDatabaseName("UIX_security_rechecks_operation_receipt");
+
+                    b.HasIndex("AssetVersionId", "SecurityGeneration")
+                        .IsUnique()
+                        .HasDatabaseName("UIX_security_rechecks_generation");
+
+                    b.HasIndex("AssetId", "AssetVersionId", "Id")
+                        .IsUnique()
+                        .HasDatabaseName("UIX_security_rechecks_scope");
+
+                    b.ToTable("security_rechecks", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_security_rechecks_content_sha", "\"ContentSha256\" ~ '^[0-9a-f]{64}$'");
+
+                            t.HasCheckConstraint("CK_security_rechecks_definition_version", "\"DefinitionVersion\" > 0");
+
+                            t.HasCheckConstraint("CK_security_rechecks_generation", "\"SecurityGeneration\" > 0");
+
+                            t.HasCheckConstraint("CK_security_rechecks_operation_digest", "\"OperationDigest\" ~ '^[0-9a-f]{64}$'");
+
+                            t.HasCheckConstraint("CK_security_rechecks_selected_generation", "\"SelectedGeneration\" IS NULL OR \"SelectedGeneration\" = \"SecurityGeneration\"");
+
+                            t.HasCheckConstraint("CK_security_rechecks_state", "\"State\" IN ('QUEUED', 'INSPECTING', 'SCANNING', 'SUCCEEDED', 'UNSAFE', 'INFECTED', 'ERROR', 'CANCELLED')");
+
+                            t.HasCheckConstraint("CK_security_rechecks_terminal_completed_at", "(\"State\" IN ('SUCCEEDED', 'UNSAFE', 'INFECTED', 'ERROR', 'CANCELLED') AND \"CompletedAt\" IS NOT NULL) OR (\"State\" NOT IN ('SUCCEEDED', 'UNSAFE', 'INFECTED', 'ERROR', 'CANCELLED') AND \"CompletedAt\" IS NULL)");
+                        });
+                });
+
             modelBuilder.Entity("AssetBlock.Domain.Core.Entities.SellerAnalyticsDaily", b =>
                 {
                     b.Property<Guid>("SellerId")
@@ -3062,6 +4173,19 @@ namespace AssetBlock.Infrastructure.Migrations
                         });
                 });
 
+            modelBuilder.Entity("AssetBlock.Domain.Core.Entities.AnalysisCapacitySlot", b =>
+                {
+                    b.HasOne("AssetBlock.Domain.Core.Entities.AssetProcessingJob", null)
+                        .WithMany()
+                        .HasForeignKey("ReservedJobId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("AssetBlock.Domain.Core.Entities.CodeAnalysisRun", null)
+                        .WithMany()
+                        .HasForeignKey("ReservedRunId")
+                        .OnDelete(DeleteBehavior.Restrict);
+                });
+
             modelBuilder.Entity("AssetBlock.Domain.Core.Entities.Asset", b =>
                 {
                     b.HasOne("AssetBlock.Domain.Core.Entities.User", "Author")
@@ -3173,6 +4297,18 @@ namespace AssetBlock.Infrastructure.Migrations
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
+                    b.HasOne("AssetBlock.Domain.Core.Entities.CodeAnalysisRun", null)
+                        .WithMany()
+                        .HasForeignKey("AssetId", "AssetVersionId", "AnalysisRunId")
+                        .HasPrincipalKey("AssetId", "AssetVersionId", "Id")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("AssetBlock.Domain.Core.Entities.SecurityRecheck", null)
+                        .WithMany()
+                        .HasForeignKey("AssetId", "AssetVersionId", "SecurityRecheckId")
+                        .HasPrincipalKey("AssetId", "AssetVersionId", "Id")
+                        .OnDelete(DeleteBehavior.Restrict);
+
                     b.Navigation("Asset");
 
                     b.Navigation("AssetVersion");
@@ -3260,6 +4396,11 @@ namespace AssetBlock.Infrastructure.Migrations
                         .HasForeignKey("AssetId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
+
+                    b.HasOne("AssetBlock.Domain.Core.Entities.CodeAnalysisReportHeader", null)
+                        .WithMany()
+                        .HasForeignKey("SelectedCodeAnalysisReportId")
+                        .OnDelete(DeleteBehavior.Restrict);
 
                     b.Navigation("Asset");
                 });
@@ -3406,13 +4547,144 @@ namespace AssetBlock.Infrastructure.Migrations
                     b.Navigation("User");
                 });
 
+            modelBuilder.Entity("AssetBlock.Domain.Core.Entities.CodeAnalysisReportAdmission", b =>
+                {
+                    b.HasOne("AssetBlock.Domain.Core.Entities.CodeAnalysisReportHeader", null)
+                        .WithMany()
+                        .HasForeignKey("ReportId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("AssetBlock.Domain.Core.Entities.CodeAnalysisReportFinding", b =>
+                {
+                    b.HasOne("AssetBlock.Domain.Core.Entities.CodeAnalysisReportHeader", null)
+                        .WithMany()
+                        .HasForeignKey("ReportId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
             modelBuilder.Entity("AssetBlock.Domain.Core.Entities.CodeAnalysisReportHeader", b =>
                 {
+                    b.HasOne("AssetBlock.Domain.Core.Entities.CodeAnalysisRun", null)
+                        .WithMany()
+                        .HasForeignKey("AnalysisRunId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
                     b.HasOne("AssetBlock.Domain.Core.Entities.Asset", "Asset")
                         .WithMany()
                         .HasForeignKey("AssetId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
+
+                    b.HasOne("AssetBlock.Domain.Core.Entities.AssetVersion", "AssetVersion")
+                        .WithMany()
+                        .HasForeignKey("AssetId", "AssetVersionId")
+                        .HasPrincipalKey("AssetId", "Id")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Asset");
+
+                    b.Navigation("AssetVersion");
+                });
+
+            modelBuilder.Entity("AssetBlock.Domain.Core.Entities.CodeAnalysisReportStage", b =>
+                {
+                    b.HasOne("AssetBlock.Domain.Core.Entities.CodeAnalysisReportHeader", null)
+                        .WithMany()
+                        .HasForeignKey("ReportId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("AssetBlock.Domain.Core.Entities.CodeAnalysisRun", null)
+                        .WithMany()
+                        .HasForeignKey("ReuseParentRunId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("AssetBlock.Domain.Core.Entities.CodeAnalysisReportStage", null)
+                        .WithMany()
+                        .HasForeignKey("ReuseParentStageId")
+                        .OnDelete(DeleteBehavior.Restrict);
+                });
+
+            modelBuilder.Entity("AssetBlock.Domain.Core.Entities.CodeAnalysisReuseArtifact", b =>
+                {
+                    b.HasOne("AssetBlock.Domain.Core.Entities.CodeAnalysisReportHeader", null)
+                        .WithMany()
+                        .HasForeignKey("SourceReportId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("AssetBlock.Domain.Core.Entities.CodeAnalysisRun", null)
+                        .WithMany()
+                        .HasForeignKey("SourceRunId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("AssetBlock.Domain.Core.Entities.CodeAnalysisReportStage", null)
+                        .WithMany()
+                        .HasForeignKey("SourceStageId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("AssetBlock.Domain.Core.Entities.CodeAnalysisRun", b =>
+                {
+                    b.HasOne("AssetBlock.Domain.Core.Entities.SecurityEvidenceRecord", null)
+                        .WithMany()
+                        .HasForeignKey("ArchiveEvidenceId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("AssetBlock.Domain.Core.Entities.AssetDraftWorkspace", null)
+                        .WithMany()
+                        .HasForeignKey("AssetDraftWorkspaceId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("AssetBlock.Domain.Core.Entities.Asset", "Asset")
+                        .WithMany()
+                        .HasForeignKey("AssetId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("AssetBlock.Domain.Core.Entities.AssetSourceDeclarationRevision", null)
+                        .WithMany()
+                        .HasForeignKey("DeclarationRevisionId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("AssetBlock.Domain.Core.Entities.AssetProcessingJob", null)
+                        .WithMany()
+                        .HasForeignKey("JobId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("AssetBlock.Domain.Core.Entities.SecurityEvidenceRecord", null)
+                        .WithMany()
+                        .HasForeignKey("MalwareEvidenceId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("AssetBlock.Domain.Core.Entities.AssetMaterialMetadataRevision", null)
+                        .WithMany()
+                        .HasForeignKey("MaterialRevisionId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("AssetBlock.Domain.Core.Entities.CodeAnalysisRun", null)
+                        .WithMany()
+                        .HasForeignKey("ParentRunId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("AssetBlock.Domain.Core.Entities.CodeAnalysisPolicyVersion", null)
+                        .WithMany()
+                        .HasForeignKey("PolicyVersionId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("AssetBlock.Domain.Core.Entities.SecurityRecheck", null)
+                        .WithMany()
+                        .HasForeignKey("SecurityRecheckId")
+                        .OnDelete(DeleteBehavior.Restrict);
 
                     b.HasOne("AssetBlock.Domain.Core.Entities.AssetVersion", "AssetVersion")
                         .WithMany()
@@ -3755,6 +5027,54 @@ namespace AssetBlock.Infrastructure.Migrations
                     b.Navigation("Asset");
 
                     b.Navigation("User");
+                });
+
+            modelBuilder.Entity("AssetBlock.Domain.Core.Entities.SecurityEvidenceRecord", b =>
+                {
+                    b.HasOne("AssetBlock.Domain.Core.Entities.AssetProcessingJob", null)
+                        .WithMany()
+                        .HasForeignKey("JobId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("AssetBlock.Domain.Core.Entities.SecurityRecheck", null)
+                        .WithMany()
+                        .HasForeignKey("SecurityRecheckId")
+                        .OnDelete(DeleteBehavior.Restrict);
+                });
+
+            modelBuilder.Entity("AssetBlock.Domain.Core.Entities.SecurityRecheck", b =>
+                {
+                    b.HasOne("AssetBlock.Domain.Core.Entities.SecurityEvidenceRecord", null)
+                        .WithMany()
+                        .HasForeignKey("ArchiveEvidenceId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("AssetBlock.Domain.Core.Entities.Asset", "Asset")
+                        .WithMany()
+                        .HasForeignKey("AssetId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("AssetBlock.Domain.Core.Entities.SecurityEvidenceRecord", null)
+                        .WithMany()
+                        .HasForeignKey("MalwareEvidenceId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("AssetBlock.Domain.Core.Entities.SecurityRecheck", null)
+                        .WithMany()
+                        .HasForeignKey("ParentRecheckId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("AssetBlock.Domain.Core.Entities.AssetVersion", "AssetVersion")
+                        .WithMany()
+                        .HasForeignKey("AssetId", "AssetVersionId")
+                        .HasPrincipalKey("AssetId", "Id")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Asset");
+
+                    b.Navigation("AssetVersion");
                 });
 
             modelBuilder.Entity("AssetBlock.Domain.Core.Entities.UserNotification", b =>

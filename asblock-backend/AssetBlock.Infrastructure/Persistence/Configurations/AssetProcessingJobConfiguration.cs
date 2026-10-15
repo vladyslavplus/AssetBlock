@@ -14,12 +14,26 @@ internal sealed class AssetProcessingJobConfiguration : IEntityTypeConfiguration
             table.HasCheckConstraint("CK_asset_processing_jobs_attempt_count", "\"AttemptCount\" >= 0 AND \"AttemptCount\" <= \"MaxAttempts\"");
             table.HasCheckConstraint("CK_asset_processing_jobs_max_attempts", "\"MaxAttempts\" > 0 AND \"MaxAttempts\" <= 10");
             table.HasCheckConstraint("CK_asset_processing_jobs_definition_version", "\"DefinitionVersion\" > 0");
-            table.HasCheckConstraint("CK_asset_processing_jobs_type", "\"Type\" IN ('ARCHIVE_INSPECTION', 'MALWARE_SCAN', 'LISTING_COPILOT', 'EMBEDDING_GENERATION')");
+            table.HasCheckConstraint("CK_asset_processing_jobs_type", "\"Type\" IN ('ARCHIVE_INSPECTION', 'MALWARE_SCAN', 'LISTING_COPILOT', 'EMBEDDING_GENERATION', 'CODE_ANALYSIS')");
             table.HasCheckConstraint("CK_asset_processing_jobs_status", "\"Status\" IN ('QUEUED', 'RUNNING', 'RETRY_SCHEDULED', 'SUCCEEDED', 'FAILED', 'CANCELLED')");
             table.HasCheckConstraint("CK_asset_processing_jobs_error_code", "\"ErrorCode\" IS NULL OR \"ErrorCode\" ~ '^[A-Z0-9_]{1,64}$'");
             table.HasCheckConstraint(
                 "CK_asset_processing_jobs_embedding_hashes",
                 "(\"Type\" = 'EMBEDDING_GENERATION' AND \"InputHash\" IS NOT NULL AND \"InputHash\" ~ '^[0-9a-f]{64}$' AND \"ModelKey\" IS NOT NULL AND \"ModelKey\" ~ '^[0-9a-f]{64}$') OR (\"Type\" <> 'EMBEDDING_GENERATION' AND \"InputHash\" IS NULL AND \"ModelKey\" IS NULL)");
+
+            // Scope ids are mutually exclusive. Analysis work is always run bound, while a security
+            // job may be unscoped for original upload work or recheck scoped for a new generation.
+            // The leading type allowlist keeps an invalid type rejected by the type constraint.
+            table.HasCheckConstraint(
+                "CK_asset_processing_jobs_scope_exclusivity",
+                "\"Type\" NOT IN ('ARCHIVE_INSPECTION', 'MALWARE_SCAN', 'LISTING_COPILOT', 'EMBEDDING_GENERATION', 'CODE_ANALYSIS') OR " +
+                "((\"Type\" = 'CODE_ANALYSIS' AND \"AnalysisRunId\" IS NOT NULL AND \"SecurityRecheckId\" IS NULL) OR " +
+                "(\"Type\" IN ('ARCHIVE_INSPECTION', 'MALWARE_SCAN') AND \"AnalysisRunId\" IS NULL) OR " +
+                "(\"Type\" IN ('LISTING_COPILOT', 'EMBEDDING_GENERATION') AND \"AnalysisRunId\" IS NULL AND \"SecurityRecheckId\" IS NULL))");
+
+            table.HasCheckConstraint(
+                "CK_asset_processing_jobs_transport_lease_token",
+                "\"TransportLeaseToken\" IS NULL OR \"TransportLeaseToken\" ~ '^[0-9a-f]{64}$'");
 
             // RUNNING requires lease fields; non-RUNNING must not have active lease
             table.HasCheckConstraint("CK_asset_processing_jobs_running_lease",
@@ -85,6 +99,10 @@ internal sealed class AssetProcessingJobConfiguration : IEntityTypeConfiguration
             .HasColumnType("char(64)")
             .IsFixedLength();
 
+        builder.Property(j => j.TransportLeaseToken)
+            .HasColumnType("char(64)")
+            .IsFixedLength();
+
         builder.Property(j => j.CreatedAt).IsRequired();
         builder.Property(j => j.UpdatedAt);
 
@@ -100,11 +118,39 @@ internal sealed class AssetProcessingJobConfiguration : IEntityTypeConfiguration
             .HasPrincipalKey(v => new { v.AssetId, v.Id })
             .OnDelete(DeleteBehavior.Cascade);
 
-        // Idempotency: exact same job cannot be enqueued twice for the same version
+        // Scoped jobs may only reference a run or recheck of the same asset and version.
+        builder.HasOne<CodeAnalysisRun>()
+            .WithMany()
+            .HasForeignKey(j => new { j.AssetId, j.AssetVersionId, j.AnalysisRunId })
+            .HasPrincipalKey(r => new { r.AssetId, r.AssetVersionId, r.Id })
+            .OnDelete(DeleteBehavior.Restrict);
+
+        builder.HasOne<SecurityRecheck>()
+            .WithMany()
+            .HasForeignKey(j => new { j.AssetId, j.AssetVersionId, j.SecurityRecheckId })
+            .HasPrincipalKey(r => new { r.AssetId, r.AssetVersionId, r.Id })
+            .OnDelete(DeleteBehavior.Restrict);
+
+        // Declared explicitly so the composite version foreign key keeps its lookup support even
+        // when the scoped composite foreign keys below change which indexes EF infers.
+        builder.HasIndex(j => new { j.AssetId, j.AssetVersionId })
+            .HasDatabaseName("IX_asset_processing_jobs_AssetId_AssetVersionId");
+
+        // Original upload dedupe stays unscoped only: a recheck must never return prior upload work.
         builder.HasIndex(j => new { j.AssetVersionId, j.Type, j.DefinitionVersion })
             .IsUnique()
-            .HasFilter("\"Type\" <> 'EMBEDDING_GENERATION'")
+            .HasFilter("\"Type\" NOT IN ('EMBEDDING_GENERATION', 'CODE_ANALYSIS') AND \"SecurityRecheckId\" IS NULL AND \"AnalysisRunId\" IS NULL")
             .HasDatabaseName("UIX_asset_processing_jobs_idempotency");
+
+        builder.HasIndex(j => new { j.SecurityRecheckId, j.Type, j.DefinitionVersion })
+            .IsUnique()
+            .HasFilter("\"SecurityRecheckId\" IS NOT NULL")
+            .HasDatabaseName("UIX_asset_processing_jobs_recheck_idempotency");
+
+        builder.HasIndex(j => new { j.AnalysisRunId, j.Type, j.DefinitionVersion })
+            .IsUnique()
+            .HasFilter("\"AnalysisRunId\" IS NOT NULL")
+            .HasDatabaseName("UIX_asset_processing_jobs_run_idempotency");
 
         // Active embedding job unique index
         builder.HasIndex(j => new { j.AssetId, j.Type, j.DefinitionVersion, j.ModelKey, j.InputHash })

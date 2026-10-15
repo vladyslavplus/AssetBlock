@@ -19,6 +19,7 @@ public sealed class AssetProcessingWorker(
     IServiceScopeFactory scopeFactory,
     IAssetProcessingRealtimePublisher realtimePublisher,
     IOptions<AssetProcessingOptions> options,
+    IOptions<CodeAnalysisOptions> analysisOptions,
     TimeProvider timeProvider,
     ILogger<AssetProcessingWorker> logger,
     Func<double>? jitterProvider = null)
@@ -29,9 +30,12 @@ public sealed class AssetProcessingWorker(
     private static readonly TimeSpan _shutdownTimeout = TimeSpan.FromSeconds(30);
 
     private readonly AssetProcessingOptions _options = options.Value;
+    private readonly CodeAnalysisOptions _analysisOptions = analysisOptions.Value;
     private readonly string _workerId = $"worker-{Environment.MachineName}-{Guid.NewGuid():N}";
     private readonly Func<double>? _jitterProvider = jitterProvider;
 
+    private bool _analysisCapacityReady;
+    private DateTimeOffset _analysisReadinessVerifiedAt;
     private readonly ConcurrentDictionary<Guid, Task> _activeTasks = new();
 
     public int ActiveJobsCount => _activeTasks.Count;
@@ -55,10 +59,21 @@ public sealed class AssetProcessingWorker(
         logger.LogInformation("AssetProcessingWorker {WorkerId} started with concurrency {Concurrency}, batch {BatchSize}.",
             _workerId, _options.Concurrency, _options.BatchSize);
 
+        // Analysis readiness is proven on the claim loop below rather than once here, so a policy
+        // manifest published or corrected after startup opens claims without a restart. Occupied
+        // reservations are still reconciled every cycle even while new claims stay closed.
+        _analysisCapacityReady = !_analysisOptions.Enabled;
+        _analysisReadinessVerifiedAt = _analysisCapacityReady ? timeProvider.GetUtcNow() : DateTimeOffset.MinValue;
+
         while (!stoppingToken.IsCancellationRequested)
         {
             try
             {
+                // Readiness is re-evaluated on the claim loop, not only at startup: a policy
+                // manifest published or corrected after this worker started opens claims without a
+                // restart, and a manifest that stops matching closes them again. Recovery of
+                // occupied reservations is unaffected either way.
+                await RefreshAnalysisReadiness(stoppingToken);
                 await RecoverExpiredLeases(stoppingToken);
 
                 // Clean up finished tasks from tracking
@@ -152,11 +167,90 @@ public sealed class AssetProcessingWorker(
         }
     }
 
+    /// <summary>
+    /// Claims from the one existing queue. Ordinary job types come from the general claim, while
+    /// analysis work is claimed only through the shared capacity reservation, so there is exactly one
+    /// permitted claim path per job type.
+    /// </summary>
+    /// <summary>
+    /// Re-proves analysis readiness for the claim path at most once per poll interval. Readiness is
+    /// never cached across a change in the pinned policy or runtime manifest, so publishing the
+    /// approved manifest opens claims without a restart and losing it closes them again. A failed
+    /// evaluation closes claims instead of letting a stale positive authorize work.
+    /// </summary>
+    private async Task RefreshAnalysisReadiness(CancellationToken cancellationToken)
+    {
+        if (!_analysisOptions.Enabled)
+        {
+            _analysisCapacityReady = true;
+            return;
+        }
+
+        DateTimeOffset now = timeProvider.GetUtcNow();
+        if (now - _analysisReadinessVerifiedAt < _options.PollInterval)
+        {
+            return;
+        }
+
+        _analysisReadinessVerifiedAt = now;
+        var previouslyReady = _analysisCapacityReady;
+
+        try
+        {
+            await using AsyncServiceScope scope = scopeFactory.CreateAsyncScope();
+            _analysisCapacityReady = await scope.ServiceProvider
+                .GetRequiredService<IAnalysisReadinessGate>()
+                .EnsureReady(cancellationToken);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            _analysisCapacityReady = false;
+            logger.LogError(ex, "Analysis readiness for service {ServiceKey} is unavailable; analysis claims stay closed.", _analysisOptions.ServiceKey);
+            return;
+        }
+
+        // The gate already logged why it refused; this only records the transition so a recovered
+        // deployment is visible without repeating one line per poll.
+        if (_analysisCapacityReady != previouslyReady)
+        {
+            if (_analysisCapacityReady)
+            {
+                logger.LogInformation("Analysis readiness for service {ServiceKey} is proven; analysis claims are open.", _analysisOptions.ServiceKey);
+            }
+            else
+            {
+                logger.LogError("Analysis readiness for service {ServiceKey} is no longer proven; analysis claims stay closed.", _analysisOptions.ServiceKey);
+            }
+        }
+    }
+
     private async Task<IReadOnlyList<ClaimedAssetProcessingJob>> ClaimBatch(int count, CancellationToken cancellationToken)
     {
         await using AsyncServiceScope scope = scopeFactory.CreateAsyncScope();
         IAssetProcessingJobStore store = scope.ServiceProvider.GetRequiredService<IAssetProcessingJobStore>();
-        return await store.ClaimPendingBatch(count, _options.LeaseDuration, _workerId, cancellationToken);
+        IAnalysisCapacityStore capacityStore = scope.ServiceProvider.GetRequiredService<IAnalysisCapacityStore>();
+
+        List<ClaimedAssetProcessingJob> claimed = new(await store.ClaimPendingBatch(count, _options.LeaseDuration, _workerId, cancellationToken));
+
+        var remaining = count - claimed.Count;
+        if (remaining > 0 && _analysisCapacityReady)
+        {
+            IReadOnlyList<ClaimedAssetProcessingJob> analysis = await capacityStore.ClaimWithCapacity(
+                remaining,
+                _options.LeaseDuration,
+                _analysisOptions.ReservationHardDeadline,
+                _analysisOptions.ReservationCleanupGrace,
+                _workerId,
+                cancellationToken);
+
+            claimed.AddRange(analysis);
+        }
+
+        return claimed;
     }
 
     private async Task RecoverExpiredLeases(CancellationToken cancellationToken)
@@ -166,8 +260,16 @@ public sealed class AssetProcessingWorker(
             await using AsyncServiceScope scope = scopeFactory.CreateAsyncScope();
             IAssetProcessingJobStore store = scope.ServiceProvider.GetRequiredService<IAssetProcessingJobStore>();
             IAssetProcessingLifecycleStore lifecycleStore = scope.ServiceProvider.GetRequiredService<IAssetProcessingLifecycleStore>();
+            IAnalysisCapacityStore capacityStore = scope.ServiceProvider.GetRequiredService<IAnalysisCapacityStore>();
             await store.RecoverExpiredLeases(cancellationToken);
             await lifecycleStore.RecoverExpiredExhaustedSecurityJobs(cancellationToken);
+
+            // Analysis reservations are reconciled by the capacity store, which owns their state machine.
+            // Recovery continues even while new claims stay closed for missing readiness.
+            if (_analysisOptions.Enabled)
+            {
+                await capacityStore.RecoverExpiredReservations(cancellationToken);
+            }
         }
         catch (Exception ex)
         {
@@ -203,11 +305,13 @@ public sealed class AssetProcessingWorker(
         AssetBlockDiagnostics.IncrementActiveJobs(job.Type);
         var stopwatch = Stopwatch.StartNew();
         var finalOutcome = JobOutcomeNames.FAILED;
+        // Set by the handler when the external execution's fate is actually known.
+        AnalysisExecutionDisposition analysisExecutionDisposition = AnalysisExecutionDisposition.UNCONFIRMED;
 
         Activity? activity;
         if (job.TraceParent != null && ActivityContext.TryParse(job.TraceParent, null, out ActivityContext parentContext))
         {
-            ActivityLink[] links = new[] { new ActivityLink(parentContext) };
+            ActivityLink[] links = [new ActivityLink(parentContext)];
             activity = AssetBlockDiagnostics.ActivitySource.StartActivity(
                 $"AssetProcessingJob {job.Type}",
                 ActivityKind.Consumer,
@@ -231,7 +335,7 @@ public sealed class AssetProcessingWorker(
             activity.SetTag("job.attempt", job.AttemptCount);
         }
 
-        using var opTimeoutCts = new CancellationTokenSource(_options.OperationTimeout, timeProvider);
+        using var opTimeoutCts = new CancellationTokenSource(OperationTimeoutFor(job.Type), timeProvider);
         using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(hostStoppingToken, opTimeoutCts.Token);
 
         var transitionSucceeded = false;
@@ -283,8 +387,14 @@ public sealed class AssetProcessingWorker(
                         try
                         {
                             await using AsyncServiceScope renewalScope = scopeFactory.CreateAsyncScope();
-                            IAssetProcessingJobStore store = renewalScope.ServiceProvider.GetRequiredService<IAssetProcessingJobStore>();
-                            var renewed = await store.RenewLease(job.JobId, job.LeaseToken, _options.LeaseDuration, renewalCts.Token);
+                            var renewed = job.Type == AssetProcessingJobType.CODE_ANALYSIS
+                                ? await renewalScope.ServiceProvider
+                                    .GetRequiredService<IAnalysisCapacityStore>()
+                                    .RenewAnalysisLease(job.JobId, job.LeaseToken, _options.LeaseDuration, renewalCts.Token)
+                                : await renewalScope.ServiceProvider
+                                    .GetRequiredService<IAssetProcessingJobStore>()
+                                    .RenewLease(job.JobId, job.LeaseToken, _options.LeaseDuration, renewalCts.Token);
+
                             if (!renewed)
                             {
                                 logger.LogWarning("Failed to renew lease for job {JobId}; lease was lost", job.JobId);
@@ -315,6 +425,22 @@ public sealed class AssetProcessingWorker(
                 try
                 {
                     outcome = await adapter.Execute(job, executionCts.Token);
+
+                    // DB status is never proof of external termination. A bare AtomicCommitted
+                    // outcome therefore remains unfenced unless the handler explicitly reports an
+                    // observed confirmed-terminated execution (see CodeAnalysisJobHandler wrapper).
+                    if (job.Type == AssetProcessingJobType.CODE_ANALYSIS
+                        && outcome is AssetProcessingJobOutcome.ExternalExecution externalOutcome)
+                    {
+                        analysisExecutionDisposition = externalOutcome.Disposition;
+                    }
+
+                    // An external execution system is only released on what the handler observed.
+                    if (outcome is AssetProcessingJobOutcome.ExternalExecution external)
+                    {
+                        analysisExecutionDisposition = external.Disposition;
+                        outcome = external.Inner;
+                    }
                 }
                 finally
                 {
@@ -416,7 +542,7 @@ public sealed class AssetProcessingWorker(
                     return;
                 }
 
-                logger.LogWarning("Job {JobId} of type {Type} timed out after {Timeout}", job.JobId, job.Type, _options.OperationTimeout);
+                logger.LogWarning("Job {JobId} of type {Type} timed out after {Timeout}", job.JobId, job.Type, OperationTimeoutFor(job.Type));
 
                 TimeSpan retryDelay = CalculateRetryDelay(job.AttemptCount, null);
                 using var cleanupCts = new CancellationTokenSource(_cleanupTimeout);
@@ -493,6 +619,51 @@ public sealed class AssetProcessingWorker(
                         finalOutcome = transitionSucceeded ? JobOutcomeNames.INVALID_RESULT : JobOutcomeNames.LEASE_LOST;
                     }
                 }
+                else if (outcome is AssetProcessingJobOutcome.PreStartDeferral deferral)
+                {
+                    using var refundCts = new CancellationTokenSource(_cleanupTimeout);
+                    // The service proved it never started this work, so the claim is refunded under its
+                    // own reservation identity and the attempt is returned. No generic retry transition
+                    // follows, because that would both spend an attempt and re-enter the same refusal.
+                    if (job.TransportLeaseToken is not { Length: 64 } refundTransportToken)
+                    {
+                        logger.LogWarning(
+                            "Job {JobId} reported a pre-start refusal without a transport reservation identity.", job.JobId);
+                        transitionSucceeded = await FailProcessing(
+                            jobStore, lifecycleStore, job,
+                            ErrorCodes.INVALID_JOB_RESULT,
+                            ErrorCodesToErrorMessages.GetMessage(ErrorCodes.INVALID_JOB_RESULT),
+                            retryable: false, retryDelay: TimeSpan.Zero, refundCts.Token);
+                        finalOutcome = transitionSucceeded ? JobOutcomeNames.INVALID_RESULT : JobOutcomeNames.LEASE_LOST;
+                    }
+                    else
+                    {
+                        await using AsyncServiceScope refundScope = scopeFactory.CreateAsyncScope();
+                        var refunded = await refundScope.ServiceProvider
+                            .GetRequiredService<IAnalysisCapacityStore>()
+                            .RefundNotStartedClaim(
+                                job.JobId,
+                                job.LeaseToken,
+                                refundTransportToken,
+                                deferral.ReservationGeneration,
+                                refundCts.Token);
+
+                        analysisExecutionDisposition = AnalysisExecutionDisposition.UNCONFIRMED;
+                        var refundSucceeded = refunded;
+                        if (refundSucceeded)
+                        {
+                            analysisExecutionDisposition = AnalysisExecutionDisposition.NOT_STARTED;
+                        }
+
+                        // A lost lease is not a committed transition: the job and run stay where
+                        // fenced reconciliation can find them, no success is published, and no
+                        // capacity is released as if the reservation had been returned.
+                        transitionSucceeded = refundSucceeded;
+                        finalOutcome = refundSucceeded
+                            ? JobOutcomeNames.RETRY_SCHEDULED
+                            : JobOutcomeNames.LEASE_LOST;
+                    }
+                }
                 else if (outcome is AssetProcessingJobOutcome.RetryableFailure retryable)
                 {
                     TimeSpan retryDelay = CalculateRetryDelay(job.AttemptCount, retryable.RetryAfter);
@@ -521,12 +692,37 @@ public sealed class AssetProcessingWorker(
                     // Lifecycle store already committed transition atomically.
                     // Skip second DB round-trip; proceed directly to SignalR publish.
                     transitionSucceeded = true;
-                    finalOutcome = committed.JobStatus == AssetProcessingJobStatus.SUCCEEDED ? JobOutcomeNames.SUCCESS : JobOutcomeNames.FAILED;
+                    finalOutcome = committed.JobStatus switch
+                    {
+                        AssetProcessingJobStatus.SUCCEEDED => JobOutcomeNames.SUCCESS,
+                        AssetProcessingJobStatus.RETRY_SCHEDULED => JobOutcomeNames.RETRY_SCHEDULED,
+                        _ => JobOutcomeNames.FAILED
+                    };
                 }
             }
         }
         finally
         {
+            // 1. Return shared analysis capacity using the disposition actually observed. An
+            //    unconfirmed outcome after acceptance keeps the reservation fenced until its
+            //    enforced deadline plus grace, so a replacement can never overlap a live execution.
+            if (job is { Type: AssetProcessingJobType.CODE_ANALYSIS, TransportLeaseToken: { Length: 64 } transportLeaseToken }
+                && analysisExecutionDisposition != AnalysisExecutionDisposition.UNCONFIRMED)
+            {
+                try
+                {
+                    using var releaseCts = new CancellationTokenSource(_cleanupTimeout);
+                    await using AsyncServiceScope releaseScope = scopeFactory.CreateAsyncScope();
+                    await releaseScope.ServiceProvider
+                        .GetRequiredService<IAnalysisCapacityStore>()
+                        .ReleaseForTerminalJob(job.JobId, transportLeaseToken, analysisExecutionDisposition, releaseCts.Token);
+                }
+                catch (Exception ex)
+                {
+                    logger.LogWarning(ex, "Failed to release analysis capacity for job {JobId}", job.JobId);
+                }
+            }
+
             // 2. Monotonic real-time sequence: Publish final state update sequentially after committed DB transition
             if (transitionSucceeded && job.Type != AssetProcessingJobType.EMBEDDING_GENERATION)
             {
@@ -556,6 +752,15 @@ public sealed class AssetProcessingWorker(
             AssetBlockDiagnostics.RecordJobCompletion(job.Type, finalOutcome, duration, queueAge, job.AttemptCount);
         }
     }
+
+    /// <summary>
+    /// Analysis work gets its own operation budget because the demonstrated ScanCode scope does not
+    /// fit the four-minute budget the other job types keep.
+    /// </summary>
+    private TimeSpan OperationTimeoutFor(AssetProcessingJobType type) =>
+        type == AssetProcessingJobType.CODE_ANALYSIS && _analysisOptions.Enabled
+            ? _analysisOptions.OperationTimeout
+            : _options.OperationTimeout;
 
     private static async Task<bool> FailProcessing(
         IAssetProcessingJobStore jobStore,

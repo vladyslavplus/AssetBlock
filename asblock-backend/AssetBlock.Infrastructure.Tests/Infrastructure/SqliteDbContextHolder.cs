@@ -69,10 +69,32 @@ internal sealed class SqliteTestMigrationsSqlGenerator(
         {
             var targetConstraints = operation.CheckConstraints
                 .Where(c => c.Name is "CK_asset_processing_jobs_error_code"
-                    or "CK_asset_processing_jobs_embedding_hashes")
+                    or "CK_asset_processing_jobs_embedding_hashes"
+                    or "CK_asset_processing_jobs_transport_lease_token")
                 .ToList();
 
             foreach (AddCheckConstraintOperation constraint in targetConstraints)
+            {
+                operation.CheckConstraints.Remove(constraint);
+            }
+        }
+
+        // The analysis and security evidence tables are guarded by PostgreSQL regex operators and
+        // jsonb functions. Their fidelity is covered by the PostgreSQL integration suite, so the
+        // unsupported constraints are stripped here instead of being emulated.
+        if (operation.Name is "code_analysis_policy_versions"
+            or "code_analysis_report_headers"
+            or "code_analysis_report_stages"
+            or "code_analysis_report_findings"
+            or "code_analysis_report_admissions"
+            or "code_analysis_reuse_artifacts"
+            or "code_analysis_runs"
+            or "security_rechecks"
+            or "security_evidence_records"
+            or "analysis_capacity_slots"
+            or "analysis_service_registrations")
+        {
+            foreach (AddCheckConstraintOperation constraint in operation.CheckConstraints.ToList())
             {
                 operation.CheckConstraints.Remove(constraint);
             }

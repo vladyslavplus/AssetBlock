@@ -88,6 +88,7 @@ public sealed class DelayJitterTests
             scopeFactory,
             publisher,
             optionsWrapper,
+            Microsoft.Extensions.Options.Options.Create(new CodeAnalysisOptions()),
             TimeProvider.System,
             NullLogger<AssetProcessingWorker>.Instance,
             jitterProvider);

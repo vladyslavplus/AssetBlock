@@ -8,6 +8,43 @@ namespace AssetBlock.Infrastructure.Persistence.Publication;
 /// <summary>SQL-translatable publication predicates shared by catalog, commerce, and download stores.</summary>
 internal static class PublicationEligibilityQuery
 {
+    /// <summary>
+    /// A report is trusted for publication only when a completed analysis run produced it and a
+    /// server admission record binds that run's exact input. A finalized header on its own, a header
+    /// with no bound run, or any admission field supplied by the analysis service proves nothing, so
+    /// pre-existing boolean headers stay untrusted.
+    /// </summary>
+    public static IQueryable<CodeAnalysisReportHeader> AdmittedReports(ApplicationDbContext db) =>
+        db.CodeAnalysisReportHeaders.AsNoTracking()
+            .Where(h =>
+                h.IsFinalized
+                && h.AnalysisRunId != null
+                && h.PythonReportId != null
+                && h.ReportDigest != null
+                && db.CodeAnalysisReportAdmissions.Any(a =>
+                    a.ReportId == h.Id
+                    && a.PythonReportId == h.PythonReportId
+                    && a.ReportDigest == h.ReportDigest
+                    && a.InputDigest == db.CodeAnalysisRuns
+                        .Where(r =>
+                            r.Id == h.AnalysisRunId
+                            && r.State == CodeAnalysisRunState.COMPLETED
+                            && r.AssetId == h.AssetId
+                            && r.AssetVersionId == h.AssetVersionId
+                            && r.ContentSha256 == h.ContentSha256)
+                        .Select(r => r.InputDigest)
+                        .FirstOrDefault()
+                    && db.CodeAnalysisRuns.Any(r =>
+                        r.Id == h.AnalysisRunId
+                        && r.State == CodeAnalysisRunState.COMPLETED
+                        && r.AssetId == h.AssetId
+                        && r.AssetVersionId == h.AssetVersionId
+                        && r.ContentSha256 == h.ContentSha256
+                        && db.CodeAnalysisPolicyVersions.Any(p =>
+                            p.Id == r.PolicyVersionId
+                            && p.PolicyKey == h.PolicyVersion
+                            && p.PolicyDigest == r.PolicyDigest))));
+
     public static IQueryable<PublicationSnapshot> TrustedApprovedSnapshots(ApplicationDbContext db) =>
         db.PublicationSnapshots.AsNoTracking()
             .Where(s =>
@@ -16,14 +53,18 @@ internal static class PublicationEligibilityQuery
                     && d.AssetId == s.AssetId
                     && d.AssetVersionId == s.AssetVersionId
                     && d.Outcome == ModerationSubmissionState.APPROVED)
-                && db.CodeAnalysisReportHeaders.Any(h =>
+                // Publication authority is decided by the persisted server admission, not by the
+                // header flag alone, so a header claiming authority over a denying admission fails.
+                && db.CodeAnalysisReportAdmissions.Any(a =>
+                    a.ReportId == s.CodeAnalysisReportHeaderId
+                    && a.CanAuthorizePublication)
+                && AdmittedReports(db).Any(h =>
                     h.Id == s.CodeAnalysisReportHeaderId
                     && h.AssetId == s.AssetId
                     && h.AssetVersionId == s.AssetVersionId
                     && h.ContentSha256 == s.ContentSha256
                     && h.Purpose == CodeAnalysisReportPurpose.PRODUCTION
-                    && h.CanAuthorizePublication
-                    && h.IsFinalized));
+                    && h.CanAuthorizePublication));
 
     public static IQueryable<Asset> PublicCatalogAssets(ApplicationDbContext db) =>
         db.Assets.AsNoTracking()
@@ -37,6 +78,7 @@ internal static class PublicationEligibilityQuery
                         v.Id == s.AssetVersionId
                         && v.AssetId == a.Id
                         && v.ProcessingStatus == AssetVersionProcessingStatus.READY
+                        && v.SafetyRestriction == AssetVersionSafetyRestriction.NONE
                         && v.ContentSha256 == s.ContentSha256)));
 
     public static IQueryable<PublicationSnapshot> SaleEligibleSnapshot(
@@ -52,6 +94,7 @@ internal static class PublicationEligibilityQuery
                     v.Id == assetVersionId
                     && v.AssetId == assetId
                     && v.ProcessingStatus == AssetVersionProcessingStatus.READY
+                    && v.SafetyRestriction == AssetVersionSafetyRestriction.NONE
                     && v.ContentSha256 == s.ContentSha256));
 
     public static IQueryable<PublicationSnapshot> SaleEligibleSnapshotById(
@@ -71,6 +114,7 @@ internal static class PublicationEligibilityQuery
                 v.AssetId == assetId
                 && v.VersionNumber >= purchasedVersionNumber
                 && v.ProcessingStatus == AssetVersionProcessingStatus.READY
+                && v.SafetyRestriction == AssetVersionSafetyRestriction.NONE
                 && TrustedApprovedSnapshots(db).Any(s =>
                     s.AssetId == assetId
                     && s.AssetVersionId == v.Id
@@ -81,10 +125,20 @@ internal static class PublicationEligibilityQuery
             .Where(v =>
                 v.AssetId == assetId
                 && v.ProcessingStatus == AssetVersionProcessingStatus.READY
+                && v.SafetyRestriction == AssetVersionSafetyRestriction.NONE
                 && TrustedApprovedSnapshots(db).Any(s =>
                     s.AssetId == assetId
                     && s.AssetVersionId == v.Id
                     && s.ContentSha256 == v.ContentSha256));
+
+    /// <summary>Exact-version bytes an owner may still read before an approved fallback is considered.</summary>
+    public static IQueryable<AssetVersion> OwnerSafePreviewVersions(ApplicationDbContext db, Guid assetId, Guid assetVersionId) =>
+        db.AssetVersions.AsNoTracking()
+            .Where(v =>
+                v.Id == assetVersionId
+                && v.AssetId == assetId
+                && v.ProcessingStatus == AssetVersionProcessingStatus.READY
+                && v.SafetyRestriction == AssetVersionSafetyRestriction.NONE);
 
     public static bool IsAuthorSafePreviewVersion(AssetVersion version) =>
         PublicationEligibility.IsAuthorSafePreviewVersion(version);

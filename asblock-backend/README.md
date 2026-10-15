@@ -314,7 +314,7 @@ Success DB mutations write the audit row in the same `IUnitOfWork` transaction a
 ### Health checks
 
 - `GET /health/live` reports process liveness only and does not probe external dependencies.
-- `GET /health/ready` probes PostgreSQL, the configured storage provider, Redis when configured, and ClamAV when `AssetProcessing:Enabled` is true. ClamAV readiness requires a parseable `VERSION` response whose signature database age is within `ClamAv:MaxSignatureAge` (default 72h, allowed 1h–7d). Liveness is unchanged.
+- `GET /health/ready` probes PostgreSQL, the configured storage provider, Redis when configured, and ClamAV when `AssetProcessing:Enabled` is true. ClamAV readiness requires a parseable `VERSION` response whose signature database age is within `ClamAv:MaxSignatureAge` (default 72h, allowed 1h–7d). `ClamAv:VersionTimeZoneId` must name the validated time zone used by the clamd process when formatting the timezone-free `VERSION` ctime; configure both sides consistently. Invalid, ambiguous, or nonexistent local times fail closed. Liveness is unchanged.
 
 Both endpoints return a small JSON report. Readiness returns HTTP 503 while any required dependency is unavailable.
 
@@ -332,7 +332,7 @@ Local daemon:
 docker-compose up -d clamav
 ```
 
-clamd binds to `127.0.0.1:3310`. Signature data lives on the `clamav_data` volume. Enable processing in Development (`AssetProcessing:Enabled` and `ClamAv:Enabled`).
+clamd binds to `127.0.0.1:3310`. Signature data lives on the `clamav_data` volume. Configure `ClamAv:VersionTimeZoneId` to match clamd process time zone (the sample uses `UTC`; run clamd in UTC for that setting). Enable processing in Development (`AssetProcessing:Enabled` and `ClamAv:Enabled`).
 
 ### Listing Copilot (optional AI)
 

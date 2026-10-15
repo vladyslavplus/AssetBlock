@@ -8,10 +8,10 @@ failure is an operational failure, never a silent skip.
 
 from __future__ import annotations
 
-import getpass
 import json
 import logging
 import os
+import re
 import secrets
 import shutil
 import subprocess
@@ -81,11 +81,37 @@ def _restrict_private(path: Path) -> None:
         raise RuntimeError("workspace privacy could not be enforced")
 
 
+
+
+def _current_windows_user_sid() -> str:
+    """Return the current process token SID for an explicit, private ACL grant."""
+    system_root = os.environ.get("SystemRoot")
+    if not system_root:
+        raise RuntimeError("workspace ACL restriction failed")
+    whoami = Path(system_root) / "System32" / "whoami.exe"
+    try:
+        completed = subprocess.run(
+            [str(whoami), "/user", "/fo", "csv", "/nh"],
+            capture_output=True,
+            timeout=60,
+            shell=False,
+            creationflags=0x08000000,
+        )
+    except (OSError, subprocess.SubprocessError) as exc:
+        raise RuntimeError("workspace ACL restriction failed") from exc
+    if completed.returncode != 0:
+        raise RuntimeError("workspace ACL restriction failed")
+    output = completed.stdout.decode("utf-8", errors="replace")
+    matches = re.findall(r"(?<![A-Za-z0-9-])(S-1-\d+(?:-\d+)+)(?![A-Za-z0-9-])", output)
+    if len(matches) != 1:
+        raise RuntimeError("workspace ACL restriction failed")
+    return "*" + matches[0]
+
 def _restrict_windows(path: Path) -> None:
-    user = getpass.getuser()
+    user_sid = _current_windows_user_sid()
     commands = [
         ["icacls", str(path), "/inheritance:r"],
-        ["icacls", str(path), "/grant:r", f"{user}:(OI)(CI)F"],
+        ["icacls", str(path), "/grant:r", f"{user_sid}:(OI)(CI)F"],
     ]
     for argv in commands:
         try:

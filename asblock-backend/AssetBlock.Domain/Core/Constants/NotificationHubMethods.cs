@@ -11,4 +11,5 @@ public static class NotificationHubMethods
     public const string ASSET_PROCESSING_READY = "AssetProcessingReady";
     public const string ASSET_PROCESSING_REJECTED = "AssetProcessingRejected";
     public const string ASSET_PROCESSING_FAILED = "AssetProcessingFailed";
+    public const string CODE_ANALYSIS_COMPLETED = "CodeAnalysisCompleted";
 }

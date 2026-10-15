@@ -48,4 +48,16 @@ public class AssetProcessingJob : BaseEntity
     public string? InputHash { get; set; }
 
     public string? ModelKey { get; set; }
+
+    /// <summary>Run this CODE_ANALYSIS job is bound to. Exclusive to that job type.</summary>
+    public Guid? AnalysisRunId { get; set; }
+
+    /// <summary>Security recheck these scoped security jobs belong to. Exclusive to security jobs.</summary>
+    public Guid? SecurityRecheckId { get; set; }
+
+    /// <summary>
+    /// Transport lease token presented to the analysis service. The service requires 64 lowercase
+    /// hex characters, so it is persisted explicitly instead of reusing the job lease Guid.
+    /// </summary>
+    public string? TransportLeaseToken { get; set; }
 }

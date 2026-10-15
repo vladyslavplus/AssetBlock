@@ -545,7 +545,6 @@ public sealed class EmbeddingGenerationJobHandlerTests : IAsyncDisposable
         {
             var workspaceId = Guid.NewGuid();
             var submissionId = Guid.NewGuid();
-            var reportId = Guid.NewGuid();
             snapshotId = Guid.NewGuid();
             _dbContext.AssetDraftWorkspaces.Add(new AssetDraftWorkspace
             {
@@ -576,28 +575,22 @@ public sealed class EmbeddingGenerationJobHandlerTests : IAsyncDisposable
                 CaseRevision = 1,
                 CreatedAt = DateTimeOffset.UtcNow
             });
-            _dbContext.CodeAnalysisReportHeaders.Add(new CodeAnalysisReportHeader
-            {
-                Id = reportId,
-                AssetId = assetId,
-                AssetVersionId = versionId,
-                ContentSha256 = version.ContentSha256,
-                PolicyVersion = "policy-v1",
-                InputRevision = 1,
-                Purpose = CodeAnalysisReportPurpose.PRODUCTION,
-                CanAuthorizePublication = true,
-                IsFinalized = true,
-                FinalizedAt = DateTimeOffset.UtcNow,
-                ReportSchemaVersion = 1,
-                CreatedAt = DateTimeOffset.UtcNow
-            });
+            // Trusted publication needs the whole evidence chain, not a bare boolean header.
+            AdmittedReportTestEvidence.Chain chain = AdmittedReportTestEvidence.BuildChain();
+            _dbContext.CodeAnalysisPolicyVersions.Add(AdmittedReportTestEvidence.Policy(chain));
+            _dbContext.SecurityEvidenceRecords.Add(AdmittedReportTestEvidence.ArchiveEvidence(version, chain));
+            _dbContext.SecurityEvidenceRecords.Add(AdmittedReportTestEvidence.MalwareEvidence(version, chain));
+            _dbContext.CodeAnalysisRuns.Add(AdmittedReportTestEvidence.CompletedRun(version, chain));
+            CodeAnalysisReportHeader seededReport = AdmittedReportTestEvidence.Header(version, chain);
+            _dbContext.CodeAnalysisReportHeaders.Add(seededReport);
+            _dbContext.CodeAnalysisReportAdmissions.Add(AdmittedReportTestEvidence.Admission(seededReport, chain, canAuthorizePublication: true));
             _dbContext.PublicationSnapshots.Add(new PublicationSnapshot
             {
                 Id = snapshotId,
                 AssetId = assetId,
                 AssetVersionId = versionId,
                 ContentSha256 = version.ContentSha256,
-                CodeAnalysisReportHeaderId = reportId,
+                CodeAnalysisReportHeaderId = seededReport.Id,
                 ModerationSubmissionId = submissionId,
                 PolicyVersion = "policy-v1",
                 ApprovedMetadataJson = ApprovedPublicationMetadata.BuildJson(approvedTitle, null, categoryId, []),

@@ -237,61 +237,63 @@ def test_split_deadlines_overall_caps_intake():
 
 def test_bootstrap_write_failure_fences_worker(
         service_app, workspace_root, tmp_path, monkeypatch):
-    """Bootstrap request.json write fails after a live spawn.
-
-    The fenced finalizer still stops and confirms the worker: no live
-    descendants after release, workspace cleaned, gate free. The spawn
-    itself is stubbed with a real sleeping process because this host
-    cannot attach job containment; stop/confirm/cleanup are all real.
-    """
-    import asyncio as _asyncio
+    """Bootstrap failure stops the actual contained worker and grandchild."""
+    import json as _json
     import pathlib as _pathlib
-    import subprocess as _sp
-    import sys as _sys
     import time as _time
-    import app.service as service_module
     from conftest import make_metadata, make_zip
-    from app import contracts
+    from conftest import SERVICE_DIR
 
     real_write_text = _pathlib.Path.write_text
+    pids_file = tmp_path / "bootstrap-pids.json"
+    worker_root = tmp_path / "bootstrap-worker"
+    worker_app = worker_root / "app"
+    worker_app.mkdir(parents=True)
+    (worker_app / "worker.py").write_text(
+        "import json, subprocess, sys, time\n"
+        "child = subprocess.Popen([sys.executable, '-c', "
+        "'import time; time.sleep(120)'])\n"
+        f"open({str(pids_file)!r}, 'w', encoding='utf-8').write("
+        "json.dumps({'worker': __import__('os').getpid(), 'child': child.pid}))\n"
+        "time.sleep(120)\n", encoding="utf-8")
+    config = service_app.state.service_config
+    original_service_dir = config.service_dir
+    original_path_entries = config.worker_path_entries
+    monkeypatch.setattr(config, "service_dir", worker_root)
+    monkeypatch.setattr(config, "worker_path_entries", ())
 
     def failing_write(self, *args, **kwargs):
         if self.name == "request.json":
+            deadline = _time.monotonic() + 10
+            while not pids_file.exists() and _time.monotonic() < deadline:
+                _time.sleep(0.05)
+            assert pids_file.exists(), "contained worker tree must start before failure"
             raise OSError("injected bootstrap failure")
         return real_write_text(self, *args, **kwargs)
 
     monkeypatch.setattr(_pathlib.Path, "write_text", failing_write)
-    long_proc = _sp.Popen(
-        [_sys.executable, "-c", "import time; time.sleep(120)"],
-        cwd=str(tmp_path), shell=False,
-        stdout=_sp.DEVNULL, stderr=_sp.DEVNULL)
-    assert long_proc.pid > 0
-
-    def fake_spawn(service_dir, workspace_dir, env):
-        return long_proc, "test", None
-
-    monkeypatch.setattr(service_module, "spawn_worker", fake_spawn)
     archive = make_zip({"src/a.js": b"function alpha() { return 1; }\n"})
     metadata = make_metadata(archive)
     body, content_type = make_body(metadata, archive)
     from conftest import TEST_SECRET
     from fastapi.testclient import TestClient
     client = TestClient(service_app)
-    try:
-        response = client.post("/internal/analysis", content=body,
-                               headers={"content-type": content_type,
-                                        "x-analysis-secret": TEST_SECRET})
-        assert response.status_code == 200
-        envelope = response.json()
-        assert envelope["outcome"] == "FAILED"
-        assert envelope["errorCode"] == "INTERNAL_ERROR"
-        from app.process_tree import pid_alive
-        assert not pid_alive(long_proc.pid)
-        assert list(workspace_root.iterdir()) == []
-        followup = client.post("/internal/analysis", content=body,
-                               headers={"content-type": content_type,
-                                        "x-analysis-secret": TEST_SECRET})
-        assert followup.status_code == 200
-    finally:
-        if long_proc.poll() is None:
-            long_proc.kill()
+    response = client.post("/internal/analysis", content=body,
+                           headers={"content-type": content_type,
+                                    "x-analysis-secret": TEST_SECRET})
+    assert response.status_code == 200
+    envelope = response.json()
+    assert envelope["outcome"] == "FAILED"
+    assert envelope["errorCode"] == "INTERNAL_ERROR"
+    from app.process_tree import pid_alive
+    pids = _json.loads(pids_file.read_text(encoding="utf-8"))
+    assert not pid_alive(pids["worker"])
+    assert not pid_alive(pids["child"])
+    assert list(workspace_root.iterdir()) == []
+    config.service_dir = original_service_dir
+    config.worker_path_entries = original_path_entries
+    monkeypatch.undo()
+    followup = client.post("/internal/analysis", content=body,
+                           headers={"content-type": content_type,
+                                    "x-analysis-secret": TEST_SECRET})
+    assert followup.status_code == 200

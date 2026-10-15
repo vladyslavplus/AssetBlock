@@ -122,6 +122,7 @@ def _service_config(raw: dict):
         reference_manifest=Path(raw["referenceManifest"]) if raw.get("referenceManifest") else None,
         gallery_root=Path(raw["galleryRoot"]) if raw.get("galleryRoot") else None,
         index_dsn=raw.get("indexDsn"),
+        index_runtime_compatibility=raw.get("indexRuntimeCompatibility"),
         overall_deadline_seconds=float(raw.get("overallDeadlineSeconds", 1080)),
         token_deadline_seconds=float(raw.get("tokenDeadlineSeconds", 180)),
         scancode_deadline_seconds=float(raw.get("scancodeDeadlineSeconds", 720)),
@@ -151,6 +152,21 @@ def _crash_envelope(request: dict, exc: Exception) -> dict:
                      "omissions": [], "omissionOverflow": 0},
         "findings": [],
         "errorCode": "INTERNAL_ERROR",
+        "crashField": (
+            exc.args[0]
+            if isinstance(exc, KeyError)
+            and exc.args
+            and isinstance(exc.args[0], str)
+            and exc.args[0] in {
+                "fileId", "canonicalPath", "sha256", "size", "languageGroup", "dialect",
+                "fragments", "extractionSha", "omissions", "omissionOverflow",
+                "coverageByDialect", "toolIdentity", "ranked", "counts", "windows",
+                "vectorsF32LeBase64", "vectors", "sourceRunId", "sourceInputDigest",
+                "sourceReportId", "sourceStageId", "artifactDigest", "stage",
+                "reuseParentRunId", "reuseParentReportId", "reuseParentStageId",
+            }
+            else None
+        ),
         "crashType": type(exc).__name__,
         "retryable": False,
         "failedStage": None,

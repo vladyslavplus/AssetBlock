@@ -24,6 +24,8 @@ public interface IAssetProcessingLifecycleStore
         Guid assetVersionId,
         ArchiveInspectionResult result,
         BoundedArchiveAnalysisRecord analysis,
+        ArchiveValidationEvidence? observedEvidence = null,
+        int? observedDefinitionVersion = null,
         CancellationToken cancellationToken = default);
 
     Task<bool> TransitionArchiveInspectionRejected(
@@ -44,12 +46,20 @@ public interface IAssetProcessingLifecycleStore
         string safeSummary,
         CancellationToken cancellationToken = default);
 
+    /// <summary>
+    /// Authoritative CLEAN transition. When observed proof is supplied, the malware evidence, the
+    /// READY promotion and the durable analysis run/job scheduling commit atomically in one
+    /// transaction; a fault anywhere rolls everything back. Without observed proof (legacy callers)
+    /// only the READY promotion commits.
+    /// </summary>
     Task<bool> TransitionMalwareScanClean(
         Guid jobId,
         Guid leaseToken,
         Guid assetId,
         Guid assetVersionId,
         MalwareScanResult result,
+        MalwareScanEvidence? observedEvidence = null,
+        int? observedDefinitionVersion = null,
         CancellationToken cancellationToken = default);
 
     Task<bool> TransitionMalwareScanRejected(

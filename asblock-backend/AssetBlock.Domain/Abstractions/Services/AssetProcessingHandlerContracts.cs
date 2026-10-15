@@ -17,7 +17,8 @@ public sealed record AssetProcessingJobContext<TPayload>(
     int MaxAttempts,
     TPayload Payload,
     string? TraceParent,
-    CancellationToken CancellationToken
+    CancellationToken CancellationToken,
+    Guid? SecurityRecheckId = null
 ) where TPayload : AssetProcessingPayload;
 
 /// <summary>
@@ -82,6 +83,24 @@ public abstract partial class AssetProcessingJobOutcome
     }
 
     /// <summary>
+    /// A handler that called an external execution system reports what it actually observed about that
+    /// execution alongside its normal outcome. Shared capacity is only returned on that evidence, so
+    /// handlers that never call an external service do not use this case.
+    /// </summary>
+    public sealed class ExternalExecution : AssetProcessingJobOutcome
+    {
+        public AssetProcessingJobOutcome Inner { get; }
+
+        public AnalysisExecutionDisposition Disposition { get; }
+
+        internal ExternalExecution(AssetProcessingJobOutcome inner, AnalysisExecutionDisposition disposition)
+        {
+            Inner = inner;
+            Disposition = disposition;
+        }
+    }
+
+    /// <summary>
     /// The lifecycle store already committed the job transition atomically (SUCCEEDED or FAILED).
     /// The worker must skip the second DB transition but still publish the final SignalR state.
     /// </summary>
@@ -107,6 +126,9 @@ public abstract partial class AssetProcessingJobOutcome
     public static AssetProcessingJobOutcome CommittedFailed() =>
         new AtomicCommitted(AssetProcessingJobStatus.FAILED);
 
+    public static AssetProcessingJobOutcome CommittedRetryScheduled() =>
+        new AtomicCommitted(AssetProcessingJobStatus.RETRY_SCHEDULED);
+
     public static AssetProcessingJobOutcome Retryable(string errorCode, string safeSummary, TimeSpan? retryAfter = null)
     {
         ValidateError(errorCode, safeSummary);
@@ -122,6 +144,52 @@ public abstract partial class AssetProcessingJobOutcome
     {
         ValidateError(errorCode, safeSummary);
         return new TerminalFailure(errorCode, safeSummary);
+    }
+
+    public static AssetProcessingJobOutcome External(
+        AssetProcessingJobOutcome inner,
+        AnalysisExecutionDisposition disposition)
+    {
+        ArgumentNullException.ThrowIfNull(inner);
+        return new ExternalExecution(inner, disposition);
+    }
+
+    /// <summary>
+    /// A confirmed pre-acceptance refusal. The service proved it never started the work, so waiting
+    /// for capacity must not consume an attempt: the claim is refunded instead of retried.
+    /// </summary>
+    public sealed class PreStartDeferral : AssetProcessingJobOutcome
+    {
+        public string ErrorCode { get; }
+
+        public string SafeSummary { get; }
+
+        /// <summary>Reservation generation that must match before the refund is applied.</summary>
+        public int ReservationGeneration { get; }
+
+        internal PreStartDeferral(string errorCode, string safeSummary, int reservationGeneration)
+        {
+            ErrorCode = errorCode;
+            SafeSummary = safeSummary;
+            ReservationGeneration = reservationGeneration;
+        }
+
+        public void Deconstruct(out string errorCode, out string safeSummary, out int reservationGeneration)
+        {
+            errorCode = ErrorCode;
+            safeSummary = SafeSummary;
+            reservationGeneration = ReservationGeneration;
+        }
+    }
+
+    public static AssetProcessingJobOutcome PreStartDeferred(
+        string errorCode,
+        string safeSummary,
+        int reservationGeneration)
+    {
+        ValidateError(errorCode, safeSummary);
+        ArgumentOutOfRangeException.ThrowIfLessThan(reservationGeneration, 1);
+        return new PreStartDeferral(errorCode, safeSummary, reservationGeneration);
     }
 
     private static void ValidateError(string errorCode, string safeSummary)

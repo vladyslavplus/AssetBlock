@@ -135,7 +135,7 @@ public sealed class SearchSqlProfileIntegrationTests
             Asset eligibleAsset = await db.Assets.SingleAsync(a => a.Id == assetId);
             AssetVersion eligibleVersion = await db.AssetVersions.SingleAsync(v => v.Id == versionId);
             Category category = await db.Categories.SingleAsync(c => c.Id == categoryId);
-            await TrustedPublicationFixtureSeed.AttachAsync(
+            await TrustedPublicationFixtureSeed.Attach(
                 db,
                 eligibleAsset,
                 eligibleVersion,

@@ -117,7 +117,7 @@ def requires_containment():
     from app.supervisor import probe_containment
     return _pytest.mark.skipif(
         not probe_containment(),
-        reason="BLOCKED: host forbids nested job assignment")
+        reason="BLOCKED: service-owned Windows Job Object probe failed")
 
 
 @pytest.fixture()

@@ -81,6 +81,11 @@ public static class DependencyInjection
             .ValidateOnStart();
         services.AddSingleton<IValidateOptions<AssetProcessingOptions>, AssetProcessingOptionsValidator>();
 
+        services.AddOptions<CodeAnalysisOptions>()
+            .Bind(configuration.GetSection(CodeAnalysisOptions.SECTION_NAME))
+            .ValidateOnStart();
+        services.AddSingleton<IValidateOptions<CodeAnalysisOptions>, CodeAnalysisOptionsValidator>();
+
         services.TryAddSingleton(TimeProvider.System);
         services.AddSingleton<Persistence.Interceptors.AuditTimestampsInterceptor>();
         services.AddAnalyticsDistributedRateLimiting(configuration, environment);
@@ -148,6 +153,11 @@ public static class DependencyInjection
         services.AddHostedService<RefreshTokenRetentionWorker>();
         services.AddHostedService<OutboxRetentionWorker>();
         services.AddHostedService<AnalyticsAggregationWorker>();
+
+        // The approved policy and runtime manifest are published before the worker starts claiming,
+        // so a deployment that enabled analysis without an approved identity keeps its claims
+        // closed instead of inheriting a stale row.
+        services.AddHostedService<AnalysisPolicyPublisherService>();
         services.AddHostedService<AssetProcessingWorker>();
         services.AddHostedService<EmbeddingBackfillCoordinatorWorker>();
         services.AddHttpClient(OllamaTextEmbeddingGenerator.HTTP_CLIENT_NAME);
@@ -156,6 +166,8 @@ public static class DependencyInjection
             AssetProcessingJobType.ARCHIVE_INSPECTION);
         services.AddAssetProcessingJobHandler<MalwareScanJobHandler, MalwareScanPayload, MalwareScanResult>(
             AssetProcessingJobType.MALWARE_SCAN);
+        services.AddAssetProcessingJobHandler<CodeAnalysisJobHandler, CodeAnalysisPayload, CodeAnalysisResult>(
+            AssetProcessingJobType.CODE_ANALYSIS);
         services.AddAssetProcessingJobHandler<ListingCopilotJobHandler, ListingCopilotPayload, ListingCopilotResult>(
             AssetProcessingJobType.LISTING_COPILOT);
         services.AddAssetProcessingJobHandler<EmbeddingGenerationJobHandler, EmbeddingGenerationPayload, EmbeddingGenerationResult>(
@@ -170,6 +182,7 @@ public static class DependencyInjection
         services.AddScoped<IEmailDeliveryStore, EmailDeliveryStore>();
         services.AddScoped<IAssetProcessingJobStore, AssetProcessingJobStore>();
         services.AddScoped<IOutboxMessageHandler, AssetBlobDeleteOutboxHandler>();
+        services.AddScoped<IOutboxMessageHandler, AnalysisSchedulingOutboxHandler>();
         services.AddScoped<IOutboxMessageHandler, EmailDispatchOutboxHandler>();
         services.AddScoped<IOutboxMessageHandler, EmailActionDispatchOutboxHandler>();
         services.AddScoped<IEmailSender, SmtpEmailSender>();
@@ -186,6 +199,32 @@ public static class DependencyInjection
         services.AddScoped<IAssetArchiveAnalysisStore, AssetArchiveAnalysisStore>();
         services.AddScoped<IListingCopilotStore, ListingCopilotStore>();
         services.AddScoped<IAssetProcessingLifecycleStore, AssetProcessingLifecycleStore>();
+
+        // Security recheck lifecycle and the shared analysis capacity scheduler. Analysis jobs are
+        // claimed only through the capacity store, never through the general queue.
+        services.AddScoped<IAnalysisRunEnqueuer, AnalysisRunEnqueuer>();
+        services.AddScoped<ISecurityProvenanceStore, SecurityProvenanceStore>();
+        services.AddScoped<IAnalysisCapacityStore, AnalysisCapacityStore>();
+        services.AddScoped<IAnalysisReadinessGate, AnalysisReadinessGate>();
+        services.AddScoped<IAnalysisPolicyPublisher, AnalysisPolicyPublisher>();
+        services.AddScoped<IAnalysisReservationReader, AnalysisReservationReader>();
+        services.AddScoped<ICodeAnalysisReportValidator, CodeAnalysisReportValidator>();
+        services.AddScoped<ICodeAnalysisReportFinalizer, CodeAnalysisReportFinalizer>();
+        services.AddHttpClient<ICodeAnalysisClient, CodeAnalysisClient>(
+            CodeAnalysisClient.HTTP_CLIENT_NAME,
+            (sp, client) =>
+            {
+                CodeAnalysisOptions options = sp.GetRequiredService<IOptions<CodeAnalysisOptions>>().Value;
+                client.BaseAddress = new Uri(EnsureTrailingSlash(options.BaseUrl));
+                // The service deadline governs the whole exchange through a linked CTS;
+                // a separate HttpClient timeout would race it, so it stays disabled.
+                client.Timeout = Timeout.InfiniteTimeSpan;
+            })
+            .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler
+            {
+                // The internal secret must never follow a redirect to another endpoint.
+                AllowAutoRedirect = false
+            });
         services.AddScoped<IPurchaseStore, PurchaseStore>();
         services.AddScoped<ICheckoutIntentStore, CheckoutIntentStore>();
         services.AddScoped<ICheckoutReconciliationHoldStore, CheckoutReconciliationHoldStore>();

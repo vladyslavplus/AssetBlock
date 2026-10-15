@@ -36,6 +36,11 @@ def worker_env(service_dir, extra_path_entries: tuple = ()) -> dict:
     entries.extend(str(Path(p)) for p in extra_path_entries if p)
     env = minimal_env()
     env["PYTHONPATH"] = ";".join(entries) if sys.platform == "win32" else ":".join(entries)
+    if sys.platform == "win32":
+        # getpass falls back to pwd on Windows when USERNAME is absent. Keep
+        # host account name out of the restricted worker environment while
+        # giving Python dependencies a stable service identity.
+        env["USERNAME"] = "code-analysis"
     return env
 
 
@@ -352,8 +357,11 @@ def confirm_containment(worker_pid: int, pgid: int | None,
         if not _group_empty(pgid):
             return False
     if job is not None and sys.platform == "win32":
-        if job_active_processes(job) is not True:
-            return False
+        deadline = time.perf_counter() + CONFIRM_SECONDS
+        while job_active_processes(job) is not True:
+            if time.perf_counter() >= deadline:
+                return False
+            time.sleep(0.1)
     return True
 
 

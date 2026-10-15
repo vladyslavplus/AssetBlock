@@ -52,6 +52,16 @@ public sealed class ApplicationDbContext(DbContextOptions<ApplicationDbContext> 
     public DbSet<AssetSourceDeclarationRevision> AssetSourceDeclarationRevisions => Set<AssetSourceDeclarationRevision>();
     public DbSet<AssetSellerEvidenceRevision> AssetSellerEvidenceRevisions => Set<AssetSellerEvidenceRevision>();
     public DbSet<CodeAnalysisReportHeader> CodeAnalysisReportHeaders => Set<CodeAnalysisReportHeader>();
+    public DbSet<CodeAnalysisPolicyVersion> CodeAnalysisPolicyVersions => Set<CodeAnalysisPolicyVersion>();
+    public DbSet<SecurityRecheck> SecurityRechecks => Set<SecurityRecheck>();
+    public DbSet<SecurityEvidenceRecord> SecurityEvidenceRecords => Set<SecurityEvidenceRecord>();
+    public DbSet<CodeAnalysisRun> CodeAnalysisRuns => Set<CodeAnalysisRun>();
+    public DbSet<AnalysisServiceRegistration> AnalysisServiceRegistrations => Set<AnalysisServiceRegistration>();
+    public DbSet<AnalysisCapacitySlot> AnalysisCapacitySlots => Set<AnalysisCapacitySlot>();
+    public DbSet<CodeAnalysisReportStage> CodeAnalysisReportStages => Set<CodeAnalysisReportStage>();
+    public DbSet<CodeAnalysisReportFinding> CodeAnalysisReportFindings => Set<CodeAnalysisReportFinding>();
+    public DbSet<CodeAnalysisReportAdmission> CodeAnalysisReportAdmissions => Set<CodeAnalysisReportAdmission>();
+    public DbSet<CodeAnalysisReuseArtifact> CodeAnalysisReuseArtifacts => Set<CodeAnalysisReuseArtifact>();
     public DbSet<ModerationSubmission> ModerationSubmissions => Set<ModerationSubmission>();
     public DbSet<ModerationSubmissionHistoryEntry> ModerationSubmissionHistoryEntries => Set<ModerationSubmissionHistoryEntry>();
     public DbSet<PublicationSnapshot> PublicationSnapshots => Set<PublicationSnapshot>();

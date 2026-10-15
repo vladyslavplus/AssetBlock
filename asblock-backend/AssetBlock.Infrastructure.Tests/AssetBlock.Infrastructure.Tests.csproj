@@ -41,4 +41,8 @@
       <PackageReference Include="Microsoft.Extensions.Hosting" Version="10.0.3" />
       <PackageReference Include="Microsoft.Extensions.Http" Version="10.0.3" />
     </ItemGroup>
+
+  <ItemGroup>
+    <None Include="..\..\services\code-analysis\tools\canonical_vectors.json" Link="canonical_vectors.json" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
 </Project>

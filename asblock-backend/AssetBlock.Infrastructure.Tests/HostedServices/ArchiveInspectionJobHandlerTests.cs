@@ -12,22 +12,27 @@ namespace AssetBlock.Infrastructure.Tests.HostedServices;
 
 public sealed class ArchiveInspectionJobHandlerTests
 {
+    private static readonly byte[] _observedBytes = [1, 2, 3];
+    private static readonly string _observedSha256 =
+        Convert.ToHexString(SHA256.HashData(_observedBytes)).ToLowerInvariant();
+
     private readonly IAssetStore _assetStore = Substitute.For<IAssetStore>();
     private readonly IAssetStorageService _storageService = Substitute.For<IAssetStorageService>();
     private readonly IEncryptionService _encryptionService = Substitute.For<IEncryptionService>();
     private readonly IArchiveSafetyInspector _inspector = Substitute.For<IArchiveSafetyInspector>();
     private readonly IAssetProcessingLifecycleStore _lifecycleStore = Substitute.For<IAssetProcessingLifecycleStore>();
+    private readonly ISecurityProvenanceStore _provenance = Substitute.For<ISecurityProvenanceStore>();
     private readonly ArchiveInspectionJobHandler _sut;
 
     public ArchiveInspectionJobHandlerTests()
     {
         _encryptionService.Decrypt(Arg.Any<Stream>(), Arg.Any<Stream>(), Arg.Any<CancellationToken>())
-            .Returns(ci => ci.ArgAt<Stream>(1).WriteAsync(new byte[] { 1, 2, 3 }, ci.Arg<CancellationToken>()).AsTask());
+            .Returns(ci => ci.ArgAt<Stream>(1).WriteAsync(_observedBytes, ci.Arg<CancellationToken>()).AsTask());
         _storageService.OpenRead(
                 Arg.Any<string>(),
                 Arg.Any<Func<Stream, CancellationToken, Task>>(),
                 Arg.Any<CancellationToken>())
-            .Returns(ci => ci.Arg<Func<Stream, CancellationToken, Task>>()(new MemoryStream([1, 2, 3]), ci.Arg<CancellationToken>()));
+            .Returns(ci => ci.Arg<Func<Stream, CancellationToken, Task>>()(new MemoryStream(_observedBytes), ci.Arg<CancellationToken>()));
 
         _sut = new ArchiveInspectionJobHandler(
             _assetStore,
@@ -35,8 +40,19 @@ public sealed class ArchiveInspectionJobHandlerTests
             _encryptionService,
             _inspector,
             _lifecycleStore,
+            _provenance,
             Microsoft.Extensions.Options.Options.Create(new AssetProcessingOptions()),
             NullLogger<ArchiveInspectionJobHandler>.Instance);
+    }
+
+    private void InspectReturns(ArchiveSafetyResult result)
+    {
+        _inspector.Inspect(Arg.Any<Stream>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(ci =>
+            {
+                ci.Arg<Stream>().CopyTo(Stream.Null);
+                return Task.FromResult(result);
+            });
     }
 
     [Fact]
@@ -93,8 +109,7 @@ public sealed class ArchiveInspectionJobHandlerTests
             .Returns(version);
 
         var safeResult = ArchiveSafetyResult.Safe(5, 1024, "# Readme", null);
-        _inspector.Inspect(Arg.Any<Stream>(), version.FileName, Arg.Any<CancellationToken>())
-            .Returns(safeResult);
+        InspectReturns(safeResult);
 
         _lifecycleStore.TransitionArchiveInspectionAccepted(
             context.JobId,
@@ -103,6 +118,8 @@ public sealed class ArchiveInspectionJobHandlerTests
             context.AssetVersionId,
             Arg.Any<ArchiveInspectionResult>(),
             Arg.Any<BoundedArchiveAnalysisRecord>(),
+            Arg.Any<ArchiveValidationEvidence>(),
+            Arg.Any<int>(),
             Arg.Any<CancellationToken>())
             .Returns(true);
 
@@ -114,6 +131,38 @@ public sealed class ArchiveInspectionJobHandlerTests
     }
 
     [Fact]
+    public async Task Process_WhenSafeInspectorReturnsBeforeRawStreamEnd_ShouldDrainBeforeAcceptingEvidence()
+    {
+        AssetProcessingJobContext<ArchiveInspectionPayload> context = CreateContext();
+        AssetVersion version = CreateVersion(context.AssetVersionId);
+        _assetStore.GetVersion(context.AssetId, context.AssetVersionId, Arg.Any<CancellationToken>())
+            .Returns(version);
+
+        var safeResult = ArchiveSafetyResult.Safe(1, 3, null, null);
+        _inspector.Inspect(Arg.Any<Stream>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(safeResult));
+        _lifecycleStore.TransitionArchiveInspectionAccepted(
+            context.JobId,
+            context.LeaseToken,
+            context.AssetId,
+            context.AssetVersionId,
+            Arg.Any<ArchiveInspectionResult>(),
+            Arg.Any<BoundedArchiveAnalysisRecord>(),
+            Arg.Is<ArchiveValidationEvidence>(evidence =>
+                evidence.ContentSha256 == _observedSha256
+                && evidence.ScannedByteCount == _observedBytes.Length
+                && evidence.ScopeComplete),
+            Arg.Any<int>(),
+            Arg.Any<CancellationToken>())
+            .Returns(true);
+
+        AssetProcessingJobOutcome outcome = await _sut.Process(context, CancellationToken.None);
+
+        outcome.Should().BeOfType<AssetProcessingJobOutcome.AtomicCommitted>()
+            .Which.JobStatus.Should().Be(AssetProcessingJobStatus.SUCCEEDED);
+    }
+
+    [Fact]
     public async Task Process_WhenArchiveUnsafe_ShouldTransitionRejectedAndReturnCommitted()
     {
         AssetProcessingJobContext<ArchiveInspectionPayload> context = CreateContext();
@@ -122,8 +171,7 @@ public sealed class ArchiveInspectionJobHandlerTests
             .Returns(version);
 
         var unsafeResult = ArchiveSafetyResult.Rejected("ARCHIVE_PATH_TRAVERSAL", "Path traversal detected");
-        _inspector.Inspect(Arg.Any<Stream>(), version.FileName, Arg.Any<CancellationToken>())
-            .Returns(unsafeResult);
+        InspectReturns(unsafeResult);
 
         _lifecycleStore.TransitionArchiveInspectionRejected(
             context.JobId,
@@ -140,6 +188,71 @@ public sealed class ArchiveInspectionJobHandlerTests
         outcome.Should().BeOfType<AssetProcessingJobOutcome.AtomicCommitted>();
         var committed = (AssetProcessingJobOutcome.AtomicCommitted)outcome;
         committed.JobStatus.Should().Be(AssetProcessingJobStatus.FAILED);
+    }
+
+    [Fact]
+    public async Task Process_WhenObservedHashDiffersFromVersion_ShouldRejectWithoutTrustingEvidence()
+    {
+        AssetProcessingJobContext<ArchiveInspectionPayload> context = CreateContext();
+        AssetVersion version = CreateVersion(context.AssetVersionId);
+        version.ContentSha256 = new string('f', 64);
+        _assetStore.GetVersion(context.AssetId, context.AssetVersionId, Arg.Any<CancellationToken>())
+            .Returns(version);
+
+        InspectReturns(ArchiveSafetyResult.Safe(5, 1024, "# Readme", null));
+
+        _lifecycleStore.TransitionArchiveInspectionRejected(
+            context.JobId,
+            context.LeaseToken,
+            context.AssetId,
+            context.AssetVersionId,
+            "ARCHIVE_CORRUPT",
+            Arg.Any<string>(),
+            Arg.Any<CancellationToken>())
+            .Returns(true);
+
+        AssetProcessingJobOutcome outcome = await _sut.Process(context, CancellationToken.None);
+
+        outcome.Should().BeOfType<AssetProcessingJobOutcome.AtomicCommitted>();
+        await _lifecycleStore.DidNotReceive().TransitionArchiveInspectionAccepted(
+            Arg.Any<Guid>(),
+            Arg.Any<Guid>(),
+            Arg.Any<Guid>(),
+            Arg.Any<Guid>(),
+            Arg.Any<ArchiveInspectionResult>(),
+            Arg.Any<BoundedArchiveAnalysisRecord>(),
+            Arg.Any<ArchiveValidationEvidence>(),
+            Arg.Any<int>(),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Process_WhenUnsafeInspectorReturnsEarly_ShouldRetainUnsafeClassification()
+    {
+        AssetProcessingJobContext<ArchiveInspectionPayload> context = CreateContext();
+        AssetVersion version = CreateVersion(context.AssetVersionId);
+        _assetStore.GetVersion(context.AssetId, context.AssetVersionId, Arg.Any<CancellationToken>())
+            .Returns(version);
+
+        // The inspector reports its verdict without consuming the stream: the unsafe
+        // classification stands on its own and must not become archive corruption.
+        _inspector.Inspect(Arg.Any<Stream>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(ArchiveSafetyResult.Rejected("ARCHIVE_PATH_TRAVERSAL", "Path traversal detected"));
+
+        _lifecycleStore.TransitionArchiveInspectionRejected(
+            context.JobId,
+            context.LeaseToken,
+            context.AssetId,
+            context.AssetVersionId,
+            "ARCHIVE_PATH_TRAVERSAL",
+            Arg.Any<string>(),
+            Arg.Any<CancellationToken>())
+            .Returns(true);
+
+        AssetProcessingJobOutcome outcome = await _sut.Process(context, CancellationToken.None);
+
+        outcome.Should().BeOfType<AssetProcessingJobOutcome.AtomicCommitted>()
+            .Which.JobStatus.Should().Be(AssetProcessingJobStatus.FAILED);
     }
 
     private static AssetProcessingJobContext<ArchiveInspectionPayload> CreateContext() =>
@@ -164,8 +277,8 @@ public sealed class ArchiveInspectionJobHandlerTests
             IsCurrent = false,
             StorageKey = "assets/test/file.zip",
             FileName = "file.zip",
-            ContentLength = 1000,
-            ContentSha256 = "abc123sha",
+            ContentLength = _observedBytes.Length,
+            ContentSha256 = _observedSha256,
             ReleaseNotes = "Initial release",
             LicenseCode = AssetLicenseCode.PERSONAL,
             LicenseTemplateVersion = "1.0",

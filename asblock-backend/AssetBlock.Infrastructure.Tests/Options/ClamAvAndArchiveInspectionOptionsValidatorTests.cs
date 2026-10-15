@@ -33,6 +33,7 @@ public sealed class ClamAvOptionsValidatorTests
         ValidateOptionsResult result = sut.Validate(null, new ClamAvOptions
         {
             Enabled = true,
+            VersionTimeZoneId = "UTC",
             Host = "127.0.0.1",
             Port = 3310,
             ConnectTimeoutMs = 1000,
@@ -43,6 +44,30 @@ public sealed class ClamAvOptionsValidatorTests
         });
 
         result.Succeeded.Should().BeTrue();
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("Unknown/DaemonZone")]
+    public void Validate_WhenVersionTimeZoneIsMissingOrUnknown_ShouldFail(string timeZoneId)
+    {
+        IConfigurationRoot config = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
+        {
+            ["AssetProcessing:Enabled"] = "true"
+        }).Build();
+        var sut = new ClamAvOptionsValidator(config);
+
+        ValidateOptionsResult result = sut.Validate(null, new ClamAvOptions
+        {
+            Enabled = true,
+            VersionTimeZoneId = timeZoneId,
+            Host = "127.0.0.1",
+            Port = 3310,
+            MaxStreamBytes = 262144000
+        });
+
+        result.Failed.Should().BeTrue();
+        result.Failures.Should().Contain(f => f.Contains("VersionTimeZoneId"));
     }
 
     [Fact]
@@ -57,6 +82,7 @@ public sealed class ClamAvOptionsValidatorTests
         ValidateOptionsResult tooShort = sut.Validate(null, new ClamAvOptions
         {
             Enabled = true,
+            VersionTimeZoneId = "UTC",
             Host = "127.0.0.1",
             Port = 3310,
             MaxStreamBytes = 262144000,
@@ -68,6 +94,7 @@ public sealed class ClamAvOptionsValidatorTests
         ValidateOptionsResult tooLong = sut.Validate(null, new ClamAvOptions
         {
             Enabled = true,
+            VersionTimeZoneId = "UTC",
             Host = "127.0.0.1",
             Port = 3310,
             MaxStreamBytes = 262144000,
@@ -88,6 +115,7 @@ public sealed class ClamAvOptionsValidatorTests
         ValidateOptionsResult result = sut.Validate(null, new ClamAvOptions
         {
             Enabled = true,
+            VersionTimeZoneId = "UTC",
             Host = "127.0.0.1",
             Port = 3310,
             MaxStreamBytes = 262144000,
@@ -111,6 +139,7 @@ public sealed class ClamAvOptionsValidatorTests
         ValidateOptionsResult result = sut.Validate(null, new ClamAvOptions
         {
             Enabled = true,
+            VersionTimeZoneId = "UTC",
             Host = "127.0.0.1",
             Port = 3310,
             MaxStreamBytes = 1024
@@ -132,6 +161,7 @@ public sealed class ClamAvOptionsValidatorTests
         ValidateOptionsResult result = sut.Validate(null, new ClamAvOptions
         {
             Enabled = true,
+            VersionTimeZoneId = "UTC",
             Host = "127.0.0.1",
             Port = 3310,
             ConnectTimeoutMs = ClamAvOptions.MAX_CONNECT_TIMEOUT_MS + 1,

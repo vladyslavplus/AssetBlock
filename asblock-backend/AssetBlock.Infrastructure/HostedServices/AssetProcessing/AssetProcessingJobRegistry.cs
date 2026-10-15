@@ -56,7 +56,8 @@ public sealed class AssetProcessingJobHandlerAdapter<THandler, TPayload, TResult
             claimedJob.MaxAttempts,
             typedPayload,
             claimedJob.TraceParent,
-            cancellationToken);
+            cancellationToken,
+            claimedJob.SecurityRecheckId);
 
         AssetProcessingJobOutcome? outcome = await handler.Process(context, cancellationToken);
 

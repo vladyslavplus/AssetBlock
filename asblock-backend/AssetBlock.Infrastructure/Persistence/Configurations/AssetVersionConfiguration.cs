@@ -26,6 +26,13 @@ internal sealed class AssetVersionConfiguration : IEntityTypeConfiguration<Asset
             table.HasCheckConstraint(
                 "CK_asset_versions_state_error_consistency",
                 "(\"ProcessingStatus\" IN ('PENDING_INSPECTION', 'PENDING_MALWARE_SCAN', 'READY') AND \"ProcessingErrorCode\" IS NULL AND \"ProcessingErrorSummary\" IS NULL) OR (\"ProcessingStatus\" IN ('REJECTED', 'PROCESSING_FAILED') AND \"ProcessingErrorCode\" IS NOT NULL AND \"ProcessingErrorSummary\" IS NOT NULL AND length(trim(\"ProcessingErrorSummary\")) > 0)");
+            table.HasCheckConstraint("CK_asset_versions_safety_restriction", "\"SafetyRestriction\" IN ('NONE', 'UNSAFE_ARCHIVE', 'INFECTED', 'INTEGRITY_MISMATCH')");
+            table.HasCheckConstraint("CK_asset_versions_analysis_selection_generation", "\"AnalysisSelectionGeneration\" > 0");
+            // A restriction is always explained; absence of a reason means absence of a restriction.
+            table.HasCheckConstraint(
+                "CK_asset_versions_safety_restriction_reason",
+                "(\"SafetyRestriction\" = 'NONE' AND \"SafetyRestrictionReason\" IS NULL AND \"SafetyRestrictedAt\" IS NULL) OR " +
+                "(\"SafetyRestriction\" <> 'NONE' AND \"SafetyRestrictionReason\" IS NOT NULL AND \"SafetyRestrictedAt\" IS NOT NULL)");
         });
 
         builder.HasKey(v => v.Id);
@@ -59,6 +66,16 @@ internal sealed class AssetVersionConfiguration : IEntityTypeConfiguration<Asset
         builder.Property(v => v.ProcessingErrorCode).HasMaxLength(64);
         builder.Property(v => v.ProcessingErrorSummary).HasMaxLength(2000);
         builder.Property(v => v.ProcessingUpdatedAt).IsRequired();
+        // Both defaults must satisfy the new check constraints, because the columns are added to a
+        // table that already holds approved and purchased versions.
+        builder.Property(v => v.SafetyRestriction)
+            .IsRequired()
+            .HasMaxLength(24)
+            .HasConversion(s => s.ToString(), s => Enum.Parse<AssetVersionSafetyRestriction>(s));
+        builder.Property(v => v.SafetyRestriction).Metadata.SetDefaultValue(AssetVersionSafetyRestriction.NONE);
+        builder.Property(v => v.SafetyRestrictionReason).HasMaxLength(64);
+        builder.Property(v => v.AnalysisSelectionGeneration).IsRequired().HasDefaultValue(1);
+        builder.Property(v => v.AnalysisSelectionGeneration).IsRequired();
 
         builder.Property(v => v.CreatedAt).IsRequired();
         // Versions are append-only; UpdatedAt from BaseEntity is unused and ignored.
@@ -74,11 +91,18 @@ internal sealed class AssetVersionConfiguration : IEntityTypeConfiguration<Asset
         builder.Property(v => v.LicenseTemplateVersion).Metadata.SetAfterSaveBehavior(PropertySaveBehavior.Throw);
         builder.Property(v => v.LicenseDisplayName).Metadata.SetAfterSaveBehavior(PropertySaveBehavior.Throw);
         builder.Property(v => v.LicenseTerms).Metadata.SetAfterSaveBehavior(PropertySaveBehavior.Throw);
+        builder.Property(v => v.SelectedCodeAnalysisReportId).Metadata.SetAfterSaveBehavior(PropertySaveBehavior.Throw);
 
         builder.HasOne(v => v.Asset)
             .WithMany(a => a.Versions)
             .HasForeignKey(v => v.AssetId)
             .OnDelete(DeleteBehavior.Cascade);
+
+        // The selected report is restrictive: deletion or tombstoning must clear it explicitly first.
+        builder.HasOne<CodeAnalysisReportHeader>()
+            .WithMany()
+            .HasForeignKey(v => v.SelectedCodeAnalysisReportId)
+            .OnDelete(DeleteBehavior.Restrict);
 
         // Enables composite FKs so child rows cannot reference a version of a different asset.
         builder.HasAlternateKey(v => new { v.AssetId, v.Id })

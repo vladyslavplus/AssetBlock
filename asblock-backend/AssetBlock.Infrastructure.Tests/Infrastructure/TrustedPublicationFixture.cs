@@ -2,7 +2,6 @@ using AssetBlock.Domain.Core.Entities;
 using AssetBlock.Domain.Core.Enums;
 using AssetBlock.Domain.Core.Publication;
 using AssetBlock.Infrastructure.Persistence;
-using Microsoft.EntityFrameworkCore;
 
 namespace AssetBlock.Infrastructure.Tests.Infrastructure;
 
@@ -46,21 +45,15 @@ internal static class TrustedPublicationFixture
             CaseRevision = 1,
             CreatedAt = DateTimeOffset.UtcNow
         };
-        CodeAnalysisReportHeader report = new()
-        {
-            Id = Guid.NewGuid(),
-            AssetId = asset.Id,
-            AssetVersionId = version.Id,
-            ContentSha256 = version.ContentSha256,
-            PolicyVersion = "policy-v1",
-            InputRevision = 1,
-            Purpose = CodeAnalysisReportPurpose.PRODUCTION,
-            CanAuthorizePublication = true,
-            IsFinalized = true,
-            FinalizedAt = DateTimeOffset.UtcNow,
-            ReportSchemaVersion = 1,
-            CreatedAt = DateTimeOffset.UtcNow
-        };
+
+        // Trusted publication needs the whole evidence chain, not a bare boolean header.
+        AdmittedReportTestEvidence.Chain chain = AdmittedReportTestEvidence.BuildChain();
+        db.CodeAnalysisPolicyVersions.Add(AdmittedReportTestEvidence.Policy(chain));
+        db.SecurityEvidenceRecords.Add(AdmittedReportTestEvidence.ArchiveEvidence(version, chain));
+        db.SecurityEvidenceRecords.Add(AdmittedReportTestEvidence.MalwareEvidence(version, chain));
+        db.CodeAnalysisRuns.Add(AdmittedReportTestEvidence.CompletedRun(version, chain));
+        CodeAnalysisReportHeader report = AdmittedReportTestEvidence.Header(version, chain);
+
         PublicationSnapshot snapshot = new()
         {
             Id = Guid.NewGuid(),
@@ -91,6 +84,7 @@ internal static class TrustedPublicationFixture
         db.AssetDraftWorkspaces.Add(workspace);
         db.ModerationSubmissions.Add(submission);
         db.CodeAnalysisReportHeaders.Add(report);
+        db.CodeAnalysisReportAdmissions.Add(AdmittedReportTestEvidence.Admission(report, chain, canAuthorizePublication: true));
         db.PublicationSnapshots.Add(snapshot);
         db.ModerationDecisionRecords.Add(decision);
         asset.CurrentPublicationSnapshotId = snapshot.Id;

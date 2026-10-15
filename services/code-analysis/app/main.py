@@ -39,6 +39,9 @@ def build_config() -> tuple:
     dolos_cli = _optional_path("CODE_ANALYSIS_DOLOS_CLI")
     scancode_exe = _optional_path("CODE_ANALYSIS_SCANCODE_EXE")
     service_dir = Path(__file__).resolve().parent.parent
+    index_runtime_compatibility = os.environ.get("CODE_ANALYSIS_INDEX_RUNTIME_COMPATIBILITY")
+    if index_runtime_compatibility not in (None, "pg18-owned-sandbox-v1"):
+        raise ValueError("unsupported CODE_ANALYSIS_INDEX_RUNTIME_COMPATIBILITY")
     worker_entries = tuple(p for p in
                            os.environ.get("CODE_ANALYSIS_WORKER_PATHS", "").split(os.pathsep)
                            if p)
@@ -54,6 +57,7 @@ def build_config() -> tuple:
         reference_manifest=_optional_path("CODE_ANALYSIS_REFERENCE_MANIFEST"),
         gallery_root=_optional_path("CODE_ANALYSIS_GALLERY_ROOT"),
         index_dsn=os.environ.get("CODE_ANALYSIS_INDEX_DSN"),
+        index_runtime_compatibility=index_runtime_compatibility,
         overall_deadline_seconds=_clamped("CODE_ANALYSIS_OVERALL_DEADLINE_SECONDS", 18 * 60, 60, 18 * 60),
         token_deadline_seconds=_clamped("CODE_ANALYSIS_TOKEN_DEADLINE_SECONDS", 3 * 60, 30, 3 * 60),
         scancode_deadline_seconds=_clamped("CODE_ANALYSIS_SCANCODE_DEADLINE_SECONDS", 12 * 60, 60, 12 * 60),
