@@ -31,6 +31,7 @@
     <PackageReference Include="SharpCompress" Version="0.50.0" />
     <PackageReference Include="StackExchange.Redis" Version="2.11.8" />
     <PackageReference Include="Stripe.net" Version="50.4.0" />
+    <PackageReference Include="System.Security.Cryptography.Pkcs" Version="10.0.13" />
   </ItemGroup>
 
   <ItemGroup>
