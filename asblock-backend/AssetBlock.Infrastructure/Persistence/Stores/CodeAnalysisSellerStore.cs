@@ -102,10 +102,10 @@ internal sealed class CodeAnalysisSellerStore(
             ) AS "Value"
             """, assetVersionId.ToString()).FirstAsync(cancellationToken).ConfigureAwait(false);
 
-        var retry = run is not { State: CodeAnalysisRunState.FAILED, OwnerRetryable: true }
-                    || version.SafetyRestriction != AssetVersionSafetyRestriction.NONE
-                    || version.ProcessingStatus != AssetVersionProcessingStatus.READY
-                    || !version.IsCurrent || latestWorkspace is null || !currentInputTuple || recheckPending;
+        var retry = run is { State: CodeAnalysisRunState.FAILED, OwnerRetryable: true }
+                    && version.SafetyRestriction == AssetVersionSafetyRestriction.NONE
+                    && version.ProcessingStatus == AssetVersionProcessingStatus.READY
+                    && version.IsCurrent && latestWorkspace is not null && currentInputTuple && !recheckPending;
         var reportIsCurrent = currentAdmitted && currentTuple && currentReport is not null
             && version.SelectedCodeAnalysisReportId == currentReport.Id;
         SellerAnalysisLifecycle lifecycle = reportIsCurrent

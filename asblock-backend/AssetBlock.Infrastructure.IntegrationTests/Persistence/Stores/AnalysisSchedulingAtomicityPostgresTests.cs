@@ -376,6 +376,50 @@ public sealed class AnalysisSchedulingAtomicityPostgresTests(PostgresFixture fix
         originalRun.State.Should().Be(CodeAnalysisRunState.FAILED);
     }
 
+    [Theory]
+    [InlineData("eligible", true)]
+    [InlineData("nonretryable", false)]
+    [InlineData("notCurrent", false)]
+    [InlineData("restricted", false)]
+    public async Task OwnerSummary_WhenRetryEligibilityChanges_ShouldExposeOnlyEligibleRetry(string state, bool expectedCanRetry)
+    {
+        await using ApplicationDbContext db = await fixture.CreateCleanDbContext();
+        (SeededProof seed, Guid ownerId, Guid failedRunId, _) = await SeedFailedRetryContext(db);
+        switch (state)
+        {
+            case "nonretryable":
+                await db.CodeAnalysisRuns.Where(r => r.Id == failedRunId)
+                    .ExecuteUpdateAsync(s => s.SetProperty(r => r.OwnerRetryable, false));
+                break;
+            case "notCurrent":
+                await db.AssetVersions.Where(v => v.Id == seed.VersionId)
+                    .ExecuteUpdateAsync(s => s.SetProperty(v => v.IsCurrent, false));
+                break;
+            case "restricted":
+                await db.AssetVersions.Where(v => v.Id == seed.VersionId).ExecuteUpdateAsync(s => s
+                    .SetProperty(v => v.SafetyRestriction, AssetVersionSafetyRestriction.INTEGRITY_MISMATCH)
+                    .SetProperty(v => v.SafetyRestrictionReason, "ARCHIVE_CORRUPT")
+                    .SetProperty(v => v.SafetyRestrictedAt, DateTimeOffset.UtcNow));
+                break;
+        }
+        db.ChangeTracker.Clear();
+
+        SellerAnalysisSummaryDto summary = (await CreateSellerStore(db, seed).GetOwnerSummary(seed.VersionId, ownerId))!;
+
+        summary.CanRetry.Should().Be(expectedCanRetry);
+        if (expectedCanRetry)
+        {
+            summary.RetryExpectation.Should().NotBeNull();
+            summary.RetryExpectation!.RunId.Should().Be(failedRunId);
+            summary.ActionHint.Should().NotBeNullOrWhiteSpace();
+        }
+        else
+        {
+            summary.RetryExpectation.Should().BeNull();
+            summary.ActionHint.Should().BeNull();
+        }
+    }
+
     [Fact]
     public async Task Retry_WhenSameOperationRunsConcurrently_ShouldReturnOneCommittedChildAndReceipt()
     {
