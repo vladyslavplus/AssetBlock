@@ -34,6 +34,11 @@ describe('seller-processing-schemas', () => {
     expect(parsed.stage).toBe('INSPECTING')
   })
 
+  it('accepts code analysis jobs returned by the processing API', () => {
+    const parsed = assetProcessingJobSchema.parse({ ...validJob, type: 'CODE_ANALYSIS' })
+    expect(parsed.type).toBe('CODE_ANALYSIS')
+  })
+
   it('rejects internal or unexpected fields in AssetProcessingJobDto', () => {
     const withPayload = {
       ...validJob,

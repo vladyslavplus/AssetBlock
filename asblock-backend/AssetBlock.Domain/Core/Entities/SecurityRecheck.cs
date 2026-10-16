@@ -37,6 +37,9 @@ public class SecurityRecheck : BaseEntity
     /// <summary>Linked prior generation created by an explicit terminal retry.</summary>
     public Guid? ParentRecheckId { get; set; }
 
+    /// <summary>Failed analysis run whose retry waits for this scoped proof repair.</summary>
+    public Guid? ParentAnalysisRunId { get; set; }
+
     public Guid? ArchiveEvidenceId { get; set; }
 
     public Guid? MalwareEvidenceId { get; set; }

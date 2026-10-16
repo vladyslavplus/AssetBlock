@@ -1810,6 +1810,10 @@ namespace AssetBlock.Infrastructure.Migrations
                         .HasMaxLength(48)
                         .HasColumnType("character varying(48)");
 
+                    b.Property<string>("ForeignOrigin")
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
                     b.Property<string>("ForeignSensitivity")
                         .IsRequired()
                         .HasMaxLength(16)
@@ -1824,6 +1828,11 @@ namespace AssetBlock.Infrastructure.Migrations
 
                     b.Property<int?>("OwnEndLine")
                         .HasColumnType("integer");
+
+                    b.Property<string>("OwnExcerpt")
+                        .IsRequired()
+                        .HasMaxLength(320)
+                        .HasColumnType("character varying(320)");
 
                     b.Property<string>("OwnScopePath")
                         .IsRequired()
@@ -1882,6 +1891,8 @@ namespace AssetBlock.Infrastructure.Migrations
                             t.HasCheckConstraint("CK_code_analysis_report_findings_key", "\"FindingKey\" ~ '^[A-Za-z0-9][A-Za-z0-9_.\\-]{0,127}$'");
 
                             t.HasCheckConstraint("CK_code_analysis_report_findings_lines", "(\"OwnStartLine\" IS NULL AND \"OwnEndLine\" IS NULL) OR (\"OwnStartLine\" IS NOT NULL AND \"OwnEndLine\" IS NOT NULL AND \"OwnStartLine\" > 0 AND \"OwnEndLine\" >= \"OwnStartLine\")");
+
+                            t.HasCheckConstraint("CK_code_analysis_report_findings_origin", "\"ForeignOrigin\" IS NULL OR \"ForeignOrigin\" IN ('OWN', 'FOREIGN')");
 
                             t.HasCheckConstraint("CK_code_analysis_report_findings_scores", "\"TokenScore\" IS NULL OR \"TokenScore\" <> 'NaN'::double precision");
 
@@ -2229,6 +2240,11 @@ namespace AssetBlock.Infrastructure.Migrations
 
                     b.Property<Guid?>("MaterialRevisionId")
                         .HasColumnType("uuid");
+
+                    b.Property<bool>("OwnerRetryable")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false);
 
                     b.Property<Guid?>("ParentRunId")
                         .HasColumnType("uuid");
@@ -3612,6 +3628,9 @@ namespace AssetBlock.Infrastructure.Migrations
                         .IsFixedLength();
 
                     b.Property<Guid>("OperationReceiptId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("ParentAnalysisRunId")
                         .HasColumnType("uuid");
 
                     b.Property<Guid?>("ParentRecheckId")

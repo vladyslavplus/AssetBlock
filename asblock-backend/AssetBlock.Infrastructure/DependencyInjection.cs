@@ -191,7 +191,15 @@ public static class DependencyInjection
         services.AddScoped<IJwtTokenService, JwtTokenService>();
         services.AddScoped<IUserStore, UserStore>();
         services.AddScoped<IAuthenticatedUserRoleResolver, AuthenticatedUserRoleResolver>();
-        services.AddScoped<IModerationFoundationStore, ModerationFoundationStore>();
+        services.AddScoped<IModerationFoundationStore>(provider => new ModerationFoundationStore(
+            provider.GetRequiredService<ApplicationDbContext>(),
+            provider.GetRequiredService<IAssetStore>(),
+            provider.GetRequiredService<IUserStore>(),
+            provider.GetRequiredService<IUnitOfWork>(),
+            provider.GetRequiredService<TimeProvider>(),
+            provider.GetRequiredService<IAuditWriter>(),
+            provider.GetRequiredService<IAnalysisRunEnqueuer>(),
+            provider.GetRequiredService<ISecurityProvenanceStore>()));
         services.AddScoped<IUserVerificationStore, UserVerificationStore>();
 
         services.AddScoped<ICategoryStore, CategoryStore>();
@@ -210,6 +218,7 @@ public static class DependencyInjection
         services.AddScoped<IAnalysisReservationReader, AnalysisReservationReader>();
         services.AddScoped<ICodeAnalysisReportValidator, CodeAnalysisReportValidator>();
         services.AddScoped<ICodeAnalysisReportFinalizer, CodeAnalysisReportFinalizer>();
+        services.AddScoped<ICodeAnalysisSellerStore, CodeAnalysisSellerStore>();
         services.AddHttpClient<ICodeAnalysisClient, CodeAnalysisClient>(
             CodeAnalysisClient.HTTP_CLIENT_NAME,
             (sp, client) =>

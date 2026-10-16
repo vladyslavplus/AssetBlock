@@ -762,7 +762,7 @@ public sealed class AssetProcessingWorker(
             ? _analysisOptions.OperationTimeout
             : _options.OperationTimeout;
 
-    private static async Task<bool> FailProcessing(
+    private async Task<bool> FailProcessing(
         IAssetProcessingJobStore jobStore,
         IAssetProcessingLifecycleStore lifecycleStore,
         ClaimedAssetProcessingJob job,
@@ -786,6 +786,17 @@ public sealed class AssetProcessingWorker(
                     errorCode,
                     safeSummary,
                     cancellationToken);
+            }
+
+            if (job.Type == AssetProcessingJobType.CODE_ANALYSIS)
+            {
+                await using AsyncServiceScope failureScope = scopeFactory.CreateAsyncScope();
+                AssetProcessingJobOutcome finalized = await failureScope.ServiceProvider
+                    .GetRequiredService<ICodeAnalysisReportFinalizer>()
+                    .FinalizeFailure(job.JobId, job.LeaseToken, errorCode, safeSummary,
+                        ownerRetryable: retryable, cancellationToken)
+                    .ConfigureAwait(false);
+                return finalized is AssetProcessingJobOutcome.AtomicCommitted;
             }
 
             return await jobStore.MarkFailedTerminal(

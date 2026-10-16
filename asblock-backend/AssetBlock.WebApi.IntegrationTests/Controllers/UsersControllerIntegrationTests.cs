@@ -4,8 +4,14 @@ using System.Text;
 using System.Text.Json;
 using AssetBlock.Domain.Core.Constants;
 using AssetBlock.Domain.Core.Dto.Users;
+using AssetBlock.Domain.Core.Entities;
+using AssetBlock.Domain.Core.Enums;
+using AssetBlock.Domain.Core.Licenses;
+using AssetBlock.Infrastructure.Persistence;
 using AssetBlock.WebApi.IntegrationTests.Support;
 using AwesomeAssertions;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace AssetBlock.WebApi.IntegrationTests.Controllers;
 
@@ -218,5 +224,185 @@ public sealed class UsersControllerIntegrationTests(IntegrationTestFixture fixtu
 
         get.StatusCode.Should().Be(HttpStatusCode.NotFound);
         post.StatusCode.Should().Be(HttpStatusCode.NotFound);
+    }
+
+    [Fact]
+    public async Task AnalysisFindings_WithoutAuth_ShouldReturn401()
+    {
+        HttpClient client = fixture.Factory.CreateClient();
+        HttpResponseMessage response = await client.GetAsync(
+            new Uri($"/api/users/me/asset-versions/{Guid.NewGuid()}/analysis/reports/{Guid.NewGuid()}/findings?page=1", UriKind.Relative));
+
+        response.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+    }
+
+    [Fact]
+    public async Task AnalysisRetry_WithoutAuth_ShouldReturn401()
+    {
+        HttpClient client = fixture.Factory.CreateClient();
+        HttpResponseMessage response = await client.PostAsJsonAsync(
+            new Uri($"/api/users/me/assets/{Guid.NewGuid()}/versions/{Guid.NewGuid()}/analysis-retries", UriKind.Relative),
+            new
+            {
+                operationId = Guid.NewGuid(),
+                expectedRunId = Guid.NewGuid(),
+                expectedWorkspaceRevision = 1,
+                expectedPolicyDigest = new string('a', 64),
+                expectedInputDigest = new string('b', 64)
+            });
+
+        response.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+    }
+
+    [Fact]
+    public async Task AnalysisRetry_WhenEmailUnverified_ShouldReturn403()
+    {
+        (HttpClient client, _) = await IntegrationTestAuth.RegisterAndAuthenticateAsync(fixture.Factory);
+        HttpResponseMessage response = await client.PostAsJsonAsync(
+            new Uri($"/api/users/me/assets/{Guid.NewGuid()}/versions/{Guid.NewGuid()}/analysis-retries", UriKind.Relative),
+            new
+            {
+                operationId = Guid.NewGuid(),
+                expectedRunId = Guid.NewGuid(),
+                expectedWorkspaceRevision = 1,
+                expectedPolicyDigest = new string('a', 64),
+                expectedInputDigest = new string('b', 64)
+            });
+
+        response.StatusCode.Should().Be(HttpStatusCode.Forbidden);
+    }
+
+    [Fact]
+    public async Task AnalysisRetry_WhenExpectationIsMalformed_ShouldReturn400()
+    {
+        (HttpClient client, _) = await IntegrationTestAuth.RegisterVerifiedAndAuthenticateAsync(fixture.Factory);
+        HttpResponseMessage response = await client.PostAsJsonAsync(
+            new Uri($"/api/users/me/assets/{Guid.NewGuid()}/versions/{Guid.NewGuid()}/analysis-retries", UriKind.Relative),
+            new
+            {
+                operationId = Guid.Empty,
+                expectedRunId = Guid.Empty,
+                expectedWorkspaceRevision = 0,
+                expectedPolicyDigest = "bad",
+                expectedInputDigest = "bad"
+            });
+
+        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+    }
+
+    [Fact]
+    public async Task AnalysisFindings_WhenOwnerDoesNotOwnVersion_ShouldReturn404()
+    {
+        (HttpClient client, _) = await IntegrationTestAuth.RegisterAndAuthenticateAsync(fixture.Factory);
+        HttpResponseMessage response = await client.GetAsync(
+            new Uri($"/api/users/me/asset-versions/{Guid.NewGuid()}/analysis/reports/{Guid.NewGuid()}/findings?page=1", UriKind.Relative));
+
+        response.StatusCode.Should().Be(HttpStatusCode.NotFound);
+    }
+
+    [Fact]
+    public async Task AnalysisFindings_WhenFinalizedHeaderAndMatchingAdmissionHaveNoBoundRun_ShouldReturn404()
+    {
+        (HttpClient client, var username) = await IntegrationTestAuth.RegisterAndAuthenticateAsync(fixture.Factory);
+        Guid assetId;
+        Guid versionId;
+        Guid reportId;
+        await using (AsyncServiceScope scope = fixture.Factory.Services.CreateAsyncScope())
+        {
+            ApplicationDbContext db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+            User owner = await db.Users.SingleAsync(u => u.Username == username);
+            var suffix = Guid.NewGuid().ToString("N");
+            DateTimeOffset now = DateTimeOffset.UtcNow;
+            Category category = new()
+            {
+                Id = Guid.NewGuid(),
+                Name = $"Analysis test {suffix}",
+                Slug = $"analysis-test-{suffix}",
+                CreatedAt = now
+            };
+            assetId = Guid.NewGuid();
+            versionId = Guid.NewGuid();
+            reportId = Guid.NewGuid();
+            var contentHash = new string('a', 64);
+            var reportDigest = new string('b', 64);
+            var pythonReportId = new string('c', 64);
+            var inputDigest = new string('d', 64);
+            Asset asset = new()
+            {
+                Id = assetId,
+                AuthorId = owner.Id,
+                CategoryId = category.Id,
+                Title = "Unbound analysis report",
+                Description = "",
+                Price = 0,
+                CreatedAt = now
+            };
+            AssetLicenseTemplate license = AssetLicenseCatalog.Get(AssetLicenseCode.PERSONAL);
+            AssetVersion version = new()
+            {
+                Id = versionId,
+                AssetId = assetId,
+                VersionNumber = 1,
+                IsCurrent = true,
+                StorageKey = $"assets/{assetId:N}/v1.bin",
+                FileName = "package.zip",
+                ContentLength = 1,
+                ContentSha256 = contentHash,
+                ReleaseNotes = "Initial release",
+                LicenseCode = license.Code,
+                LicenseTemplateVersion = license.TemplateVersion,
+                LicenseDisplayName = license.DisplayName,
+                LicenseTerms = license.TermsPlainText,
+                ProcessingStatus = AssetVersionProcessingStatus.READY,
+                ProcessingUpdatedAt = now,
+                CreatedAt = now
+            };
+            CodeAnalysisReportHeader report = new()
+            {
+                Id = reportId,
+                AssetId = assetId,
+                AssetVersionId = versionId,
+                ContentSha256 = contentHash,
+                PolicyVersion = "code-analysis-policy-v1",
+                InputRevision = 1,
+                Purpose = CodeAnalysisReportPurpose.PRODUCTION,
+                CanAuthorizePublication = false,
+                IsFinalized = true,
+                FinalizedAt = now,
+                ReportSchemaVersion = 1,
+                PythonReportId = pythonReportId,
+                ReportDigest = reportDigest,
+                CreatedAt = now
+            };
+            CodeAnalysisReportAdmission admission = new()
+            {
+                Id = Guid.NewGuid(),
+                ReportId = reportId,
+                AdmissionKind = CodeAnalysisAdmissionKind.SERVER_VALIDATED,
+                AdmittedBy = "assetblock-dotnet-finalizer",
+                AdmittedAt = now,
+                ReportDigest = reportDigest,
+                PythonReportId = pythonReportId,
+                InputDigest = inputDigest,
+                ServiceKey = "code-analysis",
+                ReservationSlotNumber = 0,
+                ReservationGeneration = 1,
+                ReservationLeaseTokenDigest = new string('e', 64),
+                CanAuthorizePublication = false,
+                PublicationAuthorityReason = "Research evaluation only.",
+                CreatedAt = now
+            };
+            db.Categories.Add(category);
+            db.Assets.Add(asset);
+            db.AssetVersions.Add(version);
+            db.CodeAnalysisReportHeaders.Add(report);
+            db.CodeAnalysisReportAdmissions.Add(admission);
+            await db.SaveChangesAsync();
+        }
+
+        HttpResponseMessage response = await client.GetAsync(
+            new Uri($"/api/users/me/asset-versions/{versionId}/analysis/reports/{reportId}/findings?page=1", UriKind.Relative));
+
+        response.StatusCode.Should().Be(HttpStatusCode.NotFound);
     }
 }

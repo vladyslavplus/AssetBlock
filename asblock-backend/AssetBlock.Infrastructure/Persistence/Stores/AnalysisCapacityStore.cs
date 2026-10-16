@@ -764,27 +764,32 @@ internal sealed class AnalysisCapacityStore(
 
                     if (attempts.Count == 1)
                     {
-                        exhausted = attempts[0].AttemptCount >= attempts[0].MaxAttempts;
+                        var resultingAttemptCount = attempts[0].AttemptCount;
 
                         // A recoverable reservation consumes this attempt, so a genuine execution
                         // failure still gets its bounded retries.
-                        if (!exhausted)
+                        if (resultingAttemptCount < attempts[0].MaxAttempts)
                         {
                             await dbContext.Database.ExecuteSqlInterpolatedAsync($"""
                                 UPDATE asset_processing_jobs
                                 SET "AttemptCount" = "AttemptCount" + 1
                                 WHERE "Id" = {jobId} AND "Status" = 'RUNNING'
                                 """, cancellationToken);
+                            resultingAttemptCount++;
                         }
+
+                        // Both the run and job transition use the post-accounting result. In
+                        // particular, a recovery that consumes the last attempt must fail both.
+                        exhausted = resultingAttemptCount >= attempts[0].MaxAttempts;
                     }
                 }
 
                 await dbContext.Database.ExecuteSqlInterpolatedAsync($"""
                     UPDATE asset_processing_jobs
-                    SET "Status" = CASE WHEN "AttemptCount" >= "MaxAttempts" THEN 'FAILED' ELSE 'RETRY_SCHEDULED' END,
-                        "Stage" = CASE WHEN "AttemptCount" >= "MaxAttempts" THEN 'FAILED_RESERVATION_RECONCILED' ELSE 'RESERVATION_RECONCILED' END,
-                        "CompletedAt" = CASE WHEN "AttemptCount" >= "MaxAttempts" THEN {dbNow} ELSE NULL END,
-                        "AvailableAt" = CASE WHEN "AttemptCount" >= "MaxAttempts" THEN "AvailableAt" ELSE {dbNow} END,
+                    SET "Status" = CASE WHEN {exhausted} THEN 'FAILED' ELSE 'RETRY_SCHEDULED' END,
+                        "Stage" = CASE WHEN {exhausted} THEN 'FAILED_RESERVATION_RECONCILED' ELSE 'RESERVATION_RECONCILED' END,
+                        "CompletedAt" = CASE WHEN {exhausted} THEN {dbNow} ELSE NULL END,
+                        "AvailableAt" = CASE WHEN {exhausted} THEN "AvailableAt" ELSE {dbNow} END,
                         "ErrorCode" = {ErrorCodes.LEASE_EXPIRED},
                         "ErrorSummary" = 'The reserved analysis execution could no longer be confirmed as running.',
                         "LeaseOwner" = NULL,
@@ -809,10 +814,12 @@ internal sealed class AnalysisCapacityStore(
                         UPDATE code_analysis_runs
                         SET "State" = CASE WHEN {exhausted} THEN 'FAILED' ELSE 'QUEUED' END,
                             "CompletedAt" = CASE WHEN {exhausted} THEN {dbNow} ELSE NULL END,
+                            "OwnerRetryable" = CASE WHEN {exhausted} THEN true ELSE "OwnerRetryable" END,
                             "TransportLeaseToken" = NULL,
                             "ReservationGeneration" = NULL,
                             "HardDeadlineUtc" = NULL,
                             "ErrorCode" = {ErrorCodes.LEASE_EXPIRED},
+                            "ErrorSummary" = 'The reserved analysis execution could no longer be confirmed as running.',
                             "UpdatedAt" = {dbNow}
                         WHERE "Id" = {runId}
                           AND "State" = 'RUNNING'

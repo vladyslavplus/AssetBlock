@@ -69,6 +69,12 @@ export function useAssetProcessingSubscription(enabled = true, userId?: string |
         queryKey: sellerProcessingKeys.version(msg.assetVersionId),
       })
       invalidateQueriesInBackground(queryClient, {
+        queryKey: sellerKeys.versionReview(msg.assetId, msg.assetVersionId),
+      })
+      invalidateQueriesInBackground(queryClient, {
+        queryKey: sellerKeys.analysisFindingsForVersion(msg.assetId, msg.assetVersionId),
+      })
+      invalidateQueriesInBackground(queryClient, {
         queryKey: sellerKeys.detail(msg.assetId),
       })
       invalidateQueriesInBackground(queryClient, {

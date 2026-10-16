@@ -7,6 +7,7 @@ import {
   sellerDraftCreatedSchema,
   sellerDraftCreateRequestSchema,
   sellerDraftSnapshotSchema,
+  sellerAnalysisFindingSchema,
   sellerVersionReviewSchema,
   sourceDeclarationByteSize,
   sourceDeclarationPayloadSchema,
@@ -34,6 +35,48 @@ const DECLARATION: SourceDeclarationPayload = {
   disclosurePolicyVersion: '1',
   components: [COMPONENT],
 }
+
+describe('sellerAnalysisFindingSchema', () => {
+  it('accepts exact backend maximum bounds and public attribution without a link', () => {
+    const result = sellerAnalysisFindingSchema.safeParse({
+      id: '123e4567-e89b-12d3-a456-426614174010',
+      findingType: 'LICENSE_CONCERN',
+      ownPath: 'a'.repeat(1024),
+      ownExcerpt: 'own source',
+      startByte: null,
+      endByte: null,
+      startLine: null,
+      endLine: null,
+      reason: 'r'.repeat(1024),
+      requestedAction: 'a'.repeat(512),
+      referenceKind: 'FOREIGN_PUBLIC',
+      publicAttribution: { label: 'Public reference', url: null },
+    })
+
+    expect(result.success).toBe(true)
+  })
+
+  it('rejects values beyond backend bounds and non-HTTPS attribution links', () => {
+    const base = {
+      id: '123e4567-e89b-12d3-a456-426614174010',
+      findingType: 'LICENSE_CONCERN',
+      ownPath: 'path',
+      ownExcerpt: '',
+      startByte: null,
+      endByte: null,
+      startLine: null,
+      endLine: null,
+      reason: '',
+      requestedAction: '',
+      referenceKind: 'FOREIGN_PUBLIC',
+      publicAttribution: { label: 'Public reference', url: 'http://example.com' },
+    }
+    expect(
+      sellerAnalysisFindingSchema.safeParse({ ...base, ownPath: 'a'.repeat(1025) }).success,
+    ).toBe(false)
+    expect(sellerAnalysisFindingSchema.safeParse(base).success).toBe(false)
+  })
+})
 
 describe('sellerDraftSnapshotSchema', () => {
   it('accepts a draft-only snapshot with nullable latest version', () => {
@@ -155,6 +198,51 @@ describe('sellerVersionReviewSchema', () => {
       canUpload: true,
       canSubmit: false,
       blockedReasons: ['ERR_ANALYSIS_NOT_AVAILABLE'],
+    })
+
+    expect(result.success).toBe(true)
+  })
+
+  it('accepts analysis timestamps with backend UTC offsets', () => {
+    const result = sellerVersionReviewSchema.safeParse({
+      assetId: '123e4567-e89b-12d3-a456-426614174000',
+      assetVersionId: '123e4567-e89b-12d3-a456-426614174001',
+      versionNumber: 1,
+      processingStatus: 'READY',
+      processingErrorCode: null,
+      processingErrorSummary: null,
+      analysis: 'ANALYSIS_AVAILABLE',
+      moderationState: 'DRAFT',
+      publicationEligible: false,
+      canUpload: true,
+      canSubmit: false,
+      blockedReasons: ['ERR_RESEARCH_EVALUATION_PENDING'],
+      analysisDetails: {
+        assetId: '123e4567-e89b-12d3-a456-426614174000',
+        assetVersionId: '123e4567-e89b-12d3-a456-426614174001',
+        lifecycle: 'COMPLETED',
+        runId: '123e4567-e89b-12d3-a456-426614174002',
+        reportId: '123e4567-e89b-12d3-a456-426614174003',
+        reportIsCurrent: true,
+        coverageLevel: 'PARTIAL',
+        analyzedFileCount: 1,
+        omissionCount: 3,
+        findingCount: 1,
+        createdAt: '2026-10-15T21:29:45.1519+00:00',
+        completedAt: '2026-10-15T21:29:55.754256+00:00',
+        errorCode: null,
+        errorMessage: null,
+        actionHint: null,
+        canRetry: false,
+        retryExpectation: null,
+        canSubmit: false,
+        canAuthorizePublication: false,
+        comparisonScope: 'Selected source files from this version only',
+        limitations: ['Research evaluation only.'],
+        stages: [
+          { stage: 'REPORT', applicability: 'MANDATORY', outcome: 'SUCCEEDED', retryable: false },
+        ],
+      },
     })
 
     expect(result.success).toBe(true)

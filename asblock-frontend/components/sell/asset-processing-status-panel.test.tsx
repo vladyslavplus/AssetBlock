@@ -202,6 +202,29 @@ describe('AssetProcessingStatusPanel', () => {
     expect(screen.getByText('Passed')).toBeInTheDocument()
   })
 
+  it('renders the admitted code analysis job type', async () => {
+    const codeAnalysisJob: AssetProcessingJobDto = {
+      ...succeededJob,
+      id: '66666666-6666-4666-8666-666666666666',
+      type: 'CODE_ANALYSIS',
+    }
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(
+        async () =>
+          new Response(JSON.stringify([codeAnalysisJob]), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          }),
+      ),
+    )
+
+    renderWithProviders(<AssetProcessingStatusPanel assetId={codeAnalysisJob.assetId} />)
+
+    expect(await screen.findByText('Code Analysis')).toBeInTheDocument()
+    expect(screen.getByText('Passed')).toBeInTheDocument()
+  })
+
   it('does not subscribe to SignalR; that belongs to the authenticated shell', async () => {
     vi.stubGlobal(
       'fetch',

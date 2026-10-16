@@ -122,6 +122,7 @@ public static class ErrorCodesToErrorMessages
         { ErrorCodes.ANALYSIS_RESPONSE_INVALID, "The analysis response could not be validated against the admitted contract." },
         { ErrorCodes.ANALYSIS_CAPACITY_UNAVAILABLE, "No analysis capacity slot is currently available." },
         { ErrorCodes.ANALYSIS_POLICY_UNAVAILABLE, "No admitted analysis policy is pinned for this deployment." },
+        { ErrorCodes.ERR_ANALYSIS_RETRY_CONFLICT, "Analysis retry is no longer available for this version. Refresh the version review and try again if retry remains available." },
         { ErrorCodes.SCANNER_LIMIT_EXCEEDED, "The malware scanner stopped because a configured size or resource limit was exceeded." },
         { ErrorCodes.MISSING_HANDLER, "No handler is registered for the processing job type." },
         { ErrorCodes.INVALID_JOB_PAYLOAD, "The processing job payload is invalid." },
@@ -162,6 +163,7 @@ public static class ErrorCodesToErrorMessages
         { ErrorCodes.ERR_SUBMISSION_WITHDRAW_CONFLICT, "The submission case changed. Refresh and try again." },
         { ErrorCodes.ERR_VERSION_FILE_CHECKS_INCOMPLETE, "File checks are not complete for this version yet." },
         { ErrorCodes.ERR_ANALYSIS_NOT_AVAILABLE, "Code analysis is not available yet for this version." },
+        { ErrorCodes.ERR_RESEARCH_EVALUATION_PENDING, "The report cannot authorize publication while research evaluation is pending." },
         { ErrorCodes.ERR_DECLARATION_INCOMPLETE, "The source declaration is incomplete for this version." }
     };
 

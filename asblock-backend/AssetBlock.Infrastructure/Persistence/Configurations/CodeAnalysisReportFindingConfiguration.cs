@@ -17,6 +17,9 @@ internal sealed class CodeAnalysisReportFindingConfiguration : IEntityTypeConfig
             table.HasCheckConstraint(
                 "CK_code_analysis_report_findings_sensitivity",
                 "\"ForeignSensitivity\" IN ('PUBLIC', 'PRIVATE')");
+            table.HasCheckConstraint(
+                "CK_code_analysis_report_findings_origin",
+                "\"ForeignOrigin\" IS NULL OR \"ForeignOrigin\" IN ('OWN', 'FOREIGN')");
             // Private references must not carry any attribution payload.
             table.HasCheckConstraint(
                 "CK_code_analysis_report_findings_attribution",
@@ -35,11 +38,13 @@ internal sealed class CodeAnalysisReportFindingConfiguration : IEntityTypeConfig
         builder.Property(f => f.FindingKey).IsRequired().HasMaxLength(128);
         builder.Property(f => f.FindingType).IsRequired().HasMaxLength(48);
         builder.Property(f => f.OwnScopePath).IsRequired().HasMaxLength(1024);
+        builder.Property(f => f.OwnExcerpt).IsRequired().HasMaxLength(320);
         builder.Property(f => f.OwnStartByte).IsRequired(false);
         builder.Property(f => f.OwnEndByte).IsRequired(false);
         builder.Property(f => f.OwnStartLine).IsRequired(false);
         builder.Property(f => f.OwnEndLine).IsRequired(false);
         builder.Property(f => f.ForeignSourceId).HasMaxLength(128);
+        builder.Property(f => f.ForeignOrigin).HasMaxLength(16);
         builder.Property(f => f.ForeignSensitivity)
             .IsRequired()
             .HasMaxLength(16)

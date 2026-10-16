@@ -86,6 +86,24 @@ describe('useAssetProcessingSubscription', () => {
     )
     expect(invalidate).toHaveBeenCalledWith(
       expect.objectContaining({
+        queryKey: sellerKeys.versionReview(
+          '22222222-2222-4222-8222-222222222222',
+          '33333333-3333-4333-8333-333333333333',
+        ),
+      }),
+      expect.anything(),
+    )
+    expect(invalidate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        queryKey: sellerKeys.analysisFindingsForVersion(
+          '22222222-2222-4222-8222-222222222222',
+          '33333333-3333-4333-8333-333333333333',
+        ),
+      }),
+      expect.anything(),
+    )
+    expect(invalidate).toHaveBeenCalledWith(
+      expect.objectContaining({
         queryKey: sellerCopilotKeys.version('33333333-3333-4333-8333-333333333333'),
       }),
       expect.anything(),
@@ -108,7 +126,7 @@ describe('useAssetProcessingSubscription', () => {
       }),
       expect.anything(),
     )
-    expect(invalidate).toHaveBeenCalledTimes(6)
+    expect(invalidate).toHaveBeenCalledTimes(8)
   })
 
   it('invalidates each key once when both edit panels share a single parent subscription', async () => {
@@ -210,6 +228,30 @@ describe('useAssetProcessingSubscription', () => {
     expect(keys.filter((key) => key.includes(JSON.stringify(sellerKeys.listings())))).toHaveLength(
       1,
     )
+    expect(
+      keys.filter((key) =>
+        key.includes(
+          JSON.stringify(
+            sellerKeys.versionReview(
+              '22222222-2222-4222-8222-222222222222',
+              '33333333-3333-4333-8333-333333333333',
+            ),
+          ),
+        ),
+      ),
+    ).toHaveLength(1)
+    expect(
+      keys.filter((key) =>
+        key.includes(
+          JSON.stringify(
+            sellerKeys.analysisFindingsForVersion(
+              '22222222-2222-4222-8222-222222222222',
+              '33333333-3333-4333-8333-333333333333',
+            ),
+          ),
+        ),
+      ),
+    ).toHaveLength(1)
   })
 
   it('invalidates catalog once for a security terminal update', async () => {
@@ -246,7 +288,7 @@ describe('useAssetProcessingSubscription', () => {
       ),
     ).toHaveLength(1)
     expect(keys.filter((key) => key.includes(JSON.stringify(assetKeys.similarAll)))).toHaveLength(1)
-    expect(invalidate).toHaveBeenCalledTimes(8)
+    expect(invalidate).toHaveBeenCalledTimes(10)
   })
 
   it('triggers catch-up invalidations when SignalR transitions to connected state', async () => {

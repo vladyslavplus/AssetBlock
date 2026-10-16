@@ -1,7 +1,10 @@
+using System.Security.Cryptography;
+using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using AssetBlock.Domain.Abstractions.Services;
 using AssetBlock.Domain.Core.Constants;
+using AssetBlock.Domain.Core.Dto;
 using AssetBlock.Domain.Core.Dto.Assets;
 using AssetBlock.Domain.Core.Dto.Audit;
 using AssetBlock.Domain.Core.Dto.Moderation;
@@ -22,7 +25,9 @@ internal sealed class ModerationFoundationStore(
     IUserStore userStore,
     IUnitOfWork unitOfWork,
     TimeProvider? timeProvider = null,
-    IAuditWriter? auditWriter = null) : IModerationFoundationStore
+    IAuditWriter? auditWriter = null,
+    IAnalysisRunEnqueuer? analysisRunEnqueuer = null,
+    ISecurityProvenanceStore? securityProvenanceStore = null) : IModerationFoundationStore
 {
     private static readonly JsonSerializerOptions _idempotencyJsonOptions = new()
     {
@@ -583,6 +588,85 @@ internal sealed class ModerationFoundationStore(
             latestVersion?.Number);
     }
 
+    private async Task ReconcileAnalysisSelection(Guid assetId, Guid assetVersionId, Guid workspaceId, Guid operationId, CancellationToken cancellationToken)
+    {
+        if (analysisRunEnqueuer is null || securityProvenanceStore is null)
+        {
+            throw new InvalidOperationException("Analysis reconciliation dependencies are unavailable.");
+        }
+
+        AssetVersion? version = await dbContext.AssetVersions.AsNoTracking()
+            .SingleOrDefaultAsync(v => v.Id == assetVersionId && v.AssetId == assetId, cancellationToken).ConfigureAwait(false);
+        AssetDraftWorkspace? workspace = await dbContext.AssetDraftWorkspaces.AsNoTracking()
+            .SingleOrDefaultAsync(w => w.Id == workspaceId, cancellationToken).ConfigureAwait(false);
+        if (version is null || workspace is null || version.ProcessingStatus != AssetVersionProcessingStatus.READY
+            || version.SafetyRestriction != AssetVersionSafetyRestriction.NONE)
+        {
+            return;
+        }
+
+        CodeAnalysisRun? parent = await dbContext.CodeAnalysisRuns.AsNoTracking()
+            .Where(r => r.AssetVersionId == assetVersionId && r.SelectionGeneration < version.AnalysisSelectionGeneration)
+            .OrderByDescending(r => r.CreatedAt).FirstOrDefaultAsync(cancellationToken).ConfigureAwait(false);
+        SecurityRecheck? selectedRecheck = await dbContext.SecurityRechecks.AsNoTracking()
+            .SingleOrDefaultAsync(r => r.AssetVersionId == assetVersionId && r.SelectedGeneration != null, cancellationToken).ConfigureAwait(false);
+        if (selectedRecheck?.State is SecurityRecheckState.QUEUED or SecurityRecheckState.INSPECTING or SecurityRecheckState.SCANNING)
+        {
+            return;
+        }
+
+        Guid? recheckId = selectedRecheck?.Id;
+        var securityGeneration = selectedRecheck?.SecurityGeneration ?? 1;
+        Guid? archiveId = selectedRecheck?.ArchiveEvidenceId;
+        Guid? malwareId = selectedRecheck?.MalwareEvidenceId;
+        if (selectedRecheck is null)
+        {
+            archiveId = await dbContext.SecurityEvidenceRecords.AsNoTracking()
+                .Where(e => e.AssetVersionId == assetVersionId && e.SecurityRecheckId == null
+                    && e.Generation == 1 && e.EvidenceKind == SecurityEvidenceKind.ARCHIVE_VALIDATION)
+                .Select(e => (Guid?)e.Id).SingleOrDefaultAsync(cancellationToken).ConfigureAwait(false);
+            malwareId = await dbContext.SecurityEvidenceRecords.AsNoTracking()
+                .Where(e => e.AssetVersionId == assetVersionId && e.SecurityRecheckId == null
+                    && e.Generation == 1 && e.EvidenceKind == SecurityEvidenceKind.MALWARE_SCAN)
+                .Select(e => (Guid?)e.Id).SingleOrDefaultAsync(cancellationToken).ConfigureAwait(false);
+        }
+
+        DateTimeOffset dbNow = await dbContext.Database.SqlQueryRaw<DateTimeOffset>("SELECT clock_timestamp() AS \"Value\"")
+            .FirstAsync(cancellationToken).ConfigureAwait(false);
+        if (selectedRecheck?.State == SecurityRecheckState.SUCCEEDED && archiveId.HasValue && malwareId.HasValue
+            || selectedRecheck is null && archiveId.HasValue && malwareId.HasValue)
+        {
+            AnalysisRunEnqueueResult result = await analysisRunEnqueuer.Enqueue(
+                assetId, assetVersionId, recheckId, archiveId!.Value, malwareId!.Value,
+                securityGeneration, version.ContentSha256, dbNow, parent?.Id, cancellationToken).ConfigureAwait(false);
+            if (result.AnalysisRunId != Guid.Empty)
+            {
+                return;
+            }
+
+            if (result.IsRetryable)
+            {
+                await analysisRunEnqueuer.PersistSchedulingIntent(assetId, assetVersionId, recheckId,
+                    archiveId.Value, malwareId.Value, securityGeneration, version.ContentSha256, dbNow,
+                    parent?.Id, cancellationToken).ConfigureAwait(false);
+                return;
+            }
+
+            if (result.Rejection != AnalysisEnqueueRejection.PROOF_INVALID)
+            {
+                return;
+            }
+        }
+
+        var operationDigest = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(
+            $"{assetId:N}|{assetVersionId:N}|{version.ContentSha256}|{workspace.WorkspaceRevision}|{version.AnalysisSelectionGeneration}|{operationId:N}"))).ToLowerInvariant();
+        await securityProvenanceStore.StartSecurityRecheck(new SecurityRecheckStartRequest(
+            assetId, assetVersionId, version.ContentSha256, AssetProcessingDefaults.MALWARE_POLICY_VERSION,
+            AssetProcessingDefaults.DEFINITION_VERSION, operationDigest, operationId,
+            ParentRecheckId: selectedRecheck?.State == SecurityRecheckState.ERROR ? selectedRecheck.Id : null,
+            ParentAnalysisRunId: parent?.Id), cancellationToken).ConfigureAwait(false);
+    }
+
     public async Task<ModerationDraftSaveResult> SaveDraftRevision(
         DraftRevisionSaveRequest request,
         CancellationToken cancellationToken = default)
@@ -718,6 +802,14 @@ internal sealed class ModerationFoundationStore(
                             .SetProperty(v => v.SelectedCodeAnalysisReportId, (Guid?)null),
                         ct)
                     .ConfigureAwait(false);
+
+                if (analysisRunEnqueuer is not null && securityProvenanceStore is not null)
+                {
+                    // Reconciliation reads the persisted revision heads. Flush this transaction's
+                    // revision/head/generation changes first so its run binds the newly saved tuple.
+                    await dbContext.SaveChangesAsync(ct).ConfigureAwait(false);
+                    await ReconcileAnalysisSelection(assetId, editedVersionId, workspace.Id, request.OperationId, ct);
+                }
             }
 
             var result = new ModerationDraftSaveResult(

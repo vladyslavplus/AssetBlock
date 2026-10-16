@@ -50,6 +50,7 @@ internal sealed partial class SecurityProvenanceStore(
         public string OperationDigest { get; init; } = "";
         public Guid OperationReceiptId { get; init; }
         public Guid? ParentRecheckId { get; init; }
+        public Guid? ParentAnalysisRunId { get; init; }
         public Guid? ArchiveEvidenceId { get; init; }
         public string State { get; init; } = "";
         public int? SelectedGeneration { get; init; }
@@ -101,7 +102,9 @@ internal sealed partial class SecurityProvenanceStore(
         ArgumentNullException.ThrowIfNull(request);
         ValidateStartRequest(request);
 
-        await using IDbContextTransaction tx = await dbContext.Database.BeginTransactionAsync(IsolationLevel.ReadCommitted, cancellationToken);
+        await using IDbContextTransaction? tx = dbContext.Database.CurrentTransaction is null
+            ? await dbContext.Database.BeginTransactionAsync(IsolationLevel.ReadCommitted, cancellationToken)
+            : null;
 
         await LockAsset(request.AssetId, cancellationToken);
         DateTimeOffset dbNow = await ReadDatabaseClock(cancellationToken);
@@ -111,14 +114,20 @@ internal sealed partial class SecurityProvenanceStore(
             || version.AssetDeleted
             || version.ProcessingStatus != nameof(AssetVersionProcessingStatus.READY))
         {
-            await tx.CommitAsync(cancellationToken);
+            if (tx is not null)
+            {
+                await tx.CommitAsync(cancellationToken);
+            }
             return new SecurityRecheckStartResult(Guid.Empty, 0, Guid.Empty, IsReplay: false);
         }
 
         // The request may never claim a different hash than the persisted version it targets.
         if (!string.Equals(version.ContentSha256, request.ContentSha256, StringComparison.Ordinal))
         {
-            await tx.CommitAsync(cancellationToken);
+            if (tx is not null)
+            {
+                await tx.CommitAsync(cancellationToken);
+            }
             return new SecurityRecheckStartResult(Guid.Empty, 0, Guid.Empty, IsReplay: false);
         }
 
@@ -131,12 +140,18 @@ internal sealed partial class SecurityProvenanceStore(
         {
             if (!string.Equals(byReceipt.OperationDigest, request.OperationDigest, StringComparison.Ordinal))
             {
-                await tx.CommitAsync(cancellationToken);
+                if (tx is not null)
+                {
+                    await tx.CommitAsync(cancellationToken);
+                }
                 return new SecurityRecheckStartResult(Guid.Empty, 0, Guid.Empty, IsReplay: false);
             }
 
             Guid replayedJob = await ResolveOrCreateScopedArchiveJob(byReceipt, dbNow, cancellationToken);
-            await tx.CommitAsync(cancellationToken);
+            if (tx is not null)
+            {
+                await tx.CommitAsync(cancellationToken);
+            }
             return new SecurityRecheckStartResult(byReceipt.Id, byReceipt.SecurityGeneration, replayedJob, IsReplay: true);
         }
 
@@ -154,7 +169,10 @@ internal sealed partial class SecurityProvenanceStore(
             if (byDigest is not null)
             {
                 Guid replayedJob = await ResolveOrCreateScopedArchiveJob(byDigest, dbNow, cancellationToken);
-                await tx.CommitAsync(cancellationToken);
+                if (tx is not null)
+                {
+                    await tx.CommitAsync(cancellationToken);
+                }
                 return new SecurityRecheckStartResult(byDigest.Id, byDigest.SecurityGeneration, replayedJob, IsReplay: true);
             }
         }
@@ -165,7 +183,10 @@ internal sealed partial class SecurityProvenanceStore(
             RecheckRow? parent = existingRows.FirstOrDefault(r => r.Id == parentId);
             if (parent is null || parent.State != nameof(SecurityRecheckState.ERROR))
             {
-                await tx.CommitAsync(cancellationToken);
+                if (tx is not null)
+                {
+                    await tx.CommitAsync(cancellationToken);
+                }
                 return new SecurityRecheckStartResult(Guid.Empty, 0, Guid.Empty, IsReplay: false);
             }
         }
@@ -184,7 +205,10 @@ internal sealed partial class SecurityProvenanceStore(
             if (active is not null)
             {
                 Guid activeJob = await ResolveOrCreateScopedArchiveJob(active, dbNow, cancellationToken);
-                await tx.CommitAsync(cancellationToken);
+                if (tx is not null)
+                {
+                    await tx.CommitAsync(cancellationToken);
+                }
                 return new SecurityRecheckStartResult(active.Id, active.SecurityGeneration, activeJob, IsReplay: true);
             }
         }
@@ -201,11 +225,11 @@ internal sealed partial class SecurityProvenanceStore(
             INSERT INTO security_rechecks (
                 "Id", "AssetId", "AssetVersionId", "ContentSha256", "SecurityGeneration",
                 "SecurityPolicyVersion", "DefinitionVersion", "OperationDigest", "OperationReceiptId",
-                "State", "SelectedGeneration", "ParentRecheckId", "RequestedAt", "CreatedAt"
+                "State", "SelectedGeneration", "ParentRecheckId", "ParentAnalysisRunId", "RequestedAt", "CreatedAt"
             ) VALUES (
                 {recheckId}, {request.AssetId}, {request.AssetVersionId}, {request.ContentSha256}, {nextGeneration},
                 {request.SecurityPolicyVersion}, {request.DefinitionVersion}, {request.OperationDigest}, {request.OperationReceiptId},
-                'QUEUED', NULL, {request.ParentRecheckId}, {dbNow}, {dbNow}
+                'QUEUED', NULL, {request.ParentRecheckId}, {request.ParentAnalysisRunId}, {dbNow}, {dbNow}
             )
             """, cancellationToken);
 
@@ -227,7 +251,10 @@ internal sealed partial class SecurityProvenanceStore(
 
         if (selected != 1)
         {
-            await tx.RollbackAsync(cancellationToken);
+            if (tx is not null)
+            {
+                await tx.RollbackAsync(cancellationToken);
+            }
             return new SecurityRecheckStartResult(Guid.Empty, 0, Guid.Empty, IsReplay: false);
         }
 
@@ -241,7 +268,10 @@ internal sealed partial class SecurityProvenanceStore(
             dbNow,
             cancellationToken);
 
-        await tx.CommitAsync(cancellationToken);
+        if (tx is not null)
+        {
+            await tx.CommitAsync(cancellationToken);
+        }
         logger.LogInformation(
             "Started security recheck {RecheckId} generation {Generation} for version {VersionId}; superseded {Superseded} selections.",
             recheckId, nextGeneration, request.AssetVersionId, swapped);
@@ -514,7 +544,8 @@ internal sealed partial class SecurityProvenanceStore(
         AnalysisRunEnqueueResult run = await analysisRunEnqueuer.Enqueue(
             assetId, assetVersionId, context.Recheck.Id,
             context.Recheck.ArchiveEvidenceId!.Value, malwareEvidenceId,
-            context.Recheck.SecurityGeneration, context.Recheck.ContentSha256, context.DbNow, cancellationToken);
+            context.Recheck.SecurityGeneration, context.Recheck.ContentSha256, context.DbNow,
+            context.Recheck.ParentAnalysisRunId, cancellationToken);
 
         // A missing pinned policy, or an older analysis run that still owns this selection
         // generation, is a recoverable gap: the completed proof commits together with one durable
@@ -526,7 +557,8 @@ internal sealed partial class SecurityProvenanceStore(
             await analysisRunEnqueuer.PersistSchedulingIntent(
                 assetId, assetVersionId, context.Recheck.Id,
                 context.Recheck.ArchiveEvidenceId!.Value, malwareEvidenceId,
-                context.Recheck.SecurityGeneration, context.Recheck.ContentSha256, context.DbNow, cancellationToken);
+                context.Recheck.SecurityGeneration, context.Recheck.ContentSha256, context.DbNow,
+                context.Recheck.ParentAnalysisRunId, cancellationToken);
 
             logger.LogWarning(
                 "Analysis for recheck {RecheckId} generation {Generation} was not enqueued ({Rejection}); a durable retryable scheduling intent was stored.",
@@ -1067,7 +1099,7 @@ internal sealed partial class SecurityProvenanceStore(
     private const string RECHECK_SELECT = """
         SELECT "Id", "AssetId", "AssetVersionId", "ContentSha256", "SecurityGeneration",
                "DefinitionVersion", "SecurityPolicyVersion", "OperationDigest", "OperationReceiptId",
-               "ParentRecheckId", "ArchiveEvidenceId", "State"::text AS "State", "SelectedGeneration"
+                "ParentRecheckId", "ParentAnalysisRunId", "ArchiveEvidenceId", "State"::text AS "State", "SelectedGeneration"
         FROM security_rechecks
         """;
 

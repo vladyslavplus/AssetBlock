@@ -75,6 +75,9 @@ public class CodeAnalysisRun : BaseEntity
 
     public string? ErrorSummary { get; set; }
 
+    /// <summary>Only true when the admitted failure envelope marked exhausted execution as retryable.</summary>
+    public bool OwnerRetryable { get; set; }
+
     public DateTimeOffset? StartedAt { get; set; }
 
     public DateTimeOffset? CompletedAt { get; set; }

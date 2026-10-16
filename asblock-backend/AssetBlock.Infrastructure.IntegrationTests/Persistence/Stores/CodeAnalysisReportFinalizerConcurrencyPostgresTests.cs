@@ -554,6 +554,39 @@ public sealed class CodeAnalysisReportFinalizerConcurrencyPostgresTests(Postgres
     }
 
     [Fact]
+    public async Task FinalizeFailure_WhenDeterministicPreStartRefusal_ShouldFailRunAndJobWithoutAdmissionOrQuarantine()
+    {
+        await using ApplicationDbContext seedDb = await fixture.CreateCleanDbContext();
+        SeedContext seed = await SeedQueued(seedDb);
+        await seed.Capacity.EnsureSlots(SERVICE_KEY, 1);
+        ClaimedAssetProcessingJob claimed = (await seed.Capacity.ClaimWithCapacity(
+            1, TimeSpan.FromMinutes(5), TimeSpan.FromMinutes(18), TimeSpan.FromMinutes(2), "capacity-worker")).Single();
+
+        ICodeAnalysisReportFinalizer finalizer = new CodeAnalysisReportFinalizer(
+            seedDb, new CodeAnalysisReportValidator(), NullLogger<CodeAnalysisReportFinalizer>.Instance);
+        AssetProcessingJobOutcome outcome = await finalizer.FinalizeFailure(
+            claimed.JobId, claimed.LeaseToken, "ANALYSIS_RESPONSE_INVALID", "The service refused invalid input.",
+            ownerRetryable: false);
+
+        outcome.Should().BeOfType<AssetProcessingJobOutcome.AtomicCommitted>()
+            .Which.JobStatus.Should().Be(AssetProcessingJobStatus.FAILED);
+        await using ApplicationDbContext verifierDb = fixture.CreateDbContext();
+        CodeAnalysisRun failedRun = await verifierDb.CodeAnalysisRuns.AsNoTracking().SingleAsync(r => r.Id == seed.RunId);
+        AssetProcessingJob failedJob = await verifierDb.AssetProcessingJobs.AsNoTracking().SingleAsync(j => j.Id == claimed.JobId);
+        failedRun.State.Should().Be(CodeAnalysisRunState.FAILED);
+        failedRun.OwnerRetryable.Should().BeFalse();
+        failedJob.Status.Should().Be(AssetProcessingJobStatus.FAILED);
+        (await verifierDb.CodeAnalysisReportHeaders.AsNoTracking().CountAsync(h => h.AnalysisRunId == seed.RunId)).Should().Be(0);
+        (await verifierDb.AssetVersions.AsNoTracking().SingleAsync(v => v.Id == seed.Version.Id)).SafetyRestriction
+            .Should().Be(AssetVersionSafetyRestriction.NONE);
+        (await verifierDb.AnalysisCapacitySlots.AsNoTracking().SingleAsync()).State.Should().Be(AnalysisCapacitySlotState.RESERVED);
+
+        (await seed.Capacity.ReleaseForTerminalJob(
+            claimed.JobId, claimed.TransportLeaseToken!, AnalysisExecutionDisposition.NOT_STARTED)).Should().BeTrue();
+        (await verifierDb.AnalysisCapacitySlots.AsNoTracking().SingleAsync()).State.Should().Be(AnalysisCapacitySlotState.FREE);
+    }
+
+    [Fact]
     public async Task FinalizeConfirmed_WhenReplayRacesDelete_ShouldResolveReplayWithoutNewEffects()
     {
         await using ApplicationDbContext seedDb = await fixture.CreateCleanDbContext();

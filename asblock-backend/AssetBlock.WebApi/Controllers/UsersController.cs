@@ -1,11 +1,13 @@
 using AssetBlock.Application.Messaging;
 using AssetBlock.Application.UseCases.Assets.EnqueueListingCopilot;
 using AssetBlock.Application.UseCases.Assets.GetListingCopilotSuggestion;
+using AssetBlock.Application.UseCases.Assets.GetMyAnalysisFindings;
 using AssetBlock.Application.UseCases.Assets.GetMyAssetProcessingJobs;
 using AssetBlock.Application.UseCases.Assets.GetMyAssetVersionProcessingJobs;
 using AssetBlock.Application.UseCases.Assets.GetMyAssetVersionReview;
 using AssetBlock.Application.UseCases.Assets.GetPersonalSimilarAssets;
 using AssetBlock.Application.UseCases.Assets.GetSellerAssetDetail;
+using AssetBlock.Application.UseCases.Assets.RetryMyAnalysis;
 using AssetBlock.Application.UseCases.Auth.ResendEmailVerification;
 using AssetBlock.Application.UseCases.Users.ChangePassword;
 using AssetBlock.Application.UseCases.Users.GetMyListings;
@@ -469,6 +471,51 @@ public sealed class UsersController(ISender sender) : ApiControllerBase(sender)
 
         Ardalis.Result.Result<SellerVersionReviewDto> result = await Sender.Send(new GetMyAssetVersionReviewQuery(assetVersionId, userId), cancellationToken);
         return MapResultToActionResult(result);
+    }
+
+    [HttpGet(ApiRoutes.Users.ME_ASSET_VERSION_ANALYSIS_FINDINGS)]
+    [Authorize]
+    [ProducesResponseType(typeof(SellerAnalysisFindingsPageDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> GetMyAssetVersionAnalysisFindings(
+        [FromRoute] Guid assetVersionId,
+        [FromRoute] Guid reportId,
+        [FromQuery] int page = 1,
+        CancellationToken cancellationToken = default)
+    {
+        if (!User.TryGetUserId(out Guid userId))
+        {
+            return UnauthorizedProblem();
+        }
+
+        Ardalis.Result.Result<SellerAnalysisFindingsPageDto> result = await Sender.Send(
+            new GetMyAnalysisFindingsQuery(assetVersionId, reportId, userId, page), cancellationToken);
+        return MapResultToActionResult(result);
+    }
+
+    [HttpPost(ApiRoutes.Users.ME_ASSET_VERSION_ANALYSIS_RETRY)]
+    [Authorize(Policy = AuthorizationPolicies.VERIFIED_EMAIL)]
+    [EnableRateLimiting(RateLimitingConstants.Policies.LISTING_COPILOT_ENQUEUE)]
+    [ProducesResponseType(typeof(SellerAnalysisRetryAcceptedDto), StatusCodes.Status202Accepted)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
+    public async Task<IActionResult> RetryMyAssetVersionAnalysis(
+        [FromRoute] Guid assetId,
+        [FromRoute] Guid assetVersionId,
+        [FromBody] SellerAnalysisRetryRequest request,
+        CancellationToken cancellationToken)
+    {
+        if (!User.TryGetUserId(out Guid userId))
+        {
+            return UnauthorizedProblem();
+        }
+
+        Ardalis.Result.Result<SellerAnalysisRetryAcceptedDto> result = await Sender.Send(
+            new RetryMyAnalysisCommand(assetId, assetVersionId, userId, request), cancellationToken);
+        return result.IsSuccess ? Accepted(result.Value) : MapResultToActionResult(result);
     }
 
     [HttpPost(ApiRoutes.Users.ME_ASSET_VERSION_LISTING_COPILOT)]

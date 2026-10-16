@@ -50,6 +50,11 @@ function getJobTypeMeta(type: AssetProcessingJobType) {
         label: 'Malware & Security Scan',
         Icon: ShieldCheck,
       }
+    case 'CODE_ANALYSIS':
+      return {
+        label: 'Code Analysis',
+        Icon: Sparkles,
+      }
     case 'LISTING_COPILOT':
       return {
         label: 'AI Listing Analysis',
