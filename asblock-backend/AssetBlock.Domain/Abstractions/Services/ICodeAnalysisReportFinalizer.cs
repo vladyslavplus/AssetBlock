@@ -12,6 +12,15 @@ public interface ICodeAnalysisReportFinalizer
         string responseBody,
         CancellationToken cancellationToken = default);
 
+    /// <summary>Commits a non-envelope worker failure to the bound run and job under their live lease.</summary>
+    Task<AssetProcessingJobOutcome> FinalizeFailure(
+        Guid jobId,
+        Guid leaseToken,
+        string errorCode,
+        string safeSummary,
+        bool ownerRetryable,
+        CancellationToken cancellationToken = default);
+
     /// <summary>
     /// Fenced exact-version quarantine after a proven integrity failure. Only runs under the
     /// live job lease; a lost lease never authorizes an unfenced mutation.

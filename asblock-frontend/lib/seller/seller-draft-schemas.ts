@@ -139,6 +139,108 @@ export const sellerModerationStateSchema = z.enum([
   'WITHDRAWN',
 ])
 
+export const sellerAnalysisLifecycleSchema = z.enum([
+  'NOT_AVAILABLE',
+  'QUEUED',
+  'RUNNING',
+  'COMPLETED',
+  'FAILED',
+  'CANCELLED',
+])
+export const sellerAnalysisStageSchema = z.object({
+  stage: z.string().min(1).max(80),
+  applicability: z.string().min(1).max(40),
+  outcome: z.string().min(1).max(40),
+  retryable: z.boolean(),
+})
+export const sellerAnalysisSummarySchema = z.object({
+  assetId: z.string().uuid(),
+  assetVersionId: z.string().uuid(),
+  lifecycle: sellerAnalysisLifecycleSchema,
+  runId: z.string().uuid().nullable(),
+  reportId: z.string().uuid().nullable(),
+  reportIsCurrent: z.boolean(),
+  coverageLevel: z.enum(['FULL', 'PARTIAL', 'UNSUPPORTED']).nullable(),
+  analyzedFileCount: z.number().int().nonnegative(),
+  omissionCount: z.number().int().nonnegative(),
+  findingCount: z.number().int().nonnegative(),
+  createdAt: z.string().datetime({ offset: true }).nullable(),
+  completedAt: z.string().datetime({ offset: true }).nullable(),
+  errorCode: z.string().max(80).nullable(),
+  errorMessage: z.string().max(300).nullable(),
+  actionHint: z.string().max(300).nullable(),
+  canRetry: z.boolean(),
+  retryExpectation: z
+    .object({
+      runId: z.string().uuid(),
+      workspaceRevision: z.number().int().nonnegative(),
+      policyDigest: z.string().length(64),
+      inputDigest: z.string().length(64),
+    })
+    .nullable(),
+  canSubmit: z.literal(false),
+  canAuthorizePublication: z.literal(false),
+  comparisonScope: z.string().max(160),
+  limitations: z.array(z.string().max(300)),
+  stages: z.array(sellerAnalysisStageSchema),
+})
+export type SellerAnalysisSummary = z.infer<typeof sellerAnalysisSummarySchema>
+export const sellerAnalysisFindingSchema = z.object({
+  id: z.string().uuid(),
+  findingType: z.string().min(1).max(80),
+  ownPath: z.string().min(1).max(1024),
+  ownExcerpt: z.string().max(320),
+  startByte: z.number().int().nonnegative().nullable(),
+  endByte: z.number().int().nonnegative().nullable(),
+  startLine: z.number().int().positive().nullable(),
+  endLine: z.number().int().positive().nullable(),
+  reason: z.string().max(1024),
+  requestedAction: z.string().max(512),
+  referenceKind: z.enum(['OWN_PRIOR_VERSION', 'FOREIGN_PRIVATE', 'FOREIGN_PUBLIC']).nullable(),
+  publicAttribution: z
+    .object({
+      label: z.string().min(1).max(120),
+      url: z
+        .string()
+        .url()
+        .refine((value) => new URL(value).protocol === 'https:')
+        .nullable(),
+    })
+    .nullable(),
+})
+export const sellerAnalysisFindingsPageSchema = z.object({
+  assetId: z.string().uuid(),
+  assetVersionId: z.string().uuid(),
+  reportId: z.string().uuid(),
+  isCurrent: z.boolean(),
+  coverageLevel: z.enum(['FULL', 'PARTIAL', 'UNSUPPORTED']),
+  items: z.array(sellerAnalysisFindingSchema),
+  totalCount: z.number().int().nonnegative(),
+  page: z.number().int().positive(),
+  pageSize: z.number().int().positive().max(50),
+  totalPages: z.number().int().nonnegative(),
+})
+export type SellerAnalysisFindingsPage = z.infer<typeof sellerAnalysisFindingsPageSchema>
+export const sellerAnalysisRetryRequestSchema = z.object({
+  operationId: z.string().uuid(),
+  expectedRunId: z.string().uuid(),
+  expectedWorkspaceRevision: z.number().int().positive(),
+  expectedPolicyDigest: z.string().length(64),
+  expectedInputDigest: z.string().length(64),
+})
+export const sellerAnalysisRetryAcceptedSchema = z.object({
+  operationId: z.string().uuid(),
+  assetId: z.string().uuid(),
+  assetVersionId: z.string().uuid(),
+  status: z.enum(['ACCEPTED', 'RECHECK_QUEUED']),
+  runId: z.string().uuid().nullable(),
+  jobId: z.string().uuid().nullable(),
+  securityRecheckId: z.string().uuid().nullable(),
+  replayed: z.boolean(),
+})
+export type SellerAnalysisRetryRequest = z.infer<typeof sellerAnalysisRetryRequestSchema>
+export type SellerAnalysisRetryAccepted = z.infer<typeof sellerAnalysisRetryAcceptedSchema>
+
 export const sellerVersionReviewSchema = z.object({
   assetId: z.string().uuid(),
   assetVersionId: z.string().uuid(),
@@ -152,6 +254,7 @@ export const sellerVersionReviewSchema = z.object({
   canUpload: z.boolean(),
   canSubmit: z.boolean(),
   blockedReasons: z.array(z.string()),
+  analysisDetails: sellerAnalysisSummarySchema.nullable().optional(),
 })
 export type SellerVersionReview = z.infer<typeof sellerVersionReviewSchema>
 

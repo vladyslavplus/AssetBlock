@@ -1,4 +1,5 @@
 using AssetBlock.Domain.Abstractions.Services;
+using AssetBlock.Domain.Core.Constants;
 using AssetBlock.Domain.Core.Dto;
 using AssetBlock.Domain.Core.Entities;
 using AssetBlock.Domain.Core.Enums;
@@ -509,10 +510,108 @@ public sealed class AnalysisCapacityPostgresTests(PostgresFixture fixture)
 
         CodeAnalysisRun run = await db.CodeAnalysisRuns.AsNoTracking().SingleAsync(r => r.Id == seed.AnalysisRunId);
         run.State.Should().Be(CodeAnalysisRunState.QUEUED);
+        run.CompletedAt.Should().BeNull();
         run.TransportLeaseToken.Should().BeNull();
 
         AssetProcessingJob recoveredJob = await db.AssetProcessingJobs.AsNoTracking().SingleAsync(j => j.Id == job.JobId);
         recoveredJob.Status.Should().Be(AssetProcessingJobStatus.RETRY_SCHEDULED);
+        recoveredJob.AttemptCount.Should().Be(2);
+        recoveredJob.CompletedAt.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task RecoverExpiredReservations_WhenRecoveryConsumesFinalAttempt_ShouldFailRunAndJobTogether()
+    {
+        await using ApplicationDbContext db = await fixture.CreateCleanDbContext();
+        SeedData seed = await Seed(db);
+        await seed.Capacity.EnsureSlots(SERVICE_KEY, 1);
+        await db.AssetProcessingJobs.Where(j => j.Id == seed.AnalysisJobId)
+            .ExecuteUpdateAsync(s => s.SetProperty(j => j.AttemptCount, 1));
+
+        ClaimedAssetProcessingJob job = (await seed.Capacity.ClaimWithCapacity(
+            1, TimeSpan.FromMinutes(5), TimeSpan.FromMinutes(18), TimeSpan.FromMinutes(2), "worker-final-attempt")).Single();
+        job.AttemptCount.Should().Be(2);
+        AnalysisCapacitySlot slot = await db.AnalysisCapacitySlots.AsNoTracking().SingleAsync();
+        await db.AnalysisCapacitySlots.Where(s => s.Id == slot.Id)
+            .ExecuteUpdateAsync(s => s.SetProperty(x => x.CleanupGraceUntil, DateTimeOffset.UtcNow.AddHours(-1)));
+
+        (await seed.Capacity.RecoverExpiredReservations()).Should().Be(1);
+
+        CodeAnalysisRun failedRun = await db.CodeAnalysisRuns.AsNoTracking().SingleAsync(r => r.Id == seed.AnalysisRunId);
+        AssetProcessingJob failedJob = await db.AssetProcessingJobs.AsNoTracking().SingleAsync(j => j.Id == job.JobId);
+        failedRun.State.Should().Be(CodeAnalysisRunState.FAILED);
+        failedRun.OwnerRetryable.Should().BeTrue();
+        failedRun.CompletedAt.Should().NotBeNull();
+        failedRun.ErrorCode.Should().Be(ErrorCodes.LEASE_EXPIRED);
+        failedJob.Status.Should().Be(AssetProcessingJobStatus.FAILED);
+        failedJob.AttemptCount.Should().Be(3);
+        failedJob.CompletedAt.Should().Be(failedRun.CompletedAt);
+        failedJob.ErrorCode.Should().Be(failedRun.ErrorCode);
+        failedJob.ErrorSummary.Should().Be(failedRun.ErrorSummary);
+        (await db.AnalysisCapacitySlots.AsNoTracking().SingleAsync()).State.Should().Be(AnalysisCapacitySlotState.FREE);
+        (await db.CodeAnalysisReportHeaders.AsNoTracking().CountAsync(h => h.AnalysisRunId == failedRun.Id)).Should().Be(0);
+        (await db.AssetVersions.AsNoTracking().SingleAsync(v => v.Id == seed.AssetVersionId)).SafetyRestriction
+            .Should().Be(AssetVersionSafetyRestriction.NONE);
+
+        (await seed.Capacity.RecoverExpiredReservations()).Should().Be(0);
+        (await db.AssetProcessingJobs.AsNoTracking().SingleAsync(j => j.Id == job.JobId)).AttemptCount.Should().Be(3);
+        (await db.CodeAnalysisRuns.AsNoTracking().SingleAsync(r => r.Id == seed.AnalysisRunId)).CompletedAt
+            .Should().Be(failedRun.CompletedAt);
+    }
+
+    [Fact]
+    public async Task RecoverExpiredReservations_WhenMaxAttemptsIsOne_ShouldFailCurrentFinalClaimCoherently()
+    {
+        await using ApplicationDbContext db = await fixture.CreateCleanDbContext();
+        SeedData seed = await Seed(db);
+        await seed.Capacity.EnsureSlots(SERVICE_KEY, 1);
+        await db.AssetProcessingJobs.Where(j => j.Id == seed.AnalysisJobId)
+            .ExecuteUpdateAsync(s => s.SetProperty(j => j.MaxAttempts, 1));
+
+        ClaimedAssetProcessingJob job = (await seed.Capacity.ClaimWithCapacity(
+            1, TimeSpan.FromMinutes(5), TimeSpan.FromMinutes(18), TimeSpan.FromMinutes(2), "worker-one-attempt")).Single();
+        job.AttemptCount.Should().Be(1);
+        AnalysisCapacitySlot slot = await db.AnalysisCapacitySlots.AsNoTracking().SingleAsync();
+        await db.AnalysisCapacitySlots.Where(s => s.Id == slot.Id)
+            .ExecuteUpdateAsync(s => s.SetProperty(x => x.CleanupGraceUntil, DateTimeOffset.UtcNow.AddHours(-1)));
+
+        (await seed.Capacity.RecoverExpiredReservations()).Should().Be(1);
+
+        CodeAnalysisRun failedRun = await db.CodeAnalysisRuns.AsNoTracking().SingleAsync(r => r.Id == seed.AnalysisRunId);
+        AssetProcessingJob failedJob = await db.AssetProcessingJobs.AsNoTracking().SingleAsync(j => j.Id == job.JobId);
+        failedRun.State.Should().Be(CodeAnalysisRunState.FAILED);
+        failedRun.OwnerRetryable.Should().BeTrue();
+        failedJob.Status.Should().Be(AssetProcessingJobStatus.FAILED);
+        failedJob.AttemptCount.Should().Be(1);
+        failedJob.CompletedAt.Should().Be(failedRun.CompletedAt);
+    }
+
+    [Fact]
+    public async Task RecoverExpiredReservations_WhenAttemptsExhausted_ShouldFailRunRetryablyAndFreeOnlyExpiredSlot()
+    {
+        await using ApplicationDbContext db = await fixture.CreateCleanDbContext();
+        SeedData seed = await Seed(db);
+        await seed.Capacity.EnsureSlots(SERVICE_KEY, 1);
+        ClaimedAssetProcessingJob job = (await seed.Capacity.ClaimWithCapacity(
+            1, TimeSpan.FromMinutes(5), TimeSpan.FromMinutes(18), TimeSpan.FromMinutes(2), "worker-a")).Single();
+        AnalysisCapacitySlot slot = await db.AnalysisCapacitySlots.AsNoTracking().SingleAsync();
+        await db.AnalysisCapacitySlots.Where(s => s.Id == slot.Id)
+            .ExecuteUpdateAsync(s => s.SetProperty(x => x.CleanupGraceUntil, DateTimeOffset.UtcNow.AddHours(-1)));
+        await db.AssetProcessingJobs.Where(j => j.Id == job.JobId)
+            .ExecuteUpdateAsync(s => s.SetProperty(j => j.AttemptCount, j => j.MaxAttempts));
+
+        (await seed.Capacity.RecoverExpiredReservations()).Should().Be(1);
+
+        CodeAnalysisRun failedRun = await db.CodeAnalysisRuns.AsNoTracking().SingleAsync(r => r.Id == seed.AnalysisRunId);
+        AssetProcessingJob failedJob = await db.AssetProcessingJobs.AsNoTracking().SingleAsync(j => j.Id == job.JobId);
+        failedRun.State.Should().Be(CodeAnalysisRunState.FAILED);
+        failedRun.OwnerRetryable.Should().BeTrue();
+        failedRun.ErrorCode.Should().Be(ErrorCodes.LEASE_EXPIRED);
+        failedRun.ErrorSummary.Should().NotBeNullOrWhiteSpace();
+        failedJob.Status.Should().Be(AssetProcessingJobStatus.FAILED);
+        (await db.AnalysisCapacitySlots.AsNoTracking().SingleAsync()).State.Should().Be(AnalysisCapacitySlotState.FREE);
+        (await db.AssetVersions.AsNoTracking().SingleAsync(v => v.Id == seed.AssetVersionId)).SafetyRestriction
+            .Should().Be(AssetVersionSafetyRestriction.NONE);
     }
 
     /// <summary>

@@ -4,12 +4,14 @@ import {
   fetchSellerDraft,
   fetchSellerDeclaration,
   fetchSellerVersionReview,
+  fetchSellerAnalysisFindings,
 } from '@/lib/seller/seller-draft-api'
 import type { SellerAssetDetail, SellerAssetListItem } from '@/lib/seller/seller-asset-schemas'
 import type {
   SellerDraftSnapshot,
   SellerDeclarationSnapshot,
   SellerVersionReview,
+  SellerAnalysisFindingsPage,
 } from '@/lib/seller/seller-draft-schemas'
 
 export const sellerKeys = {
@@ -22,6 +24,26 @@ export const sellerKeys = {
     [...sellerKeys.all, 'declaration', assetId, versionId ?? 'pre-upload'] as const,
   versionReview: (assetId: string, versionId: string) =>
     [...sellerKeys.all, 'version-review', assetId, versionId] as const,
+  analysisFindingsForVersion: (assetId: string, versionId: string) =>
+    [...sellerKeys.all, 'analysis-findings', assetId, versionId] as const,
+  analysisFindings: (assetId: string, versionId: string, reportId: string, page: number) =>
+    [...sellerKeys.analysisFindingsForVersion(assetId, versionId), reportId, page] as const,
+}
+
+export async function fetchSellerAnalysisFindingsQuery({
+  assetId,
+  versionId,
+  reportId,
+  page,
+  signal,
+}: {
+  assetId: string
+  versionId: string
+  reportId: string
+  page: number
+  signal?: AbortSignal
+}): Promise<SellerAnalysisFindingsPage> {
+  return fetchSellerAnalysisFindings(assetId, versionId, reportId, page, signal)
 }
 
 export async function fetchSellerListingsQuery({

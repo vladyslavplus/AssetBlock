@@ -55,6 +55,7 @@ internal sealed class AnalysisSchedulingOutboxHandler(
             payload.SecurityGeneration,
             payload.ContentSha256,
             dbNow,
+            parentRunId: payload.ParentAnalysisRunId,
             cancellationToken);
 
         switch (enqueued.Rejection)

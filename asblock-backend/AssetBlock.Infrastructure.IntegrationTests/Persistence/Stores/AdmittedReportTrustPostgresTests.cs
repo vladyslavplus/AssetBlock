@@ -1,10 +1,17 @@
+using AssetBlock.Domain.Abstractions.Services;
+using AssetBlock.Domain.Core.Constants;
+using AssetBlock.Domain.Core.Dto.Assets;
 using AssetBlock.Domain.Core.Entities;
 using AssetBlock.Domain.Core.Enums;
+using AssetBlock.Domain.Core.Primitives.AppSettingsOptions;
 using AssetBlock.Domain.Core.Publication;
 using AssetBlock.Infrastructure.IntegrationTests.Support;
 using AssetBlock.Infrastructure.Persistence;
 using AssetBlock.Infrastructure.Persistence.Publication;
+using AssetBlock.Infrastructure.Persistence.Stores;
 using Microsoft.EntityFrameworkCore;
+using NSubstitute;
+using MsOptions = Microsoft.Extensions.Options.Options;
 
 namespace AssetBlock.Infrastructure.IntegrationTests.Persistence.Stores;
 
@@ -146,6 +153,105 @@ public sealed class AdmittedReportTrustPostgresTests(PostgresFixture fixture)
 
         version.SafetyRestriction = AssetVersionSafetyRestriction.UNSAFE_ARCHIVE;
         PublicationEligibility.IsAuthorSafePreviewVersion(version).Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task OwnerFindings_WhenAdmissionInputDigestDoesNotMatchCompletedRun_ShouldExclude()
+    {
+        await using ApplicationDbContext db = await fixture.CreateCleanDbContext();
+        (Guid assetId, Guid versionId) = await Seed(db, headerOnly: false, admission: true, admissionInputDigestMismatch: true);
+        Guid ownerId = await db.Assets.AsNoTracking().Where(a => a.Id == assetId).Select(a => a.AuthorId).SingleAsync();
+        Guid reportId = await db.CodeAnalysisReportHeaders.AsNoTracking().Where(h => h.AssetVersionId == versionId)
+            .Select(h => h.Id).SingleAsync();
+        CodeAnalysisSellerStore store = CreateSellerStore(db);
+
+        SellerAnalysisFindingsPageDto? findings = await store.GetOwnerFindings(versionId, reportId, ownerId, 1);
+
+        findings.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task OwnerFindings_WhenBoundRunIsFailed_ShouldExclude()
+    {
+        await using ApplicationDbContext db = await fixture.CreateCleanDbContext();
+        (Guid assetId, Guid versionId) = await Seed(db, headerOnly: false, admission: true, runState: CodeAnalysisRunState.FAILED);
+        Guid ownerId = await db.Assets.AsNoTracking().Where(a => a.Id == assetId).Select(a => a.AuthorId).SingleAsync();
+        Guid reportId = await db.CodeAnalysisReportHeaders.AsNoTracking().Where(h => h.AssetVersionId == versionId)
+            .Select(h => h.Id).SingleAsync();
+        CodeAnalysisSellerStore store = CreateSellerStore(db);
+
+        SellerAnalysisFindingsPageDto? findings = await store.GetOwnerFindings(versionId, reportId, ownerId, 1);
+
+        findings.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task OwnerFindings_WhenHistoricalAdmissionChainIsCoherent_ShouldRemainReadableAndNotCurrent()
+    {
+        await using ApplicationDbContext db = await fixture.CreateCleanDbContext();
+        (Guid assetId, Guid versionId) = await Seed(db, headerOnly: false, admission: true);
+        Guid reportId = await db.CodeAnalysisReportHeaders.AsNoTracking().Where(h => h.AssetVersionId == versionId)
+            .Select(h => h.Id).SingleAsync();
+        await db.CodeAnalysisReportAdmissions.Where(a => a.ReportId == reportId)
+            .ExecuteUpdateAsync(s => s
+                .SetProperty(a => a.AdmittedBy, "assetblock-dotnet-finalizer")
+                .SetProperty(a => a.CanAuthorizePublication, false));
+        await db.CodeAnalysisReportHeaders.Where(h => h.Id == reportId)
+            .ExecuteUpdateAsync(s => s.SetProperty(h => h.CanAuthorizePublication, false));
+        Guid ownerId = await db.Assets.AsNoTracking().Where(a => a.Id == assetId).Select(a => a.AuthorId).SingleAsync();
+        CodeAnalysisSellerStore store = CreateSellerStore(db);
+
+        SellerAnalysisFindingsPageDto? findings = await store.GetOwnerFindings(versionId, reportId, ownerId, 1);
+
+        findings.Should().NotBeNull();
+        findings.IsCurrent.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task OwnerFindings_WhenRequestedByAnotherExistingOwner_ShouldExclude()
+    {
+        await using ApplicationDbContext db = await fixture.CreateCleanDbContext();
+        (Guid assetId, Guid versionId) = await Seed(db, headerOnly: false, admission: true, admissionDeniesAuthority: true);
+        var suffix = Guid.NewGuid().ToString("N");
+        User foreignOwner = new()
+        {
+            Id = Guid.NewGuid(),
+            Username = $"foreign_{suffix}",
+            Email = $"foreign-{suffix}@test.local",
+            PasswordHash = "integration-test-hash",
+            Role = AppRoles.USER,
+            CreatedAt = DateTimeOffset.UtcNow
+        };
+        db.Users.Add(foreignOwner);
+        await db.SaveChangesAsync();
+        Guid reportId = await db.CodeAnalysisReportHeaders.AsNoTracking().Where(h => h.AssetVersionId == versionId)
+            .Select(h => h.Id).SingleAsync();
+        await db.CodeAnalysisReportAdmissions.Where(a => a.ReportId == reportId)
+            .ExecuteUpdateAsync(s => s.SetProperty(a => a.AdmittedBy, "assetblock-dotnet-finalizer"));
+        CodeAnalysisSellerStore store = CreateSellerStore(db);
+
+        SellerAnalysisFindingsPageDto? findings = await store.GetOwnerFindings(versionId, reportId, foreignOwner.Id, 1);
+
+        findings.Should().BeNull();
+        (await db.Assets.AsNoTracking().AnyAsync(a => a.Id == assetId && a.AuthorId != foreignOwner.Id)).Should().BeTrue();
+    }
+
+    private static CodeAnalysisSellerStore CreateSellerStore(ApplicationDbContext db)
+    {
+        CodeAnalysisPolicyVersion policy = db.CodeAnalysisPolicyVersions.AsNoTracking().Single();
+        return new CodeAnalysisSellerStore(
+            db,
+            Substitute.For<IAnalysisRunEnqueuer>(),
+            Substitute.For<ISecurityProvenanceStore>(),
+            Substitute.For<IAuditWriter>(),
+            TimeProvider.System,
+            MsOptions.Create(new CodeAnalysisOptions
+            {
+                Enabled = true,
+                ServiceKey = "code-analysis",
+                PolicyKey = policy.PolicyKey,
+                PolicyDigest = policy.PolicyDigest
+            }));
     }
 
     /// <summary>

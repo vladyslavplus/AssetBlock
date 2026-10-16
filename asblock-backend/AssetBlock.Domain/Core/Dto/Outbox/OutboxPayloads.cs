@@ -31,7 +31,8 @@ public sealed record AnalysisSchedulingPayload(
     Guid MalwareEvidenceId,
     int SecurityGeneration,
     string ContentSha256,
-    Guid? SecurityRecheckId = null);
+    Guid? SecurityRecheckId = null,
+    Guid? ParentAnalysisRunId = null);
 
 public sealed record GetDeadLettersRequest(int Page = 1, int PageSize = 20);
 

@@ -19,6 +19,9 @@ public class CodeAnalysisReportFinding : BaseEntity
     /// <summary>Canonical relative path of the seller's own file.</summary>
     public required string OwnScopePath { get; set; }
 
+    /// <summary>Bounded excerpt from the seller's own source, never from a compared source.</summary>
+    public required string OwnExcerpt { get; set; }
+
     public int? OwnStartByte { get; set; }
 
     public int? OwnEndByte { get; set; }
@@ -31,6 +34,9 @@ public class CodeAnalysisReportFinding : BaseEntity
 
     /// <summary>Opaque reference identity; carries no seller-visible source identity when private.</summary>
     public string? ForeignSourceId { get; set; }
+
+    /// <summary>Distinguishes the seller's own earlier work from a foreign comparison.</summary>
+    public string? ForeignOrigin { get; set; }
 
     public required CodeAnalysisFindingSensitivity ForeignSensitivity { get; set; }
 

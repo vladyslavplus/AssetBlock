@@ -6,11 +6,16 @@ import {
   sellerVersionReviewSchema,
   draftSaveResultSchema,
   sellerDeclarationSnapshotSchema,
+  sellerAnalysisFindingsPageSchema,
+  sellerAnalysisRetryAcceptedSchema,
   type SellerDraftSnapshot,
   type SellerDeclarationSnapshot,
   type SellerVersionReview,
   type DraftSaveResult,
   type SellerDraftCreated,
+  type SellerAnalysisFindingsPage,
+  type SellerAnalysisRetryAccepted,
+  type SellerAnalysisRetryRequest,
 } from '@/lib/seller/seller-draft-schemas'
 
 function parseMaybeJson(text: string): unknown {
@@ -191,6 +196,40 @@ export async function fetchSellerVersionReview(
     throw new Error('Version review response was invalid.')
   }
   return review.data
+}
+
+export async function fetchSellerAnalysisFindings(
+  assetId: string,
+  versionId: string,
+  reportId: string,
+  page: number,
+  signal?: AbortSignal,
+): Promise<SellerAnalysisFindingsPage> {
+  const params = new URLSearchParams({ page: String(page) })
+  const res = await fetchJson(
+    `/api/seller/assets/${encodeURIComponent(assetId)}/versions/${encodeURIComponent(versionId)}/analysis/reports/${encodeURIComponent(reportId)}/findings?${params}`,
+    { credentials: 'include', signal },
+  )
+  const parsed = parseMaybeJson(await readResponseText(res, signal))
+  if (!res.ok)
+    throw new Error(getApiErrorMessage(parsed, `Could not load analysis findings (${res.status})`))
+  const result = sellerAnalysisFindingsPageSchema.safeParse(parsed)
+  if (!result.success) throw new Error('Analysis findings response was invalid.')
+  return result.data
+}
+
+export async function retrySellerAnalysis(
+  assetId: string,
+  versionId: string,
+  body: SellerAnalysisRetryRequest,
+): Promise<SellerApiResult<SellerAnalysisRetryAccepted>> {
+  const result = await sendJson(
+    `/api/seller/assets/${encodeURIComponent(assetId)}/versions/${encodeURIComponent(versionId)}/analysis-retries`,
+    'POST',
+    body,
+    sellerAnalysisRetryAcceptedSchema,
+  )
+  return result
 }
 
 export async function saveSellerDraft(

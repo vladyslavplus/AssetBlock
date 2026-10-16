@@ -20,6 +20,7 @@ public sealed class AssetProcessingWorkerTests
     private readonly IAssetProcessingLifecycleStore _lifecycleStore = Substitute.For<IAssetProcessingLifecycleStore>();
     private readonly IAnalysisCapacityStore _capacityStore = Substitute.For<IAnalysisCapacityStore>();
     private readonly IAnalysisReadinessGate _gate = Substitute.For<IAnalysisReadinessGate>();
+    private readonly ICodeAnalysisReportFinalizer _codeAnalysisFinalizer = Substitute.For<ICodeAnalysisReportFinalizer>();
     private readonly TimeProvider _timeProvider = TimeProvider.System;
 
     private static AssetProcessingOptions CreateDefaultOptions(bool enabled = true) => new()
@@ -50,6 +51,7 @@ public sealed class AssetProcessingWorkerTests
         // Analysis jobs are claimed only through the shared capacity reservation.
         serviceProvider.GetService(typeof(IAnalysisCapacityStore)).Returns(_capacityStore);
         serviceProvider.GetService(typeof(IAnalysisReadinessGate)).Returns(_gate);
+        serviceProvider.GetService(typeof(ICodeAnalysisReportFinalizer)).Returns(_codeAnalysisFinalizer);
         scope.ServiceProvider.Returns(serviceProvider);
         _scopeFactory.CreateScope().Returns(scope);
 
@@ -219,6 +221,67 @@ public sealed class AssetProcessingWorkerTests
         await _capacityStore.Received().RecoverExpiredReservations(Arg.Any<CancellationToken>());
         await _store.Received().ClaimPendingBatch(
             Arg.Any<int>(), Arg.Any<TimeSpan>(), Arg.Any<string>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Worker_WhenAnalysisHandlerReportsDeterministicPreStartRefusal_FailsBoundRunWithoutOwnerRetry()
+    {
+        AssetProcessingOptions options = CreateDefaultOptions();
+        AssetProcessingWorker worker = CreateWorker(options, analysisOptions: new CodeAnalysisOptions { Enabled = true });
+        var jobId = Guid.NewGuid();
+        var assetId = Guid.NewGuid();
+        var versionId = Guid.NewGuid();
+        var runId = Guid.NewGuid();
+        var leaseToken = Guid.NewGuid();
+        string transportToken = new('a', 64);
+        var claimed = new ClaimedAssetProcessingJob(
+            jobId, assetId, versionId, Guid.NewGuid(), AssetProcessingJobType.CODE_ANALYSIS,
+            1, 1, 3, "{}", null, leaseToken, DateTimeOffset.UtcNow, DateTimeOffset.UtcNow,
+            DateTimeOffset.UtcNow, runId, TransportLeaseToken: transportToken);
+        _gate.EnsureReady(Arg.Any<CancellationToken>()).Returns(true);
+        _store.ClaimPendingBatch(Arg.Any<int>(), Arg.Any<TimeSpan>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<IReadOnlyList<ClaimedAssetProcessingJob>>([]));
+        _store.RecoverExpiredLeases(Arg.Any<CancellationToken>()).Returns(0);
+        _capacityStore.RecoverExpiredReservations(Arg.Any<CancellationToken>()).Returns(0);
+        var claimCount = 0;
+        _capacityStore.ClaimWithCapacity(Arg.Any<int>(), Arg.Any<TimeSpan>(), Arg.Any<TimeSpan>(), Arg.Any<TimeSpan>(),
+                Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(_ => Interlocked.Increment(ref claimCount) == 1
+                ? Task.FromResult<IReadOnlyList<ClaimedAssetProcessingJob>>([claimed])
+                : Task.FromResult<IReadOnlyList<ClaimedAssetProcessingJob>>([]));
+        IAssetProcessingJobHandlerAdapter adapter = Substitute.For<IAssetProcessingJobHandlerAdapter>();
+        adapter.Execute(claimed, Arg.Any<CancellationToken>()).Returns(AssetProcessingJobOutcome.External(
+            AssetProcessingJobOutcome.Terminal(ErrorCodes.ANALYSIS_RESPONSE_INVALID,
+                ErrorCodesToErrorMessages.GetMessage(ErrorCodes.ANALYSIS_RESPONSE_INVALID)),
+            AnalysisExecutionDisposition.NOT_STARTED));
+        _registry.GetHandler(AssetProcessingJobType.CODE_ANALYSIS).Returns(adapter);
+        var completed = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        _codeAnalysisFinalizer.FinalizeFailure(jobId, leaseToken, Arg.Any<string>(), Arg.Any<string>(), false,
+                Arg.Any<CancellationToken>())
+            .Returns(_ =>
+            {
+                completed.TrySetResult(true);
+                return Task.FromResult(AssetProcessingJobOutcome.CommittedFailed());
+            });
+        _capacityStore.ReleaseForTerminalJob(jobId, transportToken, AnalysisExecutionDisposition.NOT_STARTED,
+            Arg.Any<CancellationToken>()).Returns(true);
+
+        await worker.StartAsync(CancellationToken.None);
+        try
+        {
+            await completed.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        }
+        finally
+        {
+            await worker.StopAsync(CancellationToken.None);
+        }
+
+        await _codeAnalysisFinalizer.Received(1).FinalizeFailure(jobId, leaseToken,
+            ErrorCodes.ANALYSIS_RESPONSE_INVALID, Arg.Any<string>(), false, Arg.Any<CancellationToken>());
+        await _capacityStore.Received(1).ReleaseForTerminalJob(
+            jobId, transportToken, AnalysisExecutionDisposition.NOT_STARTED, Arg.Any<CancellationToken>());
+        await _store.DidNotReceive().MarkFailedTerminal(
+            Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]

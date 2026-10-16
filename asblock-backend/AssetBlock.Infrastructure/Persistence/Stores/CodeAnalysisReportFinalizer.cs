@@ -329,6 +329,7 @@ internal sealed class CodeAnalysisReportFinalizer(
                 failureCode,
                 "The analysis execution failed in the analysis service.",
                 dbNow,
+                retryable,
                 cancellationToken).ConfigureAwait(false);
         }
 
@@ -496,15 +497,15 @@ internal sealed class CodeAnalysisReportFinalizer(
         {
             await dbContext.Database.ExecuteSqlInterpolatedAsync($"""
                 INSERT INTO code_analysis_report_findings (
-                    "Id", "ReportId", "FindingKey", "FindingType", "OwnScopePath", "OwnStartByte", "OwnEndByte",
+                    "Id", "ReportId", "FindingKey", "FindingType", "OwnScopePath", "OwnExcerpt", "OwnStartByte", "OwnEndByte",
                     "OwnStartLine", "OwnEndLine",
-                    "ForeignSourceId", "ForeignSensitivity", "PublicAttributionJson",
+                    "ForeignSourceId", "ForeignOrigin", "ForeignSensitivity", "PublicAttributionJson",
                     "TokenScore", "SemanticScore", "TokenRank", "SemanticRank",
                     "ReasonText", "RequestedAction", "CreatedAt", "UpdatedAt"
                 ) VALUES (
-                    {Guid.NewGuid()}, {reportId}, {finding.FindingKey}, {finding.FindingType}, {finding.OwnScopePath}, {finding.OwnStartByte}, {finding.OwnEndByte},
+                    {Guid.NewGuid()}, {reportId}, {finding.FindingKey}, {finding.FindingType}, {finding.OwnScopePath}, {finding.OwnExcerpt}, {finding.OwnStartByte}, {finding.OwnEndByte},
                     {finding.OwnStartLine}, {finding.OwnEndLine},
-                    {finding.ForeignSourceId}, {finding.ForeignSensitivity}, CAST({finding.PublicAttributionJson} AS jsonb),
+                    {finding.ForeignSourceId}, {finding.ForeignOrigin}, {finding.ForeignSensitivity}, CAST({finding.PublicAttributionJson} AS jsonb),
                     {finding.TokenScore}, {finding.SemanticScore}, {finding.TokenRank}, {finding.SemanticRank},
                     {finding.ReasonText}, {finding.RequestedAction}, {dbNow}, {dbNow}
                 )
@@ -564,6 +565,166 @@ internal sealed class CodeAnalysisReportFinalizer(
         return AssetProcessingJobOutcome.CommittedSucceeded();
     }
 
+    public async Task<AssetProcessingJobOutcome> FinalizeFailure(
+        Guid jobId,
+        Guid leaseToken,
+        string errorCode,
+        string safeSummary,
+        bool ownerRetryable,
+        CancellationToken cancellationToken = default)
+    {
+        var boundedSummary = AssetProcessingJobStore.BoundErrorSummary(safeSummary);
+        await using IDbContextTransaction tx = await dbContext.Database
+            .BeginTransactionAsync(IsolationLevel.ReadCommitted, cancellationToken).ConfigureAwait(false);
+
+        List<JobRow> probeJobs = await dbContext.Database.SqlQueryRaw<JobRow>(
+            """
+            SELECT j."Id", j."AssetId", j."AssetVersionId", j."Status"::text AS "Status",
+                   j."LeaseToken", j."LeaseExpiresAt", j."TransportLeaseToken", j."AnalysisRunId",
+                   j."AttemptCount", j."MaxAttempts"
+            FROM asset_processing_jobs AS j
+            WHERE j."Id" = {0}
+            """, jobId).ToListAsync(cancellationToken).ConfigureAwait(false);
+        if (probeJobs.Count != 1 || probeJobs[0].AnalysisRunId is not { } runId)
+        {
+            return TerminalInvalid();
+        }
+
+        JobRow probeJob = probeJobs[0];
+        List<RunRow> probeRuns = await dbContext.Database.SqlQueryRaw<RunRow>(
+            """
+            SELECT r."Id", r."AssetId", r."AssetVersionId", r."State"::text AS "State",
+                   r."ContentSha256", r."InputDigest", r."PolicyVersionId", r."PolicyDigest",
+                   r."DeclarationDigest", r."MaterialDigest", r."SelectionGeneration",
+                   r."ArchiveEvidenceId", r."MalwareEvidenceId", r."SecurityGeneration",
+                   r."SecurityRecheckId", r."ServiceKey", r."TransportLeaseToken",
+                   r."ReservationGeneration", r."AssetDraftWorkspaceId",
+                   r."DeclarationRevisionId", r."MaterialRevisionId"
+            FROM code_analysis_runs AS r
+            WHERE r."Id" = {0}
+            """, runId).ToListAsync(cancellationToken).ConfigureAwait(false);
+        if (probeRuns.Count != 1)
+        {
+            return TerminalInvalid();
+        }
+
+        RunRow probeRun = probeRuns[0];
+        List<AssetDeletedRow> assets = await dbContext.Database.SqlQueryRaw<AssetDeletedRow>(
+            """SELECT "Id", "DeletedAt", "AuthorId" FROM assets WHERE "Id" = {0} FOR UPDATE""",
+            probeJob.AssetId).ToListAsync(cancellationToken).ConfigureAwait(false);
+        if (assets.Count != 1)
+        {
+            return TerminalInvalid();
+        }
+
+        if (probeRun.AssetDraftWorkspaceId is { } workspaceId)
+        {
+            List<WorkspaceRow> workspaces = await dbContext.Database.SqlQueryRaw<WorkspaceRow>(
+                """SELECT "Id", "AssetId", "AssetVersionId", "SourceDeclarationHeadRevision", "MaterialMetadataHeadRevision" FROM asset_draft_workspaces WHERE "Id" = {0} FOR UPDATE""",
+                workspaceId).ToListAsync(cancellationToken).ConfigureAwait(false);
+            if (workspaces.Count != 1)
+            {
+                return TerminalInvalid();
+            }
+        }
+
+        List<VersionRow> versions = await dbContext.Database.SqlQueryRaw<VersionRow>(
+            """SELECT "Id", "ContentSha256", "ContentLength", "SafetyRestriction"::text AS "SafetyRestriction", "AnalysisSelectionGeneration", "SelectedCodeAnalysisReportId" FROM asset_versions WHERE "Id" = {0} AND "AssetId" = {1} FOR UPDATE""",
+            probeJob.AssetVersionId, probeJob.AssetId).ToListAsync(cancellationToken).ConfigureAwait(false);
+        if (versions.Count != 1)
+        {
+            return TerminalInvalid();
+        }
+
+        List<RunRow> runs = await dbContext.Database.SqlQueryRaw<RunRow>(
+            """
+            SELECT r."Id", r."AssetId", r."AssetVersionId", r."State"::text AS "State",
+                   r."ContentSha256", r."InputDigest", r."PolicyVersionId", r."PolicyDigest",
+                   r."DeclarationDigest", r."MaterialDigest", r."SelectionGeneration",
+                   r."ArchiveEvidenceId", r."MalwareEvidenceId", r."SecurityGeneration",
+                   r."SecurityRecheckId", r."ServiceKey", r."TransportLeaseToken",
+                   r."ReservationGeneration", r."AssetDraftWorkspaceId",
+                   r."DeclarationRevisionId", r."MaterialRevisionId"
+            FROM code_analysis_runs AS r
+            WHERE r."Id" = {0}
+            FOR UPDATE
+            """, runId).ToListAsync(cancellationToken).ConfigureAwait(false);
+        List<JobRow> jobs = await dbContext.Database.SqlQueryRaw<JobRow>(
+            """
+            SELECT j."Id", j."AssetId", j."AssetVersionId", j."Status"::text AS "Status",
+                   j."LeaseToken", j."LeaseExpiresAt", j."TransportLeaseToken", j."AnalysisRunId",
+                   j."AttemptCount", j."MaxAttempts"
+            FROM asset_processing_jobs AS j
+            WHERE j."Id" = {0}
+            FOR UPDATE
+            """, jobId).ToListAsync(cancellationToken).ConfigureAwait(false);
+        if (runs.Count != 1 || jobs.Count != 1)
+        {
+            return TerminalInvalid();
+        }
+
+        RunRow run = runs[0];
+        JobRow job = jobs[0];
+        DateTimeOffset dbNow = await ReadClock(cancellationToken).ConfigureAwait(false);
+        if (run.Id != runId || run.State != "RUNNING"
+            || job.Status != "RUNNING" || job.AnalysisRunId != run.Id
+            || job.AssetId != run.AssetId || job.AssetVersionId != run.AssetVersionId
+            || job.LeaseToken != leaseToken || job.LeaseExpiresAt is null || job.LeaseExpiresAt <= dbNow)
+        {
+            return TerminalInvalid();
+        }
+
+        var retryableForOwner = ownerRetryable
+            && versions[0].SafetyRestriction == nameof(AssetVersionSafetyRestriction.NONE);
+        var runUpdated = await dbContext.Database.ExecuteSqlInterpolatedAsync($"""
+            UPDATE code_analysis_runs
+            SET "State" = 'FAILED',
+                "ErrorCode" = {errorCode},
+                "ErrorSummary" = {boundedSummary},
+                "OwnerRetryable" = {retryableForOwner},
+                "CompletedAt" = {dbNow},
+                "UpdatedAt" = {dbNow}
+            WHERE "Id" = {run.Id} AND "State" = 'RUNNING'
+            """, cancellationToken).ConfigureAwait(false);
+        var jobUpdated = await dbContext.Database.ExecuteSqlInterpolatedAsync($"""
+            UPDATE asset_processing_jobs
+            SET "Status" = 'FAILED',
+                "Stage" = 'FAILED',
+                "ErrorCode" = {errorCode},
+                "ErrorSummary" = {boundedSummary},
+                "CompletedAt" = {dbNow},
+                "LeaseOwner" = NULL,
+                "LeaseToken" = NULL,
+                "LeaseExpiresAt" = NULL,
+                "TransportLeaseToken" = NULL,
+                "UpdatedAt" = {dbNow}
+            WHERE "Id" = {job.Id} AND "Status" = 'RUNNING' AND "LeaseToken" = {leaseToken}
+            """, cancellationToken).ConfigureAwait(false);
+        if (runUpdated != 1 || jobUpdated != 1)
+        {
+            await tx.RollbackAsync(cancellationToken).ConfigureAwait(false);
+            return TerminalInvalid();
+        }
+
+        var metadata = JsonSerializer.Serialize(new { runId = run.Id, errorCode, ownerRetryable = retryableForOwner });
+        await dbContext.Database.ExecuteSqlInterpolatedAsync($"""
+            INSERT INTO audit_logs ("OccurredAt", "ActorType", "Action", "Outcome", "ResourceType", "ResourceId", "MetadataJson")
+            VALUES ({dbNow}, 'SYSTEM', 'CODE_ANALYSIS_FAILED', 'FAILURE', 'CodeAnalysisRun', {run.Id.ToString()}, CAST({metadata} AS jsonb))
+            """, cancellationToken).ConfigureAwait(false);
+        await tx.CommitAsync(cancellationToken).ConfigureAwait(false);
+        return AssetProcessingJobOutcome.CommittedFailed();
+    }
+
+    private Task<AssetProcessingJobOutcome> FailRun(
+        IDbContextTransaction tx,
+        JobRow job,
+        RunRow run,
+        string errorCode,
+        string safeSummary,
+        DateTimeOffset dbNow,
+        CancellationToken cancellationToken) => FailRun(
+            tx, job, run, errorCode, safeSummary, dbNow, false, cancellationToken);
+
     private async Task<AssetProcessingJobOutcome> FailRun(
         IDbContextTransaction tx,
         JobRow job,
@@ -571,6 +732,7 @@ internal sealed class CodeAnalysisReportFinalizer(
         string errorCode,
         string safeSummary,
         DateTimeOffset dbNow,
+        bool ownerRetryable,
         CancellationToken cancellationToken)
     {
         // Never mutate or audit a run that is not currently live/in the RUNNING state.
@@ -579,6 +741,7 @@ internal sealed class CodeAnalysisReportFinalizer(
             SET "State" = 'FAILED',
                 "ErrorCode" = {errorCode},
                 "ErrorSummary" = {safeSummary},
+                "OwnerRetryable" = {ownerRetryable},
                 "CompletedAt" = {dbNow},
                 "UpdatedAt" = {dbNow}
             WHERE "Id" = {run.Id} AND "State" = 'RUNNING'
@@ -599,7 +762,7 @@ internal sealed class CodeAnalysisReportFinalizer(
             WHERE "Id" = {job.Id} AND "Status" = 'RUNNING'
             """, cancellationToken).ConfigureAwait(false);
 
-        if (runUpdated == 0 && jobUpdated == 0)
+        if (runUpdated != 1 || jobUpdated != 1)
         {
             await tx.RollbackAsync(cancellationToken).ConfigureAwait(false);
             return AssetProcessingJobOutcome.Terminal(

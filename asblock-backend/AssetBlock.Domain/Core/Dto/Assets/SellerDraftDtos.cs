@@ -91,7 +91,8 @@ public sealed record SellerVersionReviewDto(
     bool PublicationEligible,
     bool CanUpload,
     bool CanSubmit,
-    IReadOnlyList<string> BlockedReasons);
+    IReadOnlyList<string> BlockedReasons,
+    SellerAnalysisSummaryDto? AnalysisDetails = null);
 
 [JsonConverter(typeof(JsonStringEnumConverter))]
 public enum SellerAnalysisAvailability

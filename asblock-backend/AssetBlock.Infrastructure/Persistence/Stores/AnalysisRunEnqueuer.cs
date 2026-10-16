@@ -146,7 +146,7 @@ internal sealed class AnalysisRunEnqueuer(
             if (enqueued.IsRetryable)
             {
                 await PersistSchedulingIntent(
-                        assetId, assetVersionId, null, archiveRows[0].Id, malwareId, 1, contentSha256, dbNow, cancellationToken)
+                        assetId, assetVersionId, null, archiveRows[0].Id, malwareId, 1, contentSha256, dbNow, null, cancellationToken)
                     .ConfigureAwait(false);
             }
 
@@ -169,12 +169,13 @@ internal sealed class AnalysisRunEnqueuer(
         int securityGeneration,
         string contentSha256,
         DateTimeOffset databaseNow,
+        Guid? parentRunId,
         CancellationToken cancellationToken = default)
     {
         var payload = JsonSerializer.Serialize(
             new AnalysisSchedulingPayload(
                 assetId, assetVersionId, archiveEvidenceId, malwareEvidenceId, securityGeneration,
-                contentSha256, securityRecheckId),
+                contentSha256, securityRecheckId, parentRunId),
             _schedulingIntentJson);
 
         await dbContext.Database.ExecuteSqlInterpolatedAsync($"""
@@ -262,6 +263,7 @@ internal sealed class AnalysisRunEnqueuer(
         int securityGeneration,
         string contentSha256,
         DateTimeOffset databaseNow,
+        Guid? parentRunId = null,
         CancellationToken cancellationToken = default)
     {
         // Recovery reaches this method with no surrounding transaction, so it owns one. Every
@@ -274,7 +276,7 @@ internal sealed class AnalysisRunEnqueuer(
         {
             AnalysisRunEnqueueResult result = await EnqueueLocked(
                     assetId, assetVersionId, securityRecheckId, archiveEvidenceId, malwareEvidenceId,
-                    securityGeneration, contentSha256, databaseNow, completingJobId: null, cancellationToken)
+                    securityGeneration, contentSha256, databaseNow, completingJobId: null, cancellationToken, parentRunId)
                 .ConfigureAwait(false);
 
             if (transaction is not null)
@@ -308,7 +310,8 @@ internal sealed class AnalysisRunEnqueuer(
         string contentSha256,
         DateTimeOffset databaseNow,
         Guid? completingJobId,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        Guid? parentRunId = null)
     {
         // Deterministic lock order: Asset -> workspace -> version -> run -> job. The Asset lock
         // serialises every enqueue, recovery, deletion and security selection for this asset, so
@@ -434,6 +437,11 @@ internal sealed class AnalysisRunEnqueuer(
 
         if (existing is not null)
         {
+            if (parentRunId is not null && existing.ParentRunId != parentRunId)
+            {
+                return Rejected(AnalysisEnqueueRejection.NOT_CURRENT, "the active run is linked to another retry");
+            }
+
             return await ResolveLiveRunPair(existing, databaseNow, cancellationToken).ConfigureAwait(false);
         }
 
@@ -480,14 +488,14 @@ internal sealed class AnalysisRunEnqueuer(
             INSERT INTO code_analysis_runs (
                 "Id", "AssetId", "AssetVersionId", "AssetDraftWorkspaceId", "ContentSha256",
                 "PolicyVersionId", "PolicyDigest", "DeclarationRevisionId", "DeclarationDigest",
-                "MaterialRevisionId", "MaterialDigest", "InputDigest", "SelectionGeneration",
+                "MaterialRevisionId", "MaterialDigest", "InputDigest", "SelectionGeneration", "ParentRunId",
                 "JobId", "SecurityRecheckId", "ArchiveEvidenceId", "MalwareEvidenceId", "SecurityGeneration",
                 "ServiceKey", "State", "CreatedAt", "UpdatedAt"
             ) VALUES (
                 {runId}, {inputTuple.AssetId}, {inputTuple.AssetVersionId}, {workspace?.Id}, {inputTuple.ContentSha256},
                 {policy.Id}, {inputTuple.PolicyDigest}, {declarationRevisionId}, {inputTuple.DeclarationDigest},
                 {materialRevisionId}, {inputTuple.MaterialDigest}, {inputDigest}, {inputTuple.SelectionGeneration},
-                NULL, {securityRecheckId}, {inputTuple.ArchiveEvidenceId}, {inputTuple.MalwareEvidenceId},
+                {parentRunId}, NULL, {securityRecheckId}, {inputTuple.ArchiveEvidenceId}, {inputTuple.MalwareEvidenceId},
                 {inputTuple.SecurityGeneration}, {analysisOptions.Value.ServiceKey}, 'QUEUED',
                 {databaseNow}, {databaseNow}
             )

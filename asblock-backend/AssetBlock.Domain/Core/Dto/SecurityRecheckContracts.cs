@@ -1,5 +1,3 @@
-using AssetBlock.Domain.Core.Dto;
-
 namespace AssetBlock.Domain.Core.Dto;
 
 /// <summary>Request to start (or resolve) a security recheck for an already READY version.</summary>
@@ -11,7 +9,8 @@ public sealed record SecurityRecheckStartRequest(
     int DefinitionVersion,
     string OperationDigest,
     Guid OperationReceiptId,
-    Guid? ParentRecheckId = null);
+    Guid? ParentRecheckId = null,
+    Guid? ParentAnalysisRunId = null);
 
 /// <summary>Outcome of starting a recheck, including whether an identical request was replayed.</summary>
 public sealed record SecurityRecheckStartResult(

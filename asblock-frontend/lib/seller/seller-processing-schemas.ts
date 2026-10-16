@@ -3,6 +3,7 @@ import { z } from 'zod'
 export const assetProcessingJobTypeSchema = z.enum([
   'ARCHIVE_INSPECTION',
   'MALWARE_SCAN',
+  'CODE_ANALYSIS',
   'LISTING_COPILOT',
 ])
 export type AssetProcessingJobType = z.infer<typeof assetProcessingJobTypeSchema>

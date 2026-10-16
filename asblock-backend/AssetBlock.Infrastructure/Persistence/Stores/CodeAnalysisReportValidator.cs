@@ -1110,6 +1110,15 @@ internal sealed class CodeAnalysisReportValidator : ICodeAnalysisReportValidator
 
             var path = pathJson.GetString()!;
 
+            if (!finding.TryGetProperty("ownExcerpt", out JsonElement ownExcerptJson)
+                || ownExcerptJson.ValueKind != JsonValueKind.String
+                || ownExcerptJson.GetString()!.Length > 320)
+            {
+                throw new CodeAnalysisValidationException("Finding own excerpt is missing or outside its bound.");
+            }
+
+            var ownExcerpt = ownExcerptJson.GetString()!;
+
             var isScopeLevelNotice = type == "NOTICE_MISSING";
             if (!finding.TryGetProperty("fileId", out JsonElement ownFileId)
                 || isScopeLevelNotice && ownFileId.ValueKind != JsonValueKind.Null
@@ -1124,6 +1133,7 @@ internal sealed class CodeAnalysisReportValidator : ICodeAnalysisReportValidator
             // Foreign sensitivity defaults to PRIVATE fail-closed when absent.
             var sensitivity = "PRIVATE";
             string? foreignId = null;
+            string? foreignOrigin = null;
             string? attribution = null;
             if (finding.TryGetProperty("foreign", out JsonElement foreign) && foreign.ValueKind == JsonValueKind.Object)
             {
@@ -1154,6 +1164,8 @@ internal sealed class CodeAnalysisReportValidator : ICodeAnalysisReportValidator
                 {
                     throw new CodeAnalysisValidationException("Foreign finding origin is missing or invalid.");
                 }
+
+                foreignOrigin = origin.GetString();
 
                 if (foreign.TryGetProperty("attribution", out JsonElement attr))
                 {
@@ -1208,9 +1220,7 @@ internal sealed class CodeAnalysisReportValidator : ICodeAnalysisReportValidator
 
             if (isScopeLevelNotice)
             {
-                var excerpt = finding.TryGetProperty("ownExcerpt", out JsonElement excerptJson)
-                    && excerptJson.ValueKind == JsonValueKind.String ? excerptJson.GetString() : null;
-                if (excerpt != "" || startByte.HasValue || endByte.HasValue || startLine.HasValue || endLine.HasValue
+                if (ownExcerpt != "" || startByte.HasValue || endByte.HasValue || startLine.HasValue || endLine.HasValue
                     || finding.TryGetProperty("foreign", out JsonElement noticeForeign)
                         && noticeForeign.ValueKind is not (JsonValueKind.Null or JsonValueKind.Undefined))
                 {
@@ -1256,7 +1266,7 @@ internal sealed class CodeAnalysisReportValidator : ICodeAnalysisReportValidator
             }
 
             result.Add(new ValidatedReportFinding(
-                key, type, path, startByte, endByte, foreignId, sensitivity, attribution,
+                key, type, path, ownExcerpt, startByte, endByte, foreignId, foreignOrigin, sensitivity, attribution,
                 tokenScore, semanticScore, tokenRank, semanticRank,
                 ReasonText: reasonText,
                 RequestedAction: requestedAction,
@@ -1415,6 +1425,10 @@ internal sealed class CodeAnalysisReportValidator : ICodeAnalysisReportValidator
 
             RequireString(finding, "findingId", reportFindings[index].FindingKey);
             RequireString(finding, "type", reportFindings[index].FindingType);
+            RequireString(finding, "path", reportFindings[index].OwnScopePath);
+            RequireString(finding, "ownExcerpt", reportFindings[index].OwnExcerpt);
+            RequireString(finding, "reason", reportFindings[index].ReasonText);
+            RequireString(finding, "requestedAction", reportFindings[index].RequestedAction);
             RequireString(finding, "basis", null);
             index++;
         }

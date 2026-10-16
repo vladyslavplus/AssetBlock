@@ -245,6 +245,14 @@ export function AssetEditForm({ asset }: AssetEditFormProps) {
         invalidateQueriesInBackground(queryClient, {
           queryKey: [...sellerKeys.all, 'declaration', assetId],
         })
+        if (draft?.latestVersionId) {
+          invalidateQueriesInBackground(queryClient, {
+            queryKey: sellerKeys.versionReview(assetId, draft.latestVersionId),
+          })
+          invalidateQueriesInBackground(queryClient, {
+            queryKey: sellerKeys.analysisFindingsForVersion(assetId, draft.latestVersionId),
+          })
+        }
         invalidateQueriesInBackground(queryClient, { queryKey: sellerKeys.listings() })
         invalidateQueriesInBackground(queryClient, { queryKey: sellerKeys.detail(assetId) })
       }

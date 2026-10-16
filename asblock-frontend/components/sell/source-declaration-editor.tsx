@@ -334,6 +334,12 @@ export function SourceDeclarationEditor({
     setSavedOnce(true)
     setBaseline(result.value.workspaceRevision, parsed.data)
     void queryClient.invalidateQueries({ queryKey: sellerKeys.draft(assetId) })
+    if (versionId) {
+      void queryClient.invalidateQueries({ queryKey: sellerKeys.versionReview(assetId, versionId) })
+      void queryClient.invalidateQueries({
+        queryKey: sellerKeys.analysisFindingsForVersion(assetId, versionId),
+      })
+    }
     toast.success(result.value.replayed ? 'Sources restored.' : 'Sources saved.')
 
     // Completeness refresh is separate from the save; its failure never undoes the save.

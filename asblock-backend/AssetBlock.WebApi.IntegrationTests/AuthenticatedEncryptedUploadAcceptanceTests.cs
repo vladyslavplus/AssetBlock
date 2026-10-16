@@ -35,16 +35,16 @@ public sealed class AuthenticatedEncryptedUploadAcceptanceTests
             (HttpClient scopedClient, _) = await IntegrationTestAuth.RegisterVerifiedAndAuthenticateAsync(factory);
             using (scopedClient)
             {
-                Guid categoryId = Guid.NewGuid();
-                await using (var scope = factory.Services.CreateAsyncScope())
+                var categoryId = Guid.NewGuid();
+                await using (AsyncServiceScope scope = factory.Services.CreateAsyncScope())
                 {
-                    var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+                    ApplicationDbContext db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
                     await db.Database.CanConnectAsync();
                     db.Categories.Add(new Category { Id = categoryId, Name = "LiveAcceptance Acceptance", Slug = "live-acceptance-" + categoryId.ToString("N") });
                     await db.SaveChangesAsync();
                 }
 
-                byte[] archive = CreateArchive();
+                var archive = CreateArchive();
                 using var multipart = new MultipartFormDataContent();
                 multipart.Add(new StringContent("Live encrypted asset upload"), "Title");
                 multipart.Add(new StringContent("Task-owned isolated acceptance archive"), "Description");
@@ -56,21 +56,24 @@ public sealed class AuthenticatedEncryptedUploadAcceptanceTests
                 multipart.Add(file, "file", "live-acceptance.zip");
 
                 using HttpResponseMessage upload = await scopedClient.PostAsync("/api/assets/upload", multipart);
-                string uploadBody = await upload.Content.ReadAsStringAsync();
+                var uploadBody = await upload.Content.ReadAsStringAsync();
                 details["uploadStatus"] = (int)upload.StatusCode;
                 if (!upload.IsSuccessStatusCode)
+                {
                     throw new InvalidOperationException("Real upload endpoint failed: HTTP " + (int)upload.StatusCode + " " + SafeBody(uploadBody));
-                using JsonDocument uploadJson = JsonDocument.Parse(uploadBody);
+                }
+
+                using var uploadJson = JsonDocument.Parse(uploadBody);
                 Guid assetId = uploadJson.RootElement.GetProperty("id").GetGuid();
                 details["assetId"] = assetId;
 
                 using HttpResponseMessage getDeclaration = await scopedClient.GetAsync("/api/assets/" + assetId + "/declaration");
                 getDeclaration.EnsureSuccessStatusCode();
-                using JsonDocument declarationSnapshot = JsonDocument.Parse(await getDeclaration.Content.ReadAsStringAsync());
-                var snap = declarationSnapshot.RootElement;
+                using var declarationSnapshot = JsonDocument.Parse(await getDeclaration.Content.ReadAsStringAsync());
+                JsonElement snap = declarationSnapshot.RootElement;
                 Guid workspaceId = snap.GetProperty("workspaceId").GetGuid();
-                long revision = snap.GetProperty("workspaceRevision").GetInt64();
-                object declaration = BuildDeclaration();
+                var revision = snap.GetProperty("workspaceRevision").GetInt64();
+                var declaration = BuildDeclaration();
                 using HttpResponseMessage saved = await scopedClient.PutAsJsonAsync(
                     "/api/assets/" + assetId + "/declaration",
                     new { operationId = Guid.NewGuid(), expectedWorkspaceRevision = revision, declaration });
@@ -78,19 +81,71 @@ public sealed class AuthenticatedEncryptedUploadAcceptanceTests
 
                 var first = await WaitForAdmittedReport(factory, assetId, 1, TimeSpan.FromMinutes(25));
                 details["first"] = first;
-                var firstJson = JsonSerializer.SerializeToElement(first);
-                var firstStages = firstJson.GetProperty("stages").EnumerateArray().ToArray();
+                JsonElement firstJson = JsonSerializer.SerializeToElement(first);
+                JsonElement[] firstStages = firstJson.GetProperty("stages").EnumerateArray().ToArray();
                 if (firstStages.Length != 8 || firstStages.Any(x => x.GetProperty("outcome").GetString() != "SUCCEEDED"))
+                {
                     throw new InvalidOperationException("Initial report did not persist all eight successful stages.");
+                }
+
                 if (firstJson.GetProperty("artifacts").GetArrayLength() != 3)
+                {
                     throw new InvalidOperationException("Initial admitted report did not persist all three reusable artifacts.");
+                }
+
                 if (firstJson.GetProperty("reports").EnumerateArray().Any(x => x.GetProperty("CanAuthorizePublication").GetBoolean())
                     || firstJson.GetProperty("admissions").EnumerateArray().Any(x => x.GetProperty("CanAuthorizePublication").GetBoolean()))
+                {
                     throw new InvalidOperationException("Initial report granted publication authority.");
+                }
+
                 if (firstStages.Single(x => x.GetProperty("Stage").GetString() == "VERIFIER")
-                    .GetProperty("tools").GetProperty("mode").GetString() != "PENDING_RESEARCH_EVALUATION")
+                        .GetProperty("tools").GetProperty("mode").GetString() != "PENDING_RESEARCH_EVALUATION")
+                {
                     throw new InvalidOperationException("Initial report left pending research evaluation mode.");
-                var firstRunId = firstJson.GetProperty("runs").EnumerateArray().Last().GetProperty("Id").GetGuid();
+                }
+
+                Guid firstRunId = firstJson.GetProperty("runs").EnumerateArray().Last().GetProperty("Id").GetGuid();
+                Guid assetVersionId = firstJson.GetProperty("assetVersionId").GetGuid();
+                Guid admittedReportId;
+                await using (AsyncServiceScope scope = factory.Services.CreateAsyncScope())
+                {
+                    ApplicationDbContext db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+                    admittedReportId = await db.CodeAnalysisReportHeaders.AsNoTracking()
+                        .Where(header => header.AnalysisRunId == firstRunId && header.IsFinalized)
+                        .Select(header => header.Id).SingleAsync();
+                }
+
+                using HttpResponseMessage reviewResponse = await scopedClient.GetAsync(
+                    $"/api/users/me/asset-versions/{assetVersionId}/review");
+                reviewResponse.EnsureSuccessStatusCode();
+                using var ownerReview = JsonDocument.Parse(await reviewResponse.Content.ReadAsStringAsync());
+                JsonElement summary = ownerReview.RootElement.GetProperty("analysisDetails");
+                if (summary.GetProperty("reportId").GetGuid() != admittedReportId
+                    || !summary.GetProperty("reportIsCurrent").GetBoolean()
+                    || summary.GetProperty("canSubmit").GetBoolean()
+                    || summary.GetProperty("canAuthorizePublication").GetBoolean())
+                {
+                    throw new InvalidOperationException("Owner analysis summary did not expose the selected admitted report with publication closed.");
+                }
+
+                using HttpResponseMessage findingsResponse = await scopedClient.GetAsync(
+                    $"/api/users/me/asset-versions/{assetVersionId}/analysis/reports/{admittedReportId}/findings?page=1");
+                findingsResponse.EnsureSuccessStatusCode();
+                using var ownerFindings = JsonDocument.Parse(await findingsResponse.Content.ReadAsStringAsync());
+                if (ownerFindings.RootElement.GetProperty("reportId").GetGuid() != admittedReportId
+                    || ownerFindings.RootElement.GetProperty("items").GetArrayLength() > 50)
+                {
+                    throw new InvalidOperationException("Owner findings page did not return the admitted report safely.");
+                }
+
+                if (ownerFindings.RootElement.ToString().Contains("foreignSourceId", StringComparison.OrdinalIgnoreCase)
+                    || ownerFindings.RootElement.ToString().Contains("tokenScore", StringComparison.OrdinalIgnoreCase)
+                    || ownerFindings.RootElement.ToString().Contains("semanticScore", StringComparison.OrdinalIgnoreCase))
+                {
+                    throw new InvalidOperationException("Owner findings exposed private comparison metadata.");
+                }
+
                 details["workspaceId"] = workspaceId;
 
                 var firstSelectionGeneration = firstJson.GetProperty("runs").EnumerateArray().Last()
@@ -98,65 +153,73 @@ public sealed class AuthenticatedEncryptedUploadAcceptanceTests
                 using HttpResponseMessage priceUpdated = await scopedClient.PatchAsJsonAsync(
                     "/api/assets/" + assetId + "/price", new { price = 2.50m });
                 priceUpdated.EnsureSuccessStatusCode();
-                await using (var scope = factory.Services.CreateAsyncScope())
+                await using (AsyncServiceScope scope = factory.Services.CreateAsyncScope())
                 {
-                    var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+                    ApplicationDbContext db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
                     var price = await db.Assets.AsNoTracking().Where(x => x.Id == assetId)
                         .Select(x => x.Price).SingleAsync();
                     var selectionGeneration = await db.AssetVersions.AsNoTracking()
                         .Where(x => x.AssetId == assetId).Select(x => x.AnalysisSelectionGeneration).SingleAsync();
                     if (price != 2.50m || selectionGeneration != firstSelectionGeneration)
+                    {
                         throw new InvalidOperationException("Price-only update altered analysis selection identity.");
+                    }
                 }
-                Guid assetVersionId = firstJson.GetProperty("assetVersionId").GetGuid();
                 var versionDeclarationUrl = "/api/assets/" + assetId + "/versions/" + assetVersionId + "/declaration";
                 using HttpResponseMessage readAgain = await scopedClient.GetAsync(versionDeclarationUrl);
                 readAgain.EnsureSuccessStatusCode();
-                using JsonDocument snapshot2 = JsonDocument.Parse(await readAgain.Content.ReadAsStringAsync());
+                using var snapshot2 = JsonDocument.Parse(await readAgain.Content.ReadAsStringAsync());
                 var revision2 = snapshot2.RootElement.GetProperty("workspaceRevision").GetInt64();
-                object changedDeclaration = BuildDeclaration("Changed declaration for live acceptance reuse CAS.");
+                var changedDeclaration = BuildDeclaration("Changed declaration for live acceptance reuse CAS.");
                 using HttpResponseMessage savedAgain = await scopedClient.PutAsJsonAsync(
                     versionDeclarationUrl,
                     new { operationId = Guid.NewGuid(), expectedWorkspaceRevision = revision2, declaration = changedDeclaration });
                 savedAgain.EnsureSuccessStatusCode();
 
-                // Declaration saves use workspace CAS. Schedule the changed immutable input through the
-                // same transactional product enqueuer used by upload and durable outbox recovery.
-                var latestProofRun = firstJson.GetProperty("runs").EnumerateArray().Last();
-                AnalysisRunEnqueueResult secondEnqueue;
-                await using (var scope = factory.Services.CreateAsyncScope())
+                using HttpResponseMessage historicalReviewResponse = await scopedClient.GetAsync(
+                    $"/api/users/me/asset-versions/{assetVersionId}/review");
+                historicalReviewResponse.EnsureSuccessStatusCode();
+                using var historicalReview = JsonDocument.Parse(await historicalReviewResponse.Content.ReadAsStringAsync());
+                JsonElement historicalSummary = historicalReview.RootElement.GetProperty("analysisDetails");
+                if (historicalSummary.GetProperty("reportId").GetGuid() != admittedReportId
+                    || historicalSummary.GetProperty("reportIsCurrent").GetBoolean()
+                    || historicalSummary.GetProperty("lifecycle").GetString() is not ("QUEUED" or "RUNNING"))
                 {
-                    var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
-                    var enqueueTime = await db.Database.SqlQueryRaw<DateTimeOffset>(
-                        """SELECT clock_timestamp() AS "Value" """).FirstAsync();
-                    var enqueuer = scope.ServiceProvider.GetRequiredService<IAnalysisRunEnqueuer>();
-                    secondEnqueue = await enqueuer.Enqueue(
-                        assetId,
-                        firstJson.GetProperty("assetVersionId").GetGuid(),
-                        null,
-                        latestProofRun.GetProperty("ArchiveEvidenceId").GetGuid(),
-                        latestProofRun.GetProperty("MalwareEvidenceId").GetGuid(),
-                        latestProofRun.GetProperty("SecurityGeneration").GetInt32(),
-                        firstJson.GetProperty("contentSha256").GetString()!,
-                        enqueueTime);
+                    throw new InvalidOperationException("Declaration save did not reconcile analysis while retaining prior report as history.");
                 }
-                if (secondEnqueue.Rejection != AnalysisEnqueueRejection.NONE || secondEnqueue.IsReplay)
-                    throw new InvalidOperationException("Changed declaration did not create a fresh scheduled analysis run: " + secondEnqueue.Rejection);
-                details["secondEnqueue"] = new { secondEnqueue.AnalysisRunId, secondEnqueue.AnalysisJobId, secondEnqueue.IsReplay, secondEnqueue.Rejection };
+
+                details["historicalSummaryAfterDeclarationSave"] = new
+                {
+                    reportId = historicalSummary.GetProperty("reportId").GetGuid(),
+                    reportIsCurrent = historicalSummary.GetProperty("reportIsCurrent").GetBoolean(),
+                    lifecycle = historicalSummary.GetProperty("lifecycle").GetString()
+                };
 
                 var second = await WaitForAdmittedReport(factory, assetId, 2, TimeSpan.FromMinutes(25));
                 details["second"] = second;
-                var secondJson = JsonSerializer.SerializeToElement(second);
-                var secondRunId = secondJson.GetProperty("runs").EnumerateArray().Last().GetProperty("Id").GetGuid();
-                await using (var scope = factory.Services.CreateAsyncScope())
+                JsonElement secondJson = JsonSerializer.SerializeToElement(second);
+                Guid secondRunId = secondJson.GetProperty("runs").EnumerateArray().Last().GetProperty("Id").GetGuid();
+                Guid secondAdmittedReportId = secondJson.GetProperty("reportId").GetGuid();
+                using HttpResponseMessage currentReviewResponse = await scopedClient.GetAsync(
+                    $"/api/users/me/asset-versions/{assetVersionId}/review");
+                currentReviewResponse.EnsureSuccessStatusCode();
+                using var currentReview = JsonDocument.Parse(await currentReviewResponse.Content.ReadAsStringAsync());
+                JsonElement currentSummary = currentReview.RootElement.GetProperty("analysisDetails");
+                if (currentSummary.GetProperty("reportId").GetGuid() != secondAdmittedReportId
+                    || !currentSummary.GetProperty("reportIsCurrent").GetBoolean())
                 {
-                    var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+                    throw new InvalidOperationException("Owner summary did not switch to the exact newly admitted report after declaration reconciliation.");
+                }
+
+                await using (AsyncServiceScope scope = factory.Services.CreateAsyncScope())
+                {
+                    ApplicationDbContext db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
                     Guid secondReportId = await db.CodeAnalysisReportHeaders.AsNoTracking()
                         .Where(header => header.AnalysisRunId == secondRunId)
                         .Select(header => header.Id).SingleAsync();
-                    var findings = await db.CodeAnalysisReportFindings.AsNoTracking()
+                    List<CodeAnalysisReportFinding> findings = await db.CodeAnalysisReportFindings.AsNoTracking()
                         .Where(finding => finding.ReportId == secondReportId).ToListAsync();
-                    var notice = findings.SingleOrDefault(finding => finding.FindingType == "NOTICE_MISSING");
+                    CodeAnalysisReportFinding? notice = findings.SingleOrDefault(finding => finding.FindingType == "NOTICE_MISSING");
                     if (notice is null || notice.OwnScopePath != "UNKNOWN_SCOPE"
                         || notice.OwnStartByte is not null || notice.OwnEndByte is not null
                         || notice.OwnStartLine is not null || notice.OwnEndLine is not null)
@@ -164,8 +227,7 @@ public sealed class AuthenticatedEncryptedUploadAcceptanceTests
                         throw new InvalidOperationException("Unmatched declaration scope was not persisted without file coordinates.");
                     }
 
-                    if (findings.Any(finding => finding.OwnScopePath == "LICENSE"
-                        && finding.FindingType is "LICENSE_UNKNOWN" or "LICENSE_CONTRADICTION"))
+                    if (findings.Any(finding => finding is { OwnScopePath: "LICENSE", FindingType: "LICENSE_UNKNOWN" or "LICENSE_CONTRADICTION" }))
                     {
                         throw new InvalidOperationException("Matched license location did not retain its detected license evidence.");
                     }
@@ -181,27 +243,45 @@ public sealed class AuthenticatedEncryptedUploadAcceptanceTests
                     };
                     details["matchedLicenseScope"] = new { path = "LICENSE", hasContradictoryOrUnknownFinding = false };
                 }
-                var secondReportStages = secondJson.GetProperty("stages").EnumerateArray().ToArray();
+                JsonElement[] secondReportStages = secondJson.GetProperty("stages").EnumerateArray().ToArray();
                 if (secondReportStages.Length != 8 || secondReportStages.Any(x => x.GetProperty("outcome").GetString() != "SUCCEEDED"))
+                {
                     throw new InvalidOperationException("Second report did not persist all eight successful stages.");
+                }
+
                 if (secondJson.GetProperty("artifacts").GetArrayLength() != 3)
+                {
                     throw new InvalidOperationException("Declaration-only reuse report did not persist the next reusable artifact set.");
+                }
+
                 if (secondJson.GetProperty("reports").EnumerateArray().Any(x => x.GetProperty("CanAuthorizePublication").GetBoolean())
                     || secondJson.GetProperty("admissions").EnumerateArray().Any(x => x.GetProperty("CanAuthorizePublication").GetBoolean()))
+                {
                     throw new InvalidOperationException("Declaration-only report granted publication authority.");
+                }
+
                 if (secondJson.GetProperty("processingStatus").GetString() != "READY"
                     || secondJson.GetProperty("assetPublicationSnapshotId").ValueKind != JsonValueKind.Null
                     || secondJson.GetProperty("submissionCount").GetInt32() != 0
                     || secondJson.GetProperty("embeddingJobCount").GetInt32() != 0)
+                {
                     throw new InvalidOperationException("Analysis altered publication/submission/embedding state.");
+                }
+
                 if (secondJson.GetProperty("auditRows").GetInt32() < 2
                     || secondJson.GetProperty("outboxRows").GetArrayLength() < 1)
+                {
                     throw new InvalidOperationException("Upload or analysis audit/outbox effects were not persisted.");
+                }
+
                 if (secondReportStages.Single(x => x.GetProperty("Stage").GetString() == "VERIFIER")
-                    .GetProperty("tools").GetProperty("mode").GetString() != "PENDING_RESEARCH_EVALUATION")
+                        .GetProperty("tools").GetProperty("mode").GetString() != "PENDING_RESEARCH_EVALUATION")
+                {
                     throw new InvalidOperationException("Reuse report left pending research evaluation mode.");
-                var secondRun = secondJson.GetProperty("runs").EnumerateArray().Last();
-                var firstRun = firstJson.GetProperty("runs").EnumerateArray().Last();
+                }
+
+                JsonElement secondRun = secondJson.GetProperty("runs").EnumerateArray().Last();
+                JsonElement firstRun = firstJson.GetProperty("runs").EnumerateArray().Last();
                 if (secondRun.GetProperty("DeclarationDigest").GetString() == firstRun.GetProperty("DeclarationDigest").GetString()
                     || secondRun.GetProperty("ContentSha256").GetString() != firstRun.GetProperty("ContentSha256").GetString()
                     || secondRun.GetProperty("PolicyDigest").GetString() != firstRun.GetProperty("PolicyDigest").GetString()
@@ -210,11 +290,17 @@ public sealed class AuthenticatedEncryptedUploadAcceptanceTests
                     || secondRun.GetProperty("MalwareEvidenceId").GetGuid() != firstRun.GetProperty("MalwareEvidenceId").GetGuid()
                     || secondRun.GetProperty("SecurityGeneration").GetInt32() != firstRun.GetProperty("SecurityGeneration").GetInt32()
                     || secondRun.GetProperty("SelectionGeneration").GetInt32() <= firstRun.GetProperty("SelectionGeneration").GetInt32())
+                {
                     throw new InvalidOperationException("Version declaration CAS did not change only declaration while price-only update preserved other reuse inputs.");
-                var secondStages = secondJson.GetProperty("stages").EnumerateArray().ToArray();
+                }
+
+                JsonElement[] secondStages = secondJson.GetProperty("stages").EnumerateArray().ToArray();
                 if (secondStages.Length != 8 || secondStages.Any(x => x.GetProperty("outcome").GetString() != "SUCCEEDED"))
+                {
                     throw new InvalidOperationException("Second report did not persist all eight successful stages.");
-                var reusableStages = secondStages.Where(x => x.GetProperty("Stage").GetString() is "EXTRACTION" or "TOKEN" or "SEMANTIC").ToArray();
+                }
+
+                JsonElement[] reusableStages = secondStages.Where(x => x.GetProperty("Stage").GetString() is "EXTRACTION" or "TOKEN" or "SEMANTIC").ToArray();
                 var firstStagesByName = firstJson.GetProperty("stages").EnumerateArray()
                     .ToDictionary(x => x.GetProperty("Stage").GetString()!, x => x);
                 var firstArtifactsByName = firstJson.GetProperty("artifacts").EnumerateArray()
@@ -225,10 +311,16 @@ public sealed class AuthenticatedEncryptedUploadAcceptanceTests
                         || x.GetProperty("ReuseParentStageId").GetGuid() != firstStagesByName[x.GetProperty("Stage").GetString()!].GetProperty("Id").GetGuid()
                         || x.GetProperty("tools").GetProperty("reuseArtifactDigest").GetString()
                             != firstArtifactsByName[x.GetProperty("Stage").GetString()!].GetProperty("ArtifactDigest").GetString()))
+                {
                     throw new InvalidOperationException("Second report did not bind extraction/token/semantic reuse to admitted parent artifacts.");
-                var semantic = reusableStages.Single(x => x.GetProperty("Stage").GetString() == "SEMANTIC");
-                if (!semantic.GetProperty("counts").TryGetProperty("encoderInvocations", out var invocations) || invocations.GetInt32() != 0)
+                }
+
+                JsonElement semantic = reusableStages.Single(x => x.GetProperty("Stage").GetString() == "SEMANTIC");
+                if (!semantic.GetProperty("counts").TryGetProperty("encoderInvocations", out JsonElement invocations) || invocations.GetInt32() != 0)
+                {
                     throw new InvalidOperationException("Persisted semantic reuse did not prove encoderInvocations=0.");
+                }
+
                 details["status"] = "passed";
                 await File.WriteAllTextAsync(evidencePath, JsonSerializer.Serialize(details, new JsonSerializerOptions { WriteIndented = true }));
             }
@@ -245,15 +337,15 @@ public sealed class AuthenticatedEncryptedUploadAcceptanceTests
 
     private static async Task<object> WaitForAdmittedReport(WebApplicationFactory<Program> factory, Guid assetId, int requiredReports, TimeSpan timeout)
     {
-        var until = DateTimeOffset.UtcNow + timeout;
+        DateTimeOffset until = DateTimeOffset.UtcNow + timeout;
         while (DateTimeOffset.UtcNow < until)
         {
-            await using var scope = factory.Services.CreateAsyncScope();
-            var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
-            var version = await db.AssetVersions.AsNoTracking().SingleAsync(x => x.AssetId == assetId);
-            var runs = await db.CodeAnalysisRuns.AsNoTracking().Where(x => x.AssetId == assetId).OrderBy(x => x.CreatedAt).ToListAsync();
-            var reports = await db.CodeAnalysisReportHeaders.AsNoTracking().Where(x => x.AssetId == assetId && x.IsFinalized).OrderBy(x => x.CreatedAt).ToListAsync();
-            var jobs = await db.AssetProcessingJobs.AsNoTracking().Where(x => x.AssetId == assetId).OrderBy(x => x.CreatedAt).ToListAsync();
+            await using AsyncServiceScope scope = factory.Services.CreateAsyncScope();
+            ApplicationDbContext db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+            AssetVersion version = await db.AssetVersions.AsNoTracking().SingleAsync(x => x.AssetId == assetId);
+            List<CodeAnalysisRun> runs = await db.CodeAnalysisRuns.AsNoTracking().Where(x => x.AssetId == assetId).OrderBy(x => x.CreatedAt).ToListAsync();
+            List<CodeAnalysisReportHeader> reports = await db.CodeAnalysisReportHeaders.AsNoTracking().Where(x => x.AssetId == assetId && x.IsFinalized).OrderBy(x => x.CreatedAt).ToListAsync();
+            List<AssetProcessingJob> jobs = await db.AssetProcessingJobs.AsNoTracking().Where(x => x.AssetId == assetId).OrderBy(x => x.CreatedAt).ToListAsync();
             Guid? publicationSnapshotId = await db.Assets.AsNoTracking()
                 .Where(x => x.Id == assetId).Select(x => x.CurrentPublicationSnapshotId).SingleAsync();
             var submissionCount = await db.ModerationSubmissions.AsNoTracking()
@@ -261,13 +353,13 @@ public sealed class AuthenticatedEncryptedUploadAcceptanceTests
             var embeddingJobCount = jobs.Count(x => x.Type == AssetProcessingJobType.EMBEDDING_GENERATION);
             if (reports.Count >= requiredReports)
             {
-                Guid reportId = reports[reports.Count - 1].Id;
-                var stages = await db.CodeAnalysisReportStages.AsNoTracking().Where(x => x.ReportId == reportId).OrderBy(x => x.Stage).ToListAsync();
-                var admissions = await db.CodeAnalysisReportAdmissions.AsNoTracking().Where(x => x.ReportId == reportId).ToListAsync();
-                var artifacts = await db.CodeAnalysisReuseArtifacts.AsNoTracking().Where(x => x.SourceReportId == reportId).ToListAsync();
-                var evidence = await db.SecurityEvidenceRecords.AsNoTracking().Where(x => x.AssetVersionId == version.Id).OrderBy(x => x.CreatedAt).ToListAsync();
+                Guid reportId = reports[^1].Id;
+                List<CodeAnalysisReportStage> stages = await db.CodeAnalysisReportStages.AsNoTracking().Where(x => x.ReportId == reportId).OrderBy(x => x.Stage).ToListAsync();
+                List<CodeAnalysisReportAdmission> admissions = await db.CodeAnalysisReportAdmissions.AsNoTracking().Where(x => x.ReportId == reportId).ToListAsync();
+                List<CodeAnalysisReuseArtifact> artifacts = await db.CodeAnalysisReuseArtifacts.AsNoTracking().Where(x => x.SourceReportId == reportId).ToListAsync();
+                List<SecurityEvidenceRecord> evidence = await db.SecurityEvidenceRecords.AsNoTracking().Where(x => x.AssetVersionId == version.Id).OrderBy(x => x.CreatedAt).ToListAsync();
                 var audits = await db.AuditLogs.AsNoTracking().Where(x => x.ResourceId == assetId.ToString()).CountAsync();
-                var outbox = await db.OutboxMessages.AsNoTracking().Where(x => x.Payload.Contains(assetId.ToString())).ToListAsync();
+                List<OutboxMessage> outbox = await db.OutboxMessages.AsNoTracking().Where(x => x.Payload.Contains(assetId.ToString())).ToListAsync();
                 return new
                 {
                     assetVersionId = version.Id,
@@ -296,11 +388,13 @@ public sealed class AuthenticatedEncryptedUploadAcceptanceTests
                     .Select(x => new { type = x.Type.ToString(), x.Stage, x.ErrorCode, x.ErrorSummary, x.AttemptCount }).ToArray();
                 throw new InvalidOperationException("Processing job failed: " + JsonSerializer.Serialize(failure));
             }
-            var analysisRefusal = jobs.FirstOrDefault(x => x.Type == AssetProcessingJobType.CODE_ANALYSIS
-                && x.Status == AssetProcessingJobStatus.RETRY_SCHEDULED
-                && (x.ErrorCode == "ANALYSIS_RESPONSE_INVALID" || x.ErrorCode == "ANALYSIS_CAPACITY_UNAVAILABLE"));
+            AssetProcessingJob? analysisRefusal = jobs.FirstOrDefault(x => x is { Type: AssetProcessingJobType.CODE_ANALYSIS, Status: AssetProcessingJobStatus.RETRY_SCHEDULED }
+                                                                           && (x.ErrorCode == "ANALYSIS_RESPONSE_INVALID" || x.ErrorCode == "ANALYSIS_CAPACITY_UNAVAILABLE"));
             if (analysisRefusal is not null)
+            {
                 throw new InvalidOperationException("Analysis job refused: " + analysisRefusal.ErrorCode + " " + analysisRefusal.ErrorSummary);
+            }
+
             await Task.Delay(1000);
         }
         throw new TimeoutException("Timed out waiting for report count " + requiredReports);
@@ -321,7 +415,7 @@ public sealed class AuthenticatedEncryptedUploadAcceptanceTests
 
     private static void Add(ZipArchive zip, string path, string content)
     {
-        var entry = zip.CreateEntry(path, CompressionLevel.Optimal);
+        ZipArchiveEntry entry = zip.CreateEntry(path, CompressionLevel.Optimal);
         using var writer = new StreamWriter(entry.Open(), new UTF8Encoding(false));
         writer.Write(content);
     }
@@ -345,20 +439,6 @@ public sealed class AuthenticatedEncryptedUploadAcceptanceTests
                 origin = "OWN_CONTRIBUTION" }
         }
     };
-
-    private static async Task<string> FindEmail(WebApplicationFactory<Program> factory, string username)
-    {
-        await using var scope = factory.Services.CreateAsyncScope();
-        return (await scope.ServiceProvider.GetRequiredService<ApplicationDbContext>().Users.AsNoTracking().SingleAsync(x => x.Username == username)).Email;
-    }
-
-    private static async Task<string> Login(HttpClient client, string email)
-    {
-        using var response = await client.PostAsJsonAsync("/api/auth/login", new { email, password = "Password1!" });
-        response.EnsureSuccessStatusCode();
-        using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
-        return json.RootElement.GetProperty("accessToken").GetString()!;
-    }
 
     private static string SafeBody(string body) => body.Length > 1200 ? body[..1200] : body;
     private static object SafeJson(string json) { try { return JsonDocument.Parse(json).RootElement.Clone(); } catch { return new { malformed = true }; } }
@@ -408,8 +488,8 @@ internal sealed record LiveAcceptanceOptions(string ConfigurationPath, string Ev
 {
     public const string ENABLED_VARIABLE = "ASBLOCK_LIVE_ACCEPTANCE";
     public const string CONFIGURATION_PATH_VARIABLE = "ASBLOCK_LIVE_ACCEPTANCE_CONFIG_PATH";
-    public const string EVIDENCE_PATH_VARIABLE = "ASBLOCK_LIVE_ACCEPTANCE_EVIDENCE_PATH";
-    public const string DATA_PROTECTION_KEYS_PATH_VARIABLE = "ASBLOCK_LIVE_ACCEPTANCE_DATA_PROTECTION_PATH";
+    private const string EVIDENCE_PATH_VARIABLE = "ASBLOCK_LIVE_ACCEPTANCE_EVIDENCE_PATH";
+    private const string DATA_PROTECTION_KEYS_PATH_VARIABLE = "ASBLOCK_LIVE_ACCEPTANCE_DATA_PROTECTION_PATH";
 
     public static LiveAcceptanceOptions Resolve() => Resolve(
         Environment.GetEnvironmentVariable(ENABLED_VARIABLE),
@@ -501,7 +581,7 @@ public sealed class LiveAcceptanceOptionsTests
     [Fact]
     public void Resolve_WhenLiveAcceptanceIsNotEnabled_ShouldFailBeforeLoadingServices()
     {
-        var error = Assert.Throws<InvalidOperationException>(() =>
+        InvalidOperationException error = Assert.Throws<InvalidOperationException>(() =>
             LiveAcceptanceOptions.Resolve(null, null, null, null));
 
         Assert.Contains("ASBLOCK_LIVE_ACCEPTANCE=1", error.Message, StringComparison.Ordinal);
@@ -513,7 +593,7 @@ public sealed class LiveAcceptanceOptionsTests
         var missingConfiguration = Path.Combine(Path.GetTempPath(), Guid.NewGuid() + ".json");
         var evidencePath = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N"), "evidence.json");
 
-        var error = Assert.Throws<InvalidOperationException>(() =>
+        InvalidOperationException error = Assert.Throws<InvalidOperationException>(() =>
             LiveAcceptanceOptions.Resolve("1", missingConfiguration, evidencePath, Path.Combine(Path.GetTempPath(), "assetblock-dataprotection-keys-test")));
 
         Assert.Contains(LiveAcceptanceOptions.CONFIGURATION_PATH_VARIABLE, error.Message, StringComparison.Ordinal);

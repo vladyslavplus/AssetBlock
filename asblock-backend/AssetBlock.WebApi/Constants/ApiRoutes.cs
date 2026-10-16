@@ -124,6 +124,8 @@ public static class ApiRoutes
         public const string ME_ASSET_VERSION_PROCESSING_JOBS = "me/asset-versions/{assetVersionId:guid}/processing-jobs";
         public const string ME_ASSET_VERSION_LISTING_COPILOT = "me/asset-versions/{assetVersionId:guid}/listing-copilot";
         public const string ME_ASSET_VERSION_REVIEW = "me/asset-versions/{assetVersionId:guid}/review";
+        public const string ME_ASSET_VERSION_ANALYSIS_FINDINGS = "me/asset-versions/{assetVersionId:guid}/analysis/reports/{reportId:guid}/findings";
+        public const string ME_ASSET_VERSION_ANALYSIS_RETRY = "me/assets/{assetId:guid}/versions/{assetVersionId:guid}/analysis-retries";
     }
 
     public static class Analytics

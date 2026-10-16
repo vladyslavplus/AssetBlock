@@ -18,6 +18,7 @@ public interface IAnalysisRunEnqueuer
         int securityGeneration,
         string contentSha256,
         DateTimeOffset databaseNow,
+        Guid? parentRunId = null,
         CancellationToken cancellationToken = default);
 
     /// <summary>
@@ -34,6 +35,7 @@ public interface IAnalysisRunEnqueuer
         int securityGeneration,
         string contentSha256,
         DateTimeOffset databaseNow,
+        Guid? parentRunId,
         CancellationToken cancellationToken = default);
 
     /// <summary>

@@ -62,6 +62,7 @@ internal sealed class CodeAnalysisRunConfiguration : IEntityTypeConfiguration<Co
             .HasConversion(s => s.ToString(), s => Enum.Parse<CodeAnalysisReportDisposition>(s!));
         builder.Property(r => r.ErrorCode).HasMaxLength(64);
         builder.Property(r => r.ErrorSummary).HasMaxLength(2000);
+        builder.Property(r => r.OwnerRetryable).IsRequired().HasDefaultValue(false);
         builder.Property(r => r.StartedAt);
         builder.Property(r => r.CompletedAt);
         builder.Property(r => r.CreatedAt).IsRequired();
