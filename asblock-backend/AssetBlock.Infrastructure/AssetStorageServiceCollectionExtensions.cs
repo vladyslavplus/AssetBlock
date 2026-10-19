@@ -74,7 +74,24 @@ internal static class AssetStorageServiceCollectionExtensions
                 ? sp.GetRequiredService<IOptions<MinioOptions>>().Value.Bucket
                 : sp.GetRequiredService<IOptions<SeaweedFsOptions>>().Value.Bucket;
 
-            return new S3CompatibleAssetStorageService(client, bucket, resilience, logger);
+            (string Endpoint, bool UseSsl, string AccessKey, string SecretKey) endpoint = provider == StorageProvider.MINIO
+                ? (sp.GetRequiredService<IOptions<MinioOptions>>().Value.Endpoint,
+                    sp.GetRequiredService<IOptions<MinioOptions>>().Value.UseSsl,
+                    sp.GetRequiredService<IOptions<MinioOptions>>().Value.AccessKey,
+                    sp.GetRequiredService<IOptions<MinioOptions>>().Value.SecretKey)
+                : (sp.GetRequiredService<IOptions<SeaweedFsOptions>>().Value.Endpoint,
+                    sp.GetRequiredService<IOptions<SeaweedFsOptions>>().Value.UseSsl,
+                    sp.GetRequiredService<IOptions<SeaweedFsOptions>>().Value.AccessKey,
+                    sp.GetRequiredService<IOptions<SeaweedFsOptions>>().Value.SecretKey);
+
+            return new S3CompatibleAssetStorageService(
+                client,
+                bucket,
+                resilience,
+                logger,
+                S3CompatibleClientFactory.GetEndpointUri(endpoint.Endpoint, endpoint.UseSsl),
+                endpoint.AccessKey,
+                endpoint.SecretKey);
         });
 
         services.AddHostedService<StorageBucketEnsureHostedService>();

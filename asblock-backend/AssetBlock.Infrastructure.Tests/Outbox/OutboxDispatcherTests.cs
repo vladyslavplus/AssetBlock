@@ -181,6 +181,63 @@ public sealed class OutboxDispatcherTests
             Arg.Any<CancellationToken>());
     }
 
+    [Fact]
+    public async Task DispatchBatch_WhenStorageSucceedsButMarkProcessedLosesLease_ShouldReplayIdempotently()
+    {
+        var messageId = Guid.NewGuid();
+        var firstToken = Guid.NewGuid();
+        var replayToken = Guid.NewGuid();
+        OutboxMessage first = new()
+        {
+            Id = messageId,
+            Type = "test.exact-delete",
+            Payload = "{\"versionId\":\"generation-1\"}",
+            LockToken = firstToken,
+            AttemptCount = 1
+        };
+        OutboxMessage replay = new()
+        {
+            Id = messageId,
+            Type = first.Type,
+            Payload = first.Payload,
+            LockToken = replayToken,
+            AttemptCount = 2
+        };
+        IOutboxStore outbox = Substitute.For<IOutboxStore>();
+        outbox.ClaimPendingBatch(Arg.Any<int>(), Arg.Any<TimeSpan>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<IReadOnlyList<OutboxMessage>>([first]),
+                Task.FromResult<IReadOnlyList<OutboxMessage>>([replay]));
+        outbox.MarkProcessed(messageId, firstToken, Arg.Any<CancellationToken>()).Returns(false);
+        outbox.MarkProcessed(messageId, replayToken, Arg.Any<CancellationToken>()).Returns(true);
+
+        var deletedGenerations = new HashSet<string>(StringComparer.Ordinal);
+        var storageCalls = 0;
+        IOutboxMessageHandler handler = Substitute.For<IOutboxMessageHandler>();
+        handler.MessageType.Returns(first.Type);
+        handler.Handle(Arg.Any<OutboxMessage>(), Arg.Any<CancellationToken>()).Returns(call =>
+        {
+            storageCalls++;
+            _ = deletedGenerations.Add("generation-1");
+            return Task.CompletedTask;
+        });
+
+        var services = new ServiceCollection();
+        services.AddSingleton(outbox);
+        services.AddSingleton(handler);
+        await using ServiceProvider provider = services.BuildServiceProvider();
+        var dispatcher = new OutboxDispatcher(
+            provider.GetRequiredService<IServiceScopeFactory>(),
+            NullLogger<OutboxDispatcher>.Instance);
+
+        await dispatcher.DispatchBatch(CancellationToken.None);
+        await dispatcher.DispatchBatch(CancellationToken.None);
+
+        storageCalls.Should().Be(2);
+        deletedGenerations.Should().ContainSingle().Which.Should().Be("generation-1");
+        await outbox.Received(1).MarkProcessed(messageId, firstToken, Arg.Any<CancellationToken>());
+        await outbox.Received(1).MarkProcessed(messageId, replayToken, Arg.Any<CancellationToken>());
+    }
+
     private static void UpdateMaximum(ref int target, int candidate)
     {
         int observed;

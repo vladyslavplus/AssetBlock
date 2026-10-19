@@ -28,7 +28,9 @@ public sealed class PostgresFixture : IAsyncLifetime
         var externalConnectionString = Environment.GetEnvironmentVariable("ASBLOCK_TEST_POSTGRES");
         if (string.IsNullOrWhiteSpace(externalConnectionString))
         {
-            _postgres = new PostgreSqlBuilder("pgvector/pgvector:0.8.6-pg16-bookworm@sha256:ccc6e83d6e35e931dc7c5def2022729d5a6c370318d099181995567ff1fb4d6b").Build();
+            _postgres = new PostgreSqlBuilder("pgvector/pgvector:0.8.6-pg16-bookworm@sha256:ccc6e83d6e35e931dc7c5def2022729d5a6c370318d099181995567ff1fb4d6b")
+                .WithLabel("ao.session", Environment.GetEnvironmentVariable("AO_SESSION_ID") ?? "local")
+                .Build();
             using var cts = new CancellationTokenSource(_startTimeout);
             try
             {

@@ -1,23 +1,26 @@
 using System.IO.Pipelines;
 using System.Security.Cryptography;
 using AssetBlock.Domain.Abstractions.Services;
+using AssetBlock.Domain.Core.Primitives.Storage;
 
 namespace AssetBlock.Application.Common;
 
 public interface IAssetEncryptUploadService
 {
-    Task<string> EncryptAndUpload(
+    Task<AssetUploadReceipt> EncryptAndUploadVersioned(
         Stream plain,
         string storageKey,
         long ciphertextLength,
         CancellationToken cancellationToken);
 }
 
+public sealed record AssetUploadReceipt(string PlaintextSha256, string StorageVersionId);
+
 internal sealed class AssetEncryptUploadService(
     IEncryptionService encryptionService,
     IAssetStorageService assetStorageService) : IAssetEncryptUploadService
 {
-    public async Task<string> EncryptAndUpload(
+    public async Task<AssetUploadReceipt> EncryptAndUploadVersioned(
         Stream plain,
         string storageKey,
         long ciphertextLength,
@@ -31,6 +34,7 @@ internal sealed class AssetEncryptUploadService(
         var pipe = new Pipe();
         Exception? encryptError = null;
         Exception? uploadError = null;
+        string? storageVersionId = null;
 
         var encryptTask = Task.Run(async () =>
         {
@@ -54,7 +58,7 @@ internal sealed class AssetEncryptUploadService(
             try
             {
                 await using Stream readerStream = pipe.Reader.AsStream(leaveOpen: true);
-                await assetStorageService.Upload(storageKey, readerStream, ciphertextLength, combinedToken).ConfigureAwait(false);
+                storageVersionId = await assetStorageService.UploadVersioned(storageKey, readerStream, ciphertextLength, combinedToken).ConfigureAwait(false);
                 await pipe.Reader.CompleteAsync().ConfigureAwait(false);
             }
             catch (Exception ex)
@@ -94,7 +98,12 @@ internal sealed class AssetEncryptUploadService(
         }
 
         cancellationToken.ThrowIfCancellationRequested();
-        return hashingStream.HashHex;
+        if (!StorageVersionIdentity.IsImmutable(storageVersionId))
+        {
+            throw new InvalidOperationException("Storage upload did not return an immutable provider version ID.");
+        }
+
+        return new AssetUploadReceipt(hashingStream.HashHex, storageVersionId);
     }
 }
 

@@ -30,13 +30,16 @@ public abstract class StorageProviderFixture : IAsyncLifetime
     protected abstract string SecretKey { get; }
     protected abstract string Bucket { get; }
     protected abstract IAssetStorageService CreateStorage(string endpoint, string accessKey, string secretKey, string bucket);
+    protected virtual Task ConfigureVersioning(string bucket) => Task.CompletedTask;
+    public Task EnableVersioningForBucket(string bucket) => ConfigureVersioning(bucket);
 
     public IAssetStorageService Storage { get; private set; } = null!;
-    private string Endpoint { get; set; } = string.Empty;
+    protected string Endpoint { get; private set; } = string.Empty;
 
-    public async Task InitializeAsync()
+    public virtual async Task InitializeAsync()
     {
         _container = new ContainerBuilder(Image)
+            .WithLabel("ao.session", Environment.GetEnvironmentVariable("AO_SESSION_ID") ?? "local")
             .WithPortBinding(ContainerPort, true)
             .WithEnvironment(ContainerEnvironment)
             .WithCommand(Command)
@@ -83,6 +86,8 @@ public abstract class StorageProviderFixture : IAsyncLifetime
         {
             throw new InvalidOperationException("Storage EnsureBucket did not become ready.", last);
         }
+
+        await ConfigureVersioning(Bucket);
     }
 
     public IAssetStorageService CreateStorageForBucket(string bucket) =>
@@ -136,6 +141,14 @@ public sealed class MinioStorageFixture : StorageProviderFixture
     protected override string[] Command { get; } =
         ["server", "/data", "--console-address", ":9001"];
 
+    protected override async Task ConfigureVersioning(string bucket)
+    {
+        IMinioClient client = S3CompatibleClientFactory.Create(Endpoint, AccessKey, SecretKey, useSsl: false);
+        await client.SetVersioningAsync(new Minio.DataModel.Args.SetVersioningArgs()
+            .WithBucket(bucket)
+            .WithVersioningEnabled());
+    }
+
     protected override IAssetStorageService CreateStorage(string endpoint, string accessKey, string secretKey, string bucket)
     {
         IMinioClient client = S3CompatibleClientFactory.Create(endpoint, accessKey, secretKey, useSsl: false);
@@ -152,7 +165,10 @@ public sealed class MinioStorageFixture : StorageProviderFixture
             client,
             bucket,
             CreateResilienceProvider(),
-            NullLogger<S3CompatibleAssetStorageService>.Instance);
+            NullLogger<S3CompatibleAssetStorageService>.Instance,
+            S3CompatibleClientFactory.GetEndpointUri(endpoint, useSsl: false),
+            accessKey,
+            secretKey);
     }
 }
 
@@ -182,6 +198,14 @@ public sealed class SeaweedFsStorageFixture : StorageProviderFixture
     protected override string[] Command { get; } =
         ["mini", "-ip=0.0.0.0", "-ip.bind=0.0.0.0", "-dir=/data", "-s3.port=8333"];
 
+    protected override async Task ConfigureVersioning(string bucket)
+    {
+        IMinioClient client = S3CompatibleClientFactory.Create(Endpoint, AccessKey, SecretKey, useSsl: false);
+        await client.SetVersioningAsync(new Minio.DataModel.Args.SetVersioningArgs()
+            .WithBucket(bucket)
+            .WithVersioningEnabled());
+    }
+
     protected override IAssetStorageService CreateStorage(string endpoint, string accessKey, string secretKey, string bucket)
     {
         IMinioClient client = S3CompatibleClientFactory.Create(endpoint, accessKey, secretKey, useSsl: false);
@@ -189,7 +213,10 @@ public sealed class SeaweedFsStorageFixture : StorageProviderFixture
             client,
             bucket,
             CreateResilienceProvider(),
-            NullLogger<S3CompatibleAssetStorageService>.Instance);
+            NullLogger<S3CompatibleAssetStorageService>.Instance,
+            S3CompatibleClientFactory.GetEndpointUri(endpoint, useSsl: false),
+            accessKey,
+            secretKey);
     }
 }
 
@@ -198,9 +225,9 @@ public abstract class AssetStorageContractTests(StorageProviderFixture fixture)
 {
     private readonly string _keyPrefix = $"contract/{Guid.NewGuid():N}/";
 
-    private IAssetStorageService Storage => fixture.Storage;
+    protected IAssetStorageService Storage => fixture.Storage;
 
-    private string Key(string suffix) => _keyPrefix + suffix;
+    protected string Key(string suffix) => _keyPrefix + suffix;
 
     private IAssetStorageService CreateStorageForBucket(string bucket) =>
         fixture.CreateStorageForBucket(bucket);
@@ -234,11 +261,13 @@ public abstract class AssetStorageContractTests(StorageProviderFixture fixture)
 
         Task[] tasks = storages.Select(s => s.EnsureBucket()).ToArray();
         await Task.WhenAll(tasks);
+        await fixture.EnableVersioningForBucket(bucket);
 
         // Post-condition: bucket is usable for a tiny object.
         var key = Key("after-race.bin");
         var payload = "ok"u8.ToArray();
-        await storages[0].Upload(key, new MemoryStream(payload), payload.Length);
+        var generation = await storages[0].UploadVersioned(key, new MemoryStream(payload), payload.Length);
+        generation.Should().NotBeNullOrWhiteSpace();
         List<StorageObjectInfo> listed = await ToList(storages[0].ListObjects(_keyPrefix));
         listed.Should().Contain(o => o.Key == key);
     }
@@ -249,7 +278,8 @@ public abstract class AssetStorageContractTests(StorageProviderFixture fixture)
         var key = Key("roundtrip.bin");
         var payload = RandomNumberGenerator.GetBytes(64 * 1024);
         await using var nonSeekable = new NonSeekableStream(new MemoryStream(payload));
-        await Storage.Upload(key, nonSeekable, payload.Length);
+        var generation = await Storage.UploadVersioned(key, nonSeekable, payload.Length);
+        generation.Should().NotBeNullOrWhiteSpace();
 
         byte[]? read = null;
         await Storage.OpenRead(key, async (stream, ct) =>
@@ -272,7 +302,8 @@ public abstract class AssetStorageContractTests(StorageProviderFixture fixture)
     {
         var key = Key("nested/a/b/c.dat");
         var payload = "nested-payload"u8.ToArray();
-        await Storage.Upload(key, new MemoryStream(payload), payload.Length);
+        var generation = await Storage.UploadVersioned(key, new MemoryStream(payload), payload.Length);
+        generation.Should().NotBeNullOrWhiteSpace();
 
         List<StorageObjectInfo> listed = await ToList(Storage.ListObjects(_keyPrefix + "nested/"));
         StorageObjectInfo info = listed.Should().ContainSingle(o => o.Key == key).Subject;
@@ -285,9 +316,10 @@ public abstract class AssetStorageContractTests(StorageProviderFixture fixture)
     {
         var key = Key("delete-me.bin");
         var payload = "x"u8.ToArray();
-        await Storage.Upload(key, new MemoryStream(payload), payload.Length);
-        await Storage.Delete(key);
-        await Storage.Delete(key);
+        var generation = await Storage.UploadVersioned(key, new MemoryStream(payload), payload.Length);
+        generation.Should().NotBeNullOrWhiteSpace();
+        await Storage.Delete(key, generation);
+        await Storage.Delete(key, generation);
 
         List<StorageObjectInfo> listed = await ToList(Storage.ListObjects(_keyPrefix));
         listed.Should().NotContain(o => o.Key == key);
@@ -301,11 +333,11 @@ public abstract class AssetStorageContractTests(StorageProviderFixture fixture)
 
         await FluentActions.Awaiting(() => Storage.EnsureBucket(cts.Token))
             .Should().ThrowAsync<OperationCanceledException>();
-        await FluentActions.Awaiting(() => Storage.Upload(Key("c.bin"), new MemoryStream([1]), 1, cts.Token))
+        await FluentActions.Awaiting(() => Storage.UploadVersioned(Key("c.bin"), new MemoryStream([1]), 1, cts.Token))
             .Should().ThrowAsync<OperationCanceledException>();
         await FluentActions.Awaiting(() => Storage.OpenRead(Key("missing"), (_, _) => Task.CompletedTask, cts.Token))
             .Should().ThrowAsync<OperationCanceledException>();
-        await FluentActions.Awaiting(() => Storage.Delete(Key("missing"), cts.Token))
+        await FluentActions.Awaiting(() => Storage.Delete(Key("missing"), "missing-version", cts.Token))
             .Should().ThrowAsync<OperationCanceledException>();
         await FluentActions.Awaiting(() => ToList(Storage.ListObjects(_keyPrefix, cts.Token), cts.Token))
             .Should().ThrowAsync<OperationCanceledException>();
@@ -317,7 +349,7 @@ public abstract class AssetStorageContractTests(StorageProviderFixture fixture)
         var key = Key("partial-throw.bin");
         await using var throwing = new ThrowingAfterBytesStream(byteCountBeforeThrow: 32 * 1024);
 
-        await FluentActions.Awaiting(() => Storage.Upload(key, throwing, objectSize: 8 * 1024 * 1024))
+        await FluentActions.Awaiting(() => Storage.UploadVersioned(key, throwing, objectSize: 8 * 1024 * 1024))
             .Should().ThrowAsync<Exception>();
 
         List<StorageObjectInfo> listed = await ToList(Storage.ListObjects(_keyPrefix));
@@ -331,7 +363,7 @@ public abstract class AssetStorageContractTests(StorageProviderFixture fixture)
         using var cts = new CancellationTokenSource();
         await using var slow = new SlowByteStream(totalBytes: 8 * 1024 * 1024, cancelAfterBytes: 64 * 1024, cts);
 
-        await FluentActions.Awaiting(() => Storage.Upload(key, slow, objectSize: 8 * 1024 * 1024, cts.Token))
+        await FluentActions.Awaiting(() => Storage.UploadVersioned(key, slow, objectSize: 8 * 1024 * 1024, cts.Token))
             .Should().ThrowAsync<OperationCanceledException>();
 
         // Verification must not reuse the canceled token from the aborted upload.
@@ -348,7 +380,8 @@ public abstract class AssetStorageContractTests(StorageProviderFixture fixture)
         var expectedHash = source.ComputeSha256Hex();
         source.Reset();
 
-        await Storage.Upload(key, source, size);
+        var generation = await Storage.UploadVersioned(key, source, size);
+        generation.Should().NotBeNullOrWhiteSpace();
 
         long length = 0;
         string? actualHash = null;
@@ -530,7 +563,31 @@ public abstract class AssetStorageContractTests(StorageProviderFixture fixture)
 }
 
 public sealed class MinioAssetStorageContractTests(MinioStorageFixture fixture)
-    : AssetStorageContractTests(fixture), IClassFixture<MinioStorageFixture>;
+    : AssetStorageContractTests(fixture), IClassFixture<MinioStorageFixture>
+{
+    [Fact]
+    public async Task Delete_WhenNewerVersionExists_ShouldDeleteOnlyRequestedGeneration()
+    {
+        var key = Key("versioned-delete.zip");
+        var first = new byte[] { 1, 2, 3 };
+        var second = new byte[] { 4, 5, 6 };
+        var firstVersion = await Storage.UploadVersioned(key, new MemoryStream(first), first.Length);
+        var secondVersion = await Storage.UploadVersioned(key, new MemoryStream(second), second.Length);
+
+        firstVersion.Should().NotBe(secondVersion);
+        await Storage.Delete(key, firstVersion);
+
+        using MemoryStream actual = new();
+        await Storage.OpenRead(key, async (stream, ct) => await stream.CopyToAsync(actual, ct));
+        actual.ToArray().Should().Equal(second);
+
+        // Models a process crash after provider delete but before the outbox row is marked.
+        await Storage.Delete(key, firstVersion);
+        using MemoryStream afterReplay = new();
+        await Storage.OpenRead(key, async (stream, ct) => await stream.CopyToAsync(afterReplay, ct));
+        afterReplay.ToArray().Should().Equal(second);
+    }
+}
 
 public sealed class SeaweedFsAssetStorageContractTests(SeaweedFsStorageFixture fixture)
     : AssetStorageContractTests(fixture), IClassFixture<SeaweedFsStorageFixture>;

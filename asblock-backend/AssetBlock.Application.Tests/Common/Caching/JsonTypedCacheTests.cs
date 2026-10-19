@@ -206,7 +206,7 @@ public sealed class AssetEncryptUploadServiceTests
     }
 
     [Fact]
-    public async Task EncryptAndUpload_WhenSuccessful_ReturnsLowercaseSha256OfPlaintext()
+    public async Task EncryptAndUploadVersioned_WhenSuccessful_ReturnsHashAndImmutableGeneration()
     {
         var plainBytes = "Hello World Plaintext"u8.ToArray();
         var plainStream = new MemoryStream(plainBytes);
@@ -225,34 +225,36 @@ public sealed class AssetEncryptUploadServiceTests
                 }
             });
 
-        _assetStorageService.Upload(Arg.Any<string>(), Arg.Any<Stream>(), Arg.Any<long>(), Arg.Any<CancellationToken>())
+        _assetStorageService.UploadVersioned(Arg.Any<string>(), Arg.Any<Stream>(), Arg.Any<long>(), Arg.Any<CancellationToken>())
             .Returns(async callInfo =>
             {
                 Stream stream = callInfo.ArgAt<Stream>(1);
                 using var ms = new MemoryStream();
                 await stream.CopyToAsync(ms, callInfo.ArgAt<CancellationToken>(3));
+                return "generation-test";
             });
 
-        var hash = await _sut.EncryptAndUpload(plainStream, "key/1", 100, CancellationToken.None);
+        AssetUploadReceipt receipt = await _sut.EncryptAndUploadVersioned(plainStream, "key/1", 100, CancellationToken.None);
 
-        hash.Should().Be(expectedSha256);
-        await _assetStorageService.Received(1).Upload("key/1", Arg.Any<Stream>(), 100, Arg.Any<CancellationToken>());
+        receipt.PlaintextSha256.Should().Be(expectedSha256);
+        receipt.StorageVersionId.Should().Be("generation-test");
+        await _assetStorageService.Received(1).UploadVersioned("key/1", Arg.Any<Stream>(), 100, Arg.Any<CancellationToken>());
     }
 
     [Fact]
-    public async Task EncryptAndUpload_WhenCancelled_ThrowsOperationCanceledException()
+    public async Task EncryptAndUploadVersioned_WhenCancelled_ThrowsOperationCanceledException()
     {
         var plainStream = new MemoryStream(new byte[100]);
         using var cts = new CancellationTokenSource();
         await cts.CancelAsync();
 
-        Func<Task<string>> act = () => _sut.EncryptAndUpload(plainStream, "key/1", 100, cts.Token);
+        Func<Task<AssetUploadReceipt>> act = () => _sut.EncryptAndUploadVersioned(plainStream, "key/1", 100, cts.Token);
 
         await act.Should().ThrowAsync<OperationCanceledException>();
     }
 
     [Fact]
-    public async Task EncryptAndUpload_WhenCallerCancelsWhileActive_CancelsBothLegsAndCompletesDeterministically()
+    public async Task EncryptAndUploadVersioned_WhenCallerCancelsWhileActive_CancelsBothLegsAndCompletesDeterministically()
     {
         var plainStream = new MemoryStream(new byte[1024]);
         using var cts = new CancellationTokenSource();
@@ -270,16 +272,17 @@ public sealed class AssetEncryptUploadServiceTests
                 await Task.Delay(Timeout.Infinite, ct);
             });
 
-        _assetStorageService.Upload(Arg.Any<string>(), Arg.Any<Stream>(), Arg.Any<long>(), Arg.Any<CancellationToken>())
+        _assetStorageService.UploadVersioned(Arg.Any<string>(), Arg.Any<Stream>(), Arg.Any<long>(), Arg.Any<CancellationToken>())
             .Returns(async ci =>
             {
                 CancellationToken ct = ci.ArgAt<CancellationToken>(3);
                 uploadStarted.TrySetResult();
                 await using CancellationTokenRegistration reg = ct.Register(() => uploadCancelled.TrySetResult());
                 await Task.Delay(Timeout.Infinite, ct);
+                return "generation-test";
             });
 
-        Task<string> serviceTask = _sut.EncryptAndUpload(plainStream, "key/1", 1024, cts.Token);
+        Task<AssetUploadReceipt> serviceTask = _sut.EncryptAndUploadVersioned(plainStream, "key/1", 1024, cts.Token);
 
         var bothStarted = Task.WhenAll(encryptionStarted.Task, uploadStarted.Task);
         Task startWinner = await Task.WhenAny(bothStarted, Task.Delay(2000));
@@ -290,7 +293,7 @@ public sealed class AssetEncryptUploadServiceTests
         Task completionWinner = await Task.WhenAny(serviceTask, Task.Delay(2000));
         completionWinner.Should().Be(serviceTask, "service task must complete promptly upon cancellation");
 
-        Func<Task<string>> act = () => serviceTask;
+        Func<Task<AssetUploadReceipt>> act = () => serviceTask;
         await act.Should().ThrowAsync<OperationCanceledException>();
 
         (await Task.WhenAny(encryptionCancelled.Task, Task.Delay(2000))).Should().Be(encryptionCancelled.Task);
@@ -298,7 +301,7 @@ public sealed class AssetEncryptUploadServiceTests
     }
 
     [Fact]
-    public async Task EncryptAndUpload_WhenEncryptionFailsWhileUploadActive_CancelsUploadAndPropagatesException()
+    public async Task EncryptAndUploadVersioned_WhenEncryptionFailsWhileUploadActive_CancelsUploadAndPropagatesException()
     {
         var plainStream = new MemoryStream(new byte[1024]);
         var uploadStarted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -311,16 +314,17 @@ public sealed class AssetEncryptUploadServiceTests
                 throw new InvalidOperationException("Encryption error");
             });
 
-        _assetStorageService.Upload(Arg.Any<string>(), Arg.Any<Stream>(), Arg.Any<long>(), Arg.Any<CancellationToken>())
+        _assetStorageService.UploadVersioned(Arg.Any<string>(), Arg.Any<Stream>(), Arg.Any<long>(), Arg.Any<CancellationToken>())
             .Returns(async ci =>
             {
                 CancellationToken ct = ci.ArgAt<CancellationToken>(3);
                 uploadStarted.TrySetResult();
                 await using CancellationTokenRegistration reg = ct.Register(() => uploadCancelled.TrySetResult());
                 await Task.Delay(Timeout.Infinite, ct);
+                return "generation-test";
             });
 
-        Task<string> serviceTask = _sut.EncryptAndUpload(plainStream, "key/1", 1024, CancellationToken.None);
+        Task<AssetUploadReceipt> serviceTask = _sut.EncryptAndUploadVersioned(plainStream, "key/1", 1024, CancellationToken.None);
 
         Task startWinner = await Task.WhenAny(uploadStarted.Task, Task.Delay(2000));
         startWinner.Should().Be(uploadStarted.Task, "upload leg must start within timeout");
@@ -328,14 +332,14 @@ public sealed class AssetEncryptUploadServiceTests
         Task completionWinner = await Task.WhenAny(serviceTask, Task.Delay(2000));
         completionWinner.Should().Be(serviceTask, "service task must complete promptly upon encryption failure");
 
-        Func<Task<string>> act = () => serviceTask;
+        Func<Task<AssetUploadReceipt>> act = () => serviceTask;
         await act.Should().ThrowAsync<InvalidOperationException>().WithMessage("Encryption error");
 
         (await Task.WhenAny(uploadCancelled.Task, Task.Delay(2000))).Should().Be(uploadCancelled.Task);
     }
 
     [Fact]
-    public async Task EncryptAndUpload_WhenUploadFailsWhileEncryptionActive_CancelsEncryptionAndPropagatesException()
+    public async Task EncryptAndUploadVersioned_WhenUploadFailsWhileEncryptionActive_CancelsEncryptionAndPropagatesException()
     {
         var plainStream = new MemoryStream(new byte[1024]);
         var encryptionStarted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -350,14 +354,10 @@ public sealed class AssetEncryptUploadServiceTests
                 await Task.Delay(Timeout.Infinite, ct);
             });
 
-        _assetStorageService.Upload(Arg.Any<string>(), Arg.Any<Stream>(), Arg.Any<long>(), Arg.Any<CancellationToken>())
-            .Returns(async _ =>
-            {
-                await encryptionStarted.Task;
-                throw new InvalidOperationException("Storage error");
-            });
+        _assetStorageService.UploadVersioned(Arg.Any<string>(), Arg.Any<Stream>(), Arg.Any<long>(), Arg.Any<CancellationToken>())
+            .Returns(_ => FailUploadAfter(encryptionStarted.Task));
 
-        Task<string> serviceTask = _sut.EncryptAndUpload(plainStream, "key/1", 1024, CancellationToken.None);
+        Task<AssetUploadReceipt> serviceTask = _sut.EncryptAndUploadVersioned(plainStream, "key/1", 1024, CancellationToken.None);
 
         Task startWinner = await Task.WhenAny(encryptionStarted.Task, Task.Delay(2000));
         startWinner.Should().Be(encryptionStarted.Task, "encryption leg must start within timeout");
@@ -365,9 +365,15 @@ public sealed class AssetEncryptUploadServiceTests
         Task completionWinner = await Task.WhenAny(serviceTask, Task.Delay(2000));
         completionWinner.Should().Be(serviceTask, "service task must complete promptly upon upload failure");
 
-        Func<Task<string>> act = () => serviceTask;
+        Func<Task<AssetUploadReceipt>> act = () => serviceTask;
         await act.Should().ThrowAsync<InvalidOperationException>().WithMessage("Storage error");
 
         (await Task.WhenAny(encryptionCancelled.Task, Task.Delay(2000))).Should().Be(encryptionCancelled.Task);
+    }
+
+    private static async Task<string> FailUploadAfter(Task encryptionStarted)
+    {
+        await encryptionStarted;
+        throw new InvalidOperationException("Storage error");
     }
 }

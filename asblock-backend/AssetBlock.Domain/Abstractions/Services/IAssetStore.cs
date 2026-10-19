@@ -69,7 +69,14 @@ public interface IAssetStore
     Task<AssetVersion> CreateNextCandidateVersion(Guid assetId, Guid authorId, AssetVersion draft, CancellationToken cancellationToken = default);
 
     /// <summary>Returns all storage keys for an asset's published versions.</summary>
-    Task<IReadOnlyList<string>> GetAllStorageKeys(Guid assetId, CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<AssetBlobReference>> GetAllStorageKeys(Guid assetId, CancellationToken cancellationToken = default);
+
+    Task<IReadOnlyList<Guid>> GetAbandonedUploadAssetIds(DateTimeOffset createdBefore, int limit, CancellationToken cancellationToken = default);
+    Task<int> CountAbandonedUploadsWithUnknownStorageIdentity(DateTimeOffset createdBefore, CancellationToken cancellationToken = default);
+    Task<bool> HasActiveProcessingWork(Guid assetId, CancellationToken cancellationToken = default);
+    Task<bool> HasAbandonedUploadRetentionProtection(Guid assetId, CancellationToken cancellationToken = default);
+    Task RetireAbandonedUpload(Guid assetId, DateTimeOffset retiredAt, CancellationToken cancellationToken = default);
+    Task<bool> CanDeleteRetiredUploadBlob(Guid assetId, Guid assetVersionId, string storageKey, string storageVersionId, CancellationToken cancellationToken = default);
 
     /// <summary>Returns true when the key is referenced by any AssetVersion row.</summary>
     Task<bool> ExistsByStorageKey(string storageKey, CancellationToken cancellationToken = default);
@@ -143,3 +150,5 @@ public interface IAssetStore
         Guid actorUserId,
         CancellationToken cancellationToken = default);
 }
+
+public sealed record AssetBlobReference(Guid AssetId, Guid AssetVersionId, string StorageKey, string? StorageVersionId, DateTimeOffset CreatedAt = default);

@@ -35,6 +35,8 @@ public class UploadAssetCommandHandlerTests
         _assetStoreMock = Substitute.For<IAssetStore>();
         _tagStoreMock = Substitute.For<ITagStore>();
         _assetStorageServiceMock = Substitute.For<IAssetStorageService>();
+        _assetStorageServiceMock.UploadVersioned(Arg.Any<string>(), Arg.Any<Stream>(), Arg.Any<long>(), Arg.Any<CancellationToken>())
+            .Returns("test-generation");
         _encryptionServiceMock = Substitute.For<IEncryptionService>();
         IAssetProcessingJobStore processingJobStoreMock = Substitute.For<IAssetProcessingJobStore>();
         _unitOfWorkMock = Substitute.For<IUnitOfWork>();
@@ -92,7 +94,7 @@ public class UploadAssetCommandHandlerTests
         result.IsSuccess.Should().BeFalse();
         result.Status.Should().Be(ResultStatus.Conflict);
         result.Errors.Should().Contain(ErrorCodes.ERR_MODERATION_WORKSPACE_STALE);
-        await _assetStorageServiceMock.Received(1).Delete(Arg.Any<string>(), Arg.Any<CancellationToken>());
+        await _assetStorageServiceMock.Received(1).Delete(Arg.Any<string>(), "test-generation", Arg.Any<CancellationToken>());
     }
 
     private static UploadAssetCommand CreateCommand(UploadAssetRequest request, string fileName = "test.zip", long length = 1) =>
@@ -264,7 +266,7 @@ public class UploadAssetCommandHandlerTests
 
         result.IsSuccess.Should().BeFalse();
         result.ValidationErrors.Should().Contain(e => e.Identifier == ErrorCodes.ERR_ASSET_UPLOAD_FAILED);
-        await _assetStorageServiceMock.Received(1).Delete(Arg.Any<string>(), Arg.Any<CancellationToken>());
+        await _assetStorageServiceMock.DidNotReceive().Delete(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -275,14 +277,14 @@ public class UploadAssetCommandHandlerTests
         var category = new Category { Id = request.CategoryId, Name = "Cat", Slug = "cat" };
 
         _categoryStoreMock.GetById(request.CategoryId, Arg.Any<CancellationToken>()).Returns(category);
-        _assetStorageServiceMock.Upload(Arg.Any<string>(), Arg.Any<Stream>(), Arg.Any<long>(), Arg.Any<CancellationToken>())
+        _assetStorageServiceMock.UploadVersioned(Arg.Any<string>(), Arg.Any<Stream>(), Arg.Any<long>(), Arg.Any<CancellationToken>())
             .ThrowsAsync(new Exception("Storage Error"));
 
         Result<Guid> result = await _handler.Handle(command, CancellationToken.None);
 
         result.IsSuccess.Should().BeFalse();
         result.ValidationErrors.Should().Contain(e => e.Identifier == ErrorCodes.ERR_ASSET_UPLOAD_FAILED);
-        await _assetStorageServiceMock.Received(1).Delete(Arg.Any<string>(), Arg.Any<CancellationToken>());
+        await _assetStorageServiceMock.DidNotReceive().Delete(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -304,7 +306,7 @@ public class UploadAssetCommandHandlerTests
                 Stream output = callInfo.ArgAt<Stream>(1);
                 await output.WriteAsync(ciphertext);
             });
-        _assetStorageServiceMock.Upload(
+        _assetStorageServiceMock.UploadVersioned(
                 Arg.Any<string>(),
                 Arg.Any<Stream>(),
                 Arg.Any<long>(),
@@ -316,6 +318,7 @@ public class UploadAssetCommandHandlerTests
                 await using var destination = new MemoryStream();
                 await input.CopyToAsync(destination);
                 uploaded = destination.ToArray();
+                return "test-generation";
             });
 
         Result<Guid> result = await _handler.Handle(command, CancellationToken.None);
@@ -341,7 +344,7 @@ public class UploadAssetCommandHandlerTests
         Func<Task<Result<Guid>>> act = () => _handler.Handle(command, new CancellationToken(canceled: true));
 
         await act.Should().ThrowAsync<OperationCanceledException>();
-        await _assetStorageServiceMock.Received(1).Delete(Arg.Any<string>(), Arg.Any<CancellationToken>());
+        await _assetStorageServiceMock.DidNotReceive().Delete(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>());
         await _assetStoreMock.DidNotReceiveWithAnyArgs().AddWithVersion(
             Arg.Any<Asset>(),
             Arg.Any<AssetVersion>(),
@@ -364,7 +367,7 @@ public class UploadAssetCommandHandlerTests
 
         await act.Should().ThrowAsync<Exception>().WithMessage("DB Error");
         await _assetStorageServiceMock.DidNotReceive()
-            .Delete(Arg.Any<string>(), Arg.Any<CancellationToken>());
+            .Delete(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -382,7 +385,7 @@ public class UploadAssetCommandHandlerTests
 
         await act.Should().ThrowAsync<OperationCanceledException>();
         await _assetStorageServiceMock.DidNotReceive()
-            .Delete(Arg.Any<string>(), Arg.Any<CancellationToken>());
+            .Delete(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]

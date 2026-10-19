@@ -11,7 +11,7 @@ namespace AssetBlock.Infrastructure.Tests.Services;
 public sealed class S3CompatibleObjectStoreContentTypeTests
 {
     [Fact]
-    public async Task Upload_SetsBinaryOctetStreamContentType()
+    public async Task UploadVersioned_SetsBinaryOctetStreamContentType()
     {
         IMinioClient client = Substitute.For<IMinioClient>();
         ResiliencePipelineProvider<string> resilience = Substitute.For<ResiliencePipelineProvider<string>>();
@@ -29,7 +29,8 @@ public sealed class S3CompatibleObjectStoreContentTypeTests
                 "etag")));
 
         using var stream = new MemoryStream([1, 2, 3, 4]);
-        await store.Upload("test-key", stream, 4, CancellationToken.None);
+        Func<Task<string>> act = () => store.UploadVersioned("test-key", stream, 4, CancellationToken.None);
+        await act.Should().ThrowAsync<InvalidOperationException>();
 
         capturedArgs.Should().NotBeNull();
         System.Reflection.PropertyInfo? contentTypeProp = typeof(PutObjectArgs).GetProperty(

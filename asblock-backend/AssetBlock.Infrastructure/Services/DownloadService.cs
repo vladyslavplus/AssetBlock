@@ -94,7 +94,7 @@ internal sealed class DownloadService(
         }
 
         AssetVersion? highestApproved = await assetStore.GetHighestEntitledApprovedVersion(assetId, 1, cancellationToken);
-        if (highestApproved is not null)
+        if (highestApproved is { StorageRetiredAt: null })
         {
             return (highestApproved.StorageKey, highestApproved.FileName);
         }

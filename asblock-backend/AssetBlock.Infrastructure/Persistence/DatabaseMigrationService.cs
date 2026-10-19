@@ -323,7 +323,7 @@ internal sealed class DatabaseMigrationService(
         }
 
         var inserted = new List<(Guid AssetId, Guid VersionId, string Title, decimal Price)>(DEMO_ASSET_COUNT);
-        var uploadedStorageKeys = new List<string>(DEMO_ASSET_COUNT);
+        var uploadedStorageKeys = new List<(string Key, string VersionId)>(DEMO_ASSET_COUNT);
         AssetLicenseTemplate personalLicense = AssetLicenseCatalog.Get(AssetLicenseCode.PERSONAL);
         try
         {
@@ -337,13 +337,13 @@ internal sealed class DatabaseMigrationService(
                 var fileName = $"test-asset-{i + 1}.zip";
                 DateTimeOffset createdAt = now.AddMinutes(-i);
                 var archive = CreateDemoArchive(title);
-                var contentSha256 = await EncryptAndUploadDemoArchive(
+                (string Hash, string VersionId) upload = await EncryptAndUploadDemoArchive(
                     archive,
                     storageKey,
                     assetStorageService,
                     encryptionService,
                     cancellationToken);
-                uploadedStorageKeys.Add(storageKey);
+                uploadedStorageKeys.Add((storageKey, upload.VersionId));
 
                 context.Assets.Add(new Asset
                 {
@@ -364,7 +364,8 @@ internal sealed class DatabaseMigrationService(
                     StorageKey = storageKey,
                     FileName = fileName,
                     ContentLength = archive.Length,
-                    ContentSha256 = contentSha256,
+                    ContentSha256 = upload.Hash,
+                    StorageVersionId = upload.VersionId,
                     ReleaseNotes = "Initial release",
                     LicenseCode = personalLicense.Code,
                     LicenseTemplateVersion = personalLicense.TemplateVersion,
@@ -387,11 +388,11 @@ internal sealed class DatabaseMigrationService(
         }
         catch
         {
-            foreach (var key in uploadedStorageKeys)
+            foreach ((string Key, string VersionId) blob in uploadedStorageKeys)
             {
                 try
                 {
-                    await assetStorageService.Delete(key, cancellationToken);
+                    await assetStorageService.Delete(blob.Key, blob.VersionId, cancellationToken);
                 }
                 catch (OperationCanceledException)
                 {
@@ -586,7 +587,7 @@ internal sealed class DatabaseMigrationService(
         return output.ToArray();
     }
 
-    private static async Task<string> EncryptAndUploadDemoArchive(
+    private static async Task<(string Hash, string VersionId)> EncryptAndUploadDemoArchive(
         byte[] archive,
         string storageKey,
         IAssetStorageService assetStorageService,
@@ -598,8 +599,13 @@ internal sealed class DatabaseMigrationService(
         await using var cipher = new MemoryStream((int)encryptionService.ComputeCiphertextLength(archive.Length));
         await encryptionService.Encrypt(plain, cipher, cancellationToken);
         cipher.Position = 0;
-        await assetStorageService.Upload(storageKey, cipher, cipher.Length, cancellationToken);
-        return hash;
+        var versionId = await assetStorageService.UploadVersioned(storageKey, cipher, cipher.Length, cancellationToken);
+        if (string.IsNullOrWhiteSpace(versionId))
+        {
+            throw new InvalidOperationException("Storage provider returned no immutable generation for demo seed object.");
+        }
+
+        return (hash, versionId);
     }
 
     /// <summary>

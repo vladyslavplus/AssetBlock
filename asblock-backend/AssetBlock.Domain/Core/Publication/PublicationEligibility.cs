@@ -33,5 +33,5 @@ public static class PublicationEligibility
 
     /// <summary>Owner preview requires completed mandatory security checks (READY) and no restriction.</summary>
     public static bool IsAuthorSafePreviewVersion(AssetVersion version) =>
-        IsSafeProcessedVersion(version) && !IsSafetyRestricted(version);
+        version.StorageRetiredAt is null && IsSafeProcessedVersion(version) && !IsSafetyRestricted(version);
 }

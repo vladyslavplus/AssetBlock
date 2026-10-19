@@ -7,6 +7,7 @@ using AssetBlock.Domain.Core.Dto.Outbox;
 using AssetBlock.Domain.Core.Entities;
 using AssetBlock.Domain.Core.Enums;
 using AssetBlock.Domain.Core.Exceptions;
+using AssetBlock.Domain.Core.Primitives.Storage;
 using Microsoft.Extensions.Logging;
 
 namespace AssetBlock.Application.UseCases.Assets.DeleteAsset;
@@ -82,13 +83,19 @@ internal sealed class DeleteAssetCommandHandler(
 
                 await checkoutIntentStore.DeleteTerminalUnpaidReferencingAsset(request.Id, ct);
 
-                IReadOnlyList<string> allStorageKeys = await assetStore.GetAllStorageKeys(request.Id, ct);
+                IReadOnlyList<AssetBlobReference> allStorageKeys = await assetStore.GetAllStorageKeys(request.Id, ct);
                 await assetStore.Delete(lockedAsset.Id, ct);
-                foreach (var key in allStorageKeys)
+                foreach (AssetBlobReference blob in allStorageKeys)
                 {
+                    if (blob.StorageVersionId is not { } storageVersionId
+                        || !StorageVersionIdentity.IsImmutable(storageVersionId))
+                    {
+                        logger.LogError("Cannot enqueue object cleanup for asset version {AssetVersionId}: storage generation is unknown; object retained", blob.AssetVersionId);
+                        continue;
+                    }
                     await outboxStore.Enqueue(
                         OutboxMessageTypes.ASSET_BLOB_DELETE,
-                        new AssetBlobDeletePayload(lockedAsset.Id, key),
+                        new AssetBlobDeletePayload(lockedAsset.Id, blob.AssetVersionId, blob.StorageKey, storageVersionId),
                         ct);
                 }
 

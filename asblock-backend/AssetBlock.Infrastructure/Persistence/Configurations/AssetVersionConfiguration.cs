@@ -40,6 +40,8 @@ internal sealed class AssetVersionConfiguration : IEntityTypeConfiguration<Asset
         builder.Property(v => v.VersionNumber).IsRequired();
         builder.Property(v => v.IsCurrent).IsRequired();
         builder.Property(v => v.StorageKey).IsRequired().HasMaxLength(1024);
+        builder.Property(v => v.StorageVersionId).HasMaxLength(1024);
+        builder.Property(v => v.StorageRetiredAt);
         builder.Property(v => v.FileName).IsRequired().HasMaxLength(512);
         builder.Property(v => v.ContentLength).IsRequired();
         builder.Property(v => v.ContentSha256).IsRequired().HasMaxLength(64);
@@ -83,6 +85,7 @@ internal sealed class AssetVersionConfiguration : IEntityTypeConfiguration<Asset
 
         // Only current-version pointer and processing lifecycle fields change after insert. Content and license snapshot stay immutable.
         builder.Property(v => v.StorageKey).Metadata.SetAfterSaveBehavior(PropertySaveBehavior.Throw);
+        builder.Property(v => v.StorageVersionId).Metadata.SetAfterSaveBehavior(PropertySaveBehavior.Throw);
         builder.Property(v => v.FileName).Metadata.SetAfterSaveBehavior(PropertySaveBehavior.Throw);
         builder.Property(v => v.ContentLength).Metadata.SetAfterSaveBehavior(PropertySaveBehavior.Throw);
         builder.Property(v => v.ContentSha256).Metadata.SetAfterSaveBehavior(PropertySaveBehavior.Throw);

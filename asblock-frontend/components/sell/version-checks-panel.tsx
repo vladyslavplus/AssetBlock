@@ -1,7 +1,7 @@
 'use client'
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { AlertCircle, CheckCircle2, Clock, Loader2, ShieldCheck, Upload } from 'lucide-react'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
@@ -73,8 +73,18 @@ export function VersionChecksPanel({ assetId, versionId }: VersionChecksPanelPro
         signal,
       })
     },
-    enabled: Boolean(analysis?.reportId),
+    enabled: Boolean(analysis?.reportId && analysis.findingDetailsAvailable),
   })
+  const findingsUnavailable =
+    analysis?.findingDetailsAvailable === false || findingsQuery.data?.detailsAvailable === false
+
+  useEffect(() => {
+    if (!findingsUnavailable) return
+    const queryKey = sellerKeys.analysisFindingsForVersion(assetId, versionId)
+    void queryClient.cancelQueries({ queryKey }).then(() => {
+      queryClient.removeQueries({ queryKey })
+    })
+  }, [assetId, findingsUnavailable, queryClient, versionId])
   const retryMutation = useMutation({
     mutationFn: (body: SellerAnalysisRetryRequest) => retrySellerAnalysis(assetId, versionId, body),
     onSuccess: (result) => {
@@ -241,67 +251,76 @@ export function VersionChecksPanel({ assetId, versionId }: VersionChecksPanelPro
           </ul>
           {analysis.reportId ? (
             <div className="space-y-2">
-              {findingsQuery.isPending ? (
+              {findingsUnavailable ? (
+                <p className="text-xs text-muted-foreground" role="status">
+                  Historical finding details are no longer available. Analysis summary and counts
+                  remain.
+                </p>
+              ) : null}
+              {!findingsUnavailable && findingsQuery.isPending ? (
                 <Skeleton className="h-16 w-full" aria-busy="true" />
               ) : null}
-              {findingsQuery.isError ? (
+              {!findingsUnavailable && findingsQuery.isError ? (
                 <p role="alert" className="text-xs text-destructive">
                   Could not load findings. Refresh to try again.
                 </p>
               ) : null}
-              {findingsQuery.data?.items.map((finding) => (
-                <article
-                  key={finding.id}
-                  className="rounded border border-border p-3 text-xs space-y-1.5"
-                >
-                  <p className="font-medium text-foreground">
-                    {finding.findingType.replaceAll('_', ' ')} · {finding.ownPath}
-                  </p>
-                  {finding.startLine ? (
-                    <p className="text-muted-foreground">
-                      Lines {finding.startLine}
-                      {finding.endLine && finding.endLine !== finding.startLine
-                        ? `–${finding.endLine}`
-                        : ''}
+              {!findingsUnavailable &&
+                findingsQuery.data?.items.map((finding) => (
+                  <article
+                    key={finding.id}
+                    className="rounded border border-border p-3 text-xs space-y-1.5"
+                  >
+                    <p className="font-medium text-foreground">
+                      {finding.findingType.replaceAll('_', ' ')} · {finding.ownPath}
                     </p>
-                  ) : null}
-                  <pre className="overflow-x-auto rounded bg-muted p-2 text-[11px] whitespace-pre-wrap break-words">
-                    {finding.ownExcerpt}
-                  </pre>
-                  <p>{finding.reason}</p>
-                  <p className="text-muted-foreground">Action: {finding.requestedAction}</p>
-                  {finding.referenceKind === 'OWN_PRIOR_VERSION' ? (
-                    <p className="text-muted-foreground">Possible match in your earlier version.</p>
-                  ) : finding.referenceKind === 'FOREIGN_PRIVATE' ? (
-                    <p className="text-muted-foreground">
-                      Potential match against a private reference; source details are withheld.
-                    </p>
-                  ) : finding.referenceKind === 'FOREIGN_PUBLIC' ? (
-                    <p className="text-muted-foreground">
-                      Potential match against a public reference.
-                    </p>
-                  ) : null}
-                  {finding.publicAttribution?.url ? (
-                    <a
-                      className="underline underline-offset-2"
-                      href={finding.publicAttribution.url}
-                      target="_blank"
-                      rel="noreferrer"
-                    >
-                      {finding.publicAttribution.label}
-                    </a>
-                  ) : finding.publicAttribution ? (
-                    <p className="text-muted-foreground">{finding.publicAttribution.label}</p>
-                  ) : null}
-                </article>
-              ))}
-              {findingsQuery.data?.totalCount === 0 ? (
+                    {finding.startLine ? (
+                      <p className="text-muted-foreground">
+                        Lines {finding.startLine}
+                        {finding.endLine && finding.endLine !== finding.startLine
+                          ? `–${finding.endLine}`
+                          : ''}
+                      </p>
+                    ) : null}
+                    <pre className="overflow-x-auto rounded bg-muted p-2 text-[11px] whitespace-pre-wrap break-words">
+                      {finding.ownExcerpt}
+                    </pre>
+                    <p>{finding.reason}</p>
+                    <p className="text-muted-foreground">Action: {finding.requestedAction}</p>
+                    {finding.referenceKind === 'OWN_PRIOR_VERSION' ? (
+                      <p className="text-muted-foreground">
+                        Possible match in your earlier version.
+                      </p>
+                    ) : finding.referenceKind === 'FOREIGN_PRIVATE' ? (
+                      <p className="text-muted-foreground">
+                        Potential match against a private reference; source details are withheld.
+                      </p>
+                    ) : finding.referenceKind === 'FOREIGN_PUBLIC' ? (
+                      <p className="text-muted-foreground">
+                        Potential match against a public reference.
+                      </p>
+                    ) : null}
+                    {finding.publicAttribution?.url ? (
+                      <a
+                        className="underline underline-offset-2"
+                        href={finding.publicAttribution.url}
+                        target="_blank"
+                        rel="noreferrer"
+                      >
+                        {finding.publicAttribution.label}
+                      </a>
+                    ) : finding.publicAttribution ? (
+                      <p className="text-muted-foreground">{finding.publicAttribution.label}</p>
+                    ) : null}
+                  </article>
+                ))}
+              {!findingsUnavailable && findingsQuery.data?.totalCount === 0 ? (
                 <p className="text-xs text-muted-foreground" role="status">
                   No findings were recorded for this compared scope. Coverage and omissions above
                   still apply.
                 </p>
               ) : null}
-              {findingsQuery.data && findingsQuery.data.totalPages > 1 ? (
+              {!findingsUnavailable && findingsQuery.data && findingsQuery.data.totalPages > 1 ? (
                 <div className="flex items-center justify-between text-xs">
                   <button
                     type="button"

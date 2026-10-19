@@ -5,6 +5,17 @@ namespace AssetBlock.Infrastructure.Services;
 /// <summary>Builds a MinIO .NET SDK client against an S3-compatible endpoint.</summary>
 internal static class S3CompatibleClientFactory
 {
+    public static Uri GetEndpointUri(string endpoint, bool useSsl)
+    {
+        if (Uri.TryCreate(endpoint, UriKind.Absolute, out Uri? uri)
+            && (uri.Scheme == Uri.UriSchemeHttp || uri.Scheme == Uri.UriSchemeHttps))
+        {
+            return uri;
+        }
+
+        return new Uri($"{(useSsl ? "https" : "http")}://{endpoint}", UriKind.Absolute);
+    }
+
     public static IMinioClient Create(string endpoint, string accessKey, string secretKey, bool useSsl)
     {
         var builder = new MinioClient();

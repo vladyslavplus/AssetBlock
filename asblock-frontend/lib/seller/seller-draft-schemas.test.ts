@@ -228,6 +228,7 @@ describe('sellerVersionReviewSchema', () => {
         analyzedFileCount: 1,
         omissionCount: 3,
         findingCount: 1,
+        findingDetailsAvailable: true,
         createdAt: '2026-10-15T21:29:45.1519+00:00',
         completedAt: '2026-10-15T21:29:55.754256+00:00',
         errorCode: null,

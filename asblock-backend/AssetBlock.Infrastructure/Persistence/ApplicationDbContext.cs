@@ -68,6 +68,7 @@ public sealed class ApplicationDbContext(DbContextOptions<ApplicationDbContext> 
     public DbSet<ModerationDecisionRecord> ModerationDecisionRecords => Set<ModerationDecisionRecord>();
     public DbSet<JsonMutationIdempotencyRecord> JsonMutationIdempotencyRecords => Set<JsonMutationIdempotencyRecord>();
     public DbSet<PaidCheckoutReconciliationHold> PaidCheckoutReconciliationHolds => Set<PaidCheckoutReconciliationHold>();
+    public DbSet<StorageOrphanCleanupState> StorageOrphanCleanupStates => Set<StorageOrphanCleanupState>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
