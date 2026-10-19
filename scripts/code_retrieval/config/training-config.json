@@ -1,0 +1,43 @@
+{
+  "schema": "code-retrieval-config-v1",
+  "protocolRevision": "code-retrieval-protocol-v1",
+  "languages": ["javascript", "typescript", "python", "java", "csharp"],
+  "seed": 42,
+  "admission": {
+    "minAnchorsPerLanguage": 20,
+    "maxAnchorsPerLanguage": 60,
+    "minNegativesPerAnchor": 2,
+    "minNonIdenticalPositiveAnchorsPerLanguage": 10,
+    "positiveTransformations": ["AST_BOUND_RENAME", "COMMENT_FORMAT"]
+  },
+  "proposal": {
+    "anchorsPerLanguage": 30,
+    "negativesPerAnchor": 2
+  },
+  "training": {
+    "upstreamModelRevision": "5f0dc256eb0904af496d427451da5d7f90261676",
+    "optimizer": "AdamW",
+    "maxTokens": 256,
+    "framingTokens": 4,
+    "embeddingDimensions": 768,
+    "trainableEncoderBlocks": 2,
+    "microbatchTriplets": 1,
+    "gradientAccumulation": 4,
+    "epochs": 3,
+    "maxAdmittedTriplets": 300,
+    "maxAnchorsPerLanguage": 60,
+    "learningRate": 1e-05,
+    "temperature": 0.07,
+    "gradientClip": 1.0,
+    "deadlineMinutes": 90
+  },
+  "selection": {
+    "metric": "seedMacroMRR@20",
+    "tieBreak": ["Recall@20", "earlierEpoch"]
+  },
+  "finalTest": {
+    "sealed": true,
+    "scored": false,
+    "tuning": false
+  }
+}

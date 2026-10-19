@@ -77,6 +77,21 @@ UNSUPPORTED_PARAM_TYPES = {"tuple_pattern", "list_pattern", "object_pattern", "a
 BLOCK_BIND_TYPES = {"lexical_declaration", "variable_declaration", "using_declaration",
                     "for_in_statement", "for_of_statement", "except_clause", "catch_clause"}
 BLOCK_SCOPE_TYPES = {"statement_block", "block", "compound_statement", "block_statement"}
+# A catch/except clause binds only its declared parameter or alias pattern. An
+# ordinary write to an enclosing local inside the clause body is not a
+# declaration, so such a clause must not shadow that local.
+CATCH_CLAUSE_TYPES = {"catch_clause", "except_clause"}
+CATCH_PARAMETER_TYPES = {"catch_formal_parameter", "catch_declaration", "catch_parameter"}
+
+
+class _UnresolvedBinding(Exception):
+    """A scope binding could not be resolved from the grammar.
+
+    The rename candidate is then refused instead of being applied partially.
+    """
+# Python statements that rebind a name in an enclosing/module scope. Renaming such
+# a name is not behavior preserving, so those bindings are never rename candidates.
+GLOBAL_BIND_TYPES = {"global_statement", "nonlocal_statement"}
 
 
 def _is_binding_name(name):
@@ -164,7 +179,63 @@ def _ident_in(raw, node, name):
     return False
 
 
+def _is_identifier_text(name):
+    """A plain identifier spelling; single-character names are legitimate."""
+    if not isinstance(name, (bytes, bytearray)) or len(name) < 1:
+        return False
+    first, rest = name[:1], name[1:]
+    if not (first.isalpha() or first == b"_"):
+        return False
+    return all((byte >= 65 and byte <= 90) or (byte >= 97 and byte <= 122) or (byte >= 48 and byte <= 57)
+               or byte == 95 for byte in rest)
+
+
+def _catch_binding(raw, node):
+    """The identifier a catch/except clause actually declares, if any.
+
+    Only the declared parameter or alias pattern counts. A plain assignment or
+    reference inside the clause body never declares anything, so an enclosing
+    local written there stays visible to the rename. When the grammar does not
+    expose a resolvable binding, the status is "unresolved" and the caller
+    refuses the rename candidate rather than emitting a partial rewrite.
+    """
+    if node.type == "except_clause":
+        value = _field(node, "value")
+        if value is None:
+            return ("unresolved", None)
+        if value.type == "as_pattern":
+            targets = [child for child in value.children if child.type == "as_pattern_target"]
+            if len(targets) != 1:
+                return ("unresolved", None)
+            name = _text(raw, targets[0])
+            return ("bound", name) if _is_identifier_text(name) else ("unresolved", None)
+        if value.type in IDENT_TYPES:
+            # `except ValueError:` deletes the name and declares nothing.
+            return ("none", None)
+        return ("unresolved", None)
+    parameter = None
+    for child in node.children:
+        if child.type in CATCH_PARAMETER_TYPES:
+            parameter = child
+            break
+    if parameter is None:
+        return ("unresolved", None)
+    name_node = _field(parameter, "name")
+    if name_node is None:
+        if parameter.type == "catch_declaration":
+            # C# `catch (Exception)` declares no variable.
+            return ("none", None)
+        return ("unresolved", None)
+    name = _text(raw, name_node)
+    return ("bound", name) if _is_identifier_text(name) else ("unresolved", None)
+
+
 def _bind_declares(raw, node, name):
+    if node.type in CATCH_CLAUSE_TYPES:
+        status, bound = _catch_binding(raw, node)
+        if status == "unresolved":
+            raise _UnresolvedBinding(node.type)
+        return status == "bound" and bound == name
     if node.type in FUNCTION_TYPES:
         return any(item[0] == name for item in (_parameter_names(raw, node) or []))
     target = _field(node, "name", "pattern", "left") or node
@@ -191,6 +262,106 @@ def _local_rebind(raw, function, name):
             if left is not None and _ident_in(raw, left, name):
                 return True
         stack.extend(node.children)
+    return False
+
+
+def _global_bound_names(raw, function):
+    """Names a function rebinds in an enclosing or module scope (global/nonlocal)."""
+    names = set()
+    stack = list(function.children)
+    while stack:
+        node = stack.pop()
+        if node.type in FUNCTION_TYPES:
+            continue
+        if node.type in GLOBAL_BIND_TYPES:
+            for child in node.children:
+                if child.type in IDENT_TYPES and _is_binding_name(_text(raw, child)):
+                    names.add(_text(raw, child))
+            continue
+        stack.extend(node.children)
+    return names
+
+
+def _nonlocal_bound_names(raw, function):
+    """Names a function rebinds in an enclosing function scope (Python `nonlocal`)."""
+    names = set()
+    stack = list(function.children)
+    while stack:
+        node = stack.pop()
+        if node.type in FUNCTION_TYPES:
+            continue
+        if node.type == "nonlocal_statement":
+            for child in node.children:
+                if child.type in IDENT_TYPES and _is_binding_name(_text(raw, child)):
+                    names.add(_text(raw, child))
+            continue
+        stack.extend(node.children)
+    return names
+
+
+def _nested_functions(function):
+    found, stack = [], list(function.children)
+    while stack:
+        node = stack.pop()
+        if node.type in FUNCTION_TYPES:
+            found.append(node)
+            continue
+        stack.extend(node.children)
+    return found
+
+
+def _ident_occurs(raw, scope, name):
+    stack = [scope]
+    while stack:
+        node = stack.pop()
+        if node.type in IDENT_TYPES and _text(raw, node) == name:
+            return True
+        stack.extend(node.children)
+    return False
+
+
+def _nested_shadows(raw, nested, name, language):
+    """True when the nested scope binds `name` to its own variable.
+
+    A nested scope that binds its own `name` may keep the original identifier while
+    the enclosing binding is renamed. When it does not, the blocked occurrences
+    still refer to the enclosing binding, so renaming only the enclosing scope would
+    change which variable the nested scope reads or writes.
+    """
+    if any(item[0] == name for item in (_parameter_names(raw, nested) or [])):
+        return True
+    if language == "python":
+        # An assignment makes the name local to the nested function unless the
+        # function declares it `nonlocal`, which links it to the enclosing scope.
+        return name not in _nonlocal_bound_names(raw, nested)
+    stack = list(nested.children)
+    while stack:
+        node = stack.pop()
+        if node.type in FUNCTION_TYPES:
+            continue
+        if node.type in {"lexical_declaration", "variable_declaration", "using_declaration",
+                         "variable_declarator"} and _bind_declares(raw, node, name):
+            return True
+        stack.extend(node.children)
+    return False
+
+
+def _blocked_nested_conflict(raw, function, name, blocked, language):
+    """A blocked nested scope that still binds the enclosing scope's `name`.
+
+    The rename must not be applied: the nested occurrences are skipped while the
+    enclosing binding is rewritten, so the nested scope would keep naming a
+    variable that no longer exists (a Python `nonlocal`, or an undeclared write to
+    an outer binding in languages without implicit locals).
+    """
+    if not blocked:
+        return False
+    for nested in _nested_functions(function):
+        if not any(nested.start_byte < end and start < nested.end_byte for start, end in blocked):
+            continue
+        if _nested_shadows(raw, nested, name, language):
+            continue
+        return True
     return False
 
 
@@ -266,6 +437,49 @@ def _is_shorthand_property(node):
         node.parent is not None and node.parent.type == "shorthand_property_identifier")
 
 
+def _pattern_identifiers(raw, node):
+    """Identifiers a pattern binds, even when the pattern is not a simple name.
+
+    A destructuring pattern cannot be renamed safely, so the names it binds are
+    reserved: they are never rename candidates.
+    """
+    names = []
+    stack = [node]
+    while stack:
+        current = stack.pop()
+        if current.type in IDENT_TYPES:
+            names.append(_text(raw, current))
+        stack.extend(current.children)
+    return names
+
+
+def _declared_names(raw, node):
+    """Binding names a declaration container declares, from declarator fields only.
+
+    Only a grammar-declared variable declarator/name/pattern field names a
+    binding. A declaration's TYPE subtree never names a local: `Exception fail`
+    declares `fail`, not `Exception`. A declarator whose pattern is not a plain
+    identifier reserves the names that pattern binds.
+    """
+    names = []
+    reserved = []
+    for child in node.children:
+        if child.type == "variable_declarator":
+            named = _field(child, "name", "pattern")
+            if named is None:
+                continue
+            ident = _simple_ident(named)
+            if ident is None:
+                reserved.extend(_pattern_identifiers(raw, named))
+                continue
+            names.append((_text(raw, ident), ident))
+        elif child.type in {"variable_declaration", "lexical_declaration"}:
+            sub_names, sub_reserved = _declared_names(raw, child)
+            names.extend(sub_names)
+            reserved.extend(sub_reserved)
+    return names, reserved
+
+
 def _function_local_bindings(raw, function):
     parameters = _parameter_names(raw, function)
     if parameters is None:
@@ -273,6 +487,7 @@ def _function_local_bindings(raw, function):
     param_names = {name for name, _ in parameters}
     found = []
     seen = set()
+    reserved = set()
     stack = list(function.children)
     while stack:
         node = stack.pop()
@@ -285,16 +500,9 @@ def _function_local_bindings(raw, function):
             ident = _simple_ident(_field(node, "name", "pattern"))
         elif node.type in {"lexical_declaration", "variable_declaration", "using_declaration",
                            "local_declaration_statement"}:
-            for child in node.children:
-                declared = None
-                if child.type in {"variable_declarator", "variable_declaration"}:
-                    declared = _field(child, "name", "pattern")
-                elif child.type in IDENT_TYPES:
-                    declared = child
-                child_ident = _simple_ident(declared) if declared is not None else None
-                if child_ident is None:
-                    continue
-                name = _text(raw, child_ident)
+            declared, reserved_names = _declared_names(raw, node)
+            reserved.update(reserved_names)
+            for name, child_ident in declared:
                 if _is_binding_name(name) and name not in param_names and name not in seen:
                     found.append((name, child_ident))
                     seen.add(name)
@@ -304,6 +512,8 @@ def _function_local_bindings(raw, function):
                 found.append((name, ident))
                 seen.add(name)
         stack.extend(reversed(node.children))
+    # A name bound by a pattern that cannot be renamed is never a candidate.
+    found = [item for item in found if item[0] not in reserved]
     found.sort(key=lambda item: item[1].start_byte)
     return found
 
@@ -317,15 +527,24 @@ def ast_rename(raw, file, *, replacement=b"analysis_renamed_local"):
         locals_found = _function_local_bindings(raw, function)
         if locals_found is None:
             continue
+        global_bound = _global_bound_names(raw, function)
         for name, param in locals_found:
-            if name == replacement:
+            if name == replacement or name in global_bound:
                 continue
             chosen = replacement if replacement != name else b"analysis_renamed_localx"
             if _scope_contains_identifier(raw, function, chosen) and chosen != name:
                 continue
             if _has_named_argument(raw, tree, name):
                 continue
-            blocked = _inner_shadows(raw, function, name, binding=param)
+            try:
+                blocked = _inner_shadows(raw, function, name, binding=param)
+                if _blocked_nested_conflict(raw, function, name, blocked, language):
+                    continue
+            except _UnresolvedBinding:
+                # A nested scope binding could not be resolved from the grammar, so
+                # the rename candidate is refused instead of rewriting only part
+                # of the name's occurrences.
+                continue
             replacements = []
             stack = [function]
             while stack:

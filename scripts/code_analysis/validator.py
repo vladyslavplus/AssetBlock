@@ -97,6 +97,11 @@ def _triplet_eligible(item, files, fragments):
     return True
 
 
+def reviewed_triplet_eligible(item, files, fragments):
+    """Public alias: an explicit, orientation-preserving reviewed train triplet."""
+    return _triplet_eligible(item, files, fragments)
+
+
 def _diagnostic_complete(language, ids, files, fragments, reviews):
     if len(ids) < 10 or len(ids) != len(set(ids)):
         return False

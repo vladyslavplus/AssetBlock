@@ -153,3 +153,209 @@ class DerivationTests(unittest.TestCase):
         raw = b'function f({user}: {user: string}) { return user; }\n'
         with self.assertRaisesRegex(ValueError, 'binding-safe'):
             ast_rename(raw, file_record(raw, 'typescript'))
+
+    def test_global_bound_name_is_not_renamed(self):
+        raw = (b'def get_console():\n'
+               b'    global _console\n'
+               b'    _console = {}\n'
+               b'    held = 1\n'
+               b'    return held\n')
+        renamed, record = ast_rename(raw, file_record(raw))
+        self.assertEqual(record['changedRanges'][0]['from'], 'held')
+        text = renamed.decode('utf-8')
+        self.assertIn('global _console', text)
+        self.assertIn('    _console = {}', text)
+        self.assertNotIn('_console = analysis_renamed_local', text)
+        self.assertIn('analysis_renamed_local = 1', text)
+
+    def test_global_only_candidate_is_refused(self):
+        raw = b'def set_flag():\n    global flag\n    flag = True\n    return flag\n'
+        with self.assertRaisesRegex(ValueError, 'binding-safe'):
+            ast_rename(raw, file_record(raw))
+
+    def test_nonlocal_binding_of_a_nested_scope_is_refused(self):
+        raw = (b'def outer():\n'
+               b'    held = 0\n'
+               b'    def inner():\n'
+               b'        nonlocal held\n'
+               b'        held = 1\n'
+               b'        return held\n'
+               b'    return inner() + held\n')
+        with self.assertRaisesRegex(ValueError, 'binding-safe'):
+            ast_rename(raw, file_record(raw))
+
+    def test_nested_scope_loop_target_is_renamed_consistently(self):
+        # The nested scope is not shadowing: every occurrence of the binding inside
+        # the fragment is rewritten together, so the closure still names one variable.
+        raw = (b'function outer() {\n'
+               b'  let held = 1;\n'
+               b'  const inner = () => { for (held of [1, 2]) { } return held; };\n'
+               b'  return held + inner();\n'
+               b'}\n')
+        renamed, record = ast_rename(raw, file_record(raw, 'javascript'))
+        self.assertEqual(record['changedRanges'][0]['from'], 'held')
+        self.assertNotIn(b'held', renamed)
+        self.assertIn(b'let analysis_renamed_local = 1;', renamed)
+        self.assertIn(b'for (analysis_renamed_local of [1, 2])', renamed)
+
+    def test_nested_closure_assignment_is_renamed_consistently(self):
+        raw = (b'function outer() {\n'
+               b'  let held = 1;\n'
+               b'  const inner = () => { held = 2; return held; };\n'
+               b'  return held + inner();\n'
+               b'}\n')
+        renamed, record = ast_rename(raw, file_record(raw, 'javascript'))
+        self.assertEqual(record['changedRanges'][0]['from'], 'held')
+        self.assertNotIn(b'held', renamed)
+        self.assertIn(b'let analysis_renamed_local = 1;', renamed)
+        self.assertIn(b'{ analysis_renamed_local = 2; return analysis_renamed_local; }', renamed)
+
+    def test_nested_scope_with_its_own_local_still_renames(self):
+        raw = (b'def outer():\n'
+               b'    held = 1\n'
+               b'    def inner():\n'
+               b'        held = 2\n'
+               b'        return held\n'
+               b'    return held + inner()\n')
+        renamed, record = ast_rename(raw, file_record(raw))
+        self.assertEqual(record['changedRanges'][0]['from'], 'held')
+        text = renamed.decode('utf-8')
+        self.assertIn('analysis_renamed_local = 1', text)
+        self.assertIn('        held = 2', text)
+        self.assertIn('        return held', text)
+        self.assertIn('return analysis_renamed_local + inner()', text)
+
+    # -- catch/except bindings are read from the declared pattern only -----
+    def test_catch_body_write_to_outer_local_is_renamed_consistently(self):
+        # The catch clause declares `e`; the write to the enclosing `fail` is not a
+        # declaration, so the whole binding (declaration, catch write, later read)
+        # must be rewritten together.
+        raw = (b'class A {\n'
+               b'  void f() {\n'
+               b'    Exception fail = null;\n'
+               b'    try {\n'
+               b'      parse();\n'
+               b'    } catch (Exception e) {\n'
+               b'      fail = e;\n'
+               b'    }\n'
+               b'    System.out.println(fail.getMessage());\n'
+               b'  }\n'
+               b'}\n')
+        renamed, record = ast_rename(raw, file_record(raw, 'java'))
+        text = renamed.decode('utf-8')
+        self.assertEqual(record['changedRanges'][0]['from'], 'fail')
+        self.assertNotIn('fail', text)
+        self.assertIn('Exception analysis_renamed_local = null;', text)
+        self.assertIn('analysis_renamed_local = e;', text)
+        self.assertIn('fail.getMessage'.replace('fail', 'analysis_renamed_local'), text)
+        # The catch parameter is a different binding and stays untouched.
+        self.assertIn('catch (Exception e)', text)
+
+    def test_catch_parameter_shadow_is_not_rewritten(self):
+        # The catch parameter really shadows its own spelling, so the catch scope
+        # is skipped while the enclosing block binding is renamed. The scopes are
+        # disjoint and legal: the block that declares `caught` ends before the
+        # try/catch, so the catch parameter is a separate binding.
+        raw = (b'class B {\n'
+               b'  void f() {\n'
+               b'    {\n'
+               b'      Exception caught = null;\n'
+               b'      report(caught);\n'
+               b'    }\n'
+               b'    try {\n'
+               b'      parse();\n'
+               b'    } catch (Exception caught) {\n'
+               b'      report(caught);\n'
+               b'    }\n'
+               b'  }\n'
+               b'}\n')
+        renamed, _ = ast_rename(raw, file_record(raw, 'java'))
+        text = renamed.decode('utf-8')
+        self.assertIn('Exception analysis_renamed_local = null;', text)
+        self.assertIn('report(analysis_renamed_local);', text)
+        self.assertIn('catch (Exception caught)', text)
+        self.assertIn('      report(caught);', text)
+
+    def test_csharp_typed_local_renames_the_value_not_the_type(self):
+        raw = (b'class C {\n'
+               b'  void F() {\n'
+               b'    Exception fail = null;\n'
+               b'    try { Parse(); }\n'
+               b'    catch (Exception e) { fail = e; }\n'
+               b'    System.Console.WriteLine(fail.Message);\n'
+               b'  }\n'
+               b'}\n')
+        renamed, record = ast_rename(raw, file_record(raw, 'csharp'))
+        text = renamed.decode('utf-8')
+        self.assertEqual(record['changedRanges'][0]['from'], 'fail')
+        # The type spelling is untouched and the value binding is renamed
+        # consistently in its declaration, the catch write and the later read.
+        self.assertIn('Exception analysis_renamed_local = null;', text)
+        self.assertIn('catch (Exception e) { analysis_renamed_local = e; }', text)
+        self.assertIn('System.Console.WriteLine(analysis_renamed_local.Message);', text)
+        self.assertNotIn('analysis_renamed_local fail', text)
+
+    def test_csharp_qualified_generic_type_is_not_a_binding(self):
+        raw = (b'class D {\n'
+               b'  void F() {\n'
+               b'    System.Collections.Generic.List<int> items = new System.Collections.Generic.List<int>();\n'
+               b'    use(items);\n'
+               b'  }\n'
+               b'}\n')
+        renamed, record = ast_rename(raw, file_record(raw, 'csharp'))
+        text = renamed.decode('utf-8')
+        self.assertEqual(record['changedRanges'][0]['from'], 'items')
+        self.assertIn('System.Collections.Generic.List<int> analysis_renamed_local =', text)
+        self.assertIn('use(analysis_renamed_local);', text)
+        self.assertNotIn('analysis_renamed_local<int>', text)
+
+    def test_csharp_multiple_declarators_keep_the_type_spellings(self):
+        raw = (b'class E {\n'
+               b'  void F() {\n'
+               b'    int alpha = 1, beta = 2;\n'
+               b'    use(alpha); use(beta);\n'
+               b'  }\n'
+               b'}\n')
+        renamed, record = ast_rename(raw, file_record(raw, 'csharp'))
+        text = renamed.decode('utf-8')
+        self.assertIn(record['changedRanges'][0]['from'], ('alpha', 'beta'))
+        self.assertNotIn('analysis_renamed_local alpha', text)
+        self.assertIn('int ', text)
+
+    def test_csharp_unresolvable_declaration_pattern_is_refused(self):
+        raw = (b'class G {\n'
+               b'  void F() {\n'
+               b'    var (first, second) = Pair();\n'
+               b'    use(first);\n'
+               b'  }\n'
+               b'}\n')
+        with self.assertRaisesRegex(ValueError, 'binding-safe'):
+            ast_rename(raw, file_record(raw, 'csharp'))
+
+    def test_python_except_alias_does_not_hide_outer_local_write(self):
+        raw = (b'def f():\n'
+               b'    fail = None\n'
+               b'    try:\n'
+               b'        parse()\n'
+               b'    except ValueError as exc:\n'
+               b'        fail = exc\n'
+               b'    return fail\n')
+        renamed, record = ast_rename(raw, file_record(raw))
+        text = renamed.decode('utf-8')
+        self.assertEqual(record['changedRanges'][0]['from'], 'fail')
+        self.assertIn('fail = exc'.replace('fail', 'analysis_renamed_local'), text)
+        self.assertIn('return analysis_renamed_local', text)
+        self.assertNotIn(' fail', text)
+
+    def test_python_except_without_alias_declares_nothing(self):
+        raw = (b'def f():\n'
+               b'    fail = None\n'
+               b'    try:\n'
+               b'        parse()\n'
+               b'    except ValueError:\n'
+               b'        fail = None\n'
+               b'    return fail\n')
+        renamed, record = ast_rename(raw, file_record(raw))
+        text = renamed.decode('utf-8')
+        self.assertEqual(record['changedRanges'][0]['from'], 'fail')
+        self.assertNotIn(' fail', text)
