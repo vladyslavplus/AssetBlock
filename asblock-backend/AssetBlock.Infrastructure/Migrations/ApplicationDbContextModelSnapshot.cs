@@ -1016,6 +1016,13 @@ namespace AssetBlock.Infrastructure.Migrations
                         .HasMaxLength(1024)
                         .HasColumnType("character varying(1024)");
 
+                    b.Property<DateTimeOffset?>("StorageRetiredAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("StorageVersionId")
+                        .HasMaxLength(1024)
+                        .HasColumnType("character varying(1024)");
+
                     b.Property<int>("VersionNumber")
                         .HasColumnType("integer");
 
@@ -3823,6 +3830,33 @@ namespace AssetBlock.Infrastructure.Migrations
                             CreatedAt = new DateTimeOffset(new DateTime(2026, 2, 23, 0, 0, 0, 0, DateTimeKind.Unspecified), new TimeSpan(0, 0, 0, 0, 0)),
                             IconName = "globe",
                             Name = "Personal Website"
+                        });
+                });
+
+            modelBuilder.Entity("AssetBlock.Domain.Core.Entities.StorageOrphanCleanupState", b =>
+                {
+                    b.Property<int>("Id")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("CursorKey")
+                        .HasMaxLength(1024)
+                        .HasColumnType("character varying(1024)");
+
+                    b.Property<string>("CursorVersionId")
+                        .HasMaxLength(1024)
+                        .HasColumnType("character varying(1024)");
+
+                    b.Property<Guid?>("LeaseId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset?>("LeaseUntil")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("storage_orphan_cleanup_states", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_storage_orphan_cleanup_states_SingletonId", "\"Id\" = 1");
                         });
                 });
 

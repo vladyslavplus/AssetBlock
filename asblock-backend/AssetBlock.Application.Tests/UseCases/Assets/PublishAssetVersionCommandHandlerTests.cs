@@ -31,6 +31,8 @@ public class PublishAssetVersionCommandHandlerTests
 
     public PublishAssetVersionCommandHandlerTests()
     {
+        _assetStorageServiceMock.UploadVersioned(Arg.Any<string>(), Arg.Any<Stream>(), Arg.Any<long>(), Arg.Any<CancellationToken>())
+            .Returns("test-generation");
         _encryptionServiceMock.ComputeCiphertextLength(Arg.Any<long>()).Returns(4L);
         _unitOfWorkMock.ExecuteInTransaction(Arg.Any<Func<CancellationToken, Task>>(), Arg.Any<CancellationToken>())
             .Returns(ci => ci.Arg<Func<CancellationToken, Task>>()(CancellationToken.None));
@@ -176,7 +178,7 @@ public class PublishAssetVersionCommandHandlerTests
 
         result.Status.Should().Be(ResultStatus.NotFound);
         await _assetStorageServiceMock.DidNotReceiveWithAnyArgs()
-            .Upload(null!, null!, 0, CancellationToken.None);
+            .UploadVersioned(null!, null!, 0, CancellationToken.None);
     }
 
     [Fact]
@@ -236,7 +238,7 @@ public class PublishAssetVersionCommandHandlerTests
 
         await act.Should().ThrowAsync<Exception>().WithMessage("DB fail");
         await _assetStorageServiceMock.DidNotReceive()
-            .Delete(Arg.Any<string>(), Arg.Any<CancellationToken>());
+            .Delete(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -250,7 +252,7 @@ public class PublishAssetVersionCommandHandlerTests
 
         await act.Should().ThrowAsync<OperationCanceledException>();
         await _assetStorageServiceMock.DidNotReceive()
-            .Delete(Arg.Any<string>(), Arg.Any<CancellationToken>());
+            .Delete(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -264,21 +266,21 @@ public class PublishAssetVersionCommandHandlerTests
 
         result.IsSuccess.Should().BeFalse();
         result.ValidationErrors.Should().Contain(e => e.Identifier == ErrorCodes.ERR_ASSET_UPLOAD_FAILED);
-        await _assetStorageServiceMock.Received(1).Delete(Arg.Any<string>(), Arg.Any<CancellationToken>());
+        await _assetStorageServiceMock.DidNotReceive().Delete(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]
     public async Task Handle_WhenStorageUploadFails_ShouldCleanupAttemptedKeyAndReturnError()
     {
         StubOwnedAsset();
-        _assetStorageServiceMock.Upload(Arg.Any<string>(), Arg.Any<Stream>(), Arg.Any<long>(), Arg.Any<CancellationToken>())
+        _assetStorageServiceMock.UploadVersioned(Arg.Any<string>(), Arg.Any<Stream>(), Arg.Any<long>(), Arg.Any<CancellationToken>())
             .ThrowsAsync(new Exception("upload failed"));
 
         Result<Guid> result = await _handler.Handle(CreateCommand(), CancellationToken.None);
 
         result.IsSuccess.Should().BeFalse();
         result.ValidationErrors.Should().Contain(e => e.Identifier == ErrorCodes.ERR_ASSET_UPLOAD_FAILED);
-        await _assetStorageServiceMock.Received(1).Delete(Arg.Any<string>(), Arg.Any<CancellationToken>());
+        await _assetStorageServiceMock.DidNotReceive().Delete(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -291,6 +293,6 @@ public class PublishAssetVersionCommandHandlerTests
         Func<Task<Result<Guid>>> act = () => _handler.Handle(CreateCommand(), new CancellationToken(canceled: true));
 
         await act.Should().ThrowAsync<OperationCanceledException>();
-        await _assetStorageServiceMock.Received(1).Delete(Arg.Any<string>(), Arg.Any<CancellationToken>());
+        await _assetStorageServiceMock.DidNotReceive().Delete(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>());
     }
 }

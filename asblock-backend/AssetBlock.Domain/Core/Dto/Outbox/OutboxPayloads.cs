@@ -2,7 +2,11 @@ using AssetBlock.Domain.Core.Enums;
 
 namespace AssetBlock.Domain.Core.Dto.Outbox;
 
-public sealed record AssetBlobDeletePayload(Guid AssetId, string StorageKey);
+public sealed record AssetBlobDeletePayload(
+    Guid AssetId,
+    Guid AssetVersionId,
+    string StorageKey,
+    string StorageVersionId);
 
 public sealed record OrderCompletedPayload(
     Guid OrderId,

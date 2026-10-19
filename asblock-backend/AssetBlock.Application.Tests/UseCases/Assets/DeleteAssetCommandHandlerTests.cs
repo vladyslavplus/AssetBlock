@@ -92,7 +92,7 @@ public class DeleteAssetCommandHandlerTests
         _assetStoreMock.GetById(command.Id).Returns(asset);
         _assetStoreMock.GetForUpdate(command.Id, Arg.Any<CancellationToken>()).Returns(asset);
         _assetStoreMock.GetAllStorageKeys(command.Id, Arg.Any<CancellationToken>())
-            .Returns(["key"]);
+            .Returns([new AssetBlobReference(command.Id, Guid.NewGuid(), "key", "generation-1")]);
 
         Result result = await _handler.Handle(command, CancellationToken.None);
 

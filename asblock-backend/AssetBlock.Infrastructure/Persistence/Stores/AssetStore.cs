@@ -1,5 +1,6 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using System.Text.RegularExpressions;
 using AssetBlock.Domain.Abstractions.Services;
 using AssetBlock.Domain.Core;
 using AssetBlock.Domain.Core.Constants;
@@ -151,7 +152,7 @@ internal sealed class AssetStore(
             join v in dbContext.AssetVersions.AsNoTracking()
                 on new { VersionId = s.AssetVersionId, s.AssetId, Hash = s.ContentSha256 }
                 equals new { VersionId = v.Id, v.AssetId, Hash = v.ContentSha256 }
-            where v.ProcessingStatus == AssetVersionProcessingStatus.READY
+            where v.ProcessingStatus == AssetVersionProcessingStatus.READY && v.StorageRetiredAt == null
             select new
             {
                 a.AuthorId,
@@ -364,12 +365,12 @@ internal sealed class AssetStore(
         return draft;
     }
 
-    public async Task<IReadOnlyList<string>> GetAllStorageKeys(Guid assetId, CancellationToken cancellationToken = default)
+    public async Task<IReadOnlyList<AssetBlobReference>> GetAllStorageKeys(Guid assetId, CancellationToken cancellationToken = default)
     {
         return await dbContext.AssetVersions
             .AsNoTracking()
             .Where(v => v.AssetId == assetId)
-            .Select(v => v.StorageKey)
+            .Select(v => new AssetBlobReference(v.AssetId, v.Id, v.StorageKey, v.StorageVersionId, v.CreatedAt))
             .ToListAsync(cancellationToken);
     }
 
@@ -378,6 +379,126 @@ internal sealed class AssetStore(
         return await dbContext.AssetVersions.AsNoTracking()
             .AnyAsync(v => v.StorageKey == storageKey, cancellationToken);
     }
+
+    public async Task<IReadOnlyList<Guid>> GetAbandonedUploadAssetIds(DateTimeOffset createdBefore, int limit, CancellationToken cancellationToken = default)
+    {
+        if (limit is < 1 or > 500)
+        {
+            throw new ArgumentOutOfRangeException(nameof(limit));
+        }
+
+        return await dbContext.Assets.AsNoTracking()
+            .Where(a => a.DeletedAt == null && a.Versions.Any() && a.Versions.All(v => v.CreatedAt <= createdBefore)
+                && !dbContext.ModerationSubmissions.Any(s => s.AssetId == a.Id)
+                && !dbContext.Purchases.Any(p => p.AssetId == a.Id)
+                && !dbContext.PublicationSnapshots.Any(p => p.AssetId == a.Id)
+                && !dbContext.CodeAnalysisRuns.Any(r => r.AssetId == a.Id
+                    && (r.State == CodeAnalysisRunState.QUEUED || r.State == CodeAnalysisRunState.RUNNING))
+                && !dbContext.SecurityRechecks.Any(r => r.AssetId == a.Id
+                    && (r.State == SecurityRecheckState.QUEUED || r.State == SecurityRecheckState.INSPECTING
+                        || r.State == SecurityRecheckState.SCANNING))
+                && a.Versions.All(v => v.StorageRetiredAt == null
+                    && v.StorageVersionId != null
+                    && !Regex.IsMatch(v.StorageVersionId, @"^\s*$")
+                    && !EF.Functions.ILike(v.StorageVersionId.Trim(), "null"))
+                && !dbContext.AssetProcessingJobs.Any(j => j.AssetId == a.Id
+                    && (j.Status == AssetProcessingJobStatus.QUEUED
+                        || j.Status == AssetProcessingJobStatus.RUNNING
+                        || j.Status == AssetProcessingJobStatus.RETRY_SCHEDULED))
+                && !dbContext.CheckoutReservations.Any(r => r.AssetId == a.Id)
+                && !dbContext.CheckoutIntentItems.Any(i => i.AssetId == a.Id && i.CheckoutIntent.Status == CheckoutIntentStatus.PENDING)
+                && !dbContext.CheckoutIntentItems.Any(i => i.AssetId == a.Id
+                    && i.CheckoutIntent.StripeSessionId != null && i.CheckoutIntent.Order == null
+                    && !dbContext.PaidCheckoutReconciliationHolds.Any(h => h.CheckoutIntentId == i.CheckoutIntentId && h.State == PaidCheckoutReconciliationState.HELD))
+                && !dbContext.PaidCheckoutReconciliationHolds.Any(h => h.CheckoutIntent.Items.Any(i => i.AssetId == a.Id) && h.State == PaidCheckoutReconciliationState.HELD))
+            .OrderBy(a => a.CreatedAt).ThenBy(a => a.Id)
+            .Select(a => a.Id)
+            .Take(limit)
+            .ToListAsync(cancellationToken);
+    }
+
+    public async Task<int> CountAbandonedUploadsWithUnknownStorageIdentity(
+        DateTimeOffset createdBefore,
+        CancellationToken cancellationToken = default)
+    {
+        return await dbContext.Assets.AsNoTracking()
+            .Where(a => a.DeletedAt == null && a.Versions.Any() && a.Versions.All(v => v.CreatedAt <= createdBefore)
+                && a.Versions.Any(v => v.StorageVersionId == null || Regex.IsMatch(v.StorageVersionId, @"^\s*$")
+                    || EF.Functions.ILike(v.StorageVersionId.Trim(), "null")))
+            .CountAsync(cancellationToken);
+    }
+
+    public async Task<bool> HasAbandonedUploadRetentionProtection(Guid assetId, CancellationToken cancellationToken = default)
+    {
+        return await dbContext.ModerationSubmissions.AsNoTracking().AnyAsync(s => s.AssetId == assetId, cancellationToken)
+            || await dbContext.PublicationSnapshots.AsNoTracking().AnyAsync(s => s.AssetId == assetId, cancellationToken)
+            || await dbContext.CodeAnalysisRuns.AsNoTracking().AnyAsync(r => r.AssetId == assetId
+                && (r.State == CodeAnalysisRunState.QUEUED || r.State == CodeAnalysisRunState.RUNNING), cancellationToken)
+            || await dbContext.SecurityRechecks.AsNoTracking().AnyAsync(r => r.AssetId == assetId
+                && (r.State == SecurityRecheckState.QUEUED || r.State == SecurityRecheckState.INSPECTING
+                    || r.State == SecurityRecheckState.SCANNING), cancellationToken);
+    }
+
+    public async Task RetireAbandonedUpload(Guid assetId, DateTimeOffset retiredAt, CancellationToken cancellationToken = default)
+    {
+        await SoftDelete(assetId, retiredAt, cancellationToken).ConfigureAwait(false);
+        await dbContext.AssetVersions
+            .Where(v => v.AssetId == assetId && v.StorageRetiredAt == null)
+            .ExecuteUpdateAsync(setters => setters.SetProperty(v => v.StorageRetiredAt, retiredAt), cancellationToken)
+            .ConfigureAwait(false);
+    }
+
+    public async Task<bool> CanDeleteRetiredUploadBlob(
+        Guid assetId,
+        Guid assetVersionId,
+        string storageKey,
+        string storageVersionId,
+        CancellationToken cancellationToken = default)
+    {
+        var target = await dbContext.AssetVersions.AsNoTracking()
+            .Where(v => v.AssetId == assetId && v.Id == assetVersionId)
+            .Select(v => new { v.StorageKey, v.StorageVersionId, v.StorageRetiredAt, DeletedAt = v.Asset.DeletedAt })
+            .SingleOrDefaultAsync(cancellationToken).ConfigureAwait(false);
+        if (target is null)
+        {
+            // Hard-delete cleanup has already removed its relational version rows. Retired rows are
+            // handled below so their proof identity stays persisted while their payload is removed.
+            return !await ExistsByStorageKey(storageKey, cancellationToken).ConfigureAwait(false);
+        }
+
+        if (target.StorageRetiredAt is null || target.DeletedAt is null
+            || !string.Equals(target.StorageKey, storageKey, StringComparison.Ordinal)
+            || !string.Equals(target.StorageVersionId, storageVersionId, StringComparison.Ordinal))
+        {
+            return false;
+        }
+
+        return !await dbContext.AssetVersions.AsNoTracking().AnyAsync(v => v.StorageKey == storageKey
+                && v.StorageRetiredAt == null, cancellationToken).ConfigureAwait(false)
+            && !await dbContext.Purchases.AsNoTracking().AnyAsync(p => p.AssetId == assetId, cancellationToken).ConfigureAwait(false)
+            && !await dbContext.PublicationSnapshots.AsNoTracking().AnyAsync(p => p.AssetId == assetId, cancellationToken).ConfigureAwait(false)
+            && !await dbContext.ModerationSubmissions.AsNoTracking().AnyAsync(s => s.AssetId == assetId, cancellationToken).ConfigureAwait(false)
+            && !await dbContext.CodeAnalysisRuns.AsNoTracking().AnyAsync(r => r.AssetId == assetId
+                && (r.State == CodeAnalysisRunState.QUEUED || r.State == CodeAnalysisRunState.RUNNING), cancellationToken).ConfigureAwait(false)
+            && !await dbContext.SecurityRechecks.AsNoTracking().AnyAsync(r => r.AssetId == assetId
+                && (r.State == SecurityRecheckState.QUEUED || r.State == SecurityRecheckState.INSPECTING
+                    || r.State == SecurityRecheckState.SCANNING), cancellationToken).ConfigureAwait(false)
+            && !await dbContext.AssetProcessingJobs.AsNoTracking().AnyAsync(j => j.AssetId == assetId
+                && (j.Status == AssetProcessingJobStatus.QUEUED || j.Status == AssetProcessingJobStatus.RUNNING
+                    || j.Status == AssetProcessingJobStatus.RETRY_SCHEDULED), cancellationToken).ConfigureAwait(false)
+            && !await dbContext.CheckoutReservations.AsNoTracking().AnyAsync(r => r.AssetId == assetId, cancellationToken).ConfigureAwait(false)
+            && !await dbContext.CheckoutIntentItems.AsNoTracking().AnyAsync(i => i.AssetId == assetId
+                && (i.CheckoutIntent.Status == CheckoutIntentStatus.PENDING
+                    || (i.CheckoutIntent.StripeSessionId != null && i.CheckoutIntent.Order == null)), cancellationToken).ConfigureAwait(false)
+            && !await dbContext.PaidCheckoutReconciliationHolds.AsNoTracking().AnyAsync(h => h.CheckoutIntent.Items.Any(i => i.AssetId == assetId)
+                && h.State == PaidCheckoutReconciliationState.HELD, cancellationToken).ConfigureAwait(false);
+    }
+
+    public Task<bool> HasActiveProcessingWork(Guid assetId, CancellationToken cancellationToken = default) =>
+        dbContext.AssetProcessingJobs.AsNoTracking().AnyAsync(j => j.AssetId == assetId
+            && (j.Status == AssetProcessingJobStatus.QUEUED
+                || j.Status == AssetProcessingJobStatus.RUNNING
+                || j.Status == AssetProcessingJobStatus.RETRY_SCHEDULED), cancellationToken);
 
     public async Task<CatalogPageResult<AssetListItem>> GetPaged(
         GetAssetsRequest request,

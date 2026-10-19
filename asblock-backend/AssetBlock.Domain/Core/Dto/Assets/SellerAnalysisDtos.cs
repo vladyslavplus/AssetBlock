@@ -26,6 +26,7 @@ public sealed record SellerAnalysisSummaryDto(
     int AnalyzedFileCount,
     int OmissionCount,
     int FindingCount,
+    bool FindingDetailsAvailable,
     DateTimeOffset? CreatedAt,
     DateTimeOffset? CompletedAt,
     string? ErrorCode,
@@ -65,6 +66,7 @@ public sealed record SellerAnalysisFindingsPageDto(
     CodeAnalysisCoverageLevel CoverageLevel,
     IReadOnlyList<SellerAnalysisFindingDto> Items,
     int TotalCount,
+    bool DetailsAvailable,
     int Page,
     int PageSize,
     int TotalPages);

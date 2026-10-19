@@ -68,7 +68,7 @@ public sealed class OutboxStorePostgresTests(PostgresFixture fixture)
             await db.SaveChangesAsync(ct);
             await outbox.Enqueue(
                 OutboxMessageTypes.ASSET_BLOB_DELETE,
-                new AssetBlobDeletePayload(assetId, "assets/rollback-test.bin"),
+                new AssetBlobDeletePayload(assetId, Guid.NewGuid(), "assets/rollback-test.bin", "version-1"),
                 ct);
             throw new InvalidOperationException("force rollback");
         });
@@ -195,7 +195,7 @@ public sealed class OutboxStorePostgresTests(PostgresFixture fixture)
         OutboxStore store = CreateStore(db);
         await store.Enqueue(
             OutboxMessageTypes.ASSET_BLOB_DELETE,
-            new AssetBlobDeletePayload(Guid.NewGuid(), "key"),
+            new AssetBlobDeletePayload(Guid.NewGuid(), Guid.NewGuid(), "key", "version-1"),
             CancellationToken.None);
 
         IReadOnlyList<OutboxMessage> first = await store.ClaimPendingBatch(1, TimeSpan.FromMilliseconds(50));
@@ -229,7 +229,7 @@ public sealed class OutboxStorePostgresTests(PostgresFixture fixture)
         OutboxStore store = CreateStore(db);
         await store.Enqueue(
             OutboxMessageTypes.ASSET_BLOB_DELETE,
-            new AssetBlobDeletePayload(Guid.NewGuid(), "assets/renew-test.bin"));
+            new AssetBlobDeletePayload(Guid.NewGuid(), Guid.NewGuid(), "assets/renew-test.bin", "version-1"));
 
         IReadOnlyList<OutboxMessage> claimed = await store.ClaimPendingBatch(1, TimeSpan.FromMilliseconds(200));
         OutboxMessage message = claimed.Should().ContainSingle().Subject;
@@ -258,7 +258,7 @@ public sealed class OutboxStorePostgresTests(PostgresFixture fixture)
         OutboxStore store = CreateStore(db);
         await store.Enqueue(
             OutboxMessageTypes.ASSET_BLOB_DELETE,
-            new AssetBlobDeletePayload(Guid.NewGuid(), "assets/retry-test.bin"),
+            new AssetBlobDeletePayload(Guid.NewGuid(), Guid.NewGuid(), "assets/retry-test.bin", "version-1"),
             CancellationToken.None);
 
         IReadOnlyList<OutboxMessage> first = await store.ClaimPendingBatch(1, TimeSpan.FromMinutes(5));
@@ -286,7 +286,7 @@ public sealed class OutboxStorePostgresTests(PostgresFixture fixture)
         OutboxStore store = CreateStore(db);
         await store.Enqueue(
             OutboxMessageTypes.ASSET_BLOB_DELETE,
-            new AssetBlobDeletePayload(Guid.NewGuid(), "assets/dead-letter.bin"),
+            new AssetBlobDeletePayload(Guid.NewGuid(), Guid.NewGuid(), "assets/dead-letter.bin", "version-1"),
             CancellationToken.None);
 
         IReadOnlyList<OutboxMessage> batch = await store.ClaimPendingBatch(1, TimeSpan.FromMinutes(5));
@@ -346,7 +346,7 @@ public sealed class OutboxStorePostgresTests(PostgresFixture fixture)
         OutboxStore store = CreateStore(db);
         await store.Enqueue(
             OutboxMessageTypes.ASSET_BLOB_DELETE,
-            new AssetBlobDeletePayload(Guid.NewGuid(), "assets/rollback-replay.bin"),
+            new AssetBlobDeletePayload(Guid.NewGuid(), Guid.NewGuid(), "assets/rollback-replay.bin", "version-1"),
             CancellationToken.None);
 
         IReadOnlyList<OutboxMessage> batch = await store.ClaimPendingBatch(1, TimeSpan.FromMinutes(5));

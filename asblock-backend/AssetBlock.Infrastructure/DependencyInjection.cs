@@ -152,6 +152,8 @@ public static class DependencyInjection
         services.AddHostedService<CheckoutReservationCleanupWorker>();
         services.AddHostedService<RefreshTokenRetentionWorker>();
         services.AddHostedService<OutboxRetentionWorker>();
+        services.AddHostedService<CodeAnalysisRetentionWorker>();
+        services.AddHostedService<AbandonedUploadRetentionWorker>();
         services.AddHostedService<AnalyticsAggregationWorker>();
 
         // The approved policy and runtime manifest are published before the worker starts claiming,
@@ -204,6 +206,7 @@ public static class DependencyInjection
 
         services.AddScoped<ICategoryStore, CategoryStore>();
         services.AddScoped<IAssetStore, AssetStore>();
+        services.AddScoped<IStorageOrphanCleanupStateStore, StorageOrphanCleanupStateStore>();
         services.AddScoped<IAssetArchiveAnalysisStore, AssetArchiveAnalysisStore>();
         services.AddScoped<IListingCopilotStore, ListingCopilotStore>();
         services.AddScoped<IAssetProcessingLifecycleStore, AssetProcessingLifecycleStore>();

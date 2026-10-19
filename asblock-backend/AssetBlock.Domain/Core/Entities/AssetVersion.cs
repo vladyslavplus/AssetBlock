@@ -16,6 +16,12 @@ public class AssetVersion : BaseEntity
     /// <summary>Object key in MinIO. Immutable after insert.</summary>
     public required string StorageKey { get; set; }
 
+    /// <summary>Immutable S3 object generation returned by the provider when uploaded. Null means cleanup must fail closed.</summary>
+    public string? StorageVersionId { get; set; }
+
+    /// <summary>When unprotected abandoned-upload payload was retired while immutable proof rows were retained.</summary>
+    public DateTimeOffset? StorageRetiredAt { get; set; }
+
     /// <summary>Original display file name. Immutable after insert.</summary>
     public required string FileName { get; set; }
 

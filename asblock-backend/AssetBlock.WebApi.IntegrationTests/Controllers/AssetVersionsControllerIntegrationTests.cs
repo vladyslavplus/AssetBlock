@@ -4,8 +4,10 @@ using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using AssetBlock.Domain.Abstractions.Services;
 using AssetBlock.Domain.Core.Constants;
+using AssetBlock.Infrastructure.Persistence;
 using AssetBlock.WebApi.IntegrationTests.Support;
 using AwesomeAssertions;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace AssetBlock.WebApi.IntegrationTests.Controllers;
@@ -264,6 +266,40 @@ public sealed class AssetVersionsControllerIntegrationTests(IntegrationTestFixtu
     }
 
     [Fact]
+    public async Task DownloadVersion_WhenStorageRetired_ShouldReturn404BeforeAndAfterExactObjectRemovalWithoutReads()
+    {
+        (HttpClient author, var authorUsername) = await IntegrationTestAuth.RegisterVerifiedAndAuthenticateAsync(fixture.Factory);
+        Guid authorId = await AssetVersionsSeed.GetUserIdAsync(ScopeFactory, authorUsername);
+        (Guid assetId, List<Guid> versionIds) = await AssetVersionsSeed.SeedAssetWithVersionsAsync(ScopeFactory, authorId, versionCount: 1);
+        Guid versionId = versionIds[0];
+        const string generation = "retired-author-preview-generation";
+
+        await SeedVersionContentAsync(versionId, "retired author bytes"u8.ToArray(), generation);
+        await using (AsyncServiceScope scope = fixture.Factory.Services.CreateAsyncScope())
+        {
+            ApplicationDbContext db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+            await db.AssetVersions.Where(v => v.Id == versionId)
+                .ExecuteUpdateAsync(setters => setters
+                    .SetProperty(v => v.StorageVersionId, generation)
+                    .SetProperty(v => v.StorageRetiredAt, DateTimeOffset.UtcNow));
+        }
+
+        var storageKey = await AssetVersionsSeed.GetVersionStorageKeyAsync(ScopeFactory, versionId);
+        var readsBefore = fixture.Factory.AssetStorage.OpenReadCount;
+        HttpResponseMessage beforeRemoval = await author.GetAsync(
+            new Uri($"/api/assets/{assetId}/versions/{versionId}/download", UriKind.Relative));
+        beforeRemoval.StatusCode.Should().Be(HttpStatusCode.NotFound);
+        fixture.Factory.AssetStorage.OpenReadCount.Should().Be(readsBefore);
+
+        await fixture.Factory.AssetStorage.Delete(storageKey, generation);
+        fixture.Factory.AssetStorage.Contains(storageKey).Should().BeFalse();
+        HttpResponseMessage afterRemoval = await author.GetAsync(
+            new Uri($"/api/assets/{assetId}/versions/{versionId}/download", UriKind.Relative));
+        afterRemoval.StatusCode.Should().Be(HttpStatusCode.NotFound);
+        fixture.Factory.AssetStorage.OpenReadCount.Should().Be(readsBefore);
+    }
+
+    [Fact]
     public async Task Download_WhenPurchaser_ShouldReturn200WithDecryptedContent()
     {
         (HttpClient _, var authorUsername) = await IntegrationTestAuth.RegisterVerifiedAndAuthenticateAsync(fixture.Factory);
@@ -282,6 +318,32 @@ public sealed class AssetVersionsControllerIntegrationTests(IntegrationTestFixtu
         response.StatusCode.Should().Be(HttpStatusCode.OK);
         var bytes = await response.Content.ReadAsByteArrayAsync();
         bytes.Should().BeEquivalentTo(plaintext);
+    }
+
+    [Fact]
+    public async Task DownloadVersion_WhenPurchasedAssetIsSoftDeleted_ShouldPreserveBuyerAccess()
+    {
+        (HttpClient _, var authorUsername) = await IntegrationTestAuth.RegisterVerifiedAndAuthenticateAsync(fixture.Factory);
+        Guid authorId = await AssetVersionsSeed.GetUserIdAsync(ScopeFactory, authorUsername);
+        (Guid assetId, List<Guid> versionIds) = await AssetVersionsSeed.SeedAssetWithVersionsAsync(ScopeFactory, authorId, versionCount: 1);
+        var plaintext = "purchased soft-deleted content"u8.ToArray();
+        await SeedVersionContentAsync(versionIds[0], plaintext);
+
+        (HttpClient buyer, var buyerUsername) = await IntegrationTestAuth.RegisterAndAuthenticateAsync(fixture.Factory);
+        Guid buyerId = await AssetVersionsSeed.GetUserIdAsync(ScopeFactory, buyerUsername);
+        await AssetVersionsSeed.SeedPurchaseAsync(ScopeFactory, buyerId, assetId, versionIds[0]);
+        await using (AsyncServiceScope scope = fixture.Factory.Services.CreateAsyncScope())
+        {
+            ApplicationDbContext db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+            await db.Assets.Where(a => a.Id == assetId)
+                .ExecuteUpdateAsync(setters => setters.SetProperty(a => a.DeletedAt, DateTimeOffset.UtcNow));
+        }
+
+        HttpResponseMessage response = await buyer.GetAsync(
+            new Uri($"/api/assets/{assetId}/versions/{versionIds[0]}/download", UriKind.Relative));
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        (await response.Content.ReadAsByteArrayAsync()).Should().BeEquivalentTo(plaintext);
     }
 
     [Fact]
@@ -359,7 +421,7 @@ public sealed class AssetVersionsControllerIntegrationTests(IntegrationTestFixtu
         response.Headers.AcceptRanges.Should().Contain("none");
     }
 
-    private async Task SeedVersionContentAsync(Guid versionId, byte[] plaintext)
+    private async Task SeedVersionContentAsync(Guid versionId, byte[] plaintext, string? generation = null)
     {
         await using AsyncServiceScope scope = fixture.Factory.Services.CreateAsyncScope();
         IEncryptionService encryptionService = scope.ServiceProvider.GetRequiredService<IEncryptionService>();
@@ -370,7 +432,14 @@ public sealed class AssetVersionsControllerIntegrationTests(IntegrationTestFixtu
         await using var cipher = new MemoryStream();
         await encryptionService.Encrypt(plain, cipher, CancellationToken.None);
 
-        fixture.Factory.AssetStorage.Seed(storageKey, cipher.ToArray());
+        if (generation is null)
+        {
+            fixture.Factory.AssetStorage.Seed(storageKey, cipher.ToArray());
+        }
+        else
+        {
+            fixture.Factory.AssetStorage.SeedVersioned(storageKey, cipher.ToArray(), generation);
+        }
     }
 
     private static byte[] CreateZipArchive(string entryContent)

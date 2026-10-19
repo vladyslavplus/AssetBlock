@@ -181,20 +181,23 @@ public sealed class AssetVersionStorePostgresTests(PostgresFixture fixture)
         Asset asset = TestData.CreateAsset(author.Id, category.Id);
         var store = new AssetStore(db);
         AssetVersion v1 = TestData.CreateAssetVersion(asset.Id, storageKey: "assets/lifecycle/v1.bin", versionNumber: 1);
+        v1.StorageVersionId = "generation-v1";
         await store.AddWithVersion(asset, v1, null);
-        await store.CreateNextCandidateVersion(asset.Id, author.Id,
-            TestData.CreateAssetVersion(asset.Id, storageKey: "assets/lifecycle/v2.bin", versionNumber: 0, isCurrent: false));
-        await store.CreateNextCandidateVersion(asset.Id, author.Id,
-            TestData.CreateAssetVersion(asset.Id, storageKey: "assets/lifecycle/v3.bin", versionNumber: 0, isCurrent: false));
+        AssetVersion v2 = TestData.CreateAssetVersion(asset.Id, storageKey: "assets/lifecycle/v2.bin", versionNumber: 0, isCurrent: false);
+        v2.StorageVersionId = "generation-v2";
+        await store.CreateNextCandidateVersion(asset.Id, author.Id, v2);
+        AssetVersion v3 = TestData.CreateAssetVersion(asset.Id, storageKey: "assets/lifecycle/v3.bin", versionNumber: 0, isCurrent: false);
+        v3.StorageVersionId = "generation-v3";
+        await store.CreateNextCandidateVersion(asset.Id, author.Id, v3);
 
-        IReadOnlyList<string> keys = await store.GetAllStorageKeys(asset.Id);
+        IReadOnlyList<AssetBlobReference> keys = await store.GetAllStorageKeys(asset.Id);
 
-        keys.Should().BeEquivalentTo(
-        [
+        keys.Select(key => key.StorageKey).Should().Equal(
             "assets/lifecycle/v1.bin",
             "assets/lifecycle/v2.bin",
             "assets/lifecycle/v3.bin"
-        ]);
+        );
+        keys.Select(key => key.StorageVersionId).Should().Equal("generation-v1", "generation-v2", "generation-v3");
         (await store.ExistsByStorageKey("assets/lifecycle/v2.bin")).Should().BeTrue();
         (await store.ExistsByStorageKey("assets/lifecycle/missing.bin")).Should().BeFalse();
     }

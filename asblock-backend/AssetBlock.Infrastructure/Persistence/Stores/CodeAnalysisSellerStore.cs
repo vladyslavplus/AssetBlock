@@ -1,3 +1,4 @@
+using System.Data;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
@@ -30,6 +31,16 @@ internal sealed class CodeAnalysisSellerStore(
 
     public async Task<SellerAnalysisSummaryDto?> GetOwnerSummary(Guid assetVersionId, Guid ownerUserId, CancellationToken cancellationToken = default)
     {
+        await using IDbContextTransaction tx = await db.Database.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
+        return await GetOwnerSummaryCore(assetVersionId, ownerUserId, lockRows: true, cancellationToken).ConfigureAwait(false);
+    }
+
+    private async Task<SellerAnalysisSummaryDto?> GetOwnerSummaryCore(
+        Guid assetVersionId,
+        Guid ownerUserId,
+        bool lockRows,
+        CancellationToken cancellationToken)
+    {
         Guid? assetId = await db.AssetVersions.AsNoTracking().Where(v => v.Id == assetVersionId)
             .Select(v => (Guid?)v.AssetId).SingleOrDefaultAsync(cancellationToken).ConfigureAwait(false);
         if (assetId is null)
@@ -37,13 +48,20 @@ internal sealed class CodeAnalysisSellerStore(
             return null;
         }
 
-        await using IDbContextTransaction tx = await db.Database.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
-        Asset? asset = await db.Assets.FromSqlInterpolated($"SELECT * FROM assets WHERE \"Id\" = {assetId.Value} FOR UPDATE")
-            .SingleOrDefaultAsync(cancellationToken).ConfigureAwait(false);
-        AssetDraftWorkspace? latestWorkspace = await db.AssetDraftWorkspaces.FromSqlInterpolated($"SELECT * FROM asset_draft_workspaces WHERE \"AssetId\" = {assetId.Value} AND \"AssetVersionId\" = {assetVersionId} FOR UPDATE")
-            .SingleOrDefaultAsync(cancellationToken).ConfigureAwait(false);
-        AssetVersion? version = await db.AssetVersions.FromSqlInterpolated($"SELECT * FROM asset_versions WHERE \"Id\" = {assetVersionId} FOR UPDATE")
-            .Include(v => v.Asset).SingleOrDefaultAsync(cancellationToken).ConfigureAwait(false);
+        Asset? asset = lockRows
+            ? await db.Assets.FromSqlInterpolated($"SELECT * FROM assets WHERE \"Id\" = {assetId.Value} FOR UPDATE")
+                .SingleOrDefaultAsync(cancellationToken).ConfigureAwait(false)
+            : await db.Assets.AsNoTracking().SingleOrDefaultAsync(a => a.Id == assetId.Value, cancellationToken).ConfigureAwait(false);
+        AssetDraftWorkspace? latestWorkspace = lockRows
+            ? await db.AssetDraftWorkspaces.FromSqlInterpolated($"SELECT * FROM asset_draft_workspaces WHERE \"AssetId\" = {assetId.Value} AND \"AssetVersionId\" = {assetVersionId} FOR UPDATE")
+                .SingleOrDefaultAsync(cancellationToken).ConfigureAwait(false)
+            : await db.AssetDraftWorkspaces.AsNoTracking()
+                .SingleOrDefaultAsync(w => w.AssetId == assetId.Value && w.AssetVersionId == assetVersionId, cancellationToken).ConfigureAwait(false);
+        AssetVersion? version = lockRows
+            ? await db.AssetVersions.FromSqlInterpolated($"SELECT * FROM asset_versions WHERE \"Id\" = {assetVersionId} FOR UPDATE")
+                .Include(v => v.Asset).SingleOrDefaultAsync(cancellationToken).ConfigureAwait(false)
+            : await db.AssetVersions.AsNoTracking().Include(v => v.Asset)
+                .SingleOrDefaultAsync(v => v.Id == assetVersionId, cancellationToken).ConfigureAwait(false);
         if (asset is null || asset.AuthorId != ownerUserId || asset.DeletedAt is not null
             || version is null || version.AssetId != assetId || version.Asset.AuthorId != ownerUserId || version.Asset.DeletedAt is not null)
         {
@@ -89,6 +107,13 @@ internal sealed class CodeAnalysisSellerStore(
             currentTuple = proof.Accepted;
         }
         CodeAnalysisReportHeader? report = currentAdmitted ? currentReport : historicalReport;
+        var findingDetailsAvailable = report is null;
+        if (report is not null)
+        {
+            var findingRowCount = await db.CodeAnalysisReportFindings.AsNoTracking()
+                .CountAsync(f => f.ReportId == report.Id, cancellationToken).ConfigureAwait(false);
+            findingDetailsAvailable = report.FindingCount.HasValue && findingRowCount == report.FindingCount.Value;
+        }
 
         var recheckPending = await db.SecurityRechecks.AsNoTracking()
             .AnyAsync(r => r.AssetVersionId == assetVersionId && r.SelectedGeneration != null
@@ -103,9 +128,7 @@ internal sealed class CodeAnalysisSellerStore(
             """, assetVersionId.ToString()).FirstAsync(cancellationToken).ConfigureAwait(false);
 
         var retry = run is { State: CodeAnalysisRunState.FAILED, OwnerRetryable: true }
-                    && version.SafetyRestriction == AssetVersionSafetyRestriction.NONE
-                    && version.ProcessingStatus == AssetVersionProcessingStatus.READY
-                    && version.IsCurrent && latestWorkspace is not null && currentInputTuple && !recheckPending;
+                    && version is { SafetyRestriction: AssetVersionSafetyRestriction.NONE, ProcessingStatus: AssetVersionProcessingStatus.READY, IsCurrent: true } && latestWorkspace is not null && currentInputTuple && !recheckPending;
         var reportIsCurrent = currentAdmitted && currentTuple && currentReport is not null
             && version.SelectedCodeAnalysisReportId == currentReport.Id;
         SellerAnalysisLifecycle lifecycle = reportIsCurrent
@@ -132,6 +155,7 @@ internal sealed class CodeAnalysisSellerStore(
             version.AssetId, assetVersionId, lifecycle, run?.Id, report?.Id,
             reportIsCurrent && report?.Id == currentReport?.Id,
             report?.CoverageLevel, report?.AnalyzedFileCount ?? 0, report?.OmissionCount ?? 0, report?.FindingCount ?? 0,
+            findingDetailsAvailable,
             run?.CreatedAt, run?.CompletedAt, SafeErrorCode(run?.ErrorCode), SafeErrorMessage(run?.ErrorCode),
             retry ? "Retry analysis after checking the current seller declaration and materials." : null,
             retry, expectation, false, false, "Selected source files from this version only", limitations, stages);
@@ -139,10 +163,16 @@ internal sealed class CodeAnalysisSellerStore(
 
     public async Task<SellerAnalysisFindingsPageDto?> GetOwnerFindings(Guid assetVersionId, Guid reportId, Guid ownerUserId, int page, CancellationToken cancellationToken = default)
     {
-        if (page < 1 || page > 1_000_000)
+        if (page is < 1 or > 1_000_000)
         {
             return null;
         }
+
+        // Count, summary visibility, and page rows must all observe one MVCC snapshot. Retention
+        // locks the asset before deleting details, so a concurrent purge is either wholly visible
+        // here or wholly after this read.
+        await using IDbContextTransaction snapshot = await db.Database
+            .BeginTransactionAsync(IsolationLevel.RepeatableRead, cancellationToken).ConfigureAwait(false);
 
         var report = await OwnerAdmittedReports()
             .Where(h => h.Id == reportId && h.AssetVersionId == assetVersionId
@@ -155,6 +185,17 @@ internal sealed class CodeAnalysisSellerStore(
         }
 
         var total = await db.CodeAnalysisReportFindings.AsNoTracking().CountAsync(f => f.ReportId == reportId, cancellationToken).ConfigureAwait(false);
+        var detailsAvailable = report.Header.FindingCount.HasValue && report.Header.FindingCount.Value == total;
+        SellerAnalysisSummaryDto? summary = await GetOwnerSummaryCore(assetVersionId, ownerUserId,
+            lockRows: false, cancellationToken).ConfigureAwait(false);
+        var isCurrent = summary?.ReportIsCurrent == true && summary.ReportId == reportId;
+        if (!detailsAvailable)
+        {
+            return new SellerAnalysisFindingsPageDto(report.AssetId, assetVersionId, reportId, isCurrent,
+                report.Header.CoverageLevel ?? CodeAnalysisCoverageLevel.PARTIAL, Array.Empty<SellerAnalysisFindingDto>(),
+                Math.Max(report.Header.FindingCount.GetValueOrDefault(), total), false, page, PAGE_SIZE_LIMIT,
+                (Math.Max(report.Header.FindingCount.GetValueOrDefault(), total) + PAGE_SIZE_LIMIT - 1) / PAGE_SIZE_LIMIT);
+        }
         List<CodeAnalysisReportFinding> rows = await db.CodeAnalysisReportFindings.AsNoTracking().Where(f => f.ReportId == reportId)
             .OrderBy(f => f.OwnScopePath).ThenBy(f => f.OwnStartByte).ThenBy(f => f.FindingKey)
             .Skip((page - 1) * PAGE_SIZE_LIMIT).Take(PAGE_SIZE_LIMIT).ToListAsync(cancellationToken).ConfigureAwait(false);
@@ -167,10 +208,8 @@ internal sealed class CodeAnalysisSellerStore(
                     : f.ForeignOrigin == "FOREIGN" ? "FOREIGN_PUBLIC" : null,
             ParsePublicAttribution(f.PublicAttributionJson, f.ForeignOrigin == "OWN" || f.ForeignSensitivity != CodeAnalysisFindingSensitivity.PUBLIC)))
             .ToArray();
-        SellerAnalysisSummaryDto? summary = await GetOwnerSummary(assetVersionId, ownerUserId, cancellationToken).ConfigureAwait(false);
-        var isCurrent = summary?.ReportIsCurrent == true && summary.ReportId == reportId;
         return new SellerAnalysisFindingsPageDto(report.AssetId, assetVersionId, reportId, isCurrent,
-            report.Header.CoverageLevel ?? CodeAnalysisCoverageLevel.PARTIAL, items, total, page, PAGE_SIZE_LIMIT,
+            report.Header.CoverageLevel ?? CodeAnalysisCoverageLevel.PARTIAL, items, total, true, page, PAGE_SIZE_LIMIT,
             (total + PAGE_SIZE_LIMIT - 1) / PAGE_SIZE_LIMIT);
     }
 

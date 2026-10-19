@@ -12,6 +12,7 @@ using AssetBlock.Domain.Core.Enums;
 using AssetBlock.Domain.Core.Exceptions;
 using AssetBlock.Domain.Core.Licenses;
 using AssetBlock.Domain.Core.Primitives.AppSettingsOptions;
+using AssetBlock.Domain.Core.Primitives.Storage;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
@@ -85,20 +86,24 @@ internal sealed class PublishAssetVersionCommandHandler(
         var storageKey = $"assets/{request.AuthorId}/{request.AssetId}/{versionId}{matchedExtension}";
         var ciphertextLength = encryptionService.ComputeCiphertextLength(request.FileLength);
 
-        string sha256Hex;
+        AssetUploadReceipt uploadReceipt;
         try
         {
-            sha256Hex = await encryptUploadService.EncryptAndUpload(request.FileContent, storageKey, ciphertextLength, cancellationToken);
+            uploadReceipt = await encryptUploadService.EncryptAndUploadVersioned(request.FileContent, storageKey, ciphertextLength, cancellationToken);
         }
         catch (OperationCanceledException)
         {
-            await TryDeletePartialObject(storageKey);
             throw;
         }
         catch (Exception ex)
         {
-            await TryDeletePartialObject(storageKey);
             logger.LogError(ex, "Encrypt/upload failed for asset {AssetId} version {VersionId}", request.AssetId, versionId);
+            return ResultError.Error<Guid>(ErrorCodes.ERR_ASSET_UPLOAD_FAILED);
+        }
+
+        if (!StorageVersionIdentity.IsImmutable(uploadReceipt.StorageVersionId))
+        {
+            logger.LogError("Storage provider returned no immutable generation for uploaded object {Key}; object retained for operator investigation", storageKey);
             return ResultError.Error<Guid>(ErrorCodes.ERR_ASSET_UPLOAD_FAILED);
         }
 
@@ -110,9 +115,10 @@ internal sealed class PublishAssetVersionCommandHandler(
             VersionNumber = 0, // Set by CreateNextCandidateVersion.
             IsCurrent = false, // Set by CreateNextCandidateVersion.
             StorageKey = storageKey,
+            StorageVersionId = uploadReceipt.StorageVersionId,
             FileName = displayFileName,
             ContentLength = request.FileLength,
-            ContentSha256 = sha256Hex,
+            ContentSha256 = uploadReceipt.PlaintextSha256,
             ReleaseNotes = request.Request.ReleaseNotes.Trim(),
             LicenseCode = licenseCode,
             LicenseTemplateVersion = licenseTemplate.TemplateVersion,
@@ -176,19 +182,19 @@ internal sealed class PublishAssetVersionCommandHandler(
         catch (AssetDraftWorkspaceStaleException)
         {
             // Guaranteed pre-commit failure: nothing was attached, clean the uploaded object.
-            await TryDeletePartialObject(storageKey);
+            await TryDeletePartialObject(storageKey, uploadReceipt.StorageVersionId);
             return Result.Conflict(ErrorCodes.ERR_MODERATION_WORKSPACE_STALE);
         }
         catch (AssetNotFoundException)
         {
             // Guaranteed pre-commit domain failure from PublishNextVersion.
-            await TryDeletePartialObject(storageKey);
+            await TryDeletePartialObject(storageKey, uploadReceipt.StorageVersionId);
             return Result.NotFound(ErrorCodes.ERR_ASSET_NOT_FOUND);
         }
         catch (UnauthorizedAccessException)
         {
             // Guaranteed pre-commit domain failure from PublishNextVersion.
-            await TryDeletePartialObject(storageKey);
+            await TryDeletePartialObject(storageKey, uploadReceipt.StorageVersionId);
 
             return Result.Forbidden(ErrorCodes.ERR_FORBIDDEN);
         }
@@ -225,12 +231,12 @@ internal sealed class PublishAssetVersionCommandHandler(
     /// Best-effort delete of the attempted UUID key after encrypt/upload or DB failure.
     /// Uses a short independent token so a cancelled request cannot block cleanup.
     /// </summary>
-    private async Task TryDeletePartialObject(string storageKey)
+    private async Task TryDeletePartialObject(string storageKey, string storageVersionId)
     {
         try
         {
             using var cleanupCts = new CancellationTokenSource(TimeSpan.FromSeconds(15));
-            await assetStorageService.Delete(storageKey, cleanupCts.Token);
+            await assetStorageService.Delete(storageKey, storageVersionId, cleanupCts.Token);
         }
         catch (Exception delEx)
         {

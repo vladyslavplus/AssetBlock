@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using AssetBlock.Domain.Abstractions.Services;
+using AssetBlock.Domain.Core.Dto;
 using AssetBlock.Domain.Core.Primitives.Storage;
 using AssetBlock.Infrastructure.Observability;
 using Microsoft.Extensions.DependencyInjection;
@@ -20,6 +21,8 @@ internal sealed class StorageOrphanCleanupWorker(
     private static readonly TimeSpan _interval = TimeSpan.FromHours(24);
     private static readonly TimeSpan _orphanAge = TimeSpan.FromHours(24);
     private const string ASSETS_PREFIX = "assets/";
+    private const int MAX_OBJECTS_PER_CYCLE = 250;
+    private static readonly TimeSpan _leaseDuration = TimeSpan.FromMinutes(30);
     private readonly TimeProvider _timeProvider = timeProvider ?? TimeProvider.System;
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -73,6 +76,7 @@ internal sealed class StorageOrphanCleanupWorker(
         await using AsyncServiceScope scope = scopeFactory.CreateAsyncScope();
         IAssetStorageService storage = scope.ServiceProvider.GetRequiredService<IAssetStorageService>();
         IAssetStore assetStore = scope.ServiceProvider.GetRequiredService<IAssetStore>();
+        IStorageOrphanCleanupStateStore stateStore = scope.ServiceProvider.GetRequiredService<IStorageOrphanCleanupStateStore>();
 
         var stopwatch = Stopwatch.StartNew();
         var deletedCount = 0;
@@ -82,36 +86,104 @@ internal sealed class StorageOrphanCleanupWorker(
         try
         {
             DateTimeOffset cutoff = _timeProvider.GetUtcNow() - _orphanAge;
-
-            await foreach (StorageObjectInfo obj in storage.ListObjects(ASSETS_PREFIX, cancellationToken))
+            StorageOrphanCleanupLease? lease = await stateStore.TryAcquire(
+                _timeProvider.GetUtcNow(), _leaseDuration, cancellationToken).ConfigureAwait(false);
+            if (lease is null)
             {
-                if (obj.LastModified is null || obj.LastModified > cutoff)
+                logger.LogDebug("Storage orphan cleanup skipped because another worker holds the scan lease.");
+                return;
+            }
+
+            var resetCursor = false;
+            StorageObjectCursor? cursor = lease.Cursor;
+            try
+            {
+                if (!await stateStore.SaveCursor(
+                    lease.LeaseId, cursor, _timeProvider.GetUtcNow(), _leaseDuration, cancellationToken).ConfigureAwait(false))
                 {
-                    continue;
+                    logger.LogWarning("Storage orphan cleanup lost its scan lease before provider listing.");
+                    return;
                 }
 
-                try
+                // The S3 version-list API owns pagination. A page is capped to the full per-cycle
+                // processing budget, and the durable cursor advances only after every item in it
+                // has been checked. Crashes replay at most one page of idempotent exact-version work.
+                StorageObjectPage page = await storage.ListObjectVersionsPage(
+                    ASSETS_PREFIX, cursor, MAX_OBJECTS_PER_CYCLE, cancellationToken).ConfigureAwait(false);
+                if (page.Items.Count > MAX_OBJECTS_PER_CYCLE)
                 {
-                    if (await assetStore.ExistsByStorageKey(obj.Key, cancellationToken))
+                    throw new InvalidDataException("Storage provider exceeded the bounded version-list page size.");
+                }
+
+                foreach (StorageObjectInfo obj in page.Items)
+                {
+                    if (!await stateStore.SaveCursor(
+                        lease.LeaseId, cursor, _timeProvider.GetUtcNow(), _leaseDuration, cancellationToken).ConfigureAwait(false))
                     {
-                        continue;
+                        logger.LogWarning("Storage orphan cleanup lost its scan lease; stopping before further deletion.");
+                        return;
                     }
 
-                    await storage.Delete(obj.Key, cancellationToken);
-                    deletedCount++;
-                    logger.LogInformation("Deleted orphan storage object {Key} (LastModified={LastModified})",
-                        obj.Key, obj.LastModified);
+                    try
+                    {
+                        if (!obj.IsDeleteMarker && obj.LastModified is not null && obj.LastModified <= cutoff)
+                        {
+                            if (!StorageVersionIdentity.IsImmutable(obj.VersionId))
+                            {
+                                failedCount++;
+                                outcome = DiagnosticsOutcome.PARTIAL_FAILURE;
+                                logger.LogError("Retaining orphan object {Key}: storage listing returned no exact generation ID", obj.Key);
+                            }
+                            else if (!await assetStore.ExistsByStorageKey(obj.Key, cancellationToken).ConfigureAwait(false))
+                            {
+                                // Refresh the lease, then recheck relational protection immediately before exact-generation deletion.
+                                if (!await stateStore.SaveCursor(
+                                    lease.LeaseId, cursor, _timeProvider.GetUtcNow(), _leaseDuration, cancellationToken).ConfigureAwait(false))
+                                {
+                                    logger.LogWarning("Storage orphan cleanup lost its scan lease; stopping before deletion of {Key}.", obj.Key);
+                                    return;
+                                }
+
+                                if (!await assetStore.ExistsByStorageKey(obj.Key, cancellationToken).ConfigureAwait(false))
+                                {
+                                    await storage.Delete(obj.Key, obj.VersionId!, cancellationToken).ConfigureAwait(false);
+                                    deletedCount++;
+                                    logger.LogInformation("Deleted orphan storage object {Key} (LastModified={LastModified})",
+                                        obj.Key, obj.LastModified);
+                                }
+                            }
+                        }
+                    }
+                    catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+                    {
+                        throw;
+                    }
+                    catch (Exception ex)
+                    {
+                        failedCount++;
+                        outcome = DiagnosticsOutcome.PARTIAL_FAILURE;
+                        logger.LogWarning(ex, "Failed to evaluate/delete orphan object {Key}", obj.Key);
+                    }
+
                 }
-                catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+
+                StorageObjectCursor? nextCursor = page.NextCursor;
+                if (!page.IsComplete && (nextCursor is null || nextCursor == lease.Cursor))
                 {
-                    throw;
+                    throw new InvalidDataException("Truncated storage version listing did not advance its durable provider markers.");
                 }
-                catch (Exception ex)
+
+                resetCursor = page.IsComplete;
+                if (!await stateStore.SaveCursor(
+                    lease.LeaseId, resetCursor ? null : nextCursor, _timeProvider.GetUtcNow(), _leaseDuration, cancellationToken).ConfigureAwait(false))
                 {
-                    failedCount++;
-                    outcome = DiagnosticsOutcome.PARTIAL_FAILURE;
-                    logger.LogWarning(ex, "Failed to evaluate/delete orphan object {Key}", obj.Key);
+                    logger.LogWarning("Storage orphan cleanup lost its scan lease after processing a provider page; stopping.");
+                    return;
                 }
+            }
+            finally
+            {
+                await stateStore.Release(lease.LeaseId, resetCursor, CancellationToken.None).ConfigureAwait(false);
             }
         }
         catch (OperationCanceledException)

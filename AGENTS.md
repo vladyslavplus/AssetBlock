@@ -15,6 +15,8 @@
 
 ## Working agreement
 
+- For implementation, target the user primary checkout and its currently checked-out branch by default; do not create or switch branches/worktrees unless requested. Do not edit repository source in an AO isolated worktree. Keep one implementation writer per target; reviewer reads that same target after it is frozen by exact source identity.
+
 - Distinguish planner, reviewer, and implementer roles. Planning and review are read-only; implement only when the user authorizes changes. Existing authorization remains valid for its scope.
 - Inspect relevant code and tests before editing. Preserve user changes and keep diffs focused on the requested outcome.
 - Follow existing architecture and feature patterns. Avoid speculative abstractions, parallel service layers, broad renames, and unrelated cleanup.

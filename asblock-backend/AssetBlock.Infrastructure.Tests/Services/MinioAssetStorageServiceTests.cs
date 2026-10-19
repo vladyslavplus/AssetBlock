@@ -34,15 +34,15 @@ public sealed class MinioAssetStorageServiceTests
     public async Task Delete_throwsConnectionFailure_soCallerCanRetry()
     {
         S3CompatibleAssetStorageService sut = CreateSut("http://127.0.0.1:59996");
-        Func<Task> act = async () => await sut.Delete("key");
+        Func<Task> act = async () => await sut.Delete("key", "version-id");
         await act.Should().ThrowAsync<Exception>();
     }
 
     [Fact]
-    public async Task Upload_throws_whenServerUnreachable()
+    public async Task UploadVersioned_throws_whenServerUnreachable()
     {
         S3CompatibleAssetStorageService sut = CreateSut("http://127.0.0.1:59995");
-        Func<Task> act = async () => await sut.Upload("key", new MemoryStream([1, 2, 3]), 3, CancellationToken.None);
+        Func<Task<string>> act = async () => await sut.UploadVersioned("key", new MemoryStream([1, 2, 3]), 3, CancellationToken.None);
         await act.Should().ThrowAsync<Exception>();
     }
 

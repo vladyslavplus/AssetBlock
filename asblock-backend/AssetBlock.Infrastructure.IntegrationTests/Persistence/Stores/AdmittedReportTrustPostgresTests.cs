@@ -1,3 +1,4 @@
+using System.Data.Common;
 using AssetBlock.Domain.Abstractions.Services;
 using AssetBlock.Domain.Core.Constants;
 using AssetBlock.Domain.Core.Dto.Assets;
@@ -5,11 +6,17 @@ using AssetBlock.Domain.Core.Entities;
 using AssetBlock.Domain.Core.Enums;
 using AssetBlock.Domain.Core.Primitives.AppSettingsOptions;
 using AssetBlock.Domain.Core.Publication;
+using AssetBlock.Infrastructure.HostedServices;
 using AssetBlock.Infrastructure.IntegrationTests.Support;
 using AssetBlock.Infrastructure.Persistence;
 using AssetBlock.Infrastructure.Persistence.Publication;
 using AssetBlock.Infrastructure.Persistence.Stores;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Diagnostics;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 using NSubstitute;
 using MsOptions = Microsoft.Extensions.Options.Options;
 
@@ -151,6 +158,10 @@ public sealed class AdmittedReportTrustPostgresTests(PostgresFixture fixture)
 
         PublicationEligibility.IsAuthorSafePreviewVersion(version).Should().BeTrue();
 
+        version.StorageRetiredAt = DateTimeOffset.UtcNow;
+        PublicationEligibility.IsAuthorSafePreviewVersion(version).Should().BeFalse();
+        version.StorageRetiredAt = null;
+
         version.SafetyRestriction = AssetVersionSafetyRestriction.UNSAFE_ARCHIVE;
         PublicationEligibility.IsAuthorSafePreviewVersion(version).Should().BeFalse();
     }
@@ -208,6 +219,109 @@ public sealed class AdmittedReportTrustPostgresTests(PostgresFixture fixture)
     }
 
     [Fact]
+    public async Task OwnerFindings_WhenExpiredDetailsAreMissing_ShouldRetainSummaryAndMarkDetailsUnavailable()
+    {
+        await using ApplicationDbContext db = await fixture.CreateCleanDbContext();
+        (Guid assetId, Guid versionId) = await Seed(db, headerOnly: false, admission: true);
+        Guid reportId = await db.CodeAnalysisReportHeaders.AsNoTracking().Where(h => h.AssetVersionId == versionId)
+            .Select(h => h.Id).SingleAsync();
+        await db.CodeAnalysisReportAdmissions.Where(a => a.ReportId == reportId)
+            .ExecuteUpdateAsync(s => s
+                .SetProperty(a => a.AdmittedBy, "assetblock-dotnet-finalizer")
+                .SetProperty(a => a.CanAuthorizePublication, false));
+        await db.CodeAnalysisReportHeaders.Where(h => h.Id == reportId)
+            .ExecuteUpdateAsync(s => s
+                .SetProperty(h => h.CanAuthorizePublication, false)
+                .SetProperty(h => h.FindingCount, 3));
+        Guid ownerId = await db.Assets.AsNoTracking().Where(a => a.Id == assetId).Select(a => a.AuthorId).SingleAsync();
+        CodeAnalysisSellerStore store = CreateSellerStore(db);
+
+        SellerAnalysisFindingsPageDto? findings = await store.GetOwnerFindings(versionId, reportId, ownerId, 1);
+        SellerAnalysisSummaryDto? summary = await store.GetOwnerSummary(versionId, ownerId);
+
+        findings.Should().NotBeNull();
+        findings.DetailsAvailable.Should().BeFalse();
+        findings.Items.Should().BeEmpty();
+        findings.TotalCount.Should().Be(3);
+        summary.Should().NotBeNull();
+        summary.FindingCount.Should().Be(3);
+        summary.FindingDetailsAvailable.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task OwnerFindings_WhenRetentionCommitsAfterCount_ShouldReturnCoherentPrePurgeSnapshot()
+    {
+        FindingsCountBarrier barrier = new();
+        await using ApplicationDbContext db = await fixture.CreateCleanDbContext(options => options.AddInterceptors(barrier));
+        (Guid assetId, Guid versionId) = await Seed(db, headerOnly: false, admission: true);
+        Guid reportId = await db.CodeAnalysisReportHeaders.AsNoTracking().Where(h => h.AssetVersionId == versionId)
+            .Select(h => h.Id).SingleAsync();
+        db.CodeAnalysisReportFindings.Add(new CodeAnalysisReportFinding
+        {
+            Id = Guid.NewGuid(),
+            ReportId = reportId,
+            FindingKey = Guid.NewGuid().ToString("N"),
+            FindingType = "POTENTIAL_MATCH",
+            OwnScopePath = "src/retention-race.cs",
+            OwnExcerpt = "bounded finding excerpt",
+            ForeignSensitivity = CodeAnalysisFindingSensitivity.PRIVATE,
+            ReasonText = "retention concurrency regression",
+            RequestedAction = "review",
+            CreatedAt = DateTimeOffset.UtcNow.AddMonths(-13)
+        });
+        await db.SaveChangesAsync();
+        await db.CodeAnalysisReportAdmissions.Where(a => a.ReportId == reportId)
+            .ExecuteUpdateAsync(s => s
+                .SetProperty(a => a.AdmittedBy, "assetblock-dotnet-finalizer")
+                .SetProperty(a => a.CanAuthorizePublication, false));
+        await db.CodeAnalysisReportHeaders.Where(h => h.Id == reportId)
+            .ExecuteUpdateAsync(s => s
+                .SetProperty(h => h.CanAuthorizePublication, false)
+                .SetProperty(h => h.FindingCount, 1)
+                .SetProperty(h => h.FinalizedAt, DateTimeOffset.UtcNow.AddMonths(-13)));
+        await db.ModerationDecisionRecords.Where(d => d.AssetVersionId == versionId).ExecuteDeleteAsync();
+        await db.PublicationSnapshots.Where(s => s.AssetVersionId == versionId).ExecuteDeleteAsync();
+        await db.ModerationSubmissions.Where(s => s.AssetVersionId == versionId).ExecuteDeleteAsync();
+        Guid ownerId = await db.Assets.AsNoTracking().Where(a => a.Id == assetId).Select(a => a.AuthorId).SingleAsync();
+        CodeAnalysisSellerStore store = CreateSellerStore(db);
+        Task<SellerAnalysisFindingsPageDto?> read = store.GetOwnerFindings(versionId, reportId, ownerId, 1);
+
+        await barrier.CountReadObserved.Task.WaitAsync(TimeSpan.FromSeconds(10));
+        await using ApplicationDbContext workerDb = fixture.CreateDbContext();
+        await using ServiceProvider provider = CreateRetentionWorkerProvider(workerDb, DateTimeOffset.UtcNow);
+        (await workerDb.CodeAnalysisReportHeaders.AsNoTracking().Where(h => h.Id == reportId)
+            .Select(h => h.FinalizedAt).SingleAsync()).Should().BeBefore(DateTimeOffset.UtcNow.AddMonths(-12));
+        (await workerDb.ModerationSubmissions.AnyAsync(s => s.AssetVersionId == versionId)).Should().BeFalse();
+        (await workerDb.PublicationSnapshots.AnyAsync(s => s.AssetVersionId == versionId)).Should().BeFalse();
+        (await workerDb.Purchases.AnyAsync(p => p.AssetId == assetId)).Should().BeFalse();
+        (await workerDb.CheckoutReservations.AnyAsync(r => r.AssetId == assetId)).Should().BeFalse();
+        (await workerDb.CheckoutIntentItems.AnyAsync(i => i.AssetId == assetId)).Should().BeFalse();
+        (await workerDb.PaidCheckoutReconciliationHolds.AnyAsync(h => h.CheckoutIntent.Items.Any(i => i.AssetId == assetId))).Should().BeFalse();
+        (await workerDb.CodeAnalysisRuns.AnyAsync(r => r.AssetVersionId == versionId
+            && (r.State == CodeAnalysisRunState.QUEUED || r.State == CodeAnalysisRunState.RUNNING))).Should().BeFalse();
+        (await workerDb.SecurityRechecks.AnyAsync(r => r.AssetVersionId == versionId
+            && (r.State == SecurityRecheckState.QUEUED || r.State == SecurityRecheckState.INSPECTING
+                || r.State == SecurityRecheckState.SCANNING))).Should().BeFalse();
+        int purged;
+        try
+        {
+            purged = await provider.GetRequiredService<CodeAnalysisRetentionWorker>().RunCleanup(CancellationToken.None);
+        }
+        finally
+        {
+            barrier.ReleaseCountRead.TrySetResult(true);
+        }
+        purged.Should().Be(1);
+
+        SellerAnalysisFindingsPageDto? page = await read.WaitAsync(TimeSpan.FromSeconds(10));
+        page.Should().NotBeNull();
+        page.DetailsAvailable.Should().BeTrue();
+        page.Items.Should().ContainSingle();
+        page.TotalCount.Should().Be(1);
+        (await workerDb.CodeAnalysisReportFindings.AnyAsync(f => f.ReportId == reportId)).Should().BeFalse();
+    }
+
+    [Fact]
     public async Task OwnerFindings_WhenRequestedByAnotherExistingOwner_ShouldExclude()
     {
         await using ApplicationDbContext db = await fixture.CreateCleanDbContext();
@@ -252,6 +366,45 @@ public sealed class AdmittedReportTrustPostgresTests(PostgresFixture fixture)
                 PolicyKey = policy.PolicyKey,
                 PolicyDigest = policy.PolicyDigest
             }));
+    }
+
+    private static ServiceProvider CreateRetentionWorkerProvider(ApplicationDbContext db, DateTimeOffset now)
+    {
+        ServiceCollection services = new();
+        services.AddSingleton(db);
+        services.AddSingleton(Substitute.For<IHostEnvironment>());
+        services.AddSingleton<ILogger<CodeAnalysisRetentionWorker>>(NullLogger<CodeAnalysisRetentionWorker>.Instance);
+        services.AddSingleton(sp => new CodeAnalysisRetentionWorker(
+            sp.GetRequiredService<IServiceScopeFactory>(), sp.GetRequiredService<IHostEnvironment>(),
+            sp.GetRequiredService<ILogger<CodeAnalysisRetentionWorker>>(), new FixedTimeProvider(now)));
+        return services.BuildServiceProvider();
+    }
+
+    private sealed class FindingsCountBarrier : DbCommandInterceptor
+    {
+        public TaskCompletionSource<bool> CountReadObserved { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        public TaskCompletionSource<bool> ReleaseCountRead { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public override async ValueTask<DbDataReader> ReaderExecutedAsync(
+            DbCommand command,
+            CommandExecutedEventData eventData,
+            DbDataReader result,
+            CancellationToken cancellationToken = default)
+        {
+            if (command.CommandText.Contains("COUNT(*)", StringComparison.OrdinalIgnoreCase)
+                && command.CommandText.Contains("code_analysis_report_findings", StringComparison.OrdinalIgnoreCase))
+            {
+                CountReadObserved.TrySetResult(true);
+                await ReleaseCountRead.Task.WaitAsync(cancellationToken).ConfigureAwait(false);
+            }
+
+            return result;
+        }
+    }
+
+    private sealed class FixedTimeProvider(DateTimeOffset now) : TimeProvider
+    {
+        public override DateTimeOffset GetUtcNow() => now;
     }
 
     /// <summary>
