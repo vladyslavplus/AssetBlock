@@ -12,7 +12,7 @@ try:
     from scripts.code_analysis.evaluation import cpu_rank
     from scripts.code_analysis.frozen_encoder import encode_chunks
     from scripts.code_analysis.representations import mapped_chunks
-    from scripts.code_retrieval import index_export, retrieval_eval, retrieval_models, validation_plan
+    from scripts.code_retrieval import index_export, index_verify, retrieval_eval, retrieval_models, validation_plan
     from scripts.code_retrieval.tests import _tiny_encoder as tiny
     TORCH_IMPORT_ERROR = None
 except ImportError as exc:  # torch-less interpreters skip the evaluation checks
@@ -71,7 +71,7 @@ class RetrievalEvalTests(unittest.TestCase):
     def write_index(self, run_name, label="E0", model_identity=None, encoded=None):
         run = self.root / "runs" / run_name
         model_identity = model_identity or identity()
-        model_key = retrieval_models.model_key(model_identity)
+        model_key = index_verify.model_key(model_identity)
         entry = {"modelKey": model_key, "kind": model_identity["kind"], "fields": model_identity}
         with mock.patch.object(index_export, "RETRIEVAL_ROOT", self.root):
             return index_export.write_index(run, label, entry, self.galleries, encoded or self.encoded(), self.corpus)
@@ -85,32 +85,32 @@ class RetrievalEvalTests(unittest.TestCase):
 
     def load(self, run_name, label, model_key, export_evidence=None, corpus=None):
         export_evidence = export_evidence or self.export_for(run_name, label)
-        with mock.patch.object(retrieval_eval, "run_dir", lambda run_id: self.root / "runs" / run_id):
+        with mock.patch.object(index_verify, "run_dir", lambda run_id: self.root / "runs" / run_id):
             return retrieval_eval.load_index(run_name, label, self.plan, corpus or self.corpus, model_key,
                                              export_evidence)
 
     # -- model and index identities --------------------------------------
     def test_frozen_and_trained_keys_differ_and_track_every_identity_field(self):
-        frozen = retrieval_models.model_key(identity("frozen"))
-        trained = retrieval_models.model_key(identity("trained"))
+        frozen = index_verify.model_key(identity("frozen"))
+        trained = index_verify.model_key(identity("trained"))
         self.assertNotEqual(frozen, trained)
         for field, value in (("fullStateSha256", "9" * 64), ("tokenizerHashes", {"vocab.json": "9" * 64}),
                              ("chunking", "other"), ("pooling", "other"), ("upstreamRevision", "other"),
                              ("checkpointSha256", "9" * 64), ("label", "E2")):
             with self.subTest(field=field):
-                self.assertNotEqual(retrieval_models.model_key(identity("frozen", **{field: value})), frozen)
+                self.assertNotEqual(index_verify.model_key(identity("frozen", **{field: value})), frozen)
 
     def test_incomplete_model_identity_is_refused(self):
         broken = identity("frozen")
         del broken["fullStateSha256"]
         with self.assertRaisesRegex(ValueError, "incomplete model identity"):
-            retrieval_models.model_key(broken)
+            index_verify.model_key(broken)
 
     def test_index_key_changes_with_model_gallery_and_corpus(self):
-        base = index_export.index_key("a" * 64, self.galleries["python"], self.corpus)
-        self.assertNotEqual(base, index_export.index_key("b" * 64, self.galleries["python"], self.corpus))
-        self.assertNotEqual(base, index_export.index_key("a" * 64, self.galleries["python"][:1], self.corpus))
-        self.assertNotEqual(base, index_export.index_key("a" * 64, self.galleries["python"],
+        base = index_verify.index_key("a" * 64, self.galleries["python"], self.corpus)
+        self.assertNotEqual(base, index_verify.index_key("b" * 64, self.galleries["python"], self.corpus))
+        self.assertNotEqual(base, index_verify.index_key("a" * 64, self.galleries["python"][:1], self.corpus))
+        self.assertNotEqual(base, index_verify.index_key("a" * 64, self.galleries["python"],
                                                          {**self.corpus, "protocolSha256": "0" * 64}))
 
     def test_index_write_is_immutable(self):
@@ -338,7 +338,7 @@ class RetrievalEvalTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "corpus identity differs"):
             self.load("drift-base", "E0", key, corpus={**self.corpus, "protocolSha256": "0" * 64})
         gallery_plan = {**self.plan, "galleries": {**self.galleries, "python": self.galleries["python"][:1]}}
-        with mock.patch.object(retrieval_eval, "run_dir", lambda run_id: self.root / "runs" / run_id), \
+        with mock.patch.object(index_verify, "run_dir", lambda run_id: self.root / "runs" / run_id), \
                 self.assertRaisesRegex(ValueError, "differs from the admitted gallery"):
             retrieval_eval.load_index("drift-base", "E0", gallery_plan, self.corpus, key,
                                       self.export_for("drift-base"))

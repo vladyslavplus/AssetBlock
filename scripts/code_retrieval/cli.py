@@ -57,6 +57,20 @@ def build_parser():
     evaluation.add_argument("--index-run-id", required=True, help="export-index run id to evaluate")
     evaluation.add_argument("--reference-probe", required=True, help="environment-probe file from the reference interpreter")
     evaluation.set_defaults(handler=_evaluate)
+    publish = stages.add_parser("index-publish-check",
+                                help="query-vectors (training interpreter) or publish-and-rank (index interpreter)")
+    publish.add_argument("--stage", required=True, choices=["query-vectors", "publish-and-rank"],
+                         help="which interpreter's stage to run")
+    publish.add_argument("--run-id", required=True, help="new immutable run id for query-vectors; existing for publish")
+    publish.add_argument("--inputs", required=True, help="inputs manifest path")
+    publish.add_argument("--config", required=True, help="frozen configuration path")
+    publish.add_argument("--prepare-run-id", required=True, help="admitted prepare-data run id to bind")
+    publish.add_argument("--train-run-id", required=True, help="verified training run id")
+    publish.add_argument("--index-run-id", required=True, help="export-index run id to publish")
+    publish.add_argument("--evaluation-run-id", required=True, help="evaluation run id to cross-check")
+    publish.add_argument("--runtime-review", default=None,
+                         help="reviewed runtime package directory under artifacts/code_analysis; required to publish")
+    publish.set_defaults(handler=_index_publish_check)
     return parser
 
 
@@ -72,6 +86,14 @@ def _evaluate(args):
     return retrieval_eval.run(run_id=args.run_id, inputs_path=args.inputs, config_path=args.config,
                               prepare_run_id=args.prepare_run_id, train_run_id=args.train_run_id,
                               index_run_id=args.index_run_id, reference_probe_path=args.reference_probe)
+
+
+def _index_publish_check(args):
+    from . import index_publish_check
+    return index_publish_check.run_stage(args.stage, run_id=args.run_id, inputs_path=args.inputs,
+                                         config_path=args.config, prepare_run_id=args.prepare_run_id,
+                                         train_run_id=args.train_run_id, index_run_id=args.index_run_id,
+                                         evaluation_run_id=args.evaluation_run_id, runtime_review=args.runtime_review)
 
 
 def _train(args):

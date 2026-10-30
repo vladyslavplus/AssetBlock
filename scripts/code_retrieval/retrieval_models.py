@@ -10,16 +10,15 @@ Interpreter: every stage that loads these models runs in the training interprete
 (artifacts/feasibility_pilot/env/ml).
 """
 
-from scripts.code_analysis.contracts import canonical, digest
 from scripts.code_analysis.representations import CHUNKING
 
 from . import checkpoint
+from .index_verify import EMBEDDING_DIMENSIONS
 
 FROZEN_LABEL = "E0"
 EPOCH_LABELS = {1: "E1", 2: "E2", 3: "E3"}
 POOLING = "padding-masked mean over all non-padding tokens including framing, FP32, then L2"
 ENCODE_FUNCTION = "checkpoint.reference_vectors: FP32, eval, no autocast, one chunk per forward"
-REQUIRED_KEYS = ("kind", "label", "fullStateSha256", "tokenizerHashes", "chunking", "pooling", "dimension")
 
 
 def _tokenizer_hashes(file_hashes):
@@ -34,7 +33,7 @@ def frozen_model(device):
                 "fullStateSha256": info["loadedFullStateSha256"],
                 "tokenizerHashes": _tokenizer_hashes(upstream["fileHashes"]),
                 "chunking": CHUNKING, "pooling": POOLING, "encodeFunction": ENCODE_FUNCTION,
-                "dimension": checkpoint.EMBEDDING_DIMENSIONS}
+                "dimension": EMBEDDING_DIMENSIONS}
     return {"label": FROZEN_LABEL, "tokenizer": tokenizer, "model": model, "identity": identity}
 
 
@@ -52,15 +51,8 @@ def trained_model(train_run, epoch, expectations, device):
                 "fullStateSha256": manifest["fullStateSha256"],
                 "tokenizerHashes": {name: manifest["files"][name]["sha256"] for name in checkpoint.SUPPORT_FILES},
                 "chunking": CHUNKING, "pooling": POOLING, "encodeFunction": ENCODE_FUNCTION,
-                "dimension": checkpoint.EMBEDDING_DIMENSIONS}
+                "dimension": EMBEDDING_DIMENSIONS}
     return {"label": EPOCH_LABELS[epoch], "tokenizer": tokenizer, "model": model, "identity": identity}
-
-
-def model_key(identity):
-    """Digest of the complete model identity; any changed field changes the key."""
-    if not all(key in identity for key in REQUIRED_KEYS) or identity["dimension"] != checkpoint.EMBEDDING_DIMENSIONS:
-        raise ValueError("incomplete model identity")
-    return digest(canonical(identity))
 
 
 def encode(model, tokenizer, windows, device):

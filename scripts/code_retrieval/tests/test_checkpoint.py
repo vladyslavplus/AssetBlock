@@ -9,7 +9,7 @@ try:
     import torch
     from scripts.code_analysis.contracts import canonical, digest
     from scripts.code_analysis.frozen_encoder import state_hash
-    from scripts.code_retrieval import checkpoint
+    from scripts.code_retrieval import checkpoint, index_verify
     from scripts.code_retrieval.tests import _tiny_encoder as tiny
     TORCH_IMPORT_ERROR = None
 except ImportError as exc:  # torch-less interpreters skip the trained-encoder checks
@@ -40,7 +40,7 @@ class CheckpointTests(unittest.TestCase):
                 "config_loaded": {"configSha256": "b" * 64, "byteSha256": "c" * 64},
                 "prepare_binding": {"runId": "prepare-fixture", "prepareDataSha256": "d" * 64,
                                     "trainingAdmissionSha256": "e" * 64, "admittedTriplets": 111}}
-        checkpoint.require_training_binding(expectations, **base)
+        index_verify.require_training_binding(expectations, **base)
         prepare = base["prepare_binding"]
         drifted = {
             "inputsManifestSha256": {"loaded": {"manifestSha256": "0" * 64}},
@@ -53,14 +53,14 @@ class CheckpointTests(unittest.TestCase):
         }
         for name, override in drifted.items():
             with self.subTest(field=name), self.assertRaises(ValueError) as caught:
-                checkpoint.require_training_binding(expectations, **{**base, **override})
+                index_verify.require_training_binding(expectations, **{**base, **override})
             self.assertEqual(str(caught.exception), "training evidence binding drift: " + name)
 
     def test_config_bytes_are_compared_only_when_the_evidence_records_them(self):
         expectations = {"identity": {"inputsManifestSha256": "a" * 64, "configSha256": "b" * 64,
                                      "prepare": {"runId": "p", "prepareDataSha256": "d" * 64,
                                                  "trainingAdmissionSha256": "e" * 64, "admittedTriplets": 1}}}
-        checkpoint.require_training_binding(
+        index_verify.require_training_binding(
             expectations, loaded={"manifestSha256": "a" * 64},
             config_loaded={"configSha256": "b" * 64, "byteSha256": "0" * 64},
             prepare_binding={"runId": "p", "prepareDataSha256": "d" * 64, "trainingAdmissionSha256": "e" * 64,

@@ -21,6 +21,7 @@ from scripts.code_analysis.representations import vector_bytes
 
 from . import admission, checkpoint, config as config_module, inputs, prepare
 from .endpoints import endpoint_windows
+from .index_verify import EMBEDDING_DIMENSIONS
 
 PROBE_SCHEMA = "code-retrieval-environment-probe-v2"
 PROBE_TOLERANCE = 1e-5
@@ -98,7 +99,7 @@ def sample_record(roles, triplet, sources_root, tokenizer, model):
             "tokenCount": len(ids), "tokenIdsSha256": digest(canonical(ids)),
             "tokenOffsetsSha256": digest(canonical([list(pair) for pair in offsets])),
             "windowCount": len(windows), "chunk0Sha256": digest(canonical(chunk0)),
-            "vectorDimension": checkpoint.EMBEDDING_DIMENSIONS,
+            "vectorDimension": EMBEDDING_DIMENSIONS,
             "vectorBytes": len(packed), "vectorSha256": digest(packed),
             "vectorBase64": base64.b64encode(packed).decode("ascii")}
 

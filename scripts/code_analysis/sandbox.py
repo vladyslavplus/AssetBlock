@@ -17,6 +17,8 @@ IMAGE = ("pgvector/pgvector:0.8.6-pg16-bookworm"
 CONTAINER = os.environ.get("ASSETBLOCK_CODE_INDEX_CONTAINER", "assetblock-code-index")
 VOLUME = os.environ.get("ASSETBLOCK_CODE_INDEX_VOLUME", "assetblock-code-index-data")
 BIND = "127.0.0.1:55433:5432"
+# Docker CLI calls never open a visible console window (no effect on Linux).
+NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0)
 
 
 def _redact(text):
@@ -27,7 +29,7 @@ def _redact(text):
 
 def _docker(argv, *, env=None, timeout=180):
     result = subprocess.run(["docker", *argv], env=env, capture_output=True, text=True,
-                            encoding="utf-8", timeout=timeout)
+                            encoding="utf-8", timeout=timeout, creationflags=NO_WINDOW)
     if result.returncode:
         detail = _redact((result.stderr or result.stdout or "")[-400:]).strip()
         raise ValueError("dedicated Docker operation failed" + (": " + detail if detail else ""))
@@ -76,7 +78,8 @@ def ensure_container():
 def _wait_ready():
     for _ in range(40):
         result = subprocess.run(["docker", "exec", CONTAINER, "pg_isready", "-U", ROLE, "-d", DATABASE],
-                                capture_output=True, text=True, encoding="utf-8", timeout=30)
+                                capture_output=True, text=True, encoding="utf-8", timeout=30,
+                                creationflags=NO_WINDOW)
         if result.returncode == 0:
             return True
         time.sleep(1)
@@ -91,7 +94,8 @@ def rotate_ephemeral_password():
     sql = "ALTER ROLE " + ROLE + " WITH PASSWORD " + quoted + ";\n"
     result = subprocess.run(["docker", "exec", "-i", CONTAINER, "psql", "-U", ROLE, "-d", DATABASE,
                              "-v", "ON_ERROR_STOP=1", "-q"],
-                            input=sql, capture_output=True, text=True, encoding="utf-8", timeout=30)
+                            input=sql, capture_output=True, text=True, encoding="utf-8", timeout=30,
+                            creationflags=NO_WINDOW)
     if result.returncode:
         detail = _redact((result.stderr or result.stdout or "")[-300:]).strip()
         raise ValueError("sandbox role password rotation failed" + (": " + detail if detail else ""))

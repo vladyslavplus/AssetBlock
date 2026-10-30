@@ -25,20 +25,19 @@ from scripts.code_analysis.contracts import LANGUAGES, canonical, digest
 from scripts.code_analysis.corpus import ARTIFACT_ROOT, write_once
 from scripts.code_analysis.evaluation import (cpu_rank, freeze_protocol, language_equal_mean, query_metrics,
                                               seed_macro, timed_percentiles)
-from scripts.code_analysis.representations import read_vectors
 from scripts.feasibility_pilot.paths import ARTIFACT_ROOT as PILOT_ROOT
 from scripts.feasibility_pilot.paths import ensure_inside
 
-from . import (checkpoint, config as config_module, endpoints, environment_probe, index_export, inputs, prepare,
-               retrieval_models, training, validation_plan)
+from . import (checkpoint, config as config_module, endpoints, environment_probe, index_export, index_verify, inputs,
+               prepare, retrieval_models, training, validation_plan)
+from .index_verify import (EVALUATION_SCHEMA, TRAINED_EPOCHS, corpus_identity, load_index,
+                           require_export_evidence)
 from .paths import RETRIEVAL_ROOT, run_dir
 
-EVAL_SCHEMA = "code-retrieval-evaluation-evidence-v1"
 SELECTION_SCHEMA = "code-retrieval-selection-v1"
 EVALUATION_EVIDENCE = "evaluation-evidence.json"
 SELECTION_FILE = "selection.json"
 MODEL_LABELS = ("E0", "E1", "E2", "E3")
-TRAINED_EPOCHS = {"E1": 1, "E2": 2, "E3": 3}
 WARMUP_QUERIES = 3
 TIMED_MINIMUM = 30
 DOLOS_TIMEOUT_SECONDS = 3600
@@ -60,69 +59,8 @@ PRIMARY = "PRIMARY"
 
 
 def _protocol():
-    protocol = inputs.parse_json(index_export.PROTOCOL_PATH.read_bytes(), "evaluation protocol")
+    protocol = inputs.parse_json(index_verify.PROTOCOL_PATH.read_bytes(), "evaluation protocol")
     return protocol, freeze_protocol(protocol)["sha256"]
-
-
-def _corpus(loaded, config_loaded, plan, prepare_binding):
-    return {"inputsManifestSha256": loaded["manifestSha256"], "prepareRunId": prepare_binding["runId"],
-            "validationReportSha256": plan["reportSha256"], "protocolSha256": _protocol()[1],
-            "configSha256": config_loaded["configSha256"]}
-
-
-def require_export_evidence(export_evidence, *, index_run_id, train_run_id, expectations, corpus):
-    """Refuse indexes whose export evidence does not describe this index run, training run and corpus."""
-    if export_evidence.get("schema") != index_export.EXPORT_SCHEMA or export_evidence.get("runId") != index_run_id:
-        raise ValueError("export evidence schema or run id mismatch")
-    if export_evidence.get("outcome") != "SUCCEEDED":
-        raise ValueError("index export did not succeed; evaluation refuses its indexes")
-    identity = export_evidence.get("identity") or {}
-    if identity.get("trainRunId") != train_run_id or identity.get("trainingEvidenceSha256") != expectations["evidenceSha256"]:
-        raise ValueError("export evidence was written for another training run")
-    for key, value in corpus.items():
-        if identity.get(key) != value:
-            raise ValueError("export evidence identity drift: " + key)
-
-
-def load_index(index_run, label, plan, corpus, model_key_value, export_evidence):
-    """Verify one index: export evidence, model identity, index and gallery keys, file sizes and digests."""
-    directory = run_dir(index_run) / index_export.INDEX_DIR / label
-    manifest = inputs.parse_json(inputs.read_bytes(directory / index_export.MANIFEST_NAME, inputs.MAX_ARTIFACT_BYTES),
-                                 "index manifest")
-    if manifest.get("schema") != index_export.INDEX_SCHEMA or manifest.get("label") != label:
-        raise ValueError("index manifest schema or label mismatch: " + label)
-    if manifest.get("partition") != "validation":
-        raise ValueError("index is not a validation-partition index")
-    exported = export_evidence["models"].get(label) or {}
-    if manifest["modelKey"] != exported.get("modelKey") or manifest["languages"] != exported.get("languages"):
-        raise ValueError("index manifest differs from the export evidence: " + label)
-    if retrieval_models.model_key(manifest["identity"]) != manifest["modelKey"]:
-        raise ValueError("index model key does not match its identity: " + label)
-    if manifest["modelKey"] != model_key_value:
-        raise ValueError("mixed identity: loaded model differs from the index model: " + label)
-    if manifest["corpus"] != corpus:
-        raise ValueError("index corpus identity differs from this evaluation: " + label)
-    indexes = {}
-    for language in LANGUAGES:
-        info = manifest["languages"][language]
-        gallery = plan["galleries"][language]
-        if index_export.gallery_key(gallery) != info["galleryKey"]:
-            raise ValueError("index gallery differs from the admitted gallery: " + label + "/" + language)
-        if index_export.index_key(manifest["modelKey"], gallery, corpus) != info["indexKey"]:
-            raise ValueError("index key does not recompute: " + label + "/" + language)
-        raw = inputs.read_bytes(directory / (language + ".fp32le"), inputs.MAX_ARTIFACT_BYTES)
-        if len(raw) != info["vectorBytes"] or digest(raw) != info["vectorSha256"]:
-            raise ValueError("index vector bytes drift: " + label + "/" + language)
-        chunks_raw = inputs.read_bytes(directory / (language + ".chunks.json"), inputs.MAX_ARTIFACT_BYTES)
-        if len(chunks_raw) != info["chunkManifestBytes"] or digest(chunks_raw) != info["chunkManifestSha256"]:
-            raise ValueError("index chunk manifest drift: " + label + "/" + language)
-        chunk_rows = inputs.parse_json(chunks_raw, "chunk manifest")
-        if len(chunk_rows) != info["rows"]:
-            raise ValueError("index row count drift: " + label + "/" + language)
-        vectors = read_vectors(raw, info["rows"])
-        indexes[language] = [{"fileId": row["fileId"], "vector": vector}
-                             for row, vector in zip(chunk_rows, vectors)]
-    return manifest, indexes
 
 
 def query_vectors_for(entry, plan, sources_root, device):
@@ -341,7 +279,8 @@ def choose_epoch(scores):
             continue
         best, row = scores[chosen], scores[label]
         mrr_gap = row["mrr"] - best["mrr"]
-        if mrr_gap > TIE_TOLERANCE or (abs(mrr_gap) <= TIE_TOLERANCE and row["recall"] - best["recall"] > TIE_TOLERANCE):
+        if mrr_gap > TIE_TOLERANCE or (abs(mrr_gap) <= TIE_TOLERANCE
+                                       and row["recall"] - best["recall"] > TIE_TOLERANCE):
             chosen = label
     return chosen
 
@@ -352,17 +291,17 @@ def run(*, run_id, inputs_path, config_path, prepare_run_id, train_run_id, index
     index = prepare.reviewed_index(loaded)
     prepare_binding, triplets, prepare_payload = training.admitted_binding(loaded, config_loaded, prepare_run_id, index)
     expectations = checkpoint.load_training_evidence(run_dir(train_run_id))
-    checkpoint.require_training_binding(expectations, loaded=loaded, config_loaded=config_loaded,
-                                        prepare_binding=prepare_binding)
+    index_verify.require_training_binding(expectations, loaded=loaded, config_loaded=config_loaded,
+                                          prepare_binding=prepare_binding)
     plan = validation_plan.build(loaded, index, prepare_payload["validationQueries"])
     reference_raw = inputs.read_bytes(reference_probe_path, inputs.MAX_ARTIFACT_BYTES)
     reference_probe = inputs.parse_json(reference_raw, "reference probe")
     live_probe = environment_probe.build_probe(triplets, loaded["sourcesRoot"])
     comparison = environment_probe.compare(reference_probe, live_probe)
     export_evidence = inputs.parse_json(
-        inputs.read_bytes(run_dir(index_run_id) / index_export.EXPORT_EVIDENCE, inputs.MAX_ARTIFACT_BYTES),
+        inputs.read_bytes(run_dir(index_run_id) / index_verify.EXPORT_EVIDENCE, inputs.MAX_ARTIFACT_BYTES),
         "export evidence")
-    corpus = _corpus(loaded, config_loaded, plan, prepare_binding)
+    corpus = corpus_identity(loaded, config_loaded, plan, prepare_binding)
     require_export_evidence(export_evidence, index_run_id=index_run_id, train_run_id=train_run_id,
                             expectations=expectations, corpus=corpus)
     device = checkpoint.cuda_device()
@@ -389,7 +328,7 @@ def _evaluate(*, run_id, target, loaded, plan, prepare_binding, expectations, tr
         for label in MODEL_LABELS:
             entry = retrieval_models.frozen_model(device) if label == "E0" else \
                 retrieval_models.trained_model(run_dir(train_run_id), TRAINED_EPOCHS[label], expectations, device)
-            model_key_value = retrieval_models.model_key(entry["identity"])
+            model_key_value = index_verify.model_key(entry["identity"])
             manifest, indexed = load_index(index_run_id, label, plan, corpus, model_key_value, export_evidence)
             indexes_seen[label] = {"modelKey": model_key_value,
                                    "indexKeys": {language: manifest["languages"][language]["indexKey"]
@@ -438,7 +377,7 @@ def _evaluate(*, run_id, target, loaded, plan, prepare_binding, expectations, tr
     except Exception as exc:  # evaluation evidence records every failed run
         failure = ("FAILED_ERROR", type(exc).__name__ + ": " + str(exc))
     outcome = "SUCCEEDED" if failure is None else failure[0]
-    evidence = {"schema": EVAL_SCHEMA, "runId": run_id, "outcome": outcome,
+    evidence = {"schema": EVALUATION_SCHEMA, "runId": run_id, "outcome": outcome,
                 "reason": None if failure is None else failure[1], "Purpose": "CODE_RETRIEVAL_VALIDATION_EVALUATION",
                 "CanAuthorizePublication": False, "SecurityEvidence": "NOT_RUN",
                 "identity": {**corpus, "prepare": prepare_binding, "trainRunId": train_run_id,
@@ -450,9 +389,12 @@ def _evaluate(*, run_id, target, loaded, plan, prepare_binding, expectations, tr
                     "status", "reasons", "rawOutputSha256", "boundPairCount", "k", "window")},
                 "tables": {label: results[label]["table"] for label in results},
                 "denominators": {label: {"queries": len(results[label]["records"]),
-                                         "galleryCounts": _range([row["galleryCount"] for row in results[label]["records"]]),
-                                         "relevantCounts": _range([row["relevantCount"] for row in results[label]["records"]]),
-                                         "unknownExcluded": sum(row["unknownExcludedCount"] for row in results[label]["records"])}
+                                         "galleryCounts": _range([row["galleryCount"]
+                                                                  for row in results[label]["records"]]),
+                                         "relevantCounts": _range([row["relevantCount"]
+                                                                   for row in results[label]["records"]]),
+                                         "unknownExcluded": sum(row["unknownExcludedCount"]
+                                                                for row in results[label]["records"])}
                                   for label in results},
                 "falsePositivesTop20": {label: _sum_fp(results[label]["records"]) for label in results},
                 "pairedDeltas": paired_deltas({label: results[label]["records"] for label in results},

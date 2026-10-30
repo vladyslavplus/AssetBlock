@@ -15,29 +15,18 @@ import torch
 from scripts.code_analysis.contracts import canonical, digest
 from scripts.code_analysis.corpus import write_once
 from scripts.code_analysis.frozen_encoder import encode_chunks
-from scripts.code_analysis.evaluation import freeze_protocol
 from scripts.code_analysis.representations import CHUNKING, mapped_chunks, vector_bytes
-from scripts.feasibility_pilot.paths import REPO_ROOT
 
 from . import checkpoint, config as config_module, environment_probe, inputs, prepare, retrieval_models, training
 from . import validation_plan
+from .index_verify import (EMBEDDING_DIMENSIONS, EXPORT_EVIDENCE, EXPORT_SCHEMA, INDEX_DIR, INDEX_SCHEMA, MANIFEST_NAME,
+                           gallery_key, index_key, model_key, protocol_sha256, require_training_binding)
 from .paths import RETRIEVAL_ROOT, run_dir
 
-INDEX_SCHEMA = "code-retrieval-validation-index-v1"
-EXPORT_SCHEMA = "code-retrieval-export-index-evidence-v1"
-PROTOCOL_PATH = REPO_ROOT / "scripts" / "code_analysis" / "config" / "evaluation-protocol.json"
-INDEX_DIR = "index"
-EXPORT_EVIDENCE = "export-evidence.json"
 REFERENCE_PROBE = "reference-probe.json"
 LIVE_PROBE = "live-probe.json"
 LIKE_FOR_LIKE_SAMPLE = 16
 LIKE_FOR_LIKE_TOLERANCE = 1e-6
-MANIFEST_NAME = "index-manifest.json"
-
-
-def protocol_sha256():
-    raw = PROTOCOL_PATH.read_bytes()
-    return freeze_protocol(inputs.parse_json(raw, "evaluation protocol"))["sha256"]
 
 
 def gallery_windows(rows, tokenizer):
@@ -60,15 +49,6 @@ def gallery_windows(rows, tokenizer):
     return chunk_rows, file_rows
 
 
-def gallery_key(gallery):
-    return digest(canonical([[row["fileId"], row["sha256"]] for row in gallery]))
-
-
-def index_key(model_key, gallery, corpus_identity):
-    return digest(canonical([model_key, "validation", [[row["fileId"], row["sha256"]] for row in gallery],
-                             corpus_identity]))
-
-
 def write_index(run, label, identity, galleries_by_language, encoded, corpus_identity):
     """Write-once per-model directory: FP32 vectors, chunk manifests and an index manifest."""
     directory = run / INDEX_DIR / label
@@ -89,7 +69,7 @@ def write_index(run, label, identity, galleries_by_language, encoded, corpus_ide
             "embedSeconds": seconds}
     manifest = {"schema": INDEX_SCHEMA, "label": label, "kind": identity["kind"], "partition": "validation",
                 "modelKey": identity["modelKey"], "identity": identity["fields"],
-                "dimension": checkpoint.EMBEDDING_DIMENSIONS,
+                "dimension": EMBEDDING_DIMENSIONS,
                 "chunking": CHUNKING, "languages": languages, "corpus": corpus_identity}
     write_once(directory / MANIFEST_NAME, canonical(manifest), RETRIEVAL_ROOT)
     return manifest
@@ -123,8 +103,8 @@ def run(*, run_id, inputs_path, config_path, prepare_run_id, train_run_id, refer
     index = prepare.reviewed_index(loaded)
     prepare_binding, triplets, prepare_payload = training.admitted_binding(loaded, config_loaded, prepare_run_id, index)
     expectations = checkpoint.load_training_evidence(run_dir(train_run_id))
-    checkpoint.require_training_binding(expectations, loaded=loaded, config_loaded=config_loaded,
-                                        prepare_binding=prepare_binding)
+    require_training_binding(expectations, loaded=loaded, config_loaded=config_loaded,
+                             prepare_binding=prepare_binding)
     reference_raw = inputs.read_bytes(reference_probe_path, inputs.MAX_ARTIFACT_BYTES)
     reference_probe = inputs.parse_json(reference_raw, "reference probe")
     plan = validation_plan.build(loaded, index, prepare_payload["validationQueries"])
@@ -154,7 +134,7 @@ def _export(*, run_id, target, loaded, config_loaded, plan, prepare_binding, exp
         for label in ["E0", "E1", "E2", "E3"]:
             entry = retrieval_models.frozen_model(device) if label == "E0" else \
                 retrieval_models.trained_model(run_dir(train_run_id), int(label[1]), expectations, device)
-            identity = {"modelKey": retrieval_models.model_key(entry["identity"]), "kind": entry["identity"]["kind"],
+            identity = {"modelKey": model_key(entry["identity"]), "kind": entry["identity"]["kind"],
                         "fields": entry["identity"]}
             torch.cuda.reset_peak_memory_stats(device)
             encoded = encode_galleries(entry, galleries, device)

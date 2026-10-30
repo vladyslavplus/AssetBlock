@@ -26,6 +26,7 @@ from scripts.code_analysis.representations import read_vectors, vector_bytes
 from scripts.feasibility_pilot.paths import REPO_ROOT, ensure_inside
 
 from . import inputs
+from .index_verify import EMBEDDING_DIMENSIONS
 
 CHECKPOINT_SCHEMA = "code-retrieval-trained-checkpoint-v1"
 REFERENCE_SCHEMA = "code-retrieval-eval-reference-v1"
@@ -39,7 +40,6 @@ UPSTREAM_DIR = MODEL_ROOT / "unixcoder-base-nine"
 TRUSTED_IDENTITY = REPO_ROOT / "scripts" / "feasibility_pilot" / "config" / "model-trusted-identity.json"
 WEIGHTS = "model.safetensors"
 SUPPORT_FILES = ("config.json", "vocab.json", "merges.txt", "tokenizer_config.json", "special_tokens_map.json")
-EMBEDDING_DIMENSIONS = 768
 RELOAD_TOLERANCE = 1e-5
 SELECTION = "PENDING_VALIDATION"
 MANIFEST_NAME = "checkpoint-manifest.json"
@@ -211,21 +211,6 @@ def load_training_evidence(run):
                                               "prepare": identity["prepare"]}}
     return {"schema": EXPECTATIONS_SCHEMA, "runId": run.name, "evidenceSha256": digest(raw),
             "identity": identity, "epochs": epochs}
-
-
-def require_training_binding(expectations, *, loaded, config_loaded, prepare_binding):
-    """Refuse trained models whose training identity differs from the inputs, config and prepare run now bound."""
-    identity = expectations["identity"]
-    prepare = identity.get("prepare") or {}
-    compared = [("inputsManifestSha256", identity.get("inputsManifestSha256"), loaded["manifestSha256"]),
-                ("configSha256", identity.get("configSha256"), config_loaded["configSha256"])]
-    if "configByteSha256" in identity:
-        compared.append(("configByteSha256", identity["configByteSha256"], config_loaded["byteSha256"]))
-    for key in ("runId", "prepareDataSha256", "trainingAdmissionSha256", "admittedTriplets"):
-        compared.append(("prepare." + key, prepare.get(key), prepare_binding[key]))
-    for name, found, current in compared:
-        if found != current:
-            raise ValueError("training evidence binding drift: " + name)
 
 
 def load_reload_expectations(path, run_id):
