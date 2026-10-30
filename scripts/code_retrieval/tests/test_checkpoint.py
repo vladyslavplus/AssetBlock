@@ -29,7 +29,7 @@ class CheckpointTests(unittest.TestCase):
         self.upstream = tiny.write_upstream(self.support)
         self.device = torch.device("cpu")
         self.run = self.write_run("fixture-run", seed=0)
-        self.expectations = checkpoint.load_training_evidence(self.run)
+        self.expectations = index_verify.load_training_evidence(self.run)
 
     def test_training_binding_refuses_each_field_drift_and_accepts_the_bound_run(self):
         expectations = {"identity": {
@@ -82,14 +82,14 @@ class CheckpointTests(unittest.TestCase):
                       "frozenStateSha256": "0" * 64}
             checkpoint.write_epoch_checkpoint(epoch_dir, root=self.root, model=model, upstream=self.upstream,
                                               fields=fields, support_dir=self.support)
-            manifest_bytes = (epoch_dir / checkpoint.MANIFEST_NAME).read_bytes()
+            manifest_bytes = (epoch_dir / index_verify.CHECKPOINT_MANIFEST_NAME).read_bytes()
             epochs.append({"epoch": number, "checkpointManifestSha256": digest(manifest_bytes)})
-        evidence = {"schema": checkpoint.TRAIN_EVIDENCE_SCHEMA, "runId": run_name, "outcome": "SUCCEEDED",
+        evidence = {"schema": index_verify.TRAIN_EVIDENCE_SCHEMA, "runId": run_name, "outcome": "SUCCEEDED",
                     "CanAuthorizePublication": False,
-                    "selection": {"selectedForUse": False, "selection": checkpoint.SELECTION},
+                    "selection": {"selectedForUse": False, "selection": index_verify.SELECTION},
                     "identity": {key: identity[key] for key in ("configSha256", "inputsManifestSha256", "prepare")},
                     "epochs": epochs}
-        checkpoint.write_once(run / checkpoint.TRAIN_EVIDENCE_NAME, canonical(evidence), self.root)
+        checkpoint.write_once(run / index_verify.TRAIN_EVIDENCE_NAME, canonical(evidence), self.root)
         return run
 
     def expected(self, number, expectations=None):
@@ -131,7 +131,7 @@ class CheckpointTests(unittest.TestCase):
             self.load(3)
 
     def test_edited_but_otherwise_consistent_manifest_is_refused(self):
-        path = self.run / "epoch-2" / checkpoint.MANIFEST_NAME
+        path = self.run / "epoch-2" / index_verify.CHECKPOINT_MANIFEST_NAME
         manifest = json.loads(path.read_text(encoding="utf-8"))
         manifest["fullStateSha256"] = "0" * 64
         path.write_bytes(canonical(manifest))
@@ -147,7 +147,7 @@ class CheckpointTests(unittest.TestCase):
                                     expected_identity=wrong)
 
     def test_tampered_weights_are_refused(self):
-        weights = self.run / "epoch-1" / "checkpoint" / checkpoint.WEIGHTS
+        weights = self.run / "epoch-1" / "checkpoint" / index_verify.WEIGHTS
         raw = bytearray(weights.read_bytes())
         raw[-1] ^= 0x01
         weights.write_bytes(bytes(raw))
@@ -189,12 +189,12 @@ class CheckpointTests(unittest.TestCase):
             checkpoint._check_encoder(model, "0" * 64)
 
     def test_training_evidence_must_be_a_succeeded_publication_free_record(self):
-        path = self.run / checkpoint.TRAIN_EVIDENCE_NAME
+        path = self.run / index_verify.TRAIN_EVIDENCE_NAME
         evidence = json.loads(path.read_text(encoding="utf-8"))
         evidence["outcome"] = "FAILED_RELOAD"
         path.write_bytes(canonical(evidence))
         with self.assertRaisesRegex(ValueError, "SUCCEEDED"):
-            checkpoint.load_training_evidence(self.run)
+            index_verify.load_training_evidence(self.run)
 
     def test_reference_from_another_model_is_detected(self):
         epoch_dir = self.run / "epoch-1"
@@ -225,18 +225,18 @@ class CheckpointTests(unittest.TestCase):
                                    pad_id=1, device=self.device)
         checkpoint.reload_epoch(epoch_dir, root=self.root, upstream=self.upstream, device=self.device,
                                 expected=self.expected(1))
-        before = (epoch_dir / checkpoint.RELOAD_NAME).read_bytes()
+        before = (epoch_dir / index_verify.RELOAD_NAME).read_bytes()
         checkpoint.reload_epoch(epoch_dir, root=self.root, upstream=self.upstream, device=self.device,
-                                expected=self.expected(1), check_name=checkpoint.RELOAD_RECHECK_NAME)
-        self.assertTrue((epoch_dir / checkpoint.RELOAD_RECHECK_NAME).is_file())
-        self.assertEqual((epoch_dir / checkpoint.RELOAD_NAME).read_bytes(), before)
+                                expected=self.expected(1), check_name=index_verify.RELOAD_RECHECK_NAME)
+        self.assertTrue((epoch_dir / index_verify.RELOAD_RECHECK_NAME).is_file())
+        self.assertEqual((epoch_dir / index_verify.RELOAD_NAME).read_bytes(), before)
 
     def test_tampered_reference_bytes_are_refused(self):
         epoch_dir = self.run / "epoch-1"
         model = tiny.build_model(self.support, seed=1)
         checkpoint.write_reference(epoch_dir, root=self.root, model=model, chunk_ids=REFERENCE_IDS,
                                    pad_id=1, device=self.device)
-        path = epoch_dir / checkpoint.REFERENCE_NAME
+        path = epoch_dir / index_verify.REFERENCE_NAME
         record = json.loads(path.read_text(encoding="utf-8"))
         record["vectorSha256"] = "0" * 64
         path.write_text(json.dumps(record), encoding="utf-8")

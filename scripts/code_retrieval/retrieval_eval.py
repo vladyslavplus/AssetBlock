@@ -28,16 +28,13 @@ from scripts.code_analysis.evaluation import (cpu_rank, freeze_protocol, languag
 from scripts.feasibility_pilot.paths import ARTIFACT_ROOT as PILOT_ROOT
 from scripts.feasibility_pilot.paths import ensure_inside
 
-from . import (checkpoint, config as config_module, endpoints, environment_probe, index_export, index_verify, inputs,
-               prepare, retrieval_models, training, validation_plan)
-from .index_verify import (EVALUATION_SCHEMA, TRAINED_EPOCHS, corpus_identity, load_index,
-                           require_export_evidence)
+from . import (checkpoint, config as config_module, endpoints, environment_probe, index_verify, inputs, prepare,
+               retrieval_models, training, validation_plan)
+from .index_verify import (EVALUATION_EVIDENCE, EVALUATION_SCHEMA, MODEL_LABELS, SELECTION_FILE, TRAINED_EPOCHS,
+                           corpus_identity, load_index, require_export_evidence)
 from .paths import RETRIEVAL_ROOT, run_dir
 
 SELECTION_SCHEMA = "code-retrieval-selection-v1"
-EVALUATION_EVIDENCE = "evaluation-evidence.json"
-SELECTION_FILE = "selection.json"
-MODEL_LABELS = ("E0", "E1", "E2", "E3")
 WARMUP_QUERIES = 3
 TIMED_MINIMUM = 30
 DOLOS_TIMEOUT_SECONDS = 3600
@@ -290,7 +287,7 @@ def run(*, run_id, inputs_path, config_path, prepare_run_id, train_run_id, index
     config_loaded = config_module.load(config_path)
     index = prepare.reviewed_index(loaded)
     prepare_binding, triplets, prepare_payload = training.admitted_binding(loaded, config_loaded, prepare_run_id, index)
-    expectations = checkpoint.load_training_evidence(run_dir(train_run_id))
+    expectations = index_verify.load_training_evidence(run_dir(train_run_id))
     index_verify.require_training_binding(expectations, loaded=loaded, config_loaded=config_loaded,
                                           prepare_binding=prepare_binding)
     plan = validation_plan.build(loaded, index, prepare_payload["validationQueries"])
@@ -322,8 +319,8 @@ def _evaluate(*, run_id, target, loaded, plan, prepare_binding, expectations, tr
     results, failure, token, indexes_seen, measurements = {}, None, None, {}, {}
     selection = None
     try:
-        write_once(target / index_export.REFERENCE_PROBE, reference_raw, RETRIEVAL_ROOT)
-        write_once(target / index_export.LIVE_PROBE, canonical(live_probe), RETRIEVAL_ROOT)
+        write_once(target / index_verify.REFERENCE_PROBE, reference_raw, RETRIEVAL_ROOT)
+        write_once(target / index_verify.LIVE_PROBE, canonical(live_probe), RETRIEVAL_ROOT)
         token = token_branch(run_id, plan, sources_root, protocol)
         for label in MODEL_LABELS:
             entry = retrieval_models.frozen_model(device) if label == "E0" else \

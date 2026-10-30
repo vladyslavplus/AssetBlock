@@ -31,23 +31,15 @@ from scripts.code_analysis.index_writer import prepare_payload, publish_index
 from scripts.code_analysis.representations import vector_bytes
 from scripts.feasibility_pilot.paths import REPO_ROOT
 
-from . import admission, config as config_module, index_verify, inputs, prepare
-from .index_verify import EMBEDDING_DIMENSIONS, EVALUATION_SCHEMA, TRAINED_EPOCHS
+from . import config as config_module, index_verify, inputs, prepare
+from .index_verify import (DB_AGREEMENT_NAME, DB_EVIDENCE_NAME, DB_EVIDENCE_SCHEMA, EMBEDDING_DIMENSIONS,
+                           EVALUATION_EVIDENCE, MODEL_LABELS, QUERY_DIR, QUERY_MANIFEST, QUERY_SCHEMA, TRAINED_EPOCHS,
+                           query_vector_files, require_query_manifest)
 from .paths import RETRIEVAL_ROOT, run_dir
 
 STAGES = ("query-vectors", "publish-and-rank")
-EVIDENCE_SCHEMA = "code-retrieval-db-check-evidence-v1"
-QUERY_SCHEMA = "code-retrieval-query-vectors-v1"
 PURPOSE = "CODE_RETRIEVAL_DB_INDEX_CHECK"
-QUERY_DIR = "query-vectors"
-QUERY_MANIFEST = "manifest.json"
-EVIDENCE = "db-check-evidence.json"
-AGREEMENT = "db-agreement.json"
 FAILURE = "query-vectors-failure.json"
-PREPARE_DATA = "prepare-data.json"
-TRAIN_EVIDENCE = "train-evidence.json"
-EVALUATION_EVIDENCE = "evaluation-evidence.json"
-MODEL_LABELS = ("E0", "E1", "E2", "E3")
 TOP = 40
 WARMUP = 3
 TIE_TOLERANCE = 1e-5
@@ -68,38 +60,8 @@ def _safe(text):
 
 def failure_evidence(run_id, reason):
     """Failed evidence: never a SUCCEEDED outcome, never a DSN."""
-    return {"schema": EVIDENCE_SCHEMA, "runId": run_id, "outcome": "FAILED_ERROR", "reason": _safe(reason),
+    return {"schema": DB_EVIDENCE_SCHEMA, "runId": run_id, "outcome": "FAILED_ERROR", "reason": _safe(reason),
             "Purpose": PURPOSE, "CanAuthorizePublication": False, "SecurityEvidence": "NOT_RUN"}
-
-
-def _verified_evaluation(raw, *, train_run_id, index_run_id, prepare_binding, corpus):
-    """The evaluation evidence must describe the same training run, index run, prepare run and corpus."""
-    evaluation = inputs.parse_json(raw, "evaluation evidence")
-    if evaluation.get("schema") != EVALUATION_SCHEMA or evaluation.get("outcome") != "SUCCEEDED":
-        raise ValueError("evaluation evidence is not a SUCCEEDED evaluation")
-    identity = evaluation.get("identity") or {}
-    if identity.get("trainRunId") != train_run_id or identity.get("indexRunId") != index_run_id:
-        raise ValueError("evaluation evidence was written for another training or index run")
-    if identity.get("prepare") != prepare_binding:
-        raise ValueError("evaluation evidence prepare binding differs")
-    for key, value in corpus.items():
-        if identity.get(key) != value:
-            raise ValueError("evaluation evidence identity drift: " + key)
-    return evaluation
-
-
-def _prepare_binding(raw, prepare_run_id):
-    """Binding from the admitted prepare-data bytes; the same fields training.bind_prepare_run returns."""
-    payload = inputs.parse_json(raw, PREPARE_DATA)
-    if payload.get("schema") != prepare.SCHEMA or payload.get("runId") != prepare_run_id:
-        raise ValueError("prepare-data schema or run id mismatch")
-    training = payload.get("trainingAdmission")
-    if payload.get("status") != admission.ADMITTED or not isinstance(training, dict) \
-            or training.get("status") != admission.ADMITTED:
-        raise ValueError("prepare run is not ADMITTED")
-    return {"runId": prepare_run_id, "prepareDataSha256": digest(raw), "prepareDataBytes": len(raw),
-            "trainingAdmissionSha256": digest(canonical(training)),
-            "admittedTriplets": training["totals"]["admittedTriplets"]}, payload
 
 
 def _fragment(file_row, index_run_id):
@@ -249,39 +211,11 @@ def _summary(records):
 
 
 def _query_files(target, manifest):
-    """Read every query-vector file and bind it to the manifest: hash, bytes, whole vectors and window count."""
-    if manifest.get("schema") != QUERY_SCHEMA or manifest.get("CanAuthorizePublication") is not False:
-        raise ValueError("query-vector manifest schema mismatch")
-    windows = sum(query["windows"] for query in manifest["queries"])
-    vectors = {}
-    for label in MODEL_LABELS:
-        raw = inputs.read_bytes(target / QUERY_DIR / (label + ".fp32le"), MAX_BYTES)
-        info = manifest["labels"][label]
-        if len(raw) != info["bytes"] or digest(raw) != info["sha256"]:
-            raise ValueError("query vector bytes drift: " + label)
-        if len(raw) % (EMBEDDING_DIMENSIONS * 4):
-            raise ValueError("query vector file is not a whole number of vectors: " + label)
-        vectors[label] = [raw[offset:offset + EMBEDDING_DIMENSIONS * 4]
-                          for offset in range(0, len(raw), EMBEDDING_DIMENSIONS * 4)]
-        if len(vectors[label]) != info["vectors"] or len(vectors[label]) != windows:
-            raise ValueError("query vector count differs from the manifest windows: " + label)
-    return vectors
-
-
-def require_query_manifest(query_manifest, *, run_id, prepare_binding, corpus, evidence_digests, query_counts):
-    """The query manifest must describe this run, prepare run, corpus and evidence, with the evaluated query counts."""
-    if query_manifest.get("runId") != run_id:
-        raise ValueError("query manifest run id differs from this run")
-    if query_manifest.get("prepare") != prepare_binding:
-        raise ValueError("query manifest prepare binding differs from prepare-data.json")
-    if query_manifest.get("corpus") != corpus:
-        raise ValueError("query manifest corpus identity differs from this run's inputs")
-    for field, value in evidence_digests.items():
-        if query_manifest.get(field) != value:
-            raise ValueError("query manifest binding differs: " + field)
-    for label in MODEL_LABELS:
-        if query_counts.get(label) != len(query_manifest["queries"]):
-            raise ValueError("query count differs from the evaluation evidence: " + label)
+    """Query-vector rows per label, from the files that index_verify.query_vector_files has checked."""
+    raw_by_label = query_vector_files(target / QUERY_DIR, manifest, MAX_BYTES)
+    return {label: [raw[offset:offset + EMBEDDING_DIMENSIONS * 4]
+                    for offset in range(0, len(raw), EMBEDDING_DIMENSIONS * 4)]
+            for label, raw in raw_by_label.items()}
 
 
 def _float_vectors(raw_rows):
@@ -301,7 +235,7 @@ def query_vectors_stage(*, run_id, inputs_path, config_path, prepare_run_id, tra
     index = prepare.reviewed_index(loaded)
     prepare_binding, _triplets, prepare_payload = training.admitted_binding(loaded, config_loaded, prepare_run_id,
                                                                             index)
-    expectations = checkpoint.load_training_evidence(run_dir(train_run_id))
+    expectations = index_verify.load_training_evidence(run_dir(train_run_id))
     index_verify.require_training_binding(expectations, loaded=loaded, config_loaded=config_loaded,
                                           prepare_binding=prepare_binding)
     plan = validation_plan.build(loaded, index, prepare_payload["validationQueries"])
@@ -311,8 +245,9 @@ def query_vectors_stage(*, run_id, inputs_path, config_path, prepare_run_id, tra
     index_verify.require_export_evidence(export_evidence, index_run_id=index_run_id, train_run_id=train_run_id,
                                          expectations=expectations, corpus=corpus)
     evaluation_raw = inputs.read_bytes(run_dir(evaluation_run_id) / EVALUATION_EVIDENCE, MAX_BYTES)
-    evaluation = _verified_evaluation(evaluation_raw, train_run_id=train_run_id, index_run_id=index_run_id,
-                                      prepare_binding=prepare_binding, corpus=corpus)
+    evaluation = index_verify.verified_evaluation(evaluation_raw, train_run_id=train_run_id,
+                                                  index_run_id=index_run_id, prepare_binding=prepare_binding,
+                                                  corpus=corpus)
     target = run_dir(run_id)
     target.mkdir(parents=True, exist_ok=False)
     flat_queries = [query for language in LANGUAGES for query in plan["queries"][language]]
@@ -376,9 +311,9 @@ def publish_and_rank_stage(*, run_id, inputs_path, config_path, prepare_run_id, 
     if review is None:
         raise ValueError("publishing requires --runtime-review with root-approval.json, complete-package.json, "
                          "scope-supplement.json and wheels/")
-    prepare_binding, prepare_payload = _prepare_binding(
-        inputs.read_bytes(run_dir(prepare_run_id) / PREPARE_DATA, MAX_BYTES), prepare_run_id)
-    train_raw = inputs.read_bytes(run_dir(train_run_id) / TRAIN_EVIDENCE, MAX_BYTES)
+    prepare_binding, prepare_payload = index_verify.prepare_binding_from_bytes(
+        inputs.read_bytes(run_dir(prepare_run_id) / index_verify.PREPARE_DATA, MAX_BYTES), prepare_run_id)
+    train_raw = inputs.read_bytes(run_dir(train_run_id) / index_verify.TRAIN_EVIDENCE_NAME, MAX_BYTES)
     train_evidence = inputs.parse_json(train_raw, "training evidence")
     if train_evidence.get("outcome") != "SUCCEEDED":
         raise ValueError("training evidence is not SUCCEEDED")
@@ -396,8 +331,9 @@ def publish_and_rank_stage(*, run_id, inputs_path, config_path, prepare_run_id, 
     if export_evidence["identity"]["prepare"] != prepare_binding:
         raise ValueError("export evidence prepare binding differs from prepare-data.json")
     evaluation_raw = inputs.read_bytes(run_dir(evaluation_run_id) / EVALUATION_EVIDENCE, MAX_BYTES)
-    evaluation = _verified_evaluation(evaluation_raw, train_run_id=train_run_id, index_run_id=index_run_id,
-                                      prepare_binding=prepare_binding, corpus=corpus)
+    evaluation = index_verify.verified_evaluation(evaluation_raw, train_run_id=train_run_id,
+                                                  index_run_id=index_run_id, prepare_binding=prepare_binding,
+                                                  corpus=corpus)
     denominators = evaluation.get("denominators") or {}
     require_query_manifest(
         query_manifest, run_id=run_id, prepare_binding=prepare_binding, corpus=corpus,
@@ -472,8 +408,8 @@ def publish_and_rank_stage(*, run_id, inputs_path, config_path, prepare_run_id, 
             agreement[label]["overall"] = _summary(records_by_label[label])
         latency = {label: {**timed_percentiles(timings[label][WARMUP:]), "warmupExcluded": WARMUP}
                    for label in MODEL_LABELS}
-        agreement_raw = canonical({"schema": EVIDENCE_SCHEMA, "runId": run_id, "records": records_by_label})
-        write_once(target / AGREEMENT, agreement_raw, RETRIEVAL_ROOT)
+        agreement_raw = canonical({"schema": DB_EVIDENCE_SCHEMA, "runId": run_id, "records": records_by_label})
+        write_once(target / DB_AGREEMENT_NAME, agreement_raw, RETRIEVAL_ROOT)
         with connection.cursor() as cursor:
             cursor.execute("SELECT current_setting('server_version')")
             server_version = cursor.fetchone()[0]
@@ -487,7 +423,7 @@ def publish_and_rank_stage(*, run_id, inputs_path, config_path, prepare_run_id, 
     if failure is not None:
         evidence = failure_evidence(run_id, failure)
     else:
-        evidence = {"schema": EVIDENCE_SCHEMA, "runId": run_id, "outcome": "SUCCEEDED", "reason": None,
+        evidence = {"schema": DB_EVIDENCE_SCHEMA, "runId": run_id, "outcome": "SUCCEEDED", "reason": None,
                     "Purpose": PURPOSE, "CanAuthorizePublication": False, "SecurityEvidence": "NOT_RUN",
                     "identity": {**corpus, "prepare": prepare_binding,
                                  "trainingEvidenceSha256": expectations["evidenceSha256"],
@@ -512,7 +448,7 @@ def publish_and_rank_stage(*, run_id, inputs_path, config_path, prepare_run_id, 
                                       "index files and query vectors and is used only for comparison"},
                     "environment": {"python": sys.executable, "psycopg": psycopg.__version__,
                                     "serverVersion": server_version}}
-    write_once(target / EVIDENCE, canonical(evidence), RETRIEVAL_ROOT)
+    write_once(target / DB_EVIDENCE_NAME, canonical(evidence), RETRIEVAL_ROOT)
     return {"command": "index-publish-check", "stage": "publish-and-rank", "runId": run_id,
             "outcome": evidence["outcome"], "directory": str(target)}
 
@@ -527,7 +463,7 @@ def run_stage(stage, **arguments):
         return publish_and_rank_stage(**arguments)
     except Exception as exc:  # every failed publish-and-rank run leaves failed evidence
         target = run_dir(arguments["run_id"])
-        write_once(target / EVIDENCE, canonical(failure_evidence(arguments["run_id"],
+        write_once(target / DB_EVIDENCE_NAME, canonical(failure_evidence(arguments["run_id"],
                                                                  type(exc).__name__ + ": " + str(exc))),
                    RETRIEVAL_ROOT)
         return {"command": "index-publish-check", "stage": "publish-and-rank", "runId": arguments["run_id"],

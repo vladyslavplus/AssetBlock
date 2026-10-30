@@ -9,7 +9,7 @@ from unittest import mock
 try:
     import torch
     from scripts.code_analysis.contracts import canonical
-    from scripts.code_retrieval import admission, checkpoint, inputs, training
+    from scripts.code_retrieval import admission, checkpoint, index_verify, inputs, training
     from scripts.code_retrieval.tests import _tiny_encoder as tiny
     TORCH_IMPORT_ERROR = None
 except ImportError as exc:  # torch-less interpreters skip the trained-encoder checks
@@ -264,7 +264,7 @@ class TrainingTests(unittest.TestCase):
                                   if role == inputs.SOURCE_MANIFEST else MEMBERSHIP), \
                 mock.patch.object(training.inputs, "read_bytes", return_value=raw), \
                 mock.patch.object(training.prepare, "membership_summary", return_value=MEMBERSHIP), \
-                mock.patch.object(checkpoint, "upstream_identity", return_value={"modelRevision": "rev"}), \
+                mock.patch.object(index_verify, "upstream_identity",return_value={"modelRevision": "rev"}), \
                 mock.patch.object(checkpoint, "load_upstream") as load_upstream:
             with self.assertRaisesRegex(ValueError, "configByteSha256"):
                 training.run(run_id="refused", inputs_path=self.root / "i.json", config_path=self.root / "c.json",
@@ -331,7 +331,8 @@ class TrainingTests(unittest.TestCase):
         loaded = {"manifestSha256": "a" * 64, "sourcesRoot": sources}
         config_loaded = {"config": {"seed": 42, "training": SETTINGS}, "configSha256": "b" * 64,
                          "byteSha256": "c" * 64, "protocolSha256": "d" * 64}
-        with mock.patch.object(checkpoint, "load_upstream", return_value=(tokenizer, model, load_info, self.upstream)), \
+        with mock.patch.object(checkpoint, "load_upstream",
+                               return_value=(tokenizer, model, load_info, self.upstream)), \
                 mock.patch.object(checkpoint, "UPSTREAM_DIR", self.support), \
                 mock.patch.object(training, "reload_in_fresh_process", side_effect=reload_side_effect,
                                   return_value=reload_code) as reload:

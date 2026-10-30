@@ -62,17 +62,17 @@ def query_manifest_fixture():
                "evaluationEvidenceSha256": h("evaluation")}
     manifest = {"runId": "run-fixture", "prepare": prepare_binding, "corpus": corpus, "queries": [{}, {}], **digests}
     kwargs = {"run_id": "run-fixture", "prepare_binding": prepare_binding, "corpus": corpus,
-              "evidence_digests": digests, "query_counts": {label: 2 for label in index_publish_check.MODEL_LABELS}}
+              "evidence_digests": digests, "query_counts": {label: 2 for label in index_verify.MODEL_LABELS}}
     return manifest, kwargs
 
 
 def query_manifest_files(target, raw, *, windows=1, vectors=None):
     """Write the same query-vector bytes for every label and return a manifest that binds them."""
-    directory = target / index_publish_check.QUERY_DIR
+    directory = target / index_verify.QUERY_DIR
     directory.mkdir(parents=True, exist_ok=True)
-    manifest = {"schema": index_publish_check.QUERY_SCHEMA, "CanAuthorizePublication": False,
+    manifest = {"schema": index_verify.QUERY_SCHEMA, "CanAuthorizePublication": False,
                 "queries": [{"windows": windows}], "labels": {}}
-    for label in index_publish_check.MODEL_LABELS:
+    for label in index_verify.MODEL_LABELS:
         (directory / (label + ".fp32le")).write_bytes(raw)
         manifest["labels"][label] = {"bytes": len(raw), "sha256": digest(raw),
                                      "vectors": len(raw) // (DIM * 4) if vectors is None else vectors}
@@ -248,7 +248,7 @@ class PublishCheckTests(unittest.TestCase):
                     mock.patch.object(index_publish_check, "publish_and_rank_stage",
                                       side_effect=ValueError("runtime review missing")):
                 result = index_publish_check.run_stage("publish-and-rank", **arguments)
-            text = (root / "run-fixture" / index_publish_check.EVIDENCE).read_text(encoding="utf-8")
+            text = (root / "run-fixture" / index_verify.DB_EVIDENCE_NAME).read_text(encoding="utf-8")
             evidence = json.loads(text)
         self.assertEqual(result["outcome"], "FAILED_ERROR")
         self.assertEqual(evidence["outcome"], "FAILED_ERROR")
@@ -260,9 +260,9 @@ class PublishCheckTests(unittest.TestCase):
         payload = {"schema": prepare.SCHEMA, "runId": "prepare-fixture", "status": "NOT_ADMITTED",
                    "trainingAdmission": {"status": admission.ADMITTED, "totals": {"admittedTriplets": 3}}}
         with self.assertRaisesRegex(ValueError, "not ADMITTED"):
-            index_publish_check._prepare_binding(json.dumps(payload).encode("utf-8"), "prepare-fixture")
+            index_verify.prepare_binding_from_bytes(json.dumps(payload).encode("utf-8"), "prepare-fixture")
         payload["status"] = admission.ADMITTED
-        binding, _ = index_publish_check._prepare_binding(json.dumps(payload).encode("utf-8"), "prepare-fixture")
+        binding, _ = index_verify.prepare_binding_from_bytes(json.dumps(payload).encode("utf-8"), "prepare-fixture")
         self.assertEqual(binding["admittedTriplets"], 3)
         self.assertEqual(sorted(binding), ["admittedTriplets", "prepareDataBytes", "prepareDataSha256", "runId",
                                            "trainingAdmissionSha256"])
@@ -270,23 +270,20 @@ class PublishCheckTests(unittest.TestCase):
     def test_evaluation_evidence_must_name_the_same_runs_and_corpus(self):
         corpus = {"configSha256": h("config")}
         prepare_binding = {"runId": "prepare-fixture"}
-        evidence = {"schema": index_publish_check.EVALUATION_SCHEMA, "outcome": "SUCCEEDED",
+        evidence = {"schema": index_verify.EVALUATION_SCHEMA, "outcome": "SUCCEEDED",
                     "identity": {"trainRunId": "train", "indexRunId": "index", "prepare": prepare_binding,
                                  **corpus}}
         raw = json.dumps(evidence).encode("utf-8")
-        index_publish_check._verified_evaluation(raw, train_run_id="train", index_run_id="index",
-                                                 prepare_binding=prepare_binding, corpus=corpus)
+        matching = {"train_run_id": "train", "index_run_id": "index", "prepare_binding": prepare_binding}
+        index_verify.verified_evaluation(raw, corpus=corpus, **matching)
         with self.assertRaisesRegex(ValueError, "another training or index run"):
-            index_publish_check._verified_evaluation(raw, train_run_id="other", index_run_id="index",
-                                                     prepare_binding=prepare_binding, corpus=corpus)
+            index_verify.verified_evaluation(raw, corpus=corpus, **{**matching, "train_run_id": "other"})
         with self.assertRaisesRegex(ValueError, "identity drift: configSha256"):
-            index_publish_check._verified_evaluation(raw, train_run_id="train", index_run_id="index",
-                                                     prepare_binding=prepare_binding,
-                                                     corpus={"configSha256": h("other")})
+            index_verify.verified_evaluation(raw, **{**matching, "corpus": {"configSha256": h("other")}})
 
     def test_query_manifest_with_matching_bindings_is_accepted(self):
         manifest, kwargs = query_manifest_fixture()
-        index_publish_check.require_query_manifest(manifest, **kwargs)
+        index_verify.require_query_manifest(manifest, **kwargs)
 
     def test_query_manifest_binding_mismatches_are_refused(self):
         cases = [
@@ -305,26 +302,26 @@ class PublishCheckTests(unittest.TestCase):
                 manifest, kwargs = query_manifest_fixture()
                 mutate(manifest, kwargs)
                 with self.assertRaisesRegex(ValueError, message):
-                    index_publish_check.require_query_manifest(manifest, **kwargs)
+                    index_verify.require_query_manifest(manifest, **kwargs)
 
     def test_query_count_must_match_the_evaluation_denominator_for_each_label(self):
-        for label in index_publish_check.MODEL_LABELS:
+        for label in index_verify.MODEL_LABELS:
             with self.subTest(label=label, case="different count"):
                 manifest, kwargs = query_manifest_fixture()
                 kwargs["query_counts"] = {**kwargs["query_counts"], label: 3}
                 with self.assertRaisesRegex(ValueError, "query count differs from the evaluation evidence: " + label):
-                    index_publish_check.require_query_manifest(manifest, **kwargs)
+                    index_verify.require_query_manifest(manifest, **kwargs)
         with self.subTest(case="evaluation denominator missing"):
             manifest, kwargs = query_manifest_fixture()
-            kwargs["query_counts"] = {label: None for label in index_publish_check.MODEL_LABELS}
+            kwargs["query_counts"] = {label: None for label in index_verify.MODEL_LABELS}
             with self.assertRaisesRegex(ValueError, "query count differs from the evaluation evidence: E0"):
-                index_publish_check.require_query_manifest(manifest, **kwargs)
+                index_verify.require_query_manifest(manifest, **kwargs)
 
     def test_query_manifest_run_id_is_checked_before_any_query_file_is_read(self):
         manifest, kwargs = query_manifest_fixture()
         manifest["runId"] = "retrieval-db-other"
         with self.assertRaisesRegex(ValueError, "run id differs"):
-            index_publish_check.require_query_manifest(manifest, **kwargs)
+            index_verify.require_query_manifest(manifest, **kwargs)
 
     def test_tampered_query_vector_file_is_refused(self):
         with tempfile.TemporaryDirectory() as temp:
@@ -332,7 +329,7 @@ class PublishCheckTests(unittest.TestCase):
             manifest = query_manifest_files(target, vector_bytes([unit(0)]))
             vectors = index_publish_check._query_files(target, manifest)
             self.assertEqual(len(vectors["E0"]), 1)
-            path = target / index_publish_check.QUERY_DIR / "E2.fp32le"
+            path = target / index_verify.QUERY_DIR / "E2.fp32le"
             tampered = bytearray(path.read_bytes())
             tampered[0] ^= 0x01
             path.write_bytes(bytes(tampered))

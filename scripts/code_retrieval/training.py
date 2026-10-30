@@ -30,12 +30,12 @@ from scripts.code_analysis.corpus import write_once
 from scripts.code_analysis.frozen_encoder import tensors_hash
 from scripts.feasibility_pilot.paths import REPO_ROOT
 
-from . import admission, checkpoint, environment_probe, inputs, prepare
+from . import admission, checkpoint, environment_probe, index_verify, inputs, prepare
 from . import config as config_module
 from .endpoints import endpoint_windows
 from .paths import RETRIEVAL_ROOT, run_dir
 
-SCHEMA = checkpoint.TRAIN_EVIDENCE_SCHEMA
+SCHEMA = index_verify.TRAIN_EVIDENCE_SCHEMA
 PURPOSE = "CODE_RETRIEVAL_TRAINING"
 PREPARE_DATA = "prepare-data.json"
 REFERENCE_PROBE = "reference-probe.json"
@@ -142,7 +142,7 @@ def admitted_binding(loaded, config_loaded, prepare_run_id, index):
     prepare_raw = inputs.read_bytes(run_dir(prepare_run_id) / PREPARE_DATA, inputs.MAX_ARTIFACT_BYTES)
     binding = bind_prepare_run(
         prepare_raw, prepare_run_id, loaded=loaded, config_loaded=config_loaded, recomputed=recomputed,
-        admitted_count=len(triplets), model_revision=checkpoint.upstream_identity()["modelRevision"],
+        admitted_count=len(triplets), model_revision=index_verify.upstream_identity()["modelRevision"],
         membership=prepare.membership_summary(inputs.value(loaded, inputs.FINAL_TEST_MEMBERSHIP)))
     return binding, triplets, inputs.parse_json(prepare_raw, PREPARE_DATA)
 
@@ -427,7 +427,7 @@ def reload_in_fresh_process(run_id, config_path, root, expectations_path):
 
 def reload_passed(run_id, epochs):
     for epoch in range(1, epochs + 1):
-        path = run_dir(run_id) / ("epoch-" + str(epoch)) / checkpoint.RELOAD_NAME
+        path = run_dir(run_id) / ("epoch-" + str(epoch)) / index_verify.RELOAD_NAME
         if not path.is_file():
             return False
         if not inputs.parse_json(inputs.read_bytes(path, inputs.MAX_ARTIFACT_BYTES), "reload check")["passed"]:
@@ -508,7 +508,7 @@ def _execute(*, run_id, target, root, loaded, config_loaded, config_path, settin
     if failure is None:
         try:
             identity_keys = {key: trainer.identity[key] for key in checkpoint.IDENTITY_KEYS}
-            expectations = {"schema": checkpoint.EXPECTATIONS_SCHEMA, "runId": run_id,
+            expectations = {"schema": index_verify.EXPECTATIONS_SCHEMA, "runId": run_id,
                             "epochs": {str(record["epoch"]): {"checkpointManifestSha256":
                                                               record["checkpointManifestSha256"],
                                                               "identity": identity_keys}
@@ -534,7 +534,7 @@ def _execute(*, run_id, target, root, loaded, config_loaded, config_path, settin
                              reload_passed=passed)
     evidence = {"schema": SCHEMA, "Purpose": PURPOSE, "runId": run_id, "outcome": outcome, "reason": reason,
                 "CanAuthorizePublication": False, "SecurityEvidence": "NOT_RUN",
-                "selection": {"selectedForUse": False, "selection": checkpoint.SELECTION},
+                "selection": {"selectedForUse": False, "selection": index_verify.SELECTION},
                 "identity": {"inputsManifestSha256": loaded["manifestSha256"],
                              "configSha256": config_loaded["configSha256"],
                              "configByteSha256": config_loaded["byteSha256"],

@@ -46,7 +46,8 @@ def build_parser():
     export.add_argument("--config", required=True, help="frozen configuration path")
     export.add_argument("--prepare-run-id", required=True, help="admitted prepare-data run id to bind")
     export.add_argument("--train-run-id", required=True, help="verified training run id")
-    export.add_argument("--reference-probe", required=True, help="environment-probe file from the reference interpreter")
+    export.add_argument("--reference-probe", required=True,
+                        help="environment-probe file from the reference interpreter")
     export.set_defaults(handler=_export_index)
     evaluation = stages.add_parser("evaluate", help="evaluate E0..E3 on the validation indexes; write selection")
     evaluation.add_argument("--run-id", required=True, help="new immutable run id")
@@ -55,7 +56,8 @@ def build_parser():
     evaluation.add_argument("--prepare-run-id", required=True, help="admitted prepare-data run id to bind")
     evaluation.add_argument("--train-run-id", required=True, help="verified training run id")
     evaluation.add_argument("--index-run-id", required=True, help="export-index run id to evaluate")
-    evaluation.add_argument("--reference-probe", required=True, help="environment-probe file from the reference interpreter")
+    evaluation.add_argument("--reference-probe", required=True,
+                            help="environment-probe file from the reference interpreter")
     evaluation.set_defaults(handler=_evaluate)
     publish = stages.add_parser("index-publish-check",
                                 help="query-vectors (training interpreter) or publish-and-rank (index interpreter)")
@@ -71,7 +73,37 @@ def build_parser():
     publish.add_argument("--runtime-review", default=None,
                          help="reviewed runtime package directory under artifacts/code_analysis; required to publish")
     publish.set_defaults(handler=_index_publish_check)
+    evidence = stages.add_parser("validate-evidence",
+                                 help="verify the evidence chain from bytes and write the evidence package")
+    evidence.add_argument("--run-id", required=True, help="new immutable run id for the package")
+    evidence.add_argument("--inputs", required=True, help="inputs manifest path")
+    evidence.add_argument("--config", required=True, help="frozen configuration path")
+    evidence.add_argument("--prepare-run-id", required=True, help="admitted prepare-data run id in the chain")
+    evidence.add_argument("--train-run-id", required=True, help="training run id in the chain")
+    evidence.add_argument("--index-run-id", required=True, help="export-index run id in the chain")
+    evidence.add_argument("--evaluation-run-id", required=True, help="evaluation run id in the chain")
+    evidence.add_argument("--database-run-id", required=True, help="database check run id in the chain")
+    evidence.add_argument("--runtime-review", required=True,
+                          help="reviewed runtime package directory under artifacts/code_analysis, "
+                               "used by publish-and-rank")
+    evidence.add_argument("--superseded-run-id", action="append", default=[],
+                          help="evidence run this rerun supersedes; repeat for each")
+    evidence.set_defaults(handler=_validate_evidence)
     return parser
+
+
+def stage_parsers():
+    """Stage name to subparser; the evidence ledger takes its flag names from here."""
+    return next(action.choices for action in build_parser()._actions if isinstance(action.choices, dict))
+
+
+def _validate_evidence(args):
+    from . import evidence_package
+    return evidence_package.run(run_id=args.run_id, inputs_path=args.inputs, config_path=args.config,
+                                prepare_run_id=args.prepare_run_id, train_run_id=args.train_run_id,
+                                index_run_id=args.index_run_id, evaluation_run_id=args.evaluation_run_id,
+                                database_run_id=args.database_run_id, runtime_review=args.runtime_review,
+                                superseded_run_ids=args.superseded_run_id)
 
 
 def _export_index(args):
@@ -114,11 +146,11 @@ def _environment_probe(args):
 
 
 def _train_reload_check(args):
-    from . import checkpoint, paths
+    from . import checkpoint, index_verify, paths
     config_loaded = config_module.load(args.config)
     run = paths.run_dir(args.run_id)
     if args.expectations is None:
-        expectations = checkpoint.load_training_evidence(run)
+        expectations = index_verify.load_training_evidence(run)
     else:
         expectations = checkpoint.load_reload_expectations(args.expectations, args.run_id)
     result = checkpoint.reload_run(run, expectations=expectations, root=paths.RETRIEVAL_ROOT,

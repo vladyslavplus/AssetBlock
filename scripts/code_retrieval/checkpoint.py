@@ -26,29 +26,17 @@ from scripts.code_analysis.representations import read_vectors, vector_bytes
 from scripts.feasibility_pilot.paths import REPO_ROOT, ensure_inside
 
 from . import inputs
-from .index_verify import EMBEDDING_DIMENSIONS
+from .index_verify import (CHECKPOINT_DIR, CHECKPOINT_MANIFEST_NAME, CHECKPOINT_SCHEMA, EMBEDDING_DIMENSIONS,
+                           EXPECTATIONS_SCHEMA, MAX_JSON_BYTES, REFERENCE_NAME, REFERENCE_SCHEMA, RELOAD_NAME,
+                           RELOAD_RECHECK_NAME, SELECTION, SUPPORT_FILES, WEIGHTS, reference_record,
+                           upstream_identity)
 
-CHECKPOINT_SCHEMA = "code-retrieval-trained-checkpoint-v1"
-REFERENCE_SCHEMA = "code-retrieval-eval-reference-v1"
 RELOAD_SCHEMA = "code-retrieval-reload-check-v1"
-EXPECTATIONS_SCHEMA = "code-retrieval-reload-expectations-v1"
-TRAIN_EVIDENCE_SCHEMA = "code-retrieval-train-evidence-v1"
-TRAIN_EVIDENCE_NAME = "train-evidence.json"
 EXPECTATIONS_NAME = "reload-expectations.json"
 MODEL_ROOT = REPO_ROOT / "artifacts" / "feasibility_pilot" / "cache" / "models"
 UPSTREAM_DIR = MODEL_ROOT / "unixcoder-base-nine"
-TRUSTED_IDENTITY = REPO_ROOT / "scripts" / "feasibility_pilot" / "config" / "model-trusted-identity.json"
-WEIGHTS = "model.safetensors"
-SUPPORT_FILES = ("config.json", "vocab.json", "merges.txt", "tokenizer_config.json", "special_tokens_map.json")
 RELOAD_TOLERANCE = 1e-5
-SELECTION = "PENDING_VALIDATION"
-MANIFEST_NAME = "checkpoint-manifest.json"
-REFERENCE_NAME = "eval-reference.json"
-RELOAD_NAME = "reload-check.json"
-RELOAD_RECHECK_NAME = "reload-recheck.json"
-CHECKPOINT_DIR = "checkpoint"
 IDENTITY_KEYS = ("runId", "configSha256", "inputsManifestSha256", "prepare")
-MAX_JSON_BYTES = 8 * 1024 * 1024
 MAX_REFERENCE_BYTES = 4 * 1024 * 1024
 
 
@@ -64,12 +52,6 @@ def cuda_device():
     if not torch.cuda.is_available():
         raise ValueError("CUDA is required for trained encoder work; no CPU fallback")
     return torch.device("cuda")
-
-
-def upstream_identity():
-    """Pinned upstream revision and file hashes from the trusted-identity record."""
-    trusted = inputs.parse_json(inputs.read_bytes(TRUSTED_IDENTITY, MAX_JSON_BYTES), "model trusted identity")
-    return {"modelRevision": trusted["modelRevision"], "fileHashes": trusted["fileHashes"]}
 
 
 def load_upstream(device):
@@ -133,7 +115,7 @@ def write_epoch_checkpoint(epoch_dir, *, root, model, upstream, fields, support_
                 "files": {name: {"sha256": digest(data), "bytes": len(data)} for name, data in files.items()},
                 "fullStateSha256": state_hash(model),
                 "selectedForUse": False, "selection": SELECTION, **fields}
-    write_once(epoch_dir / MANIFEST_NAME, canonical(manifest), root)
+    write_once(epoch_dir / CHECKPOINT_MANIFEST_NAME, canonical(manifest), root)
     return manifest
 
 
@@ -156,7 +138,7 @@ def _epoch_number(epoch_dir):
 def load_trained(epoch_dir, *, upstream, device, expected_manifest_sha256, expected_identity):
     """Load one checkpoint only if its manifest is the one the training evidence binds."""
     number = _epoch_number(epoch_dir)
-    raw = inputs.read_bytes(epoch_dir / MANIFEST_NAME, MAX_JSON_BYTES)
+    raw = inputs.read_bytes(epoch_dir / CHECKPOINT_MANIFEST_NAME, MAX_JSON_BYTES)
     if digest(raw) != sha(expected_manifest_sha256):
         raise ValueError("checkpoint manifest is not the one training evidence binds")
     manifest = inputs.parse_json(raw, "checkpoint manifest")
@@ -190,48 +172,12 @@ def load_trained(epoch_dir, *, upstream, device, expected_manifest_sha256, expec
     return tokenizer, model, manifest
 
 
-def load_training_evidence(run):
-    """Verified training evidence: the per-epoch expectations every trained-checkpoint stage binds to."""
-    raw = inputs.read_bytes(run / TRAIN_EVIDENCE_NAME, MAX_JSON_BYTES)
-    evidence = inputs.parse_json(raw, TRAIN_EVIDENCE_NAME)
-    if evidence.get("schema") != TRAIN_EVIDENCE_SCHEMA or evidence.get("runId") != run.name:
-        raise ValueError("training evidence schema or run id mismatch")
-    if evidence.get("outcome") != "SUCCEEDED" or evidence.get("CanAuthorizePublication") is not False:
-        raise ValueError("training evidence must be SUCCEEDED and non-publishing")
-    if evidence.get("selection") != {"selectedForUse": False, "selection": SELECTION}:
-        raise ValueError("training evidence selection must stay PENDING_VALIDATION")
-    identity = evidence["identity"]
-    epochs = {}
-    for position, row in enumerate(evidence["epochs"], start=1):
-        if row.get("epoch") != position:
-            raise ValueError("training evidence epochs are out of order")
-        epochs[str(position)] = {"checkpointManifestSha256": row["checkpointManifestSha256"],
-                                 "identity": {"runId": run.name, "configSha256": identity["configSha256"],
-                                              "inputsManifestSha256": identity["inputsManifestSha256"],
-                                              "prepare": identity["prepare"]}}
-    return {"schema": EXPECTATIONS_SCHEMA, "runId": run.name, "evidenceSha256": digest(raw),
-            "identity": identity, "epochs": epochs}
-
-
 def load_reload_expectations(path, run_id):
     """Expectations written by the training run before its fresh-process reload."""
     expectations = inputs.parse_json(inputs.read_bytes(path, MAX_JSON_BYTES), "reload expectations")
     if expectations.get("schema") != EXPECTATIONS_SCHEMA or expectations.get("runId") != run_id:
         raise ValueError("reload expectations schema or run id mismatch")
     return expectations
-
-
-def reference_record(reference):
-    """Validated reference: token ids, FP32 bytes and the stored digest of both."""
-    if reference.get("schema") != REFERENCE_SCHEMA or reference.get("dimension") != EMBEDDING_DIMENSIONS:
-        raise ValueError("eval reference schema or dimension mismatch")
-    chunk_ids = reference["inputIds"]
-    if digest(canonical(chunk_ids)) != sha(reference["inputIdsSha256"]):
-        raise ValueError("eval reference token ids drift")
-    packed = base64.b64decode(reference["vectorsBase64"], validate=True)
-    if len(packed) != reference["vectorBytes"] or digest(packed) != sha(reference["vectorSha256"]):
-        raise ValueError("eval reference vector bytes drift")
-    return chunk_ids, packed
 
 
 def write_reference(epoch_dir, *, root, model, chunk_ids, pad_id, device):

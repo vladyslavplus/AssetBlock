@@ -19,12 +19,11 @@ from scripts.code_analysis.representations import CHUNKING, mapped_chunks, vecto
 
 from . import checkpoint, config as config_module, environment_probe, inputs, prepare, retrieval_models, training
 from . import validation_plan
-from .index_verify import (EMBEDDING_DIMENSIONS, EXPORT_EVIDENCE, EXPORT_SCHEMA, INDEX_DIR, INDEX_SCHEMA, MANIFEST_NAME,
-                           gallery_key, index_key, model_key, protocol_sha256, require_training_binding)
+from .index_verify import (EMBEDDING_DIMENSIONS, EXPORT_EVIDENCE, EXPORT_SCHEMA, INDEX_DIR, INDEX_SCHEMA, LIVE_PROBE,
+                           MANIFEST_NAME, REFERENCE_PROBE, gallery_key, index_key, load_training_evidence, model_key,
+                           protocol_sha256, require_training_binding)
 from .paths import RETRIEVAL_ROOT, run_dir
 
-REFERENCE_PROBE = "reference-probe.json"
-LIVE_PROBE = "live-probe.json"
 LIKE_FOR_LIKE_SAMPLE = 16
 LIKE_FOR_LIKE_TOLERANCE = 1e-6
 
@@ -102,7 +101,7 @@ def run(*, run_id, inputs_path, config_path, prepare_run_id, train_run_id, refer
     config_loaded = config_module.load(config_path)
     index = prepare.reviewed_index(loaded)
     prepare_binding, triplets, prepare_payload = training.admitted_binding(loaded, config_loaded, prepare_run_id, index)
-    expectations = checkpoint.load_training_evidence(run_dir(train_run_id))
+    expectations = load_training_evidence(run_dir(train_run_id))
     require_training_binding(expectations, loaded=loaded, config_loaded=config_loaded,
                              prepare_binding=prepare_binding)
     reference_raw = inputs.read_bytes(reference_probe_path, inputs.MAX_ARTIFACT_BYTES)

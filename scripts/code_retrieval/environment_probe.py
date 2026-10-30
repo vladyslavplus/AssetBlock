@@ -168,7 +168,8 @@ def compare(reference, live):
         if probe.get("schema") != PROBE_SCHEMA:
             raise ValueError("probe schema mismatch")
     _pinned_reference(reference)
-    if live["device"] != reference["device"] or live["dtype"] != reference["dtype"] or live["mode"] != reference["mode"]:
+    if (live["device"] != reference["device"] or live["dtype"] != reference["dtype"]
+            or live["mode"] != reference["mode"]):
         raise ValueError("probe device, dtype or mode differs")
     differing = []
     for key in sorted(set(reference["interpreter"]) | set(live["interpreter"])):
@@ -182,7 +183,8 @@ def compare(reference, live):
         raise ValueError("probe sample count differs between interpreters")
     worst = 0.0
     for left, right in zip(reference["samples"], live["samples"]):
-        if left["roles"] != right["roles"] or left["sample"] != right["sample"] or left["language"] != right["language"]:
+        if (left["roles"] != right["roles"] or left["sample"] != right["sample"]
+                or left["language"] != right["language"]):
             raise ValueError("probe sample endpoint differs between interpreters")
         for field in EXACT_FIELDS:
             if left.get(field) != right.get(field):
