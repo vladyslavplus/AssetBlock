@@ -50,6 +50,7 @@ def run_dolos_batch(
     k: int,
     window: int,
     timeout_s: float,
+    creationflags: int | None = None,
 ) -> dict[str, Any]:
     resolved = dolos_cli()
     if resolved is None:
@@ -89,6 +90,7 @@ def run_dolos_batch(
         timeout_s=timeout_s,
         extra_env_allow=("NODE_PATH",),
         env={"NODE_PATH": str(prefix / "node_modules")},
+        creationflags=creationflags,
     )
     pairs_csv = _find_csv(output_dir, "pairs")
     parsed = _parse_pairs_csv(pairs_csv) if pairs_csv else []

@@ -104,7 +104,7 @@ def identity_sha_diagnostic_rank(gallery_ids, *, query_sha256, gallery_shas, lim
             for index, file_id in enumerate(hits[:limit], 1)]
 
 
-def token_stage(root, language, files, output_dir, *, k=23, window=17, timeout_s=600):
+def token_stage(root, language, files, output_dir, *, k=23, window=17, timeout_s=600, creationflags=None):
     dest = ensure_inside(Path(output_dir), PILOT_ROOT)
     if dest.exists():
         shutil.rmtree(dest)
@@ -119,7 +119,8 @@ def token_stage(root, language, files, output_dir, *, k=23, window=17, timeout_s
         shutil.copyfile(src, target)
         staged.append(target)
         allowlist.append({"fileId": row["fileId"], "path": name, "sha256": row["sha256"]})
-    result = run_dolos_batch(language=language, files=staged, output_dir=dest / "dolos", k=k, window=window, timeout_s=timeout_s)
+    result = run_dolos_batch(language=language, files=staged, output_dir=dest / "dolos", k=k, window=window,
+                             timeout_s=timeout_s, creationflags=creationflags)
     if result.get("outcome") != "SUCCEEDED":
         return report({**result, "status": "FAILED", "k": k, "window": window})
     bound = bind_token_pairs(result.get("pairs") or [], allowlist)

@@ -32,6 +32,7 @@ def run_bounded(
     max_output_bytes: int = 256 * 1024 * 1024,
     env: Mapping[str, str] | None = None,
     extra_env_allow: Sequence[str] = (),
+    creationflags: int | None = None,
 ) -> CommandResult:
     if not argv:
         raise ValueError("empty command")
@@ -43,6 +44,8 @@ def run_bounded(
         if candidate.is_absolute() or (len(arg) >= 2 and arg[1] == ":"):
             ensure_inside(Path(arg), *allowed_roots)
     merged = _tool_env(env, extra_env_allow)
+    if creationflags is None:
+        creationflags = subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0
     start = time.perf_counter()
     try:
         completed = subprocess.run(
@@ -53,6 +56,7 @@ def run_bounded(
             timeout=timeout_s,
             check=False,
             shell=False,
+            creationflags=creationflags,
         )
     except subprocess.TimeoutExpired as exc:
         stdout = _decode_cap(exc.stdout, max_output_bytes)
