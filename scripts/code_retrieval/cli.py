@@ -34,8 +34,44 @@ def build_parser():
     reload_check = stages.add_parser("train-reload-check", help="reload every epoch checkpoint in a fresh process")
     reload_check.add_argument("--run-id", required=True, help="training run id")
     reload_check.add_argument("--config", required=True, help="frozen configuration path")
+    reload_check.add_argument("--expectations", default=None,
+                              help="reload expectations file written by the run; default: verified training evidence")
+    reload_check.add_argument("--check-name", default="reload-check.json",
+                              choices=["reload-check.json", "reload-recheck.json"],
+                              help="new per-epoch result file; existing results are never overwritten")
     reload_check.set_defaults(handler=_train_reload_check)
+    export = stages.add_parser("export-index", help="write one immutable validation index per compared encoder")
+    export.add_argument("--run-id", required=True, help="new immutable run id")
+    export.add_argument("--inputs", required=True, help="inputs manifest path")
+    export.add_argument("--config", required=True, help="frozen configuration path")
+    export.add_argument("--prepare-run-id", required=True, help="admitted prepare-data run id to bind")
+    export.add_argument("--train-run-id", required=True, help="verified training run id")
+    export.add_argument("--reference-probe", required=True, help="environment-probe file from the reference interpreter")
+    export.set_defaults(handler=_export_index)
+    evaluation = stages.add_parser("evaluate", help="evaluate E0..E3 on the validation indexes; write selection")
+    evaluation.add_argument("--run-id", required=True, help="new immutable run id")
+    evaluation.add_argument("--inputs", required=True, help="inputs manifest path")
+    evaluation.add_argument("--config", required=True, help="frozen configuration path")
+    evaluation.add_argument("--prepare-run-id", required=True, help="admitted prepare-data run id to bind")
+    evaluation.add_argument("--train-run-id", required=True, help="verified training run id")
+    evaluation.add_argument("--index-run-id", required=True, help="export-index run id to evaluate")
+    evaluation.add_argument("--reference-probe", required=True, help="environment-probe file from the reference interpreter")
+    evaluation.set_defaults(handler=_evaluate)
     return parser
+
+
+def _export_index(args):
+    from . import index_export
+    return index_export.run(run_id=args.run_id, inputs_path=args.inputs, config_path=args.config,
+                            prepare_run_id=args.prepare_run_id, train_run_id=args.train_run_id,
+                            reference_probe_path=args.reference_probe)
+
+
+def _evaluate(args):
+    from . import retrieval_eval
+    return retrieval_eval.run(run_id=args.run_id, inputs_path=args.inputs, config_path=args.config,
+                              prepare_run_id=args.prepare_run_id, train_run_id=args.train_run_id,
+                              index_run_id=args.index_run_id, reference_probe_path=args.reference_probe)
 
 
 def _train(args):
@@ -47,18 +83,26 @@ def _train(args):
 def _environment_probe(args):
     from . import environment_probe
     probe = environment_probe.write_probe(args.inputs, args.config, args.out)
-    return {"command": "environment-probe", "out": args.out, "sample": probe["sample"],
-            "tokenIdsSha256": probe["tokenIdsSha256"], "tokenOffsetsSha256": probe["tokenOffsetsSha256"],
-            "chunk0Sha256": probe["chunk0Sha256"], "windowCount": probe["windowCount"],
-            "vectorSha256": probe["vectorSha256"], "interpreter": probe["interpreter"]}
+    return {"command": "environment-probe", "out": args.out, "schema": probe["schema"],
+            "interpreter": probe["interpreter"],
+            "samples": [{"roles": row["roles"], "language": row["language"], "sample": row["sample"],
+                         "tokenIdsSha256": row["tokenIdsSha256"], "windowCount": row["windowCount"],
+                         "chunk0Sha256": row["chunk0Sha256"], "vectorSha256": row["vectorSha256"]}
+                        for row in probe["samples"]]}
 
 
 def _train_reload_check(args):
     from . import checkpoint, paths
     config_loaded = config_module.load(args.config)
-    result = checkpoint.reload_run(paths.run_dir(args.run_id),
+    run = paths.run_dir(args.run_id)
+    if args.expectations is None:
+        expectations = checkpoint.load_training_evidence(run)
+    else:
+        expectations = checkpoint.load_reload_expectations(args.expectations, args.run_id)
+    result = checkpoint.reload_run(run, expectations=expectations, root=paths.RETRIEVAL_ROOT,
+                                   device=checkpoint.cuda_device(),
                                    epochs=config_loaded["config"]["training"]["epochs"],
-                                   root=paths.RETRIEVAL_ROOT, device=checkpoint.cuda_device())
+                                   check_name=args.check_name)
     return {"command": "train-reload-check", "runId": args.run_id, "passed": result["passed"],
             "epochs": [row["epochDirectory"] + ":" + str(row["passed"]) for row in result["epochs"]]}
 

@@ -6,6 +6,10 @@ positive and two query-relative negatives per triplet. Every epoch writes a
 manifest-bound checkpoint and a fixed reference; a fresh process then reloads each
 checkpoint. Evidence is write-once and records an outcome, never a quality claim.
 Validation, selection and index export are later stages.
+
+Interpreter: trained checkpoints are loaded only in the training interpreter
+(artifacts/feasibility_pilot/env/ml); the frozen reference probe is the pinned CPU
+interpreter's job, see environment_probe.
 """
 
 import ctypes
@@ -31,7 +35,7 @@ from . import config as config_module
 from .endpoints import endpoint_windows
 from .paths import RETRIEVAL_ROOT, run_dir
 
-SCHEMA = "code-retrieval-train-evidence-v1"
+SCHEMA = checkpoint.TRAIN_EVIDENCE_SCHEMA
 PURPOSE = "CODE_RETRIEVAL_TRAINING"
 PREPARE_DATA = "prepare-data.json"
 REFERENCE_PROBE = "reference-probe.json"
@@ -92,9 +96,12 @@ def process_working_set():
     return {"currentBytes": int(counters.WorkingSetSize), "peakBytes": int(counters.PeakWorkingSetSize)}
 
 
-def bind_prepare_run(raw, prepare_run_id, *, loaded, config_loaded, recomputed, admitted_count):
+def bind_prepare_run(raw, prepare_run_id, *, loaded, config_loaded, recomputed, admitted_count, model_revision,
+                     membership):
     """Refuse any drift between the admitted prepare-data bytes and the inputs now loaded."""
     payload = inputs.parse_json(raw, PREPARE_DATA)
+    if payload.get("schema") != prepare.SCHEMA:
+        raise ValueError("prepare-data schema mismatch")
     if payload.get("runId") != prepare_run_id:
         raise ValueError("prepare run identity mismatch")
     if payload.get("status") != admission.ADMITTED or recomputed["status"] != admission.ADMITTED:
@@ -105,15 +112,39 @@ def bind_prepare_run(raw, prepare_run_id, *, loaded, config_loaded, recomputed, 
     identity = payload.get("identity") or {}
     for key, current in (("inputsManifestSha256", loaded["manifestSha256"]),
                          ("configSha256", config_loaded["configSha256"]),
-                         ("configByteSha256", config_loaded["byteSha256"])):
+                         ("configByteSha256", config_loaded["byteSha256"]),
+                         ("protocolSha256", config_loaded["protocolSha256"])):
         if identity.get(key) != current:
             raise ValueError("prepare identity drift: " + key)
+    if config_loaded["config"]["training"]["upstreamModelRevision"] != model_revision:
+        raise ValueError("configured upstream revision differs from the trusted identity")
+    if payload.get("finalTestMembership") != membership:
+        raise ValueError("prepare finalTestMembership differs from the loaded membership report")
     if digest(canonical(training)) != digest(canonical(recomputed)):
         raise ValueError("trainingAdmission digest differs from the recomputed admission")
     if recomputed["totals"]["admittedTriplets"] != admitted_count:
         raise ValueError("admitted triplet count differs from the recomputed admission")
     return {"runId": prepare_run_id, "prepareDataSha256": digest(raw), "prepareDataBytes": len(raw),
             "trainingAdmissionSha256": digest(canonical(training)), "admittedTriplets": admitted_count}
+
+
+def admitted_binding(loaded, config_loaded, prepare_run_id, index):
+    """Recompute admission over the loaded inputs and bind the admitted prepare run to it.
+
+    Returns (binding, admitted triplets, parsed prepare-data payload). Shared by training,
+    export-index and evaluate so every stage refuses the same drift.
+    """
+    sources = inputs.value(loaded, inputs.SOURCE_MANIFEST)["sources"]
+    recomputed = admission.evaluate(index, config_loaded["config"], sources=sources,
+                                    sources_root=loaded["sourcesRoot"])
+    triplets = admission.admitted_triplets(index, config_loaded["config"], sources=sources,
+                                           sources_root=loaded["sourcesRoot"])
+    prepare_raw = inputs.read_bytes(run_dir(prepare_run_id) / PREPARE_DATA, inputs.MAX_ARTIFACT_BYTES)
+    binding = bind_prepare_run(
+        prepare_raw, prepare_run_id, loaded=loaded, config_loaded=config_loaded, recomputed=recomputed,
+        admitted_count=len(triplets), model_revision=checkpoint.upstream_identity()["modelRevision"],
+        membership=prepare.membership_summary(inputs.value(loaded, inputs.FINAL_TEST_MEMBERSHIP)))
+    return binding, triplets, inputs.parse_json(prepare_raw, PREPARE_DATA)
 
 
 def require_train_endpoints(triplet):
@@ -381,12 +412,12 @@ class Trainer:
             self.finish_epoch(epoch, measured, epoch_started)
 
 
-def reload_in_fresh_process(run_id, config_path, root):
+def reload_in_fresh_process(run_id, config_path, root, expectations_path):
     """Run the reload proof in a new interpreter; no console window is ever shown."""
     creation = getattr(subprocess, "CREATE_NO_WINDOW", 0)
     completed = subprocess.run(
         [sys.executable, "-B", "-m", "scripts.code_retrieval", "train-reload-check", "--run-id", run_id,
-         "--config", str(config_path)],
+         "--config", str(config_path), "--expectations", str(expectations_path)],
         cwd=str(REPO_ROOT), capture_output=True, text=True, creationflags=creation, check=False)
     write_once(run_dir(run_id) / RELOAD_LOG,
                ("exit code " + str(completed.returncode) + "\n--- stdout ---\n" + completed.stdout
@@ -419,19 +450,14 @@ def run(*, run_id, inputs_path, config_path, prepare_run_id, reference_probe_pat
     settings = config["training"]
     if settings["microbatchTriplets"] != 1:
         raise ValueError("training microbatch is one triplet")
-    sources = inputs.value(loaded, inputs.SOURCE_MANIFEST)["sources"]
     index = prepare.reviewed_index(loaded)
-    recomputed = admission.evaluate(index, config, sources=sources, sources_root=loaded["sourcesRoot"])
-    triplets = admission.admitted_triplets(index, config, sources=sources, sources_root=loaded["sourcesRoot"])
-    prepare_raw = inputs.read_bytes(run_dir(prepare_run_id) / PREPARE_DATA, inputs.MAX_ARTIFACT_BYTES)
-    prepare_binding = bind_prepare_run(prepare_raw, prepare_run_id, loaded=loaded, config_loaded=config_loaded,
-                                       recomputed=recomputed, admitted_count=len(triplets))
+    prepare_binding, triplets, _ = admitted_binding(loaded, config_loaded, prepare_run_id, index)
     reference_raw = inputs.read_bytes(reference_probe_path, inputs.MAX_ARTIFACT_BYTES)
     reference_probe = inputs.parse_json(reference_raw, "reference probe")
     device = checkpoint.cuda_device()
     if not triplets:
         raise ValueError("training needs at least one admitted triplet")
-    live_probe = environment_probe.build_probe(triplets[0], loaded["sourcesRoot"])
+    live_probe = environment_probe.build_probe(triplets, loaded["sourcesRoot"])
     comparison = environment_probe.compare(reference_probe, live_probe)
     checkpoint.configure_numerics()
     seed_everything(config["seed"])
@@ -478,9 +504,26 @@ def _execute(*, run_id, target, root, loaded, config_loaded, config_path, settin
     finally:
         if trainer is not None:
             trainer.close()
+    passed = False
     if failure is None:
-        reload_code = reload_in_fresh_process(run_id, config_path, root)
-    passed = failure is None and reload_code == 0 and reload_passed(run_id, settings["epochs"])
+        try:
+            identity_keys = {key: trainer.identity[key] for key in checkpoint.IDENTITY_KEYS}
+            expectations = {"schema": checkpoint.EXPECTATIONS_SCHEMA, "runId": run_id,
+                            "epochs": {str(record["epoch"]): {"checkpointManifestSha256":
+                                                              record["checkpointManifestSha256"],
+                                                              "identity": identity_keys}
+                                       for record in trainer.epoch_records}}
+            write_once(target / checkpoint.EXPECTATIONS_NAME, canonical(expectations), root)
+            reload_code = reload_in_fresh_process(run_id, config_path, root, target / checkpoint.EXPECTATIONS_NAME)
+            passed = reload_code == 0 and reload_passed(run_id, settings["epochs"])
+        except FileExistsError as exc:
+            failure = ("FAILED_ERROR", "reload output collision: " + str(exc))
+        except OSError as exc:
+            failure = ("FAILED_RELOAD", "reload process could not start: " + str(exc))
+        except (ValueError, KeyError) as exc:
+            failure = ("FAILED_RELOAD", "reload check unreadable: " + str(exc))
+        except Exception as exc:
+            failure = ("FAILED_ERROR", type(exc).__name__ + ": " + str(exc))
     epochs = trainer.epoch_records if trainer is not None else []
     outcome, reason = decide(failure=failure, epochs_done=len(epochs), epochs_expected=settings["epochs"],
                              planned=trainer.planned if trainer is not None else 0,
@@ -526,6 +569,7 @@ def _execute(*, run_id, target, root, loaded, config_loaded, config_path, settin
                                     "trainableEncoderBlocks": settings["trainableEncoderBlocks"],
                                     "trainableNames": [] if trainer is None else trainer.names,
                                     "dropout": "model.train() active",
+                                    "windowPolicy": "chunk-0 only",
                                     "amp": "CUDA FP16 autocast with GradScaler",
                                     "deadlineMinutes": settings["deadlineMinutes"]},
                 "steps": {"planned": trainer.planned if trainer is not None else 0,

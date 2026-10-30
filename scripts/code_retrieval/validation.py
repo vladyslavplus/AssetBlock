@@ -78,7 +78,7 @@ def _blocker(reason, **extra):
     return payload
 
 
-def _held_out(split_files):
+def held_out(split_files):
     """Held-out families and normalized content of train/final-test partitions."""
     rows = list(split_files.values())
     families = {row["familyId"] for row in rows if row["partition"] in HELD_OUT}
@@ -364,7 +364,7 @@ def admit(payload, *, files, fragments, split_files, sources, sources_root, file
             files[alias] = files[canonical_id]
     fragments = {row["fragmentId"]: row for row in fragments}
     sources = {row["sourceId"]: row for row in sources}
-    held_families, held_normalized = _held_out(split_files)
+    held_families, held_normalized = held_out(split_files)
     languages = payload.get("languages")
     if not isinstance(languages, dict):
         return _blocker("validation corpus declares no per-language seeds", validationFileCounts=counts)
@@ -451,7 +451,7 @@ def propose(index, *, sources, sources_root, seeds_per_language=2, gallery_files
     sources = {row["sourceId"]: row for row in sources}
     files = {row["fileId"]: row for row in index["files"]}
     split_files = index["lineage"]["splitFiles"]
-    held_families, _ = _held_out(split_files)
+    held_families, _ = held_out(split_files)
     coverage = {}
     for row in index["fragments"]:
         if not row.get("derivation"):

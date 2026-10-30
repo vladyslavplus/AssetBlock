@@ -15,12 +15,8 @@ from .paths import RETRIEVAL_ROOT, derived_dir, run_dir
 SCHEMA = "code-retrieval-prepare-data-v1"
 
 
-def _membership_report(loaded, lineage):
-    membership = inputs.value(loaded, inputs.FINAL_TEST_MEMBERSHIP)
-    if membership.get("finalTestFileIds") != lineage["finalTestFileIds"]:
-        raise ValueError("final-test membership changed after authenticated input loading")
-    if membership.get("finalTestMembershipSha256") != lineage["finalTestMembershipSha256"]:
-        raise ValueError("final-test membership digest drift")
+def membership_summary(membership):
+    """The non-relevance report fields of an authenticated final-test membership value."""
     if any(membership.get(flag) is not False for flag in ("scored", "ranksInspected", "tuning")):
         raise ValueError("final-test membership non-relevance flags must remain false")
     return {"schema": membership["schema"], "partition": membership["partition"],
@@ -28,6 +24,15 @@ def _membership_report(loaded, lineage):
             "finalTestMembershipSha256": membership["finalTestMembershipSha256"],
             "rightsSha256": membership["rightsSha256"],
             "scored": False, "ranksInspected": False, "tuning": False}
+
+
+def _membership_report(loaded, lineage):
+    membership = inputs.value(loaded, inputs.FINAL_TEST_MEMBERSHIP)
+    if membership.get("finalTestFileIds") != lineage["finalTestFileIds"]:
+        raise ValueError("final-test membership changed after authenticated input loading")
+    if membership.get("finalTestMembershipSha256") != lineage["finalTestMembershipSha256"]:
+        raise ValueError("final-test membership digest drift")
+    return membership_summary(membership)
 
 
 def _materialize_derived(index, run_id):
