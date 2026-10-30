@@ -145,7 +145,7 @@ def bind_span(fragments, name, start, end, *, source_id=None):
 def materialize_fragment_reviews(extract, adoption):
     """Validate an explicit reviewed export; never infer relations or create approval."""
     if "pairReviews" not in adoption:
-        raise ValueError("explicit reviewed fragment export required; legacy adoptions need offline migration")
+        raise ValueError("explicit reviewed fragment export required; adoption rows need conversion to the reviewed export schema")
     merged = merge_fragment_exports(adoption)
     relation_index(extract, merged["pairReviews"], merged["extraFragments"])
     return merged

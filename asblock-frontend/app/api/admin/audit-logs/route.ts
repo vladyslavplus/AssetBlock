@@ -5,14 +5,14 @@ import { proxyAuthenticatedBff } from '@/lib/server/bff-route'
 const adminAuditLogsQuerySchema = z.object({
   page: z.coerce.number().int().min(1).optional(),
   pageSize: z.coerce.number().int().min(1).max(100).optional(),
-  actorUserId: z.string().uuid().optional(),
+  actorUserId: z.guid().optional(),
   actorType: z.enum(['USER', 'SYSTEM', 'ANONYMOUS']).optional(),
   action: z.string().trim().max(100).optional(),
   outcome: z.enum(['SUCCESS', 'FAILURE', 'DENIED']).optional(),
   resourceType: z.string().trim().max(100).optional(),
   resourceId: z.string().trim().max(200).optional(),
-  from: z.string().datetime({ offset: true }).optional(),
-  to: z.string().datetime({ offset: true }).optional(),
+  from: z.iso.datetime({ offset: true }).optional(),
+  to: z.iso.datetime({ offset: true }).optional(),
 })
 
 export async function GET(request: Request) {

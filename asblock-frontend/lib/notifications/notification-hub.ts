@@ -81,9 +81,9 @@ function cancelPendingStop(): void {
 
 const processingNotificationPayloadSchema = z
   .object({
-    notificationId: z.string().uuid(),
-    assetId: z.string().uuid(),
-    assetVersionId: z.string().uuid(),
+    notificationId: z.guid(),
+    assetId: z.guid(),
+    assetVersionId: z.guid(),
     processingStatus: z.enum(['READY', 'REJECTED', 'PROCESSING_FAILED']),
     assetTitle: z.string().min(1).max(500),
   })

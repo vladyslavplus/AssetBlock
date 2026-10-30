@@ -25,6 +25,30 @@ def read(path, *roots):
     return json.loads(raw)
 
 
+def _read_pinned_json(path, root, *, cap=64 * 1024 * 1024):
+    """Read one contained metadata file with bounded strict JSON parsing."""
+    checked = ensure_inside(Path(path), root)
+    if not checked.is_file():
+        raise ValueError("pinned metadata input is not a regular file: " + str(checked))
+    with checked.open("rb") as stream:
+        raw = stream.read(cap + 1)
+    if len(raw) > cap:
+        raise ValueError("pinned metadata input byte cap exceeded: " + str(checked))
+
+    def object_from_pairs(pairs):
+        result = {}
+        for key, value in pairs:
+            if key in result:
+                raise ValueError("duplicate JSON member: " + key)
+            result[key] = value
+        return result
+
+    value = json.loads(raw.decode("utf-8"), object_pairs_hook=object_from_pairs,
+                       parse_constant=lambda value: (_ for _ in ()).throw(
+                           ValueError("non-finite JSON number: " + value)))
+    return raw, value
+
+
 def verified_split(config, root):
     split = read(root / "split.json", ARTIFACT_ROOT)
     verified = intake(config, root, offline=True)
@@ -45,7 +69,7 @@ def verified_split(config, root):
 
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("stage", choices=("preflight", "intake", "verify-offline", "split", "extract", "derive", "export", "summarize", "materialize-labels", "token-baseline", "license-review", "embed-frozen", "index-build", "index-restore", "index-check", "evaluate", "seal-final-test", "validate-evidence"))
+    parser.add_argument("stage", choices=("preflight", "intake", "verify-offline", "split", "extract", "derive", "export", "summarize", "final-test-membership", "materialize-labels", "token-baseline", "license-review", "embed-frozen", "index-build", "index-restore", "index-check", "evaluate", "seal-final-test", "validate-evidence"))
     parser.add_argument("--run-id", required=True)
     parser.add_argument("--config", default=str(CONFIG_ROOT / "sources.json"))
     parser.add_argument("--parent-run-id", help="Explicit frozen representation run to reuse")
@@ -123,6 +147,38 @@ def main(argv=None):
             if (root / "materialize-labels.json").exists():
                 labels = read(root / "materialize-labels.json", ARTIFACT_ROOT)
             payload = sufficiency(split, labels.get("seeds", []), labels.get("pairReviews", []))
+        elif args.stage == "final-test-membership":
+            # This branch reads only the authenticated source manifest, split, and
+            # extract from an already completed run. It precedes both the
+            # seal producer and all query-source walks.
+            if not args.parent_run_id:
+                raise ValueError("final-test-membership requires an explicit authenticated --parent-run-id")
+            parent = ensure_inside(ARTIFACT_ROOT / "runs" / args.parent_run_id, ARTIFACT_ROOT)
+            source_path = ensure_inside(parent / "source-manifest.json", ARTIFACT_ROOT)
+            split_path = ensure_inside(parent / "split.json", ARTIFACT_ROOT)
+            extract_path = ensure_inside(parent / "extract.json", ARTIFACT_ROOT)
+            source_raw, source_manifest = _read_pinned_json(source_path, ARTIFACT_ROOT)
+            split_raw, split = _read_pinned_json(split_path, ARTIFACT_ROOT)
+            extract_raw, extracted = _read_pinned_json(extract_path, ARTIFACT_ROOT)
+            if digest(canonical(source_manifest)) != split.get("configSha256"):
+                raise ValueError("final-test-membership source-manifest/split pin mismatch")
+            extract_record_path = ensure_inside(parent / "extract-stage.json", ARTIFACT_ROOT)
+            extract_record = read(extract_record_path, ARTIFACT_ROOT)
+            if (extract_record.get("ActualOutcome") != "SUCCEEDED" or
+                    extract_record.get("outputs", {}).get("extract.json") != digest(canonical(extracted))):
+                raise ValueError("final-test-membership extract-stage pin mismatch")
+            from scripts.code_retrieval.corpus_index import build_final_test_membership
+            pin_roles = {
+                "source-manifest": ("source-manifest.json", source_raw, source_manifest),
+                "split": ("split.json", split_raw, split),
+                "extract": ("extract.json", extract_raw, extracted),
+            }
+            input_pins = {}
+            for role, (name, raw, value) in pin_roles.items():
+                input_pins[role] = {"relativePath": "runs/{}/{}".format(args.parent_run_id, name),
+                                    "bytes": len(raw), "byteSha256": digest(raw),
+                                    "canonicalSha256": digest(canonical(value))}
+            payload = build_final_test_membership(source_manifest, split, extracted, input_pins)
         elif args.stage == "materialize-labels":
             from .independent_acceptance import materialize_label_manifest
             if not args.labels:
@@ -228,7 +284,10 @@ def main(argv=None):
                 raise ValueError(payload.get("reason") or "live index unverified")
         else:
             raise ValueError("unhandled stage")
-        payload = report(payload)
+        # The membership role has an exact closed schema consumed by
+        # code_retrieval.inputs. Do not enrich it with generic run-report keys.
+        if args.stage != "final-test-membership":
+            payload = report(payload)
         output = root / (args.stage + ".json")
         write_once(output, canonical(payload), ARTIFACT_ROOT)
         outputs[output.name] = digest(canonical(payload))

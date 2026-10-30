@@ -1,120 +1,50 @@
 ---
 name: orchestrate-change
-description: Orchestrate an AssetBlock code change from Codex UI with Codex planning and coordination, Antigravity CLI execution, and an independent Codex review loop. Use when the user asks Codex to plan, delegate implementation to Antigravity, review its changes, and return findings for fixes until approval; do not use for read-only planning or ordinary direct implementation.
+description: Coordinate a user-authorized AssetBlock change through a chosen implementation provider and independent read-only review when the user requests delegated implementation and review.
 ---
 
 # Orchestrate Change
 
-Keep the main Codex thread as planner and coordinator. Delegate implementation to Antigravity CLI and review to one dedicated Codex subagent. The user should not need to copy text between tools.
+Use this skill when the user asks for coordinated implementation and independent review. The coordinator plans and communicates; one selected implementer writes; one independent reviewer reads the same frozen target. Keep this workflow provider-neutral.
 
-Read [README.md](README.md) only when the user asks how to invoke, install, configure, or troubleshoot this workflow.
+The user chooses provider, model, reasoning level, and transport. Do not prescribe a provider, model, effort, or fallback. When unspecified, keep the current session configuration. Before starting delegated work, inspect the chosen provider's supported exact model/reasoning identifiers and relevant transport instructions. After launch, verify effective settings from provider/session evidence when available; a requested setting or run-state field alone is not proof. Never silently substitute, downgrade, upgrade, or switch providers/models because of quota, failure, or availability. Ask only when an unresolved choice blocks the work.
 
-## Establish scope
+Use the selected provider's native transport skill or documentation for invocation, session continuation, and result delivery. Read only the relevant provider reference. [Antigravity](references/antigravity.md) documents an optional adapter; it is not the default workflow. Read [README.md](README.md) for invocation guidance when requested.
 
-1. Read repository `AGENTS.md` plus every nested guide required by the task scope.
-2. Inspect relevant implementation and tests before planning.
-3. Create an outcome-first plan with scope, constraints, acceptance criteria, affected boundaries, and verification commands.
-4. Inspect `git status --short`. Do not create a branch, worktree, commit, stash, or reset.
-5. Preserve existing user changes. If planned edits overlap already-modified files and safe preservation is uncertain, stop and ask the user before invoking Antigravity.
-6. Divide verification into two tiers:
-   - focused checks that give fast feedback on edited behavior;
-   - final expensive checks such as full PostgreSQL suites, broad builds, and full frontend checks.
-7. Select the Antigravity model. Use `gemini-3.7-flash-medium` unless the user explicitly requests another available model. Translate friendly names such as “3.7 Flash High” to the exact slug returned by `agy models`; never invent a slug.
+## Scope and roles
 
-## Delegate implementation
+1. Read repository AGENTS.md and all nested guides relevant to the affected code. Inspect current source, focused tests, call sites, and Git status before planning. Work in the current checkout and branch unless the user directs otherwise. Do not create branches/worktrees or commit, push, deploy, or install tools unless authorized.
+2. For nontrivial implementation, follow the repository's implement-change skill and include it in the writer's initial brief.
+3. Preserve user changes. State the requested outcome, acceptance criteria, affected boundaries, baseline/source identity, relevant guides, read/write scope, and verification authority. Do not broaden scope or infer external permissions from approval to implement.
+4. Use one writer per target. Reuse the authorized implementer and reviewer sessions. Do not add parallel workers or extra delegation unless the user explicitly requests that workflow. The reviewer stays read-only under repository rules and reviews the exact target the implementer froze.
+5. Keep implementation, source review, focused verification, integration verification, and runtime/admission status distinct. An accepted report, pending response, clean counter, or matching hash is not proof of behavior; hashes establish identity only.
 
-Use [execution-report.schema.json](references/execution-report.schema.json) and the adapter at `scripts/run-antigravity.mjs`.
+## Briefs, sessions, and handoffs
 
-Create a focused English executor prompt in a temporary ignored path under `.agentflow/runs/`. Include:
+Make the initial implementer brief self-contained: include the user's request, actual scope, acceptance criteria, constraints and authorization, baseline, relevant instructions, exact read/write boundaries, and permitted checks. Include raw source/evidence needed for decisions, not merely conclusions or names.
 
-- the user's raw request;
-- the plan and acceptance criteria;
-- relevant repository and nested instructions;
-- a request to inspect and use `.agents/skills/implement-change/SKILL.md`;
-- exact verification expectations;
-- the exact planned read/write locations and command lines needed for focused and final verification;
-- a requirement to preserve pre-existing changes and avoid commits, branches, worktrees, pushes, resets, and unrelated cleanup;
-- a requirement to return the structured execution report.
+For follow-ups, send compact deltas: exact new finding, affected location, current frozen source identity, prior result, changed acceptance detail, and current permission boundary. Do not repeat the full history. Use stable run/conversation identifiers. Before retrying, inspect the provider transcript, queue/session state, and completed artifacts; a completed old report is not a new job. Do not ask the user to ferry messages between coordinator, writer, and reviewer when the selected transport can deliver them.
 
-Create a JSON permission manifest beside the prompt with these arrays:
+On pause, compaction, or restart, preserve partial files and drafts. Record exact paths, hashes, session identifiers, outstanding findings, and unrun checks. Reload only the context needed to continue; do not restart completed work or trust ignored handoffs without checking their bytes and provenance.
 
-- `read_paths`: every planned repository read root/file;
-- `write_paths`: every planned write root/file;
-- `allowed_commands`: all exact commands for focused and final phases;
-- `allowed_command_patterns`: optional Antigravity token-regex patterns with the same token count as the command, scoped to repository operations whose token values may vary;
-- `required_verification`: exact commands required in the current turn.
-- `required_paths_present` / `required_paths_absent`: optional actual filesystem postconditions for moves, generated files, and removals that a command ledger cannot prove.
+## Implement and review
 
-Use repository-relative paths rooted at the active working directory in permission manifests, executor prompts, examples, tests, documentation, and persisted run artifacts. The adapter may resolve them internally for execution, but must not persist developer-specific drives, usernames, home directories, or checkout locations.
+Before editing, trace the affected behavior through actual producers, callers, consumers, signatures, return shapes, field owners, authorization/loading paths, and failure lifetime. Compare representative genuine inputs with the complete predicates and expected outputs. Do not infer behavior from method names, comments, aggregate counts, or a single successful result. Check absence versus null, multiplicity, and independent expected/observed ownership when they matter to the contract. Keep analysis proportional; simple changes do not need exhaustive matrices.
 
-The adapter reads Antigravity's global `settings.json` and validates the whole manifest before starting the executor using Antigravity's fixed-arity token-regex command semantics. A regex token such as `.*` matches one command token, never an arbitrary tail. Missing rules fail before a conversation turn or edit and are returned as one complete list. Do not rely on the model to call `list_permissions`; tool availability and model compliance are not deterministic enough for a safety gate.
+Implement one coherent root-cause correction across the affected path. Inspect the full predicate and caller chain so a new check does not sit beside an older contradictory check. Preserve accepted guards and existing contracts. Separate semantic changes from mechanical path, loader, or pin updates. Avoid unrelated cleanup, duplicate architecture, and new trust layers.
 
-For repository edits, instruct Antigravity to use `replace_file_content` / `multi_replace_file_content` and not `write_to_file`, which is reserved for Antigravity artifact paths. Never authorize shell-writing fallbacks such as `Set-Content`, redirection, or heredocs for source files.
+Use the repository's [review-change skill](../review-change/SKILL.md) as canonical for finding format and routing. Give the independent reviewer the raw request, accepted scope, baseline, exact frozen source identity, changed files/diff, relevant evidence, verification results, and deferred checks. The first review must be independent of implementation planning. Route one consolidated finding bundle to the same writer; after a fix, send the changed delta and new evidence to the same reviewer. Reviewers do not run project verification when repository instructions reserve it for the implementer.
 
-For the initial implementation phase, require Antigravity to:
+Findings should identify the root cause, precise location, trigger, impact, minimal correction, and focused expected verification. Close a finding only when the changed source and evidence address its actual cause; do not relabel it, infer closure from version/count/hash, or manufacture approval.
 
-1. implement one coherent unit at a time when the plan spans several subsystems;
-2. format only changed files or narrowly scoped changed roots, using `--include` for `dotnet format`; never run solution-wide formatting in a dirty or multi-file repository, and skip explicit formatting when it cannot be safely scoped;
-3. run focused verification only;
-4. report final expensive verification as deferred in `remaining_risks`, not as falsely passed or failed verification entries;
-5. make no further edits after its last focused verification command.
+## Progress and blockers
 
-Run from repository root:
+Do not impose a fixed number of review/fix rounds or stop solely because a finding repeats, a check fails, or a worker reports blocked. After several cycles (often around three), make a progress checkpoint: trace any recurring root cause again, check for regressions or unchanged uncertainty, confirm the writer used the right target and evidence, and determine whether scope or required authority changed. Change the correction approach when needed. Continue through six, eight, or more rounds when work remains authorized and each round makes meaningful progress; avoid blind retries.
 
-```powershell
-node .agents/skills/orchestrate-change/scripts/run-antigravity.mjs --prompt-file .agentflow/runs/<run-id>/executor-prompt.md --permission-manifest .agentflow/runs/<run-id>/permissions.json --model <model-slug>
-```
+Stop and report a concrete blocker when it cannot be resolved within current authorization, or when it requires a destructive/external action, dependency, migration/schema/public-contract expansion, conflicting user change, new scope, user decision, or exhausted budget. If a provider or worker fails, inspect retained state and recover the authorized session where possible. Do not switch provider/model or bypass a run limit without explicit authorization. Preserve user-imposed attempt limits. A source-fix loop never authorizes another operational run, retry, or one-shot action.
 
-Invoke the dependency-free Node adapter directly. Never route it through `pnpm`, `npm`, `yarn`, or another package manager; package-manager bootstrap and registry checks can block before Antigravity starts.
+## Verification and completion
 
-The adapter defaults to `gemini-3.7-flash-medium`, records the selected model in run state, and reuses it on continuation unless explicitly overridden. It records baseline and post-run Git evidence under ignored `.agentflow/runs/` and returns a run directory plus Antigravity conversation ID. Treat Git state and command output as authoritative; executor summary is supporting context only.
+Run checks only when authorized and permitted by repository instructions. Start with focused checks. Where useful, obtain read-only source review before expensive final checks; run expensive checks only after relevant source approval. Repeat only checks invalidated by a failure or later edit. If a source-only hold applies, leave checks unrun and report them accurately; do not claim completion or readiness.
 
-The adapter injects the concrete checkout root only into the in-memory Antigravity message so repository-relative tool paths resolve against the checkout instead of the CLI scratch directory. Persisted prompts and evidence remain machine-path-redacted.
-
-The adapter rejects any report after an unresolved permission denial, any command attempt absent from the current manifest, or an empty changed-file ledger after successful file mutations. It also rejects a `completed` report when required path postconditions fail, verification contains failed/not-run entries, a human-decision reason remains, a required command is omitted, raw command evidence is missing, or later same-lane edits make verification stale. Treat such output as invalid, not as success.
-
-Do not use Antigravity's `--dangerously-skip-permissions`. If a required command is soft-denied, report the exact denial and ask the user to add a narrow Antigravity permission rule.
-
-## Verify and review
-
-1. Inspect the executor result, current diff, untracked files, and focused verification.
-2. Do not rerun implementation verification as reviewer. Verification execution belongs to the executor under repository rules.
-3. Spawn one dedicated review subagent before expensive final verification. Give it the raw request, accepted plan, acceptance criteria, baseline evidence, current diff, relevant files, focused verification, and the explicitly deferred final checks.
-4. Require the reviewer to read and follow `.agents/skills/review-change/SKILL.md`. It must remain read-only and return its standard verdict and findings.
-5. For meaningful cross-stack changes, let that reviewer route independent backend and frontend lanes as required by the review skill.
-
-The first reviewer turn must be independent of planning. Reuse the same reviewer thread for later rounds so it can verify whether its findings were resolved.
-
-## Fix loop
-
-When verdict is `CHANGES REQUESTED`:
-
-1. Build a compact English fix prompt containing exact findings, affected files, and focused verification. Refer to the original request and acceptance criteria already present in the conversation; do not repeat the full history.
-2. Continue the same Antigravity conversation and run directory:
-
-```powershell
-node .agents/skills/orchestrate-change/scripts/run-antigravity.mjs --prompt-file <absolute-fix-prompt-path> --permission-manifest <absolute-fix-manifest-path> --run-dir <absolute-run-directory>
-```
-
-3. Inspect new Git evidence and executor verification.
-4. Send the updated diff and results to the existing review subagent.
-
-When the reviewer returns `APPROVE`, run one final verification phase in the same Antigravity conversation:
-
-1. Send only the final command ledger and current source-approval status.
-2. Create a final-phase permission manifest whose `required_verification` contains the exact final command ledger.
-3. Require each expensive integration suite/build/check at most once unless it fails or later source edits invalidate it.
-4. Require no formatting or source/test edits in this phase.
-5. If verification fails, send a focused fix prompt, rerun only invalidated checks, then return the changed diff to the same reviewer.
-6. If any file changes during final verification, review that delta before finishing.
-
-Stop with `NEEDS HUMAN` rather than continuing when any condition holds:
-
-- three fix rounds completed without approval;
-- the same material finding survives two consecutive fix attempts;
-- required verification cannot run or remains failing;
-- implementation needs a dependency, migration, public-contract expansion, destructive action, or external mutation not authorized by the task;
-- existing user changes conflict with required edits;
-- Antigravity returns `blocked` or needs interactive input.
-
-Finish only when reviewer verdict is `APPROVE`, final required verification is passing, no final-phase file change escaped review, and the diff still matches the accepted scope. Do not commit, push, merge, reset, or deploy. Report outcome, selected Antigravity model, files, verification, review rounds, residual risks, and the retained run-directory path.
+Finish when requested acceptance criteria are implemented, independent review is approved when required, and all permitted required verification passes. Report exact changed paths and source state, evidence and commands/results, review status, unrun checks, and residual risks. Keep source-approved, tested, integrated, runtime-accepted, and admitted states distinct. Follow repository/user commit policy; never commit automatically.

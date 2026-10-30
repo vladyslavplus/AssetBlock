@@ -12,12 +12,15 @@ def file_hash(path):
         for block in iter(lambda:stream.read(1024*1024),b''):h.update(block)
     return h.hexdigest()
 
-def state_hash(model):
+def tensors_hash(named):
     h=hashlib.sha256()
-    for name,tensor in sorted(model.state_dict().items()):
+    for name,tensor in sorted(named.items()):
         h.update(canonical([name,str(tensor.dtype),list(tensor.shape)]))
         h.update(tensor.detach().cpu().contiguous().reshape(-1).view(__import__('torch').uint8).numpy().tobytes())
     return h.hexdigest()
+
+def state_hash(model):
+    return tensors_hash(model.state_dict())
 
 def load_frozen(model_dir,cache_root,expected_files,*,device='cpu'):
     model_dir=ensure_inside(Path(model_dir),Path(cache_root))

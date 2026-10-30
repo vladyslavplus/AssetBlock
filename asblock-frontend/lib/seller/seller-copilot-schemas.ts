@@ -9,8 +9,8 @@ import {
 
 export const listingCopilotEnqueueResponseSchema = z
   .object({
-    jobId: z.string().uuid(),
-    assetVersionId: z.string().uuid(),
+    jobId: z.guid(),
+    assetVersionId: z.guid(),
   })
   .strict()
 
@@ -18,8 +18,8 @@ export type ListingCopilotEnqueueResponse = z.infer<typeof listingCopilotEnqueue
 
 export const listingCopilotSuggestionSchema = z
   .object({
-    jobId: z.string().uuid(),
-    assetVersionId: z.string().uuid(),
+    jobId: z.guid(),
+    assetVersionId: z.guid(),
     title: z.string().min(1).max(ASSET_TITLE_MAX_LENGTH),
     description: z.string().max(ASSET_DESCRIPTION_MAX_LENGTH),
     category: z.string().min(1).max(ASSET_CATEGORY_NAME_MAX_LENGTH),
@@ -28,7 +28,7 @@ export const listingCopilotSuggestionSchema = z
     actualModel: z.string().min(1).max(200),
     modelRevision: z.string().min(1).max(200).nullable(),
     upstreamProvider: z.string().min(1).max(128).nullable(),
-    createdAt: z.string().datetime({ offset: true }),
+    createdAt: z.iso.datetime({ offset: true }),
   })
   .strict()
 

@@ -20,6 +20,7 @@
 - Distinguish planner, reviewer, and implementer roles. Planning and review are read-only; implement only when the user authorizes changes. Existing authorization remains valid for its scope.
 - Inspect relevant code and tests before editing. Preserve user changes and keep diffs focused on the requested outcome.
 - Follow existing architecture and feature patterns. Avoid speculative abstractions, parallel service layers, broad renames, and unrelated cleanup.
+- This is a project in active development: do not add obsolete compatibility code, shims, fallback paths for superseded formats, or deprecated terminology in names, comments, tests, or docs. When touching a file, remove such code if it is no longer needed, or rename it to describe its actual purpose. An identifier owned by pinned or frozen evidence must stay exact for authentication: keep one named constant with a comment naming its owner, and do not spread it through the code.
 - Prefer a correct existing pattern, then language/framework capabilities, then an installed dependency before adding new code or packages. Do not remove validation, authorization, accessibility, error handling, or requested behavior to make code smaller.
 - Do not add dependencies, alter public contracts, change database schema, or generate migrations unless the task requires it. Follow the approval and migration rules in the relevant nested guide.
 - Never commit secrets or expose tokens, credentials, private keys, payment payloads, or decrypted asset content.

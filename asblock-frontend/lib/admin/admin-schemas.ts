@@ -3,31 +3,47 @@ import { z } from 'zod'
 const slugSchema = z
   .string()
   .min(1, 'Required')
-  .max(200)
+  .max(200, 'String must contain at most 200 character(s)')
   .regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/i, 'Use letters, numbers, and single hyphens')
 
 export const adminCategoryCreateSchema = z.object({
-  name: z.string().min(1, 'Name required').max(200),
-  description: z.string().max(4000).optional().nullable(),
+  name: z.string().min(1, 'Name required').max(200, 'String must contain at most 200 character(s)'),
+  description: z
+    .string()
+    .max(4000, 'String must contain at most 4000 character(s)')
+    .optional()
+    .nullable(),
   slug: slugSchema,
 })
 
 export const adminCategoryUpdateSchema = z.object({
-  name: z.string().min(1, 'Name required').max(200),
-  description: z.string().max(4000).optional().nullable(),
+  name: z.string().min(1, 'Name required').max(200, 'String must contain at most 200 character(s)'),
+  description: z
+    .string()
+    .max(4000, 'String must contain at most 4000 character(s)')
+    .optional()
+    .nullable(),
   slug: slugSchema,
 })
 
 export const adminTagCreateSchema = z.object({
-  name: z.string().min(1, 'Name required').max(200).trim(),
+  name: z
+    .string()
+    .min(1, 'Name required')
+    .max(200, 'String must contain at most 200 character(s)')
+    .trim(),
 })
 
 export const adminTagUpdateSchema = z.object({
-  name: z.string().min(1).max(200).trim(),
+  name: z
+    .string()
+    .min(1, 'String must contain at least 1 character(s)')
+    .max(200, 'String must contain at most 200 character(s)')
+    .trim(),
 })
 
 export const adminReviewDeleteSchema = z.object({
-  reviewId: z.string().uuid('Enter a valid review ID'),
+  reviewId: z.guid('Enter a valid review ID'),
 })
 
 const ADMIN_USER_ROLES = ['User', 'Moderator'] as const
@@ -38,7 +54,7 @@ export const adminUserRoleUpdateSchema = z.object({
 })
 
 export const adminUserListItemSchema = z.object({
-  id: z.string().uuid(),
+  id: z.guid(),
   username: z.string().min(1),
   email: z.string().min(1),
   role: z.string().min(1),
@@ -46,7 +62,7 @@ export const adminUserListItemSchema = z.object({
 })
 
 export const adminUserRoleAssignmentResultSchema = z.object({
-  userId: z.string().uuid(),
+  userId: z.guid(),
   role: z.string().min(1),
   roleRevision: z.number().int().nonnegative(),
 })

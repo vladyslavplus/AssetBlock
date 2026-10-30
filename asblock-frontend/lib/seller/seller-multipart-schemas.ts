@@ -11,10 +11,10 @@ export const assetUploadMultipartSchema = z.object({
   title: z.string().trim().min(1, 'Title is required').max(500),
   description: z.string().max(5000, 'Description must be at most 5000 characters').optional(),
   price: marketplacePriceSchema,
-  categoryId: z.string().uuid('Select a category'),
+  categoryId: z.guid('Select a category'),
   licenseCode: licenseCodeFieldSchema,
   tags: z.array(z.string().trim().min(1)).optional(),
-  workspaceId: z.string().uuid('workspaceId must be a UUID').optional(),
+  workspaceId: z.guid('workspaceId must be a UUID').optional(),
   expectedWorkspaceRevision: z.coerce.number().int().nonnegative().optional(),
 })
 
@@ -25,7 +25,7 @@ export const publishVersionMultipartSchema = z.object({
     .trim()
     .min(1, 'Release notes are required')
     .max(RELEASE_NOTES_MAX, `Release notes must be at most ${RELEASE_NOTES_MAX} characters`),
-  workspaceId: z.string().uuid('workspaceId must be a UUID').optional(),
+  workspaceId: z.guid('workspaceId must be a UUID').optional(),
   expectedWorkspaceRevision: z.coerce.number().int().nonnegative().optional(),
 })
 

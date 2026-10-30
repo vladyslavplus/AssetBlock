@@ -10,7 +10,11 @@ const DESCRIPTION_MAX = COLLECTION_DESCRIPTION_MAX_LENGTH
 
 export const createCollectionSchema = z
   .object({
-    title: z.string().trim().min(1, 'Title is required').max(TITLE_MAX),
+    title: z
+      .string()
+      .trim()
+      .min(1, 'Title is required')
+      .max(TITLE_MAX, `String must contain at most ${TITLE_MAX} character(s)`),
     description: z
       .string()
       .trim()
@@ -27,7 +31,7 @@ export type UpdateCollectionBody = z.infer<typeof updateCollectionSchema>
 
 export const addCollectionItemSchema = z
   .object({
-    assetId: z.string().uuid('Asset ID must be a valid UUID.'),
+    assetId: z.guid('Asset ID must be a valid UUID.'),
   })
   .strict()
 
@@ -35,14 +39,18 @@ export type AddCollectionItemBody = z.infer<typeof addCollectionItemSchema>
 
 export const reorderCollectionItemsSchema = z
   .object({
-    assetIds: z.array(z.string().uuid('Asset ID must be a valid UUID.')).max(COLLECTION_MAX_ITEMS),
+    assetIds: z.array(z.guid('Asset ID must be a valid UUID.')).max(COLLECTION_MAX_ITEMS),
   })
   .strict()
 
 export type ReorderCollectionItemsBody = z.infer<typeof reorderCollectionItemsSchema>
 
 export const collectionMetadataFormSchema = z.object({
-  title: z.string().trim().min(1, 'Title is required').max(TITLE_MAX),
+  title: z
+    .string()
+    .trim()
+    .min(1, 'Title is required')
+    .max(TITLE_MAX, `String must contain at most ${TITLE_MAX} character(s)`),
   description: z
     .string()
     .max(DESCRIPTION_MAX, `Description must be at most ${DESCRIPTION_MAX} characters`)
@@ -55,7 +63,7 @@ export const collectionStatusResponseSchema = z.enum(['DRAFT', 'PUBLISHED', 'ARC
 export type CollectionStatus = z.infer<typeof collectionStatusResponseSchema>
 
 export const collectionItemResponseSchema = z.object({
-  assetId: z.string().uuid(),
+  assetId: z.guid(),
   title: z.string(),
   price: z.number(),
   position: z.number().int().positive(),
@@ -64,21 +72,21 @@ export const collectionItemResponseSchema = z.object({
 })
 
 export const collectionListItemResponseSchema = z.object({
-  id: z.string().uuid(),
+  id: z.guid(),
   title: z.string(),
   description: z.string().nullable(),
   status: collectionStatusResponseSchema,
   publishedAt: z.string().nullable(),
   createdAt: z.string(),
-  sellerId: z.string().uuid(),
+  sellerId: z.guid(),
   sellerUsername: z.string(),
   itemCount: z.number().int().nonnegative(),
-  coverAssetId: z.string().uuid().nullable(),
+  coverAssetId: z.guid().nullable(),
   coverAssetTitle: z.string().nullable(),
 })
 
 export const collectionDetailResponseSchema = z.object({
-  id: z.string().uuid(),
+  id: z.guid(),
   title: z.string(),
   description: z.string().nullable(),
   status: collectionStatusResponseSchema,
@@ -86,13 +94,13 @@ export const collectionDetailResponseSchema = z.object({
   archivedAt: z.string().nullable(),
   createdAt: z.string(),
   updatedAt: z.string().nullable(),
-  sellerId: z.string().uuid(),
+  sellerId: z.guid(),
   sellerUsername: z.string(),
   items: z.array(collectionItemResponseSchema),
 })
 
 export const createCollectionResponseSchema = z.object({
-  id: z.string().uuid(),
+  id: z.guid(),
 })
 
 export const pagedCollectionsResponseSchema = z.object({

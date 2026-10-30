@@ -5,14 +5,14 @@ export const PENDING_CHECKOUT_CONTEXT_KEY = 'assetblock_pending_checkout_context
 
 const pendingCheckoutContextSchema = z.discriminatedUnion('kind', [
   z.object({
-    checkoutIntentId: z.string().uuid(),
+    checkoutIntentId: z.guid(),
     kind: z.literal('asset'),
-    assetId: z.string().uuid(),
+    assetId: z.guid(),
   }),
   z.object({
-    checkoutIntentId: z.string().uuid(),
+    checkoutIntentId: z.guid(),
     kind: z.literal('bundle'),
-    bundleId: z.string().uuid(),
+    bundleId: z.guid(),
   }),
 ])
 

@@ -5,6 +5,15 @@ vi.mock('server-only', () => ({}))
 
 describe('bff-params', () => {
   describe('parseUuidParam', () => {
+    it('accepts seeded ids that are not RFC 4122 versioned', () => {
+      const seededId = 'b8c4d5e6-f7a2-5b3c-0d9e-8f7a6b5c4d3e'
+      const result = parseUuidParam('id', seededId)
+      expect(result.ok).toBe(true)
+      if (result.ok) {
+        expect(result.value).toBe(seededId)
+      }
+    })
+
     it('returns parsed UUID on valid input', () => {
       const validUuid = '123e4567-e89b-12d3-a456-426614174000'
       const result = parseUuidParam('id', validUuid)

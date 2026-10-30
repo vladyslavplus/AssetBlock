@@ -12,12 +12,12 @@ class PreparedRepresentationTests(unittest.TestCase):
         self.maps=struct.pack('<II',4,8)
         self.rows=[{'fragmentId':'fragment','fileId':'file','partition':'train','language':'Java','chunkOrdinal':0,'inputIds':[0,7,2,99,2],'totalInputTokens':5,'chunking':CHUNKING,'sourceMappingByteOffset':0,'sourceMappingByteLength':8,'representationSha256':digest(canonical([CHUNKING,[99],[{'startByte':4,'endByte':8}]]))}]
         self.metadata={'tokenizerIdentity':copy.deepcopy(self.identity),'chunks':1}
-    def test_matching_identity_passes_changed_vocabulary_and_legacy_manifest_refused(self):
+    def test_matching_identity_passes_changed_vocabulary_and_missing_identity_refused(self):
         validate_prepared(self.rows,self.maps,self.metadata,self.extracted,self.identity)
         changed=copy.deepcopy(self.identity);changed['fileHashes']['vocab.json']='new'
         with self.assertRaisesRegex(ValueError,'new immutable run'):validate_prepared(self.rows,self.maps,self.metadata,self.extracted,changed)
-        legacy=copy.deepcopy(self.metadata);del legacy['tokenizerIdentity']
-        with self.assertRaisesRegex(ValueError,'new immutable run'):validate_prepared(self.rows,self.maps,legacy,self.extracted,self.identity)
+        missing_identity=copy.deepcopy(self.metadata);del missing_identity['tokenizerIdentity']
+        with self.assertRaisesRegex(ValueError,'new immutable run'):validate_prepared(self.rows,self.maps,missing_identity,self.extracted,self.identity)
     def test_self_consistent_parent_framing_mapping_and_membership_drift_refused(self):
         for field,value in [('fileId','unknown'),('partition','final-test'),('chunkOrdinal',1),('inputIds',[0,8,2,99,2])]:
             rows=copy.deepcopy(self.rows);rows[0][field]=value

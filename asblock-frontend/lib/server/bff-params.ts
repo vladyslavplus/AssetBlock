@@ -2,7 +2,7 @@ import 'server-only'
 import { z } from 'zod'
 import { problemResponse } from '@/lib/server/bff-http'
 
-const uuidSchema = z.string().uuid()
+const uuidSchema = z.guid()
 
 export type ParsedUuidResult = { ok: true; value: string } | { ok: false; response: Response }
 

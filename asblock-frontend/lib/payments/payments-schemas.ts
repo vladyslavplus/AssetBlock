@@ -4,7 +4,7 @@ import { checkoutAttributionBrowserSchema } from '@/lib/analytics/telemetry-sche
 
 export const createCheckoutRequestSchema = z
   .object({
-    assetId: z.string().uuid('Asset ID must be a valid UUID.'),
+    assetId: z.guid('Asset ID must be a valid UUID.'),
     attribution: checkoutAttributionBrowserSchema.optional(),
     doNotTrack: z.literal(true).optional(),
   })
@@ -14,7 +14,7 @@ export type CreateCheckoutRequest = z.infer<typeof createCheckoutRequestSchema>
 
 export const createBundleCheckoutRequestSchema = z
   .object({
-    bundleId: z.string().uuid('Bundle ID must be a valid UUID.'),
+    bundleId: z.guid('Bundle ID must be a valid UUID.'),
     attribution: checkoutAttributionBrowserSchema.optional(),
     doNotTrack: z.literal(true).optional(),
   })
@@ -24,7 +24,7 @@ export type CreateBundleCheckoutRequest = z.infer<typeof createBundleCheckoutReq
 
 export const createCheckoutResponseSchema = z.object({
   checkoutUrl: z.string().url(),
-  checkoutIntentId: z.string().uuid(),
+  checkoutIntentId: z.guid(),
 })
 
 export const CHECKOUT_FULFILLMENT_STATUSES = ['pending', 'completed', 'cancelled'] as const
@@ -32,9 +32,9 @@ export type CheckoutFulfillmentStatus = (typeof CHECKOUT_FULFILLMENT_STATUSES)[n
 
 export const checkoutStatusResponseSchema = z.object({
   status: z.enum(CHECKOUT_FULFILLMENT_STATUSES),
-  checkoutIntentId: z.string().uuid(),
-  orderId: z.string().uuid().nullable(),
+  checkoutIntentId: z.guid(),
+  orderId: z.guid().nullable(),
   productTitle: z.string(),
-  assetId: z.string().uuid().nullable(),
-  bundleId: z.string().uuid().nullable(),
+  assetId: z.guid().nullable(),
+  bundleId: z.guid().nullable(),
 })

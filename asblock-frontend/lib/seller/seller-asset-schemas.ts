@@ -9,13 +9,13 @@ export const sellerProcessingStatusSchema = z.enum([
 ])
 export type SellerProcessingStatus = z.infer<typeof sellerProcessingStatusSchema>
 
-const isoDateTimeSchema = z.string().datetime({ offset: true })
+const isoDateTimeSchema = z.iso.datetime({ offset: true })
 
 const sellerProcessingFieldsSchema = {
-  latestVersionId: z.string().uuid().nullable(),
+  latestVersionId: z.guid().nullable(),
   latestVersionNumber: z.number().int().nonnegative().nullable(),
-  currentReadyVersionId: z.string().uuid().nullable(),
-  publicVersionId: z.string().uuid().nullable(),
+  currentReadyVersionId: z.guid().nullable(),
+  publicVersionId: z.guid().nullable(),
   latestProcessingStatus: sellerProcessingStatusSchema,
   latestProcessingUpdatedAt: isoDateTimeSchema,
   latestProcessingErrorCode: z.string().min(1).max(64).nullable(),
@@ -24,13 +24,13 @@ const sellerProcessingFieldsSchema = {
 
 export const sellerAssetListItemSchema = z
   .object({
-    id: z.string().uuid(),
+    id: z.guid(),
     title: z.string().min(1),
     description: z.string().nullable(),
     price: z.number(),
-    categoryId: z.string().uuid(),
+    categoryId: z.guid(),
     categoryName: z.string().nullable(),
-    authorId: z.string().uuid(),
+    authorId: z.guid(),
     authorUsername: z.string(),
     createdAt: isoDateTimeSchema,
     tags: z.array(z.string()),
@@ -51,13 +51,13 @@ export type PagedSellerAssetList = z.infer<typeof pagedSellerAssetListSchema>
 
 export const sellerAssetDetailSchema = z
   .object({
-    id: z.string().uuid(),
+    id: z.guid(),
     title: z.string().min(1),
     description: z.string().nullable(),
     price: z.number(),
-    categoryId: z.string().uuid(),
+    categoryId: z.guid(),
     categoryName: z.string().nullable(),
-    authorId: z.string().uuid(),
+    authorId: z.guid(),
     authorUsername: z.string(),
     createdAt: isoDateTimeSchema,
     updatedAt: isoDateTimeSchema.nullable(),

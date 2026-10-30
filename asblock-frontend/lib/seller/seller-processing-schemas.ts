@@ -29,13 +29,13 @@ export function isNonTerminalStatus(status: AssetProcessingJobStatus): boolean {
   return status === 'QUEUED' || status === 'RUNNING' || status === 'RETRY_SCHEDULED'
 }
 
-export const isoDateTimeSchema = z.string().datetime({ offset: true })
+export const isoDateTimeSchema = z.iso.datetime({ offset: true })
 
 export const assetProcessingJobSchema = z
   .object({
-    id: z.string().uuid(),
-    assetId: z.string().uuid(),
-    assetVersionId: z.string().uuid(),
+    id: z.guid(),
+    assetId: z.guid(),
+    assetVersionId: z.guid(),
     type: assetProcessingJobTypeSchema,
     definitionVersion: z.number().int(),
     status: assetProcessingJobStatusSchema,
@@ -56,9 +56,9 @@ export type AssetProcessingJobDto = z.infer<typeof assetProcessingJobSchema>
 
 export const assetProcessingUpdateMessageSchema = z
   .object({
-    jobId: z.string().uuid(),
-    assetId: z.string().uuid(),
-    assetVersionId: z.string().uuid(),
+    jobId: z.guid(),
+    assetId: z.guid(),
+    assetVersionId: z.guid(),
     type: assetProcessingJobTypeSchema,
     status: assetProcessingJobStatusSchema,
     stage: z.string().min(1).max(64),

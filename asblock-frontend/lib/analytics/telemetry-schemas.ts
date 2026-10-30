@@ -12,7 +12,7 @@ export const analyticsTrafficSourceSchema = z.enum(ANALYTICS_TRAFFIC_SOURCES)
 export const analyticsDeviceClassSchema = z.enum(ANALYTICS_DEVICE_CLASSES)
 
 const analyticsEventBaseSchema = z.object({
-  eventId: z.string().uuid(),
+  eventId: z.guid(),
   source: analyticsTrafficSourceSchema,
   deviceClass: analyticsDeviceClassSchema,
   referrerHost: z.string().max(ANALYTICS_REFERRER_HOST_MAX_LENGTH).optional(),
@@ -23,33 +23,33 @@ export const ingestAnalyticsEventBrowserSchema = z.discriminatedUnion('eventType
   analyticsEventBaseSchema
     .extend({
       eventType: z.literal('ASSET_VIEW'),
-      assetId: z.string().uuid(),
+      assetId: z.guid(),
     })
     .strict(),
   analyticsEventBaseSchema
     .extend({
       eventType: z.literal('BUNDLE_VIEW'),
-      bundleId: z.string().uuid(),
+      bundleId: z.guid(),
     })
     .strict(),
   analyticsEventBaseSchema
     .extend({
       eventType: z.literal('COLLECTION_VIEW'),
-      collectionId: z.string().uuid(),
+      collectionId: z.guid(),
     })
     .strict(),
   analyticsEventBaseSchema
     .extend({
       eventType: z.literal('COLLECTION_ITEM_CLICK'),
-      collectionId: z.string().uuid(),
-      assetId: z.string().uuid(),
+      collectionId: z.guid(),
+      assetId: z.guid(),
     })
     .strict(),
   analyticsEventBaseSchema
     .extend({
       eventType: z.literal('DOWNLOAD_REQUESTED'),
-      assetId: z.string().uuid(),
-      assetVersionId: z.string().uuid(),
+      assetId: z.guid(),
+      assetVersionId: z.guid(),
     })
     .strict(),
 ])
@@ -57,15 +57,15 @@ export const ingestAnalyticsEventBrowserSchema = z.discriminatedUnion('eventType
 export type IngestAnalyticsEventBrowserBody = z.infer<typeof ingestAnalyticsEventBrowserSchema>
 
 const recommendationEventBaseSchema = z.object({
-  eventId: z.string().uuid(),
-  sourceAssetId: z.string().uuid(),
-  targetAssetId: z.string().uuid(),
+  eventId: z.guid(),
+  sourceAssetId: z.guid(),
+  targetAssetId: z.guid(),
   slotPosition: z.number().int().min(0).max(11),
-  exposureId: z.string().uuid(),
+  exposureId: z.guid(),
   rankingVersion: z.string().min(1).max(64),
   expiresAt: z.string().min(1),
   exposureToken: z.string().length(64),
-  candidateIds: z.array(z.string().uuid()).min(1).max(12),
+  candidateIds: z.array(z.guid()).min(1).max(12),
   deviceClass: analyticsDeviceClassSchema,
 })
 
@@ -89,7 +89,7 @@ export type IngestRecommendationEventBrowserBody = z.infer<
 export const checkoutAttributionBrowserSchema = z
   .object({
     source: analyticsTrafficSourceSchema.optional(),
-    collectionId: z.string().uuid().optional(),
+    collectionId: z.guid().optional(),
     referrerHost: z.string().max(ANALYTICS_REFERRER_HOST_MAX_LENGTH).optional(),
   })
   .strict()
