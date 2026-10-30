@@ -2,7 +2,7 @@
 
 import argparse
 
-from . import prepare
+from . import prepare, training
 
 
 def build_parser():
@@ -23,6 +23,24 @@ def build_parser():
                          help="prior candidate package bound by the supplied receipt")
     command.add_argument("--dry-run", action="store_true", help="write a non-evidence scratch rehearsal")
     command.set_defaults(handler=_prepare)
+
+    command = stages.add_parser("train", help="train five immutable verifier checkpoints")
+    command.add_argument("--run-id", required=True)
+    command.add_argument("--prepare-run-id", required=True)
+    command.add_argument("--inputs", required=True)
+    command.add_argument("--config", required=True)
+    command.set_defaults(handler=_train)
+
+    command = stages.add_parser("reload-check", help="verify all checkpoints in a fresh process")
+    command.add_argument("--run-id", required=True)
+    command.set_defaults(handler=_reload)
+
+    command = stages.add_parser("smoke", help="rehearse real-input binding and checkpoint round trip")
+    command.add_argument("--run-id", required=True, help="new dryrun-prefixed scratch directory")
+    command.add_argument("--prepare-run-id", required=True)
+    command.add_argument("--inputs", required=True)
+    command.add_argument("--config", required=True)
+    command.set_defaults(handler=_smoke)
     return parser
 
 
@@ -35,6 +53,26 @@ def _prepare(args):
                          dry_run=args.dry_run)
     return {"command": args.command, "outcome": result["outcome"], "runId": args.run_id,
             "directory": str(result["directory"])}
+
+
+def _train(args):
+    result = training.train(run_id=args.run_id, prepare_run_id=args.prepare_run_id,
+                            inputs_path=args.inputs, config_path=args.config)
+    return {"command": args.command, "outcome": result["outcome"], "runId": args.run_id,
+            "directory": str(result["directory"]), "evidenceSha256": result["evidenceSha256"]}
+
+
+def _reload(args):
+    result = training.reload_check(run_id=args.run_id)
+    return {"command": args.command, "outcome": result["outcome"], "runId": args.run_id,
+            "directory": str(result["directory"]), "evidenceSha256": result["evidenceSha256"]}
+
+
+def _smoke(args):
+    result = training.smoke(run_id=args.run_id, prepare_run_id=args.prepare_run_id,
+                            inputs_path=args.inputs, config_path=args.config)
+    return {"command": args.command, "outcome": result["outcome"], "runId": args.run_id,
+            "directory": str(result["directory"]), "reportSha256": result["reportSha256"]}
 
 
 def main(argv=None):
