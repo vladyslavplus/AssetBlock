@@ -287,8 +287,14 @@ def _disjointness(files, query, positive, negatives):
     return None
 
 
-def evaluate(index, config, *, sources, sources_root):
-    """Return per-language admitted counts or a concrete blocker status."""
+def _outcomes(index, config, *, sources, sources_root):
+    """Gate every reviewed triplet in index order: the one loop shared by report and training.
+
+    Yields (triplet, reason, endpoints). An admitted triplet has reason None and
+    endpoints ordered query, positive, then negatives, each materialized from real
+    source bytes as {"label", "fragment", "parent", "body"}. A blocked triplet carries
+    its concrete reason and no endpoints.
+    """
     sources = {row["sourceId"]: row for row in sources}
     files = {row["fileId"]: row for row in index["files"]}
     fragments = {row["fragmentId"]: row for row in index["fragments"]}
@@ -296,7 +302,61 @@ def evaluate(index, config, *, sources, sources_root):
     held_families, held_normalized = held_out_guard(split_files)
     directed, provenance = pair_assertions(fragments, index["merged"]["pairReviews"])
     conflicts = combined_pair_conflicts(directed, index["triplets"], files, fragments)
+    minimum_negatives = config["admission"]["minNegativesPerAnchor"]
 
+    for item in index["triplets"]:
+        if not reviewed_triplet_eligible(item, files, fragments):
+            yield item, INELIGIBLE_TRIPLET, None
+            continue
+        query = fragments[item["queryFragmentId"]]
+        if item.get("querySha256") != query["sha256"]:
+            raise ValueError("reviewed triplet query hash is not bound")
+        if is_derived(query):
+            yield item, INELIGIBLE_TRIPLET, None
+            continue
+        reason = _reconcile(item, directed, conflicts)
+        if reason is not None:
+            yield item, reason, None
+            continue
+        if _triplet_provenance(item, directed, provenance) is None:
+            yield item, MISSING_PROVENANCE, None
+            continue
+        positive = fragments[item["positive"]["rightFragmentId"]]
+        negatives = [fragments[row["rightFragmentId"]] for row in item["negatives"]]
+        if len(negatives) < minimum_negatives:
+            raise ValueError("reviewed triplet lacks query-relative negatives")
+        if len({row["fragmentId"] for row in negatives}) != len(negatives):
+            raise ValueError("reviewed negatives are not distinct fragments")
+        reason = _disjointness(files, query, positive, negatives)
+        if reason is not None:
+            yield item, reason, None
+            continue
+        reason = _rejection(sources, files, held_families, held_normalized, query, positive, negatives)
+        if reason is not None:
+            yield item, reason, None
+            continue
+        endpoints = []
+        for label, fragment in (("anchor", query), ("positive", positive),
+                                *[("negative", row) for row in negatives]):
+            try:
+                parent, body = _materialize(sources_root, files, fragments, fragment, held_normalized, label)
+            except _Blocked as exc:
+                yield item, exc.reason, None
+                break
+            endpoints.append({"label": label, "fragment": fragment, "parent": parent, "body": body})
+        else:
+            yield item, None, endpoints
+
+
+def admitted_triplets(index, config, *, sources, sources_root):
+    """Admitted triplets for training, with the same gate and materialization as evaluate."""
+    return [{"queryFragmentId": item["queryFragmentId"], "language": item["language"], "endpoints": endpoints}
+            for item, reason, endpoints in _outcomes(index, config, sources=sources, sources_root=sources_root)
+            if reason is None]
+
+
+def evaluate(index, config, *, sources, sources_root):
+    """Return per-language admitted counts or a concrete blocker status."""
     admission = config["admission"]
     floor = admission["minAnchorsPerLanguage"]
     cap = admission["maxAnchorsPerLanguage"]
@@ -307,53 +367,19 @@ def evaluate(index, config, *, sources, sources_root):
     buckets = {language: {"anchorFiles": set(), "nonIdenticalFiles": set(), "dialects": set(),
                           "reviewedAnchors": 0} for language in LANGUAGES}
     excluded = []
-    for item in index["triplets"]:
-        query_id = item.get("queryFragmentId")
-        if not reviewed_triplet_eligible(item, files, fragments):
-            excluded.append({"reason": INELIGIBLE_TRIPLET, "queryFragmentId": query_id})
-            continue
-        query = fragments[item["queryFragmentId"]]
-        if item.get("querySha256") != query["sha256"]:
-            raise ValueError("reviewed triplet query hash is not bound")
-        if is_derived(query):
-            excluded.append({"reason": INELIGIBLE_TRIPLET, "queryFragmentId": query_id})
-            continue
-        reason = _reconcile(item, directed, conflicts)
+    for item, reason, endpoints in _outcomes(index, config, sources=sources, sources_root=sources_root):
         if reason is not None:
-            excluded.append({"reason": reason, "queryFragmentId": query_id})
+            excluded.append({"reason": reason, "queryFragmentId": item.get("queryFragmentId")})
             continue
-        if _triplet_provenance(item, directed, provenance) is None:
-            excluded.append({"reason": MISSING_PROVENANCE, "queryFragmentId": query_id})
-            continue
-        positive = fragments[item["positive"]["rightFragmentId"]]
-        negatives = [fragments[row["rightFragmentId"]] for row in item["negatives"]]
-        if len(negatives) < minimum_negatives:
-            raise ValueError("reviewed triplet lacks query-relative negatives")
-        if len({row["fragmentId"] for row in negatives}) != len(negatives):
-            raise ValueError("reviewed negatives are not distinct fragments")
-        reason = _disjointness(files, query, positive, negatives)
-        if reason is not None:
-            excluded.append({"reason": reason, "queryFragmentId": query_id})
-            continue
-        reason = _rejection(sources, files, held_families, held_normalized, query, positive, negatives)
-        if reason is not None:
-            excluded.append({"reason": reason, "queryFragmentId": query_id})
-            continue
-        for label, fragment in (("anchor", query), ("positive", positive),
-                                *[("negative", row) for row in negatives]):
-            try:
-                _materialize(sources_root, files, fragments, fragment, held_normalized, label)
-            except _Blocked as exc:
-                excluded.append({"reason": exc.reason, "queryFragmentId": query_id})
-                break
-        else:
-            parent = files[query["fileId"]]
-            bucket = buckets[item["language"]]
-            bucket["anchorFiles"].add(parent["fileId"])
-            if positive["sha256"] != query["sha256"]:
-                bucket["nonIdenticalFiles"].add(parent["fileId"])
-            bucket["dialects"].add(parent.get("dialect", item["language"]))
-            bucket["reviewedAnchors"] += 1
+        query = endpoints[0]["fragment"]
+        positive = endpoints[1]["fragment"]
+        parent = endpoints[0]["parent"]
+        bucket = buckets[item["language"]]
+        bucket["anchorFiles"].add(parent["fileId"])
+        if positive["sha256"] != query["sha256"]:
+            bucket["nonIdenticalFiles"].add(parent["fileId"])
+        bucket["dialects"].add(parent.get("dialect", item["language"]))
+        bucket["reviewedAnchors"] += 1
 
     total_reviewed = sum(v["reviewedAnchors"] for v in buckets.values())
     languages, admitted = {}, True

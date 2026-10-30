@@ -1,7 +1,8 @@
-"""Retrieval training-data admission and provenance binding.
+"""Retrieval training-data admission, encoder training and provenance binding.
 
-This package consumes only explicitly identified, hash-bound local artifacts. It
-never downloads source, loads an ML model, instantiates an optimizer, writes a
+This package consumes only explicitly identified, hash-bound local artifacts. The
+admission stage never loads an ML model. The training stage loads the pinned encoder
+only after binding to an admitted prepare run. Nothing downloads source, writes a
 database, scores the sealed final test, or authorizes publication.
 """
 

@@ -43,11 +43,8 @@ def _materialize_derived(index, run_id):
     return materialized
 
 
-def run(*, loaded, config_loaded, run_id):
-    config = config_loaded["config"]
-    source_manifest = inputs.value(loaded, inputs.SOURCE_MANIFEST)
-    split = inputs.value(loaded, inputs.SPLIT)
-    extract = inputs.value(loaded, inputs.EXTRACT)
+def reviewed_index(loaded):
+    """Corpus index over every reviewed payload; shared by prepare-data and training."""
     payloads = [inputs.value(loaded, role) for role in (inputs.REVIEWED_EXPORT,
                                                         inputs.INDEPENDENT_ACCEPTANCE,
                                                         inputs.VALIDATION_ACCEPTANCE,
@@ -55,8 +52,14 @@ def run(*, loaded, config_loaded, run_id):
     payloads = [row for row in payloads if row is not None]
     if not payloads:
         raise ValueError("prepare-data requires at least one reviewed fragment export")
+    return build_index(inputs.value(loaded, inputs.SOURCE_MANIFEST), inputs.value(loaded, inputs.SPLIT),
+                       inputs.value(loaded, inputs.EXTRACT), payloads)
 
-    index = build_index(source_manifest, split, extract, payloads)
+
+def run(*, loaded, config_loaded, run_id):
+    config = config_loaded["config"]
+    source_manifest = inputs.value(loaded, inputs.SOURCE_MANIFEST)
+    index = reviewed_index(loaded)
     membership = _membership_report(loaded, index["lineage"])
     training = admission.evaluate(index, config, sources=source_manifest["sources"],
                                   sources_root=loaded["sourcesRoot"])

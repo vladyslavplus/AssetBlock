@@ -69,6 +69,25 @@ class AdmissionTests(unittest.TestCase):
         return admission.evaluate(scene["index"], scene["config"], sources=scene["sources"],
                                   sources_root=scene["sources_root"])
 
+    def test_admitted_triplets_agree_with_the_admission_report(self):
+        scene = self.scene(min_anchors=0)
+        report = self.evaluate(scene)
+        admitted = admission.admitted_triplets(scene["index"], scene["config"], sources=scene["sources"],
+                                               sources_root=scene["sources_root"])
+        self.assertEqual(report["totals"]["admittedTriplets"], len(admitted))
+        self.assertEqual([endpoint["label"] for endpoint in admitted[0]["endpoints"]],
+                         ["anchor", "positive", "negative", "negative"])
+        self.assertTrue(all(endpoint["parent"]["partition"] == "train"
+                            for endpoint in admitted[0]["endpoints"]))
+
+    def test_blocked_triplets_are_not_listed_for_training(self):
+        scene = self.scene(min_anchors=0, same_as_query_negative=True)
+        report = self.evaluate(scene)
+        admitted = admission.admitted_triplets(scene["index"], scene["config"], sources=scene["sources"],
+                                               sources_root=scene["sources_root"])
+        self.assertEqual(admitted, [])
+        self.assertEqual(report["totals"]["admittedTriplets"], 0)
+
     # -- admission of reviewed volume ------------------------------------
     def test_one_reviewed_anchor_is_admitted(self):
         result = self.evaluate(self.scene(min_anchors=0))
