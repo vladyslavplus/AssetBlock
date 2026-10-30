@@ -5,7 +5,6 @@ from pathlib import Path
 from scripts.code_analysis.contracts import canonical, digest
 from scripts.code_analysis.splits import normalized_hash
 from scripts.code_retrieval import admission
-from scripts.code_retrieval.paths import RETRIEVAL_ROOT
 from scripts.code_retrieval.tests import _support as fx
 
 LANGUAGE = "python"
@@ -18,8 +17,7 @@ def review(pairs, *, reviewer="Pair reviewer", reviewed_on="2026-10-01"):
 
 class AdmissionTests(unittest.TestCase):
     def setUp(self):
-        RETRIEVAL_ROOT.mkdir(parents=True, exist_ok=True)
-        self.temp = tempfile.TemporaryDirectory(dir=RETRIEVAL_ROOT)
+        self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
         self.root = Path(self.temp.name)
         self.counter = 0

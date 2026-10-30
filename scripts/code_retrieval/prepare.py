@@ -5,7 +5,7 @@ optimizer, fetches source bytes from the network or writes a database. Outputs a
 written once per run id; an existing output is an immutable collision.
 """
 
-from scripts.code_analysis.contracts import canonical, digest
+from scripts.code_analysis.contracts import canonical
 from scripts.code_analysis.corpus import write_once
 
 from . import admission, candidates, inputs, validation
@@ -15,42 +15,19 @@ from .paths import RETRIEVAL_ROOT, derived_dir, run_dir
 SCHEMA = "code-retrieval-prepare-data-v1"
 
 
-def _seal_report(loaded, lineage):
-    split = inputs.value(loaded, inputs.SPLIT)
-    extract = inputs.value(loaded, inputs.EXTRACT)
-    manifest = inputs.value(loaded, inputs.SOURCE_MANIFEST)
-    seal = inputs.value(loaded, inputs.FINAL_TEST_SEAL)
-    split_identity = inputs.identity(loaded, inputs.SPLIT)
-    if seal.get("partition") != "final-test":
-        raise ValueError("final-test seal names an unexpected partition")
-    for flag in ("scored", "ranksInspected", "tuning"):
-        if seal.get(flag) is not False:
-            raise ValueError("final-test seal was " + flag)
-    if seal.get("splitSha256") != split_identity["byteSha256"]:
-        raise ValueError("final-test seal split binding drift")
-    if seal.get("extractionSha256") != extract.get("extractionSha256"):
-        raise ValueError("final-test seal extraction binding drift")
-    if seal.get("rightsSha256") != split.get("rightsSha256"):
-        raise ValueError("final-test seal rights binding drift")
-    manifest_rights = digest(canonical({row["sourceId"]: row.get("rights", {})
-                                        for row in manifest["sources"]}))
-    if manifest_rights != split.get("rightsSha256"):
-        raise ValueError("source manifest and split disagree on rights identity")
-
-    final_ids = set(lineage["finalTestFileIds"])
-    if seal.get("fileCount") != len(final_ids):
-        raise ValueError("final-test seal file count drift")
-    referenced = set(seal.get("galleryFileIds") or [])
-    referenced |= set(seal.get("relevance") or {})
-    referenced |= {row.get("seedFileId") for row in seal.get("seedIdentities") or []}
-    referenced.discard(None)
-    if referenced and not referenced <= final_ids:
-        raise ValueError("final-test seal references files outside the final-test partition")
-    return {"partition": seal["partition"], "fileCount": len(final_ids),
-            "seedCount": seal.get("seedCount"), "scored": False, "ranksInspected": False, "tuning": False,
-            "splitSha256": seal["splitSha256"], "extractionSha256": seal["extractionSha256"],
-            "rightsSha256": seal["rightsSha256"],
-            "finalTestMembershipSha256": lineage["finalTestMembershipSha256"]}
+def _membership_report(loaded, lineage):
+    membership = inputs.value(loaded, inputs.FINAL_TEST_MEMBERSHIP)
+    if membership.get("finalTestFileIds") != lineage["finalTestFileIds"]:
+        raise ValueError("final-test membership changed after authenticated input loading")
+    if membership.get("finalTestMembershipSha256") != lineage["finalTestMembershipSha256"]:
+        raise ValueError("final-test membership digest drift")
+    if any(membership.get(flag) is not False for flag in ("scored", "ranksInspected", "tuning")):
+        raise ValueError("final-test membership non-relevance flags must remain false")
+    return {"schema": membership["schema"], "partition": membership["partition"],
+            "fileCount": membership["fileCount"],
+            "finalTestMembershipSha256": membership["finalTestMembershipSha256"],
+            "rightsSha256": membership["rightsSha256"],
+            "scored": False, "ranksInspected": False, "tuning": False}
 
 
 def _materialize_derived(index, run_id):
@@ -80,7 +57,7 @@ def run(*, loaded, config_loaded, run_id):
         raise ValueError("prepare-data requires at least one reviewed fragment export")
 
     index = build_index(source_manifest, split, extract, payloads)
-    seal = _seal_report(loaded, index["lineage"])
+    membership = _membership_report(loaded, index["lineage"])
     training = admission.evaluate(index, config, sources=source_manifest["sources"],
                                   sources_root=loaded["sourcesRoot"])
     contribution = candidates.build(index, sources=source_manifest["sources"], sources_root=loaded["sourcesRoot"],
@@ -113,7 +90,8 @@ def run(*, loaded, config_loaded, run_id):
     if "protocolSha256" in config_loaded:
         identity["protocolSha256"] = config_loaded["protocolSha256"]
 
-    payload = {"schema": SCHEMA, "status": status, "runId": run_id, "identity": identity, "seal": seal,
+    payload = {"schema": SCHEMA, "status": status, "runId": run_id, "identity": identity,
+               "finalTestMembership": membership,
                "trainingAdmission": training, "validationQueries": validation_report,
                "corpusIndex": {"files": len(index["files"]), "fragments": len(index["fragments"]),
                                "derivedFragments": len(materialized),

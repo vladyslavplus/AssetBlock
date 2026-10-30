@@ -46,7 +46,7 @@ def eligible_fragment(fragment):
             and not fragment.get("partialMLCoverage"))
 
 
-def _unique(rows, key, label):
+def unique_rows(rows, key, label):
     out = {}
     for row in rows or []:
         ident = row.get(key)
@@ -84,7 +84,7 @@ def bind_lineage(manifest, split, extract):
     families = split.get("families")
     if not isinstance(families, dict) or not families:
         raise ValueError("split families are required")
-    split_files = _unique(split.get("files"), "fileId", "split file")
+    split_files = unique_rows(split.get("files"), "fileId", "split file")
     for row in split_files.values():
         if row.get("sourceId") not in sources:
             raise ValueError("split file names an unknown source")
@@ -108,7 +108,7 @@ def bind_lineage(manifest, split, extract):
             raise ValueError("split repeats an original source file identity: {}".format(key))
         canonical_files[key] = file_id
 
-    extract_files = _unique(extract.get("files"), "fileId", "extraction file")
+    extract_files = unique_rows(extract.get("files"), "fileId", "extraction file")
     if set(extract_files) != set(split_files):
         raise ValueError("extraction file membership disagrees with the authoritative split")
     for file_id, row in extract_files.items():
@@ -127,6 +127,47 @@ def bind_lineage(manifest, split, extract):
             "extractFiles": extract_files, "families": families, "canonicalFiles": canonical_files,
             "finalTestFileIds": final_test,
             "finalTestMembershipSha256": digest(canonical(final_test))}
+
+
+def build_final_test_membership(manifest, split, extract, input_pins):
+    """Build non-relevance membership metadata from authenticated corpus inputs."""
+    lineage = bind_lineage(manifest, split, extract)
+    file_keys = ("fileId", "sourceId", "path", "partition", "familyId", "language",
+                 "sha256", "normalizedSha256", "bytes")
+    rows = []
+    extract_files = lineage["extractFiles"]
+    for file_id in lineage["finalTestFileIds"]:
+        split_row = lineage["splitFiles"][file_id]
+        extract_row = extract_files[file_id]
+        if any(split_row.get(key) != extract_row.get(key) for key in FILE_INVARIANTS):
+            raise ValueError("final-test split/extract row mismatch: " + file_id)
+        rows.append({key: extract_row.get(key) for key in file_keys})
+    gallery = sorted(
+        file_id for file_id, row in extract_files.items()
+        if row.get("partition") == "final-test"
+        and row.get("searchableExecutable") is True
+        and not row.get("generated")
+        and not row.get("vendor")
+    )
+    if not set(gallery) <= set(lineage["finalTestFileIds"]):
+        raise ValueError("final-test gallery contains a foreign file")
+    if split.get("rightsSha256") != digest(canonical({
+            row["sourceId"]: row.get("rights", {}) for row in manifest["sources"]})):
+        raise ValueError("source manifest and split disagree on rights identity")
+    return {
+        "schema": "code-retrieval-final-test-membership-v1",
+        "partition": "final-test",
+        "fileCount": len(lineage["finalTestFileIds"]),
+        "finalTestFileIds": list(lineage["finalTestFileIds"]),
+        "finalTestFiles": rows,
+        "galleryFileIds": gallery,
+        "finalTestMembershipSha256": lineage["finalTestMembershipSha256"],
+        "inputPins": input_pins,
+        "rightsSha256": split["rightsSha256"],
+        "scored": False,
+        "ranksInspected": False,
+        "tuning": False,
+    }
 
 
 def _resolve_extra_file(row, lineage):
@@ -182,7 +223,7 @@ def build(manifest, split, extract, payloads):
         _resolve_extra_file(row, lineage)
         files[file_id] = row
 
-    fragments = _unique(extract.get("fragments"), "fragmentId", "extraction fragment")
+    fragments = unique_rows(extract.get("fragments"), "fragmentId", "extraction fragment")
     for row in merged["extraFragments"]:
         frag_id = row.get("fragmentId")
         base = fragments.get(frag_id)

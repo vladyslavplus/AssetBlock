@@ -5,8 +5,7 @@ from pathlib import Path
 from unittest import mock
 
 from scripts.code_analysis.contracts import digest
-from scripts.code_retrieval import config as config_module, inputs, prepare, validation
-from scripts.code_retrieval.paths import RETRIEVAL_ROOT
+from scripts.code_retrieval import corpus_index, config as config_module, inputs, prepare, validation
 from scripts.code_retrieval.tests import _support as fx
 
 LANGUAGE = "python"
@@ -101,8 +100,7 @@ class ValidationScene:
 
 class ValidationAdmissionTests(unittest.TestCase):
     def setUp(self):
-        RETRIEVAL_ROOT.mkdir(parents=True, exist_ok=True)
-        self.temp = tempfile.TemporaryDirectory(dir=RETRIEVAL_ROOT)
+        self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
         self.counter = 0
 
@@ -533,8 +531,7 @@ class ValidationAdmissionTests(unittest.TestCase):
 
 class ValidationProposeTests(unittest.TestCase):
     def setUp(self):
-        RETRIEVAL_ROOT.mkdir(parents=True, exist_ok=True)
-        self.temp = tempfile.TemporaryDirectory(dir=RETRIEVAL_ROOT)
+        self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
         self.scene = ValidationScene(self.temp.name, 1, validation_files=6)
         self.index = fx.index(self.scene.manifest, self.scene.split, self.scene.extract, [])
@@ -592,8 +589,7 @@ class PrepareValidationWiringTests(unittest.TestCase):
     DISTRACTORS = 40
 
     def setUp(self):
-        RETRIEVAL_ROOT.mkdir(parents=True, exist_ok=True)
-        self.temp = tempfile.TemporaryDirectory(dir=RETRIEVAL_ROOT)
+        self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
         self.root = Path(self.temp.name)
         self.corpus = self.root / "runs" / "corpus-fixture"
@@ -701,15 +697,20 @@ class PrepareValidationWiringTests(unittest.TestCase):
             (self.corpus / name).write_bytes(raw)
             entries.append({"role": role, "path": "runs/corpus-fixture/" + name,
                             "byteSha256": fx.sha(raw), "canonicalSha256": digest(fx.canon(value))})
-        seal = {"schema": "code-corpus-v1", "partition": "final-test", "seedCount": 0,
-                "fileCount": len([row for row in split["files"] if row["partition"] == "final-test"]),
-                "splitSha256": digest((self.corpus / "split.json").read_bytes()),
-                "extractionSha256": extract["extractionSha256"], "rightsSha256": split["rightsSha256"],
-                "scored": False, "ranksInspected": False, "tuning": False}
-        raw = fx.canon(seal)
-        (self.corpus / "final-test-seal.json").write_bytes(raw)
-        entries.append({"role": "final-test-seal", "path": "runs/corpus-fixture/final-test-seal.json",
-                        "byteSha256": fx.sha(raw), "canonicalSha256": digest(fx.canon(seal))})
+        by_role = {entry["role"]: entry for entry in entries}
+        input_pins = {
+            role: {"relativePath": by_role[role]["path"],
+                   "bytes": len((self.corpus / (role + ".json")).read_bytes()),
+                   "byteSha256": by_role[role]["byteSha256"],
+                   "canonicalSha256": by_role[role]["canonicalSha256"]}
+            for role in (inputs.SOURCE_MANIFEST, inputs.SPLIT, inputs.EXTRACT)
+        }
+        membership = corpus_index.build_final_test_membership(manifest, split, extract, input_pins)
+        raw = fx.canon(membership)
+        name = "final-test-membership.json"
+        (self.corpus / name).write_bytes(raw)
+        entries.append({"role": inputs.FINAL_TEST_MEMBERSHIP, "path": "runs/corpus-fixture/" + name,
+                        "byteSha256": fx.sha(raw), "canonicalSha256": digest(fx.canon(membership))})
         return nodes, entries
 
     def run_prepare(self, entries):

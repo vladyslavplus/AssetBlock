@@ -4,7 +4,6 @@ import unittest
 from pathlib import Path
 
 from scripts.code_retrieval import corpus_index
-from scripts.code_retrieval.paths import RETRIEVAL_ROOT
 from scripts.code_retrieval.tests import _support as fx
 
 LANGUAGE = "python"
@@ -25,8 +24,7 @@ class _RecordingStream(io.BytesIO):
 
 class BoundedReadTests(unittest.TestCase):
     def setUp(self):
-        RETRIEVAL_ROOT.mkdir(parents=True, exist_ok=True)
-        self.temp = tempfile.TemporaryDirectory(dir=RETRIEVAL_ROOT)
+        self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
         self.root = Path(self.temp.name)
 
@@ -63,8 +61,7 @@ class BoundedReadTests(unittest.TestCase):
 
 class LineageIdentityTests(unittest.TestCase):
     def setUp(self):
-        RETRIEVAL_ROOT.mkdir(parents=True, exist_ok=True)
-        self.temp = tempfile.TemporaryDirectory(dir=RETRIEVAL_ROOT)
+        self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
         self.root = Path(self.temp.name)
         self.nodes = [fx.node("fixture", "q.py", LANGUAGE, "train", "fam-train", fx.python_body("q")),

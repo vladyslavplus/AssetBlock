@@ -3,36 +3,25 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from scripts.code_retrieval import inputs
-from scripts.code_retrieval.paths import RETRIEVAL_ROOT
+from scripts.code_retrieval import corpus_index, inputs
 from scripts.code_retrieval.tests import _support as fx
-
-VALUES = {
-    "source-manifest": {"schema": "code-corpus-v1", "sources": []},
-    "split": {"schema": "code-corpus-v1", "files": [], "families": {"fam": {"partition": "train"}},
-              "rightsSha256": fx.sha(b"rights"), "normalization": {"algorithm": "ast-leaves-identifiers-v1"}},
-    "extract": {"schema": "code-corpus-v1", "files": [], "fragments": [], "extractionSha256": fx.sha(b"x")},
-    "final-test-seal": {"schema": "code-corpus-v1", "partition": "final-test", "fileCount": 1,
-                        "splitSha256": fx.sha(b"s"), "extractionSha256": fx.sha(b"x"),
-                        "rightsSha256": fx.sha(b"r"), "scored": False, "ranksInspected": False,
-                        "tuning": False},
-    "reviewed-export": {"schema": "code-corpus-v1", "extraFiles": [], "extraFragments": []},
-}
-
 
 class InputManifestTests(unittest.TestCase):
     def setUp(self):
-        RETRIEVAL_ROOT.mkdir(parents=True, exist_ok=True)
-        self.temp = tempfile.TemporaryDirectory(dir=RETRIEVAL_ROOT)
+        self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
         self.root = Path(self.temp.name)
         self.corpus = self.root / "runs" / "corpus-fixture"
         (self.corpus / "sources").mkdir(parents=True)
+        node = fx.node("fixture", "final.py", "python", "final-test", "fam-final", fx.python_body("final"))
+        self.values = dict(zip(("source-manifest", "split", "extract"),
+                               fx.corpus([node], [], sources=[fx.source("fixture", [
+                                   (node["row"]["path"], node["row"]["sha256"], "python")])])) )
+        self.values["reviewed-export"] = {"schema": "code-corpus-v1", "extraFiles": [], "extraFragments": []}
         self.names = {"source-manifest": "source-manifest.json", "split": "split.json",
-                      "extract": "extract.json", "final-test-seal": "final-test-seal.json",
-                      "reviewed-export": "reviewed-export.json"}
+                      "extract": "extract.json", "reviewed-export": "reviewed-export.json"}
         for role, name in self.names.items():
-            (self.corpus / name).write_bytes(fx.canon(VALUES[role]))
+            (self.corpus / name).write_bytes(fx.canon(self.values[role]))
         self.manifest = self.root / "inputs.json"
 
     def entry(self, role, **extra):
@@ -55,12 +44,22 @@ class InputManifestTests(unittest.TestCase):
                 "canonicalSha256": fx.sha(fx.canon(value))}
 
     def all_entries(self):
-        return [self.entry(role) for role in self.names]
+        entries = [self.entry(role) for role in self.names]
+        by_role = {entry["role"]: entry for entry in entries}
+        pins = {role: {"relativePath": by_role[role]["path"],
+                       "bytes": len((self.corpus / self.names[role]).read_bytes()),
+                       "byteSha256": by_role[role]["byteSha256"],
+                       "canonicalSha256": by_role[role]["canonicalSha256"]}
+                for role in ("source-manifest", "split", "extract")}
+        value = corpus_index.build_final_test_membership(
+            self.values["source-manifest"], self.values["split"], self.values["extract"], pins)
+        entries.append(self.declare(inputs.FINAL_TEST_MEMBERSHIP, value))
+        return entries
 
     def test_valid_manifest_resolves_every_artifact(self):
         loaded = self.write(self.all_entries())
-        self.assertEqual(set(loaded["artifacts"]), set(self.names))
-        self.assertEqual(loaded["artifacts"]["extract"]["value"], VALUES["extract"])
+        self.assertEqual(set(loaded["artifacts"]), set(self.names) | {inputs.FINAL_TEST_MEMBERSHIP})
+        self.assertEqual(loaded["artifacts"]["extract"]["value"], self.values["extract"])
         self.assertTrue(loaded["sourcesRoot"].is_dir())
 
     def test_byte_digest_drift_fails_closed(self):
@@ -106,8 +105,30 @@ class InputManifestTests(unittest.TestCase):
             self.write(entries)
 
     def test_missing_required_role_is_rejected(self):
-        entries = [row for row in self.all_entries() if row["role"] != "final-test-seal"]
+        entries = [row for row in self.all_entries() if row["role"] != inputs.FINAL_TEST_MEMBERSHIP]
         with self.assertRaisesRegex(ValueError, "required roles"):
+            self.write(entries)
+
+    def test_seal_role_is_rejected_before_declared_path_is_opened(self):
+        entries = self.all_entries()
+        entries.append({"role": inputs.FINAL_TEST_SEAL, "path": "runs/corpus-fixture/absent-seal.json"})
+        with self.assertRaisesRegex(ValueError, "final-test-seal role is forbidden"):
+            self.write(entries)
+
+    def test_json_duplicate_members_are_rejected(self):
+        with self.assertRaisesRegex(ValueError, "duplicate JSON member"):
+            inputs.parse_json(b'{"schema":"one","schema":"two"}', "fixture")
+
+    def test_json_nonfinite_numbers_are_rejected(self):
+        with self.assertRaisesRegex(ValueError, "non-finite JSON number"):
+            inputs.parse_json(b'{"value":NaN}', "fixture")
+
+    def test_membership_rejects_foreign_gallery_id(self):
+        entries = self.all_entries()
+        membership = json.loads((self.corpus / (inputs.FINAL_TEST_MEMBERSHIP + ".json")).read_bytes())
+        membership["galleryFileIds"] = ["foreign"]
+        entries[-1] = self.declare(inputs.FINAL_TEST_MEMBERSHIP, membership)
+        with self.assertRaisesRegex(ValueError, "gallery ownership|disagrees"):
             self.write(entries)
 
     def test_schema_mismatch_is_rejected(self):
@@ -131,6 +152,11 @@ class InputManifestTests(unittest.TestCase):
         from scripts.code_retrieval import validation
         self.assertEqual(inputs.ROLE_SCHEMAS[inputs.RETRIEVAL_VALIDATION_CORPUS], validation.SCHEMA)
         self.assertEqual(inputs.ROLE_REQUIRED_KEYS[inputs.RETRIEVAL_VALIDATION_CORPUS], ("languages",))
+
+    def test_assembly_derivation_role_requires_its_schema_and_keys(self):
+        self.assertIn(inputs.ASSEMBLY_DERIVATION, inputs.ROLES)
+        self.assertEqual(inputs.ROLE_SCHEMAS[inputs.ASSEMBLY_DERIVATION], inputs.ASSEMBLY_DERIVATION_SCHEMA)
+        self.assertEqual(inputs.ROLE_REQUIRED_KEYS[inputs.ASSEMBLY_DERIVATION], ("outputOwners", "canonicalSha256"))
 
     def test_validation_acceptance_role_stays_transformation_only(self):
         from scripts.code_retrieval import validation
