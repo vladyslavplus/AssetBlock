@@ -13,7 +13,7 @@ export const SELLER_LICENSE_UNKNOWN = 'UNKNOWN'
 export const sellerDraftMaterialPayloadSchema = z.object({
   title: z.string().min(1, 'Title is required').max(SELLER_TITLE_MAX),
   description: z.string().max(SELLER_DESCRIPTION_MAX).nullable(),
-  categoryId: z.string().uuid('Select a category'),
+  categoryId: z.guid('Select a category'),
   tags: z.array(z.string().min(1)).max(100),
 })
 export type SellerDraftMaterialPayload = z.infer<typeof sellerDraftMaterialPayloadSchema>
@@ -72,20 +72,20 @@ export function sourceDeclarationByteSize(payload: SourceDeclarationPayload): nu
 }
 
 export const sellerDraftSnapshotSchema = z.object({
-  assetId: z.string().uuid(),
-  workspaceId: z.string().uuid(),
+  assetId: z.guid(),
+  workspaceId: z.guid(),
   workspaceRevision: z.number().int().nonnegative(),
   caseRevision: z.number().int().nonnegative(),
   material: sellerDraftMaterialPayloadSchema,
   declaration: sourceDeclarationPayloadSchema.nullable(),
   declarationComplete: z.boolean(),
-  latestVersionId: z.string().uuid().nullable(),
+  latestVersionId: z.guid().nullable(),
   latestVersionNumber: z.number().int().nonnegative().nullable(),
 })
 export type SellerDraftSnapshot = z.infer<typeof sellerDraftSnapshotSchema>
 
 export const draftSaveResultSchema = z.object({
-  workspaceId: z.string().uuid(),
+  workspaceId: z.guid(),
   workspaceRevision: z.number().int().nonnegative(),
   headRevision: z.number().int().nonnegative(),
   replayed: z.boolean(),
@@ -93,8 +93,8 @@ export const draftSaveResultSchema = z.object({
 export type DraftSaveResult = z.infer<typeof draftSaveResultSchema>
 
 export const sellerDraftCreatedSchema = z.object({
-  assetId: z.string().uuid(),
-  workspaceId: z.string().uuid(),
+  assetId: z.guid(),
+  workspaceId: z.guid(),
   workspaceRevision: z.number().int().nonnegative(),
   replayed: z.boolean(),
 })
@@ -106,9 +106,9 @@ export type SellerDraftCreated = z.infer<typeof sellerDraftCreatedSchema>
  * declaration revision has been stored yet.
  */
 export const sellerDeclarationSnapshotSchema = z.object({
-  assetId: z.string().uuid(),
-  assetVersionId: z.string().uuid().nullable(),
-  workspaceId: z.string().uuid(),
+  assetId: z.guid(),
+  assetVersionId: z.guid().nullable(),
+  workspaceId: z.guid(),
   workspaceRevision: z.number().int().nonnegative(),
   headRevision: z.number().int().nonnegative(),
   declaration: sourceDeclarationPayloadSchema.nullable(),
@@ -154,26 +154,26 @@ export const sellerAnalysisStageSchema = z.object({
   retryable: z.boolean(),
 })
 export const sellerAnalysisSummarySchema = z.object({
-  assetId: z.string().uuid(),
-  assetVersionId: z.string().uuid(),
+  assetId: z.guid(),
+  assetVersionId: z.guid(),
   lifecycle: sellerAnalysisLifecycleSchema,
-  runId: z.string().uuid().nullable(),
-  reportId: z.string().uuid().nullable(),
+  runId: z.guid().nullable(),
+  reportId: z.guid().nullable(),
   reportIsCurrent: z.boolean(),
   coverageLevel: z.enum(['FULL', 'PARTIAL', 'UNSUPPORTED']).nullable(),
   analyzedFileCount: z.number().int().nonnegative(),
   omissionCount: z.number().int().nonnegative(),
   findingCount: z.number().int().nonnegative(),
   findingDetailsAvailable: z.boolean(),
-  createdAt: z.string().datetime({ offset: true }).nullable(),
-  completedAt: z.string().datetime({ offset: true }).nullable(),
+  createdAt: z.iso.datetime({ offset: true }).nullable(),
+  completedAt: z.iso.datetime({ offset: true }).nullable(),
   errorCode: z.string().max(80).nullable(),
   errorMessage: z.string().max(300).nullable(),
   actionHint: z.string().max(300).nullable(),
   canRetry: z.boolean(),
   retryExpectation: z
     .object({
-      runId: z.string().uuid(),
+      runId: z.guid(),
       workspaceRevision: z.number().int().nonnegative(),
       policyDigest: z.string().length(64),
       inputDigest: z.string().length(64),
@@ -187,7 +187,7 @@ export const sellerAnalysisSummarySchema = z.object({
 })
 export type SellerAnalysisSummary = z.infer<typeof sellerAnalysisSummarySchema>
 export const sellerAnalysisFindingSchema = z.object({
-  id: z.string().uuid(),
+  id: z.guid(),
   findingType: z.string().min(1).max(80),
   ownPath: z.string().min(1).max(1024),
   ownExcerpt: z.string().max(320),
@@ -210,9 +210,9 @@ export const sellerAnalysisFindingSchema = z.object({
     .nullable(),
 })
 export const sellerAnalysisFindingsPageSchema = z.object({
-  assetId: z.string().uuid(),
-  assetVersionId: z.string().uuid(),
-  reportId: z.string().uuid(),
+  assetId: z.guid(),
+  assetVersionId: z.guid(),
+  reportId: z.guid(),
   isCurrent: z.boolean(),
   coverageLevel: z.enum(['FULL', 'PARTIAL', 'UNSUPPORTED']),
   items: z.array(sellerAnalysisFindingSchema),
@@ -224,28 +224,28 @@ export const sellerAnalysisFindingsPageSchema = z.object({
 })
 export type SellerAnalysisFindingsPage = z.infer<typeof sellerAnalysisFindingsPageSchema>
 export const sellerAnalysisRetryRequestSchema = z.object({
-  operationId: z.string().uuid(),
-  expectedRunId: z.string().uuid(),
+  operationId: z.guid(),
+  expectedRunId: z.guid(),
   expectedWorkspaceRevision: z.number().int().positive(),
   expectedPolicyDigest: z.string().length(64),
   expectedInputDigest: z.string().length(64),
 })
 export const sellerAnalysisRetryAcceptedSchema = z.object({
-  operationId: z.string().uuid(),
-  assetId: z.string().uuid(),
-  assetVersionId: z.string().uuid(),
+  operationId: z.guid(),
+  assetId: z.guid(),
+  assetVersionId: z.guid(),
   status: z.enum(['ACCEPTED', 'RECHECK_QUEUED']),
-  runId: z.string().uuid().nullable(),
-  jobId: z.string().uuid().nullable(),
-  securityRecheckId: z.string().uuid().nullable(),
+  runId: z.guid().nullable(),
+  jobId: z.guid().nullable(),
+  securityRecheckId: z.guid().nullable(),
   replayed: z.boolean(),
 })
 export type SellerAnalysisRetryRequest = z.infer<typeof sellerAnalysisRetryRequestSchema>
 export type SellerAnalysisRetryAccepted = z.infer<typeof sellerAnalysisRetryAcceptedSchema>
 
 export const sellerVersionReviewSchema = z.object({
-  assetId: z.string().uuid(),
-  assetVersionId: z.string().uuid(),
+  assetId: z.guid(),
+  assetVersionId: z.guid(),
   versionNumber: z.number().int().nonnegative(),
   processingStatus: sellerProcessingStateSchema,
   processingErrorCode: z.string().min(1).max(64).nullable(),
@@ -262,23 +262,23 @@ export type SellerVersionReview = z.infer<typeof sellerVersionReviewSchema>
 
 export const sellerDraftCreateRequestSchema = z.object({
   // One UUID per logical creation; callers keep it to replay lost responses.
-  operationId: z.string().uuid(),
+  operationId: z.guid(),
   title: z.string().min(1, 'Title is required').max(SELLER_TITLE_MAX),
   description: z.string().max(SELLER_DESCRIPTION_MAX).nullable().optional(),
   price: z.number().nonnegative(),
-  categoryId: z.string().uuid('Select a category'),
+  categoryId: z.guid('Select a category'),
   downloadLimitPerHour: z.number().int().positive().max(10000).nullable().optional(),
 })
 
 export const sellerDraftSaveRequestSchema = z.object({
-  operationId: z.string().uuid(),
+  operationId: z.guid(),
   expectedWorkspaceRevision: z.number().int().nonnegative(),
   material: sellerDraftMaterialPayloadSchema,
 })
 
 export const sellerDeclarationSaveRequestSchema = z
   .object({
-    operationId: z.string().uuid(),
+    operationId: z.guid(),
     expectedWorkspaceRevision: z.number().int().nonnegative(),
     declaration: sourceDeclarationPayloadSchema,
   })
@@ -292,13 +292,13 @@ export const assetPriceUpdateRequestSchema = z.object({
 })
 
 export const assetVersionSubmissionRequestSchema = z.object({
-  workspaceId: z.string().uuid(),
+  workspaceId: z.guid(),
   expectedWorkspaceRevision: z.number().int().nonnegative(),
   expectedCaseRevision: z.number().int().nonnegative(),
-  operationId: z.string().uuid(),
+  operationId: z.guid(),
 })
 
 export const submissionWithdrawRequestSchema = z.object({
   expectedCaseRevision: z.number().int().nonnegative(),
-  operationId: z.string().uuid(),
+  operationId: z.guid(),
 })

@@ -47,32 +47,96 @@ function csvToArray(value: string): string[] {
 }
 
 const declarationComponentFormSchema = z.object({
-  componentId: z.string().min(1).max(SELLER_COMPONENT_ID_MAX),
-  name: z.string().min(1, 'Component name is required').max(SELLER_COMPONENT_NAME_MAX),
+  componentId: z
+    .string()
+    .min(1, 'String must contain at least 1 character(s)')
+    .max(
+      SELLER_COMPONENT_ID_MAX,
+      `String must contain at most ${SELLER_COMPONENT_ID_MAX} character(s)`,
+    ),
+  name: z
+    .string()
+    .min(1, 'Component name is required')
+    .max(
+      SELLER_COMPONENT_NAME_MAX,
+      `String must contain at most ${SELLER_COMPONENT_NAME_MAX} character(s)`,
+    ),
   origin: z.enum(['OWN_CONTRIBUTION', 'THIRD_PARTY']),
-  packagePathOrRange: z.string().max(SELLER_COMPONENT_PATH_MAX),
+  packagePathOrRange: z
+    .string()
+    .max(
+      SELLER_COMPONENT_PATH_MAX,
+      `String must contain at most ${SELLER_COMPONENT_PATH_MAX} character(s)`,
+    ),
   sourceUrl: z
     .string()
-    .max(SELLER_COMPONENT_SOURCE_URL_MAX)
+    .max(
+      SELLER_COMPONENT_SOURCE_URL_MAX,
+      `String must contain at most ${SELLER_COMPONENT_SOURCE_URL_MAX} character(s)`,
+    )
     .url('Enter a valid HTTPS source URL')
     .refine((url) => url.startsWith('https://'), 'Source URL must use HTTPS'),
-  knownVersion: z.string().max(SELLER_COMPONENT_KNOWN_VERSION_MAX),
-  license: z.string().min(1, 'License is required').max(SELLER_COMPONENT_LICENSE_MAX),
+  knownVersion: z
+    .string()
+    .max(
+      SELLER_COMPONENT_KNOWN_VERSION_MAX,
+      `String must contain at most ${SELLER_COMPONENT_KNOWN_VERSION_MAX} character(s)`,
+    ),
+  license: z
+    .string()
+    .min(1, 'License is required')
+    .max(
+      SELLER_COMPONENT_LICENSE_MAX,
+      `String must contain at most ${SELLER_COMPONENT_LICENSE_MAX} character(s)`,
+    ),
   noticeLocationsCsv: z
     .string()
-    .max(SELLER_COMPONENT_NOTICE_ITEM_MAX * SELLER_NOTICE_LOCATIONS_MAX),
-  modifications: z.string().max(SELLER_EXPLANATION_MAX),
-  evidenceRefsCsv: z.string().max(SELLER_COMPONENT_REF_ITEM_MAX * SELLER_EVIDENCE_REFS_MAX),
+    .max(
+      SELLER_COMPONENT_NOTICE_ITEM_MAX * SELLER_NOTICE_LOCATIONS_MAX,
+      `String must contain at most ${SELLER_COMPONENT_NOTICE_ITEM_MAX * SELLER_NOTICE_LOCATIONS_MAX} character(s)`,
+    ),
+  modifications: z
+    .string()
+    .max(
+      SELLER_EXPLANATION_MAX,
+      `String must contain at most ${SELLER_EXPLANATION_MAX} character(s)`,
+    ),
+  evidenceRefsCsv: z
+    .string()
+    .max(
+      SELLER_COMPONENT_REF_ITEM_MAX * SELLER_EVIDENCE_REFS_MAX,
+      `String must contain at most ${SELLER_COMPONENT_REF_ITEM_MAX * SELLER_EVIDENCE_REFS_MAX} character(s)`,
+    ),
 })
 
 const declarationFormSchema = z
   .object({
-    ownContributionSummary: z.string().max(SELLER_EXPLANATION_MAX),
-    ownChanges: z.string().max(SELLER_EXPLANATION_MAX),
-    earlierWork: z.string().max(SELLER_EXPLANATION_MAX),
+    ownContributionSummary: z
+      .string()
+      .max(
+        SELLER_EXPLANATION_MAX,
+        `String must contain at most ${SELLER_EXPLANATION_MAX} character(s)`,
+      ),
+    ownChanges: z
+      .string()
+      .max(
+        SELLER_EXPLANATION_MAX,
+        `String must contain at most ${SELLER_EXPLANATION_MAX} character(s)`,
+      ),
+    earlierWork: z
+      .string()
+      .max(
+        SELLER_EXPLANATION_MAX,
+        `String must contain at most ${SELLER_EXPLANATION_MAX} character(s)`,
+      ),
     redistributionAcknowledged: z.boolean(),
-    disclosurePolicyVersion: z.string().min(1).max(64),
-    components: z.array(declarationComponentFormSchema).max(SELLER_COMPONENTS_MAX),
+    disclosurePolicyVersion: z
+      .string()
+      .min(1, 'String must contain at least 1 character(s)')
+      .max(64, 'String must contain at most 64 character(s)'),
+    components: z
+      .array(declarationComponentFormSchema)
+      .max(SELLER_COMPONENTS_MAX, `Array must contain at most ${SELLER_COMPONENTS_MAX} element(s)`),
   })
   .superRefine((values, ctx) => {
     values.components.forEach((component, index) => {

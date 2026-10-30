@@ -53,7 +53,7 @@ export type RecommendationPreferencesValues = z.infer<typeof recommendationPrefe
 export const updateSocialLinksSchema = z.object({
   links: z.array(
     z.object({
-      platformId: z.string().uuid(),
+      platformId: z.guid(),
       url: z.string().url().max(500),
     }),
   ),

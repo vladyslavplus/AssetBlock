@@ -13,7 +13,11 @@ const DESCRIPTION_MAX = BUNDLE_DESCRIPTION_MAX_LENGTH
 
 export const createBundleSchema = z
   .object({
-    title: z.string().trim().min(1, 'Title is required').max(TITLE_MAX),
+    title: z
+      .string()
+      .trim()
+      .min(1, 'Title is required')
+      .max(TITLE_MAX, `String must contain at most ${TITLE_MAX} character(s)`),
     description: z
       .string()
       .trim()
@@ -22,7 +26,7 @@ export const createBundleSchema = z
       .nullable(),
     price: marketplacePriceSchema,
     assetIds: z
-      .array(z.string().uuid('Asset ID must be a valid UUID.'))
+      .array(z.guid('Asset ID must be a valid UUID.'))
       .min(BUNDLE_MIN_ITEMS, `Select at least ${BUNDLE_MIN_ITEMS} assets`)
       .max(BUNDLE_MAX_ITEMS, `Select at most ${BUNDLE_MAX_ITEMS} assets`),
   })
@@ -44,14 +48,18 @@ export type ReviseBundleBody = z.infer<typeof reviseBundleSchema>
 
 export const bundleFormSchema = z
   .object({
-    title: z.string().trim().min(1, 'Title is required').max(TITLE_MAX),
+    title: z
+      .string()
+      .trim()
+      .min(1, 'Title is required')
+      .max(TITLE_MAX, `String must contain at most ${TITLE_MAX} character(s)`),
     description: z
       .string()
       .max(DESCRIPTION_MAX, `Description must be at most ${DESCRIPTION_MAX} characters`)
       .optional(),
     price: marketplacePriceSchema.optional(),
     assetIds: z
-      .array(z.string().uuid())
+      .array(z.guid('Invalid uuid'))
       .min(BUNDLE_MIN_ITEMS, `Select at least ${BUNDLE_MIN_ITEMS} assets`)
       .max(BUNDLE_MAX_ITEMS, `Select at most ${BUNDLE_MAX_ITEMS} assets`),
   })
@@ -68,7 +76,7 @@ export const bundleFormSchema = z
 export type BundleFormValues = z.infer<typeof bundleFormSchema>
 
 export const bundleItemResponseSchema = z.object({
-  assetId: z.string().uuid().nullable(),
+  assetId: z.guid().nullable(),
   title: z.string(),
   listPrice: z.number(),
   position: z.number().int().positive(),
@@ -80,8 +88,8 @@ export const bundleItemResponseSchema = z.object({
 })
 
 export const bundleListItemResponseSchema = z.object({
-  id: z.string().uuid(),
-  revisionId: z.string().uuid(),
+  id: z.guid(),
+  revisionId: z.guid(),
   revisionNumber: z.number().int().positive(),
   title: z.string(),
   description: z.string().nullable(),
@@ -91,7 +99,7 @@ export const bundleListItemResponseSchema = z.object({
   savingsPercent: z.number(),
   currency: z.string(),
   itemCount: z.number().int().nonnegative(),
-  sellerId: z.string().uuid(),
+  sellerId: z.guid(),
   sellerUsername: z.string(),
   createdAt: z.string(),
   isArchived: z.boolean(),
@@ -99,8 +107,8 @@ export const bundleListItemResponseSchema = z.object({
 })
 
 export const bundleDetailResponseSchema = z.object({
-  id: z.string().uuid(),
-  revisionId: z.string().uuid(),
+  id: z.guid(),
+  revisionId: z.guid(),
   revisionNumber: z.number().int().positive(),
   title: z.string(),
   description: z.string().nullable(),
@@ -109,7 +117,7 @@ export const bundleDetailResponseSchema = z.object({
   savingsAmount: z.number(),
   savingsPercent: z.number(),
   currency: z.string(),
-  sellerId: z.string().uuid(),
+  sellerId: z.guid(),
   sellerUsername: z.string(),
   createdAt: z.string(),
   updatedAt: z.string().nullable(),
@@ -120,8 +128,8 @@ export const bundleDetailResponseSchema = z.object({
 })
 
 export const createBundleResponseSchema = z.object({
-  id: z.string().uuid(),
-  revisionId: z.string().uuid(),
+  id: z.guid(),
+  revisionId: z.guid(),
   revisionNumber: z.number().int().positive(),
 })
 

@@ -422,6 +422,9 @@ from the npm registry (canonical, OS-independent). Reviewed exceptions may set
 - `npm` qs@6.16.0
   - source: https://github.com/ljharb/qs
   - license-url: https://spdx.org/licenses/BSD-3-Clause.html
+- `npm` qs@6.17.1
+  - source: https://github.com/ljharb/qs
+  - license-url: https://spdx.org/licenses/BSD-3-Clause.html
 - `npm` source-map@0.6.1
   - copyright/author: Nick Fitzgerald
   - source: ssh://git@github.com/mozilla/source-map
@@ -946,7 +949,7 @@ from the npm registry (canonical, OS-independent). Reviewed exceptions may set
   - copyright/author: Yusuke Wada <yusuke@kamawada.com> (https://github.com/yusukebe)
   - source: https://github.com/honojs/node-server
   - license-url: https://spdx.org/licenses/MIT.html
-- `npm` @hookform/resolvers@3.10.0
+- `npm` @hookform/resolvers@5.4.1
   - copyright/author: bluebill1049
   - source: https://github.com/react-hook-form/resolvers
   - license-url: https://spdx.org/licenses/MIT.html
@@ -977,7 +980,7 @@ from the npm registry (canonical, OS-independent). Reviewed exceptions may set
   - copyright/author: Microsoft
   - source: https://github.com/dotnet/aspnetcore
   - license-url: https://spdx.org/licenses/MIT.html
-- `npm` @modelcontextprotocol/sdk@1.31.0
+- `npm` @modelcontextprotocol/sdk@1.32.0
   - copyright/author: Anthropic, PBC
   - source: https://github.com/modelcontextprotocol/typescript-sdk
   - license-url: https://spdx.org/licenses/MIT.html
@@ -988,35 +991,35 @@ from the npm registry (canonical, OS-independent). Reviewed exceptions may set
   - copyright/author: LongYinan
   - source: https://github.com/napi-rs/napi-rs
   - license-url: https://spdx.org/licenses/MIT.html
-- `npm` @next/env@16.3.8
+- `npm` @next/env@16.4.1
   - copyright/author: Next.js Team
   - source: https://github.com/vercel/next.js
   - license-url: https://spdx.org/licenses/MIT.html
-- `npm` @next/eslint-plugin-next@16.3.8
+- `npm` @next/eslint-plugin-next@16.4.1
   - source: https://github.com/vercel/next.js
   - license-url: https://spdx.org/licenses/MIT.html
-- `npm` @next/swc-darwin-arm64@16.3.8
+- `npm` @next/swc-darwin-arm64@16.4.1
   - source: https://github.com/vercel/next.js
   - license-url: https://spdx.org/licenses/MIT.html
-- `npm` @next/swc-darwin-x64@16.3.8
+- `npm` @next/swc-darwin-x64@16.4.1
   - source: https://github.com/vercel/next.js
   - license-url: https://spdx.org/licenses/MIT.html
-- `npm` @next/swc-linux-arm64-gnu@16.3.8
+- `npm` @next/swc-linux-arm64-gnu@16.4.1
   - source: https://github.com/vercel/next.js
   - license-url: https://spdx.org/licenses/MIT.html
-- `npm` @next/swc-linux-arm64-musl@16.3.8
+- `npm` @next/swc-linux-arm64-musl@16.4.1
   - source: https://github.com/vercel/next.js
   - license-url: https://spdx.org/licenses/MIT.html
-- `npm` @next/swc-linux-x64-gnu@16.3.8
+- `npm` @next/swc-linux-x64-gnu@16.4.1
   - source: https://github.com/vercel/next.js
   - license-url: https://spdx.org/licenses/MIT.html
-- `npm` @next/swc-linux-x64-musl@16.3.8
+- `npm` @next/swc-linux-x64-musl@16.4.1
   - source: https://github.com/vercel/next.js
   - license-url: https://spdx.org/licenses/MIT.html
-- `npm` @next/swc-win32-arm64-msvc@16.3.8
+- `npm` @next/swc-win32-arm64-msvc@16.4.1
   - source: https://github.com/vercel/next.js
   - license-url: https://spdx.org/licenses/MIT.html
-- `npm` @next/swc-win32-x64-msvc@16.3.8
+- `npm` @next/swc-win32-x64-msvc@16.4.1
   - source: https://github.com/vercel/next.js
   - license-url: https://spdx.org/licenses/MIT.html
 - `npm` @nodelib/fs.scandir@2.1.5
@@ -1755,7 +1758,7 @@ from the npm registry (canonical, OS-independent). Reviewed exceptions may set
   - copyright/author: Sindre Sorhus
   - source: https://github.com/sindresorhus/binary-extensions
   - license-url: https://spdx.org/licenses/MIT.html
-- `npm` body-parser@2.3.0
+- `npm` body-parser@2.4.0
   - source: https://github.com/expressjs/body-parser
   - license-url: https://spdx.org/licenses/MIT.html
 - `npm` brace-expansion@1.1.21
@@ -2058,7 +2061,7 @@ from the npm registry (canonical, OS-independent). Reviewed exceptions may set
   - copyright/author: Nicholas C. Zakas
   - source: https://github.com/eslint/eslint
   - license-url: https://spdx.org/licenses/MIT.html
-- `npm` eslint-config-next@16.3.8
+- `npm` eslint-config-next@16.4.1
   - source: https://github.com/vercel/next.js
   - license-url: https://spdx.org/licenses/MIT.html
 - `npm` eslint-config-prettier@10.1.8
@@ -2702,7 +2705,7 @@ from the npm registry (canonical, OS-independent). Reviewed exceptions may set
 - `npm` neo-async@2.6.2
   - source: ssh://git@github.com/suguru03/neo-async
   - license-url: https://spdx.org/licenses/MIT.html
-- `npm` next@16.3.8
+- `npm` next@16.4.1
   - source: https://github.com/vercel/next.js
   - license-url: https://spdx.org/licenses/MIT.html
 - `npm` next-themes@0.4.6
@@ -3360,7 +3363,7 @@ from the npm registry (canonical, OS-independent). Reviewed exceptions may set
   - copyright/author: Emil Kowalski
   - source: https://github.com/emilkowalski/vaul
   - license-url: https://spdx.org/licenses/MIT.html
-- `npm` vite@7.3.6
+- `npm` vite@7.3.7
   - copyright/author: Evan You
   - source: https://github.com/vitejs/vite
   - license-url: https://spdx.org/licenses/MIT.html
@@ -3443,12 +3446,8 @@ from the npm registry (canonical, OS-independent). Reviewed exceptions may set
   - copyright/author: Sindre Sorhus
   - source: https://github.com/sindresorhus/yocto-queue
   - license-url: https://spdx.org/licenses/MIT.html
-- `npm` zod@3.25.76
+- `npm` zod@4.6.6
   - copyright/author: Colin McDonnell
-  - source: https://github.com/colinhacks/zod
-  - license-url: https://spdx.org/licenses/MIT.html
-- `npm` zod@4.6.5
-  - copyright/author: Colin McDonnell <zod@colinhacks.com>
   - source: https://github.com/colinhacks/zod
   - license-url: https://spdx.org/licenses/MIT.html
 - `npm` zod-validation-error@4.0.2

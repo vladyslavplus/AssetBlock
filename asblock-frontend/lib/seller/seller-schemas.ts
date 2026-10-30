@@ -15,35 +15,14 @@ function hasAllowedArchiveExtension(file: File): boolean {
   return ASSET_UPLOAD_ALLOWED_EXTENSIONS.some((extension) => fileName.endsWith(extension))
 }
 
-export const assetUploadFormSchema = z.object({
-  title: z.string().min(1, 'Title is required').max(ASSET_TITLE_MAX_LENGTH),
-  description: z
-    .string()
-    .max(
-      ASSET_DESCRIPTION_MAX_LENGTH,
-      `Description must be at most ${ASSET_DESCRIPTION_MAX_LENGTH} characters`,
-    )
-    .optional(),
-  price: marketplacePriceSchema,
-  categoryId: z.string().uuid('Select a category'),
-  licenseCode: z.enum(ASSET_LICENSE_CODES, { required_error: 'Select a license' }),
-  tags: z.string().optional(),
-  file: z
-    .custom<File>((val) => val instanceof File && val.size > 0, 'Choose a file to upload')
-    .refine(
-      (file) => !(file instanceof File) || file.size <= ASSET_UPLOAD_MAX_BYTES,
-      'File must be at most 250 MiB',
-    )
-    .refine(
-      (file) => !(file instanceof File) || hasAllowedArchiveExtension(file),
-      'Choose a .zip, .tar, .tar.gz, or .tgz archive',
-    ),
-})
-
-export type AssetUploadFormValues = z.infer<typeof assetUploadFormSchema>
-
 export const assetEditFormSchema = z.object({
-  title: z.string().min(1, 'Title is required').max(ASSET_TITLE_MAX_LENGTH),
+  title: z
+    .string()
+    .min(1, 'Title is required')
+    .max(
+      ASSET_TITLE_MAX_LENGTH,
+      `String must contain at most ${ASSET_TITLE_MAX_LENGTH} character(s)`,
+    ),
   description: z
     .string()
     .max(
@@ -52,14 +31,20 @@ export const assetEditFormSchema = z.object({
     )
     .optional(),
   price: marketplacePriceSchema,
-  categoryId: z.string().uuid('Select a category'),
+  categoryId: z.guid('Select a category'),
   tags: z.string().optional(),
 })
 
 export type AssetEditFormValues = z.infer<typeof assetEditFormSchema>
 
 export const assetDraftCreateFormSchema = z.object({
-  title: z.string().min(1, 'Title is required').max(ASSET_TITLE_MAX_LENGTH),
+  title: z
+    .string()
+    .min(1, 'Title is required')
+    .max(
+      ASSET_TITLE_MAX_LENGTH,
+      `String must contain at most ${ASSET_TITLE_MAX_LENGTH} character(s)`,
+    ),
   description: z
     .string()
     .max(
@@ -68,7 +53,7 @@ export const assetDraftCreateFormSchema = z.object({
     )
     .optional(),
   price: marketplacePriceSchema,
-  categoryId: z.string().uuid('Select a category'),
+  categoryId: z.guid('Select a category'),
 })
 
 export type AssetDraftCreateFormValues = z.infer<typeof assetDraftCreateFormSchema>
@@ -83,7 +68,7 @@ export const sellerAssetPatchSchema = z.object({
     )
     .nullable()
     .optional(),
-  categoryId: z.string().uuid('Select a category').optional(),
+  categoryId: z.guid('Select a category').optional(),
 })
 
 export type SellerAssetPatchValues = z.infer<typeof sellerAssetPatchSchema>
@@ -104,7 +89,9 @@ export type AssetTagAddValues = z.infer<typeof assetTagAddSchema>
 const RELEASE_NOTES_MAX = 4000
 
 export const publishVersionFormSchema = z.object({
-  licenseCode: z.enum(ASSET_LICENSE_CODES, { required_error: 'Select a license' }),
+  licenseCode: z.enum(ASSET_LICENSE_CODES, {
+    error: (issue) => (issue.input === undefined ? 'Select a license' : undefined),
+  }),
   releaseNotes: z
     .string()
     .trim()

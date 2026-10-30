@@ -9,26 +9,26 @@ import {
 export const purchaseSourceSchema = z.enum(['ASSET', 'BUNDLE'])
 export type PurchaseSource = z.infer<typeof purchaseSourceSchema>
 
-export const isoDateTimeSchema = z.string().datetime({ offset: true })
+export const isoDateTimeSchema = z.iso.datetime({ offset: true })
 
 export const purchaseLibraryItemSchema = z.object({
-  id: z.string().uuid(),
-  orderId: z.string().uuid(),
-  assetId: z.string().uuid(),
+  id: z.guid(),
+  orderId: z.guid(),
+  assetId: z.guid(),
   assetTitle: z.string().min(1),
   price: z.number().nonnegative(),
   purchasedAt: isoDateTimeSchema,
   authorUsername: z.string().min(1),
   hasUserReviewed: z.boolean(),
   purchasedVersionNumber: z.number().int().positive(),
-  purchasedVersionId: z.string().uuid(),
+  purchasedVersionId: z.guid(),
   latestEntitledVersionNumber: z.number().int().positive(),
-  latestEntitledVersionId: z.string().uuid(),
+  latestEntitledVersionId: z.guid(),
   hasUpdate: z.boolean(),
   pricePaid: z.number().nonnegative(),
   currency: z.string().min(1),
   source: purchaseSourceSchema,
-  bundleId: z.string().uuid().nullable().optional().default(null),
+  bundleId: z.guid().nullable().optional().default(null),
   bundleTitle: z.string().nullable().optional().default(null),
 })
 
@@ -55,7 +55,7 @@ export const assetVersionProcessingStatusSchema = z.enum(ASSET_VERSION_PROCESSIN
 export type AssetVersionProcessingStatus = z.infer<typeof assetVersionProcessingStatusSchema>
 
 export const assetVersionSummarySchema = z.object({
-  id: z.string().uuid(),
+  id: z.guid(),
   versionNumber: z.number().int().positive(),
   isCurrent: z.boolean(),
   fileName: z.string().min(1),

@@ -17,7 +17,7 @@ const dateOnlySchema = z.string().refine((value) => parseDateOnlyUtc(value) != n
   message: 'Invalid UTC date (YYYY-MM-DD)',
 })
 
-const isoTimestampSchema = z.string().datetime({ offset: true })
+const isoTimestampSchema = z.iso.datetime({ offset: true })
 
 const moneyCentsMetricSchema = z
   .object({
@@ -128,7 +128,7 @@ export const analyticsTrafficSourceRowSchema = z
 export const analyticsProductItemSchema = z
   .object({
     productKind: z.enum(ANALYTICS_PRODUCT_KINDS),
-    productId: z.string().uuid(),
+    productId: z.guid(),
     title: z.string(),
     availability: z.enum(ANALYTICS_PRODUCT_AVAILABILITY),
     grossRevenueCents: z.number().int().safe().nonnegative(),
@@ -197,9 +197,9 @@ export const analyticsProductsResultSchema = z
 export const analyticsSaleItemSchema = z
   .object({
     productKind: z.enum(ANALYTICS_PRODUCT_KINDS),
-    productId: z.string().uuid(),
+    productId: z.guid(),
     productTitle: z.string(),
-    orderId: z.string().uuid(),
+    orderId: z.guid(),
     purchasedAt: isoTimestampSchema,
     units: z.number().int().safe().positive(),
     grossRevenueCents: z.number().int().safe().nonnegative(),
@@ -226,7 +226,7 @@ export const analyticsSortDirectionSchema = z.enum(ANALYTICS_SORT_DIRECTIONS)
 
 export const analyticsCollectionTopAssetSchema = z
   .object({
-    assetId: z.string().uuid(),
+    assetId: z.guid(),
     title: z.string(),
     clicks: z.number().int().safe().nonnegative(),
   })
@@ -234,7 +234,7 @@ export const analyticsCollectionTopAssetSchema = z
 
 export const analyticsCollectionItemSchema = z
   .object({
-    collectionId: z.string().uuid(),
+    collectionId: z.guid(),
     title: z.string(),
     status: z.enum(ANALYTICS_COLLECTION_STATUSES),
     views: z.number().int().safe().nonnegative().nullable(),
@@ -272,7 +272,7 @@ export const analyticsProductDetailAssetSchema = z
     currency: z.literal('usd'),
     granularity: z.enum(ANALYTICS_GRANULARITIES),
     engagementAvailableFrom: isoTimestampSchema.nullable(),
-    assetId: z.string().uuid(),
+    assetId: z.guid(),
     title: z.string(),
     availability: z.enum(ANALYTICS_PRODUCT_AVAILABILITY),
     grossRevenueCents: z.number().int().safe().nonnegative(),
@@ -302,7 +302,7 @@ export const analyticsProductDetailBundleSchema = z
     currency: z.literal('usd'),
     granularity: z.enum(ANALYTICS_GRANULARITIES),
     engagementAvailableFrom: isoTimestampSchema.nullable(),
-    bundleId: z.string().uuid(),
+    bundleId: z.guid(),
     title: z.string(),
     availability: z.enum(ANALYTICS_PRODUCT_AVAILABILITY),
     grossRevenueCents: z.number().int().safe().nonnegative(),
