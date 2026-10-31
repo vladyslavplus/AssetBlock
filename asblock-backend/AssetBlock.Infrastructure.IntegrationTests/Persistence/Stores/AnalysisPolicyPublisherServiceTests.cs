@@ -184,7 +184,7 @@ public sealed class AnalysisPolicyPublisherServiceTests(PostgresFixture fixture)
             AdmittedReportTestEvidence.NewHex64(),
             "code-analysis-v1",
             AdmittedReportTestEvidence.StageMatrixJson(),
-            "PENDING_RESEARCH_EVALUATION",
+            "DISABLED_BY_EVALUATION",
             "Retrieval quality research evaluation has not been reviewed.",
             AdmittedReportTestEvidence.ToolIdentitiesJson(),
             AdmittedReportTestEvidence.LimitsJson(),

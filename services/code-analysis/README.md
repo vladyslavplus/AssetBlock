@@ -52,8 +52,21 @@ terminated TLS. Runtime secrets, machine-specific paths, and model artifacts sta
   evidence with observed tool identities, coverage with explicit omissions,
   bounded findings with an overflow summary, and a `sellerSafe` projection
   that contains no foreign private bytes, paths, names, vectors, or
-  scores. `admittedBy` is always null here; `canAuthorizePublication` is
-  false and the verifier mode is `PENDING_RESEARCH_EVALUATION`.
+  scores. `admittedBy` is always null here; the producer does not assert
+  review eligibility or publication authority. The verifier mode is
+  `DISABLED_BY_EVALUATION`. The immutable
+  policy `code-analysis-policy-v1` binds its frozen evaluation evidence SHA-256
+  and records `VERIFIER` as `NOT_APPLICABLE` with `POLICY_DISABLED`.
+  Only the product server can issue an admission after validating its persisted
+  production run and exact policy, security and stage bindings. Submission
+  eligibility never publishes a version; an APPROVED human decision is required.
+  Retained candidates are moderator evidence, not seller response obligations.
+- Deployments must pin the policy key and canonical policy digest together
+  and recompute the runtime-manifest digest from the complete approved manifest
+  (including verifier mode and reason). Reuse requires the same exact policy
+  digest. Missing configuration keeps claims closed. Development rows produced
+  with a different development policy digest must be removed through a local
+  development database reset before republishing this single initial policy.
 
 ## Budgets and safety
 

@@ -3,6 +3,7 @@ using System.Text.Json.Nodes;
 using AssetBlock.Domain.Abstractions.Services;
 using AssetBlock.Domain.Core.Constants;
 using AssetBlock.Domain.Core.Dto;
+using AssetBlock.Domain.Core.Dto.Moderation;
 using AssetBlock.Domain.Core.Dto.Outbox;
 using AssetBlock.Domain.Core.Entities;
 using AssetBlock.Domain.Core.Enums;
@@ -21,7 +22,231 @@ namespace AssetBlock.Infrastructure.IntegrationTests.Persistence.Stores;
 public sealed class CodeAnalysisReportFinalizerPostgresTests(PostgresFixture fixture)
 {
     private const string SERVICE_KEY = "code-analysis";
-    private const string POLICY_KEY = "code-analysis-policy-v1";
+    private const string POLICY_KEY = ReviewAnalysisPolicy.KEY;
+
+    [Theory]
+    [InlineData("fixture")]
+    [InlineData("simulated")]
+    [InlineData("purpose")]
+    [InlineData("purpose-type")]
+    [InlineData("disabled-policy-mismatch")]
+    [InlineData("fabricated-review-eligibility")]
+    [InlineData("stale-digest")]
+    [InlineData("failed-stage")]
+    [InlineData("missing-stage")]
+    public async Task ValidateCompleted_WhenUntrustedReviewEnvelope_ShouldRejectEvenWithRecomputedReportDigest(string forgery)
+    {
+        await using ApplicationDbContext db = await fixture.CreateCleanDbContext();
+        SeedContext seed = await SeedQueued(db);
+        await seed.Capacity.EnsureSlots(SERVICE_KEY, 1);
+        await seed.Capacity.ClaimWithCapacity(1, TimeSpan.FromMinutes(5), TimeSpan.FromMinutes(18), TimeSpan.FromMinutes(2), "negative-worker");
+        CodeAnalysisRun run = await db.CodeAnalysisRuns.AsNoTracking().SingleAsync(r => r.Id == seed.RunId);
+        CodeAnalysisPolicyVersion policy = await db.CodeAnalysisPolicyVersions.AsNoTracking().SingleAsync();
+        JsonObject body = JsonNode.Parse(BuildResponseBody(run, seed.Version, seed.Asset, seed.Chain, seed.PolicyDigest))!.AsObject();
+        switch (forgery)
+        {
+            case "fixture":
+                body["fixture"] = true;
+                break;
+            case "simulated":
+                body["simulated"] = true;
+                break;
+            case "purpose":
+                body["purpose"] = "FIXTURE";
+                break;
+            case "purpose-type":
+                body["purpose"] = 1;
+                break;
+            case "disabled-policy-mismatch":
+                body["policy"]!["verifierMode"] = "REQUIRED";
+                break;
+            case "fabricated-review-eligibility":
+                body["reviewEligible"] = true;
+                break;
+            case "stale-digest":
+                body["policy"]!["policyDigest"] = new string('f', 64);
+                break;
+            case "failed-stage":
+                body["stages"]![0]!["outcome"] = "FAILED";
+                break;
+            case "missing-stage":
+                body["stages"]!.AsArray().RemoveAt(0);
+                break;
+        }
+        var forged = PythonAnalysisEnvelope.RegenerateDerivedIdentity(body).ToJsonString();
+        Action validate = () => new CodeAnalysisReportValidator().ValidateCompleted(forged, run, policy);
+        validate.Should().Throw<CodeAnalysisValidationException>();
+        (await db.CodeAnalysisReportAdmissions.CountAsync()).Should().Be(0);
+    }
+
+    [Theory]
+    [InlineData("eligible", null)]
+    [InlineData("partial", ErrorCodes.ERR_REVIEW_COVERAGE_REQUIRED)]
+    [InlineData("unsupported", ErrorCodes.ERR_REVIEW_COVERAGE_REQUIRED)]
+    [InlineData("findings", null)]
+    [InlineData("released-reservation", null)]
+    [InlineData("non-string-declaration", ErrorCodes.ERR_DECLARATION_INCOMPLETE)]
+    [InlineData("not-current", ErrorCodes.ERR_ANALYSIS_NOT_AVAILABLE)]
+    [InlineData("fixture", ErrorCodes.ERR_ANALYSIS_REPORT_NOT_TRUSTED)]
+    [InlineData("disabled", ErrorCodes.ERR_ANALYSIS_REPORT_NOT_TRUSTED)]
+    [InlineData("missing-admission", ErrorCodes.ERR_ANALYSIS_REPORT_NOT_TRUSTED)]
+    [InlineData("failed-stage", ErrorCodes.ERR_ANALYSIS_REPORT_NOT_TRUSTED)]
+    [InlineData("missing-stage", ErrorCodes.ERR_ANALYSIS_REPORT_NOT_TRUSTED)]
+    [InlineData("stale-digest", ErrorCodes.ERR_MODERATION_WORKSPACE_STALE)]
+    public async Task AttemptGuardedSubmission_WhenReportEligibilityVaries_ShouldEnforceGatesAndReplay(string condition, string? blockedReason)
+    {
+        await using ApplicationDbContext db = await fixture.CreateCleanDbContext();
+        SeedContext seed = await SeedQueued(db);
+        var workspace = new AssetDraftWorkspace
+        {
+            Id = Guid.NewGuid(),
+            AssetId = seed.Asset.Id,
+            AssetVersionId = seed.Version.Id,
+            WorkspaceVersionScopeKey = seed.Version.Id,
+            ScopeId = Guid.NewGuid(),
+            MaterialMetadataHeadRevision = 1,
+            SourceDeclarationHeadRevision = 1,
+            CreatedAt = DateTimeOffset.UtcNow
+        };
+        var declarationId = Guid.NewGuid();
+        var materialId = Guid.NewGuid();
+        const string declarationJson = """{"redistributionAcknowledged":true,"ownContributionSummary":"Original implementation.","components":[]}""";
+        const string materialJson = """{"title":"Review subject"}""";
+        var declarationDigest = Convert.ToHexStringLower(System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(declarationJson)));
+        var materialDigest = Convert.ToHexStringLower(System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(materialJson)));
+        db.AssetDraftWorkspaces.Add(workspace);
+        db.AssetSourceDeclarationRevisions.Add(new AssetSourceDeclarationRevision
+        {
+            Id = declarationId,
+            AssetId = seed.Asset.Id,
+            AssetVersionId = seed.Version.Id,
+            WorkspaceId = workspace.Id,
+            WorkspaceVersionScopeKey = seed.Version.Id,
+            Revision = 1,
+            AuthorUserId = seed.Asset.AuthorId,
+            ContentDigest = declarationDigest,
+            SchemaVersion = 1,
+            PayloadJson = declarationJson,
+            CreatedAt = DateTimeOffset.UtcNow
+        });
+        db.AssetMaterialMetadataRevisions.Add(new AssetMaterialMetadataRevision
+        {
+            Id = materialId,
+            AssetId = seed.Asset.Id,
+            AssetVersionId = seed.Version.Id,
+            WorkspaceId = workspace.Id,
+            WorkspaceVersionScopeKey = seed.Version.Id,
+            Revision = 1,
+            AuthorUserId = seed.Asset.AuthorId,
+            ContentDigest = materialDigest,
+            SchemaVersion = 1,
+            PayloadJson = materialJson,
+            CreatedAt = DateTimeOffset.UtcNow
+        });
+        await db.SaveChangesAsync();
+        await db.CodeAnalysisRuns.Where(r => r.Id == seed.RunId).ExecuteUpdateAsync(s => s
+            .SetProperty(r => r.AssetDraftWorkspaceId, workspace.Id).SetProperty(r => r.DeclarationRevisionId, declarationId)
+            .SetProperty(r => r.MaterialRevisionId, materialId).SetProperty(r => r.DeclarationDigest, declarationDigest)
+            .SetProperty(r => r.MaterialDigest, materialDigest));
+        await seed.Capacity.EnsureSlots(SERVICE_KEY, 1);
+        ClaimedAssetProcessingJob job = (await seed.Capacity.ClaimWithCapacity(1, TimeSpan.FromMinutes(5), TimeSpan.FromMinutes(18), TimeSpan.FromMinutes(2), "submission-worker")).Single();
+        CodeAnalysisRun run = await db.CodeAnalysisRuns.AsNoTracking().SingleAsync(r => r.Id == seed.RunId);
+        JsonObject body = JsonNode.Parse(BuildResponseBody(run, seed.Version, seed.Asset, seed.Chain, seed.PolicyDigest))!.AsObject();
+        if (condition != "findings")
+        {
+            body["findings"] = new JsonArray();
+            body["stages"]!.AsArray().Single(s => s!["stage"]!.GetValue<string>() == "UNION")!["counts"]!["unionFindings"] = 0;
+        }
+        var finalizer = new CodeAnalysisReportFinalizer(db, new CodeAnalysisReportValidator(), NullLogger<CodeAnalysisReportFinalizer>.Instance);
+        (await finalizer.FinalizeConfirmed(job.JobId, job.LeaseToken, PythonAnalysisEnvelope.RegenerateDerivedIdentity(body).ToJsonString()))
+            .Should().BeOfType<AssetProcessingJobOutcome.AtomicCommitted>();
+        CodeAnalysisReportHeader report = await db.CodeAnalysisReportHeaders.AsNoTracking().SingleAsync();
+        switch (condition)
+        {
+            case "released-reservation":
+                (await seed.Capacity.ReleaseForTerminalJob(job.JobId, run.TransportLeaseToken!, AnalysisExecutionDisposition.CONFIRMED_TERMINATED)).Should().BeTrue();
+                break;
+            case "not-current":
+                await db.AssetVersions.Where(v => v.Id == seed.Version.Id).ExecuteUpdateAsync(s => s.SetProperty(v => v.SelectedCodeAnalysisReportId, (Guid?)null));
+                break;
+            case "partial":
+                await db.CodeAnalysisReportHeaders.Where(h => h.Id == report.Id).ExecuteUpdateAsync(s => s.SetProperty(h => h.CoverageLevel, CodeAnalysisCoverageLevel.PARTIAL));
+                break;
+            case "unsupported":
+                await db.CodeAnalysisReportHeaders.Where(h => h.Id == report.Id).ExecuteUpdateAsync(s => s.SetProperty(h => h.CoverageLevel, CodeAnalysisCoverageLevel.UNSUPPORTED));
+                break;
+            case "non-string-declaration":
+                await db.AssetSourceDeclarationRevisions.Where(d => d.Id == declarationId).ExecuteUpdateAsync(s => s.SetProperty(d => d.PayloadJson,
+                    """{"redistributionAcknowledged":true,"ownContributionSummary":42,"components":[]}"""));
+                break;
+            case "fixture":
+                await db.CodeAnalysisReportHeaders.Where(h => h.Id == report.Id).ExecuteUpdateAsync(s => s.SetProperty(h => h.Purpose, CodeAnalysisReportPurpose.FIXTURE));
+                break;
+            case "disabled":
+                await db.CodeAnalysisReportHeaders.Where(h => h.Id == report.Id).ExecuteUpdateAsync(s => s.SetProperty(h => h.Purpose, CodeAnalysisReportPurpose.DISABLED));
+                break;
+            case "missing-admission":
+                await db.CodeAnalysisReportAdmissions.Where(a => a.ReportId == report.Id).ExecuteDeleteAsync();
+                break;
+            case "failed-stage":
+                await db.CodeAnalysisReportStages.Where(s => s.ReportId == report.Id && s.Stage == "TOKEN").ExecuteUpdateAsync(s => s.SetProperty(x => x.Outcome, CodeAnalysisStageOutcome.FAILED));
+                break;
+            case "missing-stage":
+                await db.CodeAnalysisReportStages.Where(s => s.ReportId == report.Id && s.Stage == "TOKEN").ExecuteDeleteAsync();
+                break;
+            case "stale-digest":
+                await db.CodeAnalysisRuns.Where(r => r.Id == run.Id).ExecuteUpdateAsync(s => s.SetProperty(r => r.DeclarationDigest, new string('f', 64)));
+                break;
+        }
+        var store = new ModerationFoundationStore(db, new AssetStore(db), new UserStore(db), new EfUnitOfWork(db));
+        var request = new GuardedSubmissionRequest(seed.Asset.AuthorId, seed.Asset.Id, seed.Version.Id,
+            workspace.Id, 1, 1, Guid.NewGuid(), new string('a', 64), report.Id);
+        GuardedSubmissionResult created;
+        if (condition == "eligible")
+        {
+            await using ApplicationDbContext firstDb = fixture.CreateDbContext();
+            await using ApplicationDbContext secondDb = fixture.CreateDbContext();
+            var firstStore = new ModerationFoundationStore(firstDb, new AssetStore(firstDb), new UserStore(firstDb), new EfUnitOfWork(firstDb));
+            var secondStore = new ModerationFoundationStore(secondDb, new AssetStore(secondDb), new UserStore(secondDb), new EfUnitOfWork(secondDb));
+            GuardedSubmissionResult[] raced = await Task.WhenAll(
+                firstStore.AttemptGuardedSubmission(request), secondStore.AttemptGuardedSubmission(request));
+            created = raced.Single(r => r.Status == GuardedSubmissionStatus.CREATED);
+            raced.Single(r => r.Status == GuardedSubmissionStatus.REPLAYED).SubmissionId.Should().Be(created.SubmissionId);
+        }
+        else
+        {
+            created = await store.AttemptGuardedSubmission(request);
+        }
+        if (blockedReason is not null)
+        {
+            created.Status.Should().Be(GuardedSubmissionStatus.BLOCKED);
+            created.BlockedReasonCode.Should().Be(blockedReason);
+            (await db.ModerationSubmissions.CountAsync()).Should().Be(0);
+            (await db.ModerationSubmissionHistoryEntries.CountAsync()).Should().Be(0);
+            return;
+        }
+        created.Status.Should().Be(GuardedSubmissionStatus.CREATED);
+        GuardedSubmissionResult replay = await store.AttemptGuardedSubmission(request);
+        replay.Status.Should().Be(GuardedSubmissionStatus.REPLAYED);
+        replay.SubmissionId.Should().Be(created.SubmissionId);
+        await db.AssetDraftWorkspaces.Where(w => w.Id == workspace.Id).ExecuteUpdateAsync(s => s.SetProperty(w => w.WorkspaceRevision, 2));
+        (await store.AttemptGuardedSubmission(request)).Status.Should().Be(GuardedSubmissionStatus.REPLAYED);
+        (await store.AttemptGuardedSubmission(request with { RequestDigest = new string('b', 64) })).Status.Should().Be(GuardedSubmissionStatus.CONFLICT);
+        GuardedSubmissionResult duplicate = await store.AttemptGuardedSubmission(request with { OperationId = Guid.NewGuid(), ExpectedWorkspaceRevision = 2, ExpectedCaseRevision = 2 });
+        duplicate.BlockedReasonCode.Should().Be(ErrorCodes.ERR_MODERATION_ACTIVE_CASE_EXISTS);
+        (await db.ModerationSubmissions.AsNoTracking().SingleAsync()).State.Should().Be(ModerationSubmissionState.SUBMITTED);
+        (await db.ModerationSubmissionHistoryEntries.CountAsync()).Should().Be(1);
+        (await db.PublicationSnapshots.CountAsync()).Should().Be(0);
+        (await db.Assets.AsNoTracking().SingleAsync(a => a.Id == seed.Asset.Id)).CurrentPublicationSnapshotId.Should().BeNull();
+        User nextOwner = TestData.CreateUser("next-owner", "next-owner@example.test");
+        db.Users.Add(nextOwner);
+        await db.SaveChangesAsync();
+        await db.Assets.Where(a => a.Id == seed.Asset.Id).ExecuteUpdateAsync(s => s.SetProperty(a => a.AuthorId, nextOwner.Id));
+        db.ChangeTracker.Clear();
+        GuardedSubmissionResult deniedReplay = await store.AttemptGuardedSubmission(request);
+        deniedReplay.Status.Should().Be(GuardedSubmissionStatus.BLOCKED);
+        deniedReplay.BlockedReasonCode.Should().Be(ErrorCodes.ERR_FORBIDDEN);
+    }
 
     [Fact]
     public async Task FinalizeConfirmed_WhenValidCompletedReport_ShouldCommitHeaderStagesFindingsAdmissionAuditOutboxAndSelectVersion()
@@ -63,7 +288,7 @@ public sealed class CodeAnalysisReportFinalizerPostgresTests(PostgresFixture fix
         header.Disposition.Should().Be(CodeAnalysisReportDisposition.SELECTED);
         header.IsFinalized.Should().BeTrue();
         header.Purpose.Should().Be(CodeAnalysisReportPurpose.PRODUCTION);
-        header.CanAuthorizePublication.Should().BeFalse();
+        header.ReviewEligible.Should().BeTrue();
         header.AnalyzedFileCount.Should().Be(1);
         header.OmissionCount.Should().Be(0);
         header.FindingCount.Should().Be(1);
@@ -77,7 +302,7 @@ public sealed class CodeAnalysisReportFinalizerPostgresTests(PostgresFixture fix
         CodeAnalysisReportAdmission admission = await db.CodeAnalysisReportAdmissions.AsNoTracking().SingleAsync(a => a.ReportId == reportId);
         admission.AdmissionKind.Should().Be(CodeAnalysisAdmissionKind.SERVER_VALIDATED);
         admission.AdmittedBy.Should().Be("assetblock-dotnet-finalizer");
-        admission.CanAuthorizePublication.Should().BeFalse();
+        admission.ReviewEligible.Should().BeTrue();
         admission.ReportDigest.Should().HaveLength(64);
         admission.InputDigest.Should().Be(run.InputDigest);
         admission.ServiceKey.Should().Be(SERVICE_KEY);
@@ -376,12 +601,12 @@ public sealed class CodeAnalysisReportFinalizerPostgresTests(PostgresFixture fix
         CodeAnalysisPolicyVersion policy = new()
         {
             Id = chain.PolicyVersionId,
-            PolicyKey = POLICY_KEY,
+            PolicyKey = ReviewAnalysisPolicy.KEY,
             PolicyDigest = policyDigest,
             SchemaName = "code-analysis-v1",
             StageMatrixJson = "{}",
-            VerifierMode = "PENDING_RESEARCH_EVALUATION",
-            VerifierReason = "Retrieval quality research evaluation has not been reviewed.",
+            VerifierMode = ReviewAnalysisPolicy.VERIFIER_MODE,
+            VerifierReason = ReviewAnalysisPolicy.VERIFIER_REASON,
             ToolIdentitiesJson = "{}",
             LimitsJson = "{}",
             SecurityValidityJson = "{}",
@@ -630,6 +855,7 @@ public sealed class CodeAnalysisReportFinalizerPostgresTests(PostgresFixture fix
         await db.SaveChangesAsync();
 
         AdmittedReportTestEvidence.Chain chain = AdmittedReportTestEvidence.BuildChain();
+        chain = chain with { PolicyDigest = ReviewAnalysisPolicy.DIGEST };
         db.CodeAnalysisPolicyVersions.Add(AdmittedReportTestEvidence.Policy(chain));
         AdmittedReportTestEvidence.SeedObservedProof(db, version, chain);
         await db.SaveChangesAsync();

@@ -1722,9 +1722,6 @@ namespace AssetBlock.Infrastructure.Migrations
                         .HasMaxLength(64)
                         .HasColumnType("character varying(64)");
 
-                    b.Property<bool>("CanAuthorizePublication")
-                        .HasColumnType("boolean");
-
                     b.Property<DateTimeOffset>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
 
@@ -1732,11 +1729,6 @@ namespace AssetBlock.Infrastructure.Migrations
                         .IsRequired()
                         .HasColumnType("char(64)")
                         .IsFixedLength();
-
-                    b.Property<string>("PublicationAuthorityReason")
-                        .IsRequired()
-                        .HasMaxLength(512)
-                        .HasColumnType("character varying(512)");
 
                     b.Property<string>("PythonReportId")
                         .IsRequired()
@@ -1762,6 +1754,14 @@ namespace AssetBlock.Infrastructure.Migrations
                     b.Property<int>("ReservationSlotNumber")
                         .HasColumnType("integer");
 
+                    b.Property<string>("ReviewEligibilityReason")
+                        .IsRequired()
+                        .HasMaxLength(512)
+                        .HasColumnType("character varying(512)");
+
+                    b.Property<bool>("ReviewEligible")
+                        .HasColumnType("boolean");
+
                     b.Property<string>("ServiceKey")
                         .IsRequired()
                         .HasMaxLength(128)
@@ -1778,8 +1778,6 @@ namespace AssetBlock.Infrastructure.Migrations
 
                     b.ToTable("code_analysis_report_admissions", null, t =>
                         {
-                            t.HasCheckConstraint("CK_code_analysis_report_admissions_authority_reason", "\"PublicationAuthorityReason\" IS NOT NULL AND length(\"PublicationAuthorityReason\") > 0");
-
                             t.HasCheckConstraint("CK_code_analysis_report_admissions_generation", "\"ReservationGeneration\" > 0");
 
                             t.HasCheckConstraint("CK_code_analysis_report_admissions_input_digest", "\"InputDigest\" ~ '^[0-9a-f]{64}$'");
@@ -1791,6 +1789,8 @@ namespace AssetBlock.Infrastructure.Migrations
                             t.HasCheckConstraint("CK_code_analysis_report_admissions_python_report_id", "\"PythonReportId\" ~ '^[0-9a-f]{64}$'");
 
                             t.HasCheckConstraint("CK_code_analysis_report_admissions_report_digest", "\"ReportDigest\" ~ '^[0-9a-f]{64}$'");
+
+                            t.HasCheckConstraint("CK_code_analysis_report_admissions_review_reason", "\"ReviewEligibilityReason\" IS NOT NULL AND length(\"ReviewEligibilityReason\") > 0");
 
                             t.HasCheckConstraint("CK_code_analysis_report_admissions_service_key", "\"ServiceKey\" ~ '^[A-Za-z0-9][A-Za-z0-9_.\\-]{0,127}$'");
 
@@ -1929,9 +1929,6 @@ namespace AssetBlock.Infrastructure.Migrations
                     b.Property<Guid>("AssetVersionId")
                         .HasColumnType("uuid");
 
-                    b.Property<bool>("CanAuthorizePublication")
-                        .HasColumnType("boolean");
-
                     b.Property<string>("ContentSha256")
                         .IsRequired()
                         .HasColumnType("char(64)");
@@ -1982,6 +1979,9 @@ namespace AssetBlock.Infrastructure.Migrations
 
                     b.Property<int>("ReportSchemaVersion")
                         .HasColumnType("integer");
+
+                    b.Property<bool>("ReviewEligible")
+                        .HasColumnType("boolean");
 
                     b.Property<int?>("SelectionGeneration")
                         .HasColumnType("integer");
@@ -2104,7 +2104,7 @@ namespace AssetBlock.Infrastructure.Migrations
 
                             t.HasCheckConstraint("CK_code_analysis_report_stages_input_sha", "\"InputSha256\" IS NULL OR \"InputSha256\" ~ '^[0-9a-f]{64}$'");
 
-                            t.HasCheckConstraint("CK_code_analysis_report_stages_outcome", "\"Outcome\" IN ('SUCCEEDED', 'FAILED')");
+                            t.HasCheckConstraint("CK_code_analysis_report_stages_outcome", "\"Outcome\" IN ('SUCCEEDED', 'FAILED', 'NOT_APPLICABLE')");
 
                             t.HasCheckConstraint("CK_code_analysis_report_stages_output_sha", "\"OutputSha256\" IS NULL OR \"OutputSha256\" ~ '^[0-9a-f]{64}$'");
 

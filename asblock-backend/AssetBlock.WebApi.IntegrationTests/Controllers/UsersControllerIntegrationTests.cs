@@ -366,7 +366,7 @@ public sealed class UsersControllerIntegrationTests(IntegrationTestFixture fixtu
                 PolicyVersion = "code-analysis-policy-v1",
                 InputRevision = 1,
                 Purpose = CodeAnalysisReportPurpose.PRODUCTION,
-                CanAuthorizePublication = false,
+                ReviewEligible = false,
                 IsFinalized = true,
                 FinalizedAt = now,
                 ReportSchemaVersion = 1,
@@ -388,8 +388,8 @@ public sealed class UsersControllerIntegrationTests(IntegrationTestFixture fixtu
                 ReservationSlotNumber = 0,
                 ReservationGeneration = 1,
                 ReservationLeaseTokenDigest = new string('e', 64),
-                CanAuthorizePublication = false,
-                PublicationAuthorityReason = "Research evaluation only.",
+                ReviewEligible = false,
+                ReviewEligibilityReason = "Research evaluation only.",
                 CreatedAt = now
             };
             db.Categories.Add(category);

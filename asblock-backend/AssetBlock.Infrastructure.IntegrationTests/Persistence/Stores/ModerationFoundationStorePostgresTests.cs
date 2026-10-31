@@ -91,6 +91,14 @@ public sealed class ModerationFoundationStorePostgresTests(PostgresFixture fixtu
             null);
 
         GuardedSubmissionResult first = await store.AttemptGuardedSubmission(request, CancellationToken.None);
+        await db.AssetDraftWorkspaces.Where(w => w.Id == workspaceEntity.Id)
+            .ExecuteUpdateAsync(s => s.SetProperty(w => w.WorkspaceRevision, w => w.WorkspaceRevision + 1));
+        AssetVersion nextVersion = TestData.CreateAssetVersion(asset.Id, versionNumber: 2, isCurrent: false);
+        db.AssetVersions.Add(nextVersion);
+        await db.SaveChangesAsync();
+        await db.AssetDraftWorkspaces.Where(w => w.Id == workspaceEntity.Id).ExecuteUpdateAsync(s => s
+            .SetProperty(w => w.AssetVersionId, nextVersion.Id).SetProperty(w => w.WorkspaceVersionScopeKey, nextVersion.Id));
+        db.ChangeTracker.Clear();
         GuardedSubmissionResult second = await store.AttemptGuardedSubmission(request, CancellationToken.None);
 
         first.Status.Should().Be(GuardedSubmissionStatus.BLOCKED);
@@ -516,7 +524,7 @@ public sealed class ModerationFoundationStorePostgresTests(PostgresFixture fixtu
             CancellationToken.None);
 
         result.Status.Should().Be(GuardedSubmissionStatus.BLOCKED);
-        result.BlockedReasonCode.Should().Be(ErrorCodes.ERR_MODERATION_SUBMISSION_BLOCKED);
+        result.BlockedReasonCode.Should().Be(ErrorCodes.ERR_ANALYSIS_NOT_AVAILABLE);
     }
 
     [Fact]
@@ -868,7 +876,7 @@ public sealed class ModerationFoundationStorePostgresTests(PostgresFixture fixtu
             PolicyVersion = "policy-v1",
             InputRevision = 1,
             Purpose = CodeAnalysisReportPurpose.PRODUCTION,
-            CanAuthorizePublication = true,
+            ReviewEligible = true,
             IsFinalized = true,
             FinalizedAt = DateTimeOffset.UtcNow,
             ReportSchemaVersion = 1,

@@ -60,4 +60,4 @@ def test_seller_safe_redacts_private_foreign_evidence():
     assert "channelScore" not in text
     assert "private asset" in text
     assert "dayjs MIT" in text
-    assert safe["canAuthorizePublication"] is False
+    assert "reviewEligible" not in safe

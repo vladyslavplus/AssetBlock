@@ -35,10 +35,11 @@ public sealed record SellerAnalysisSummaryDto(
     bool CanRetry,
     SellerAnalysisRetryExpectation? RetryExpectation,
     bool CanSubmit,
-    bool CanAuthorizePublication,
+    bool ReviewEligible,
     string ComparisonScope,
     IReadOnlyList<string> Limitations,
-    IReadOnlyList<SellerAnalysisStageDto> Stages);
+    IReadOnlyList<SellerAnalysisStageDto> Stages,
+    string? SubmissionBlockedReason = null);
 
 public sealed record SellerPublicAttributionDto(
     string Label,

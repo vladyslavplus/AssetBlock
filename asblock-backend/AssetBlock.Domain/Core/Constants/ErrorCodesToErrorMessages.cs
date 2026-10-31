@@ -152,6 +152,7 @@ public static class ErrorCodesToErrorMessages
         { ErrorCodes.ERR_MODERATION_WORKSPACE_STALE, "The draft workspace changed. Refresh and try again." },
         { ErrorCodes.ERR_MODERATION_OPERATION_CONFLICT, "This operation was already used with different input." },
         { ErrorCodes.ERR_MODERATION_SUBMISSION_BLOCKED, "Submission is not available for this version yet." },
+        { ErrorCodes.ERR_REVIEW_COVERAGE_REQUIRED, "Incomplete coverage requires a coverage assessment. Submission is currently blocked." },
         { ErrorCodes.ERR_MODERATION_ACTIVE_CASE_EXISTS, "An active moderation case already exists for this version." },
         { ErrorCodes.ERR_MODERATION_CROSS_ASSET, "Referenced records do not belong to the same asset." },
         { ErrorCodes.ERR_ANALYSIS_REPORT_NOT_TRUSTED, "The analysis report cannot authorize submission." },
@@ -163,7 +164,6 @@ public static class ErrorCodesToErrorMessages
         { ErrorCodes.ERR_SUBMISSION_WITHDRAW_CONFLICT, "The submission case changed. Refresh and try again." },
         { ErrorCodes.ERR_VERSION_FILE_CHECKS_INCOMPLETE, "File checks are not complete for this version yet." },
         { ErrorCodes.ERR_ANALYSIS_NOT_AVAILABLE, "Code analysis is not available yet for this version." },
-        { ErrorCodes.ERR_RESEARCH_EVALUATION_PENDING, "The report cannot authorize publication while research evaluation is pending." },
         { ErrorCodes.ERR_DECLARATION_INCOMPLETE, "The source declaration is incomplete for this version." }
     };
 

@@ -610,7 +610,7 @@ public sealed class CodeAnalysisReportFinalizerConcurrencyPostgresTests(Postgres
             claimed.JobId, claimed.LeaseToken, body, CancellationToken.None);
         first.Should().BeOfType<AssetProcessingJobOutcome.AtomicCommitted>();
 
-        Guid selectedBefore = (await seedDb.AssetVersions.AsNoTracking().SingleAsync(v => v.Id == seed.Version.Id)).SelectedCodeAnalysisReportId!.Value;
+        Guid? selectedBefore = (await seedDb.AssetVersions.AsNoTracking().SingleAsync(v => v.Id == seed.Version.Id)).SelectedCodeAnalysisReportId;
         var headersBefore = await seedDb.CodeAnalysisReportHeaders.AsNoTracking().CountAsync();
         var outboxesBefore = await seedDb.OutboxMessages.AsNoTracking().CountAsync();
 
@@ -628,7 +628,7 @@ public sealed class CodeAnalysisReportFinalizerConcurrencyPostgresTests(Postgres
         (await replayTask).Should().BeOfType<AssetProcessingJobOutcome.AtomicCommitted>();
         (await seedDb.CodeAnalysisReportHeaders.AsNoTracking().CountAsync()).Should().Be(headersBefore);
         (await seedDb.OutboxMessages.AsNoTracking().CountAsync()).Should().Be(outboxesBefore);
-        (await seedDb.AssetVersions.AsNoTracking().SingleAsync(v => v.Id == seed.Version.Id)).SelectedCodeAnalysisReportId!.Value
+        (await seedDb.AssetVersions.AsNoTracking().SingleAsync(v => v.Id == seed.Version.Id)).SelectedCodeAnalysisReportId
             .Should().Be(selectedBefore);
     }
 
@@ -817,7 +817,7 @@ public sealed class CodeAnalysisReportFinalizerConcurrencyPostgresTests(Postgres
             workspaceId = attached.VersionWorkspace!.WorkspaceId;
         }
 
-        AdmittedReportTestEvidence.Chain chain = AdmittedReportTestEvidence.BuildChain();
+        AdmittedReportTestEvidence.Chain chain = AdmittedReportTestEvidence.BuildChain() with { PolicyDigest = ReviewAnalysisPolicy.DIGEST };
         db.CodeAnalysisPolicyVersions.Add(AdmittedReportTestEvidence.Policy(chain));
         await AdmittedReportTestEvidence.SeedObservedProofAsync(db, version, chain);
         await db.SaveChangesAsync();

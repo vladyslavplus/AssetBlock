@@ -38,7 +38,7 @@ public sealed class AnalysisPolicyPublisherPostgresTests(PostgresFixture fixture
             policyDigest ?? AdmittedReportTestEvidence.NewHex64(),
             schemaName,
             stageMatrixJson.Length == 0 ? AdmittedReportTestEvidence.StageMatrixJson() : stageMatrixJson,
-            "PENDING_RESEARCH_EVALUATION",
+            "DISABLED_BY_EVALUATION",
             verifierReason,
             toolIdentitiesJson.Length == 0 ? AdmittedReportTestEvidence.ToolIdentitiesJson() : toolIdentitiesJson,
             limitsJson.Length == 0 ? AdmittedReportTestEvidence.LimitsJson() : limitsJson,

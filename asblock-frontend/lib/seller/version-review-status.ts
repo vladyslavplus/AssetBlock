@@ -4,17 +4,17 @@ import type { SellerVersionReview } from '@/lib/seller/seller-draft-schemas'
 export const versionReviewBlockedReasonMessages: Record<string, string> = {
   ERR_VERSION_FILE_CHECKS_INCOMPLETE: 'File checks are not complete for this version yet.',
   ERR_ANALYSIS_NOT_AVAILABLE: 'Code analysis is not available yet for this version.',
-  ERR_RESEARCH_EVALUATION_PENDING:
-    'The report is available for research review, but it cannot authorize publication yet.',
   ERR_DECLARATION_INCOMPLETE: 'The source declaration is incomplete for this version.',
+  ERR_REVIEW_COVERAGE_REQUIRED:
+    'Incomplete coverage requires a coverage assessment. Submission is currently blocked.',
+  ERR_MODERATION_ACTIVE_CASE_EXISTS: 'This version already has an active moderation case.',
+  ERR_ANALYSIS_REPORT_NOT_TRUSTED: 'The report is not eligible for submission.',
+  ERR_MODERATION_WORKSPACE_STALE: 'The draft changed. Refresh version review before submitting.',
 }
 
 const versionReviewBlockedReasonActions: Record<string, string> = {
   ERR_VERSION_FILE_CHECKS_INCOMPLETE: 'Wait for the archive inspection and malware scan to finish.',
-  ERR_ANALYSIS_NOT_AVAILABLE:
-    'Keep this version ready — code analysis arrives in a later update. Submission stays disabled until then.',
-  ERR_RESEARCH_EVALUATION_PENDING:
-    'Publication remains closed while the report is in research evaluation.',
+  ERR_ANALYSIS_NOT_AVAILABLE: 'Wait for analysis to complete or use the available retry action.',
   ERR_DECLARATION_INCOMPLETE:
     'Open the source declaration editor and complete the required fields.',
 }

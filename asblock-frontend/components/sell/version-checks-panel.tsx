@@ -391,8 +391,8 @@ export function VersionChecksPanel({ assetId, versionId }: VersionChecksPanelPro
             </div>
           ) : null}
           <p className="text-xs font-medium text-amber-700 dark:text-amber-300">
-            Research support only. This analysis does not clear ownership, licensing, or
-            publication.
+            Automated evidence supports human review. Publication requires an explicit moderator
+            decision.
           </p>
         </section>
       ) : null}

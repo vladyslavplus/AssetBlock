@@ -179,8 +179,9 @@ export const sellerAnalysisSummarySchema = z.object({
       inputDigest: z.string().length(64),
     })
     .nullable(),
-  canSubmit: z.literal(false),
-  canAuthorizePublication: z.literal(false),
+  canSubmit: z.boolean(),
+  reviewEligible: z.boolean(),
+  submissionBlockedReason: z.string().max(100).nullable(),
   comparisonScope: z.string().max(160),
   limitations: z.array(z.string().max(300)),
   stages: z.array(sellerAnalysisStageSchema),

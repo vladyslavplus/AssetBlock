@@ -53,18 +53,14 @@ internal static class PublicationEligibilityQuery
                     && d.AssetId == s.AssetId
                     && d.AssetVersionId == s.AssetVersionId
                     && d.Outcome == ModerationSubmissionState.APPROVED)
-                // Publication authority is decided by the persisted server admission, not by the
-                // header flag alone, so a header claiming authority over a denying admission fails.
-                && db.CodeAnalysisReportAdmissions.Any(a =>
-                    a.ReportId == s.CodeAnalysisReportHeaderId
-                    && a.CanAuthorizePublication)
+                // Only the approved decision grants publication. Report admission still proves
+                // provenance; review eligibility is not publication authority.
                 && AdmittedReports(db).Any(h =>
                     h.Id == s.CodeAnalysisReportHeaderId
                     && h.AssetId == s.AssetId
                     && h.AssetVersionId == s.AssetVersionId
                     && h.ContentSha256 == s.ContentSha256
-                    && h.Purpose == CodeAnalysisReportPurpose.PRODUCTION
-                    && h.CanAuthorizePublication));
+                    && h.Purpose == CodeAnalysisReportPurpose.PRODUCTION));
 
     public static IQueryable<Asset> PublicCatalogAssets(ApplicationDbContext db) =>
         db.Assets.AsNoTracking()

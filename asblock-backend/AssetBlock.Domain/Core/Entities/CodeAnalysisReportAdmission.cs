@@ -4,7 +4,7 @@ using AssetBlock.Domain.Core.Primitives.BaseEntities;
 namespace AssetBlock.Domain.Core.Entities;
 
 /// <summary>
-/// Server-issued admission for one validated report. This is the only trusted new-report authority;
+/// Server-issued review eligibility for one validated report. This is the trusted admission record;
 /// a report header alone, or any admission field supplied by the analysis service, proves nothing.
 /// </summary>
 public class CodeAnalysisReportAdmission : BaseEntity
@@ -33,8 +33,8 @@ public class CodeAnalysisReportAdmission : BaseEntity
     /// <summary>Digest of the transport lease token, never the token itself.</summary>
     public required string ReservationLeaseTokenDigest { get; set; }
 
-    /// <summary>Server decision. Always false while publication authority is unavailable.</summary>
-    public required bool CanAuthorizePublication { get; set; }
+    /// <summary>Server eligibility for human review; publication still requires an explicit decision.</summary>
+    public required bool ReviewEligible { get; set; }
 
-    public required string PublicationAuthorityReason { get; set; }
+    public required string ReviewEligibilityReason { get; set; }
 }

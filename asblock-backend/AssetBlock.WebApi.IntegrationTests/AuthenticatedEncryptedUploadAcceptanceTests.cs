@@ -44,18 +44,42 @@ public sealed class AuthenticatedEncryptedUploadAcceptanceTests
                     await db.SaveChangesAsync();
                 }
 
+                using HttpResponseMessage created = await scopedClient.PostAsJsonAsync("/api/assets/drafts",
+                    new
+                    {
+                        operationId = Guid.NewGuid(),
+                        title = "Live encrypted asset upload",
+                        description = "Task-owned isolated acceptance archive",
+                        price = 1.25m,
+                        categoryId,
+                        downloadLimitPerHour = 10
+                    });
+                created.EnsureSuccessStatusCode();
+                using var createdJson = JsonDocument.Parse(await created.Content.ReadAsStringAsync());
+                Guid assetId = createdJson.RootElement.GetProperty("assetId").GetGuid();
+                Guid workspaceId = createdJson.RootElement.GetProperty("workspaceId").GetGuid();
+                var revision = createdJson.RootElement.GetProperty("workspaceRevision").GetInt64();
+                details["assetId"] = assetId;
+
+                var declaration = BuildDeclaration();
+                using HttpResponseMessage saved = await scopedClient.PutAsJsonAsync(
+                    "/api/assets/" + assetId + "/declaration",
+                    new { operationId = Guid.NewGuid(), expectedWorkspaceRevision = revision, declaration });
+                saved.EnsureSuccessStatusCode();
+                using var savedJson = JsonDocument.Parse(await saved.Content.ReadAsStringAsync());
+                var uploadRevision = savedJson.RootElement.GetProperty("workspaceRevision").GetInt64();
+
                 var archive = CreateArchive();
                 using var multipart = new MultipartFormDataContent();
-                multipart.Add(new StringContent("Live encrypted asset upload"), "Title");
-                multipart.Add(new StringContent("Task-owned isolated acceptance archive"), "Description");
-                multipart.Add(new StringContent("1.25"), "Price");
-                multipart.Add(new StringContent(categoryId.ToString()), "CategoryId");
                 multipart.Add(new StringContent("PERSONAL"), "LicenseCode");
+                multipart.Add(new StringContent("Initial review candidate"), "ReleaseNotes");
+                multipart.Add(new StringContent(workspaceId.ToString()), "WorkspaceId");
+                multipart.Add(new StringContent(uploadRevision.ToString()), "ExpectedWorkspaceRevision");
                 var file = new ByteArrayContent(archive);
                 file.Headers.ContentType = new MediaTypeHeaderValue("application/zip");
                 multipart.Add(file, "file", "live-acceptance.zip");
 
-                using HttpResponseMessage upload = await scopedClient.PostAsync("/api/assets/upload", multipart);
+                using HttpResponseMessage upload = await scopedClient.PostAsync($"/api/assets/{assetId}/versions", multipart);
                 var uploadBody = await upload.Content.ReadAsStringAsync();
                 details["uploadStatus"] = (int)upload.StatusCode;
                 if (!upload.IsSuccessStatusCode)
@@ -63,29 +87,13 @@ public sealed class AuthenticatedEncryptedUploadAcceptanceTests
                     throw new InvalidOperationException("Real upload endpoint failed: HTTP " + (int)upload.StatusCode + " " + SafeBody(uploadBody));
                 }
 
-                using var uploadJson = JsonDocument.Parse(uploadBody);
-                Guid assetId = uploadJson.RootElement.GetProperty("id").GetGuid();
-                details["assetId"] = assetId;
-
-                using HttpResponseMessage getDeclaration = await scopedClient.GetAsync("/api/assets/" + assetId + "/declaration");
-                getDeclaration.EnsureSuccessStatusCode();
-                using var declarationSnapshot = JsonDocument.Parse(await getDeclaration.Content.ReadAsStringAsync());
-                JsonElement snap = declarationSnapshot.RootElement;
-                Guid workspaceId = snap.GetProperty("workspaceId").GetGuid();
-                var revision = snap.GetProperty("workspaceRevision").GetInt64();
-                var declaration = BuildDeclaration();
-                using HttpResponseMessage saved = await scopedClient.PutAsJsonAsync(
-                    "/api/assets/" + assetId + "/declaration",
-                    new { operationId = Guid.NewGuid(), expectedWorkspaceRevision = revision, declaration });
-                saved.EnsureSuccessStatusCode();
-
                 var first = await WaitForAdmittedReport(factory, assetId, 1, TimeSpan.FromMinutes(25));
                 details["first"] = first;
                 JsonElement firstJson = JsonSerializer.SerializeToElement(first);
                 JsonElement[] firstStages = firstJson.GetProperty("stages").EnumerateArray().ToArray();
-                if (firstStages.Length != 8 || firstStages.Any(x => x.GetProperty("outcome").GetString() != "SUCCEEDED"))
+                if (firstStages.Length != 8 || firstStages.Any(x => x.GetProperty("outcome").GetString() != (x.GetProperty("Stage").GetString() == "VERIFIER" ? "NOT_APPLICABLE" : "SUCCEEDED")))
                 {
-                    throw new InvalidOperationException("Initial report did not persist all eight successful stages.");
+                    throw new InvalidOperationException("Initial report did not persist all eight policy-valid stages.");
                 }
 
                 if (firstJson.GetProperty("artifacts").GetArrayLength() != 3)
@@ -93,16 +101,16 @@ public sealed class AuthenticatedEncryptedUploadAcceptanceTests
                     throw new InvalidOperationException("Initial admitted report did not persist all three reusable artifacts.");
                 }
 
-                if (firstJson.GetProperty("reports").EnumerateArray().Any(x => x.GetProperty("CanAuthorizePublication").GetBoolean())
-                    || firstJson.GetProperty("admissions").EnumerateArray().Any(x => x.GetProperty("CanAuthorizePublication").GetBoolean()))
+                if (firstJson.GetProperty("reports").EnumerateArray().Any(x => !x.GetProperty("ReviewEligible").GetBoolean())
+                    || firstJson.GetProperty("admissions").EnumerateArray().Any(x => !x.GetProperty("ReviewEligible").GetBoolean()))
                 {
-                    throw new InvalidOperationException("Initial report granted publication authority.");
+                    throw new InvalidOperationException("Initial report did not persist server-issued review eligibility.");
                 }
 
                 if (firstStages.Single(x => x.GetProperty("Stage").GetString() == "VERIFIER")
-                        .GetProperty("tools").GetProperty("mode").GetString() != "PENDING_RESEARCH_EVALUATION")
+                        .GetProperty("tools").GetProperty("mode").GetString() != "DISABLED_BY_EVALUATION")
                 {
-                    throw new InvalidOperationException("Initial report left pending research evaluation mode.");
+                    throw new InvalidOperationException("Initial report did not record the evaluation-disabled verifier mode.");
                 }
 
                 Guid firstRunId = firstJson.GetProperty("runs").EnumerateArray().Last().GetProperty("Id").GetGuid();
@@ -123,10 +131,9 @@ public sealed class AuthenticatedEncryptedUploadAcceptanceTests
                 JsonElement summary = ownerReview.RootElement.GetProperty("analysisDetails");
                 if (summary.GetProperty("reportId").GetGuid() != admittedReportId
                     || !summary.GetProperty("reportIsCurrent").GetBoolean()
-                    || summary.GetProperty("canSubmit").GetBoolean()
-                    || summary.GetProperty("canAuthorizePublication").GetBoolean())
+                    || !summary.GetProperty("reviewEligible").GetBoolean())
                 {
-                    throw new InvalidOperationException("Owner analysis summary did not expose the selected admitted report with publication closed.");
+                    throw new InvalidOperationException("Owner analysis summary did not expose server-issued review eligibility.");
                 }
 
                 using HttpResponseMessage findingsResponse = await scopedClient.GetAsync(
@@ -227,7 +234,7 @@ public sealed class AuthenticatedEncryptedUploadAcceptanceTests
                         throw new InvalidOperationException("Unmatched declaration scope was not persisted without file coordinates.");
                     }
 
-                    if (findings.Any(finding => finding is { OwnScopePath: "LICENSE", FindingType: "LICENSE_UNKNOWN" or "LICENSE_CONTRADICTION" }))
+                    if (findings.Any(finding => finding is { OwnScopePath: "src/calculator.py", FindingType: "LICENSE_UNKNOWN" or "LICENSE_CONTRADICTION" }))
                     {
                         throw new InvalidOperationException("Matched license location did not retain its detected license evidence.");
                     }
@@ -241,12 +248,12 @@ public sealed class AuthenticatedEncryptedUploadAcceptanceTests
                         notice.OwnStartLine,
                         notice.OwnEndLine
                     };
-                    details["matchedLicenseScope"] = new { path = "LICENSE", hasContradictoryOrUnknownFinding = false };
+                    details["matchedLicenseScope"] = new { path = "src/calculator.py", hasContradictoryOrUnknownFinding = false };
                 }
                 JsonElement[] secondReportStages = secondJson.GetProperty("stages").EnumerateArray().ToArray();
-                if (secondReportStages.Length != 8 || secondReportStages.Any(x => x.GetProperty("outcome").GetString() != "SUCCEEDED"))
+                if (secondReportStages.Length != 8 || secondReportStages.Any(x => x.GetProperty("outcome").GetString() != (x.GetProperty("Stage").GetString() == "VERIFIER" ? "NOT_APPLICABLE" : "SUCCEEDED")))
                 {
-                    throw new InvalidOperationException("Second report did not persist all eight successful stages.");
+                    throw new InvalidOperationException("Second report did not persist all eight policy-valid stages.");
                 }
 
                 if (secondJson.GetProperty("artifacts").GetArrayLength() != 3)
@@ -254,10 +261,10 @@ public sealed class AuthenticatedEncryptedUploadAcceptanceTests
                     throw new InvalidOperationException("Declaration-only reuse report did not persist the next reusable artifact set.");
                 }
 
-                if (secondJson.GetProperty("reports").EnumerateArray().Any(x => x.GetProperty("CanAuthorizePublication").GetBoolean())
-                    || secondJson.GetProperty("admissions").EnumerateArray().Any(x => x.GetProperty("CanAuthorizePublication").GetBoolean()))
+                if (secondJson.GetProperty("reports").EnumerateArray().Any(x => !x.GetProperty("ReviewEligible").GetBoolean())
+                    || secondJson.GetProperty("admissions").EnumerateArray().Any(x => !x.GetProperty("ReviewEligible").GetBoolean()))
                 {
-                    throw new InvalidOperationException("Declaration-only report granted publication authority.");
+                    throw new InvalidOperationException("Declaration-only report did not persist server-issued review eligibility.");
                 }
 
                 if (secondJson.GetProperty("processingStatus").GetString() != "READY"
@@ -275,9 +282,9 @@ public sealed class AuthenticatedEncryptedUploadAcceptanceTests
                 }
 
                 if (secondReportStages.Single(x => x.GetProperty("Stage").GetString() == "VERIFIER")
-                        .GetProperty("tools").GetProperty("mode").GetString() != "PENDING_RESEARCH_EVALUATION")
+                        .GetProperty("tools").GetProperty("mode").GetString() != "DISABLED_BY_EVALUATION")
                 {
-                    throw new InvalidOperationException("Reuse report left pending research evaluation mode.");
+                    throw new InvalidOperationException("Reuse report did not record the evaluation-disabled verifier mode.");
                 }
 
                 JsonElement secondRun = secondJson.GetProperty("runs").EnumerateArray().Last();
@@ -295,9 +302,9 @@ public sealed class AuthenticatedEncryptedUploadAcceptanceTests
                 }
 
                 JsonElement[] secondStages = secondJson.GetProperty("stages").EnumerateArray().ToArray();
-                if (secondStages.Length != 8 || secondStages.Any(x => x.GetProperty("outcome").GetString() != "SUCCEEDED"))
+                if (secondStages.Length != 8 || secondStages.Any(x => x.GetProperty("outcome").GetString() != (x.GetProperty("Stage").GetString() == "VERIFIER" ? "NOT_APPLICABLE" : "SUCCEEDED")))
                 {
-                    throw new InvalidOperationException("Second report did not persist all eight successful stages.");
+                    throw new InvalidOperationException("Second report did not persist all eight policy-valid stages.");
                 }
 
                 JsonElement[] reusableStages = secondStages.Where(x => x.GetProperty("Stage").GetString() is "EXTRACTION" or "TOKEN" or "SEMANTIC").ToArray();
@@ -321,6 +328,70 @@ public sealed class AuthenticatedEncryptedUploadAcceptanceTests
                     throw new InvalidOperationException("Persisted semantic reuse did not prove encoderInvocations=0.");
                 }
 
+                details["submissionSummary"] = currentSummary.Clone();
+                if (!currentSummary.GetProperty("canSubmit").GetBoolean()
+                    || !currentSummary.GetProperty("reviewEligible").GetBoolean()
+                    || currentSummary.GetProperty("coverageLevel").GetString() != "FULL")
+                {
+                    throw new InvalidOperationException("The real completed report was not eligible for submission.");
+                }
+                object submitRequest;
+                long searchRevision;
+                await using (AsyncServiceScope scope = factory.Services.CreateAsyncScope())
+                {
+                    ApplicationDbContext db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+                    AssetDraftWorkspace workspace = await db.AssetDraftWorkspaces.AsNoTracking()
+                        .SingleAsync(w => w.AssetId == assetId && w.AssetVersionId == assetVersionId);
+                    searchRevision = await db.Assets.Where(a => a.Id == assetId).Select(a => a.SearchRevision).SingleAsync();
+                    submitRequest = new
+                    {
+                        workspaceId = workspace.Id,
+                        expectedWorkspaceRevision = workspace.WorkspaceRevision,
+                        expectedCaseRevision = workspace.CaseRevision,
+                        operationId = Guid.NewGuid()
+                    };
+                }
+                var submissionUrl = $"/api/assets/{assetId}/versions/{assetVersionId}/submissions";
+                using HttpResponseMessage submitted = await scopedClient.PostAsJsonAsync(submissionUrl, submitRequest);
+                if (!submitted.IsSuccessStatusCode)
+                {
+                    throw new InvalidOperationException("Real submission failed: HTTP " + (int)submitted.StatusCode + " "
+                        + SafeBody(await submitted.Content.ReadAsStringAsync()));
+                }
+                using var submittedJson = JsonDocument.Parse(await submitted.Content.ReadAsStringAsync());
+                Guid submissionId = submittedJson.RootElement.GetProperty("submissionId").GetGuid();
+                using HttpResponseMessage replay = await scopedClient.PostAsJsonAsync(submissionUrl, submitRequest);
+                replay.EnsureSuccessStatusCode();
+                using var replayJson = JsonDocument.Parse(await replay.Content.ReadAsStringAsync());
+                if (replayJson.RootElement.GetProperty("submissionId").GetGuid() != submissionId)
+                {
+                    throw new InvalidOperationException("Submission replay changed its frozen case identity.");
+                }
+                await using (AsyncServiceScope scope = factory.Services.CreateAsyncScope())
+                {
+                    ApplicationDbContext db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+                    ModerationSubmission submission = await db.ModerationSubmissions.AsNoTracking().SingleAsync(s => s.Id == submissionId);
+                    var historyCount = await db.ModerationSubmissionHistoryEntries.CountAsync(h => h.SubmissionId == submissionId);
+                    Asset asset = await db.Assets.AsNoTracking().SingleAsync(a => a.Id == assetId);
+                    if (submission.State != ModerationSubmissionState.SUBMITTED || historyCount != 1
+                        || submission.CodeAnalysisReportHeaderId != secondAdmittedReportId
+                        || asset.CurrentPublicationSnapshotId is not null || asset.SearchRevision != searchRevision
+                        || await db.PublicationSnapshots.AnyAsync(p => p.AssetId == assetId))
+                    {
+                        throw new InvalidOperationException("Submission did not persist one case/history without publication effects.");
+                    }
+                    details["submission"] = new
+                    {
+                        submissionId,
+                        state = submission.State.ToString(),
+                        historyCount,
+                        submission.CodeAnalysisReportHeaderId,
+                        retainedFindingCount = currentSummary.GetProperty("findingCount").GetInt32(),
+                        publicSnapshotId = asset.CurrentPublicationSnapshotId,
+                        searchRevisionUnchanged = true,
+                        replayed = true
+                    };
+                }
                 details["status"] = "passed";
                 await File.WriteAllTextAsync(evidencePath, JsonSerializer.Serialize(details, new JsonSerializerOptions { WriteIndented = true }));
             }
@@ -371,8 +442,8 @@ public sealed class AuthenticatedEncryptedUploadAcceptanceTests
                     runCount = runs.Count,
                     runs = runs.Select(x => new { x.Id, state = x.State.ToString(), x.InputDigest, x.ContentSha256, x.PolicyDigest, x.DeclarationDigest, x.MaterialDigest, x.ParentRunId, x.SelectionGeneration, x.ArchiveEvidenceId, x.MalwareEvidenceId, x.SecurityGeneration }),
                     reportId = reports[^1].Id,
-                    reports = reports.Select(x => new { x.Id, x.AnalysisRunId, x.PythonReportId, x.ReportDigest, x.CanAuthorizePublication, x.IsFinalized }),
-                    admissions = admissions.Select(x => new { x.Id, x.AdmittedBy, x.CanAuthorizePublication, x.PublicationAuthorityReason, x.InputDigest }),
+                    reports = reports.Select(x => new { x.Id, x.AnalysisRunId, x.PythonReportId, x.ReportDigest, x.ReviewEligible, x.IsFinalized }),
+                    admissions = admissions.Select(x => new { x.Id, x.AdmittedBy, x.ReviewEligible, x.ReviewEligibilityReason, x.InputDigest }),
                     stages = stages.Select(x => new { x.Id, x.Stage, outcome = x.Outcome.ToString(), x.Applicability, x.InputSha256, x.OutputSha256, x.ReuseParentRunId, x.ReuseParentStageId, counts = SafeJson(x.CountsJson), tools = SafeJson(x.ToolIdentityJson) }),
                     artifacts = artifacts.Select(x => new { x.Id, x.SourceRunId, x.SourceStageId, x.Stage, x.ArtifactDigest, x.PayloadBytes }),
                     securityEvidence = evidence.Select(x => new { x.Id, evidenceKind = x.EvidenceKind.ToString(), evidenceOutcome = x.Outcome.ToString(), x.ContentSha256, x.ScopeComplete, x.ImplementationIdentity, x.EngineIdentity, x.EngineVersion, x.SignatureIdentity, x.SignatureObservedAt, x.SignatureValidUntil, x.EvidenceDigest, x.ScannedByteCount }),
@@ -405,10 +476,7 @@ public sealed class AuthenticatedEncryptedUploadAcceptanceTests
         using var ms = new MemoryStream();
         using (var zip = new ZipArchive(ms, ZipArchiveMode.Create, leaveOpen: true))
         {
-            Add(zip, "README.md", "# Live acceptance\nBenign task-local source archive.\n");
-            Add(zip, "LICENSE", "MIT License\n\nCopyright (c) 2026 Live acceptance\n");
-            Add(zip, "src/calculator.py", "def add(a, b):\n    return a + b\n");
-            Add(zip, "pyproject.toml", "[project]\nname = \"live-acceptance\"\nversion = \"1.0.0\"\nlicense = { text = \"MIT\" }\n");
+            Add(zip, "src/calculator.py", "# SPDX-License-Identifier: MIT\n# Copyright (c) 2026 Live acceptance\ndef add(a, b):\n    return a + b\n");
         }
         return ms.ToArray();
     }
@@ -433,9 +501,9 @@ public sealed class AuthenticatedEncryptedUploadAcceptanceTests
                 sourceUrl = "https://example.invalid/live-acceptance", knownVersion = (string?)null, license = "MIT",
                 noticeLocations = Array.Empty<string>(), modifications = "Original", permissionEvidenceReferences = Array.Empty<string>(),
                 origin = "OWN_CONTRIBUTION" },
-            new { componentId = "live-acceptance-license", name = "Matched license", packagePathOrRange = (string?)"LICENSE",
+            new { componentId = "live-acceptance-license", name = "Matched license", packagePathOrRange = (string?)"src/calculator.py",
                 sourceUrl = "https://example.invalid/live-acceptance-license", knownVersion = (string?)null, license = "MIT",
-                noticeLocations = new[] { "LICENSE" }, modifications = "Original", permissionEvidenceReferences = Array.Empty<string>(),
+                noticeLocations = new[] { "src/calculator.py" }, modifications = "Original", permissionEvidenceReferences = Array.Empty<string>(),
                 origin = "OWN_CONTRIBUTION" }
         }
     };

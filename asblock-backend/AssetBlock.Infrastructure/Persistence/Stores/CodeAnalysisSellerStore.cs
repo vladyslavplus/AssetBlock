@@ -147,7 +147,14 @@ internal sealed class CodeAnalysisSellerStore(
             .OrderBy(s => s.Stage)
             .Select(s => new SellerAnalysisStageDto(s.Stage, s.Applicability.ToString(), s.Outcome.ToString(), s.Retryable))
             .ToArrayAsync(cancellationToken).ConfigureAwait(false);
-        string[] limitations = ["Research evaluation only; this report does not authorize publication.", "Automated comparison is incomplete and requires human review."];
+        string[] limitations = ["Pair verification is disabled by evaluation. Retained comparison evidence requires human review.", "Publication requires an explicit moderator decision."];
+        var submissionBlockedReason = !reportIsCurrent || latestWorkspace is null
+            ? ErrorCodes.ERR_ANALYSIS_NOT_AVAILABLE
+            : await ReviewSubmissionEligibility.BlockedReason(db, version, latestWorkspace, report!.Id, cancellationToken).ConfigureAwait(false);
+        var reviewEligible = report is not null && report.PolicyVersion == ReviewAnalysisPolicy.KEY
+            && await db.CodeAnalysisReportAdmissions.AnyAsync(a => a.ReportId == report.Id
+                && a.AdmissionKind == CodeAnalysisAdmissionKind.SERVER_VALIDATED && a.ReviewEligible
+                && a.AdmittedBy == "assetblock-dotnet-finalizer", cancellationToken).ConfigureAwait(false);
         SellerAnalysisRetryExpectation? expectation = retry && run is not null && latestWorkspace is not null
             ? new SellerAnalysisRetryExpectation(run.Id, latestWorkspace.WorkspaceRevision, run.PolicyDigest, run.InputDigest)
             : null;
@@ -158,7 +165,7 @@ internal sealed class CodeAnalysisSellerStore(
             findingDetailsAvailable,
             run?.CreatedAt, run?.CompletedAt, SafeErrorCode(run?.ErrorCode), SafeErrorMessage(run?.ErrorCode),
             retry ? "Retry analysis after checking the current seller declaration and materials." : null,
-            retry, expectation, false, false, "Selected source files from this version only", limitations, stages);
+            retry, expectation, submissionBlockedReason is null, reviewEligible, "Selected source files from this version only", limitations, stages, submissionBlockedReason);
     }
 
     public async Task<SellerAnalysisFindingsPageDto?> GetOwnerFindings(Guid assetVersionId, Guid reportId, Guid ownerUserId, int page, CancellationToken cancellationToken = default)
@@ -453,9 +460,10 @@ internal sealed class CodeAnalysisSellerStore(
 
     private IQueryable<CodeAnalysisReportHeader> OwnerAdmittedReports() =>
         PublicationEligibilityQuery.AdmittedReports(db)
-            .Where(h => db.CodeAnalysisReportAdmissions.Any(a => a.ReportId == h.Id
+            .Where(h => h.Purpose == CodeAnalysisReportPurpose.PRODUCTION
+                && db.CodeAnalysisReportAdmissions.Any(a => a.ReportId == h.Id
                 && a.AdmissionKind == CodeAnalysisAdmissionKind.SERVER_VALIDATED
-                && !a.CanAuthorizePublication && a.AdmittedBy == "assetblock-dotnet-finalizer"
+                && a.ReviewEligible == h.ReviewEligible && a.AdmittedBy == "assetblock-dotnet-finalizer"
                 && a.ReportDigest == h.ReportDigest && a.PythonReportId == h.PythonReportId));
     private static JsonMutationIdempotencyRecord CreateReceipt(Guid ownerUserId, Guid operationId, string requestDigest,
         SellerAnalysisRetryAcceptedDto accepted) => new()

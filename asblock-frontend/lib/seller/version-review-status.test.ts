@@ -50,8 +50,14 @@ describe('version review status helpers', () => {
     expect(versionReviewBlockedReasonAction('ERR_DECLARATION_INCOMPLETE')).toMatch(
       /declaration editor/i,
     )
-    expect(versionReviewBlockedReasonAction('ERR_ANALYSIS_NOT_AVAILABLE')).toMatch(/later update/i)
+    expect(versionReviewBlockedReasonAction('ERR_ANALYSIS_NOT_AVAILABLE')).toMatch(/retry action/i)
     expect(versionReviewBlockedReasonAction('ERR_UNKNOWN')).toBeNull()
+  })
+
+  it('explains coverage blockers explicitly', () => {
+    expect(versionReviewBlockedReasonMessage('ERR_REVIEW_COVERAGE_REQUIRED')).toMatch(
+      /coverage assessment/i,
+    )
   })
 
   it('labels moderation states without implying publication', () => {

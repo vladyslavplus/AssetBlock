@@ -43,14 +43,23 @@ public sealed class AdmittedReportTrustPostgresTests(PostgresFixture fixture)
     }
 
     [Fact]
-    public async Task TrustedApprovedSnapshots_WhenAdmissionDeniesAndHeaderClaimsAuthority_ShouldExclude()
+    public async Task TrustedApprovedSnapshots_WhenReviewEligibilityIsFalseAndDecisionApproves_ShouldUseTheDecision()
     {
         await using ApplicationDbContext db = await fixture.CreateCleanDbContext();
-        await Seed(db, headerOnly: false, admission: false, admissionDeniesAuthority: true);
+        await Seed(db, headerOnly: false, admission: true, admissionReviewIneligible: true);
 
         List<PublicationSnapshot> trusted = await PublicationEligibilityQuery.TrustedApprovedSnapshots(db).ToListAsync();
 
-        trusted.Should().BeEmpty();
+        trusted.Should().ContainSingle();
+    }
+
+    [Fact]
+    public async Task TrustedApprovedSnapshots_WhenReviewEligibleWithoutApprovedDecision_ShouldExclude()
+    {
+        await using ApplicationDbContext db = await fixture.CreateCleanDbContext();
+        await Seed(db, headerOnly: false, admission: true);
+        await db.ModerationDecisionRecords.ExecuteDeleteAsync();
+        (await PublicationEligibilityQuery.TrustedApprovedSnapshots(db).ToListAsync()).Should().BeEmpty();
     }
 
     [Fact]
@@ -206,9 +215,9 @@ public sealed class AdmittedReportTrustPostgresTests(PostgresFixture fixture)
         await db.CodeAnalysisReportAdmissions.Where(a => a.ReportId == reportId)
             .ExecuteUpdateAsync(s => s
                 .SetProperty(a => a.AdmittedBy, "assetblock-dotnet-finalizer")
-                .SetProperty(a => a.CanAuthorizePublication, false));
+                .SetProperty(a => a.ReviewEligible, false));
         await db.CodeAnalysisReportHeaders.Where(h => h.Id == reportId)
-            .ExecuteUpdateAsync(s => s.SetProperty(h => h.CanAuthorizePublication, false));
+            .ExecuteUpdateAsync(s => s.SetProperty(h => h.ReviewEligible, false));
         Guid ownerId = await db.Assets.AsNoTracking().Where(a => a.Id == assetId).Select(a => a.AuthorId).SingleAsync();
         CodeAnalysisSellerStore store = CreateSellerStore(db);
 
@@ -228,10 +237,10 @@ public sealed class AdmittedReportTrustPostgresTests(PostgresFixture fixture)
         await db.CodeAnalysisReportAdmissions.Where(a => a.ReportId == reportId)
             .ExecuteUpdateAsync(s => s
                 .SetProperty(a => a.AdmittedBy, "assetblock-dotnet-finalizer")
-                .SetProperty(a => a.CanAuthorizePublication, false));
+                .SetProperty(a => a.ReviewEligible, false));
         await db.CodeAnalysisReportHeaders.Where(h => h.Id == reportId)
             .ExecuteUpdateAsync(s => s
-                .SetProperty(h => h.CanAuthorizePublication, false)
+                .SetProperty(h => h.ReviewEligible, false)
                 .SetProperty(h => h.FindingCount, 3));
         Guid ownerId = await db.Assets.AsNoTracking().Where(a => a.Id == assetId).Select(a => a.AuthorId).SingleAsync();
         CodeAnalysisSellerStore store = CreateSellerStore(db);
@@ -273,10 +282,10 @@ public sealed class AdmittedReportTrustPostgresTests(PostgresFixture fixture)
         await db.CodeAnalysisReportAdmissions.Where(a => a.ReportId == reportId)
             .ExecuteUpdateAsync(s => s
                 .SetProperty(a => a.AdmittedBy, "assetblock-dotnet-finalizer")
-                .SetProperty(a => a.CanAuthorizePublication, false));
+                .SetProperty(a => a.ReviewEligible, false));
         await db.CodeAnalysisReportHeaders.Where(h => h.Id == reportId)
             .ExecuteUpdateAsync(s => s
-                .SetProperty(h => h.CanAuthorizePublication, false)
+                .SetProperty(h => h.ReviewEligible, false)
                 .SetProperty(h => h.FindingCount, 1)
                 .SetProperty(h => h.FinalizedAt, DateTimeOffset.UtcNow.AddMonths(-13)));
         await db.ModerationDecisionRecords.Where(d => d.AssetVersionId == versionId).ExecuteDeleteAsync();
@@ -325,7 +334,7 @@ public sealed class AdmittedReportTrustPostgresTests(PostgresFixture fixture)
     public async Task OwnerFindings_WhenRequestedByAnotherExistingOwner_ShouldExclude()
     {
         await using ApplicationDbContext db = await fixture.CreateCleanDbContext();
-        (Guid assetId, Guid versionId) = await Seed(db, headerOnly: false, admission: true, admissionDeniesAuthority: true);
+        (Guid assetId, Guid versionId) = await Seed(db, headerOnly: false, admission: true, admissionReviewIneligible: true);
         var suffix = Guid.NewGuid().ToString("N");
         User foreignOwner = new()
         {
@@ -417,7 +426,7 @@ public sealed class AdmittedReportTrustPostgresTests(PostgresFixture fixture)
         bool admission,
         bool bindRunToHeader = true,
         bool admissionInputDigestMismatch = false,
-        bool admissionDeniesAuthority = false,
+        bool admissionReviewIneligible = false,
         bool headerContentHashMismatch = false,
         CodeAnalysisRunState runState = CodeAnalysisRunState.COMPLETED)
     {
@@ -481,7 +490,7 @@ public sealed class AdmittedReportTrustPostgresTests(PostgresFixture fixture)
         if (admission)
         {
             CodeAnalysisReportAdmission record = AdmittedReportTestEvidence.Admission(
-                report, chain, canAuthorizePublication: !admissionDeniesAuthority);
+                report, chain, reviewEligible: !admissionReviewIneligible);
 
             if (admissionInputDigestMismatch)
             {

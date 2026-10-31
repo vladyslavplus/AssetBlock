@@ -244,7 +244,7 @@ public sealed class CodeAnalysisRetentionPostgresTests(PostgresFixture fixture)
         PolicyVersion = "retention-test",
         InputRevision = 1,
         Purpose = CodeAnalysisReportPurpose.PRODUCTION,
-        CanAuthorizePublication = false,
+        ReviewEligible = false,
         IsFinalized = true,
         FinalizedAt = finalizedAt,
         ReportSchemaVersion = 1,

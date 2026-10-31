@@ -279,83 +279,69 @@ internal sealed class ModerationFoundationStore(
         GuardedSubmissionRequest request,
         CancellationToken cancellationToken = default)
     {
-        AssetDraftWorkspaceSnapshot? workspace = await LockAssetAndWorkspaceForUpdate(
-            request.AssetId,
-            request.WorkspaceId,
-            request.ExpectedWorkspaceRevision,
-            cancellationToken);
+        GuardedSubmissionResult outcome = null!;
+        await unitOfWork.ExecuteInTransaction(async ct =>
+        {
+            outcome = await AttemptSubmissionUnderLock(request, ct);
+        }, cancellationToken);
+        return outcome;
+    }
 
+    private async Task<GuardedSubmissionResult> AttemptSubmissionUnderLock(
+        GuardedSubmissionRequest request, CancellationToken ct)
+    {
+        Asset? asset = await assetStore.GetForUpdate(request.AssetId, ct);
+        if (asset is null || asset.DeletedAt is not null || asset.AuthorId != request.OwnerUserId)
+        {
+            return new(GuardedSubmissionStatus.BLOCKED, null, ErrorCodes.ERR_FORBIDDEN);
+        }
+        Guid lockedId = await dbContext.Database.SqlQuery<Guid>($"""
+            SELECT "Id" AS "Value" FROM asset_draft_workspaces
+            WHERE "Id" = {request.WorkspaceId} AND "AssetId" = {request.AssetId} FOR UPDATE
+            """).FirstOrDefaultAsync(ct);
+        AssetDraftWorkspace? workspace = lockedId == Guid.Empty ? null : await ReadWorkspaceFreshUnderLock(lockedId, ct);
         if (workspace is null)
         {
-            return new GuardedSubmissionResult(GuardedSubmissionStatus.CONFLICT, null, ErrorCodes.ERR_MODERATION_WORKSPACE_STALE);
+            return new(GuardedSubmissionStatus.CONFLICT, null, ErrorCodes.ERR_MODERATION_WORKSPACE_STALE);
         }
-
-        if (workspace.CaseRevision != request.ExpectedCaseRevision)
+        await dbContext.Database.SqlQuery<Guid>($"""
+            SELECT "Id" AS "Value" FROM moderation_submissions
+            WHERE "WorkspaceId" = {workspace.Id} AND "State" IN ('SUBMITTED', 'IN_REVIEW') FOR UPDATE
+            """).ToListAsync(ct);
+        UserPersistedRole? role = await LockRoleAfterWorkspace(request.OwnerUserId, ct);
+        if (role is null || role.Role is not (AppRoles.USER or AppRoles.MODERATOR or AppRoles.ADMIN))
         {
-            return new GuardedSubmissionResult(GuardedSubmissionStatus.CONFLICT, null, ErrorCodes.ERR_MODERATION_WORKSPACE_STALE);
+            return new(GuardedSubmissionStatus.BLOCKED, null, ErrorCodes.ERR_FORBIDDEN);
         }
-
-        if (workspace.WorkspaceVersionScopeKey != request.AssetVersionId)
+        JsonMutationIdempotencyRecord? receipt = await FindIdempotencyRecord(request.OwnerUserId,
+            ModerationOperationKinds.SUBMISSION_CREATE, request.OperationId, ct);
+        if (receipt is not null)
         {
-            return new GuardedSubmissionResult(GuardedSubmissionStatus.CONFLICT, null, ErrorCodes.ERR_MODERATION_WORKSPACE_STALE);
-        }
-
-        AssetOwnershipDto? ownership = await assetStore.GetOwnership(request.AssetId, cancellationToken);
-        if (ownership is null || ownership.IsDeleted || ownership.AuthorId != request.OwnerUserId)
-        {
-            return new GuardedSubmissionResult(GuardedSubmissionStatus.BLOCKED, null, ErrorCodes.ERR_FORBIDDEN);
-        }
-
-        UserPersistedRole? ownerRole = await LockRoleAfterWorkspace(request.OwnerUserId, cancellationToken);
-        if (ownerRole is null
-            || ownerRole.Role is not (AppRoles.USER or AppRoles.MODERATOR or AppRoles.ADMIN))
-        {
-            return new GuardedSubmissionResult(GuardedSubmissionStatus.BLOCKED, null, ErrorCodes.ERR_FORBIDDEN);
-        }
-
-        JsonMutationIdempotencyRecord? existingIdempotency = await dbContext.JsonMutationIdempotencyRecords
-            .AsNoTracking()
-            .FirstOrDefaultAsync(r =>
-                r.ActorUserId == request.OwnerUserId
-                && r.OperationKind == ModerationOperationKinds.SUBMISSION_CREATE
-                && r.OperationId == request.OperationId,
-                cancellationToken);
-
-        if (existingIdempotency is not null)
-        {
-            if (existingIdempotency.RequestDigest != request.RequestDigest)
+            if (receipt.RequestDigest != request.RequestDigest)
             {
-                return new GuardedSubmissionResult(
-                    GuardedSubmissionStatus.CONFLICT,
-                    null,
-                    ErrorCodes.ERR_MODERATION_OPERATION_CONFLICT);
+                return new(GuardedSubmissionStatus.CONFLICT, null, ErrorCodes.ERR_MODERATION_OPERATION_CONFLICT);
             }
-
-            return DeserializeGuardedSubmissionResult(existingIdempotency.ResultJson);
+            GuardedSubmissionResult replay = DeserializeGuardedSubmissionResult(receipt.ResultJson);
+            return replay.SubmissionId.HasValue ? replay with { Status = GuardedSubmissionStatus.REPLAYED } : replay;
         }
-
-        GuardedSubmissionResult outcome = await EvaluateGuardedSubmissionGates(request, cancellationToken);
-        var resultJson = SerializeGuardedSubmissionResult(outcome);
-
-        IdempotentMutationResult idempotency = await TryCommitIdempotentMutation(
-            request.OwnerUserId,
-            ModerationOperationKinds.SUBMISSION_CREATE,
-            request.OperationId,
-            request.RequestDigest,
-            resultJson,
-            cancellationToken);
-
-        if (idempotency.Status == IdempotentMutationStatus.CONFLICT)
+        if (workspace.AssetVersionId != request.AssetVersionId || workspace.WorkspaceVersionScopeKey != request.AssetVersionId
+            || workspace.WorkspaceRevision != request.ExpectedWorkspaceRevision || workspace.CaseRevision != request.ExpectedCaseRevision)
         {
-            return new GuardedSubmissionResult(GuardedSubmissionStatus.CONFLICT, null, ErrorCodes.ERR_MODERATION_OPERATION_CONFLICT);
+            return new(GuardedSubmissionStatus.CONFLICT, null, ErrorCodes.ERR_MODERATION_WORKSPACE_STALE);
         }
-
-        if (idempotency.Status == IdempotentMutationStatus.REPLAYED)
+        GuardedSubmissionResult result = await EvaluateGuardedSubmissionGates(request, workspace, ct);
+        dbContext.JsonMutationIdempotencyRecords.Add(new JsonMutationIdempotencyRecord
         {
-            return DeserializeGuardedSubmissionResult(idempotency.ResultJson!);
-        }
-
-        return outcome;
+            Id = Guid.NewGuid(),
+            ActorUserId = request.OwnerUserId,
+            OperationKind = ModerationOperationKinds.SUBMISSION_CREATE,
+            OperationId = request.OperationId,
+            RequestDigest = request.RequestDigest,
+            ResultJson = SerializeGuardedSubmissionResult(result),
+            CreatedAt = _timeProvider.GetUtcNow()
+        });
+        await dbContext.SaveChangesAsync(ct);
+        return result;
     }
 
     public async Task<SellerDraftCreatedDto?> CreateAssetDraft(
@@ -1141,6 +1127,11 @@ internal sealed class ModerationFoundationStore(
             return new WithdrawSubmissionResult(WithdrawSubmissionStatus.NOT_FOUND);
         }
 
+        if (submission.OwnerUserId != request.ActorUserId)
+        {
+            return new WithdrawSubmissionResult(WithdrawSubmissionStatus.FORBIDDEN);
+        }
+
         JsonMutationIdempotencyRecord? existing = await FindIdempotencyRecord(
             request.ActorUserId, ModerationOperationKinds.SUBMISSION_WITHDRAW, request.OperationId, cancellationToken);
         if (existing is not null)
@@ -1156,11 +1147,6 @@ internal sealed class ModerationFoundationStore(
                 replayed?.CaseRevision,
                 existing.ResultJson,
                 Replayed: true);
-        }
-
-        if (submission.OwnerUserId != request.ActorUserId)
-        {
-            return new WithdrawSubmissionResult(WithdrawSubmissionStatus.FORBIDDEN);
         }
 
         var isActive = submission.State is ModerationSubmissionState.SUBMITTED or ModerationSubmissionState.IN_REVIEW;
@@ -1340,7 +1326,7 @@ internal sealed class ModerationFoundationStore(
             : JsonSerializer.Deserialize<SellerDraftMaterialPayload>(materialJson, _idempotencyJsonOptions);
         SourceDeclarationPayload? declaration = declarationJson is null
             ? null
-            : JsonSerializer.Deserialize<SourceDeclarationPayload>(declarationJson, _idempotencyJsonOptions);
+            : DeserializeDeclaration(declarationJson);
 
         return new MaterialAndDeclaration(
             material,
@@ -1377,6 +1363,21 @@ internal sealed class ModerationFoundationStore(
                 cancellationToken);
     }
 
+    internal static bool IsDeclarationComplete(string payloadJson)
+        => IsDeclarationComplete(DeserializeDeclaration(payloadJson));
+
+    private static SourceDeclarationPayload? DeserializeDeclaration(string payloadJson)
+    {
+        try
+        {
+            return JsonSerializer.Deserialize<SourceDeclarationPayload>(payloadJson, _idempotencyJsonOptions);
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
+    }
+
     private static bool IsDeclarationComplete(SourceDeclarationPayload? declaration)
     {
         if (declaration is null)
@@ -1390,9 +1391,13 @@ internal sealed class ModerationFoundationStore(
             return false;
         }
 
+        if (declaration.Components is null)
+        {
+            return false;
+        }
         foreach (SourceDeclarationComponent component in declaration.Components)
         {
-            if (string.IsNullOrWhiteSpace(component.SourceUrl)
+            if (component is null || string.IsNullOrWhiteSpace(component.SourceUrl)
                 || string.IsNullOrWhiteSpace(component.License))
             {
                 return false;
@@ -1471,38 +1476,64 @@ internal sealed class ModerationFoundationStore(
     }
 
     private async Task<GuardedSubmissionResult> EvaluateGuardedSubmissionGates(
-        GuardedSubmissionRequest request,
-        CancellationToken cancellationToken)
+        GuardedSubmissionRequest request, AssetDraftWorkspace workspace, CancellationToken ct)
     {
-        if (request.CodeAnalysisReportHeaderId is null)
+        AssetVersion? version = await dbContext.AssetVersions.AsNoTracking()
+            .SingleOrDefaultAsync(v => v.Id == request.AssetVersionId && v.AssetId == request.AssetId, ct);
+        if (version is null || request.CodeAnalysisReportHeaderId is null)
         {
-            return new GuardedSubmissionResult(
-                GuardedSubmissionStatus.BLOCKED,
-                null,
-                ErrorCodes.ERR_MODERATION_SUBMISSION_BLOCKED);
+            return new(GuardedSubmissionStatus.BLOCKED, null, ErrorCodes.ERR_ANALYSIS_NOT_AVAILABLE);
         }
-
-        CodeAnalysisReportHeader? report = await dbContext.CodeAnalysisReportHeaders
-            .AsNoTracking()
-            .FirstOrDefaultAsync(r => r.Id == request.CodeAnalysisReportHeaderId, cancellationToken);
-
-        if (report is null
-            || report.AssetId != request.AssetId
-            || report.AssetVersionId != request.AssetVersionId
-            || !report.IsFinalized
-            || report.Purpose != CodeAnalysisReportPurpose.PRODUCTION
-            || !report.CanAuthorizePublication)
+        var reason = await ReviewSubmissionEligibility.BlockedReason(dbContext, version, workspace,
+            request.CodeAnalysisReportHeaderId, ct);
+        if (reason is not null)
         {
-            return new GuardedSubmissionResult(
-                GuardedSubmissionStatus.BLOCKED,
-                null,
-                ErrorCodes.ERR_ANALYSIS_REPORT_NOT_TRUSTED);
+            return new(GuardedSubmissionStatus.BLOCKED, null, reason);
         }
-
-        return new GuardedSubmissionResult(
-            GuardedSubmissionStatus.BLOCKED,
-            null,
-            ErrorCodes.ERR_MODERATION_SUBMISSION_BLOCKED);
+        DateTimeOffset now = _timeProvider.GetUtcNow();
+        Guid? previous = await dbContext.ModerationSubmissions.AsNoTracking().Where(s => s.AssetVersionId == version.Id)
+            .OrderByDescending(s => s.CreatedAt).ThenByDescending(s => s.Id).Select(s => (Guid?)s.Id).FirstOrDefaultAsync(ct);
+        var evidenceDigest = workspace.SellerEvidenceHeadRevision == 0
+            ? ProductDigests.EmptyProjectionDigest(nameof(AssetSellerEvidenceRevision))
+            : await dbContext.AssetSellerEvidenceRevisions.Where(r => r.WorkspaceId == workspace.Id
+                && r.Revision == workspace.SellerEvidenceHeadRevision).Select(r => r.ContentDigest).SingleAsync(ct);
+        workspace.CaseRevision++;
+        var submission = new ModerationSubmission
+        {
+            Id = Guid.NewGuid(),
+            AssetId = request.AssetId,
+            AssetVersionId = version.Id,
+            WorkspaceId = workspace.Id,
+            WorkspaceVersionScopeKey = version.Id,
+            OwnerUserId = request.OwnerUserId,
+            ContentSha256 = version.ContentSha256,
+            CodeAnalysisReportHeaderId = request.CodeAnalysisReportHeaderId,
+            DeclarationRevision = workspace.SourceDeclarationHeadRevision,
+            MaterialMetadataRevision = workspace.MaterialMetadataHeadRevision,
+            SellerEvidenceRevision = workspace.SellerEvidenceHeadRevision,
+            SellerEvidenceDigest = evidenceDigest,
+            PolicyVersion = ReviewAnalysisPolicy.KEY,
+            State = ModerationSubmissionState.SUBMITTED,
+            CaseRevision = workspace.CaseRevision,
+            PreviousSubmissionId = previous,
+            CreatedAt = now
+        };
+        dbContext.ModerationSubmissions.Add(submission);
+        dbContext.ModerationSubmissionHistoryEntries.Add(new ModerationSubmissionHistoryEntry
+        {
+            Id = Guid.NewGuid(),
+            SubmissionId = submission.Id,
+            AssetId = submission.AssetId,
+            AssetVersionId = submission.AssetVersionId,
+            State = submission.State,
+            CaseRevision = submission.CaseRevision,
+            ActorUserId = request.OwnerUserId,
+            Summary = "Submitted for human review.",
+            CreatedAt = now
+        });
+        await WriteAuditInTransaction(new AuditEvent("MODERATION_SUBMITTED", AuditOutcome.SUCCESS,
+            "ModerationSubmission", submission.Id.ToString(), ActorUserIdOverride: request.OwnerUserId), ct);
+        return new(GuardedSubmissionStatus.CREATED, submission.Id, null);
     }
 
     private static bool IsIdempotencyOperationUniqueViolation(DbUpdateException exception)

@@ -22,6 +22,7 @@ from pathlib import Path
 
 from . import archive_safety, contracts, mechanisms, policy as policy_module, workspace as workspace_module
 from .archive_safety import InventoriedFile
+from .policy import VERIFIER_REASON, EVALUATION_EVIDENCE_SHA256
 from .contracts import (APPLICABILITY, COVERAGE, FINDING_TYPE, RUN_OUTCOME,
                         SENSITIVITY, STAGE, STAGE_OUTCOME, VERIFIER_MODE,
                         ContractError, StageRecord, compute_analysis_digest)
@@ -54,7 +55,6 @@ class ServiceConfig:
     reference_manifest: Path | None = None
     gallery_root: Path | None = None
     index_dsn: str | None = None
-    index_runtime_compatibility: str | None = None
     overall_deadline_seconds: float = 18 * 60
     token_deadline_seconds: float = 3 * 60
     scancode_deadline_seconds: float = 12 * 60
@@ -1036,9 +1036,8 @@ def _query_index(ctx: RunContext, snapshot: ReferenceSnapshot,
         raise ContractError("REFERENCE_MANIFEST_INVALID", "modelKey")
     connection = _connect_readonly(ctx.config.index_dsn)
     try:
-        _verify_index_row(connection, snapshot, ctx.config.index_runtime_compatibility)
-        return _exact_retrieval(connection, snapshot, windows, vectors,
-                                ctx.config.index_runtime_compatibility)
+        _verify_index_row(connection, snapshot)
+        return _exact_retrieval(connection, snapshot, windows, vectors)
     finally:
         try:
             connection.close()
@@ -1056,15 +1055,13 @@ def _connect_readonly(dsn: str):
     return connection
 
 
-def _verify_index_row(connection, snapshot: ReferenceSnapshot,
-                      runtime_compatibility: str | None = None) -> None:
+def _verify_index_row(connection, snapshot: ReferenceSnapshot) -> None:
     try:
         from scripts.code_analysis import code_index as research_index
     except ImportError as exc:
         raise ContractError("INDEX_UNAVAILABLE", type(exc).__name__)
     try:
-        research_index.service_runtime_preflight(
-            connection, compatibility=runtime_compatibility)
+        research_index.service_runtime_preflight(connection)
     except (ValueError, Exception) as exc:
         raise ContractError("INDEX_UNAVAILABLE", type(exc).__name__)
     try:
@@ -1086,8 +1083,7 @@ def _verify_index_row(connection, snapshot: ReferenceSnapshot,
 
 
 def _exact_retrieval(connection, snapshot: ReferenceSnapshot,
-                     windows: list, vectors: list,
-                     runtime_compatibility: str | None = None) -> dict:
+                     windows: list, vectors: list) -> dict:
     try:
         from scripts.code_analysis import code_index as research_index
     except ImportError as exc:
@@ -1113,7 +1109,7 @@ def _exact_retrieval(connection, snapshot: ReferenceSnapshot,
                 rows = research_index.exact_query(
                     connection, snapshot.index_key, batch, gallery_ids,
                     group, partition=snapshot.partition, limit=contracts.SEMANTIC_TOP,
-                    runtime_compatibility=runtime_compatibility)
+                    runtime_target=research_index.SERVICE_RUNTIME_TARGET)
             except (ValueError, Exception) as exc:
                 raise ContractError("INDEX_UNAVAILABLE", type(exc).__name__)
             for row in rows:
@@ -1350,9 +1346,10 @@ def _stage_verifier(pipe: Pipeline) -> None:
     started = time.perf_counter()
     pipe.record(StageRecord(
         stage=STAGE.VERIFIER.value, applicability=APPLICABILITY.MANDATORY.value,
-        outcome=STAGE_OUTCOME.SUCCEEDED.value,
+        outcome=STAGE_OUTCOME.NOT_APPLICABLE.value, error_code="POLICY_DISABLED",
         duration_seconds=time.perf_counter() - started,
-        tool_identity={"mode": VERIFIER_MODE.PENDING_RESEARCH_EVALUATION.value},
+        tool_identity={"mode": VERIFIER_MODE.DISABLED_BY_EVALUATION.value,
+                       "reason": VERIFIER_REASON, "evidenceSha256": EVALUATION_EVIDENCE_SHA256},
         counts={"outputs": 0}))
 
 
@@ -1385,8 +1382,8 @@ def _success_envelope(pipe: Pipeline) -> dict:
         "versionId": ctx.metadata.version_id,
         "policy": {"policyVersion": ctx.policy["policyVersion"],
                    "policyDigest": ctx.policy["policyDigest"],
-                   "verifierMode": VERIFIER_MODE.PENDING_RESEARCH_EVALUATION.value,
-                   "canAuthorizePublication": False},
+                   "verifierMode": VERIFIER_MODE.DISABLED_BY_EVALUATION.value,
+                   "evidenceSha256": EVALUATION_EVIDENCE_SHA256},
         "securityEvidence": {"archiveEvidenceId": ctx.metadata.security_evidence.archive_evidence_id,
                              "malwareEvidenceId": ctx.metadata.security_evidence.malware_evidence_id,
                              "securityGeneration": ctx.metadata.security_evidence.security_generation,
@@ -1450,8 +1447,8 @@ def _validate_report_body(pipe: Pipeline, body: dict) -> None:
         raise ContractError("INTERNAL_ERROR", "report binding")
     if body.get("admittedBy") is not None:
         raise ContractError("INTERNAL_ERROR", "report authority")
-    if body.get("policy", {}).get("canAuthorizePublication") is not False:
-        raise ContractError("INTERNAL_ERROR", "report authority")
+    if any("reviewEligible" in section for section in (body, body.get("policy", {}), body.get("sellerSafe", {}))):
+        raise ContractError("INTERNAL_ERROR", "fabricated review eligibility")
     safe = body.get("sellerSafe") or {}
     if safe.get("reportId") != body.get("reportId"):
         raise ContractError("INTERNAL_ERROR", "report projection")
@@ -1462,9 +1459,18 @@ def _validate_report_body(pipe: Pipeline, body: dict) -> None:
 
 
 def _full_matrix(pipe: Pipeline) -> bool:
-    succeeded = {s.stage for s in pipe.stages
-                 if s.outcome == STAGE_OUTCOME.SUCCEEDED.value}
-    return {stage.value for stage in STAGE} <= succeeded
+    if len(pipe.stages) != len(STAGE) or len({s.stage for s in pipe.stages}) != len(STAGE):
+        return False
+    for stage in pipe.stages:
+        if stage.stage == STAGE.VERIFIER.value:
+            if (stage.outcome != STAGE_OUTCOME.NOT_APPLICABLE.value
+                    or stage.error_code != "POLICY_DISABLED"
+                    or stage.tool_identity.get("mode") != VERIFIER_MODE.DISABLED_BY_EVALUATION.value
+                    or stage.tool_identity.get("evidenceSha256") != EVALUATION_EVIDENCE_SHA256):
+                return False
+        elif stage.outcome != STAGE_OUTCOME.SUCCEEDED.value:
+            return False
+    return {stage.value for stage in STAGE} == {s.stage for s in pipe.stages}
 
 
 def _failure_envelope(pipe: Pipeline) -> dict:
@@ -1481,8 +1487,8 @@ def _failure_envelope(pipe: Pipeline) -> dict:
         "versionId": ctx.metadata.version_id,
         "policy": {"policyVersion": ctx.policy["policyVersion"],
                    "policyDigest": ctx.policy["policyDigest"],
-                   "verifierMode": VERIFIER_MODE.PENDING_RESEARCH_EVALUATION.value,
-                   "canAuthorizePublication": False},
+                   "verifierMode": VERIFIER_MODE.DISABLED_BY_EVALUATION.value,
+                   "evidenceSha256": EVALUATION_EVIDENCE_SHA256},
         "stages": [s.as_dict() for s in pipe.stages],
         "coverage": {"level": _coverage_level(pipe),
                      "analyzedFiles": len(pipe.analyzed),
@@ -1530,7 +1536,6 @@ def build_seller_safe(report: dict) -> dict:
         "omissionCount": len(report.get("coverage", {}).get("omissions", [])),
         "findings": safe_findings,
         "findingOverflow": report.get("findingOverflow", 0),
-        "canAuthorizePublication": False,
     }
 
 
