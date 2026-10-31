@@ -8,11 +8,13 @@ using AssetBlock.Application.UseCases.Assets.GetAssetDeclaration;
 using AssetBlock.Application.UseCases.Assets.GetAssetDraft;
 using AssetBlock.Application.UseCases.Assets.GetAssets;
 using AssetBlock.Application.UseCases.Assets.GetAssetVersions;
+using AssetBlock.Application.UseCases.Assets.GetSellerResponses;
 using AssetBlock.Application.UseCases.Assets.GetSimilarAssets;
 using AssetBlock.Application.UseCases.Assets.PublishAssetVersion;
 using AssetBlock.Application.UseCases.Assets.RemoveAssetTag;
 using AssetBlock.Application.UseCases.Assets.SaveAssetDeclaration;
 using AssetBlock.Application.UseCases.Assets.SaveAssetDraft;
+using AssetBlock.Application.UseCases.Assets.SaveSellerEvidence;
 using AssetBlock.Application.UseCases.Assets.SubmitAssetVersion;
 using AssetBlock.Application.UseCases.Assets.UpdateAsset;
 using AssetBlock.Application.UseCases.Assets.UpdateAssetPrice;
@@ -551,9 +553,45 @@ public sealed class AssetsController(
     }
 
     /// <summary>
-    /// Requests moderation submission for a version. Until trusted analysis exists this returns
-    /// a truthful business conflict; no simulated success path exists.
+    /// Reads the owner's append-only response history and current response requirements.
     /// </summary>
+    [HttpGet(ApiRoutes.Assets.VERSION_RESPONSES)]
+    [Authorize]
+    public async Task<IActionResult> GetResponses(Guid id, Guid versionId, [FromQuery] int page = 1, CancellationToken cancellationToken = default)
+    {
+        Response.Headers.CacheControl = "private, no-store";
+        if (!User.TryGetUserId(out Guid userId))
+        { return UnauthorizedProblem(); }
+        Result<SellerResponsesPageDto> result = await Sender.Send(new GetSellerResponsesQuery(userId, id, versionId, page), cancellationToken);
+        return MapResultToActionResult(result);
+    }
+
+    [HttpPost(ApiRoutes.Assets.VERSION_RESPONSES)]
+    [Authorize(Policy = AuthorizationPolicies.VERIFIED_EMAIL)]
+    public async Task<IActionResult> SaveResponse(Guid id, Guid versionId, [FromBody] SellerResponseRequest request, CancellationToken cancellationToken)
+    {
+        Response.Headers.CacheControl = "private, no-store";
+        if (!User.TryGetUserId(out Guid userId))
+        { return UnauthorizedProblem(); }
+        Result<SellerEvidenceSavedDto> result = await Sender.Send(new SaveSellerEvidenceCommand(userId, id, versionId,
+            request.WorkspaceId, request.ReportId, request.FindingId, request.ResponseType, request.Text,
+            request.ExpectedWorkspaceRevision, request.ExpectedEvidenceRevision, request.OperationId), cancellationToken);
+        return MapResultToActionResult(result);
+    }
+
+    [HttpPut(ApiRoutes.Assets.VERSION_EVIDENCE)]
+    [Authorize(Policy = AuthorizationPolicies.VERIFIED_EMAIL)]
+    public async Task<IActionResult> SaveEvidence(Guid id, Guid versionId, [FromBody] SellerEvidenceEditRequest request, CancellationToken cancellationToken)
+    {
+        Response.Headers.CacheControl = "private, no-store";
+        if (!User.TryGetUserId(out Guid userId))
+        { return UnauthorizedProblem(); }
+        Result<SellerEvidenceSavedDto> result = await Sender.Send(new SaveSellerEvidenceCommand(userId, id, versionId,
+            request.WorkspaceId, request.ReportId, null, null, request.Text,
+            request.ExpectedWorkspaceRevision, request.ExpectedEvidenceRevision, request.OperationId), cancellationToken);
+        return MapResultToActionResult(result);
+    }
+
     [HttpPost(ApiRoutes.Assets.VERSION_SUBMISSIONS)]
     [Authorize(Policy = AuthorizationPolicies.VERIFIED_EMAIL)]
     [ProducesResponseType(StatusCodes.Status200OK)]

@@ -1,0 +1,11 @@
+{
+  "responses": {
+    "path": "/api/assets/{assetId}/versions/{versionId}/responses",
+    "readMethod": "GET",
+    "writeMethod": "POST"
+  },
+  "evidence": {
+    "path": "/api/assets/{assetId}/versions/{versionId}/evidence",
+    "writeMethod": "PUT"
+  }
+}

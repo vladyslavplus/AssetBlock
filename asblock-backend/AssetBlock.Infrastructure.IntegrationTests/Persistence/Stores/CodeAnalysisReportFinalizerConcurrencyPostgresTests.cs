@@ -688,7 +688,7 @@ public sealed class CodeAnalysisReportFinalizerConcurrencyPostgresTests(Postgres
         await using ApplicationDbContext saveDb = fixture.CreateDbContext(options => options.AddInterceptors(saveBarrier));
         IAssetStore saveAssetStore = new AssetStore(saveDb);
         IModerationFoundationStore moderation = new ModerationFoundationStore(
-            saveDb, saveAssetStore, Substitute.For<IUserStore>(), new EfUnitOfWork(saveDb));
+            saveDb, saveAssetStore, new UserStore(saveDb), new EfUnitOfWork(saveDb));
         Task<ModerationDraftSaveResult> saveTask = moderation.SaveDraftRevision(new DraftRevisionSaveRequest(
             seed.Asset.AuthorId, seed.Asset.Id, seed.Version.Id,
             ModerationOperationKinds.DECLARATION_SAVE, Guid.NewGuid(), new string('a', 64),

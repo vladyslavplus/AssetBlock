@@ -148,9 +148,11 @@ internal sealed class CodeAnalysisSellerStore(
             .Select(s => new SellerAnalysisStageDto(s.Stage, s.Applicability.ToString(), s.Outcome.ToString(), s.Retryable))
             .ToArrayAsync(cancellationToken).ConfigureAwait(false);
         string[] limitations = ["Pair verification is disabled by evaluation. Retained comparison evidence requires human review.", "Publication requires an explicit moderator decision."];
+        SellerResponseRequirementState? responses = reportIsCurrent && report is not null && latestWorkspace is not null
+            ? await SellerResponseRequirements.Read(db, report.Id, latestWorkspace, cancellationToken) : null;
         var submissionBlockedReason = !reportIsCurrent || latestWorkspace is null
             ? ErrorCodes.ERR_ANALYSIS_NOT_AVAILABLE
-            : await ReviewSubmissionEligibility.BlockedReason(db, version, latestWorkspace, report!.Id, cancellationToken).ConfigureAwait(false);
+            : await ReviewSubmissionEligibility.BlockedReason(db, version, latestWorkspace, report!.Id, cancellationToken, responses).ConfigureAwait(false);
         var reviewEligible = report is not null && report.PolicyVersion == ReviewAnalysisPolicy.KEY
             && await db.CodeAnalysisReportAdmissions.AnyAsync(a => a.ReportId == report.Id
                 && a.AdmissionKind == CodeAnalysisAdmissionKind.SERVER_VALIDATED && a.ReviewEligible
@@ -165,7 +167,7 @@ internal sealed class CodeAnalysisSellerStore(
             findingDetailsAvailable,
             run?.CreatedAt, run?.CompletedAt, SafeErrorCode(run?.ErrorCode), SafeErrorMessage(run?.ErrorCode),
             retry ? "Retry analysis after checking the current seller declaration and materials." : null,
-            retry, expectation, submissionBlockedReason is null, reviewEligible, "Selected source files from this version only", limitations, stages, submissionBlockedReason);
+            retry, expectation, submissionBlockedReason is null, reviewEligible, "Selected source files from this version only", limitations, stages, submissionBlockedReason, responses?.Required.Count ?? 0, responses?.Outstanding ?? 0, latestWorkspace?.SellerEvidenceHeadRevision ?? 0);
     }
 
     public async Task<SellerAnalysisFindingsPageDto?> GetOwnerFindings(Guid assetVersionId, Guid reportId, Guid ownerUserId, int page, CancellationToken cancellationToken = default)
@@ -206,6 +208,10 @@ internal sealed class CodeAnalysisSellerStore(
         List<CodeAnalysisReportFinding> rows = await db.CodeAnalysisReportFindings.AsNoTracking().Where(f => f.ReportId == reportId)
             .OrderBy(f => f.OwnScopePath).ThenBy(f => f.OwnStartByte).ThenBy(f => f.FindingKey)
             .Skip((page - 1) * PAGE_SIZE_LIMIT).Take(PAGE_SIZE_LIMIT).ToListAsync(cancellationToken).ConfigureAwait(false);
+        AssetDraftWorkspace? responseWorkspace = isCurrent ? await db.AssetDraftWorkspaces.AsNoTracking()
+            .SingleOrDefaultAsync(w => w.AssetVersionId == assetVersionId, cancellationToken) : null;
+        SellerResponseRequirementState? responses = responseWorkspace is null ? null
+            : await SellerResponseRequirements.Read(db, reportId, responseWorkspace, cancellationToken);
         SellerAnalysisFindingDto[] items = rows.Select(f => new SellerAnalysisFindingDto(
             f.Id, f.FindingType, f.OwnScopePath, f.OwnExcerpt, f.OwnStartByte, f.OwnEndByte, f.OwnStartLine, f.OwnEndLine,
             f.ReasonText, f.RequestedAction,
@@ -213,7 +219,8 @@ internal sealed class CodeAnalysisSellerStore(
                 : f is { ForeignOrigin: "FOREIGN", ForeignSensitivity: CodeAnalysisFindingSensitivity.PRIVATE }
                     ? "FOREIGN_PRIVATE"
                     : f.ForeignOrigin == "FOREIGN" ? "FOREIGN_PUBLIC" : null,
-            ParsePublicAttribution(f.PublicAttributionJson, f.ForeignOrigin == "OWN" || f.ForeignSensitivity != CodeAnalysisFindingSensitivity.PUBLIC)))
+            ParsePublicAttribution(f.PublicAttributionJson, f.ForeignOrigin == "OWN" || f.ForeignSensitivity != CodeAnalysisFindingSensitivity.PUBLIC),
+            responses?.Required.Contains(f.Id) == true, responses?.Answers.ContainsKey(f.Id) == true))
             .ToArray();
         return new SellerAnalysisFindingsPageDto(report.AssetId, assetVersionId, reportId, isCurrent,
             report.Header.CoverageLevel ?? CodeAnalysisCoverageLevel.PARTIAL, items, total, true, page, PAGE_SIZE_LIMIT,

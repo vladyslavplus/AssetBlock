@@ -73,4 +73,54 @@ public sealed class AssetSubmissionIntegrationTests(IntegrationTestFixture fixtu
         (await verificationDb.JsonMutationIdempotencyRecords.SingleAsync(r => r.OperationId == operationId)).ResultJson
             .Should().Contain(ErrorCodes.ERR_ANALYSIS_NOT_AVAILABLE);
     }
+
+    [Theory]
+    [InlineData("POST", "responses")]
+    [InlineData("PUT", "evidence")]
+    [InlineData("GET", "responses")]
+    public async Task SellerEvidence_WhenAnonymous_ShouldRequireAuthentication(string method, string endpoint)
+    {
+        using HttpClient client = fixture.Factory.CreateClient();
+        using var request = new HttpRequestMessage(new HttpMethod(method), $"/api/assets/{Guid.NewGuid()}/versions/{Guid.NewGuid()}/{endpoint}");
+        if (method != "GET")
+        { request.Content = JsonContent.Create(new { }); }
+        using HttpResponseMessage response = await client.SendAsync(request);
+        response.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+    }
+
+    [Theory]
+    [InlineData("POST", "responses")]
+    [InlineData("PUT", "evidence")]
+    public async Task SellerEvidence_WhenInputIsInvalid_ShouldReturnValidationProblem(string method, string endpoint)
+    {
+        (HttpClient client, _) = await IntegrationTestAuth.RegisterVerifiedAndAuthenticateAsync(fixture.Factory);
+        using var request = new HttpRequestMessage(new HttpMethod(method), $"/api/assets/{Guid.NewGuid()}/versions/{Guid.NewGuid()}/{endpoint}")
+        {
+            Content = JsonContent.Create(new
+            {
+                workspaceId = Guid.Empty,
+                reportId = Guid.Empty,
+                operationId = Guid.Empty,
+                findingId = Guid.Empty,
+                expectedWorkspaceRevision = -1,
+                expectedEvidenceRevision = -1,
+                responseType = "NO_EVIDENCE",
+                text = new string('x', 2001)
+            })
+        };
+        using HttpResponseMessage response = await client.SendAsync(request);
+        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        (await response.Content.ReadAsStringAsync()).Should().Contain(ErrorCodes.ERR_VALIDATION_FAILED);
+    }
+
+    [Fact]
+    public async Task SellerEvidence_WhenForeignVersionIsRequested_ShouldNotExposeHistory()
+    {
+        (HttpClient client, _) = await IntegrationTestAuth.RegisterVerifiedAndAuthenticateAsync(fixture.Factory);
+        using HttpResponseMessage response = await client.GetAsync($"/api/assets/{Guid.NewGuid()}/versions/{Guid.NewGuid()}/responses");
+        response.StatusCode.Should().Be(HttpStatusCode.NotFound);
+        response.Headers.CacheControl.Should().NotBeNull();
+        response.Headers.CacheControl!.Private.Should().BeTrue();
+        response.Headers.CacheControl.NoStore.Should().BeTrue();
+    }
 }

@@ -82,6 +82,12 @@ public interface IModerationFoundationStore
         long expectedWorkspaceRevision,
         CancellationToken cancellationToken = default);
 
+    Task<SellerEvidenceWriteResult> SaveSellerEvidence(SellerEvidenceWriteRequest request, CancellationToken cancellationToken = default);
+    Task<SellerResponsesPageDto?> GetOwnerResponses(Guid assetId, Guid assetVersionId, Guid ownerUserId, int page, CancellationToken cancellationToken = default);
+    /// <summary>Caller owns the transaction and its receipt. No standalone decision or publication operation.</summary>
+    Task<bool> AppendFindingDispositions(Guid submissionId, Guid moderatorUserId, long expectedCaseRevision,
+        IReadOnlyList<FindingDispositionInput> dispositions, CancellationToken cancellationToken = default);
+
     Task<WithdrawSubmissionResult> WithdrawSubmission(
         WithdrawSubmissionRequest request,
         CancellationToken cancellationToken = default);

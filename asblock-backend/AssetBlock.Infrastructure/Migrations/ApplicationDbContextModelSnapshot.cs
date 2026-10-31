@@ -2631,6 +2631,72 @@ namespace AssetBlock.Infrastructure.Migrations
                     b.ToTable("moderation_decisions", (string)null);
                 });
 
+            modelBuilder.Entity("AssetBlock.Domain.Core.Entities.ModerationFindingDisposition", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("AssetId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("AssetVersionId")
+                        .HasColumnType("uuid");
+
+                    b.Property<long>("CaseRevision")
+                        .HasColumnType("bigint");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Disposition")
+                        .IsRequired()
+                        .HasMaxLength(48)
+                        .HasColumnType("character varying(48)");
+
+                    b.Property<Guid>("FindingId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("ModeratorUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Rationale")
+                        .IsRequired()
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)");
+
+                    b.Property<Guid>("ReportId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("SubmissionId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ModeratorUserId");
+
+                    b.HasIndex("ReportId", "FindingId");
+
+                    b.HasIndex("AssetId", "AssetVersionId", "ReportId");
+
+                    b.HasIndex("AssetId", "AssetVersionId", "SubmissionId");
+
+                    b.HasIndex("SubmissionId", "FindingId", "CaseRevision")
+                        .IsUnique();
+
+                    b.ToTable("moderation_finding_dispositions", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_finding_dispositions_rationale", "char_length(\"Rationale\") BETWEEN 1 AND 2000 AND btrim(\"Rationale\") = \"Rationale\"");
+
+                            t.HasCheckConstraint("CK_finding_dispositions_revision", "\"CaseRevision\" > 0");
+
+                            t.HasCheckConstraint("CK_finding_dispositions_type", "\"Disposition\" IN ('EXPLAINED','FALSE_MATCH','ACCEPTED_WITH_LIMITS','CHANGES_NEEDED','INSUFFICIENT_EVIDENCE')");
+                        });
+                });
+
             modelBuilder.Entity("AssetBlock.Domain.Core.Entities.ModerationSubmission", b =>
                 {
                     b.Property<Guid>("Id")
@@ -3751,6 +3817,79 @@ namespace AssetBlock.Infrastructure.Migrations
                         });
                 });
 
+            modelBuilder.Entity("AssetBlock.Domain.Core.Entities.SellerResponse", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("ActorUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("AssetId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("AssetVersionId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("FindingId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("ReportId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ResponseType")
+                        .IsRequired()
+                        .HasMaxLength(48)
+                        .HasColumnType("character varying(48)");
+
+                    b.Property<int>("SellerEvidenceRevision")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Text")
+                        .IsRequired()
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)");
+
+                    b.Property<DateTimeOffset?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("WorkspaceId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("WorkspaceVersionScopeKey")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ActorUserId");
+
+                    b.HasIndex("ReportId", "FindingId");
+
+                    b.HasIndex("AssetId", "AssetVersionId", "ReportId");
+
+                    b.HasIndex("AssetId", "WorkspaceId", "WorkspaceVersionScopeKey");
+
+                    b.HasIndex("AssetVersionId", "SellerEvidenceRevision", "Id");
+
+                    b.HasIndex("WorkspaceId", "SellerEvidenceRevision", "FindingId")
+                        .IsUnique();
+
+                    b.ToTable("seller_responses", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_seller_responses_revision", "\"SellerEvidenceRevision\" > 0");
+
+                            t.HasCheckConstraint("CK_seller_responses_scope", "\"AssetVersionId\" = \"WorkspaceVersionScopeKey\"");
+
+                            t.HasCheckConstraint("CK_seller_responses_text", "char_length(\"Text\") <= 2000 AND btrim(\"Text\") = \"Text\" AND (\"ResponseType\" = 'NO_EVIDENCE' OR char_length(\"Text\") > 0)");
+
+                            t.HasCheckConstraint("CK_seller_responses_type", "\"ResponseType\" IN ('PRIOR_WORK','PERMITTED_COMPONENT','INDEPENDENT_IMPLEMENTATION','WRONG_SOURCE','CORRECTED_FILES','NO_EVIDENCE')");
+                        });
+                });
+
             modelBuilder.Entity("AssetBlock.Domain.Core.Entities.SocialPlatform", b =>
                 {
                     b.Property<Guid>("Id")
@@ -4827,6 +4966,36 @@ namespace AssetBlock.Infrastructure.Migrations
                     b.Navigation("Submission");
                 });
 
+            modelBuilder.Entity("AssetBlock.Domain.Core.Entities.ModerationFindingDisposition", b =>
+                {
+                    b.HasOne("AssetBlock.Domain.Core.Entities.User", null)
+                        .WithMany()
+                        .HasForeignKey("ModeratorUserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("AssetBlock.Domain.Core.Entities.CodeAnalysisReportFinding", null)
+                        .WithMany()
+                        .HasForeignKey("ReportId", "FindingId")
+                        .HasPrincipalKey("ReportId", "Id")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("AssetBlock.Domain.Core.Entities.CodeAnalysisReportHeader", null)
+                        .WithMany()
+                        .HasForeignKey("AssetId", "AssetVersionId", "ReportId")
+                        .HasPrincipalKey("AssetId", "AssetVersionId", "Id")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("AssetBlock.Domain.Core.Entities.ModerationSubmission", null)
+                        .WithMany()
+                        .HasForeignKey("AssetId", "AssetVersionId", "SubmissionId")
+                        .HasPrincipalKey("AssetId", "AssetVersionId", "Id")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
             modelBuilder.Entity("AssetBlock.Domain.Core.Entities.ModerationSubmission", b =>
                 {
                     b.HasOne("AssetBlock.Domain.Core.Entities.Asset", "Asset")
@@ -5134,6 +5303,50 @@ namespace AssetBlock.Infrastructure.Migrations
                     b.Navigation("Asset");
 
                     b.Navigation("AssetVersion");
+                });
+
+            modelBuilder.Entity("AssetBlock.Domain.Core.Entities.SellerResponse", b =>
+                {
+                    b.HasOne("AssetBlock.Domain.Core.Entities.User", null)
+                        .WithMany()
+                        .HasForeignKey("ActorUserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("AssetBlock.Domain.Core.Entities.AssetVersion", null)
+                        .WithMany()
+                        .HasForeignKey("AssetId", "AssetVersionId")
+                        .HasPrincipalKey("AssetId", "Id")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("AssetBlock.Domain.Core.Entities.CodeAnalysisReportFinding", null)
+                        .WithMany()
+                        .HasForeignKey("ReportId", "FindingId")
+                        .HasPrincipalKey("ReportId", "Id")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("AssetBlock.Domain.Core.Entities.AssetSellerEvidenceRevision", null)
+                        .WithMany()
+                        .HasForeignKey("WorkspaceId", "SellerEvidenceRevision")
+                        .HasPrincipalKey("WorkspaceId", "Revision")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("AssetBlock.Domain.Core.Entities.CodeAnalysisReportHeader", null)
+                        .WithMany()
+                        .HasForeignKey("AssetId", "AssetVersionId", "ReportId")
+                        .HasPrincipalKey("AssetId", "AssetVersionId", "Id")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("AssetBlock.Domain.Core.Entities.AssetDraftWorkspace", null)
+                        .WithMany()
+                        .HasForeignKey("AssetId", "WorkspaceId", "WorkspaceVersionScopeKey")
+                        .HasPrincipalKey("AssetId", "Id", "WorkspaceVersionScopeKey")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
                 });
 
             modelBuilder.Entity("AssetBlock.Domain.Core.Entities.UserNotification", b =>

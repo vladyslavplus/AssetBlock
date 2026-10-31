@@ -19,7 +19,7 @@ using Npgsql;
 
 namespace AssetBlock.Infrastructure.Persistence.Stores;
 
-internal sealed class ModerationFoundationStore(
+internal sealed partial class ModerationFoundationStore(
     ApplicationDbContext dbContext,
     IAssetStore assetStore,
     IUserStore userStore,
@@ -111,6 +111,9 @@ internal sealed class ModerationFoundationStore(
         tracked.WithdrawalReason = fresh.WithdrawalReason;
         return tracked;
     }
+
+    // Ownership grants owner actions for every persisted product role; it never grants Moderator powers.
+    private static bool CanActAsOwner(UserPersistedRole? role) => role?.Role is AppRoles.USER or AppRoles.MODERATOR or AppRoles.ADMIN;
 
     public async Task<AssetDraftWorkspaceSnapshot?> LockAssetAndWorkspaceForUpdate(
         Guid assetId,
@@ -309,7 +312,7 @@ internal sealed class ModerationFoundationStore(
             WHERE "WorkspaceId" = {workspace.Id} AND "State" IN ('SUBMITTED', 'IN_REVIEW') FOR UPDATE
             """).ToListAsync(ct);
         UserPersistedRole? role = await LockRoleAfterWorkspace(request.OwnerUserId, ct);
-        if (role is null || role.Role is not (AppRoles.USER or AppRoles.MODERATOR or AppRoles.ADMIN))
+        if (!CanActAsOwner(role))
         {
             return new(GuardedSubmissionStatus.BLOCKED, null, ErrorCodes.ERR_FORBIDDEN);
         }
@@ -703,6 +706,14 @@ internal sealed class ModerationFoundationStore(
             if (workspace is null)
             {
                 outcome = new ModerationDraftSaveResult(ModerationDraftSaveStatus.NOT_FOUND, 0);
+                return;
+            }
+
+            await LockActiveEvidenceCases(workspace.Id, ct);
+            UserPersistedRole? ownerRole = await LockRoleAfterWorkspace(request.ActorUserId, ct);
+            if (!CanActAsOwner(ownerRole))
+            {
+                outcome = new ModerationDraftSaveResult(ModerationDraftSaveStatus.FORBIDDEN, 0);
                 return;
             }
 
@@ -1132,6 +1143,12 @@ internal sealed class ModerationFoundationStore(
             return new WithdrawSubmissionResult(WithdrawSubmissionStatus.FORBIDDEN);
         }
 
+        UserPersistedRole? ownerRole = await LockRoleAfterWorkspace(request.ActorUserId, cancellationToken);
+        if (!CanActAsOwner(ownerRole))
+        {
+            return new WithdrawSubmissionResult(WithdrawSubmissionStatus.FORBIDDEN);
+        }
+
         JsonMutationIdempotencyRecord? existing = await FindIdempotencyRecord(
             request.ActorUserId, ModerationOperationKinds.SUBMISSION_WITHDRAW, request.OperationId, cancellationToken);
         if (existing is not null)
@@ -1214,13 +1231,13 @@ internal sealed class ModerationFoundationStore(
         return new WithdrawSubmissionResult(WithdrawSubmissionStatus.SUCCEEDED, submission.CaseRevision, resultJson);
     }
 
-    /// <summary>Withdraws the single active case bound to this workspace with reason SUPERSEDED; history stays immutable.</summary>
+    /// <summary>Supersedes the single active case bound to this workspace; history stays immutable.</summary>
     private async Task SupersedeActiveCase(AssetDraftWorkspace workspace, Guid actorUserId, DateTimeOffset now, CancellationToken cancellationToken)
     {
         // Submission rows are locked after the workspace lock, matching the canonical order
         // Asset → workspace → submission so withdrawal cannot deadlock against saves.
         // State is a string-mapped column; compare against canonical enum member names.
-        await dbContext.Database
+        List<Guid> activeIds = await dbContext.Database
             .SqlQuery<Guid>($"""
                 SELECT "Id" AS "Value"
                 FROM moderation_submissions
@@ -1230,15 +1247,13 @@ internal sealed class ModerationFoundationStore(
                 """)
             .ToListAsync(cancellationToken);
 
-        List<ModerationSubmission> activeCases = await dbContext.ModerationSubmissions
-            .Where(s => s.WorkspaceId == workspace.Id
-                && (s.State == ModerationSubmissionState.SUBMITTED || s.State == ModerationSubmissionState.IN_REVIEW))
-            .ToListAsync(cancellationToken);
-
-        foreach (ModerationSubmission submission in activeCases)
+        foreach (Guid submissionId in activeIds)
         {
-            submission.State = ModerationSubmissionState.WITHDRAWN;
-            submission.WithdrawalReason = ModerationWithdrawalReason.SUPERSEDED;
+            ModerationSubmission? submission = await ReadSubmissionFreshUnderLock(submissionId, cancellationToken);
+            if (submission is null || submission.State is not (ModerationSubmissionState.SUBMITTED or ModerationSubmissionState.IN_REVIEW))
+            { continue; }
+            submission.State = ModerationSubmissionState.SUPERSEDED;
+            submission.WithdrawalReason = null;
             submission.CaseRevision++;
 
             dbContext.ModerationSubmissionHistoryEntries.Add(new ModerationSubmissionHistoryEntry
@@ -1247,11 +1262,11 @@ internal sealed class ModerationFoundationStore(
                 SubmissionId = submission.Id,
                 AssetId = submission.AssetId,
                 AssetVersionId = submission.AssetVersionId,
-                State = ModerationSubmissionState.WITHDRAWN,
-                WithdrawalReason = ModerationWithdrawalReason.SUPERSEDED,
+                State = ModerationSubmissionState.SUPERSEDED,
+                WithdrawalReason = null,
                 CaseRevision = submission.CaseRevision,
                 ActorUserId = actorUserId,
-                Summary = nameof(ModerationWithdrawalReason.SUPERSEDED),
+                Summary = "Superseded by changed review evidence.",
                 CreatedAt = now
             });
 
@@ -1262,7 +1277,7 @@ internal sealed class ModerationFoundationStore(
     private async Task<ModerationSubmissionState> GetEffectiveModerationState(Guid assetVersionId, CancellationToken cancellationToken)
     {
         // The latest applicable case determines the state; terminal outcomes (APPROVED,
-        // REJECTED, CHANGES_REQUESTED, WITHDRAWN) must not be flattened back to DRAFT.
+        // REJECTED, CHANGES_REQUESTED, WITHDRAWN, SUPERSEDED) must not be flattened back to DRAFT.
         ModerationSubmissionState? state = await dbContext.ModerationSubmissions
             .AsNoTracking()
             .Where(s => s.AssetVersionId == assetVersionId)

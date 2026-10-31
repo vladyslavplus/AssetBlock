@@ -8,6 +8,7 @@ using AssetBlock.Domain.Abstractions.Services;
 using AssetBlock.Domain.Core.Entities;
 using AssetBlock.Domain.Core.Constants;
 using AssetBlock.Domain.Core.Dto.Auth;
+using AssetBlock.Domain.Core.Dto.Assets;
 using AssetBlock.Domain.Core.Enums;
 using AssetBlock.Infrastructure.Persistence;
 using AssetBlock.WebApi.IntegrationTests.Support;
@@ -331,11 +332,12 @@ public sealed class AuthenticatedEncryptedUploadAcceptanceTests
                 }
 
                 details["submissionSummary"] = currentSummary.Clone();
-                if (!currentSummary.GetProperty("canSubmit").GetBoolean()
+                if (currentSummary.GetProperty("canSubmit").GetBoolean()
+                    || currentSummary.GetProperty("outstandingResponseCount").GetInt32() == 0
                     || !currentSummary.GetProperty("reviewEligible").GetBoolean()
                     || currentSummary.GetProperty("coverageLevel").GetString() != "FULL")
                 {
-                    throw new InvalidOperationException("The real completed report was not eligible for submission.");
+                    throw new InvalidOperationException("The real material report did not require seller responses.");
                 }
                 object submitRequest;
                 long searchRevision;
@@ -354,6 +356,50 @@ public sealed class AuthenticatedEncryptedUploadAcceptanceTests
                     };
                 }
                 var submissionUrl = $"/api/assets/{assetId}/versions/{assetVersionId}/submissions";
+                using (HttpResponseMessage blocked = await scopedClient.PostAsJsonAsync(submissionUrl, submitRequest))
+                {
+                    if ((int)blocked.StatusCode != 409 || !(await blocked.Content.ReadAsStringAsync()).Contains(ErrorCodes.ERR_FINDING_RESPONSE_REQUIRED, StringComparison.Ordinal))
+                        throw new InvalidOperationException("Material findings did not block submit with the seller-visible reason.");
+                }
+                ReviewEndpoint responseEndpoint = ReadReviewEndpoint("responses", assetId, assetVersionId);
+                ReviewEndpoint evidenceEndpoint = ReadReviewEndpoint("evidence", assetId, assetVersionId);
+                details["sellerEndpointContracts"] = new { responses = responseEndpoint, evidence = evidenceEndpoint };
+                List<Guid> materialIds;
+                await using (AsyncServiceScope scope = factory.Services.CreateAsyncScope())
+                {
+                    ApplicationDbContext db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+                    List<CodeAnalysisReportFinding> candidates = await db.CodeAnalysisReportFindings.AsNoTracking().Where(f => f.ReportId == secondAdmittedReportId && f.RetrievalEvidenceJson != null).ToListAsync();
+                    materialIds = candidates.Where(f => JsonDocument.Parse(f.RetrievalEvidenceJson!).RootElement.GetProperty("material").GetBoolean()).Select(f => f.Id).ToList();
+                }
+                if (materialIds.Count == 0)
+                    throw new InvalidOperationException("Real token retrieval produced no material finding.");
+                foreach (Guid findingId in materialIds)
+                {
+                    SellerResponsesPageDto current = (await ReadReviewResponses(scopedClient, responseEndpoint))!;
+                    var responseRequest = new SellerResponseRequest(current.WorkspaceId, secondAdmittedReportId, findingId,
+                        current.WorkspaceRevision, current.EvidenceRevision, Guid.NewGuid(), SellerResponseType.NO_EVIDENCE, "");
+                    using HttpResponseMessage response = await SendReviewWrite(scopedClient, responseEndpoint, responseRequest);
+                    response.EnsureSuccessStatusCode();
+                    using HttpResponseMessage responseReplay = await SendReviewWrite(scopedClient, responseEndpoint, responseRequest);
+                    responseReplay.EnsureSuccessStatusCode();
+                    using HttpResponseMessage staleResponse = await SendReviewWrite(scopedClient, responseEndpoint, responseRequest with { OperationId = Guid.NewGuid(), ExpectedWorkspaceRevision = current.WorkspaceRevision + 1 });
+                    if ((int)staleResponse.StatusCode != 409 || !(await staleResponse.Content.ReadAsStringAsync()).Contains(ErrorCodes.ERR_SELLER_EVIDENCE_STALE, StringComparison.Ordinal))
+                        throw new InvalidOperationException("Stale evidence did not return the standard 409 reason.");
+                }
+                SellerResponsesPageDto answered = (await ReadReviewResponses(scopedClient, responseEndpoint))!;
+                if (answered.OutstandingCount != 0 || answered.RequiredCount != materialIds.Count)
+                    throw new InvalidOperationException("No evidence responses did not satisfy the current snapshot.");
+                details["responses"] = new
+                {
+                    materialCount = materialIds.Count,
+                    blockedReason = ErrorCodes.ERR_FINDING_RESPONSE_REQUIRED,
+                    answered.OutstandingCount,
+                    answered.EvidenceRevision,
+                    responseIds = answered.Items.Select(r => r.Id).ToArray(),
+                    replayed = true,
+                    staleReason = ErrorCodes.ERR_SELLER_EVIDENCE_STALE
+                };
+                submitRequest = new { workspaceId = answered.WorkspaceId, expectedWorkspaceRevision = answered.WorkspaceRevision, expectedCaseRevision = answered.CaseRevision, operationId = Guid.NewGuid() };
                 using HttpResponseMessage submitted = await scopedClient.PostAsJsonAsync(submissionUrl, submitRequest);
                 if (!submitted.IsSuccessStatusCode)
                 {
@@ -392,6 +438,53 @@ public sealed class AuthenticatedEncryptedUploadAcceptanceTests
                         publicSnapshotId = asset.CurrentPublicationSnapshotId,
                         searchRevisionUnchanged = true,
                         replayed = true
+                    };
+                }
+                SellerResponsesPageDto beforeCorrection = (await ReadReviewResponses(scopedClient, responseEndpoint))!;
+                var correction = new SellerEvidenceEditRequest(beforeCorrection.WorkspaceId, secondAdmittedReportId, beforeCorrection.WorkspaceRevision,
+                    beforeCorrection.EvidenceRevision, Guid.NewGuid(), "Private evidence-only correction.");
+                using HttpResponseMessage corrected = await SendReviewWrite(scopedClient, evidenceEndpoint, correction);
+                corrected.EnsureSuccessStatusCode();
+                await using (AsyncServiceScope scope = factory.Services.CreateAsyncScope())
+                {
+                    ApplicationDbContext db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+                    if (await db.ModerationSubmissions.CountAsync(s => s.AssetVersionId == assetVersionId) != 1
+                        || (await db.ModerationSubmissions.AsNoTracking().SingleAsync(s => s.Id == submissionId)).State != ModerationSubmissionState.SUPERSEDED
+                        || await db.CodeAnalysisRuns.CountAsync(r => r.AssetVersionId == assetVersionId) != 2)
+                        throw new InvalidOperationException("Evidence correction did not supersede without creating a case or analysis run.");
+                }
+                SellerResponsesPageDto afterCorrection = (await ReadReviewResponses(scopedClient, responseEndpoint))!;
+                using HttpResponseMessage resubmitted = await scopedClient.PostAsJsonAsync(submissionUrl, new
+                {
+                    workspaceId = afterCorrection.WorkspaceId,
+                    expectedWorkspaceRevision = afterCorrection.WorkspaceRevision,
+                    expectedCaseRevision = afterCorrection.CaseRevision,
+                    operationId = Guid.NewGuid()
+                });
+                resubmitted.EnsureSuccessStatusCode();
+                using var resubmittedJson = JsonDocument.Parse(await resubmitted.Content.ReadAsStringAsync());
+                Guid previousSubmissionId = submissionId;
+                submissionId = resubmittedJson.RootElement.GetProperty("submissionId").GetGuid();
+                await using (AsyncServiceScope scope = factory.Services.CreateAsyncScope())
+                {
+                    ApplicationDbContext db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+                    ModerationSubmission linked = await db.ModerationSubmissions.AsNoTracking().SingleAsync(s => s.Id == submissionId);
+                    if (linked.PreviousSubmissionId != previousSubmissionId || linked.CodeAnalysisReportHeaderId != secondAdmittedReportId
+                        || linked.State != ModerationSubmissionState.SUBMITTED || linked.SellerEvidenceRevision != afterCorrection.EvidenceRevision)
+                        throw new InvalidOperationException("Explicit resubmission did not freeze the same report with linked current evidence.");
+                    if ((await db.AuditLogs.Select(a => a.MetadataJson).ToListAsync()).Any(value => value != null && value.Contains("Private evidence-only correction.", StringComparison.Ordinal))
+                        || (await db.OutboxMessages.Select(o => o.Payload).ToListAsync()).Any(value => value.Contains("Private evidence-only correction.", StringComparison.Ordinal)))
+                        throw new InvalidOperationException("Private evidence text leaked into an audit or outbox payload.");
+                    details["linkedResubmission"] = new
+                    {
+                        previousSubmissionId,
+                        submissionId,
+                        state = linked.State.ToString(),
+                        previousState = "SUPERSEDED",
+                        linked.CodeAnalysisReportHeaderId,
+                        linked.SellerEvidenceRevision,
+                        analysisRunCount = 2,
+                        historyCount = await db.ModerationSubmissionHistoryEntries.CountAsync(h => h.SubmissionId == submissionId || h.SubmissionId == previousSubmissionId)
                     };
                 }
                 (HttpClient moderatorClient, var moderatorUsername) = await IntegrationTestAuth.RegisterVerifiedWithRoleAsync(factory, AppRoles.MODERATOR);
@@ -607,12 +700,41 @@ public sealed class AuthenticatedEncryptedUploadAcceptanceTests
         throw new TimeoutException("Timed out waiting for report count " + requiredReports);
     }
 
+    // This is the same checked-in endpoint contract imported by the BFF route handlers.
+    private sealed record ReviewEndpoint(string Path, string WriteMethod, string? ReadMethod);
+    private static ReviewEndpoint ReadReviewEndpoint(string name, Guid assetId, Guid versionId)
+    {
+        const string relative = "asblock-frontend/lib/seller/seller-review-endpoints.json";
+        DirectoryInfo? directory = new(Directory.GetCurrentDirectory());
+        while (directory is not null && !File.Exists(Path.Combine(directory.FullName, relative)))
+        { directory = directory.Parent; }
+        if (directory is null)
+            throw new InvalidOperationException("Shared seller endpoint contract was not found.");
+        using JsonDocument document = JsonDocument.Parse(File.ReadAllText(Path.Combine(directory.FullName, relative)));
+        JsonElement endpoint = document.RootElement.GetProperty(name);
+        string path = endpoint.GetProperty("path").GetString()!.Replace("{assetId}", assetId.ToString(), StringComparison.Ordinal)
+            .Replace("{versionId}", versionId.ToString(), StringComparison.Ordinal);
+        return new(path, endpoint.GetProperty("writeMethod").GetString()!, endpoint.TryGetProperty("readMethod", out JsonElement read) ? read.GetString() : null);
+    }
+    private static async Task<HttpResponseMessage> SendReviewWrite(HttpClient client, ReviewEndpoint endpoint, object body)
+    {
+        using var request = new HttpRequestMessage(new HttpMethod(endpoint.WriteMethod), endpoint.Path) { Content = JsonContent.Create(body) };
+        return await client.SendAsync(request);
+    }
+    private static async Task<SellerResponsesPageDto?> ReadReviewResponses(HttpClient client, ReviewEndpoint endpoint)
+    {
+        using var request = new HttpRequestMessage(new HttpMethod(endpoint.ReadMethod!), endpoint.Path + "?page=1");
+        using HttpResponseMessage response = await client.SendAsync(request);
+        response.EnsureSuccessStatusCode();
+        return await response.Content.ReadFromJsonAsync<SellerResponsesPageDto>();
+    }
+
     private static byte[] CreateArchive()
     {
         using var ms = new MemoryStream();
         using (var zip = new ZipArchive(ms, ZipArchiveMode.Create, leaveOpen: true))
         {
-            Add(zip, "src/calculator.py", "# SPDX-License-Identifier: MIT\n# Copyright (c) 2026 Live acceptance\ndef add(a, b):\n    return a + b\n");
+            Add(zip, "src/calculator.py", "# SPDX-License-Identifier: MIT\n# Copyright (c) 2026 Live acceptance\ndef mean(items):\n    return sum(items) / len(items)\n\n\ndef total(items):\n    acc = 0\n    for entry in items:\n        acc = acc + entry\n    return acc\n");
         }
         return ms.ToArray();
     }

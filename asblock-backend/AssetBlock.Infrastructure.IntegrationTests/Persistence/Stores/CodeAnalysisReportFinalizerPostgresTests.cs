@@ -19,7 +19,7 @@ using MsOptions = Microsoft.Extensions.Options.Options;
 namespace AssetBlock.Infrastructure.IntegrationTests.Persistence.Stores;
 
 [Collection(nameof(PostgresStoreCollection))]
-public sealed class CodeAnalysisReportFinalizerPostgresTests(PostgresFixture fixture)
+public sealed partial class CodeAnalysisReportFinalizerPostgresTests(PostgresFixture fixture)
 {
     private const string SERVICE_KEY = "code-analysis";
     private const string POLICY_KEY = ReviewAnalysisPolicy.KEY;
@@ -118,7 +118,8 @@ public sealed class CodeAnalysisReportFinalizerPostgresTests(PostgresFixture fix
     [InlineData("eligible", null)]
     [InlineData("partial", ErrorCodes.ERR_REVIEW_COVERAGE_REQUIRED)]
     [InlineData("unsupported", ErrorCodes.ERR_REVIEW_COVERAGE_REQUIRED)]
-    [InlineData("findings", null)]
+    [InlineData("findings", ErrorCodes.ERR_FINDING_RESPONSE_REQUIRED)]
+    [InlineData("answered-findings", null)]
     [InlineData("released-reservation", null)]
     [InlineData("non-string-declaration", ErrorCodes.ERR_DECLARATION_INCOMPLETE)]
     [InlineData("not-current", ErrorCodes.ERR_ANALYSIS_NOT_AVAILABLE)]
@@ -187,7 +188,7 @@ public sealed class CodeAnalysisReportFinalizerPostgresTests(PostgresFixture fix
         ClaimedAssetProcessingJob job = (await seed.Capacity.ClaimWithCapacity(1, TimeSpan.FromMinutes(5), TimeSpan.FromMinutes(18), TimeSpan.FromMinutes(2), "submission-worker")).Single();
         CodeAnalysisRun run = await db.CodeAnalysisRuns.AsNoTracking().SingleAsync(r => r.Id == seed.RunId);
         JsonObject body = JsonNode.Parse(BuildResponseBody(run, seed.Version, seed.Asset, seed.Chain, seed.PolicyDigest))!.AsObject();
-        if (condition != "findings")
+        if (condition is not ("findings" or "answered-findings"))
         {
             body["findings"] = new JsonArray();
             body["retrievalSummary"] = PythonAnalysisEnvelope.RetrievalSummary(0);
@@ -235,8 +236,16 @@ public sealed class CodeAnalysisReportFinalizerPostgresTests(PostgresFixture fix
                 break;
         }
         var store = new ModerationFoundationStore(db, new AssetStore(db), new UserStore(db), new EfUnitOfWork(db));
+        if (condition == "answered-findings")
+        {
+            Guid findingId = await db.CodeAnalysisReportFindings.Select(f => f.Id).SingleAsync();
+            SellerEvidenceWriteResult saved = await store.SaveSellerEvidence(new SellerEvidenceWriteRequest(seed.Asset.AuthorId,
+                seed.Asset.Id, seed.Version.Id, workspace.Id, report.Id, findingId, SellerResponseType.NO_EVIDENCE,
+                "", 1, 0, Guid.NewGuid(), new string('c', 64)));
+            saved.Status.Should().Be(SellerEvidenceWriteStatus.SAVED);
+        }
         var request = new GuardedSubmissionRequest(seed.Asset.AuthorId, seed.Asset.Id, seed.Version.Id,
-            workspace.Id, 1, 1, Guid.NewGuid(), new string('a', 64), report.Id);
+            workspace.Id, condition == "answered-findings" ? 2 : 1, 1, Guid.NewGuid(), new string('a', 64), report.Id);
         GuardedSubmissionResult created;
         if (condition == "eligible")
         {
@@ -262,7 +271,7 @@ public sealed class CodeAnalysisReportFinalizerPostgresTests(PostgresFixture fix
             return;
         }
         created.Status.Should().Be(GuardedSubmissionStatus.CREATED);
-        if (condition == "findings")
+        if (condition == "answered-findings")
         {
             CodeAnalysisReportFinding finding = await db.CodeAnalysisReportFindings.AsNoTracking().SingleAsync();
             finding.TokenScore.Should().Be(0.5);

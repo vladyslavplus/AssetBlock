@@ -3,6 +3,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useEffect, useRef, useState } from 'react'
 import { AlertCircle, CheckCircle2, Clock, Loader2, ShieldCheck, Upload } from 'lucide-react'
+import { SellerResponsesPanel } from '@/components/sell/seller-responses-panel'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -344,6 +345,15 @@ export function VersionChecksPanel({ assetId, versionId }: VersionChecksPanelPro
                 </div>
               ) : null}
             </div>
+          ) : null}
+          {analysis.reportId && analysis.reportIsCurrent ? (
+            <SellerResponsesPanel
+              assetId={assetId}
+              versionId={versionId}
+              reportId={analysis.reportId}
+              findings={findingsQuery.data?.items ?? []}
+              canSubmit={review.canSubmit}
+            />
           ) : null}
           {analysis.limitations.map((limitation) => (
             <p key={limitation} className="text-xs text-muted-foreground">

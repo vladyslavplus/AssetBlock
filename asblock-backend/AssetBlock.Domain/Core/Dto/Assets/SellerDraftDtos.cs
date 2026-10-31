@@ -92,7 +92,8 @@ public sealed record SellerVersionReviewDto(
     bool CanUpload,
     bool CanSubmit,
     IReadOnlyList<string> BlockedReasons,
-    SellerAnalysisSummaryDto? AnalysisDetails = null);
+    SellerAnalysisSummaryDto? AnalysisDetails = null,
+    int RequiredResponseCount = 0, int OutstandingResponseCount = 0, int EvidenceRevision = 0);
 
 [JsonConverter(typeof(JsonStringEnumConverter))]
 public enum SellerAnalysisAvailability

@@ -12,6 +12,9 @@ const UUID = '123e4567-e89b-12d3-a456-426614174000'
 function review(overrides: Partial<SellerVersionReview> = {}): SellerVersionReview {
   return {
     assetId: UUID,
+    requiredResponseCount: 0,
+    outstandingResponseCount: 0,
+    evidenceRevision: 0,
     assetVersionId: UUID,
     versionNumber: 1,
     processingStatus: 'READY',

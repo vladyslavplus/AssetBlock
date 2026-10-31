@@ -2,6 +2,8 @@ namespace AssetBlock.Domain.Core.Constants;
 
 public static class ModerationOperationKinds
 {
+    public const string RESPONSE_SAVE = "Moderation.ResponseSave";
+    public const string EVIDENCE_SAVE = "Moderation.EvidenceSave";
     public const string DRAFT_CREATE = "Moderation.DraftCreate";
     public const string DRAFT_SAVE = "Moderation.DraftSave";
     public const string DECLARATION_SAVE = "Moderation.DeclarationSave";

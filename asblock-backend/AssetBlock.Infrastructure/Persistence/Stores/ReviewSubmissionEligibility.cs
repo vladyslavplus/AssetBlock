@@ -9,7 +9,7 @@ namespace AssetBlock.Infrastructure.Persistence.Stores;
 /// <summary>Read-only gates reused by owner hints and the locked submission transaction.</summary>
 internal static class ReviewSubmissionEligibility
 {
-    public static async Task<string?> BlockedReason(ApplicationDbContext db, AssetVersion version,
+    public static async Task<string?> CurrentReportBlockedReason(ApplicationDbContext db, AssetVersion version,
         AssetDraftWorkspace workspace, Guid? reportId, CancellationToken ct)
     {
         if (version.ProcessingStatus != AssetVersionProcessingStatus.READY
@@ -79,12 +79,25 @@ internal static class ReviewSubmissionEligibility
         {
             return ErrorCodes.ERR_VERSION_FILE_CHECKS_INCOMPLETE;
         }
+        return null;
+    }
+
+    public static async Task<string?> BlockedReason(ApplicationDbContext db, AssetVersion version,
+        AssetDraftWorkspace workspace, Guid? reportId, CancellationToken ct, SellerResponseRequirementState? responseState = null)
+    {
+        var unavailable = await CurrentReportBlockedReason(db, version, workspace, reportId, ct);
+        if (unavailable is not null)
+        { return unavailable; }
+        CodeAnalysisReportHeader report = await db.CodeAnalysisReportHeaders.AsNoTracking().SingleAsync(h => h.Id == reportId, ct);
         if (report.CoverageLevel != CodeAnalysisCoverageLevel.FULL || report.OmissionCount != 0 || report.AnalyzedFileCount is not > 0)
         {
             return ErrorCodes.ERR_REVIEW_COVERAGE_REQUIRED;
         }
-        // Retained candidates are moderator evidence. Only an explicit persisted response request
-        // can create a seller obligation; this workflow does not create response requests yet.
+        SellerResponseRequirementState responses = responseState ?? await SellerResponseRequirements.Read(db, report.Id, workspace, ct);
+        if (!responses.Available)
+        { return ErrorCodes.ERR_ANALYSIS_NOT_AVAILABLE; }
+        if (responses.Outstanding > 0)
+        { return ErrorCodes.ERR_FINDING_RESPONSE_REQUIRED; }
         if (await db.ModerationSubmissions.AnyAsync(s => s.AssetVersionId == version.Id
                 && (s.State == ModerationSubmissionState.SUBMITTED || s.State == ModerationSubmissionState.IN_REVIEW), ct))
         {

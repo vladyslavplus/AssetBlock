@@ -220,6 +220,124 @@ public sealed class CodeAnalysisRetentionPostgresTests(PostgresFixture fixture)
         (await workerDb.CodeAnalysisReportFindings.AnyAsync(f => f.ReportId == report.Id)).Should().BeFalse();
     }
 
+
+    [Theory]
+    [InlineData("superseded")]
+    [InlineData("selected-superseded")]
+    [InlineData("response")]
+    [InlineData("disposition")]
+    public async Task RunCleanup_WhenReportIsNeeded_ShouldKeepAllSiblingsAndPurgeUnrelatedReport(string protection)
+    {
+        await using ApplicationDbContext db = await fixture.CreateCleanDbContext();
+        (User author, Category category) = await TestData.SeedAuthorAndCategory(db);
+        Asset asset = TestData.CreateAsset(author.Id, category.Id);
+        AssetVersion version = TestData.CreateAssetVersion(asset.Id, processingStatus: AssetVersionProcessingStatus.READY);
+        db.Assets.Add(asset);
+        db.AssetVersions.Add(version);
+        await db.SaveChangesAsync();
+        DateTimeOffset now = DateTimeOffset.UtcNow;
+        CodeAnalysisReportHeader report = AddReport(asset, version, now.AddMonths(-13));
+        report.FindingCount = 2;
+        CodeAnalysisReportHeader unrelated = AddReport(asset, version, now.AddMonths(-13));
+        unrelated.FindingCount = 2;
+        CodeAnalysisReportFinding answered = AddFinding(report.Id);
+        db.CodeAnalysisReportHeaders.AddRange(report, unrelated);
+        db.CodeAnalysisReportFindings.AddRange(answered, AddFinding(report.Id), AddFinding(unrelated.Id), AddFinding(unrelated.Id));
+        var workspace = new AssetDraftWorkspace
+        {
+            Id = Guid.NewGuid(),
+            AssetId = asset.Id,
+            AssetVersionId = version.Id,
+            WorkspaceVersionScopeKey = version.Id,
+            ScopeId = Guid.NewGuid(),
+            CreatedAt = now
+        };
+        db.AssetDraftWorkspaces.Add(workspace);
+        if (protection is "superseded" or "selected-superseded" or "disposition")
+        {
+            var submission = new ModerationSubmission
+            {
+                Id = Guid.NewGuid(),
+                AssetId = asset.Id,
+                AssetVersionId = version.Id,
+                WorkspaceId = workspace.Id,
+                WorkspaceVersionScopeKey = version.Id,
+                OwnerUserId = author.Id,
+                CodeAnalysisReportHeaderId = protection == "selected-superseded" ? null : report.Id,
+                ContentSha256 = version.ContentSha256,
+                DeclarationRevision = 1,
+                MaterialMetadataRevision = 1,
+                SellerEvidenceRevision = 0,
+                SellerEvidenceDigest = new string('a', 64),
+                PolicyVersion = "retention-test",
+                CaseRevision = 1,
+                State = protection == "disposition" ? ModerationSubmissionState.WITHDRAWN : ModerationSubmissionState.SUPERSEDED,
+                CreatedAt = now
+            };
+            db.ModerationSubmissions.Add(submission);
+            if (protection == "disposition")
+            {
+                db.ModerationFindingDispositions.Add(new ModerationFindingDisposition
+                {
+                    Id = Guid.NewGuid(),
+                    AssetId = asset.Id,
+                    AssetVersionId = version.Id,
+                    SubmissionId = submission.Id,
+                    ReportId = report.Id,
+                    FindingId = answered.Id,
+                    ModeratorUserId = author.Id,
+                    CaseRevision = 1,
+                    Disposition = FindingDispositionType.EXPLAINED,
+                    Rationale = "Retention evidence",
+                    CreatedAt = now
+                });
+            }
+        }
+        if (protection == "response")
+        {
+            var responseId = Guid.NewGuid();
+            workspace.SellerEvidenceHeadRevision = 1;
+            db.AssetSellerEvidenceRevisions.Add(new AssetSellerEvidenceRevision
+            {
+                Id = Guid.NewGuid(),
+                AssetId = asset.Id,
+                AssetVersionId = version.Id,
+                WorkspaceId = workspace.Id,
+                WorkspaceVersionScopeKey = version.Id,
+                Revision = 1,
+                AuthorUserId = author.Id,
+                SchemaVersion = 1,
+                ContentDigest = new string('b', 64),
+                PayloadJson = "{}",
+                CreatedAt = now
+            });
+            db.SellerResponses.Add(new SellerResponse
+            {
+                Id = responseId,
+                AssetId = asset.Id,
+                AssetVersionId = version.Id,
+                WorkspaceId = workspace.Id,
+                WorkspaceVersionScopeKey = version.Id,
+                ReportId = report.Id,
+                FindingId = answered.Id,
+                SellerEvidenceRevision = 1,
+                ResponseType = SellerResponseType.NO_EVIDENCE,
+                Text = "",
+                ActorUserId = author.Id,
+                CreatedAt = now
+            });
+        }
+        await db.SaveChangesAsync();
+        if (protection == "selected-superseded")
+        {
+            await db.AssetVersions.Where(v => v.Id == version.Id).ExecuteUpdateAsync(s => s.SetProperty(v => v.SelectedCodeAnalysisReportId, report.Id));
+        }
+        await using ServiceProvider provider = CreateWorkerProvider(db, now);
+        (await provider.GetRequiredService<CodeAnalysisRetentionWorker>().RunCleanup(CancellationToken.None)).Should().Be(2);
+        (await db.CodeAnalysisReportFindings.CountAsync(f => f.ReportId == report.Id)).Should().Be(2);
+        (await db.CodeAnalysisReportFindings.AnyAsync(f => f.ReportId == unrelated.Id)).Should().BeFalse();
+    }
+
     private static void AddFindingToContext(ApplicationDbContext db, Guid reportId) => db.CodeAnalysisReportFindings.Add(AddFinding(reportId));
 
     private static ServiceProvider CreateWorkerProvider(ApplicationDbContext db, DateTimeOffset now)

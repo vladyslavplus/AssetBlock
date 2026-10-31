@@ -2,6 +2,9 @@ import type { SellerVersionReview } from '@/lib/seller/seller-draft-schemas'
 
 /** Messages mirror the backend `ErrorCodesToErrorMessages` mapping. */
 export const versionReviewBlockedReasonMessages: Record<string, string> = {
+  ERR_FINDING_RESPONSE_REQUIRED:
+    'Respond to every required finding, or choose No evidence, before submitting this version.',
+  ERR_SELLER_EVIDENCE_STALE: 'Review evidence changed. Refresh this version and try again.',
   ERR_VERSION_FILE_CHECKS_INCOMPLETE: 'File checks are not complete for this version yet.',
   ERR_ANALYSIS_NOT_AVAILABLE: 'Code analysis is not available yet for this version.',
   ERR_DECLARATION_INCOMPLETE: 'The source declaration is incomplete for this version.',
@@ -45,6 +48,8 @@ export function versionReviewModerationLabel(
       return 'Approved'
     case 'REJECTED':
       return 'Rejected'
+    case 'SUPERSEDED':
+      return 'Evidence changed; resubmit for review'
     case 'WITHDRAWN':
       return 'Withdrawn'
   }

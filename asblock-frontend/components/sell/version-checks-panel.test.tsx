@@ -14,6 +14,9 @@ const UUID_REPORT = 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee'
 function analysisDetails(overrides: Record<string, unknown> = {}) {
   return {
     assetId: UUID_ASSET,
+    requiredResponseCount: 0,
+    outstandingResponseCount: 0,
+    evidenceRevision: 0,
     assetVersionId: UUID_VERSION,
     lifecycle: 'FAILED',
     runId: UUID_RUN,
@@ -57,6 +60,9 @@ function stubReviewFetch(review: Record<string, unknown>) {
 function review(overrides: Record<string, unknown> = {}) {
   return {
     assetId: UUID_ASSET,
+    requiredResponseCount: 0,
+    outstandingResponseCount: 0,
+    evidenceRevision: 0,
     assetVersionId: UUID_VERSION,
     versionNumber: 2,
     processingStatus: 'READY',
@@ -154,6 +160,9 @@ describe('VersionChecksPanel', () => {
             JSON.stringify({
               operationId: 'ffffffff-ffff-4fff-8fff-ffffffffffff',
               assetId: UUID_ASSET,
+              requiredResponseCount: 0,
+              outstandingResponseCount: 0,
+              evidenceRevision: 0,
               assetVersionId: UUID_VERSION,
               status: 'ACCEPTED',
               runId: UUID_RUN,
@@ -224,6 +233,9 @@ describe('VersionChecksPanel', () => {
           return new Response(
             JSON.stringify({
               assetId: UUID_ASSET,
+              requiredResponseCount: 0,
+              outstandingResponseCount: 0,
+              evidenceRevision: 0,
               assetVersionId: UUID_VERSION,
               reportId: UUID_REPORT,
               isCurrent: true,
@@ -293,6 +305,8 @@ describe('VersionChecksPanel', () => {
           endLine: 1,
           reason: 'Matched selected code.',
           requestedAction: 'Review the source.',
+          responseRequired: false,
+          hasResponse: false,
           referenceKind: 'FOREIGN_PRIVATE',
           publicAttribution: null,
         },
@@ -367,6 +381,9 @@ describe('VersionChecksPanel', () => {
           return new Response(
             JSON.stringify({
               assetId: UUID_ASSET,
+              requiredResponseCount: 0,
+              outstandingResponseCount: 0,
+              evidenceRevision: 0,
               assetVersionId: UUID_VERSION,
               reportId: UUID_REPORT,
               isCurrent: false,

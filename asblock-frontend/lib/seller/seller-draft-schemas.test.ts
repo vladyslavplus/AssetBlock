@@ -31,6 +31,9 @@ const COMPONENT = {
 describe('server review eligibility', () => {
   const summary = {
     assetId: '123e4567-e89b-12d3-a456-426614174000',
+    requiredResponseCount: 0,
+    outstandingResponseCount: 0,
+    evidenceRevision: 0,
     assetVersionId: '123e4567-e89b-12d3-a456-426614174001',
     lifecycle: 'COMPLETED',
     runId: '123e4567-e89b-12d3-a456-426614174002',
@@ -109,6 +112,8 @@ describe('sellerAnalysisFindingSchema', () => {
       endLine: null,
       reason: 'r'.repeat(1024),
       requestedAction: 'a'.repeat(512),
+      responseRequired: false,
+      hasResponse: false,
       referenceKind: 'FOREIGN_PUBLIC',
       publicAttribution: { label: 'Public reference', url: null },
     })
@@ -128,6 +133,8 @@ describe('sellerAnalysisFindingSchema', () => {
       endLine: null,
       reason: '',
       requestedAction: '',
+      responseRequired: false,
+      hasResponse: false,
       referenceKind: 'FOREIGN_PUBLIC',
       publicAttribution: { label: 'Public reference', url: 'http://example.com' },
     }
@@ -247,6 +254,9 @@ describe('sellerVersionReviewSchema', () => {
   it('accepts a review payload with blocked reasons', () => {
     const result = sellerVersionReviewSchema.safeParse({
       assetId: '123e4567-e89b-12d3-a456-426614174000',
+      requiredResponseCount: 0,
+      outstandingResponseCount: 0,
+      evidenceRevision: 0,
       assetVersionId: '123e4567-e89b-12d3-a456-426614174001',
       versionNumber: 1,
       processingStatus: 'PENDING_INSPECTION',
@@ -266,6 +276,9 @@ describe('sellerVersionReviewSchema', () => {
   it('accepts analysis timestamps with backend UTC offsets', () => {
     const result = sellerVersionReviewSchema.safeParse({
       assetId: '123e4567-e89b-12d3-a456-426614174000',
+      requiredResponseCount: 0,
+      outstandingResponseCount: 0,
+      evidenceRevision: 0,
       assetVersionId: '123e4567-e89b-12d3-a456-426614174001',
       versionNumber: 1,
       processingStatus: 'READY',
@@ -279,6 +292,9 @@ describe('sellerVersionReviewSchema', () => {
       blockedReasons: ['ERR_REVIEW_COVERAGE_REQUIRED'],
       analysisDetails: {
         assetId: '123e4567-e89b-12d3-a456-426614174000',
+        requiredResponseCount: 0,
+        outstandingResponseCount: 0,
+        evidenceRevision: 0,
         assetVersionId: '123e4567-e89b-12d3-a456-426614174001',
         lifecycle: 'COMPLETED',
         runId: '123e4567-e89b-12d3-a456-426614174002',
@@ -313,6 +329,9 @@ describe('sellerVersionReviewSchema', () => {
   it('rejects numeric enum values instead of canonical strings', () => {
     const result = sellerVersionReviewSchema.safeParse({
       assetId: '123e4567-e89b-12d3-a456-426614174000',
+      requiredResponseCount: 0,
+      outstandingResponseCount: 0,
+      evidenceRevision: 0,
       assetVersionId: '123e4567-e89b-12d3-a456-426614174001',
       versionNumber: 1,
       processingStatus: 0,
@@ -446,6 +465,9 @@ describe('backend contract alignment', () => {
   it('parses a declaration snapshot that feeds the next save CAS', () => {
     const result = sellerDeclarationSnapshotSchema.safeParse({
       assetId: UUID,
+      requiredResponseCount: 0,
+      outstandingResponseCount: 0,
+      evidenceRevision: 0,
       assetVersionId: null,
       workspaceId: '123e4567-e89b-12d3-a456-426614174001',
       workspaceRevision: 4,

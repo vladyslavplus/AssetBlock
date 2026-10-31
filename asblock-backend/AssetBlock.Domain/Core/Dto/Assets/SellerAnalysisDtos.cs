@@ -39,7 +39,8 @@ public sealed record SellerAnalysisSummaryDto(
     string ComparisonScope,
     IReadOnlyList<string> Limitations,
     IReadOnlyList<SellerAnalysisStageDto> Stages,
-    string? SubmissionBlockedReason = null);
+    string? SubmissionBlockedReason = null,
+    int RequiredResponseCount = 0, int OutstandingResponseCount = 0, int EvidenceRevision = 0);
 
 public sealed record SellerPublicAttributionDto(
     string Label,
@@ -57,7 +58,8 @@ public sealed record SellerAnalysisFindingDto(
     string Reason,
     string RequestedAction,
     string? ReferenceKind,
-    SellerPublicAttributionDto? PublicAttribution);
+    SellerPublicAttributionDto? PublicAttribution,
+    bool ResponseRequired = false, bool HasResponse = false);
 
 public sealed record SellerAnalysisFindingsPageDto(
     Guid AssetId,

@@ -31,6 +31,9 @@ internal sealed class GetMyAssetVersionReviewQueryHandler(
             {
                 AnalysisDetails = analysis,
                 CanSubmit = analysis.CanSubmit,
+                RequiredResponseCount = analysis.RequiredResponseCount,
+                OutstandingResponseCount = analysis.OutstandingResponseCount,
+                EvidenceRevision = analysis.EvidenceRevision,
                 Analysis = analysis.ReportIsCurrent
                     ? SellerAnalysisAvailability.ANALYSIS_AVAILABLE
                     : SellerAnalysisAvailability.ANALYSIS_NOT_AVAILABLE,
