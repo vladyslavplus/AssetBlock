@@ -31,9 +31,9 @@ public sealed partial class CodeAnalysisReportFinalizerPostgresTests
         }
     }
 
-    private static async Task<(ResponseReviewSeed Seed, Guid SubmissionId)> SeedSubmittedCase(ApplicationDbContext db)
+    private static async Task<(ResponseReviewSeed Seed, Guid SubmissionId)> SeedSubmittedCase(ApplicationDbContext db, string[]? tags = null)
     {
-        ResponseReviewSeed seed = await SeedCurrentMaterialReview(db, 1);
+        ResponseReviewSeed seed = await SeedCurrentMaterialReview(db, 1, tags);
         ModerationFoundationStore store = CoverageStore(db);
         SellerResponsesPageDto current = (await store.GetOwnerResponses(seed.Source.Asset.Id, seed.Source.Version.Id, seed.Source.Asset.AuthorId, 1))!;
         (await new SaveSellerEvidenceCommandHandler(store).Handle(ResponseCommand(seed, current, seed.Findings[0], SellerResponseType.NO_EVIDENCE, ""), CancellationToken.None)).IsSuccess.Should().BeTrue();

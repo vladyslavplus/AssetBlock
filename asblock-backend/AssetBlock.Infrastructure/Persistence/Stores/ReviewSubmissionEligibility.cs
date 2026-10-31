@@ -10,6 +10,16 @@ namespace AssetBlock.Infrastructure.Persistence.Stores;
 /// <summary>Read-only gates reused by owner hints and the locked submission transaction.</summary>
 internal static class ReviewSubmissionEligibility
 {
+    public static async Task<(string? Reason, CoverageOwnerStatus? Coverage)> CoverageBlockedReason(ApplicationDbContext db,
+        AssetVersion version, AssetDraftWorkspace workspace, CodeAnalysisReportHeader report, CancellationToken ct, CoverageOwnerStatus? coverage = null)
+    {
+        if (report.CoverageLevel == CodeAnalysisCoverageLevel.FULL)
+        { return (report.OmissionCount == 0 && report.AnalyzedFileCount is > 0 ? null : ErrorCodes.ERR_REVIEW_COVERAGE_REQUIRED, null); }
+        if (report.CoverageLevel is not (CodeAnalysisCoverageLevel.PARTIAL or CodeAnalysisCoverageLevel.UNSUPPORTED))
+        { return (ErrorCodes.ERR_REVIEW_COVERAGE_REQUIRED, null); }
+        coverage ??= await CoverageReviewState.ReadStatus(db, version, workspace, ct);
+        return (coverage.Status == "ACCEPTED" ? null : coverage.ReasonCode ?? ErrorCodes.ERR_REVIEW_COVERAGE_REQUIRED, coverage);
+    }
     public static async Task<string?> CurrentReportBlockedReason(ApplicationDbContext db, AssetVersion version,
         AssetDraftWorkspace workspace, Guid? reportId, CancellationToken ct)
     {
@@ -90,19 +100,9 @@ internal static class ReviewSubmissionEligibility
         if (unavailable is not null)
         { return unavailable; }
         CodeAnalysisReportHeader report = await db.CodeAnalysisReportHeaders.AsNoTracking().SingleAsync(h => h.Id == reportId, ct);
-        if (report.CoverageLevel == CodeAnalysisCoverageLevel.FULL)
-        {
-            if (report.OmissionCount != 0 || report.AnalyzedFileCount is not > 0)
-            { return ErrorCodes.ERR_REVIEW_COVERAGE_REQUIRED; }
-        }
-        else if (report.CoverageLevel is CodeAnalysisCoverageLevel.PARTIAL or CodeAnalysisCoverageLevel.UNSUPPORTED)
-        {
-            CoverageOwnerStatus coverage = coverageState ?? await CoverageReviewState.ReadStatus(db, version, workspace, ct);
-            if (coverage.Status != "ACCEPTED")
-            { return coverage.ReasonCode ?? ErrorCodes.ERR_REVIEW_COVERAGE_REQUIRED; }
-        }
-        else
-        { return ErrorCodes.ERR_REVIEW_COVERAGE_REQUIRED; }
+        (string? Reason, CoverageOwnerStatus? Coverage) coverageResult = await CoverageBlockedReason(db, version, workspace, report, ct, coverageState);
+        if (coverageResult.Reason is not null)
+        { return coverageResult.Reason; }
         SellerResponseRequirementState responses = responseState ?? await SellerResponseRequirements.Read(db, report.Id, workspace, ct);
         if (!responses.Available)
         { return ErrorCodes.ERR_ANALYSIS_NOT_AVAILABLE; }

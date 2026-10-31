@@ -357,7 +357,7 @@ public sealed partial class CodeAnalysisReportFinalizerPostgresTests
     private static SaveSellerEvidenceCommand ResponseCommand(ResponseReviewSeed seed, SellerResponsesPageDto current, Guid findingId, SellerResponseType type, string text) => new(seed.Source.Asset.AuthorId,
         seed.Source.Asset.Id, seed.Source.Version.Id, current.WorkspaceId, seed.ReportId, findingId, type, text, current.WorkspaceRevision, current.EvidenceRevision, Guid.NewGuid());
 
-    private static async Task<ResponseReviewSeed> SeedCurrentMaterialReview(ApplicationDbContext db, int candidates)
+    private static async Task<ResponseReviewSeed> SeedCurrentMaterialReview(ApplicationDbContext db, int candidates, string[]? tags = null)
     {
         SeedContext seed = await SeedQueued(db);
         var workspace = new AssetDraftWorkspace
@@ -374,7 +374,9 @@ public sealed partial class CodeAnalysisReportFinalizerPostgresTests
         var declarationId = Guid.NewGuid();
         var materialId = Guid.NewGuid();
         const string declaration = """{"redistributionAcknowledged":true,"ownContributionSummary":"Original implementation.","components":[]}""";
-        const string material = """{"title":"Review subject"}""";
+        tags ??= [];
+        db.Tags.AddRange(tags.Select(name => TestData.CreateTag(name)));
+        var material = JsonSerializer.Serialize(new { title = "Review subject", description = (string?)null, categoryId = seed.Asset.CategoryId, tags });
         var declarationDigest = Convert.ToHexStringLower(System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(declaration)));
         var materialDigest = Convert.ToHexStringLower(System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(material)));
         db.AssetDraftWorkspaces.Add(workspace);

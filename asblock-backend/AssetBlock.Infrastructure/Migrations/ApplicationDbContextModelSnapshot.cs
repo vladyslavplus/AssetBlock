@@ -2749,6 +2749,10 @@ namespace AssetBlock.Infrastructure.Migrations
                     b.Property<DateTimeOffset>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<string>("ManualPlanCompletionReference")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
                     b.Property<string>("Message")
                         .IsRequired()
                         .HasMaxLength(2000)

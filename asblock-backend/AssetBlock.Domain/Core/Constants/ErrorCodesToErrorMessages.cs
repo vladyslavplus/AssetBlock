@@ -7,6 +7,12 @@ public static class ErrorCodesToErrorMessages
 {
     private static readonly IReadOnlyDictionary<string, string> _map = new Dictionary<string, string>
     {
+        { ErrorCodes.ERR_REVIEW_PLAN_REFERENCE_MISMATCH, "The completion reference does not match the coverage assessment." },
+        { ErrorCodes.ERR_PUBLICATION_METADATA_UNAVAILABLE, "The submitted category or tags are unavailable. Request changes before approval." },
+        { ErrorCodes.ERR_MODERATION_CONCURRENT_UPDATE, "The review was interrupted by a concurrent update. Try again." },
+        { ErrorCodes.ERR_MODERATION_DECISION_BLOCKED, "The current dispositions do not permit approval." },
+        { ErrorCodes.ERR_MODERATION_DISPOSITIONS_INVALID, "Provide one valid disposition for every material finding." },
+        { ErrorCodes.ERR_MODERATION_DECISION_EXISTS, "This submission already has a decision." },
         { ErrorCodes.ERR_MODERATION_CASE_HELD, "This submission is already claimed by another Moderator." },
         { ErrorCodes.ERR_MODERATION_CASE_NOT_CLAIMED, "This submission is not currently claimed." },
         { ErrorCodes.ERR_REVIEW_AUDIT_UNAVAILABLE, "The review action could not be audited. Try again later." },
