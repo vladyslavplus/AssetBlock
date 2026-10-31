@@ -2490,6 +2490,156 @@ namespace AssetBlock.Infrastructure.Migrations
                         });
                 });
 
+            modelBuilder.Entity("AssetBlock.Domain.Core.Entities.CoverageAssessment", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("CompetenceJson")
+                        .IsRequired()
+                        .HasColumnType("jsonb");
+
+                    b.Property<string>("CompletedPlanReference")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<bool>("ManageableScope")
+                        .HasColumnType("boolean");
+
+                    b.Property<Guid>("ModeratorUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Outcome")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<string>("Rationale")
+                        .IsRequired()
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)");
+
+                    b.Property<Guid>("RequestId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ReviewPlan")
+                        .IsRequired()
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)");
+
+                    b.Property<string>("ScopeJson")
+                        .IsRequired()
+                        .HasColumnType("jsonb");
+
+                    b.Property<DateTimeOffset?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ModeratorUserId");
+
+                    b.HasIndex("RequestId")
+                        .IsUnique();
+
+                    b.ToTable("coverage_assessments", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_coverage_assessments_outcome", "\"Outcome\" IN ('ACCEPTED','BLOCKED')");
+
+                            t.HasCheckConstraint("CK_coverage_assessments_plan", "\"Outcome\" <> 'ACCEPTED' OR (\"ManageableScope\" = TRUE AND length(\"CompletedPlanReference\") > 0)");
+
+                            t.HasCheckConstraint("CK_coverage_assessments_text", "length(\"Rationale\") BETWEEN 1 AND 2000 AND length(\"ReviewPlan\") BETWEEN 1 AND 2000 AND length(\"CompletedPlanReference\") <= 200");
+                        });
+                });
+
+            modelBuilder.Entity("AssetBlock.Domain.Core.Entities.CoverageReviewRequest", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("AssetId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("AssetVersionId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ContentSha256")
+                        .IsRequired()
+                        .HasColumnType("char(64)");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("DeclarationRevision")
+                        .HasColumnType("integer");
+
+                    b.Property<bool>("IsOpen")
+                        .HasColumnType("boolean");
+
+                    b.Property<int>("MaterialRevision")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid>("OwnerUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("PolicyDigest")
+                        .IsRequired()
+                        .HasColumnType("char(64)");
+
+                    b.Property<string>("PolicyVersion")
+                        .IsRequired()
+                        .HasMaxLength(80)
+                        .HasColumnType("character varying(80)");
+
+                    b.Property<Guid>("ReportId")
+                        .HasColumnType("uuid");
+
+                    b.Property<long>("RequestedWorkspaceRevision")
+                        .HasColumnType("bigint");
+
+                    b.Property<long>("Revision")
+                        .HasColumnType("bigint");
+
+                    b.Property<int>("SellerEvidenceRevision")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("TupleDigest")
+                        .IsRequired()
+                        .HasColumnType("char(64)");
+
+                    b.Property<DateTimeOffset?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("WorkspaceId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("OwnerUserId");
+
+                    b.HasIndex("TupleDigest")
+                        .IsUnique()
+                        .HasFilter("\"IsOpen\" = TRUE");
+
+                    b.HasIndex("AssetId", "AssetVersionId", "ReportId");
+
+                    b.HasIndex("AssetId", "WorkspaceId", "AssetVersionId");
+
+                    b.HasIndex("AssetVersionId", "RequestedWorkspaceRevision", "Id");
+
+                    b.ToTable("coverage_review_requests", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_coverage_requests_digests", "length(\"TupleDigest\") = 64 AND length(\"ContentSha256\") = 64 AND length(\"PolicyDigest\") = 64");
+
+                            t.HasCheckConstraint("CK_coverage_requests_revision", "\"RequestedWorkspaceRevision\" > 0 AND \"Revision\" > 0 AND \"DeclarationRevision\" > 0 AND \"MaterialRevision\" > 0 AND \"SellerEvidenceRevision\" >= 0");
+                        });
+                });
+
             modelBuilder.Entity("AssetBlock.Domain.Core.Entities.EmailAction", b =>
                 {
                     b.Property<Guid>("Id")
@@ -2719,6 +2869,9 @@ namespace AssetBlock.Infrastructure.Migrations
                         .IsRequired()
                         .HasColumnType("char(64)");
 
+                    b.Property<Guid?>("CoverageAssessmentId")
+                        .HasColumnType("uuid");
+
                     b.Property<DateTimeOffset>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
 
@@ -2770,6 +2923,8 @@ namespace AssetBlock.Infrastructure.Migrations
                         .IsUnique()
                         .HasDatabaseName("UIX_moderation_submissions_active_case")
                         .HasFilter("\"State\" IN ('SUBMITTED', 'IN_REVIEW')");
+
+                    b.HasIndex("CoverageAssessmentId");
 
                     b.HasIndex("AssetId", "AssetVersionId", "CodeAnalysisReportHeaderId");
 
@@ -4926,6 +5081,51 @@ namespace AssetBlock.Infrastructure.Migrations
                     b.Navigation("Collection");
                 });
 
+            modelBuilder.Entity("AssetBlock.Domain.Core.Entities.CoverageAssessment", b =>
+                {
+                    b.HasOne("AssetBlock.Domain.Core.Entities.User", null)
+                        .WithMany()
+                        .HasForeignKey("ModeratorUserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("AssetBlock.Domain.Core.Entities.CoverageReviewRequest", null)
+                        .WithMany()
+                        .HasForeignKey("RequestId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("AssetBlock.Domain.Core.Entities.CoverageReviewRequest", b =>
+                {
+                    b.HasOne("AssetBlock.Domain.Core.Entities.User", null)
+                        .WithMany()
+                        .HasForeignKey("OwnerUserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("AssetBlock.Domain.Core.Entities.AssetVersion", null)
+                        .WithMany()
+                        .HasForeignKey("AssetId", "AssetVersionId")
+                        .HasPrincipalKey("AssetId", "Id")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("AssetBlock.Domain.Core.Entities.CodeAnalysisReportHeader", null)
+                        .WithMany()
+                        .HasForeignKey("AssetId", "AssetVersionId", "ReportId")
+                        .HasPrincipalKey("AssetId", "AssetVersionId", "Id")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("AssetBlock.Domain.Core.Entities.AssetDraftWorkspace", null)
+                        .WithMany()
+                        .HasForeignKey("AssetId", "WorkspaceId", "AssetVersionId")
+                        .HasPrincipalKey("AssetId", "Id", "WorkspaceVersionScopeKey")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
             modelBuilder.Entity("AssetBlock.Domain.Core.Entities.EmailAction", b =>
                 {
                     b.HasOne("AssetBlock.Domain.Core.Entities.User", "User")
@@ -5003,6 +5203,11 @@ namespace AssetBlock.Infrastructure.Migrations
                         .HasForeignKey("AssetId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
+
+                    b.HasOne("AssetBlock.Domain.Core.Entities.CoverageAssessment", null)
+                        .WithMany()
+                        .HasForeignKey("CoverageAssessmentId")
+                        .OnDelete(DeleteBehavior.Restrict);
 
                     b.HasOne("AssetBlock.Domain.Core.Entities.AssetVersion", "AssetVersion")
                         .WithMany()

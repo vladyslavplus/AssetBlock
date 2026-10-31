@@ -245,7 +245,7 @@ public sealed class ModerationFoundationStorePostgresTests(PostgresFixture fixtu
             });
         }
         await db.SaveChangesAsync();
-        var store = new ModerationFoundationStore(db, new AssetStore(db), new UserStore(db), new EfUnitOfWork(db));
+        var store = new ModerationFoundationStore(db, new AssetStore(db), new UserStore(db), new EfUnitOfWork(db), auditWriter: TestData.CreateReviewAuditWriter(db));
         ModerationCaseAccessResult result = await store.GetCaseSummaryForModerator(moderator.Id, submission.Id);
         result.Summary!.RetrievalEvidence!.Candidates.Select(c => c.FindingKey).Should().Equal(
             "path-first", "z-token-first", "a-token-second", "b-sem-first", "z-sem-second", "a-no-ranks", "z-no-ranks");

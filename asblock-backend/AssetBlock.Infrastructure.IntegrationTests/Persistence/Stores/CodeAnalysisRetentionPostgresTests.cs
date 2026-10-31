@@ -1,3 +1,4 @@
+using AssetBlock.Domain.Core.Constants;
 using AssetBlock.Domain.Core.Entities;
 using AssetBlock.Domain.Core.Enums;
 using AssetBlock.Infrastructure.HostedServices;
@@ -224,6 +225,7 @@ public sealed class CodeAnalysisRetentionPostgresTests(PostgresFixture fixture)
     [Theory]
     [InlineData("superseded")]
     [InlineData("selected-superseded")]
+    [InlineData("coverage-request")]
     [InlineData("response")]
     [InlineData("disposition")]
     public async Task RunCleanup_WhenReportIsNeeded_ShouldKeepAllSiblingsAndPurgeUnrelatedReport(string protection)
@@ -292,6 +294,27 @@ public sealed class CodeAnalysisRetentionPostgresTests(PostgresFixture fixture)
                     CreatedAt = now
                 });
             }
+        }
+        if (protection == "coverage-request")
+        {
+            db.CoverageReviewRequests.Add(new CoverageReviewRequest
+            {
+                Id = Guid.NewGuid(),
+                AssetId = asset.Id,
+                AssetVersionId = version.Id,
+                WorkspaceId = workspace.Id,
+                ReportId = report.Id,
+                OwnerUserId = author.Id,
+                ContentSha256 = version.ContentSha256,
+                DeclarationRevision = 1,
+                MaterialRevision = 1,
+                SellerEvidenceRevision = 0,
+                PolicyVersion = ReviewAnalysisPolicy.KEY,
+                PolicyDigest = ReviewAnalysisPolicy.DIGEST,
+                TupleDigest = new string('c', 64),
+                RequestedWorkspaceRevision = 1,
+                CreatedAt = now
+            });
         }
         if (protection == "response")
         {

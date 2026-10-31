@@ -8,14 +8,16 @@ namespace AssetBlock.Infrastructure.Persistence;
 
 public sealed class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options) : DbContext(options)
 {
+    public DbSet<CoverageReviewRequest> CoverageReviewRequests => Set<CoverageReviewRequest>();
+    public DbSet<CoverageAssessment> CoverageAssessments => Set<CoverageAssessment>();
     public DbSet<SellerResponse> SellerResponses => Set<SellerResponse>();
     public DbSet<ModerationFindingDisposition> ModerationFindingDispositions => Set<ModerationFindingDisposition>();
     private void GuardAppendOnlyReviewRecords()
     {
-        if (ChangeTracker.Entries().Any(e => (e.Entity is SellerResponse or ModerationFindingDisposition)
+        if (ChangeTracker.Entries().Any(e => (e.Entity is SellerResponse or ModerationFindingDisposition or CoverageAssessment)
             && e.State is EntityState.Modified or EntityState.Deleted))
         {
-            throw new InvalidOperationException("Review responses and dispositions are append-only.");
+            throw new InvalidOperationException("Review responses, dispositions and coverage assessments are append-only.");
         }
     }
     public override int SaveChanges(bool acceptAllChangesOnSuccess)

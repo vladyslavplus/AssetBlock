@@ -1,6 +1,7 @@
 using AssetBlock.Domain.Core.Dto.Assets;
 using AssetBlock.Domain.Core.Dto.Moderation;
 using AssetBlock.Domain.Core.Dto.Users;
+using AssetBlock.Domain.Core.Enums;
 
 namespace AssetBlock.Domain.Abstractions.Services;
 
@@ -81,6 +82,11 @@ public interface IModerationFoundationStore
         Guid workspaceId,
         long expectedWorkspaceRevision,
         CancellationToken cancellationToken = default);
+
+    Task<ReviewAccessResult<RestrictedEvidenceDto>> ReadRestrictedEvidence(Guid actorId, Guid scopeId, bool coverageScope, RestrictedEvidenceKind kind, Guid? findingId, CancellationToken cancellationToken = default);
+    Task<ReviewAccessResult<CoverageReviewSaved>> RequestCoverageReview(Guid actorId, Guid assetId, Guid versionId, CoverageReviewCreateRequest request, string requestDigest, CancellationToken cancellationToken = default);
+    Task<ReviewAccessResult<CoverageReviewSaved>> AssessCoverage(Guid actorId, Guid requestId, CoverageAssessmentRequest request, string requestDigest, CancellationToken cancellationToken = default);
+    Task<ReviewAccessResult<CoverageQueuePage>> GetCoverageQueue(Guid actorId, int page, CancellationToken cancellationToken = default);
 
     Task<SellerEvidenceWriteResult> SaveSellerEvidence(SellerEvidenceWriteRequest request, CancellationToken cancellationToken = default);
     Task<SellerResponsesPageDto?> GetOwnerResponses(Guid assetId, Guid assetVersionId, Guid ownerUserId, int page, CancellationToken cancellationToken = default);

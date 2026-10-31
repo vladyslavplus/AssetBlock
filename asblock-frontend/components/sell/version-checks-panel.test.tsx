@@ -14,6 +14,7 @@ const UUID_REPORT = 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee'
 function analysisDetails(overrides: Record<string, unknown> = {}) {
   return {
     assetId: UUID_ASSET,
+    coverageReview: null,
     requiredResponseCount: 0,
     outstandingResponseCount: 0,
     evidenceRevision: 0,
@@ -60,6 +61,7 @@ function stubReviewFetch(review: Record<string, unknown>) {
 function review(overrides: Record<string, unknown> = {}) {
   return {
     assetId: UUID_ASSET,
+    coverageReview: null,
     requiredResponseCount: 0,
     outstandingResponseCount: 0,
     evidenceRevision: 0,
@@ -160,6 +162,7 @@ describe('VersionChecksPanel', () => {
             JSON.stringify({
               operationId: 'ffffffff-ffff-4fff-8fff-ffffffffffff',
               assetId: UUID_ASSET,
+              coverageReview: null,
               requiredResponseCount: 0,
               outstandingResponseCount: 0,
               evidenceRevision: 0,
@@ -233,6 +236,7 @@ describe('VersionChecksPanel', () => {
           return new Response(
             JSON.stringify({
               assetId: UUID_ASSET,
+              coverageReview: null,
               requiredResponseCount: 0,
               outstandingResponseCount: 0,
               evidenceRevision: 0,
@@ -381,6 +385,7 @@ describe('VersionChecksPanel', () => {
           return new Response(
             JSON.stringify({
               assetId: UUID_ASSET,
+              coverageReview: null,
               requiredResponseCount: 0,
               outstandingResponseCount: 0,
               evidenceRevision: 0,

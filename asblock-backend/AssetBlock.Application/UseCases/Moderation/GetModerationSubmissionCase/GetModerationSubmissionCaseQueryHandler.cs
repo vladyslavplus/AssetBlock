@@ -16,7 +16,7 @@ internal sealed class GetModerationSubmissionCaseQueryHandler(
         CancellationToken cancellationToken)
     {
         UserPersistedRole? role = await userStore.GetPersistedRole(request.ActorUserId, cancellationToken);
-        if (role is null || role.Role != AppRoles.MODERATOR)
+        if (!AppRoles.CanReview(role?.Role))
         {
             return Result.Forbidden(ErrorCodes.ERR_FORBIDDEN);
         }
@@ -29,6 +29,8 @@ internal sealed class GetModerationSubmissionCaseQueryHandler(
         return access.Status switch
         {
             ModerationCaseAccessStatus.DENIED_ROLE or ModerationCaseAccessStatus.SELF_OWNED_DENIED => Result.Forbidden(ErrorCodes.ERR_FORBIDDEN),
+            ModerationCaseAccessStatus.SECURITY_RESTRICTED => Result.Forbidden(ErrorCodes.ERR_EVIDENCE_SECURITY_RESTRICTED),
+            ModerationCaseAccessStatus.AUDIT_UNAVAILABLE => Result.Unavailable(ErrorCodes.ERR_EVIDENCE_AUDIT_UNAVAILABLE),
             ModerationCaseAccessStatus.NOT_FOUND => Result.NotFound(ErrorCodes.ERR_MODERATION_CASE_NOT_FOUND),
             _ => Result.Success(access.Summary!)
         };

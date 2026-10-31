@@ -10,4 +10,4 @@ public sealed record ModerationCaseSummary(
     long CaseRevision,
     string ContentSha256,
     string PolicyVersion,
-    ModeratorReportEvidence? RetrievalEvidence = null);
+    ModeratorReportEvidence? RetrievalEvidence = null, Guid? CoverageAssessmentId = null);

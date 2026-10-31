@@ -7,5 +7,9 @@
   "evidence": {
     "path": "/api/assets/{assetId}/versions/{versionId}/evidence",
     "writeMethod": "PUT"
+  },
+  "coverage": {
+    "path": "/api/assets/{assetId}/versions/{versionId}/coverage-reviews",
+    "writeMethod": "POST"
   }
 }

@@ -15,6 +15,7 @@ public class ModerationSubmission : BaseEntity
 
     public required string ContentSha256 { get; init; }
     public Guid? CodeAnalysisReportHeaderId { get; init; }
+    public Guid? CoverageAssessmentId { get; init; }
     public required int DeclarationRevision { get; init; }
     public required int MaterialMetadataRevision { get; init; }
     public required int SellerEvidenceRevision { get; init; }

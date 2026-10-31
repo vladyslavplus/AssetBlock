@@ -44,6 +44,7 @@ internal sealed class ModerationSubmissionConfiguration : IEntityTypeConfigurati
             .HasForeignKey(s => new { s.AssetId, s.AssetVersionId, s.CodeAnalysisReportHeaderId })
             .HasPrincipalKey(h => new { h.AssetId, h.AssetVersionId, h.Id })
             .OnDelete(DeleteBehavior.Restrict);
+        builder.HasOne<CoverageAssessment>().WithMany().HasForeignKey(s => s.CoverageAssessmentId).OnDelete(DeleteBehavior.Restrict);
         builder.HasOne(s => s.PreviousSubmission)
             .WithMany()
             .HasForeignKey(s => new { s.AssetId, s.AssetVersionId, s.PreviousSubmissionId })

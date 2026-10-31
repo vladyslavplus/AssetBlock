@@ -7,6 +7,7 @@ using AssetBlock.Domain.Core.Constants;
 using AssetBlock.Domain.Core.Dto;
 using AssetBlock.Domain.Core.Dto.Assets;
 using AssetBlock.Domain.Core.Dto.Audit;
+using AssetBlock.Domain.Core.Dto.Moderation;
 using AssetBlock.Domain.Core.Entities;
 using AssetBlock.Domain.Core.Enums;
 using AssetBlock.Domain.Core.Primitives.AppSettingsOptions;
@@ -150,9 +151,13 @@ internal sealed class CodeAnalysisSellerStore(
         string[] limitations = ["Pair verification is disabled by evaluation. Retained comparison evidence requires human review.", "Publication requires an explicit moderator decision."];
         SellerResponseRequirementState? responses = reportIsCurrent && report is not null && latestWorkspace is not null
             ? await SellerResponseRequirements.Read(db, report.Id, latestWorkspace, cancellationToken) : null;
+        CoverageOwnerStatus coverageReview = latestWorkspace is null ? new(null, "NOT_REQUESTED", null)
+            : await CoverageReviewState.ReadStatus(db, version, latestWorkspace, cancellationToken);
         var submissionBlockedReason = !reportIsCurrent || latestWorkspace is null
             ? ErrorCodes.ERR_ANALYSIS_NOT_AVAILABLE
-            : await ReviewSubmissionEligibility.BlockedReason(db, version, latestWorkspace, report!.Id, cancellationToken, responses).ConfigureAwait(false);
+            : await ReviewSubmissionEligibility.BlockedReason(db, version, latestWorkspace, report!.Id, cancellationToken, responses, coverageReview).ConfigureAwait(false);
+        var coverageRequestEligible = reportIsCurrent && latestWorkspace is not null && report is not null
+            && await ReviewSubmissionEligibility.CurrentReportBlockedReason(db, version, latestWorkspace, report.Id, cancellationToken) is null;
         var reviewEligible = report is not null && report.PolicyVersion == ReviewAnalysisPolicy.KEY
             && await db.CodeAnalysisReportAdmissions.AnyAsync(a => a.ReportId == report.Id
                 && a.AdmissionKind == CodeAnalysisAdmissionKind.SERVER_VALIDATED && a.ReviewEligible
@@ -167,7 +172,7 @@ internal sealed class CodeAnalysisSellerStore(
             findingDetailsAvailable,
             run?.CreatedAt, run?.CompletedAt, SafeErrorCode(run?.ErrorCode), SafeErrorMessage(run?.ErrorCode),
             retry ? "Retry analysis after checking the current seller declaration and materials." : null,
-            retry, expectation, submissionBlockedReason is null, reviewEligible, "Selected source files from this version only", limitations, stages, submissionBlockedReason, responses?.Required.Count ?? 0, responses?.Outstanding ?? 0, latestWorkspace?.SellerEvidenceHeadRevision ?? 0);
+            retry, expectation, submissionBlockedReason is null, reviewEligible, "Selected source files from this version only", limitations, stages, submissionBlockedReason, responses?.Required.Count ?? 0, responses?.Outstanding ?? 0, latestWorkspace?.SellerEvidenceHeadRevision ?? 0, coverageReview with { CanRequest = coverageRequestEligible && (report?.CoverageLevel is CodeAnalysisCoverageLevel.PARTIAL or CodeAnalysisCoverageLevel.UNSUPPORTED) && CoverageReviewState.CanRequest(coverageReview) });
     }
 
     public async Task<SellerAnalysisFindingsPageDto?> GetOwnerFindings(Guid assetVersionId, Guid reportId, Guid ownerUserId, int page, CancellationToken cancellationToken = default)

@@ -198,7 +198,7 @@ internal sealed partial class ModerationFoundationStore
         await dbContext.Database.SqlQuery<Guid>($"""SELECT "Id" AS "Value" FROM moderation_submissions WHERE "Id" = {submissionId} FOR UPDATE""").ToListAsync(cancellationToken);
         UserPersistedRole? role = await userStore.LockAndReadPersistedRole(moderatorUserId, cancellationToken);
         ModerationSubmission? submission = await dbContext.ModerationSubmissions.AsNoTracking().SingleOrDefaultAsync(s => s.Id == submissionId, cancellationToken);
-        if (asset is null || asset.DeletedAt.HasValue || asset.AuthorId == moderatorUserId || role?.Role != AppRoles.MODERATOR || workspaceId == Guid.Empty
+        if (asset is null || asset.DeletedAt.HasValue || asset.AuthorId == moderatorUserId || !AppRoles.CanReview(role?.Role) || workspaceId == Guid.Empty
             || submission is null || submission.CaseRevision != expectedCaseRevision || submission.State is not (ModerationSubmissionState.SUBMITTED or ModerationSubmissionState.IN_REVIEW)
             || submission.CodeAnalysisReportHeaderId is null)
         { return false; }

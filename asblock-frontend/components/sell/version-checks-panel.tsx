@@ -1,5 +1,7 @@
 'use client'
 
+import { CoverageReviewPanel } from '@/components/sell/coverage-review-panel'
+
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useEffect, useRef, useState } from 'react'
 import { AlertCircle, CheckCircle2, Clock, Loader2, ShieldCheck, Upload } from 'lucide-react'
@@ -407,6 +409,7 @@ export function VersionChecksPanel({ assetId, versionId }: VersionChecksPanelPro
         </section>
       ) : null}
 
+      <CoverageReviewPanel assetId={assetId} versionId={versionId} review={review} />
       {!review.canSubmit ? (
         <Alert className="border-amber-500/40 bg-amber-500/10 py-3">
           <AlertCircle className="h-4 w-4 text-amber-600 dark:text-amber-400" />

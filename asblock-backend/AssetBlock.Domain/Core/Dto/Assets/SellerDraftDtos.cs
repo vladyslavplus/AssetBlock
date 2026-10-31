@@ -1,4 +1,5 @@
 using System.Text.Json.Serialization;
+using AssetBlock.Domain.Core.Dto.Moderation;
 using AssetBlock.Domain.Core.Enums;
 
 namespace AssetBlock.Domain.Core.Dto.Assets;
@@ -93,7 +94,7 @@ public sealed record SellerVersionReviewDto(
     bool CanSubmit,
     IReadOnlyList<string> BlockedReasons,
     SellerAnalysisSummaryDto? AnalysisDetails = null,
-    int RequiredResponseCount = 0, int OutstandingResponseCount = 0, int EvidenceRevision = 0);
+    int RequiredResponseCount = 0, int OutstandingResponseCount = 0, int EvidenceRevision = 0, CoverageOwnerStatus? CoverageReview = null);
 
 [JsonConverter(typeof(JsonStringEnumConverter))]
 public enum SellerAnalysisAvailability

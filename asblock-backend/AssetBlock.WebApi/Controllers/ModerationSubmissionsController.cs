@@ -7,10 +7,12 @@ using AssetBlock.WebApi.Extensions;
 using AssetBlock.WebApi.ProblemDetails;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 
 namespace AssetBlock.WebApi.Controllers;
 
 [ApiController]
+[EnableRateLimiting(RateLimitingConstants.Policies.MODERATION_EVIDENCE)]
 [Authorize(Roles = AppRoles.MODERATOR)]
 [Authorize(Policy = AuthorizationPolicies.VERIFIED_EMAIL)]
 [Produces("application/json")]

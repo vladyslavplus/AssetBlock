@@ -2,6 +2,9 @@ namespace AssetBlock.Domain.Core.Constants;
 
 public static class ModerationOperationKinds
 {
+    public const string COVERAGE_REQUEST = "coverage-request";
+    public const string COVERAGE_ASSESS = "coverage-assess";
+
     public const string RESPONSE_SAVE = "Moderation.ResponseSave";
     public const string EVIDENCE_SAVE = "Moderation.EvidenceSave";
     public const string DRAFT_CREATE = "Moderation.DraftCreate";

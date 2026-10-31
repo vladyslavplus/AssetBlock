@@ -7,6 +7,14 @@ public static class ErrorCodesToErrorMessages
 {
     private static readonly IReadOnlyDictionary<string, string> _map = new Dictionary<string, string>
     {
+        { ErrorCodes.ERR_EVIDENCE_SECURITY_RESTRICTED, "Evidence preview is unavailable while this version is security-restricted." },
+        { ErrorCodes.ERR_EVIDENCE_AUDIT_UNAVAILABLE, "Evidence access could not be audited. No content was released. Try again later." },
+        { ErrorCodes.ERR_REVIEW_EVIDENCE_NOT_FOUND, "The requested review evidence was not found." },
+        { ErrorCodes.ERR_COVERAGE_REVIEW_CONFLICT, "Coverage review changed. Refresh this version before trying again." },
+        { ErrorCodes.ERR_COVERAGE_ASSESSMENT_BLOCKED, "Coverage review could not establish a safe manual review scope. Correct the source package before requesting review again." },
+        { ErrorCodes.ERR_COVERAGE_ASSESSMENT_INVALIDATED, "Coverage review no longer matches this version. Request review for the current report and declaration." },
+        { ErrorCodes.ERR_COVERAGE_ASSESSOR_UNAVAILABLE, "Coverage review needs a new reviewer. Request another coverage review." },
+        { ErrorCodes.ERR_COVERAGE_SCOPE_UNAVAILABLE, "Readable evidence for the complete omitted scope is unavailable. Record a blocked assessment." },
         { ErrorCodes.ERR_AUTH_INVALID_CREDENTIALS, "Invalid email or password." },
         { ErrorCodes.ERR_AUTH_TOKEN_EXPIRED, "Token has expired." },
         { ErrorCodes.ERR_AUTH_TOKEN_INVALID, "Invalid token." },

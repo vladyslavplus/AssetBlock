@@ -154,7 +154,31 @@ export const sellerAnalysisStageSchema = z.object({
   outcome: z.string().min(1).max(40),
   retryable: z.boolean(),
 })
+export const coverageOwnerStatusSchema = z.object({
+  requestId: z.guid().nullable(),
+  status: z.enum(['NOT_REQUESTED', 'REQUESTED', 'ACCEPTED', 'BLOCKED', 'INVALIDATED']),
+  reasonCode: z.string().max(100).nullable(),
+  canRequest: z.boolean(),
+})
+export const coverageReviewCreateRequestSchema = z
+  .object({
+    operationId: z.guid(),
+    workspaceId: z.guid(),
+    reportId: z.guid(),
+    expectedWorkspaceRevision: z.number().int().positive(),
+  })
+  .strict()
+export const coverageReviewSavedSchema = z.object({
+  requestId: z.guid(),
+  requestRevision: z.number().int().positive(),
+  workspaceRevision: z.number().int().positive(),
+  tupleDigest: z.string().regex(/^[a-f0-9]{64}$/),
+  replayed: z.boolean(),
+})
+export type CoverageReviewCreateRequest = z.infer<typeof coverageReviewCreateRequestSchema>
+
 export const sellerAnalysisSummarySchema = z.object({
+  coverageReview: coverageOwnerStatusSchema.nullable(),
   requiredResponseCount: z.number().int().nonnegative(),
   outstandingResponseCount: z.number().int().nonnegative(),
   evidenceRevision: z.number().int().nonnegative(),
@@ -251,6 +275,7 @@ export type SellerAnalysisRetryRequest = z.infer<typeof sellerAnalysisRetryReque
 export type SellerAnalysisRetryAccepted = z.infer<typeof sellerAnalysisRetryAcceptedSchema>
 
 export const sellerVersionReviewSchema = z.object({
+  coverageReview: coverageOwnerStatusSchema.nullable(),
   requiredResponseCount: z.number().int().nonnegative(),
   outstandingResponseCount: z.number().int().nonnegative(),
   evidenceRevision: z.number().int().nonnegative(),

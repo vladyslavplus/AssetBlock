@@ -31,6 +31,7 @@ const COMPONENT = {
 describe('server review eligibility', () => {
   const summary = {
     assetId: '123e4567-e89b-12d3-a456-426614174000',
+    coverageReview: null,
     requiredResponseCount: 0,
     outstandingResponseCount: 0,
     evidenceRevision: 0,
@@ -254,6 +255,7 @@ describe('sellerVersionReviewSchema', () => {
   it('accepts a review payload with blocked reasons', () => {
     const result = sellerVersionReviewSchema.safeParse({
       assetId: '123e4567-e89b-12d3-a456-426614174000',
+      coverageReview: null,
       requiredResponseCount: 0,
       outstandingResponseCount: 0,
       evidenceRevision: 0,
@@ -276,6 +278,7 @@ describe('sellerVersionReviewSchema', () => {
   it('accepts analysis timestamps with backend UTC offsets', () => {
     const result = sellerVersionReviewSchema.safeParse({
       assetId: '123e4567-e89b-12d3-a456-426614174000',
+      coverageReview: null,
       requiredResponseCount: 0,
       outstandingResponseCount: 0,
       evidenceRevision: 0,
@@ -292,6 +295,7 @@ describe('sellerVersionReviewSchema', () => {
       blockedReasons: ['ERR_REVIEW_COVERAGE_REQUIRED'],
       analysisDetails: {
         assetId: '123e4567-e89b-12d3-a456-426614174000',
+        coverageReview: null,
         requiredResponseCount: 0,
         outstandingResponseCount: 0,
         evidenceRevision: 0,
@@ -329,6 +333,7 @@ describe('sellerVersionReviewSchema', () => {
   it('rejects numeric enum values instead of canonical strings', () => {
     const result = sellerVersionReviewSchema.safeParse({
       assetId: '123e4567-e89b-12d3-a456-426614174000',
+      coverageReview: null,
       requiredResponseCount: 0,
       outstandingResponseCount: 0,
       evidenceRevision: 0,
@@ -465,6 +470,7 @@ describe('backend contract alignment', () => {
   it('parses a declaration snapshot that feeds the next save CAS', () => {
     const result = sellerDeclarationSnapshotSchema.safeParse({
       assetId: UUID,
+      coverageReview: null,
       requiredResponseCount: 0,
       outstandingResponseCount: 0,
       evidenceRevision: 0,

@@ -7,6 +7,7 @@ public static class RateLimitingConstants
 {
     public static class Policies
     {
+        public const string MODERATION_EVIDENCE = "moderation-evidence";
         public const string AUTH_REGISTER = "auth-register";
         public const string AUTH_LOGIN = "auth-login";
         public const string AUTH_REFRESH = "auth-refresh";
@@ -30,6 +31,8 @@ public static class RateLimitingConstants
     {
         public const int SLIDING_WINDOW_SEGMENTS = 6;
 
+        public const int MODERATION_EVIDENCE_LIMIT = 60;
+        public const int MODERATION_EVIDENCE_PERIOD_SECONDS = 60;
         public const int AUTH_REGISTER_LIMIT = 5;
         public const int AUTH_REGISTER_PERIOD_SECONDS = 60;
 

@@ -2,6 +2,8 @@ import { ApiRequestError } from '@/lib/http/api-client'
 import { getApiErrorMessage, parseApiErrorBody } from '@/lib/http/api-errors'
 import { isAbortError, toAbortError } from '@/lib/http/is-abort-error'
 import {
+  coverageReviewSavedSchema,
+  type CoverageReviewCreateRequest,
   sellerResponsesPageSchema,
   sellerEvidenceSavedSchema,
   type SellerResponseRequest,
@@ -416,5 +418,18 @@ export function saveSellerEvidence(
     'PUT',
     body,
     sellerEvidenceSavedSchema,
+  )
+}
+
+export function requestSellerCoverageReview(
+  assetId: string,
+  versionId: string,
+  body: CoverageReviewCreateRequest,
+) {
+  return sendJson(
+    `/api/seller/assets/${encodeURIComponent(assetId)}/versions/${encodeURIComponent(versionId)}/coverage-reviews`,
+    'POST',
+    body,
+    coverageReviewSavedSchema,
   )
 }

@@ -11,6 +11,10 @@ namespace AssetBlock.Infrastructure.IntegrationTests.Support;
 /// </summary>
 internal static class TestData
 {
+    public static AssetBlock.Domain.Abstractions.Services.IAuditWriter CreateReviewAuditWriter(ApplicationDbContext db) => new AssetBlock.Infrastructure.Services.AuditWriter(
+        new AssetBlock.Infrastructure.Persistence.Stores.AuditStore(db), NSubstitute.Substitute.For<AssetBlock.Domain.Abstractions.Services.IAuditContextAccessor>(),
+        Microsoft.Extensions.Logging.Abstractions.NullLogger<AssetBlock.Infrastructure.Services.AuditWriter>.Instance);
+
     private const string PASSWORD_HASH = "test-password-hash-not-a-real-secret";
 
     public static User CreateUser(

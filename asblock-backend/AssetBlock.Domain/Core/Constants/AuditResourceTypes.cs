@@ -3,6 +3,8 @@ namespace AssetBlock.Domain.Core.Constants;
 /// <summary>Stable audit resource type names.</summary>
 public static class AuditResourceTypes
 {
+    public const string COVERAGE_REVIEW = "CoverageReviewRequest";
+    public const string MODERATION_SUBMISSION = "ModerationSubmission";
     public const string USER = "User";
     public const string ASSET_VERSION = "AssetVersion";
     public const string ASSET = "Asset";

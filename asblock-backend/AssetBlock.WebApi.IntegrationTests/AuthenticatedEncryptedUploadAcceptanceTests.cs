@@ -1,3 +1,4 @@
+using AssetBlock.Domain.Core.Dto.Moderation;
 using System.IO.Compression;
 #pragma warning disable IDE0007, IDE0008, IDE0011
 using System.Net.Http.Headers;
@@ -497,6 +498,31 @@ public sealed class AuthenticatedEncryptedUploadAcceptanceTests
                     {
                         throw new InvalidOperationException("Moderator evidence was cacheable.");
                     }
+                    Guid evidenceFindingId;
+                    await using (AsyncServiceScope evidenceScope = factory.Services.CreateAsyncScope())
+                    {
+                        ApplicationDbContext db = evidenceScope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+                        evidenceFindingId = await db.CodeAnalysisReportFindings.Where(f => f.ReportId == secondAdmittedReportId && f.OwnExcerpt != "").Select(f => f.Id).FirstAsync();
+                    }
+                    var evidenceUrl = caseUrl + "/evidence/OWN_EXCERPT?findingId=" + evidenceFindingId;
+                    using (var evidenceRequest = new HttpRequestMessage(HttpMethod.Get, evidenceUrl))
+                    using (HttpResponseMessage excerpt = await moderatorClient.SendAsync(evidenceRequest, HttpCompletionOption.ResponseHeadersRead))
+                    {
+                        excerpt.EnsureSuccessStatusCode();
+                        if (excerpt.Headers.CacheControl is not { Private: true, NoStore: true })
+                            throw new InvalidOperationException("Restricted evidence was cacheable.");
+                        await using AsyncServiceScope auditScope = factory.Services.CreateAsyncScope();
+                        ApplicationDbContext auditDb = auditScope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+                        List<string?> auditMetadata = await auditDb.AuditLogs.AsNoTracking().Where(a => a.Action == AuditActions.RESTRICTED_EVIDENCE_READ && a.ResourceId == submissionId.ToString()).Select(a => a.MetadataJson).ToListAsync();
+                        if (!auditMetadata.Any(m => m != null && JsonDocument.Parse(m).RootElement.GetProperty("kind").GetString() == "OWN_EXCERPT"))
+                            throw new InvalidOperationException("Evidence audit did not commit before response body consumption.");
+                        RestrictedEvidenceDto evidence = (await excerpt.Content.ReadFromJsonAsync<RestrictedEvidenceDto>())!;
+                        if (string.IsNullOrEmpty(evidence.Content) || evidence.ReportId != secondAdmittedReportId)
+                            throw new InvalidOperationException("Restricted finding excerpt was not report-bound.");
+                        if (auditMetadata.Any(m => m != null && m.Contains(evidence.Content, StringComparison.Ordinal)))
+                            throw new InvalidOperationException("Private excerpt leaked into audit.");
+                        details["restrictedEvidence"] = new { kind = evidence.Kind.ToString(), evidence.FindingId, textBytes = Encoding.UTF8.GetByteCount(evidence.Content), auditCommittedBeforeBody = true, cacheControl = "private, no-store" };
+                    }
                     using var moderatorJson = JsonDocument.Parse(await moderatorRead.Content.ReadAsStringAsync());
                     JsonElement moderatorEvidence = moderatorJson.RootElement.GetProperty("retrievalEvidence");
                     if (moderatorEvidence.GetProperty("scoresAvailability").GetString() != "AVAILABLE"
@@ -621,6 +647,7 @@ public sealed class AuthenticatedEncryptedUploadAcceptanceTests
                         cacheControl = "private, no-store"
                     };
                 }
+                await VerifyPartialCoverage(factory, categoryId, details);
                 details["status"] = "passed";
                 await File.WriteAllTextAsync(evidencePath, JsonSerializer.Serialize(details, new JsonSerializerOptions { WriteIndented = true }));
             }
@@ -701,8 +728,8 @@ public sealed class AuthenticatedEncryptedUploadAcceptanceTests
     }
 
     // This is the same checked-in endpoint contract imported by the BFF route handlers.
-    private sealed record ReviewEndpoint(string Path, string WriteMethod, string? ReadMethod);
-    private static ReviewEndpoint ReadReviewEndpoint(string name, Guid assetId, Guid versionId)
+    internal sealed record ReviewEndpoint(string Path, string WriteMethod, string? ReadMethod);
+    internal static ReviewEndpoint ReadReviewEndpoint(string name, Guid assetId, Guid versionId)
     {
         const string relative = "asblock-frontend/lib/seller/seller-review-endpoints.json";
         DirectoryInfo? directory = new(Directory.GetCurrentDirectory());
@@ -729,12 +756,143 @@ public sealed class AuthenticatedEncryptedUploadAcceptanceTests
         return await response.Content.ReadFromJsonAsync<SellerResponsesPageDto>();
     }
 
-    private static byte[] CreateArchive()
+    private static async Task VerifyPartialCoverage(LiveAcceptanceFactory factory, Guid categoryId, Dictionary<string, object?> details)
+    {
+        (HttpClient owner, _) = await IntegrationTestAuth.RegisterVerifiedAndAuthenticateAsync(factory);
+        (HttpClient moderator, _) = await IntegrationTestAuth.RegisterVerifiedWithRoleAsync(factory, AppRoles.MODERATOR);
+        using (owner)
+        using (moderator)
+        {
+            using HttpResponseMessage created = await owner.PostAsJsonAsync("/api/assets/drafts", new { operationId = Guid.NewGuid(), title = "Manual documentation review", description = "Bounded stored documentation omission", price = 1.25m, categoryId, downloadLimitPerHour = 10 });
+            created.EnsureSuccessStatusCode();
+            using JsonDocument draft = JsonDocument.Parse(await created.Content.ReadAsStringAsync());
+            Guid assetId = draft.RootElement.GetProperty("assetId").GetGuid();
+            Guid workspaceId = draft.RootElement.GetProperty("workspaceId").GetGuid();
+            using HttpResponseMessage declared = await owner.PutAsJsonAsync($"/api/assets/{assetId}/declaration", new { operationId = Guid.NewGuid(), expectedWorkspaceRevision = draft.RootElement.GetProperty("workspaceRevision").GetInt64(), declaration = BuildDeclaration() });
+            declared.EnsureSuccessStatusCode();
+            using JsonDocument declaration = JsonDocument.Parse(await declared.Content.ReadAsStringAsync());
+            using var form = new MultipartFormDataContent();
+            form.Add(new StringContent("PERSONAL"), "LicenseCode");
+            form.Add(new StringContent("Readable documentation scope"), "ReleaseNotes");
+            form.Add(new StringContent(workspaceId.ToString()), "WorkspaceId");
+            form.Add(new StringContent(declaration.RootElement.GetProperty("workspaceRevision").GetInt64().ToString()), "ExpectedWorkspaceRevision");
+            var archive = new ByteArrayContent(CreateArchive(true));
+            archive.Headers.ContentType = new MediaTypeHeaderValue("application/zip");
+            form.Add(archive, "file", "coverage-acceptance.zip");
+            using HttpResponseMessage uploaded = await owner.PostAsync($"/api/assets/{assetId}/versions", form);
+            uploaded.EnsureSuccessStatusCode();
+            object produced = await WaitForAdmittedReport(factory, assetId, 1, TimeSpan.FromMinutes(25));
+            Guid versionId;
+            Guid reportId;
+            await using (AsyncServiceScope scope = factory.Services.CreateAsyncScope())
+            {
+                ApplicationDbContext db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+                CodeAnalysisReportHeader report = await db.CodeAnalysisReportHeaders.AsNoTracking().SingleAsync(r => r.AssetId == assetId);
+                if (report.CoverageLevel != CodeAnalysisCoverageLevel.PARTIAL || report.OmissionCount != 1 || !report.ReviewEligible)
+                    throw new InvalidOperationException("Real documentation archive did not produce admitted PARTIAL coverage.");
+                versionId = report.AssetVersionId;
+                reportId = report.Id;
+            }
+            ReviewEndpoint responseEndpoint = ReadReviewEndpoint("responses", assetId, versionId);
+            SellerResponsesPageDto page = (await ReadReviewResponses(owner, responseEndpoint))!;
+            List<Guid> material;
+            await using (AsyncServiceScope scope = factory.Services.CreateAsyncScope())
+            {
+                ApplicationDbContext db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+                List<CodeAnalysisReportFinding> findings = await db.CodeAnalysisReportFindings.Where(f => f.ReportId == reportId && f.RetrievalEvidenceJson != null).ToListAsync();
+                material = findings.Where(f => JsonDocument.Parse(f.RetrievalEvidenceJson!).RootElement.GetProperty("material").GetBoolean()).Select(f => f.Id).ToList();
+            }
+            foreach (Guid id in material)
+            {
+                page = (await ReadReviewResponses(owner, responseEndpoint))!;
+                using HttpResponseMessage response = await SendReviewWrite(owner, responseEndpoint, new SellerResponseRequest(page.WorkspaceId, reportId, id, page.WorkspaceRevision, page.EvidenceRevision, Guid.NewGuid(), SellerResponseType.NO_EVIDENCE, ""));
+                response.EnsureSuccessStatusCode();
+            }
+            page = (await ReadReviewResponses(owner, responseEndpoint))!;
+            var submitUrl = $"/api/assets/{assetId}/versions/{versionId}/submissions";
+            using HttpResponseMessage blocked = await owner.PostAsJsonAsync(submitUrl, new { workspaceId = page.WorkspaceId, expectedWorkspaceRevision = page.WorkspaceRevision, expectedCaseRevision = page.CaseRevision, operationId = Guid.NewGuid() });
+            if ((int)blocked.StatusCode != 409 || !(await blocked.Content.ReadAsStringAsync()).Contains(ErrorCodes.ERR_REVIEW_COVERAGE_REQUIRED, StringComparison.Ordinal))
+                throw new InvalidOperationException("Incomplete coverage did not block before assessment.");
+            ReviewEndpoint coverageEndpoint = ReadReviewEndpoint("coverage", assetId, versionId);
+            var requestBody = new CoverageReviewCreateRequest(Guid.NewGuid(), page.WorkspaceId, reportId, page.WorkspaceRevision);
+            using HttpResponseMessage requested = await SendReviewWrite(owner, coverageEndpoint, requestBody);
+            requested.EnsureSuccessStatusCode();
+            CoverageReviewSaved saved = (await requested.Content.ReadFromJsonAsync<CoverageReviewSaved>())!;
+            using HttpResponseMessage requestReplay = await SendReviewWrite(owner, coverageEndpoint, requestBody);
+            requestReplay.EnsureSuccessStatusCode();
+            foreach (var kind in new[] { "COVERAGE_INVENTORY", "ARCHIVE_README" })
+            {
+                using HttpResponseMessage evidence = await moderator.GetAsync($"/api/moderation/coverage-reviews/{saved.RequestId}/evidence/{kind}");
+                evidence.EnsureSuccessStatusCode();
+                if (evidence.Headers.CacheControl is not { Private: true, NoStore: true })
+                    throw new InvalidOperationException("Request evidence was cacheable.");
+                RestrictedEvidenceDto content = (await evidence.Content.ReadFromJsonAsync<RestrictedEvidenceDto>())!;
+                if (content.Truncated || string.IsNullOrEmpty(content.Content))
+                    throw new InvalidOperationException("Complete readable request evidence was unavailable.");
+            }
+            var assessment = new CoverageAssessmentRequest(Guid.NewGuid(), saved.RequestRevision, saved.TupleDigest, CoverageAssessmentOutcome.ACCEPTED,
+                ["Markdown"], [new("README.md", "Markdown", "Documentation; no executable core logic", true, RestrictedEvidenceKind.ARCHIVE_README)], true,
+                "Read complete stored documentation and compare omitted scope with inventory.", "manual-review/readme-complete", "Private documentation assessment rationale.");
+            using HttpResponseMessage assessed = await moderator.PostAsJsonAsync($"/api/moderation/coverage-reviews/{saved.RequestId}/assessments", assessment);
+            if (!assessed.IsSuccessStatusCode)
+                throw new InvalidOperationException("Coverage assessment failed: " + (int)assessed.StatusCode + " " + SafeBody(await assessed.Content.ReadAsStringAsync()));
+            using HttpResponseMessage review = await owner.GetAsync($"/api/users/me/asset-versions/{versionId}/review");
+            review.EnsureSuccessStatusCode();
+            var safe = await review.Content.ReadAsStringAsync();
+            using JsonDocument status = JsonDocument.Parse(safe);
+            if (!status.RootElement.GetProperty("canSubmit").GetBoolean() || status.RootElement.GetProperty("coverageReview").GetProperty("status").GetString() != "ACCEPTED" || safe.Contains(assessment.Rationale, StringComparison.Ordinal))
+                throw new InvalidOperationException("Accepted scope did not enable seller-safe submission.");
+            page = (await ReadReviewResponses(owner, responseEndpoint))!;
+            using HttpResponseMessage submitted = await owner.PostAsJsonAsync(submitUrl, new { workspaceId = page.WorkspaceId, expectedWorkspaceRevision = page.WorkspaceRevision, expectedCaseRevision = page.CaseRevision, operationId = Guid.NewGuid() });
+            submitted.EnsureSuccessStatusCode();
+            using JsonDocument submittedJson = JsonDocument.Parse(await submitted.Content.ReadAsStringAsync());
+            Guid submissionId = submittedJson.RootElement.GetProperty("submissionId").GetGuid();
+            Guid assessmentId;
+            await using (AsyncServiceScope scope = factory.Services.CreateAsyncScope())
+            {
+                ApplicationDbContext db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+                ModerationSubmission row = await db.ModerationSubmissions.AsNoTracking().SingleAsync(s => s.Id == submissionId);
+                assessmentId = await db.CoverageAssessments.Where(a => a.RequestId == saved.RequestId).Select(a => a.Id).SingleAsync();
+                if (row.State != ModerationSubmissionState.SUBMITTED || row.CoverageAssessmentId != assessmentId || await db.PublicationSnapshots.AnyAsync(p => p.AssetId == assetId))
+                    throw new InvalidOperationException("Partial submission did not freeze accepted assessment without publication.");
+            }
+            page = (await ReadReviewResponses(owner, responseEndpoint))!;
+            using HttpResponseMessage corrected = await owner.PutAsJsonAsync($"/api/assets/{assetId}/versions/{versionId}/declaration", new { operationId = Guid.NewGuid(), expectedWorkspaceRevision = page.WorkspaceRevision, declaration = BuildDeclaration("Documentation attribution clarified") });
+            corrected.EnsureSuccessStatusCode();
+            using HttpResponseMessage invalidated = await owner.GetAsync($"/api/users/me/asset-versions/{versionId}/review");
+            invalidated.EnsureSuccessStatusCode();
+            using JsonDocument invalid = JsonDocument.Parse(await invalidated.Content.ReadAsStringAsync());
+            if (invalid.RootElement.GetProperty("coverageReview").GetProperty("status").GetString() != "INVALIDATED" || invalid.RootElement.GetProperty("canSubmit").GetBoolean())
+                throw new InvalidOperationException("Tuple change did not invalidate accepted assessment.");
+            await WaitForAdmittedReport(factory, assetId, 2, TimeSpan.FromMinutes(25));
+            details["manualCoverage"] = new
+            {
+                assetId,
+                versionId,
+                reportId,
+                saved.RequestId,
+                assessmentId,
+                submissionId,
+                coverage = "PARTIAL",
+                omittedPath = "README.md",
+                genuineProductionReport = true,
+                requestEndpoint = coverageEndpoint,
+                assessment = "ACCEPTED",
+                submittedState = "SUBMITTED",
+                invalidatedAfterDeclarationChange = true,
+                rawSourceOrRationaleRecorded = false
+            };
+        }
+    }
+
+    private static byte[] CreateArchive(bool manualScope = false)
     {
         using var ms = new MemoryStream();
         using (var zip = new ZipArchive(ms, ZipArchiveMode.Create, leaveOpen: true))
         {
             Add(zip, "src/calculator.py", "# SPDX-License-Identifier: MIT\n# Copyright (c) 2026 Live acceptance\ndef mean(items):\n    return sum(items) / len(items)\n\n\ndef total(items):\n    acc = 0\n    for entry in items:\n        acc = acc + entry\n    return acc\n");
+            if (manualScope)
+                Add(zip, "README.md", "# SPDX-License-Identifier: MIT\nDocumentation for this arithmetic helper. No executable logic.");
         }
         return ms.ToArray();
     }

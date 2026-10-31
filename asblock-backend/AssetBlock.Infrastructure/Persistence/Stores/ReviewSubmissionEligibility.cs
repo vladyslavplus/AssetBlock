@@ -1,4 +1,5 @@
 using AssetBlock.Domain.Core.Constants;
+using AssetBlock.Domain.Core.Dto.Moderation;
 using AssetBlock.Domain.Core.Entities;
 using AssetBlock.Domain.Core.Enums;
 using AssetBlock.Infrastructure.Persistence.Publication;
@@ -83,16 +84,25 @@ internal static class ReviewSubmissionEligibility
     }
 
     public static async Task<string?> BlockedReason(ApplicationDbContext db, AssetVersion version,
-        AssetDraftWorkspace workspace, Guid? reportId, CancellationToken ct, SellerResponseRequirementState? responseState = null)
+        AssetDraftWorkspace workspace, Guid? reportId, CancellationToken ct, SellerResponseRequirementState? responseState = null, CoverageOwnerStatus? coverageState = null)
     {
         var unavailable = await CurrentReportBlockedReason(db, version, workspace, reportId, ct);
         if (unavailable is not null)
         { return unavailable; }
         CodeAnalysisReportHeader report = await db.CodeAnalysisReportHeaders.AsNoTracking().SingleAsync(h => h.Id == reportId, ct);
-        if (report.CoverageLevel != CodeAnalysisCoverageLevel.FULL || report.OmissionCount != 0 || report.AnalyzedFileCount is not > 0)
+        if (report.CoverageLevel == CodeAnalysisCoverageLevel.FULL)
         {
-            return ErrorCodes.ERR_REVIEW_COVERAGE_REQUIRED;
+            if (report.OmissionCount != 0 || report.AnalyzedFileCount is not > 0)
+            { return ErrorCodes.ERR_REVIEW_COVERAGE_REQUIRED; }
         }
+        else if (report.CoverageLevel is CodeAnalysisCoverageLevel.PARTIAL or CodeAnalysisCoverageLevel.UNSUPPORTED)
+        {
+            CoverageOwnerStatus coverage = coverageState ?? await CoverageReviewState.ReadStatus(db, version, workspace, ct);
+            if (coverage.Status != "ACCEPTED")
+            { return coverage.ReasonCode ?? ErrorCodes.ERR_REVIEW_COVERAGE_REQUIRED; }
+        }
+        else
+        { return ErrorCodes.ERR_REVIEW_COVERAGE_REQUIRED; }
         SellerResponseRequirementState responses = responseState ?? await SellerResponseRequirements.Read(db, report.Id, workspace, ct);
         if (!responses.Available)
         { return ErrorCodes.ERR_ANALYSIS_NOT_AVAILABLE; }

@@ -283,16 +283,16 @@ public sealed partial class CodeAnalysisReportFinalizerPostgresTests(PostgresFix
             moderator.Role = AppRoles.MODERATOR;
             db.Users.Add(moderator);
             await db.SaveChangesAsync();
-            ModerationCaseAccessResult access = await store.GetCaseSummaryForModerator(moderator.Id, created.SubmissionId!.Value);
+            ModerationCaseAccessResult access = await CoverageStore(db).GetCaseSummaryForModerator(moderator.Id, created.SubmissionId!.Value);
             access.Summary!.RetrievalEvidence!.ScoresAvailability.Should().Be("AVAILABLE");
             access.Summary.RetrievalEvidence.Candidates.Single().Scores!.Material.Should().BeTrue();
             await db.CodeAnalysisReportFindings.Where(f => f.Id == finding.Id)
                 .ExecuteUpdateAsync(s => s.SetProperty(f => f.RetrievalEvidenceJson, (string?)null));
-            ModerationCaseAccessResult unavailable = await store.GetCaseSummaryForModerator(moderator.Id, created.SubmissionId.Value);
+            ModerationCaseAccessResult unavailable = await CoverageStore(db).GetCaseSummaryForModerator(moderator.Id, created.SubmissionId.Value);
             unavailable.Summary!.RetrievalEvidence!.Candidates.Single().ScoresAvailability.Should().Be("SCORES_UNAVAILABLE");
             unavailable.Summary.RetrievalEvidence.Candidates.Single().Scores.Should().BeNull();
             await db.Users.Where(u => u.Id == moderator.Id).ExecuteUpdateAsync(s => s.SetProperty(u => u.Role, AppRoles.USER));
-            (await store.GetCaseSummaryForModerator(moderator.Id, created.SubmissionId.Value)).Status.Should().Be(ModerationCaseAccessStatus.DENIED_ROLE);
+            (await CoverageStore(db).GetCaseSummaryForModerator(moderator.Id, created.SubmissionId.Value)).Status.Should().Be(ModerationCaseAccessStatus.DENIED_ROLE);
         }
 
         GuardedSubmissionResult replay = await store.AttemptGuardedSubmission(request);

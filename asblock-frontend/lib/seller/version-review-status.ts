@@ -2,6 +2,12 @@ import type { SellerVersionReview } from '@/lib/seller/seller-draft-schemas'
 
 /** Messages mirror the backend `ErrorCodesToErrorMessages` mapping. */
 export const versionReviewBlockedReasonMessages: Record<string, string> = {
+  ERR_COVERAGE_ASSESSMENT_BLOCKED:
+    'Coverage review could not establish a safe manual review scope. Correct the source package before requesting review again.',
+  ERR_COVERAGE_ASSESSMENT_INVALIDATED:
+    'Coverage review no longer matches this version. Request review for the current report and declaration.',
+  ERR_COVERAGE_ASSESSOR_UNAVAILABLE:
+    'Coverage review needs a new reviewer. Request another coverage review.',
   ERR_FINDING_RESPONSE_REQUIRED:
     'Respond to every required finding, or choose No evidence, before submitting this version.',
   ERR_SELLER_EVIDENCE_STALE: 'Review evidence changed. Refresh this version and try again.',

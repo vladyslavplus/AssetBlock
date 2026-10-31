@@ -1,3 +1,4 @@
+using AssetBlock.Domain.Core.Dto.Moderation;
 using AssetBlock.Domain.Core.Enums;
 
 namespace AssetBlock.Domain.Core.Dto.Assets;
@@ -40,7 +41,7 @@ public sealed record SellerAnalysisSummaryDto(
     IReadOnlyList<string> Limitations,
     IReadOnlyList<SellerAnalysisStageDto> Stages,
     string? SubmissionBlockedReason = null,
-    int RequiredResponseCount = 0, int OutstandingResponseCount = 0, int EvidenceRevision = 0);
+    int RequiredResponseCount = 0, int OutstandingResponseCount = 0, int EvidenceRevision = 0, CoverageOwnerStatus? CoverageReview = null);
 
 public sealed record SellerPublicAttributionDto(
     string Label,

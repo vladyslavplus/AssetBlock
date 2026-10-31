@@ -15,6 +15,8 @@ using AssetBlock.Infrastructure.Persistence.Configurations;
 using AssetBlock.Infrastructure.Persistence.Publication;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.ChangeTracking;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 using Npgsql;
 
 namespace AssetBlock.Infrastructure.Persistence.Stores;
@@ -27,7 +29,8 @@ internal sealed partial class ModerationFoundationStore(
     TimeProvider? timeProvider = null,
     IAuditWriter? auditWriter = null,
     IAnalysisRunEnqueuer? analysisRunEnqueuer = null,
-    ISecurityProvenanceStore? securityProvenanceStore = null) : IModerationFoundationStore
+    ISecurityProvenanceStore? securityProvenanceStore = null,
+    ILogger<ModerationFoundationStore>? logger = null) : IModerationFoundationStore
 {
     private static readonly JsonSerializerOptions _idempotencyJsonOptions = new()
     {
@@ -38,6 +41,7 @@ internal sealed partial class ModerationFoundationStore(
 
     private readonly TimeProvider _timeProvider = timeProvider ?? TimeProvider.System;
     private readonly IAuditWriter? _auditWriter = auditWriter;
+    private readonly ILogger<ModerationFoundationStore> _logger = logger ?? NullLogger<ModerationFoundationStore>.Instance;
 
     /// <summary>
     /// Writes the mutation's audit entry inside the ambient transaction: an audit failure
@@ -113,7 +117,7 @@ internal sealed partial class ModerationFoundationStore(
     }
 
     // Ownership grants owner actions for every persisted product role; it never grants Moderator powers.
-    private static bool CanActAsOwner(UserPersistedRole? role) => role?.Role is AppRoles.USER or AppRoles.MODERATOR or AppRoles.ADMIN;
+    private static bool CanActAsOwner(UserPersistedRole? role) => AppRoles.CanActAsOwner(role?.Role);
 
     public async Task<AssetDraftWorkspaceSnapshot?> LockAssetAndWorkspaceForUpdate(
         Guid assetId,
@@ -1455,18 +1459,8 @@ internal sealed partial class ModerationFoundationStore(
         return Convert.ToHexStringLower(System.Security.Cryptography.SHA256.HashData(bytes));
     }
 
-    public async Task<ModerationCaseAccessResult> GetCaseSummaryForModerator(
-        Guid moderatorUserId,
-        Guid submissionId,
-        CancellationToken cancellationToken = default)
+    private async Task<ModerationCaseAccessResult> ReadCaseSummaryUnderLocks(Guid moderatorUserId, Guid submissionId, CancellationToken cancellationToken)
     {
-        await using Microsoft.EntityFrameworkCore.Storage.IDbContextTransaction transaction = await dbContext.Database
-            .BeginTransactionAsync(System.Data.IsolationLevel.RepeatableRead, cancellationToken);
-        UserPersistedRole? liveRole = await userStore.GetPersistedRole(moderatorUserId, cancellationToken);
-        if (liveRole?.Role != AppRoles.MODERATOR)
-        {
-            return new ModerationCaseAccessResult(ModerationCaseAccessStatus.DENIED_ROLE, null);
-        }
         var row = await dbContext.ModerationSubmissions
             .AsNoTracking()
             .Where(s => s.Id == submissionId)
@@ -1479,7 +1473,7 @@ internal sealed partial class ModerationFoundationStore(
                     s.State,
                     s.CaseRevision,
                     s.ContentSha256,
-                    s.PolicyVersion),
+                    s.PolicyVersion, null, s.CoverageAssessmentId),
                 s.Asset.AuthorId,
                 s.CodeAnalysisReportHeaderId
             })
@@ -1519,7 +1513,6 @@ internal sealed partial class ModerationFoundationStore(
                 ? "SCORES_UNAVAILABLE" : "AVAILABLE",
             persisted?.ReferenceSnapshotId, persisted?.ReferenceRevision, report?.CoverageLevel?.ToString(),
             report?.OmissionCount, persisted?.FindingOverflow, persisted?.Retrieval, candidates);
-        await transaction.CommitAsync(cancellationToken);
         return new ModerationCaseAccessResult(ModerationCaseAccessStatus.FOUND, row.Summary with { RetrievalEvidence = evidence });
     }
 
@@ -1532,8 +1525,10 @@ internal sealed partial class ModerationFoundationStore(
         {
             return new(GuardedSubmissionStatus.BLOCKED, null, ErrorCodes.ERR_ANALYSIS_NOT_AVAILABLE);
         }
+        CodeAnalysisCoverageLevel? coverageLevel = await dbContext.CodeAnalysisReportHeaders.Where(h => h.Id == request.CodeAnalysisReportHeaderId).Select(h => h.CoverageLevel).SingleOrDefaultAsync(ct);
+        CoverageOwnerStatus? coverage = coverageLevel == CodeAnalysisCoverageLevel.FULL ? null : await CoverageReviewState.ReadStatus(dbContext, version, workspace, ct);
         var reason = await ReviewSubmissionEligibility.BlockedReason(dbContext, version, workspace,
-            request.CodeAnalysisReportHeaderId, ct);
+            request.CodeAnalysisReportHeaderId, ct, coverageState: coverage);
         if (reason is not null)
         {
             return new(GuardedSubmissionStatus.BLOCKED, null, reason);
@@ -1545,6 +1540,8 @@ internal sealed partial class ModerationFoundationStore(
             ? ProductDigests.EmptyProjectionDigest(nameof(AssetSellerEvidenceRevision))
             : await dbContext.AssetSellerEvidenceRevisions.Where(r => r.WorkspaceId == workspace.Id
                 && r.Revision == workspace.SellerEvidenceHeadRevision).Select(r => r.ContentDigest).SingleAsync(ct);
+        Guid? coverageAssessmentId = coverage?.Status == "ACCEPTED"
+            ? await dbContext.CoverageAssessments.Where(a => a.RequestId == coverage.RequestId && a.Outcome == CoverageAssessmentOutcome.ACCEPTED).Select(a => (Guid?)a.Id).SingleAsync(ct) : null;
         workspace.CaseRevision++;
         var submission = new ModerationSubmission
         {
@@ -1556,6 +1553,7 @@ internal sealed partial class ModerationFoundationStore(
             OwnerUserId = request.OwnerUserId,
             ContentSha256 = version.ContentSha256,
             CodeAnalysisReportHeaderId = request.CodeAnalysisReportHeaderId,
+            CoverageAssessmentId = coverageAssessmentId,
             DeclarationRevision = workspace.SourceDeclarationHeadRevision,
             MaterialMetadataRevision = workspace.MaterialMetadataHeadRevision,
             SellerEvidenceRevision = workspace.SellerEvidenceHeadRevision,

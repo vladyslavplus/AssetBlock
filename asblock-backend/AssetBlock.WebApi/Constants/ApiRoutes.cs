@@ -43,6 +43,7 @@ public static class ApiRoutes
         public const string DECLARATION = "{id:guid}/declaration";
         public const string VERSION_DECLARATION = "{id:guid}/versions/{versionId:guid}/declaration";
         public const string PRICE = "{id:guid}/price";
+        public const string VERSION_COVERAGE_REVIEWS = "{id:guid}/versions/{versionId:guid}/coverage-reviews";
         public const string VERSION_RESPONSES = "{id:guid}/versions/{versionId:guid}/responses";
         public const string VERSION_EVIDENCE = "{id:guid}/versions/{versionId:guid}/evidence";
         public const string VERSION_SUBMISSIONS = "{id:guid}/versions/{versionId:guid}/submissions";
@@ -160,6 +161,11 @@ public static class ApiRoutes
 
     public static class Moderation
     {
+        public const string CASE_EVIDENCE = "/api/moderation/submissions/{id:guid}/evidence/{kind}";
+        public const string COVERAGE_REQUESTS = "/api/moderation/coverage-reviews";
+        public const string COVERAGE_EVIDENCE = "/api/moderation/coverage-reviews/{id:guid}/evidence/{kind}";
+        public const string COVERAGE_ASSESSMENT = "/api/moderation/coverage-reviews/{id:guid}/assessments";
+
         public const string SUBMISSION_BY_ID = "api/moderation/submissions/{id:guid}";
         public const string SUBMISSION_WITHDRAW = "api/submissions/{id:guid}/withdraw";
     }

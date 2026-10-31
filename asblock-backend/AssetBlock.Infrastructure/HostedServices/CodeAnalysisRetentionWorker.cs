@@ -70,6 +70,7 @@ internal sealed class CodeAnalysisRetentionWorker(
                     JOIN asset_versions v ON v."Id" = aa."AssetVersionId"
                     JOIN assets a ON a."Id" = v."AssetId"
                     WHERE aa."CreatedAt" <= {cutoff}
+                      AND NOT EXISTS (SELECT 1 FROM coverage_review_requests cq WHERE cq."AssetVersionId" = v."Id")
                       AND (aa."ReadmeContent" IS NOT NULL OR aa."ManifestMetadata" IS NOT NULL)
                       AND NOT EXISTS (SELECT 1 FROM purchases p WHERE p."AssetId" = a."Id")
                       AND NOT EXISTS (SELECT 1 FROM publication_snapshots ps WHERE ps."AssetVersionId" = v."Id")
@@ -133,6 +134,7 @@ internal sealed class CodeAnalysisRetentionWorker(
                       AND h."IsFinalized" = TRUE
                       AND h."FinalizedAt" IS NOT NULL
                       AND h."FinalizedAt" <= {cutoff}
+                      AND NOT EXISTS (SELECT 1 FROM coverage_review_requests cq WHERE cq."ReportId" = h."Id")
                       AND NOT EXISTS (SELECT 1 FROM purchases p WHERE p."AssetId" = h."AssetId")
                       AND NOT EXISTS (SELECT 1 FROM publication_snapshots ps WHERE ps."AssetVersionId" = h."AssetVersionId")
                       AND NOT EXISTS (SELECT 1 FROM checkout_reservations cr WHERE cr."AssetId" = h."AssetId")
@@ -194,6 +196,7 @@ internal sealed class CodeAnalysisRetentionWorker(
                      AND al."Action" = 'CODE_ANALYSIS_FINALIZED'
                     JOIN assets a ON a."Id" = h."AssetId"
                     WHERE h."IsFinalized" = TRUE AND h."FinalizedAt" IS NOT NULL AND h."FinalizedAt" <= {cutoff}
+                      AND NOT EXISTS (SELECT 1 FROM coverage_review_requests cq WHERE cq."ReportId" = h."Id")
                       AND NOT EXISTS (SELECT 1 FROM purchases p WHERE p."AssetId" = h."AssetId")
                       AND NOT EXISTS (SELECT 1 FROM publication_snapshots ps WHERE ps."AssetVersionId" = h."AssetVersionId")
                       AND NOT EXISTS (SELECT 1 FROM checkout_reservations cr WHERE cr."AssetId" = h."AssetId")
@@ -249,6 +252,7 @@ internal sealed class CodeAnalysisRetentionWorker(
                     JOIN code_analysis_report_headers h ON h."Id" = ra."SourceReportId"
                     JOIN assets a ON a."Id" = h."AssetId"
                     WHERE h."IsFinalized" = TRUE AND h."FinalizedAt" IS NOT NULL AND h."FinalizedAt" <= {cutoff}
+                      AND NOT EXISTS (SELECT 1 FROM coverage_review_requests cq WHERE cq."ReportId" = h."Id")
                       AND NOT EXISTS (SELECT 1 FROM purchases p WHERE p."AssetId" = h."AssetId")
                       AND NOT EXISTS (SELECT 1 FROM publication_snapshots ps WHERE ps."AssetVersionId" = h."AssetVersionId")
                       AND NOT EXISTS (SELECT 1 FROM checkout_reservations cr WHERE cr."AssetId" = h."AssetId")

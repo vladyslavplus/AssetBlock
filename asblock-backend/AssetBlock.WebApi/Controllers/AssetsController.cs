@@ -19,9 +19,11 @@ using AssetBlock.Application.UseCases.Assets.SubmitAssetVersion;
 using AssetBlock.Application.UseCases.Assets.UpdateAsset;
 using AssetBlock.Application.UseCases.Assets.UpdateAssetPrice;
 using AssetBlock.Application.UseCases.Assets.UploadAsset;
+using AssetBlock.Application.UseCases.Moderation.RequestCoverageReview;
 using AssetBlock.Domain.Abstractions.Services;
 using AssetBlock.Domain.Core.Constants;
 using AssetBlock.Domain.Core.Dto.Assets;
+using AssetBlock.Domain.Core.Dto.Moderation;
 using AssetBlock.Domain.Core.Dto.Tags;
 using AssetBlock.Domain.Core.Primitives.Api;
 using AssetBlock.Domain.Core.Primitives.AppSettingsOptions;
@@ -553,8 +555,20 @@ public sealed class AssetsController(
     }
 
     /// <summary>
-    /// Reads the owner's append-only response history and current response requirements.
+    /// Requests a manual coverage review for the owner's current report.
     /// </summary>
+    [HttpPost(ApiRoutes.Assets.VERSION_COVERAGE_REVIEWS)]
+    [Authorize(Policy = AuthorizationPolicies.VERIFIED_EMAIL)]
+    public async Task<IActionResult> RequestCoverage(Guid id, Guid versionId, [FromBody] CoverageReviewCreateRequest input, CancellationToken cancellationToken)
+    {
+        Response.Headers.CacheControl = "private, no-store";
+        if (!User.TryGetUserId(out Guid actorId))
+        { return UnauthorizedProblem(); }
+        Result<CoverageReviewSaved> result = await Sender.Send(new RequestCoverageReviewCommand(actorId, id, versionId, input), cancellationToken);
+        return MapResultToActionResult(result);
+    }
+
+    /// <summary>Reads the owner's append-only response history and current response requirements.</summary>
     [HttpGet(ApiRoutes.Assets.VERSION_RESPONSES)]
     [Authorize]
     public async Task<IActionResult> GetResponses(Guid id, Guid versionId, [FromQuery] int page = 1, CancellationToken cancellationToken = default)
