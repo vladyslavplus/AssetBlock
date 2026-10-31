@@ -1868,6 +1868,9 @@ namespace AssetBlock.Infrastructure.Migrations
                         .HasMaxLength(512)
                         .HasColumnType("character varying(512)");
 
+                    b.Property<string>("RetrievalEvidenceJson")
+                        .HasColumnType("jsonb");
+
                     b.Property<int?>("SemanticRank")
                         .HasColumnType("integer");
 
@@ -1979,6 +1982,9 @@ namespace AssetBlock.Infrastructure.Migrations
 
                     b.Property<int>("ReportSchemaVersion")
                         .HasColumnType("integer");
+
+                    b.Property<string>("RetrievalSummaryJson")
+                        .HasColumnType("jsonb");
 
                     b.Property<bool>("ReviewEligible")
                         .HasColumnType("boolean");

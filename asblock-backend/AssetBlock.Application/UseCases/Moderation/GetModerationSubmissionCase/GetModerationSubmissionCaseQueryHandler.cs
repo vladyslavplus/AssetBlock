@@ -28,7 +28,7 @@ internal sealed class GetModerationSubmissionCaseQueryHandler(
 
         return access.Status switch
         {
-            ModerationCaseAccessStatus.SELF_OWNED_DENIED => Result.Forbidden(ErrorCodes.ERR_FORBIDDEN),
+            ModerationCaseAccessStatus.DENIED_ROLE or ModerationCaseAccessStatus.SELF_OWNED_DENIED => Result.Forbidden(ErrorCodes.ERR_FORBIDDEN),
             ModerationCaseAccessStatus.NOT_FOUND => Result.NotFound(ErrorCodes.ERR_MODERATION_CASE_NOT_FOUND),
             _ => Result.Success(access.Summary!)
         };

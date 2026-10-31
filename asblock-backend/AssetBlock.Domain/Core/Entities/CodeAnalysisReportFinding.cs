@@ -4,8 +4,8 @@ using AssetBlock.Domain.Core.Primitives.BaseEntities;
 namespace AssetBlock.Domain.Core.Entities;
 
 /// <summary>
-/// Seller-safe concern recorded for one report. Stores locations, opaque reference identity and
-/// scores only: never raw source, foreign paths, snippets, or private corpus identity.
+/// Retained concern with moderator-only retrieval evidence. Owner reads use explicit safe projections;
+/// private reference identities and scores never enter seller JSON.
 /// </summary>
 public class CodeAnalysisReportFinding : BaseEntity
 {
@@ -50,6 +50,9 @@ public class CodeAnalysisReportFinding : BaseEntity
     public int? TokenRank { get; set; }
 
     public int? SemanticRank { get; set; }
+
+    /// <summary>Complete bounded retrieval detail; absent detail means scores unavailable, never inferred.</summary>
+    public string? RetrievalEvidenceJson { get; set; }
 
     public required string ReasonText { get; set; }
 

@@ -41,6 +41,9 @@ public class CodeAnalysisReportHeader : BaseEntity
 
     public CodeAnalysisReportDisposition? Disposition { get; set; }
 
+    /// <summary>Bounded retrieval limits, overflow, reference snapshot and revision, frozen at admission.</summary>
+    public string? RetrievalSummaryJson { get; set; }
+
     public Asset Asset { get; set; } = null!;
     public AssetVersion AssetVersion { get; set; } = null!;
 }

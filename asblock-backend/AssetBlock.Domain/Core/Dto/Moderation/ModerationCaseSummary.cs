@@ -9,4 +9,5 @@ public sealed record ModerationCaseSummary(
     ModerationSubmissionState State,
     long CaseRevision,
     string ContentSha256,
-    string PolicyVersion);
+    string PolicyVersion,
+    ModeratorReportEvidence? RetrievalEvidence = null);

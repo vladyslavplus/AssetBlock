@@ -23,6 +23,7 @@ public sealed class ModerationSubmissionsController(ISender sender) : Controller
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> GetById(Guid id, CancellationToken cancellationToken)
     {
+        Response.Headers.CacheControl = "private, no-store";
         if (!User.TryGetUserId(out Guid moderatorUserId))
         {
             return Unauthorized();

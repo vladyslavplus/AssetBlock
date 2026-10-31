@@ -1,4 +1,5 @@
 using System.Data.Common;
+using System.Text.Json;
 using AssetBlock.Domain.Abstractions.Services;
 using AssetBlock.Domain.Core.Constants;
 using AssetBlock.Domain.Core.Dto.Assets;
@@ -357,6 +358,72 @@ public sealed class AdmittedReportTrustPostgresTests(PostgresFixture fixture)
 
         findings.Should().BeNull();
         (await db.Assets.AsNoTracking().AnyAsync(a => a.Id == assetId && a.AuthorId != foreignOwner.Id)).Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task OwnerFindings_WhenPrivateRetrievalDetailIsPersisted_ShouldRedactPageAndReviewSummary()
+    {
+        await using ApplicationDbContext db = await fixture.CreateCleanDbContext();
+        (Guid assetId, Guid versionId) = await Seed(db, headerOnly: false, admission: true);
+        Guid reportId = await db.CodeAnalysisReportHeaders.Where(h => h.AssetVersionId == versionId).Select(h => h.Id).SingleAsync();
+        Guid ownerId = await db.Assets.Where(a => a.Id == assetId).Select(a => a.AuthorId).SingleAsync();
+        var privateId = new string('b', 64);
+        var privateQuery = new string('c', 64);
+        var detail = JsonSerializer.Serialize(new
+        {
+            queryFileId = privateQuery,
+            queryUnit = "FILE",
+            channels = "TOKEN_AND_SEMANTIC",
+            tokenRank = 1,
+            tokenScore = 0.812345,
+            semanticRank = 1,
+            semanticScore = 0.456789,
+            material = true
+        });
+        db.CodeAnalysisReportFindings.Add(new CodeAnalysisReportFinding
+        {
+            Id = Guid.NewGuid(),
+            ReportId = reportId,
+            FindingKey = "private-retrieval",
+            FindingType = "SIMILARITY_TOKEN",
+            OwnScopePath = "own.py",
+            OwnExcerpt = "own source",
+            ForeignSourceId = privateId,
+            ForeignOrigin = "FOREIGN",
+            ForeignSensitivity = CodeAnalysisFindingSensitivity.PRIVATE,
+            TokenRank = 1,
+            TokenScore = 0.812345,
+            SemanticRank = 1,
+            SemanticScore = 0.456789,
+            RetrievalEvidenceJson = detail,
+            ReasonText = "Another private asset contains similar code.",
+            RequestedAction = "Wait for review.",
+            CreatedAt = DateTimeOffset.UtcNow
+        });
+        await db.SaveChangesAsync();
+        await db.CodeAnalysisReportHeaders.Where(h => h.Id == reportId).ExecuteUpdateAsync(s => s.SetProperty(h => h.FindingCount, 1));
+        await db.CodeAnalysisReportAdmissions.Where(a => a.ReportId == reportId)
+            .ExecuteUpdateAsync(s => s.SetProperty(a => a.AdmittedBy, "assetblock-dotnet-finalizer"));
+        CodeAnalysisSellerStore store = CreateSellerStore(db);
+        SellerAnalysisFindingsPageDto? page = await store.GetOwnerFindings(versionId, reportId, ownerId, 1);
+        SellerAnalysisSummaryDto? summary = await store.GetOwnerSummary(versionId, ownerId);
+        page.Should().NotBeNull();
+        page.Items.Should().ContainSingle();
+        summary.Should().NotBeNull();
+        summary.FindingCount.Should().Be(1);
+        foreach (var json in new[] { JsonSerializer.Serialize(page, new JsonSerializerOptions(JsonSerializerDefaults.Web)),
+            JsonSerializer.Serialize(summary, new JsonSerializerOptions(JsonSerializerDefaults.Web)) })
+        {
+            foreach (var value in new[] { privateId, privateQuery, "0.812345", "0.456789" })
+            {
+                json.Should().NotContain(value);
+            }
+            foreach (var field in new[] { "foreignSourceId", "referenceItemId", "tokenRank", "tokenScore", "semanticRank",
+                "semanticScore", "channels", "queryFileId", "material", "retrieval", "retrievalEvidenceJson" })
+            {
+                json.Should().NotContain("\"" + field + "\":");
+            }
+        }
     }
 
     private static CodeAnalysisSellerStore CreateSellerStore(ApplicationDbContext db)

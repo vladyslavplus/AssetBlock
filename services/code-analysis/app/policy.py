@@ -10,6 +10,7 @@ from __future__ import annotations
 from copy import deepcopy
 
 from . import contracts
+from .retrieval_evidence import DETAIL_KEYS, QUERY_KEYS
 from .contracts import VERIFIER_MODE, canonical, sha256_hex
 
 VERIFIER_REASON = (
@@ -73,6 +74,22 @@ def build_policy() -> dict:
             "dimension": 768,
             "framing": "encoder-only-256-overlap32-max16-v1",
             "pooling": "padding-masked mean then L2",
+        },
+        "retrieval": {
+            "queryUnit": "FILE",
+            "candidateFields": sorted(DETAIL_KEYS),
+            "querySummaryFields": sorted(QUERY_KEYS),
+            "scoreBounds": [0, 1],
+            "absentChannel": "EXPLICIT_NULL_RANK_AND_SCORE",
+            "maxQueries": contracts.MAX_ENTRIES,
+            "tokenMembership": "STRICTLY_POSITIVE_OBSERVED_PAIR_SCORE",
+            "queryTokenMaximum": "RANK_ONE_SCORE_BEFORE_REPORT_TRUNCATION;NULL_WITH_NO_POSITIVE_TOKEN",
+            "channels": ["TOKEN", "SEMANTIC", "TOKEN_AND_SEMANTIC"],
+            "ordering": "TOKEN_THEN_SEMANTIC_UNIQUE;TOKEN_SCORE_DESC_FILE_ID_ASC;SEMANTIC_DISTANCE_ASC_FILE_ID_ASC",
+            "overflow": "EXACT_CANDIDATES_MINUS_CHANNEL_TOP;REPORT_OMISSIONS_PER_QUERY",
+            "materialRule": "ALL_TOP_POSITIVE_TOKEN_SCORE_TIES_PER_QUERY_FILE",
+            "materialJustification": "Token ordinal top-1 control F1 0.843 supports the channel signal, not the exact positive-guard/all-ties product rule; raw zero/tie counts were not retained. Semantic controls 0.51/0.59; no tuned threshold or abstention.",
+            "evidenceSha256": EVALUATION_EVIDENCE_SHA256,
         },
         "verifier": {
             "mode": VERIFIER_MODE.DISABLED_BY_EVALUATION.value,

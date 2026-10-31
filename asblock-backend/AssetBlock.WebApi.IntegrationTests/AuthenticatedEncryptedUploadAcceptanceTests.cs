@@ -6,6 +6,8 @@ using System.Text;
 using System.Text.Json;
 using AssetBlock.Domain.Abstractions.Services;
 using AssetBlock.Domain.Core.Entities;
+using AssetBlock.Domain.Core.Constants;
+using AssetBlock.Domain.Core.Dto.Auth;
 using AssetBlock.Domain.Core.Enums;
 using AssetBlock.Infrastructure.Persistence;
 using AssetBlock.WebApi.IntegrationTests.Support;
@@ -392,6 +394,140 @@ public sealed class AuthenticatedEncryptedUploadAcceptanceTests
                         replayed = true
                     };
                 }
+                (HttpClient moderatorClient, var moderatorUsername) = await IntegrationTestAuth.RegisterVerifiedWithRoleAsync(factory, AppRoles.MODERATOR);
+                using (moderatorClient)
+                {
+                    var caseUrl = $"/api/moderation/submissions/{submissionId}";
+                    using HttpResponseMessage moderatorRead = await moderatorClient.GetAsync(caseUrl);
+                    moderatorRead.EnsureSuccessStatusCode();
+                    if (moderatorRead.Headers.CacheControl is not { Private: true, NoStore: true })
+                    {
+                        throw new InvalidOperationException("Moderator evidence was cacheable.");
+                    }
+                    using var moderatorJson = JsonDocument.Parse(await moderatorRead.Content.ReadAsStringAsync());
+                    JsonElement moderatorEvidence = moderatorJson.RootElement.GetProperty("retrievalEvidence");
+                    if (moderatorEvidence.GetProperty("scoresAvailability").GetString() != "AVAILABLE"
+                        || moderatorEvidence.GetProperty("candidates").GetArrayLength() == 0)
+                    {
+                        throw new InvalidOperationException("Moderator retrieval evidence was unavailable after real admission.");
+                    }
+                    foreach (JsonElement candidate in moderatorEvidence.GetProperty("candidates").EnumerateArray())
+                    {
+                        JsonElement scores = candidate.GetProperty("scores");
+                        if (!scores.TryGetProperty("tokenRank", out _) || !scores.TryGetProperty("tokenScore", out _)
+                            || !scores.TryGetProperty("semanticRank", out _) || !scores.TryGetProperty("semanticScore", out _)
+                            || !scores.TryGetProperty("channels", out _) || !scores.TryGetProperty("material", out _)
+                            || candidate.GetProperty("referenceItemId").ValueKind != JsonValueKind.String)
+                        {
+                            throw new InvalidOperationException("Moderator candidate lost a channel or provenance.");
+                        }
+                    }
+                    details["moderatorRetrievalEvidence"] = moderatorEvidence.Clone();
+                    await using (AsyncServiceScope scope = factory.Services.CreateAsyncScope())
+                    {
+                        ApplicationDbContext db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+                        List<CodeAnalysisReportFinding> persisted = await db.CodeAnalysisReportFindings.AsNoTracking()
+                            .Where(f => f.ReportId == secondAdmittedReportId && f.RetrievalEvidenceJson != null)
+                            .OrderBy(f => f.FindingKey).ToListAsync();
+                        if (persisted.Count != moderatorEvidence.GetProperty("candidates").GetArrayLength())
+                        {
+                            throw new InvalidOperationException("Moderator did not return every persisted retrieval candidate.");
+                        }
+                        var returned = moderatorEvidence.GetProperty("candidates").EnumerateArray()
+                            .ToDictionary(c => c.GetProperty("findingKey").GetString()!, c => c.GetProperty("scores"));
+                        foreach (CodeAnalysisReportFinding candidate in persisted)
+                        {
+                            using var detail = JsonDocument.Parse(candidate.RetrievalEvidenceJson!);
+                            if (CanonicalJson.Sha256Hex(detail.RootElement) != CanonicalJson.Sha256Hex(returned[candidate.FindingKey]))
+                            {
+                                throw new InvalidOperationException("Moderator changed persisted channel evidence.");
+                            }
+                            var parentDetail = await db.CodeAnalysisReportFindings.AsNoTracking()
+                                .Where(f => f.ReportId == admittedReportId && f.FindingKey == candidate.FindingKey)
+                                .Select(f => f.RetrievalEvidenceJson).SingleAsync();
+                            using var parent = JsonDocument.Parse(parentDetail!);
+                            if (CanonicalJson.Sha256Hex(parent.RootElement) != CanonicalJson.Sha256Hex(detail.RootElement))
+                            {
+                                throw new InvalidOperationException("Declaration reuse changed retrieval scores or ranks.");
+                            }
+                        }
+                        details["persistedRetrievalCandidates"] = persisted.Select(f => new
+                        {
+                            f.FindingKey,
+                            f.TokenRank,
+                            f.TokenScore,
+                            f.SemanticRank,
+                            f.SemanticScore,
+                            evidence = SafeJson(f.RetrievalEvidenceJson!)
+                        }).ToArray();
+                        foreach (CodeAnalysisReportFinding candidate in persisted.Where(f => f.ForeignSensitivity == CodeAnalysisFindingSensitivity.PRIVATE))
+                        {
+                            if (ownerFindings.RootElement.ToString().Contains(candidate.ForeignSourceId!, StringComparison.Ordinal)
+                                || currentReview.RootElement.ToString().Contains(candidate.ForeignSourceId!, StringComparison.Ordinal))
+                            {
+                                throw new InvalidOperationException("Private reference identity reached seller JSON.");
+                            }
+                        }
+                    }
+                    AssertSellerRedaction(ownerFindings.RootElement.ToString());
+                    AssertSellerRedaction(currentReview.RootElement.ToString());
+                    (HttpClient adminClient, _) = await IntegrationTestAuth.RegisterVerifiedWithRoleAsync(factory, AppRoles.ADMIN);
+                    using (adminClient)
+                    {
+                        using HttpResponseMessage deniedAdmin = await adminClient.GetAsync(caseUrl);
+                        if (deniedAdmin.StatusCode != System.Net.HttpStatusCode.Forbidden)
+                        {
+                            throw new InvalidOperationException("Admin without Moderator role read private evidence.");
+                        }
+                    }
+                    (HttpClient foreignClient, _) = await IntegrationTestAuth.RegisterVerifiedAndAuthenticateAsync(factory);
+                    using (foreignClient)
+                    {
+                        using HttpResponseMessage deniedForeign = await foreignClient.GetAsync(caseUrl);
+                        if (deniedForeign.StatusCode != System.Net.HttpStatusCode.Forbidden)
+                        {
+                            throw new InvalidOperationException("Foreign user read Moderator evidence.");
+                        }
+                    }
+                    string ownerEmail;
+                    await using (AsyncServiceScope scope = factory.Services.CreateAsyncScope())
+                    {
+                        ApplicationDbContext db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+                        User moderator = await db.Users.SingleAsync(u => u.Username == moderatorUsername);
+                        moderator.Role = AppRoles.USER;
+                        moderator.RoleRevision++;
+                        User owner = await db.Users.SingleAsync(u => u.Id == db.Assets.Where(a => a.Id == assetId).Select(a => a.AuthorId).First());
+                        owner.Role = AppRoles.MODERATOR;
+                        owner.RoleRevision++;
+                        ownerEmail = owner.Email;
+                        await db.SaveChangesAsync();
+                    }
+                    using HttpResponseMessage revoked = await moderatorClient.GetAsync(caseUrl);
+                    if (revoked.StatusCode != System.Net.HttpStatusCode.Forbidden)
+                    {
+                        throw new InvalidOperationException("Revoked Moderator retained evidence access through an existing JWT.");
+                    }
+                    using HttpClient ownerModerator = factory.CreateClient();
+                    using HttpResponseMessage ownerLogin = await ownerModerator.PostAsJsonAsync("/api/auth/login", new LoginRequest(ownerEmail, "Password1!"));
+                    ownerLogin.EnsureSuccessStatusCode();
+                    var ownerTokens = (await ownerLogin.Content.ReadFromJsonAsync<IntegrationTestAuth.TokensResponseDto>())!;
+                    ownerModerator.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", ownerTokens.AccessToken);
+                    using HttpResponseMessage deniedOwner = await ownerModerator.GetAsync(caseUrl);
+                    if (deniedOwner.StatusCode != System.Net.HttpStatusCode.Forbidden)
+                    {
+                        throw new InvalidOperationException("Owning Moderator read their own review evidence.");
+                    }
+                    details["retrievalAccessChecks"] = new
+                    {
+                        moderator = 200,
+                        adminWithoutRole = 403,
+                        foreignUser = 403,
+                        owningModerator = 403,
+                        revokedModerator = 403,
+                        sellerRedacted = true,
+                        cacheControl = "private, no-store"
+                    };
+                }
                 details["status"] = "passed";
                 await File.WriteAllTextAsync(evidencePath, JsonSerializer.Serialize(details, new JsonSerializerOptions { WriteIndented = true }));
             }
@@ -507,6 +643,18 @@ public sealed class AuthenticatedEncryptedUploadAcceptanceTests
                 origin = "OWN_CONTRIBUTION" }
         }
     };
+
+    private static void AssertSellerRedaction(string json)
+    {
+        foreach (var field in new[] { "tokenRank", "tokenScore", "semanticRank", "semanticScore", "channels", "material",
+            "queryFileId", "referenceItemId", "referenceSnapshotId", "retrieval", "retrievalSummary", "retrievalEvidence" })
+        {
+            if (json.Contains("\"" + field + "\":", StringComparison.OrdinalIgnoreCase))
+            {
+                throw new InvalidOperationException("Moderator-only field reached seller JSON: " + field);
+            }
+        }
+    }
 
     private static string SafeBody(string body) => body.Length > 1200 ? body[..1200] : body;
     private static object SafeJson(string json) { try { return JsonDocument.Parse(json).RootElement.Clone(); } catch { return new { malformed = true }; } }

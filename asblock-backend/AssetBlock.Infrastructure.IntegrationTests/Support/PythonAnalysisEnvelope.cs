@@ -467,6 +467,7 @@ internal static class PythonAnalysisEnvelope
             },
             ["findings"] = new JsonArray(Finding("finding-1", applied.FindingReason)),
             ["findingOverflow"] = 0,
+            ["retrievalSummary"] = RetrievalSummary(),
             ["comparedScope"] = new JsonObject
             {
                 ["snapshotId"] = policy.ReferenceSnapshotId,
@@ -701,6 +702,28 @@ internal static class PythonAnalysisEnvelope
             ["counts"] = counts
         };
 
+    public static JsonObject RetrievalSummary(int candidates = 1) => new()
+    {
+        ["tokenTop"] = 20,
+        ["semanticTop"] = 20,
+        ["unionBudget"] = 40,
+        ["queries"] = new JsonArray(new JsonObject
+        {
+            ["queryFileId"] = new string('e', 64),
+            ["tokenMaxScore"] = candidates > 0 ? JsonValue.Create(0.5) : null,
+            ["tokenCandidates"] = candidates,
+            ["tokenRetained"] = candidates,
+            ["tokenOverflow"] = 0,
+            ["semanticCandidates"] = candidates,
+            ["semanticRetained"] = candidates,
+            ["semanticOverflow"] = 0,
+            ["unionRetained"] = candidates,
+            ["reportOmitted"] = 0,
+            ["reportOmittedToken"] = 0,
+            ["reportOmittedSemantic"] = 0
+        })
+    };
+
     private static JsonObject Finding(string findingId, string? reason = null) =>
         new()
         {
@@ -720,7 +743,17 @@ internal static class PythonAnalysisEnvelope
                 ["origin"] = "FOREIGN",
                 ["attribution"] = new JsonObject { ["label"] = "public reference" }
             },
-            ["channelScore"] = 0.5,
+            ["retrieval"] = new JsonObject
+            {
+                ["queryFileId"] = new string('e', 64),
+                ["queryUnit"] = "FILE",
+                ["channels"] = "TOKEN_AND_SEMANTIC",
+                ["tokenRank"] = 1,
+                ["tokenScore"] = 0.5,
+                ["semanticRank"] = 1,
+                ["semanticScore"] = 0.4,
+                ["material"] = true
+            },
             ["reason"] = reason ?? "Token channel overlap with the pinned reference corpus.",
             ["requestedAction"] = "Review the overlapping code and rewrite it in your own words if it is not yours."
         };

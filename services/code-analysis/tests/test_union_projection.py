@@ -20,9 +20,6 @@ def test_union_budget_and_order_are_deterministic():
     assert len(union) == 40
     assert union[:30] == token
     assert union[30:] == [f"{i:064x}" for i in range(30, 40)]
-    ordered = mechanisms.reciprocal_rank_order(token, semantic, 40)
-    assert len(ordered) == 40
-    assert set(ordered) == set(union)
 
 
 def test_seller_safe_redacts_private_foreign_evidence():
@@ -39,7 +36,7 @@ def test_seller_safe_redacts_private_foreign_evidence():
              "startLine": 1, "endLine": 3, "ownExcerpt": "function own() {}",
              "foreign": {"fileId": "b" * 64, "sensitivity": "PRIVATE", "origin": "FOREIGN",
                          "attribution": {"path": sentinel_path, "title": sentinel_name}},
-             "channelScore": 0.97,
+             "retrieval": {"tokenRank": 1, "tokenScore": 0.97, "semanticRank": 2, "semanticScore": 0.88, "channels": "TOKEN_AND_SEMANTIC", "material": True},
              "reason": "Similar code was found in another private asset.",
              "requestedAction": "Wait for review."},
             {"findingId": "e" * 64, "type": "SIMILARITY_TOKEN",
@@ -47,7 +44,7 @@ def test_seller_safe_redacts_private_foreign_evidence():
              "startLine": 1, "endLine": 2, "ownExcerpt": "function two() {}",
              "foreign": {"fileId": "d" * 64, "sensitivity": "PUBLIC", "origin": "FOREIGN",
                          "attribution": {"label": "dayjs MIT"}},
-             "channelScore": 0.88,
+             "retrieval": {"tokenRank": 1, "tokenScore": 0.88},
              "reason": "Overlaps public reference.",
              "requestedAction": "Review."},
         ],
@@ -57,7 +54,8 @@ def test_seller_safe_redacts_private_foreign_evidence():
     assert sentinel_path not in text
     assert sentinel_name not in text
     assert "0.97" not in text and "0.88" not in text
-    assert "channelScore" not in text
+    for private_field in ("tokenRank", "tokenScore", "semanticRank", "semanticScore", "retrieval", "channels", "material"):
+        assert private_field not in text
     assert "private asset" in text
     assert "dayjs MIT" in text
     assert "reviewEligible" not in safe

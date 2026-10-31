@@ -348,7 +348,7 @@ public sealed class CodeAnalysisAdmissionContractPostgresTests(PostgresFixture f
                     ["path"] = "private/secret.cs",
                     ["sensitivity"] = "PRIVATE"
                 };
-                ((JsonObject)safe[0]!)["channelScore"] = 0.91;
+                ((JsonObject)safe[0]!)["tokenScore"] = 0.91;
                 return body;
             }
             ,

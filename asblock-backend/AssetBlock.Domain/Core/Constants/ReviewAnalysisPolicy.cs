@@ -4,7 +4,11 @@ namespace AssetBlock.Domain.Core.Constants;
 public static class ReviewAnalysisPolicy
 {
     public const string KEY = "code-analysis-policy-v1";
-    public const string DIGEST = "10ee71111355f6bfb13cef99fd019ffccf0328da0c829bf293bd1d8c3f1ff022";
+    public const string DIGEST = "0b283e5d9d81abc5c7a1ce3cbbc68b6ddc7e90f911920f833ba13f00f8269e15";
+    public const int MAX_QUERIES = 2000;
+    public const int TOKEN_TOP = 20;
+    public const int SEMANTIC_TOP = 20;
+    public const int UNION_BUDGET = 40;
     public const string VERIFIER_MODE = "DISABLED_BY_EVALUATION";
     public const string VERIFIER_REASON = "Pair verification is disabled by evaluation; retained comparison evidence requires an explicit human decision.";
     // Owned by the frozen pair-verification evidence package. This is evidence, never a model activation.

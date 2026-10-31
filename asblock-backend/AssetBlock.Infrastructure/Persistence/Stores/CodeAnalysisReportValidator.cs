@@ -4,6 +4,7 @@ using System.Text.Json.Nodes;
 using AssetBlock.Domain.Abstractions.Services;
 using AssetBlock.Domain.Core.Constants;
 using AssetBlock.Domain.Core.Dto;
+using AssetBlock.Domain.Core.Dto.Moderation;
 using AssetBlock.Domain.Core.Entities;
 
 namespace AssetBlock.Infrastructure.Persistence.Stores;
@@ -202,6 +203,7 @@ internal sealed class CodeAnalysisReportValidator : ICodeAnalysisReportValidator
 
             List<ValidatedReportFinding> parsedFindings = ParseFindings(findingsJson);
             var findingOverflow = RequireNonNegativeInt(root, "findingOverflow", allowMissing: true);
+            RetrievalReportSummary retrievalSummary = RetrievalEvidenceValidator.ValidateSummary(root, parsedFindings, findingOverflow);
             ValidateReportStageCounts(parsedStages, analyzedFiles, omissions, parsedFindings.Count, findingOverflow, omissionOverflow);
 
             // Report digest over the pre-REPORT payload: recompute reportId from the body
@@ -274,7 +276,8 @@ internal sealed class CodeAnalysisReportValidator : ICodeAnalysisReportValidator
                 parsedFindings,
                 snapshotId,
                 revision,
-                reuseArtifacts);
+                reuseArtifacts,
+                JsonSerializer.Serialize(new PersistedRetrievalSummary(snapshotId, revision, findingOverflow, retrievalSummary), RetrievalEvidenceValidator.JsonOptions));
         }
     }
 
@@ -1104,7 +1107,7 @@ internal sealed class CodeAnalysisReportValidator : ICodeAnalysisReportValidator
             RequireOnlyMembers(finding,
             [
                 "findingId", "type", "path", "fileId", "startLine", "endLine", "startByte", "endByte",
-                "ownExcerpt", "foreign", "channelScore", "reason", "requestedAction"
+                "ownExcerpt", "foreign", "retrieval", "reason", "requestedAction"
             ], "finding");
 
             var key = RequireString(finding, "findingId", null);
@@ -1247,50 +1250,16 @@ internal sealed class CodeAnalysisReportValidator : ICodeAnalysisReportValidator
                 }
             }
 
-            double? tokenScore = null;
-            double? semanticScore = null;
-            int? tokenRank = null;
-            int? semanticRank = null;
-            if (finding.TryGetProperty("channelScore", out JsonElement scoreJson))
-            {
-                if (scoreJson.ValueKind != JsonValueKind.Number || !scoreJson.TryGetDouble(out var cs))
-                {
-                    throw new CodeAnalysisValidationException("Finding channel score is invalid.");
-                }
-
-                if (!double.IsFinite(cs) || cs is < 0 or > 1)
-                {
-                    throw new CodeAnalysisValidationException("Finding channel score is out of bounds.");
-                }
-
-                if (type == "SIMILARITY_TOKEN")
-                {
-                    tokenScore = cs;
-                }
-                else if (type == "SIMILARITY_SEMANTIC")
-                {
-                    semanticScore = cs;
-                }
-                else
-                {
-                    throw new CodeAnalysisValidationException("Only similarity findings may carry a channel score.");
-                }
-            }
-
-            if (type == "SIMILARITY_TOKEN" && !tokenScore.HasValue
-                || type == "SIMILARITY_SEMANTIC" && !semanticScore.HasValue
-                || type is not ("SIMILARITY_TOKEN" or "SIMILARITY_SEMANTIC") && scoreJson.ValueKind != JsonValueKind.Undefined)
-            {
-                throw new CodeAnalysisValidationException("Finding score does not match its channel type.");
-            }
+            RetrievalCandidateEvidence? retrieval = RetrievalEvidenceValidator.ParseCandidate(finding, type);
 
             result.Add(new ValidatedReportFinding(
                 key, type, path, ownExcerpt, startByte, endByte, foreignId, foreignOrigin, sensitivity, attribution,
-                tokenScore, semanticScore, tokenRank, semanticRank,
+                retrieval?.TokenScore, retrieval?.SemanticScore, retrieval?.TokenRank, retrieval?.SemanticRank,
                 ReasonText: reasonText,
                 RequestedAction: requestedAction,
                 OwnStartLine: startLine,
-                OwnEndLine: endLine));
+                OwnEndLine: endLine,
+                RetrievalEvidenceJson: retrieval is null ? null : JsonSerializer.Serialize(retrieval, RetrievalEvidenceValidator.JsonOptions)));
         }
 
         return result;

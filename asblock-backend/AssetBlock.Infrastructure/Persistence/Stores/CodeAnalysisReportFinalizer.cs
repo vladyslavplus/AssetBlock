@@ -451,13 +451,13 @@ internal sealed class CodeAnalysisReportFinalizer(
                 "Id", "AssetId", "AssetVersionId", "ContentSha256", "PolicyVersion", "InputRevision",
                 "Purpose", "ReviewEligible", "IsFinalized", "FinalizedAt", "ReportSchemaVersion",
                 "AnalysisRunId", "PythonReportId", "ReportDigest", "SelectionGeneration",
-                "CoverageLevel", "AnalyzedFileCount", "OmissionCount", "FindingCount", "Disposition",
+                "CoverageLevel", "AnalyzedFileCount", "OmissionCount", "FindingCount", "Disposition", "RetrievalSummaryJson",
                 "CreatedAt", "UpdatedAt"
             ) VALUES (
                 {reportId}, {job.AssetId}, {job.AssetVersionId}, {run.ContentSha256}, {policy.PolicyKey}, {run.SelectionGeneration},
                 'PRODUCTION', true, true, {dbNow}, 1,
                 {run.Id}, {validated.PythonReportId}, {validated.ReportDigest}, {run.SelectionGeneration},
-                {validated.CoverageLevel}, {validated.AnalyzedFileCount}, {validated.OmissionCount}, {validated.FindingCount}, {disposition},
+                {validated.CoverageLevel}, {validated.AnalyzedFileCount}, {validated.OmissionCount}, {validated.FindingCount}, {disposition}, CAST({validated.RetrievalSummaryJson} AS jsonb),
                 {dbNow}, {dbNow}
             )
             """, cancellationToken).ConfigureAwait(false);
@@ -500,13 +500,13 @@ internal sealed class CodeAnalysisReportFinalizer(
                     "Id", "ReportId", "FindingKey", "FindingType", "OwnScopePath", "OwnExcerpt", "OwnStartByte", "OwnEndByte",
                     "OwnStartLine", "OwnEndLine",
                     "ForeignSourceId", "ForeignOrigin", "ForeignSensitivity", "PublicAttributionJson",
-                    "TokenScore", "SemanticScore", "TokenRank", "SemanticRank",
+                    "TokenScore", "SemanticScore", "TokenRank", "SemanticRank", "RetrievalEvidenceJson",
                     "ReasonText", "RequestedAction", "CreatedAt", "UpdatedAt"
                 ) VALUES (
                     {Guid.NewGuid()}, {reportId}, {finding.FindingKey}, {finding.FindingType}, {finding.OwnScopePath}, {finding.OwnExcerpt}, {finding.OwnStartByte}, {finding.OwnEndByte},
                     {finding.OwnStartLine}, {finding.OwnEndLine},
                     {finding.ForeignSourceId}, {finding.ForeignOrigin}, {finding.ForeignSensitivity}, CAST({finding.PublicAttributionJson} AS jsonb),
-                    {finding.TokenScore}, {finding.SemanticScore}, {finding.TokenRank}, {finding.SemanticRank},
+                    {finding.TokenScore}, {finding.SemanticScore}, {finding.TokenRank}, {finding.SemanticRank}, CAST({finding.RetrievalEvidenceJson} AS jsonb),
                     {finding.ReasonText}, {finding.RequestedAction}, {dbNow}, {dbNow}
                 )
                 """, cancellationToken).ConfigureAwait(false);

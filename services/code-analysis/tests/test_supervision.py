@@ -308,7 +308,8 @@ from app.stages import Pipeline, _success_envelope, _stage_verifier
 workdir = Path(sys.argv[1])
 request = json.loads((workdir / "request.json").read_text(encoding="utf-8"))
 metadata = contracts.validate_metadata(request["metadata"])
-context = SimpleNamespace(metadata=metadata, policy=policy.current_policy(), snapshot=None)
+context = SimpleNamespace(metadata=metadata, policy=policy.current_policy(),
+                          snapshot=SimpleNamespace(snapshot_id="fixture", revision="fixture", files=[]))
 pipe = Pipeline(context=context)
 for name in ("INVENTORY", "EXTRACTION", "TOKEN", "SEMANTIC", "LICENSE", "UNION"):
     pipe.record(StageRecord(stage=name, applicability=APPLICABILITY.MANDATORY.value,
@@ -376,11 +377,16 @@ def test_unconfirmed_run_holds_gate_without_cleanup(service_app, workspace_root,
             [sys.executable, "-c", "import time; time.sleep(120)"],
             cwd=str(workspace_dir), shell=False,
             stdout=_sp.DEVNULL, stderr=_sp.DEVNULL,
+            creationflags=_sp.CREATE_NO_WINDOW if sys.platform == "win32" else 0,
             start_new_session=sys.platform != "win32")
         spawned.append(proc)
         return proc, "test", None
 
     monkeypatch.setattr(service_module, "spawn_worker", stub_spawn)
+    # Model denied termination explicitly; real containment must still stop real workers.
+    monkeypatch.setattr(service_module, "stop_containment", lambda *_: None)
+    import app.supervisor as supervisor_module
+    monkeypatch.setattr(supervisor_module, "stop_containment", lambda *_: None)
     client = TestClient(service_app)
     archive = make_zip({"src/a.js": b"function alpha() { return 1; }\n"})
     metadata = make_metadata(archive)

@@ -20,6 +20,7 @@ from dataclasses import dataclass, field
 from io import StringIO
 from pathlib import Path
 
+from .retrieval_evidence import validate_retrieval as _validate_retrieval
 from . import archive_safety, contracts, mechanisms, policy as policy_module, workspace as workspace_module
 from .archive_safety import InventoriedFile
 from .policy import VERIFIER_REASON, EVALUATION_EVIDENCE_SHA256
@@ -102,6 +103,7 @@ class Pipeline:
     inventory: object = None
     analyzed: list = field(default_factory=list)
     token_ranked: dict = field(default_factory=dict)
+    token_candidate_counts: dict = field(default_factory=dict)
     semantic_ranked: dict = field(default_factory=dict)
     license_rows: list = field(default_factory=list)
     findings: list = field(default_factory=list)
@@ -147,9 +149,9 @@ class Pipeline:
     def add_finding(self, ftype: str, path: str | None, file_id: str | None,
                     reason: str, foreign_id: str | None = None,
                     sensitivity: str | None = None, origin: str | None = None,
-                    attribution: dict | None = None, score=None) -> None:
+                    attribution: dict | None = None, retrieval=None) -> None:
         _append_finding(self, ftype, path, file_id, reason, foreign_id,
-                        sensitivity, origin, attribution, score)
+                        sensitivity, origin, attribution, retrieval)
 
 
 def _retryable(code: str) -> bool:
@@ -601,9 +603,13 @@ def _stage_token(pipe: Pipeline) -> None:
             data, _, parent = cached
             ranked = data.get("ranked")
             counts = data.get("counts")
-            if not isinstance(ranked, dict) or not isinstance(counts, dict):
+            candidate_counts = counts.get("candidateCounts") if isinstance(counts, dict) else None
+            if (not isinstance(ranked, dict) or not isinstance(counts, dict)
+                    or not isinstance(candidate_counts, dict)
+                    or any(type(value) is not int or not 0 <= value <= 1000 for value in candidate_counts.values())):
                 raise ContractError("REFERENCE_MANIFEST_INVALID", "reuse token data")
             pipe.token_ranked = ranked
+            pipe.token_candidate_counts = candidate_counts
             tool_identity = data.get("toolIdentity", {})
             output_digest = _create_reuse_artifact(
                 pipe, STAGE.TOKEN.value,
@@ -648,7 +654,7 @@ def _stage_token(pipe: Pipeline) -> None:
         tool_identity = _tool_identity("dolos", ctx)
         counts = {"queryFiles": len(query_files), "batches": batches,
                   "rankedFiles": len(ranked), "comparedGroups": compared,
-                  "uncomparedGroups": uncompared}
+                  "uncomparedGroups": uncompared, "candidateCounts": pipe.token_candidate_counts}
         artifact_digest = _create_reuse_artifact(
             pipe, STAGE.TOKEN.value,
             {"ranked": ranked, "counts": counts, "toolIdentity": tool_identity})
@@ -776,11 +782,13 @@ def _token_batch(pipe: Pipeline, snapshot: ReferenceSnapshot, group: str,
     gallery_ids = [e.file_id for e in gallery]
     ranked: dict[str, list] = {}
     for item in queries:
-        rows = mechanisms.rank_token_files(bound, item.file_id, gallery_ids,
-                                           contracts.TOKEN_TOP)
+        # Rank all strictly positive observed pairs to count TOP overflow, never infer missing scores.
+        # Ties use ascending opaque file identity after descending score.
+        rows = mechanisms.rank_token_files(bound, item.file_id, gallery_ids, len(gallery_ids))
+        pipe.token_candidate_counts[item.file_id] = len(rows)
         ranked[item.file_id] = [
             {"fileId": r["fileId"], "score": float(r["score"]), "rank": int(r["rank"])}
-            for r in rows]
+            for r in rows[:contracts.TOKEN_TOP]]
     return ranked
 
 
@@ -1116,6 +1124,7 @@ def _exact_retrieval(connection, snapshot: ReferenceSnapshot,
                 distance = float(row["distance"])
                 if row["fileId"] not in best or distance < best[row["fileId"]]:
                     best[row["fileId"]] = distance
+        # Exact distance ascending, then file identity ascending; no threshold or abstention.
         ordered = sorted(best, key=lambda fid: (best[fid], fid))[:contracts.SEMANTIC_TOP]
         ranked[query_id] = [{"fileId": fid,
                              "score": max(0.0, 1.0 - best[fid]),
@@ -1281,9 +1290,8 @@ def _stage_union(pipe: Pipeline) -> None:
             semantic_ids = [r["fileId"] for r in pipe.semantic_ranked.get(item.file_id, [])]
             union = mechanisms.union_candidates(token_ids, semantic_ids,
                                                 contracts.UNION_BUDGET)
-            ordering = mechanisms.reciprocal_rank_order(token_ids, semantic_ids,
-                                                        contracts.UNION_BUDGET)
-            token_set, semantic_set = set(token_ids), set(semantic_ids)
+            # Stable token-channel order first, then unseen semantic candidates. No top-1 selection.
+            token_set = set(token_ids)
             for foreign_id in union:
                 entry = by_id.get(foreign_id)
                 if entry is None:
@@ -1299,14 +1307,14 @@ def _stage_union(pipe: Pipeline) -> None:
                     foreign_id=foreign_id, sensitivity=entry.sensitivity,
                     origin=entry.origin,
                     attribution=dict(entry.attribution),
-                    score=_channel_score(pipe, item.file_id, foreign_id, token_set))
+                    retrieval=_candidate_evidence(pipe, item.file_id, foreign_id))
         record = StageRecord(
             stage=STAGE.UNION.value, applicability=APPLICABILITY.MANDATORY.value,
             outcome=STAGE_OUTCOME.SUCCEEDED.value,
             duration_seconds=time.perf_counter() - started,
             output_sha256=contracts.sha256_hex(contracts.canonical(
                 [f["findingId"] for f in pipe.findings])),
-            counts={"unionFindings": len(pipe.findings)})
+            counts={"unionFindings": len(pipe.findings) + pipe.finding_overflow})
     except ContractError as exc:
         record = StageRecord(
             stage=STAGE.UNION.value, applicability=APPLICABILITY.MANDATORY.value,
@@ -1317,15 +1325,17 @@ def _stage_union(pipe: Pipeline) -> None:
     LOG.info("run union outcome=%s findings=%d", record.outcome, len(pipe.findings))
 
 
-def _channel_score(pipe: Pipeline, query_id: str, foreign_id: str, token_set: set):
-    if foreign_id in token_set:
-        for row in pipe.token_ranked.get(query_id, []):
-            if row["fileId"] == foreign_id:
-                return float(row["score"])
-    for row in pipe.semantic_ranked.get(query_id, []):
-        if row["fileId"] == foreign_id:
-            return float(row.get("score", 0.0))
-    return 0.0
+def _candidate_evidence(pipe: Pipeline, query_id: str, foreign_id: str) -> dict:
+    token = next((r for r in pipe.token_ranked.get(query_id, []) if r["fileId"] == foreign_id), None)
+    semantic = next((r for r in pipe.semantic_ranked.get(query_id, []) if r["fileId"] == foreign_id), None)
+    return {"queryFileId": query_id, "queryUnit": "FILE",
+            "channels": "TOKEN_AND_SEMANTIC" if token and semantic else "TOKEN" if token else "SEMANTIC",
+            "tokenRank": token["rank"] if token else None,
+            "tokenScore": token["score"] if token else None,
+            "semanticRank": semantic["rank"] if semantic else None,
+            "semanticScore": semantic["score"] if semantic else None,
+            "material": token is not None and token["score"] > 0
+                and token["score"] == max(r["score"] for r in pipe.token_ranked[query_id])}
 
 
 def _similarity_reason(entry, channel: str) -> str:
@@ -1370,7 +1380,7 @@ def _success_envelope(pipe: Pipeline) -> dict:
                                                     f["findingId"]))
     total = len(findings)
     kept = findings[:contracts.MAX_FINDINGS]
-    overflow = total - len(kept)
+    overflow = total + pipe.finding_overflow - len(kept)
     body = {
         "schema": contracts.SCHEMA,
         "serviceVersion": contracts.SERVICE_VERSION,
@@ -1398,6 +1408,7 @@ def _success_envelope(pipe: Pipeline) -> dict:
                      "omissionOverflow": pipe.omission_overflow},
         "findings": kept,
         "findingOverflow": overflow,
+        "retrievalSummary": _retrieval_summary(pipe, kept),
         "comparedScope": {"snapshotId": ctx.snapshot.snapshot_id if ctx.snapshot else None,
                           "revision": ctx.snapshot.revision if ctx.snapshot else None,
                           "comparedFiles": len(ctx.snapshot.files) if ctx.snapshot else 0},
@@ -1449,6 +1460,7 @@ def _validate_report_body(pipe: Pipeline, body: dict) -> None:
         raise ContractError("INTERNAL_ERROR", "report authority")
     if any("reviewEligible" in section for section in (body, body.get("policy", {}), body.get("sellerSafe", {}))):
         raise ContractError("INTERNAL_ERROR", "fabricated review eligibility")
+    _validate_retrieval(body)
     safe = body.get("sellerSafe") or {}
     if safe.get("reportId") != body.get("reportId"):
         raise ContractError("INTERNAL_ERROR", "report projection")
@@ -1548,7 +1560,7 @@ def _finding_id(ftype: str, path: str | None, file_id: str | None,
 def _append_finding(pipe: Pipeline, ftype: str, path: str | None, file_id: str | None,
                     reason: str, foreign_id: str | None = None, sensitivity: str | None = None,
                     origin: str | None = None, attribution: dict | None = None,
-                    score=None) -> None:
+                    retrieval=None) -> None:
     if len(pipe.findings) >= 10 * contracts.MAX_FINDINGS:
         pipe.finding_overflow += 1
         return
@@ -1573,8 +1585,8 @@ def _append_finding(pipe: Pipeline, ftype: str, path: str | None, file_id: str |
         "reason": reason[:1024],
         "requestedAction": _requested_action(ftype),
     }
-    if score is not None:
-        finding["channelScore"] = score
+    if retrieval is not None:
+        finding["retrieval"] = retrieval
     pipe.findings.append(finding)
 
 
@@ -1602,3 +1614,25 @@ def _own_excerpt(pipe: Pipeline, file_id: str) -> tuple[str, int | None, int | N
             return (excerpt[:320], first.get("startLine"), first.get("endLine"),
                     first.get("startByte"), first.get("endByte"))
     return "", None, None, None, None
+
+
+def _retrieval_summary(pipe: Pipeline, kept: list) -> dict:
+    snapshot = _require_snapshot(pipe)
+    queries = []
+    for item in sorted(pipe.analyzed, key=lambda f: f.file_id):
+        token = pipe.token_ranked.get(item.file_id, [])
+        semantic = pipe.semantic_ranked.get(item.file_id, [])
+        candidate_count = pipe.token_candidate_counts.get(item.file_id, 0)
+        # Exact-query verifies every eligible gallery item has indexed source before TOP selection.
+        semantic_count = sum(e.language_group == item.language_group for e in snapshot.files) if semantic else 0
+        emitted = [f["retrieval"] for f in kept if f.get("retrieval", {}).get("queryFileId") == item.file_id]
+        union_count = len({r["fileId"] for r in token + semantic})
+        queries.append({"queryFileId": item.file_id,
+            "tokenMaxScore": token[0]["score"] if token else None,
+            "tokenCandidates": candidate_count, "tokenRetained": len(token), "tokenOverflow": candidate_count - len(token),
+            "semanticCandidates": semantic_count, "semanticRetained": len(semantic), "semanticOverflow": semantic_count - len(semantic),
+            "unionRetained": union_count, "reportOmitted": union_count - len(emitted),
+            "reportOmittedToken": len(token) - sum(e["tokenRank"] is not None for e in emitted),
+            "reportOmittedSemantic": len(semantic) - sum(e["semanticRank"] is not None for e in emitted)})
+    return {"tokenTop": contracts.TOKEN_TOP, "semanticTop": contracts.SEMANTIC_TOP,
+            "unionBudget": contracts.UNION_BUDGET, "queries": queries}

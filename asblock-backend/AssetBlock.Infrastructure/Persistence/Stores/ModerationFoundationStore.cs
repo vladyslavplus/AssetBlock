@@ -1445,6 +1445,13 @@ internal sealed class ModerationFoundationStore(
         Guid submissionId,
         CancellationToken cancellationToken = default)
     {
+        await using Microsoft.EntityFrameworkCore.Storage.IDbContextTransaction transaction = await dbContext.Database
+            .BeginTransactionAsync(System.Data.IsolationLevel.RepeatableRead, cancellationToken);
+        UserPersistedRole? liveRole = await userStore.GetPersistedRole(moderatorUserId, cancellationToken);
+        if (liveRole?.Role != AppRoles.MODERATOR)
+        {
+            return new ModerationCaseAccessResult(ModerationCaseAccessStatus.DENIED_ROLE, null);
+        }
         var row = await dbContext.ModerationSubmissions
             .AsNoTracking()
             .Where(s => s.Id == submissionId)
@@ -1458,7 +1465,8 @@ internal sealed class ModerationFoundationStore(
                     s.CaseRevision,
                     s.ContentSha256,
                     s.PolicyVersion),
-                s.Asset.AuthorId
+                s.Asset.AuthorId,
+                s.CodeAnalysisReportHeaderId
             })
             .FirstOrDefaultAsync(cancellationToken);
 
@@ -1472,7 +1480,32 @@ internal sealed class ModerationFoundationStore(
             return new ModerationCaseAccessResult(ModerationCaseAccessStatus.SELF_OWNED_DENIED, null);
         }
 
-        return new ModerationCaseAccessResult(ModerationCaseAccessStatus.FOUND, row.Summary);
+        CodeAnalysisReportHeader? report = await dbContext.CodeAnalysisReportHeaders.AsNoTracking()
+            .SingleOrDefaultAsync(h => h.Id == row.CodeAnalysisReportHeaderId && h.AssetId == row.Summary.AssetId
+                && h.AssetVersionId == row.Summary.AssetVersionId, cancellationToken);
+        PersistedRetrievalSummary? persisted = report?.RetrievalSummaryJson is null ? null
+            : JsonSerializer.Deserialize<PersistedRetrievalSummary>(report.RetrievalSummaryJson, RetrievalEvidenceValidator.JsonOptions);
+        List<CodeAnalysisReportFinding> findings = report is null ? [] : await dbContext.CodeAnalysisReportFindings.AsNoTracking()
+            .Where(f => f.ReportId == report.Id && (f.FindingType == "SIMILARITY_TOKEN" || f.FindingType == "SIMILARITY_SEMANTIC"))
+            .OrderBy(f => f.OwnScopePath).ThenBy(f => f.TokenRank ?? int.MaxValue)
+            .ThenBy(f => f.SemanticRank ?? int.MaxValue).ThenBy(f => f.FindingKey).Take(200).ToListAsync(cancellationToken);
+        ModeratorRetrievalCandidate[] candidates = findings.Select(f =>
+        {
+            // Absent complete persisted detail is explicit unavailability, never inferred from scalar scores.
+            RetrievalCandidateEvidence? scores = persisted is null || f.RetrievalEvidenceJson is null ? null
+                : JsonSerializer.Deserialize<RetrievalCandidateEvidence>(f.RetrievalEvidenceJson, RetrievalEvidenceValidator.JsonOptions);
+            return new ModeratorRetrievalCandidate(f.FindingKey, f.OwnScopePath, f.OwnStartByte, f.OwnEndByte,
+                f.OwnStartLine, f.OwnEndLine, f.ForeignSourceId, f.ForeignOrigin, f.ForeignSensitivity.ToString(),
+                scores is null ? "SCORES_UNAVAILABLE" : "AVAILABLE", scores);
+        }).ToArray();
+        var evidence = new ModeratorReportEvidence(report?.Id,
+            persisted is null || candidates.Any(c => c.Scores is null)
+                || candidates.Length != persisted.Retrieval.Queries.Sum(q => q.UnionRetained - q.ReportOmitted)
+                ? "SCORES_UNAVAILABLE" : "AVAILABLE",
+            persisted?.ReferenceSnapshotId, persisted?.ReferenceRevision, report?.CoverageLevel?.ToString(),
+            report?.OmissionCount, persisted?.FindingOverflow, persisted?.Retrieval, candidates);
+        await transaction.CommitAsync(cancellationToken);
+        return new ModerationCaseAccessResult(ModerationCaseAccessStatus.FOUND, row.Summary with { RetrievalEvidence = evidence });
     }
 
     private async Task<GuardedSubmissionResult> EvaluateGuardedSubmissionGates(

@@ -34,6 +34,14 @@ public sealed class CodeAnalysisReportFinalizerPostgresTests(PostgresFixture fix
     [InlineData("stale-digest")]
     [InlineData("failed-stage")]
     [InlineData("missing-stage")]
+    [InlineData("missing-retrieval")]
+    [InlineData("rank-zero")]
+    [InlineData("score-over-one")]
+    [InlineData("membership-mismatch")]
+    [InlineData("material-mismatch")]
+    [InlineData("overflow-mismatch")]
+    [InlineData("duplicate-rank")]
+    [InlineData("missing-summary")]
     public async Task ValidateCompleted_WhenUntrustedReviewEnvelope_ShouldRejectEvenWithRecomputedReportDigest(string forgery)
     {
         await using ApplicationDbContext db = await fixture.CreateCleanDbContext();
@@ -45,6 +53,33 @@ public sealed class CodeAnalysisReportFinalizerPostgresTests(PostgresFixture fix
         JsonObject body = JsonNode.Parse(BuildResponseBody(run, seed.Version, seed.Asset, seed.Chain, seed.PolicyDigest))!.AsObject();
         switch (forgery)
         {
+            case "rank-zero":
+                body["findings"]![0]!["retrieval"]!["tokenRank"] = 0;
+                break;
+            case "score-over-one":
+                body["findings"]![0]!["retrieval"]!["tokenScore"] = 1.1;
+                break;
+            case "membership-mismatch":
+                body["findings"]![0]!["retrieval"]!["channels"] = "SEMANTIC";
+                break;
+            case "material-mismatch":
+                body["findings"]![0]!["retrieval"]!["material"] = false;
+                break;
+            case "overflow-mismatch":
+                body["retrievalSummary"]!["queries"]![0]!["tokenOverflow"] = 1;
+                break;
+            case "missing-summary":
+                body.Remove("retrievalSummary");
+                break;
+            case "duplicate-rank":
+                JsonNode duplicate = body["findings"]![0]!.DeepClone();
+                duplicate["findingId"] = "different-finding";
+                duplicate["foreign"]!["fileId"] = new string('d', 64);
+                body["findings"]!.AsArray().Add(duplicate);
+                break;
+            case "missing-retrieval":
+                body["findings"]![0]!.AsObject().Remove("retrieval");
+                break;
             case "fixture":
                 body["fixture"] = true;
                 break;
@@ -155,6 +190,7 @@ public sealed class CodeAnalysisReportFinalizerPostgresTests(PostgresFixture fix
         if (condition != "findings")
         {
             body["findings"] = new JsonArray();
+            body["retrievalSummary"] = PythonAnalysisEnvelope.RetrievalSummary(0);
             body["stages"]!.AsArray().Single(s => s!["stage"]!.GetValue<string>() == "UNION")!["counts"]!["unionFindings"] = 0;
         }
         var finalizer = new CodeAnalysisReportFinalizer(db, new CodeAnalysisReportValidator(), NullLogger<CodeAnalysisReportFinalizer>.Instance);
@@ -226,6 +262,30 @@ public sealed class CodeAnalysisReportFinalizerPostgresTests(PostgresFixture fix
             return;
         }
         created.Status.Should().Be(GuardedSubmissionStatus.CREATED);
+        if (condition == "findings")
+        {
+            CodeAnalysisReportFinding finding = await db.CodeAnalysisReportFindings.AsNoTracking().SingleAsync();
+            finding.TokenScore.Should().Be(0.5);
+            finding.SemanticScore.Should().Be(0.4);
+            finding.TokenRank.Should().Be(1);
+            finding.SemanticRank.Should().Be(1);
+            finding.RetrievalEvidenceJson.Should().Contain("TOKEN_AND_SEMANTIC");
+            User moderator = TestData.CreateUser("reviewer", "reviewer@example.test");
+            moderator.Role = AppRoles.MODERATOR;
+            db.Users.Add(moderator);
+            await db.SaveChangesAsync();
+            ModerationCaseAccessResult access = await store.GetCaseSummaryForModerator(moderator.Id, created.SubmissionId!.Value);
+            access.Summary!.RetrievalEvidence!.ScoresAvailability.Should().Be("AVAILABLE");
+            access.Summary.RetrievalEvidence.Candidates.Single().Scores!.Material.Should().BeTrue();
+            await db.CodeAnalysisReportFindings.Where(f => f.Id == finding.Id)
+                .ExecuteUpdateAsync(s => s.SetProperty(f => f.RetrievalEvidenceJson, (string?)null));
+            ModerationCaseAccessResult unavailable = await store.GetCaseSummaryForModerator(moderator.Id, created.SubmissionId.Value);
+            unavailable.Summary!.RetrievalEvidence!.Candidates.Single().ScoresAvailability.Should().Be("SCORES_UNAVAILABLE");
+            unavailable.Summary.RetrievalEvidence.Candidates.Single().Scores.Should().BeNull();
+            await db.Users.Where(u => u.Id == moderator.Id).ExecuteUpdateAsync(s => s.SetProperty(u => u.Role, AppRoles.USER));
+            (await store.GetCaseSummaryForModerator(moderator.Id, created.SubmissionId.Value)).Status.Should().Be(ModerationCaseAccessStatus.DENIED_ROLE);
+        }
+
         GuardedSubmissionResult replay = await store.AttemptGuardedSubmission(request);
         replay.Status.Should().Be(GuardedSubmissionStatus.REPLAYED);
         replay.SubmissionId.Should().Be(created.SubmissionId);
@@ -392,6 +452,7 @@ public sealed class CodeAnalysisReportFinalizerPostgresTests(PostgresFixture fix
         };
         JsonObject root = JsonNode.Parse(BuildResponseBody(run, seed.Version, seed.Asset, seed.Chain, seed.PolicyDigest))!.AsObject();
         root["findings"] = new JsonArray(scopeNotice, matchedLicense);
+        root["retrievalSummary"] = PythonAnalysisEnvelope.RetrievalSummary(0);
         root["stages"]!.AsArray().Select(node => node!.AsObject())
             .Single(stage => stage["stage"]!.GetValue<string>() == "UNION")["counts"]!["unionFindings"] = 2;
         var body = PythonAnalysisEnvelope.RegenerateDerivedIdentity(root).ToJsonString();
@@ -649,6 +710,7 @@ public sealed class CodeAnalysisReportFinalizerPostgresTests(PostgresFixture fix
         var headersBefore = await db.CodeAnalysisReportHeaders.AsNoTracking().CountAsync();
         var stagesBefore = await db.CodeAnalysisReportStages.AsNoTracking().CountAsync();
         var findingsBefore = await db.CodeAnalysisReportFindings.AsNoTracking().CountAsync();
+        CodeAnalysisReportFinding findingBefore = await db.CodeAnalysisReportFindings.AsNoTracking().SingleAsync();
         var admissionsBefore = await db.CodeAnalysisReportAdmissions.AsNoTracking().CountAsync();
         var auditsBefore = await db.AuditLogs.AsNoTracking().CountAsync(a => a.Action == "CODE_ANALYSIS_FINALIZED");
         var outboxesBefore = await db.OutboxMessages.AsNoTracking().CountAsync();
@@ -661,6 +723,7 @@ public sealed class CodeAnalysisReportFinalizerPostgresTests(PostgresFixture fix
         (await db.CodeAnalysisReportHeaders.AsNoTracking().CountAsync()).Should().Be(headersBefore);
         (await db.CodeAnalysisReportStages.AsNoTracking().CountAsync()).Should().Be(stagesBefore);
         (await db.CodeAnalysisReportFindings.AsNoTracking().CountAsync()).Should().Be(findingsBefore);
+        (await db.CodeAnalysisReportFindings.AsNoTracking().SingleAsync()).Should().BeEquivalentTo(findingBefore);
         (await db.CodeAnalysisReportAdmissions.AsNoTracking().CountAsync()).Should().Be(admissionsBefore);
         (await db.AuditLogs.AsNoTracking().CountAsync(a => a.Action == "CODE_ANALYSIS_FINALIZED")).Should().Be(auditsBefore);
         (await db.OutboxMessages.AsNoTracking().CountAsync()).Should().Be(outboxesBefore);

@@ -139,7 +139,8 @@ def test_report_validation_rejects_fabricated_review_eligibility():
     body = {"schema": "code-analysis-v1", "runId": "r", "inputDigest": "d",
             "admittedBy": None, "policy": {},
             "sellerSafe": {"reportId": "x"}, "reportId": "x",
-            "findings": [], "coverage": {"omissions": []}}
+            "findings": [], "coverage": {"omissions": []},
+            "retrievalSummary": {"tokenTop": 20, "semanticTop": 20, "unionBudget": 40, "queries": []}}
     _validate_report_body(pipe, body)
     bad = dict(body, policy={"reviewEligible": True})
     with pytest.raises(contracts.ContractError):
