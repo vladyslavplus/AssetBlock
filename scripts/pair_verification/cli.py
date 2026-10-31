@@ -2,7 +2,7 @@
 
 import argparse
 
-from . import prepare, training
+from . import evaluation, prepare, training, validation_evidence
 
 
 def build_parser():
@@ -41,6 +41,23 @@ def build_parser():
     command.add_argument("--inputs", required=True)
     command.add_argument("--config", required=True)
     command.set_defaults(handler=_smoke)
+
+    command = stages.add_parser("evaluate", help="score validation candidate pairs and compare controls")
+    command.add_argument("--run-id", required=True)
+    command.add_argument("--prepare-run-id", required=True)
+    command.add_argument("--train-run-id", required=True)
+    command.add_argument("--inputs", required=True)
+    command.add_argument("--config", required=True)
+    command.set_defaults(handler=_evaluate)
+
+    command = stages.add_parser("validate-evidence", help="verify and package pair research evidence")
+    command.add_argument("--run-id", required=True)
+    command.add_argument("--prepare-run-id", required=True)
+    command.add_argument("--train-run-id", required=True)
+    command.add_argument("--evaluation-run-id", required=True)
+    command.add_argument("--inputs", required=True)
+    command.add_argument("--config", required=True)
+    command.set_defaults(handler=_validate_evidence)
     return parser
 
 
@@ -73,6 +90,25 @@ def _smoke(args):
                             inputs_path=args.inputs, config_path=args.config)
     return {"command": args.command, "outcome": result["outcome"], "runId": args.run_id,
             "directory": str(result["directory"]), "reportSha256": result["reportSha256"]}
+
+
+def _evaluate(args):
+    result = evaluation.run(run_id=args.run_id, prepare_run_id=args.prepare_run_id,
+                            train_run_id=args.train_run_id, inputs_path=args.inputs,
+                            config_path=args.config)
+    return {"command": args.command, "outcome": result["outcome"], "runId": args.run_id,
+            "directory": str(result["directory"]), "evidenceSha256": result["evidenceSha256"],
+            "selectedEpoch": result["selectedEpoch"]}
+
+
+def _validate_evidence(args):
+    result = validation_evidence.run(run_id=args.run_id, prepare_run_id=args.prepare_run_id,
+                                     train_run_id=args.train_run_id,
+                                     evaluation_run_id=args.evaluation_run_id,
+                                     inputs_path=args.inputs, config_path=args.config)
+    return {"command": args.command, "outcome": result["outcome"], "runId": args.run_id,
+            "directory": str(result["directory"]), "evidenceSha256": result["evidenceSha256"],
+            "reconstructionSha256": result["reconstructionSha256"]}
 
 
 def main(argv=None):
