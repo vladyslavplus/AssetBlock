@@ -13,6 +13,7 @@ using AssetBlock.Domain.Core.Entities;
 using AssetBlock.Domain.Core.Enums;
 using AssetBlock.Infrastructure.Persistence.Configurations;
 using AssetBlock.Infrastructure.Persistence.Publication;
+using Microsoft.AspNetCore.DataProtection;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.ChangeTracking;
 using Microsoft.Extensions.Logging;
@@ -30,7 +31,8 @@ internal sealed partial class ModerationFoundationStore(
     IAuditWriter? auditWriter = null,
     IAnalysisRunEnqueuer? analysisRunEnqueuer = null,
     ISecurityProvenanceStore? securityProvenanceStore = null,
-    ILogger<ModerationFoundationStore>? logger = null) : IModerationFoundationStore
+    ILogger<ModerationFoundationStore>? logger = null,
+    IDataProtectionProvider? dataProtectionProvider = null) : IModerationFoundationStore
 {
     private static readonly JsonSerializerOptions _idempotencyJsonOptions = new()
     {
@@ -42,6 +44,7 @@ internal sealed partial class ModerationFoundationStore(
     private readonly TimeProvider _timeProvider = timeProvider ?? TimeProvider.System;
     private readonly IAuditWriter? _auditWriter = auditWriter;
     private readonly ILogger<ModerationFoundationStore> _logger = logger ?? NullLogger<ModerationFoundationStore>.Instance;
+    private readonly IDataProtectionProvider? _dataProtectionProvider = dataProtectionProvider;
 
     /// <summary>
     /// Writes the mutation's audit entry inside the ambient transaction: an audit failure
@@ -110,9 +113,8 @@ internal sealed partial class ModerationFoundationStore(
             return fresh;
         }
 
-        tracked.State = fresh.State;
-        tracked.CaseRevision = fresh.CaseRevision;
-        tracked.WithdrawalReason = fresh.WithdrawalReason;
+        dbContext.Entry(tracked).CurrentValues.SetValues(fresh);
+        dbContext.Entry(tracked).OriginalValues.SetValues(fresh);
         return tracked;
     }
 
@@ -1184,6 +1186,8 @@ internal sealed partial class ModerationFoundationStore(
         DateTimeOffset now = _timeProvider.GetUtcNow();
         submission.State = ModerationSubmissionState.WITHDRAWN;
         submission.WithdrawalReason = request.WithdrawalReason;
+        submission.ClaimHolderId = null;
+        submission.ClaimedAt = null;
         submission.CaseRevision++;
 
         var history = new ModerationSubmissionHistoryEntry
@@ -1258,6 +1262,8 @@ internal sealed partial class ModerationFoundationStore(
             { continue; }
             submission.State = ModerationSubmissionState.SUPERSEDED;
             submission.WithdrawalReason = null;
+            submission.ClaimHolderId = null;
+            submission.ClaimedAt = null;
             submission.CaseRevision++;
 
             dbContext.ModerationSubmissionHistoryEntries.Add(new ModerationSubmissionHistoryEntry

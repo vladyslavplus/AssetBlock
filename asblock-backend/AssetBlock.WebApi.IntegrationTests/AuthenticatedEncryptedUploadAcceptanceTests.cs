@@ -12,6 +12,7 @@ using AssetBlock.Domain.Core.Dto.Auth;
 using AssetBlock.Domain.Core.Dto.Assets;
 using AssetBlock.Domain.Core.Enums;
 using AssetBlock.Infrastructure.Persistence;
+using AssetBlock.WebApi.Constants;
 using AssetBlock.WebApi.IntegrationTests.Support;
 using AssetBlock.WebApi.IntegrationTests.Support.Fakes;
 using Microsoft.AspNetCore.Hosting;
@@ -491,7 +492,36 @@ public sealed class AuthenticatedEncryptedUploadAcceptanceTests
                 (HttpClient moderatorClient, var moderatorUsername) = await IntegrationTestAuth.RegisterVerifiedWithRoleAsync(factory, AppRoles.MODERATOR);
                 using (moderatorClient)
                 {
-                    var caseUrl = $"/api/moderation/submissions/{submissionId}";
+                    using HttpResponseMessage queueResponse = await moderatorClient.GetAsync("/" + ApiRoutes.Moderation.QUEUE);
+                    queueResponse.EnsureSuccessStatusCode();
+                    using var queueJson = JsonDocument.Parse(await queueResponse.Content.ReadAsStringAsync());
+                    JsonElement queueItem = queueJson.RootElement.GetProperty("items").EnumerateArray().Single(x => x.GetProperty("submissionId").GetGuid() == submissionId);
+                    var queueRevision = queueItem.GetProperty("caseRevision").GetInt64();
+                    var claimUrl = "/" + ApiRoutes.Moderation.CLAIM.Replace("{id:guid}", submissionId.ToString(), StringComparison.Ordinal);
+                    var releaseUrl = "/" + ApiRoutes.Moderation.RELEASE.Replace("{id:guid}", submissionId.ToString(), StringComparison.Ordinal);
+                    using HttpResponseMessage ownerClaim = await scopedClient.PostAsJsonAsync(claimUrl, new { operationId = Guid.NewGuid(), expectedCaseRevision = queueRevision });
+                    if (ownerClaim.StatusCode != System.Net.HttpStatusCode.Forbidden)
+                        throw new InvalidOperationException("Owner claim was not denied.");
+                    using HttpResponseMessage claimed = await moderatorClient.PostAsJsonAsync(claimUrl, new { operationId = Guid.NewGuid(), expectedCaseRevision = queueRevision });
+                    claimed.EnsureSuccessStatusCode();
+                    using var claimedJson = JsonDocument.Parse(await claimed.Content.ReadAsStringAsync());
+                    if (claimedJson.RootElement.GetProperty("state").GetString() != "IN_REVIEW")
+                        throw new InvalidOperationException("Claim did not start review.");
+                    var claimedRevision = claimedJson.RootElement.GetProperty("caseRevision").GetInt64();
+                    (HttpClient rival, _) = await IntegrationTestAuth.RegisterVerifiedWithRoleAsync(factory, AppRoles.MODERATOR);
+                    using (rival)
+                    using (HttpResponseMessage contested = await rival.PostAsJsonAsync(claimUrl, new { operationId = Guid.NewGuid(), expectedCaseRevision = claimedRevision }))
+                    {
+                        if (contested.StatusCode != System.Net.HttpStatusCode.Conflict || !(await contested.Content.ReadAsStringAsync()).Contains(ErrorCodes.ERR_MODERATION_CASE_HELD, StringComparison.Ordinal))
+                            throw new InvalidOperationException("Competing claim did not return the held conflict.");
+                    }
+                    using HttpResponseMessage released = await moderatorClient.PostAsJsonAsync(releaseUrl, new { operationId = Guid.NewGuid(), expectedCaseRevision = claimedRevision });
+                    released.EnsureSuccessStatusCode();
+                    using var releasedJson = JsonDocument.Parse(await released.Content.ReadAsStringAsync());
+                    if (releasedJson.RootElement.GetProperty("state").GetString() != "SUBMITTED")
+                        throw new InvalidOperationException("Release did not return the case to the queue.");
+                    details["moderatorAssignment"] = new { submissionId, claimedState = "IN_REVIEW", releasedState = "SUBMITTED", competingClaim = "CONFLICT", ownerClaim = "FORBIDDEN" };
+                    var caseUrl = "/" + ApiRoutes.Moderation.SUBMISSION_BY_ID.Replace("{id:guid}", submissionId.ToString(), StringComparison.Ordinal);
                     using HttpResponseMessage moderatorRead = await moderatorClient.GetAsync(caseUrl);
                     moderatorRead.EnsureSuccessStatusCode();
                     if (moderatorRead.Headers.CacheControl is not { Private: true, NoStore: true })
@@ -504,7 +534,7 @@ public sealed class AuthenticatedEncryptedUploadAcceptanceTests
                         ApplicationDbContext db = evidenceScope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
                         evidenceFindingId = await db.CodeAnalysisReportFindings.Where(f => f.ReportId == secondAdmittedReportId && f.OwnExcerpt != "").Select(f => f.Id).FirstAsync();
                     }
-                    var evidenceUrl = caseUrl + "/evidence/OWN_EXCERPT?findingId=" + evidenceFindingId;
+                    var evidenceUrl = ApiRoutes.Moderation.CASE_EVIDENCE.Replace("{id:guid}", submissionId.ToString(), StringComparison.Ordinal).Replace("{kind}", nameof(RestrictedEvidenceKind.OWN_EXCERPT), StringComparison.Ordinal) + "?findingId=" + evidenceFindingId;
                     using (var evidenceRequest = new HttpRequestMessage(HttpMethod.Get, evidenceUrl))
                     using (HttpResponseMessage excerpt = await moderatorClient.SendAsync(evidenceRequest, HttpCompletionOption.ResponseHeadersRead))
                     {
@@ -822,7 +852,8 @@ public sealed class AuthenticatedEncryptedUploadAcceptanceTests
             requestReplay.EnsureSuccessStatusCode();
             foreach (var kind in new[] { "COVERAGE_INVENTORY", "ARCHIVE_README" })
             {
-                using HttpResponseMessage evidence = await moderator.GetAsync($"/api/moderation/coverage-reviews/{saved.RequestId}/evidence/{kind}");
+                var evidencePath = ApiRoutes.Moderation.COVERAGE_EVIDENCE.Replace("{id:guid}", saved.RequestId.ToString(), StringComparison.Ordinal).Replace("{kind}", kind, StringComparison.Ordinal);
+                using HttpResponseMessage evidence = await moderator.GetAsync(evidencePath);
                 evidence.EnsureSuccessStatusCode();
                 if (evidence.Headers.CacheControl is not { Private: true, NoStore: true })
                     throw new InvalidOperationException("Request evidence was cacheable.");
@@ -833,7 +864,8 @@ public sealed class AuthenticatedEncryptedUploadAcceptanceTests
             var assessment = new CoverageAssessmentRequest(Guid.NewGuid(), saved.RequestRevision, saved.TupleDigest, CoverageAssessmentOutcome.ACCEPTED,
                 ["Markdown"], [new("README.md", "Markdown", "Documentation; no executable core logic", true, RestrictedEvidenceKind.ARCHIVE_README)], true,
                 "Read complete stored documentation and compare omitted scope with inventory.", "manual-review/readme-complete", "Private documentation assessment rationale.");
-            using HttpResponseMessage assessed = await moderator.PostAsJsonAsync($"/api/moderation/coverage-reviews/{saved.RequestId}/assessments", assessment);
+            var assessmentPath = ApiRoutes.Moderation.COVERAGE_ASSESSMENT.Replace("{id:guid}", saved.RequestId.ToString(), StringComparison.Ordinal);
+            using HttpResponseMessage assessed = await moderator.PostAsJsonAsync(assessmentPath, assessment);
             if (!assessed.IsSuccessStatusCode)
                 throw new InvalidOperationException("Coverage assessment failed: " + (int)assessed.StatusCode + " " + SafeBody(await assessed.Content.ReadAsStringAsync()));
             using HttpResponseMessage review = await owner.GetAsync($"/api/users/me/asset-versions/{versionId}/review");

@@ -20,6 +20,6 @@ internal sealed class ReadReviewEvidenceQueryHandler(IModerationFoundationStore 
     {
         if (!AppRoles.CanReview((await users.GetPersistedRole(command.ActorId, ct))?.Role))
         { return Result.Forbidden(ErrorCodes.ERR_FORBIDDEN); }
-        return CoverageReviewResults.Map(await store.ReadRestrictedEvidence(command.ActorId, command.ScopeId, command.CoverageScope, command.Kind, command.FindingId, ct));
+        return CoverageReviewResults.Map(await store.ReadRestrictedEvidence(command.ActorId, command.ScopeId, command.CoverageScope, command.Kind, command.FindingId, ct), evidenceRead: true);
     }
 }

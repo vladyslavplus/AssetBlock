@@ -73,7 +73,8 @@ public sealed partial class CodeAnalysisReportFinalizerPostgresTests
         var runsBefore = await db.CodeAnalysisRuns.CountAsync();
         ModerationSubmission trackedCase = await db.ModerationSubmissions.SingleAsync(s => s.Id == submitted.Value);
         var priorCaseRevision = trackedCase.CaseRevision;
-        await db.ModerationSubmissions.Where(s => s.Id == submitted.Value).ExecuteUpdateAsync(s => s.SetProperty(c => c.State, ModerationSubmissionState.IN_REVIEW).SetProperty(c => c.CaseRevision, priorCaseRevision + 1));
+        User reviewer = await CoverageModerator(db);
+        await db.ModerationSubmissions.Where(s => s.Id == submitted.Value).ExecuteUpdateAsync(s => s.SetProperty(c => c.State, ModerationSubmissionState.IN_REVIEW).SetProperty(c => c.ClaimHolderId, reviewer.Id).SetProperty(c => c.ClaimedAt, DateTimeOffset.UtcNow).SetProperty(c => c.CaseRevision, priorCaseRevision + 1));
         current = (await store.GetOwnerResponses(seed.Source.Asset.Id, seed.Source.Version.Id, seed.Source.Asset.AuthorId, 1))!;
         Result<SellerEvidenceSavedDto> edited = await save.Handle(new SaveSellerEvidenceCommand(seed.Source.Asset.AuthorId,
             seed.Source.Asset.Id, seed.Source.Version.Id, current.WorkspaceId, seed.ReportId, null, null,

@@ -2,6 +2,8 @@ namespace AssetBlock.Domain.Core.Constants;
 
 public static class ModerationOperationKinds
 {
+    public const string CASE_CLAIM = "Moderation.CaseClaim";
+    public const string CASE_RELEASE = "Moderation.CaseRelease";
     public const string COVERAGE_REQUEST = "coverage-request";
     public const string COVERAGE_ASSESS = "coverage-assess";
 

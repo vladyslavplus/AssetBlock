@@ -15,6 +15,7 @@ internal sealed class ModerationSubmissionConfiguration : IEntityTypeConfigurati
             table.HasCheckConstraint("CK_moderation_submissions_case_revision", "\"CaseRevision\" > 0");
             table.HasCheckConstraint("CK_moderation_submissions_evidence_digest", "length(\"SellerEvidenceDigest\") = 64");
             table.HasCheckConstraint("CK_moderation_submissions_content_sha", "length(\"ContentSha256\") = 64");
+            table.HasCheckConstraint("CK_moderation_submissions_claim", "(\"State\" = 'IN_REVIEW' AND \"ClaimHolderId\" IS NOT NULL AND \"ClaimedAt\" IS NOT NULL) OR (\"State\" <> 'IN_REVIEW' AND \"ClaimHolderId\" IS NULL AND \"ClaimedAt\" IS NULL)");
             table.HasCheckConstraint(
                 "CK_moderation_submissions_workspace_scope",
                 "\"AssetVersionId\" = \"WorkspaceVersionScopeKey\"");
@@ -45,6 +46,8 @@ internal sealed class ModerationSubmissionConfiguration : IEntityTypeConfigurati
             .HasPrincipalKey(h => new { h.AssetId, h.AssetVersionId, h.Id })
             .OnDelete(DeleteBehavior.Restrict);
         builder.HasOne<CoverageAssessment>().WithMany().HasForeignKey(s => s.CoverageAssessmentId).OnDelete(DeleteBehavior.Restrict);
+        builder.HasOne<User>().WithMany().HasForeignKey(s => s.ClaimHolderId).OnDelete(DeleteBehavior.Restrict);
+        builder.HasIndex(s => new { s.CreatedAt, s.Id }).HasFilter("\"State\" IN ('SUBMITTED', 'IN_REVIEW')").HasDatabaseName("IX_moderation_submissions_queue");
         builder.HasOne(s => s.PreviousSubmission)
             .WithMany()
             .HasForeignKey(s => new { s.AssetId, s.AssetVersionId, s.PreviousSubmissionId })

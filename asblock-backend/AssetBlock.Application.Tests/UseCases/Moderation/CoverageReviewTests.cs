@@ -27,6 +27,13 @@ public sealed class CoverageReviewTests
         result.Errors.Should().Contain(reason);
         CoverageReviewResults.Map(new ReviewAccessResult<CoverageReviewSaved>(ReviewAccessStatus.SECURITY_RESTRICTED)).Status.Should().Be(ResultStatus.Forbidden);
     }
+    [Fact]
+    public void Map_WhenAuditUnavailable_ShouldDistinguishEvidenceReads()
+    {
+        var result = new ReviewAccessResult<CoverageReviewSaved>(ReviewAccessStatus.AUDIT_UNAVAILABLE);
+        CoverageReviewResults.Map(result).Errors.Should().Contain(ErrorCodes.ERR_REVIEW_AUDIT_UNAVAILABLE);
+        CoverageReviewResults.Map(result, evidenceRead: true).Errors.Should().Contain(ErrorCodes.ERR_EVIDENCE_AUDIT_UNAVAILABLE);
+    }
     private static CoverageAssessmentRequest Input() => new(Guid.NewGuid(), 1, new string('a', 64), CoverageAssessmentOutcome.ACCEPTED,
         ["Markdown"], [new("README.md", "Markdown", "Documentation", true, RestrictedEvidenceKind.ARCHIVE_README)], true, "Read stored scope", "review/completed", "Reviewed.");
     [Theory]

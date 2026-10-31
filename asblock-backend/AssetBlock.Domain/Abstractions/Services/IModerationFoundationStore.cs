@@ -7,6 +7,8 @@ namespace AssetBlock.Domain.Abstractions.Services;
 
 public interface IModerationFoundationStore
 {
+    Task<CaseClaimResult> ChangeCaseClaim(CaseClaimChange request, CancellationToken cancellationToken = default);
+    Task<ReviewAccessResult<ModeratorQueuePage>> GetModeratorQueue(ModeratorQueueRequest request, CancellationToken cancellationToken = default);
     Task<AssetDraftWorkspaceSnapshot?> LockAssetAndWorkspaceForUpdate(
         Guid assetId,
         Guid workspaceId,

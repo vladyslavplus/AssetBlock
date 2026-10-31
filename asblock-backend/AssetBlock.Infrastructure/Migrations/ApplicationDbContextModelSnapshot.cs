@@ -2862,6 +2862,12 @@ namespace AssetBlock.Infrastructure.Migrations
                     b.Property<long>("CaseRevision")
                         .HasColumnType("bigint");
 
+                    b.Property<Guid?>("ClaimHolderId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset?>("ClaimedAt")
+                        .HasColumnType("timestamp with time zone");
+
                     b.Property<Guid?>("CodeAnalysisReportHeaderId")
                         .HasColumnType("uuid");
 
@@ -2924,7 +2930,13 @@ namespace AssetBlock.Infrastructure.Migrations
                         .HasDatabaseName("UIX_moderation_submissions_active_case")
                         .HasFilter("\"State\" IN ('SUBMITTED', 'IN_REVIEW')");
 
+                    b.HasIndex("ClaimHolderId");
+
                     b.HasIndex("CoverageAssessmentId");
+
+                    b.HasIndex("CreatedAt", "Id")
+                        .HasDatabaseName("IX_moderation_submissions_queue")
+                        .HasFilter("\"State\" IN ('SUBMITTED', 'IN_REVIEW')");
 
                     b.HasIndex("AssetId", "AssetVersionId", "CodeAnalysisReportHeaderId");
 
@@ -2935,6 +2947,8 @@ namespace AssetBlock.Infrastructure.Migrations
                     b.ToTable("moderation_submissions", null, t =>
                         {
                             t.HasCheckConstraint("CK_moderation_submissions_case_revision", "\"CaseRevision\" > 0");
+
+                            t.HasCheckConstraint("CK_moderation_submissions_claim", "(\"State\" = 'IN_REVIEW' AND \"ClaimHolderId\" IS NOT NULL AND \"ClaimedAt\" IS NOT NULL) OR (\"State\" <> 'IN_REVIEW' AND \"ClaimHolderId\" IS NULL AND \"ClaimedAt\" IS NULL)");
 
                             t.HasCheckConstraint("CK_moderation_submissions_content_sha", "length(\"ContentSha256\") = 64");
 
@@ -5203,6 +5217,11 @@ namespace AssetBlock.Infrastructure.Migrations
                         .HasForeignKey("AssetId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
+
+                    b.HasOne("AssetBlock.Domain.Core.Entities.User", null)
+                        .WithMany()
+                        .HasForeignKey("ClaimHolderId")
+                        .OnDelete(DeleteBehavior.Restrict);
 
                     b.HasOne("AssetBlock.Domain.Core.Entities.CoverageAssessment", null)
                         .WithMany()

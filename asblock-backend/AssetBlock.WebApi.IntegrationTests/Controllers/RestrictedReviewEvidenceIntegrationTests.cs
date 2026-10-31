@@ -108,7 +108,62 @@ public sealed class RestrictedReviewEvidenceIntegrationTests(IntegrationTestFixt
         await db.SaveChangesAsync();
         return new(submission.Id, version.Id, finding.Id);
     }
-    private static string EvidenceUrl(CaseSeed seed) => $"/api/moderation/submissions/{seed.SubmissionId}/evidence/OWN_EXCERPT?findingId={seed.FindingId}";
+    private static string EvidenceUrl(CaseSeed seed) => ApiRoutes.Moderation.CASE_EVIDENCE.Replace("{id:guid}", seed.SubmissionId.ToString(), StringComparison.Ordinal)
+        .Replace("{kind}", nameof(RestrictedEvidenceKind.OWN_EXCERPT), StringComparison.Ordinal) + $"?findingId={seed.FindingId}";
+    [Fact]
+    public async Task Assignment_WhenCalledThroughHttp_ShouldEnforceRoleConflictsAndNoStore()
+    {
+        (HttpClient owner, var username) = await IntegrationTestAuth.RegisterVerifiedAndAuthenticateAsync(fixture.Factory);
+        using (owner)
+        {
+            CaseSeed seed = await SeedCase(username);
+            (HttpClient moderator, var moderatorName) = await IntegrationTestAuth.RegisterVerifiedWithRoleAsync(fixture.Factory, AppRoles.MODERATOR);
+            (HttpClient other, _) = await IntegrationTestAuth.RegisterVerifiedWithRoleAsync(fixture.Factory, AppRoles.MODERATOR);
+            using (moderator)
+            using (other)
+            {
+                var queuePath = "/" + ApiRoutes.Moderation.QUEUE;
+                var claimPath = "/" + ApiRoutes.Moderation.CLAIM.Replace("{id:guid}", seed.SubmissionId.ToString(), StringComparison.Ordinal);
+                var releasePath = "/" + ApiRoutes.Moderation.RELEASE.Replace("{id:guid}", seed.SubmissionId.ToString(), StringComparison.Ordinal);
+                using HttpClient anonymous = fixture.Factory.CreateClient();
+                using HttpResponseMessage unauthenticated = await anonymous.GetAsync(queuePath);
+                unauthenticated.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+                unauthenticated.Headers.CacheControl!.NoStore.Should().BeTrue();
+                (HttpClient admin, _) = await IntegrationTestAuth.RegisterVerifiedWithRoleAsync(fixture.Factory, AppRoles.ADMIN);
+                using (admin)
+                using (HttpResponseMessage adminDenied = await admin.GetAsync(queuePath))
+                { adminDenied.StatusCode.Should().Be(HttpStatusCode.Forbidden); }
+                using HttpResponseMessage forbidden = await owner.GetAsync(queuePath);
+                forbidden.StatusCode.Should().Be(HttpStatusCode.Forbidden);
+                using HttpResponseMessage queue = await moderator.GetAsync(queuePath);
+                queue.StatusCode.Should().Be(HttpStatusCode.OK);
+                queue.Headers.CacheControl!.NoStore.Should().BeTrue();
+                (await queue.Content.ReadAsStringAsync()).Should().Contain(seed.SubmissionId.ToString()).And.NotContain(PRIVATE_EXCERPT);
+                using HttpResponseMessage bounds = await moderator.GetAsync(queuePath + "?pageSize=101");
+                bounds.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+                using HttpResponseMessage badCursor = await moderator.GetAsync(queuePath + "?cursor=tampered");
+                badCursor.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+                using HttpResponseMessage claim = await moderator.PostAsJsonAsync(claimPath, new { operationId = Guid.NewGuid(), expectedCaseRevision = 1 });
+                claim.StatusCode.Should().Be(HttpStatusCode.OK);
+                claim.Headers.CacheControl!.NoStore.Should().BeTrue();
+                using HttpResponseMessage contested = await other.PostAsJsonAsync(claimPath, new { operationId = Guid.NewGuid(), expectedCaseRevision = 2 });
+                contested.StatusCode.Should().Be(HttpStatusCode.Conflict);
+                (await contested.Content.ReadAsStringAsync()).Should().Contain(ErrorCodes.ERR_MODERATION_CASE_HELD);
+                using HttpResponseMessage release = await moderator.PostAsJsonAsync(releasePath, new { operationId = Guid.NewGuid(), expectedCaseRevision = 2 });
+                release.StatusCode.Should().Be(HttpStatusCode.OK);
+                release.Headers.CacheControl!.NoStore.Should().BeTrue();
+                using HttpResponseMessage stale = await moderator.PostAsJsonAsync(claimPath, new { operationId = Guid.NewGuid(), expectedCaseRevision = 1 });
+                stale.StatusCode.Should().Be(HttpStatusCode.Conflict);
+                stale.Headers.CacheControl!.NoStore.Should().BeTrue();
+                (await stale.Content.ReadAsStringAsync()).Should().Contain(ErrorCodes.ERR_MODERATION_CASE_STALE);
+                await using AsyncServiceScope scope = fixture.Factory.Services.CreateAsyncScope();
+                ApplicationDbContext db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+                await db.Users.Where(u => u.Username == moderatorName).ExecuteUpdateAsync(s => s.SetProperty(u => u.Role, AppRoles.USER));
+                using HttpResponseMessage revoked = await moderator.GetAsync(queuePath);
+                revoked.StatusCode.Should().Be(HttpStatusCode.Forbidden);
+            }
+        }
+    }
     [Fact]
     public async Task Evidence_WhenModeratorReads_ShouldHaveCommittedSafeAuditAndNoStoreBeforeBody()
     {

@@ -25,6 +25,8 @@ public class ModerationSubmission : BaseEntity
     public required ModerationSubmissionState State { get; set; }
     public ModerationWithdrawalReason? WithdrawalReason { get; set; }
     public required long CaseRevision { get; set; }
+    public Guid? ClaimHolderId { get; set; }
+    public DateTimeOffset? ClaimedAt { get; set; }
     public Guid? PreviousSubmissionId { get; init; }
 
     public Asset Asset { get; set; } = null!;

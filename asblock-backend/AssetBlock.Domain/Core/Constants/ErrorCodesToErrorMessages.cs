@@ -7,6 +7,12 @@ public static class ErrorCodesToErrorMessages
 {
     private static readonly IReadOnlyDictionary<string, string> _map = new Dictionary<string, string>
     {
+        { ErrorCodes.ERR_MODERATION_CASE_HELD, "This submission is already claimed by another Moderator." },
+        { ErrorCodes.ERR_MODERATION_CASE_NOT_CLAIMED, "This submission is not currently claimed." },
+        { ErrorCodes.ERR_REVIEW_AUDIT_UNAVAILABLE, "The review action could not be audited. Try again later." },
+        { ErrorCodes.ERR_MODERATION_CASE_NOT_ACTIVE, "This submission is no longer active." },
+        { ErrorCodes.ERR_MODERATION_CASE_STALE, "This submission has changed. Refresh the page before trying again." },
+        { ErrorCodes.ERR_MODERATION_NOT_HOLDER, "Only the current reviewer can release this submission." },
         { ErrorCodes.ERR_EVIDENCE_SECURITY_RESTRICTED, "Evidence preview is unavailable while this version is security-restricted." },
         { ErrorCodes.ERR_EVIDENCE_AUDIT_UNAVAILABLE, "Evidence access could not be audited. No content was released. Try again later." },
         { ErrorCodes.ERR_REVIEW_EVIDENCE_NOT_FOUND, "The requested review evidence was not found." },

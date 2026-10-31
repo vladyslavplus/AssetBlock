@@ -79,6 +79,14 @@ if (!app.Environment.IsEnvironment("IntegrationTesting") && !app.Environment.IsD
 }
 
 app.UseAssetBlockCors();
+app.Use(async (context, next) =>
+{
+    if (context.GetEndpoint()?.Metadata.GetMetadata<AssetBlock.WebApi.Filters.PrivateNoStoreAttribute>() is not null)
+    {
+        context.Response.Headers.CacheControl = "private, no-store";
+    }
+    await next();
+});
 app.UseAuthentication();
 app.UseAnalyticsBffSignatureValidation();
 app.UseRateLimiter();

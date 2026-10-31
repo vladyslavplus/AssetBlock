@@ -201,7 +201,9 @@ public static class DependencyInjection
             provider.GetRequiredService<TimeProvider>(),
             provider.GetRequiredService<IAuditWriter>(),
             provider.GetRequiredService<IAnalysisRunEnqueuer>(),
-            provider.GetRequiredService<ISecurityProvenanceStore>()));
+            provider.GetRequiredService<ISecurityProvenanceStore>(),
+            provider.GetRequiredService<Microsoft.Extensions.Logging.ILogger<ModerationFoundationStore>>(),
+            provider.GetRequiredService<Microsoft.AspNetCore.DataProtection.IDataProtectionProvider>()));
         services.AddScoped<IUserVerificationStore, UserVerificationStore>();
 
         services.AddScoped<ICategoryStore, CategoryStore>();

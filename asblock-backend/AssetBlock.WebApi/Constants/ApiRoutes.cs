@@ -161,6 +161,9 @@ public static class ApiRoutes
 
     public static class Moderation
     {
+        public const string QUEUE = "api/moderation/submissions";
+        public const string CLAIM = "api/moderation/submissions/{id:guid}/claim";
+        public const string RELEASE = "api/moderation/submissions/{id:guid}/release";
         public const string CASE_EVIDENCE = "/api/moderation/submissions/{id:guid}/evidence/{kind}";
         public const string COVERAGE_REQUESTS = "/api/moderation/coverage-reviews";
         public const string COVERAGE_EVIDENCE = "/api/moderation/coverage-reviews/{id:guid}/evidence/{kind}";
