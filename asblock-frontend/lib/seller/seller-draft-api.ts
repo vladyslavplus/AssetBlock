@@ -1,6 +1,11 @@
+import { ApiRequestError } from '@/lib/http/api-client'
 import { getApiErrorMessage, parseApiErrorBody } from '@/lib/http/api-errors'
 import { isAbortError, toAbortError } from '@/lib/http/is-abort-error'
 import {
+  sellerResponsesPageSchema,
+  sellerEvidenceSavedSchema,
+  type SellerResponseRequest,
+  type SellerEvidenceEditRequest,
   sellerDraftCreatedSchema,
   sellerDraftSnapshotSchema,
   sellerVersionReviewSchema,
@@ -32,7 +37,7 @@ async function fetchJson(url: string, init: RequestInit = {}): Promise<Response>
     return await fetch(url, init)
   } catch (error) {
     if (isAbortError(error, init.signal)) throw toAbortError(error, init.signal)
-    throw error
+    throw new ApiRequestError('Network request failed.', 0, undefined)
   }
 }
 
@@ -41,7 +46,7 @@ async function readResponseText(res: Response, signal?: AbortSignal): Promise<st
     return await res.text()
   } catch (error) {
     if (isAbortError(error, signal)) throw toAbortError(error, signal)
-    throw error
+    throw new ApiRequestError('Network request failed.', 0, undefined)
   }
 }
 
@@ -51,6 +56,7 @@ export type SellerApiResult<T> =
       ok: false
       message: string
       fieldErrors?: Record<string, string>
+      retryable?: boolean
       code?: string
     }
 
@@ -78,9 +84,12 @@ async function sendJson<T>(
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
   })
-  const parsed = parseMaybeJson(await res.text())
+  const parsed = parseMaybeJson(await readResponseText(res))
   if (!res.ok) {
-    return errorResult(parsed, `Request failed (${res.status})`)
+    return {
+      ...errorResult(parsed, `Request failed (${res.status})`),
+      retryable: res.status >= 500,
+    }
   }
   if (!schema.safeParse(parsed).success) {
     return { ok: false, message: 'Unexpected response from server.' }
@@ -104,7 +113,7 @@ export async function createSellerDraft(body: {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
   })
-  const parsed = parseMaybeJson(await res.text())
+  const parsed = parseMaybeJson(await readResponseText(res))
   if (!res.ok) {
     return errorResult(parsed, `Could not create draft (${res.status})`)
   }
@@ -270,7 +279,7 @@ export async function updateSellerAssetPrice(
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ price }),
   })
-  const parsed = parseMaybeJson(await res.text())
+  const parsed = parseMaybeJson(await readResponseText(res))
   if (!res.ok) {
     const p = parseApiErrorBody(parsed)
     const fe = p?.fieldErrors
@@ -286,7 +295,7 @@ export async function updateSellerAssetPrice(
 
 export type SubmitVersionResult =
   | { ok: true; submissionId: string }
-  | { ok: false; message: string; blockedReasons?: string[] }
+  | { ok: false; message: string; blockedReasons?: string[]; retryable?: boolean }
 
 export async function submitSellerAssetVersion(
   assetId: string,
@@ -307,7 +316,7 @@ export async function submitSellerAssetVersion(
       body: JSON.stringify(body),
     },
   )
-  const parsed = parseMaybeJson(await res.text())
+  const parsed = parseMaybeJson(await readResponseText(res))
   if (res.status === 409) {
     const p = parseApiErrorBody(parsed)
     return {
@@ -318,15 +327,19 @@ export async function submitSellerAssetVersion(
   }
   if (!res.ok) {
     const p = parseApiErrorBody(parsed)
-    return { ok: false, message: p?.summary ?? `Could not submit version (${res.status})` }
+    return {
+      ok: false,
+      message: p?.summary ?? `Could not submit version (${res.status})`,
+      retryable: res.status >= 500,
+    }
   }
   if (
     typeof parsed === 'object' &&
     parsed !== null &&
-    'id' in parsed &&
-    typeof (parsed as { id: unknown }).id === 'string'
+    'submissionId' in parsed &&
+    typeof (parsed as { submissionId: unknown }).submissionId === 'string'
   ) {
-    return { ok: true, submissionId: (parsed as { id: string }).id }
+    return { ok: true, submissionId: (parsed as { submissionId: string }).submissionId }
   }
   return { ok: false, message: 'Unexpected response from server.' }
 }
@@ -344,7 +357,7 @@ export async function withdrawSellerSubmission(
       body: JSON.stringify(body),
     },
   )
-  const parsed = parseMaybeJson(await res.text())
+  const parsed = parseMaybeJson(await readResponseText(res))
   if (!res.ok) {
     const p = parseApiErrorBody(parsed)
     return { ok: false, message: p?.summary ?? `Could not withdraw submission (${res.status})` }
@@ -365,4 +378,43 @@ export async function withdrawSellerSubmission(
     }
   }
   return { ok: false, message: 'Unexpected response from server.' }
+}
+
+export async function fetchSellerResponses(
+  assetId: string,
+  versionId: string,
+  page = 1,
+  signal?: AbortSignal,
+) {
+  const res = await fetchJson(
+    `/api/seller/assets/${encodeURIComponent(assetId)}/versions/${encodeURIComponent(versionId)}/responses?page=${page}`,
+    { credentials: 'include', signal },
+  )
+  const parsed = parseMaybeJson(await readResponseText(res, signal))
+  if (!res.ok) throw new Error(getApiErrorMessage(parsed, 'Could not load responses.'))
+  return sellerResponsesPageSchema.parse(parsed)
+}
+export function saveSellerResponse(
+  assetId: string,
+  versionId: string,
+  body: SellerResponseRequest,
+) {
+  return sendJson(
+    `/api/seller/assets/${encodeURIComponent(assetId)}/versions/${encodeURIComponent(versionId)}/responses`,
+    'POST',
+    body,
+    sellerEvidenceSavedSchema,
+  )
+}
+export function saveSellerEvidence(
+  assetId: string,
+  versionId: string,
+  body: SellerEvidenceEditRequest,
+) {
+  return sendJson(
+    `/api/seller/assets/${encodeURIComponent(assetId)}/versions/${encodeURIComponent(versionId)}/evidence`,
+    'PUT',
+    body,
+    sellerEvidenceSavedSchema,
+  )
 }

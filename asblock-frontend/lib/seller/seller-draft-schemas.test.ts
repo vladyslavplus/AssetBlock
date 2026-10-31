@@ -8,6 +8,7 @@ import {
   sellerDraftCreateRequestSchema,
   sellerDraftSnapshotSchema,
   sellerAnalysisFindingSchema,
+  sellerAnalysisSummarySchema,
   sellerVersionReviewSchema,
   sourceDeclarationByteSize,
   sourceDeclarationPayloadSchema,
@@ -26,6 +27,68 @@ const COMPONENT = {
   permissionEvidenceReferences: [],
   origin: 'THIRD_PARTY' as const,
 }
+
+describe('server review eligibility', () => {
+  const summary = {
+    assetId: '123e4567-e89b-12d3-a456-426614174000',
+    requiredResponseCount: 0,
+    outstandingResponseCount: 0,
+    evidenceRevision: 0,
+    assetVersionId: '123e4567-e89b-12d3-a456-426614174001',
+    lifecycle: 'COMPLETED',
+    runId: '123e4567-e89b-12d3-a456-426614174002',
+    reportId: '123e4567-e89b-12d3-a456-426614174003',
+    reportIsCurrent: true,
+    coverageLevel: 'FULL',
+    analyzedFileCount: 1,
+    omissionCount: 0,
+    findingCount: 0,
+    findingDetailsAvailable: true,
+    createdAt: null,
+    completedAt: null,
+    errorCode: null,
+    errorMessage: null,
+    actionHint: null,
+    canRetry: false,
+    retryExpectation: null,
+    canSubmit: true,
+    reviewEligible: true,
+    submissionBlockedReason: null,
+    comparisonScope: 'Selected source files only',
+    limitations: ['Publication requires an explicit moderator decision.'],
+    stages: [
+      {
+        stage: 'VERIFIER',
+        applicability: 'MANDATORY',
+        outcome: 'NOT_APPLICABLE',
+        retryable: false,
+      },
+    ],
+  }
+
+  it('accepts server-issued eligibility without publishing the version', () => {
+    expect(sellerAnalysisSummarySchema.parse(summary).canSubmit).toBe(true)
+  })
+
+  it('preserves explicit blocked reasons and denied eligibility', () => {
+    const blocked = sellerAnalysisSummarySchema.parse({
+      ...summary,
+      canSubmit: false,
+      reviewEligible: false,
+      submissionBlockedReason: 'ERR_REVIEW_COVERAGE_REQUIRED',
+    })
+    expect(blocked.submissionBlockedReason).toBe('ERR_REVIEW_COVERAGE_REQUIRED')
+  })
+
+  it('rejects string review eligibility flags', () => {
+    expect(sellerAnalysisSummarySchema.safeParse({ ...summary, canSubmit: 'true' }).success).toBe(
+      false,
+    )
+    expect(
+      sellerAnalysisSummarySchema.safeParse({ ...summary, reviewEligible: 'true' }).success,
+    ).toBe(false)
+  })
+})
 
 const DECLARATION: SourceDeclarationPayload = {
   ownContributionSummary: 'Authored the pipeline myself.',
@@ -49,6 +112,8 @@ describe('sellerAnalysisFindingSchema', () => {
       endLine: null,
       reason: 'r'.repeat(1024),
       requestedAction: 'a'.repeat(512),
+      responseRequired: false,
+      hasResponse: false,
       referenceKind: 'FOREIGN_PUBLIC',
       publicAttribution: { label: 'Public reference', url: null },
     })
@@ -68,6 +133,8 @@ describe('sellerAnalysisFindingSchema', () => {
       endLine: null,
       reason: '',
       requestedAction: '',
+      responseRequired: false,
+      hasResponse: false,
       referenceKind: 'FOREIGN_PUBLIC',
       publicAttribution: { label: 'Public reference', url: 'http://example.com' },
     }
@@ -187,6 +254,9 @@ describe('sellerVersionReviewSchema', () => {
   it('accepts a review payload with blocked reasons', () => {
     const result = sellerVersionReviewSchema.safeParse({
       assetId: '123e4567-e89b-12d3-a456-426614174000',
+      requiredResponseCount: 0,
+      outstandingResponseCount: 0,
+      evidenceRevision: 0,
       assetVersionId: '123e4567-e89b-12d3-a456-426614174001',
       versionNumber: 1,
       processingStatus: 'PENDING_INSPECTION',
@@ -206,6 +276,9 @@ describe('sellerVersionReviewSchema', () => {
   it('accepts analysis timestamps with backend UTC offsets', () => {
     const result = sellerVersionReviewSchema.safeParse({
       assetId: '123e4567-e89b-12d3-a456-426614174000',
+      requiredResponseCount: 0,
+      outstandingResponseCount: 0,
+      evidenceRevision: 0,
       assetVersionId: '123e4567-e89b-12d3-a456-426614174001',
       versionNumber: 1,
       processingStatus: 'READY',
@@ -216,9 +289,12 @@ describe('sellerVersionReviewSchema', () => {
       publicationEligible: false,
       canUpload: true,
       canSubmit: false,
-      blockedReasons: ['ERR_RESEARCH_EVALUATION_PENDING'],
+      blockedReasons: ['ERR_REVIEW_COVERAGE_REQUIRED'],
       analysisDetails: {
         assetId: '123e4567-e89b-12d3-a456-426614174000',
+        requiredResponseCount: 0,
+        outstandingResponseCount: 0,
+        evidenceRevision: 0,
         assetVersionId: '123e4567-e89b-12d3-a456-426614174001',
         lifecycle: 'COMPLETED',
         runId: '123e4567-e89b-12d3-a456-426614174002',
@@ -236,8 +312,9 @@ describe('sellerVersionReviewSchema', () => {
         actionHint: null,
         canRetry: false,
         retryExpectation: null,
+        submissionBlockedReason: 'ERR_REVIEW_COVERAGE_REQUIRED',
         canSubmit: false,
-        canAuthorizePublication: false,
+        reviewEligible: false,
         comparisonScope: 'Selected source files from this version only',
         limitations: ['Research evaluation only.'],
         stages: [
@@ -252,6 +329,9 @@ describe('sellerVersionReviewSchema', () => {
   it('rejects numeric enum values instead of canonical strings', () => {
     const result = sellerVersionReviewSchema.safeParse({
       assetId: '123e4567-e89b-12d3-a456-426614174000',
+      requiredResponseCount: 0,
+      outstandingResponseCount: 0,
+      evidenceRevision: 0,
       assetVersionId: '123e4567-e89b-12d3-a456-426614174001',
       versionNumber: 1,
       processingStatus: 0,
@@ -385,6 +465,9 @@ describe('backend contract alignment', () => {
   it('parses a declaration snapshot that feeds the next save CAS', () => {
     const result = sellerDeclarationSnapshotSchema.safeParse({
       assetId: UUID,
+      requiredResponseCount: 0,
+      outstandingResponseCount: 0,
+      evidenceRevision: 0,
       assetVersionId: null,
       workspaceId: '123e4567-e89b-12d3-a456-426614174001',
       workspaceRevision: 4,

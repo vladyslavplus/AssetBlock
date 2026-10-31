@@ -91,6 +91,14 @@ public sealed class ModerationFoundationStorePostgresTests(PostgresFixture fixtu
             null);
 
         GuardedSubmissionResult first = await store.AttemptGuardedSubmission(request, CancellationToken.None);
+        await db.AssetDraftWorkspaces.Where(w => w.Id == workspaceEntity.Id)
+            .ExecuteUpdateAsync(s => s.SetProperty(w => w.WorkspaceRevision, w => w.WorkspaceRevision + 1));
+        AssetVersion nextVersion = TestData.CreateAssetVersion(asset.Id, versionNumber: 2, isCurrent: false);
+        db.AssetVersions.Add(nextVersion);
+        await db.SaveChangesAsync();
+        await db.AssetDraftWorkspaces.Where(w => w.Id == workspaceEntity.Id).ExecuteUpdateAsync(s => s
+            .SetProperty(w => w.AssetVersionId, nextVersion.Id).SetProperty(w => w.WorkspaceVersionScopeKey, nextVersion.Id));
+        db.ChangeTracker.Clear();
         GuardedSubmissionResult second = await store.AttemptGuardedSubmission(request, CancellationToken.None);
 
         first.Status.Should().Be(GuardedSubmissionStatus.BLOCKED);
@@ -180,6 +188,67 @@ public sealed class ModerationFoundationStorePostgresTests(PostgresFixture fixtu
         ModerationCaseAccessResult access = await store.GetCaseSummaryForModerator(author.Id, submission.Id);
 
         access.Status.Should().Be(ModerationCaseAccessStatus.SELF_OWNED_DENIED);
+    }
+
+    [Fact]
+    public async Task GetCaseSummaryForModerator_WhenCandidatesHaveNullableRanks_ShouldOrderByPathThenChannelRanksThenKey()
+    {
+        await using ApplicationDbContext db = await fixture.CreateCleanDbContext();
+        (User author, Category _, Asset asset) = await SeedAssetAsync(db);
+        User moderator = TestData.CreateUser("ordering-reviewer", "ordering-reviewer@example.test");
+        moderator.Role = AppRoles.MODERATOR;
+        db.Users.Add(moderator);
+        AssetVersion version = TestData.CreateAssetVersion(asset.Id);
+        AssetDraftWorkspace workspace = CreateVersionWorkspace(asset.Id, version.Id);
+        db.AssetVersions.Add(version);
+        db.AssetDraftWorkspaces.Add(workspace);
+        var report = new CodeAnalysisReportHeader
+        {
+            Id = Guid.NewGuid(),
+            AssetId = asset.Id,
+            AssetVersionId = version.Id,
+            ContentSha256 = version.ContentSha256,
+            PolicyVersion = ReviewAnalysisPolicy.KEY,
+            InputRevision = 1,
+            Purpose = CodeAnalysisReportPurpose.FIXTURE,
+            ReviewEligible = false,
+            IsFinalized = true,
+            ReportSchemaVersion = 1,
+            CreatedAt = DateTimeOffset.UtcNow
+        };
+        db.CodeAnalysisReportHeaders.Add(report);
+        ModerationSubmission submission = CreateSubmission(asset, version, workspace, author, reportId: report.Id);
+        db.ModerationSubmissions.Add(submission);
+        (string Key, string Path, int? Token, int? Semantic)[] input =
+        [
+            ("a-no-ranks", "own.py", null, null), ("a-token-second", "own.py", 2, 1),
+            ("z-sem-second", "own.py", null, 2), ("z-token-first", "own.py", 1, 5),
+            ("b-sem-first", "own.py", null, 1), ("z-no-ranks", "own.py", null, null),
+            ("path-first", "a.py", null, null)
+        ];
+        foreach ((string Key, string Path, int? Token, int? Semantic) row in input)
+        {
+            db.CodeAnalysisReportFindings.Add(new CodeAnalysisReportFinding
+            {
+                Id = Guid.NewGuid(),
+                ReportId = report.Id,
+                FindingKey = row.Key,
+                FindingType = "SIMILARITY_SEMANTIC",
+                OwnScopePath = row.Path,
+                OwnExcerpt = "own",
+                ForeignSensitivity = CodeAnalysisFindingSensitivity.PRIVATE,
+                TokenRank = row.Token,
+                SemanticRank = row.Semantic,
+                ReasonText = "Private comparison.",
+                RequestedAction = "Wait.",
+                CreatedAt = DateTimeOffset.UtcNow
+            });
+        }
+        await db.SaveChangesAsync();
+        var store = new ModerationFoundationStore(db, new AssetStore(db), new UserStore(db), new EfUnitOfWork(db));
+        ModerationCaseAccessResult result = await store.GetCaseSummaryForModerator(moderator.Id, submission.Id);
+        result.Summary!.RetrievalEvidence!.Candidates.Select(c => c.FindingKey).Should().Equal(
+            "path-first", "z-token-first", "a-token-second", "b-sem-first", "z-sem-second", "a-no-ranks", "z-no-ranks");
     }
 
     [Fact]
@@ -516,7 +585,7 @@ public sealed class ModerationFoundationStorePostgresTests(PostgresFixture fixtu
             CancellationToken.None);
 
         result.Status.Should().Be(GuardedSubmissionStatus.BLOCKED);
-        result.BlockedReasonCode.Should().Be(ErrorCodes.ERR_MODERATION_SUBMISSION_BLOCKED);
+        result.BlockedReasonCode.Should().Be(ErrorCodes.ERR_ANALYSIS_NOT_AVAILABLE);
     }
 
     [Fact]
@@ -868,7 +937,7 @@ public sealed class ModerationFoundationStorePostgresTests(PostgresFixture fixtu
             PolicyVersion = "policy-v1",
             InputRevision = 1,
             Purpose = CodeAnalysisReportPurpose.PRODUCTION,
-            CanAuthorizePublication = true,
+            ReviewEligible = true,
             IsFinalized = true,
             FinalizedAt = DateTimeOffset.UtcNow,
             ReportSchemaVersion = 1,
@@ -908,7 +977,8 @@ public sealed class ModerationFoundationStorePostgresTests(PostgresFixture fixtu
         AssetDraftWorkspace workspace,
         User author,
         Guid? id = null,
-        Guid? workspaceVersionScopeKey = null) =>
+        Guid? workspaceVersionScopeKey = null,
+        Guid? reportId = null) =>
         new()
         {
             Id = id ?? Guid.NewGuid(),
@@ -918,6 +988,7 @@ public sealed class ModerationFoundationStorePostgresTests(PostgresFixture fixtu
             WorkspaceVersionScopeKey = workspaceVersionScopeKey ?? workspace.WorkspaceVersionScopeKey,
             OwnerUserId = author.Id,
             ContentSha256 = version.ContentSha256,
+            CodeAnalysisReportHeaderId = reportId,
             DeclarationRevision = 1,
             MaterialMetadataRevision = 1,
             SellerEvidenceRevision = 1,

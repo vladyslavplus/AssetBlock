@@ -93,7 +93,7 @@ internal static class ApprovedPublicationTestBuilder
         db.CodeAnalysisRuns.Add(AdmittedReportTestEvidence.CompletedRun(version, chain));
         CodeAnalysisReportHeader report = AdmittedReportTestEvidence.Header(version, chain);
         db.CodeAnalysisReportHeaders.Add(report);
-        db.CodeAnalysisReportAdmissions.Add(AdmittedReportTestEvidence.Admission(report, chain, canAuthorizePublication: true));
+        db.CodeAnalysisReportAdmissions.Add(AdmittedReportTestEvidence.Admission(report, chain, reviewEligible: true));
 
         PublicationSnapshot snapshot = new()
         {

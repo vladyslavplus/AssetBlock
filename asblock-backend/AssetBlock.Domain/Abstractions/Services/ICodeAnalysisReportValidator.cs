@@ -15,7 +15,8 @@ public sealed record ValidatedCodeAnalysisReport(
     IReadOnlyList<ValidatedReportFinding> Findings,
     string ComparedSnapshotId,
     string ComparedRevision,
-    IReadOnlyList<ValidatedAnalysisReuseArtifact> ReuseArtifacts);
+    IReadOnlyList<ValidatedAnalysisReuseArtifact> ReuseArtifacts,
+    string RetrievalSummaryJson);
 
 public sealed record ValidatedAnalysisReuseArtifact(
     string Stage,
@@ -65,7 +66,8 @@ public sealed record ValidatedReportFinding(
     string ReasonText,
     string RequestedAction,
     int? OwnStartLine = null,
-    int? OwnEndLine = null);
+    int? OwnEndLine = null,
+    string? RetrievalEvidenceJson = null);
 
 public interface ICodeAnalysisReportValidator
 {

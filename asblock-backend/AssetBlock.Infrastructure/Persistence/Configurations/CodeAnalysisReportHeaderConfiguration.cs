@@ -32,6 +32,8 @@ internal sealed class CodeAnalysisReportHeaderConfiguration : IEntityTypeConfigu
                 "(\"AnalyzedFileCount\" IS NULL OR \"AnalyzedFileCount\" >= 0) AND (\"OmissionCount\" IS NULL OR \"OmissionCount\" >= 0) AND (\"FindingCount\" IS NULL OR \"FindingCount\" >= 0)");
         });
 
+        builder.Property(f => f.RetrievalSummaryJson).HasColumnType("jsonb");
+
         builder.HasKey(h => h.Id);
         builder.Property(h => h.ContentSha256).IsRequired().HasColumnType("char(64)");
         builder.Property(h => h.PolicyVersion).IsRequired().HasMaxLength(64);

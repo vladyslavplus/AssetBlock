@@ -61,14 +61,16 @@ public sealed class GetModerationSubmissionCaseQueryHandlerTests
         result.Value.Should().Be(summary);
     }
 
-    [Fact]
-    public async Task Handle_WhenModeratorOwnsAsset_ShouldForbidden()
+    [Theory]
+    [InlineData(ModerationCaseAccessStatus.SELF_OWNED_DENIED)]
+    [InlineData(ModerationCaseAccessStatus.DENIED_ROLE)]
+    public async Task Handle_WhenStoreDeniesCurrentAccess_ShouldForbidden(ModerationCaseAccessStatus status)
     {
         var actorId = Guid.NewGuid();
         _userStore.GetPersistedRole(actorId, Arg.Any<CancellationToken>())
             .Returns(new UserPersistedRole(actorId, AppRoles.MODERATOR, 2));
         _moderationStore.GetCaseSummaryForModerator(actorId, Arg.Any<Guid>(), Arg.Any<CancellationToken>())
-            .Returns(new ModerationCaseAccessResult(ModerationCaseAccessStatus.SELF_OWNED_DENIED, null));
+            .Returns(new ModerationCaseAccessResult(status, null));
 
         Ardalis.Result.Result<ModerationCaseSummary> result = await _handler.Handle(
             new GetModerationSubmissionCaseQuery(actorId, Guid.NewGuid()),

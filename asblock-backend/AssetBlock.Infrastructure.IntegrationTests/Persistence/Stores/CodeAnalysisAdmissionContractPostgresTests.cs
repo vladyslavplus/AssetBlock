@@ -69,18 +69,18 @@ public sealed class CodeAnalysisAdmissionContractPostgresTests(PostgresFixture f
         semantic.ToolIdentityJson.Should().Contain("padding-masked mean then L2");
         stages.Single(s => s.Stage == "TOKEN").ToolIdentityJson.Should().Contain("dolos");
         stages.Single(s => s.Stage == "LICENSE").ToolIdentityJson.Should().Contain("scancode");
-        stages.Single(s => s.Stage == "VERIFIER").ToolIdentityJson.Should().Contain("PENDING_RESEARCH_EVALUATION");
+        stages.Single(s => s.Stage == "VERIFIER").ToolIdentityJson.Should().Contain("DISABLED_BY_EVALUATION");
 
-        // The baseline stays closed: the service carries no publication authority here.
+        // Eligibility is server-issued; publication still requires a human decision.
         CodeAnalysisReportAdmission admission = await db.CodeAnalysisReportAdmissions.AsNoTracking()
             .SingleAsync(a => a.ReportId == reportId);
-        admission.CanAuthorizePublication.Should().BeFalse();
+        admission.ReviewEligible.Should().BeTrue();
         admission.AdmissionKind.Should().Be(CodeAnalysisAdmissionKind.SERVER_VALIDATED);
         admission.InputDigest.Should().Be(run.InputDigest);
         admission.ReservationGeneration.Should().Be(1);
 
         CodeAnalysisReportHeader header = await db.CodeAnalysisReportHeaders.AsNoTracking().SingleAsync();
-        header.CanAuthorizePublication.Should().BeFalse();
+        header.ReviewEligible.Should().BeTrue();
         header.Disposition.Should().Be(CodeAnalysisReportDisposition.SELECTED);
     }
 
@@ -199,7 +199,7 @@ public sealed class CodeAnalysisAdmissionContractPostgresTests(PostgresFixture f
             "inputDigest" => new PythonAnalysisEnvelope.Options { Outcome = "FAILED", InputDigest = AdmittedReportTestEvidence.NewHex64() },
             "contentSha256" => new PythonAnalysisEnvelope.Options { Outcome = "FAILED", ContentSha256 = AdmittedReportTestEvidence.NewHex64() },
             "assetId" => new PythonAnalysisEnvelope.Options { Outcome = "FAILED", AssetId = Guid.NewGuid().ToString("D") },
-            "schema" => new PythonAnalysisEnvelope.Options { Outcome = "FAILED", Schema = "code-analysis-v9" },
+            "schema" => new PythonAnalysisEnvelope.Options { Outcome = "FAILED", Schema = "invalid-analysis-schema" },
             "admittedBy" => new PythonAnalysisEnvelope.Options { Outcome = "FAILED", AdmittedByFabricated = true },
             "findings" => new PythonAnalysisEnvelope.Options { Outcome = "FAILED", IncludeFailureFindings = true },
             _ => new PythonAnalysisEnvelope.Options { Outcome = "FAILED", IncludeFailureStages = true }
@@ -277,7 +277,7 @@ public sealed class CodeAnalysisAdmissionContractPostgresTests(PostgresFixture f
             case ProofBreakage.ALTERED_POLICY:
                 await db.Database.ExecuteSqlInterpolatedAsync($"""
                     UPDATE security_evidence_records
-                    SET "SecurityPolicyVersion" = 'policy-v9-altered'
+                    SET "SecurityPolicyVersion" = 'invalid-security-policy'
                     WHERE "Id" = {seed.Chain.MalwareEvidenceId}
                     """);
                 break;
@@ -334,7 +334,7 @@ public sealed class CodeAnalysisAdmissionContractPostgresTests(PostgresFixture f
             ,
             "sellerSafeAuthority" => body =>
             {
-                ((JsonObject)body["sellerSafe"]!)["canAuthorizePublication"] = true;
+                ((JsonObject)body["sellerSafe"]!)["reviewEligible"] = true;
                 return body;
             }
             ,
@@ -348,7 +348,7 @@ public sealed class CodeAnalysisAdmissionContractPostgresTests(PostgresFixture f
                     ["path"] = "private/secret.cs",
                     ["sensitivity"] = "PRIVATE"
                 };
-                ((JsonObject)safe[0]!)["channelScore"] = 0.91;
+                ((JsonObject)safe[0]!)["tokenScore"] = 0.91;
                 return body;
             }
             ,
@@ -458,7 +458,7 @@ public sealed class CodeAnalysisAdmissionContractPostgresTests(PostgresFixture f
         db.Assets.Add(asset);
         db.AssetVersions.Add(version);
 
-        AdmittedReportTestEvidence.Chain chain = AdmittedReportTestEvidence.BuildChain();
+        AdmittedReportTestEvidence.Chain chain = AdmittedReportTestEvidence.BuildChain() with { PolicyDigest = ReviewAnalysisPolicy.DIGEST };
         db.CodeAnalysisPolicyVersions.Add(AdmittedReportTestEvidence.Policy(chain));
         await AdmittedReportTestEvidence.SeedObservedProofAsync(db, version, chain);
 

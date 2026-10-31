@@ -449,15 +449,15 @@ internal sealed class CodeAnalysisReportFinalizer(
         await dbContext.Database.ExecuteSqlInterpolatedAsync($"""
             INSERT INTO code_analysis_report_headers (
                 "Id", "AssetId", "AssetVersionId", "ContentSha256", "PolicyVersion", "InputRevision",
-                "Purpose", "CanAuthorizePublication", "IsFinalized", "FinalizedAt", "ReportSchemaVersion",
+                "Purpose", "ReviewEligible", "IsFinalized", "FinalizedAt", "ReportSchemaVersion",
                 "AnalysisRunId", "PythonReportId", "ReportDigest", "SelectionGeneration",
-                "CoverageLevel", "AnalyzedFileCount", "OmissionCount", "FindingCount", "Disposition",
+                "CoverageLevel", "AnalyzedFileCount", "OmissionCount", "FindingCount", "Disposition", "RetrievalSummaryJson",
                 "CreatedAt", "UpdatedAt"
             ) VALUES (
                 {reportId}, {job.AssetId}, {job.AssetVersionId}, {run.ContentSha256}, {policy.PolicyKey}, {run.SelectionGeneration},
-                'PRODUCTION', false, true, {dbNow}, 1,
+                'PRODUCTION', true, true, {dbNow}, 1,
                 {run.Id}, {validated.PythonReportId}, {validated.ReportDigest}, {run.SelectionGeneration},
-                {validated.CoverageLevel}, {validated.AnalyzedFileCount}, {validated.OmissionCount}, {validated.FindingCount}, {disposition},
+                {validated.CoverageLevel}, {validated.AnalyzedFileCount}, {validated.OmissionCount}, {validated.FindingCount}, {disposition}, CAST({validated.RetrievalSummaryJson} AS jsonb),
                 {dbNow}, {dbNow}
             )
             """, cancellationToken).ConfigureAwait(false);
@@ -500,13 +500,13 @@ internal sealed class CodeAnalysisReportFinalizer(
                     "Id", "ReportId", "FindingKey", "FindingType", "OwnScopePath", "OwnExcerpt", "OwnStartByte", "OwnEndByte",
                     "OwnStartLine", "OwnEndLine",
                     "ForeignSourceId", "ForeignOrigin", "ForeignSensitivity", "PublicAttributionJson",
-                    "TokenScore", "SemanticScore", "TokenRank", "SemanticRank",
+                    "TokenScore", "SemanticScore", "TokenRank", "SemanticRank", "RetrievalEvidenceJson",
                     "ReasonText", "RequestedAction", "CreatedAt", "UpdatedAt"
                 ) VALUES (
                     {Guid.NewGuid()}, {reportId}, {finding.FindingKey}, {finding.FindingType}, {finding.OwnScopePath}, {finding.OwnExcerpt}, {finding.OwnStartByte}, {finding.OwnEndByte},
                     {finding.OwnStartLine}, {finding.OwnEndLine},
                     {finding.ForeignSourceId}, {finding.ForeignOrigin}, {finding.ForeignSensitivity}, CAST({finding.PublicAttributionJson} AS jsonb),
-                    {finding.TokenScore}, {finding.SemanticScore}, {finding.TokenRank}, {finding.SemanticRank},
+                    {finding.TokenScore}, {finding.SemanticScore}, {finding.TokenRank}, {finding.SemanticRank}, CAST({finding.RetrievalEvidenceJson} AS jsonb),
                     {finding.ReasonText}, {finding.RequestedAction}, {dbNow}, {dbNow}
                 )
                 """, cancellationToken).ConfigureAwait(false);
@@ -517,12 +517,12 @@ internal sealed class CodeAnalysisReportFinalizer(
             INSERT INTO code_analysis_report_admissions (
                 "Id", "ReportId", "AdmissionKind", "AdmittedBy", "AdmittedAt", "ReportDigest",
                 "PythonReportId", "InputDigest", "ServiceKey", "ReservationSlotNumber", "ReservationGeneration",
-                "ReservationLeaseTokenDigest", "CanAuthorizePublication", "PublicationAuthorityReason",
+                "ReservationLeaseTokenDigest", "ReviewEligible", "ReviewEligibilityReason",
                 "CreatedAt", "UpdatedAt"
             ) VALUES (
                 {Guid.NewGuid()}, {reportId}, 'SERVER_VALIDATED', 'assetblock-dotnet-finalizer', {dbNow}, {validated.ReportDigest},
                 {validated.PythonReportId}, {run.InputDigest}, {run.ServiceKey}, 0, {run.ReservationGeneration ?? 0},
-                {leaseDigest}, false, 'Baseline policy carries no publication authority pending research evaluation.',
+                {leaseDigest}, true, {"Eligible for explicit human review; no publication without a moderator decision."},
                 {dbNow}, {dbNow}
             )
             """, cancellationToken).ConfigureAwait(false);
@@ -841,7 +841,7 @@ internal sealed class CodeAnalysisReportFinalizer(
             CodeAnalysisReportAdmission? admission = header is null ? null : await dbContext.CodeAnalysisReportAdmissions
                 .FromSqlInterpolated($"SELECT * FROM code_analysis_report_admissions WHERE \"ReportId\" = {header.Id} FOR SHARE")
                 .AsNoTracking().SingleOrDefaultAsync(a => a.AdmissionKind == CodeAnalysisAdmissionKind.SERVER_VALIDATED
-                    && !a.CanAuthorizePublication && a.ReportDigest == header.ReportDigest
+                    && a.ReviewEligible == header.ReviewEligible && a.ReportDigest == header.ReportDigest
                     && a.InputDigest == source.InputDigest, cancellationToken).ConfigureAwait(false);
             if (header is null || admission is null
                 || header.AnalysisRunId != source.Id
@@ -849,7 +849,6 @@ internal sealed class CodeAnalysisReportFinalizer(
                 || header.AssetVersionId != source.AssetVersionId
                 || header.ContentSha256 != source.ContentSha256
                 || header.PolicyVersion != policy.PolicyKey
-                || header.CanAuthorizePublication
                 || header.Purpose != CodeAnalysisReportPurpose.PRODUCTION
                 || header.PythonReportId is null
                 || admission.PythonReportId != header.PythonReportId
@@ -1050,8 +1049,8 @@ internal sealed class CodeAnalysisReportFinalizer(
                 && overflow.TryGetInt64(out var overflowCount)
                 && overflowCount >= 0
                 && IsPolicyBound(root, run, policy)
-                && IsCoherentStageMatrix(stages)
-                && HasSuccessfulStageMatrix(stages);
+                && IsCoherentStageMatrix(stages, policy)
+                && HasSuccessfulStageMatrix(stages, policy);
         }
 
         // Cancellation is its own terminal shape: no stage ran, no policy is restated and no cleanup
@@ -1092,7 +1091,7 @@ internal sealed class CodeAnalysisReportFinalizer(
             // approved policy it ran under, and reports a coherent stage matrix: no unknown stage, no
             // duplicate, and every mandatory stage recorded exactly once.
             return IsFailedStageReported(stages, failedStageElement.GetString()!, code, retryable)
-                && IsCoherentStageMatrix(stages)
+                && IsCoherentStageMatrix(stages, policy)
                 && IsPolicyBound(root, run, policy)
                 && reportedCleanupError.ValueKind == JsonValueKind.Null
                 && HasExactProperties(root,
@@ -1155,7 +1154,7 @@ internal sealed class CodeAnalysisReportFinalizer(
         }
     }
 
-    private static bool IsCoherentStageMatrix(JsonElement stages)
+    private static bool IsCoherentStageMatrix(JsonElement stages, CodeAnalysisPolicyVersion? policy)
     {
         var seen = new HashSet<string>(StringComparer.Ordinal);
 
@@ -1163,12 +1162,12 @@ internal sealed class CodeAnalysisReportFinalizer(
         {
             if (stage.ValueKind != JsonValueKind.Object
                 || !TryReadString(stage, "stage", out var name)
-                || !_analysisStageNames.Contains(name!)
+                || !StageNames.Contains(name!)
                 || !seen.Add(name!)
                 || !TryReadString(stage, "applicability", out var applicability)
                 || !string.Equals(applicability, "MANDATORY", StringComparison.Ordinal)
                 || !TryReadString(stage, "outcome", out var outcome)
-                || (outcome != "SUCCEEDED" && outcome != "FAILED"))
+                || (outcome != "SUCCEEDED" && outcome != "FAILED" && !IsDisabledVerifier(stage, policy)))
             {
                 return false;
             }
@@ -1179,6 +1178,14 @@ internal sealed class CodeAnalysisReportFinalizer(
                 return false;
             }
 
+            if (IsDisabledVerifier(stage, policy))
+            {
+                if (retryable.ValueKind == JsonValueKind.True)
+                {
+                    return false;
+                }
+                continue;
+            }
             // A succeeded stage carries no error and is never retryable; a failed stage must carry one.
             if (string.Equals(outcome, "SUCCEEDED", StringComparison.Ordinal))
             {
@@ -1198,7 +1205,7 @@ internal sealed class CodeAnalysisReportFinalizer(
         return true;
     }
 
-    private static readonly HashSet<string> _analysisStageNames = new(StringComparer.Ordinal)
+    internal static IReadOnlySet<string> StageNames { get; } = new HashSet<string>(StringComparer.Ordinal)
     {
         "INVENTORY", "EXTRACTION", "TOKEN", "SEMANTIC", "LICENSE", "UNION", "VERIFIER", "REPORT"
     };
@@ -1235,9 +1242,15 @@ internal sealed class CodeAnalysisReportFinalizer(
         };
     }
 
-    private static bool HasSuccessfulStageMatrix(JsonElement stages)
+    private static bool IsDisabledVerifier(JsonElement stage, CodeAnalysisPolicyVersion? policy) =>
+        policy?.PolicyKey == ReviewAnalysisPolicy.KEY && policy.PolicyDigest == ReviewAnalysisPolicy.DIGEST
+        && TryReadString(stage, "stage", out var name) && name == "VERIFIER"
+        && TryReadString(stage, "outcome", out var outcome) && outcome == "NOT_APPLICABLE"
+        && TryReadString(stage, "errorCode", out var code) && code == "POLICY_DISABLED";
+
+    private static bool HasSuccessfulStageMatrix(JsonElement stages, CodeAnalysisPolicyVersion? policy)
     {
-        if (stages.ValueKind != JsonValueKind.Array || stages.GetArrayLength() != _analysisStageNames.Count)
+        if (stages.ValueKind != JsonValueKind.Array || stages.GetArrayLength() != StageNames.Count)
         {
             return false;
         }
@@ -1246,7 +1259,7 @@ internal sealed class CodeAnalysisReportFinalizer(
         {
             if (stage.ValueKind != JsonValueKind.Object
                 || !TryReadString(stage, "outcome", out var outcome)
-                || !string.Equals(outcome, "SUCCEEDED", StringComparison.Ordinal))
+                || (!string.Equals(outcome, "SUCCEEDED", StringComparison.Ordinal) && !IsDisabledVerifier(stage, policy)))
             {
                 return false;
             }
@@ -1319,8 +1332,7 @@ internal sealed class CodeAnalysisReportFinalizer(
             && string.Equals(policyDigest, run.PolicyDigest, StringComparison.Ordinal)
             && TryReadString(policyJson, "verifierMode", out var verifierMode)
             && string.Equals(verifierMode, policy.VerifierMode, StringComparison.Ordinal)
-            && policyJson.TryGetProperty("canAuthorizePublication", out JsonElement canAuthorize)
-            && canAuthorize.ValueKind == JsonValueKind.False;
+            && !policyJson.TryGetProperty("reviewEligible", out _);
     }
 
 

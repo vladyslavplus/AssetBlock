@@ -2,7 +2,9 @@ using System.Buffers.Binary;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using AssetBlock.Domain.Abstractions.Services;
+using AssetBlock.Domain.Core.Constants;
 using AssetBlock.Domain.Core.Dto;
+using AssetBlock.Domain.Core.Dto.Moderation;
 using AssetBlock.Domain.Core.Entities;
 
 namespace AssetBlock.Infrastructure.Persistence.Stores;
@@ -16,11 +18,6 @@ internal sealed class CodeAnalysisReportValidator : ICodeAnalysisReportValidator
 {
     /// <summary>An operation timeout bounds every stage, so no stage may report a longer one.</summary>
     private const double MAX_STAGE_DURATION_SECONDS = 3600d;
-
-    private static readonly HashSet<string> _expectedStages = new(StringComparer.Ordinal)
-    {
-        "INVENTORY", "EXTRACTION", "TOKEN", "SEMANTIC", "LICENSE", "UNION", "VERIFIER", "REPORT"
-    };
 
     private static readonly HashSet<string> _findingTypes = new(StringComparer.Ordinal)
     {
@@ -86,11 +83,23 @@ internal sealed class CodeAnalysisReportValidator : ICodeAnalysisReportValidator
 
             RequireString(policyJson, "policyVersion", policy.PolicyKey);
             RequireString(policyJson, "policyDigest", policy.PolicyDigest);
-            RequireString(policyJson, "verifierMode", "PENDING_RESEARCH_EVALUATION");
-            if (!policyJson.TryGetProperty("canAuthorizePublication", out JsonElement canAuth)
-                || canAuth.ValueKind != JsonValueKind.False)
+            if (policy.PolicyKey != ReviewAnalysisPolicy.KEY || policy.PolicyDigest != ReviewAnalysisPolicy.DIGEST
+                || policy.VerifierMode != ReviewAnalysisPolicy.VERIFIER_MODE
+                || policy.VerifierReason != ReviewAnalysisPolicy.VERIFIER_REASON)
             {
-                throw new CodeAnalysisValidationException("Policy must not authorize publication.");
+                throw new CodeAnalysisValidationException("Unrecognized review policy identity.");
+            }
+            RequireString(policyJson, "verifierMode", ReviewAnalysisPolicy.VERIFIER_MODE);
+            RequireString(policyJson, "evidenceSha256", ReviewAnalysisPolicy.EVIDENCE_SHA256);
+            if ((root.TryGetProperty("purpose", out JsonElement purpose)
+                    && (purpose.ValueKind != JsonValueKind.String || purpose.GetString() != "PRODUCTION"))
+                || root.TryGetProperty("simulated", out _) || root.TryGetProperty("fixture", out _))
+            {
+                throw new CodeAnalysisValidationException("Non-production envelope cannot be admitted.");
+            }
+            if (root.TryGetProperty("reviewEligible", out _) || policyJson.TryGetProperty("reviewEligible", out _))
+            {
+                throw new CodeAnalysisValidationException("The producer cannot assert review eligibility.");
             }
 
             if (!string.Equals(run.PolicyDigest, policy.PolicyDigest, StringComparison.Ordinal))
@@ -194,6 +203,7 @@ internal sealed class CodeAnalysisReportValidator : ICodeAnalysisReportValidator
 
             List<ValidatedReportFinding> parsedFindings = ParseFindings(findingsJson);
             var findingOverflow = RequireNonNegativeInt(root, "findingOverflow", allowMissing: true);
+            RetrievalReportSummary retrievalSummary = RetrievalEvidenceValidator.ValidateSummary(root, parsedFindings, findingOverflow);
             ValidateReportStageCounts(parsedStages, analyzedFiles, omissions, parsedFindings.Count, findingOverflow, omissionOverflow);
 
             // Report digest over the pre-REPORT payload: recompute reportId from the body
@@ -227,10 +237,9 @@ internal sealed class CodeAnalysisReportValidator : ICodeAnalysisReportValidator
             RequireString(sellerSafe, "outcome", "COMPLETED");
             RequireString(sellerSafe, "coverage", level);
 
-            if (!sellerSafe.TryGetProperty("canAuthorizePublication", out JsonElement safeAuthority)
-                || safeAuthority.ValueKind != JsonValueKind.False)
+            if (sellerSafe.TryGetProperty("reviewEligible", out _))
             {
-                throw new CodeAnalysisValidationException("Seller projection must not authorize publication.");
+                throw new CodeAnalysisValidationException("The producer cannot assert review eligibility.");
             }
 
             if (RequireNonNegativeInt(sellerSafe, "omissionCount") != omissions)
@@ -267,7 +276,8 @@ internal sealed class CodeAnalysisReportValidator : ICodeAnalysisReportValidator
                 parsedFindings,
                 snapshotId,
                 revision,
-                reuseArtifacts);
+                reuseArtifacts,
+                JsonSerializer.Serialize(new PersistedRetrievalSummary(snapshotId, revision, findingOverflow, retrievalSummary), RetrievalEvidenceValidator.JsonOptions));
         }
     }
 
@@ -295,6 +305,10 @@ internal sealed class CodeAnalysisReportValidator : ICodeAnalysisReportValidator
         foreach (ValidatedReportStage stage in stages)
         {
             using var tool = JsonDocument.Parse(stage.ToolIdentityJson);
+            if (tool.RootElement.TryGetProperty("fixture", out _) || tool.RootElement.TryGetProperty("simulated", out _))
+            {
+                throw new CodeAnalysisValidationException("Simulated stage evidence cannot be admitted.");
+            }
 
             switch (stage.Stage)
             {
@@ -352,6 +366,8 @@ internal sealed class CodeAnalysisReportValidator : ICodeAnalysisReportValidator
 
                 case "VERIFIER":
                     RequireToolMember(tool.RootElement, "mode", policy.VerifierMode);
+                    RequireToolMember(tool.RootElement, "reason", ReviewAnalysisPolicy.VERIFIER_REASON);
+                    RequireToolMember(tool.RootElement, "evidenceSha256", ReviewAnalysisPolicy.EVIDENCE_SHA256);
                     break;
 
                 case "REPORT":
@@ -883,7 +899,7 @@ internal sealed class CodeAnalysisReportValidator : ICodeAnalysisReportValidator
             }
 
             var name = RequireString(stage, "stage", null);
-            if (!_expectedStages.Contains(name))
+            if (!CodeAnalysisReportFinalizer.StageNames.Contains(name))
             {
                 throw new CodeAnalysisValidationException($"Unexpected stage '{name}'.");
             }
@@ -894,10 +910,16 @@ internal sealed class CodeAnalysisReportValidator : ICodeAnalysisReportValidator
             }
 
             RequireString(stage, "applicability", "MANDATORY");
-            RequireString(stage, "outcome", "SUCCEEDED");
+            var disabledVerifier = name == "VERIFIER";
+            var outcome = disabledVerifier ? "NOT_APPLICABLE" : "SUCCEEDED";
+            RequireString(stage, "outcome", outcome);
+            if (disabledVerifier)
+            {
+                RequireString(stage, "errorCode", "POLICY_DISABLED");
+            }
 
-            string? errorCode = null;
-            if (stage.TryGetProperty("errorCode", out JsonElement errorJson))
+            var errorCode = disabledVerifier ? "POLICY_DISABLED" : null;
+            if (!disabledVerifier && stage.TryGetProperty("errorCode", out JsonElement errorJson))
             {
                 if (errorJson.ValueKind != JsonValueKind.Null)
                 {
@@ -988,7 +1010,7 @@ internal sealed class CodeAnalysisReportValidator : ICodeAnalysisReportValidator
             }
 
             result.Add(new ValidatedReportStage(
-                name, "MANDATORY", "SUCCEEDED", errorCode, retryable, durationMs, inputSha, outputSha,
+                name, "MANDATORY", outcome, errorCode, retryable, durationMs, inputSha, outputSha,
                 toolJson, countsJson, reuseParentRunId, reuseParentReportId, reuseParentStageId, reuseArtifactDigest));
         }
 
@@ -1085,7 +1107,7 @@ internal sealed class CodeAnalysisReportValidator : ICodeAnalysisReportValidator
             RequireOnlyMembers(finding,
             [
                 "findingId", "type", "path", "fileId", "startLine", "endLine", "startByte", "endByte",
-                "ownExcerpt", "foreign", "channelScore", "reason", "requestedAction"
+                "ownExcerpt", "foreign", "retrieval", "reason", "requestedAction"
             ], "finding");
 
             var key = RequireString(finding, "findingId", null);
@@ -1228,50 +1250,16 @@ internal sealed class CodeAnalysisReportValidator : ICodeAnalysisReportValidator
                 }
             }
 
-            double? tokenScore = null;
-            double? semanticScore = null;
-            int? tokenRank = null;
-            int? semanticRank = null;
-            if (finding.TryGetProperty("channelScore", out JsonElement scoreJson))
-            {
-                if (scoreJson.ValueKind != JsonValueKind.Number || !scoreJson.TryGetDouble(out var cs))
-                {
-                    throw new CodeAnalysisValidationException("Finding channel score is invalid.");
-                }
-
-                if (!double.IsFinite(cs) || cs is < 0 or > 1)
-                {
-                    throw new CodeAnalysisValidationException("Finding channel score is out of bounds.");
-                }
-
-                if (type == "SIMILARITY_TOKEN")
-                {
-                    tokenScore = cs;
-                }
-                else if (type == "SIMILARITY_SEMANTIC")
-                {
-                    semanticScore = cs;
-                }
-                else
-                {
-                    throw new CodeAnalysisValidationException("Only similarity findings may carry a channel score.");
-                }
-            }
-
-            if (type == "SIMILARITY_TOKEN" && !tokenScore.HasValue
-                || type == "SIMILARITY_SEMANTIC" && !semanticScore.HasValue
-                || type is not ("SIMILARITY_TOKEN" or "SIMILARITY_SEMANTIC") && scoreJson.ValueKind != JsonValueKind.Undefined)
-            {
-                throw new CodeAnalysisValidationException("Finding score does not match its channel type.");
-            }
+            RetrievalCandidateEvidence? retrieval = RetrievalEvidenceValidator.ParseCandidate(finding, type);
 
             result.Add(new ValidatedReportFinding(
                 key, type, path, ownExcerpt, startByte, endByte, foreignId, foreignOrigin, sensitivity, attribution,
-                tokenScore, semanticScore, tokenRank, semanticRank,
+                retrieval?.TokenScore, retrieval?.SemanticScore, retrieval?.TokenRank, retrieval?.SemanticRank,
                 ReasonText: reasonText,
                 RequestedAction: requestedAction,
                 OwnStartLine: startLine,
-                OwnEndLine: endLine));
+                OwnEndLine: endLine,
+                RetrievalEvidenceJson: retrieval is null ? null : JsonSerializer.Serialize(retrieval, RetrievalEvidenceValidator.JsonOptions)));
         }
 
         return result;

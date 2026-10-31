@@ -4,6 +4,7 @@ namespace AssetBlock.Domain.Core.Constants;
 public static class AuditResourceTypes
 {
     public const string USER = "User";
+    public const string ASSET_VERSION = "AssetVersion";
     public const string ASSET = "Asset";
     public const string CATEGORY = "Category";
     public const string TAG = "Tag";

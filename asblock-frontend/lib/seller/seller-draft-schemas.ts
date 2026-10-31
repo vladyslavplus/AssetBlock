@@ -137,6 +137,7 @@ export const sellerModerationStateSchema = z.enum([
   'APPROVED',
   'REJECTED',
   'WITHDRAWN',
+  'SUPERSEDED',
 ])
 
 export const sellerAnalysisLifecycleSchema = z.enum([
@@ -154,6 +155,9 @@ export const sellerAnalysisStageSchema = z.object({
   retryable: z.boolean(),
 })
 export const sellerAnalysisSummarySchema = z.object({
+  requiredResponseCount: z.number().int().nonnegative(),
+  outstandingResponseCount: z.number().int().nonnegative(),
+  evidenceRevision: z.number().int().nonnegative(),
   assetId: z.guid(),
   assetVersionId: z.guid(),
   lifecycle: sellerAnalysisLifecycleSchema,
@@ -179,14 +183,17 @@ export const sellerAnalysisSummarySchema = z.object({
       inputDigest: z.string().length(64),
     })
     .nullable(),
-  canSubmit: z.literal(false),
-  canAuthorizePublication: z.literal(false),
+  canSubmit: z.boolean(),
+  reviewEligible: z.boolean(),
+  submissionBlockedReason: z.string().max(100).nullable(),
   comparisonScope: z.string().max(160),
   limitations: z.array(z.string().max(300)),
   stages: z.array(sellerAnalysisStageSchema),
 })
 export type SellerAnalysisSummary = z.infer<typeof sellerAnalysisSummarySchema>
 export const sellerAnalysisFindingSchema = z.object({
+  responseRequired: z.boolean(),
+  hasResponse: z.boolean(),
   id: z.guid(),
   findingType: z.string().min(1).max(80),
   ownPath: z.string().min(1).max(1024),
@@ -244,6 +251,9 @@ export type SellerAnalysisRetryRequest = z.infer<typeof sellerAnalysisRetryReque
 export type SellerAnalysisRetryAccepted = z.infer<typeof sellerAnalysisRetryAcceptedSchema>
 
 export const sellerVersionReviewSchema = z.object({
+  requiredResponseCount: z.number().int().nonnegative(),
+  outstandingResponseCount: z.number().int().nonnegative(),
+  evidenceRevision: z.number().int().nonnegative(),
   assetId: z.guid(),
   assetVersionId: z.guid(),
   versionNumber: z.number().int().nonnegative(),
@@ -302,3 +312,87 @@ export const submissionWithdrawRequestSchema = z.object({
   expectedCaseRevision: z.number().int().nonnegative(),
   operationId: z.guid(),
 })
+
+// Evidence revision and text limits mirror the append-only seller evidence contract.
+export const SELLER_RESPONSE_TEXT_MAX = 2000
+export const sellerResponseTypeSchema = z.enum([
+  'PRIOR_WORK',
+  'PERMITTED_COMPONENT',
+  'INDEPENDENT_IMPLEMENTATION',
+  'WRONG_SOURCE',
+  'CORRECTED_FILES',
+  'NO_EVIDENCE',
+])
+export const sellerEvidenceEditRequestSchema = z
+  .object({
+    workspaceId: z.guid(),
+    reportId: z.guid(),
+    operationId: z.guid(),
+    expectedWorkspaceRevision: z.number().int().positive(),
+    expectedEvidenceRevision: z.number().int().nonnegative(),
+    text: z
+      .string()
+      .trim()
+      .max(SELLER_RESPONSE_TEXT_MAX)
+      .refine((value) => !value.includes('\0'), 'Text contains an invalid character.'),
+  })
+  .strict()
+export const sellerResponseRequestSchema = sellerEvidenceEditRequestSchema
+  .extend({
+    findingId: z.guid(),
+    responseType: sellerResponseTypeSchema,
+  })
+  .refine((value) => value.responseType === 'NO_EVIDENCE' || value.text.length > 0, {
+    message: 'Explain your response or choose No evidence.',
+    path: ['text'],
+  })
+export const sellerEvidenceSavedSchema = z.object({
+  responseId: z.guid().nullable(),
+  workspaceId: z.guid(),
+  workspaceRevision: z.number().int().positive(),
+  evidenceRevision: z.number().int().positive(),
+  caseRevision: z.number().int().nonnegative(),
+  replayed: z.boolean(),
+})
+export const sellerResponsesPageSchema = z.object({
+  workspaceId: z.guid(),
+  workspaceRevision: z.number().int().positive(),
+  caseRevision: z.number().int().nonnegative(),
+  evidenceRevision: z.number().int().nonnegative(),
+  reportId: z.guid().nullable(),
+  requiredCount: z.number().int().nonnegative(),
+  outstandingCount: z.number().int().nonnegative(),
+  evidenceText: z.string().max(SELLER_RESPONSE_TEXT_MAX),
+  items: z.array(
+    z.object({
+      id: z.guid(),
+      assetVersionId: z.guid(),
+      reportId: z.guid(),
+      findingId: z.guid(),
+      evidenceRevision: z.number().int().positive(),
+      responseType: sellerResponseTypeSchema,
+      text: z.string().max(SELLER_RESPONSE_TEXT_MAX),
+      createdAt: z.iso.datetime({ offset: true }),
+      actorUserId: z.guid(),
+      isCurrent: z.boolean(),
+    }),
+  ),
+  totalCount: z.number().int().nonnegative(),
+  page: z.number().int().positive(),
+  pageSize: z.number().int().positive().max(50),
+  totalPages: z.number().int().nonnegative(),
+})
+export type SellerResponseRequest = z.infer<typeof sellerResponseRequestSchema>
+export type SellerEvidenceEditRequest = z.infer<typeof sellerEvidenceEditRequestSchema>
+export type SellerResponsesPage = z.infer<typeof sellerResponsesPageSchema>
+
+export const sellerResponseFormSchema = z
+  .object({
+    text: sellerEvidenceEditRequestSchema.shape.text,
+    responseType: sellerResponseTypeSchema,
+  })
+  .refine((value) => value.responseType === 'NO_EVIDENCE' || value.text.length > 0, {
+    message: 'Explain your response or choose No evidence.',
+    path: ['text'],
+  })
+export type SellerResponseFormValues = z.infer<typeof sellerResponseFormSchema>

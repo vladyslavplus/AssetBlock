@@ -14,6 +14,9 @@ const UUID_REPORT = 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee'
 function analysisDetails(overrides: Record<string, unknown> = {}) {
   return {
     assetId: UUID_ASSET,
+    requiredResponseCount: 0,
+    outstandingResponseCount: 0,
+    evidenceRevision: 0,
     assetVersionId: UUID_VERSION,
     lifecycle: 'FAILED',
     runId: UUID_RUN,
@@ -38,7 +41,8 @@ function analysisDetails(overrides: Record<string, unknown> = {}) {
       inputDigest: 'b'.repeat(64),
     },
     canSubmit: false,
-    canAuthorizePublication: false,
+    reviewEligible: false,
+    submissionBlockedReason: 'ERR_ANALYSIS_NOT_AVAILABLE',
     comparisonScope: 'Selected source files from this version only',
     limitations: ['Research evaluation only.'],
     stages: [],
@@ -56,6 +60,9 @@ function stubReviewFetch(review: Record<string, unknown>) {
 function review(overrides: Record<string, unknown> = {}) {
   return {
     assetId: UUID_ASSET,
+    requiredResponseCount: 0,
+    outstandingResponseCount: 0,
+    evidenceRevision: 0,
     assetVersionId: UUID_VERSION,
     versionNumber: 2,
     processingStatus: 'READY',
@@ -153,6 +160,9 @@ describe('VersionChecksPanel', () => {
             JSON.stringify({
               operationId: 'ffffffff-ffff-4fff-8fff-ffffffffffff',
               assetId: UUID_ASSET,
+              requiredResponseCount: 0,
+              outstandingResponseCount: 0,
+              evidenceRevision: 0,
               assetVersionId: UUID_VERSION,
               status: 'ACCEPTED',
               runId: UUID_RUN,
@@ -212,6 +222,7 @@ describe('VersionChecksPanel', () => {
                   omissionCount: 1,
                   canRetry: false,
                   retryExpectation: null,
+                  submissionBlockedReason: 'ERR_REVIEW_COVERAGE_REQUIRED',
                 }),
               }),
             ),
@@ -222,6 +233,9 @@ describe('VersionChecksPanel', () => {
           return new Response(
             JSON.stringify({
               assetId: UUID_ASSET,
+              requiredResponseCount: 0,
+              outstandingResponseCount: 0,
+              evidenceRevision: 0,
               assetVersionId: UUID_VERSION,
               reportId: UUID_REPORT,
               isCurrent: true,
@@ -291,6 +305,8 @@ describe('VersionChecksPanel', () => {
           endLine: 1,
           reason: 'Matched selected code.',
           requestedAction: 'Review the source.',
+          responseRequired: false,
+          hasResponse: false,
           referenceKind: 'FOREIGN_PRIVATE',
           publicAttribution: null,
         },
@@ -365,6 +381,9 @@ describe('VersionChecksPanel', () => {
           return new Response(
             JSON.stringify({
               assetId: UUID_ASSET,
+              requiredResponseCount: 0,
+              outstandingResponseCount: 0,
+              evidenceRevision: 0,
               assetVersionId: UUID_VERSION,
               reportId: UUID_REPORT,
               isCurrent: false,

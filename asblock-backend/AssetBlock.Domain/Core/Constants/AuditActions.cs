@@ -3,6 +3,9 @@ namespace AssetBlock.Domain.Core.Constants;
 /// <summary>Stable machine-readable audit action names.</summary>
 public static class AuditActions
 {
+    public const string SELLER_RESPONSE_SAVED = "SELLER_RESPONSE_SAVED";
+    public const string SELLER_EVIDENCE_SAVED = "SELLER_EVIDENCE_SAVED";
+
     public const string AUTH_REGISTER = "Auth.Register";
     public const string AUTH_LOGIN = "Auth.Login";
     public const string AUTH_REFRESH_TOKEN = "Auth.RefreshToken";

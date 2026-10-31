@@ -68,7 +68,7 @@ internal static class TrustedPublicationFixtureSeed
         db.CodeAnalysisRuns.Add(AdmittedReportTestEvidence.CompletedRun(version, chain));
         CodeAnalysisReportHeader seededReport = AdmittedReportTestEvidence.Header(version, chain);
         db.CodeAnalysisReportHeaders.Add(seededReport);
-        db.CodeAnalysisReportAdmissions.Add(AdmittedReportTestEvidence.Admission(seededReport, chain, canAuthorizePublication: true));
+        db.CodeAnalysisReportAdmissions.Add(AdmittedReportTestEvidence.Admission(seededReport, chain, reviewEligible: true));
         db.PublicationSnapshots.Add(new PublicationSnapshot
         {
             Id = snapshotId,

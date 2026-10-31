@@ -40,6 +40,14 @@ public class SellerDraftSerializationTests
     private static readonly JsonSerializerOptions _webJson = new(JsonSerializerDefaults.Web);
 
     [Fact]
+    public void Serialize_WhenVerifierIsDisabled_ShouldPreserveNotApplicableAsDistinctOutcome()
+    {
+        var json = JsonSerializer.Serialize(CodeAnalysisStageOutcome.NOT_APPLICABLE, _webJson);
+        json.Should().Be("\"NOT_APPLICABLE\"");
+        JsonSerializer.Deserialize<CodeAnalysisStageOutcome>(json, _webJson).Should().Be(CodeAnalysisStageOutcome.NOT_APPLICABLE);
+    }
+
+    [Fact]
     public void Serialize_WhenDeclarationHasThirdPartyOrigin_ShouldEmitStringOriginProperty()
     {
         var dto = new SellerDraftSnapshotDto(

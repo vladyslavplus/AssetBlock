@@ -77,6 +77,11 @@ def test_missing_model_identity_rejected():
 
 
 def _record(stage, outcome="SUCCEEDED"):
+    if stage == "VERIFIER":
+        from app.policy import EVALUATION_EVIDENCE_SHA256
+        return StageRecord(stage=stage, applicability="MANDATORY", outcome="NOT_APPLICABLE",
+                           error_code="POLICY_DISABLED", duration_seconds=0.0,
+                           tool_identity={"mode": "DISABLED_BY_EVALUATION", "evidenceSha256": EVALUATION_EVIDENCE_SHA256})
     return StageRecord(stage=stage, applicability="MANDATORY", outcome=outcome,
                        duration_seconds=0.0)
 
@@ -127,16 +132,17 @@ def test_full_matrix_requires_all_eight():
     assert _full_matrix(pipe) is True
 
 
-def test_report_validation_rejects_authority_flip():
+def test_report_validation_rejects_fabricated_review_eligibility():
     from types import SimpleNamespace
     metadata = SimpleNamespace(run_id="r", input_digest="d")
     pipe = Pipeline(context=SimpleNamespace(metadata=metadata))
     body = {"schema": "code-analysis-v1", "runId": "r", "inputDigest": "d",
-            "admittedBy": None, "policy": {"canAuthorizePublication": False},
+            "admittedBy": None, "policy": {},
             "sellerSafe": {"reportId": "x"}, "reportId": "x",
-            "findings": [], "coverage": {"omissions": []}}
+            "findings": [], "coverage": {"omissions": []},
+            "retrievalSummary": {"tokenTop": 20, "semanticTop": 20, "unionBudget": 40, "queries": []}}
     _validate_report_body(pipe, body)
-    bad = dict(body, policy={"canAuthorizePublication": True})
+    bad = dict(body, policy={"reviewEligible": True})
     with pytest.raises(contracts.ContractError):
         _validate_report_body(pipe, bad)
     bad2 = dict(body, admittedBy="someone")

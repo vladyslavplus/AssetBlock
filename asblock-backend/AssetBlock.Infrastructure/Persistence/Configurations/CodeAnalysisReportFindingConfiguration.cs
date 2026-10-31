@@ -33,6 +33,8 @@ internal sealed class CodeAnalysisReportFindingConfiguration : IEntityTypeConfig
             table.HasCheckConstraint("CK_code_analysis_report_findings_scores_semantic", "\"SemanticScore\" IS NULL OR \"SemanticScore\" <> 'NaN'::double precision");
         });
 
+        builder.Property(f => f.RetrievalEvidenceJson).HasColumnType("jsonb");
+
         builder.HasKey(f => f.Id);
 
         builder.Property(f => f.FindingKey).IsRequired().HasMaxLength(128);

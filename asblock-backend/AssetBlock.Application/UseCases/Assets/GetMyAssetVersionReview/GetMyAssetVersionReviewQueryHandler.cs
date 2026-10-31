@@ -30,13 +30,18 @@ internal sealed class GetMyAssetVersionReviewQueryHandler(
             review = review with
             {
                 AnalysisDetails = analysis,
+                CanSubmit = analysis.CanSubmit,
+                RequiredResponseCount = analysis.RequiredResponseCount,
+                OutstandingResponseCount = analysis.OutstandingResponseCount,
+                EvidenceRevision = analysis.EvidenceRevision,
                 Analysis = analysis.ReportIsCurrent
                     ? SellerAnalysisAvailability.ANALYSIS_AVAILABLE
                     : SellerAnalysisAvailability.ANALYSIS_NOT_AVAILABLE,
                 BlockedReasons = analysis.ReportIsCurrent
                     ? review.BlockedReasons
                         .Where(code => code != ErrorCodes.ERR_ANALYSIS_NOT_AVAILABLE)
-                        .Append(ErrorCodes.ERR_RESEARCH_EVALUATION_PENDING)
+                        .Concat(analysis.SubmissionBlockedReason is { } reason ? [reason]
+                            : analysis.CanSubmit ? [] : [ErrorCodes.ERR_MODERATION_SUBMISSION_BLOCKED])
                         .Distinct(StringComparer.Ordinal)
                         .ToArray()
                     : review.BlockedReasons

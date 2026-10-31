@@ -19,11 +19,10 @@ internal sealed class CodeAnalysisReportAdmissionConfiguration : IEntityTypeConf
             table.HasCheckConstraint("CK_code_analysis_report_admissions_slot_number", "\"ReservationSlotNumber\" >= 0");
             table.HasCheckConstraint("CK_code_analysis_report_admissions_generation", "\"ReservationGeneration\" > 0");
             table.HasCheckConstraint("CK_code_analysis_report_admissions_lease_token_digest", "\"ReservationLeaseTokenDigest\" ~ '^[0-9a-f]{64}$'");
-            // Publication authority is a server decision recorded with an explicit reason, never an
-            // implicit default; the current admission path always records it as unavailable.
+            // Review eligibility is a server decision recorded with an explicit reason.
             table.HasCheckConstraint(
-                "CK_code_analysis_report_admissions_authority_reason",
-                "\"PublicationAuthorityReason\" IS NOT NULL AND length(\"PublicationAuthorityReason\") > 0");
+                "CK_code_analysis_report_admissions_review_reason",
+                "\"ReviewEligibilityReason\" IS NOT NULL AND length(\"ReviewEligibilityReason\") > 0");
         });
 
         builder.HasKey(a => a.Id);
@@ -39,7 +38,7 @@ internal sealed class CodeAnalysisReportAdmissionConfiguration : IEntityTypeConf
         builder.Property(a => a.InputDigest).IsRequired().HasColumnType("char(64)").IsFixedLength();
         builder.Property(a => a.ServiceKey).IsRequired().HasMaxLength(128);
         builder.Property(a => a.ReservationLeaseTokenDigest).IsRequired().HasColumnType("char(64)").IsFixedLength();
-        builder.Property(a => a.PublicationAuthorityReason).IsRequired().HasMaxLength(512);
+        builder.Property(a => a.ReviewEligibilityReason).IsRequired().HasMaxLength(512);
         builder.Property(a => a.CreatedAt).IsRequired();
 
         // One server admission per admitted report; its absence is what makes a header untrusted.

@@ -84,7 +84,7 @@ internal static class TrustedPublicationFixture
         db.AssetDraftWorkspaces.Add(workspace);
         db.ModerationSubmissions.Add(submission);
         db.CodeAnalysisReportHeaders.Add(report);
-        db.CodeAnalysisReportAdmissions.Add(AdmittedReportTestEvidence.Admission(report, chain, canAuthorizePublication: true));
+        db.CodeAnalysisReportAdmissions.Add(AdmittedReportTestEvidence.Admission(report, chain, reviewEligible: true));
         db.PublicationSnapshots.Add(snapshot);
         db.ModerationDecisionRecords.Add(decision);
         asset.CurrentPublicationSnapshotId = snapshot.Id;

@@ -362,6 +362,9 @@ healthchecksdb
 
 # Local/development config (secrets, connection strings)
 .env
+# Personal Docker Compose overrides (merged automatically by Compose)
+docker-compose.override.yml
+compose.override.yml
 **/appsettings.Development.json
 **/appsettings.*.local.json
 

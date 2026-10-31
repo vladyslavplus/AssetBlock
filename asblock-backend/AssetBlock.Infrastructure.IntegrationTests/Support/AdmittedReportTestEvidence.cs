@@ -72,12 +72,12 @@ internal static class AdmittedReportTestEvidence
         new()
         {
             Id = chain.PolicyVersionId,
-            PolicyKey = "code-analysis-policy-v1",
+            PolicyKey = ReviewAnalysisPolicy.KEY,
             PolicyDigest = chain.PolicyDigest,
             SchemaName = "code-analysis-v1",
             StageMatrixJson = stageMatrixJson ?? StageMatrixJson(),
-            VerifierMode = "PENDING_RESEARCH_EVALUATION",
-            VerifierReason = verifierReason ?? "Retrieval quality research evaluation has not been reviewed.",
+            VerifierMode = ReviewAnalysisPolicy.VERIFIER_MODE,
+            VerifierReason = verifierReason ?? ReviewAnalysisPolicy.VERIFIER_REASON,
             ToolIdentitiesJson = toolIdentitiesJson ?? ToolIdentitiesJson(),
             LimitsJson = LimitsJson(),
             SecurityValidityJson = SecurityValidityJson(),
@@ -93,8 +93,8 @@ internal static class AdmittedReportTestEvidence
             "code-analysis-v1",
             StageMatrixJson(),
             ToolIdentitiesJson(),
-            "PENDING_RESEARCH_EVALUATION",
-            "Retrieval quality research evaluation has not been reviewed.",
+            "DISABLED_BY_EVALUATION",
+            ReviewAnalysisPolicy.VERIFIER_REASON,
             LimitsJson(),
             SecurityValidityJson(),
             MODEL_KEY,
@@ -389,7 +389,7 @@ internal static class AdmittedReportTestEvidence
             PolicyVersion = "code-analysis-policy-v1",
             InputRevision = 1,
             Purpose = CodeAnalysisReportPurpose.PRODUCTION,
-            CanAuthorizePublication = true,
+            ReviewEligible = true,
             IsFinalized = true,
             FinalizedAt = DateTimeOffset.UtcNow,
             ReportSchemaVersion = 1,
@@ -403,7 +403,7 @@ internal static class AdmittedReportTestEvidence
     }
 
     public static CodeAnalysisReportAdmission Admission(
-        CodeAnalysisReportHeader report, Chain chain, bool canAuthorizePublication)
+        CodeAnalysisReportHeader report, Chain chain, bool reviewEligible)
     {
         return new CodeAnalysisReportAdmission
         {
@@ -419,10 +419,10 @@ internal static class AdmittedReportTestEvidence
             ReservationSlotNumber = 0,
             ReservationGeneration = 1,
             ReservationLeaseTokenDigest = NewHex64(),
-            CanAuthorizePublication = canAuthorizePublication,
-            PublicationAuthorityReason = canAuthorizePublication
-                ? "test evidence granting publication authority"
-                : "publication authority is unavailable pending research evaluation",
+            ReviewEligible = reviewEligible,
+            ReviewEligibilityReason = reviewEligible
+                ? "test evidence granting review eligibility"
+                : "test evidence denying review eligibility",
             CreatedAt = DateTimeOffset.UtcNow
         };
     }

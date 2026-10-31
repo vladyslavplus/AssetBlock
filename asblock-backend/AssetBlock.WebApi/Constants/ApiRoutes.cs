@@ -43,6 +43,8 @@ public static class ApiRoutes
         public const string DECLARATION = "{id:guid}/declaration";
         public const string VERSION_DECLARATION = "{id:guid}/versions/{versionId:guid}/declaration";
         public const string PRICE = "{id:guid}/price";
+        public const string VERSION_RESPONSES = "{id:guid}/versions/{versionId:guid}/responses";
+        public const string VERSION_EVIDENCE = "{id:guid}/versions/{versionId:guid}/evidence";
         public const string VERSION_SUBMISSIONS = "{id:guid}/versions/{versionId:guid}/submissions";
     }
 

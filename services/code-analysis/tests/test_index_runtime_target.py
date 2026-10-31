@@ -59,12 +59,10 @@ class _Connection:
         return _Cursor(self)
 
 
-def test_compatibility_is_explicit_and_default_keeps_pg16_guard():
-    connection = _Connection()
+def test_service_uses_only_its_pinned_target():
+    code_index.service_runtime_preflight(_Connection())
     with pytest.raises(ValueError, match="target"):
-        code_index.service_runtime_preflight(connection)
-    code_index.service_runtime_preflight(
-        connection, compatibility=code_index.SERVICE_RUNTIME_COMPATIBILITY)
+        code_index.service_runtime_preflight(_Connection(port=code_index.PORT))
 
 
 @pytest.mark.parametrize("change", [
@@ -74,36 +72,22 @@ def test_compatibility_is_explicit_and_default_keeps_pg16_guard():
     {"readonly": False}, {"has_write_privilege": True},
     {"can_create_schema": True},
 ])
-def test_compatibility_refuses_unowned_or_unverified_targets(change):
+def test_service_target_refuses_unowned_or_unverified_targets(change):
     with pytest.raises(ValueError):
         code_index.service_runtime_preflight(
-            _Connection(**change),
-            compatibility=code_index.SERVICE_RUNTIME_COMPATIBILITY)
+            _Connection(**change))
 
 
-def test_compatibility_cannot_skip_markers_or_use_unknown_mode():
-    connection = _Connection()
+def test_service_target_cannot_skip_markers():
     with pytest.raises(ValueError, match="initialized"):
-        code_index.service_runtime_preflight(
-            connection, compatibility=code_index.SERVICE_RUNTIME_COMPATIBILITY,
-            initialized=False)
-    with pytest.raises(ValueError, match="unknown"):
-        code_index.service_runtime_preflight(connection, compatibility="other")
+        code_index.service_runtime_preflight(_Connection(), initialized=False)
 
 
-def test_service_config_requires_the_single_reviewed_compatibility_mode(monkeypatch):
+def test_service_config_keeps_loopback_with_pinned_index_target(monkeypatch):
     from app.main import build_config
-
     monkeypatch.setenv("CODE_ANALYSIS_SECRET", "test-secret-value-at-least-32-bytes!!")
-    monkeypatch.setenv("CODE_ANALYSIS_INDEX_RUNTIME_COMPATIBILITY", "unknown")
-    with pytest.raises(ValueError, match="unsupported CODE_ANALYSIS_INDEX_RUNTIME_COMPATIBILITY"):
-        build_config()
-
-    monkeypatch.setenv("CODE_ANALYSIS_INDEX_RUNTIME_COMPATIBILITY",
-                       code_index.SERVICE_RUNTIME_COMPATIBILITY)
-    for name in ("CODE_ANALYSIS_NODE_EXE", "CODE_ANALYSIS_DOLOS_CLI",
-                 "CODE_ANALYSIS_SCANCODE_EXE"):
+    for name in ("CODE_ANALYSIS_NODE_EXE", "CODE_ANALYSIS_DOLOS_CLI", "CODE_ANALYSIS_SCANCODE_EXE"):
         monkeypatch.delenv(name, raising=False)
     config, bind = build_config()
     assert bind == "127.0.0.1"
-    assert config.index_runtime_compatibility == code_index.SERVICE_RUNTIME_COMPATIBILITY
+    assert config.index_dsn is None

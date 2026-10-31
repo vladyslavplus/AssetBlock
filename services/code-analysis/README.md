@@ -52,8 +52,21 @@ terminated TLS. Runtime secrets, machine-specific paths, and model artifacts sta
   evidence with observed tool identities, coverage with explicit omissions,
   bounded findings with an overflow summary, and a `sellerSafe` projection
   that contains no foreign private bytes, paths, names, vectors, or
-  scores. `admittedBy` is always null here; `canAuthorizePublication` is
-  false and the verifier mode is `PENDING_RESEARCH_EVALUATION`.
+  scores. `admittedBy` is always null here; the producer does not assert
+  review eligibility or publication authority. The verifier mode is
+  `DISABLED_BY_EVALUATION`. The immutable
+  policy `code-analysis-policy-v1` binds its frozen evaluation evidence SHA-256
+  and records `VERIFIER` as `NOT_APPLICABLE` with `POLICY_DISABLED`.
+  Only the product server can issue an admission after validating its persisted
+  production run and exact policy, security and stage bindings. Submission
+  eligibility never publishes a version; an APPROVED human decision is required.
+  Retained candidates are moderator evidence, not seller response obligations.
+- Deployments must pin the policy key and canonical policy digest together
+  and recompute the runtime-manifest digest from the complete approved manifest
+  (including verifier mode and reason). Reuse requires the same exact policy
+  digest. Missing configuration keeps claims closed. Development rows produced
+  with a different development policy digest must be removed through a local
+  development database reset before republishing this single initial policy.
 
 ## Budgets and safety
 
@@ -89,3 +102,12 @@ the gate until operator restart. Logs carry run identifiers, stages,
 durations, counts, and allowlisted error codes only — never exception
 messages, tracebacks, request bodies, or DSNs.
 
+## Moderator retrieval evidence
+
+The single initial policy binds complete retrieval detail for each retained candidate: `queryFileId`, FILE query unit, explicit TOKEN/SEMANTIC/TOKEN_AND_SEMANTIC membership, nullable `tokenRank`/`tokenScore` and `semanticRank`/`semanticScore`, and a deterministic `material` flag. A zero token score is not a token observation and is excluded before ranking/counting; a real zero semantic score remains valid. Both channels are retained independently; the union never selects a winner or makes a moderation decision. Own excerpt byte/line coordinates identify the displayed query-file excerpt; they are not pair-verification match spans.
+
+Token ranking uses descending score then ascending opaque file identity. Semantic ranking uses ascending exact distance then ascending file identity, aggregated across query windows; displayed similarity is clamped to [0,1], so equal displayed scores need not imply equal original distances. Union ordering is token order followed by unseen semantic candidates. Each channel retains at most its policy TOP (20); union budget is 40. The report summary records exact candidate, retained and overflow counts per query file and separate omissions caused by the global report budget. Omitted union count lies between the maximum and the sum of its omitted channel counts; total omitted candidates cannot exceed global finding overflow. Token overflow counts strictly positive observed bound pairs, not zero-score pairs or unobserved gallery scores. Semantic overflow counts indexed eligible gallery items excluded by TOP; full-gallery indexing is checked before querying. Missing historical scores are never reconstructed.
+
+Material evidence means every retained token candidate tied at the highest strictly positive token score within its query file. Ranks remain unique ordinals (score descending, file ID ascending); ties do not discard material flags. Query summary records the measured rank-one score as tokenMaxScore before report truncation, or null when no positive token exists. This keeps material identity explicit even when rank one is omitted from the bounded report. There is no tuned numeric threshold, abstention or semantic-only material class. The frozen control reported ordinal per-query top-1 F1 0.843 versus semantic controls 0.51/0.59; raw pair scores were not persisted, so actual zero-score and raw-tie counts cannot be recovered. The control could select a zero-score ordinal winner and did not retain all raw-score ties. Its F1 justifies the token-channel top signal, not a measurement of the exact positive-guard/all-ties product rule. Pair verification remains disabled. The policy points to its existing `EVALUATION_EVIDENCE_SHA256` constant, owned by the frozen pair-verification evidence package. The material flag does not create a response request and does not change submission eligibility.
+
+The product stores both typed score/rank columns and complete bounded JSON retrieval detail, plus report-level reference snapshot/revision, limits and overflow summary. Moderator case reads require a live Moderator role and deny the owner. Missing complete persisted detail is explicitly `SCORES_UNAVAILABLE`, never zero or an inferred rank. Seller projections expose neither private reference identity nor retrieval scores, ranks, membership or material flags. Publication still requires an explicit approved decision.

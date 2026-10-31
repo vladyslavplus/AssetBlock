@@ -15,12 +15,12 @@ public class CodeAnalysisReportHeader : BaseEntity
     public required string PolicyVersion { get; init; }
     public required int InputRevision { get; init; }
     public required CodeAnalysisReportPurpose Purpose { get; init; }
-    public required bool CanAuthorizePublication { get; init; }
+    public required bool ReviewEligible { get; init; }
     public required bool IsFinalized { get; init; }
     public DateTimeOffset? FinalizedAt { get; init; }
     public required int ReportSchemaVersion { get; init; }
 
-    /// <summary>Run that produced this report. Null for legacy headers, which stay untrusted.</summary>
+    /// <summary>Producing run. Unbound headers are untrusted and cannot satisfy report admission.</summary>
     public Guid? AnalysisRunId { get; set; }
 
     /// <summary>SHA-256 report identity produced by the analysis service over the pre-REPORT body.</summary>
@@ -40,6 +40,9 @@ public class CodeAnalysisReportHeader : BaseEntity
     public int? FindingCount { get; set; }
 
     public CodeAnalysisReportDisposition? Disposition { get; set; }
+
+    /// <summary>Bounded retrieval limits, overflow, reference snapshot and revision, frozen at admission.</summary>
+    public string? RetrievalSummaryJson { get; set; }
 
     public Asset Asset { get; set; } = null!;
     public AssetVersion AssetVersion { get; set; } = null!;

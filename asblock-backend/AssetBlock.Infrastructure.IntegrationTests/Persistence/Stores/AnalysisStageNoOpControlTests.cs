@@ -1,5 +1,6 @@
 using System.Text.Json;
 using AssetBlock.Domain.Abstractions.Services;
+using AssetBlock.Domain.Core.Constants;
 using AssetBlock.Domain.Core.Dto;
 using AssetBlock.Domain.Core.Entities;
 using AssetBlock.Domain.Core.Enums;
@@ -67,7 +68,7 @@ public sealed class AnalysisStageNoOpControlTests(PostgresFixture fixture)
         AssetVersion version = TestData.CreateAssetVersion(asset.Id, isCurrent: true, processingStatus: AssetVersionProcessingStatus.READY);
         db.Assets.Add(asset);
         db.AssetVersions.Add(version);
-        AdmittedReportTestEvidence.Chain chain = AdmittedReportTestEvidence.BuildChain();
+        AdmittedReportTestEvidence.Chain chain = AdmittedReportTestEvidence.BuildChain() with { PolicyDigest = ReviewAnalysisPolicy.DIGEST };
         db.CodeAnalysisPolicyVersions.Add(AdmittedReportTestEvidence.Policy(chain));
         await AdmittedReportTestEvidence.SeedObservedProofAsync(db, version, chain);
         CodeAnalysisRun run = new()

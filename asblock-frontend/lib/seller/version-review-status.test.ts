@@ -12,6 +12,9 @@ const UUID = '123e4567-e89b-12d3-a456-426614174000'
 function review(overrides: Partial<SellerVersionReview> = {}): SellerVersionReview {
   return {
     assetId: UUID,
+    requiredResponseCount: 0,
+    outstandingResponseCount: 0,
+    evidenceRevision: 0,
     assetVersionId: UUID,
     versionNumber: 1,
     processingStatus: 'READY',
@@ -50,8 +53,14 @@ describe('version review status helpers', () => {
     expect(versionReviewBlockedReasonAction('ERR_DECLARATION_INCOMPLETE')).toMatch(
       /declaration editor/i,
     )
-    expect(versionReviewBlockedReasonAction('ERR_ANALYSIS_NOT_AVAILABLE')).toMatch(/later update/i)
+    expect(versionReviewBlockedReasonAction('ERR_ANALYSIS_NOT_AVAILABLE')).toMatch(/retry action/i)
     expect(versionReviewBlockedReasonAction('ERR_UNKNOWN')).toBeNull()
+  })
+
+  it('explains coverage blockers explicitly', () => {
+    expect(versionReviewBlockedReasonMessage('ERR_REVIEW_COVERAGE_REQUIRED')).toMatch(
+      /coverage assessment/i,
+    )
   })
 
   it('labels moderation states without implying publication', () => {
