@@ -1,5 +1,6 @@
 """Local safetensors-only frozen encoder; full state and FP32 output identities."""
 import hashlib
+import math
 import time
 from pathlib import Path
 from scripts.feasibility_pilot.paths import ensure_inside
@@ -38,7 +39,7 @@ def load_frozen(model_dir,cache_root,expected_files,*,device='cpu'):
     for param in model.parameters():param.requires_grad_(False)
     return tokenizer,model,{'checkpointSha256':expected_files['model.safetensors'],'tokenizerHashes':{k:v for k,v in expected_files.items() if k!='model.safetensors'},'loadedFullStateSha256':state_hash(model),'dimension':768,'device':str(device),'safetensorsOnly':True,'trainableParameters':0}
 
-def encode_chunks(model,tokenizer,chunks,*,batch_size=8):
+def encode_chunks(model,tokenizer,chunks,*,batch_size=8,failure_diagnostics=None):
     if not 0<len(chunks)<=12000 or type(batch_size)!=int or not 1<=batch_size<=8:raise ValueError('bounded frozen inference required')
     import torch
     if model.training or any(p.requires_grad for p in model.parameters()):raise ValueError('encoder must be fully frozen/eval')
@@ -56,6 +57,14 @@ def encode_chunks(model,tokenizer,chunks,*,batch_size=8):
             hidden=model(input_ids=ids,attention_mask=mask).last_hidden_state.float()
             pooled=(hidden*mask.unsqueeze(-1)).sum(1)/mask.sum(1).unsqueeze(-1)
             vectors=torch.nn.functional.normalize(pooled,p=2,dim=-1).cpu().tolist()
+            if failure_diagnostics is not None and any(
+                    not isinstance(value, (int, float)) or not math.isfinite(value)
+                    for row in vectors for value in row):
+                try:
+                    failure_diagnostics(model=model, tokenizer=tokenizer, chunks=batch,
+                                        batch_start=start, batch_size=batch_size, device=device)
+                except Exception:
+                    pass
             vector_bytes(vectors);output.extend(vectors)
             if device.type=='cuda':torch.cuda.synchronize(device)
             timings.append(time.perf_counter()-started)

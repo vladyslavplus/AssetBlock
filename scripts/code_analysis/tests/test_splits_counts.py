@@ -3,7 +3,7 @@ import unittest
 
 from scripts.code_analysis.contracts import LANGUAGES, PARTITIONS, canonical, digest
 from scripts.code_analysis.evidence import sufficiency
-from scripts.code_analysis.splits import assign, normalized_hash
+from scripts.code_analysis.splits import assign, normalized_hash, normalized_span_hash
 
 
 def file(i, sid="a", language="python", partition="train"):
@@ -71,6 +71,22 @@ class SplitTests(unittest.TestCase):
         self.assertNotEqual(normalized_hash(left, "python"), normalized_hash(left.replace(b"1", b"2"), "python"))
         with self.assertRaises(ValueError):
             normalized_hash(b"def broken(\n", "python")
+
+    def test_span_normalizes_partial_java_method_in_complete_source_context(self):
+        source = b"class A { int f(int value) { return value + 1; } }"
+        start = source.index(b"return")
+        end = source.index(b";", start) + 1
+        renamed = b"class B { int g(int item) { return item + 1; } }"
+        renamed_start = renamed.index(b"return")
+        renamed_end = renamed.index(b";", renamed_start) + 1
+        self.assertEqual(normalized_span_hash(source, "java", start, end),
+                         normalized_span_hash(renamed, "java", renamed_start, renamed_end))
+
+    def test_span_normalization_refuses_partial_token(self):
+        source = b"class A { int value; }"
+        start = source.index(b"value")
+        with self.assertRaisesRegex(ValueError, "splits a normalized token"):
+            normalized_span_hash(source, "java", start, start + 2)
 
 
 class CountTests(unittest.TestCase):

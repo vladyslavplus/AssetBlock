@@ -15,6 +15,23 @@ asblock/
 └── asblock-frontend/          # Next.js web application (App Router)
 ```
 
+## Pair verification research tooling
+
+The local Python package `scripts.pair_verification` provides immutable stages for reviewed pair admission,
+verifier training and reload checks, validation comparison, and hash-only evidence packaging. Its stages are
+`prepare-pairs`, `train`, `reload-check`, `evaluate`, and `validate-evidence`. Run model stages
+with the existing pilot CUDA interpreter and pure evidence stages with the pinned CPU interpreter. Example:
+
+```powershell
+.\artifacts\feasibility_pilot\env\ml\Scripts\python.exe -B -m scripts.pair_verification evaluate --run-id pairs-evaluate-YYYYMMDD-NN --prepare-run-id PREPARE_RUN_ID --train-run-id TRAIN_RUN_ID --inputs INPUTS_MANIFEST --config scripts/code_retrieval/config/training-config.json
+.\artifacts\code_analysis\env\ml\Scripts\python.exe -B -m scripts.pair_verification validate-evidence --run-id pairs-evidence-YYYYMMDD-NN --prepare-run-id PREPARE_RUN_ID --train-run-id TRAIN_RUN_ID --evaluation-run-id EVALUATION_RUN_ID --inputs INPUTS_MANIFEST --config scripts/code_retrieval/config/training-config.json
+```
+
+Runs stay under ignored `artifacts/pair_verification/runs/`. Evaluation compares the verifier with semantic
+score thresholds, a per-query token-rank top-1 cut, and retrieval-list controls. The token-rank cut is not a global
+score threshold; its headline F1 must be read as a top-1 rank baseline. Latency excludes tokenization and E0 window
+alignment. Research evaluation does not authorize product use or checkpoint redistribution.
+
 ## Backend (`asblock-backend`)
 
 **Stack:** .NET 10, ASP.NET Core Web API, **Clean Architecture** (Domain / Application / Infrastructure / WebApi), CQRS-style use cases with an in-process mediator, **FluentValidation**, **Ardalis.Result**, Entity Framework Core with PostgreSQL (catalog FTS via `tsvector` + `pg_trgm`), optional **Redis-protocol caching** (local Valkey), **provider-selectable S3-compatible storage** (SeaweedFS by default locally; MinIO via Compose profile) for encrypted asset storage, **Stripe** Checkout and webhooks, **SignalR** for real-time notifications, **Serilog** for structured logging.

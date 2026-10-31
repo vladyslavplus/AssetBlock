@@ -16,6 +16,7 @@ cannot run is reported BLOCKED with its reason; semantic results are still deliv
 
 import sys
 import time
+import subprocess
 from collections import defaultdict
 
 import torch
@@ -74,8 +75,10 @@ def query_vectors_for(entry, plan, sources_root, device):
     return encoded
 
 
-def token_branch(run_id, plan, sources_root, protocol):
+def token_branch(run_id, plan, sources_root, protocol, *, creationflags=None):
     """Dolos token pairs per language, run once and shared by every model; BLOCKED with a reason on failure."""
+    if creationflags is None:
+        creationflags = subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0
     token = protocol["token"]
     pairs, raw_hashes, blocked, bound_counts = {}, {}, {}, {}
     for language in LANGUAGES:
@@ -94,7 +97,8 @@ def token_branch(run_id, plan, sources_root, protocol):
             files.append({"fileId": query["queryId"], "sha256": digest(body), "absolutePath": str(path)})
         result = baselines.token_stage(sources_root, language, files,
                                        PILOT_ROOT / "runs" / run_id / ("dolos-" + language),
-                                       k=token["k"], window=token["window"], timeout_s=DOLOS_TIMEOUT_SECONDS)
+                                       k=token["k"], window=token["window"], timeout_s=DOLOS_TIMEOUT_SECONDS,
+                                       creationflags=creationflags)
         if result.get("status") == "SUCCEEDED":
             pairs[language] = result["boundPairs"]
             raw_hashes[language] = result.get("csvSha256")

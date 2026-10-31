@@ -17,10 +17,34 @@ def normalized_hash(raw, language):
     tree = parse_source(language, raw)
     if tree.root_node.has_error:
         raise ValueError("invalid source cannot supply normalized duplicate evidence")
+    return _normalized_tree_hash(raw, language, tree.root_node, start=0, end=len(raw))
+
+
+def normalized_span_hash(raw, language, start, end):
+    """Normalize an exact source span using its complete parsed source context."""
+    if type(start) is not int or type(end) is not int or not 0 <= start < end <= len(raw):
+        raise ValueError("invalid normalization source span")
+    tree = parse_source(language, raw)
+    if tree.root_node.has_error:
+        raise ValueError("invalid source cannot supply normalized duplicate evidence")
+    return _normalized_tree_hash(raw, language, tree.root_node, start=start, end=end)
+
+
+def _normalized_tree_hash(raw, language, root, *, start, end):
     tokens = []
-    stack = [tree.root_node]
+    stack = [root]
     while stack:
         node = stack.pop()
+        if node.end_byte <= start or node.start_byte >= end:
+            continue
+        contained = start <= node.start_byte and node.end_byte <= end
+        if not contained:
+            if "comment" in node.type or "string" in node.type or "literal" in node.type:
+                raise ValueError("source span splits a normalized token")
+            if node.children:
+                stack.extend(reversed(node.children))
+                continue
+            raise ValueError("source span splits a normalized token")
         if "comment" in node.type:
             continue
         # Preserve complete literal values, including interpolation, conservatively.

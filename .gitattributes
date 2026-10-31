@@ -6,3 +6,8 @@ asblock-frontend/** text=auto eol=lf
 # Fixture hashes include intentional LF/CRLF bytes; never normalize on checkout.
 scripts/feasibility_pilot/fixtures/code/** -text
 scripts/feasibility_pilot/fixtures/licenses/** -text
+
+# Preserve LF bytes for configurations bound by evidence hashes.
+scripts/code_retrieval/config/training-config.json text eol=lf
+scripts/code_analysis/config/evaluation-protocol.json text eol=lf
+scripts/feasibility_pilot/config/model-trusted-identity.json text eol=lf
