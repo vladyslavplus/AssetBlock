@@ -8,21 +8,49 @@ using AssetBlock.Domain.Core.Dto.Assets;
 using AssetBlock.Domain.Core.Dto.Moderation;
 using AssetBlock.Domain.Core.Entities;
 using AssetBlock.Domain.Core.Enums;
+using AssetBlock.Domain.Core.Primitives.AppSettingsOptions;
 using AssetBlock.Domain.Core.Publication;
 using AssetBlock.Infrastructure.IntegrationTests.Support;
+using AssetBlock.Infrastructure.Outbox;
 using AssetBlock.Infrastructure.Persistence;
 using AssetBlock.Infrastructure.Persistence.Publication;
 using AssetBlock.Infrastructure.Persistence.Stores;
+using AssetBlock.Infrastructure.Services;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Migrations;
+using Microsoft.Extensions.Logging.Abstractions;
 using NSubstitute;
+using MsOptions = Microsoft.Extensions.Options.Options;
 
 namespace AssetBlock.Infrastructure.IntegrationTests.Persistence.Stores;
 
 public sealed partial class CodeAnalysisReportFinalizerPostgresTests
 {
+    [Fact]
+    public async Task Decision_WhenPromotedEventIsReplayed_ShouldInvalidateCacheAndEnqueueApprovedEmbeddingOnce()
+    {
+        await using ApplicationDbContext db = await fixture.CreateCleanDbContext();
+        (ResponseReviewSeed seed, ModerationSubmission submission, User reviewer) = await SeedClaimedDecision(db);
+        ModerationDecisionRequest request = DecisionRequest(seed, submission, reviewer, ModerationDecisionOutcome.APPROVE);
+        (await CoverageStore(db).DecideModerationCase(request)).Status.Should().Be(ModerationDecisionStatus.SUCCEEDED);
+        (await CoverageStore(db).DecideModerationCase(request)).Saved!.Replayed.Should().BeTrue();
+        OutboxMessage message = await db.OutboxMessages.AsNoTracking().SingleAsync(m => m.Type == OutboxMessageTypes.MODERATION_DECISION);
+        var cache = new MemoryCacheService();
+        var cacheKey = CacheKeys.ASSETS_LIST_PREFIX + "review-test";
+        await cache.SetString(cacheKey, "cached", TimeSpan.FromMinutes(5));
+        var options = new EmbeddingOptions { Enabled = true, Model = "test-model", Revision = "test-revision", Digest = "sha256:" + new string('a', 64), Dimension = 32 };
+        var jobs = new AssetProcessingJobStore(db, NullLogger<AssetProcessingJobStore>.Instance, MsOptions.Create(new AssetProcessingOptions()));
+        var assets = new AssetStore(db, jobs, MsOptions.Create(options));
+        var handler = new ModerationDecisionOutboxHandler(Substitute.For<IRealtimeNotificationPublisher>(), cache, assets);
+        await handler.Handle(message, CancellationToken.None);
+        await handler.Handle(message, CancellationToken.None);
+        (await cache.GetString(cacheKey)).Should().BeNull();
+        (await db.AssetProcessingJobs.CountAsync(j => j.AssetId == submission.AssetId && j.Type == AssetProcessingJobType.EMBEDDING_GENERATION)).Should().Be(1);
+        (await db.ModerationDecisionRecords.CountAsync()).Should().Be(1);
+        (await db.PublicationSnapshots.CountAsync()).Should().Be(1);
+    }
     [Fact]
     public async Task Decision_WhenMigrationRevertedAndReapplied_ShouldRestoreCompletionReferenceColumn()
     {
@@ -128,7 +156,16 @@ public sealed partial class CodeAnalysisReportFinalizerPostgresTests
         history.CaseRevision.Should().Be(final.CaseRevision);
         history.Summary.Should().NotContain("rationale");
         OutboxMessage message = await db.OutboxMessages.AsNoTracking().SingleAsync(m => m.Type == OutboxMessageTypes.MODERATION_DECISION);
-        message.Payload.Should().NotContain("rationale").And.NotContain("Review subject");
+        message.Payload.Should().NotContain("rationale").And.NotContain("Review subject").And.NotContain(new string('b', 64));
+        message.Id.Should().Be(result.Saved.DecisionId);
+        IRealtimeNotificationPublisher publisher = Substitute.For<IRealtimeNotificationPublisher>();
+        var handler = new ModerationDecisionOutboxHandler(publisher, Substitute.For<ICacheService>(), Substitute.For<IPublicationEmbeddingEnqueuer>());
+        await handler.Handle(message, CancellationToken.None);
+        await handler.Handle(message, CancellationToken.None);
+        await publisher.Received(2).DeliverPersistedNotification(message.Id, submission.OwnerUserId, NotificationKind.MODERATION_APPROVED,
+            NotificationHubMethods.MODERATION_CASE_CHANGED, Arg.Any<string>(), Arg.Any<CancellationToken>());
+        (await db.ModerationDecisionRecords.CountAsync()).Should().Be(1);
+        (await db.PublicationSnapshots.CountAsync()).Should().Be(1);
         AuditLog audit = await db.AuditLogs.AsNoTracking().SingleAsync(a => a.Action == AuditActions.CASE_DECIDED && a.ResourceId == submission.Id.ToString());
         audit.MetadataJson.Should().NotContain("rationale").And.NotContain("Review subject");
         await db.Users.Where(u => u.Id == reviewer.Id).ExecuteUpdateAsync(s => s.SetProperty(u => u.Role, AppRoles.USER));

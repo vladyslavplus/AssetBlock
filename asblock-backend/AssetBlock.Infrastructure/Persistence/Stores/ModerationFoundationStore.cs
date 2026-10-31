@@ -1184,6 +1184,7 @@ internal sealed partial class ModerationFoundationStore(
         }
 
         DateTimeOffset now = _timeProvider.GetUtcNow();
+        Guid? priorHolderId = submission.ClaimHolderId;
         submission.State = ModerationSubmissionState.WITHDRAWN;
         submission.WithdrawalReason = request.WithdrawalReason;
         submission.ClaimHolderId = null;
@@ -1204,6 +1205,7 @@ internal sealed partial class ModerationFoundationStore(
             CreatedAt = now
         };
         dbContext.ModerationSubmissionHistoryEntries.Add(history);
+        EnqueueLifecycleNotification(submission, NotificationKind.MODERATION_WITHDRAWN, priorHolderId, now);
 
         // Fresh read under the locks; a tracked instance would carry a pre-lock CaseRevision.
         AssetDraftWorkspace? workspace = await ReadWorkspaceFreshUnderLock(submission.WorkspaceId, cancellationToken);
@@ -1571,6 +1573,7 @@ internal sealed partial class ModerationFoundationStore(
             CreatedAt = now
         };
         dbContext.ModerationSubmissions.Add(submission);
+        EnqueueLifecycleNotification(submission, NotificationKind.MODERATION_SUBMITTED, null, now);
         dbContext.ModerationSubmissionHistoryEntries.Add(new ModerationSubmissionHistoryEntry
         {
             Id = Guid.NewGuid(),

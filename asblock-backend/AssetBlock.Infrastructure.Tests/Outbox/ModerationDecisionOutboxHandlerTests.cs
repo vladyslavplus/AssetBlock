@@ -15,17 +15,28 @@ namespace AssetBlock.Infrastructure.Tests.Outbox;
 public sealed class ModerationDecisionOutboxHandlerTests
 {
     [Fact]
+    public void LifecycleIdentity_WhenSubjectRevisionOrKindChanges_ShouldRemainDeterministicAndDistinct()
+    {
+        var submissionId = Guid.NewGuid();
+        Guid first = ModerationEventIdentity.Event(submissionId, 1, NotificationKind.MODERATION_SUBMITTED);
+        first.Should().Be(ModerationEventIdentity.Event(submissionId, 1, NotificationKind.MODERATION_SUBMITTED));
+        first.Should().NotBe(ModerationEventIdentity.Event(submissionId, 2, NotificationKind.MODERATION_SUBMITTED));
+        first.Should().NotBe(ModerationEventIdentity.Event(submissionId, 1, NotificationKind.MODERATION_WITHDRAWN));
+        first.Should().NotBe(ModerationEventIdentity.Event(Guid.NewGuid(), 1, NotificationKind.MODERATION_SUBMITTED));
+    }
+    [Fact]
     public async Task Dispatch_WhenDecisionHandlerIsPresent_ShouldProcessWithoutDeadLetter()
     {
         var token = Guid.NewGuid();
         var recipientId = Guid.NewGuid();
+        var messageId = Guid.NewGuid();
         var message = new OutboxMessage
         {
-            Id = Guid.NewGuid(),
+            Id = messageId,
             Type = OutboxMessageTypes.MODERATION_DECISION,
             LockToken = token,
             AttemptCount = 1,
-            Payload = JsonSerializer.Serialize(new { decisionId = Guid.NewGuid(), submissionId = Guid.NewGuid(), assetId = Guid.NewGuid(), recipientId, state = "REJECTED", promotion = "NOT_PROMOTED" })
+            Payload = JsonSerializer.Serialize(new { decisionId = messageId, submissionId = Guid.NewGuid(), assetId = Guid.NewGuid(), versionId = Guid.NewGuid(), recipientId, revision = 1, state = "REJECTED", promotion = "NOT_PROMOTED" })
         };
         IOutboxStore outbox = Substitute.For<IOutboxStore>();
         outbox.ClaimPendingBatch(Arg.Any<int>(), Arg.Any<TimeSpan>(), Arg.Any<CancellationToken>()).Returns([message]);
@@ -54,7 +65,7 @@ public sealed class ModerationDecisionOutboxHandlerTests
         {
             Id = messageId,
             Type = OutboxMessageTypes.MODERATION_DECISION,
-            Payload = JsonSerializer.Serialize(new { decisionId = Guid.NewGuid(), submissionId = Guid.NewGuid(), assetId = Guid.NewGuid(), recipientId, state, promotion = "NOT_PROMOTED" })
+            Payload = JsonSerializer.Serialize(new { decisionId = messageId, submissionId = Guid.NewGuid(), assetId = Guid.NewGuid(), versionId = Guid.NewGuid(), recipientId, revision = 1, state, promotion = "NOT_PROMOTED" })
         };
         var handler = new ModerationDecisionOutboxHandler(notifications, cache, assets);
         await handler.Handle(message, CancellationToken.None);
@@ -69,11 +80,12 @@ public sealed class ModerationDecisionOutboxHandlerTests
     {
         IRealtimeNotificationPublisher notifications = Substitute.For<IRealtimeNotificationPublisher>();
         var handler = new ModerationDecisionOutboxHandler(notifications, Substitute.For<ICacheService>(), Substitute.For<IPublicationEmbeddingEnqueuer>());
+        var messageId = Guid.NewGuid();
         var message = new OutboxMessage
         {
-            Id = Guid.NewGuid(),
+            Id = messageId,
             Type = OutboxMessageTypes.MODERATION_DECISION,
-            Payload = JsonSerializer.Serialize(new { decisionId = Guid.NewGuid(), submissionId = Guid.NewGuid(), assetId = Guid.NewGuid(), recipientId = Guid.NewGuid(), state = "REJECTED", promotion = "PROMOTED" })
+            Payload = JsonSerializer.Serialize(new { decisionId = messageId, submissionId = Guid.NewGuid(), assetId = Guid.NewGuid(), versionId = Guid.NewGuid(), recipientId = Guid.NewGuid(), revision = 1, state = "REJECTED", promotion = "PROMOTED" })
         };
         Func<Task> operation = () => handler.Handle(message, CancellationToken.None);
         await operation.Should().ThrowAsync<InvalidOperationException>();
@@ -92,7 +104,7 @@ public sealed class ModerationDecisionOutboxHandlerTests
         {
             Id = messageId,
             Type = OutboxMessageTypes.MODERATION_DECISION,
-            Payload = JsonSerializer.Serialize(new { decisionId = Guid.NewGuid(), submissionId = Guid.NewGuid(), assetId, recipientId, state = "APPROVED", promotion = "PROMOTED" })
+            Payload = JsonSerializer.Serialize(new { decisionId = messageId, submissionId = Guid.NewGuid(), assetId, versionId = Guid.NewGuid(), recipientId, revision = 1, state = "APPROVED", promotion = "PROMOTED" })
         };
         var handler = new ModerationDecisionOutboxHandler(notifications, cache, assets);
         await handler.Handle(message, CancellationToken.None);

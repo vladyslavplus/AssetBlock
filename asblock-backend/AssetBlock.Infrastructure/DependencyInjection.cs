@@ -185,6 +185,8 @@ public static class DependencyInjection
         services.AddScoped<IAssetProcessingJobStore, AssetProcessingJobStore>();
         services.AddScoped<IOutboxMessageHandler, AssetBlobDeleteOutboxHandler>();
         services.AddScoped<IOutboxMessageHandler, AnalysisSchedulingOutboxHandler>();
+        services.AddScoped<IOutboxMessageHandler, ModerationDecisionOutboxHandler>();
+        services.AddScoped<IOutboxMessageHandler, ModerationLifecycleOutboxHandler>();
         services.AddScoped<IOutboxMessageHandler, EmailDispatchOutboxHandler>();
         services.AddScoped<IOutboxMessageHandler, EmailActionDispatchOutboxHandler>();
         services.AddScoped<IEmailSender, SmtpEmailSender>();
@@ -208,6 +210,7 @@ public static class DependencyInjection
 
         services.AddScoped<ICategoryStore, CategoryStore>();
         services.AddScoped<IAssetStore, AssetStore>();
+        services.AddScoped<IPublicationEmbeddingEnqueuer>(provider => (AssetStore)provider.GetRequiredService<IAssetStore>());
         services.AddScoped<IStorageOrphanCleanupStateStore, StorageOrphanCleanupStateStore>();
         services.AddScoped<IAssetArchiveAnalysisStore, AssetArchiveAnalysisStore>();
         services.AddScoped<IListingCopilotStore, ListingCopilotStore>();

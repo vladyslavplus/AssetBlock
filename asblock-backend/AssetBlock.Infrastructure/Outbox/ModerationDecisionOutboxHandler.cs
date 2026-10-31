@@ -10,7 +10,7 @@ namespace AssetBlock.Infrastructure.Outbox;
 internal sealed class ModerationDecisionOutboxHandler(IRealtimeNotificationPublisher notifications, ICacheService cache, IPublicationEmbeddingEnqueuer assets) : IOutboxMessageHandler
 {
     private static readonly JsonSerializerOptions _json = new(JsonSerializerDefaults.Web);
-    private sealed record Payload(Guid DecisionId, Guid SubmissionId, Guid AssetId, Guid RecipientId, string State, string Promotion);
+    private sealed record Payload(Guid DecisionId, Guid SubmissionId, Guid AssetId, Guid VersionId, Guid RecipientId, long Revision, string State, string Promotion);
     public string MessageType => OutboxMessageTypes.MODERATION_DECISION;
 
     public async Task Handle(OutboxMessage message, CancellationToken cancellationToken)
@@ -23,10 +23,10 @@ internal sealed class ModerationDecisionOutboxHandler(IRealtimeNotificationPubli
             nameof(ModerationSubmissionState.REJECTED) => NotificationKind.MODERATION_REJECTED,
             _ => throw new InvalidOperationException("Invalid moderation decision state.")
         };
-        if (payload.DecisionId == Guid.Empty || payload.SubmissionId == Guid.Empty || payload.AssetId == Guid.Empty || payload.RecipientId == Guid.Empty
+        if (payload.DecisionId == Guid.Empty || payload.DecisionId != message.Id || payload.SubmissionId == Guid.Empty || payload.AssetId == Guid.Empty || payload.VersionId == Guid.Empty || payload.RecipientId == Guid.Empty || payload.Revision <= 0
             || payload.Promotion is not ("PROMOTED" or "NOT_PROMOTED") || (payload.Promotion == "PROMOTED" && kind != NotificationKind.MODERATION_APPROVED))
         { throw new InvalidOperationException("Invalid moderation decision event."); }
-        var metadata = JsonSerializer.Serialize(new { payload.DecisionId, payload.SubmissionId, payload.AssetId, payload.State }, _json);
+        var metadata = JsonSerializer.Serialize(new { payload.DecisionId, payload.SubmissionId, payload.AssetId, payload.VersionId, payload.State, payload.Revision }, _json);
         await notifications.DeliverPersistedNotification(message.Id, payload.RecipientId, kind, NotificationHubMethods.MODERATION_CASE_CHANGED, metadata, cancellationToken);
         if (payload.Promotion == "PROMOTED")
         {

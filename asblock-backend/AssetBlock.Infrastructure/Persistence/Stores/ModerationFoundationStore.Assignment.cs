@@ -90,6 +90,8 @@ internal sealed partial class ModerationFoundationStore
                 submission.ClaimedAt = request.Claim ? now : null;
                 submission.CaseRevision++;
                 workspace.CaseRevision++;
+                if (request.Claim)
+                { EnqueueLifecycleNotification(submission, NotificationKind.MODERATION_REVIEW_STARTED, null, now); }
                 dbContext.ModerationSubmissionHistoryEntries.Add(new ModerationSubmissionHistoryEntry
                 {
                     Id = Guid.NewGuid(),

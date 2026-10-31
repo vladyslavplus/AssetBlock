@@ -6,8 +6,11 @@ using AssetBlock.Domain.Abstractions.Services;
 using AssetBlock.Domain.Core.Constants;
 using AssetBlock.Domain.Core.Dto.Assets;
 using AssetBlock.Domain.Core.Dto.Moderation;
+using AssetBlock.Domain.Core.Dto.Notifications;
 using AssetBlock.Domain.Core.Entities;
 using AssetBlock.Domain.Core.Enums;
+using AssetBlock.Infrastructure.IntegrationTests.Support;
+using AssetBlock.Infrastructure.Outbox;
 using AssetBlock.Infrastructure.Persistence;
 using AssetBlock.Infrastructure.Persistence.Stores;
 using AssetBlock.Infrastructure.Services;
@@ -21,6 +24,241 @@ namespace AssetBlock.Infrastructure.IntegrationTests.Persistence.Stores;
 
 public sealed partial class CodeAnalysisReportFinalizerPostgresTests
 {
+    private sealed class FailLifecycleWrite : SaveChangesInterceptor
+    {
+        public bool Enabled { get; set; }
+        public override ValueTask<InterceptionResult<int>> SavingChangesAsync(DbContextEventData data, InterceptionResult<int> result, CancellationToken cancellationToken = default)
+        {
+            if (Enabled && data.Context!.ChangeTracker.Entries<OutboxMessage>().Any(e => e.State == EntityState.Added && e.Entity.Type == OutboxMessageTypes.MODERATION_LIFECYCLE))
+            { throw new DbUpdateException("Lifecycle event write failed."); }
+            return base.SavingChangesAsync(data, result, cancellationToken);
+        }
+    }
+
+    private sealed class LifecycleCommandCounter : DbCommandInterceptor
+    {
+        public int Count;
+        public override ValueTask<InterceptionResult<DbDataReader>> ReaderExecutingAsync(DbCommand command, CommandEventData data, InterceptionResult<DbDataReader> result, CancellationToken cancellationToken = default)
+        { Interlocked.Increment(ref Count); return base.ReaderExecutingAsync(command, data, result, cancellationToken); }
+        public override ValueTask<InterceptionResult<int>> NonQueryExecutingAsync(DbCommand command, CommandEventData data, InterceptionResult<int> result, CancellationToken cancellationToken = default)
+        { Interlocked.Increment(ref Count); return base.NonQueryExecutingAsync(command, data, result, cancellationToken); }
+    }
+
+    private sealed class FailSecondFanoutBatch : DbCommandInterceptor
+    {
+        private int _inserts;
+        public override ValueTask<InterceptionResult<int>> NonQueryExecutingAsync(DbCommand command, CommandEventData data, InterceptionResult<int> result, CancellationToken cancellationToken = default)
+        {
+            if (command.CommandText.Contains("INSERT INTO outbox_messages", StringComparison.Ordinal) && Interlocked.Increment(ref _inserts) == 2)
+            { throw new DbUpdateException("Notification batch failed."); }
+            return base.NonQueryExecutingAsync(command, data, result, cancellationToken);
+        }
+    }
+
+    [Fact]
+    public async Task Assignment_WhenFanoutBatchFails_ShouldResumeWithoutDuplicateNotifications()
+    {
+        await using ApplicationDbContext db = await fixture.CreateCleanDbContext();
+        (ResponseReviewSeed seed, _) = await SeedSubmittedCase(db);
+        User reviewer = await CoverageModerator(db);
+        OutboxMessage message = await db.OutboxMessages.AsNoTracking().SingleAsync(m => m.Type == OutboxMessageTypes.MODERATION_LIFECYCLE);
+        await using (ApplicationDbContext failing = fixture.CreateDbContext(options => options.AddInterceptors(new FailSecondFanoutBatch())))
+        {
+            Func<Task> operation = () => new ModerationLifecycleOutboxHandler(failing, TimeProvider.System).Handle(message, CancellationToken.None);
+            await operation.Should().ThrowAsync<DbUpdateException>();
+        }
+        (await db.UserNotifications.CountAsync(n => n.Kind == NotificationKind.MODERATION_SUBMITTED)).Should().Be(1);
+        await new ModerationLifecycleOutboxHandler(db, TimeProvider.System).Handle(message, CancellationToken.None);
+        List<Guid> recipients = await db.UserNotifications.Where(n => n.Kind == NotificationKind.MODERATION_SUBMITTED).Select(n => n.RecipientUserId).ToListAsync();
+        recipients.Should().BeEquivalentTo([seed.Source.Asset.AuthorId, reviewer.Id]);
+    }
+
+    [Fact]
+    public async Task Assignment_WhenQueueFanoutExceedsOnePage_ShouldBatchWritesWithoutSkipping()
+    {
+        var counter = new LifecycleCommandCounter();
+        await using ApplicationDbContext db = await fixture.CreateCleanDbContext(options => options.AddInterceptors(counter));
+        (_, Guid submissionId) = await SeedSubmittedCase(db);
+        for (var i = 0; i < 101; i++)
+        {
+            User reviewer = TestData.CreateUser($"reviewer-{i}", $"reviewer-{i}@example.test");
+            reviewer.Role = AppRoles.MODERATOR;
+            db.Users.Add(reviewer);
+        }
+        await db.SaveChangesAsync();
+        OutboxMessage message = await db.OutboxMessages.AsNoTracking().SingleAsync(m => m.Type == OutboxMessageTypes.MODERATION_LIFECYCLE);
+        counter.Count = 0;
+        await new ModerationLifecycleOutboxHandler(db, TimeProvider.System).Handle(message, CancellationToken.None);
+        counter.Count.Should().BeLessThan(20);
+        (await db.UserNotifications.CountAsync(n => n.Kind == NotificationKind.MODERATION_SUBMITTED)).Should().Be(102);
+        (await db.ModerationSubmissions.AnyAsync(s => s.Id == submissionId)).Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task Assignment_WhenNotificationWriteFails_ShouldRollbackClaim()
+    {
+        var failure = new FailLifecycleWrite();
+        await using ApplicationDbContext db = await fixture.CreateCleanDbContext(options => options.AddInterceptors(failure));
+        (_, Guid submissionId) = await SeedSubmittedCase(db);
+        User reviewer = await CoverageModerator(db);
+        ModerationSubmission submission = await db.ModerationSubmissions.AsNoTracking().SingleAsync(s => s.Id == submissionId);
+        failure.Enabled = true;
+        Func<Task> operation = async () => await CoverageStore(db).ChangeCaseClaim(new(reviewer.Id, submissionId, Guid.NewGuid(), submission.CaseRevision, true, new string('a', 64)));
+        await operation.Should().ThrowAsync<DbUpdateException>();
+        await using ApplicationDbContext observer = fixture.CreateDbContext();
+        (await observer.ModerationSubmissions.AsNoTracking().SingleAsync(s => s.Id == submissionId)).State.Should().Be(ModerationSubmissionState.SUBMITTED);
+        (await observer.OutboxMessages.CountAsync(m => m.Type == OutboxMessageTypes.MODERATION_LIFECYCLE)).Should().Be(1);
+        (await observer.ModerationSubmissionHistoryEntries.CountAsync(h => h.SubmissionId == submissionId && h.State == ModerationSubmissionState.IN_REVIEW)).Should().Be(0);
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task Assignment_WhenReleasedOrSuperseded_ShouldNotInventNotification(bool release)
+    {
+        await using ApplicationDbContext db = await fixture.CreateCleanDbContext();
+        (ResponseReviewSeed seed, Guid submissionId) = await SeedSubmittedCase(db);
+        User reviewer = await CoverageModerator(db);
+        ModerationSubmission submission = await db.ModerationSubmissions.AsNoTracking().SingleAsync(s => s.Id == submissionId);
+        (await CoverageStore(db).ChangeCaseClaim(new(reviewer.Id, submissionId, Guid.NewGuid(), submission.CaseRevision, true, new string('a', 64)))).Status.Should().Be(CaseClaimStatus.SUCCESS);
+        submission = await db.ModerationSubmissions.AsNoTracking().SingleAsync(s => s.Id == submissionId);
+        if (release)
+        { (await CoverageStore(db).ChangeCaseClaim(new(reviewer.Id, submissionId, Guid.NewGuid(), submission.CaseRevision, false, new string('b', 64)))).Status.Should().Be(CaseClaimStatus.SUCCESS); }
+        else
+        {
+            SellerResponsesPageDto current = (await CoverageStore(db).GetOwnerResponses(seed.Source.Asset.Id, seed.Source.Version.Id, seed.Source.Asset.AuthorId, 1))!;
+            var edit = new SaveSellerEvidenceCommand(seed.Source.Asset.AuthorId, seed.Source.Asset.Id, seed.Source.Version.Id, current.WorkspaceId,
+                seed.ReportId, null, null, "Changed note", current.WorkspaceRevision, current.EvidenceRevision, Guid.NewGuid());
+            (await new SaveSellerEvidenceCommandHandler(CoverageStore(db)).Handle(edit, CancellationToken.None)).IsSuccess.Should().BeTrue();
+        }
+        (await db.OutboxMessages.CountAsync(m => m.Type == OutboxMessageTypes.MODERATION_LIFECYCLE)).Should().Be(2);
+    }
+    [Fact]
+    public async Task Assignment_WhenTransitionsReplay_ShouldPersistOneSafeEventPerTransition()
+    {
+        await using ApplicationDbContext db = await fixture.CreateCleanDbContext();
+        (ResponseReviewSeed seed, Guid submissionId) = await SeedSubmittedCase(db);
+        User reviewer = await CoverageModerator(db);
+        ModerationSubmission submission = await db.ModerationSubmissions.AsNoTracking().SingleAsync(s => s.Id == submissionId);
+        var claim = new CaseClaimChange(reviewer.Id, submissionId, Guid.NewGuid(), submission.CaseRevision, true, new string('a', 64));
+        (await CoverageStore(db).ChangeCaseClaim(claim)).Status.Should().Be(CaseClaimStatus.SUCCESS);
+        (await CoverageStore(db).ChangeCaseClaim(claim)).Value!.Replayed.Should().BeTrue();
+        submission = await db.ModerationSubmissions.AsNoTracking().SingleAsync(s => s.Id == submissionId);
+        var withdraw = new WithdrawSubmissionRequest(seed.Source.Asset.AuthorId, submissionId, submission.CaseRevision, Guid.NewGuid(), new string('b', 64), ModerationWithdrawalReason.SELLER_WITHDRAWAL);
+        (await CoverageStore(db).WithdrawSubmission(withdraw)).Status.Should().Be(WithdrawSubmissionStatus.SUCCEEDED);
+        (await CoverageStore(db).WithdrawSubmission(withdraw)).Replayed.Should().BeTrue();
+        List<OutboxMessage> events = await db.OutboxMessages.AsNoTracking().Where(m => m.Type == OutboxMessageTypes.MODERATION_LIFECYCLE).ToListAsync();
+        events.Should().HaveCount(3);
+        events.Select(e => e.Id).Distinct().Should().HaveCount(3);
+        Guid firstEventId = events[0].Id;
+        Func<Task> duplicate = () => db.Database.ExecuteSqlInterpolatedAsync($"""
+            INSERT INTO outbox_messages ("Id", "Type", "Payload", "OccurredAt", "Status", "AttemptCount", "ReplayCount")
+            SELECT "Id", "Type", "Payload", "OccurredAt", "Status", "AttemptCount", "ReplayCount" FROM outbox_messages WHERE "Id" = {firstEventId}
+            """);
+        (await duplicate.Should().ThrowAsync<Npgsql.PostgresException>()).Which.SqlState.Should().Be(Npgsql.PostgresErrorCodes.UniqueViolation);
+        events.Select(e => e.Payload).Should().OnlyContain(p => !p.Contains("Private", StringComparison.OrdinalIgnoreCase) && !p.Contains("Original implementation", StringComparison.Ordinal));
+        OutboxMessage withdrawnEvent = events.Single(e => e.Id == ModerationEventIdentity.Event(submissionId, submission.CaseRevision + 1, NotificationKind.MODERATION_WITHDRAWN));
+        var handler = new ModerationLifecycleOutboxHandler(db, TimeProvider.System);
+        await handler.Handle(withdrawnEvent, CancellationToken.None);
+        await handler.Handle(withdrawnEvent, CancellationToken.None);
+        List<UserNotification> notices = await db.UserNotifications.AsNoTracking().Where(n => n.Kind == NotificationKind.MODERATION_WITHDRAWN).ToListAsync();
+        notices.Select(n => n.RecipientUserId).Should().BeEquivalentTo([seed.Source.Asset.AuthorId, reviewer.Id]);
+        notices.Select(n => n.MetadataJson).Should().OnlyContain(json => !json.Contains(reviewer.Id.ToString(), StringComparison.Ordinal)
+            && !json.Contains("Original implementation", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task Assignment_WhenLifecycleEventReplayed_ShouldPersistOneNotificationPerRecipient()
+    {
+        await using ApplicationDbContext db = await fixture.CreateCleanDbContext();
+        (ResponseReviewSeed seed, Guid submissionId) = await SeedSubmittedCase(db);
+        User moderator = await CoverageModerator(db);
+        User other = await CoverageModerator(db, AppRoles.USER);
+        User admin = await CoverageModerator(db, AppRoles.ADMIN);
+        await db.Users.Where(u => u.Id == seed.Source.Asset.AuthorId).ExecuteUpdateAsync(s => s.SetProperty(u => u.Role, AppRoles.MODERATOR));
+        OutboxMessage message = await db.OutboxMessages.AsNoTracking().SingleAsync(m => m.Type == OutboxMessageTypes.MODERATION_LIFECYCLE);
+        await using ApplicationDbContext first = fixture.CreateDbContext();
+        await using ApplicationDbContext second = fixture.CreateDbContext();
+        await Task.WhenAll(new ModerationLifecycleOutboxHandler(first, TimeProvider.System).Handle(message, CancellationToken.None),
+            new ModerationLifecycleOutboxHandler(second, TimeProvider.System).Handle(message, CancellationToken.None));
+        await new ModerationLifecycleOutboxHandler(db, TimeProvider.System).Handle(message, CancellationToken.None);
+        List<UserNotification> rows = await db.UserNotifications.AsNoTracking().Where(n => n.Kind == NotificationKind.MODERATION_SUBMITTED).ToListAsync();
+        rows.Should().HaveCount(2);
+        rows.Select(n => n.RecipientUserId).Should().BeEquivalentTo([seed.Source.Asset.AuthorId, moderator.Id]);
+        rows.Should().OnlyContain(n => n.Kind == NotificationKind.MODERATION_SUBMITTED && !n.MetadataJson.Contains("Original implementation", StringComparison.Ordinal));
+        rows.Select(n => n.MetadataJson).Should().OnlyContain(json => !json.Contains(moderator.Id.ToString(), StringComparison.Ordinal)
+            && !json.Contains(new string('b', 64), StringComparison.Ordinal) && !json.Contains("evidence", StringComparison.OrdinalIgnoreCase));
+        (await db.OutboxMessages.CountAsync(m => m.Type == OutboxMessageTypes.NOTIFICATION_DISPATCH && (m.Id == rows[0].Id || m.Id == rows[1].Id))).Should().Be(2);
+        var store = new NotificationStore(db, NullLogger<NotificationStore>.Instance);
+        (await store.GetPaged(other.Id, new GetNotificationsRequest())).Items.Should().BeEmpty();
+        (await store.GetPaged(admin.Id, new GetNotificationsRequest())).Items.Should().BeEmpty();
+        (await store.GetPaged(seed.Source.Asset.AuthorId, new GetNotificationsRequest())).Items.Should().ContainSingle(n => n.Kind == NotificationKind.MODERATION_SUBMITTED);
+        (await store.MarkRead(other.Id, rows.Single(n => n.RecipientUserId == seed.Source.Asset.AuthorId).Id)).Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task Assignment_WhenOwnerChangesBeforeFanout_ShouldExcludeBothOwnersFromModeratorAudience()
+    {
+        await using ApplicationDbContext db = await fixture.CreateCleanDbContext();
+        (ResponseReviewSeed seed, _) = await SeedSubmittedCase(db);
+        User newOwner = await CoverageModerator(db);
+        User moderator = await CoverageModerator(db);
+        await db.Users.Where(u => u.Id == seed.Source.Asset.AuthorId).ExecuteUpdateAsync(s => s.SetProperty(u => u.Role, AppRoles.MODERATOR));
+        await db.Assets.Where(a => a.Id == seed.Source.Asset.Id).ExecuteUpdateAsync(s => s.SetProperty(a => a.AuthorId, newOwner.Id));
+        OutboxMessage message = await db.OutboxMessages.AsNoTracking().SingleAsync(m => m.Type == OutboxMessageTypes.MODERATION_LIFECYCLE);
+        await new ModerationLifecycleOutboxHandler(db, TimeProvider.System).Handle(message, CancellationToken.None);
+        List<Guid> recipients = await db.UserNotifications.AsNoTracking().Where(n => n.Kind == NotificationKind.MODERATION_SUBMITTED).Select(n => n.RecipientUserId).ToListAsync();
+        recipients.Should().BeEquivalentTo([newOwner.Id, moderator.Id]);
+    }
+
+    [Fact]
+    public async Task Lifecycle_WhenPrivateTextIsSubmittedAndApproved_ShouldKeepItOutOfDurableRows()
+    {
+        const string responseText = "SELLER-PRIVATE-SENTINEL-4f2a";
+        const string rationale = "MODERATOR-RATIONALE-SENTINEL-9c1d";
+        const string dispositionText = "MODERATOR-DISPOSITION-SENTINEL-7b3e";
+        await using ApplicationDbContext db = await fixture.CreateCleanDbContext();
+        ResponseReviewSeed seed = await SeedCurrentMaterialReview(db, 1);
+        ModerationFoundationStore store = CoverageStore(db);
+        SellerResponsesPageDto current = (await store.GetOwnerResponses(seed.Source.Asset.Id, seed.Source.Version.Id, seed.Source.Asset.AuthorId, 1))!;
+        (await new SaveSellerEvidenceCommandHandler(store).Handle(ResponseCommand(seed, current, seed.Findings[0], SellerResponseType.INDEPENDENT_IMPLEMENTATION, responseText), CancellationToken.None)).IsSuccess.Should().BeTrue();
+        current = (await store.GetOwnerResponses(seed.Source.Asset.Id, seed.Source.Version.Id, seed.Source.Asset.AuthorId, 1))!;
+        Guid submissionId = (await new SubmitAssetVersionCommandHandler(store, ResponseAnalysisStore(db)).Handle(SubmitResponseVersion(seed, current), CancellationToken.None)).Value;
+        User reviewer = await CoverageModerator(db);
+        ModerationSubmission submission = await db.ModerationSubmissions.AsNoTracking().SingleAsync(s => s.Id == submissionId);
+        (await store.ChangeCaseClaim(new(reviewer.Id, submissionId, Guid.NewGuid(), submission.CaseRevision, true, new string('a', 64)))).Status.Should().Be(CaseClaimStatus.SUCCESS);
+        submission = await db.ModerationSubmissions.AsNoTracking().SingleAsync(s => s.Id == submissionId);
+        ModerationDecisionRequest decision = DecisionRequest(seed, submission, reviewer, ModerationDecisionOutcome.APPROVE) with
+        {
+            Rationale = rationale,
+            Dispositions = [new(seed.Findings[0], FindingDispositionType.EXPLAINED, dispositionText)]
+        };
+        (await CoverageStore(db).DecideModerationCase(decision)).Status.Should().Be(ModerationDecisionStatus.SUCCEEDED);
+
+        var lifecycleHandler = new ModerationLifecycleOutboxHandler(db, TimeProvider.System);
+        foreach (OutboxMessage lifecycle in await db.OutboxMessages.AsNoTracking().Where(m => m.Type == OutboxMessageTypes.MODERATION_LIFECYCLE).ToListAsync())
+        { await lifecycleHandler.Handle(lifecycle, CancellationToken.None); }
+        OutboxMessage decided = await db.OutboxMessages.AsNoTracking().SingleAsync(m => m.Type == OutboxMessageTypes.MODERATION_DECISION);
+        await new ModerationDecisionOutboxHandler(Substitute.For<IRealtimeNotificationPublisher>(), Substitute.For<ICacheService>(),
+            Substitute.For<IPublicationEmbeddingEnqueuer>()).Handle(decided, CancellationToken.None);
+
+        CodeAnalysisReportFinding finding = await db.CodeAnalysisReportFindings.AsNoTracking().SingleAsync(f => f.Id == seed.Findings[0]);
+        var durable = new List<string>();
+        durable.AddRange(await db.OutboxMessages.AsNoTracking().Select(m => m.Payload).ToListAsync());
+        durable.AddRange(await db.UserNotifications.AsNoTracking().Select(n => n.MetadataJson).ToListAsync());
+        durable.AddRange((await db.AuditLogs.AsNoTracking().Select(a => a.MetadataJson).ToListAsync()).OfType<string>());
+        durable.AddRange(await db.ModerationSubmissionHistoryEntries.AsNoTracking().Select(h => h.Summary).ToListAsync());
+        durable.Should().HaveCountGreaterThan(3);
+        var privateTexts = new List<string> { responseText, rationale, dispositionText };
+        if (finding.OwnExcerpt.Length > 0)
+        { privateTexts.Add(finding.OwnExcerpt); }
+        if (!string.IsNullOrEmpty(finding.ForeignSourceId))
+        { privateTexts.Add(finding.ForeignSourceId); }
+        durable.Should().NotContain(text => privateTexts.Any(secret => text.Contains(secret, StringComparison.Ordinal)));
+        (await db.OutboxMessages.CountAsync(m => m.Type == OutboxMessageTypes.MODERATION_LIFECYCLE)).Should().Be(2);
+        (await db.UserNotifications.CountAsync(n => n.Kind == NotificationKind.MODERATION_SUBMITTED)).Should().Be(2);
+    }
+
     private sealed class QueueCommandCounter : DbCommandInterceptor
     {
         public int Count;

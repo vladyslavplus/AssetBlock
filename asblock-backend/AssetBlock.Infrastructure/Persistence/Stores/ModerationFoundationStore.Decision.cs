@@ -230,9 +230,9 @@ internal sealed partial class ModerationFoundationStore
                 });
                 dbContext.OutboxMessages.Add(new OutboxMessage
                 {
-                    Id = Guid.NewGuid(),
+                    Id = decisionId,
                     Type = OutboxMessageTypes.MODERATION_DECISION,
-                    Payload = JsonSerializer.Serialize(new { decisionId, submissionId = submission.Id, assetId = asset.Id, recipientId = submission.OwnerUserId, state = state.ToString(), promotion = promoted ? "PROMOTED" : "NOT_PROMOTED" }, CoverageReviewState.JsonOptions),
+                    Payload = JsonSerializer.Serialize(new { decisionId, submissionId = submission.Id, assetId = asset.Id, versionId = version.Id, recipientId = asset.AuthorId, revision = submission.CaseRevision, state = state.ToString(), promotion = promoted ? "PROMOTED" : "NOT_PROMOTED" }, CoverageReviewState.JsonOptions),
                     OccurredAt = now
                 });
                 await dbContext.SaveChangesAsync(ct);
