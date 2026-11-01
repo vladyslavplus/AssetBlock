@@ -81,6 +81,35 @@ internal static class SellerResponseRequirements
         }
         return results;
     }
+
+    internal static async Task<IReadOnlyDictionary<Guid, IReadOnlyList<SellerResponse>>> ReadFrozenResponses(
+        ApplicationDbContext db, SummaryInput input, CancellationToken ct)
+    {
+        if (input.Revision <= 0)
+        { return new Dictionary<Guid, IReadOnlyList<SellerResponse>>(); }
+        var payload = await db.AssetSellerEvidenceRevisions.AsNoTracking()
+            .Where(r => r.WorkspaceId == input.WorkspaceId && r.Revision == input.Revision)
+            .Select(r => r.PayloadJson).SingleOrDefaultAsync(ct);
+        SellerEvidenceSnapshot? snapshot;
+        try
+        { snapshot = payload is null ? null : JsonSerializer.Deserialize<SellerEvidenceSnapshot>(payload, JsonOptions); }
+        catch (JsonException)
+        { return new Dictionary<Guid, IReadOnlyList<SellerResponse>>(); }
+        if (snapshot is null || snapshot.ReportId != input.ReportId
+            || snapshot.ResponseIds.Count > SellerEvidenceLimits.MAX_RESPONSES
+            || snapshot.ResponseIds.Distinct().Count() != snapshot.ResponseIds.Count)
+        { return new Dictionary<Guid, IReadOnlyList<SellerResponse>>(); }
+        Guid[] ids = snapshot.ResponseIds.ToArray();
+        SellerResponse[] rows = await db.SellerResponses.AsNoTracking()
+            .Where(r => ids.Contains(r.Id) && r.WorkspaceId == input.WorkspaceId
+                && r.AssetVersionId == input.VersionId && r.ReportId == input.ReportId
+                && r.SellerEvidenceRevision <= input.Revision)
+            .OrderByDescending(r => r.CreatedAt).ThenByDescending(r => r.Id)
+            .Take(SellerEvidenceLimits.MAX_RESPONSES).ToArrayAsync(ct);
+        if (rows.Length != ids.Length || rows.Select(r => r.FindingId).Distinct().Count() != rows.Length)
+        { return new Dictionary<Guid, IReadOnlyList<SellerResponse>>(); }
+        return rows.GroupBy(r => r.FindingId).ToDictionary(g => g.Key, g => (IReadOnlyList<SellerResponse>)g.ToArray());
+    }
     internal static JsonSerializerOptions JsonOptions { get; } = new(JsonSerializerDefaults.Web)
     {
         PropertyNameCaseInsensitive = false,

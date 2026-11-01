@@ -28,6 +28,25 @@ public sealed class ModerationSubmissionsController(ISender sender) : Controller
 {
     /// <summary>Decision bodies carry at most 200 dispositions with bounded text; anything larger is refused before binding.</summary>
     private const int DECISION_BODY_LIMIT_BYTES = 1_048_576;
+    private static readonly HashSet<string> DECISION_BLOCKER_CODES =
+    [
+        ErrorCodes.ERR_MODERATION_APPEAL_DECISION_NOT_ALLOWED,
+        ErrorCodes.ERR_VERSION_FILE_CHECKS_INCOMPLETE,
+        ErrorCodes.ERR_REVIEW_COVERAGE_REQUIRED,
+        ErrorCodes.ERR_ANALYSIS_REPORT_NOT_TRUSTED,
+        ErrorCodes.ERR_MODERATION_WORKSPACE_STALE,
+        ErrorCodes.ERR_DECLARATION_INCOMPLETE,
+        ErrorCodes.ERR_COVERAGE_ASSESSMENT_INVALIDATED,
+        ErrorCodes.ERR_COVERAGE_ASSESSOR_UNAVAILABLE,
+        ErrorCodes.ERR_COVERAGE_ASSESSMENT_BLOCKED,
+        ErrorCodes.ERR_REVIEW_PLAN_REFERENCE_MISMATCH,
+        ErrorCodes.ERR_ANALYSIS_NOT_AVAILABLE,
+        ErrorCodes.ERR_MODERATION_DECISION_RESPONSES_OUTSTANDING,
+        ErrorCodes.ERR_MODERATION_DISPOSITIONS_INVALID,
+        ErrorCodes.ERR_MODERATION_DECISION_BLOCKED,
+        ErrorCodes.ERR_PUBLICATION_METADATA_UNAVAILABLE,
+        ErrorCodes.ERR_MODERATION_CONCURRENT_UPDATE
+    ];
 
     public sealed record ClaimInput(Guid OperationId, long ExpectedCaseRevision);
 
@@ -107,7 +126,7 @@ public sealed class ModerationSubmissionsController(ISender sender) : Controller
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
-    [ProducesResponseType(StatusCodes.Status409Conflict)]
+    [ProducesResponseType(typeof(Microsoft.AspNetCore.Mvc.ProblemDetails), StatusCodes.Status409Conflict)]
     [ProducesResponseType(StatusCodes.Status413PayloadTooLarge)]
     [ProducesResponseType(StatusCodes.Status503ServiceUnavailable)]
     public async Task<IActionResult> Decide(Guid id, [FromBody] DecisionInput input, CancellationToken cancellationToken)
@@ -130,6 +149,14 @@ public sealed class ModerationSubmissionsController(ISender sender) : Controller
                 input.Dispositions?.Select(d => d is null ? null : new FindingDispositionInput(d.FindingId, d.Disposition!.Value, d.Rationale)).ToArray(),
                 input.ManualPlanCompletionReference),
             cancellationToken);
+        if (result.Status == Ardalis.Result.ResultStatus.Conflict
+            && DECISION_BLOCKER_CODES.Contains(result.Errors.FirstOrDefault() ?? string.Empty))
+        {
+            var code = result.Errors.First();
+            Microsoft.AspNetCore.Mvc.ProblemDetails problem = AssetBlockProblemDetails.Create(HttpContext, StatusCodes.Status409Conflict, code);
+            problem.Extensions["blockerCodes"] = new[] { code };
+            return AssetBlockProblemDetails.ToActionResult(problem);
+        }
         return ResultProblemDetailsMapper.Map(HttpContext, result);
     }
     [HttpGet(ApiRoutes.Moderation.SUBMISSION_BY_ID)]

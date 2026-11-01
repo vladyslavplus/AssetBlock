@@ -221,8 +221,10 @@ public sealed class ModerationDecisionIntegrationTests(IntegrationTestFixture fi
     {
         (HttpClient owner, var ownerName) = await IntegrationTestAuth.RegisterVerifiedAndAuthenticateAsync(fixture.Factory);
         (HttpClient moderator, var moderatorName, _) = await RegisterModerator();
+        (HttpClient independent, _, _) = await RegisterModerator();
         using (owner)
         using (moderator)
+        using (independent)
         {
             CaseSeed seed = await SeedCase(ownerName, ModerationSubmissionState.REJECTED, moderatorName, true);
             await using AsyncServiceScope scope = fixture.Factory.Services.CreateAsyncScope();
@@ -236,6 +238,17 @@ public sealed class ModerationDecisionIntegrationTests(IntegrationTestFixture fi
             created.StatusCode.Should().Be(HttpStatusCode.OK, await created.Content.ReadAsStringAsync());
             using var json = System.Text.Json.JsonDocument.Parse(await created.Content.ReadAsStringAsync());
             Guid appealId = json.RootElement.GetProperty("submissionId").GetGuid();
+            using HttpResponseMessage appealQueue = await independent.GetAsync("/" + ApiRoutes.Moderation.QUEUE);
+            appealQueue.StatusCode.Should().Be(HttpStatusCode.OK);
+            using var appealQueueJson = System.Text.Json.JsonDocument.Parse(await appealQueue.Content.ReadAsStringAsync());
+            System.Text.Json.JsonElement appealQueueItem = appealQueueJson.RootElement.GetProperty("items").EnumerateArray()
+                .Single(item => item.GetProperty("submissionId").GetGuid() == appealId);
+            appealQueueItem.GetProperty("kind").GetString().Should().Be("APPEAL");
+            var appealCasePath = "/" + ApiRoutes.Moderation.SUBMISSION_BY_ID.Replace("{id:guid}", appealId.ToString(), StringComparison.Ordinal);
+            using HttpResponseMessage appealCase = await independent.GetAsync(appealCasePath);
+            appealCase.StatusCode.Should().Be(HttpStatusCode.OK);
+            using var appealCaseJson = System.Text.Json.JsonDocument.Parse(await appealCase.Content.ReadAsStringAsync());
+            appealCaseJson.RootElement.GetProperty("kind").GetString().Should().Be("APPEAL");
             using HttpResponseMessage replay = await owner.PostAsJsonAsync(endpoint.Path, request);
             replay.StatusCode.Should().Be(HttpStatusCode.OK);
             (await replay.Content.ReadAsStringAsync()).Should().Contain(appealId.ToString());
@@ -316,7 +329,11 @@ public sealed class ModerationDecisionIntegrationTests(IntegrationTestFixture fi
             };
             using HttpResponseMessage response = await moderator.PostAsJsonAsync(DecisionPath(seed), body);
             response.StatusCode.Should().Be(HttpStatusCode.Conflict, await response.Content.ReadAsStringAsync());
-            (await response.Content.ReadAsStringAsync()).Should().Contain(ErrorCodes.ERR_MODERATION_DECISION_RESPONSES_OUTSTANDING).And.NotContain("Private decision marker");
+            var responseBody = await response.Content.ReadAsStringAsync();
+            responseBody.Should().Contain(ErrorCodes.ERR_MODERATION_DECISION_RESPONSES_OUTSTANDING).And.NotContain("Private decision marker");
+            using var problem = System.Text.Json.JsonDocument.Parse(responseBody);
+            problem.RootElement.GetProperty("blockerCodes").EnumerateArray().Select(code => code.GetString())
+                .Should().Equal(ErrorCodes.ERR_MODERATION_DECISION_RESPONSES_OUTSTANDING);
             (await db.ModerationDecisionRecords.CountAsync(d => d.SubmissionId == original.Id)).Should().Be(0);
         }
     }

@@ -71,7 +71,7 @@ public sealed class RestrictedReviewEvidenceIntegrationTests(IntegrationTestFixt
             Id = Guid.NewGuid(),
             ReportId = report.Id,
             FindingKey = "restricted-fixture",
-            FindingType = "POTENTIAL_MATCH",
+            FindingType = "NOTICE_MISSING",
             OwnScopePath = "own.py",
             OwnExcerpt = PRIVATE_EXCERPT,
             ForeignSensitivity = CodeAnalysisFindingSensitivity.PRIVATE,
@@ -108,6 +108,36 @@ public sealed class RestrictedReviewEvidenceIntegrationTests(IntegrationTestFixt
         await db.SaveChangesAsync();
         return new(submission.Id, version.Id, finding.Id);
     }
+
+    [Fact]
+    public async Task Case_WhenModeratorReadsOwnedClaim_ShouldSerializeCallerClaimAndNoExpectedPlanReference()
+    {
+        (HttpClient owner, var ownerName) = await IntegrationTestAuth.RegisterVerifiedAndAuthenticateAsync(fixture.Factory);
+        using (owner)
+        {
+            CaseSeed seed = await SeedCase(ownerName);
+            (HttpClient moderator, var moderatorName) = await IntegrationTestAuth.RegisterVerifiedWithRoleAsync(fixture.Factory, AppRoles.MODERATOR);
+            using (moderator)
+            {
+                await using (AsyncServiceScope scope = fixture.Factory.Services.CreateAsyncScope())
+                {
+                    ApplicationDbContext db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+                    Guid moderatorId = await db.Users.Where(u => u.Username == moderatorName).Select(u => u.Id).SingleAsync();
+                    await db.ModerationSubmissions.Where(s => s.Id == seed.SubmissionId)
+                        .ExecuteUpdateAsync(s => s.SetProperty(row => row.State, ModerationSubmissionState.IN_REVIEW)
+                            .SetProperty(row => row.ClaimHolderId, moderatorId)
+                            .SetProperty(row => row.ClaimedAt, DateTimeOffset.UtcNow));
+                }
+                using HttpResponseMessage response = await moderator.GetAsync($"/api/moderation/submissions/{seed.SubmissionId}");
+                response.StatusCode.Should().Be(HttpStatusCode.OK);
+                using var body = System.Text.Json.JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+                body.RootElement.GetProperty("isClaimedByCaller").GetBoolean().Should().BeTrue();
+                body.RootElement.GetProperty("retrievalEvidence").GetProperty("candidates")[0]
+                    .GetProperty("findingType").GetString().Should().Be("NOTICE_MISSING");
+                body.RootElement.TryGetProperty("expectedManualPlanCompletionReference", out _).Should().BeFalse();
+            }
+        }
+    }
     private static string EvidenceUrl(CaseSeed seed) => ApiRoutes.Moderation.CASE_EVIDENCE.Replace("{id:guid}", seed.SubmissionId.ToString(), StringComparison.Ordinal)
         .Replace("{kind}", nameof(RestrictedEvidenceKind.OWN_EXCERPT), StringComparison.Ordinal) + $"?findingId={seed.FindingId}";
     [Fact]
@@ -138,7 +168,33 @@ public sealed class RestrictedReviewEvidenceIntegrationTests(IntegrationTestFixt
                 using HttpResponseMessage queue = await moderator.GetAsync(queuePath);
                 queue.StatusCode.Should().Be(HttpStatusCode.OK);
                 queue.Headers.CacheControl!.NoStore.Should().BeTrue();
-                (await queue.Content.ReadAsStringAsync()).Should().Contain(seed.SubmissionId.ToString()).And.NotContain(PRIVATE_EXCERPT);
+                using var queueJson = System.Text.Json.JsonDocument.Parse(await queue.Content.ReadAsStringAsync());
+                System.Text.Json.JsonElement queueItem = queueJson.RootElement.GetProperty("items").EnumerateArray()
+                    .Single(item => item.GetProperty("submissionId").GetGuid() == seed.SubmissionId);
+                queueItem.GetProperty("kind").GetString().Should().Be("STANDARD");
+                using HttpResponseMessage caseResponse = await moderator.GetAsync("/" + ApiRoutes.Moderation.SUBMISSION_BY_ID.Replace("{id:guid}", seed.SubmissionId.ToString(), StringComparison.Ordinal));
+                caseResponse.StatusCode.Should().Be(HttpStatusCode.OK);
+                using var caseJson = System.Text.Json.JsonDocument.Parse(await caseResponse.Content.ReadAsStringAsync());
+                caseJson.RootElement.GetProperty("kind").GetString().Should().Be("STANDARD");
+                System.Text.Json.JsonElement basis = caseJson.RootElement.GetProperty("basis");
+                basis.GetProperty("versionId").GetGuid().Should().Be(seed.VersionId);
+                basis.GetProperty("contentSha256").GetString().Should().Be(new string('a', 64));
+                basis.GetProperty("analysisReportId").GetGuid().Should().NotBe(Guid.Empty);
+                basis.GetProperty("declarationRevision").GetInt32().Should().Be(1);
+                basis.GetProperty("materialMetadataRevision").GetInt32().Should().Be(1);
+                basis.GetProperty("sellerEvidenceRevision").GetInt32().Should().Be(0);
+                basis.GetProperty("caseRevision").GetInt64().Should().Be(1);
+                System.Text.Json.JsonElement reportEvidence = caseJson.RootElement.GetProperty("retrievalEvidence");
+                reportEvidence.GetProperty("reportId").GetGuid().Should().NotBe(Guid.Empty);
+                reportEvidence.GetProperty("responseRequirementsAvailable").GetBoolean().Should().BeFalse();
+                System.Text.Json.JsonElement candidate = reportEvidence.GetProperty("candidates").EnumerateArray().Single();
+                candidate.GetProperty("findingId").GetGuid().Should().Be(seed.FindingId);
+                candidate.GetProperty("responseRequired").GetBoolean().Should().BeFalse();
+                candidate.GetProperty("answered").GetBoolean().Should().BeFalse();
+                caseJson.RootElement.TryGetProperty("ownerUserId", out _).Should().BeFalse();
+                caseJson.RootElement.TryGetProperty("excludedReviewerIds", out _).Should().BeFalse();
+                caseJson.RootElement.ToString().Should().NotContain("actorUserId");
+                caseJson.RootElement.GetRawText().Should().NotContain(PRIVATE_EXCERPT);
                 using HttpResponseMessage bounds = await moderator.GetAsync(queuePath + "?pageSize=101");
                 bounds.StatusCode.Should().Be(HttpStatusCode.BadRequest);
                 using HttpResponseMessage badCursor = await moderator.GetAsync(queuePath + "?cursor=tampered");

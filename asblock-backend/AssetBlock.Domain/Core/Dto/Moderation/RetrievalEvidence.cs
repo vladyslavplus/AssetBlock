@@ -1,3 +1,5 @@
+using AssetBlock.Domain.Core.Enums;
+
 namespace AssetBlock.Domain.Core.Dto.Moderation;
 
 /// <summary>FILE-level retrieval evidence. Own excerpt spans are not a verified matching pair.</summary>
@@ -32,7 +34,9 @@ public sealed record RetrievalReportSummary(
     IReadOnlyList<RetrievalQuerySummary> Queries);
 
 public sealed record ModeratorRetrievalCandidate(
+    Guid FindingId,
     string FindingKey,
+    string FindingType,
     string OwnScopePath,
     int? OwnStartByte,
     int? OwnEndByte,
@@ -42,10 +46,15 @@ public sealed record ModeratorRetrievalCandidate(
     string? ReferenceOrigin,
     string ReferenceSensitivity,
     string ScoresAvailability,
-    RetrievalCandidateEvidence? Scores);
+    RetrievalCandidateEvidence? Scores,
+    bool ResponseRequired,
+    bool Answered,
+    IReadOnlyList<ModeratorSellerResponse> Responses);
+
+public sealed record ModeratorSellerResponse(SellerResponseType Kind, string Text, DateTimeOffset CreatedAt);
 
 public sealed record ModeratorReportEvidence(
-    Guid? ReportId,
+    Guid ReportId,
     string ScoresAvailability,
     string? ReferenceSnapshotId,
     string? ReferenceRevision,
@@ -53,7 +62,8 @@ public sealed record ModeratorReportEvidence(
     int? OmissionCount,
     int? FindingOverflow,
     RetrievalReportSummary? Retrieval,
-    IReadOnlyList<ModeratorRetrievalCandidate> Candidates);
+    IReadOnlyList<ModeratorRetrievalCandidate> Candidates,
+    bool ResponseRequirementsAvailable);
 
 /// <summary>Admission-time reference and overflow identity, not a reconstruction from findings.</summary>
 public sealed record PersistedRetrievalSummary(

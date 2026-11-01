@@ -9,5 +9,6 @@ public sealed record CaseClaimResult(CaseClaimStatus Status, CaseClaimSaved? Val
 public enum CaseClaimFilter { ALL, MINE, UNCLAIMED }
 public sealed record ModeratorQueueRequest(Guid ActorId, ModerationSubmissionState? State, CaseClaimFilter ClaimFilter, int PageSize, string? Cursor);
 public sealed record ModeratorQueueItem(Guid SubmissionId, Guid AssetId, string AssetTitle, int VersionNumber, DateTimeOffset SubmittedAt,
-    ModerationSubmissionState State, Guid? ClaimHolderId, string? ClaimHolderName, long CaseRevision, CodeAnalysisCoverageLevel? CoverageLevel, int MaterialFindingCount, bool HasOpenResponses);
+    ModerationSubmissionKind Kind, ModerationSubmissionState State, Guid? ClaimHolderId, string? ClaimHolderName, long CaseRevision,
+    CodeAnalysisCoverageLevel? CoverageLevel, int MaterialFindingCount, bool HasOpenResponses);
 public sealed record ModeratorQueuePage(IReadOnlyList<ModeratorQueueItem> Items, string? NextCursor);

@@ -836,8 +836,12 @@ public sealed partial class CodeAnalysisReportFinalizerPostgresTests
         User other = await CoverageModerator(db);
         var queue = new ModerationFoundationStore(db, new AssetStore(db), new UserStore(db), new EfUnitOfWork(db), dataProtectionProvider: new EphemeralDataProtectionProvider());
         ModeratorQueueItem item = (await queue.GetModeratorQueue(new(other.Id, null, CaseClaimFilter.UNCLAIMED, 50, null))).Value!.Items.Single(i => i.SubmissionId == appeal.Id);
+        item.Kind.Should().Be(ModerationSubmissionKind.APPEAL);
         item.State.Should().Be(ModerationSubmissionState.SUBMITTED);
         item.ClaimHolderId.Should().BeNull();
+        ModerationCaseAccessResult caseAccess = await CoverageStore(db).GetCaseSummaryForModerator(other.Id, appeal.Id);
+        caseAccess.Status.Should().Be(ModerationCaseAccessStatus.FOUND);
+        caseAccess.Summary!.Kind.Should().Be(ModerationSubmissionKind.APPEAL);
         ModerationDecisionResult denied = await CoverageStore(db).DecideModerationCase(DecisionRequest(seed, appeal, reviewer, ModerationDecisionOutcome.APPROVE));
         denied.Status.Should().Be(ModerationDecisionStatus.FORBIDDEN);
         denied.ReasonCode.Should().Be("ERR_MODERATION_APPEAL_REVIEWER_EXCLUDED");

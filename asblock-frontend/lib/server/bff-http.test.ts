@@ -163,6 +163,19 @@ describe('BFF same-origin and response forwarding', () => {
     })
   })
 
+  it('forwards only bounded error blocker codes from a decision conflict', async () => {
+    const response = safeBackendProblemResponse(409, {
+      code: 'ERR_MODERATION_DECISION_BLOCKED',
+      title: 'Conflict',
+      detail: 'Decision is blocked.',
+      blockerCodes: ['ERR_MODERATION_DECISION_BLOCKED', '<private>'],
+    })
+    expect(await response.json()).toMatchObject({
+      code: 'ERR_MODERATION_DECISION_BLOCKED',
+      blockerCodes: ['ERR_MODERATION_DECISION_BLOCKED'],
+    })
+  })
+
   it.each([
     ['HTML', '<html>blocked by WAF</html>'],
     ['stack trace', 'Error: boom\n at handler (route.ts:1)'],

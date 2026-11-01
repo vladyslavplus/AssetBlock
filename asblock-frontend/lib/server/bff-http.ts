@@ -14,6 +14,7 @@ export function problemResponse(
   errors?: Record<string, string[]>,
   extraHeaders?: Record<string, string>,
   titleOverride?: string,
+  blockerCodes?: string[],
 ): Response {
   const body = {
     type: `urn:assetblock:error:${code}`,
@@ -25,6 +26,7 @@ export function problemResponse(
     code,
     traceId: crypto.randomUUID(),
     ...(errors ? { errors } : {}),
+    ...(blockerCodes?.length ? { blockerCodes } : {}),
   }
 
   return new Response(JSON.stringify(body), {
@@ -129,6 +131,7 @@ export function safeBackendProblemResponse(
     undefined,
     retryAfter ? { 'Retry-After': retryAfter } : undefined,
     title,
+    parsed?.blockerCodes,
   )
 }
 

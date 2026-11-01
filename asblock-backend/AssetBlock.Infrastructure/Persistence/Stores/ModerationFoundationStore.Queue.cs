@@ -66,6 +66,7 @@ internal sealed partial class ModerationFoundationStore
                 s.CodeAnalysisReportHeaderId,
                 s.SellerEvidenceRevision,
                 s.CreatedAt,
+                s.Kind,
                 s.State,
                 s.CaseRevision,
                 AssetTitle = s.Asset.Title,
@@ -83,7 +84,7 @@ internal sealed partial class ModerationFoundationStore
         {
             summaries.TryGetValue(row.Id, out SellerResponseRequirements.Summary? responses);
             ModerationSubmissionState effectiveState = row.Holder is null ? ModerationSubmissionState.SUBMITTED : row.State;
-            items.Add(new(row.Id, row.AssetId, row.AssetTitle, row.VersionNumber, row.CreatedAt, effectiveState,
+            items.Add(new(row.Id, row.AssetId, row.AssetTitle, row.VersionNumber, row.CreatedAt, row.Kind, effectiveState,
                 row.Holder?.Id, row.Holder?.Username, row.CaseRevision, row.Coverage, responses?.Required.Count ?? 0, responses is not null && (!responses.Available || responses.Outstanding > 0)));
         }
         string? next = null;

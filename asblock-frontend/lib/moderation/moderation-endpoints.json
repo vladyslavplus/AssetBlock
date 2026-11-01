@@ -1,0 +1,38 @@
+{
+  "queue": {
+    "path": "/api/moderation/submissions",
+    "method": "GET"
+  },
+  "claim": {
+    "path": "/api/moderation/submissions/{id}/claim",
+    "method": "POST"
+  },
+  "release": {
+    "path": "/api/moderation/submissions/{id}/release",
+    "method": "POST"
+  },
+  "case": {
+    "path": "/api/moderation/submissions/{id}",
+    "method": "GET"
+  },
+  "decision": {
+    "path": "/api/moderation/submissions/{id}/decision",
+    "method": "POST"
+  },
+  "caseEvidence": {
+    "path": "/api/moderation/submissions/{id}/evidence/{kind}",
+    "method": "GET"
+  },
+  "coverageQueue": {
+    "path": "/api/moderation/coverage-reviews",
+    "method": "GET"
+  },
+  "coverageEvidence": {
+    "path": "/api/moderation/coverage-reviews/{id}/evidence/{kind}",
+    "method": "GET"
+  },
+  "coverageAssessment": {
+    "path": "/api/moderation/coverage-reviews/{id}/assessments",
+    "method": "POST"
+  }
+}

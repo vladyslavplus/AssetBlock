@@ -47,9 +47,13 @@ public sealed class GetModerationSubmissionCaseQueryHandlerTests
             Guid.NewGuid(),
             Guid.NewGuid(),
             ModerationSubmissionState.SUBMITTED,
+            ModerationSubmissionKind.STANDARD,
             1,
             new string('a', 64),
-            "policy-v1");
+            "policy-v1",
+            new DecisionBasis(Guid.NewGuid(), new string('a', 64), Guid.NewGuid(), 1, 1, "policy-v1", 1, 1),
+            false,
+            null);
         _moderationStore.GetCaseSummaryForModerator(actorId, submissionId, Arg.Any<CancellationToken>())
             .Returns(new ModerationCaseAccessResult(ModerationCaseAccessStatus.FOUND, summary));
 

@@ -1553,11 +1553,20 @@ internal sealed partial class ModerationFoundationStore(
                     s.AssetId,
                     s.AssetVersionId,
                     s.State,
+                    s.Kind,
                     s.CaseRevision,
                     s.ContentSha256,
-                    s.PolicyVersion, null, s.CoverageAssessmentId),
+                    s.PolicyVersion,
+                    new DecisionBasis(s.AssetVersionId, s.ContentSha256, s.CodeAnalysisReportHeaderId!.Value,
+                        s.DeclarationRevision, s.MaterialMetadataRevision, s.PolicyVersion,
+                        s.SellerEvidenceRevision, s.CaseRevision),
+                    false,
+                    null,
+                    s.CoverageAssessmentId),
+                s.WorkspaceId,
                 s.Asset.AuthorId,
-                s.CodeAnalysisReportHeaderId
+                s.CodeAnalysisReportHeaderId,
+                IsClaimedByCaller = s.ClaimHolderId == moderatorUserId
             })
             .FirstOrDefaultAsync(cancellationToken);
 
@@ -1571,31 +1580,61 @@ internal sealed partial class ModerationFoundationStore(
             return new ModerationCaseAccessResult(ModerationCaseAccessStatus.SELF_OWNED_DENIED, null);
         }
 
+        CoverageAssessment? assessment = row.Summary.CoverageAssessmentId is Guid assessmentId
+            ? await dbContext.CoverageAssessments.AsNoTracking().SingleOrDefaultAsync(a => a.Id == assessmentId, cancellationToken)
+            : null;
+        var planReferenceRequired = assessment?.Outcome == CoverageAssessmentOutcome.ACCEPTED;
         CodeAnalysisReportHeader? report = await dbContext.CodeAnalysisReportHeaders.AsNoTracking()
-            .SingleOrDefaultAsync(h => h.Id == row.CodeAnalysisReportHeaderId && h.AssetId == row.Summary.AssetId
+            .SingleOrDefaultAsync(h => h.Id == row.Summary.Basis.AnalysisReportId && h.AssetId == row.Summary.AssetId
                 && h.AssetVersionId == row.Summary.AssetVersionId, cancellationToken);
         PersistedRetrievalSummary? persisted = report?.RetrievalSummaryJson is null ? null
             : JsonSerializer.Deserialize<PersistedRetrievalSummary>(report.RetrievalSummaryJson, RetrievalEvidenceValidator.JsonOptions);
         List<CodeAnalysisReportFinding> findings = report is null ? [] : await dbContext.CodeAnalysisReportFindings.AsNoTracking()
-            .Where(f => f.ReportId == report.Id && (f.FindingType == "SIMILARITY_TOKEN" || f.FindingType == "SIMILARITY_SEMANTIC"))
+            .Where(f => f.ReportId == report.Id)
             .OrderBy(f => f.OwnScopePath).ThenBy(f => f.TokenRank ?? int.MaxValue)
-            .ThenBy(f => f.SemanticRank ?? int.MaxValue).ThenBy(f => f.FindingKey).Take(200).ToListAsync(cancellationToken);
+            .ThenBy(f => f.SemanticRank ?? int.MaxValue).ThenBy(f => f.FindingKey).ThenBy(f => f.Id)
+            .Take(SellerEvidenceLimits.MAX_RESPONSES).ToListAsync(cancellationToken);
+        Guid responseKey = row.Summary.SubmissionId;
+        SellerResponseRequirements.Summary responseRequirements = report is null
+            ? new(false, new HashSet<Guid>(), new HashSet<Guid>())
+            : (await SellerResponseRequirements.ReadSummaries(dbContext,
+                [new(responseKey, report.Id, row.WorkspaceId, row.Summary.AssetVersionId, row.Summary.Basis.SellerEvidenceRevision)],
+                cancellationToken))[responseKey];
+        IReadOnlyDictionary<Guid, IReadOnlyList<SellerResponse>> responseRows = report is null || !responseRequirements.Available
+            ? new Dictionary<Guid, IReadOnlyList<SellerResponse>>()
+            : await SellerResponseRequirements.ReadFrozenResponses(dbContext,
+                new(responseKey, report.Id, row.WorkspaceId, row.Summary.AssetVersionId, row.Summary.Basis.SellerEvidenceRevision),
+                cancellationToken);
         ModeratorRetrievalCandidate[] candidates = findings.Select(f =>
         {
             // Absent complete persisted detail is explicit unavailability, never inferred from scalar scores.
             RetrievalCandidateEvidence? scores = persisted is null || f.RetrievalEvidenceJson is null ? null
                 : JsonSerializer.Deserialize<RetrievalCandidateEvidence>(f.RetrievalEvidenceJson, RetrievalEvidenceValidator.JsonOptions);
-            return new ModeratorRetrievalCandidate(f.FindingKey, f.OwnScopePath, f.OwnStartByte, f.OwnEndByte,
+            IReadOnlyList<ModeratorSellerResponse> responses = responseRequirements.Answered.Contains(f.Id)
+                && responseRows.TryGetValue(f.Id, out IReadOnlyList<SellerResponse>? rows)
+                ? rows.Select(r => new ModeratorSellerResponse(r.ResponseType, r.Text, r.CreatedAt)).ToArray()
+                : [];
+            return new ModeratorRetrievalCandidate(f.Id, f.FindingKey, f.FindingType, f.OwnScopePath, f.OwnStartByte, f.OwnEndByte,
                 f.OwnStartLine, f.OwnEndLine, f.ForeignSourceId, f.ForeignOrigin, f.ForeignSensitivity.ToString(),
-                scores is null ? "SCORES_UNAVAILABLE" : "AVAILABLE", scores);
+                scores is not null ? "AVAILABLE"
+                    : f.FindingType is "SIMILARITY_TOKEN" or "SIMILARITY_SEMANTIC" ? "SCORES_UNAVAILABLE" : "NOT_APPLICABLE", scores,
+                responseRequirements.Required.Contains(f.Id), responseRequirements.Available && responseRequirements.Answered.Contains(f.Id),
+                responses);
         }).ToArray();
-        var evidence = new ModeratorReportEvidence(report?.Id,
-            persisted is null || candidates.Any(c => c.Scores is null)
-                || candidates.Length != persisted.Retrieval.Queries.Sum(q => q.UnionRetained - q.ReportOmitted)
+        ModeratorRetrievalCandidate[] similarityCandidates = candidates
+            .Where(c => c.FindingType is "SIMILARITY_TOKEN" or "SIMILARITY_SEMANTIC").ToArray();
+        var evidence = new ModeratorReportEvidence(row.Summary.Basis.AnalysisReportId,
+            persisted is null || similarityCandidates.Any(c => c.Scores is null)
+                || similarityCandidates.Length != persisted.Retrieval.Queries.Sum(q => q.UnionRetained - q.ReportOmitted)
                 ? "SCORES_UNAVAILABLE" : "AVAILABLE",
             persisted?.ReferenceSnapshotId, persisted?.ReferenceRevision, report?.CoverageLevel?.ToString(),
-            report?.OmissionCount, persisted?.FindingOverflow, persisted?.Retrieval, candidates);
-        return new ModerationCaseAccessResult(ModerationCaseAccessStatus.FOUND, row.Summary with { RetrievalEvidence = evidence });
+            report?.OmissionCount, persisted?.FindingOverflow, persisted?.Retrieval, candidates, responseRequirements.Available);
+        return new ModerationCaseAccessResult(ModerationCaseAccessStatus.FOUND, row.Summary with
+        {
+            ManualPlanCompletionReferenceRequired = planReferenceRequired,
+            RetrievalEvidence = evidence,
+            IsClaimedByCaller = row.IsClaimedByCaller
+        });
     }
 
     private async Task<GuardedSubmissionResult> EvaluateGuardedSubmissionGates(

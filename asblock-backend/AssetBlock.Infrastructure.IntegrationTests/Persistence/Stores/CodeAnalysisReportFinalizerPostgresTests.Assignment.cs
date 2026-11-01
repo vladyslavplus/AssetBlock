@@ -581,6 +581,7 @@ public sealed partial class CodeAnalysisReportFinalizerPostgresTests
         ReviewAccessResult<ModeratorQueuePage> result = await store.GetModeratorQueue(new(moderator.Id, null, CaseClaimFilter.ALL, 1, null));
         result.Status.Should().Be(ReviewAccessStatus.SUCCESS);
         result.Value!.Items.Select(i => i.SubmissionId).Should().Contain(submissionId);
+        result.Value.Items.Single(i => i.SubmissionId == submissionId).Kind.Should().Be(ModerationSubmissionKind.STANDARD);
         var json = JsonSerializer.Serialize(result.Value);
         json.Should().NotContain("OwnExcerpt").And.NotContain("ForeignSourceId").And.NotContain("ReasonText").And.NotContain("SellerEvidenceDigest");
         CodeAnalysisReportFinding finding = await db.CodeAnalysisReportFindings.AsNoTracking().SingleAsync(f => f.Id == seed.Findings[0]);
