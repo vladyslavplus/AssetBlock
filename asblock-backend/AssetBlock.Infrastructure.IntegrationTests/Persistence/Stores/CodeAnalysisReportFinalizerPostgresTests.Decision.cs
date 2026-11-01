@@ -43,7 +43,7 @@ public sealed partial class CodeAnalysisReportFinalizerPostgresTests
         var options = new EmbeddingOptions { Enabled = true, Model = "test-model", Revision = "test-revision", Digest = "sha256:" + new string('a', 64), Dimension = 32 };
         var jobs = new AssetProcessingJobStore(db, NullLogger<AssetProcessingJobStore>.Instance, MsOptions.Create(new AssetProcessingOptions()));
         var assets = new AssetStore(db, jobs, MsOptions.Create(options));
-        var handler = new ModerationDecisionOutboxHandler(Substitute.For<IRealtimeNotificationPublisher>(), cache, assets);
+        var handler = new ModerationDecisionOutboxHandler(Substitute.For<IRealtimeNotificationPublisher>(), cache, assets, new AssetStore(db));
         await handler.Handle(message, CancellationToken.None);
         await handler.Handle(message, CancellationToken.None);
         (await cache.GetString(cacheKey)).Should().BeNull();
@@ -385,9 +385,9 @@ public sealed partial class CodeAnalysisReportFinalizerPostgresTests
         history.Summary.Should().NotContain("rationale");
         OutboxMessage message = await db.OutboxMessages.AsNoTracking().SingleAsync(m => m.Type == OutboxMessageTypes.MODERATION_DECISION);
         message.Payload.Should().NotContain("rationale").And.NotContain("Review subject").And.NotContain(new string('b', 64));
-        message.Id.Should().Be(result.Saved.DecisionId);
+        message.Id.Should().Be(ModerationEventIdentity.Decision(result.Saved.DecisionId, false));
         IRealtimeNotificationPublisher publisher = Substitute.For<IRealtimeNotificationPublisher>();
-        var handler = new ModerationDecisionOutboxHandler(publisher, Substitute.For<ICacheService>(), Substitute.For<IPublicationEmbeddingEnqueuer>());
+        var handler = new ModerationDecisionOutboxHandler(publisher, Substitute.For<ICacheService>(), Substitute.For<IPublicationEmbeddingEnqueuer>(), new AssetStore(db));
         await handler.Handle(message, CancellationToken.None);
         await handler.Handle(message, CancellationToken.None);
         await publisher.Received(2).DeliverPersistedNotification(message.Id, submission.OwnerUserId, NotificationKind.MODERATION_APPROVED,

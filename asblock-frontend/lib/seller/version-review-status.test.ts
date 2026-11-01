@@ -23,6 +23,8 @@ function review(overrides: Partial<SellerVersionReview> = {}): SellerVersionRevi
     processingErrorSummary: null,
     analysis: 'ANALYSIS_NOT_AVAILABLE',
     moderationState: 'DRAFT',
+    canAppeal: false,
+    appeal: null,
     publicationEligible: false,
     canUpload: true,
     canSubmit: false,

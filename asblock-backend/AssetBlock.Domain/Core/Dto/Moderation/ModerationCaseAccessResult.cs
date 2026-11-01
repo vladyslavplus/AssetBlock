@@ -2,6 +2,7 @@ namespace AssetBlock.Domain.Core.Dto.Moderation;
 
 public enum ModerationCaseAccessStatus
 {
+    APPEAL_REVIEWER_EXCLUDED,
     FOUND,
     NOT_FOUND,
     DENIED_ROLE,

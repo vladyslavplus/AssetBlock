@@ -1,6 +1,7 @@
 using Ardalis.Result;
 using AssetBlock.Application.UseCases.Assets.SubmitAssetVersion;
 using AssetBlock.Domain.Abstractions.Services;
+using AssetBlock.Domain.Core.Constants;
 using AssetBlock.Domain.Core.Dto.Assets;
 using AssetBlock.Domain.Core.Dto.Moderation;
 using AssetBlock.Domain.Core.Enums;
@@ -11,6 +12,20 @@ namespace AssetBlock.Application.Tests.UseCases.Assets;
 
 public sealed class SubmitAssetVersionCommandHandlerTests
 {
+    [Theory]
+    [InlineData(ErrorCodes.ERR_MODERATION_APPEAL_REQUIRED)]
+    [InlineData(ErrorCodes.ERR_MODERATION_REJECTION_FINAL)]
+    public async Task Handle_WhenRejectionBlocksSubmission_ShouldReturnConflict(string code)
+    {
+        IModerationFoundationStore moderation = Substitute.For<IModerationFoundationStore>();
+        ICodeAnalysisSellerStore analysis = Substitute.For<ICodeAnalysisSellerStore>();
+        var request = new SubmitAssetVersionCommand(Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), 3, 2, Guid.NewGuid());
+        moderation.AttemptGuardedSubmission(Arg.Any<GuardedSubmissionRequest>(), Arg.Any<CancellationToken>())
+            .Returns(new GuardedSubmissionResult(GuardedSubmissionStatus.BLOCKED, null, code));
+        Result<Guid> result = await new SubmitAssetVersionCommandHandler(moderation, analysis).Handle(request, CancellationToken.None);
+        result.Status.Should().Be(ResultStatus.Conflict);
+        result.Errors.Should().ContainSingle().Which.Should().Be(code);
+    }
     [Theory]
     [InlineData(true)]
     [InlineData(false)]

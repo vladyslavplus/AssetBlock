@@ -282,6 +282,15 @@ export const sellerVersionDecisionSchema = z.object({
 })
 export type SellerVersionDecision = z.infer<typeof sellerVersionDecisionSchema>
 
+export const sellerAppealSchema = z
+  .object({
+    state: z.enum(['PENDING_REVIEW', 'UPHELD', 'APPROVED', 'WITHDRAWN']),
+    requestedAt: z.iso.datetime({ offset: true }),
+    decidedAt: z.iso.datetime({ offset: true }).nullable(),
+  })
+  .strict()
+export type SellerAppeal = z.infer<typeof sellerAppealSchema>
+
 export const sellerVersionReviewSchema = z.object({
   coverageReview: coverageOwnerStatusSchema.nullable(),
   requiredResponseCount: z.number().int().nonnegative(),
@@ -298,6 +307,8 @@ export const sellerVersionReviewSchema = z.object({
   publicationEligible: z.boolean(),
   canUpload: z.boolean(),
   canSubmit: z.boolean(),
+  canAppeal: z.boolean(),
+  appeal: sellerAppealSchema.nullable(),
   blockedReasons: z.array(z.string()),
   analysisDetails: sellerAnalysisSummarySchema.nullable().optional(),
   decision: sellerVersionDecisionSchema.nullable().optional(),
@@ -341,6 +352,23 @@ export const assetVersionSubmissionRequestSchema = z.object({
   expectedCaseRevision: z.number().int().nonnegative(),
   operationId: z.guid(),
 })
+
+export const appealRequestSchema = z
+  .object({
+    workspaceId: z.guid(),
+    expectedWorkspaceRevision: z.number().int().positive(),
+    expectedCaseRevision: z.number().int().positive(),
+    operationId: z.guid(),
+    rationale: z
+      .string()
+      .max(4000)
+      .trim()
+      .min(1)
+      .max(2000)
+      .refine((value) => !value.includes('\0')),
+  })
+  .strict()
+export type AppealRequest = z.infer<typeof appealRequestSchema>
 
 export const submissionWithdrawRequestSchema = z.object({
   expectedCaseRevision: z.number().int().nonnegative(),

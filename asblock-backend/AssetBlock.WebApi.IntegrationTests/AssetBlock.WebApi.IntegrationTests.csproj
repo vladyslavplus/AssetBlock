@@ -26,4 +26,8 @@
         <Using Include="Xunit"/>
     </ItemGroup>
 
+    <ItemGroup>
+        <Compile Include="..\AssetBlock.Infrastructure.IntegrationTests\Support\AdmittedReportTestEvidence.cs" Link="Support\AdmittedReportTestEvidence.cs" />
+    </ItemGroup>
+
 </Project>

@@ -2857,6 +2857,13 @@ namespace AssetBlock.Infrastructure.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
+                    b.Property<Guid?>("AppealOfDecisionId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("AppealRationale")
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)");
+
                     b.Property<Guid>("AssetId")
                         .HasColumnType("uuid");
 
@@ -2887,6 +2894,13 @@ namespace AssetBlock.Infrastructure.Migrations
 
                     b.Property<int>("DeclarationRevision")
                         .HasColumnType("integer");
+
+                    b.Property<string>("Kind")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)")
+                        .HasDefaultValue("STANDARD");
 
                     b.Property<int>("MaterialMetadataRevision")
                         .HasColumnType("integer");
@@ -2929,6 +2943,11 @@ namespace AssetBlock.Infrastructure.Migrations
 
                     b.HasKey("Id");
 
+                    b.HasIndex("AppealOfDecisionId")
+                        .IsUnique()
+                        .HasDatabaseName("UIX_moderation_submissions_appeal_decision")
+                        .HasFilter("\"AppealOfDecisionId\" IS NOT NULL");
+
                     b.HasIndex("AssetVersionId")
                         .IsUnique()
                         .HasDatabaseName("UIX_moderation_submissions_active_case")
@@ -2950,6 +2969,8 @@ namespace AssetBlock.Infrastructure.Migrations
 
                     b.ToTable("moderation_submissions", null, t =>
                         {
+                            t.HasCheckConstraint("CK_moderation_submissions_appeal", "(\"Kind\" = 'STANDARD' AND \"AppealOfDecisionId\" IS NULL AND \"AppealRationale\" IS NULL) OR (\"Kind\" = 'APPEAL' AND \"AppealOfDecisionId\" IS NOT NULL AND \"AppealRationale\" IS NOT NULL AND length(trim(\"AppealRationale\")) BETWEEN 1 AND 2000)");
+
                             t.HasCheckConstraint("CK_moderation_submissions_case_revision", "\"CaseRevision\" > 0");
 
                             t.HasCheckConstraint("CK_moderation_submissions_claim", "(\"State\" = 'IN_REVIEW' AND \"ClaimHolderId\" IS NOT NULL AND \"ClaimedAt\" IS NOT NULL) OR (\"State\" <> 'IN_REVIEW' AND \"ClaimHolderId\" IS NULL AND \"ClaimedAt\" IS NULL)");
@@ -5216,6 +5237,11 @@ namespace AssetBlock.Infrastructure.Migrations
 
             modelBuilder.Entity("AssetBlock.Domain.Core.Entities.ModerationSubmission", b =>
                 {
+                    b.HasOne("AssetBlock.Domain.Core.Entities.ModerationDecisionRecord", "AppealOfDecision")
+                        .WithMany()
+                        .HasForeignKey("AppealOfDecisionId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
                     b.HasOne("AssetBlock.Domain.Core.Entities.Asset", "Asset")
                         .WithMany()
                         .HasForeignKey("AssetId")
@@ -5257,6 +5283,8 @@ namespace AssetBlock.Infrastructure.Migrations
                         .HasPrincipalKey("AssetId", "Id", "WorkspaceVersionScopeKey")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
+
+                    b.Navigation("AppealOfDecision");
 
                     b.Navigation("Asset");
 

@@ -23,6 +23,7 @@ import {
   type SellerAnalysisFindingsPage,
   type SellerAnalysisRetryAccepted,
   type SellerAnalysisRetryRequest,
+  type AppealRequest,
 } from '@/lib/seller/seller-draft-schemas'
 
 function parseMaybeJson(text: string): unknown {
@@ -298,6 +299,41 @@ export async function updateSellerAssetPrice(
 export type SubmitVersionResult =
   | { ok: true; submissionId: string }
   | { ok: false; message: string; blockedReasons?: string[]; retryable?: boolean }
+
+export async function requestSellerAppeal(
+  assetId: string,
+  versionId: string,
+  body: AppealRequest,
+): Promise<SubmitVersionResult> {
+  const res = await fetchJson(
+    `/api/seller/assets/${encodeURIComponent(assetId)}/versions/${encodeURIComponent(versionId)}/appeals`,
+    {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    },
+  )
+  const parsed = parseMaybeJson(await readResponseText(res))
+  if (!res.ok) {
+    const p = parseApiErrorBody(parsed)
+    return {
+      ok: false,
+      message: p?.summary ?? `Could not request review (${res.status})`,
+      ...(p?.code ? { blockedReasons: [p.code] } : {}),
+      retryable: res.status >= 500,
+    }
+  }
+  if (
+    typeof parsed === 'object' &&
+    parsed !== null &&
+    'submissionId' in parsed &&
+    typeof parsed.submissionId === 'string'
+  ) {
+    return { ok: true, submissionId: parsed.submissionId }
+  }
+  return { ok: false, message: 'Unexpected response from server.' }
+}
 
 export async function submitSellerAssetVersion(
   assetId: string,

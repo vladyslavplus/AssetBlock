@@ -1,4 +1,5 @@
 using AssetBlock.Domain.Core.Entities;
+using AssetBlock.Domain.Core.Enums;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 
@@ -12,6 +13,7 @@ internal sealed class ModerationSubmissionConfiguration : IEntityTypeConfigurati
     {
         builder.ToTable("moderation_submissions", table =>
         {
+            table.HasCheckConstraint("CK_moderation_submissions_appeal", "(\"Kind\" = 'STANDARD' AND \"AppealOfDecisionId\" IS NULL AND \"AppealRationale\" IS NULL) OR (\"Kind\" = 'APPEAL' AND \"AppealOfDecisionId\" IS NOT NULL AND \"AppealRationale\" IS NOT NULL AND length(trim(\"AppealRationale\")) BETWEEN 1 AND 2000)");
             table.HasCheckConstraint("CK_moderation_submissions_case_revision", "\"CaseRevision\" > 0");
             table.HasCheckConstraint("CK_moderation_submissions_evidence_digest", "length(\"SellerEvidenceDigest\") = 64");
             table.HasCheckConstraint("CK_moderation_submissions_content_sha", "length(\"ContentSha256\") = 64");
@@ -22,6 +24,10 @@ internal sealed class ModerationSubmissionConfiguration : IEntityTypeConfigurati
         });
 
         builder.HasKey(s => s.Id);
+        builder.Property(s => s.Kind).HasConversion<string>().HasMaxLength(16).HasDefaultValue(ModerationSubmissionKind.STANDARD).IsRequired();
+        builder.Property(s => s.AppealRationale).HasMaxLength(2000);
+        builder.HasOne(s => s.AppealOfDecision).WithMany().HasForeignKey(s => s.AppealOfDecisionId).OnDelete(DeleteBehavior.Restrict);
+        builder.HasIndex(s => s.AppealOfDecisionId).IsUnique().HasFilter("\"AppealOfDecisionId\" IS NOT NULL").HasDatabaseName("UIX_moderation_submissions_appeal_decision");
         builder.Property(s => s.ContentSha256).IsRequired().HasColumnType("char(64)");
         builder.Property(s => s.SellerEvidenceDigest).IsRequired().HasColumnType("char(64)");
         builder.Property(s => s.PolicyVersion).IsRequired().HasMaxLength(64);

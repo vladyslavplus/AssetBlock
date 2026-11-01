@@ -32,6 +32,7 @@ internal sealed class ChangeCaseClaimCommandHandler(IModerationFoundationStore s
         return result.Status switch
         {
             CaseClaimStatus.SUCCESS => Result.Success(result.Value!),
+            CaseClaimStatus.APPEAL_REVIEWER_EXCLUDED => Result.Forbidden(ErrorCodes.ERR_MODERATION_APPEAL_REVIEWER_EXCLUDED),
             CaseClaimStatus.FORBIDDEN => Result.Forbidden(ErrorCodes.ERR_FORBIDDEN),
             CaseClaimStatus.NOT_HOLDER => Result.Forbidden(ErrorCodes.ERR_MODERATION_NOT_HOLDER),
             CaseClaimStatus.NOT_FOUND => Result.NotFound(ErrorCodes.ERR_MODERATION_CASE_NOT_FOUND),

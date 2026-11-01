@@ -75,7 +75,7 @@ internal sealed class DecideModerationCaseCommandHandler(IModerationFoundationSt
         return result.Status switch
         {
             ModerationDecisionStatus.SUCCEEDED => Result.Success(result.Saved!),
-            ModerationDecisionStatus.FORBIDDEN => Result.Forbidden(ErrorCodes.ERR_FORBIDDEN),
+            ModerationDecisionStatus.FORBIDDEN => Result.Forbidden(result.ReasonCode ?? ErrorCodes.ERR_FORBIDDEN),
             ModerationDecisionStatus.NOT_HOLDER => Result.Forbidden(ErrorCodes.ERR_MODERATION_NOT_HOLDER),
             ModerationDecisionStatus.NOT_FOUND => Result.NotFound(ErrorCodes.ERR_MODERATION_CASE_NOT_FOUND),
             ModerationDecisionStatus.AUDIT_UNAVAILABLE => Result.Unavailable(ErrorCodes.ERR_REVIEW_AUDIT_UNAVAILABLE),

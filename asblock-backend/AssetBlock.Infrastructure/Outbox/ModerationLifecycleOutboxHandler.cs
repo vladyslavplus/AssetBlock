@@ -4,6 +4,7 @@ using AssetBlock.Domain.Core.Dto.Outbox;
 using AssetBlock.Domain.Core.Entities;
 using AssetBlock.Domain.Core.Enums;
 using AssetBlock.Infrastructure.Persistence;
+using AssetBlock.Infrastructure.Persistence.Stores;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Storage;
 
@@ -23,16 +24,21 @@ internal sealed class ModerationLifecycleOutboxHandler(ApplicationDbContext db, 
             || (payload.Kind == NotificationKind.MODERATION_SUBMITTED && payload.State != ModerationSubmissionState.SUBMITTED)
             || (payload.Kind == NotificationKind.MODERATION_REVIEW_STARTED && payload.State != ModerationSubmissionState.IN_REVIEW)
             || (payload.Kind == NotificationKind.MODERATION_WITHDRAWN && payload.State != ModerationSubmissionState.WITHDRAWN)
-            || message.Id != ModerationEventIdentity.Event(payload.SubmissionId, payload.Revision, payload.Kind))
+            || message.Id != ModerationEventIdentity.Event(payload.SubmissionId, payload.Revision, payload.Kind, payload.IsAppeal))
         { throw new InvalidOperationException("Invalid moderation lifecycle event."); }
-        var metadata = JsonSerializer.Serialize(new { payload.SubmissionId, payload.AssetId, payload.VersionId, state = payload.State.ToString(), payload.Revision }, _json);
+        var validSubject = await db.ModerationSubmissions.AsNoTracking().AnyAsync(s => s.Id == payload.SubmissionId && s.AssetId == payload.AssetId
+            && s.AssetVersionId == payload.VersionId && (s.Kind == ModerationSubmissionKind.APPEAL) == payload.IsAppeal, cancellationToken);
+        if (!validSubject)
+        { throw new InvalidOperationException("Invalid moderation lifecycle subject."); }
+        var metadata = JsonSerializer.Serialize(new { payload.SubmissionId, payload.AssetId, payload.VersionId, state = payload.State.ToString(), payload.Revision, payload.IsAppeal }, _json);
         DateTimeOffset now = clock.GetUtcNow();
         Guid ownerId = await db.Assets.AsNoTracking().Where(a => a.Id == payload.AssetId).Select(a => a.AuthorId).SingleOrDefaultAsync(cancellationToken);
         if (ownerId == Guid.Empty)
         { throw new InvalidOperationException("Moderation event asset is unavailable."); }
         await AddRecipients(message.Id, [ownerId], payload.Kind, metadata, now, cancellationToken);
         if (payload.Kind == NotificationKind.MODERATION_WITHDRAWN && payload.ReviewerId is Guid reviewer && reviewer != payload.OwnerId && reviewer != ownerId
-            && await db.Users.Where(AppRoles.CanReviewUserExpression).AnyAsync(u => u.Id == reviewer, cancellationToken))
+            && await db.Users.Where(AppRoles.CanReviewUserExpression).AnyAsync(u => u.Id == reviewer, cancellationToken)
+            && (!payload.IsAppeal || !await AppealReviewExclusions.ForSubmission(db, payload.SubmissionId).ContainsAsync(reviewer, cancellationToken)))
         { await AddRecipients(message.Id, [reviewer], payload.Kind, metadata, now, cancellationToken); }
         if (payload.Kind == NotificationKind.MODERATION_SUBMITTED)
         {
@@ -40,6 +46,11 @@ internal sealed class ModerationLifecycleOutboxHandler(ApplicationDbContext db, 
             while (true)
             {
                 IQueryable<User> reviewers = db.Users.AsNoTracking().Where(AppRoles.CanReviewUserExpression).Where(u => u.Id != payload.OwnerId && u.Id != ownerId);
+                if (payload.IsAppeal)
+                {
+                    IQueryable<Guid> excluded = AppealReviewExclusions.ForSubmission(db, payload.SubmissionId);
+                    reviewers = reviewers.Where(u => !excluded.Contains(u.Id));
+                }
                 if (cursor is Guid last)
                 { reviewers = reviewers.Where(u => u.Id.CompareTo(last) > 0); }
                 List<Guid> batch = await reviewers.OrderBy(u => u.Id).Select(u => u.Id).Take(100).ToListAsync(cancellationToken);

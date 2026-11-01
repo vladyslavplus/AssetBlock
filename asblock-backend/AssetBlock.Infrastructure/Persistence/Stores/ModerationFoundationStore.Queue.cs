@@ -34,22 +34,25 @@ internal sealed partial class ModerationFoundationStore
             { return new(ReviewAccessStatus.INVALID); }
         }
         IQueryable<User> reviewers = dbContext.Users.Where(AppRoles.CanReviewUserExpression);
+        IQueryable<AppealReviewExclusion> exclusions = AppealReviewExclusions.All(dbContext);
+        IQueryable<Guid> excluded = exclusions.Where(x => x.UserId == request.ActorId).Select(x => x.SubmissionId);
         IQueryable<ModerationSubmission> query = dbContext.ModerationSubmissions.AsNoTracking()
             .Where(s => (s.State == ModerationSubmissionState.SUBMITTED || s.State == ModerationSubmissionState.IN_REVIEW)
-                && s.OwnerUserId != request.ActorId && s.Asset.AuthorId != request.ActorId && s.Asset.DeletedAt == null);
+                && s.OwnerUserId != request.ActorId && s.Asset.AuthorId != request.ActorId && s.Asset.DeletedAt == null
+                && !excluded.Contains(s.Id));
         if (request.State == ModerationSubmissionState.SUBMITTED)
         {
-            query = query.Where(s => s.State == ModerationSubmissionState.SUBMITTED || !reviewers.Any(u => u.Id == s.ClaimHolderId && u.Id != s.OwnerUserId && u.Id != s.Asset.AuthorId));
+            query = query.Where(s => s.State == ModerationSubmissionState.SUBMITTED || !reviewers.Any(u => u.Id == s.ClaimHolderId && u.Id != s.OwnerUserId && u.Id != s.Asset.AuthorId && !exclusions.Any(e => e.SubmissionId == s.Id && e.UserId == u.Id)));
         }
         if (request.State == ModerationSubmissionState.IN_REVIEW)
         {
-            query = query.Where(s => s.State == ModerationSubmissionState.IN_REVIEW && reviewers.Any(u => u.Id == s.ClaimHolderId && u.Id != s.OwnerUserId && u.Id != s.Asset.AuthorId));
+            query = query.Where(s => s.State == ModerationSubmissionState.IN_REVIEW && reviewers.Any(u => u.Id == s.ClaimHolderId && u.Id != s.OwnerUserId && u.Id != s.Asset.AuthorId && !exclusions.Any(e => e.SubmissionId == s.Id && e.UserId == u.Id)));
         }
         if (request.ClaimFilter == CaseClaimFilter.MINE)
         { query = query.Where(s => s.State == ModerationSubmissionState.IN_REVIEW && s.ClaimHolderId == request.ActorId); }
         if (request.ClaimFilter == CaseClaimFilter.UNCLAIMED)
         {
-            query = query.Where(s => s.State == ModerationSubmissionState.SUBMITTED || !reviewers.Any(u => u.Id == s.ClaimHolderId && u.Id != s.OwnerUserId && u.Id != s.Asset.AuthorId));
+            query = query.Where(s => s.State == ModerationSubmissionState.SUBMITTED || !reviewers.Any(u => u.Id == s.ClaimHolderId && u.Id != s.OwnerUserId && u.Id != s.Asset.AuthorId && !exclusions.Any(e => e.SubmissionId == s.Id && e.UserId == u.Id)));
         }
         if (cursor is not null)
         { query = query.Where(s => s.CreatedAt > cursor.CreatedAt || (s.CreatedAt == cursor.CreatedAt && s.Id.CompareTo(cursor.Id) > 0)); }
@@ -68,7 +71,7 @@ internal sealed partial class ModerationFoundationStore
                 AssetTitle = s.Asset.Title,
                 VersionNumber = s.AssetVersion.VersionNumber,
                 Coverage = s.CodeAnalysisReportHeader == null ? (CodeAnalysisCoverageLevel?)null : s.CodeAnalysisReportHeader.CoverageLevel,
-                Holder = reviewers.Where(u => u.Id == s.ClaimHolderId && u.Id != s.OwnerUserId && u.Id != s.Asset.AuthorId).Select(u => new { u.Id, u.Username }).FirstOrDefault()
+                Holder = reviewers.Where(u => u.Id == s.ClaimHolderId && u.Id != s.OwnerUserId && u.Id != s.Asset.AuthorId && !exclusions.Any(e => e.SubmissionId == s.Id && e.UserId == u.Id)).Select(u => new { u.Id, u.Username }).FirstOrDefault()
             })
             .ToListAsync(cancellationToken);
         SellerResponseRequirements.SummaryInput[] inputs = rows.Take(request.PageSize).Where(r => r.CodeAnalysisReportHeaderId.HasValue)

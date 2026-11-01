@@ -11,5 +11,9 @@
   "coverage": {
     "path": "/api/assets/{assetId}/versions/{versionId}/coverage-reviews",
     "writeMethod": "POST"
+  },
+  "appeal": {
+    "path": "/api/assets/{assetId}/versions/{versionId}/appeals",
+    "writeMethod": "POST"
   }
 }

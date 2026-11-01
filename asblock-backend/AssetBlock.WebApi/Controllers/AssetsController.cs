@@ -1,3 +1,4 @@
+using System.Text.Json.Serialization;
 using Ardalis.Result;
 using AssetBlock.Application.Messaging;
 using AssetBlock.Application.UseCases.Assets.AddAssetTag;
@@ -19,6 +20,7 @@ using AssetBlock.Application.UseCases.Assets.SubmitAssetVersion;
 using AssetBlock.Application.UseCases.Assets.UpdateAsset;
 using AssetBlock.Application.UseCases.Assets.UpdateAssetPrice;
 using AssetBlock.Application.UseCases.Assets.UploadAsset;
+using AssetBlock.Application.UseCases.Moderation.RequestAppeal;
 using AssetBlock.Application.UseCases.Moderation.RequestCoverageReview;
 using AssetBlock.Domain.Abstractions.Services;
 using AssetBlock.Domain.Core.Constants;
@@ -30,6 +32,7 @@ using AssetBlock.Domain.Core.Primitives.AppSettingsOptions;
 using AssetBlock.WebApi.Constants;
 using AssetBlock.WebApi.Extensions;
 using AssetBlock.WebApi.Models;
+using FluentValidation;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
@@ -47,6 +50,56 @@ public sealed class AssetsController(
     IOptions<FileUploadOptions> fileUploadOptions,
     ILogger<AssetsController> logger) : ApiControllerBase(sender)
 {
+    [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
+    public sealed class AppealInput
+    {
+        public Guid? WorkspaceId { get; init; }
+        public long? ExpectedWorkspaceRevision { get; init; }
+        public long? ExpectedCaseRevision { get; init; }
+        public Guid? OperationId { get; init; }
+        public string? Rationale { get; init; }
+    }
+
+    public sealed class AppealInputValidator : AbstractValidator<AppealInput>
+    {
+        public AppealInputValidator()
+        {
+            RuleFor(x => x.WorkspaceId).NotNull();
+            RuleFor(x => x.ExpectedWorkspaceRevision).NotNull();
+            RuleFor(x => x.ExpectedCaseRevision).NotNull();
+            RuleFor(x => x.OperationId).NotNull();
+            RuleFor(x => x.Rationale).NotNull();
+        }
+    }
+
+    [HttpPost(ApiRoutes.Assets.VERSION_APPEALS)]
+    [Authorize(Policy = AuthorizationPolicies.VERIFIED_EMAIL)]
+    [EnableRateLimiting(RateLimitingConstants.Policies.MODERATION_EVIDENCE)]
+    [RequestSizeLimit(16384)]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
+    [ProducesResponseType(StatusCodes.Status413PayloadTooLarge)]
+    [ProducesResponseType(StatusCodes.Status503ServiceUnavailable)]
+    public async Task<IActionResult> AppealVersion(Guid id, Guid versionId, [FromBody] AppealInput input, CancellationToken cancellationToken)
+    {
+        Response.Headers.CacheControl = "private, no-store";
+        if (!User.TryGetUserId(out Guid userId))
+        { return UnauthorizedProblem(); }
+        FluentValidation.Results.ValidationResult validation = new AppealInputValidator().Validate(input);
+        if (!validation.IsValid)
+        {
+            foreach (FluentValidation.Results.ValidationFailure error in validation.Errors)
+            { ModelState.AddModelError(error.PropertyName, error.ErrorMessage); }
+            return ValidationProblem(ModelState);
+        }
+        Result<Guid> result = await Sender.Send(new RequestAppealCommand(userId, id, versionId, input.WorkspaceId!.Value,
+            input.ExpectedWorkspaceRevision!.Value, input.ExpectedCaseRevision!.Value, input.OperationId!.Value, input.Rationale), cancellationToken);
+        return result.IsSuccess ? Ok(new { submissionId = result.Value }) : MapResultToActionResult(result);
+    }
     /// <summary>
     /// List assets with paging, search, and filters. Optional <c>authorId</c> scopes the catalog to one seller (public storefront).
     /// </summary>

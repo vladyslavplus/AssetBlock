@@ -3,6 +3,7 @@ namespace AssetBlock.Domain.Core.Constants;
 /// <summary>Stable machine-readable audit action names.</summary>
 public static class AuditActions
 {
+    public const string APPEAL_OPENED = "MODERATION_APPEAL_OPENED";
     public const string CASE_DECIDED = "CASE_DECIDED";
     public const string CASE_CLAIMED = "CASE_CLAIMED";
     public const string CASE_RELEASED = "CASE_RELEASED";

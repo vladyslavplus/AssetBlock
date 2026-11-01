@@ -17,7 +17,7 @@ public sealed class ModerationLifecycleOutboxHandlerTests
     public async Task Handle_WhenMessageIdIsNotDerivedFromEvent_ShouldFailClosed()
     {
         var payload = new ModerationLifecyclePayload(Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), null,
-            ModerationSubmissionState.SUBMITTED, 1, NotificationKind.MODERATION_SUBMITTED);
+            ModerationSubmissionState.SUBMITTED, 1, NotificationKind.MODERATION_SUBMITTED, false);
         var message = new OutboxMessage
         {
             Id = Guid.NewGuid(),
@@ -37,10 +37,10 @@ public sealed class ModerationLifecycleOutboxHandlerTests
     [InlineData(NotificationKind.MODERATION_APPROVED, ModerationSubmissionState.APPROVED)]
     public async Task Handle_WhenStateDoesNotMatchLifecycleKind_ShouldFailClosed(NotificationKind kind, ModerationSubmissionState state)
     {
-        var payload = new ModerationLifecyclePayload(Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), null, state, 2, kind);
+        var payload = new ModerationLifecyclePayload(Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), null, state, 2, kind, false);
         var message = new OutboxMessage
         {
-            Id = ModerationEventIdentity.Event(payload.SubmissionId, payload.Revision, kind),
+            Id = ModerationEventIdentity.Event(payload.SubmissionId, payload.Revision, kind, false),
             Type = OutboxMessageTypes.MODERATION_LIFECYCLE,
             Payload = JsonSerializer.Serialize(payload, _json)
         };

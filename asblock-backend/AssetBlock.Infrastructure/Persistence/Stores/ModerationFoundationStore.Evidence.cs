@@ -31,7 +31,7 @@ internal sealed partial class ModerationFoundationStore
         if (!AppRoles.CanReview((await userStore.GetPersistedRole(moderatorUserId, cancellationToken))?.Role))
         { return new(ModerationCaseAccessStatus.DENIED_ROLE, null); }
         var binding = await dbContext.ModerationSubmissions.AsNoTracking().Where(s => s.Id == submissionId)
-            .Select(s => new { s.AssetId, s.AssetVersionId, s.WorkspaceId, s.OwnerUserId }).SingleOrDefaultAsync(cancellationToken);
+            .Select(s => new { s.AssetId, s.AssetVersionId, s.WorkspaceId, s.OwnerUserId, s.Kind }).SingleOrDefaultAsync(cancellationToken);
         if (binding is null)
         { return new(ModerationCaseAccessStatus.NOT_FOUND, null); }
         if (dbContext.Database.CurrentTransaction is not null)
@@ -45,6 +45,8 @@ internal sealed partial class ModerationFoundationStore
             UserPersistedRole? role = await ShareReviewRole(moderatorUserId, cancellationToken);
             if (!AppRoles.CanReview(role?.Role))
             { return new(ModerationCaseAccessStatus.DENIED_ROLE, null); }
+            if (binding.Kind == ModerationSubmissionKind.APPEAL && await AppealReviewExclusions.ForSubmission(dbContext, submissionId).ContainsAsync(moderatorUserId, cancellationToken))
+            { return new(ModerationCaseAccessStatus.APPEAL_REVIEWER_EXCLUDED, null); }
             if (asset?.AuthorId == moderatorUserId || binding.OwnerUserId == moderatorUserId)
             { return new(ModerationCaseAccessStatus.SELF_OWNED_DENIED, null); }
             AssetVersion version = await dbContext.AssetVersions.AsNoTracking().SingleAsync(v => v.Id == binding.AssetVersionId, cancellationToken);
@@ -63,7 +65,7 @@ internal sealed partial class ModerationFoundationStore
         catch (Exception ex) { _logger.LogError("Review read failed exceptionType {ExceptionType}", ex.GetType().Name); await tx.RollbackAsync(CancellationToken.None); return new(ModerationCaseAccessStatus.AUDIT_UNAVAILABLE, null); }
     }
 
-    private sealed record EvidenceBinding(Guid AssetId, Guid VersionId, Guid WorkspaceId, Guid? ReportId, int DeclarationRevision, int MaterialRevision, int EvidenceRevision, Guid OwnerId, string ContentSha256);
+    private sealed record EvidenceBinding(Guid AssetId, Guid VersionId, Guid WorkspaceId, Guid? ReportId, int DeclarationRevision, int MaterialRevision, int EvidenceRevision, Guid OwnerId, string ContentSha256, ModerationSubmissionKind? SubmissionKind);
     public async Task<ReviewAccessResult<RestrictedEvidenceDto>> ReadRestrictedEvidence(Guid actorId, Guid scopeId, bool coverageScope, RestrictedEvidenceKind kind, Guid? findingId, CancellationToken cancellationToken = default)
     {
         if (!Enum.IsDefined(kind))
@@ -73,8 +75,8 @@ internal sealed partial class ModerationFoundationStore
         if (dbContext.Database.CurrentTransaction is not null)
         { return new(ReviewAccessStatus.AUDIT_UNAVAILABLE); }
         EvidenceBinding? binding = coverageScope
-            ? await dbContext.CoverageReviewRequests.AsNoTracking().Where(r => r.Id == scopeId).Select(r => new EvidenceBinding(r.AssetId, r.AssetVersionId, r.WorkspaceId, r.ReportId, r.DeclarationRevision, r.MaterialRevision, r.SellerEvidenceRevision, r.OwnerUserId, r.ContentSha256)).SingleOrDefaultAsync(cancellationToken)
-            : await dbContext.ModerationSubmissions.AsNoTracking().Where(s => s.Id == scopeId).Select(s => new EvidenceBinding(s.AssetId, s.AssetVersionId, s.WorkspaceId, s.CodeAnalysisReportHeaderId, s.DeclarationRevision, s.MaterialMetadataRevision, s.SellerEvidenceRevision, s.OwnerUserId, s.ContentSha256)).SingleOrDefaultAsync(cancellationToken);
+            ? await dbContext.CoverageReviewRequests.AsNoTracking().Where(r => r.Id == scopeId).Select(r => new EvidenceBinding(r.AssetId, r.AssetVersionId, r.WorkspaceId, r.ReportId, r.DeclarationRevision, r.MaterialRevision, r.SellerEvidenceRevision, r.OwnerUserId, r.ContentSha256, null)).SingleOrDefaultAsync(cancellationToken)
+            : await dbContext.ModerationSubmissions.AsNoTracking().Where(s => s.Id == scopeId).Select(s => new EvidenceBinding(s.AssetId, s.AssetVersionId, s.WorkspaceId, s.CodeAnalysisReportHeaderId, s.DeclarationRevision, s.MaterialMetadataRevision, s.SellerEvidenceRevision, s.OwnerUserId, s.ContentSha256, s.Kind)).SingleOrDefaultAsync(cancellationToken);
         if (binding is null)
         { return new(ReviewAccessStatus.NOT_FOUND); }
         // This method owns the commit boundary: no lazy enumeration/stream can escape before audit commits.
@@ -88,7 +90,10 @@ internal sealed partial class ModerationFoundationStore
             else
             { await dbContext.Database.SqlQuery<Guid>($"""SELECT "Id" AS "Value" FROM moderation_submissions WHERE "Id" = {scopeId} FOR SHARE""").ToListAsync(cancellationToken); }
             UserPersistedRole? role = await ShareReviewRole(actorId, cancellationToken);
-            ReviewAccessStatus status = !AppRoles.CanReview(role?.Role) || asset?.AuthorId == actorId || binding.OwnerId == actorId ? ReviewAccessStatus.FORBIDDEN : ReviewAccessStatus.SUCCESS;
+            var excluded = AppRoles.CanReview(role?.Role) && binding.SubmissionKind == ModerationSubmissionKind.APPEAL
+                && await AppealReviewExclusions.ForSubmission(dbContext, scopeId).ContainsAsync(actorId, cancellationToken);
+            ReviewAccessStatus status = !AppRoles.CanReview(role?.Role) || excluded || asset?.AuthorId == actorId || binding.OwnerId == actorId
+                ? ReviewAccessStatus.FORBIDDEN : ReviewAccessStatus.SUCCESS;
             AssetVersion? version = await dbContext.AssetVersions.AsNoTracking().SingleOrDefaultAsync(v => v.Id == binding.VersionId && v.AssetId == binding.AssetId, cancellationToken);
             if (status == ReviewAccessStatus.SUCCESS && (asset is null || workspace is null || version is null || version.ContentSha256 != binding.ContentSha256))
             { status = ReviewAccessStatus.NOT_FOUND; }
@@ -109,7 +114,7 @@ internal sealed partial class ModerationFoundationStore
                 new { scopeId, coverageScope, kind = kind.ToString(), findingId, outcome = status.ToString() }, cancellationToken, coverageScope);
             await dbContext.SaveChangesAsync(cancellationToken);
             await transaction.CommitAsync(cancellationToken);
-            return new(status, status == ReviewAccessStatus.SUCCESS ? dto : null);
+            return new(status, status == ReviewAccessStatus.SUCCESS ? dto : null, excluded ? ErrorCodes.ERR_MODERATION_APPEAL_REVIEWER_EXCLUDED : null);
         }
         catch (OperationCanceledException) { throw; }
         catch (Exception ex)

@@ -39,10 +39,15 @@ internal sealed partial class ModerationFoundationStore
                 }
                 else
                 { role = await LockRoleAfterWorkspace(request.ActorId, ct); }
-                if (!AppRoles.CanReview(role?.Role) || asset?.AuthorId == request.ActorId || submission?.OwnerUserId == request.ActorId)
+                if (!AppRoles.CanReview(role?.Role))
                 { result = new(CaseClaimStatus.FORBIDDEN); return; }
                 if (asset is null || asset.DeletedAt.HasValue || workspace is null || submission is null)
                 { return; }
+                if (request.Claim && submission.Kind == ModerationSubmissionKind.APPEAL && await AppealReviewExclusions.ForSubmission(dbContext, submission.Id).ContainsAsync(request.ActorId, ct))
+                { result = new(CaseClaimStatus.APPEAL_REVIEWER_EXCLUDED); return; }
+                var isOwner = asset.AuthorId == request.ActorId || submission.OwnerUserId == request.ActorId;
+                if (isOwner && (request.Claim || submission.Kind != ModerationSubmissionKind.APPEAL))
+                { result = new(CaseClaimStatus.FORBIDDEN); return; }
                 var operation = request.Claim ? ModerationOperationKinds.CASE_CLAIM : ModerationOperationKinds.CASE_RELEASE;
                 JsonMutationIdempotencyRecord? receipt = await FindIdempotencyRecord(request.ActorId, operation, request.OperationId, ct);
                 if (receipt is not null)
@@ -52,6 +57,8 @@ internal sealed partial class ModerationFoundationStore
                         : new(CaseClaimStatus.OPERATION_CONFLICT);
                     return;
                 }
+                if (isOwner && submission.ClaimHolderId != request.ActorId)
+                { result = new(CaseClaimStatus.FORBIDDEN); return; }
                 if (submission.State is not (ModerationSubmissionState.SUBMITTED or ModerationSubmissionState.IN_REVIEW))
                 { result = new(CaseClaimStatus.NOT_ACTIVE); return; }
                 if (request.Claim && submission.State == ModerationSubmissionState.IN_REVIEW && submission.ClaimHolderId == request.ActorId)
@@ -78,7 +85,8 @@ internal sealed partial class ModerationFoundationStore
                 var takeover = false;
                 if (request.Claim && submission.State == ModerationSubmissionState.IN_REVIEW && submission.ClaimHolderId is Guid holder)
                 {
-                    if (AppRoles.CanReview(holderRole?.Role) && holder != asset.AuthorId && holder != submission.OwnerUserId)
+                    if (AppRoles.CanReview(holderRole?.Role) && holder != asset.AuthorId && holder != submission.OwnerUserId
+                        && (submission.Kind != ModerationSubmissionKind.APPEAL || !await AppealReviewExclusions.ForSubmission(dbContext, submission.Id).ContainsAsync(holder, ct)))
                     { result = new(CaseClaimStatus.HELD); return; }
                     takeover = true;
                 }

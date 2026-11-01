@@ -2,6 +2,7 @@ namespace AssetBlock.Domain.Core.Constants;
 
 public static class ModerationOperationKinds
 {
+    public const string APPEAL_CREATE = "Moderation.AppealCreate";
     public const string CASE_DECIDE = "Moderation.CaseDecide";
     public const string CASE_CLAIM = "Moderation.CaseClaim";
     public const string CASE_RELEASE = "Moderation.CaseRelease";

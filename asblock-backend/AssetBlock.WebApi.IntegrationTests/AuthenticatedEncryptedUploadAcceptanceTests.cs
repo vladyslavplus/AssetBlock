@@ -34,6 +34,16 @@ public sealed class AuthenticatedEncryptedUploadAcceptanceTests
     public async Task UploadWorkerPersistsAdmittedReportAndDeclarationReuse()
     {
         var live = LiveAcceptanceOptions.Resolve();
+        await RunLiveScenario(true);
+        JsonElement upheld = JsonSerializer.Deserialize<JsonElement>(await File.ReadAllTextAsync(live.EvidencePath));
+        await RunLiveScenario(false);
+        JsonElement approved = JsonSerializer.Deserialize<JsonElement>(await File.ReadAllTextAsync(live.EvidencePath));
+        await File.WriteAllTextAsync(live.EvidencePath, JsonSerializer.Serialize(new { status = "passed", upheld, approved }, new JsonSerializerOptions { WriteIndented = true }));
+    }
+
+    private static async Task RunLiveScenario(bool uphold)
+    {
+        var live = LiveAcceptanceOptions.Resolve();
         var evidencePath = live.EvidencePath;
         var details = new Dictionary<string, object?>();
         try
@@ -654,7 +664,7 @@ public sealed class AuthenticatedEncryptedUploadAcceptanceTests
                             throw new InvalidOperationException("Foreign user read Moderator evidence.");
                         }
                     }
-                    await VerifyModerationDecisionLifecycle(factory, scopedClient, moderatorClient, assetId, assetVersionId, secondAdmittedReportId, submissionId, approvalTag, categoryId, details);
+                    await VerifyModerationDecisionLifecycle(factory, scopedClient, moderatorClient, assetId, assetVersionId, secondAdmittedReportId, submissionId, approvalTag, categoryId, details, uphold);
                     string ownerEmail;
                     await using (AsyncServiceScope scope = factory.Services.CreateAsyncScope())
                     {
@@ -717,7 +727,7 @@ public sealed class AuthenticatedEncryptedUploadAcceptanceTests
         "/" + ApiRoutes.Users.BASE + "/" + ApiRoutes.Users.ME_ASSET_VERSION_REVIEW.Replace("{assetVersionId:guid}", assetVersionId.ToString(), StringComparison.Ordinal);
 
     private static async Task VerifyModerationDecisionLifecycle(LiveAcceptanceFactory factory, HttpClient seller, HttpClient moderator,
-        Guid assetId, Guid assetVersionId, Guid reportId, Guid resubmittedCaseId, string approvalTag, Guid categoryId, Dictionary<string, object?> details)
+        Guid assetId, Guid assetVersionId, Guid reportId, Guid resubmittedCaseId, string approvalTag, Guid categoryId, Dictionary<string, object?> details, bool uphold)
     {
         const string changesRationale = "Live changes-requested rationale sentinel.";
         const string approvalRationale = "Live approval rationale sentinel.";
@@ -818,12 +828,121 @@ public sealed class AuthenticatedEncryptedUploadAcceptanceTests
 
         await ClaimCase(moderator, approvalCaseId, approvalCase.CaseRevision);
         approvalCase = await LoadSubmission(factory, approvalCaseId);
-        Guid approveOperation = Guid.NewGuid();
+        const string rejectReason = "Live rejection reason sentinel.";
         var approveDispositions = materialIds.Select(id => (id, "EXPLAINED")).ToArray();
+        Guid rejectionDecisionId;
+        using (HttpResponseMessage rejected = await PostDecision(moderator, approvalCaseId,
+            DecisionBody(Guid.NewGuid(), approvalCase, reportId, "REJECT", rejectReason, approveDispositions)))
+        {
+            if (rejected.StatusCode != HttpStatusCode.OK)
+                throw new InvalidOperationException("REJECT failed: HTTP " + (int)rejected.StatusCode + " " + SafeBody(await rejected.Content.ReadAsStringAsync()));
+            using JsonDocument body = JsonDocument.Parse(await rejected.Content.ReadAsStringAsync());
+            rejectionDecisionId = body.RootElement.GetProperty("decisionId").GetGuid();
+        }
+        await WaitForOutboxProcessed(factory, ModerationEventIdentity.Decision(rejectionDecisionId, false), TimeSpan.FromMinutes(3));
+        using (HttpResponseMessage review = await seller.GetAsync(SellerVersionReviewUrl(assetVersionId)))
+        {
+            if (review.StatusCode != HttpStatusCode.OK)
+                throw new InvalidOperationException("Rejected review HTTP " + (int)review.StatusCode);
+            using JsonDocument json = JsonDocument.Parse(await review.Content.ReadAsStringAsync());
+            if (!json.RootElement.GetProperty("canAppeal").GetBoolean() || json.RootElement.GetProperty("decision").GetProperty("outcome").GetString() != "REJECTED"
+                || json.RootElement.GetProperty("decision").GetProperty("reason").GetString() != rejectReason)
+                throw new InvalidOperationException("Rejected seller review did not offer appeal with the exact reason.");
+        }
+        await using (AsyncServiceScope scope = factory.Services.CreateAsyncScope())
+        {
+            ApplicationDbContext db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+            if (!await db.UserNotifications.AnyAsync(n => n.SourceOutboxMessageId == ModerationEventIdentity.Decision(rejectionDecisionId, false) && n.Kind == NotificationKind.MODERATION_REJECTED && n.RecipientUserId == approvalCase.OwnerUserId))
+                throw new InvalidOperationException("Rejection notification was not delivered to the seller.");
+        }
+        SellerResponsesPageDto current = (await ReadReviewResponses(seller, responseEndpoint))!;
+        var ordinaryBody = new { workspaceId = current.WorkspaceId, expectedWorkspaceRevision = current.WorkspaceRevision, expectedCaseRevision = current.CaseRevision, operationId = Guid.NewGuid() };
+        using (HttpResponseMessage blocked = await seller.PostAsJsonAsync(submissionUrl, ordinaryBody))
+        {
+            if (blocked.StatusCode != HttpStatusCode.Conflict || !(await blocked.Content.ReadAsStringAsync()).Contains(ErrorCodes.ERR_MODERATION_APPEAL_REQUIRED, StringComparison.Ordinal))
+                throw new InvalidOperationException("Unchanged ordinary resubmission did not require an appeal: HTTP " + (int)blocked.StatusCode);
+        }
+        var appealUrl = AssetPath(ApiRoutes.Assets.VERSION_APPEALS, assetId, assetVersionId);
+        const string appealText = "Private appeal rationale sentinel.";
+        var appealBody = new { workspaceId = current.WorkspaceId, expectedWorkspaceRevision = current.WorkspaceRevision, expectedCaseRevision = current.CaseRevision, operationId = Guid.NewGuid(), rationale = appealText };
+        Guid appealCaseId;
+        using (HttpResponseMessage opened = await seller.PostAsJsonAsync(appealUrl, appealBody))
+        {
+            if (opened.StatusCode != HttpStatusCode.OK)
+                throw new InvalidOperationException("Appeal request failed: HTTP " + (int)opened.StatusCode + " " + SafeBody(await opened.Content.ReadAsStringAsync()));
+            using JsonDocument json = JsonDocument.Parse(await opened.Content.ReadAsStringAsync());
+            appealCaseId = json.RootElement.GetProperty("submissionId").GetGuid();
+        }
+        using (HttpResponseMessage review = await seller.GetAsync(SellerVersionReviewUrl(assetVersionId)))
+        {
+            if (review.StatusCode != HttpStatusCode.OK)
+                throw new InvalidOperationException("Pending appeal review HTTP " + (int)review.StatusCode);
+            using JsonDocument json = JsonDocument.Parse(await review.Content.ReadAsStringAsync());
+            if (json.RootElement.GetProperty("canAppeal").GetBoolean() || json.RootElement.GetProperty("appeal").GetProperty("state").GetString() != "PENDING_REVIEW"
+                || json.RootElement.GetProperty("decision").ValueKind != JsonValueKind.Null)
+                throw new InvalidOperationException("Pending appeal projection was incorrect.");
+        }
+        using (HttpResponseMessage queue = await moderator.GetAsync("/" + ApiRoutes.Moderation.QUEUE))
+        {
+            if (queue.StatusCode != HttpStatusCode.OK || (await queue.Content.ReadAsStringAsync()).Contains(appealCaseId.ToString(), StringComparison.OrdinalIgnoreCase))
+                throw new InvalidOperationException("Original reviewer could see the appeal in the queue.");
+        }
+        ModerationSubmission appealCase = await LoadSubmission(factory, appealCaseId);
+        var appealClaimUrl = "/" + ApiRoutes.Moderation.CLAIM.Replace("{id:guid}", appealCaseId.ToString(), StringComparison.Ordinal);
+        using (HttpResponseMessage denied = await moderator.PostAsJsonAsync(appealClaimUrl, new { operationId = Guid.NewGuid(), expectedCaseRevision = appealCase.CaseRevision }))
+        {
+            if (denied.StatusCode != HttpStatusCode.Forbidden || !(await denied.Content.ReadAsStringAsync()).Contains(ErrorCodes.ERR_MODERATION_APPEAL_REVIEWER_EXCLUDED, StringComparison.Ordinal))
+                throw new InvalidOperationException("Original reviewer claim was not excluded: HTTP " + (int)denied.StatusCode);
+        }
+        (HttpClient independent, _) = await IntegrationTestAuth.RegisterVerifiedWithRoleAsync(factory, AppRoles.MODERATOR);
+        using var independentReviewer = independent;
+        using (HttpResponseMessage queue = await independentReviewer.GetAsync("/" + ApiRoutes.Moderation.QUEUE))
+        {
+            if (queue.StatusCode != HttpStatusCode.OK || !(await queue.Content.ReadAsStringAsync()).Contains(appealCaseId.ToString(), StringComparison.OrdinalIgnoreCase))
+                throw new InvalidOperationException("Independent reviewer could not see the appeal.");
+        }
+        using (HttpResponseMessage claimed = await independentReviewer.PostAsJsonAsync(appealClaimUrl, new { operationId = Guid.NewGuid(), expectedCaseRevision = appealCase.CaseRevision }))
+        {
+            if (claimed.StatusCode != HttpStatusCode.OK)
+                throw new InvalidOperationException("Independent reviewer claim failed: HTTP " + (int)claimed.StatusCode);
+        }
+        appealCase = await LoadSubmission(factory, appealCaseId);
+        using (HttpResponseMessage changes = await PostDecision(independentReviewer, appealCaseId, DecisionBody(Guid.NewGuid(), appealCase, reportId, "REQUEST_CHANGES", "Not permitted.", approveDispositions)))
+        {
+            if (changes.StatusCode != HttpStatusCode.Conflict || !(await changes.Content.ReadAsStringAsync()).Contains(ErrorCodes.ERR_MODERATION_APPEAL_DECISION_NOT_ALLOWED, StringComparison.Ordinal))
+                throw new InvalidOperationException("Appeal accepted REQUEST_CHANGES: HTTP " + (int)changes.StatusCode);
+        }
+        if (uphold)
+        {
+            const string upheldReason = "Live upheld reason sentinel.";
+            using HttpResponseMessage rejected = await PostDecision(independentReviewer, appealCaseId, DecisionBody(Guid.NewGuid(), appealCase, reportId, "REJECT", upheldReason, approveDispositions));
+            if (rejected.StatusCode != HttpStatusCode.OK)
+                throw new InvalidOperationException("Appeal uphold failed: HTTP " + (int)rejected.StatusCode + " " + SafeBody(await rejected.Content.ReadAsStringAsync()));
+            using JsonDocument outcome = JsonDocument.Parse(await rejected.Content.ReadAsStringAsync());
+            Guid eventId = ModerationEventIdentity.Decision(outcome.RootElement.GetProperty("decisionId").GetGuid(), true);
+            await WaitForOutboxProcessed(factory, eventId, TimeSpan.FromMinutes(3));
+            using HttpResponseMessage review = await seller.GetAsync(SellerVersionReviewUrl(assetVersionId));
+            if (review.StatusCode != HttpStatusCode.OK)
+                throw new InvalidOperationException("Upheld review HTTP " + (int)review.StatusCode);
+            using JsonDocument json = JsonDocument.Parse(await review.Content.ReadAsStringAsync());
+            if (json.RootElement.GetProperty("canAppeal").GetBoolean() || json.RootElement.GetProperty("appeal").GetProperty("state").GetString() != "UPHELD"
+                || json.RootElement.GetProperty("decision").GetProperty("outcome").GetString() != "REJECTED" || json.RootElement.GetProperty("decision").GetProperty("reason").GetString() != upheldReason)
+                throw new InvalidOperationException("Upheld seller projection was incorrect.");
+            current = (await ReadReviewResponses(seller, responseEndpoint))!;
+            using HttpResponseMessage repeat = await seller.PostAsJsonAsync(appealUrl, new { workspaceId = current.WorkspaceId, expectedWorkspaceRevision = current.WorkspaceRevision, expectedCaseRevision = current.CaseRevision, operationId = Guid.NewGuid(), rationale = appealText });
+            if (repeat.StatusCode != HttpStatusCode.Conflict || !(await repeat.Content.ReadAsStringAsync()).Contains(ErrorCodes.ERR_MODERATION_APPEAL_EXISTS, StringComparison.Ordinal))
+                throw new InvalidOperationException("Upheld appeal could be reopened: HTTP " + (int)repeat.StatusCode);
+            await VerifyAppealEffects(factory, appealCaseId, eventId, approvalCase.OwnerUserId, NotificationKind.MODERATION_APPEAL_UPHELD, appealText, upheldReason);
+            details["appeal"] = new { state = "UPHELD", appealCaseId, rejectionDecisionId, notification = "MODERATION_APPEAL_UPHELD" };
+            return;
+        }
+        approvalCaseId = appealCaseId;
+        approvalCase = appealCase;
+        Guid approveOperation = Guid.NewGuid();
         var approveBody = DecisionBody(approveOperation, approvalCase, reportId, "APPROVE", approvalRationale, approveDispositions);
         Guid approvalDecisionId;
         Guid snapshotId;
-        using (HttpResponseMessage approved = await PostDecision(moderator, approvalCaseId, approveBody))
+        using (HttpResponseMessage approved = await PostDecision(independentReviewer, approvalCaseId, approveBody))
         {
             if (approved.StatusCode != HttpStatusCode.OK)
                 throw new InvalidOperationException("APPROVE decision failed: HTTP " + (int)approved.StatusCode + " " + SafeBody(await approved.Content.ReadAsStringAsync()));
@@ -833,7 +952,8 @@ public sealed class AuthenticatedEncryptedUploadAcceptanceTests
                 throw new InvalidOperationException("APPROVE was not promoted on its first execution.");
             snapshotId = approvedJson.RootElement.GetProperty("publicationSnapshotId").GetGuid();
         }
-        await WaitForOutboxProcessed(factory, approvalDecisionId, TimeSpan.FromMinutes(3));
+        Guid approvalEventId = ModerationEventIdentity.Decision(approvalDecisionId, true);
+        await WaitForOutboxProcessed(factory, approvalEventId, TimeSpan.FromMinutes(3));
 
         await using (AsyncServiceScope scope = factory.Services.CreateAsyncScope())
         {
@@ -841,11 +961,11 @@ public sealed class AuthenticatedEncryptedUploadAcceptanceTests
             Asset asset = await db.Assets.AsNoTracking().SingleAsync(a => a.Id == assetId);
             var snapshots = await db.PublicationSnapshots.AsNoTracking().Where(p => p.AssetId == assetId).ToListAsync();
             int decisionCount = await db.ModerationDecisionRecords.CountAsync(d => d.AssetId == assetId);
-            int notificationCount = await db.UserNotifications.CountAsync(n => n.SourceOutboxMessageId == approvalDecisionId);
-            bool notificationToOwner = await db.UserNotifications.AnyAsync(n => n.SourceOutboxMessageId == approvalDecisionId
+            int notificationCount = await db.UserNotifications.CountAsync(n => n.SourceOutboxMessageId == approvalEventId);
+            bool notificationToOwner = await db.UserNotifications.AnyAsync(n => n.SourceOutboxMessageId == approvalEventId
                 && n.RecipientUserId == approvalCase.OwnerUserId);
             if (snapshots.Count != 1 || snapshots[0].Id != snapshotId || asset.CurrentPublicationSnapshotId != snapshotId
-                || asset.SearchRevision != searchRevisionBefore + 1 || decisionCount != 2)
+                || asset.SearchRevision != searchRevisionBefore + 1 || decisionCount != 3)
                 throw new InvalidOperationException("APPROVE did not persist one snapshot, one pointer move and one search revision.");
             using JsonDocument metadata = JsonDocument.Parse(snapshots[0].ApprovedMetadataJson);
             if (asset.Title != "Live encrypted asset upload" || asset.Description != "Task-owned isolated acceptance archive"
@@ -865,7 +985,7 @@ public sealed class AuthenticatedEncryptedUploadAcceptanceTests
             outboxBeforeReplay = await scope.ServiceProvider.GetRequiredService<ApplicationDbContext>().OutboxMessages
                 .CountAsync(m => m.Type == OutboxMessageTypes.MODERATION_DECISION);
         }
-        using (HttpResponseMessage replay = await PostDecision(moderator, approvalCaseId, approveBody))
+        using (HttpResponseMessage replay = await PostDecision(independentReviewer, approvalCaseId, approveBody))
         {
             if (replay.StatusCode != HttpStatusCode.OK)
                 throw new InvalidOperationException("APPROVE replay did not return the original decision: HTTP " + (int)replay.StatusCode);
@@ -873,13 +993,13 @@ public sealed class AuthenticatedEncryptedUploadAcceptanceTests
             if (!replayJson.RootElement.GetProperty("replayed").GetBoolean() || replayJson.RootElement.GetProperty("decisionId").GetGuid() != approvalDecisionId)
                 throw new InvalidOperationException("APPROVE replay did not return the original decision identity.");
         }
-        using (HttpResponseMessage changedPayload = await PostDecision(moderator, approvalCaseId,
+        using (HttpResponseMessage changedPayload = await PostDecision(independentReviewer, approvalCaseId,
             DecisionBody(approveOperation, approvalCase, reportId, "APPROVE", "Changed approval rationale.", approveDispositions)))
         {
             if (changedPayload.StatusCode != HttpStatusCode.Conflict || !(await changedPayload.Content.ReadAsStringAsync()).Contains(ErrorCodes.ERR_MODERATION_OPERATION_CONFLICT, StringComparison.Ordinal))
                 throw new InvalidOperationException("Changed payload with a reused operation did not conflict.");
         }
-        using (HttpResponseMessage secondDecision = await PostDecision(moderator, approvalCaseId,
+        using (HttpResponseMessage secondDecision = await PostDecision(independentReviewer, approvalCaseId,
             DecisionBody(Guid.NewGuid(), approvalCase, reportId, "APPROVE", approvalRationale, approveDispositions)))
         {
             if (secondDecision.StatusCode != HttpStatusCode.Conflict || !(await secondDecision.Content.ReadAsStringAsync()).Contains(ErrorCodes.ERR_MODERATION_DECISION_EXISTS, StringComparison.Ordinal))
@@ -889,15 +1009,15 @@ public sealed class AuthenticatedEncryptedUploadAcceptanceTests
         await using (AsyncServiceScope scope = factory.Services.CreateAsyncScope())
         {
             ApplicationDbContext db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
-            OutboxMessage message = await db.OutboxMessages.AsNoTracking().SingleAsync(m => m.Id == approvalDecisionId);
+            OutboxMessage message = await db.OutboxMessages.AsNoTracking().SingleAsync(m => m.Id == approvalEventId);
             IOutboxMessageHandler handler = scope.ServiceProvider.GetServices<IOutboxMessageHandler>()
                 .Single(h => h.MessageType == OutboxMessageTypes.MODERATION_DECISION);
             await handler.Handle(message, CancellationToken.None);
             await handler.Handle(message, CancellationToken.None);
-            if (await db.UserNotifications.CountAsync(n => n.SourceOutboxMessageId == approvalDecisionId) != 1
+            if (await db.UserNotifications.CountAsync(n => n.SourceOutboxMessageId == approvalEventId) != 1
                 || await db.OutboxMessages.CountAsync(m => m.Type == OutboxMessageTypes.MODERATION_DECISION) != outboxBeforeReplay
                 || await db.PublicationSnapshots.CountAsync(p => p.AssetId == assetId) != 1
-                || await db.ModerationDecisionRecords.CountAsync(d => d.AssetId == assetId) != 2)
+                || await db.ModerationDecisionRecords.CountAsync(d => d.AssetId == assetId) != 3)
                 throw new InvalidOperationException("Replayed or repeated decision effects created new rows.");
         }
 
@@ -912,6 +1032,13 @@ public sealed class AuthenticatedEncryptedUploadAcceptanceTests
             if (unentitledDownload.IsSuccessStatusCode)
                 throw new InvalidOperationException("Approved version bytes were downloadable without an entitlement.");
         }
+        (HttpClient buyer, _) = await IntegrationTestAuth.RegisterVerifiedAndAuthenticateAsync(factory);
+        using (buyer)
+        using (HttpResponseMessage catalog = await buyer.GetAsync("/" + ApiRoutes.Assets.BASE + ApiRoutes.Assets.LIST + "?page=1&pageSize=100&search=" + Uri.EscapeDataString("Live encrypted asset upload")))
+        {
+            if (catalog.StatusCode != HttpStatusCode.OK || !(await catalog.Content.ReadAsStringAsync()).Contains(assetId.ToString(), StringComparison.OrdinalIgnoreCase))
+                throw new InvalidOperationException("Buyer catalog did not expose the approved appeal asset: HTTP " + (int)catalog.StatusCode);
+        }
 
         string sellerReviewJson;
         using (HttpResponseMessage sellerReview = await seller.GetAsync(SellerVersionReviewUrl(assetVersionId)))
@@ -922,10 +1049,11 @@ public sealed class AuthenticatedEncryptedUploadAcceptanceTests
         using (JsonDocument projected = JsonDocument.Parse(sellerReviewJson))
         {
             JsonElement decision = projected.RootElement.GetProperty("decision");
-            if (decision.GetProperty("outcome").GetString() != "APPROVED" || decision.GetProperty("reason").ValueKind != JsonValueKind.Null
+            if (projected.RootElement.GetProperty("appeal").GetProperty("state").GetString() != "APPROVED" || decision.GetProperty("outcome").GetString() != "APPROVED" || decision.GetProperty("reason").ValueKind != JsonValueKind.Null
                 || decision.GetProperty("publication").GetString() != "PUBLISHED")
                 throw new InvalidOperationException("Seller review did not project the approved decision as published without a reason.");
         }
+        await VerifyAppealEffects(factory, appealCaseId, approvalEventId, approvalCase.OwnerUserId, NotificationKind.MODERATION_APPROVED, appealText, approvalRationale);
         SellerResponsesPageDto finalResponses = (await ReadReviewResponses(seller, responseEndpoint))!;
         string sellerResponsesJson = JsonSerializer.Serialize(finalResponses);
         foreach (string json in new[] { sellerReviewJson, sellerResponsesJson })
@@ -959,6 +1087,21 @@ public sealed class AuthenticatedEncryptedUploadAcceptanceTests
             sellerDecisionProjection = new { outcome = "APPROVED", reason = (string?)null, publication = "PUBLISHED" },
             pendingSecondVersion = "NOT_EXERCISED_LIVE"
         };
+    }
+
+    private static async Task VerifyAppealEffects(LiveAcceptanceFactory factory, Guid appealId, Guid eventId, Guid ownerId, NotificationKind kind, string appealText, string rationale)
+    {
+        await using AsyncServiceScope scope = factory.Services.CreateAsyncScope();
+        ApplicationDbContext db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+        if (await db.UserNotifications.CountAsync(n => n.SourceOutboxMessageId == eventId && n.RecipientUserId == ownerId && n.Kind == kind) != 1)
+            throw new InvalidOperationException("Appeal decision notification was not delivered exactly once.");
+        List<AuditLog> audits = await db.AuditLogs.AsNoTracking().Where(a => a.ResourceId == appealId.ToString() && (a.Action == AuditActions.APPEAL_OPENED || a.Action == AuditActions.CASE_DECIDED)).ToListAsync();
+        string[] privateText = [appealText, rationale, "Live rejection reason sentinel.", "Live changes-requested rationale sentinel.", "Live disposition sentinel."];
+        if (audits.Count != 2 || audits.Any(a => privateText.Any(text => (a.MetadataJson ?? "").Contains(text, StringComparison.Ordinal))))
+            throw new InvalidOperationException("Appeal audit rows were missing or contained private text.");
+        List<string> payloads = await db.OutboxMessages.AsNoTracking().Where(m => m.Type == OutboxMessageTypes.MODERATION_LIFECYCLE || m.Type == OutboxMessageTypes.MODERATION_DECISION).Select(m => m.Payload).ToListAsync();
+        if (payloads.Any(p => privateText.Any(text => p.Contains(text, StringComparison.Ordinal))))
+            throw new InvalidOperationException("Appeal outbox contained private text.");
     }
 
     private static object DecisionBody(Guid operationId, ModerationSubmission submission, Guid reportId, string outcome, string rationale,

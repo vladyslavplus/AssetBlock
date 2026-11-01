@@ -48,6 +48,7 @@ public static class ApiRoutes
         public const string VERSION_RESPONSES = "{id:guid}/versions/{versionId:guid}/responses";
         public const string VERSION_EVIDENCE = "{id:guid}/versions/{versionId:guid}/evidence";
         public const string VERSION_SUBMISSIONS = "{id:guid}/versions/{versionId:guid}/submissions";
+        public const string VERSION_APPEALS = "{id:guid}/versions/{versionId:guid}/appeals";
     }
 
     public static class Payments

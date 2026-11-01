@@ -95,7 +95,15 @@ public sealed record SellerVersionReviewDto(
     IReadOnlyList<string> BlockedReasons,
     SellerAnalysisSummaryDto? AnalysisDetails = null,
     int RequiredResponseCount = 0, int OutstandingResponseCount = 0, int EvidenceRevision = 0, CoverageOwnerStatus? CoverageReview = null,
-    SellerVersionDecisionDto? Decision = null);
+    SellerVersionDecisionDto? Decision = null,
+    bool CanAppeal = false,
+    SellerAppealDto? Appeal = null);
+
+/// <summary>Owner-safe appeal status without reviewer or evidence details.</summary>
+public sealed record SellerAppealDto(SellerAppealState State, DateTimeOffset RequestedAt, DateTimeOffset? DecidedAt);
+
+[JsonConverter(typeof(JsonStringEnumConverter))]
+public enum SellerAppealState { PENDING_REVIEW, UPHELD, APPROVED, WITHDRAWN }
 
 /// <summary>
 /// Owner-safe terminal decision for a version. Present only when the latest submission (by CreatedAt, then Id descending) has a decision;

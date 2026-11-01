@@ -27,10 +27,11 @@ internal sealed class GetMyAssetVersionReviewQueryHandler(
             request.AssetVersionId, request.OwnerId, cancellationToken);
         if (analysis is not null)
         {
+            var rejectionReason = review.BlockedReasons.FirstOrDefault(code => code is ErrorCodes.ERR_MODERATION_APPEAL_REQUIRED or ErrorCodes.ERR_MODERATION_REJECTION_FINAL);
             review = review with
             {
-                AnalysisDetails = analysis,
-                CanSubmit = analysis.CanSubmit,
+                AnalysisDetails = rejectionReason is null ? analysis : analysis with { CanSubmit = false, SubmissionBlockedReason = rejectionReason },
+                CanSubmit = analysis.CanSubmit && rejectionReason is null,
                 RequiredResponseCount = analysis.RequiredResponseCount,
                 OutstandingResponseCount = analysis.OutstandingResponseCount,
                 EvidenceRevision = analysis.EvidenceRevision,

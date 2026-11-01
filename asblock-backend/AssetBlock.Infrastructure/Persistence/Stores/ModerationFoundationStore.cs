@@ -888,6 +888,32 @@ internal sealed partial class ModerationFoundationStore(
         Guid ownerUserId,
         CancellationToken cancellationToken = default)
     {
+        Guid assetId = await dbContext.AssetVersions.AsNoTracking().Where(v => v.Id == assetVersionId).Select(v => v.AssetId).FirstOrDefaultAsync(cancellationToken);
+        if (assetId == Guid.Empty)
+        { return null; }
+        await using Microsoft.EntityFrameworkCore.Storage.IDbContextTransaction? transaction = dbContext.Database.CurrentTransaction is null
+            ? await dbContext.Database.BeginTransactionAsync(cancellationToken) : null;
+        Asset? asset = await ShareReviewAsset(assetId, cancellationToken);
+        if (asset is null || asset.AuthorId != ownerUserId)
+        { return null; }
+        Guid workspaceId = await dbContext.AssetDraftWorkspaces.AsNoTracking().Where(w => w.AssetId == assetId && w.AssetVersionId == assetVersionId)
+            .Select(w => w.Id).FirstOrDefaultAsync(cancellationToken);
+        AssetDraftWorkspace? workspace = workspaceId == Guid.Empty ? null : await ShareReviewWorkspace(workspaceId, cancellationToken);
+        await dbContext.Database.SqlQuery<Guid>($"""
+            SELECT "Id" AS "Value" FROM moderation_submissions WHERE "Id" =
+                (SELECT "Id" FROM moderation_submissions WHERE "AssetVersionId" = {assetVersionId}
+                 ORDER BY "CreatedAt" DESC, "Id" DESC LIMIT 1) FOR SHARE
+            """).ToListAsync(cancellationToken);
+        UserPersistedRole? role = await ShareReviewRole(ownerUserId, cancellationToken);
+        SellerVersionReviewDto? result = await ReadOwnerVersionReview(assetVersionId, ownerUserId, workspace, CanActAsOwner(role), cancellationToken);
+        if (transaction is not null)
+        { await transaction.CommitAsync(cancellationToken); }
+        return result;
+    }
+
+    private async Task<SellerVersionReviewDto?> ReadOwnerVersionReview(Guid assetVersionId, Guid ownerUserId,
+        AssetDraftWorkspace? workspace, bool ownerRoleEligible, CancellationToken cancellationToken)
+    {
         var row = await dbContext.AssetVersions
             .AsNoTracking()
             .Where(v => v.Id == assetVersionId)
@@ -942,6 +968,30 @@ internal sealed partial class ModerationFoundationStore(
             })
             .FirstOrDefaultAsync(cancellationToken);
         ModerationSubmissionState moderationState = latest?.State ?? ModerationSubmissionState.DRAFT;
+        ModerationSubmission? latestSubmission = workspace is null ? null : await LatestSubmissionsForVersion(assetVersionId).FirstOrDefaultAsync(cancellationToken);
+        var canAppeal = workspace is not null && workspace.AssetVersionId == assetVersionId && workspace.WorkspaceVersionScopeKey == assetVersionId
+            && !row.DeletedAt.HasValue && ownerRoleEligible
+            && (await EvaluateAppealEligibility(row.AssetId, assetVersionId, workspace, latestSubmission, cancellationToken)).Reason is null;
+        ModerationSubmission? appealSubmission = latestSubmission?.Kind == ModerationSubmissionKind.APPEAL ? latestSubmission
+            : latestSubmission is null || latest?.Decision?.Outcome != ModerationSubmissionState.REJECTED ? null : await dbContext.ModerationSubmissions.AsNoTracking()
+                .Where(s => s.Kind == ModerationSubmissionKind.APPEAL && s.AppealOfDecision!.SubmissionId == latestSubmission.Id)
+                .FirstOrDefaultAsync(cancellationToken);
+        SellerAppealDto? appeal = null;
+        if (appealSubmission is not null)
+        {
+            DateTimeOffset? decidedAt = await dbContext.ModerationDecisionRecords.AsNoTracking().Where(d => d.SubmissionId == appealSubmission.Id)
+                .Select(d => (DateTimeOffset?)d.CreatedAt).SingleOrDefaultAsync(cancellationToken);
+            SellerAppealState? state = appealSubmission.State switch
+            {
+                ModerationSubmissionState.SUBMITTED or ModerationSubmissionState.IN_REVIEW => SellerAppealState.PENDING_REVIEW,
+                ModerationSubmissionState.REJECTED => SellerAppealState.UPHELD,
+                ModerationSubmissionState.APPROVED => SellerAppealState.APPROVED,
+                ModerationSubmissionState.WITHDRAWN => SellerAppealState.WITHDRAWN,
+                _ => null
+            };
+            if (state.HasValue)
+            { appeal = new(state.Value, appealSubmission.CreatedAt, decidedAt); }
+        }
         var newestDecision = latest?.Decision;
         SellerVersionDecisionDto? decision = newestDecision is null ? null : new SellerVersionDecisionDto(
             newestDecision.Outcome,
@@ -959,6 +1009,16 @@ internal sealed partial class ModerationFoundationStore(
         }
 
         blocked.Add(ErrorCodes.ERR_ANALYSIS_NOT_AVAILABLE);
+        if (workspace is not null)
+        {
+            AssetVersion? version = await dbContext.AssetVersions.AsNoTracking().SingleOrDefaultAsync(v => v.Id == assetVersionId, cancellationToken);
+            if (version is not null)
+            {
+                var rejection = await RejectedBasisBlock(version, workspace, version.SelectedCodeAnalysisReportId, cancellationToken);
+                if (rejection is not null)
+                { blocked.Add(rejection); }
+            }
+        }
         if (!declarationComplete)
         {
             blocked.Add(ErrorCodes.ERR_DECLARATION_INCOMPLETE);
@@ -977,7 +1037,7 @@ internal sealed partial class ModerationFoundationStore(
             !row.DeletedAt.HasValue,
             false,
             blocked,
-            Decision: decision);
+            Decision: decision, CanAppeal: canAppeal, Appeal: appeal);
     }
 
     public async Task<VersionAttachResult> AttachUploadedVersionToWorkspace(
@@ -1547,6 +1607,9 @@ internal sealed partial class ModerationFoundationStore(
         {
             return new(GuardedSubmissionStatus.BLOCKED, null, ErrorCodes.ERR_ANALYSIS_NOT_AVAILABLE);
         }
+        var rejectedBasis = await RejectedBasisBlock(version, workspace, request.CodeAnalysisReportHeaderId, ct);
+        if (rejectedBasis is not null)
+        { return new(GuardedSubmissionStatus.BLOCKED, null, rejectedBasis); }
         CodeAnalysisCoverageLevel? coverageLevel = await dbContext.CodeAnalysisReportHeaders.Where(h => h.Id == request.CodeAnalysisReportHeaderId).Select(h => h.CoverageLevel).SingleOrDefaultAsync(ct);
         CoverageOwnerStatus? coverage = coverageLevel == CodeAnalysisCoverageLevel.FULL ? null : await CoverageReviewState.ReadStatus(dbContext, version, workspace, ct);
         var reason = await ReviewSubmissionEligibility.BlockedReason(dbContext, version, workspace,

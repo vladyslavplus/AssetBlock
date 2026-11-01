@@ -157,7 +157,7 @@ public sealed partial class CodeAnalysisReportFinalizerPostgresTests
             """);
         (await duplicate.Should().ThrowAsync<Npgsql.PostgresException>()).Which.SqlState.Should().Be(Npgsql.PostgresErrorCodes.UniqueViolation);
         events.Select(e => e.Payload).Should().OnlyContain(p => !p.Contains("Private", StringComparison.OrdinalIgnoreCase) && !p.Contains("Original implementation", StringComparison.Ordinal));
-        OutboxMessage withdrawnEvent = events.Single(e => e.Id == ModerationEventIdentity.Event(submissionId, submission.CaseRevision + 1, NotificationKind.MODERATION_WITHDRAWN));
+        OutboxMessage withdrawnEvent = events.Single(e => e.Id == ModerationEventIdentity.Event(submissionId, submission.CaseRevision + 1, NotificationKind.MODERATION_WITHDRAWN, false));
         var handler = new ModerationLifecycleOutboxHandler(db, TimeProvider.System);
         await handler.Handle(withdrawnEvent, CancellationToken.None);
         await handler.Handle(withdrawnEvent, CancellationToken.None);
@@ -240,7 +240,7 @@ public sealed partial class CodeAnalysisReportFinalizerPostgresTests
         { await lifecycleHandler.Handle(lifecycle, CancellationToken.None); }
         OutboxMessage decided = await db.OutboxMessages.AsNoTracking().SingleAsync(m => m.Type == OutboxMessageTypes.MODERATION_DECISION);
         await new ModerationDecisionOutboxHandler(Substitute.For<IRealtimeNotificationPublisher>(), Substitute.For<ICacheService>(),
-            Substitute.For<IPublicationEmbeddingEnqueuer>()).Handle(decided, CancellationToken.None);
+            Substitute.For<IPublicationEmbeddingEnqueuer>(), new AssetStore(db)).Handle(decided, CancellationToken.None);
 
         CodeAnalysisReportFinding finding = await db.CodeAnalysisReportFindings.AsNoTracking().SingleAsync(f => f.Id == seed.Findings[0]);
         var durable = new List<string>();

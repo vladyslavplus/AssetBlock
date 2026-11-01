@@ -19,6 +19,26 @@ public sealed class PublicSurfaceVersionIntegrationTests(IntegrationTestFixture 
     private const string PENDING_TITLE = "Pending draft title sentinel";
     private const string ASSETS_BASE = "/" + ApiRoutes.Assets.BASE;
 
+    [Fact]
+    public async Task SellerReview_WhenCaseIsPending_ShouldSerializeSafeAppealFields()
+    {
+        (HttpClient owner, var ownerName) = await IntegrationTestAuth.RegisterVerifiedAndAuthenticateAsync(fixture.Factory);
+        (HttpClient stranger, _) = await IntegrationTestAuth.RegisterVerifiedAndAuthenticateAsync(fixture.Factory);
+        using (owner)
+        using (stranger)
+        {
+            Seeded seeded = await SeedApprovedWithPendingVersion(ownerName, ModerationSubmissionState.SUBMITTED, null);
+            var path = "/" + ApiRoutes.Users.BASE + "/" + ApiRoutes.Users.ME_ASSET_VERSION_REVIEW.Replace("{assetVersionId:guid}", seeded.PendingVersionId.ToString(), StringComparison.Ordinal);
+            using HttpResponseMessage response = await owner.GetAsync(new Uri(path, UriKind.Relative));
+            response.StatusCode.Should().Be(HttpStatusCode.OK);
+            using var body = System.Text.Json.JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+            body.RootElement.GetProperty("canAppeal").GetBoolean().Should().BeFalse();
+            body.RootElement.GetProperty("appeal").ValueKind.Should().Be(System.Text.Json.JsonValueKind.Null);
+            using HttpResponseMessage denied = await stranger.GetAsync(new Uri(path, UriKind.Relative));
+            denied.StatusCode.Should().Be(HttpStatusCode.NotFound);
+        }
+    }
+
     private sealed record Seeded(Guid AssetId, Guid ApprovedVersionId, Guid PendingVersionId, string ApprovedTitle, string Token);
 
     private async Task<Seeded> SeedApprovedWithPendingVersion(string ownerUsername, ModerationSubmissionState pendingState, string? moderatorUsername)

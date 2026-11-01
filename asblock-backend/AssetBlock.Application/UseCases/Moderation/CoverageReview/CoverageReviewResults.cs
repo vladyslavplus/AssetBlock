@@ -12,7 +12,7 @@ internal static class CoverageReviewResults
     public static Result<T> Map<T>(ReviewAccessResult<T> result, bool evidenceRead = false) => result.Status switch
     {
         ReviewAccessStatus.SUCCESS => Result.Success(result.Value!),
-        ReviewAccessStatus.FORBIDDEN => Result.Forbidden(ErrorCodes.ERR_FORBIDDEN),
+        ReviewAccessStatus.FORBIDDEN => Result.Forbidden(result.ReasonCode ?? ErrorCodes.ERR_FORBIDDEN),
         ReviewAccessStatus.NOT_FOUND => Result.NotFound(ErrorCodes.ERR_REVIEW_EVIDENCE_NOT_FOUND),
         ReviewAccessStatus.STALE or ReviewAccessStatus.CONFLICT => Result.Conflict(result.ReasonCode ?? ErrorCodes.ERR_COVERAGE_REVIEW_CONFLICT),
         ReviewAccessStatus.SECURITY_RESTRICTED => Result.Forbidden(ErrorCodes.ERR_EVIDENCE_SECURITY_RESTRICTED),

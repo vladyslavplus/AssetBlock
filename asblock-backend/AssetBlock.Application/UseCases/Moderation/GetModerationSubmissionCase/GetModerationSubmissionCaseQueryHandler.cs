@@ -28,6 +28,7 @@ internal sealed class GetModerationSubmissionCaseQueryHandler(
 
         return access.Status switch
         {
+            ModerationCaseAccessStatus.APPEAL_REVIEWER_EXCLUDED => Result.Forbidden(ErrorCodes.ERR_MODERATION_APPEAL_REVIEWER_EXCLUDED),
             ModerationCaseAccessStatus.DENIED_ROLE or ModerationCaseAccessStatus.SELF_OWNED_DENIED => Result.Forbidden(ErrorCodes.ERR_FORBIDDEN),
             ModerationCaseAccessStatus.SECURITY_RESTRICTED => Result.Forbidden(ErrorCodes.ERR_EVIDENCE_SECURITY_RESTRICTED),
             ModerationCaseAccessStatus.AUDIT_UNAVAILABLE => Result.Unavailable(ErrorCodes.ERR_EVIDENCE_AUDIT_UNAVAILABLE),

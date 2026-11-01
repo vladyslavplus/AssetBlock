@@ -9,6 +9,8 @@ import {
   sellerDraftSnapshotSchema,
   sellerAnalysisFindingSchema,
   sellerAnalysisSummarySchema,
+  sellerAppealSchema,
+  appealRequestSchema,
   sellerVersionDecisionSchema,
   sellerVersionReviewSchema,
   sourceDeclarationByteSize,
@@ -253,6 +255,46 @@ describe('sellerDeclarationSaveRequestSchema', () => {
 })
 
 describe('sellerVersionReviewSchema', () => {
+  it('rejects missing appeal fields and unknown appeal input', () => {
+    const body = {
+      workspaceId: '123e4567-e89b-12d3-a456-426614174000',
+      operationId: '123e4567-e89b-12d3-a456-426614174001',
+      expectedWorkspaceRevision: 1,
+      expectedCaseRevision: 1,
+      rationale: '  Please review  ',
+    }
+    expect(appealRequestSchema.parse(body).rationale).toBe('Please review')
+    expect(appealRequestSchema.safeParse({ ...body, expectedWorkspaceRevision: 0 }).success).toBe(
+      false,
+    )
+    expect(appealRequestSchema.safeParse({ ...body, expectedCaseRevision: 0 }).success).toBe(false)
+    expect(appealRequestSchema.safeParse({ ...body, unexpected: true }).success).toBe(false)
+    expect(appealRequestSchema.safeParse({ ...body, operationId: undefined }).success).toBe(false)
+  })
+  it('validates appeal state and timestamps without private details', () => {
+    expect(
+      sellerAppealSchema.safeParse({
+        state: 'PENDING_REVIEW',
+        requestedAt: '2026-10-31T10:00:00Z',
+        decidedAt: null,
+      }).success,
+    ).toBe(true)
+    expect(
+      sellerAppealSchema.safeParse({
+        state: 'UNKNOWN',
+        requestedAt: '2026-10-31T10:00:00Z',
+        decidedAt: null,
+      }).success,
+    ).toBe(false)
+    expect(
+      sellerAppealSchema.safeParse({
+        state: 'UPHELD',
+        requestedAt: '2026-10-31T10:00:00Z',
+        decidedAt: null,
+        reviewerId: 'private',
+      }).success,
+    ).toBe(false)
+  })
   it('accepts a review payload with blocked reasons', () => {
     const result = sellerVersionReviewSchema.safeParse({
       assetId: '123e4567-e89b-12d3-a456-426614174000',
@@ -267,6 +309,8 @@ describe('sellerVersionReviewSchema', () => {
       processingErrorSummary: null,
       analysis: 'ANALYSIS_NOT_AVAILABLE',
       moderationState: 'DRAFT',
+      canAppeal: false,
+      appeal: null,
       publicationEligible: false,
       canUpload: true,
       canSubmit: false,
@@ -290,12 +334,24 @@ describe('sellerVersionReviewSchema', () => {
       processingErrorSummary: null,
       analysis: 'ANALYSIS_AVAILABLE',
       moderationState: 'CHANGES_REQUESTED',
+      canAppeal: false,
+      appeal: null,
       publicationEligible: false,
       canUpload: true,
       canSubmit: true,
       blockedReasons: [],
     }
     expect(sellerVersionReviewSchema.safeParse(base).success).toBe(true)
+    expect(sellerVersionReviewSchema.safeParse({ ...base, canAppeal: undefined }).success).toBe(
+      false,
+    )
+    expect(
+      sellerVersionReviewSchema.safeParse({
+        ...base,
+        canAppeal: false,
+        appeal: { state: 'PENDING_REVIEW', requestedAt: '2026-10-31T10:00:00Z', decidedAt: null },
+      }).success,
+    ).toBe(true)
     expect(sellerVersionReviewSchema.safeParse({ ...base, decision: null }).success).toBe(true)
     expect(
       sellerVersionReviewSchema.safeParse({
@@ -348,6 +404,8 @@ describe('sellerVersionReviewSchema', () => {
       processingErrorSummary: null,
       analysis: 'ANALYSIS_AVAILABLE',
       moderationState: 'DRAFT',
+      canAppeal: false,
+      appeal: null,
       publicationEligible: false,
       canUpload: true,
       canSubmit: false,
@@ -403,6 +461,8 @@ describe('sellerVersionReviewSchema', () => {
       processingErrorSummary: null,
       analysis: 0,
       moderationState: 1,
+      canAppeal: false,
+      appeal: null,
       publicationEligible: false,
       canUpload: true,
       canSubmit: false,

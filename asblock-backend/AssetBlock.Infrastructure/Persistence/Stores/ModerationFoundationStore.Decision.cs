@@ -7,6 +7,7 @@ using AssetBlock.Domain.Core.Dto.Users;
 using AssetBlock.Domain.Core.Entities;
 using AssetBlock.Domain.Core.Enums;
 using AssetBlock.Domain.Core.Publication;
+using AssetBlock.Infrastructure.Outbox;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.ChangeTracking;
 using Microsoft.Extensions.Logging;
@@ -48,10 +49,14 @@ internal sealed partial class ModerationFoundationStore
                 }
                 else
                 { actorRole = await LockRoleAfterWorkspace(request.ActorId, ct); }
-                if (!AppRoles.CanReview(actorRole?.Role) || asset?.AuthorId == request.ActorId || submission?.OwnerUserId == request.ActorId)
+                if (!AppRoles.CanReview(actorRole?.Role))
                 { result = new(ModerationDecisionStatus.FORBIDDEN); return; }
                 if (asset is null || asset.DeletedAt.HasValue || workspace is null || submission is null)
                 { return; }
+                if (submission.Kind == ModerationSubmissionKind.APPEAL && await AppealReviewExclusions.ForSubmission(dbContext, submission.Id).ContainsAsync(request.ActorId, ct))
+                { result = new(ModerationDecisionStatus.FORBIDDEN, ReasonCode: ErrorCodes.ERR_MODERATION_APPEAL_REVIEWER_EXCLUDED); return; }
+                if (asset.AuthorId == request.ActorId || submission.OwnerUserId == request.ActorId)
+                { result = new(ModerationDecisionStatus.FORBIDDEN); return; }
                 Asset? trackedAsset = dbContext.Assets.Local.SingleOrDefault(a => a.Id == asset.Id);
                 if (trackedAsset is null)
                 { dbContext.Attach(asset); }
@@ -75,6 +80,8 @@ internal sealed partial class ModerationFoundationStore
                 { result = new(ModerationDecisionStatus.NOT_ACTIVE, ReasonCode: ErrorCodes.ERR_MODERATION_CASE_NOT_ACTIVE); return; }
                 if (submission.ClaimHolderId != request.ActorId)
                 { result = new(ModerationDecisionStatus.NOT_HOLDER); return; }
+                if (submission.Kind == ModerationSubmissionKind.APPEAL && request.Outcome == ModerationDecisionOutcome.REQUEST_CHANGES)
+                { result = new(ModerationDecisionStatus.BLOCKED, ReasonCode: ErrorCodes.ERR_MODERATION_APPEAL_DECISION_NOT_ALLOWED); return; }
                 DecisionBasis basis = request.Basis;
                 AssetVersion? version = await dbContext.AssetVersions.AsNoTracking().SingleOrDefaultAsync(v => v.Id == submission.AssetVersionId && v.AssetId == asset.Id, ct);
                 if (version is not null)
@@ -230,9 +237,9 @@ internal sealed partial class ModerationFoundationStore
                 });
                 dbContext.OutboxMessages.Add(new OutboxMessage
                 {
-                    Id = decisionId,
+                    Id = ModerationEventIdentity.Decision(decisionId, submission.Kind == ModerationSubmissionKind.APPEAL),
                     Type = OutboxMessageTypes.MODERATION_DECISION,
-                    Payload = JsonSerializer.Serialize(new { decisionId, submissionId = submission.Id, assetId = asset.Id, versionId = version.Id, recipientId = asset.AuthorId, revision = submission.CaseRevision, state = state.ToString(), promotion = promoted ? "PROMOTED" : "NOT_PROMOTED" }, CoverageReviewState.JsonOptions),
+                    Payload = JsonSerializer.Serialize(new { decisionId, submissionId = submission.Id, assetId = asset.Id, versionId = version.Id, revision = submission.CaseRevision, state = state.ToString(), promotion = promoted ? "PROMOTED" : "NOT_PROMOTED", isAppeal = submission.Kind == ModerationSubmissionKind.APPEAL }, CoverageReviewState.JsonOptions),
                     OccurredAt = now
                 });
                 await dbContext.SaveChangesAsync(ct);
