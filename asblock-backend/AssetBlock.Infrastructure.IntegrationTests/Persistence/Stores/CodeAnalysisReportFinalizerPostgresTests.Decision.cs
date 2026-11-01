@@ -64,6 +64,218 @@ public sealed partial class CodeAnalysisReportFinalizerPostgresTests
         after.Should().Be(1);
     }
 
+    [Theory]
+    [InlineData(ModerationDecisionOutcome.APPROVE, ModerationSubmissionState.APPROVED)]
+    [InlineData(ModerationDecisionOutcome.REQUEST_CHANGES, ModerationSubmissionState.CHANGES_REQUESTED)]
+    [InlineData(ModerationDecisionOutcome.REJECT, ModerationSubmissionState.REJECTED)]
+    public async Task Decision_WhenDecided_ShouldProjectOnlySafeDecisionToSellerJson(ModerationDecisionOutcome outcome, ModerationSubmissionState expectedState)
+    {
+        const string reasonMarker = "moderator reason marker";
+        const string dispositionMarker = "moderator disposition marker";
+        const string scoreMarker = "0.812345";
+        await using ApplicationDbContext db = await fixture.CreateCleanDbContext();
+        (ResponseReviewSeed seed, ModerationSubmission submission, User reviewer) = await SeedClaimedDecision(db);
+        await db.CodeAnalysisReportFindings.Where(f => f.Id == seed.Findings[0]).ExecuteUpdateAsync(s => s
+            .SetProperty(f => f.TokenRank, 1)
+            .SetProperty(f => f.TokenScore, 0.812345)
+            .SetProperty(f => f.SemanticRank, 1)
+            .SetProperty(f => f.SemanticScore, 0.456789));
+        ModerationDecisionRequest input = DecisionRequest(seed, submission, reviewer, outcome) with
+        {
+            Rationale = reasonMarker,
+            Dispositions = [new(seed.Findings[0], FindingDispositionType.EXPLAINED, dispositionMarker)]
+        };
+        (await CoverageStore(db).DecideModerationCase(input)).Status.Should().Be(ModerationDecisionStatus.SUCCEEDED);
+        Guid ownerId = seed.Source.Asset.AuthorId;
+        ModerationFoundationStore store = ResponseStore(db);
+
+        SellerVersionReviewDto? review = await store.GetOwnerVersionReview(submission.AssetVersionId, ownerId);
+        SellerResponsesPageDto? responses = await store.GetOwnerResponses(seed.Source.Asset.Id, submission.AssetVersionId, ownerId, 1);
+        SellerAnalysisFindingsPageDto? findings = await ResponseAnalysisStore(db).GetOwnerFindings(submission.AssetVersionId, seed.ReportId, ownerId, 1);
+
+        review.Should().NotBeNull();
+        review!.ModerationState.Should().Be(expectedState);
+        review.Decision.Should().NotBeNull();
+        review.Decision!.Outcome.Should().Be(expectedState);
+        if (outcome == ModerationDecisionOutcome.APPROVE)
+        {
+            review.Decision.Reason.Should().BeNull();
+            review.Decision.Publication.Should().Be(SellerDecisionPublication.PUBLISHED);
+        }
+        else
+        {
+            review.Decision.Reason.Should().Be(reasonMarker);
+            review.Decision.Publication.Should().BeNull();
+        }
+        responses.Should().NotBeNull();
+        findings.Should().NotBeNull();
+        foreach (var json in new[] { JsonSerializer.Serialize(review, new JsonSerializerOptions(JsonSerializerDefaults.Web)),
+            JsonSerializer.Serialize(responses, new JsonSerializerOptions(JsonSerializerDefaults.Web)),
+            JsonSerializer.Serialize(findings, new JsonSerializerOptions(JsonSerializerDefaults.Web)) })
+        {
+            json.Should().NotContain(dispositionMarker);
+            json.Should().NotContain(scoreMarker);
+            json.Should().NotContain("0.456789");
+            json.Should().NotContain(reviewer.Id.ToString());
+            foreach (var field in new[] { "tokenRank", "tokenScore", "semanticRank", "semanticScore", "foreignSourceId",
+                "dispositions", "manualPlanCompletionReference", "decisionId", "moderatorUserId", "claimHolderId", "coverageReason" })
+            {
+                json.Should().NotContain("\"" + field + "\":");
+            }
+        }
+        var reviewJson = JsonSerializer.Serialize(review, new JsonSerializerOptions(JsonSerializerDefaults.Web));
+        reviewJson.Contains(reasonMarker, StringComparison.Ordinal).Should().Be(outcome != ModerationDecisionOutcome.APPROVE);
+    }
+
+    [Fact]
+    public async Task Decision_WhenNoDecisionExists_ShouldProjectNoDecision()
+    {
+        await using ApplicationDbContext db = await fixture.CreateCleanDbContext();
+        (ResponseReviewSeed seed, ModerationSubmission submission, _) = await SeedClaimedDecision(db);
+        SellerVersionReviewDto? review = await ResponseStore(db).GetOwnerVersionReview(submission.AssetVersionId, seed.Source.Asset.AuthorId);
+        review.Should().NotBeNull();
+        review!.Decision.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task Decision_WhenNewerDecisionExists_ShouldProjectOnlyTheNewestDecision()
+    {
+        const string olderReasonMarker = "older superseded reason marker";
+        await using ApplicationDbContext db = await fixture.CreateCleanDbContext();
+        (ResponseReviewSeed seed, ModerationSubmission submission, User reviewer) = await SeedClaimedDecision(db);
+        (await CoverageStore(db).DecideModerationCase(DecisionRequest(seed, submission, reviewer, ModerationDecisionOutcome.APPROVE)))
+            .Status.Should().Be(ModerationDecisionStatus.SUCCEEDED);
+        var older = new ModerationSubmission
+        {
+            Id = Guid.NewGuid(),
+            AssetId = submission.AssetId,
+            AssetVersionId = submission.AssetVersionId,
+            WorkspaceId = submission.WorkspaceId,
+            WorkspaceVersionScopeKey = submission.WorkspaceVersionScopeKey,
+            OwnerUserId = submission.OwnerUserId,
+            ContentSha256 = submission.ContentSha256,
+            DeclarationRevision = 1,
+            MaterialMetadataRevision = 1,
+            SellerEvidenceRevision = 0,
+            SellerEvidenceDigest = new string('f', 64),
+            PolicyVersion = submission.PolicyVersion,
+            State = ModerationSubmissionState.SUPERSEDED,
+            CaseRevision = 1,
+            CreatedAt = DateTimeOffset.UtcNow.AddDays(-2)
+        };
+        db.ModerationSubmissions.Add(older);
+        db.ModerationDecisionRecords.Add(new ModerationDecisionRecord
+        {
+            Id = Guid.NewGuid(),
+            SubmissionId = older.Id,
+            AssetId = submission.AssetId,
+            AssetVersionId = submission.AssetVersionId,
+            ModeratorUserId = reviewer.Id,
+            Outcome = ModerationSubmissionState.REJECTED,
+            CaseRevision = 1,
+            Message = olderReasonMarker,
+            CreatedAt = DateTimeOffset.UtcNow.AddDays(-1)
+        });
+        await db.SaveChangesAsync();
+
+        SellerVersionReviewDto? review = await ResponseStore(db).GetOwnerVersionReview(submission.AssetVersionId, seed.Source.Asset.AuthorId);
+        review.Should().NotBeNull();
+        review!.Decision.Should().NotBeNull();
+        review.Decision!.Outcome.Should().Be(ModerationSubmissionState.APPROVED);
+        review.Decision.Reason.Should().BeNull();
+        JsonSerializer.Serialize(review, new JsonSerializerOptions(JsonSerializerDefaults.Web)).Should().NotContain(olderReasonMarker);
+    }
+
+    [Theory]
+    [InlineData(ModerationSubmissionState.SUBMITTED, false)]
+    [InlineData(ModerationSubmissionState.WITHDRAWN, false)]
+    [InlineData(ModerationSubmissionState.SUPERSEDED, false)]
+    [InlineData(ModerationSubmissionState.SUBMITTED, true)]
+    public async Task Decision_WhenResubmittedAfterChangesRequested_ShouldHideOlderDecisionUntilNewestCaseDecides(ModerationSubmissionState newState, bool sameCreatedAt)
+    {
+        await using ApplicationDbContext db = await fixture.CreateCleanDbContext();
+        (ResponseReviewSeed seed, ModerationSubmission submission, User reviewer) = await SeedClaimedDecision(db);
+        (await CoverageStore(db).DecideModerationCase(DecisionRequest(seed, submission, reviewer, ModerationDecisionOutcome.REQUEST_CHANGES)))
+            .Status.Should().Be(ModerationDecisionStatus.SUCCEEDED);
+        db.ModerationSubmissions.Add(new ModerationSubmission
+        {
+            Id = Guid.Parse("ffffffff-ffff-ffff-ffff-ffffffffffff"),
+            AssetId = submission.AssetId,
+            AssetVersionId = submission.AssetVersionId,
+            WorkspaceId = submission.WorkspaceId,
+            WorkspaceVersionScopeKey = submission.WorkspaceVersionScopeKey,
+            OwnerUserId = submission.OwnerUserId,
+            ContentSha256 = submission.ContentSha256,
+            CodeAnalysisReportHeaderId = submission.CodeAnalysisReportHeaderId,
+            DeclarationRevision = submission.DeclarationRevision,
+            MaterialMetadataRevision = submission.MaterialMetadataRevision,
+            SellerEvidenceRevision = submission.SellerEvidenceRevision + 1,
+            SellerEvidenceDigest = new string('f', 64),
+            PolicyVersion = submission.PolicyVersion,
+            State = newState,
+            CaseRevision = 1,
+            PreviousSubmissionId = submission.Id,
+            CreatedAt = sameCreatedAt ? submission.CreatedAt : DateTimeOffset.UtcNow.AddSeconds(5)
+        });
+        await db.SaveChangesAsync();
+
+        SellerVersionReviewDto? review = await ResponseStore(db).GetOwnerVersionReview(submission.AssetVersionId, seed.Source.Asset.AuthorId);
+        review.Should().NotBeNull();
+        review!.ModerationState.Should().Be(newState);
+        review.Decision.Should().BeNull();
+        var json = JsonSerializer.Serialize(review, new JsonSerializerOptions(JsonSerializerDefaults.Web));
+        json.Should().NotContain(reviewer.Id.ToString()).And.NotContain("Disposition rationale").And.NotContain("Decision rationale");
+        json.Should().NotContain("\"claimHolderId\"").And.NotContain("\"dispositions\"").And.NotContain("\"tokenScore\"");
+    }
+
+    [Fact]
+    public async Task Decision_WhenApprovedAssetIsSoftDeleted_ShouldProjectHistoricalPublication()
+    {
+        await using ApplicationDbContext db = await fixture.CreateCleanDbContext();
+        (ResponseReviewSeed seed, ModerationSubmission submission, User reviewer) = await SeedClaimedDecision(db);
+        (await CoverageStore(db).DecideModerationCase(DecisionRequest(seed, submission, reviewer, ModerationDecisionOutcome.APPROVE)))
+            .Status.Should().Be(ModerationDecisionStatus.SUCCEEDED);
+        SellerVersionReviewDto? published = await ResponseStore(db).GetOwnerVersionReview(submission.AssetVersionId, seed.Source.Asset.AuthorId);
+        published!.Decision!.Publication.Should().Be(SellerDecisionPublication.PUBLISHED);
+
+        await db.Assets.Where(a => a.Id == submission.AssetId).ExecuteUpdateAsync(s => s.SetProperty(a => a.DeletedAt, DateTimeOffset.UtcNow));
+        SellerVersionReviewDto? deleted = await ResponseStore(db).GetOwnerVersionReview(submission.AssetVersionId, seed.Source.Asset.AuthorId);
+        deleted!.Decision!.Outcome.Should().Be(ModerationSubmissionState.APPROVED);
+        deleted.Decision.Publication.Should().Be(SellerDecisionPublication.HISTORICAL);
+    }
+    [Fact]
+    public async Task Decision_WhenApprovalNoLongerHoldsPointer_ShouldProjectHistoricalPublication()
+    {
+        await using ApplicationDbContext db = await fixture.CreateCleanDbContext();
+        (ResponseReviewSeed seed, ModerationSubmission submission, User reviewer) = await SeedClaimedDecision(db);
+        (await CoverageStore(db).DecideModerationCase(DecisionRequest(seed, submission, reviewer, ModerationDecisionOutcome.APPROVE)))
+            .Status.Should().Be(ModerationDecisionStatus.SUCCEEDED);
+        await db.Assets.Where(a => a.Id == submission.AssetId).ExecuteUpdateAsync(s => s.SetProperty(a => a.CurrentPublicationSnapshotId, (Guid?)null));
+        SellerVersionReviewDto? review = await ResponseStore(db).GetOwnerVersionReview(submission.AssetVersionId, seed.Source.Asset.AuthorId);
+        review!.Decision!.Publication.Should().Be(SellerDecisionPublication.HISTORICAL);
+        review.PublicationEligible.Should().BeFalse();
+    }
+
+    [Theory]
+    [InlineData(AssetVersionSafetyRestriction.UNSAFE_ARCHIVE)]
+    [InlineData(AssetVersionSafetyRestriction.INFECTED)]
+    [InlineData(AssetVersionSafetyRestriction.INTEGRITY_MISMATCH)]
+    public async Task Decision_WhenApprovedVersionIsRestricted_ShouldProjectHistoricalPublication(AssetVersionSafetyRestriction restriction)
+    {
+        await using ApplicationDbContext db = await fixture.CreateCleanDbContext();
+        (ResponseReviewSeed seed, ModerationSubmission submission, User reviewer) = await SeedClaimedDecision(db);
+        (await CoverageStore(db).DecideModerationCase(DecisionRequest(seed, submission, reviewer, ModerationDecisionOutcome.APPROVE)))
+            .Status.Should().Be(ModerationDecisionStatus.SUCCEEDED);
+        await db.AssetVersions.Where(v => v.Id == submission.AssetVersionId).ExecuteUpdateAsync(s => s.SetProperty(v => v.SafetyRestriction, restriction)
+            .SetProperty(v => v.SafetyRestrictionReason, "test restriction").SetProperty(v => v.SafetyRestrictedAt, DateTimeOffset.UtcNow));
+        SellerVersionReviewDto? review = await ResponseStore(db).GetOwnerVersionReview(submission.AssetVersionId, seed.Source.Asset.AuthorId);
+        review!.Decision!.Publication.Should().Be(SellerDecisionPublication.HISTORICAL);
+        review.PublicationEligible.Should().BeFalse();
+        var json = JsonSerializer.Serialize(review, new JsonSerializerOptions(JsonSerializerDefaults.Web));
+        json.Should().NotContain(reviewer.Id.ToString()).And.NotContain("Decision rationale").And.NotContain("Disposition rationale");
+        json.Should().NotContain("\"claimHolderId\"").And.NotContain("\"dispositions\"").And.NotContain("\"tokenScore\"");
+    }
+
     private sealed class FailDecisionOutbox : SaveChangesInterceptor
     {
         public bool Enabled { get; set; }
@@ -96,6 +308,22 @@ public sealed partial class CodeAnalysisReportFinalizerPostgresTests
         new(reviewer.Id, submission.Id, Guid.NewGuid(), new(submission.AssetVersionId, submission.ContentSha256, submission.CodeAnalysisReportHeaderId!.Value,
             submission.DeclarationRevision, submission.MaterialMetadataRevision, submission.PolicyVersion, submission.SellerEvidenceRevision, submission.CaseRevision),
             outcome, "Decision rationale", [new(seed.Findings[0], disposition, "Disposition rationale")], null, new string('d', 64));
+
+    [Fact]
+    public async Task Decision_WhenSellerResponsesAreOutstanding_ShouldReturnModeratorReasonWithoutEffects()
+    {
+        await using ApplicationDbContext db = await fixture.CreateCleanDbContext();
+        (ResponseReviewSeed seed, ModerationSubmission submission, User reviewer) = await SeedClaimedDecision(db);
+        await db.Database.ExecuteSqlInterpolatedAsync($"""
+            UPDATE asset_seller_evidence_revisions SET "PayloadJson" = jsonb_set("PayloadJson", ARRAY['responseIds'], '[]'::jsonb)
+            WHERE "WorkspaceId" = {submission.WorkspaceId} AND "Revision" = {submission.SellerEvidenceRevision}
+            """);
+        ModerationDecisionResult result = await CoverageStore(db).DecideModerationCase(DecisionRequest(seed, submission, reviewer, ModerationDecisionOutcome.APPROVE));
+        result.Status.Should().Be(ModerationDecisionStatus.BLOCKED);
+        result.ReasonCode.Should().Be(ErrorCodes.ERR_MODERATION_DECISION_RESPONSES_OUTSTANDING);
+        (await db.ModerationDecisionRecords.AnyAsync()).Should().BeFalse();
+        (await db.PublicationSnapshots.AnyAsync()).Should().BeFalse();
+    }
 
     [Theory]
     [InlineData(FindingDispositionType.CHANGES_NEEDED)]

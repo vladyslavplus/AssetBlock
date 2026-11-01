@@ -274,6 +274,14 @@ export const sellerAnalysisRetryAcceptedSchema = z.object({
 export type SellerAnalysisRetryRequest = z.infer<typeof sellerAnalysisRetryRequestSchema>
 export type SellerAnalysisRetryAccepted = z.infer<typeof sellerAnalysisRetryAcceptedSchema>
 
+export const sellerVersionDecisionSchema = z.object({
+  outcome: z.enum(['APPROVED', 'CHANGES_REQUESTED', 'REJECTED']),
+  reason: z.string().min(1).max(2000).nullable(),
+  decidedAt: z.iso.datetime({ offset: true }),
+  publication: z.enum(['PUBLISHED', 'HISTORICAL']).nullable(),
+})
+export type SellerVersionDecision = z.infer<typeof sellerVersionDecisionSchema>
+
 export const sellerVersionReviewSchema = z.object({
   coverageReview: coverageOwnerStatusSchema.nullable(),
   requiredResponseCount: z.number().int().nonnegative(),
@@ -292,6 +300,7 @@ export const sellerVersionReviewSchema = z.object({
   canSubmit: z.boolean(),
   blockedReasons: z.array(z.string()),
   analysisDetails: sellerAnalysisSummarySchema.nullable().optional(),
+  decision: sellerVersionDecisionSchema.nullable().optional(),
 })
 export type SellerVersionReview = z.infer<typeof sellerVersionReviewSchema>
 

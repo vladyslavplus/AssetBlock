@@ -897,6 +897,7 @@ internal sealed partial class ModerationFoundationStore(
                 v.AssetId,
                 v.VersionNumber,
                 v.ProcessingStatus,
+                v.SafetyRestriction,
                 v.ProcessingErrorCode,
                 v.ProcessingErrorSummary,
                 v.Asset.AuthorId,
@@ -910,13 +911,13 @@ internal sealed partial class ModerationFoundationStore(
             return null;
         }
 
-        ModerationSubmissionState moderationState = await GetEffectiveModerationState(assetVersionId, cancellationToken);
         var declarationComplete = await IsVersionDeclarationComplete(row.AssetId, assetVersionId, cancellationToken);
 
         // Established publication predicate: the version must be the asset's current public
         // offering, backed by a trusted approved snapshot, READY bytes, and a matching hash.
         var publicationEligible = row.DeletedAt is null
             && row.ProcessingStatus == AssetVersionProcessingStatus.READY
+            && row.SafetyRestriction == AssetVersionSafetyRestriction.NONE
             && row.CurrentPublicationSnapshotId is { } currentSnapshotId
             && await PublicationEligibilityQuery.TrustedApprovedSnapshots(dbContext)
                 .AnyAsync(
@@ -928,6 +929,28 @@ internal sealed partial class ModerationFoundationStore(
                             && v.ContentSha256 == s.ContentSha256
                             && v.ProcessingStatus == AssetVersionProcessingStatus.READY),
                     cancellationToken);
+
+        // Select state and decision from the same latest submission to keep the seller projection consistent.
+        var latest = await LatestSubmissionsForVersion(assetVersionId)
+            .Select(s => new
+            {
+                s.State,
+                Decision = dbContext.ModerationDecisionRecords.AsNoTracking()
+                    .Where(d => d.SubmissionId == s.Id && d.Submission.AssetVersionId == assetVersionId)
+                    .Select(d => new { d.Outcome, d.Message, d.CreatedAt, d.PublicationSnapshotId })
+                    .SingleOrDefault()
+            })
+            .FirstOrDefaultAsync(cancellationToken);
+        ModerationSubmissionState moderationState = latest?.State ?? ModerationSubmissionState.DRAFT;
+        var newestDecision = latest?.Decision;
+        SellerVersionDecisionDto? decision = newestDecision is null ? null : new SellerVersionDecisionDto(
+            newestDecision.Outcome,
+            newestDecision.Outcome == ModerationSubmissionState.APPROVED ? null : newestDecision.Message,
+            newestDecision.CreatedAt,
+            newestDecision.Outcome != ModerationSubmissionState.APPROVED ? null
+                : publicationEligible && newestDecision.PublicationSnapshotId is { } decisionSnapshotId && decisionSnapshotId == row.CurrentPublicationSnapshotId
+                    ? SellerDecisionPublication.PUBLISHED
+                    : SellerDecisionPublication.HISTORICAL);
 
         var blocked = new List<string>();
         if (row.ProcessingStatus != AssetVersionProcessingStatus.READY)
@@ -953,7 +976,8 @@ internal sealed partial class ModerationFoundationStore(
             publicationEligible,
             !row.DeletedAt.HasValue,
             false,
-            blocked);
+            blocked,
+            Decision: decision);
     }
 
     public async Task<VersionAttachResult> AttachUploadedVersionToWorkspace(
@@ -1286,20 +1310,10 @@ internal sealed partial class ModerationFoundationStore(
         }
     }
 
-    private async Task<ModerationSubmissionState> GetEffectiveModerationState(Guid assetVersionId, CancellationToken cancellationToken)
-    {
-        // The latest applicable case determines the state; terminal outcomes (APPROVED,
-        // REJECTED, CHANGES_REQUESTED, WITHDRAWN, SUPERSEDED) must not be flattened back to DRAFT.
-        ModerationSubmissionState? state = await dbContext.ModerationSubmissions
-            .AsNoTracking()
-            .Where(s => s.AssetVersionId == assetVersionId)
-            .OrderByDescending(s => s.CaseRevision)
-            .ThenByDescending(s => s.CreatedAt)
-            .Select(s => (ModerationSubmissionState?)s.State)
-            .FirstOrDefaultAsync(cancellationToken);
-
-        return state ?? ModerationSubmissionState.DRAFT;
-    }
+    // CaseRevision is local to a case; only creation time and identity order distinct submissions.
+    private IOrderedQueryable<ModerationSubmission> LatestSubmissionsForVersion(Guid assetVersionId) =>
+        dbContext.ModerationSubmissions.AsNoTracking().Where(s => s.AssetVersionId == assetVersionId)
+            .OrderByDescending(s => s.CreatedAt).ThenByDescending(s => s.Id);
 
     private async Task<bool> IsVersionDeclarationComplete(Guid assetId, Guid assetVersionId, CancellationToken cancellationToken)
     {
@@ -1542,8 +1556,7 @@ internal sealed partial class ModerationFoundationStore(
             return new(GuardedSubmissionStatus.BLOCKED, null, reason);
         }
         DateTimeOffset now = _timeProvider.GetUtcNow();
-        Guid? previous = await dbContext.ModerationSubmissions.AsNoTracking().Where(s => s.AssetVersionId == version.Id)
-            .OrderByDescending(s => s.CreatedAt).ThenByDescending(s => s.Id).Select(s => (Guid?)s.Id).FirstOrDefaultAsync(ct);
+        Guid? previous = await LatestSubmissionsForVersion(version.Id).Select(s => (Guid?)s.Id).FirstOrDefaultAsync(ct);
         var evidenceDigest = workspace.SellerEvidenceHeadRevision == 0
             ? ProductDigests.EmptyProjectionDigest(nameof(AssetSellerEvidenceRevision))
             : await dbContext.AssetSellerEvidenceRevisions.Where(r => r.WorkspaceId == workspace.Id

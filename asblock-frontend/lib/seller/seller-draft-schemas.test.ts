@@ -9,6 +9,7 @@ import {
   sellerDraftSnapshotSchema,
   sellerAnalysisFindingSchema,
   sellerAnalysisSummarySchema,
+  sellerVersionDecisionSchema,
   sellerVersionReviewSchema,
   sourceDeclarationByteSize,
   sourceDeclarationPayloadSchema,
@@ -275,6 +276,64 @@ describe('sellerVersionReviewSchema', () => {
     expect(result.success).toBe(true)
   })
 
+  it('accepts a review payload with and without a seller decision projection', () => {
+    const base = {
+      assetId: '123e4567-e89b-12d3-a456-426614174000',
+      coverageReview: null,
+      requiredResponseCount: 0,
+      outstandingResponseCount: 0,
+      evidenceRevision: 0,
+      assetVersionId: '123e4567-e89b-12d3-a456-426614174001',
+      versionNumber: 1,
+      processingStatus: 'READY',
+      processingErrorCode: null,
+      processingErrorSummary: null,
+      analysis: 'ANALYSIS_AVAILABLE',
+      moderationState: 'CHANGES_REQUESTED',
+      publicationEligible: false,
+      canUpload: true,
+      canSubmit: true,
+      blockedReasons: [],
+    }
+    expect(sellerVersionReviewSchema.safeParse(base).success).toBe(true)
+    expect(sellerVersionReviewSchema.safeParse({ ...base, decision: null }).success).toBe(true)
+    expect(
+      sellerVersionReviewSchema.safeParse({
+        ...base,
+        decision: {
+          outcome: 'CHANGES_REQUESTED',
+          reason: 'Explain the similar block.',
+          decidedAt: '2026-10-31T10:00:00+02:00',
+          publication: null,
+        },
+      }).success,
+    ).toBe(true)
+  })
+
+  it('accepts each decision outcome and rejects unknown outcomes or publication values', () => {
+    const decision = { reason: null, decidedAt: '2026-10-31T10:00:00Z', publication: 'PUBLISHED' }
+    expect(
+      sellerVersionDecisionSchema.safeParse({ ...decision, outcome: 'APPROVED' }).success,
+    ).toBe(true)
+    expect(
+      sellerVersionDecisionSchema.safeParse({
+        ...decision,
+        outcome: 'REJECTED',
+        reason: 'Reason',
+        publication: null,
+      }).success,
+    ).toBe(true)
+    expect(sellerVersionDecisionSchema.safeParse({ ...decision, outcome: 'PENDING' }).success).toBe(
+      false,
+    )
+    expect(
+      sellerVersionDecisionSchema.safeParse({
+        ...decision,
+        outcome: 'APPROVED',
+        publication: 'LIVE',
+      }).success,
+    ).toBe(false)
+  })
   it('accepts analysis timestamps with backend UTC offsets', () => {
     const result = sellerVersionReviewSchema.safeParse({
       assetId: '123e4567-e89b-12d3-a456-426614174000',

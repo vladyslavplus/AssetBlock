@@ -127,7 +127,7 @@ internal sealed partial class ModerationFoundationStore
                 if (!requirements.Available)
                 { result = new(ModerationDecisionStatus.BLOCKED, ReasonCode: ErrorCodes.ERR_ANALYSIS_NOT_AVAILABLE); return; }
                 if (requirements.Outstanding > 0)
-                { result = new(ModerationDecisionStatus.BLOCKED, ReasonCode: ErrorCodes.ERR_FINDING_RESPONSE_REQUIRED); return; }
+                { result = new(ModerationDecisionStatus.BLOCKED, ReasonCode: ErrorCodes.ERR_MODERATION_DECISION_RESPONSES_OUTSTANDING); return; }
                 if (dispositionIds.Distinct().Count() != dispositionIds.Length || requirements.Required.Any(id => !dispositionIds.Contains(id)))
                 { result = new(ModerationDecisionStatus.BLOCKED, ReasonCode: ErrorCodes.ERR_MODERATION_DISPOSITIONS_INVALID); return; }
                 if (request.Outcome == ModerationDecisionOutcome.APPROVE && request.Dispositions.Any(d => requirements.Required.Contains(d.FindingId)

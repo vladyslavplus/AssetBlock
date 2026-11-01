@@ -28,6 +28,7 @@ public static class ApiRoutes
 
     public static class Assets
     {
+        public const string BASE = "api/assets";
         public const string LIST = "";
         public const string UPLOAD = "upload";
         public const string ID = "{id:guid}";
@@ -107,6 +108,7 @@ public static class ApiRoutes
 
     public static class Users
     {
+        public const string BASE = "api/users";
         public const string SOCIAL_PLATFORMS = "social-platforms";
         public const string PROFILE = "{username}";
         public const string ME = "me";
@@ -164,6 +166,7 @@ public static class ApiRoutes
         public const string QUEUE = "api/moderation/submissions";
         public const string CLAIM = "api/moderation/submissions/{id:guid}/claim";
         public const string RELEASE = "api/moderation/submissions/{id:guid}/release";
+        public const string DECISION = "api/moderation/submissions/{id:guid}/decision";
         public const string CASE_EVIDENCE = "/api/moderation/submissions/{id:guid}/evidence/{kind}";
         public const string COVERAGE_REQUESTS = "/api/moderation/coverage-reviews";
         public const string COVERAGE_EVIDENCE = "/api/moderation/coverage-reviews/{id:guid}/evidence/{kind}";
