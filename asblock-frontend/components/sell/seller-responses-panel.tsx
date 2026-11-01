@@ -23,6 +23,8 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { sellerKeys } from '@/lib/seller/seller-query'
+import { notificationsKeys } from '@/lib/notifications/notifications-query'
+import { versionReviewActionMessage } from '@/lib/seller/version-review-status'
 import {
   SELLER_RESPONSE_TEXT_MAX,
   sellerResponseFormSchema,
@@ -58,28 +60,60 @@ export function SellerResponsesPanel({ assetId, versionId, reportId, findings, c
     await Promise.all([
       client.invalidateQueries({ queryKey: sellerKeys.responses(assetId, versionId) }),
       client.invalidateQueries({ queryKey: sellerKeys.versionReview(assetId, versionId) }),
+      client.invalidateQueries({ queryKey: sellerKeys.versions(assetId) }),
       client.invalidateQueries({
         queryKey: sellerKeys.analysisFindingsForVersion(assetId, versionId),
       }),
+      client.invalidateQueries({ queryKey: notificationsKeys.all }),
     ])
   }
-  const submitBody = useRef<Parameters<typeof submitSellerAssetVersion>[2] | null>(null)
+  const submitBody = useRef<{
+    key: string
+    body: Parameters<typeof submitSellerAssetVersion>[2]
+  } | null>(null)
+  const submitInFlight = useRef(false)
+  const submitRetryPending = useRef(false)
   const submit = useMutation({
-    mutationFn: () => {
+    mutationFn: async () => {
       if (!query.data) throw new Error('Refresh evidence before submitting.')
-      submitBody.current ??= {
-        workspaceId: query.data.workspaceId,
-        expectedWorkspaceRevision: query.data.workspaceRevision,
-        expectedCaseRevision: query.data.caseRevision,
-        operationId: crypto.randomUUID(),
+      const latest = await query.refetch()
+      if (latest.isError || !latest.data) throw new Error('Could not refresh review revisions.')
+      const current = latest.data
+      const key = JSON.stringify({
+        workspaceId: current.workspaceId,
+        workspaceRevision: current.workspaceRevision,
+        caseRevision: current.caseRevision,
+      })
+      const retryingUncertain = submitRetryPending.current
+      if (!submitBody.current || (!retryingUncertain && submitBody.current.key !== key)) {
+        submitBody.current = {
+          key,
+          body: {
+            workspaceId: current.workspaceId,
+            expectedWorkspaceRevision: current.workspaceRevision,
+            expectedCaseRevision: current.caseRevision,
+            operationId: crypto.randomUUID(),
+          },
+        }
       }
-      return submitSellerAssetVersion(assetId, versionId, submitBody.current)
+      return submitSellerAssetVersion(assetId, versionId, submitBody.current.body)
     },
     onSuccess: async (result) => {
-      if (result.ok || !result.retryable) submitBody.current = null
+      submitRetryPending.current = !result.ok && Boolean(result.retryable)
+      if (!submitRetryPending.current) submitBody.current = null
       if (result.ok) toast.success('Submitted for human review.')
-      else toast.error(result.message)
+      else {
+        const code = result.blockedReasons?.[0]
+        toast.error(code ? versionReviewActionMessage(code) : result.message)
+      }
       await refresh()
+    },
+    onError: async () => {
+      submitRetryPending.current = true
+      await refresh()
+    },
+    onSettled: () => {
+      submitInFlight.current = false
     },
   })
   if (query.isPending) return <p role="status">Loading review responses...</p>
@@ -94,6 +128,12 @@ export function SellerResponsesPanel({ assetId, versionId, reportId, findings, c
     )
   if (query.data.reportId !== reportId)
     return <p role="status">The selected report changed. Refresh version checks.</p>
+  const responseRequired = query.data.outstandingCount > 0
+  const submitForReview = () => {
+    if (submitInFlight.current || responseRequired) return
+    submitInFlight.current = true
+    submit.mutate()
+  }
   return (
     <section className="space-y-3 border-t pt-3" aria-label="Review responses">
       <p>
@@ -149,19 +189,33 @@ export function SellerResponsesPanel({ assetId, versionId, reportId, findings, c
           Next responses
         </Button>
       </details>
-      {canSubmit || submit.isError || (submit.data && !submit.data.ok && submit.data.retryable) ? (
+      {canSubmit ||
+      responseRequired ||
+      submit.isError ||
+      (submit.data && !submit.data.ok && submit.data.retryable) ? (
         <Button
           type="button"
           className="rounded border px-3 py-2"
-          disabled={submit.isPending}
-          onClick={() => submit.mutate()}
+          disabled={submit.isPending || responseRequired}
+          onClick={submitForReview}
         >
-          {submit.isPending ? 'Submitting...' : 'Submit for review'}
+          {submit.isPending
+            ? 'Submitting...'
+            : submit.isError || (submit.data && !submit.data.ok && submit.data.retryable)
+              ? 'Retry submit for review'
+              : 'Submit for review'}
         </Button>
+      ) : null}
+      {responseRequired ? (
+        <p role="status">{versionReviewActionMessage('ERR_FINDING_RESPONSE_REQUIRED')}</p>
       ) : null}
       {submit.data ? (
         <p role={submit.data.ok ? 'status' : 'alert'}>
-          {submit.data.ok ? 'Submitted for human review.' : submit.data.message}
+          {submit.data.ok
+            ? 'Submitted for human review.'
+            : submit.data.blockedReasons?.[0]
+              ? versionReviewActionMessage(submit.data.blockedReasons[0])
+              : submit.data.message}
         </p>
       ) : null}
       {submit.isError ? (
@@ -249,6 +303,7 @@ function EvidenceForm({
     >
       <p className="font-medium">
         {label}
+        {finding?.responseRequired ? ' - Required response' : ''}
         {finding?.hasResponse ? ' - Answer recorded' : ''}
       </p>
       {finding ? (

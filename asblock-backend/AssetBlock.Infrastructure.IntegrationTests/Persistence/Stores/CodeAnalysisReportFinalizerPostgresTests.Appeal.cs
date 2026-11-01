@@ -98,14 +98,27 @@ public sealed partial class CodeAnalysisReportFinalizerPostgresTests
         SellerVersionReviewDto? before = await store.GetOwnerVersionReview(submission.AssetVersionId, submission.OwnerUserId);
         before!.CanAppeal.Should().BeTrue();
         before.Appeal.Should().BeNull();
+        before.ActiveSubmission.Should().BeNull();
+        before.History.Should().ContainSingle(entry => entry.SubmissionId == submission.Id
+            && entry.Kind == ModerationSubmissionKind.STANDARD
+            && entry.DecisionOutcome == ModerationSubmissionState.REJECTED
+            && entry.DecisionReason == DecisionRequest(seed, submission, reviewer, ModerationDecisionOutcome.REJECT).Rationale);
         AssetDraftWorkspace workspace = await db.AssetDraftWorkspaces.AsNoTracking().SingleAsync(w => w.Id == submission.WorkspaceId);
         var request = new AppealCreateRequest(submission.OwnerUserId, submission.AssetId, submission.AssetVersionId, workspace.Id,
             workspace.WorkspaceRevision, workspace.CaseRevision, Guid.NewGuid(), "Review again.", new string('a', 64));
-        (await store.RequestAppeal(request)).Status.Should().Be(GuardedSubmissionStatus.CREATED);
+        GuardedSubmissionResult created = await store.RequestAppeal(request);
+        created.Status.Should().Be(GuardedSubmissionStatus.CREATED);
+        ModerationSubmission appealCase = await db.ModerationSubmissions.AsNoTracking().SingleAsync(row => row.Id == created.SubmissionId!.Value);
         SellerVersionReviewDto? after = await store.GetOwnerVersionReview(submission.AssetVersionId, submission.OwnerUserId);
         after!.CanAppeal.Should().BeFalse();
         after.Appeal!.State.Should().Be(SellerAppealState.PENDING_REVIEW);
         after.Decision.Should().BeNull();
+        after.ActiveSubmission.Should().Be(new SellerActiveSubmissionDto(
+            created.SubmissionId!.Value, ModerationSubmissionKind.APPEAL, ModerationSubmissionState.SUBMITTED, appealCase.CaseRevision));
+        after.History.Select(entry => entry.Kind).Should().ContainInOrder(ModerationSubmissionKind.APPEAL, ModerationSubmissionKind.STANDARD);
+        after.History.Should().Contain(entry => entry.SubmissionId == submission.Id
+            && entry.DecisionOutcome == ModerationSubmissionState.REJECTED
+            && entry.DecisionReason == DecisionRequest(seed, submission, reviewer, ModerationDecisionOutcome.REJECT).Rationale);
         after.BlockedReasons.Should().NotContain(ErrorCodes.ERR_MODERATION_REJECTION_FINAL);
         (await store.GetOwnerVersionReview(submission.AssetVersionId, reviewer.Id)).Should().BeNull();
     }

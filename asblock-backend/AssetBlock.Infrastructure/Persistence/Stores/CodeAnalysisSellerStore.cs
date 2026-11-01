@@ -146,7 +146,7 @@ internal sealed class CodeAnalysisSellerStore(
         SellerAnalysisStageDto[] stages = report is null ? Array.Empty<SellerAnalysisStageDto>() : await db.CodeAnalysisReportStages.AsNoTracking()
             .Where(s => s.ReportId == report.Id)
             .OrderBy(s => s.Stage)
-            .Select(s => new SellerAnalysisStageDto(s.Stage, s.Applicability.ToString(), s.Outcome.ToString(), s.Retryable))
+            .Select(s => new SellerAnalysisStageDto(s.Stage, s.Applicability.ToString(), s.Outcome.ToString(), s.Retryable, s.ErrorCode))
             .ToArrayAsync(cancellationToken).ConfigureAwait(false);
         string[] limitations = ["Pair verification is disabled by evaluation. Retained comparison evidence requires human review.", "Publication requires an explicit moderator decision."];
         SellerResponseRequirementState? responses = reportIsCurrent && report is not null && latestWorkspace is not null

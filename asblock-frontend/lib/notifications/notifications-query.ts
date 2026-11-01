@@ -1,5 +1,8 @@
 import { getApiErrorMessage } from '@/lib/http/api-errors'
-import type { PagedNotificationsDto } from '@/lib/notifications/notification-types'
+import {
+  pagedNotificationsSchema,
+  type PagedNotificationsDto,
+} from '@/lib/notifications/notification-types'
 
 export const NOTIFICATIONS_PAGE_SIZE = 4
 
@@ -25,8 +28,8 @@ export async function fetchNotificationsUnreadCount(signal?: AbortSignal): Promi
   if (!res.ok) {
     return 0
   }
-  const data = (await res.json()) as PagedNotificationsDto
-  return Number(data.totalCount) || 0
+  const data = pagedNotificationsSchema.safeParse(await res.json())
+  return data.success ? data.data.totalCount : 0
 }
 
 export async function fetchNotificationsPage(
@@ -48,7 +51,7 @@ export async function fetchNotificationsPage(
   if (!res.ok) {
     throw new Error('Notifications request failed')
   }
-  return (await res.json()) as PagedNotificationsDto
+  return pagedNotificationsSchema.parse(await res.json())
 }
 
 export async function postMarkAllNotificationsRead(): Promise<{ updatedCount: number }> {

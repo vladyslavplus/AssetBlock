@@ -13,7 +13,8 @@ public sealed record SellerAnalysisStageDto(
     string Stage,
     string Applicability,
     string Outcome,
-    bool Retryable);
+    bool Retryable,
+    string? ErrorCode);
 
 /// <summary>Owner-safe projection from the selected immutable run and admitted report.</summary>
 public sealed record SellerAnalysisSummaryDto(

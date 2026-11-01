@@ -153,6 +153,7 @@ export const sellerAnalysisStageSchema = z.object({
   applicability: z.string().min(1).max(40),
   outcome: z.string().min(1).max(40),
   retryable: z.boolean(),
+  errorCode: z.string().max(80).nullable().optional(),
 })
 export const coverageOwnerStatusSchema = z.object({
   requestId: z.guid().nullable(),
@@ -291,6 +292,29 @@ export const sellerAppealSchema = z
   .strict()
 export type SellerAppeal = z.infer<typeof sellerAppealSchema>
 
+export const sellerActiveSubmissionSchema = z
+  .object({
+    submissionId: z.guid(),
+    kind: z.enum(['STANDARD', 'APPEAL']),
+    state: z.enum(['SUBMITTED', 'IN_REVIEW']),
+    caseRevision: z.number().int().positive(),
+  })
+  .strict()
+export type SellerActiveSubmission = z.infer<typeof sellerActiveSubmissionSchema>
+
+export const sellerSubmissionHistoryEntrySchema = z
+  .object({
+    submissionId: z.guid(),
+    kind: z.enum(['STANDARD', 'APPEAL']),
+    state: sellerModerationStateSchema,
+    decisionOutcome: z.enum(['APPROVED', 'CHANGES_REQUESTED', 'REJECTED']).nullable(),
+    decisionReason: z.string().min(1).max(2000).nullable(),
+    createdAt: z.iso.datetime({ offset: true }),
+    decidedAt: z.iso.datetime({ offset: true }).nullable(),
+  })
+  .strict()
+export type SellerSubmissionHistoryEntry = z.infer<typeof sellerSubmissionHistoryEntrySchema>
+
 export const sellerVersionReviewSchema = z.object({
   coverageReview: coverageOwnerStatusSchema.nullable(),
   requiredResponseCount: z.number().int().nonnegative(),
@@ -309,6 +333,8 @@ export const sellerVersionReviewSchema = z.object({
   canSubmit: z.boolean(),
   canAppeal: z.boolean(),
   appeal: sellerAppealSchema.nullable(),
+  activeSubmission: sellerActiveSubmissionSchema.nullable(),
+  history: z.array(sellerSubmissionHistoryEntrySchema).max(20),
   blockedReasons: z.array(z.string()),
   analysisDetails: sellerAnalysisSummarySchema.nullable().optional(),
   decision: sellerVersionDecisionSchema.nullable().optional(),
@@ -353,22 +379,35 @@ export const assetVersionSubmissionRequestSchema = z.object({
   operationId: z.guid(),
 })
 
+export const sellerAppealRationaleSchema = z
+  .string()
+  .max(4000)
+  .trim()
+  .min(1)
+  .max(2000)
+  .refine((value) => !value.includes('\0'))
+export const appealRationaleFormSchema = z.object({ rationale: sellerAppealRationaleSchema })
+
 export const appealRequestSchema = z
   .object({
     workspaceId: z.guid(),
     expectedWorkspaceRevision: z.number().int().positive(),
     expectedCaseRevision: z.number().int().positive(),
     operationId: z.guid(),
-    rationale: z
-      .string()
-      .max(4000)
-      .trim()
-      .min(1)
-      .max(2000)
-      .refine((value) => !value.includes('\0')),
+    rationale: sellerAppealRationaleSchema,
   })
   .strict()
 export type AppealRequest = z.infer<typeof appealRequestSchema>
+
+export const sellerSubmissionCreatedSchema = z.object({ submissionId: z.guid() }).strict()
+export const sellerSubmissionWithdrawnSchema = z
+  .object({
+    status: z.literal('SUCCEEDED'),
+    caseRevision: z.number().int().positive().nullable(),
+    idempotentResultJson: z.string().nullable(),
+    replayed: z.boolean(),
+  })
+  .strict()
 
 export const submissionWithdrawRequestSchema = z.object({
   expectedCaseRevision: z.number().int().nonnegative(),

@@ -10,9 +10,12 @@ import {
   sellerAnalysisFindingSchema,
   sellerAnalysisSummarySchema,
   sellerAppealSchema,
+  sellerAppealRationaleSchema,
   appealRequestSchema,
   sellerVersionDecisionSchema,
   sellerVersionReviewSchema,
+  sellerSubmissionCreatedSchema,
+  sellerSubmissionWithdrawnSchema,
   sourceDeclarationByteSize,
   sourceDeclarationPayloadSchema,
   type SourceDeclarationPayload,
@@ -90,6 +93,39 @@ describe('server review eligibility', () => {
     )
     expect(
       sellerAnalysisSummarySchema.safeParse({ ...summary, reviewEligible: 'true' }).success,
+    ).toBe(false)
+  })
+})
+
+describe('seller submission lifecycle responses', () => {
+  it('accepts only the strict created and withdrawn response shapes', () => {
+    expect(
+      sellerSubmissionCreatedSchema.safeParse({
+        submissionId: '123e4567-e89b-12d3-a456-426614174000',
+      }).success,
+    ).toBe(true)
+    expect(
+      sellerSubmissionCreatedSchema.safeParse({
+        submissionId: '123e4567-e89b-12d3-a456-426614174000',
+        state: 'SUBMITTED',
+      }).success,
+    ).toBe(false)
+    expect(
+      sellerSubmissionWithdrawnSchema.safeParse({
+        status: 'SUCCEEDED',
+        caseRevision: 2,
+        idempotentResultJson: null,
+        replayed: false,
+      }).success,
+    ).toBe(true)
+    expect(
+      sellerSubmissionWithdrawnSchema.safeParse({
+        status: 'SUCCEEDED',
+        caseRevision: 2,
+        idempotentResultJson: null,
+        replayed: false,
+        moderatorId: 'private',
+      }).success,
     ).toBe(false)
   })
 })
@@ -311,6 +347,8 @@ describe('sellerVersionReviewSchema', () => {
       moderationState: 'DRAFT',
       canAppeal: false,
       appeal: null,
+      activeSubmission: null,
+      history: [],
       publicationEligible: false,
       canUpload: true,
       canSubmit: false,
@@ -318,6 +356,109 @@ describe('sellerVersionReviewSchema', () => {
     })
 
     expect(result.success).toBe(true)
+  })
+
+  it('validates active submissions and bounded owner-safe history entries', () => {
+    const result = sellerVersionReviewSchema.safeParse({
+      assetId: '123e4567-e89b-12d3-a456-426614174000',
+      coverageReview: null,
+      requiredResponseCount: 0,
+      outstandingResponseCount: 0,
+      evidenceRevision: 0,
+      assetVersionId: '123e4567-e89b-12d3-a456-426614174001',
+      versionNumber: 1,
+      processingStatus: 'READY',
+      processingErrorCode: null,
+      processingErrorSummary: null,
+      analysis: 'ANALYSIS_NOT_AVAILABLE',
+      moderationState: 'IN_REVIEW',
+      canAppeal: false,
+      appeal: null,
+      activeSubmission: {
+        submissionId: '123e4567-e89b-12d3-a456-426614174002',
+        kind: 'APPEAL',
+        state: 'IN_REVIEW',
+        caseRevision: 7,
+      },
+      history: [
+        {
+          submissionId: '123e4567-e89b-12d3-a456-426614174002',
+          kind: 'APPEAL',
+          state: 'IN_REVIEW',
+          decisionOutcome: null,
+          decisionReason: null,
+          createdAt: '2026-10-31T10:00:00Z',
+          decidedAt: null,
+        },
+      ],
+      publicationEligible: false,
+      canUpload: true,
+      canSubmit: false,
+      blockedReasons: [],
+    })
+
+    expect(result.success).toBe(true)
+    if (result.success) {
+      expect(result.data.activeSubmission?.kind).toBe('APPEAL')
+      expect(result.data.history[0]?.submissionId).toBe('123e4567-e89b-12d3-a456-426614174002')
+    }
+    expect(
+      sellerVersionReviewSchema.safeParse({
+        ...(result.success ? result.data : {}),
+        history: [
+          {
+            submissionId: '123e4567-e89b-12d3-a456-426614174002',
+            kind: 'STANDARD',
+            state: 'REJECTED',
+            decisionOutcome: 'REJECTED',
+            decisionReason: null,
+            createdAt: '2026-10-31T10:00:00Z',
+            decidedAt: '2026-10-31T11:00:00Z',
+            moderatorId: 'private',
+          },
+        ],
+      }).success,
+    ).toBe(false)
+    expect(
+      sellerVersionReviewSchema.safeParse({ ...(result.success ? result.data : {}), history: [] })
+        .success,
+    ).toBe(true)
+  })
+
+  it('does not retain moderator identity, dispositions, or scores from an unexpected review payload', () => {
+    const payload = {
+      assetId: '123e4567-e89b-12d3-a456-426614174000',
+      coverageReview: null,
+      requiredResponseCount: 0,
+      outstandingResponseCount: 0,
+      evidenceRevision: 0,
+      assetVersionId: '123e4567-e89b-12d3-a456-426614174001',
+      versionNumber: 1,
+      processingStatus: 'READY',
+      processingErrorCode: null,
+      processingErrorSummary: null,
+      analysis: 'ANALYSIS_AVAILABLE',
+      moderationState: 'APPROVED',
+      canAppeal: false,
+      appeal: null,
+      activeSubmission: null,
+      history: [],
+      publicationEligible: true,
+      canUpload: true,
+      canSubmit: false,
+      blockedReasons: [],
+      reviewerId: 'private-reviewer-id',
+      dispositions: [{ findingId: 'private', value: 'CHANGES_NEEDED' }],
+      scores: [0.99],
+    }
+    const parsed = sellerVersionReviewSchema.safeParse(payload)
+
+    expect(parsed.success).toBe(true)
+    if (parsed.success) {
+      expect(parsed.data).not.toHaveProperty('reviewerId')
+      expect(parsed.data).not.toHaveProperty('dispositions')
+      expect(parsed.data).not.toHaveProperty('scores')
+    }
   })
 
   it('accepts a review payload with and without a seller decision projection', () => {
@@ -336,6 +477,8 @@ describe('sellerVersionReviewSchema', () => {
       moderationState: 'CHANGES_REQUESTED',
       canAppeal: false,
       appeal: null,
+      activeSubmission: null,
+      history: [],
       publicationEligible: false,
       canUpload: true,
       canSubmit: true,
@@ -406,6 +549,8 @@ describe('sellerVersionReviewSchema', () => {
       moderationState: 'DRAFT',
       canAppeal: false,
       appeal: null,
+      activeSubmission: null,
+      history: [],
       publicationEligible: false,
       canUpload: true,
       canSubmit: false,
@@ -463,6 +608,8 @@ describe('sellerVersionReviewSchema', () => {
       moderationState: 1,
       canAppeal: false,
       appeal: null,
+      activeSubmission: null,
+      history: [],
       publicationEligible: false,
       canUpload: true,
       canSubmit: false,
@@ -470,6 +617,14 @@ describe('sellerVersionReviewSchema', () => {
     })
 
     expect(result.success).toBe(false)
+  })
+
+  it('mirrors appeal trim-then-measure and NUL validation', () => {
+    expect(sellerAppealRationaleSchema.parse(`  ${'a'.repeat(2000)}  `)).toBe('a'.repeat(2000))
+    expect(sellerAppealRationaleSchema.safeParse('   ').success).toBe(false)
+    expect(sellerAppealRationaleSchema.safeParse(` ${'a'.repeat(2001)} `).success).toBe(false)
+    expect(sellerAppealRationaleSchema.safeParse(`${' '.repeat(4001)}a`).success).toBe(false)
+    expect(sellerAppealRationaleSchema.safeParse('valid\0text').success).toBe(false)
   })
 })
 

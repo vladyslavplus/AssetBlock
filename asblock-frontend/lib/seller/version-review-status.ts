@@ -19,6 +19,12 @@ export const versionReviewBlockedReasonMessages: Record<string, string> = {
   ERR_MODERATION_ACTIVE_CASE_EXISTS: 'This version already has an active moderation case.',
   ERR_ANALYSIS_REPORT_NOT_TRUSTED: 'The report is not eligible for submission.',
   ERR_MODERATION_WORKSPACE_STALE: 'The draft changed. Refresh version review before submitting.',
+  ERR_MODERATION_APPEAL_REQUIRED: 'Request an independent review of the rejection instead.',
+  ERR_MODERATION_REJECTION_FINAL:
+    'This rejection is final. Submit a substantively corrected review request.',
+  ERR_MODERATION_APPEAL_BASIS_CHANGED: 'The review basis changed. Submit a new review request.',
+  ERR_MODERATION_APPEAL_EXISTS: 'An appeal already exists for this decision.',
+  ERR_MODERATION_APPEAL_NOT_ALLOWED: 'An appeal is not available for this review.',
 }
 
 const versionReviewBlockedReasonActions: Record<string, string> = {
@@ -32,6 +38,10 @@ export function versionReviewBlockedReasonMessage(code: string): string {
   return (
     versionReviewBlockedReasonMessages[code] ?? 'Submission is not available for this version yet.'
   )
+}
+
+export function versionReviewActionMessage(code: string): string {
+  return versionReviewBlockedReasonMessages[code] ?? 'The review request could not be completed.'
 }
 
 export function versionReviewBlockedReasonAction(code: string): string | null {

@@ -22,14 +22,14 @@ const page = {
   pageSize: 50,
   totalPages: 0,
 }
-function renderPanel() {
+function renderPanel(canSubmit = false) {
   return renderWithQueryClient(
     <SellerResponsesPanel
       assetId={id}
       versionId={version}
       reportId={report}
       findings={[{ id: finding, ownPath: 'own.py', responseRequired: true, hasResponse: false }]}
-      canSubmit={false}
+      canSubmit={canSubmit}
     />,
   )
 }
@@ -78,7 +78,7 @@ describe('seller review responses', () => {
         expectedEvidenceRevision: 1,
         expectedWorkspaceRevision: 2,
       })
-      expect(screen.queryByRole('button', { name: 'Submit for review' })).not.toBeInTheDocument()
+      expect(screen.getByRole('button', { name: 'Submit for review' })).toBeDisabled()
     },
   )
   it('shows explicit evidence conflicts without silently retrying changed expectations', async () => {
@@ -120,6 +120,149 @@ describe('seller review responses', () => {
     await screen.findByText('No current report is available.')
     expect(screen.queryByText(/Result unknown/)).not.toBeInTheDocument()
     expect(screen.getByLabelText('Response for own.py')).not.toBeDisabled()
+  })
+
+  it('shows the backend response-required message and blocks submission while a required finding is unanswered', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => new Response(JSON.stringify(page))),
+    )
+    renderPanel()
+
+    await screen.findByText(/1 of 1 required findings/)
+
+    expect(screen.getByRole('button', { name: 'Submit for review' })).toBeDisabled()
+    expect(screen.getByText(/Response for own.py - Required response/)).toBeInTheDocument()
+    expect(screen.getByRole('status')).toHaveTextContent(
+      'Respond to every required finding, or choose No evidence, before submitting this version.',
+    )
+  })
+
+  it('sends only one submission when the seller double-clicks', async () => {
+    let finish: ((response: Response) => void) | undefined
+    const writes: unknown[] = []
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (_url: string, init?: RequestInit) => {
+        if (init?.method === 'POST') {
+          writes.push(JSON.parse(init.body as string))
+          return new Promise<Response>((resolve) => {
+            finish = resolve
+          })
+        }
+        return new Response(JSON.stringify({ ...page, outstandingCount: 0, requiredCount: 0 }))
+      }),
+    )
+    renderWithQueryClient(
+      <SellerResponsesPanel
+        assetId={id}
+        versionId={version}
+        reportId={report}
+        findings={[]}
+        canSubmit
+      />,
+    )
+    await screen.findByRole('button', { name: 'Submit for review' })
+    fireEvent.click(screen.getByRole('button', { name: 'Submit for review' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Submit for review' }))
+    await waitFor(() => expect(writes).toHaveLength(1))
+    finish?.(new Response(JSON.stringify({ submissionId: finding })))
+    await screen.findByText('Submitted for human review.')
+  })
+
+  it('reuses the unchanged submit operation after an uncertain response and refreshed revisions', async () => {
+    const writes: Array<Record<string, unknown>> = []
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (_url: string, init?: RequestInit) => {
+        if (init?.method === 'POST') {
+          writes.push(JSON.parse(init.body as string))
+          if (writes.length === 1) throw new TypeError('Connection lost')
+          return new Response(JSON.stringify({ submissionId: finding }))
+        }
+        return new Response(
+          JSON.stringify(
+            writes.length
+              ? { ...page, workspaceRevision: 3, caseRevision: 2, outstandingCount: 0 }
+              : { ...page, outstandingCount: 0 },
+          ),
+        )
+      }),
+    )
+    renderPanel(true)
+    fireEvent.click(await screen.findByRole('button', { name: 'Submit for review' }))
+    await screen.findByRole('button', { name: 'Retry submit for review' })
+    fireEvent.click(screen.getByRole('button', { name: 'Retry submit for review' }))
+    await screen.findByText('Submitted for human review.')
+
+    expect(writes).toHaveLength(2)
+    expect(writes[1]).toEqual(writes[0])
+    expect(writes[0]).toMatchObject({
+      expectedWorkspaceRevision: page.workspaceRevision,
+      expectedCaseRevision: page.caseRevision,
+    })
+  })
+
+  it('preserves an unsaved finding explanation when submission receives a stale 409', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (_url: string, init?: RequestInit) =>
+        init?.method === 'POST'
+          ? new Response(
+              JSON.stringify({
+                code: 'ERR_MODERATION_WORKSPACE_STALE',
+                detail: 'The draft changed. Refresh version review before submitting.',
+              }),
+              { status: 409 },
+            )
+          : new Response(JSON.stringify({ ...page, outstandingCount: 0 })),
+      ),
+    )
+    renderPanel(true)
+    const explanation = await screen.findByRole('textbox', { name: 'Response for own.py' })
+    fireEvent.change(explanation, { target: { value: 'I authored this source independently.' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Submit for review' }))
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(/draft changed/i)
+    expect(explanation).toHaveValue('I authored this source independently.')
+  })
+
+  it('shows append-only response history as seller text without actor identities', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(
+        async () =>
+          new Response(
+            JSON.stringify({
+              ...page,
+              outstandingCount: 0,
+              items: [
+                {
+                  id: finding,
+                  assetVersionId: version,
+                  reportId: report,
+                  findingId: finding,
+                  evidenceRevision: 1,
+                  responseType: 'NO_EVIDENCE',
+                  text: '',
+                  createdAt: '2026-10-31T10:00:00Z',
+                  actorUserId: '88888888-8888-4888-8888-888888888888',
+                  isCurrent: false,
+                },
+              ],
+              totalCount: 1,
+            }),
+          ),
+      ),
+    )
+    renderPanel()
+
+    fireEvent.click(await screen.findByText('Response history (1)'))
+    expect(
+      await screen.findByText('NO EVIDENCE - evidence revision 1 - Historical answer'),
+    ).toBeInTheDocument()
+    expect(screen.getByText('No evidence supplied.')).toBeInTheDocument()
+    expect(screen.queryByText('88888888-8888-4888-8888-888888888888')).not.toBeInTheDocument()
   })
 
   it('adopts clean refetched notes and preserves dirty text and its original CAS basis', async () => {

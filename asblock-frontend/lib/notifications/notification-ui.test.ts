@@ -5,7 +5,10 @@ import {
   getNotificationHref,
   getNotificationTitle,
 } from '@/lib/notifications/notification-ui'
-import { notificationKindSchema } from '@/lib/notifications/notification-types'
+import {
+  notificationKindSchema,
+  pagedNotificationsSchema,
+} from '@/lib/notifications/notification-types'
 
 describe('notification-ui processing kinds', () => {
   const metadata = JSON.stringify({
@@ -14,6 +17,26 @@ describe('notification-ui processing kinds', () => {
     assetVersionId: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
     processingStatus: 'READY',
     assetTitle: 'Forest Pack',
+  })
+
+  it('validates strict paged notification responses while allowing unknown string kinds', () => {
+    const valid = {
+      items: [
+        {
+          id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+          kind: 'UNKNOWN_FUTURE_KIND',
+          metadataJson: '{}',
+          createdAt: '2026-01-02T00:00:00.000Z',
+          readAt: null,
+        },
+      ],
+      totalCount: 1,
+      page: 1,
+      pageSize: 4,
+      totalPages: 1,
+    }
+    expect(pagedNotificationsSchema.safeParse(valid).success).toBe(true)
+    expect(pagedNotificationsSchema.safeParse({ ...valid, unexpected: true }).success).toBe(false)
   })
 
   it('maps durable processing hub methods to titles and owner manage links', () => {

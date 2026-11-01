@@ -1078,6 +1078,109 @@ public sealed class ModerationFoundationStorePostgresTests(PostgresFixture fixtu
         review.PublicationEligible.Should().BeFalse();
     }
 
+    [Fact]
+    public async Task GetOwnerVersionReview_WhenSubmissionHistoryExceedsLimit_ShouldReturnNewestSafeEntriesAndActiveIdentity()
+    {
+        await using ApplicationDbContext db = await fixture.CreateCleanDbContext();
+        (User author, Category _, Asset asset) = await SeedAssetAsync(db);
+        var moderatorSuffix = Guid.NewGuid().ToString("N");
+        User moderator = TestData.CreateUser("moderator-" + moderatorSuffix, "moderator-" + moderatorSuffix + "@example.test");
+        db.Users.Add(moderator);
+        (AssetVersion version, AssetDraftWorkspace workspace) = await SeedVersionWorkspaceAsync(db, asset);
+        DateTimeOffset startValue = DateTimeOffset.UtcNow.AddHours(-1);
+        DateTimeOffset start = new(startValue.Ticks - startValue.Ticks % 10, TimeSpan.Zero);
+        var submissions = new List<ModerationSubmission>();
+        var decisions = new List<ModerationDecisionRecord>();
+        for (var index = 0; index < 22; index++)
+        {
+            ModerationSubmission submission = CreateSubmission(asset, version, workspace, author);
+            submission.CreatedAt = start.AddMinutes(index);
+            submission.State = ModerationSubmissionState.WITHDRAWN;
+            if (index == 3)
+            {
+                submission.State = ModerationSubmissionState.CHANGES_REQUESTED;
+                decisions.Add(new ModerationDecisionRecord
+                {
+                    Id = Guid.NewGuid(),
+                    SubmissionId = submission.Id,
+                    AssetId = asset.Id,
+                    AssetVersionId = version.Id,
+                    ModeratorUserId = moderator.Id,
+                    Outcome = ModerationSubmissionState.CHANGES_REQUESTED,
+                    CaseRevision = submission.CaseRevision,
+                    Message = "Please clarify the source.",
+                    CreatedAt = submission.CreatedAt.AddSeconds(1)
+                });
+            }
+            else if (index == 4)
+            {
+                submission.State = ModerationSubmissionState.REJECTED;
+                decisions.Add(new ModerationDecisionRecord
+                {
+                    Id = Guid.NewGuid(),
+                    SubmissionId = submission.Id,
+                    AssetId = asset.Id,
+                    AssetVersionId = version.Id,
+                    ModeratorUserId = moderator.Id,
+                    Outcome = ModerationSubmissionState.REJECTED,
+                    CaseRevision = submission.CaseRevision,
+                    Message = "The rejected basis reason.",
+                    CreatedAt = submission.CreatedAt.AddSeconds(1)
+                });
+            }
+            else if (index == 5)
+            {
+                submission.State = ModerationSubmissionState.APPROVED;
+                decisions.Add(new ModerationDecisionRecord
+                {
+                    Id = Guid.NewGuid(),
+                    SubmissionId = submission.Id,
+                    AssetId = asset.Id,
+                    AssetVersionId = version.Id,
+                    ModeratorUserId = moderator.Id,
+                    Outcome = ModerationSubmissionState.APPROVED,
+                    CaseRevision = submission.CaseRevision,
+                    Message = "Private approval text.",
+                    CreatedAt = submission.CreatedAt.AddSeconds(1)
+                });
+            }
+            else if (index == 21)
+            {
+                submission.State = ModerationSubmissionState.IN_REVIEW;
+                submission.ClaimHolderId = moderator.Id;
+                submission.ClaimedAt = submission.CreatedAt;
+            }
+            submissions.Add(submission);
+        }
+
+        db.ModerationSubmissions.AddRange(submissions);
+        db.ModerationDecisionRecords.AddRange(decisions);
+        await db.SaveChangesAsync();
+
+        var store = new ModerationFoundationStore(db, new AssetStore(db), new UserStore(db), new EfUnitOfWork(db));
+        SellerVersionReviewDto? review = await store.GetOwnerVersionReview(version.Id, author.Id);
+        review.Should().NotBeNull();
+        review!.History.Should().HaveCount(20);
+        review.History.Select(entry => entry.SubmissionId).Should().Equal(submissions.Skip(2).Reverse().Select(row => row.Id));
+        review.History[0].CreatedAt.Should().Be(submissions[21].CreatedAt);
+        review.ActiveSubmission.Should().Be(new SellerActiveSubmissionDto(
+            submissions[21].Id, ModerationSubmissionKind.STANDARD, ModerationSubmissionState.IN_REVIEW, submissions[21].CaseRevision));
+        review.History.Should().Contain(entry => entry.SubmissionId == submissions[3].Id
+            && entry.DecisionOutcome == ModerationSubmissionState.CHANGES_REQUESTED
+            && entry.DecisionReason == "Please clarify the source.");
+        review.History.Should().Contain(entry => entry.SubmissionId == submissions[4].Id
+            && entry.DecisionOutcome == ModerationSubmissionState.REJECTED
+            && entry.DecisionReason == "The rejected basis reason.");
+        review.History.Should().Contain(entry => entry.SubmissionId == submissions[5].Id
+            && entry.DecisionOutcome == ModerationSubmissionState.APPROVED
+            && entry.DecisionReason == null);
+        (await store.GetOwnerVersionReview(version.Id, moderator.Id)).Should().BeNull();
+
+        var json = System.Text.Json.JsonSerializer.Serialize(review, new System.Text.Json.JsonSerializerOptions(System.Text.Json.JsonSerializerDefaults.Web));
+        json.Should().NotContain(moderator.Id.ToString()).And.NotContain("Private approval text")
+            .And.NotContain("claimHolder").And.NotContain("dispositions").And.NotContain("scores").And.NotContain("exclusion");
+    }
+
     private static async Task<(User Author, Category Category, Asset Asset)> SeedAssetAsync(ApplicationDbContext db)
     {
         User author = TestData.CreateUser();

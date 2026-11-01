@@ -138,7 +138,7 @@ public sealed partial class CodeAnalysisReportFinalizerPostgresTests
     }
 
     [Fact]
-    public async Task Decision_WhenNewerDecisionExists_ShouldProjectOnlyTheNewestDecision()
+    public async Task Decision_WhenNewerDecisionExists_ShouldProjectNewestDecisionAndRetainOlderReasonInHistory()
     {
         const string olderReasonMarker = "older superseded reason marker";
         await using ApplicationDbContext db = await fixture.CreateCleanDbContext();
@@ -183,7 +183,9 @@ public sealed partial class CodeAnalysisReportFinalizerPostgresTests
         review!.Decision.Should().NotBeNull();
         review.Decision!.Outcome.Should().Be(ModerationSubmissionState.APPROVED);
         review.Decision.Reason.Should().BeNull();
-        JsonSerializer.Serialize(review, new JsonSerializerOptions(JsonSerializerDefaults.Web)).Should().NotContain(olderReasonMarker);
+        review.History.Should().Contain(entry => entry.SubmissionId == older.Id
+            && entry.DecisionOutcome == ModerationSubmissionState.REJECTED
+            && entry.DecisionReason == olderReasonMarker);
     }
 
     [Theory]
@@ -191,7 +193,7 @@ public sealed partial class CodeAnalysisReportFinalizerPostgresTests
     [InlineData(ModerationSubmissionState.WITHDRAWN, false)]
     [InlineData(ModerationSubmissionState.SUPERSEDED, false)]
     [InlineData(ModerationSubmissionState.SUBMITTED, true)]
-    public async Task Decision_WhenResubmittedAfterChangesRequested_ShouldHideOlderDecisionUntilNewestCaseDecides(ModerationSubmissionState newState, bool sameCreatedAt)
+    public async Task Decision_WhenResubmittedAfterChangesRequested_ShouldHideOldDecisionButKeepItInHistory(ModerationSubmissionState newState, bool sameCreatedAt)
     {
         await using ApplicationDbContext db = await fixture.CreateCleanDbContext();
         (ResponseReviewSeed seed, ModerationSubmission submission, User reviewer) = await SeedClaimedDecision(db);
@@ -223,8 +225,11 @@ public sealed partial class CodeAnalysisReportFinalizerPostgresTests
         review.Should().NotBeNull();
         review!.ModerationState.Should().Be(newState);
         review.Decision.Should().BeNull();
+        review.History.Should().Contain(entry => entry.SubmissionId == submission.Id
+            && entry.DecisionOutcome == ModerationSubmissionState.CHANGES_REQUESTED
+            && entry.DecisionReason == "Decision rationale");
         var json = JsonSerializer.Serialize(review, new JsonSerializerOptions(JsonSerializerDefaults.Web));
-        json.Should().NotContain(reviewer.Id.ToString()).And.NotContain("Disposition rationale").And.NotContain("Decision rationale");
+        json.Should().NotContain(reviewer.Id.ToString()).And.NotContain("Disposition rationale");
         json.Should().NotContain("\"claimHolderId\"").And.NotContain("\"dispositions\"").And.NotContain("\"tokenScore\"");
     }
 

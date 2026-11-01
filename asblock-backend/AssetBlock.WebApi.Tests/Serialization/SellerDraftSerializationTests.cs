@@ -48,6 +48,15 @@ public class SellerDraftSerializationTests
     }
 
     [Fact]
+    public void Serialize_WhenAnalysisStageIsPolicyDisabled_ShouldExposeStructuredErrorCode()
+    {
+        var dto = new SellerAnalysisStageDto("VERIFIER", "MANDATORY", "NOT_APPLICABLE", false, "POLICY_DISABLED");
+        using var document = JsonDocument.Parse(JsonSerializer.Serialize(dto, _webJson));
+
+        document.RootElement.GetProperty("errorCode").GetString().Should().Be("POLICY_DISABLED");
+    }
+
+    [Fact]
     public void Serialize_WhenDeclarationHasThirdPartyOrigin_ShouldEmitStringOriginProperty()
     {
         var dto = new SellerDraftSnapshotDto(
@@ -89,6 +98,47 @@ public class SellerDraftSerializationTests
         parsed.Should().NotBeNull();
         parsed.ModerationState.Should().Be(ModerationSubmissionState.APPROVED);
         parsed.Analysis.Should().Be(SellerAnalysisAvailability.ANALYSIS_NOT_AVAILABLE);
+    }
+
+    [Fact]
+    public void Serialize_WhenVersionReviewContainsSubmissionHistory_ShouldExposeOnlyOwnerSafeFields()
+    {
+        var createdAt = DateTimeOffset.Parse("2026-10-31T09:00:00Z");
+        DateTimeOffset decidedAt = createdAt.AddHours(1);
+        var dto = new SellerVersionReviewDto(
+            _assetId, _versionId, 2,
+            AssetVersionProcessingStatus.READY,
+            ProcessingErrorCode: null,
+            ProcessingErrorSummary: null,
+            Analysis: SellerAnalysisAvailability.ANALYSIS_NOT_AVAILABLE,
+            ModerationState: ModerationSubmissionState.IN_REVIEW,
+            PublicationEligible: false,
+            CanUpload: true,
+            CanSubmit: false,
+            BlockedReasons: [])
+        {
+            ActiveSubmission = new SellerActiveSubmissionDto(_versionId, ModerationSubmissionKind.APPEAL,
+                ModerationSubmissionState.IN_REVIEW, 8),
+            History =
+            [
+                new SellerSubmissionHistoryEntryDto(_versionId, ModerationSubmissionKind.STANDARD,
+                    ModerationSubmissionState.REJECTED, ModerationSubmissionState.REJECTED, "Seller-visible reason",
+                    createdAt, decidedAt)
+            ]
+        };
+
+        var json = JsonSerializer.Serialize(dto, _webJson);
+        using var document = JsonDocument.Parse(json);
+        JsonElement root = document.RootElement;
+        root.GetProperty("activeSubmission").GetProperty("kind").GetString().Should().Be("APPEAL");
+        root.GetProperty("activeSubmission").GetProperty("caseRevision").GetInt64().Should().Be(8);
+        JsonElement history = root.GetProperty("history");
+        history.GetArrayLength().Should().Be(1);
+        history[0].GetProperty("decisionOutcome").GetString().Should().Be("REJECTED");
+        history[0].GetProperty("decisionReason").GetString().Should().Be("Seller-visible reason");
+        history[0].GetProperty("createdAt").GetDateTimeOffset().Should().Be(createdAt);
+        json.Should().NotContain("moderator").And.NotContain("claimHolder").And.NotContain("disposition")
+            .And.NotContain("score").And.NotContain("exclusion");
     }
 
     [Fact]

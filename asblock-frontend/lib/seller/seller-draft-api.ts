@@ -15,6 +15,8 @@ import {
   sellerDeclarationSnapshotSchema,
   sellerAnalysisFindingsPageSchema,
   sellerAnalysisRetryAcceptedSchema,
+  sellerSubmissionCreatedSchema,
+  sellerSubmissionWithdrawnSchema,
   type SellerDraftSnapshot,
   type SellerDeclarationSnapshot,
   type SellerVersionReview,
@@ -324,14 +326,8 @@ export async function requestSellerAppeal(
       retryable: res.status >= 500,
     }
   }
-  if (
-    typeof parsed === 'object' &&
-    parsed !== null &&
-    'submissionId' in parsed &&
-    typeof parsed.submissionId === 'string'
-  ) {
-    return { ok: true, submissionId: parsed.submissionId }
-  }
+  const created = sellerSubmissionCreatedSchema.safeParse(parsed)
+  if (created.success) return { ok: true, submissionId: created.data.submissionId }
   return { ok: false, message: 'Unexpected response from server.' }
 }
 
@@ -371,14 +367,8 @@ export async function submitSellerAssetVersion(
       retryable: res.status >= 500,
     }
   }
-  if (
-    typeof parsed === 'object' &&
-    parsed !== null &&
-    'submissionId' in parsed &&
-    typeof (parsed as { submissionId: unknown }).submissionId === 'string'
-  ) {
-    return { ok: true, submissionId: (parsed as { submissionId: string }).submissionId }
-  }
+  const created = sellerSubmissionCreatedSchema.safeParse(parsed)
+  if (created.success) return { ok: true, submissionId: created.data.submissionId }
   return { ok: false, message: 'Unexpected response from server.' }
 }
 
@@ -398,20 +388,20 @@ export async function withdrawSellerSubmission(
   const parsed = parseMaybeJson(await readResponseText(res))
   if (!res.ok) {
     const p = parseApiErrorBody(parsed)
-    return { ok: false, message: p?.summary ?? `Could not withdraw submission (${res.status})` }
+    return {
+      ok: false,
+      message: p?.summary ?? `Could not withdraw submission (${res.status})`,
+      retryable: res.status >= 500,
+      ...(p?.code ? { code: p.code } : {}),
+    }
   }
-  if (
-    typeof parsed === 'object' &&
-    parsed !== null &&
-    'status' in parsed &&
-    typeof (parsed as { status: unknown }).status === 'string'
-  ) {
-    const raw = parsed as { status: string; caseRevision?: unknown }
+  const withdrawn = sellerSubmissionWithdrawnSchema.safeParse(parsed)
+  if (withdrawn.success) {
     return {
       ok: true,
       value: {
-        status: raw.status,
-        caseRevision: typeof raw.caseRevision === 'number' ? raw.caseRevision : null,
+        status: withdrawn.data.status,
+        caseRevision: withdrawn.data.caseRevision,
       },
     }
   }

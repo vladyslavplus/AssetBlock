@@ -97,7 +97,28 @@ public sealed record SellerVersionReviewDto(
     int RequiredResponseCount = 0, int OutstandingResponseCount = 0, int EvidenceRevision = 0, CoverageOwnerStatus? CoverageReview = null,
     SellerVersionDecisionDto? Decision = null,
     bool CanAppeal = false,
-    SellerAppealDto? Appeal = null);
+    SellerAppealDto? Appeal = null)
+{
+    public SellerActiveSubmissionDto? ActiveSubmission { get; init; }
+    public IReadOnlyList<SellerSubmissionHistoryEntryDto> History { get; init; } = [];
+}
+
+/// <summary>Owner-safe identity and revision for withdrawing the version's active submission.</summary>
+public sealed record SellerActiveSubmissionDto(
+    Guid SubmissionId,
+    ModerationSubmissionKind Kind,
+    ModerationSubmissionState State,
+    long CaseRevision);
+
+/// <summary>Bounded owner-safe lifecycle and decision history for a version submission.</summary>
+public sealed record SellerSubmissionHistoryEntryDto(
+    Guid SubmissionId,
+    ModerationSubmissionKind Kind,
+    ModerationSubmissionState State,
+    ModerationSubmissionState? DecisionOutcome,
+    string? DecisionReason,
+    DateTimeOffset CreatedAt,
+    DateTimeOffset? DecidedAt);
 
 /// <summary>Owner-safe appeal status without reviewer or evidence details.</summary>
 public sealed record SellerAppealDto(SellerAppealState State, DateTimeOffset RequestedAt, DateTimeOffset? DecidedAt);

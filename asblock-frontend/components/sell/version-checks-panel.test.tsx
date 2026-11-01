@@ -75,6 +75,10 @@ function review(overrides: Record<string, unknown> = {}) {
     publicationEligible: false,
     canUpload: true,
     canSubmit: false,
+    canAppeal: false,
+    appeal: null,
+    activeSubmission: null,
+    history: [],
     blockedReasons: ['ERR_ANALYSIS_NOT_AVAILABLE', 'ERR_DECLARATION_INCOMPLETE'],
     ...overrides,
   }
@@ -132,6 +136,68 @@ describe('VersionChecksPanel', () => {
       expect(screen.getByText('Publicly listed')).toBeInTheDocument()
     })
     expect(screen.getByText(/this version is eligible for submission/i)).toBeInTheDocument()
+  })
+
+  it('keeps pending and published version review states distinct and never displays private review fields', async () => {
+    const publishedVersion = '11111111-1111-4111-8111-111111111111'
+    const pendingVersion = '22222222-2222-4222-8222-222222222222'
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = String(input)
+        if (url.includes(`/versions/${publishedVersion}/review`)) {
+          return new Response(
+            JSON.stringify({
+              ...review({
+                assetVersionId: publishedVersion,
+                versionNumber: 1,
+                moderationState: 'APPROVED',
+                publicationEligible: true,
+                blockedReasons: [],
+                decision: {
+                  outcome: 'APPROVED',
+                  reason: null,
+                  decidedAt: '2026-10-31T10:00:00Z',
+                  publication: 'PUBLISHED',
+                },
+                reviewerId: 'private-reviewer-id',
+                dispositions: [{ findingId: 'private-finding', value: 'ACCEPTED_WITH_LIMITS' }],
+                scores: [0.99],
+              }),
+            }),
+          )
+        }
+        if (url.includes(`/versions/${pendingVersion}/review`)) {
+          return new Response(
+            JSON.stringify(
+              review({
+                assetVersionId: pendingVersion,
+                versionNumber: 2,
+                moderationState: 'IN_REVIEW',
+                publicationEligible: false,
+                canSubmit: false,
+                blockedReasons: [],
+              }),
+            ),
+          )
+        }
+        return new Response('{}')
+      }),
+    )
+    renderWithQueryClient(
+      <div>
+        <VersionChecksPanel assetId={UUID_ASSET} versionId={publishedVersion} />
+        <VersionChecksPanel assetId={UUID_ASSET} versionId={pendingVersion} />
+      </div>,
+    )
+
+    expect(await screen.findByText(/Publication: Published/)).toBeInTheDocument()
+    expect(screen.getByText('Candidate — not published')).toBeInTheDocument()
+    expect(screen.getAllByText('Review in progress')).toHaveLength(2)
+    expect(screen.getAllByRole('region', { name: 'Review status' })).toHaveLength(2)
+    expect(
+      screen.queryByText(/private-reviewer-id|ACCEPTED_WITH_LIMITS|0\.99/),
+    ).not.toBeInTheDocument()
   })
 
   it('distinguishes a failed security check from moderation rejection', async () => {

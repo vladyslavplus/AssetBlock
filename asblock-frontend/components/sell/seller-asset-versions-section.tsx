@@ -25,7 +25,7 @@ export function SellerAssetVersionsSection({
     queryKey: sellerKeys.versions(assetId),
     queryFn: () => fetchSellerAssetVersions(assetId),
   })
-  const [checksVersionId, setChecksVersionId] = useState<string | null>(null)
+  const [checksVersionIds, setChecksVersionIds] = useState<Set<string>>(() => new Set())
   const [editingVersionId, setEditingVersionId] = useState<string | null>(null)
 
   const versions = versionsQuery.data ?? []
@@ -65,13 +65,20 @@ export function SellerAssetVersionsSection({
                   size="sm"
                   className="border-border"
                   onClick={() =>
-                    setChecksVersionId((current) => (current === version.id ? null : version.id))
+                    setChecksVersionIds((current) => {
+                      const next = new Set(current)
+                      if (next.has(version.id)) next.delete(version.id)
+                      else next.add(version.id)
+                      return next
+                    })
                   }
                 >
                   <Eye className="mr-1.5 size-3.5" aria-hidden />
-                  {checksVersionId === version.id ? 'Hide checks' : 'View checks'}
+                  {checksVersionIds.has(version.id)
+                    ? `Hide checks for version ${version.versionNumber}`
+                    : `View checks for version ${version.versionNumber}`}
                 </Button>
-                {checksVersionId === version.id ? (
+                {checksVersionIds.has(version.id) ? (
                   <VersionChecksPanel assetId={assetId} versionId={version.id} />
                 ) : null}
                 <Button

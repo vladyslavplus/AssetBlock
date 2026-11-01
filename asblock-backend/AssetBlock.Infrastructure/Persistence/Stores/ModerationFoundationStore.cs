@@ -956,17 +956,23 @@ internal sealed partial class ModerationFoundationStore(
                             && v.ProcessingStatus == AssetVersionProcessingStatus.READY),
                     cancellationToken);
 
-        // Select state and decision from the same latest submission to keep the seller projection consistent.
-        var latest = await LatestSubmissionsForVersion(assetVersionId)
+        // One bounded ordered projection supplies the latest summary and seller history.
+        var recentSubmissions = await LatestSubmissionsForVersion(assetVersionId)
+            .Take(20)
             .Select(s => new
             {
+                s.Id,
+                s.Kind,
                 s.State,
+                s.CaseRevision,
+                s.CreatedAt,
                 Decision = dbContext.ModerationDecisionRecords.AsNoTracking()
                     .Where(d => d.SubmissionId == s.Id && d.Submission.AssetVersionId == assetVersionId)
                     .Select(d => new { d.Outcome, d.Message, d.CreatedAt, d.PublicationSnapshotId })
                     .SingleOrDefault()
             })
-            .FirstOrDefaultAsync(cancellationToken);
+            .ToListAsync(cancellationToken);
+        var latest = recentSubmissions.FirstOrDefault();
         ModerationSubmissionState moderationState = latest?.State ?? ModerationSubmissionState.DRAFT;
         ModerationSubmission? latestSubmission = workspace is null ? null : await LatestSubmissionsForVersion(assetVersionId).FirstOrDefaultAsync(cancellationToken);
         var canAppeal = workspace is not null && workspace.AssetVersionId == assetVersionId && workspace.WorkspaceVersionScopeKey == assetVersionId
@@ -979,8 +985,12 @@ internal sealed partial class ModerationFoundationStore(
         SellerAppealDto? appeal = null;
         if (appealSubmission is not null)
         {
-            DateTimeOffset? decidedAt = await dbContext.ModerationDecisionRecords.AsNoTracking().Where(d => d.SubmissionId == appealSubmission.Id)
-                .Select(d => (DateTimeOffset?)d.CreatedAt).SingleOrDefaultAsync(cancellationToken);
+            DateTimeOffset? decidedAt = recentSubmissions.FirstOrDefault(s => s.Id == appealSubmission.Id)?.Decision?.CreatedAt;
+            if (decidedAt is null)
+            {
+                decidedAt = await dbContext.ModerationDecisionRecords.AsNoTracking().Where(d => d.SubmissionId == appealSubmission.Id)
+                    .Select(d => (DateTimeOffset?)d.CreatedAt).SingleOrDefaultAsync(cancellationToken);
+            }
             SellerAppealState? state = appealSubmission.State switch
             {
                 ModerationSubmissionState.SUBMITTED or ModerationSubmissionState.IN_REVIEW => SellerAppealState.PENDING_REVIEW,
@@ -1024,6 +1034,20 @@ internal sealed partial class ModerationFoundationStore(
             blocked.Add(ErrorCodes.ERR_DECLARATION_INCOMPLETE);
         }
 
+        SellerActiveSubmissionDto? activeSubmission = latest is { State: ModerationSubmissionState.SUBMITTED or ModerationSubmissionState.IN_REVIEW }
+            ? new(latest.Id, latest.Kind, latest.State, latest.CaseRevision)
+            : null;
+        IReadOnlyList<SellerSubmissionHistoryEntryDto> history = recentSubmissions.Select(submission => new SellerSubmissionHistoryEntryDto(
+            submission.Id,
+            submission.Kind,
+            submission.State,
+            submission.Decision?.Outcome,
+            submission.Decision?.Outcome is ModerationSubmissionState.CHANGES_REQUESTED or ModerationSubmissionState.REJECTED
+                ? submission.Decision.Message
+                : null,
+            submission.CreatedAt,
+            submission.Decision?.CreatedAt)).ToList();
+
         return new SellerVersionReviewDto(
             row.AssetId,
             row.Id,
@@ -1037,7 +1061,11 @@ internal sealed partial class ModerationFoundationStore(
             !row.DeletedAt.HasValue,
             false,
             blocked,
-            Decision: decision, CanAppeal: canAppeal, Appeal: appeal);
+            Decision: decision, CanAppeal: canAppeal, Appeal: appeal)
+        {
+            ActiveSubmission = activeSubmission,
+            History = history
+        };
     }
 
     public async Task<VersionAttachResult> AttachUploadedVersionToWorkspace(

@@ -238,7 +238,7 @@ public sealed class ModerationDecisionIntegrationTests(IntegrationTestFixture fi
             created.StatusCode.Should().Be(HttpStatusCode.OK, await created.Content.ReadAsStringAsync());
             using var json = System.Text.Json.JsonDocument.Parse(await created.Content.ReadAsStringAsync());
             Guid appealId = json.RootElement.GetProperty("submissionId").GetGuid();
-            using HttpResponseMessage appealQueue = await independent.GetAsync("/" + ApiRoutes.Moderation.QUEUE);
+            using HttpResponseMessage appealQueue = await independent.GetAsync("/" + ApiRoutes.Moderation.QUEUE + "?state=SUBMITTED&pageSize=100");
             appealQueue.StatusCode.Should().Be(HttpStatusCode.OK);
             using var appealQueueJson = System.Text.Json.JsonDocument.Parse(await appealQueue.Content.ReadAsStringAsync());
             System.Text.Json.JsonElement appealQueueItem = appealQueueJson.RootElement.GetProperty("items").EnumerateArray()

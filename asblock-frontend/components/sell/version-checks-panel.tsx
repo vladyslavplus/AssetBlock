@@ -4,11 +4,11 @@ import { CoverageReviewPanel } from '@/components/sell/coverage-review-panel'
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useEffect, useRef, useState } from 'react'
-import { AlertCircle, CheckCircle2, Clock, Loader2, ShieldCheck, Upload } from 'lucide-react'
+import { CheckCircle2, Clock, Loader2, ShieldCheck, Upload } from 'lucide-react'
 import { SellerResponsesPanel } from '@/components/sell/seller-responses-panel'
-import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
+import { SellerVersionReviewPanel } from '@/components/sell/seller-version-review-panel'
 import {
   fetchSellerAnalysisFindingsQuery,
   fetchSellerVersionReviewQuery,
@@ -18,8 +18,6 @@ import { retrySellerAnalysis } from '@/lib/seller/seller-draft-api'
 import type { SellerAnalysisRetryRequest } from '@/lib/seller/seller-draft-schemas'
 import {
   isVersionPublished,
-  versionReviewBlockedReasonAction,
-  versionReviewBlockedReasonMessage,
   versionReviewModerationLabel,
 } from '@/lib/seller/version-review-status'
 
@@ -410,29 +408,7 @@ export function VersionChecksPanel({ assetId, versionId }: VersionChecksPanelPro
       ) : null}
 
       <CoverageReviewPanel assetId={assetId} versionId={versionId} review={review} />
-      {!review.canSubmit ? (
-        <Alert className="border-amber-500/40 bg-amber-500/10 py-3">
-          <AlertCircle className="h-4 w-4 text-amber-600 dark:text-amber-400" />
-          <AlertDescription className="text-xs text-amber-800 dark:text-amber-200 space-y-1.5">
-            <p className="font-medium text-foreground/90">Submission is not available yet.</p>
-            <ul className="space-y-1">
-              {review.blockedReasons.map((reason) => (
-                <li key={reason}>
-                  {versionReviewBlockedReasonMessage(reason)}
-                  {versionReviewBlockedReasonAction(reason)
-                    ? ` ${versionReviewBlockedReasonAction(reason)}`
-                    : ''}
-                </li>
-              ))}
-            </ul>
-          </AlertDescription>
-        </Alert>
-      ) : (
-        <p className="flex items-center gap-1.5 text-xs text-emerald-300">
-          <CheckCircle2 className="size-3.5" aria-hidden />
-          This version is eligible for submission.
-        </p>
-      )}
+      <SellerVersionReviewPanel assetId={assetId} versionId={versionId} review={review} />
     </div>
   )
 }
