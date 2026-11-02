@@ -9,7 +9,10 @@ missing prerequisites surface as honest stage failures, never import crashes.
 from __future__ import annotations
 
 import sys
+import math
 from pathlib import Path
+
+from .contracts import ContractError
 
 # strictly below: app/ -> code-analysis/ -> services/ -> repository root.
 REPO_ROOT = Path(__file__).resolve().parents[3]
@@ -44,18 +47,18 @@ def bind_token_pairs(raw_pairs: list, allowlist: list) -> list:
 
 
 def rank_token_files(pairs: list, query_id: str, gallery_ids: list, limit: int) -> list:
+    # Zero is absence of token observation; malformed scores must still fail the stage.
+    for pair in pairs:
+        score = pair["tokenScore"]
+        if type(score) not in (int, float) or not math.isfinite(score) or not 0 <= score <= 1:
+            raise ContractError("TOOL_OUTPUT_INVALID", "token score")
     return _import("scripts.code_analysis.baselines.rank_files")(
-        pairs, query_id, gallery_ids, limit=limit)
+        [pair for pair in pairs if pair["tokenScore"] > 0], query_id, gallery_ids, limit=limit)
 
 
 def union_candidates(token_ids: list, semantic_ids: list, budget: int) -> list:
     return _import("scripts.code_analysis.baselines.union_candidates")(
         token_ids, semantic_ids, budget=budget)
-
-
-def reciprocal_rank_order(token_ids: list, semantic_ids: list, budget: int) -> list:
-    from scripts.code_analysis import baselines
-    return baselines.rrf_order(token_ids, semantic_ids, budget=budget)
 
 
 def generator_header_signals(raw: bytes) -> list:

@@ -44,7 +44,7 @@ The database migrations use the PostgreSQL `vector` extension. For a native Wind
    WHERE extname = 'vector';
    ```
 
-The expected extension version is `0.8.6`. After this, start the API with `Database:AutoMigrate=true`; EF applies the schema migrations automatically. Creating or recreating a database does **not** require rebuilding pgvector: repeat only step 5. Reinstall pgvector only after replacing the local PostgreSQL server or changing its major version.
+The expected extension version is `0.8.6`. After this, start the API with `Database:AutoMigrate=true`; EF applies the schema migrations automatically. The schema history is a single `Initial` migration: a database created before that squash still carries the old history rows and fails with `relation already exists`, so drop and recreate it (repeat step 5, then migrate) instead of upgrading it. Creating or recreating a database does **not** require rebuilding pgvector: repeat only step 5. Reinstall pgvector only after replacing the local PostgreSQL server or changing its major version.
 
 ### 1. User Secrets (optional alternative to Development JSON)
 

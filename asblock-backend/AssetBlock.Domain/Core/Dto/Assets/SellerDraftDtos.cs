@@ -1,4 +1,5 @@
 using System.Text.Json.Serialization;
+using AssetBlock.Domain.Core.Dto.Moderation;
 using AssetBlock.Domain.Core.Enums;
 
 namespace AssetBlock.Domain.Core.Dto.Assets;
@@ -92,7 +93,59 @@ public sealed record SellerVersionReviewDto(
     bool CanUpload,
     bool CanSubmit,
     IReadOnlyList<string> BlockedReasons,
-    SellerAnalysisSummaryDto? AnalysisDetails = null);
+    SellerAnalysisSummaryDto? AnalysisDetails = null,
+    int RequiredResponseCount = 0, int OutstandingResponseCount = 0, int EvidenceRevision = 0, CoverageOwnerStatus? CoverageReview = null,
+    SellerVersionDecisionDto? Decision = null,
+    bool CanAppeal = false,
+    SellerAppealDto? Appeal = null)
+{
+    public SellerActiveSubmissionDto? ActiveSubmission { get; init; }
+    public IReadOnlyList<SellerSubmissionHistoryEntryDto> History { get; init; } = [];
+}
+
+/// <summary>Owner-safe identity and revision for withdrawing the version's active submission.</summary>
+public sealed record SellerActiveSubmissionDto(
+    Guid SubmissionId,
+    ModerationSubmissionKind Kind,
+    ModerationSubmissionState State,
+    long CaseRevision);
+
+/// <summary>Bounded owner-safe lifecycle and decision history for a version submission.</summary>
+public sealed record SellerSubmissionHistoryEntryDto(
+    Guid SubmissionId,
+    ModerationSubmissionKind Kind,
+    ModerationSubmissionState State,
+    ModerationSubmissionState? DecisionOutcome,
+    string? DecisionReason,
+    DateTimeOffset CreatedAt,
+    DateTimeOffset? DecidedAt);
+
+/// <summary>Owner-safe appeal status without reviewer or evidence details.</summary>
+public sealed record SellerAppealDto(SellerAppealState State, DateTimeOffset RequestedAt, DateTimeOffset? DecidedAt);
+
+[JsonConverter(typeof(JsonStringEnumConverter))]
+public enum SellerAppealState { PENDING_REVIEW, UPHELD, APPROVED, WITHDRAWN }
+
+/// <summary>
+/// Owner-safe terminal decision for a version. Present only when the latest submission (by CreatedAt, then Id descending) has a decision;
+/// while a newer submission is pending (or any newer case exists) the decision is null. Reason is the Moderator's
+/// rationale for CHANGES_REQUESTED and REJECTED and is null for APPROVED. Publication is PUBLISHED only for an approval
+/// whose snapshot is the asset's current pointer and whose version is publication-eligible; other approvals are
+/// HISTORICAL, while non-approval outcomes have null publication.
+/// Never carries Moderator identity, dispositions, coverage text, scores, reference identities or claim holders.
+/// </summary>
+public sealed record SellerVersionDecisionDto(
+    ModerationSubmissionState Outcome,
+    string? Reason,
+    DateTimeOffset DecidedAt,
+    SellerDecisionPublication? Publication);
+
+[JsonConverter(typeof(JsonStringEnumConverter))]
+public enum SellerDecisionPublication
+{
+    PUBLISHED,
+    HISTORICAL
+}
 
 [JsonConverter(typeof(JsonStringEnumConverter))]
 public enum SellerAnalysisAvailability

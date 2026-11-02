@@ -279,6 +279,38 @@ describe('notification-hub durable processing notifications', () => {
     unsubscribe()
   })
 
+  it('dispatches valid moderation case changes to notification subscribers', () => {
+    const received: Array<[string, unknown]> = []
+    const unsubscribe = subscribeNotificationHub((method, payload) => {
+      received.push([method, payload])
+    }, USER_A)
+    const payload = {
+      submissionId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+      assetId: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+      versionId: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
+      state: 'IN_REVIEW',
+      revision: 2,
+      isAppeal: false,
+    }
+
+    handlers.ModerationCaseChanged?.(payload)
+
+    expect(received).toEqual([['ModerationCaseChanged', payload]])
+    expect(toast.info).toHaveBeenCalledWith('Moderation case updated')
+    unsubscribe()
+  })
+
+  it('ignores malformed moderation case changes', () => {
+    const received: Array<[string, unknown]> = []
+    const unsubscribe = subscribeNotificationHub((method, payload) => {
+      received.push([method, payload])
+    }, USER_A)
+    handlers.ModerationCaseChanged?.({ submissionId: 'not-an-id' })
+    expect(received).toHaveLength(0)
+    expect(toast.info).not.toHaveBeenCalled()
+    unsubscribe()
+  })
+
   it('does not toast twice when a terminal processing job update arrives with a durable notification', () => {
     const payload = terminalPayload('cccccccc-cccc-4ccc-8ccc-cccccccccccc')
     const unsubProcessing = subscribeProcessingHub(() => {}, USER_A)

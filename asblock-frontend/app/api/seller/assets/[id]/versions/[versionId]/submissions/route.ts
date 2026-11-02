@@ -1,6 +1,7 @@
 import {
   assertSameOrigin,
-  invalidJsonResponse,
+  BACKEND_JSON_BODY_LIMIT_BYTES,
+  readBoundedJsonBody,
   zodValidationProblemResponse,
 } from '@/lib/server/bff-http'
 import { parseUuidParam } from '@/lib/server/bff-params'
@@ -13,6 +14,8 @@ export async function POST(
 ) {
   const originError = assertSameOrigin(request)
   if (originError) return originError
+  const body = await readBoundedJsonBody(request, BACKEND_JSON_BODY_LIMIT_BYTES.sellerSubmission)
+  if (!body.ok) return body.response
 
   const { id, versionId } = await context.params
   const parsedId = parseUuidParam('id', id)
@@ -24,15 +27,7 @@ export async function POST(
     return parsedVersionId.response
   }
 
-  const bodyText = await request.text()
-  let bodyJson: unknown
-  try {
-    bodyJson = JSON.parse(bodyText)
-  } catch {
-    return invalidJsonResponse()
-  }
-
-  const parsed = assetVersionSubmissionRequestSchema.safeParse(bodyJson)
+  const parsed = assetVersionSubmissionRequestSchema.safeParse(body.value)
   if (!parsed.success) {
     return zodValidationProblemResponse(parsed.error)
   }

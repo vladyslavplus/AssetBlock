@@ -8,6 +8,28 @@ namespace AssetBlock.Infrastructure.Persistence;
 
 public sealed class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options) : DbContext(options)
 {
+    public DbSet<CoverageReviewRequest> CoverageReviewRequests => Set<CoverageReviewRequest>();
+    public DbSet<CoverageAssessment> CoverageAssessments => Set<CoverageAssessment>();
+    public DbSet<SellerResponse> SellerResponses => Set<SellerResponse>();
+    public DbSet<ModerationFindingDisposition> ModerationFindingDispositions => Set<ModerationFindingDisposition>();
+    private void GuardAppendOnlyReviewRecords()
+    {
+        if (ChangeTracker.Entries().Any(e => (e.Entity is SellerResponse or ModerationFindingDisposition or CoverageAssessment)
+            && e.State is EntityState.Modified or EntityState.Deleted))
+        {
+            throw new InvalidOperationException("Review responses, dispositions and coverage assessments are append-only.");
+        }
+    }
+    public override int SaveChanges(bool acceptAllChangesOnSuccess)
+    {
+        GuardAppendOnlyReviewRecords();
+        return base.SaveChanges(acceptAllChangesOnSuccess);
+    }
+    public override Task<int> SaveChangesAsync(bool acceptAllChangesOnSuccess, CancellationToken cancellationToken = default)
+    {
+        GuardAppendOnlyReviewRecords();
+        return base.SaveChangesAsync(acceptAllChangesOnSuccess, cancellationToken);
+    }
     public DbSet<User> Users => Set<User>();
     public DbSet<Category> Categories => Set<Category>();
     public DbSet<Asset> Assets => Set<Asset>();
@@ -83,6 +105,7 @@ public sealed class ApplicationDbContext(DbContextOptions<ApplicationDbContext> 
         }
 
         modelBuilder.HasPostgresExtension("pg_trgm");
+        modelBuilder.HasPostgresExtension("vector");
         modelBuilder.HasDbFunction(
                 typeof(PostgresDbFunctions).GetMethod(
                     nameof(PostgresDbFunctions.TrigramsSimilarity),

@@ -1,3 +1,4 @@
+using AssetBlock.Domain.Core.Dto.Moderation;
 using AssetBlock.Domain.Core.Enums;
 
 namespace AssetBlock.Domain.Core.Dto.Assets;
@@ -12,7 +13,8 @@ public sealed record SellerAnalysisStageDto(
     string Stage,
     string Applicability,
     string Outcome,
-    bool Retryable);
+    bool Retryable,
+    string? ErrorCode);
 
 /// <summary>Owner-safe projection from the selected immutable run and admitted report.</summary>
 public sealed record SellerAnalysisSummaryDto(
@@ -35,10 +37,12 @@ public sealed record SellerAnalysisSummaryDto(
     bool CanRetry,
     SellerAnalysisRetryExpectation? RetryExpectation,
     bool CanSubmit,
-    bool CanAuthorizePublication,
+    bool ReviewEligible,
     string ComparisonScope,
     IReadOnlyList<string> Limitations,
-    IReadOnlyList<SellerAnalysisStageDto> Stages);
+    IReadOnlyList<SellerAnalysisStageDto> Stages,
+    string? SubmissionBlockedReason = null,
+    int RequiredResponseCount = 0, int OutstandingResponseCount = 0, int EvidenceRevision = 0, CoverageOwnerStatus? CoverageReview = null);
 
 public sealed record SellerPublicAttributionDto(
     string Label,
@@ -56,7 +60,8 @@ public sealed record SellerAnalysisFindingDto(
     string Reason,
     string RequestedAction,
     string? ReferenceKind,
-    SellerPublicAttributionDto? PublicAttribution);
+    SellerPublicAttributionDto? PublicAttribution,
+    bool ResponseRequired = false, bool HasResponse = false);
 
 public sealed record SellerAnalysisFindingsPageDto(
     Guid AssetId,

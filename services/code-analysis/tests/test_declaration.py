@@ -32,7 +32,7 @@ def test_declaration_contradiction_is_a_finding_not_failure():
     assert [f["type"] for f in pipe.findings] == ["LICENSE_CONTRADICTION"]
     assert pipe.findings[0]["path"] == "calc/a.js"
     assert pipe.findings[0]["fileId"]
-    assert "channelScore" not in pipe.findings[0]
+    assert "retrieval" not in pipe.findings[0]
 
 
 def test_unknown_detection_is_a_concern():
@@ -42,7 +42,7 @@ def test_unknown_detection_is_a_concern():
     assert [f["type"] for f in pipe.findings] == ["LICENSE_UNKNOWN"]
     assert pipe.findings[0]["path"] == "calc/a.js"
     assert pipe.findings[0]["fileId"]
-    assert "channelScore" not in pipe.findings[0]
+    assert "retrieval" not in pipe.findings[0]
 
 
 def test_unscanned_scope_is_missing_notice_without_file_attribution():
@@ -58,7 +58,7 @@ def test_unscanned_scope_is_missing_notice_without_file_attribution():
     assert finding["ownExcerpt"] == ""
     assert "Declared license scope" in finding["reason"]
     assert "calc/a.js" not in finding["path"]
-    assert "channelScore" not in finding
+    assert "retrieval" not in finding
 
 
 def test_unscanned_scope_finding_does_not_depend_on_archive_order():

@@ -97,6 +97,29 @@ internal static class IntegrationTestAuth
         return (client, username);
     }
 
+    public static async Task<(HttpClient Client, string Username)> RegisterVerifiedWithRoleAsync(
+        WebApplicationFactory<Program> factory, string role)
+    {
+        (HttpClient registered, var username) = await RegisterVerifiedAndAuthenticateAsync(factory);
+        registered.Dispose();
+        string email;
+        await using (AsyncServiceScope scope = factory.Services.CreateAsyncScope())
+        {
+            ApplicationDbContext db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+            User user = await db.Users.SingleAsync(u => u.Username == username);
+            user.Role = role;
+            user.RoleRevision++;
+            email = user.Email;
+            await db.SaveChangesAsync();
+        }
+        HttpClient client = factory.CreateClient();
+        HttpResponseMessage login = await client.PostAsJsonAsync("/api/auth/login", new LoginRequest(email, "Password1!"));
+        login.EnsureSuccessStatusCode();
+        TokensResponseDto tokens = (await login.Content.ReadFromJsonAsync<TokensResponseDto>(JsonOptions))!;
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", tokens.AccessToken);
+        return (client, username);
+    }
+
     public static async Task MarkEmailVerifiedAsync(WebApplicationFactory<Program> factory, string username)
     {
         await using AsyncServiceScope scope = factory.Services.CreateAsyncScope();

@@ -3,6 +3,8 @@ namespace AssetBlock.Domain.Core.Constants;
 /// <summary>Outbox message type discriminators (wire values).</summary>
 public static class OutboxMessageTypes
 {
+    public const string MODERATION_DECISION = "ModerationDecision";
+    public const string MODERATION_LIFECYCLE = "ModerationLifecycle";
     public const string ASSET_BLOB_DELETE = "AssetBlobDelete";
     public const string NOTIFICATION_DISPATCH = "NotificationDispatch";
     public const string EMAIL_DISPATCH = "EmailDispatch";

@@ -44,8 +44,8 @@ internal static class AdmittedReportTestEvidence
             PolicyDigest = chain.PolicyDigest,
             SchemaName = "code-analysis-v1",
             StageMatrixJson = "{}",
-            VerifierMode = "PENDING_RESEARCH_EVALUATION",
-            VerifierReason = "Retrieval quality research evaluation has not been reviewed.",
+            VerifierMode = "DISABLED_BY_EVALUATION",
+            VerifierReason = AssetBlock.Domain.Core.Constants.ReviewAnalysisPolicy.VERIFIER_REASON,
             ToolIdentitiesJson = "{}",
             LimitsJson = "{}",
             SecurityValidityJson = "{}",
@@ -145,7 +145,7 @@ internal static class AdmittedReportTestEvidence
             PolicyVersion = "code-analysis-policy-v1",
             InputRevision = 1,
             Purpose = CodeAnalysisReportPurpose.PRODUCTION,
-            CanAuthorizePublication = true,
+            ReviewEligible = true,
             IsFinalized = true,
             FinalizedAt = DateTimeOffset.UtcNow,
             ReportSchemaVersion = 1,
@@ -159,7 +159,7 @@ internal static class AdmittedReportTestEvidence
     }
 
     public static CodeAnalysisReportAdmission Admission(
-        CodeAnalysisReportHeader report, Chain chain, bool canAuthorizePublication)
+        CodeAnalysisReportHeader report, Chain chain, bool reviewEligible)
     {
         return new CodeAnalysisReportAdmission
         {
@@ -175,10 +175,10 @@ internal static class AdmittedReportTestEvidence
             ReservationSlotNumber = 0,
             ReservationGeneration = 1,
             ReservationLeaseTokenDigest = NewHex64(),
-            CanAuthorizePublication = canAuthorizePublication,
-            PublicationAuthorityReason = canAuthorizePublication
-                ? "test evidence granting publication authority"
-                : "publication authority is unavailable pending research evaluation",
+            ReviewEligible = reviewEligible,
+            ReviewEligibilityReason = reviewEligible
+                ? "test evidence granting review eligibility"
+                : "test evidence denying review eligibility",
             CreatedAt = DateTimeOffset.UtcNow
         };
     }

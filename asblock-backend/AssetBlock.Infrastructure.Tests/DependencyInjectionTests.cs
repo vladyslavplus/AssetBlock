@@ -2,8 +2,10 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using AssetBlock.Domain.Abstractions.Services;
+using AssetBlock.Domain.Core.Constants;
 using AssetBlock.Domain.Core.Enums;
 using AssetBlock.Domain.Core.Primitives.AppSettingsOptions;
+using AssetBlock.Infrastructure.Outbox;
 using AssetBlock.Infrastructure.Persistence;
 using AssetBlock.Infrastructure.RateLimiting;
 using Microsoft.AspNetCore.DataProtection;
@@ -19,6 +21,16 @@ namespace AssetBlock.Infrastructure.Tests;
 
 public sealed class DependencyInjectionTests
 {
+    [Fact]
+    public void AddInfrastructure_WhenModerationOutboxMessagesAreDispatched_ShouldResolveOneHandlerPerType()
+    {
+        ServiceCollection services = BuildValidServices(new TestHostEnvironment());
+        services.AddSingleton(Substitute.For<IRealtimeNotificationPublisher>());
+        using ServiceProvider provider = services.BuildServiceProvider();
+        var handlers = provider.GetServices<IOutboxMessageHandler>().ToList();
+        handlers.Should().ContainSingle(h => h.MessageType == OutboxMessageTypes.MODERATION_DECISION);
+        handlers.Should().ContainSingle(h => h.MessageType == OutboxMessageTypes.MODERATION_LIFECYCLE);
+    }
     [Fact]
     public void AddInfrastructure_resolves_core_services()
     {

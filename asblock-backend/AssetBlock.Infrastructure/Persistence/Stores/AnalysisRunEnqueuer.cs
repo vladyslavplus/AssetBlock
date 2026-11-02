@@ -546,7 +546,7 @@ internal sealed class AnalysisRunEnqueuer(
 
     /// <summary>
     /// Resolves one complete coherent run/job pair for a run that already exists, materialising
-    /// the missing half when a previous deployment left it unbound. A replay never returns a run
+    /// the missing half when scheduling was interrupted before binding. A replay never returns a run
     /// without its job.
     /// </summary>
     private async Task<AnalysisRunEnqueueResult> ResolveLiveRunPair(
@@ -646,7 +646,7 @@ internal sealed class AnalysisRunEnqueuer(
                     AND h."IsFinalized"
                     AND h."Disposition" = 'SELECTED'
                     AND a."AdmissionKind" = 'SERVER_VALIDATED'
-                    AND NOT a."CanAuthorizePublication"
+                    AND a."ReviewEligible" = h."ReviewEligible"
                     AND a."ReportDigest" = h."ReportDigest"
                     AND (
                         SELECT COUNT(*)

@@ -34,7 +34,7 @@ public sealed class CodeAnalysisOptions
     public string AuthenticationHeader { get; init; } = "X-Analysis-Secret";
 
     /// <summary>Pinned policy identity this deployment admits. No policy row means no analysis.</summary>
-    public string PolicyKey { get; init; } = "code-analysis-policy-v1";
+    public string PolicyKey { get; init; } = Constants.ReviewAnalysisPolicy.KEY;
 
     /// <summary>
     /// Digest of the pinned policy manifest. Resolved together with the key so a deployment never

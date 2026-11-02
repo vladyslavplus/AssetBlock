@@ -2,12 +2,15 @@ using System.Net;
 using System.Net.Http.Json;
 using System.Text;
 using System.Text.Json;
+using AssetBlock.Domain.Abstractions.Services;
 using AssetBlock.Domain.Core.Constants;
 using AssetBlock.Domain.Core.Dto.Users;
 using AssetBlock.Domain.Core.Entities;
 using AssetBlock.Domain.Core.Enums;
 using AssetBlock.Domain.Core.Licenses;
 using AssetBlock.Infrastructure.Persistence;
+using AssetBlock.WebApi.Constants;
+using AssetBlock.WebApi.Controllers;
 using AssetBlock.WebApi.IntegrationTests.Support;
 using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore;
@@ -18,6 +21,58 @@ namespace AssetBlock.WebApi.IntegrationTests.Controllers;
 [Collection(nameof(IntegrationTestCollection))]
 public sealed class UsersControllerIntegrationTests(IntegrationTestFixture fixture)
 {
+    [Fact]
+    public async Task ListNotifications_WhenModerationEventsExist_ShouldRestrictThemToRecipient()
+    {
+        (HttpClient owner, var ownerName) = await IntegrationTestAuth.RegisterAndAuthenticateAsync(fixture.Factory);
+        (HttpClient other, _) = await IntegrationTestAuth.RegisterAndAuthenticateAsync(fixture.Factory);
+        var ids = new List<Guid>();
+        await using (AsyncServiceScope scope = fixture.Factory.Services.CreateAsyncScope())
+        {
+            ApplicationDbContext db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+            Guid userId = await db.Users.Where(u => u.Username == ownerName).Select(u => u.Id).SingleAsync();
+            NotificationKind[] kinds = [NotificationKind.MODERATION_SUBMITTED, NotificationKind.MODERATION_REVIEW_STARTED,
+                NotificationKind.MODERATION_CHANGES_REQUESTED, NotificationKind.MODERATION_APPROVED, NotificationKind.MODERATION_REJECTED, NotificationKind.MODERATION_WITHDRAWN];
+            foreach (NotificationKind kind in kinds)
+            {
+                var id = Guid.NewGuid();
+                ids.Add(id);
+                db.UserNotifications.Add(new UserNotification { Id = id, RecipientUserId = userId, Kind = kind, MetadataJson = "{}", CreatedAt = DateTimeOffset.UtcNow });
+            }
+            await db.SaveChangesAsync();
+        }
+        var prefix = $"/api/{nameof(UsersController).Replace("Controller", "", StringComparison.Ordinal)}/";
+        var listing = new Uri(prefix + ApiRoutes.Users.ME_NOTIFICATIONS, UriKind.Relative);
+        var ownerJson = await owner.GetStringAsync(listing);
+        var otherJson = await other.GetStringAsync(listing);
+        foreach (Guid id in ids)
+        { ownerJson.Should().Contain(id.ToString()); otherJson.Should().NotContain(id.ToString()); }
+        var read = ApiRoutes.Users.ME_NOTIFICATION_READ.Replace("{id:guid}", ids[0].ToString(), StringComparison.Ordinal);
+        (await other.PatchAsync(new Uri(prefix + read, UriKind.Relative), new StringContent("", Encoding.UTF8, "application/json"))).StatusCode.Should().Be(HttpStatusCode.NotFound);
+        (await owner.PatchAsync(new Uri(prefix + read, UriKind.Relative), new StringContent("", Encoding.UTF8, "application/json"))).StatusCode.Should().Be(HttpStatusCode.OK);
+    }
+
+    [Fact]
+    public async Task ListNotifications_WhenDecisionEventIsDeliveredTwice_ShouldListOneNotification()
+    {
+        (HttpClient owner, var ownerName) = await IntegrationTestAuth.RegisterAndAuthenticateAsync(fixture.Factory);
+        var eventId = Guid.NewGuid();
+        await using (AsyncServiceScope scope = fixture.Factory.Services.CreateAsyncScope())
+        {
+            ApplicationDbContext db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+            Guid userId = await db.Users.Where(u => u.Username == ownerName).Select(u => u.Id).SingleAsync();
+            IRealtimeNotificationPublisher publisher = scope.ServiceProvider.GetRequiredService<IRealtimeNotificationPublisher>();
+            await publisher.DeliverPersistedNotification(eventId, userId, NotificationKind.MODERATION_APPROVED, NotificationHubMethods.MODERATION_CASE_CHANGED, "{}", CancellationToken.None);
+            await publisher.DeliverPersistedNotification(eventId, userId, NotificationKind.MODERATION_APPROVED, NotificationHubMethods.MODERATION_CASE_CHANGED, "{}", CancellationToken.None);
+            (await db.UserNotifications.AsNoTracking().CountAsync(n => n.SourceOutboxMessageId == eventId)).Should().Be(1);
+        }
+        var path = $"/api/{nameof(UsersController).Replace("Controller", "", StringComparison.Ordinal)}/{ApiRoutes.Users.ME_NOTIFICATIONS}";
+        var json = await owner.GetStringAsync(new Uri(path, UriKind.Relative));
+        using var document = JsonDocument.Parse(json);
+        document.RootElement.GetProperty("items").EnumerateArray()
+            .Count(item => item.GetProperty("kind").GetString() == nameof(NotificationKind.MODERATION_APPROVED))
+            .Should().Be(1);
+    }
     [Fact]
     public async Task ListSocialPlatforms_ShouldReturnOkWithSeededPlatforms()
     {
@@ -366,7 +421,7 @@ public sealed class UsersControllerIntegrationTests(IntegrationTestFixture fixtu
                 PolicyVersion = "code-analysis-policy-v1",
                 InputRevision = 1,
                 Purpose = CodeAnalysisReportPurpose.PRODUCTION,
-                CanAuthorizePublication = false,
+                ReviewEligible = false,
                 IsFinalized = true,
                 FinalizedAt = now,
                 ReportSchemaVersion = 1,
@@ -388,8 +443,8 @@ public sealed class UsersControllerIntegrationTests(IntegrationTestFixture fixtu
                 ReservationSlotNumber = 0,
                 ReservationGeneration = 1,
                 ReservationLeaseTokenDigest = new string('e', 64),
-                CanAuthorizePublication = false,
-                PublicationAuthorityReason = "Research evaluation only.",
+                ReviewEligible = false,
+                ReviewEligibilityReason = "Research evaluation only.",
                 CreatedAt = now
             };
             db.Categories.Add(category);

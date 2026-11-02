@@ -1,5 +1,34 @@
 import type { Route } from 'next'
+import { isModeratorRole } from '@/lib/auth/roles'
 import { routes } from '@/lib/routes'
+import type { NotificationKind } from '@/lib/notifications/notification-types'
+
+const notificationTitles: Record<NotificationKind, string> = {
+  DOWNLOAD_READY: 'Download ready',
+  ASSET_SOLD: 'Sale completed',
+  REVIEW_RECEIVED: 'New review',
+  ORDER_READY: 'Order ready',
+  ASSET_PROCESSING_READY: 'Listing ready',
+  ASSET_PROCESSING_REJECTED: 'Listing rejected',
+  ASSET_PROCESSING_FAILED: 'Listing processing failed',
+  CODE_ANALYSIS_COMPLETED: 'Code analysis completed',
+  MODERATION_SUBMITTED: 'Moderation submitted',
+  MODERATION_REVIEW_STARTED: 'Moderation review started',
+  MODERATION_CHANGES_REQUESTED: 'Moderation changes requested',
+  MODERATION_APPROVED: 'Moderation approved',
+  MODERATION_REJECTED: 'Moderation rejected',
+  MODERATION_WITHDRAWN: 'Moderation submission withdrawn',
+  MODERATION_APPEAL_UPHELD: 'Appeal upheld',
+}
+
+const ownerOutcomeKinds = new Set<string>([
+  'MODERATION_REVIEW_STARTED',
+  'MODERATION_CHANGES_REQUESTED',
+  'MODERATION_APPROVED',
+  'MODERATION_REJECTED',
+  'MODERATION_APPEAL_UPHELD',
+])
+const ambiguousRecipientKinds = new Set<string>(['MODERATION_SUBMITTED', 'MODERATION_WITHDRAWN'])
 
 function tryParseJson(json: string): unknown {
   try {
@@ -32,24 +61,8 @@ export function normalizeNotificationKind(input: string): string {
 
 export function getNotificationTitle(kindOrMethod: string): string {
   const k = normalizeNotificationKind(kindOrMethod)
-  switch (k) {
-    case 'ORDER_READY':
-      return 'Order ready'
-    case 'DOWNLOAD_READY':
-      return 'Download ready'
-    case 'ASSET_SOLD':
-      return 'Sale completed'
-    case 'REVIEW_RECEIVED':
-      return 'New review'
-    case 'ASSET_PROCESSING_READY':
-      return 'Listing ready'
-    case 'ASSET_PROCESSING_REJECTED':
-      return 'Listing rejected'
-    case 'ASSET_PROCESSING_FAILED':
-      return 'Listing processing failed'
-    default:
-      return 'Notification'
-  }
+  if (k === 'MODERATION_CASE_CHANGED') return 'Moderation case updated'
+  return notificationTitles[k as NotificationKind] ?? 'Notification'
 }
 
 function pickProductTitle(r: Record<string, unknown>): string | undefined {
@@ -85,11 +98,25 @@ export function getNotificationAssetId(metadataJson: string): string | undefined
   return typeof id === 'string' && id.length > 0 ? id : undefined
 }
 
-export function getNotificationHref(kindOrMethod: string, metadataJson: string): Route {
+export function getNotificationHref(
+  kindOrMethod: string,
+  metadataJson: string,
+  role?: string | null,
+): Route {
   const k = normalizeNotificationKind(kindOrMethod)
   const parsed = tryParseJson(metadataJson)
   const r = asRecord(parsed)
   if (r) {
+    const submissionId = pickString(r, 'submissionId')
+    if ((ownerOutcomeKinds.has(k) || ambiguousRecipientKinds.has(k)) && submissionId) {
+      const moderationAssetId = pickString(r, 'assetId')
+      if (ownerOutcomeKinds.has(k) && moderationAssetId)
+        return routes.sellerAssetEdit(moderationAssetId)
+      if (ambiguousRecipientKinds.has(k)) {
+        if (isModeratorRole(role)) return routes.moderation()
+        if (moderationAssetId) return routes.sellerAssetEdit(moderationAssetId)
+      }
+    }
     const bundleId = pickString(r, 'bundleId')
     if (bundleId && (k === 'ORDER_READY' || k === 'ASSET_SOLD')) {
       return routes.bundleDetail(bundleId)

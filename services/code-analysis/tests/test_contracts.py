@@ -3,16 +3,19 @@
 from app import contracts, policy as policy_module
 
 
-def test_policy_is_immutable_and_has_no_publication_authority():
+def test_policy_is_immutable_and_does_not_assert_review_eligibility():
     first = policy_module.current_policy()
     assert first["policyVersion"] == contracts.POLICY_ID
-    assert first["canAuthorizePublication"] is False
-    assert first["canSubmit"] is False
-    assert first["verifier"]["mode"] == "PENDING_RESEARCH_EVALUATION"
+    assert "reviewEligible" not in first
+    assert first["policyVersion"] == "code-analysis-policy-v1"
+    assert first["verifier"]["mode"] == "DISABLED_BY_EVALUATION"
+    assert first["verifier"]["evidenceSha256"] == "676ad4da5a40ea7a6f040b0c51cc060088689cfd26f23d4a3974b965f1063973"
     assert first["verifier"]["outputs"] == []
     assert first["policyDigest"] == policy_module.POLICY_DIGEST
     # Same content, same digest across builds.
     assert policy_module.build_policy()["policyDigest"] == policy_module.POLICY_DIGEST
+    first["verifier"]["outputs"].append("untrusted")
+    assert policy_module.current_policy()["verifier"]["outputs"] == []
 
 
 def test_exposed_enums_use_upper_snake_case():

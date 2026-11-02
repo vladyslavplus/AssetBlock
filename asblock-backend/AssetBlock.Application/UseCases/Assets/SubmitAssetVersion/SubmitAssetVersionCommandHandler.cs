@@ -3,18 +3,18 @@ using AssetBlock.Application.Common;
 using AssetBlock.Application.Messaging;
 using AssetBlock.Domain.Abstractions.Services;
 using AssetBlock.Domain.Core.Constants;
+using AssetBlock.Domain.Core.Dto.Assets;
 using AssetBlock.Domain.Core.Dto.Moderation;
 
 namespace AssetBlock.Application.UseCases.Assets.SubmitAssetVersion;
 
 internal sealed class SubmitAssetVersionCommandHandler(
-    IModerationFoundationStore moderationFoundationStore)
+    IModerationFoundationStore moderationFoundationStore,
+    ICodeAnalysisSellerStore analysisStore)
     : IRequestHandler<SubmitAssetVersionCommand, Result<Guid>>
 {
     public async Task<Result<Guid>> Handle(SubmitAssetVersionCommand request, CancellationToken cancellationToken)
     {
-        // The trusted analysis integration is not available yet: production submission stays
-        // truthfully blocked even if a report row is inserted manually.
         var requestDigest = DraftPayloadJson.ComputeDigest(DraftPayloadJson.Serialize(new
         {
             request.AssetId,
@@ -24,6 +24,7 @@ internal sealed class SubmitAssetVersionCommandHandler(
             request.ExpectedCaseRevision
         }));
 
+        SellerAnalysisSummaryDto? analysis = await analysisStore.GetOwnerSummary(request.AssetVersionId, request.OwnerId, cancellationToken);
         GuardedSubmissionResult attempt = await moderationFoundationStore.AttemptGuardedSubmission(
             new GuardedSubmissionRequest(
                 request.OwnerId,
@@ -34,7 +35,7 @@ internal sealed class SubmitAssetVersionCommandHandler(
                 request.ExpectedCaseRevision,
                 request.OperationId,
                 requestDigest,
-                CodeAnalysisReportHeaderId: null),
+                CodeAnalysisReportHeaderId: analysis is { ReportIsCurrent: true } ? analysis.ReportId : null),
             cancellationToken);
 
         return attempt.Status switch

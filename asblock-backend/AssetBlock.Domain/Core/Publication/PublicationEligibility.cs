@@ -9,9 +9,6 @@ namespace AssetBlock.Domain.Core.Publication;
 /// </summary>
 public static class PublicationEligibility
 {
-    public static bool IsTrustedProductionReport(CodeAnalysisReportHeader header) =>
-        header is { Purpose: CodeAnalysisReportPurpose.PRODUCTION, CanAuthorizePublication: true, IsFinalized: true };
-
     public static bool SnapshotMatchesVersion(PublicationSnapshot snapshot, AssetVersion version) =>
         snapshot.AssetId == version.AssetId
         && snapshot.AssetVersionId == version.Id

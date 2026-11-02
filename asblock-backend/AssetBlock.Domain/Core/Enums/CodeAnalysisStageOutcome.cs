@@ -6,5 +6,6 @@ namespace AssetBlock.Domain.Core.Enums;
 public enum CodeAnalysisStageOutcome
 {
     SUCCEEDED,
-    FAILED
+    FAILED,
+    NOT_APPLICABLE
 }

@@ -53,6 +53,7 @@ export interface ParsedApiError {
   code?: string
   /** Correlation id from ProblemDetails extensions. */
   traceId?: string
+  blockerCodes?: string[]
 }
 
 function collectFromValidationDictionary(
@@ -109,6 +110,16 @@ export function parseApiErrorBody(body: unknown): ParsedApiError | undefined {
   const fieldErrors: Record<string, string> = {}
   const allMessages: string[] = []
   const { code, traceId } = readCodeAndTraceId(o)
+  const extensions = isPlainObject(o.extensions) ? o.extensions : undefined
+  const rawBlockers = Array.isArray(o.blockerCodes) ? o.blockerCodes : extensions?.blockerCodes
+  const blockerCodes = Array.isArray(rawBlockers)
+    ? rawBlockers
+        .filter(
+          (value): value is string =>
+            typeof value === 'string' && /^ERR_[A-Z0-9_]{1,100}$/.test(value),
+        )
+        .slice(0, 10)
+    : undefined
 
   const errorsVal = o.errors
 
@@ -150,6 +161,7 @@ export function parseApiErrorBody(body: unknown): ParsedApiError | undefined {
     fieldErrors,
     ...(code ? { code } : {}),
     ...(traceId ? { traceId } : {}),
+    ...(blockerCodes?.length ? { blockerCodes } : {}),
   }
 }
 

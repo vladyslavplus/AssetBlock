@@ -12,5 +12,6 @@ public enum ModerationSubmissionState
     CHANGES_REQUESTED,
     APPROVED,
     REJECTED,
+    SUPERSEDED,
     WITHDRAWN
 }

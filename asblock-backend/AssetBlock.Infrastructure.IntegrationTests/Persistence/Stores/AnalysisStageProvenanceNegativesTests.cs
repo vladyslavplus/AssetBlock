@@ -1,5 +1,6 @@
 using System.Text.Json.Nodes;
 using AssetBlock.Domain.Abstractions.Services;
+using AssetBlock.Domain.Core.Constants;
 using AssetBlock.Domain.Core.Dto;
 using AssetBlock.Domain.Core.Entities;
 using AssetBlock.Domain.Core.Enums;
@@ -34,6 +35,9 @@ public sealed class AnalysisStageProvenanceNegativesTests(PostgresFixture fixtur
             forecastBody => { JsonNode? sem = forecastBody["stages"]!.AsArray().First(s => s!["stage"]!.GetValue<string>() == "SEMANTIC"); ((JsonObject)sem!["toolIdentity"]!)["device"] = JsonValue.Create("cuda"); return forecastBody; },
             run.DeclarationDigest,
             run.MaterialDigest);
+        (await Finalize(db, claimed, body)).Should().BeOfType<AssetProcessingJobOutcome.AtomicCommitted>()
+            .Which.JobStatus.Should().Be(AssetProcessingJobStatus.FAILED);
+        await AssertReturnedNoAdmission(db, seed);
     }
 
     private static void AlterStage(JsonObject body, string stageName, string field, string value)
@@ -69,7 +73,7 @@ public sealed class AnalysisStageProvenanceNegativesTests(PostgresFixture fixtur
         AssetVersion version = TestData.CreateAssetVersion(asset.Id, isCurrent: true, processingStatus: AssetVersionProcessingStatus.READY);
         db.Assets.Add(asset);
         db.AssetVersions.Add(version);
-        AdmittedReportTestEvidence.Chain chain = AdmittedReportTestEvidence.BuildChain();
+        AdmittedReportTestEvidence.Chain chain = AdmittedReportTestEvidence.BuildChain() with { PolicyDigest = ReviewAnalysisPolicy.DIGEST };
         db.CodeAnalysisPolicyVersions.Add(AdmittedReportTestEvidence.Policy(chain));
         AdmittedReportTestEvidence.SeedObservedProof(db, version, chain);
         CodeAnalysisRun run = new()

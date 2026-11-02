@@ -17,7 +17,7 @@ internal sealed class CodeAnalysisReportStageConfiguration : IEntityTypeConfigur
                 "\"Applicability\" IN ('MANDATORY', 'OPTIONAL')");
             table.HasCheckConstraint(
                 "CK_code_analysis_report_stages_outcome",
-                "\"Outcome\" IN ('SUCCEEDED', 'FAILED')");
+                "\"Outcome\" IN ('SUCCEEDED', 'FAILED', 'NOT_APPLICABLE')");
             table.HasCheckConstraint("CK_code_analysis_report_stages_duration", "\"DurationMilliseconds\" >= 0");
             table.HasCheckConstraint(
                 "CK_code_analysis_report_stages_input_sha",

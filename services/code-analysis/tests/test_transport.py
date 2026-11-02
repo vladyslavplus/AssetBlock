@@ -69,7 +69,7 @@ def _assert_unavailable(client, workspace_root, archive, metadata, body, content
     assert response.status_code == 200
     assert response.json()["outcome"] == "FAILED"
     assert response.json()["errorCode"] == "REFERENCE_GRANT_MISSING"
-    assert response.json()["policy"]["canAuthorizePublication"] is False
+    assert "reviewEligible" not in response.json()["policy"]
     assert list(workspace_root.iterdir()) == []
     followup = client.post("/internal/analysis", content=body,
                            headers={"content-type": content_type,

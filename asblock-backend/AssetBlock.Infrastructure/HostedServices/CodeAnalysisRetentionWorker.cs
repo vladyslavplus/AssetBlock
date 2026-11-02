@@ -70,6 +70,7 @@ internal sealed class CodeAnalysisRetentionWorker(
                     JOIN asset_versions v ON v."Id" = aa."AssetVersionId"
                     JOIN assets a ON a."Id" = v."AssetId"
                     WHERE aa."CreatedAt" <= {cutoff}
+                      AND NOT EXISTS (SELECT 1 FROM coverage_review_requests cq WHERE cq."AssetVersionId" = v."Id")
                       AND (aa."ReadmeContent" IS NOT NULL OR aa."ManifestMetadata" IS NOT NULL)
                       AND NOT EXISTS (SELECT 1 FROM purchases p WHERE p."AssetId" = a."Id")
                       AND NOT EXISTS (SELECT 1 FROM publication_snapshots ps WHERE ps."AssetVersionId" = v."Id")
@@ -86,7 +87,7 @@ internal sealed class CodeAnalysisRetentionWorker(
                       AND NOT EXISTS (
                           SELECT 1 FROM moderation_submissions ms
                           WHERE ms."AssetVersionId" = v."Id"
-                            AND ms."State" IN ('DRAFT', 'SUBMITTED', 'IN_REVIEW', 'CHANGES_REQUESTED', 'REJECTED'))
+                            AND ms."State" IN ('DRAFT', 'SUBMITTED', 'IN_REVIEW', 'CHANGES_REQUESTED', 'SUPERSEDED', 'REJECTED'))
                       AND NOT EXISTS (
                           SELECT 1 FROM paid_checkout_reconciliation_holds ph
                           JOIN checkout_intents c ON c."Id" = ph."CheckoutIntentId"
@@ -124,13 +125,16 @@ internal sealed class CodeAnalysisRetentionWorker(
         {
             var deleted = await db.Database.ExecuteSqlInterpolatedAsync($"""
                 WITH eligible AS (
-                    SELECT f."Id"
+                    SELECT h."Id"
                     FROM code_analysis_report_headers h
                     JOIN assets a ON a."Id" = h."AssetId"
-                    JOIN code_analysis_report_findings f ON f."ReportId" = h."Id"
-                    WHERE h."IsFinalized" = TRUE
+                    WHERE EXISTS (SELECT 1 FROM code_analysis_report_findings f WHERE f."ReportId" = h."Id")
+                      AND NOT EXISTS (SELECT 1 FROM seller_responses r WHERE r."ReportId" = h."Id")
+                      AND NOT EXISTS (SELECT 1 FROM moderation_finding_dispositions d WHERE d."ReportId" = h."Id")
+                      AND h."IsFinalized" = TRUE
                       AND h."FinalizedAt" IS NOT NULL
                       AND h."FinalizedAt" <= {cutoff}
+                      AND NOT EXISTS (SELECT 1 FROM coverage_review_requests cq WHERE cq."ReportId" = h."Id")
                       AND NOT EXISTS (SELECT 1 FROM purchases p WHERE p."AssetId" = h."AssetId")
                       AND NOT EXISTS (SELECT 1 FROM publication_snapshots ps WHERE ps."AssetVersionId" = h."AssetVersionId")
                       AND NOT EXISTS (SELECT 1 FROM checkout_reservations cr WHERE cr."AssetId" = h."AssetId")
@@ -146,7 +150,10 @@ internal sealed class CodeAnalysisRetentionWorker(
                       AND NOT EXISTS (
                           SELECT 1 FROM moderation_submissions ms
                           WHERE ms."AssetVersionId" = h."AssetVersionId"
-                            AND ms."State" IN ('DRAFT', 'SUBMITTED', 'IN_REVIEW', 'CHANGES_REQUESTED'))
+                            AND (ms."CodeAnalysisReportHeaderId" = h."Id" OR EXISTS (
+                                SELECT 1 FROM asset_versions v WHERE v."Id" = ms."AssetVersionId"
+                                  AND v."SelectedCodeAnalysisReportId" = h."Id"))
+                            AND ms."State" IN ('DRAFT', 'SUBMITTED', 'IN_REVIEW', 'CHANGES_REQUESTED', 'SUPERSEDED'))
                       AND NOT EXISTS (
                           SELECT 1 FROM moderation_submissions ms
                           WHERE ms."AssetVersionId" = h."AssetVersionId" AND ms."State" = 'REJECTED')
@@ -161,13 +168,13 @@ internal sealed class CodeAnalysisRetentionWorker(
                       AND NOT EXISTS (
                           SELECT 1 FROM security_rechecks sr
                           WHERE sr."AssetVersionId" = h."AssetVersionId" AND sr."State" IN ('QUEUED', 'INSPECTING', 'SCANNING'))
-                    ORDER BY a."Id", h."FinalizedAt", f."Id"
+                    ORDER BY a."Id", h."FinalizedAt", h."Id"
                     LIMIT {BATCH_SIZE}
                     FOR UPDATE OF a SKIP LOCKED
                 )
                 DELETE FROM code_analysis_report_findings f
                 USING eligible e
-                WHERE f."Id" = e."Id"
+                WHERE f."ReportId" = e."Id"
                 """, cancellationToken).ConfigureAwait(false);
 
             removed += deleted;
@@ -189,6 +196,7 @@ internal sealed class CodeAnalysisRetentionWorker(
                      AND al."Action" = 'CODE_ANALYSIS_FINALIZED'
                     JOIN assets a ON a."Id" = h."AssetId"
                     WHERE h."IsFinalized" = TRUE AND h."FinalizedAt" IS NOT NULL AND h."FinalizedAt" <= {cutoff}
+                      AND NOT EXISTS (SELECT 1 FROM coverage_review_requests cq WHERE cq."ReportId" = h."Id")
                       AND NOT EXISTS (SELECT 1 FROM purchases p WHERE p."AssetId" = h."AssetId")
                       AND NOT EXISTS (SELECT 1 FROM publication_snapshots ps WHERE ps."AssetVersionId" = h."AssetVersionId")
                       AND NOT EXISTS (SELECT 1 FROM checkout_reservations cr WHERE cr."AssetId" = h."AssetId")
@@ -204,7 +212,7 @@ internal sealed class CodeAnalysisRetentionWorker(
                       AND NOT EXISTS (
                           SELECT 1 FROM moderation_submissions ms
                           WHERE ms."AssetVersionId" = h."AssetVersionId"
-                            AND ms."State" IN ('DRAFT', 'SUBMITTED', 'IN_REVIEW', 'CHANGES_REQUESTED'))
+                            AND ms."State" IN ('DRAFT', 'SUBMITTED', 'IN_REVIEW', 'CHANGES_REQUESTED', 'SUPERSEDED'))
                       AND NOT EXISTS (
                           SELECT 1 FROM moderation_submissions ms
                           WHERE ms."AssetVersionId" = h."AssetVersionId" AND ms."State" = 'REJECTED')
@@ -244,6 +252,7 @@ internal sealed class CodeAnalysisRetentionWorker(
                     JOIN code_analysis_report_headers h ON h."Id" = ra."SourceReportId"
                     JOIN assets a ON a."Id" = h."AssetId"
                     WHERE h."IsFinalized" = TRUE AND h."FinalizedAt" IS NOT NULL AND h."FinalizedAt" <= {cutoff}
+                      AND NOT EXISTS (SELECT 1 FROM coverage_review_requests cq WHERE cq."ReportId" = h."Id")
                       AND NOT EXISTS (SELECT 1 FROM purchases p WHERE p."AssetId" = h."AssetId")
                       AND NOT EXISTS (SELECT 1 FROM publication_snapshots ps WHERE ps."AssetVersionId" = h."AssetVersionId")
                       AND NOT EXISTS (SELECT 1 FROM checkout_reservations cr WHERE cr."AssetId" = h."AssetId")
@@ -259,7 +268,7 @@ internal sealed class CodeAnalysisRetentionWorker(
                       AND NOT EXISTS (
                           SELECT 1 FROM moderation_submissions ms
                           WHERE ms."AssetVersionId" = h."AssetVersionId"
-                            AND ms."State" IN ('DRAFT', 'SUBMITTED', 'IN_REVIEW', 'CHANGES_REQUESTED'))
+                            AND ms."State" IN ('DRAFT', 'SUBMITTED', 'IN_REVIEW', 'CHANGES_REQUESTED', 'SUPERSEDED'))
                       AND NOT EXISTS (
                           SELECT 1 FROM moderation_submissions ms
                           WHERE ms."AssetVersionId" = h."AssetVersionId" AND ms."State" = 'REJECTED')

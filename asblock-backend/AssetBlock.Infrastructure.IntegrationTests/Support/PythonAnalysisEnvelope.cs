@@ -1,5 +1,6 @@
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using AssetBlock.Domain.Core.Constants;
 using AssetBlock.Domain.Core.Entities;
 using AssetBlock.Infrastructure.Persistence;
 
@@ -15,7 +16,7 @@ namespace AssetBlock.Infrastructure.IntegrationTests.Support;
 /// inventory entry counts, the extraction parser map, the observed dolos token identity with its k
 /// and window, the bound encoder identity with model key, index key, loaded checkpoint and state,
 /// framing, pooling and device, the observed scancode licence identity, union finding counts, the
-/// pending verifier mode, and the report input and output digests.
+/// evaluation-disabled verifier mode, and the report input and output digests.
 /// </para>
 /// <para>
 /// The failure envelopes reproduce the service's CANCELLED and FAILED envelopes exactly: empty stage
@@ -201,7 +202,6 @@ internal static class PythonAnalysisEnvelope
                 ["policyVersion"] = policy.PolicyKey,
                 ["policyDigest"] = policy.PolicyDigest,
                 ["verifierMode"] = policy.VerifierMode,
-                ["canAuthorizePublication"] = false
             };
         }
 
@@ -345,7 +345,7 @@ internal static class PythonAnalysisEnvelope
             ["durationSeconds"] = 0.0,
             ["inputSha256"] = reportInputSha256,
             ["outputSha256"] = reportId,
-            ["toolIdentity"] = new JsonObject { ["mode"] = "PENDING_RESEARCH_EVALUATION" },
+            ["toolIdentity"] = new JsonObject { ["mode"] = "DISABLED_BY_EVALUATION" },
             ["counts"] = new JsonObject
             {
                 ["findings"] = ((JsonArray)mutated["findings"]!).Count,
@@ -397,7 +397,6 @@ internal static class PythonAnalysisEnvelope
             ["omissionCount"] = body["coverage"]!["omissions"]!.AsArray().Count,
             ["findings"] = safeFindings,
             ["findingOverflow"] = 0,
-            ["canAuthorizePublication"] = false
         };
     }
 
@@ -429,10 +428,8 @@ internal static class PythonAnalysisEnvelope
             {
                 ["policyVersion"] = applied.PolicyVersion ?? policy.PolicyKey,
                 ["policyDigest"] = policy.PolicyDigest,
-                ["verifierMode"] = applied.VerifierMode ?? "PENDING_RESEARCH_EVALUATION",
+                ["verifierMode"] = applied.VerifierMode ?? policy.VerifierMode,
                 ["verifierReason"] = policy.VerifierReason,
-                ["canAuthorizePublication"] = false,
-                ["canSubmit"] = false
             },
             ["declaration"] = new JsonObject
             {
@@ -470,6 +467,7 @@ internal static class PythonAnalysisEnvelope
             },
             ["findings"] = new JsonArray(Finding("finding-1", applied.FindingReason)),
             ["findingOverflow"] = 0,
+            ["retrievalSummary"] = RetrievalSummary(),
             ["comparedScope"] = new JsonObject
             {
                 ["snapshotId"] = policy.ReferenceSnapshotId,
@@ -477,6 +475,8 @@ internal static class PythonAnalysisEnvelope
                 ["comparedFiles"] = 1
             }
         };
+
+        preReport["policy"]!["evidenceSha256"] = ReviewAnalysisPolicy.EVIDENCE_SHA256;
 
         // The report identity is the digest of the pre-REPORT body, exactly as the service computes it.
         using var preDocument = JsonDocument.Parse(preReport.ToJsonString());
@@ -537,7 +537,6 @@ internal static class PythonAnalysisEnvelope
             ["omissionCount"] = 0,
             ["findings"] = safeFindings,
             ["findingOverflow"] = 0,
-            ["canAuthorizePublication"] = false
         };
 
         // The mutation is applied to the complete envelope (with reportId, sellerSafe, REPORT stage),
@@ -659,12 +658,18 @@ internal static class PythonAnalysisEnvelope
             new JsonObject { ["unionFindings"] = 1 },
             new JsonObject());
 
-    private static JsonObject VerifierStage() =>
-        Stage("VERIFIER",
-            "SUCCEEDED",
-            AdmittedReportTestEvidence.NewHex64(),
-            new JsonObject { ["outputs"] = 0 },
-            new JsonObject { ["mode"] = "PENDING_RESEARCH_EVALUATION" });
+    private static JsonObject VerifierStage()
+    {
+        JsonObject stage = Stage("VERIFIER", "NOT_APPLICABLE", AdmittedReportTestEvidence.NewHex64(),
+            new JsonObject { ["outputs"] = 0 }, new JsonObject
+            {
+                ["mode"] = ReviewAnalysisPolicy.VERIFIER_MODE,
+                ["reason"] = ReviewAnalysisPolicy.VERIFIER_REASON,
+                ["evidenceSha256"] = ReviewAnalysisPolicy.EVIDENCE_SHA256
+            });
+        stage["errorCode"] = "POLICY_DISABLED";
+        return stage;
+    }
 
     private static JsonObject ReportStage(string inputSha256, string outputSha256)
     {
@@ -672,7 +677,7 @@ internal static class PythonAnalysisEnvelope
             "SUCCEEDED",
             inputSha256,
              new JsonObject { ["findings"] = 1, ["findingOverflow"] = 0, ["omissions"] = 0, ["omissionOverflow"] = 0 },
-            new JsonObject { ["mode"] = "PENDING_RESEARCH_EVALUATION" });
+            new JsonObject { ["mode"] = "DISABLED_BY_EVALUATION" });
         stage["outputSha256"] = outputSha256;
         return stage;
     }
@@ -697,6 +702,28 @@ internal static class PythonAnalysisEnvelope
             ["counts"] = counts
         };
 
+    public static JsonObject RetrievalSummary(int candidates = 1) => new()
+    {
+        ["tokenTop"] = 20,
+        ["semanticTop"] = 20,
+        ["unionBudget"] = 40,
+        ["queries"] = new JsonArray(new JsonObject
+        {
+            ["queryFileId"] = new string('e', 64),
+            ["tokenMaxScore"] = candidates > 0 ? JsonValue.Create(0.5) : null,
+            ["tokenCandidates"] = candidates,
+            ["tokenRetained"] = candidates,
+            ["tokenOverflow"] = 0,
+            ["semanticCandidates"] = candidates,
+            ["semanticRetained"] = candidates,
+            ["semanticOverflow"] = 0,
+            ["unionRetained"] = candidates,
+            ["reportOmitted"] = 0,
+            ["reportOmittedToken"] = 0,
+            ["reportOmittedSemantic"] = 0
+        })
+    };
+
     private static JsonObject Finding(string findingId, string? reason = null) =>
         new()
         {
@@ -716,7 +743,17 @@ internal static class PythonAnalysisEnvelope
                 ["origin"] = "FOREIGN",
                 ["attribution"] = new JsonObject { ["label"] = "public reference" }
             },
-            ["channelScore"] = 0.5,
+            ["retrieval"] = new JsonObject
+            {
+                ["queryFileId"] = new string('e', 64),
+                ["queryUnit"] = "FILE",
+                ["channels"] = "TOKEN_AND_SEMANTIC",
+                ["tokenRank"] = 1,
+                ["tokenScore"] = 0.5,
+                ["semanticRank"] = 1,
+                ["semanticScore"] = 0.4,
+                ["material"] = true
+            },
             ["reason"] = reason ?? "Token channel overlap with the pinned reference corpus.",
             ["requestedAction"] = "Review the overlapping code and rewrite it in your own words if it is not yours."
         };

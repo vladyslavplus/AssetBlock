@@ -235,7 +235,7 @@ internal sealed class AnalysisReservationReader(
                 && header.Disposition == CodeAnalysisReportDisposition.SELECTED
                 && header.SelectionGeneration == source.SelectionGeneration
                 && admission.AdmissionKind == CodeAnalysisAdmissionKind.SERVER_VALIDATED
-                && !admission.CanAuthorizePublication
+                && admission.ReviewEligible == header.ReviewEligible
                 && admission.ReportDigest == header.ReportDigest
             select new { header.Id, header.ReportDigest }).ToListAsync(cancellationToken).ConfigureAwait(false);
 

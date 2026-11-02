@@ -14,6 +14,7 @@ public class ModerationDecisionRecord : BaseEntity
     public Guid? PublicationSnapshotId { get; init; }
     public required long CaseRevision { get; init; }
     public required string Message { get; init; }
+    public string? ManualPlanCompletionReference { get; init; }
 
     public ModerationSubmission Submission { get; set; } = null!;
     public PublicationSnapshot? PublicationSnapshot { get; set; }

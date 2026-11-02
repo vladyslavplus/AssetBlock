@@ -31,6 +31,9 @@ import type {
   PagedNotificationsDto,
 } from '@/lib/notifications/notification-types'
 import { subscribeNotificationHub } from '@/lib/notifications/notification-hub'
+import { moderationCaseChangedMessageSchema } from '@/lib/notifications/notification-types'
+import { moderationKeys } from '@/lib/moderation/moderation-query'
+import { sellerKeys } from '@/lib/seller/seller-query'
 import {
   getNotificationHref,
   getNotificationBody,
@@ -152,10 +155,19 @@ export function NotificationBell() {
     if (status !== 'authenticated' || !user?.id) {
       return
     }
-    return subscribeNotificationHub(() => {
+    return subscribeNotificationHub((method, payload) => {
       invalidateQueriesInBackground(queryClient, { queryKey: notificationsKeys.unread() })
       if (open) {
         invalidateQueriesInBackground(queryClient, { queryKey: notificationsKeys.inbox() })
+      }
+      if (method === 'ModerationCaseChanged') {
+        const parsed = moderationCaseChangedMessageSchema.safeParse(payload)
+        if (parsed.success) {
+          invalidateQueriesInBackground(queryClient, { queryKey: moderationKeys.all })
+          invalidateQueriesInBackground(queryClient, {
+            queryKey: sellerKeys.versionReview(parsed.data.assetId, parsed.data.versionId),
+          })
+        }
       }
     }, user.id)
   }, [status, user?.id, queryClient, open])
@@ -284,7 +296,7 @@ export function NotificationBell() {
               {items.map((n) => {
                 const title = getNotificationTitle(n.kind)
                 const body = getNotificationBody(n.kind, n.metadataJson)
-                const href = getNotificationHref(n.kind, n.metadataJson)
+                const href = getNotificationHref(n.kind, n.metadataJson, user?.role)
                 const unread = !n.readAt
                 return (
                   <li

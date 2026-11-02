@@ -5,6 +5,8 @@ import { describe, expect, it, vi } from 'vitest'
 
 import { NotificationBell } from '@/components/notifications/notification-bell'
 import { notificationsKeys } from '@/lib/notifications/notifications-query'
+import { moderationKeys } from '@/lib/moderation/moderation-query'
+import { sellerKeys } from '@/lib/seller/seller-query'
 import { createTestQueryClient } from '@/test/query-client'
 import { verifiedSeller } from '@/test/session-user'
 
@@ -102,5 +104,54 @@ describe('NotificationBell hub invalidation', () => {
     const calls = invalidate.mock.calls.map((call) => JSON.stringify(call[0]))
     expect(calls.some((k) => k.includes(unreadKey))).toBe(true)
     expect(calls.some((k) => k.includes(inboxKey))).toBe(true)
+  })
+
+  it('invalidates moderation case and seller review data when a case changes', async () => {
+    useAuth.mockReturnValue({
+      user: verifiedSeller(),
+      status: 'authenticated',
+      isAdmin: false,
+      refresh: vi.fn(),
+      logout: vi.fn(),
+    })
+    let hubCb: ((method: string, payload: unknown) => void) | undefined
+    subscribeNotificationHub.mockImplementation(
+      (cb: (method: string, payload: unknown) => void) => {
+        hubCb = cb
+        return () => {}
+      },
+    )
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(
+        async () => new Response(JSON.stringify({ items: [], totalCount: 0 }), { status: 200 }),
+      ),
+    )
+    const queryClient = createTestQueryClient()
+    const invalidate = vi.spyOn(queryClient, 'invalidateQueries')
+    render(
+      <QueryClientProvider client={queryClient}>
+        <NotificationBell />
+      </QueryClientProvider>,
+    )
+    await screen.findByRole('button', { name: /notifications/i })
+    hubCb?.('ModerationCaseChanged', {
+      submissionId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+      assetId: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+      versionId: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
+      state: 'APPROVED',
+      revision: 3,
+      isAppeal: false,
+    })
+    const calls = invalidate.mock.calls.map((call) => JSON.stringify(call[0]))
+    expect(calls).toContain(JSON.stringify({ queryKey: moderationKeys.all }))
+    expect(calls).toContain(
+      JSON.stringify({
+        queryKey: sellerKeys.versionReview(
+          'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+          'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
+        ),
+      }),
+    )
   })
 })

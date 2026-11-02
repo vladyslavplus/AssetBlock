@@ -583,7 +583,7 @@ public sealed class EmbeddingGenerationJobHandlerTests : IAsyncDisposable
             _dbContext.CodeAnalysisRuns.Add(AdmittedReportTestEvidence.CompletedRun(version, chain));
             CodeAnalysisReportHeader seededReport = AdmittedReportTestEvidence.Header(version, chain);
             _dbContext.CodeAnalysisReportHeaders.Add(seededReport);
-            _dbContext.CodeAnalysisReportAdmissions.Add(AdmittedReportTestEvidence.Admission(seededReport, chain, canAuthorizePublication: true));
+            _dbContext.CodeAnalysisReportAdmissions.Add(AdmittedReportTestEvidence.Admission(seededReport, chain, reviewEligible: true));
             _dbContext.PublicationSnapshots.Add(new PublicationSnapshot
             {
                 Id = snapshotId,

@@ -27,16 +27,23 @@ internal sealed class GetMyAssetVersionReviewQueryHandler(
             request.AssetVersionId, request.OwnerId, cancellationToken);
         if (analysis is not null)
         {
+            var rejectionReason = review.BlockedReasons.FirstOrDefault(code => code is ErrorCodes.ERR_MODERATION_APPEAL_REQUIRED or ErrorCodes.ERR_MODERATION_REJECTION_FINAL);
             review = review with
             {
-                AnalysisDetails = analysis,
+                AnalysisDetails = rejectionReason is null ? analysis : analysis with { CanSubmit = false, SubmissionBlockedReason = rejectionReason },
+                CanSubmit = analysis.CanSubmit && rejectionReason is null,
+                RequiredResponseCount = analysis.RequiredResponseCount,
+                OutstandingResponseCount = analysis.OutstandingResponseCount,
+                EvidenceRevision = analysis.EvidenceRevision,
+                CoverageReview = analysis.CoverageReview,
                 Analysis = analysis.ReportIsCurrent
                     ? SellerAnalysisAvailability.ANALYSIS_AVAILABLE
                     : SellerAnalysisAvailability.ANALYSIS_NOT_AVAILABLE,
                 BlockedReasons = analysis.ReportIsCurrent
                     ? review.BlockedReasons
                         .Where(code => code != ErrorCodes.ERR_ANALYSIS_NOT_AVAILABLE)
-                        .Append(ErrorCodes.ERR_RESEARCH_EVALUATION_PENDING)
+                        .Concat(analysis.SubmissionBlockedReason is { } reason ? [reason]
+                            : analysis.CanSubmit ? [] : [ErrorCodes.ERR_MODERATION_SUBMISSION_BLOCKED])
                         .Distinct(StringComparer.Ordinal)
                         .ToArray()
                     : review.BlockedReasons

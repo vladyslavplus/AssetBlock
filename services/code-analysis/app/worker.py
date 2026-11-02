@@ -122,7 +122,6 @@ def _service_config(raw: dict):
         reference_manifest=Path(raw["referenceManifest"]) if raw.get("referenceManifest") else None,
         gallery_root=Path(raw["galleryRoot"]) if raw.get("galleryRoot") else None,
         index_dsn=raw.get("indexDsn"),
-        index_runtime_compatibility=raw.get("indexRuntimeCompatibility"),
         overall_deadline_seconds=float(raw.get("overallDeadlineSeconds", 1080)),
         token_deadline_seconds=float(raw.get("tokenDeadlineSeconds", 180)),
         scancode_deadline_seconds=float(raw.get("scancodeDeadlineSeconds", 720)),

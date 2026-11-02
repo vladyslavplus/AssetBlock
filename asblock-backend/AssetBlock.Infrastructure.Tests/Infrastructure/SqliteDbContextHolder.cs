@@ -65,6 +65,13 @@ internal sealed class SqliteTestMigrationsSqlGenerator(
             operation.CheckConstraints.Remove(constraint);
         }
 
+        // Text constraint fidelity belongs to the PostgreSQL response/disposition tests.
+        foreach (AddCheckConstraintOperation constraint in operation.CheckConstraints
+            .Where(c => c.Name is "CK_seller_responses_text" or "CK_finding_dispositions_rationale").ToList())
+        {
+            operation.CheckConstraints.Remove(constraint);
+        }
+
         if (operation.Name == "asset_processing_jobs")
         {
             var targetConstraints = operation.CheckConstraints

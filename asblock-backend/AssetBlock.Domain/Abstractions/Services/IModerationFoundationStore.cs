@@ -1,11 +1,16 @@
 using AssetBlock.Domain.Core.Dto.Assets;
 using AssetBlock.Domain.Core.Dto.Moderation;
 using AssetBlock.Domain.Core.Dto.Users;
+using AssetBlock.Domain.Core.Enums;
 
 namespace AssetBlock.Domain.Abstractions.Services;
 
 public interface IModerationFoundationStore
 {
+    Task<GuardedSubmissionResult> RequestAppeal(AppealCreateRequest request, CancellationToken cancellationToken = default);
+    Task<ModerationDecisionResult> DecideModerationCase(ModerationDecisionRequest request, CancellationToken cancellationToken = default);
+    Task<CaseClaimResult> ChangeCaseClaim(CaseClaimChange request, CancellationToken cancellationToken = default);
+    Task<ReviewAccessResult<ModeratorQueuePage>> GetModeratorQueue(ModeratorQueueRequest request, CancellationToken cancellationToken = default);
     Task<AssetDraftWorkspaceSnapshot?> LockAssetAndWorkspaceForUpdate(
         Guid assetId,
         Guid workspaceId,
@@ -81,6 +86,17 @@ public interface IModerationFoundationStore
         Guid workspaceId,
         long expectedWorkspaceRevision,
         CancellationToken cancellationToken = default);
+
+    Task<ReviewAccessResult<RestrictedEvidenceDto>> ReadRestrictedEvidence(Guid actorId, Guid scopeId, bool coverageScope, RestrictedEvidenceKind kind, Guid? findingId, CancellationToken cancellationToken = default);
+    Task<ReviewAccessResult<CoverageReviewSaved>> RequestCoverageReview(Guid actorId, Guid assetId, Guid versionId, CoverageReviewCreateRequest request, string requestDigest, CancellationToken cancellationToken = default);
+    Task<ReviewAccessResult<CoverageReviewSaved>> AssessCoverage(Guid actorId, Guid requestId, CoverageAssessmentRequest request, string requestDigest, CancellationToken cancellationToken = default);
+    Task<ReviewAccessResult<CoverageQueuePage>> GetCoverageQueue(Guid actorId, int page, CancellationToken cancellationToken = default);
+
+    Task<SellerEvidenceWriteResult> SaveSellerEvidence(SellerEvidenceWriteRequest request, CancellationToken cancellationToken = default);
+    Task<SellerResponsesPageDto?> GetOwnerResponses(Guid assetId, Guid assetVersionId, Guid ownerUserId, int page, CancellationToken cancellationToken = default);
+    /// <summary>Caller owns the transaction and its receipt. No standalone decision or publication operation.</summary>
+    Task<bool> AppendFindingDispositions(Guid submissionId, Guid moderatorUserId, long expectedCaseRevision,
+        IReadOnlyList<FindingDispositionInput> dispositions, CancellationToken cancellationToken = default);
 
     Task<WithdrawSubmissionResult> WithdrawSubmission(
         WithdrawSubmissionRequest request,

@@ -1,3 +1,4 @@
+using System.Text.Json.Serialization;
 using Ardalis.Result;
 using AssetBlock.Application.Messaging;
 using AssetBlock.Application.UseCases.Assets.AddAssetTag;
@@ -8,24 +9,30 @@ using AssetBlock.Application.UseCases.Assets.GetAssetDeclaration;
 using AssetBlock.Application.UseCases.Assets.GetAssetDraft;
 using AssetBlock.Application.UseCases.Assets.GetAssets;
 using AssetBlock.Application.UseCases.Assets.GetAssetVersions;
+using AssetBlock.Application.UseCases.Assets.GetSellerResponses;
 using AssetBlock.Application.UseCases.Assets.GetSimilarAssets;
 using AssetBlock.Application.UseCases.Assets.PublishAssetVersion;
 using AssetBlock.Application.UseCases.Assets.RemoveAssetTag;
 using AssetBlock.Application.UseCases.Assets.SaveAssetDeclaration;
 using AssetBlock.Application.UseCases.Assets.SaveAssetDraft;
+using AssetBlock.Application.UseCases.Assets.SaveSellerEvidence;
 using AssetBlock.Application.UseCases.Assets.SubmitAssetVersion;
 using AssetBlock.Application.UseCases.Assets.UpdateAsset;
 using AssetBlock.Application.UseCases.Assets.UpdateAssetPrice;
 using AssetBlock.Application.UseCases.Assets.UploadAsset;
+using AssetBlock.Application.UseCases.Moderation.RequestAppeal;
+using AssetBlock.Application.UseCases.Moderation.RequestCoverageReview;
 using AssetBlock.Domain.Abstractions.Services;
 using AssetBlock.Domain.Core.Constants;
 using AssetBlock.Domain.Core.Dto.Assets;
+using AssetBlock.Domain.Core.Dto.Moderation;
 using AssetBlock.Domain.Core.Dto.Tags;
 using AssetBlock.Domain.Core.Primitives.Api;
 using AssetBlock.Domain.Core.Primitives.AppSettingsOptions;
 using AssetBlock.WebApi.Constants;
 using AssetBlock.WebApi.Extensions;
 using AssetBlock.WebApi.Models;
+using FluentValidation;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
@@ -43,6 +50,56 @@ public sealed class AssetsController(
     IOptions<FileUploadOptions> fileUploadOptions,
     ILogger<AssetsController> logger) : ApiControllerBase(sender)
 {
+    [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
+    public sealed class AppealInput
+    {
+        public Guid? WorkspaceId { get; init; }
+        public long? ExpectedWorkspaceRevision { get; init; }
+        public long? ExpectedCaseRevision { get; init; }
+        public Guid? OperationId { get; init; }
+        public string? Rationale { get; init; }
+    }
+
+    public sealed class AppealInputValidator : AbstractValidator<AppealInput>
+    {
+        public AppealInputValidator()
+        {
+            RuleFor(x => x.WorkspaceId).NotNull();
+            RuleFor(x => x.ExpectedWorkspaceRevision).NotNull();
+            RuleFor(x => x.ExpectedCaseRevision).NotNull();
+            RuleFor(x => x.OperationId).NotNull();
+            RuleFor(x => x.Rationale).NotNull();
+        }
+    }
+
+    [HttpPost(ApiRoutes.Assets.VERSION_APPEALS)]
+    [Authorize(Policy = AuthorizationPolicies.VERIFIED_EMAIL)]
+    [EnableRateLimiting(RateLimitingConstants.Policies.MODERATION_EVIDENCE)]
+    [RequestSizeLimit(16384)]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
+    [ProducesResponseType(StatusCodes.Status413PayloadTooLarge)]
+    [ProducesResponseType(StatusCodes.Status503ServiceUnavailable)]
+    public async Task<IActionResult> AppealVersion(Guid id, Guid versionId, [FromBody] AppealInput input, CancellationToken cancellationToken)
+    {
+        Response.Headers.CacheControl = "private, no-store";
+        if (!User.TryGetUserId(out Guid userId))
+        { return UnauthorizedProblem(); }
+        FluentValidation.Results.ValidationResult validation = new AppealInputValidator().Validate(input);
+        if (!validation.IsValid)
+        {
+            foreach (FluentValidation.Results.ValidationFailure error in validation.Errors)
+            { ModelState.AddModelError(error.PropertyName, error.ErrorMessage); }
+            return ValidationProblem(ModelState);
+        }
+        Result<Guid> result = await Sender.Send(new RequestAppealCommand(userId, id, versionId, input.WorkspaceId!.Value,
+            input.ExpectedWorkspaceRevision!.Value, input.ExpectedCaseRevision!.Value, input.OperationId!.Value, input.Rationale), cancellationToken);
+        return result.IsSuccess ? Ok(new { submissionId = result.Value }) : MapResultToActionResult(result);
+    }
     /// <summary>
     /// List assets with paging, search, and filters. Optional <c>authorId</c> scopes the catalog to one seller (public storefront).
     /// </summary>
@@ -551,9 +608,57 @@ public sealed class AssetsController(
     }
 
     /// <summary>
-    /// Requests moderation submission for a version. Until trusted analysis exists this returns
-    /// a truthful business conflict; no simulated success path exists.
+    /// Requests a manual coverage review for the owner's current report.
     /// </summary>
+    [HttpPost(ApiRoutes.Assets.VERSION_COVERAGE_REVIEWS)]
+    [Authorize(Policy = AuthorizationPolicies.VERIFIED_EMAIL)]
+    public async Task<IActionResult> RequestCoverage(Guid id, Guid versionId, [FromBody] CoverageReviewCreateRequest input, CancellationToken cancellationToken)
+    {
+        Response.Headers.CacheControl = "private, no-store";
+        if (!User.TryGetUserId(out Guid actorId))
+        { return UnauthorizedProblem(); }
+        Result<CoverageReviewSaved> result = await Sender.Send(new RequestCoverageReviewCommand(actorId, id, versionId, input), cancellationToken);
+        return MapResultToActionResult(result);
+    }
+
+    /// <summary>Reads the owner's append-only response history and current response requirements.</summary>
+    [HttpGet(ApiRoutes.Assets.VERSION_RESPONSES)]
+    [Authorize]
+    public async Task<IActionResult> GetResponses(Guid id, Guid versionId, [FromQuery] int page = 1, CancellationToken cancellationToken = default)
+    {
+        Response.Headers.CacheControl = "private, no-store";
+        if (!User.TryGetUserId(out Guid userId))
+        { return UnauthorizedProblem(); }
+        Result<SellerResponsesPageDto> result = await Sender.Send(new GetSellerResponsesQuery(userId, id, versionId, page), cancellationToken);
+        return MapResultToActionResult(result);
+    }
+
+    [HttpPost(ApiRoutes.Assets.VERSION_RESPONSES)]
+    [Authorize(Policy = AuthorizationPolicies.VERIFIED_EMAIL)]
+    public async Task<IActionResult> SaveResponse(Guid id, Guid versionId, [FromBody] SellerResponseRequest request, CancellationToken cancellationToken)
+    {
+        Response.Headers.CacheControl = "private, no-store";
+        if (!User.TryGetUserId(out Guid userId))
+        { return UnauthorizedProblem(); }
+        Result<SellerEvidenceSavedDto> result = await Sender.Send(new SaveSellerEvidenceCommand(userId, id, versionId,
+            request.WorkspaceId, request.ReportId, request.FindingId, request.ResponseType, request.Text,
+            request.ExpectedWorkspaceRevision, request.ExpectedEvidenceRevision, request.OperationId), cancellationToken);
+        return MapResultToActionResult(result);
+    }
+
+    [HttpPut(ApiRoutes.Assets.VERSION_EVIDENCE)]
+    [Authorize(Policy = AuthorizationPolicies.VERIFIED_EMAIL)]
+    public async Task<IActionResult> SaveEvidence(Guid id, Guid versionId, [FromBody] SellerEvidenceEditRequest request, CancellationToken cancellationToken)
+    {
+        Response.Headers.CacheControl = "private, no-store";
+        if (!User.TryGetUserId(out Guid userId))
+        { return UnauthorizedProblem(); }
+        Result<SellerEvidenceSavedDto> result = await Sender.Send(new SaveSellerEvidenceCommand(userId, id, versionId,
+            request.WorkspaceId, request.ReportId, null, null, request.Text,
+            request.ExpectedWorkspaceRevision, request.ExpectedEvidenceRevision, request.OperationId), cancellationToken);
+        return MapResultToActionResult(result);
+    }
+
     [HttpPost(ApiRoutes.Assets.VERSION_SUBMISSIONS)]
     [Authorize(Policy = AuthorizationPolicies.VERIFIED_EMAIL)]
     [ProducesResponseType(StatusCodes.Status200OK)]

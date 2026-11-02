@@ -91,6 +91,14 @@ public sealed class ModerationFoundationStorePostgresTests(PostgresFixture fixtu
             null);
 
         GuardedSubmissionResult first = await store.AttemptGuardedSubmission(request, CancellationToken.None);
+        await db.AssetDraftWorkspaces.Where(w => w.Id == workspaceEntity.Id)
+            .ExecuteUpdateAsync(s => s.SetProperty(w => w.WorkspaceRevision, w => w.WorkspaceRevision + 1));
+        AssetVersion nextVersion = TestData.CreateAssetVersion(asset.Id, versionNumber: 2, isCurrent: false);
+        db.AssetVersions.Add(nextVersion);
+        await db.SaveChangesAsync();
+        await db.AssetDraftWorkspaces.Where(w => w.Id == workspaceEntity.Id).ExecuteUpdateAsync(s => s
+            .SetProperty(w => w.AssetVersionId, nextVersion.Id).SetProperty(w => w.WorkspaceVersionScopeKey, nextVersion.Id));
+        db.ChangeTracker.Clear();
         GuardedSubmissionResult second = await store.AttemptGuardedSubmission(request, CancellationToken.None);
 
         first.Status.Should().Be(GuardedSubmissionStatus.BLOCKED);
@@ -181,6 +189,259 @@ public sealed class ModerationFoundationStorePostgresTests(PostgresFixture fixtu
 
         access.Status.Should().Be(ModerationCaseAccessStatus.SELF_OWNED_DENIED);
     }
+
+    [Fact]
+    public async Task GetCaseSummaryForModerator_WhenCandidatesHaveNullableRanks_ShouldOrderByPathThenChannelRanksThenKey()
+    {
+        await using ApplicationDbContext db = await fixture.CreateCleanDbContext();
+        (User author, Category _, Asset asset) = await SeedAssetAsync(db);
+        User moderator = TestData.CreateUser("ordering-reviewer", "ordering-reviewer@example.test");
+        moderator.Role = AppRoles.MODERATOR;
+        db.Users.Add(moderator);
+        AssetVersion version = TestData.CreateAssetVersion(asset.Id);
+        AssetDraftWorkspace workspace = CreateVersionWorkspace(asset.Id, version.Id);
+        db.AssetVersions.Add(version);
+        db.AssetDraftWorkspaces.Add(workspace);
+        var report = new CodeAnalysisReportHeader
+        {
+            Id = Guid.NewGuid(),
+            AssetId = asset.Id,
+            AssetVersionId = version.Id,
+            ContentSha256 = version.ContentSha256,
+            PolicyVersion = ReviewAnalysisPolicy.KEY,
+            InputRevision = 1,
+            Purpose = CodeAnalysisReportPurpose.FIXTURE,
+            ReviewEligible = false,
+            IsFinalized = true,
+            ReportSchemaVersion = 1,
+            CreatedAt = DateTimeOffset.UtcNow
+        };
+        db.CodeAnalysisReportHeaders.Add(report);
+        ModerationSubmission submission = CreateSubmission(asset, version, workspace, author, reportId: report.Id);
+        db.ModerationSubmissions.Add(submission);
+        (string Key, string Path, int? Token, int? Semantic)[] input =
+        [
+            ("a-no-ranks", "own.py", null, null), ("a-token-second", "own.py", 2, 1),
+            ("z-sem-second", "own.py", null, 2), ("z-token-first", "own.py", 1, 5),
+            ("b-sem-first", "own.py", null, 1), ("z-no-ranks", "own.py", null, null),
+            ("path-first", "a.py", null, null)
+        ];
+        foreach ((string Key, string Path, int? Token, int? Semantic) row in input)
+        {
+            db.CodeAnalysisReportFindings.Add(new CodeAnalysisReportFinding
+            {
+                Id = Guid.NewGuid(),
+                ReportId = report.Id,
+                FindingKey = row.Key,
+                FindingType = "SIMILARITY_SEMANTIC",
+                OwnScopePath = row.Path,
+                OwnExcerpt = "own",
+                ForeignSensitivity = CodeAnalysisFindingSensitivity.PRIVATE,
+                TokenRank = row.Token,
+                SemanticRank = row.Semantic,
+                ReasonText = "Private comparison.",
+                RequestedAction = "Wait.",
+                CreatedAt = DateTimeOffset.UtcNow
+            });
+        }
+        await db.SaveChangesAsync();
+        var store = new ModerationFoundationStore(db, new AssetStore(db), new UserStore(db), new EfUnitOfWork(db), auditWriter: TestData.CreateReviewAuditWriter(db));
+        ModerationCaseAccessResult result = await store.GetCaseSummaryForModerator(moderator.Id, submission.Id);
+        result.Summary!.Kind.Should().Be(ModerationSubmissionKind.STANDARD);
+        result.Summary!.RetrievalEvidence!.Candidates.Select(c => c.FindingKey).Should().Equal(
+            "path-first", "z-token-first", "a-token-second", "b-sem-first", "z-sem-second", "a-no-ranks", "z-no-ranks");
+    }
+
+    [Fact]
+    public async Task GetCaseSummaryForModerator_WhenReportHasNoticeFinding_ShouldKeepSimilarityScoresAvailableAndListNoticeType()
+    {
+        await using ApplicationDbContext db = await fixture.CreateCleanDbContext();
+        (User author, _, Asset asset) = await SeedAssetAsync(db);
+        User moderator = TestData.CreateUser("notice-reviewer", "notice-reviewer@example.test");
+        moderator.Role = AppRoles.MODERATOR;
+        db.Users.Add(moderator);
+        AssetVersion version = TestData.CreateAssetVersion(asset.Id);
+        AssetDraftWorkspace workspace = CreateVersionWorkspace(asset.Id, version.Id);
+        db.AssetVersions.Add(version);
+        db.AssetDraftWorkspaces.Add(workspace);
+        CodeAnalysisReportHeader report = CreateReportHeader(asset.Id, version.Id, version.ContentSha256);
+        string queryId = new('a', 64);
+        RetrievalReportSummary retrieval = new(20, 20, 40,
+            [new RetrievalQuerySummary(queryId, 1, 1, 0, 0, 0, 0, 1, 0, 0, 0, null)]);
+        report.RetrievalSummaryJson = System.Text.Json.JsonSerializer.Serialize(
+            new PersistedRetrievalSummary("snapshot", "revision", 0, retrieval),
+            new System.Text.Json.JsonSerializerOptions(System.Text.Json.JsonSerializerDefaults.Web));
+        db.CodeAnalysisReportHeaders.Add(report);
+        ModerationSubmission submission = CreateSubmission(asset, version, workspace, author, reportId: report.Id);
+        db.ModerationSubmissions.Add(submission);
+        CodeAnalysisReportFinding similarity = CreateReviewFinding(report.Id, Guid.NewGuid(), "similarity",
+            System.Text.Json.JsonSerializer.Serialize(new RetrievalCandidateEvidence(queryId, "FILE", "TOKEN",
+                1, 0.9, null, null, true), new System.Text.Json.JsonSerializerOptions(System.Text.Json.JsonSerializerDefaults.Web)),
+            "SIMILARITY_TOKEN");
+        CodeAnalysisReportFinding notice = CreateReviewFinding(report.Id, Guid.NewGuid(), "notice", null, "NOTICE_MISSING");
+        db.CodeAnalysisReportFindings.AddRange(similarity, notice);
+        await db.SaveChangesAsync();
+
+        var store = new ModerationFoundationStore(db, new AssetStore(db), new UserStore(db), new EfUnitOfWork(db),
+            auditWriter: TestData.CreateReviewAuditWriter(db));
+        ModerationCaseAccessResult result = await store.GetCaseSummaryForModerator(moderator.Id, submission.Id);
+
+        result.Summary!.RetrievalEvidence!.ScoresAvailability.Should().Be("AVAILABLE");
+        result.Summary.RetrievalEvidence.Candidates.Should().ContainSingle(c => c.FindingKey == "notice");
+        result.Summary.RetrievalEvidence.Candidates.Single(c => c.FindingKey == "notice").Scores.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task GetCaseSummaryForModerator_WhenReadingFrozenReview_ShouldReturnDecisionBasisFindingIdsResponsesAndPlanReference()
+    {
+        await using ApplicationDbContext db = await fixture.CreateCleanDbContext();
+        (User author, _, Asset asset) = await SeedAssetAsync(db);
+        User moderator = TestData.CreateUser("case-projection-reviewer", "case-projection-reviewer@example.test");
+        moderator.Role = AppRoles.MODERATOR;
+        db.Users.Add(moderator);
+        AssetVersion version = TestData.CreateAssetVersion(asset.Id);
+        AssetDraftWorkspace workspace = CreateVersionWorkspace(asset.Id, version.Id);
+        workspace.SellerEvidenceHeadRevision = 1;
+        db.AssetVersions.Add(version);
+        db.AssetDraftWorkspaces.Add(workspace);
+        CodeAnalysisReportHeader report = CreateReportHeader(asset.Id, version.Id, version.ContentSha256);
+        report.FindingCount = 2;
+        db.CodeAnalysisReportHeaders.Add(report);
+
+        var requiredAnsweredFindingId = Guid.NewGuid();
+        var requiredOutstandingFindingId = Guid.NewGuid();
+        db.CodeAnalysisReportFindings.AddRange(
+            CreateReviewFinding(report.Id, requiredAnsweredFindingId, "answered", "{\"material\":true}"),
+            CreateReviewFinding(report.Id, requiredOutstandingFindingId, "outstanding", "{\"material\":true}", "POTENTIAL_MATCH"));
+        var sellerResponseId = Guid.NewGuid();
+        DateTimeOffset responseCreatedAt = DateTimeOffset.UtcNow.AddMinutes(-1);
+        db.SellerResponses.Add(new SellerResponse
+        {
+            Id = sellerResponseId,
+            AssetId = asset.Id,
+            AssetVersionId = version.Id,
+            WorkspaceId = workspace.Id,
+            WorkspaceVersionScopeKey = version.Id,
+            ReportId = report.Id,
+            FindingId = requiredAnsweredFindingId,
+            SellerEvidenceRevision = 1,
+            ResponseType = SellerResponseType.PRIOR_WORK,
+            Text = "Bounded seller answer.",
+            ActorUserId = author.Id,
+            CreatedAt = responseCreatedAt
+        });
+        var sellerSnapshot = System.Text.Json.JsonSerializer.Serialize(
+            new SellerEvidenceSnapshot(report.Id, [sellerResponseId], "Private seller evidence."),
+            SellerResponseRequirements.JsonOptions);
+        db.AssetSellerEvidenceRevisions.Add(new AssetSellerEvidenceRevision
+        {
+            Id = Guid.NewGuid(),
+            AssetId = asset.Id,
+            AssetVersionId = version.Id,
+            WorkspaceId = workspace.Id,
+            WorkspaceVersionScopeKey = version.Id,
+            Revision = 1,
+            AuthorUserId = author.Id,
+            ContentDigest = new string('c', 64),
+            SchemaVersion = 1,
+            PayloadJson = sellerSnapshot,
+            CreatedAt = DateTimeOffset.UtcNow
+        });
+
+        var coverageRequestId = Guid.NewGuid();
+        const string tupleDigest = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+        db.CoverageReviewRequests.Add(new CoverageReviewRequest
+        {
+            Id = coverageRequestId,
+            AssetId = asset.Id,
+            AssetVersionId = version.Id,
+            WorkspaceId = workspace.Id,
+            ReportId = report.Id,
+            OwnerUserId = author.Id,
+            ContentSha256 = version.ContentSha256,
+            DeclarationRevision = 1,
+            MaterialRevision = 1,
+            SellerEvidenceRevision = 1,
+            PolicyVersion = report.PolicyVersion,
+            PolicyDigest = new string('b', 64),
+            TupleDigest = tupleDigest,
+            RequestedWorkspaceRevision = workspace.WorkspaceRevision,
+            Revision = 1,
+            IsOpen = false,
+            CreatedAt = DateTimeOffset.UtcNow
+        });
+        const string expectedPlanReference = "manual-review/complete-omitted-files";
+        var coverageAssessmentId = Guid.NewGuid();
+        db.CoverageAssessments.Add(new CoverageAssessment
+        {
+            Id = coverageAssessmentId,
+            RequestId = coverageRequestId,
+            ModeratorUserId = moderator.Id,
+            Outcome = CoverageAssessmentOutcome.ACCEPTED,
+            CompetenceJson = "[\"Archive review\"]",
+            ScopeJson = "[]",
+            ManageableScope = true,
+            ReviewPlan = "Review all omitted files.",
+            CompletedPlanReference = expectedPlanReference,
+            Rationale = "The stored evidence was readable.",
+            CreatedAt = DateTimeOffset.UtcNow
+        });
+        ModerationSubmission submission = CreateSubmission(asset, version, workspace, author, reportId: report.Id,
+            coverageAssessmentId: coverageAssessmentId, sellerEvidenceRevision: 1);
+        submission.State = ModerationSubmissionState.IN_REVIEW;
+        submission.ClaimHolderId = moderator.Id;
+        submission.ClaimedAt = DateTimeOffset.UtcNow;
+        db.ModerationSubmissions.Add(submission);
+        await db.SaveChangesAsync();
+
+        var store = new ModerationFoundationStore(db, new AssetStore(db), new UserStore(db), new EfUnitOfWork(db),
+            auditWriter: TestData.CreateReviewAuditWriter(db));
+        ModerationCaseAccessResult result = await store.GetCaseSummaryForModerator(moderator.Id, submission.Id);
+        ModerationCaseSummary summary = result.Summary!;
+        SellerResponseRequirements.Summary decisionRequirements =
+            (await SellerResponseRequirements.ReadSummaries(db,
+                [new(workspace.Id, report.Id, workspace.Id, version.Id, submission.SellerEvidenceRevision)],
+                CancellationToken.None))[workspace.Id];
+
+        result.Status.Should().Be(ModerationCaseAccessStatus.FOUND);
+        summary.Basis.Should().Be(new DecisionBasis(version.Id, submission.ContentSha256, report.Id,
+            submission.DeclarationRevision, submission.MaterialMetadataRevision, submission.PolicyVersion,
+            submission.SellerEvidenceRevision, submission.CaseRevision));
+        summary.ManualPlanCompletionReferenceRequired.Should().BeTrue();
+        var summaryJson = System.Text.Json.JsonSerializer.Serialize(summary,
+            new System.Text.Json.JsonSerializerOptions(System.Text.Json.JsonSerializerDefaults.Web));
+        summaryJson.Should().NotContain("expectedManualPlanCompletionReference").And.NotContain(expectedPlanReference);
+        summaryJson.Should().Contain("\"isClaimedByCaller\":true");
+        summary.RetrievalEvidence!.ReportId.Should().Be(report.Id);
+        summary.RetrievalEvidence.ResponseRequirementsAvailable.Should().BeTrue();
+        ModeratorRetrievalCandidate answered = summary.RetrievalEvidence.Candidates.Single(c => c.FindingId == requiredAnsweredFindingId);
+        ModeratorRetrievalCandidate outstanding = summary.RetrievalEvidence.Candidates.Single(c => c.FindingId == requiredOutstandingFindingId);
+        answered.ResponseRequired.Should().Be(decisionRequirements.Required.Contains(requiredAnsweredFindingId));
+        answered.Answered.Should().Be(decisionRequirements.Answered.Contains(requiredAnsweredFindingId));
+        outstanding.ResponseRequired.Should().Be(decisionRequirements.Required.Contains(requiredOutstandingFindingId));
+        outstanding.Answered.Should().Be(decisionRequirements.Answered.Contains(requiredOutstandingFindingId));
+        ModeratorSellerResponse projectedResponse = answered.Responses.Should().ContainSingle().Which;
+        projectedResponse.Kind.Should().Be(SellerResponseType.PRIOR_WORK);
+        projectedResponse.Text.Should().Be("Bounded seller answer.");
+        projectedResponse.CreatedAt.Should().BeCloseTo(responseCreatedAt, TimeSpan.FromMilliseconds(1));
+        outstanding.Responses.Should().BeEmpty();
+        summary.RetrievalEvidence.Candidates.Select(c => c.FindingId).Should().OnlyHaveUniqueItems();
+    }
+
+    private static CodeAnalysisReportFinding CreateReviewFinding(Guid reportId, Guid id, string key, string? retrievalEvidenceJson, string findingType = "SIMILARITY_SEMANTIC") => new()
+    {
+        Id = id,
+        ReportId = reportId,
+        FindingKey = key,
+        FindingType = findingType,
+        OwnScopePath = "src/review.py",
+        OwnExcerpt = "private excerpt",
+        ForeignSensitivity = CodeAnalysisFindingSensitivity.PRIVATE,
+        ReasonText = "private reason",
+        RequestedAction = "private requested action",
+        RetrievalEvidenceJson = retrievalEvidenceJson,
+        CreatedAt = DateTimeOffset.UtcNow
+    };
 
     [Fact]
     public async Task AttemptGuardedSubmission_WhenWorkspaceVersionMismatchesRequest_ShouldConflictWithoutIdempotency()
@@ -516,7 +777,7 @@ public sealed class ModerationFoundationStorePostgresTests(PostgresFixture fixtu
             CancellationToken.None);
 
         result.Status.Should().Be(GuardedSubmissionStatus.BLOCKED);
-        result.BlockedReasonCode.Should().Be(ErrorCodes.ERR_MODERATION_SUBMISSION_BLOCKED);
+        result.BlockedReasonCode.Should().Be(ErrorCodes.ERR_ANALYSIS_NOT_AVAILABLE);
     }
 
     [Fact]
@@ -817,6 +1078,109 @@ public sealed class ModerationFoundationStorePostgresTests(PostgresFixture fixtu
         review.PublicationEligible.Should().BeFalse();
     }
 
+    [Fact]
+    public async Task GetOwnerVersionReview_WhenSubmissionHistoryExceedsLimit_ShouldReturnNewestSafeEntriesAndActiveIdentity()
+    {
+        await using ApplicationDbContext db = await fixture.CreateCleanDbContext();
+        (User author, Category _, Asset asset) = await SeedAssetAsync(db);
+        var moderatorSuffix = Guid.NewGuid().ToString("N");
+        User moderator = TestData.CreateUser("moderator-" + moderatorSuffix, "moderator-" + moderatorSuffix + "@example.test");
+        db.Users.Add(moderator);
+        (AssetVersion version, AssetDraftWorkspace workspace) = await SeedVersionWorkspaceAsync(db, asset);
+        DateTimeOffset startValue = DateTimeOffset.UtcNow.AddHours(-1);
+        DateTimeOffset start = new(startValue.Ticks - startValue.Ticks % 10, TimeSpan.Zero);
+        var submissions = new List<ModerationSubmission>();
+        var decisions = new List<ModerationDecisionRecord>();
+        for (var index = 0; index < 22; index++)
+        {
+            ModerationSubmission submission = CreateSubmission(asset, version, workspace, author);
+            submission.CreatedAt = start.AddMinutes(index);
+            submission.State = ModerationSubmissionState.WITHDRAWN;
+            if (index == 3)
+            {
+                submission.State = ModerationSubmissionState.CHANGES_REQUESTED;
+                decisions.Add(new ModerationDecisionRecord
+                {
+                    Id = Guid.NewGuid(),
+                    SubmissionId = submission.Id,
+                    AssetId = asset.Id,
+                    AssetVersionId = version.Id,
+                    ModeratorUserId = moderator.Id,
+                    Outcome = ModerationSubmissionState.CHANGES_REQUESTED,
+                    CaseRevision = submission.CaseRevision,
+                    Message = "Please clarify the source.",
+                    CreatedAt = submission.CreatedAt.AddSeconds(1)
+                });
+            }
+            else if (index == 4)
+            {
+                submission.State = ModerationSubmissionState.REJECTED;
+                decisions.Add(new ModerationDecisionRecord
+                {
+                    Id = Guid.NewGuid(),
+                    SubmissionId = submission.Id,
+                    AssetId = asset.Id,
+                    AssetVersionId = version.Id,
+                    ModeratorUserId = moderator.Id,
+                    Outcome = ModerationSubmissionState.REJECTED,
+                    CaseRevision = submission.CaseRevision,
+                    Message = "The rejected basis reason.",
+                    CreatedAt = submission.CreatedAt.AddSeconds(1)
+                });
+            }
+            else if (index == 5)
+            {
+                submission.State = ModerationSubmissionState.APPROVED;
+                decisions.Add(new ModerationDecisionRecord
+                {
+                    Id = Guid.NewGuid(),
+                    SubmissionId = submission.Id,
+                    AssetId = asset.Id,
+                    AssetVersionId = version.Id,
+                    ModeratorUserId = moderator.Id,
+                    Outcome = ModerationSubmissionState.APPROVED,
+                    CaseRevision = submission.CaseRevision,
+                    Message = "Private approval text.",
+                    CreatedAt = submission.CreatedAt.AddSeconds(1)
+                });
+            }
+            else if (index == 21)
+            {
+                submission.State = ModerationSubmissionState.IN_REVIEW;
+                submission.ClaimHolderId = moderator.Id;
+                submission.ClaimedAt = submission.CreatedAt;
+            }
+            submissions.Add(submission);
+        }
+
+        db.ModerationSubmissions.AddRange(submissions);
+        db.ModerationDecisionRecords.AddRange(decisions);
+        await db.SaveChangesAsync();
+
+        var store = new ModerationFoundationStore(db, new AssetStore(db), new UserStore(db), new EfUnitOfWork(db));
+        SellerVersionReviewDto? review = await store.GetOwnerVersionReview(version.Id, author.Id);
+        review.Should().NotBeNull();
+        review!.History.Should().HaveCount(20);
+        review.History.Select(entry => entry.SubmissionId).Should().Equal(submissions.Skip(2).Reverse().Select(row => row.Id));
+        review.History[0].CreatedAt.Should().Be(submissions[21].CreatedAt);
+        review.ActiveSubmission.Should().Be(new SellerActiveSubmissionDto(
+            submissions[21].Id, ModerationSubmissionKind.STANDARD, ModerationSubmissionState.IN_REVIEW, submissions[21].CaseRevision));
+        review.History.Should().Contain(entry => entry.SubmissionId == submissions[3].Id
+            && entry.DecisionOutcome == ModerationSubmissionState.CHANGES_REQUESTED
+            && entry.DecisionReason == "Please clarify the source.");
+        review.History.Should().Contain(entry => entry.SubmissionId == submissions[4].Id
+            && entry.DecisionOutcome == ModerationSubmissionState.REJECTED
+            && entry.DecisionReason == "The rejected basis reason.");
+        review.History.Should().Contain(entry => entry.SubmissionId == submissions[5].Id
+            && entry.DecisionOutcome == ModerationSubmissionState.APPROVED
+            && entry.DecisionReason == null);
+        (await store.GetOwnerVersionReview(version.Id, moderator.Id)).Should().BeNull();
+
+        var json = System.Text.Json.JsonSerializer.Serialize(review, new System.Text.Json.JsonSerializerOptions(System.Text.Json.JsonSerializerDefaults.Web));
+        json.Should().NotContain(moderator.Id.ToString()).And.NotContain("Private approval text")
+            .And.NotContain("claimHolder").And.NotContain("dispositions").And.NotContain("scores").And.NotContain("exclusion");
+    }
+
     private static async Task<(User Author, Category Category, Asset Asset)> SeedAssetAsync(ApplicationDbContext db)
     {
         User author = TestData.CreateUser();
@@ -868,7 +1232,7 @@ public sealed class ModerationFoundationStorePostgresTests(PostgresFixture fixtu
             PolicyVersion = "policy-v1",
             InputRevision = 1,
             Purpose = CodeAnalysisReportPurpose.PRODUCTION,
-            CanAuthorizePublication = true,
+            ReviewEligible = true,
             IsFinalized = true,
             FinalizedAt = DateTimeOffset.UtcNow,
             ReportSchemaVersion = 1,
@@ -908,7 +1272,10 @@ public sealed class ModerationFoundationStorePostgresTests(PostgresFixture fixtu
         AssetDraftWorkspace workspace,
         User author,
         Guid? id = null,
-        Guid? workspaceVersionScopeKey = null) =>
+        Guid? workspaceVersionScopeKey = null,
+        Guid? reportId = null,
+        Guid? coverageAssessmentId = null,
+        int sellerEvidenceRevision = 1) =>
         new()
         {
             Id = id ?? Guid.NewGuid(),
@@ -918,9 +1285,11 @@ public sealed class ModerationFoundationStorePostgresTests(PostgresFixture fixtu
             WorkspaceVersionScopeKey = workspaceVersionScopeKey ?? workspace.WorkspaceVersionScopeKey,
             OwnerUserId = author.Id,
             ContentSha256 = version.ContentSha256,
+            CodeAnalysisReportHeaderId = reportId,
+            CoverageAssessmentId = coverageAssessmentId,
             DeclarationRevision = 1,
             MaterialMetadataRevision = 1,
-            SellerEvidenceRevision = 1,
+            SellerEvidenceRevision = sellerEvidenceRevision,
             PolicyVersion = "policy-v1",
             SellerEvidenceDigest = new string('d', 64),
             State = ModerationSubmissionState.SUBMITTED,

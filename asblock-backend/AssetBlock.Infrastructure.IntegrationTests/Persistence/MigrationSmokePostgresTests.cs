@@ -170,7 +170,7 @@ public sealed class MigrationSmokePostgresTests(PostgresFixture fixture)
     }
 
     [Fact]
-    public async Task MigrateAsync_WhenFreshDatabase_ShouldHaveNoPendingMigrationsAndContainInitialCreate()
+    public async Task MigrateAsync_WhenFreshDatabase_ShouldHaveNoPendingMigrationsAndContainInitial()
     {
         await using ApplicationDbContext db = await fixture.CreateCleanDbContext();
 
@@ -178,7 +178,7 @@ public sealed class MigrationSmokePostgresTests(PostgresFixture fixture)
         pending.Should().BeEmpty();
 
         IEnumerable<string> applied = await db.Database.GetAppliedMigrationsAsync();
-        applied.Should().ContainSingle(m => m.Contains("InitialCreate", StringComparison.OrdinalIgnoreCase));
+        applied.Should().ContainSingle(m => m.EndsWith("_Initial", StringComparison.Ordinal));
     }
 
     [Fact]

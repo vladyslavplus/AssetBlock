@@ -3,6 +3,17 @@ namespace AssetBlock.Domain.Core.Constants;
 /// <summary>Stable machine-readable audit action names.</summary>
 public static class AuditActions
 {
+    public const string APPEAL_OPENED = "MODERATION_APPEAL_OPENED";
+    public const string CASE_DECIDED = "CASE_DECIDED";
+    public const string CASE_CLAIMED = "CASE_CLAIMED";
+    public const string CASE_RELEASED = "CASE_RELEASED";
+    public const string RESTRICTED_EVIDENCE_READ = "RESTRICTED_EVIDENCE_READ";
+    public const string COVERAGE_REVIEW_REQUESTED = "COVERAGE_REVIEW_REQUESTED";
+    public const string COVERAGE_REVIEW_ASSESSED = "COVERAGE_REVIEW_ASSESSED";
+
+    public const string SELLER_RESPONSE_SAVED = "SELLER_RESPONSE_SAVED";
+    public const string SELLER_EVIDENCE_SAVED = "SELLER_EVIDENCE_SAVED";
+
     public const string AUTH_REGISTER = "Auth.Register";
     public const string AUTH_LOGIN = "Auth.Login";
     public const string AUTH_REFRESH_TOKEN = "Auth.RefreshToken";

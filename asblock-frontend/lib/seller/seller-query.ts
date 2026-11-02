@@ -16,6 +16,8 @@ import type {
 
 export const sellerKeys = {
   all: ['seller'] as const,
+  responses: (assetId: string, versionId: string) =>
+    [...sellerKeys.all, 'responses', assetId, versionId] as const,
   listings: () => [...sellerKeys.all, 'listings'] as const,
   detail: (assetId: string) => [...sellerKeys.all, 'detail', assetId] as const,
   versions: (assetId: string) => [...sellerKeys.all, 'versions', assetId] as const,

@@ -54,6 +54,10 @@ class _SuspendedProc:
         self.service_owns_handle = True
 
     def poll(self):
+        # Match Popen: preserve a completed exit status while cleanup terminates
+        # any remaining members of the Job Object and closes process handles.
+        if self.returncode is not None:
+            return self.returncode
         import ctypes
         code = ctypes.c_uint32(0)
         kernel32 = ctypes.windll.kernel32

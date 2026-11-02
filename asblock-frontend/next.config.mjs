@@ -6,6 +6,7 @@ const appRoot = path.dirname(fileURLToPath(import.meta.url))
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  distDir: process.env.NEXT_DIST_DIR === 'e2e' ? '.next-e2e' : '.next',
   reactCompiler: true,
   typedRoutes: true,
   typescript: {
@@ -13,6 +14,9 @@ const nextConfig = {
   },
   turbopack: {
     root: appRoot,
+    ...(process.env.NEXT_DIST_DIR === 'e2e'
+      ? { resolveAlias: { '@/lib/fonts': './e2e/mock-google-fonts.ts' } }
+      : {}),
   },
   allowedDevOrigins: ['127.0.0.1'],
   outputFileTracingRoot: appRoot,

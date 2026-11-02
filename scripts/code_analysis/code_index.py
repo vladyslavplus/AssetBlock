@@ -5,11 +5,13 @@ from pathlib import Path
 from .contracts import canonical, digest, sha
 from .representations import vector_bytes
 
+# Owned by the hash-bound code index DDL in config/index-schema.sql.
 MARKER = 'assetblock-code-index-sandbox-v1'
 DATABASE = 'assetblock_code_lab'
 ROLE = 'assetblock_code_index'
 PORT = 55433
-SERVICE_RUNTIME_COMPATIBILITY = 'pg18-owned-sandbox-v1'
+# Owned by the provisioned read-only service index runtime.
+SERVICE_RUNTIME_TARGET = 'pg18-owned-sandbox-v1'
 SERVICE_RUNTIME_PORT = 55439
 
 
@@ -33,23 +35,19 @@ def preflight(connection, *, initialized=True):
             if cursor.fetchone() != ('0.8.6',): raise ValueError('pgvector version mismatch')
 
 
-def service_runtime_preflight(connection, *, compatibility=None, initialized=True):
-    """Check the service's pinned research target; PG18 is opt-in for the owned local runtime only."""
-    if compatibility is None:
-        return preflight(connection, initialized=initialized)
-    if compatibility != SERVICE_RUNTIME_COMPATIBILITY:
-        raise ValueError('unknown service runtime compatibility mode')
+def service_runtime_preflight(connection, *, initialized=True):
+    """Check the single pinned read-only service runtime target."""
     if initialized is not True:
         raise ValueError('service runtime requires the initialized, marked index')
     require_owned_transaction(connection)
     if (connection.info.host not in ('127.0.0.1', 'localhost', '::1')
             or connection.info.port != SERVICE_RUNTIME_PORT):
-        raise ValueError('refusing unknown/nonloopback compatibility target')
+        raise ValueError('refusing unknown/nonloopback service index target')
     with connection.cursor() as cursor:
         cursor.execute('SELECT current_database(),current_user,current_setting(\'server_version_num\')')
         database, role, server = cursor.fetchone()
         if database != DATABASE or role != ROLE or not 180006 <= int(server) < 180007:
-            raise ValueError('refusing product/unknown database, role or compatibility version')
+            raise ValueError('refusing product/unknown database, role or service index version')
         if initialized:
             cursor.execute('SELECT marker FROM code_lab.sandbox_marker')
             if cursor.fetchall() != [(MARKER,)]: raise ValueError('sandbox marker mismatch')
@@ -118,14 +116,19 @@ def index_key(model, snapshot, gallery, extraction):
 
 
 def exact_query(connection,index,vectors,gallery_ids,language,*,partition,limit=40,
-                runtime_compatibility=None):
+                runtime_target=None):
     """Exhaustive query-chunk × gallery-chunk maximum, with exact winning spans."""
     if partition not in ('train','validation'):raise ValueError('final-test scoring prohibited in this phase')
     sha(index);vector_bytes(vectors)
     if not 0<len(vectors)<=80 or not 0<len(gallery_ids)<=1000 or len(set(gallery_ids))!=len(gallery_ids):raise ValueError('bounded unique full gallery/query required')
     for file_id in gallery_ids:sha(file_id)
     if type(limit)!=int or not 1<=limit<=40:raise ValueError('file candidate budget invalid')
-    service_runtime_preflight(connection, compatibility=runtime_compatibility)
+    if runtime_target is None:
+        preflight(connection)
+    elif runtime_target == SERVICE_RUNTIME_TARGET:
+        service_runtime_preflight(connection)
+    else:
+        raise ValueError('unknown index runtime target')
     with connection.cursor() as cursor:
         cursor.execute('SELECT state,partition,expected_rows FROM code_lab.code_indexes WHERE index_key=%s',(index,));row=cursor.fetchone()
         if not row or row[:2]!=('READY',partition):raise ValueError('incomplete/wrong-partition index')

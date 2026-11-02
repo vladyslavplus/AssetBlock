@@ -6,6 +6,11 @@ namespace AssetBlock.Domain.Core.Entities;
 /// <summary>Immutable submission snapshot plus mutable active-case state for a version.</summary>
 public class ModerationSubmission : BaseEntity
 {
+    public ModerationSubmissionKind Kind { get; init; } = ModerationSubmissionKind.STANDARD;
+    public Guid? AppealOfDecisionId { get; init; }
+    public string? AppealRationale { get; init; }
+    public ModerationDecisionRecord? AppealOfDecision { get; set; }
+
     public required Guid AssetId { get; init; }
     public required Guid AssetVersionId { get; init; }
     public required Guid WorkspaceId { get; init; }
@@ -15,6 +20,7 @@ public class ModerationSubmission : BaseEntity
 
     public required string ContentSha256 { get; init; }
     public Guid? CodeAnalysisReportHeaderId { get; init; }
+    public Guid? CoverageAssessmentId { get; init; }
     public required int DeclarationRevision { get; init; }
     public required int MaterialMetadataRevision { get; init; }
     public required int SellerEvidenceRevision { get; init; }
@@ -24,6 +30,8 @@ public class ModerationSubmission : BaseEntity
     public required ModerationSubmissionState State { get; set; }
     public ModerationWithdrawalReason? WithdrawalReason { get; set; }
     public required long CaseRevision { get; set; }
+    public Guid? ClaimHolderId { get; set; }
+    public DateTimeOffset? ClaimedAt { get; set; }
     public Guid? PreviousSubmissionId { get; init; }
 
     public Asset Asset { get; set; } = null!;

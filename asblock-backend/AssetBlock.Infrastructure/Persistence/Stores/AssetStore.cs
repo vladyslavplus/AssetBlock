@@ -28,7 +28,7 @@ internal sealed class AssetStore(
     IAssetProcessingJobStore? jobStore = null,
     IOptions<EmbeddingOptions>? embeddingOptions = null,
     TimeProvider? timeProvider = null,
-    IRecommendationPersonalizationStore? personalizationStore = null) : IAssetStore
+    IRecommendationPersonalizationStore? personalizationStore = null) : IAssetStore, IPublicationEmbeddingEnqueuer
 {
     private const float TRIGRAM_SIMILARITY_THRESHOLD = 0.30f;
     private const int MIN_TRIGRAM_QUERY_LENGTH = 3;
@@ -1700,6 +1700,13 @@ internal sealed class AssetStore(
             .Where(a => a.Id == assetId)
             .Select(a => (Guid?)a.CurrentPublicationSnapshot!.AssetVersionId)
             .FirstOrDefaultAsync(cancellationToken);
+
+    public async Task EnqueueApprovedPublicationEmbedding(Guid assetId, CancellationToken cancellationToken = default)
+    {
+        Guid? versionId = await GetApprovedPublicVersionIdForEmbedding(assetId, cancellationToken);
+        if (versionId.HasValue)
+        { await EnqueueEmbeddingJobIfEligible(assetId, versionId.Value, cancellationToken); }
+    }
 
     private async Task EnqueueEmbeddingJobIfEligible(Guid assetId, Guid currentVersionId, CancellationToken cancellationToken)
     {

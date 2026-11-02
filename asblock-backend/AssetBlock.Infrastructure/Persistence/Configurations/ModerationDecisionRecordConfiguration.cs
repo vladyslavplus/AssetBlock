@@ -1,3 +1,4 @@
+using AssetBlock.Domain.Core.Constants;
 using AssetBlock.Domain.Core.Entities;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
@@ -12,6 +13,7 @@ internal sealed class ModerationDecisionRecordConfiguration : IEntityTypeConfigu
         builder.HasKey(d => d.Id);
         builder.Property(d => d.Outcome).HasConversion<string>().HasMaxLength(32).IsRequired();
         builder.Property(d => d.Message).IsRequired().HasMaxLength(2000);
+        builder.Property(d => d.ManualPlanCompletionReference).HasMaxLength(ReviewEvidenceLimits.PLAN_REFERENCE_LENGTH);
 
         builder.HasOne(d => d.Submission).WithMany().HasForeignKey(d => d.SubmissionId).OnDelete(DeleteBehavior.Restrict);
         builder.HasOne(d => d.PublicationSnapshot).WithMany().HasForeignKey(d => d.PublicationSnapshotId).OnDelete(DeleteBehavior.Restrict);

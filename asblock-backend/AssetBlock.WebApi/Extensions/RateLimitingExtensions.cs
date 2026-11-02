@@ -121,6 +121,7 @@ internal static class RateLimitingExtensions
                 AddNoOpPolicy(RateLimitingConstants.Policies.USERS_EMAIL_CHANGE_REQUEST);
                 AddNoOpPolicy(RateLimitingConstants.Policies.USERS_PASSWORD_CHANGE);
                 AddNoOpPolicy(RateLimitingConstants.Policies.ASSETS_UPLOAD);
+                AddNoOpPolicy(RateLimitingConstants.Policies.MODERATION_EVIDENCE);
                 AddNoOpPolicy(RateLimitingConstants.Policies.ASSETS_DOWNLOAD);
                 AddNoOpPolicy(RateLimitingConstants.Policies.CATALOG_SEARCH);
                 AddNoOpPolicy(RateLimitingConstants.Policies.PAYMENTS_CHECKOUT);
@@ -243,6 +244,17 @@ internal static class RateLimitingExtensions
                 {
                     Window = TimeSpan.FromSeconds(RateLimitingConstants.Windows.ASSETS_UPLOAD_PERIOD_SECONDS),
                     PermitLimit = RateLimitingConstants.Windows.ASSETS_UPLOAD_LIMIT,
+                    SegmentsPerWindow = RateLimitingConstants.Windows.SLIDING_WINDOW_SEGMENTS,
+                    QueueProcessingOrder = QueueProcessingOrder.OldestFirst
+                }));
+
+        opts.AddPolicy(RateLimitingConstants.Policies.MODERATION_EVIDENCE, httpContext =>
+            RateLimitPartition.GetSlidingWindowLimiter(
+                partitionKey: GetUserPartitionKey(httpContext),
+                factory: _ => new SlidingWindowRateLimiterOptions
+                {
+                    Window = TimeSpan.FromSeconds(RateLimitingConstants.Windows.MODERATION_EVIDENCE_PERIOD_SECONDS),
+                    PermitLimit = RateLimitingConstants.Windows.MODERATION_EVIDENCE_LIMIT,
                     SegmentsPerWindow = RateLimitingConstants.Windows.SLIDING_WINDOW_SEGMENTS,
                     QueueProcessingOrder = QueueProcessingOrder.OldestFirst
                 }));

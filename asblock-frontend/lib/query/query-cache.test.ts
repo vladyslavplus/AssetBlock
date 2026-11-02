@@ -14,6 +14,7 @@ import { authKeys } from '@/lib/auth/auth-query'
 import { accountKeys } from '@/lib/account/account-query'
 import { adminAuditKeys } from '@/lib/admin/admin-audit-query'
 import { adminKeys } from '@/lib/admin/admin-query'
+import { moderationKeys } from '@/lib/moderation/moderation-query'
 import { checkoutKeys } from '@/lib/payments/checkout-query'
 import { clearPrivateUserQueries } from '@/lib/query/clear-user-scoped-queries'
 import { runQueryInBackground } from '@/lib/query/query-refresh'
@@ -85,7 +86,7 @@ describe('query keys', () => {
 })
 
 describe('session cache isolation', () => {
-  it('clears private user keys and keeps public catalog and session cache', () => {
+  it('clears private user keys and keeps public catalog and session cache', async () => {
     const client = createTestQueryClient()
     client.setQueryData(catalogKeys.list(DEFAULT_CATALOG_FILTERS), { items: ['public'] })
     client.setQueryData(collectionKeys.publicList({ page: 1 }), { items: ['public-col'] })
@@ -97,13 +98,14 @@ describe('session cache isolation', () => {
     client.setQueryData(collectionKeys.sellerList(), { items: [] })
     client.setQueryData(adminKeys.categories(), { items: ['admin-cat'] })
     client.setQueryData(adminAuditKeys.all, { items: ['audit-log'] })
+    client.setQueryData(moderationKeys.all, { private: 'moderator payload' })
     client.setQueryData(checkoutKeys.status('intent-1'), { status: 'pending' })
     client.setQueryData(assetKeys.similar('asset-1', 6, 'similarity'), { items: ['public'] })
     client.setQueryData(assetKeys.personalSimilar('user-1', 'asset-1', 6, 'similarity'), {
       items: ['personal'],
     })
 
-    clearPrivateUserQueries(client)
+    await clearPrivateUserQueries(client)
 
     expect(client.getQueryData(catalogKeys.list(DEFAULT_CATALOG_FILTERS))).toEqual({
       items: ['public'],
@@ -120,12 +122,38 @@ describe('session cache isolation', () => {
     expect(client.getQueryData(collectionKeys.sellerList())).toBeUndefined()
     expect(client.getQueryData(adminKeys.categories())).toBeUndefined()
     expect(client.getQueryData(adminAuditKeys.all)).toBeUndefined()
+    expect(client.getQueryData(moderationKeys.all)).toBeUndefined()
     expect(client.getQueryData(assetKeys.similar('asset-1', 6, 'similarity'))).toEqual({
       items: ['public'],
     })
     expect(
       client.getQueryData(assetKeys.personalSimilar('user-1', 'asset-1', 6, 'similarity')),
     ).toBeUndefined()
+  })
+
+  it('cancels pending moderation fetches before removing their private entries', async () => {
+    const client = createTestQueryClient()
+    const queryKey = moderationKeys.case('moderator-a', 'appeal-case')
+    let complete: ((value: string) => void) | undefined
+    let signal: AbortSignal | undefined
+    const pending = client.fetchQuery({
+      queryKey,
+      queryFn: ({ signal: querySignal }) => {
+        signal = querySignal
+        return new Promise<string>((resolve) => {
+          complete = resolve
+        })
+      },
+    })
+
+    await vi.waitFor(() => expect(complete).toBeDefined())
+    await clearPrivateUserQueries(client)
+    expect(signal?.aborted).toBe(true)
+    expect(client.getQueryCache().findAll({ queryKey: moderationKeys.all })).toHaveLength(0)
+
+    complete?.('late private response')
+    await pending.catch(() => undefined)
+    expect(client.getQueryData(queryKey)).toBeUndefined()
   })
 })
 

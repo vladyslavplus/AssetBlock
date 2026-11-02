@@ -11,8 +11,11 @@ namespace AssetBlock.WebApi.Tests.Services;
 
 public sealed class RealtimeNotificationPublisherTests
 {
-    [Fact]
-    public async Task DeliverPersistedNotification_WhenDeliveredTwice_ShouldPersistOnlyOnce()
+    [Theory]
+    [InlineData(NotificationKind.ORDER_READY)]
+    [InlineData(NotificationKind.MODERATION_APPEAL_UPHELD)]
+    [InlineData(NotificationKind.MODERATION_APPROVED)]
+    public async Task DeliverPersistedNotification_WhenDeliveredTwice_ShouldPersistOnlyOnce(NotificationKind kind)
     {
         var outboxId = Guid.NewGuid();
         var recipientId = Guid.NewGuid();
@@ -45,14 +48,14 @@ public sealed class RealtimeNotificationPublisherTests
         await publisher.DeliverPersistedNotification(
             outboxId,
             recipientId,
-            NotificationKind.ORDER_READY,
+            kind,
             "OrderReady",
             "{}",
             CancellationToken.None);
         await publisher.DeliverPersistedNotification(
             outboxId,
             recipientId,
-            NotificationKind.ORDER_READY,
+            kind,
             "OrderReady",
             "{}",
             CancellationToken.None);
@@ -60,7 +63,7 @@ public sealed class RealtimeNotificationPublisherTests
         await store.Received(1).Add(
             Arg.Is<UserNotification>(notification =>
                 notification.SourceOutboxMessageId == outboxId &&
-                notification.RecipientUserId == recipientId),
+                notification.RecipientUserId == recipientId && notification.Kind == kind),
             Arg.Any<CancellationToken>());
     }
 }

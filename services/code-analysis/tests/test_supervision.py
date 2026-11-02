@@ -15,6 +15,25 @@ from app.process_tree import pid_alive, run_native
 from app.service import _cancelled_envelope, _cleanup_failed_envelope
 
 
+def test_completed_worker_exit_status_survives_containment_cleanup(monkeypatch):
+    import ctypes
+    from types import SimpleNamespace
+    from app.supervisor import _SuspendedProc
+
+    kernel_status = [0]
+
+    def read_exit_code(_handle, pointer):
+        pointer._obj.value = kernel_status[0]
+        return True
+
+    monkeypatch.setattr(ctypes, "windll", SimpleNamespace(
+        kernel32=SimpleNamespace(GetExitCodeProcess=read_exit_code)), raising=False)
+    process = _SuspendedProc(123, 1)
+    assert process.poll() == 0
+    kernel_status[0] = 1
+    assert process.poll() == 0
+
+
 def _post(client, metadata, archive, secret=TEST_SECRET):
     body, content_type = make_body(metadata, archive)
     return client.post("/internal/analysis", content=body,
@@ -200,11 +219,12 @@ def test_cleanup_failure_overrides_success_with_withheld_findings():
                "errorCode": None}
               for name in ("INVENTORY", "EXTRACTION", "TOKEN", "SEMANTIC",
                            "LICENSE", "UNION", "VERIFIER", "REPORT")]
+    stages[6]["outcome"] = "NOT_APPLICABLE"
+    stages[6]["errorCode"] = "POLICY_DISABLED"
     completed = {"stages": stages, "coverage": {"level": "FULL", "analyzedFiles": 1,
                  "omissions": [], "omissionOverflow": 0}, "findingOverflow": 2,
                  "policy": {"policyVersion": "p", "policyDigest": "a" * 64,
-                            "verifierMode": "PENDING_RESEARCH_EVALUATION",
-                            "canAuthorizePublication": False},
+                            "verifierMode": "DISABLED_BY_EVALUATION"},
                  "securityEvidence": {"contentSha256": "c", "archiveEvidenceId": "archive",
                                       "malwareEvidenceId": "malware", "securityGeneration": 3},
                  "reservation": {"serviceKey": "code-analysis", "slotNumber": 0,
@@ -214,7 +234,7 @@ def test_cleanup_failure_overrides_success_with_withheld_findings():
     assert envelope["errorCode"] == "CLEANUP_FAILED"
     assert envelope["failedStage"] == "REPORT"
     assert envelope["retryable"] is False
-    assert [stage["outcome"] for stage in envelope["stages"]] == ["SUCCEEDED"] * 8
+    assert [stage["outcome"] for stage in envelope["stages"]] == ["SUCCEEDED"] * 6 + ["NOT_APPLICABLE", "SUCCEEDED"]
     assert envelope["findings"] == []
     assert envelope["findingOverflow"] == 2
     assert envelope["securityEvidence"] == completed["securityEvidence"]
@@ -241,8 +261,7 @@ def test_cleanup_failure_preserves_an_already_failed_computational_stage():
     failed = {"outcome": "FAILED", "errorCode": "TOKENIZER_UNAVAILABLE",
               "failedStage": "TOKEN", "retryable": True, "stages": stages,
               "policy": {"policyVersion": "p", "policyDigest": "a" * 64,
-                         "verifierMode": "PENDING_RESEARCH_EVALUATION",
-                         "canAuthorizePublication": False},
+                         "verifierMode": "DISABLED_BY_EVALUATION"},
               "securityEvidence": {"contentSha256": "c", "archiveEvidenceId": "archive",
                                    "malwareEvidenceId": "malware", "securityGeneration": 3},
               "reservation": {"serviceKey": "code-analysis", "slotNumber": 0,
@@ -284,17 +303,19 @@ service_root = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(service_root))
 from app import contracts, policy
 from app.contracts import APPLICABILITY, STAGE_OUTCOME, StageRecord
-from app.stages import Pipeline, _success_envelope
+from app.stages import Pipeline, _success_envelope, _stage_verifier
 
 workdir = Path(sys.argv[1])
 request = json.loads((workdir / "request.json").read_text(encoding="utf-8"))
 metadata = contracts.validate_metadata(request["metadata"])
-context = SimpleNamespace(metadata=metadata, policy=policy.current_policy(), snapshot=None)
+context = SimpleNamespace(metadata=metadata, policy=policy.current_policy(),
+                          snapshot=SimpleNamespace(snapshot_id="fixture", revision="fixture", files=[]))
 pipe = Pipeline(context=context)
-for name in ("INVENTORY", "EXTRACTION", "TOKEN", "SEMANTIC", "LICENSE", "UNION", "VERIFIER"):
+for name in ("INVENTORY", "EXTRACTION", "TOKEN", "SEMANTIC", "LICENSE", "UNION"):
     pipe.record(StageRecord(stage=name, applicability=APPLICABILITY.MANDATORY.value,
                             outcome=STAGE_OUTCOME.SUCCEEDED.value,
                             tool_identity={"fixture": "contract-faithful-supervised-child"}))
+_stage_verifier(pipe)
 envelope = _success_envelope(pipe)
 (workdir / "envelope.json").write_bytes(contracts.canonical(envelope))
 ''', encoding="utf-8")
@@ -315,9 +336,8 @@ def test_parent_cleanup_failure_blocks_and_withholds(client, app_config,
     baseline = _post(client, make_metadata(archive), archive)
     assert baseline.status_code == 200
     assert baseline.json()["outcome"] == "COMPLETED"
-    assert [stage["outcome"] for stage in baseline.json()["stages"]] == ["SUCCEEDED"] * 8
-    assert baseline.json()["policy"]["verifierMode"] == "PENDING_RESEARCH_EVALUATION"
-    assert baseline.json()["policy"]["canAuthorizePublication"] is False
+    assert [stage["outcome"] for stage in baseline.json()["stages"]] == ["SUCCEEDED"] * 6 + ["NOT_APPLICABLE", "SUCCEEDED"]
+    assert baseline.json()["policy"]["verifierMode"] == "DISABLED_BY_EVALUATION"
     assert baseline.json()["admittedBy"] is None
 
     def failing_rmtree(path, ignore_errors=False):
@@ -333,9 +353,8 @@ def test_parent_cleanup_failure_blocks_and_withholds(client, app_config,
     assert response.json()["findings"] == []
     assert response.json()["failedStage"] == "REPORT"
     assert response.json()["retryable"] is False
-    assert [stage["outcome"] for stage in response.json()["stages"]] == ["SUCCEEDED"] * 8
-    assert response.json()["policy"]["verifierMode"] == "PENDING_RESEARCH_EVALUATION"
-    assert response.json()["policy"]["canAuthorizePublication"] is False
+    assert [stage["outcome"] for stage in response.json()["stages"]] == ["SUCCEEDED"] * 6 + ["NOT_APPLICABLE", "SUCCEEDED"]
+    assert response.json()["policy"]["verifierMode"] == "DISABLED_BY_EVALUATION"
     assert response.json()["admittedBy"] is None
     assert response.json()["cleanupError"] == "CLEANUP_FAILED"
     # The stuck workspace blocks subsequent work until the sweeper retries.
@@ -358,11 +377,16 @@ def test_unconfirmed_run_holds_gate_without_cleanup(service_app, workspace_root,
             [sys.executable, "-c", "import time; time.sleep(120)"],
             cwd=str(workspace_dir), shell=False,
             stdout=_sp.DEVNULL, stderr=_sp.DEVNULL,
+            creationflags=_sp.CREATE_NO_WINDOW if sys.platform == "win32" else 0,
             start_new_session=sys.platform != "win32")
         spawned.append(proc)
         return proc, "test", None
 
     monkeypatch.setattr(service_module, "spawn_worker", stub_spawn)
+    # Model denied termination explicitly; real containment must still stop real workers.
+    monkeypatch.setattr(service_module, "stop_containment", lambda *_: None)
+    import app.supervisor as supervisor_module
+    monkeypatch.setattr(supervisor_module, "stop_containment", lambda *_: None)
     client = TestClient(service_app)
     archive = make_zip({"src/a.js": b"function alpha() { return 1; }\n"})
     metadata = make_metadata(archive)

@@ -9,6 +9,7 @@ import {
 import { z } from 'zod'
 import { toast } from 'sonner'
 import { setHubConnectionState } from '@/lib/notifications/hub-connection-state'
+import { moderationCaseChangedMessageSchema } from '@/lib/notifications/notification-types'
 
 const HUB_METHODS = [
   'OrderReady',
@@ -18,6 +19,7 @@ const HUB_METHODS = [
   'AssetProcessingReady',
   'AssetProcessingRejected',
   'AssetProcessingFailed',
+  'ModerationCaseChanged',
 ] as const
 const ASSET_PROCESSING_UPDATED_METHOD = 'AssetProcessingUpdated'
 const PROCESSING_NOTIFICATION_METHODS = new Set<string>([
@@ -60,7 +62,7 @@ function createHubLogger(): signalR.ILogger {
   }
 }
 
-type InvalidateFn = () => void
+type InvalidateFn = (method: string, payload: unknown) => void
 export type ProcessingUpdateFn = (message: AssetProcessingUpdateMessage) => void
 
 const invalidateHandlers = new Set<InvalidateFn>()
@@ -119,6 +121,13 @@ function dispatchHubEvent(method: string, payload: unknown): void {
     }
     payload = parsed.data
   }
+  if (method === 'ModerationCaseChanged') {
+    const parsed = moderationCaseChangedMessageSchema.safeParse(payload)
+    if (!parsed.success) {
+      return
+    }
+    payload = parsed.data
+  }
 
   const notificationId = notificationIdFromPayload(payload)
   const isNew = notificationId ? rememberNotificationId(notificationId) : true
@@ -127,7 +136,7 @@ function dispatchHubEvent(method: string, payload: unknown): void {
   }
   for (const fn of invalidateHandlers) {
     try {
-      fn()
+      fn(method, payload)
     } catch {
       /* subscriber must not break hub */
     }
