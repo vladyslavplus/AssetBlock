@@ -134,9 +134,9 @@ function EvidencePreview({
 
 export function ModerationCaseWorkspace({ submissionId }: { submissionId: string }) {
   const { user } = useAuth()
-  const caseQuery = useModerationCase(submissionId)
-  const queue = useModerationQueue({ pageSize: 100 })
-  const coverage = useCoverageRequests()
+  const caseQuery = useModerationCase(user?.id, submissionId)
+  const queue = useModerationQueue(user?.id, { pageSize: 100 })
+  const coverage = useCoverageRequests(user?.id)
   const claimMutation = useChangeModerationClaim()
   const assessMutation = useAssessCoverage()
   const decisionMutation = useSubmitModerationDecision()

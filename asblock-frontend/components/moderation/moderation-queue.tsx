@@ -35,7 +35,7 @@ function claimHolderLabel(item: ModeratorQueueItem, userId: string | undefined) 
 export function ModerationQueue() {
   const { user } = useAuth()
   const [claimFilter, setClaimFilter] = useState<'ALL' | 'MINE' | 'UNCLAIMED'>('ALL')
-  const queue = useModerationQueue({ claimFilter, pageSize: 50 })
+  const queue = useModerationQueue(user?.id, { claimFilter, pageSize: 50 })
   const claimMutation = useChangeModerationClaim()
   const mutationError = claimErrorMessage(claimMutation.error, claimMutation.variables?.action)
 

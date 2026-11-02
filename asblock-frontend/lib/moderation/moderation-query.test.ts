@@ -5,11 +5,39 @@ import {
   fetchModerationQueue,
   ModerationApiError,
   moderationErrorMessage,
+  moderationKeys,
   postCoverageAssessment,
 } from './moderation-query'
 import { moderationBackendEndpoints } from './moderation-routes'
 
 afterEach(() => vi.unstubAllGlobals())
+
+describe('moderation cache identity', () => {
+  it('scopes queue, case, and coverage keys to actor while retaining shared prefixes', () => {
+    const keys = moderationKeys as unknown as {
+      queueRoot: readonly unknown[]
+      caseRoot: readonly unknown[]
+      coverageRoot: readonly unknown[]
+      queue: (actorId: string, filters: { pageSize: number }) => readonly unknown[]
+      case: (actorId: string, submissionId: string) => readonly unknown[]
+      coverage: (actorId: string, page: number) => readonly unknown[]
+    }
+    const actorId = 'moderator-a'
+    const queue = keys.queue(actorId, { pageSize: 25 })
+    const caseKey = keys.case(actorId, 'appeal-case')
+    const coverage = keys.coverage(actorId, 2)
+
+    expect(keys.queueRoot).toEqual([...moderationKeys.all, 'queue'])
+    expect(keys.caseRoot).toEqual([...moderationKeys.all, 'case'])
+    expect(keys.coverageRoot).toEqual([...moderationKeys.all, 'coverage'])
+    expect(queue.slice(0, keys.queueRoot.length)).toEqual(keys.queueRoot)
+    expect(caseKey.slice(0, keys.caseRoot.length)).toEqual(keys.caseRoot)
+    expect(coverage.slice(0, keys.coverageRoot.length)).toEqual(keys.coverageRoot)
+    expect(queue).toContain(actorId)
+    expect(caseKey).toContain(actorId)
+    expect(coverage).toContain(actorId)
+  })
+})
 
 describe('moderation data contracts', () => {
   it('rejects invalid successful responses with a gateway error', async () => {

@@ -614,7 +614,7 @@ describe('moderation case workspace', () => {
       authUser: user,
     })
     await screen.findByRole('heading', { name: 'Findings and retrieval evidence' })
-    const query = queryClient.getQueryCache().find({ queryKey: moderationKeys.case(id) })
+    const query = queryClient.getQueryCache().find({ queryKey: moderationKeys.case(user.id, id) })
     const options = query?.options as unknown as {
       refetchInterval?: unknown
       refetchOnWindowFocus?: unknown
@@ -667,18 +667,17 @@ describe('moderation case workspace', () => {
 
   it('does not allow unknown caller identity to count as holding the claim', async () => {
     const body = { ...caseBody(), isClaimedByCaller: false }
-    vi.stubGlobal(
-      'fetch',
-      vi.fn(async (input: RequestInfo | URL) =>
-        String(input).includes(`/submissions/${id}`)
-          ? json(body)
-          : String(input).includes('coverage-reviews')
-            ? json({ items: [], page: 1, pageSize: 20, totalCount: 0, totalPages: 0 })
-            : json({ items: [], nextCursor: null }),
-      ),
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) =>
+      String(input).includes(`/submissions/${id}`)
+        ? json(body)
+        : String(input).includes('coverage-reviews')
+          ? json({ items: [], page: 1, pageSize: 20, totalCount: 0, totalPages: 0 })
+          : json({ items: [], nextCursor: null }),
     )
+    vi.stubGlobal('fetch', fetchMock)
     renderWithProviders(<ModerationCaseWorkspace submissionId={id} />, { authUser: null })
-    expect(await screen.findByRole('button', { name: 'Submit decision' })).toBeDisabled()
+    expect(screen.getByRole('status')).toHaveTextContent('Loading case')
+    expect(fetchMock).not.toHaveBeenCalled()
   })
 
   it('disables release while a request is pending and prevents a second release', async () => {

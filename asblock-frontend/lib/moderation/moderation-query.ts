@@ -26,10 +26,13 @@ export interface ModerationQueueFilters {
 export const moderationKeys = {
   all: ['moderation'] as const,
   coverageRoot: ['moderation', 'coverage'] as const,
-  coverage: (page = 1) => [...moderationKeys.coverageRoot, page] as const,
-  queue: (filters: ModerationQueueFilters = {}) =>
-    [...moderationKeys.all, 'queue', filters] as const,
-  case: (submissionId: string) => [...moderationKeys.all, 'case', submissionId] as const,
+  queueRoot: ['moderation', 'queue'] as const,
+  caseRoot: ['moderation', 'case'] as const,
+  coverage: (actorId: string, page = 1) => [...moderationKeys.coverageRoot, actorId, page] as const,
+  queue: (actorId: string, filters: ModerationQueueFilters = {}) =>
+    [...moderationKeys.queueRoot, actorId, filters] as const,
+  case: (actorId: string, submissionId: string) =>
+    [...moderationKeys.caseRoot, actorId, submissionId] as const,
 }
 
 export class ModerationApiError extends Error {
@@ -142,22 +145,26 @@ export function postCoverageAssessment(requestId: string, body: CoverageAssessme
   )
 }
 
-export function useModerationQueue(filters: ModerationQueueFilters = {}) {
+export function useModerationQueue(
+  actorId: string | undefined,
+  filters: ModerationQueueFilters = {},
+) {
   return useInfiniteQuery({
-    queryKey: moderationKeys.queue(filters),
+    queryKey: moderationKeys.queue(actorId ?? '', filters),
     queryFn: ({ pageParam, signal }) => fetchModerationQueue(filters, pageParam, signal),
     initialPageParam: undefined as string | undefined,
     getNextPageParam: (lastPage) => lastPage.nextCursor ?? undefined,
     staleTime: 10_000,
     refetchInterval: 30_000,
+    enabled: Boolean(actorId),
   })
 }
 
-export function useModerationCase(submissionId: string) {
+export function useModerationCase(actorId: string | undefined, submissionId: string) {
   return useQuery({
-    queryKey: moderationKeys.case(submissionId),
+    queryKey: moderationKeys.case(actorId ?? '', submissionId),
     queryFn: ({ signal }) => fetchModerationCase(submissionId, signal),
-    enabled: Boolean(submissionId),
+    enabled: Boolean(actorId && submissionId),
     staleTime: 10_000,
     refetchInterval: false,
     refetchOnWindowFocus: false,
@@ -165,14 +172,15 @@ export function useModerationCase(submissionId: string) {
   })
 }
 
-export function useCoverageRequests() {
+export function useCoverageRequests(actorId: string | undefined) {
   return useInfiniteQuery({
-    queryKey: moderationKeys.coverageRoot,
+    queryKey: moderationKeys.coverage(actorId ?? ''),
     queryFn: ({ pageParam, signal }) => fetchCoverageRequests(pageParam, signal),
     initialPageParam: 1,
     getNextPageParam: (lastPage) =>
       lastPage.page < lastPage.totalPages ? lastPage.page + 1 : undefined,
     staleTime: 10_000,
+    enabled: Boolean(actorId),
   })
 }
 
@@ -275,10 +283,10 @@ export function useChangeModerationClaim() {
       const path = moderationBackendPath(input.action, input.submissionId)
       return postModeration(path, input.body, claimChangeResponseSchema, 'Moderation claim')
     },
-    onSuccess: async (saved) => {
+    onSuccess: async () => {
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: moderationKeys.all }),
-        queryClient.invalidateQueries({ queryKey: moderationKeys.case(saved.submissionId) }),
+        queryClient.invalidateQueries({ queryKey: moderationKeys.caseRoot }),
       ])
     },
   })
@@ -294,10 +302,10 @@ export function useSubmitModerationDecision() {
         moderationDecisionResponseSchema,
         'Moderation decision',
       ),
-    onSuccess: async (_saved, input) => {
+    onSuccess: async () => {
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: moderationKeys.all }),
-        queryClient.invalidateQueries({ queryKey: moderationKeys.case(input.submissionId) }),
+        queryClient.invalidateQueries({ queryKey: moderationKeys.caseRoot }),
       ])
     },
   })

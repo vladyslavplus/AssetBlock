@@ -5,7 +5,8 @@ import {
 import { parseUuidParam } from '@/lib/server/bff-params'
 import {
   assertSameOrigin,
-  invalidJsonResponse,
+  BACKEND_JSON_BODY_LIMIT_BYTES,
+  readBoundedJsonBody,
   zodValidationProblemResponse,
   problemResponse,
 } from '@/lib/server/bff-http'
@@ -18,6 +19,8 @@ export async function POST(
 ) {
   const originError = assertSameOrigin(request)
   if (originError) return originError
+  const body = await readBoundedJsonBody(request, BACKEND_JSON_BODY_LIMIT_BYTES.sellerResponse)
+  if (!body.ok) return body.response
 
   const { id, versionId } = await context.params
   const asset = parseUuidParam('id', id)
@@ -25,13 +28,7 @@ export async function POST(
   const version = parseUuidParam('versionId', versionId)
   if (!version.ok) return version.response
 
-  let input: unknown
-  try {
-    input = await request.json()
-  } catch {
-    return invalidJsonResponse()
-  }
-  const parsed = sellerResponseRequestSchema.safeParse(input)
+  const parsed = sellerResponseRequestSchema.safeParse(body.value)
   if (!parsed.success) return zodValidationProblemResponse(parsed.error)
   return proxyAuthenticatedBff(request, {
     path: sellerReviewBackendPath('responses', asset.value, version.value),

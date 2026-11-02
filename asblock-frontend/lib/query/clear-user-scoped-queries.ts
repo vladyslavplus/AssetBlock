@@ -10,14 +10,17 @@ import { collectionKeys } from '@/lib/collections/collections-query'
 import { libraryKeys } from '@/lib/library/library-query'
 import { notificationsKeys } from '@/lib/notifications/notifications-query'
 import { sellerKeys } from '@/lib/seller/seller-query'
+import { moderationKeys } from '@/lib/moderation/moderation-query'
 
 /**
- * Drops private seller/library/account/notification/admin cache without touching `auth.session`.
+ * Drops private seller/library/account/notification/admin/moderation cache without touching `auth.session`.
  * Removing the session query here would refetch it and can loop after logout/session loss.
  * Personal similar-asset payloads carry the user id in the key and are dropped via predicate
  * so the shared identity-free public similar cache is preserved.
  */
-export function clearPrivateUserQueries(queryClient: QueryClient): void {
+export async function clearPrivateUserQueries(queryClient: QueryClient): Promise<void> {
+  await queryClient.cancelQueries({ queryKey: moderationKeys.all })
+  queryClient.removeQueries({ queryKey: moderationKeys.all })
   queryClient.removeQueries({ queryKey: sellerKeys.all })
   queryClient.removeQueries({ queryKey: libraryKeys.all })
   queryClient.removeQueries({ queryKey: checkoutKeys.all })

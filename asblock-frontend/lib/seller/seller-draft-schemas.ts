@@ -433,8 +433,8 @@ export const sellerEvidenceEditRequestSchema = z
     expectedEvidenceRevision: z.number().int().nonnegative(),
     text: z
       .string()
-      .trim()
       .max(SELLER_RESPONSE_TEXT_MAX)
+      .trim()
       .refine((value) => !value.includes('\0'), 'Text contains an invalid character.'),
   })
   .strict()

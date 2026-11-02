@@ -16,6 +16,8 @@ import {
   sellerVersionReviewSchema,
   sellerSubmissionCreatedSchema,
   sellerSubmissionWithdrawnSchema,
+  sellerEvidenceEditRequestSchema,
+  sellerResponseRequestSchema,
   sourceDeclarationByteSize,
   sourceDeclarationPayloadSchema,
   type SourceDeclarationPayload,
@@ -805,6 +807,39 @@ describe('backend contract alignment', () => {
         price: 10,
         categoryId: UUID,
         downloadLimitPerHour: null,
+      }).success,
+    ).toBe(false)
+  })
+})
+
+describe('seller evidence request byte bounds', () => {
+  const evidence = {
+    workspaceId: '123e4567-e89b-12d3-a456-426614174000',
+    reportId: '123e4567-e89b-12d3-a456-426614174001',
+    operationId: '123e4567-e89b-12d3-a456-426614174002',
+    expectedWorkspaceRevision: 1,
+    expectedEvidenceRevision: 0,
+    text: ' '.repeat(1000) + 'x'.repeat(1000),
+  }
+
+  it('bounds raw evidence text before trimming for response and evidence routes', () => {
+    expect(sellerEvidenceEditRequestSchema.safeParse(evidence).success).toBe(true)
+    expect(
+      sellerEvidenceEditRequestSchema.safeParse({ ...evidence, text: ' '.repeat(2001) }).success,
+    ).toBe(false)
+    expect(
+      sellerResponseRequestSchema.safeParse({
+        ...evidence,
+        findingId: '123e4567-e89b-12d3-a456-426614174003',
+        responseType: 'NO_EVIDENCE',
+      }).success,
+    ).toBe(true)
+    expect(
+      sellerResponseRequestSchema.safeParse({
+        ...evidence,
+        findingId: '123e4567-e89b-12d3-a456-426614174003',
+        responseType: 'NO_EVIDENCE',
+        text: ' '.repeat(2001),
       }).success,
     ).toBe(false)
   })

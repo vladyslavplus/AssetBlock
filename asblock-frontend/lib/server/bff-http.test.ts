@@ -2,15 +2,90 @@ import { describe, expect, it } from 'vitest'
 
 import {
   assertSameOrigin,
+  BACKEND_JSON_BODY_LIMIT_BYTES,
   forwardAuthenticatedBackendResponse,
   forwardBackendDownloadResponse,
   forwardBackendResponse,
   invalidJsonResponse,
   problemResponse,
+  readBoundedJsonBody,
   safeBackendProblemResponse,
 } from '@/lib/server/bff-http'
 
 describe('BFF same-origin and response forwarding', () => {
+  it('defines only route-specific bounded JSON ceilings below upload limits', () => {
+    const limits = BACKEND_JSON_BODY_LIMIT_BYTES as unknown as Record<string, number>
+    expect(limits).not.toHaveProperty('default')
+    expect(limits).toMatchObject({
+      moderationDecision: 1_048_576,
+      moderationClaim: expect.any(Number),
+      moderationRelease: expect.any(Number),
+      coverageAssessment: expect.any(Number),
+      sellerResponse: expect.any(Number),
+      sellerAppeal: 16_384,
+      sellerEvidence: expect.any(Number),
+      sellerCoverageRequest: expect.any(Number),
+      sellerSubmission: expect.any(Number),
+      sellerWithdraw: expect.any(Number),
+      sellerAnalysisRetry: expect.any(Number),
+    })
+    for (const [name, limit] of Object.entries(limits)) {
+      if (name === 'moderationDecision' || name === 'sellerAppeal') continue
+      expect(limit, name).toBeLessThan(1_048_576)
+      expect(limit, name).toBeGreaterThan(0)
+    }
+  })
+
+  it('rejects an oversized declared length before reading the body', async () => {
+    let pulls = 0
+    const body = new ReadableStream<Uint8Array>({
+      pull(controller) {
+        pulls += 1
+        controller.enqueue(new TextEncoder().encode('{}'))
+      },
+      cancel() {},
+    })
+    const request = new Request('http://localhost:3000/api/test', {
+      method: 'POST',
+      headers: { 'Content-Length': '9' },
+      body,
+      duplex: 'half',
+    } as RequestInit)
+
+    const result = await readBoundedJsonBody(request, 8)
+    expect(result.ok).toBe(false)
+    if (!result.ok) expect(result.response.status).toBe(413)
+    expect(pulls).toBe(0)
+  })
+
+  it.each([
+    ['without declared length', undefined],
+    ['with understated declared length', '1'],
+  ])('rejects oversized streamed bodies %s', async (_label, contentLength) => {
+    const headers = contentLength ? { 'Content-Length': contentLength } : {}
+    const request = new Request('http://localhost:3000/api/test', {
+      method: 'POST',
+      headers,
+      body: new ReadableStream<Uint8Array>({
+        start(controller) {
+          controller.enqueue(new TextEncoder().encode('{"a":123}'))
+          controller.close()
+        },
+      }),
+      duplex: 'half',
+    } as RequestInit)
+    const result = await readBoundedJsonBody(request, 8)
+    expect(result.ok).toBe(false)
+    if (!result.ok) expect(result.response.status).toBe(413)
+  })
+
+  it('accepts a valid JSON body exactly at the byte limit', async () => {
+    const request = new Request('http://localhost:3000/api/test', {
+      method: 'POST',
+      body: new TextEncoder().encode('{"a":12}'),
+    })
+    await expect(readBoundedJsonBody(request, 8)).resolves.toEqual({ ok: true, value: { a: 12 } })
+  })
   it('allows a mutating request with a matching Origin', async () => {
     const request = new Request('http://localhost:3000/api/auth/logout', {
       method: 'POST',

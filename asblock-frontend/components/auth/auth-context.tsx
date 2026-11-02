@@ -42,19 +42,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       : 'anonymous'
   const isAdmin = isAdminRole(user?.role)
   const isModerator = isModeratorRole(user?.role)
+  const identity = user ? `${user.id}:${user.role ?? ''}:${user.roleRevision ?? ''}` : null
 
-  const previousUserIdRef = useRef<string | null | undefined>(undefined)
+  const previousIdentityRef = useRef<string | null | undefined>(undefined)
 
   useEffect(() => {
     if (sessionQuery.isPending) return
-    const nextId = user?.id ?? null
-    const previousId = previousUserIdRef.current
-    previousUserIdRef.current = nextId
-    if (previousId === undefined) return
-    if (previousId !== nextId) {
-      clearPrivateUserQueries(queryClient)
+    const previousIdentity = previousIdentityRef.current
+    previousIdentityRef.current = identity
+    if (previousIdentity === undefined) return
+    if (previousIdentity !== identity) {
+      void clearPrivateUserQueries(queryClient)
     }
-  }, [queryClient, sessionQuery.isPending, user?.id])
+  }, [identity, queryClient, sessionQuery.isPending])
 
   const refresh = async () => {
     await queryClient.invalidateQueries({ queryKey: authKeys.session() }, { cancelRefetch: false })
@@ -62,9 +62,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   const logout = async () => {
-    await fetch('/api/auth/logout', { method: 'POST' })
-    clearPrivateUserQueries(queryClient)
-    queryClient.setQueryData(authKeys.session(), null)
+    try {
+      await fetch('/api/auth/logout', { method: 'POST' })
+    } finally {
+      await clearPrivateUserQueries(queryClient)
+      queryClient.setQueryData(authKeys.session(), null)
+    }
   }
 
   const value = { user, status, isAdmin, isModerator, refresh, logout }

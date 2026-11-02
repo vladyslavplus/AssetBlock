@@ -7,6 +7,21 @@ const BODYLESS_STATUSES = new Set([204, 205, 304])
 const SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS'])
 const SAFE_PROBLEM_CODE = /^ERR_[A-Z0-9_]+$/
 
+/** Per-route JSON ceilings derive from bounded request fields and backend endpoint limits. */
+export const BACKEND_JSON_BODY_LIMIT_BYTES = {
+  moderationClaim: 1_024, // UUID and revision fields plus the 1 KiB JSON envelope.
+  moderationRelease: 1_024, // UUID and revision fields plus the 1 KiB JSON envelope.
+  coverageAssessment: 1_024 + 4 * (20 * 60 + 20 * (512 + 60 + 200) + 2_000 + 200 + 2_000), // Max bounded strings plus the 1 KiB JSON envelope.
+  sellerResponse: 1_024 + 4 * 2_000, // One bounded response text plus the 1 KiB JSON envelope.
+  moderationDecision: 1_048_576, // Moderation decision endpoint RequestSizeLimit.
+  sellerAppeal: 16_384, // Appeal endpoint RequestSizeLimit; rationale is raw-bounded at 4,000 chars.
+  sellerEvidence: 1_024 + 4 * 2_000, // One bounded evidence text plus the 1 KiB JSON envelope.
+  sellerCoverageRequest: 1_024, // UUID and revision fields plus the 1 KiB JSON envelope.
+  sellerSubmission: 1_024, // UUID and revision fields plus the 1 KiB JSON envelope.
+  sellerWithdraw: 1_024, // UUID and revision fields plus the 1 KiB JSON envelope.
+  sellerAnalysisRetry: 1_024 + 4 * (64 + 64), // Two bounded digest strings plus the 1 KiB JSON envelope.
+} as const
+
 export function problemResponse(
   status: number,
   code: string,
@@ -50,6 +65,57 @@ export function invalidJsonResponse(): Response {
   return problemResponse(400, 'ERR_VALIDATION_FAILED', 'The request body must be valid JSON.', {
     body: ['Invalid JSON body.'],
   })
+}
+
+export type BoundedJsonBodyResult = { ok: true; value: unknown } | { ok: false; response: Response }
+
+function tooLargeJsonResponse(): Response {
+  return problemResponse(
+    413,
+    'ERR_REQUEST_BODY_TOO_LARGE',
+    'The request body exceeds the permitted size.',
+    undefined,
+    { 'Cache-Control': 'no-store' },
+  )
+}
+
+/** Reads JSON incrementally so oversized client bodies never reach JSON parsing or backend forwarding. */
+export async function readBoundedJsonBody(
+  request: Request,
+  maxBytes: number,
+): Promise<BoundedJsonBodyResult> {
+  const declaredLength = request.headers.get('Content-Length')
+  if (declaredLength !== null) {
+    if (!/^\d+$/.test(declaredLength)) return { ok: false, response: invalidJsonResponse() }
+    if (BigInt(declaredLength) > BigInt(maxBytes)) {
+      await request.body?.cancel().catch(() => undefined)
+      return { ok: false, response: tooLargeJsonResponse() }
+    }
+  }
+
+  if (!request.body) return { ok: false, response: invalidJsonResponse() }
+  const reader = request.body.getReader()
+  const decoder = new TextDecoder('utf-8', { fatal: true })
+  let bytes = 0
+  let text = ''
+  try {
+    while (true) {
+      const { done, value } = await reader.read()
+      if (done) break
+      bytes += value.byteLength
+      if (bytes > maxBytes) {
+        await reader.cancel().catch(() => undefined)
+        return { ok: false, response: tooLargeJsonResponse() }
+      }
+      text += decoder.decode(value, { stream: true })
+    }
+    text += decoder.decode()
+    return { ok: true, value: JSON.parse(text) as unknown }
+  } catch {
+    return { ok: false, response: invalidJsonResponse() }
+  } finally {
+    reader.releaseLock()
+  }
 }
 
 export function zodValidationProblemResponse(error: ZodError): Response {
