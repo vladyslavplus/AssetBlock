@@ -113,7 +113,7 @@ public sealed class AnalysisPolicyPublisherPostgresTests(PostgresFixture fixture
     public async Task Publish_WhenConcurrentPublishersShareKeyAndDigest_ShouldPersistOneRowAndReplayTheOther()
     {
         await using ApplicationDbContext firstDb = await fixture.CreateCleanDbContext();
-        await using ApplicationDbContext secondDb = await fixture.CreateCleanDbContext();
+        await using ApplicationDbContext secondDb = fixture.CreateDbContext();
         AnalysisPolicyManifest manifest = Manifest();
 
         Task<AnalysisPolicyPublishResult> first = CreatePublisher(firstDb).Publish(manifest);
@@ -135,7 +135,7 @@ public sealed class AnalysisPolicyPublisherPostgresTests(PostgresFixture fixture
     public async Task Publish_WhenConcurrentPublishersShareKeyWithDifferentDigests_ShouldRefuseTheSecond()
     {
         await using ApplicationDbContext firstDb = await fixture.CreateCleanDbContext();
-        await using ApplicationDbContext secondDb = await fixture.CreateCleanDbContext();
+        await using ApplicationDbContext secondDb = fixture.CreateDbContext();
 
         Task<AnalysisPolicyPublishResult> first = CreatePublisher(firstDb).Publish(Manifest());
         Task<AnalysisPolicyPublishResult> second = CreatePublisher(secondDb).Publish(Manifest());

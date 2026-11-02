@@ -13,9 +13,90 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  test:
-    name: Build & Test
+  changes:
+    name: Detect backend changes
     runs-on: ubuntu-latest
+    outputs:
+      backend: ${{ steps.decide.outputs.backend }}
+
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        if: github.event_name == 'pull_request'
+
+      - name: List changed files
+        if: github.event_name == 'pull_request'
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          git fetch --no-tags --depth=1 origin "$BASE_SHA"
+          git diff --no-renames --name-only "$BASE_SHA" HEAD > "$RUNNER_TEMP/changed-files.txt"
+
+      - name: Decide backend scope
+        id: decide
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          CHANGED_FILES: ${{ runner.temp }}/changed-files.txt
+        run: |
+          # Backend scope: asblock-backend/ plus repo files backend tests read or copy at build time:
+          # asblock-frontend/lib/seller/seller-review-endpoints.json (WebApi.IntegrationTests HTTP contract),
+          # services/code-analysis/tools/canonical_vectors.json (Infrastructure.Tests, copied to output),
+          # .gitattributes (line endings of backend sources), and this workflow.
+          backend_pattern='^(asblock-backend/|\.github/workflows/backend-ci\.yml$|\.gitattributes$|asblock-frontend/lib/seller/seller-review-endpoints\.json$|services/code-analysis/tools/canonical_vectors\.json$)'
+          is_backend_change() {
+            grep -Eq "$backend_pattern" "$1"
+          }
+          if [ "$EVENT_NAME" != "pull_request" ] || is_backend_change "$CHANGED_FILES"; then
+            backend=true
+          else
+            backend=false
+          fi
+          echo "backend=$backend" >> "$GITHUB_OUTPUT"
+          echo "backend=$backend"
+
+  lint:
+    name: Format & Analyzers
+    needs: changes
+    if: needs.changes.outputs.backend == 'true'
+    runs-on: ubuntu-latest
+    env:
+      DOTNET_NOLOGO: "true"
+      DOTNET_CLI_TELEMETRY_OPTOUT: "true"
+      DOTNET_SKIP_FIRST_TIME_EXPERIENCE: "true"
+
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with:
+          dotnet-version: "10.0.x"
+
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.nuget/packages
+          key: nuget-${{ hashFiles('asblock-backend/**/*.csproj', 'asblock-backend/Directory.Build.props', 'asblock-backend/Directory.Packages.props', 'asblock-backend/NuGet.config', 'asblock-backend/**/packages.lock.json', 'asblock-backend/global.json', 'asblock-backend/.config/dotnet-tools.json') }}
+          restore-keys: nuget-
+
+      - name: Restore
+        working-directory: asblock-backend
+        run: dotnet restore asblock-backend.slnx --locked-mode
+
+      - name: Verify formatting and code style
+        working-directory: asblock-backend
+        run: dotnet format asblock-backend.slnx --no-restore --verify-no-changes --verbosity minimal
+
+      - name: Build with analyzers
+        working-directory: asblock-backend
+        run: dotnet build asblock-backend.slnx --no-restore --configuration Release
+
+  test:
+    name: Backend tests
+    needs: changes
+    if: needs.changes.outputs.backend == 'true'
+    runs-on: ubuntu-latest
+    env:
+      DOTNET_NOLOGO: "true"
+      DOTNET_CLI_TELEMETRY_OPTOUT: "true"
+      DOTNET_SKIP_FIRST_TIME_EXPERIENCE: "true"
 
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -36,13 +117,22 @@ jobs:
           dotnet restore asblock-backend.slnx --locked-mode
           dotnet tool restore
 
-      - name: Verify formatting and code style
-        working-directory: asblock-backend
-        run: dotnet format asblock-backend.slnx --no-restore --verify-no-changes --verbosity minimal
+      # Image references are copied from the Testcontainers literals in asblock-backend C# tests, which are the source of truth.
+      - name: Pre-pull test images
+        run: |
+          (for image in \
+            "pgvector/pgvector:0.8.6-pg16-bookworm@sha256:ccc6e83d6e35e931dc7c5def2022729d5a6c370318d099181995567ff1fb4d6b" \
+            "axllent/mailpit:v1.30.0@sha256:0059ef81e492a7192af3816281eed6859eb078bd7bdc58b76757c13e10e53a7d" \
+            "docker.io/pgsty/minio:RELEASE.2026-08-04T00-00-00Z@sha256:b6bfe7239bfc83fb90d31612d9704d86039dd714f7904b3f1ad68f211e602372" \
+            "chrislusf/seaweedfs:4.42@sha256:f7cbc8bdbbf60a1aaba7d61784a3bdff3ec1e0657f6ad0b26d5b6ab2cd9d0dc6" \
+            "clamav/clamav:1.4.6@sha256:b25d9199257ae7ef45e0cc4c7eaa60ce7e5447796f0090d5ff311d1a30980cc3" \
+            "valkey/valkey:9.1.1@sha256:64e361b630ecf18dff7ca4df6a88e6eafc193687eb48cff2c7e0a293ab67d29a"; do
+            docker pull -q "$image"
+          done) >/tmp/prepull.log 2>&1 &
 
       - name: Build
         working-directory: asblock-backend
-        run: dotnet build asblock-backend.slnx --no-restore --configuration Release
+        run: dotnet build asblock-backend.slnx --no-restore --configuration Release -p:RunAnalyzers=false
 
       - name: Test & Collect Coverage
         working-directory: asblock-backend
@@ -54,20 +144,27 @@ jobs:
           expected_projects=(
             AssetBlock.Application.Tests
             AssetBlock.Infrastructure.Tests
-            AssetBlock.Infrastructure.IntegrationTests
+            AssetBlock.Infrastructure.IntegrationTests.A
+            AssetBlock.Infrastructure.IntegrationTests.B
             AssetBlock.WebApi.Tests
             AssetBlock.WebApi.IntegrationTests
           )
           run_test_project() {
             csproj="$1"
-            name="$(basename "$csproj" .csproj)"
+            name="$2"
+            filter="${3:-}"
             results_dir="${GITHUB_WORKSPACE}/asblock-backend/artifacts/test-results/${name}"
             mkdir -p "$results_dir"
             log_file="${results_dir}/test.log"
+            filter_args=()
+            if [ -n "$filter" ]; then
+              filter_args=(--filter "$filter")
+            fi
             echo "::group::Test $name"
             dotnet test "$csproj" \
               --no-build \
               --configuration Release \
+              "${filter_args[@]}" \
               --logger "console;verbosity=normal" \
               --logger "trx;LogFileName=${name}.trx" \
               --results-directory "$results_dir" \
@@ -77,13 +174,15 @@ jobs:
             echo "::endgroup::"
           }
           export -f run_test_project
+          # Longest first. Each line is name|csproj|optional filter.
           printf '%s\n' \
-            AssetBlock.Application.Tests/AssetBlock.Application.Tests.csproj \
-            AssetBlock.Infrastructure.Tests/AssetBlock.Infrastructure.Tests.csproj \
-            AssetBlock.Infrastructure.IntegrationTests/AssetBlock.Infrastructure.IntegrationTests.csproj \
-            AssetBlock.WebApi.Tests/AssetBlock.WebApi.Tests.csproj \
-            AssetBlock.WebApi.IntegrationTests/AssetBlock.WebApi.IntegrationTests.csproj \
-            | xargs -P 2 -I {} bash -c 'run_test_project "$@"' _ {}
+            'AssetBlock.Infrastructure.IntegrationTests.A|AssetBlock.Infrastructure.IntegrationTests/AssetBlock.Infrastructure.IntegrationTests.csproj|FullyQualifiedName~CodeAnalysisReportFinalizer' \
+            'AssetBlock.Infrastructure.IntegrationTests.B|AssetBlock.Infrastructure.IntegrationTests/AssetBlock.Infrastructure.IntegrationTests.csproj|FullyQualifiedName!~CodeAnalysisReportFinalizer' \
+            'AssetBlock.WebApi.IntegrationTests|AssetBlock.WebApi.IntegrationTests/AssetBlock.WebApi.IntegrationTests.csproj|' \
+            'AssetBlock.Application.Tests|AssetBlock.Application.Tests/AssetBlock.Application.Tests.csproj|' \
+            'AssetBlock.Infrastructure.Tests|AssetBlock.Infrastructure.Tests/AssetBlock.Infrastructure.Tests.csproj|' \
+            'AssetBlock.WebApi.Tests|AssetBlock.WebApi.Tests/AssetBlock.WebApi.Tests.csproj|' \
+            | xargs -d '\n' -P 4 -I {} bash -c 'IFS="|" read -r name csproj filter <<< "$1"; run_test_project "$csproj" "$name" "$filter"' _ {}
           overall=0
           for name in "${expected_projects[@]}"; do
             exit_file="${status_dir}/${name}.exit"
@@ -107,7 +206,8 @@ jobs:
           expected_projects=(
             AssetBlock.Application.Tests
             AssetBlock.Infrastructure.Tests
-            AssetBlock.Infrastructure.IntegrationTests
+            AssetBlock.Infrastructure.IntegrationTests.A
+            AssetBlock.Infrastructure.IntegrationTests.B
             AssetBlock.WebApi.Tests
             AssetBlock.WebApi.IntegrationTests
           )
@@ -180,8 +280,8 @@ jobs:
 
   coverage-comment:
     name: PR Coverage Comment
-    needs: test
-    if: success() && github.event_name == 'pull_request'
+    needs: [changes, test]
+    if: needs.changes.outputs.backend == 'true' && needs.test.result == 'success' && github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -198,3 +298,35 @@ jobs:
         with:
           recreate: true
           path: code-coverage-results.md
+
+  # Required status check "Build & Test". Always reports; skipped backend work counts as passing.
+  build-and-test:
+    name: Build & Test
+    needs: [changes, lint, test]
+    if: ${{ !cancelled() }}
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Aggregate job results
+        env:
+          BACKEND: ${{ needs.changes.outputs.backend }}
+          CHANGES_RESULT: ${{ needs.changes.result }}
+          LINT_RESULT: ${{ needs.lint.result }}
+          TEST_RESULT: ${{ needs.test.result }}
+        run: |
+          echo "changes: $CHANGES_RESULT (backend=$BACKEND)"
+          echo "lint: $LINT_RESULT"
+          echo "test: $TEST_RESULT"
+          if [ "$CHANGES_RESULT" != "success" ]; then
+            echo "Backend change detection did not succeed."
+            exit 1
+          fi
+          if [ "$BACKEND" != "true" ]; then
+            echo "backend unaffected: skipped"
+            exit 0
+          fi
+          if [ "$LINT_RESULT" != "success" ] || [ "$TEST_RESULT" != "success" ]; then
+            echo "Backend lint or tests did not succeed."
+            exit 1
+          fi
+          echo "Backend lint and tests passed."
