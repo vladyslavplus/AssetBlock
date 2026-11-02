@@ -11,6 +11,7 @@
 #
 # Switching Storage:Provider does not migrate existing encrypted objects.
 # Do not wipe Docker volumes or databases unless you intentionally discard local data.
+# A volume created before the single `Initial` migration must be recreated (docker compose down -v), then migrated again.
 
 services:
   postgres:

@@ -18,8 +18,6 @@ using AssetBlock.Infrastructure.Persistence.Stores;
 using AssetBlock.Infrastructure.Services;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
-using Microsoft.EntityFrameworkCore.Infrastructure;
-using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.Extensions.Logging.Abstractions;
 using NSubstitute;
 using MsOptions = Microsoft.Extensions.Options.Options;
@@ -52,14 +50,9 @@ public sealed partial class CodeAnalysisReportFinalizerPostgresTests
         (await db.PublicationSnapshots.CountAsync()).Should().Be(1);
     }
     [Fact]
-    public async Task Decision_WhenMigrationRevertedAndReapplied_ShouldRestoreCompletionReferenceColumn()
+    public async Task Decision_WhenFreshDatabase_ShouldCreateCompletionReferenceColumn()
     {
         await using ApplicationDbContext db = await fixture.CreateCleanDbContext();
-        IMigrator migrator = db.GetService<IMigrator>();
-        await migrator.MigrateAsync("20261031171312_AddModerationAssignment");
-        var before = await db.Database.SqlQueryRaw<int>("SELECT count(*)::int AS \"Value\" FROM information_schema.columns WHERE table_name = 'moderation_decisions' AND column_name = 'ManualPlanCompletionReference'").SingleAsync();
-        before.Should().Be(0);
-        await migrator.MigrateAsync();
         var after = await db.Database.SqlQueryRaw<int>("SELECT count(*)::int AS \"Value\" FROM information_schema.columns WHERE table_name = 'moderation_decisions' AND column_name = 'ManualPlanCompletionReference'").SingleAsync();
         after.Should().Be(1);
     }

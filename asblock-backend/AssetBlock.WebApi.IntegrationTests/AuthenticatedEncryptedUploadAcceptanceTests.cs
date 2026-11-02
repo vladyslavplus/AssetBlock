@@ -586,29 +586,58 @@ public sealed class AuthenticatedEncryptedUploadAcceptanceTests
                     {
                         throw new InvalidOperationException("Moderator retrieval evidence was unavailable after real admission.");
                     }
-                    foreach (JsonElement candidate in moderatorEvidence.GetProperty("candidates").EnumerateArray())
+                    JsonElement[] moderatorCandidates = moderatorEvidence.GetProperty("candidates").EnumerateArray().ToArray();
+                    int similarityCandidateCount = 0;
+                    bool noticeCandidateFound = false;
+                    foreach (JsonElement candidate in moderatorCandidates)
                     {
+                        string? findingType = candidate.GetProperty("findingType").GetString();
                         JsonElement scores = candidate.GetProperty("scores");
-                        if (!scores.TryGetProperty("tokenRank", out _) || !scores.TryGetProperty("tokenScore", out _)
-                            || !scores.TryGetProperty("semanticRank", out _) || !scores.TryGetProperty("semanticScore", out _)
-                            || !scores.TryGetProperty("channels", out _) || !scores.TryGetProperty("material", out _)
-                            || candidate.GetProperty("referenceItemId").ValueKind != JsonValueKind.String)
+                        if (findingType is "SIMILARITY_TOKEN" or "SIMILARITY_SEMANTIC")
                         {
-                            throw new InvalidOperationException("Moderator candidate lost a channel or provenance.");
+                            similarityCandidateCount++;
+                            if (scores.ValueKind != JsonValueKind.Object
+                                || !scores.TryGetProperty("tokenRank", out _) || !scores.TryGetProperty("tokenScore", out _)
+                                || !scores.TryGetProperty("semanticRank", out _) || !scores.TryGetProperty("semanticScore", out _)
+                                || !scores.TryGetProperty("channels", out _) || !scores.TryGetProperty("material", out _)
+                                || candidate.GetProperty("referenceItemId").ValueKind != JsonValueKind.String)
+                            {
+                                throw new InvalidOperationException("Moderator similarity candidate lost a channel or provenance.");
+                            }
                         }
+                        else
+                        {
+                            if (scores.ValueKind != JsonValueKind.Null
+                                || candidate.GetProperty("scoresAvailability").GetString() != "NOT_APPLICABLE")
+                            {
+                                throw new InvalidOperationException("Non-similarity finding carried inapplicable retrieval scores.");
+                            }
+
+                            noticeCandidateFound |= findingType == "NOTICE_MISSING";
+                        }
+                    }
+                    if (similarityCandidateCount == 0)
+                    {
+                        throw new InvalidOperationException("Moderator case detail carried no similarity candidate after real admission.");
+                    }
+                    if (!noticeCandidateFound)
+                    {
+                        throw new InvalidOperationException("Moderator case detail omitted the notice finding type.");
                     }
                     details["moderatorRetrievalEvidence"] = moderatorEvidence.Clone();
                     await using (AsyncServiceScope scope = factory.Services.CreateAsyncScope())
                     {
                         ApplicationDbContext db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
                         List<CodeAnalysisReportFinding> persisted = await db.CodeAnalysisReportFindings.AsNoTracking()
-                            .Where(f => f.ReportId == secondAdmittedReportId && f.RetrievalEvidenceJson != null)
+                            .Where(f => f.ReportId == secondAdmittedReportId && f.RetrievalEvidenceJson != null
+                                && (f.FindingType == "SIMILARITY_TOKEN" || f.FindingType == "SIMILARITY_SEMANTIC"))
                             .OrderBy(f => f.FindingKey).ToListAsync();
-                        if (persisted.Count != moderatorEvidence.GetProperty("candidates").GetArrayLength())
+                        if (persisted.Count != similarityCandidateCount)
                         {
-                            throw new InvalidOperationException("Moderator did not return every persisted retrieval candidate.");
+                            throw new InvalidOperationException("Moderator did not return every persisted similarity candidate.");
                         }
-                        var returned = moderatorEvidence.GetProperty("candidates").EnumerateArray()
+                        var returned = moderatorCandidates
+                            .Where(c => c.GetProperty("findingType").GetString() is "SIMILARITY_TOKEN" or "SIMILARITY_SEMANTIC")
                             .ToDictionary(c => c.GetProperty("findingKey").GetString()!, c => c.GetProperty("scores"));
                         foreach (CodeAnalysisReportFinding candidate in persisted)
                         {
@@ -1052,17 +1081,27 @@ public sealed class AuthenticatedEncryptedUploadAcceptanceTests
             if (projected.RootElement.GetProperty("appeal").GetProperty("state").GetString() != "APPROVED" || decision.GetProperty("outcome").GetString() != "APPROVED" || decision.GetProperty("reason").ValueKind != JsonValueKind.Null
                 || decision.GetProperty("publication").GetString() != "PUBLISHED")
                 throw new InvalidOperationException("Seller review did not project the approved decision as published without a reason.");
+
+            int changesReasonHistoryEntries = projected.RootElement.GetProperty("history").EnumerateArray().Count(entry =>
+                entry.GetProperty("decisionOutcome").GetString() == "CHANGES_REQUESTED"
+                && entry.GetProperty("decisionReason").GetString() == changesRationale);
+            if (changesReasonHistoryEntries == 0)
+                throw new InvalidOperationException("Seller history did not expose the allowed changes-requested reason.");
+            if (CountOccurrences(sellerReviewJson, changesRationale) != changesReasonHistoryEntries)
+                throw new InvalidOperationException("Changes-requested rationale appeared outside seller history decision reasons.");
         }
         await VerifyAppealEffects(factory, appealCaseId, approvalEventId, approvalCase.OwnerUserId, NotificationKind.MODERATION_APPROVED, appealText, approvalRationale);
         SellerResponsesPageDto finalResponses = (await ReadReviewResponses(seller, responseEndpoint))!;
         string sellerResponsesJson = JsonSerializer.Serialize(finalResponses);
         foreach (string json in new[] { sellerReviewJson, sellerResponsesJson })
         {
-            if (json.Contains(changesRationale, StringComparison.Ordinal) || json.Contains(approvalRationale, StringComparison.Ordinal)
+            if (json.Contains(approvalRationale, StringComparison.Ordinal)
                 || json.Contains("Live disposition", StringComparison.Ordinal))
-                throw new InvalidOperationException("Moderator decision text reached seller JSON.");
+                throw new InvalidOperationException("Approval rationale or disposition text reached seller JSON.");
             AssertSellerRedaction(json);
         }
+        if (sellerResponsesJson.Contains(changesRationale, StringComparison.Ordinal))
+            throw new InvalidOperationException("Changes-requested rationale escaped its seller history field.");
 
         details["moderationDecision"] = new
         {
@@ -1434,6 +1473,14 @@ public sealed class AuthenticatedEncryptedUploadAcceptanceTests
                 origin = "OWN_CONTRIBUTION" }
         }
     };
+
+    private static int CountOccurrences(string text, string value)
+    {
+        int count = 0;
+        for (int index = text.IndexOf(value, StringComparison.Ordinal); index >= 0; index = text.IndexOf(value, index + value.Length, StringComparison.Ordinal))
+            count++;
+        return count;
+    }
 
     private static void AssertSellerRedaction(string json)
     {

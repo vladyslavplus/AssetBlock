@@ -40,7 +40,7 @@ internal sealed class CodeAnalysisReportFindingConfiguration : IEntityTypeConfig
         builder.Property(f => f.FindingKey).IsRequired().HasMaxLength(128);
         builder.Property(f => f.FindingType).IsRequired().HasMaxLength(48);
         builder.Property(f => f.OwnScopePath).IsRequired().HasMaxLength(1024);
-        builder.Property(f => f.OwnExcerpt).IsRequired().HasMaxLength(320);
+        builder.Property(f => f.OwnExcerpt).IsRequired().HasMaxLength(320).HasDefaultValue(string.Empty);
         builder.Property(f => f.OwnStartByte).IsRequired(false);
         builder.Property(f => f.OwnEndByte).IsRequired(false);
         builder.Property(f => f.OwnStartLine).IsRequired(false);

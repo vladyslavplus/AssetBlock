@@ -105,6 +105,7 @@ public sealed class ApplicationDbContext(DbContextOptions<ApplicationDbContext> 
         }
 
         modelBuilder.HasPostgresExtension("pg_trgm");
+        modelBuilder.HasPostgresExtension("vector");
         modelBuilder.HasDbFunction(
                 typeof(PostgresDbFunctions).GetMethod(
                     nameof(PostgresDbFunctions.TrigramsSimilarity),

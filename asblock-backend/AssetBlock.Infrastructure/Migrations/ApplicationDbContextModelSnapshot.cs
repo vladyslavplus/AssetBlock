@@ -23,6 +23,7 @@ namespace AssetBlock.Infrastructure.Migrations
                 .HasAnnotation("Relational:MaxIdentifierLength", 63);
 
             NpgsqlModelBuilderExtensions.HasPostgresExtension(modelBuilder, "pg_trgm");
+            NpgsqlModelBuilderExtensions.HasPostgresExtension(modelBuilder, "vector");
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
 
             modelBuilder.Entity("AssetBlock.Domain.Core.Entities.AnalysisCapacitySlot", b =>
@@ -1838,8 +1839,10 @@ namespace AssetBlock.Infrastructure.Migrations
 
                     b.Property<string>("OwnExcerpt")
                         .IsRequired()
+                        .ValueGeneratedOnAdd()
                         .HasMaxLength(320)
-                        .HasColumnType("character varying(320)");
+                        .HasColumnType("character varying(320)")
+                        .HasDefaultValue("");
 
                     b.Property<string>("OwnScopePath")
                         .IsRequired()
