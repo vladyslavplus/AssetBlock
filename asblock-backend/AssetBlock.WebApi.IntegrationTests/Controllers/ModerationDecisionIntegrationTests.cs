@@ -18,7 +18,7 @@ public sealed class ModerationDecisionIntegrationTests(IntegrationTestFixture fi
 {
     // Admission producer identity is owned by CodeAnalysisReportFinalizer.
     private const string FINALIZER_ID = "assetblock-dotnet-finalizer";
-    private static readonly string CONTENT_SHA256 = new('a', 64);
+    private static readonly string _contentSha256 = new('a', 64);
     private const string PRIVATE_DECISION_TEXT = "decision private sentinel";
 
     private sealed record CaseSeed(Guid SubmissionId, Guid VersionId, Guid ReportId, Guid FindingId);
@@ -42,7 +42,7 @@ public sealed class ModerationDecisionIntegrationTests(IntegrationTestFixture fi
             StorageKey = "decision-fixture/" + Guid.NewGuid().ToString("N") + "/source.bin",
             FileName = "source.zip",
             ContentLength = 1,
-            ContentSha256 = CONTENT_SHA256,
+            ContentSha256 = _contentSha256,
             ReleaseNotes = "Fixture",
             LicenseCode = license.Code,
             LicenseTemplateVersion = license.TemplateVersion,
@@ -314,7 +314,7 @@ public sealed class ModerationDecisionIntegrationTests(IntegrationTestFixture fi
                 basis = new
                 {
                     versionId = seed.VersionId,
-                    contentSha256 = CONTENT_SHA256,
+                    contentSha256 = _contentSha256,
                     analysisReportId = reportId,
                     declarationRevision = 1,
                     materialMetadataRevision = 1,
@@ -526,7 +526,7 @@ public sealed class ModerationDecisionIntegrationTests(IntegrationTestFixture fi
     private static object Basis(CaseSeed seed, long caseRevision = 1) => new
     {
         versionId = seed.VersionId,
-        contentSha256 = CONTENT_SHA256,
+        contentSha256 = _contentSha256,
         analysisReportId = seed.ReportId,
         declarationRevision = 1,
         materialMetadataRevision = 1,
@@ -718,7 +718,7 @@ public sealed class ModerationDecisionIntegrationTests(IntegrationTestFixture fi
                         manualPlanCompletionReference = (string?)null
                     },
                     "missing-operation" => new { basis = Basis(seed), outcome = "APPROVE", rationale = "Reviewed.", dispositions = Array.Empty<object>() },
-                    "missing-revision" => new { operationId = Guid.NewGuid(), basis = new { versionId = seed.VersionId, contentSha256 = CONTENT_SHA256, analysisReportId = seed.ReportId, declarationRevision = 1, materialMetadataRevision = 1, policyVersion = ReviewAnalysisPolicy.KEY, sellerEvidenceRevision = 0 }, outcome = "APPROVE", rationale = "Reviewed.", dispositions = Array.Empty<object>() },
+                    "missing-revision" => new { operationId = Guid.NewGuid(), basis = new { versionId = seed.VersionId, contentSha256 = _contentSha256, analysisReportId = seed.ReportId, declarationRevision = 1, materialMetadataRevision = 1, policyVersion = ReviewAnalysisPolicy.KEY, sellerEvidenceRevision = 0 }, outcome = "APPROVE", rationale = "Reviewed.", dispositions = Array.Empty<object>() },
                     "empty-operation" => new
                     {
                         operationId = Guid.Empty,

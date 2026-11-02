@@ -12,7 +12,7 @@ namespace AssetBlock.Infrastructure.Persistence.Stores;
 internal sealed partial class ModerationFoundationStore
 {
     private const string QUEUE_CURSOR_PURPOSE = "moderation-queue-cursor";
-    private static readonly TimeSpan QUEUE_CURSOR_LIFETIME = TimeSpan.FromHours(1);
+    private static readonly TimeSpan _queueCursorLifetime = TimeSpan.FromHours(1);
     private sealed record QueueCursor(Guid ActorId, ModerationSubmissionState? State, CaseClaimFilter ClaimFilter, int PageSize, DateTimeOffset CreatedAt, Guid Id, DateTimeOffset ExpiresAt);
 
     public async Task<ReviewAccessResult<ModeratorQueuePage>> GetModeratorQueue(ModeratorQueueRequest request, CancellationToken cancellationToken = default)
@@ -91,7 +91,7 @@ internal sealed partial class ModerationFoundationStore
         if (rows.Count > request.PageSize)
         {
             var last = rows[request.PageSize - 1];
-            DateTimeOffset expiresAt = _timeProvider.GetUtcNow() + QUEUE_CURSOR_LIFETIME;
+            DateTimeOffset expiresAt = _timeProvider.GetUtcNow() + _queueCursorLifetime;
             next = protector.Protect(JsonSerializer.Serialize(new QueueCursor(request.ActorId, request.State, request.ClaimFilter, request.PageSize, last.CreatedAt, last.Id, expiresAt), CoverageReviewState.JsonOptions), expiresAt);
         }
         return new(ReviewAccessStatus.SUCCESS, new(items, next));

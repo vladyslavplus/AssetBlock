@@ -28,7 +28,7 @@ public sealed class ModerationSubmissionsController(ISender sender) : Controller
 {
     /// <summary>Decision bodies carry at most 200 dispositions with bounded text; anything larger is refused before binding.</summary>
     private const int DECISION_BODY_LIMIT_BYTES = 1_048_576;
-    private static readonly HashSet<string> DECISION_BLOCKER_CODES =
+    private static readonly HashSet<string> _decisionBlockerCodes =
     [
         ErrorCodes.ERR_MODERATION_APPEAL_DECISION_NOT_ALLOWED,
         ErrorCodes.ERR_VERSION_FILE_CHECKS_INCOMPLETE,
@@ -150,7 +150,7 @@ public sealed class ModerationSubmissionsController(ISender sender) : Controller
                 input.ManualPlanCompletionReference),
             cancellationToken);
         if (result.Status == Ardalis.Result.ResultStatus.Conflict
-            && DECISION_BLOCKER_CODES.Contains(result.Errors.FirstOrDefault() ?? string.Empty))
+            && _decisionBlockerCodes.Contains(result.Errors.FirstOrDefault() ?? string.Empty))
         {
             var code = result.Errors.First();
             Microsoft.AspNetCore.Mvc.ProblemDetails problem = AssetBlockProblemDetails.Create(HttpContext, StatusCodes.Status409Conflict, code);
