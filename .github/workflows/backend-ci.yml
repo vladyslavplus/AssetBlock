@@ -162,10 +162,11 @@ jobs:
             fi
             # The coverage collector instruments assemblies in place. Concurrent runs of one test project (the shards)
             # would instrument the same files and record no hits, so every run executes from its own copy of the output.
+            # The copy is a sibling of bin/Release because tests resolve repository files relative to their output depth.
             project_dir="$(dirname "$csproj")"
-            run_dir="${RUNNER_TEMP}/test-bin/${name}"
-            mkdir -p "$run_dir"
-            cp -r "${project_dir}/bin/Release/." "$run_dir/"
+            run_dir="${project_dir}/bin/Release-${name}"
+            rm -rf "$run_dir"
+            cp -r "${project_dir}/bin/Release" "$run_dir"
             tfm_dir="$(find "$run_dir" -mindepth 1 -maxdepth 1 -type d | head -n 1)"
             echo "::group::Test $name"
             dotnet test "$csproj" \
