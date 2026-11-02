@@ -1447,6 +1447,24 @@ const server = http.createServer((req, res) => {
   send(res, 404, { title: 'Not found' })
 })
 
+let shuttingDown = false
+const shutdown = () => {
+  if (shuttingDown) return
+  shuttingDown = true
+  process.stdin.pause()
+  if (!server.listening) return
+  server.close(() => {
+    process.exitCode = 0
+  })
+  server.closeAllConnections()
+}
+
+process.stdin.resume()
+process.stdin.once('end', shutdown)
+process.stdin.once('close', shutdown)
+process.once('SIGINT', shutdown)
+process.once('SIGTERM', shutdown)
+
 server.listen(PORT, '127.0.0.1', () => {
   process.stdout.write(`playwright stub API listening on 127.0.0.1:${PORT}\n`)
 })
