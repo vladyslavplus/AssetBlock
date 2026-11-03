@@ -133,6 +133,79 @@ function json(value: unknown, status = 200) {
 describe('moderation case workspace', () => {
   afterEach(() => vi.unstubAllGlobals())
 
+  it.each([
+    [
+      'ERR_MODERATION_APPEAL_DECISION_NOT_ALLOWED',
+      'This decision is not allowed for an appeal case.',
+    ],
+    [
+      'ERR_VERSION_FILE_CHECKS_INCOMPLETE',
+      'This version does not have current security and processing checks.',
+    ],
+    ['ERR_REVIEW_COVERAGE_REQUIRED', 'An accepted coverage assessment is required.'],
+    [
+      'ERR_ANALYSIS_REPORT_NOT_TRUSTED',
+      'The persisted analysis report failed its admission checks.',
+    ],
+    ['ERR_MODERATION_WORKSPACE_STALE', 'The submission workspace changed after analysis.'],
+    ['ERR_DECLARATION_INCOMPLETE', 'The frozen source declaration is incomplete.'],
+    ['ERR_COVERAGE_ASSESSMENT_INVALIDATED', 'The coverage assessment is no longer current.'],
+    ['ERR_COVERAGE_ASSESSOR_UNAVAILABLE', 'Coverage review needs a new eligible reviewer.'],
+    [
+      'ERR_COVERAGE_ASSESSMENT_BLOCKED',
+      'The accepted coverage assessment no longer permits this decision.',
+    ],
+    [
+      'ERR_REVIEW_PLAN_REFERENCE_MISMATCH',
+      'Confirm the exact completed plan reference from the assessment.',
+    ],
+    ['ERR_ANALYSIS_NOT_AVAILABLE', 'Required analysis or response status is unavailable.'],
+    [
+      'ERR_MODERATION_DECISION_RESPONSES_OUTSTANDING',
+      'Seller responses to required findings are outstanding.',
+    ],
+    [
+      'ERR_MODERATION_DISPOSITIONS_INVALID',
+      'Provide one valid disposition for every material finding.',
+    ],
+    ['ERR_MODERATION_DECISION_BLOCKED', 'One or more dispositions prevent approval.'],
+    ['ERR_PUBLICATION_METADATA_UNAVAILABLE', 'Required publication metadata is unavailable.'],
+    [
+      'ERR_MODERATION_CONCURRENT_UPDATE',
+      'The case changed during the decision. Review its refreshed state.',
+    ],
+    [
+      'ERR_FUTURE_REVIEW_BLOCKER',
+      'The backend blocked this decision. Review the refreshed case before retrying.',
+    ],
+  ])('renders the 409 decision blocker message for %s', async (code, expectedMessage) => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input)
+      if (init?.method === 'POST')
+        return json({ code: 'ERR_MODERATION_DECISION_BLOCKED', blockerCodes: [code] }, 409)
+      if (url.includes(`/submissions/${id}`)) return json(caseBody('STANDARD', true, true))
+      if (url.includes('/submissions?')) return json(claimedQueue())
+      if (url.includes('coverage-reviews'))
+        return json({ items: [], page: 1, pageSize: 20, totalCount: 0, totalPages: 0 })
+      return json({ items: [], nextCursor: null })
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    renderWithProviders(<ModerationCaseWorkspace submissionId={id} />, { authUser: user })
+    fireEvent.change(await screen.findByLabelText('Decision rationale'), {
+      target: { value: 'Decision rationale for current claimed case.' },
+    })
+    fireEvent.change(screen.getByLabelText('Disposition for material-finding'), {
+      target: { value: 'EXPLAINED' },
+    })
+    fireEvent.change(screen.getByLabelText('Rationale for material-finding'), {
+      target: { value: 'Current finding rationale.' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Submit decision' }))
+    expect(await screen.findByLabelText('Refreshed case state')).toBeInTheDocument()
+    expect(await screen.findByText(expectedMessage)).toBeInTheDocument()
+    expect(screen.queryByText(code)).not.toBeInTheDocument()
+  })
+
   it('shows case loading and API error states', async () => {
     let finish: ((response: Response) => void) | undefined
     vi.stubGlobal(

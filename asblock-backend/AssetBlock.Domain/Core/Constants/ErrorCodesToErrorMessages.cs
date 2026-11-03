@@ -97,7 +97,7 @@ public static class ErrorCodesToErrorMessages
         { ErrorCodes.ERR_SOCIAL_PLATFORM_NOT_FOUND, "Unknown social platform." },
         { ErrorCodes.ERR_NOT_FOUND, "Resource not found." },
         { ErrorCodes.ERR_FORBIDDEN, "Forbidden." },
-        { ErrorCodes.ERR_BAD_REQUEST, "An error occurred." },
+        { ErrorCodes.ERR_BAD_REQUEST, "The request could not be processed." },
         { ErrorCodes.ERR_CONFLICT, "Resource conflict." },
         { ErrorCodes.ERR_INTERNAL, "An unexpected error occurred." },
         { ErrorCodes.ERR_VALIDATION_FAILED, "One or more validation errors occurred." },

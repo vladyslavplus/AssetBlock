@@ -22,10 +22,6 @@ async function prepare(page: Page, state: Record<string, unknown>) {
   const reset = await page.request.post('http://127.0.0.1:3999/__e2e/reset', { data: state })
   expect(reset.ok()).toBeTruthy()
   const role = state.role === 'Moderator' ? 'Moderator' : 'User'
-  const accessToken =
-    'eyJhbGciOiJIUzI1NiJ9.' +
-    Buffer.from(JSON.stringify({ exp: 9999999999, role })).toString('base64url') +
-    '.playwright-signature'
   await page.context().addCookies([
     {
       name: 'assetblock_rt',
@@ -37,13 +33,21 @@ async function prepare(page: Page, state: Record<string, unknown>) {
     },
     {
       name: 'assetblock_at',
-      value: accessToken,
+      value: accessTokenFor(role),
       domain: 'localhost',
       path: '/',
       httpOnly: true,
       sameSite: 'Lax',
     },
   ])
+}
+
+function accessTokenFor(role: 'User' | 'Moderator') {
+  return (
+    'eyJhbGciOiJIUzI1NiJ9.' +
+    Buffer.from(JSON.stringify({ exp: 9999999999, role })).toString('base64url') +
+    '.playwright-signature'
+  )
 }
 
 test('seller answers the required finding before submitting for human review', async ({ page }) => {
@@ -84,7 +88,13 @@ test('seller requests an appeal after rejection and sees its pending state', asy
     .getByRole('textbox', { name: 'Appeal rationale' })
     .fill('Please have another reviewer assess this decision.')
   const appeal = page.getByRole('button', { name: 'Request another review' })
+  const appealResponse = page.waitForResponse(
+    (response) =>
+      response.url().includes(`/api/seller/assets/${assetId}/versions/${versionId}/appeals`) &&
+      response.request().method() === 'POST',
+  )
   await activateByKeyboard(page, appeal)
+  expect((await appealResponse).status()).toBe(200)
   await expect(
     page
       .getByRole('status')
@@ -279,12 +289,34 @@ test('seller resubmits a corrected version after changes are requested', async (
   await expect(page.getByLabel('Decision reason').first()).toContainText(
     'Please update the source declaration.',
   )
+  const versionsUrl = `http://127.0.0.1:3999/api/assets/${assetId}/versions`
+  const originalVersionsResponse = await page.request.get(versionsUrl)
+  expect(originalVersionsResponse.status()).toBe(200)
+  const originalVersions = await originalVersionsResponse.json()
+  const archiveUploads: string[] = []
+  page.on('request', (request) => {
+    if (
+      request.method() === 'POST' &&
+      request.headers()['content-type']?.startsWith('multipart/form-data')
+    ) {
+      archiveUploads.push(request.url())
+    }
+  })
+  await page
+    .getByRole('textbox', { name: 'Own contribution summary' })
+    .fill('I corrected the source declaration; the uploaded archive is unchanged.')
+  await activateByKeyboard(page, page.getByRole('button', { name: 'Save sources' }))
+  await expect(page.getByText('Sources saved.', { exact: true })).toBeVisible()
   const submit = page.getByRole('button', { name: 'Submit for review' })
   await expect(submit).toBeEnabled()
   await activateByKeyboard(page, submit)
   await expect(
     page.getByRole('status').filter({ hasText: 'Submitted for human review.' }),
   ).toBeVisible()
+  const correctedVersionsResponse = await page.request.get(versionsUrl)
+  expect(correctedVersionsResponse.status()).toBe(200)
+  expect(await correctedVersionsResponse.json()).toEqual(originalVersions)
+  expect(archiveUploads).toHaveLength(0)
 })
 
 test('Moderator can claim and release a queued case with keyboard actions', async ({ page }) => {
@@ -351,6 +383,35 @@ test('stale review keeps the typed decision rationale beside refreshed case stat
     'Keep this explanation while I review the changed case.',
   )
   await expect(page.getByLabel('Refreshed case state')).toContainText('revision 3')
+})
+
+test('decision session expiry preserves rationale and disposition text', async ({ page }) => {
+  await prepare(page, {
+    scenario: 'decision-session-expired',
+    role: 'Moderator',
+    answered: true,
+  })
+  await navigate(page, `/moderation/cases/${submissionId}`)
+  await activateByKeyboard(page, page.getByRole('button', { name: 'Claim case' }))
+  await page.getByRole('combobox', { name: 'Decision' }).selectOption('APPROVE')
+  await page
+    .getByRole('textbox', { name: 'Decision rationale' })
+    .fill('Retain this text after expiry.')
+  await page
+    .getByRole('combobox', { name: 'Disposition for material-source-finding' })
+    .selectOption('EXPLAINED')
+  await page
+    .getByRole('textbox', { name: 'Rationale for material-source-finding' })
+    .fill('Keep this disposition rationale for the retry.')
+  await activateByKeyboard(page, page.getByRole('button', { name: 'Submit decision' }))
+
+  await expect(page.getByRole('alert').filter({ hasText: 'Session expired' })).toBeVisible()
+  await expect(page.getByRole('textbox', { name: 'Decision rationale' })).toHaveValue(
+    'Retain this text after expiry.',
+  )
+  await expect(
+    page.getByRole('textbox', { name: 'Rationale for material-source-finding' }),
+  ).toHaveValue('Keep this disposition rationale for the retry.')
 })
 
 test('moderator cannot open a case owned by the same account', async ({ page }) => {
@@ -430,4 +491,115 @@ test('Moderator records a disposition and approves the claimed case', async ({ p
   await activateByKeyboard(page, submit)
   await expect(page.getByText('Decision saved.')).toBeVisible()
   await expect(page.getByText('APPROVED', { exact: true })).toBeVisible()
+  await expect(page.getByText('Decision saved.', { exact: true })).toBeFocused()
+  const published = await page.request.get(`http://127.0.0.1:3999/api/assets/${assetId}`)
+  expect(published.status()).toBe(200)
+  expect(await published.json()).toMatchObject({ id: assetId, currentVersionId: versionId })
+})
+
+test('seller submission becomes public only after the Moderator approves it', async ({ page }) => {
+  await prepare(page, {
+    scenario: 'moderator-approval',
+    answered: true,
+  })
+  await navigate(page, `/sell/assets/${assetId}/edit`)
+  await activateByKeyboard(page, page.getByRole('button', { name: 'View checks for version 1' }))
+  await activateByKeyboard(page, page.getByRole('button', { name: 'Submit for review' }))
+  await expect(
+    page.getByRole('status').filter({ hasText: 'Submitted for human review.' }),
+  ).toBeVisible()
+
+  const beforeApproval = await page.request.get(`http://127.0.0.1:3999/api/assets/${assetId}`)
+  expect(beforeApproval.status()).toBe(404)
+  const roleChange = await page.request.post('http://127.0.0.1:3999/__e2e/role', {
+    data: { role: 'Moderator' },
+  })
+  expect(roleChange.status()).toBe(200)
+  await page.context().addCookies([
+    {
+      name: 'assetblock_at',
+      value: accessTokenFor('Moderator'),
+      domain: 'localhost',
+      path: '/',
+      httpOnly: true,
+      sameSite: 'Lax',
+    },
+  ])
+
+  await navigate(page, '/moderation')
+  await expect(page.getByRole('link', { name: 'Procedural Shader Kit' })).toBeVisible()
+  await activateByKeyboard(page, page.getByRole('link', { name: 'Procedural Shader Kit' }))
+  await activateByKeyboard(page, page.getByRole('button', { name: 'Claim case' }))
+  await page.getByRole('combobox', { name: 'Decision' }).selectOption('APPROVE')
+  await page
+    .getByRole('textbox', { name: 'Decision rationale' })
+    .fill('The current evidence supports approval.')
+  await page
+    .getByRole('combobox', { name: 'Disposition for material-source-finding' })
+    .selectOption('EXPLAINED')
+  await page
+    .getByRole('textbox', { name: 'Rationale for material-source-finding' })
+    .fill('The seller response explains the match.')
+  await activateByKeyboard(page, page.getByRole('button', { name: 'Submit decision' }))
+  await expect(page.getByText('Decision saved.', { exact: true })).toBeVisible()
+
+  const afterApproval = await page.request.get(`http://127.0.0.1:3999/api/assets/${assetId}`)
+  expect(afterApproval.status()).toBe(200)
+  expect(await afterApproval.json()).toMatchObject({ id: assetId, currentVersionId: versionId })
+})
+
+test('the production notification client receives a validated ModerationCaseChanged event over LongPolling', async ({
+  page,
+}) => {
+  await prepare(page, { scenario: 'moderator-notification', role: 'Moderator', answered: true })
+  await navigate(page, `/moderation/cases/${submissionId}`)
+  await expect(page.getByText('SUBMITTED', { exact: true })).toBeVisible()
+  await expect
+    .poll(async () => {
+      const response = await page.request.get('http://127.0.0.1:3999/__e2e/signalr')
+      return (await response.json()).tokenRequests
+    })
+    .toBe(1)
+  await expect
+    .poll(async () => {
+      const response = await page.request.get('http://127.0.0.1:3999/__e2e/signalr')
+      return (await response.json()).negotiations
+    })
+    .toBe(1)
+  await expect
+    .poll(async () => {
+      const response = await page.request.get('http://127.0.0.1:3999/__e2e/signalr')
+      return response.json()
+    })
+    .toMatchObject({ handshakes: 1 })
+
+  const event = await page.request.post('http://127.0.0.1:3999/__e2e/event', {
+    data: {
+      submissionId,
+      assetId,
+      versionId,
+      state: 'IN_REVIEW',
+      revision: 2,
+      isAppeal: false,
+    },
+  })
+  expect(event.status()).toBe(204)
+  await expect(page.getByText('IN REVIEW', { exact: true })).toBeVisible()
+  await expect(page.getByText('Moderation case updated', { exact: true })).toBeVisible()
+})
+
+test('the queue recovers an intentionally missed event through bounded polling', async ({
+  page,
+}) => {
+  await prepare(page, { scenario: 'moderator-missed-event', role: 'Moderator', answered: true })
+  await navigate(page, '/moderation')
+  await expect(page.getByRole('link', { name: 'Procedural Shader Kit' })).toBeVisible()
+
+  const serverState = await page.request.post('http://127.0.0.1:3999/__e2e/state', {
+    data: { state: 'APPROVED' },
+  })
+  expect(serverState.status()).toBe(200)
+  await expect(page.getByRole('link', { name: 'Procedural Shader Kit' })).toHaveCount(0, {
+    timeout: 40_000,
+  })
 })
