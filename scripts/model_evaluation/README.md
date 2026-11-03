@@ -5,6 +5,8 @@ The package freezes every choice that could change a result in a hashed manifest
 anything is scored, computes end-to-end metrics over full galleries, and refuses
 withheld material by construction.
 
+Status: the harness has passed its synthetic test suite, but no held-out source corpus has been admitted and no model-quality result is available. Command availability and synthetic tests do not establish an executed evaluation.
+
 ## Commands
 
 ```text
