@@ -24,6 +24,29 @@ internal static class ModerationDecisionFixture
         AssetVersion version = await db.AssetVersions.SingleAsync(v => v.Id == submission.AssetVersionId);
         AssetDraftWorkspace workspace = await db.AssetDraftWorkspaces.SingleAsync(w => w.Id == submission.WorkspaceId);
         Asset asset = await db.Assets.SingleAsync(a => a.Id == submission.AssetId);
+        Guid reportId = await PrepareAnalysisReadyVersion(
+            db, version, workspace, asset, submission.OwnerUserId, draftTitle, draftDescription, coverageLevel, omissionCount);
+        db.Entry(submission).Property(s => s.CodeAnalysisReportHeaderId).CurrentValue = reportId;
+        db.Entry(submission).Property(s => s.SellerEvidenceDigest).CurrentValue = AssetBlock.Infrastructure.Persistence.ProductDigests.EmptyProjectionDigest(nameof(AssetSellerEvidenceRevision));
+        await db.SaveChangesAsync();
+        return reportId;
+    }
+
+    /// <summary>
+    /// Makes a version submit-ready and decision-ready without creating a case: declaration and material heads, the pinned
+    /// policy, observed proof, a completed run, an admitted report with its stages, and the version's selected-report pointer.
+    /// </summary>
+    public static async Task<Guid> PrepareAnalysisReadyVersion(
+        ApplicationDbContext db,
+        AssetVersion version,
+        AssetDraftWorkspace workspace,
+        Asset asset,
+        Guid ownerUserId,
+        string draftTitle,
+        string? draftDescription,
+        CodeAnalysisCoverageLevel coverageLevel,
+        int omissionCount)
+    {
         Category category = await db.Categories.SingleAsync(c => c.Id == asset.CategoryId);
         workspace.SourceDeclarationHeadRevision = 1;
         workspace.MaterialMetadataHeadRevision = 1;
@@ -41,7 +64,7 @@ internal static class ModerationDecisionFixture
             WorkspaceId = workspace.Id,
             WorkspaceVersionScopeKey = version.Id,
             Revision = 1,
-            AuthorUserId = submission.OwnerUserId,
+            AuthorUserId = ownerUserId,
             ContentDigest = declarationDigest,
             SchemaVersion = 1,
             PayloadJson = declaration,
@@ -55,7 +78,7 @@ internal static class ModerationDecisionFixture
             WorkspaceId = workspace.Id,
             WorkspaceVersionScopeKey = version.Id,
             Revision = 1,
-            AuthorUserId = submission.OwnerUserId,
+            AuthorUserId = ownerUserId,
             ContentDigest = materialDigest,
             SchemaVersion = 1,
             PayloadJson = material,
@@ -106,8 +129,6 @@ internal static class ModerationDecisionFixture
                 CreatedAt = DateTimeOffset.UtcNow
             });
         }
-        db.Entry(submission).Property(s => s.CodeAnalysisReportHeaderId).CurrentValue = report.Id;
-        db.Entry(submission).Property(s => s.SellerEvidenceDigest).CurrentValue = AssetBlock.Infrastructure.Persistence.ProductDigests.EmptyProjectionDigest(nameof(AssetSellerEvidenceRevision));
         await db.SaveChangesAsync();
         await db.AssetVersions.Where(candidate => candidate.Id == version.Id)
             .ExecuteUpdateAsync(update => update.SetProperty(candidate => candidate.SelectedCodeAnalysisReportId, report.Id));

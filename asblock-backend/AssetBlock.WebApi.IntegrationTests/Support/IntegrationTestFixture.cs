@@ -1,3 +1,4 @@
+using Npgsql;
 using Testcontainers.PostgreSql;
 
 namespace AssetBlock.WebApi.IntegrationTests.Support;
@@ -48,4 +49,19 @@ public sealed class IntegrationTestFixture : IAsyncLifetime, IDisposable
     {
         _factory?.Dispose();
     }
+
+    /// <summary>Creates an empty migrated-on-first-use database on the shared container, for tests that leave many cases behind.</summary>
+    public async Task<string> CreateIsolatedDatabaseAsync(string databaseName)
+    {
+        await _postgres.ExecScriptAsync($"CREATE DATABASE \"{databaseName}\";");
+        var builder = new NpgsqlConnectionStringBuilder(_postgres.GetConnectionString()) { Database = databaseName };
+        await using var connection = new NpgsqlConnection(builder.ConnectionString);
+        await connection.OpenAsync();
+        await using var extension = new NpgsqlCommand("CREATE EXTENSION IF NOT EXISTS vector WITH SCHEMA public;", connection);
+        await extension.ExecuteNonQueryAsync();
+        return builder.ConnectionString;
+    }
+
+    public Task DropIsolatedDatabaseAsync(string databaseName) =>
+        _postgres.ExecScriptAsync($"DROP DATABASE IF EXISTS \"{databaseName}\" WITH (FORCE);");
 }
