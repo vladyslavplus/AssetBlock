@@ -12,6 +12,7 @@ public sealed class IntegrationTestFixture : IAsyncLifetime, IDisposable
     private AssetBlockWebApplicationFactory? _factory;
 
     public AssetBlockWebApplicationFactory Factory => _factory!;
+    public string ConnectionString => _postgres.GetConnectionString();
 
     public async Task InitializeAsync()
     {
