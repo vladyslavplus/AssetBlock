@@ -748,11 +748,11 @@ public sealed class AuthenticatedEncryptedUploadAcceptanceTests
         }
     }
 
-    private static string AssetPath(string route, Guid assetId, Guid? versionId = null) =>
+    internal static string AssetPath(string route, Guid assetId, Guid? versionId = null) =>
         "/" + ApiRoutes.Assets.BASE + "/" + route.Replace("{id:guid}", assetId.ToString(), StringComparison.Ordinal)
             .Replace("{versionId:guid}", versionId?.ToString(), StringComparison.Ordinal);
 
-    private static string SellerVersionReviewUrl(Guid assetVersionId) =>
+    internal static string SellerVersionReviewUrl(Guid assetVersionId) =>
         "/" + ApiRoutes.Users.BASE + "/" + ApiRoutes.Users.ME_ASSET_VERSION_REVIEW.Replace("{assetVersionId:guid}", assetVersionId.ToString(), StringComparison.Ordinal);
 
     private static async Task VerifyModerationDecisionLifecycle(LiveAcceptanceFactory factory, HttpClient seller, HttpClient moderator,
@@ -1143,7 +1143,7 @@ public sealed class AuthenticatedEncryptedUploadAcceptanceTests
             throw new InvalidOperationException("Appeal outbox contained private text.");
     }
 
-    private static object DecisionBody(Guid operationId, ModerationSubmission submission, Guid reportId, string outcome, string rationale,
+    internal static object DecisionBody(Guid operationId, ModerationSubmission submission, Guid reportId, string outcome, string rationale,
         IEnumerable<(Guid FindingId, string Disposition)> dispositions) => new
         {
             operationId,
@@ -1164,10 +1164,10 @@ public sealed class AuthenticatedEncryptedUploadAcceptanceTests
             manualPlanCompletionReference = (string?)null
         };
 
-    private static async Task<HttpResponseMessage> PostDecision(HttpClient moderator, Guid submissionId, object body) =>
+    internal static async Task<HttpResponseMessage> PostDecision(HttpClient moderator, Guid submissionId, object body) =>
         await moderator.PostAsJsonAsync("/" + ApiRoutes.Moderation.DECISION.Replace("{id:guid}", submissionId.ToString(), StringComparison.Ordinal), body);
 
-    private static async Task ClaimCase(HttpClient moderator, Guid submissionId, long expectedCaseRevision)
+    internal static async Task ClaimCase(HttpClient moderator, Guid submissionId, long expectedCaseRevision)
     {
         var claimUrl = "/" + ApiRoutes.Moderation.CLAIM.Replace("{id:guid}", submissionId.ToString(), StringComparison.Ordinal);
         using HttpResponseMessage claimed = await moderator.PostAsJsonAsync(claimUrl, new { operationId = Guid.NewGuid(), expectedCaseRevision });
@@ -1175,7 +1175,7 @@ public sealed class AuthenticatedEncryptedUploadAcceptanceTests
             throw new InvalidOperationException("Moderator claim for the decision flow failed: HTTP " + (int)claimed.StatusCode + " " + SafeBody(await claimed.Content.ReadAsStringAsync()));
     }
 
-    private static async Task<ModerationSubmission> LoadSubmission(WebApplicationFactory<Program> factory, Guid submissionId)
+    internal static async Task<ModerationSubmission> LoadSubmission(WebApplicationFactory<Program> factory, Guid submissionId)
     {
         await using AsyncServiceScope scope = factory.Services.CreateAsyncScope();
         return await scope.ServiceProvider.GetRequiredService<ApplicationDbContext>().ModerationSubmissions.AsNoTracking().SingleAsync(s => s.Id == submissionId);
@@ -1187,7 +1187,7 @@ public sealed class AuthenticatedEncryptedUploadAcceptanceTests
         return (await scope.ServiceProvider.GetRequiredService<ApplicationDbContext>().Assets.AsNoTracking().SingleAsync(a => a.Id == assetId)).SearchRevision;
     }
 
-    private static async Task<List<Guid>> MaterialFindingIds(WebApplicationFactory<Program> factory, Guid reportId)
+    internal static async Task<List<Guid>> MaterialFindingIds(WebApplicationFactory<Program> factory, Guid reportId)
     {
         await using AsyncServiceScope scope = factory.Services.CreateAsyncScope();
         List<CodeAnalysisReportFinding> candidates = await scope.ServiceProvider.GetRequiredService<ApplicationDbContext>().CodeAnalysisReportFindings
@@ -1291,12 +1291,12 @@ public sealed class AuthenticatedEncryptedUploadAcceptanceTests
             .Replace("{versionId}", versionId.ToString(), StringComparison.Ordinal);
         return new(path, endpoint.GetProperty("writeMethod").GetString()!, endpoint.TryGetProperty("readMethod", out JsonElement read) ? read.GetString() : null);
     }
-    private static async Task<HttpResponseMessage> SendReviewWrite(HttpClient client, ReviewEndpoint endpoint, object body)
+    internal static async Task<HttpResponseMessage> SendReviewWrite(HttpClient client, ReviewEndpoint endpoint, object body)
     {
         using var request = new HttpRequestMessage(new HttpMethod(endpoint.WriteMethod), endpoint.Path) { Content = JsonContent.Create(body) };
         return await client.SendAsync(request);
     }
-    private static async Task<SellerResponsesPageDto?> ReadReviewResponses(HttpClient client, ReviewEndpoint endpoint)
+    internal static async Task<SellerResponsesPageDto?> ReadReviewResponses(HttpClient client, ReviewEndpoint endpoint)
     {
         using var request = new HttpRequestMessage(new HttpMethod(endpoint.ReadMethod!), endpoint.Path + "?page=1");
         using HttpResponseMessage response = await client.SendAsync(request);
@@ -1435,7 +1435,7 @@ public sealed class AuthenticatedEncryptedUploadAcceptanceTests
         }
     }
 
-    private static byte[] CreateArchive(bool manualScope = false)
+    internal static byte[] CreateArchive(bool manualScope = false)
     {
         using var ms = new MemoryStream();
         using (var zip = new ZipArchive(ms, ZipArchiveMode.Create, leaveOpen: true))
@@ -1454,7 +1454,7 @@ public sealed class AuthenticatedEncryptedUploadAcceptanceTests
         writer.Write(content);
     }
 
-    private static object BuildDeclaration(string? changes = null) => new
+    internal static object BuildDeclaration(string? changes = null) => new
     {
         ownContributionSummary = "Original small arithmetic helper created for isolated acceptance.",
         ownChanges = changes ?? "Created for Live encrypted asset upload acceptance.",
@@ -1494,7 +1494,7 @@ public sealed class AuthenticatedEncryptedUploadAcceptanceTests
         }
     }
 
-    private static string SafeBody(string body) => body.Length > 1200 ? body[..1200] : body;
+    internal static string SafeBody(string body) => body.Length > 1200 ? body[..1200] : body;
     private static object SafeJson(string json) { try { return JsonDocument.Parse(json).RootElement.Clone(); } catch { return new { malformed = true }; } }
 }
 
@@ -1544,6 +1544,17 @@ internal sealed record LiveAcceptanceOptions(string ConfigurationPath, string Ev
     public const string CONFIGURATION_PATH_VARIABLE = "ASBLOCK_LIVE_ACCEPTANCE_CONFIG_PATH";
     private const string EVIDENCE_PATH_VARIABLE = "ASBLOCK_LIVE_ACCEPTANCE_EVIDENCE_PATH";
     private const string DATA_PROTECTION_KEYS_PATH_VARIABLE = "ASBLOCK_LIVE_ACCEPTANCE_DATA_PROTECTION_PATH";
+
+    /// <summary>
+    /// Evidence file of one live test: the configured file name with the test name inserted before the extension,
+    /// so live tests that share one configured evidence path cannot overwrite each other.
+    /// </summary>
+    public string EvidencePathFor(string testName)
+    {
+        var fullEvidencePath = Path.GetFullPath(EvidencePath);
+        return Path.Combine(Path.GetDirectoryName(fullEvidencePath)!,
+            Path.GetFileNameWithoutExtension(fullEvidencePath) + "." + testName + Path.GetExtension(fullEvidencePath));
+    }
 
     public static LiveAcceptanceOptions Resolve() => Resolve(
         Environment.GetEnvironmentVariable(ENABLED_VARIABLE),

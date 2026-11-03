@@ -120,6 +120,30 @@ internal static class IntegrationTestAuth
         return (client, username);
     }
 
+    /// <summary>
+    /// Moves an existing user onto the Moderator role, then logs in again so the JWT carries the new role.
+    /// </summary>
+    public static async Task<HttpClient> PromoteToModeratorAsync(WebApplicationFactory<Program> factory, string username)
+    {
+        string email;
+        await using (AsyncServiceScope scope = factory.Services.CreateAsyncScope())
+        {
+            ApplicationDbContext db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+            User user = await db.Users.SingleAsync(u => u.Username == username);
+            user.Role = AppRoles.MODERATOR;
+            user.RoleRevision++;
+            email = user.Email;
+            await db.SaveChangesAsync();
+        }
+
+        HttpClient client = factory.CreateClient();
+        HttpResponseMessage login = await client.PostAsJsonAsync("/api/auth/login", new LoginRequest(email, "Password1!"));
+        login.EnsureSuccessStatusCode();
+        TokensResponseDto tokens = (await login.Content.ReadFromJsonAsync<TokensResponseDto>(JsonOptions))!;
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", tokens.AccessToken);
+        return client;
+    }
+
     public static async Task MarkEmailVerifiedAsync(WebApplicationFactory<Program> factory, string username)
     {
         await using AsyncServiceScope scope = factory.Services.CreateAsyncScope();
