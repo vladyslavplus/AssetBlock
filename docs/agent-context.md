@@ -24,6 +24,10 @@ Backend paths after the first row are relative to `asblock-backend/AssetBlock.We
 
 Backend tests mirror production areas under `AssetBlock.Application.Tests`, `AssetBlock.Infrastructure.Tests`, `AssetBlock.Infrastructure.IntegrationTests`, `AssetBlock.WebApi.Tests`, and `AssetBlock.WebApi.IntegrationTests`. Frontend tests are feature-local `.test.ts`/`.test.tsx`; browser flows are in `asblock-frontend/e2e/`. Test existence is not passing evidence.
 
+## Model evaluation harness
+
+The local CLI entry point is `python -m scripts.model_evaluation` (`scripts/model_evaluation/cli.py`). Stages are `freeze`, `prepare`, `candidates`, `score`, `validate-evidence`, `parity`, and `models-check`; the package README documents each command. Use `artifacts/code_analysis/env/ml/Scripts/python.exe` for CPU and evidence stages and the existing `artifacts/feasibility_pilot/env/ml/Scripts/python.exe` for encoder stages. Package tests use `artifacts/code_analysis/env/ml/Scripts/python.exe -B -m unittest discover -s scripts/model_evaluation/tests -t .`. Synthetic harness validation is not held-out evaluation: no source corpus is admitted and no model-quality result is available.
+
 ## Isolated code analysis tooling
 
 `scripts/code_analysis/README.md` documents the corpus/extraction/baseline CLI and
