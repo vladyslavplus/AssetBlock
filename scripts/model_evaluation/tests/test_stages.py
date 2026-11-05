@@ -4,6 +4,7 @@ import unittest
 
 from scripts.code_analysis.contracts import canonical, digest
 from scripts.model_evaluation import candidates, guards, manifest, pipelines, prepare, score
+from scripts.model_evaluation.tests._fixtures import EXCLUDED_SOURCES
 from scripts.model_evaluation.tests._pipeline import Workspace, corpus_document, fake_components, fid
 
 
@@ -85,11 +86,11 @@ class PrepareTests(unittest.TestCase):
 
     def test_a_marker_named_gallery_partition_is_a_refusal_that_does_not_echo_the_name(self):
         marker = "decoy-" + guards.SEAL
-        def change(document):
-            gallery = next(row for row in document["files"] if row["fileId"] == fid("g2"))
-            gallery["partition"] = marker
+        files = corpus_document()["files"]
+        next(row for row in files if row["fileId"] == fid("g2"))["partition"] = marker
+        # Called on the file validator directly: the whole-corpus walk in build_prepared would refuse first.
         with self.assertRaises(guards.SealedInputRefused) as context:
-            self.ws.prepare(corpus=self.mutated(change))
+            prepare._validate_files(files, EXCLUDED_SOURCES)
         self.assertNotIn(marker, str(context.exception))
 
     def test_relevant_gallery_file_must_share_the_query_family(self):

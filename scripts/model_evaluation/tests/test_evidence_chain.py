@@ -76,6 +76,9 @@ class ChainTests(unittest.TestCase):
         self.assertIn("excluded-source list", text)
         self.assertIn("Reviewer acceptance is NOT_RECORDED", text)
         self.assertIn("typescript:tsx", text)
+        # the fixture has no .ts or .tsx cohort at all, so both dialects are reported as below the minimum
+        self.assertIn("Dialects below the frozen minimum counts: tsx, ts;", text)
+        self.assertIn("strata below the frozen minimum counts:", text)
 
     def test_a_changed_document_in_any_link_is_refused(self):
         cases = {

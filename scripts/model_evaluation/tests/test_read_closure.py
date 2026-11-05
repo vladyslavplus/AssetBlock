@@ -42,7 +42,7 @@ def refusal_with_recorded_access(call):
 
 
 class ReadClosureTests(unittest.TestCase):
-    """Restricted-named entries are skipped by name, before any stat or open."""
+    """Run-root restricted-named entries are skipped by name and counted; a restricted-named registry entry refuses the listing. Nothing restricted is stat-ed or opened."""
 
     def setUp(self):
         temp = tempfile.TemporaryDirectory()
@@ -83,7 +83,7 @@ class ReadClosureTests(unittest.TestCase):
 
 
 class RegistryAndListingTests(unittest.TestCase):
-    """matching_attempts skips restricted-named key directories; attempt_listing refuses a restricted attempt."""
+    """matching_attempts refuses a restricted-named registry entry; attempt_listing refuses a restricted attempt."""
 
     def setUp(self):
         temp = tempfile.TemporaryDirectory()

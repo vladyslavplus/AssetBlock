@@ -102,10 +102,13 @@ hidden, with separate output files, and keep its process ID. For the API, record
 
 ### 3.1 Compose services
 
-See section 2. Wait until each service reports healthy in `docker compose ps`. The `clamav` service reads
-`asblock-backend/clamav/clamd.env`, which `docker-compose.yml` mounts; its values are owner-provided and are not recorded here.
-The test lanes do not use these services: their Testcontainers start their own PostgreSQL, Redis, ClamAV and Mailpit
-containers (section 5).
+See section 2. Wait until each service reports healthy in `docker compose ps`. The `clamav` service reads its environment through `env_file: ./clamav/clamd.env` in
+`asblock-backend/docker-compose.yml`; that file is tracked in the repository.
+The test lanes do not use these Compose services. Their own Testcontainers are: PostgreSQL (`IntegrationTestFixture` and
+`PostgresFixture`, used by every selected lane); ClamAV in `SafetyUploadHttpIntegrationTests` (lane `d4-upload-safety-http`).
+Redis (`RedisAnalyticsDistributedRateLimitIntegrationTests`), Mailpit (`SmtpEmailSenderMailpitTests`), ClamAV
+(`ClamAvContentMalwareScannerContainerTests`) and object storage (`AssetStorageContractTests`) also start containers, but
+no lane selects those classes.
 
 ### 3.2 Code-analysis service
 
@@ -267,7 +270,8 @@ Lane evidence kinds:
 - **browser-stub**: Playwright against the local API stub. Simulated.
 - **unit**: in-process tests (xUnit or Vitest).
 
-The optional live lane uses this kind only for its preflight; it is opt-in and uses real services when configured.
+The optional live lane `d6-live-pending-v2-optional` uses `http-postgres-test-host` only for its preflight; that lane is
+opt-in and uses real services when configured.
 
 No lane consumes the fixtures in section 6. They are inputs for a manual live run, which was not performed.
 
@@ -285,7 +289,7 @@ or Moderator rationale.
 
 | ID | Title | Actors | Intended live steps (not run by the lanes) | What the lanes actually do | Lanes (kind, discovered count) | Gaps |
 | --- | --- | --- | --- | --- | --- | --- |
-| D1 | Clean submission requires approval | Seller A, M1, anonymous, buyer | Upload the clean-original fixture; declaration; required checks; explicit submit; M1 approves; anonymous and buyer surfaces read over HTTP before and after approval | HTTP lane seeds READY versions and submissions directly into the test database and seeds bytes through the test storage replacement, then reads public surfaces over HTTP. It does not upload, declare, check or submit. The latest-not-public matrix checks the expected status per actor and route when the newest version is not public and an earlier version is approved. The never-approved first-version HTTP test seeds a READY-only first version beside an approved control and checks that no public surface exposes the first version. A store lane asserts that a no-findings decision still requires an explicit approval record. Browser lane drives the frontend against the stub | `d1-publication-http` (http-postgres-test-host, 10); `d1-latest-not-public-http` (http-postgres-test-host, 6); `d1-never-approved-first-version-http` (http-postgres-test-host, 1); `d1-no-findings-postgres` (postgres-store, 1); `d1-browser-approval` (browser-stub, 1) | No lane consumes the clean-original fixture. No server upload, declaration, check or submit. Browser lane simulated. Complete direct, bundle, list and search matrix not covered |
+| D1 | Clean submission requires approval | Seller A, M1, anonymous, buyer | Upload the clean-original fixture; declaration; required checks; explicit submit; M1 approves; anonymous and buyer surfaces read over HTTP before and after approval | HTTP lane seeds READY versions and submissions directly into the test database and seeds bytes through the test storage replacement, then reads public surfaces over HTTP. It does not upload, declare, check or submit. The latest-not-public matrix checks the expected status per actor and route when the newest version is not public and an earlier version is approved. The never-approved first-version HTTP test seeds a READY-only first version beside an approved control. It checks that the first version is absent from catalog search, detail, version list, asset download, version download and checkout, with positive controls on search, detail and version list. Non-purchaser download 403s come from the purchase check; the 404 detail and checkout and the empty version list carry the publication gate. A store lane asserts that a no-findings decision still requires an explicit approval record. Browser lane drives the frontend against the stub | `d1-publication-http` (http-postgres-test-host, 10); `d1-latest-not-public-http` (http-postgres-test-host, 6); `d1-never-approved-first-version-http` (http-postgres-test-host, 1); `d1-no-findings-postgres` (postgres-store, 1); `d1-browser-approval` (browser-stub, 1) | No lane consumes the clean-original fixture. No server upload, declaration, check or submit. Browser lane simulated. Complete direct, bundle, list and search matrix not covered |
 | D2 | Declared third-party match | Seller A, M1 | Upload the declared-third-party fixture; analysis reports a match; seller answers the required finding; M1 attempts the decision | HTTP lane seeds outstanding seller responses and asserts the decision-specific conflict. Store lane asserts that an unresolved material finding blocks approval with no decision record and no publication snapshot. Browser lane drives the seller answer flow against the stub. No lane produces a match or consumes the fixture | `d2-decision-blocked-by-responses` (http-postgres-test-host, 1); `d2-unresolved-finding-postgres` (postgres-store, 2); `d2-browser-answer-before-submit` (browser-stub, 1) | Live match SETUP UNAVAILABLE (needs enabled analysis host and populated reference index). Answering a finding does not close it by itself: no lane asserts that an answered finding stays open. Attribution and distribution terms unverified. Missing rights and notices covered by server validation not run here |
 | D3 | Independent implementation match | M1, Seller A | Two authored implementations (independent-pair-a and -b) reviewed by M1, who records a bounded disposition; invalid dispositions rejected | Unit lane checks disposition validation (32 tests). A Vitest unit test checks that outstanding seller responses keep the decision blocked. Browser lane drives a disposition and approval against the stub. No lane produces a match or consumes the fixtures | `d3-disposition-validation` (unit, 32); `d3-case-workspace-unit` (unit, 1 selected of 34 in file); `d3-browser-disposition` (browser-stub, 1) | Live similarity match SETUP UNAVAILABLE (needs enabled analysis host and populated reference index). Row is test-verified or simulated only. Independence of the pair is structural only. Quality of reasoning is human review |
 | D4 | Failed safety check | Seller A | Upload the unsafe-archive fixture (generated at build time) and a runtime test payload; server rejects both; submit denied under a host with analysis unavailable | HTTP lanes build their own traversal archive in the test (not the unsafe-archive fixture) and a runtime-generated test string, and assert ARCHIVE_PATH_TRAVERSAL and MALWARE_DETECTED with blocked actions and no downstream jobs. The submission test asserts ERR_ANALYSIS_NOT_AVAILABLE on a host with analysis disabled | `d4-upload-safety-http` (http-postgres-test-host, 2) | Submit denial is host configuration, not an isolated safety override. Only one ../ ZIP and one test-string ZIP reach HTTP; no archive bomb, special tar, empty or oversized archive case. No enabled-analysis host, Moderator action or quarantine route. Object storage is a test replacement. Malware case uses a runtime test string, not a sample |
@@ -297,8 +301,8 @@ or Moderator rationale.
 
 Notes under the table:
 
-- Discovered counts were produced by `run_scenarios discover --all` for this candidate. The optional live lane is not
-  selected by discovery.
+- Discovered counts were produced by `run_scenarios discover --all` on manifest `f1cb0461...` (exit 0); every lane's
+  discovered count equals its manifest minimum. The optional live lane is not selected by discovery.
 - `d3-case-workspace-unit` reports 34 tests in its file; the `-t` name filter selects 1 and vitest reports the other 33
   as filtered-out skips.
 - SETUP UNAVAILABLE (D2 and D3 live match): the live step needs an enabled analysis host and a populated reference
@@ -484,9 +488,10 @@ not performed and no corpus was admitted. The command therefore has no real chai
 identifiers in the two packages belong to the earlier retrieval and verification chains, not to this stage. Any
 future run needs the owner to record the chain ids first.
 
-Read closure of `validate-evidence` (`scripts/model_evaluation`). It was narrowed so that restricted-named run and
-registry entries are skipped by name before any stat or open. The restricted-marker predicate in `guards.py` decides
-this; the names it skips are never stat-ed, opened or read. Reads per function:
+Read closure of `validate-evidence` (`scripts/model_evaluation`). Restricted-named entries are never stat-ed, opened or read.
+At the run root they are skipped by name and counted. In the scoring registry a restricted-named entry (in the registry
+root or in a key directory) refuses the whole listing, by name, before any stat or open. The restricted-marker predicate
+in `guards.py` decides both. Reads per function:
 
 - `validation.run`:
   - reads five JSON documents: the freeze manifest, the bound manifest, the prepared corpus, the candidate artifact
@@ -501,8 +506,8 @@ this; the names it skips are never stat-ed, opened or read. Reads per function:
   - calls `provenance.capture`: `git rev-parse` and `git status`, and reads the bytes of loaded modules under `scripts/`
     and `services/code-analysis/app`.
 - `guards.registered_run_ids` and `guards.matching_attempts`: list the scoring registry through
-  `guards.ordinary_names` and skip restricted-named key directories by name. Only ordinary `attempt-*.json` files are
-  opened.
+  `guards.refused_listing`, which refuses the listing when the registry root or any key directory holds a restricted-named
+  entry. Only the `attempt-*.json` files of the remaining directories are opened.
 - `attempt_listing`: reads `score-result.json` bytes only for registered run ids that are not restricted-named. A
   registered attempt whose run id carries a restricted marker is refused. `score` refuses such run ids when they are
   given to it, so such an attempt can only come from outside the pipeline.
@@ -510,8 +515,9 @@ this; the names it skips are never stat-ed, opened or read. Reads per function:
   name in the same step, before any `stat`, `is_file`, `open` or read.
 
 Tests of the closure (`scripts/model_evaluation/tests/test_read_closure.py`, path-access recorder over `Path` methods):
-three functions are covered directly, `validation.unregistered_results`, `guards.registered_run_ids` and
-`guards.ordinary_names`. Further tests cover `guards.matching_attempts`, the restricted branch of
+three functions are covered directly: `validation.unregistered_results` (run-root skip and count),
+`guards.registered_run_ids` (registry refusal) and `guards.ordinary_names`. Further tests cover `guards.matching_attempts`
+(registry refusal, and a clean registry for ordinary matches), the restricted branch of
 `validation.attempt_listing`, and an end-to-end `validation.run` over a complete synthetic chain that contains one
 restricted-named run-root entry. Both the path recorder and the test fixture are synthetic.
 
@@ -528,7 +534,7 @@ chain run directories and the source modules listed above. Restricted-named run 
 stat-ed or opened. It is not certified beyond this list: the `git` executable and the operating system read files
 outside this code. The owner must review this before any reproduction run is authorized.
 
-Harness tests in this candidate: `scripts/model_evaluation` unittest suite, 275 tests, exit 0. Demonstration runner
+Harness tests in this candidate: `scripts/model_evaluation` unittest suite, 280 tests, exit 0 (last run for this change). Demonstration runner
 and fixture tests (`scripts/demonstration/tests`): 63 tests, exit 0.
 
 Governed procedure (documented, NOT EXECUTED): freeze, prepare, candidates, score, validate-evidence, with
@@ -600,7 +606,7 @@ The limitations below are carried from the verification stage. They are stated p
 10. Browser: no reload, retry or storage sweep, no full keyboard, contrast or screen-reader evidence, no per-journey mutation evidence.
 11. Copy: the verdict denylist covers frontend source and backend error messages (the terms of the backend test). Notification text and public or buyer score absence have no mechanical test. Editorial quality is human source review.
 12. Evaluation: not performed. No labels, admitted corpus, parity, latency, checkpoint load or human spot-check. No TSX quality claim from parser support or pooled TypeScript counts. Harness results are synthetic only. The deployed parity adapter is still open.
-13. Environment: Chromium and Windows only. Two live tests skip by default. One service pytest skip has an unknown reason. The native exit code of the first recorded run (`demo-full-1`) was not captured; later runs record it.
+13. Environment: Chromium and Windows only. Two live tests skip by default. One service pytest skip has an unknown reason. Native exit codes are captured for `demo-full-2`, `demo-full-4` and `demo-d1-2` (all 0). The native exit codes of `demo-full-1` and `demo-full-3` are UNKNOWN (not captured).
 14. Residuals with no row in section 5: reject-to-appeal is not one continuous journey; same-version draft metadata and public snapshot behaviour are not wholly covered.
 15. No scenario was run live in this candidate. The recorded runs run test lanes only, and their aggregate status is LANES_PASS, which is not scenario acceptance.
 16. Publication matrix: revoked role, deleted and safety states, bundle, library, bundle checkout, pending price and tags not covered.

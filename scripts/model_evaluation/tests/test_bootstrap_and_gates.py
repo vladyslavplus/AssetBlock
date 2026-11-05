@@ -176,6 +176,19 @@ class ClaimGateTests(unittest.TestCase):
         self.assertEqual(result["overall"]["detector"]["status"], metrics.UNVALIDATED)
         self.assertIn("minimumCounts:typescript:ts", result["overall"]["detector"]["unevaluatedGates"])
 
+    def test_a_present_but_short_ts_cohort_leaves_typescript_ts_unvalidated(self):
+        rows = []
+        for language in SUPPORTED:
+            for dialect in (("ts", "tsx") if language == "typescript" else (None,)):
+                tag = "c" if dialect is None else "c-%s" % dialect
+                positives = 3 if dialect == "ts" else 10
+                rows += positive_set(language, positives, prefix=tag, dialect=dialect)
+                rows += no_match_set(language, 5, prefix=tag, dialect=dialect)
+        result = self.evaluate(dataset(rows))
+        self.assertEqual(result["perGroup"]["typescript:ts"]["status"], metrics.UNVALIDATED)
+        self.assertIn("minimumCounts:typescript:ts", result["overall"]["detector"]["unevaluatedGates"])
+        self.assertEqual(result["overall"]["detector"]["status"], metrics.UNVALIDATED)
+
     def test_one_adequate_language_alone_never_validates_overall(self):
         result = self.evaluate(validated_languages(), bootstrap={"resamples": 40, "seed": 1})
         self.assertEqual(result["perGroup"]["python"]["status"], metrics.VALIDATED)

@@ -268,7 +268,7 @@ MODEL_ORDER = ("e0", "e3", "verifier")
 
 
 def registered_run_ids(root):
-    """Run ids of every attempt in the registry, whatever the models. Restricted-named key directories are skipped."""
+    """Run ids of every attempt in the registry, whatever the models. A restricted-named entry refuses the registry."""
     root = Path(root)
     names = refused_listing(root)
     return {attempt["runId"] for name in names if (root / name).is_dir()

@@ -18,8 +18,9 @@ namespace AssetBlock.WebApi.IntegrationTests.Controllers;
 
 /// <summary>
 /// An asset whose only version is READY and submitted, with no approved decision and no current publication
-/// snapshot. No public surface may expose that version. An approved control asset on the same catalog route
-/// proves the search and detail routes do return public assets.
+/// snapshot. The routes read are catalog search, detail, version list, asset download, version download and
+/// checkout. An approved control asset is read on the detail and version-list routes as well, so each negative
+/// result on the target is shown to come from a route that serves public assets.
 /// </summary>
 [Collection(nameof(IntegrationTestCollection))]
 public sealed class NeverApprovedFirstVersionIntegrationTests(IntegrationTestFixture fixture)
@@ -27,7 +28,7 @@ public sealed class NeverApprovedFirstVersionIntegrationTests(IntegrationTestFix
     private const string ASSETS_BASE = "/" + ApiRoutes.Assets.BASE;
 
     [Fact]
-    public async Task NeverApprovedFirstVersion_WhenReadyOnly_ShouldNotBeExposedOnAnyPublicSurface()
+    public async Task NeverApprovedFirstVersion_WhenReadyOnly_ShouldNotBeExposedOnTheReadRoutes()
     {
         (HttpClient owner, var ownerName) = await IntegrationTestAuth.RegisterVerifiedAndAuthenticateAsync(fixture.Factory);
         (HttpClient stranger, _) = await IntegrationTestAuth.RegisterVerifiedAndAuthenticateAsync(fixture.Factory);
@@ -40,15 +41,31 @@ public sealed class NeverApprovedFirstVersionIntegrationTests(IntegrationTestFix
             var token = "NeverApproved" + Guid.NewGuid().ToString("N");
             var controlToken = "ApprovedControl" + Guid.NewGuid().ToString("N");
             (Guid assetId, Guid versionId) = await SeedReadyOnlyFirstVersionAsync(ownerName, token + " first version");
-            Guid controlId = await SeedApprovedControlAsync(ownerName, controlToken + " approved");
+            (Guid controlId, Guid controlVersionId) = await SeedApprovedControlAsync(ownerName, controlToken + " approved");
 
-            // Positive control: the approved asset is listed and its detail is served to an anonymous caller.
+            // Positive controls: the approved asset is listed by search, its detail is served, and its version list
+            // shows its approved version, all to an anonymous caller.
             using (HttpResponseMessage controlSearch = await anonymous.GetAsync(new Uri(CatalogUrl(controlToken), UriKind.Relative)))
             {
-                controlSearch.StatusCode.Should().Be(HttpStatusCode.OK);
+                controlSearch.StatusCode.Should().Be(HttpStatusCode.OK, "control catalog search");
                 (await ListedIdsAsync(controlSearch)).Should().Contain(controlId);
             }
 
+            using (HttpResponseMessage controlDetail = await anonymous.GetAsync(new Uri(AssetPath(controlId), UriKind.Relative)))
+            {
+                controlDetail.StatusCode.Should().Be(HttpStatusCode.OK, "control detail");
+            }
+
+            using (HttpResponseMessage controlVersions = await anonymous.GetAsync(new Uri(VersionsPath(controlId), UriKind.Relative)))
+            {
+                controlVersions.StatusCode.Should().Be(HttpStatusCode.OK, "control version list");
+                using var controlBody = JsonDocument.Parse(await controlVersions.Content.ReadAsStringAsync());
+                controlBody.RootElement.EnumerateArray().Select(item => item.GetProperty("id").GetGuid()).Should().Contain(controlVersionId);
+            }
+
+            // Non-purchaser downloads return 403 because of the purchase check (DownloadService.cs:31-37), which runs
+            // before any publication check. The 404 detail and checkout, and the empty version list, carry the
+            // publication gate. Anonymous callers get 401 from [Authorize] on the download routes.
             Caller[] callers =
             [
                 new Caller("anonymous", anonymous, HttpStatusCode.Unauthorized, HttpStatusCode.Unauthorized),
@@ -160,7 +177,7 @@ public sealed class NeverApprovedFirstVersionIntegrationTests(IntegrationTestFix
         return (asset.Id, version.Id);
     }
 
-    private async Task<Guid> SeedApprovedControlAsync(string ownerUsername, string title)
+    private async Task<(Guid AssetId, Guid VersionId)> SeedApprovedControlAsync(string ownerUsername, string title)
     {
         await using AsyncServiceScope scope = fixture.Factory.Services.CreateAsyncScope();
         ApplicationDbContext db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
@@ -174,7 +191,7 @@ public sealed class NeverApprovedFirstVersionIntegrationTests(IntegrationTestFix
         await db.SaveChangesAsync();
         await TrustedPublicationFixture.AttachTrustedApprovedPublication(db, asset, version, owner, category, title);
         await db.SaveChangesAsync();
-        return asset.Id;
+        return (asset.Id, version.Id);
     }
 
     private static Category NewCategory() => new()
