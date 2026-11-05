@@ -41,7 +41,7 @@ Non-claims:
 | --- | --- | --- | --- |
 | Operating system | Windows with PowerShell 7 | `PowerShell` tool use in this change | VERIFIED for the commands listed here |
 | .NET SDK | 10.0.100 or later in the 10.0 feature band | `asblock-backend/global.json` (`rollForward: latestFeature`) | VERIFIED; 10.0.401 observed |
-| Node.js | Version compatible with Next.js and Playwright | Root and `asblock-frontend/package.json` | VERIFIED; v24.20.0 observed |
+| Node.js | Version compatible with Next.js and Playwright | Root and `asblock-frontend/package.json` | VERIFIED; v24.20.0 observed. Not pinned: neither `package.json` declares `engines` |
 | pnpm | 11.13.0 | `asblock-frontend/package.json` (`packageManager`) | VERIFIED |
 | Browser for Playwright | Chromium installed for Playwright | `README.md` | OBSERVED IN RECORDED RUN (browser-stub lanes passed in the recorded run); not re-checked here |
 | Docker Desktop with Compose | Required for PostgreSQL, ClamAV and other Testcontainers lanes and for the local Compose services | `asblock-backend/docker-compose.yml`; Testcontainers lanes | OBSERVED IN RECORDED RUN (Docker server 29.9.2 at the runner preflight; HTTP and store lanes started); not re-checked here |
@@ -81,12 +81,12 @@ Secrets. The following configuration keys hold secret values. Only their names a
 
 ## 3. Launch order
 
-Status: Launch recipe checked against source only; not executed. A live submission needs the analysis keys, tool
+Status: Not reproducible without owner-provided configuration. Launch recipe checked against source only; not executed. A live submission needs the analysis keys, tool
 paths and provisioned accounts; without them the host denies submission. The repeatable path in this candidate is
 the lane runner in section 5.
 
 Confirm that the required ports are free and that no process you do not own is using them. Start each process
-hidden, with separate output files, and keep its process ID. Do not kill processes by name.
+hidden, with separate output files, and keep its process ID. For the API, record the ID of the process listening on port 5088: `dotnet run` can start a child process, and the launcher's ID alone is not enough. Do not kill processes by name.
 
 ### 3.0 Restore and install prerequisites
 
@@ -94,13 +94,18 @@ hidden, with separate output files, and keep its process ID. Do not kill process
   (command shapes from `asblock-backend/README.md`). The integration lanes pass `--no-restore`, so restore first.
 - Frontend: `pnpm install --frozen-lockfile` in `asblock-frontend/` (command shape from `README.md`), then the
   production build in section 3.4.
+- Playwright Chromium (command shape only; not run in this change), from `asblock-frontend/`:
+  `node node_modules/@playwright/test/cli.js install chromium`.
 - Service: the interpreter `artifacts/code_analysis/env/service/Scripts/python.exe` is named in
   `services/code-analysis/README.md`. Its packages were not installed or checked in this change.
 - Backend secrets: `dotnet user-secrets set "<key>" "<value>" --project AssetBlock.WebApi` for each key in section 2.
 
 ### 3.1 Compose services
 
-See section 2. Wait until each service reports healthy in `docker compose ps`.
+See section 2. Wait until each service reports healthy in `docker compose ps`. The `clamav` service reads
+`asblock-backend/clamav/clamd.env`, which `docker-compose.yml` mounts; its values are owner-provided and are not recorded here.
+The test lanes do not use these services: their Testcontainers start their own PostgreSQL, Redis, ClamAV and Mailpit
+containers (section 5).
 
 ### 3.2 Code-analysis service
 
@@ -144,6 +149,10 @@ Executable: dotnet
 Arguments:  run --no-build --no-restore --project AssetBlock.WebApi --launch-profile http
 ```
 
+Migrations: the API runs `DatabaseMigrationService` at start. It applies pending migrations when `Database:AutoMigrate`
+is true. `appsettings.json` sets it to false and `appsettings.Development.json` sets it to true, so a Development start
+migrates the database and creates a dev admin account when none exists.
+
 Analysis configuration (names and purpose only; values come from user secrets or the environment, never from this
 document). `CodeAnalysis:Enabled` defaults to `false`, and the committed appsettings files contain no `CodeAnalysis`
 section (`CodeAnalysisOptions.cs`):
@@ -164,7 +173,8 @@ submission is attempted.
 ### 3.4 Frontend
 
 Working directory: `asblock-frontend`. Use a production build for this candidate. Do not reuse a stale `.next`
-output, and do not use the stub `.next-e2e` output used by Playwright.
+output, and do not use the stub `.next-e2e` output used by Playwright. Before the build, remove a stale `.next` output (document
+only; delete it only after the containment check in section 10).
 
 ```text
 Build:      node node_modules/next/dist/bin/next build
@@ -173,13 +183,16 @@ Arguments:  node_modules/next/dist/bin/next start --hostname 127.0.0.1 --port 30
 Environment:
   NEXT_PUBLIC_API_BASE_URL=<approved local API base, for example http://localhost:5088>
   ASSETBLOCK_API_BASE_URL=<same approved local API base, server side>
+  ASSETBLOCK_ANALYTICS_BFF_SIGNING_SECRET=<owner-provided value; name read by app/api/analytics/events/route.ts; never written here>
 ```
 
 Verified: both key names are read by the frontend (`process.env.NEXT_PUBLIC_API_BASE_URL` and
 `process.env.ASSETBLOCK_API_BASE_URL`). Port 3000 is the port used by the plan; `next start` has no default
 port in `asblock-frontend/package.json`. Secrets never go into `NEXT_PUBLIC_` variables.
 
-Readiness: the home page responds, and one authenticated BFF read succeeds.
+Readiness: the home page responds, and one authenticated BFF read succeeds. The authenticated read needs an account:
+a Development start creates a dev admin when none exists (section 3.3). Section 4 lists the roles the scenarios use;
+this runbook creates no other account.
 
 ### 3.5 Stop order
 
@@ -211,6 +224,13 @@ effect on accounts was NOT VERIFIED.
 
 ## 5. Scenario table
 
+List the lanes and validate the manifest with the same interpreter; no run directory is created:
+
+```text
+artifacts/code_analysis/env/ml/Scripts/python.exe -B -m scripts.demonstration.run_scenarios list
+artifacts/code_analysis/env/ml/Scripts/python.exe -B -m scripts.demonstration.run_scenarios check
+```
+
 Run one scenario:
 
 ```text
@@ -220,7 +240,7 @@ artifacts/code_analysis/env/ml/Scripts/python.exe -B -m scripts.demonstration.ru
 Run every default lane of every scenario: `run --all --run-id <new-run-id>`. Optional lanes run only with
 `--include-optional` or when named with `--lane`.
 
-The runner refuses a run id that already exists, an unknown lane id, a lane outside the selected scenarios, and an
+A run id matches `[A-Za-z0-9][A-Za-z0-9_-]{0,79}`. The runner refuses a run id that already exists, an unknown lane id, a lane outside the selected scenarios, and an
 empty selection. Results are written to `artifacts/demonstration/runs/<run-id>/result.json`, with one log pair per
 lane. The lane list and minimum counts are in `scripts/demonstration/scenarios.json`. Counts below were discovered
 with `run_scenarios discover` (dotnet `--list-tests`, Playwright `--list`, Vitest). They are not results of a run.
@@ -247,6 +267,8 @@ Lane evidence kinds:
 - **browser-stub**: Playwright against the local API stub. Simulated.
 - **unit**: in-process tests (xUnit or Vitest).
 
+The optional live lane uses this kind only for its preflight; it is opt-in and uses real services when configured.
+
 No lane consumes the fixtures in section 6. They are inputs for a manual live run, which was not performed.
 
 Container preflight. Before any lane of kind http-postgres-test-host or postgres-store starts, the runner runs
@@ -263,14 +285,14 @@ or Moderator rationale.
 
 | ID | Title | Actors | Intended live steps (not run by the lanes) | What the lanes actually do | Lanes (kind, discovered count) | Gaps |
 | --- | --- | --- | --- | --- | --- | --- |
-| D1 | Clean submission requires approval | Seller A, M1, anonymous, buyer | Upload the clean-original fixture; declaration; required checks; explicit submit; M1 approves; anonymous and buyer surfaces read over HTTP before and after approval | HTTP lane seeds READY versions and submissions directly into the test database and seeds bytes through the test storage replacement, then reads public surfaces over HTTP. It does not upload, declare, check or submit. The never-published matrix checks the expected status per actor and route when no version is public. A store lane asserts that a no-findings decision still requires an explicit approval record. Browser lane drives the frontend against the stub | `d1-publication-http` (http-postgres-test-host, 10); `d1-never-published-http` (http-postgres-test-host, 6); `d1-no-findings-postgres` (postgres-store, 1); `d1-browser-approval` (browser-stub, 1) | No lane consumes the clean-original fixture. No server upload, declaration, check or submit. Browser lane simulated. Complete direct, bundle, list and search matrix not covered |
+| D1 | Clean submission requires approval | Seller A, M1, anonymous, buyer | Upload the clean-original fixture; declaration; required checks; explicit submit; M1 approves; anonymous and buyer surfaces read over HTTP before and after approval | HTTP lane seeds READY versions and submissions directly into the test database and seeds bytes through the test storage replacement, then reads public surfaces over HTTP. It does not upload, declare, check or submit. The latest-not-public matrix checks the expected status per actor and route when the newest version is not public and an earlier version is approved. The never-approved first-version HTTP test seeds a READY-only first version beside an approved control and checks that no public surface exposes the first version. A store lane asserts that a no-findings decision still requires an explicit approval record. Browser lane drives the frontend against the stub | `d1-publication-http` (http-postgres-test-host, 10); `d1-latest-not-public-http` (http-postgres-test-host, 6); `d1-never-approved-first-version-http` (http-postgres-test-host, 1); `d1-no-findings-postgres` (postgres-store, 1); `d1-browser-approval` (browser-stub, 1) | No lane consumes the clean-original fixture. No server upload, declaration, check or submit. Browser lane simulated. Complete direct, bundle, list and search matrix not covered |
 | D2 | Declared third-party match | Seller A, M1 | Upload the declared-third-party fixture; analysis reports a match; seller answers the required finding; M1 attempts the decision | HTTP lane seeds outstanding seller responses and asserts the decision-specific conflict. Store lane asserts that an unresolved material finding blocks approval with no decision record and no publication snapshot. Browser lane drives the seller answer flow against the stub. No lane produces a match or consumes the fixture | `d2-decision-blocked-by-responses` (http-postgres-test-host, 1); `d2-unresolved-finding-postgres` (postgres-store, 2); `d2-browser-answer-before-submit` (browser-stub, 1) | Live match SETUP UNAVAILABLE (needs enabled analysis host and populated reference index). Answering a finding does not close it by itself: no lane asserts that an answered finding stays open. Attribution and distribution terms unverified. Missing rights and notices covered by server validation not run here |
 | D3 | Independent implementation match | M1, Seller A | Two authored implementations (independent-pair-a and -b) reviewed by M1, who records a bounded disposition; invalid dispositions rejected | Unit lane checks disposition validation (32 tests). A Vitest unit test checks that outstanding seller responses keep the decision blocked. Browser lane drives a disposition and approval against the stub. No lane produces a match or consumes the fixtures | `d3-disposition-validation` (unit, 32); `d3-case-workspace-unit` (unit, 1 selected of 34 in file); `d3-browser-disposition` (browser-stub, 1) | Live similarity match SETUP UNAVAILABLE (needs enabled analysis host and populated reference index). Row is test-verified or simulated only. Independence of the pair is structural only. Quality of reasoning is human review |
 | D4 | Failed safety check | Seller A | Upload the unsafe-archive fixture (generated at build time) and a runtime test payload; server rejects both; submit denied under a host with analysis unavailable | HTTP lanes build their own traversal archive in the test (not the unsafe-archive fixture) and a runtime-generated test string, and assert ARCHIVE_PATH_TRAVERSAL and MALWARE_DETECTED with blocked actions and no downstream jobs. The submission test asserts ERR_ANALYSIS_NOT_AVAILABLE on a host with analysis disabled | `d4-upload-safety-http` (http-postgres-test-host, 2) | Submit denial is host configuration, not an isolated safety override. Only one ../ ZIP and one test-string ZIP reach HTTP; no archive bomb, special tar, empty or oversized archive case. No enabled-analysis host, Moderator action or quarantine route. Object storage is a test replacement. Malware case uses a runtime test string, not a sample |
 | D5 | Corrected resubmission | Seller A, M1 | Changes requested; seller corrects the declaration or bytes (corrected-resubmission fixture) and resubmits; a byte-changing correction gets a new version and fresh checks; the older decision stays in history | Browser lane simulates a declaration-only correction on the stub: the seller saves the declaration and resubmits, and the test asserts that no archive upload request is made. Store lane seeds a later submission on the same asset version after a changes-requested decision and asserts the older decision is hidden from the current view and kept in history. Store lane shows an explicit linked evidence resubmission on the same version, followed by an unchanged withdrawal and resubmission. No lane changes bytes | `d5-browser-resubmit` (browser-stub, 1); `d5-finalizer-resubmission` (postgres-store, 4); `d5-linked-evidence-resubmission-postgres` (postgres-store, 3) | No byte-changing correction, no new-version re-scan, and no refusal of an old report for changed content. Browser correction is declaration-only and runs against the stub. Version-list equality in the browser journey cannot fail and is not claimed. Full immutable explanation, expiry and withdrawal path not established |
 | D6 | Pending version 2 beside approved version 1 | Seller A, M1, buyer, anonymous | Approve version 1; buyer purchases version 1; upload and submit version 2; request changes; approve corrected version 2 | Seven HTTP tests seed approved and pending versions directly and assert public, buyer and decision-route behaviour: version 1 stays public; pending version 2 is hidden on catalog, detail and version routes; buyer pending download returns 404; approving version 2 promotes it. Browser lane drives the stub | `d6-public-surface-http` (http-postgres-test-host, 7); `d6-browser-beside-pending` (browser-stub, 1); `d6-live-pending-v2-optional` (optional, not run) | Live lane opt-in and skipped by default; a skip is not a pass. Pending rows are seeded, not produced by upload and submit. Embeddings, search, tags, bundle, license and price matrix not covered. Stale-empty catalog search after approval is bounded eventual consistency (outbox dispatch or two-minute cache TTL) |
-| D7 | Stale-review rejection | Seller A, M1, M2 | M1 opens the case and keeps its basis; seller changes evidence; M1 decides on the old basis | HTTP tests assert standard conflicts for a stale basis and for a repeated decision, with no decision record. Store lane asserts that a changed tuple member (content, report, declaration, material, evidence, policy or evidence digest; seven cases) is refused with no decision record and no publication snapshot. Store lane asserts the production outcome when a tuple member changes while the case is claimed (declaration, evidence, response, security recheck). The race test asserts one of two consistent end states; which branch runs is not deterministic. Browser lane simulated | `d7-http-conflicts` (http-postgres-test-host, 2); `d7-race-evidence-edit` (http-postgres-test-host, 1); `d7-tuple-change-postgres` (postgres-store, 7); `d7-tuple-workflows-postgres` (postgres-store, 4); `d7-browser-stale-rationale` (browser-stub, 1) | Race test branch is not deterministic. HTTP stale test asserts no decision; the no-publication assertion is in the store lane. A superseded case may return NOT_ACTIVE rather than STALE; tests assert their exact code. Zero-effect checks cover asserted tables only |
-| D8 | Self-approval prevention | Owner with Moderator role, M1 | Owner tries claim, case read, evidence read, queue read and decision on own asset; a separate Moderator is unaffected | HTTP matrix tests call the claim, decision, case, case-evidence and queue routes for each caller class (owner, owner with the Moderator role, stranger, Admin without the Moderator role, revoked Moderator, other Moderator). Owner-Moderator and Admin denials assert Forbidden. Each denial step compares the audit-row delta with its expected value: most selected steps expect no new audit row, and two owner-Moderator steps expect one. A decision test asserts no effect when the decider owns the case or the case is unclaimed. Browser lane drives the owner-Moderator attempt on the stub | `d8-http-role-ownership` (http-postgres-test-host, 6); `d8-browser-same-account` (browser-stub, 1) | Admin without the Moderator role gets Forbidden in the selected matrix tests; no Admin-only case list is tested outside those matrices. Audit-row expectations are per step, not a general audit-completeness check. Browser lane simulated; hidden-button state is not server evidence |
+| D7 | Stale-review rejection | Seller A, M1, M2 | M1 opens the case and keeps its basis; seller changes evidence; M1 decides on the old basis | HTTP tests assert standard conflicts for a stale basis and for a repeated decision, with no decision record. Store lane asserts that a changed tuple member (content, report, declaration, material, evidence, policy or evidence digest; seven cases) is refused with no decision record and no publication snapshot; a changed policy returns BLOCKED and the other six return STALE. Store lane asserts the production outcome when a tuple member changes while the case is claimed (declaration, evidence, response, security recheck). The race test asserts one of two consistent end states; which branch runs is not deterministic. Browser lane simulated | `d7-http-conflicts` (http-postgres-test-host, 2); `d7-race-evidence-edit` (http-postgres-test-host, 1); `d7-tuple-change-postgres` (postgres-store, 7); `d7-tuple-workflows-postgres` (postgres-store, 4); `d7-browser-stale-rationale` (browser-stub, 1) | Race test branch is not deterministic. HTTP stale test asserts no decision; the no-publication assertion is in the store lane. A superseded case may return NOT_ACTIVE rather than STALE; tests assert their exact code. Zero-effect checks cover asserted tables only |
+| D8 | Self-approval prevention | Owner with Moderator role, M1 | Owner tries claim, case read, evidence read, queue read and decision on own asset; a separate Moderator is unaffected | HTTP matrix tests call the claim, decision, case, case-evidence and queue routes for each caller class (owner, owner with the Moderator role, stranger, Admin without the Moderator role, revoked Moderator, other Moderator). Admin denials assert Forbidden. The owner-Moderator queue step returns 200 and excludes the own case. The owner-Moderator case-evidence step asserts Forbidden and one new audit row, the only selected step that expects one. Each denial step compares the audit-row delta with its expected value. A decision test asserts no effect when the decider owns the case or the case is unclaimed. Browser lane drives the owner-Moderator attempt on the stub | `d8-http-role-ownership` (http-postgres-test-host, 6); `d8-browser-same-account` (browser-stub, 1) | Admin without the Moderator role gets Forbidden in the selected matrix tests; no Admin-only case list is tested outside those matrices. Audit-row expectations are per step, not a general audit-completeness check. Browser lane simulated; hidden-button state is not server evidence |
 | D9 | Private-evidence protection | Seller A, M1, anonymous, other seller | Restricted own-excerpt evidence: synthetic canaries; other actors try access; M1 reads with audit; a failed audit is checked | HTTP tests read the restricted own-excerpt evidence through the Moderator route and assert the audit is written before the body, a failed audit releases no text, responses are private and no-store, and five denial cases hold. A canary test checks a synthetic sentinel across cross-seller responses (one 404 on the cross-seller check) | `d9-restricted-evidence-http` (http-postgres-test-host, 10); `d9-canary-cross-seller` (http-postgres-test-host, 1) | No foreign-comparison evidence kind and no buyer read in these lanes. No browser lane (screenshots cannot prove sinks). Buyer body, BFF, cache, dispatched notification payloads and structured logs not reached. No whole-flow privacy claim |
 
 Notes under the table:
@@ -279,6 +301,10 @@ Notes under the table:
   selected by discovery.
 - `d3-case-workspace-unit` reports 34 tests in its file; the `-t` name filter selects 1 and vitest reports the other 33
   as filtered-out skips.
+- SETUP UNAVAILABLE (D2 and D3 live match): the live step needs an enabled analysis host and a populated reference
+  index. This candidate did not have them, and no lane stands in for that step.
+- Discovery (`run_scenarios discover`) runs each lane's probe and is not a run. It writes only its logs under
+  `artifacts/demonstration/discover/`.
 
 ## 6. Fixtures
 
@@ -307,7 +333,9 @@ artifacts/code_analysis/env/ml/Scripts/python.exe -B -m scripts.demonstration.fi
 The builder writes deterministic ZIP archives (sorted entries, fixed 1980-01-01 timestamps, fixed permissions,
 LF line endings), `declaration.json` (example seller declaration with the field names of the seller payload) and
 `fixture-manifest.json` (SHA-256 and size of each archive and entry, purpose, rights and provenance). Building
-twice on the same interpreter gives identical hashes. The per-entry hashes in `fixture-manifest.json` are the stable
+twice on the same interpreter gives identical hashes. To repeat the check, build into a second directory
+(`--out artifacts/demonstration/fixtures-repeat`) and compare the two `fixture-manifest.json` files byte for byte.
+The per-entry hashes in `fixture-manifest.json` are the stable
 identity of each fixture. Archive-level bytes depend on the compression library build, so archive hashes are
 recorded with the interpreter version in the local run ledger, not in this document. Fixtures are illustrative only
 and must never be used for research training, evaluation or threshold tuning.
@@ -356,7 +384,7 @@ owner must confirm availability before any reproduction (custodian row, section 
 | Evidence-package identity | Retrieval package SHA-256 `44ce724068485e9e5304304d8b3ee276c3248aa6e09e879cbd2b47eb0574cc9b` (MATCH), run `retrieval-evidence-20261030-03`. Supersedes `retrieval-evidence-20261030-01` and `-02` | Verifier package SHA-256 `676ad4da5a40ea7a6f040b0c51cc060088689cfd26f23d4a3974b965f1063973` (MATCH), run `pairs-evidence-20261031-03`. Chain: prepare `pairs-prepare-20261030-05`, train `pairs-train-20261030-03`, evaluate `pairs-evaluate-20261031-04` |
 | Reload-check record | `measurements.training.reloadPassed` true. Every epoch reload check passed (`reloadChecksPassedEveryEpoch` true). Non-finite step losses: 0 | `reloadEvidenceSha256` `707995933bd7e0f02d8119ae25e5bd5f9fe22f47d47eaeebcef48ef93947f1c2`; `reloadMarkerSha256` `7323f2065c5b32c44fbb4804546999b8e86444d1744357eaa718b94d80541674`; reload evidence recorded as SUCCEEDED |
 | Approval and use status | `approvedForUse` false; no product selection | `checkpointAuthorization`: `approvedForUse` false, `selectedForUse` false, `productAuthorizationChanged` false |
-| Custodian (project owner) | Project owner. Custody for this closeout is delegated to the coordinating engineer; availability still must be confirmed before reproduction. | Project owner. Custody for this closeout is delegated to the coordinating engineer; availability still must be confirmed before reproduction. |
+| Custodian (project owner) | Custodian: project owner. Availability not confirmed. | Custodian: project owner. Availability not confirmed. |
 | Recovery and access procedure | Checkpoints are local-only; redistribution is denied. No checkpoint locator is recorded in the package (`runtimeReview.path` names a review directory, not a checkpoint). Reproduction requires owner confirmation of availability first | Same as model 1: local-only, redistribution denied, no locator recorded. Reproduction requires owner confirmation of availability first |
 | Access availability | NOT VERIFIED in this candidate. The owner must confirm | NOT VERIFIED in this candidate. The owner must confirm |
 | Redistribution | Local-only; a separate rights decision is required | Redistribution denied; local-only |
@@ -543,8 +571,7 @@ Mandatory safety, privacy and access behaviour, and a missing trained model, are
   validation retrieval set is near its ceiling, and EXACT_COPY queries are saturated by construction. Neither
   checkpoint nor a successful reload proves useful quality.
 - The verifier outcome is FLAT_OR_NEGATIVE. The retrieval outcome is NO_MEASURABLE_DIFFERENCE_NEAR_CEILING.
-- The checkpoints are not approved for product use. Access is NOT VERIFIED. Custodian: project owner; custody for
-  this closeout is delegated to the coordinating engineer; availability still must be confirmed before reproduction.
+- The checkpoints are not approved for product use. Access is NOT VERIFIED. Custodian: project owner. Availability not confirmed.
 - Independence of the evaluation set from the training chain is not established. The packages record that
   withheld material was not scored; they do not prove independence.
 - No content-level comparison against restricted data is claimed. Labels are agent-produced and are not
@@ -569,13 +596,18 @@ The limitations below are carried from the verification stage. They are stated p
 6. Late completion and replay: a replay-gate mutation survived; outbox dispatch and consumer replay are unproven.
 7. Safety: only one `../` ZIP and one test-string ZIP reach HTTP. No bomb, special tar, empty or oversized archive row. The reason check is only a leading letter, not specific text and next action. Object storage in that host is a test replacement. Analysis disabled. No scanner-branch mutation. No Moderator action. "Blocked" means seller download 404 and no publication; no quarantine route or state was asserted.
 8. Privacy: actual queue HTTP cursor pages were walked. Only `PRIVATE_SOURCE` has a queue-page kill. The private rationale is checked only after the decision (public detail, seller review, outbox, audit, history), not on queue pages. The other-seller note and source are checked on the owner's response read, not on a live queue item. Notification and seller-row scans may be empty at runtime. The cross-seller check is one 404. Buyer body, BFF, cache, dispatched notification and log sinks are unreached. No whole-flow privacy claim.
-9. Moderation events: also no event-handler mutation.
-10. Browser: no per-journey mutation evidence.
+9. Moderation events: LongPolling stub only; no real SignalR server, WebSocket or reconnect; no event-handler mutation.
+10. Browser: no reload, retry or storage sweep, no full keyboard, contrast or screen-reader evidence, no per-journey mutation evidence.
 11. Copy: the verdict denylist covers frontend source and backend error messages (the terms of the backend test). Notification text and public or buyer score absence have no mechanical test. Editorial quality is human source review.
 12. Evaluation: not performed. No labels, admitted corpus, parity, latency, checkpoint load or human spot-check. No TSX quality claim from parser support or pooled TypeScript counts. Harness results are synthetic only. The deployed parity adapter is still open.
 13. Environment: Chromium and Windows only. Two live tests skip by default. One service pytest skip has an unknown reason. The native exit code of the first recorded run (`demo-full-1`) was not captured; later runs record it.
 14. Residuals with no row in section 5: reject-to-appeal is not one continuous journey; same-version draft metadata and public snapshot behaviour are not wholly covered.
 15. No scenario was run live in this candidate. The recorded runs run test lanes only, and their aggregate status is LANES_PASS, which is not scenario acceptance.
+16. Publication matrix: revoked role, deleted and safety states, bundle, library, bundle checkout, pending price and tags not covered.
+17. User-visible unsupported, partial and TSX reasons and stale assessment are not proven end to end.
+18. No temporary-file or plaintext residue matrix across success, failure, cancel, lease and restart.
+19. No cache coherence matrix. No deletion-state matrix.
+20. Price-only separation: by design in source (price sits outside the material revision and the decision tuple has no price). No traced example and no price-only test in these lanes; pending price is not covered.
 
 Additional limitations from this candidate:
 

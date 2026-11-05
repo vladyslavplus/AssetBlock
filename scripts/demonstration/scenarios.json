@@ -7,7 +7,7 @@
       "title": "Clean submission requires approval",
       "what_it_shows": "A clean submission is not public until a Moderator approves it. Passed checks alone do not publish.",
       "intended_live_steps": "Upload the clean-original fixture, submit a declaration and the required checks, explicit submit; a Moderator approves; anonymous and buyer surfaces are read over HTTP before and after approval.",
-      "lanes_actually_do": "The HTTP lane seeds READY versions and submissions directly into the test database and seeds bytes through the test storage replacement, then reads public surfaces over HTTP. It does not upload, declare, check or submit. The never-published matrix checks the expected status for each actor and route when no version is public. A PostgreSQL store lane asserts that a no-findings decision still requires an explicit approval record. The browser lane drives the frontend against the local stub.",
+      "lanes_actually_do": "The HTTP lane seeds READY versions and submissions directly into the test database and seeds bytes through the test storage replacement, then reads public surfaces over HTTP. It does not upload, declare, check or submit. The latest-not-public matrix checks the expected status for each actor and route when the newest version is not public and an earlier version is approved. The never-approved first-version HTTP test seeds a READY-only first version beside an approved control and checks that no public surface exposes the first version. A PostgreSQL store lane asserts that a no-findings decision still requires an explicit approval record. The browser lane drives the frontend against the local stub.",
       "live_run_fixtures": [
         "clean-original"
       ],
@@ -51,7 +51,7 @@
           ]
         },
         {
-          "id": "d1-never-published-http",
+          "id": "d1-latest-not-public-http",
           "evidence_kind": "http-postgres-test-host",
           "cwd": "asblock-backend",
           "executable": "dotnet",
@@ -68,6 +68,26 @@
           "timeout_seconds": 1800,
           "test_files": [
             "asblock-backend/AssetBlock.WebApi.IntegrationTests/Controllers/PublicationAccessMatrixIntegrationTests.cs"
+          ]
+        },
+        {
+          "id": "d1-never-approved-first-version-http",
+          "evidence_kind": "http-postgres-test-host",
+          "cwd": "asblock-backend",
+          "executable": "dotnet",
+          "args": [
+            "test",
+            "AssetBlock.WebApi.IntegrationTests/AssetBlock.WebApi.IntegrationTests.csproj",
+            "--no-restore",
+            "--disable-build-servers",
+            "-nodeReuse:false",
+            "--filter",
+            "FullyQualifiedName~NeverApprovedFirstVersion"
+          ],
+          "expected_min_tests": 1,
+          "timeout_seconds": 1800,
+          "test_files": [
+            "asblock-backend/AssetBlock.WebApi.IntegrationTests/Controllers/NeverApprovedFirstVersionIntegrationTests.cs"
           ]
         },
         {
@@ -450,7 +470,7 @@
       "title": "Stale-review rejection",
       "what_it_shows": "A decision written against a stale basis, or against a changed tuple, is refused with a documented conflict and has no effect. The browser keeps the typed rationale.",
       "intended_live_steps": "A Moderator opens the case and keeps its basis; the seller changes evidence; the Moderator decides on the old basis.",
-      "lanes_actually_do": "HTTP tests assert standard conflicts for a stale basis (a caseRevision that does not match) and for a repeated decision, with no decision record. A PostgreSQL store lane asserts that a changed tuple member (material, evidence, policy or evidence digest) is refused with no decision record and no publication snapshot. A second PostgreSQL store lane asserts the production outcome when a tuple member changes while the case is claimed (declaration, evidence, response or security recheck). The race test asserts one of two consistent end states; which branch runs is not deterministic. The browser lane is simulated.",
+      "lanes_actually_do": "HTTP tests assert standard conflicts for a stale basis (a caseRevision that does not match) and for a repeated decision, with no decision record. A PostgreSQL store lane asserts that a changed tuple member is refused with no decision record and no publication snapshot. The seven members are content, report, declaration, material, evidence, policy and evidenceDigest; a changed policy returns BLOCKED, the other six return STALE. A second PostgreSQL store lane asserts the production outcome when a tuple member changes while the case is claimed (declaration, evidence, response or security recheck). The race test asserts one of two consistent end states; which branch runs is not deterministic. The browser lane is simulated.",
       "live_run_fixtures": [
         "clean-original"
       ],
@@ -567,7 +587,7 @@
       "title": "Self-approval prevention",
       "what_it_shows": "An owner who also holds the Moderator role cannot claim, decide or read the case or its evidence and queue for their own asset. The denial happens on the server.",
       "intended_live_steps": "The owner, who also holds the Moderator role, tries claim, case read, evidence read, queue read and decision on their own asset; a separate Moderator is unaffected.",
-      "lanes_actually_do": "HTTP matrix tests call the claim, decision, case, case-evidence and queue routes for each caller class (owner, owner with the Moderator role, stranger, Admin without the Moderator role, revoked Moderator, other Moderator). Owner-Moderator and Admin denials assert Forbidden. Each denial step compares the audit-row delta with its expected value; the selected steps expect no new audit row except two owner-Moderator steps, which expect one. A decision test asserts no effect when the decider owns the case or the case is unclaimed. The browser lane drives the owner-Moderator attempt on the stub.",
+      "lanes_actually_do": "HTTP matrix tests call the claim, decision, case, case-evidence and queue routes for each caller class (owner, owner with the Moderator role, stranger, Admin without the Moderator role, revoked Moderator, other Moderator). Admin denials assert Forbidden. The owner-Moderator queue step returns 200 and excludes the own case. The owner-Moderator case-evidence step asserts Forbidden and one new audit row, the only selected step that expects one. Each denial step compares the audit-row delta with its expected value. A decision test asserts no effect when the decider owns the case or the case is unclaimed. The browser lane drives the owner-Moderator attempt on the stub.",
       "live_run_fixtures": [
         "clean-original"
       ],

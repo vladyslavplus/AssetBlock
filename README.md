@@ -92,6 +92,7 @@ Seller-facing analytics live under **`/sell` → Analytics** (UTC date ranges, g
 - **Interactive API:** Swagger UI when the Web API is running in Development.
 - **Liveness:** `GET /health/live` checks that the API process can serve requests.
 - **Readiness:** `GET /health/ready` checks PostgreSQL, the configured storage provider, and Redis connection when configured (Valkey locally).
+- **Demonstration runbook:** `docs/demonstration.md`; scenario runner `scripts/demonstration/run_scenarios.py` (lanes, counts and limitations).
 
 ## Contributing / quality
 
