@@ -1,0 +1,6 @@
+Dedication to the public domain (CC0 1.0 Universal style)
+
+The author of this demonstration fixture has dedicated the authored base library to the public domain, to the
+extent permitted by law, by waiving all copyright and related rights. The full legal text of the dedication is
+at https://creativecommons.org/publicdomain/zero/1.0/legalcode. The vendor component under vendor/ is licensed
+separately; see vendor/stand-in-moving-average/LICENSE.txt.

@@ -1,0 +1,26 @@
+{
+  "ownContributionSummary": "Wrote the textstats helper module and its median and clamp functions for the demonstration upload.",
+  "ownChanges": "Added a clamp helper and a clear empty-sequence error in mean and median.",
+  "earlierWork": null,
+  "redistributionAcknowledged": true,
+  "disclosurePolicyVersion": "disclosure-v1",
+  "components": [
+    {
+      "componentId": "stand-in-moving-average",
+      "name": "Stand-in exponential smoothing helper",
+      "packagePathOrRange": "vendor/stand-in-moving-average",
+      "sourceUrl": "https://example.com/assetblock-demonstration/stand-in-moving-average",
+      "knownVersion": "authored-stand-in-1.0.0",
+      "license": "MIT",
+      "noticeLocations": [
+        "vendor/stand-in-moving-average/NOTICE.md",
+        "vendor/stand-in-moving-average/LICENSE.txt"
+      ],
+      "modifications": "Authored for the demonstration; no upstream project exists. The helper was adapted to return a list instead of a generator.",
+      "permissionEvidenceReferences": [
+        "vendor/stand-in-moving-average/LICENSE.txt"
+      ],
+      "origin": "THIRD_PARTY"
+    }
+  ]
+}

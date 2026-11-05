@@ -1,0 +1,680 @@
+{
+  "schema": "demonstration-scenarios-v1",
+  "description": "Nine demonstration scenarios. Each lane names an existing test selection. Evidence kinds: http-postgres-test-host (HTTP tests in an in-process WebApplicationFactory with a PostgreSQL test database, object storage replaced by a test double and analysis disabled; Docker needed), postgres-store (store-level PostgreSQL tests in the infrastructure test project; Docker needed), browser-stub (Playwright against the local API stub, simulated), unit (in-process tests). Optional lanes run only with --include-optional or when named with --lane. The run aggregate LANES_PASS means every selected lane passed; it is not scenario acceptance.",
+  "scenarios": [
+    {
+      "id": "D1",
+      "title": "Clean submission requires approval",
+      "what_it_shows": "A clean submission is not public until a Moderator approves it. Passed checks alone do not publish.",
+      "intended_live_steps": "Upload the clean-original fixture, submit a declaration and the required checks, explicit submit; a Moderator approves; anonymous and buyer surfaces are read over HTTP before and after approval.",
+      "lanes_actually_do": "The HTTP lane seeds READY versions and submissions directly into the test database and seeds bytes through the test storage replacement, then reads public surfaces over HTTP. It does not upload, declare, check or submit. The never-published matrix checks the expected status for each actor and route when no version is public. A PostgreSQL store lane asserts that a no-findings decision still requires an explicit approval record. The browser lane drives the frontend against the local stub.",
+      "live_run_fixtures": [
+        "clean-original"
+      ],
+      "lanes": [
+        {
+          "id": "d1-publication-http",
+          "evidence_kind": "http-postgres-test-host",
+          "cwd": "asblock-backend",
+          "executable": "dotnet",
+          "args": [
+            "test",
+            "AssetBlock.WebApi.IntegrationTests/AssetBlock.WebApi.IntegrationTests.csproj",
+            "--no-restore",
+            "--disable-build-servers",
+            "-nodeReuse:false",
+            "--filter",
+            "FullyQualifiedName~PublicSurfaceVersionIntegrationTests"
+          ],
+          "expected_min_tests": 10,
+          "timeout_seconds": 1800,
+          "test_files": [
+            "asblock-backend/AssetBlock.WebApi.IntegrationTests/Controllers/PublicSurfaceVersionIntegrationTests.cs"
+          ]
+        },
+        {
+          "id": "d1-browser-approval",
+          "evidence_kind": "browser-stub",
+          "cwd": "asblock-frontend",
+          "executable": "node",
+          "args": [
+            "node_modules/@playwright/test/cli.js",
+            "test",
+            "e2e/moderation-journeys.spec.ts",
+            "--grep",
+            "seller submission becomes public only after the Moderator approves it"
+          ],
+          "expected_min_tests": 1,
+          "timeout_seconds": 1800,
+          "test_files": [
+            "asblock-frontend/e2e/moderation-journeys.spec.ts"
+          ]
+        },
+        {
+          "id": "d1-never-published-http",
+          "evidence_kind": "http-postgres-test-host",
+          "cwd": "asblock-backend",
+          "executable": "dotnet",
+          "args": [
+            "test",
+            "AssetBlock.WebApi.IntegrationTests/AssetBlock.WebApi.IntegrationTests.csproj",
+            "--no-restore",
+            "--disable-build-servers",
+            "-nodeReuse:false",
+            "--filter",
+            "FullyQualifiedName~AccessMatrix_WhenLatestVersionIsNotPublic"
+          ],
+          "expected_min_tests": 6,
+          "timeout_seconds": 1800,
+          "test_files": [
+            "asblock-backend/AssetBlock.WebApi.IntegrationTests/Controllers/PublicationAccessMatrixIntegrationTests.cs"
+          ]
+        },
+        {
+          "id": "d1-no-findings-postgres",
+          "evidence_kind": "postgres-store",
+          "cwd": "asblock-backend",
+          "executable": "dotnet",
+          "args": [
+            "test",
+            "AssetBlock.Infrastructure.IntegrationTests/AssetBlock.Infrastructure.IntegrationTests.csproj",
+            "--no-restore",
+            "--disable-build-servers",
+            "-nodeReuse:false",
+            "--filter",
+            "FullyQualifiedName~Decision_WhenNoFindings_ShouldStillRequireAndRecordExplicitApproval"
+          ],
+          "expected_min_tests": 1,
+          "timeout_seconds": 1800,
+          "test_files": [
+            "asblock-backend/AssetBlock.Infrastructure.IntegrationTests/Persistence/Stores/CodeAnalysisReportFinalizerPostgresTests.Decision.cs"
+          ]
+        }
+      ],
+      "gaps": [
+        "No lane consumes the clean-original fixture.",
+        "No lane performs an upload, declaration, required check or submit through the server.",
+        "The browser lane runs against the local API stub and is simulated; it does not prove server authorization.",
+        "The complete direct, bundle, list and search matrix for the approved version is not covered."
+      ]
+    },
+    {
+      "id": "D2",
+      "title": "Declared third-party match",
+      "what_it_shows": "A declared third-party component carries its own notices. Outstanding seller responses and unresolved material findings block the Moderator decision.",
+      "intended_live_steps": "Upload the declared-third-party fixture; the analysis reports a match; the seller answers the required finding; the Moderator attempts the decision.",
+      "lanes_actually_do": "The HTTP lane seeds outstanding seller responses and asserts the decision-specific conflict. A PostgreSQL store lane asserts that an unresolved material finding blocks approval with no decision record and no publication snapshot. The browser lane drives the seller answer flow against the stub. No lane produces a match or consumes the declared-third-party fixture.",
+      "live_run_fixtures": [
+        "declared-third-party"
+      ],
+      "lanes": [
+        {
+          "id": "d2-decision-blocked-by-responses",
+          "evidence_kind": "http-postgres-test-host",
+          "cwd": "asblock-backend",
+          "executable": "dotnet",
+          "args": [
+            "test",
+            "AssetBlock.WebApi.IntegrationTests/AssetBlock.WebApi.IntegrationTests.csproj",
+            "--no-restore",
+            "--disable-build-servers",
+            "-nodeReuse:false",
+            "--filter",
+            "FullyQualifiedName~Decision_WhenSellerResponseIsOutstanding_ShouldReturnDecisionSpecificConflict"
+          ],
+          "expected_min_tests": 1,
+          "timeout_seconds": 1800,
+          "test_files": [
+            "asblock-backend/AssetBlock.WebApi.IntegrationTests/Controllers/ModerationDecisionIntegrationTests.cs"
+          ]
+        },
+        {
+          "id": "d2-browser-answer-before-submit",
+          "evidence_kind": "browser-stub",
+          "cwd": "asblock-frontend",
+          "executable": "node",
+          "args": [
+            "node_modules/@playwright/test/cli.js",
+            "test",
+            "e2e/moderation-journeys.spec.ts",
+            "--grep",
+            "seller answers the required finding before submitting for human review"
+          ],
+          "expected_min_tests": 1,
+          "timeout_seconds": 1800,
+          "test_files": [
+            "asblock-frontend/e2e/moderation-journeys.spec.ts"
+          ]
+        },
+        {
+          "id": "d2-unresolved-finding-postgres",
+          "evidence_kind": "postgres-store",
+          "cwd": "asblock-backend",
+          "executable": "dotnet",
+          "args": [
+            "test",
+            "AssetBlock.Infrastructure.IntegrationTests/AssetBlock.Infrastructure.IntegrationTests.csproj",
+            "--no-restore",
+            "--disable-build-servers",
+            "-nodeReuse:false",
+            "--filter",
+            "FullyQualifiedName~Decision_WhenMaterialFindingUnresolved_ShouldBlockApprovalWithoutEffects"
+          ],
+          "expected_min_tests": 2,
+          "timeout_seconds": 1800,
+          "test_files": [
+            "asblock-backend/AssetBlock.Infrastructure.IntegrationTests/Persistence/Stores/CodeAnalysisReportFinalizerPostgresTests.Decision.cs"
+          ]
+        }
+      ],
+      "gaps": [
+        "No live analysis run produces a declared third-party match. Match setup is UNAVAILABLE: it needs an enabled analysis host and a populated reference index.",
+        "Answering a material finding does not close it on its own. No lane asserts that an answered finding stays open; the lanes assert only the outstanding-response block and the unresolved-finding block.",
+        "Attribution and distribution terms are recorded as declared values; no lane verifies them.",
+        "Missing rights, notices or package bytes are blockers covered by server validation that no lane in this scenario runs.",
+        "The stand-in component has no upstream project; its source URL and version are labels."
+      ]
+    },
+    {
+      "id": "D3",
+      "title": "Independent implementation match",
+      "what_it_shows": "Moderator context and a bounded disposition with rationale. Similarity is a finding for review, not a theft or legal verdict.",
+      "intended_live_steps": "Two authored implementations (independent-pair-a and independent-pair-b) are reviewed by a Moderator, who records a bounded disposition; absent or invalid dispositions are rejected.",
+      "lanes_actually_do": "A unit test class checks disposition validation (32 tests). A Vitest unit test checks that outstanding seller responses keep the decision blocked. The browser lane drives a disposition and approval against the stub. No lane produces a live match and no lane consumes the independent-pair fixtures.",
+      "live_run_fixtures": [
+        "independent-pair-a",
+        "independent-pair-b"
+      ],
+      "lanes": [
+        {
+          "id": "d3-disposition-validation",
+          "evidence_kind": "unit",
+          "cwd": "asblock-backend",
+          "executable": "dotnet",
+          "args": [
+            "test",
+            "AssetBlock.Application.Tests/AssetBlock.Application.Tests.csproj",
+            "--no-restore",
+            "--disable-build-servers",
+            "-nodeReuse:false",
+            "--filter",
+            "FullyQualifiedName~DecideModerationCaseTests"
+          ],
+          "expected_min_tests": 32,
+          "timeout_seconds": 900,
+          "test_files": [
+            "asblock-backend/AssetBlock.Application.Tests/UseCases/Moderation/DecideModerationCaseTests.cs"
+          ]
+        },
+        {
+          "id": "d3-case-workspace-unit",
+          "evidence_kind": "unit",
+          "cwd": "asblock-frontend",
+          "executable": "node",
+          "args": [
+            "node_modules/vitest/vitest.mjs",
+            "run",
+            "components/moderation/moderation-case-workspace.test.tsx",
+            "-t",
+            "shows outstanding seller responses and keeps decision submission blocked"
+          ],
+          "expected_min_tests": 1,
+          "timeout_seconds": 600,
+          "test_files": [
+            "asblock-frontend/components/moderation/moderation-case-workspace.test.tsx"
+          ]
+        },
+        {
+          "id": "d3-browser-disposition",
+          "evidence_kind": "browser-stub",
+          "cwd": "asblock-frontend",
+          "executable": "node",
+          "args": [
+            "node_modules/@playwright/test/cli.js",
+            "test",
+            "e2e/moderation-journeys.spec.ts",
+            "--grep",
+            "Moderator records a disposition and approves the claimed case"
+          ],
+          "expected_min_tests": 1,
+          "timeout_seconds": 1800,
+          "test_files": [
+            "asblock-frontend/e2e/moderation-journeys.spec.ts"
+          ]
+        }
+      ],
+      "gaps": [
+        "Live similarity match setup is UNAVAILABLE: a baseline match needs an enabled analysis host and a populated reference index, which this demonstration does not run. The row is test-verified or simulated only.",
+        "The two implementations are authored by one author in one session; their independence is structural only.",
+        "No lane evaluates the quality of a Moderator's reasoning. That is human review."
+      ]
+    },
+    {
+      "id": "D4",
+      "title": "Failed safety check",
+      "what_it_shows": "An unsafe archive and a runtime test payload are rejected by the server and block downstream jobs. Nothing is published.",
+      "intended_live_steps": "Upload the unsafe-archive fixture (generated at build time) and a runtime test payload; the server rejects them; submit is denied under a host with analysis unavailable.",
+      "lanes_actually_do": "The HTTP lanes build their own traversal archive in the test (not the unsafe-archive fixture) and a runtime-generated test string, and assert ARCHIVE_PATH_TRAVERSAL and MALWARE_DETECTED with blocked actions and no downstream jobs. The submission test asserts ERR_ANALYSIS_NOT_AVAILABLE on a host with analysis disabled.",
+      "live_run_fixtures": [
+        "unsafe-archive"
+      ],
+      "lanes": [
+        {
+          "id": "d4-upload-safety-http",
+          "evidence_kind": "http-postgres-test-host",
+          "cwd": "asblock-backend",
+          "executable": "dotnet",
+          "args": [
+            "test",
+            "AssetBlock.WebApi.IntegrationTests/AssetBlock.WebApi.IntegrationTests.csproj",
+            "--no-restore",
+            "--disable-build-servers",
+            "-nodeReuse:false",
+            "--filter",
+            "FullyQualifiedName~SafetyUploadHttpIntegrationTests|FullyQualifiedName~Submit_WhenCurrentAnalysisIsUnavailable"
+          ],
+          "expected_min_tests": 2,
+          "timeout_seconds": 1800,
+          "test_files": [
+            "asblock-backend/AssetBlock.WebApi.IntegrationTests/SafetyUploadHttpIntegrationTests.cs",
+            "asblock-backend/AssetBlock.WebApi.IntegrationTests/Controllers/AssetSubmissionIntegrationTests.cs"
+          ]
+        }
+      ],
+      "gaps": [
+        "The submission denial comes from a host with analysis disabled (ERR_ANALYSIS_NOT_AVAILABLE). It is not an isolated safety override.",
+        "No enabled-analysis host, Moderator action or distinct quarantine route is exercised.",
+        "Only one ../ ZIP and one test-string ZIP reach HTTP. No archive bomb, special tar, empty or oversized archive case.",
+        "The malware case uses a standard test string generated at runtime by the test helper; it is not stored in the repository and is not a real malware sample.",
+        "The lanes need Docker for the ClamAV and PostgreSQL containers."
+      ]
+    },
+    {
+      "id": "D5",
+      "title": "Corrected resubmission",
+      "what_it_shows": "After changes are requested and the seller resubmits, the older decision is hidden from the current view and kept in history. The seller's linked evidence resubmission on the same version is recorded.",
+      "intended_live_steps": "Changes are requested; the seller corrects the source declaration or the bytes (corrected-resubmission fixture) and resubmits; a byte-changing correction gets a new version and fresh checks; the older decision stays in history.",
+      "lanes_actually_do": "The browser lane simulates a declaration-only correction on the stub: the seller saves the declaration and resubmits, and the test asserts that no archive upload request is made. The PostgreSQL finalizer lane seeds a later submission on the same asset version after a changes-requested decision and asserts that the older decision is hidden from the current view and kept in history. The PostgreSQL seller-response lane shows an explicit linked evidence resubmission on the same version, followed by an unchanged withdrawal and resubmission. No lane changes bytes.",
+      "live_run_fixtures": [
+        "clean-original",
+        "corrected-resubmission"
+      ],
+      "lanes": [
+        {
+          "id": "d5-browser-resubmit",
+          "evidence_kind": "browser-stub",
+          "cwd": "asblock-frontend",
+          "executable": "node",
+          "args": [
+            "node_modules/@playwright/test/cli.js",
+            "test",
+            "e2e/moderation-journeys.spec.ts",
+            "--grep",
+            "seller resubmits a corrected version after changes are requested"
+          ],
+          "expected_min_tests": 1,
+          "timeout_seconds": 1800,
+          "test_files": [
+            "asblock-frontend/e2e/moderation-journeys.spec.ts"
+          ]
+        },
+        {
+          "id": "d5-finalizer-resubmission",
+          "evidence_kind": "postgres-store",
+          "cwd": "asblock-backend",
+          "executable": "dotnet",
+          "args": [
+            "test",
+            "AssetBlock.Infrastructure.IntegrationTests/AssetBlock.Infrastructure.IntegrationTests.csproj",
+            "--no-restore",
+            "--disable-build-servers",
+            "-nodeReuse:false",
+            "--filter",
+            "FullyQualifiedName~Decision_WhenResubmittedAfterChangesRequested_ShouldHideOldDecisionButKeepItInHistory"
+          ],
+          "expected_min_tests": 4,
+          "timeout_seconds": 1800,
+          "test_files": [
+            "asblock-backend/AssetBlock.Infrastructure.IntegrationTests/Persistence/Stores/CodeAnalysisReportFinalizerPostgresTests.Decision.cs"
+          ]
+        },
+        {
+          "id": "d5-linked-evidence-resubmission-postgres",
+          "evidence_kind": "postgres-store",
+          "cwd": "asblock-backend",
+          "executable": "dotnet",
+          "args": [
+            "test",
+            "AssetBlock.Infrastructure.IntegrationTests/AssetBlock.Infrastructure.IntegrationTests.csproj",
+            "--no-restore",
+            "--disable-build-servers",
+            "-nodeReuse:false",
+            "--filter",
+            "FullyQualifiedName~SellerResponses_WhenMaterialFindingsAreAnswered_ShouldPermitExplicitLinkedEvidenceResubmissionAndUnchangedWithdrawal"
+          ],
+          "expected_min_tests": 3,
+          "timeout_seconds": 1800,
+          "test_files": [
+            "asblock-backend/AssetBlock.Infrastructure.IntegrationTests/Persistence/Stores/CodeAnalysisReportFinalizerPostgresTests.SellerResponses.cs"
+          ]
+        }
+      ],
+      "gaps": [
+        "No lane performs a byte-changing correction, a new-version re-scan, or shows an old report refused for changed content.",
+        "The browser correction is declaration-only and runs against the stub, not the server.",
+        "The version-list equality checked in the browser journey cannot fail and is not claimed as evidence.",
+        "The full immutable explanation, expiry and withdrawal path is not established by these lanes."
+      ]
+    },
+    {
+      "id": "D6",
+      "title": "Pending version 2 beside approved version 1",
+      "what_it_shows": "Approved version 1 stays public while version 2 is pending. Pending bytes are not exposed to buyers or strangers. Approving version 2 keeps buyer access to version 1.",
+      "intended_live_steps": "Approve version 1; a buyer purchases version 1; upload and submit version 2; request changes; approve corrected version 2.",
+      "lanes_actually_do": "Seven HTTP tests seed approved and pending versions directly and assert public, buyer and decision-route behaviour: version 1 stays public, pending version 2 is hidden on catalog, detail and version routes, buyer pending download returns 404, and approving version 2 promotes it. The browser lane drives the stub. The optional live lane is not run by default.",
+      "live_run_fixtures": [
+        "clean-original",
+        "corrected-resubmission"
+      ],
+      "lanes": [
+        {
+          "id": "d6-public-surface-http",
+          "evidence_kind": "http-postgres-test-host",
+          "cwd": "asblock-backend",
+          "executable": "dotnet",
+          "args": [
+            "test",
+            "AssetBlock.WebApi.IntegrationTests/AssetBlock.WebApi.IntegrationTests.csproj",
+            "--no-restore",
+            "--disable-build-servers",
+            "-nodeReuse:false",
+            "--filter",
+            "FullyQualifiedName~PendingVersion_WhenNotApproved_ShouldStayHiddenFromAnonymousAndBuyerSurfaces|FullyQualifiedName~DecisionRoute_WhenApprovingPendingV2_ShouldPromoteItAndPreserveBuyerAccessToV1|FullyQualifiedName~Decision_WhenOlderVersionIsApprovedAfterNewerIsPublic|FullyQualifiedName~ApprovedNewerVersion_WhenBuyerPurchasedEarlierVersion"
+          ],
+          "expected_min_tests": 7,
+          "timeout_seconds": 1800,
+          "test_files": [
+            "asblock-backend/AssetBlock.WebApi.IntegrationTests/Controllers/PublicSurfaceVersionIntegrationTests.cs"
+          ]
+        },
+        {
+          "id": "d6-live-pending-v2-optional",
+          "evidence_kind": "http-postgres-test-host",
+          "optional": true,
+          "cwd": "asblock-backend",
+          "executable": "dotnet",
+          "args": [
+            "test",
+            "AssetBlock.WebApi.IntegrationTests/AssetBlock.WebApi.IntegrationTests.csproj",
+            "--no-restore",
+            "--disable-build-servers",
+            "-nodeReuse:false",
+            "--filter",
+            "FullyQualifiedName~LivePendingVersionAcceptanceTests"
+          ],
+          "expected_min_tests": 1,
+          "timeout_seconds": 1800,
+          "test_files": [
+            "asblock-backend/AssetBlock.WebApi.IntegrationTests/LivePendingVersionAcceptanceTests.cs"
+          ]
+        },
+        {
+          "id": "d6-browser-beside-pending",
+          "evidence_kind": "browser-stub",
+          "cwd": "asblock-frontend",
+          "executable": "node",
+          "args": [
+            "node_modules/@playwright/test/cli.js",
+            "test",
+            "e2e/moderation-journeys.spec.ts",
+            "--grep",
+            "seller sees the approved public version beside a pending newer version"
+          ],
+          "expected_min_tests": 1,
+          "timeout_seconds": 1800,
+          "test_files": [
+            "asblock-frontend/e2e/moderation-journeys.spec.ts"
+          ]
+        }
+      ],
+      "gaps": [
+        "The live pending-version acceptance lane is opt-in: it is skipped by default and needs ASBLOCK_LIVE_ACCEPTANCE=1 with explicit configuration. A skip is not a pass.",
+        "Pending-version rows are seeded, not produced by the upload and submit path.",
+        "The full embeddings, search, tags, bundle, license and price matrix for pending versions is not covered.",
+        "Stale-empty catalog search after approval is bounded eventual consistency (outbox dispatch or a two-minute cache TTL). It is not demonstrated as immediate.",
+        "The browser lane is simulated."
+      ]
+    },
+    {
+      "id": "D7",
+      "title": "Stale-review rejection",
+      "what_it_shows": "A decision written against a stale basis, or against a changed tuple, is refused with a documented conflict and has no effect. The browser keeps the typed rationale.",
+      "intended_live_steps": "A Moderator opens the case and keeps its basis; the seller changes evidence; the Moderator decides on the old basis.",
+      "lanes_actually_do": "HTTP tests assert standard conflicts for a stale basis (a caseRevision that does not match) and for a repeated decision, with no decision record. A PostgreSQL store lane asserts that a changed tuple member (material, evidence, policy or evidence digest) is refused with no decision record and no publication snapshot. A second PostgreSQL store lane asserts the production outcome when a tuple member changes while the case is claimed (declaration, evidence, response or security recheck). The race test asserts one of two consistent end states; which branch runs is not deterministic. The browser lane is simulated.",
+      "live_run_fixtures": [
+        "clean-original"
+      ],
+      "lanes": [
+        {
+          "id": "d7-http-conflicts",
+          "evidence_kind": "http-postgres-test-host",
+          "cwd": "asblock-backend",
+          "executable": "dotnet",
+          "args": [
+            "test",
+            "AssetBlock.WebApi.IntegrationTests/AssetBlock.WebApi.IntegrationTests.csproj",
+            "--no-restore",
+            "--disable-build-servers",
+            "-nodeReuse:false",
+            "--filter",
+            "FullyQualifiedName~Decision_WhenBasisIsStaleOrCaseIsNotActive_ShouldReturnStandardConflicts|FullyQualifiedName~Decision_WhenDecisionAlreadyExists_ShouldConflictWithoutLeakingDecisionText"
+          ],
+          "expected_min_tests": 2,
+          "timeout_seconds": 1800,
+          "test_files": [
+            "asblock-backend/AssetBlock.WebApi.IntegrationTests/Controllers/ModerationDecisionIntegrationTests.cs"
+          ]
+        },
+        {
+          "id": "d7-race-evidence-edit",
+          "evidence_kind": "http-postgres-test-host",
+          "cwd": "asblock-backend",
+          "executable": "dotnet",
+          "args": [
+            "test",
+            "AssetBlock.WebApi.IntegrationTests/AssetBlock.WebApi.IntegrationTests.csproj",
+            "--no-restore",
+            "--disable-build-servers",
+            "-nodeReuse:false",
+            "--filter",
+            "FullyQualifiedName~Race_DecisionAndOwnerEvidenceEdit_ShouldEndInOneOfTwoConsistentStates"
+          ],
+          "expected_min_tests": 1,
+          "timeout_seconds": 1800,
+          "test_files": [
+            "asblock-backend/AssetBlock.WebApi.IntegrationTests/Controllers/ReviewRaceIntegrationTests.cs"
+          ]
+        },
+        {
+          "id": "d7-browser-stale-rationale",
+          "evidence_kind": "browser-stub",
+          "cwd": "asblock-frontend",
+          "executable": "node",
+          "args": [
+            "node_modules/@playwright/test/cli.js",
+            "test",
+            "e2e/moderation-journeys.spec.ts",
+            "--grep",
+            "stale review keeps the typed decision rationale beside refreshed case state"
+          ],
+          "expected_min_tests": 1,
+          "timeout_seconds": 1800,
+          "test_files": [
+            "asblock-frontend/e2e/moderation-journeys.spec.ts"
+          ]
+        },
+        {
+          "id": "d7-tuple-change-postgres",
+          "evidence_kind": "postgres-store",
+          "cwd": "asblock-backend",
+          "executable": "dotnet",
+          "args": [
+            "test",
+            "AssetBlock.Infrastructure.IntegrationTests/AssetBlock.Infrastructure.IntegrationTests.csproj",
+            "--no-restore",
+            "--disable-build-servers",
+            "-nodeReuse:false",
+            "--filter",
+            "FullyQualifiedName~Decision_WhenCurrentTupleChanges_ShouldRejectWithoutEffects"
+          ],
+          "expected_min_tests": 7,
+          "timeout_seconds": 1800,
+          "test_files": [
+            "asblock-backend/AssetBlock.Infrastructure.IntegrationTests/Persistence/Stores/CodeAnalysisReportFinalizerPostgresTests.Decision.cs"
+          ]
+        },
+        {
+          "id": "d7-tuple-workflows-postgres",
+          "evidence_kind": "postgres-store",
+          "cwd": "asblock-backend",
+          "executable": "dotnet",
+          "args": [
+            "test",
+            "AssetBlock.Infrastructure.IntegrationTests/AssetBlock.Infrastructure.IntegrationTests.csproj",
+            "--no-restore",
+            "--disable-build-servers",
+            "-nodeReuse:false",
+            "--filter",
+            "FullyQualifiedName~TupleWorkflow_WhenMemberChangesWhileCaseIsClaimed_ShouldApplyTheProductionOutcome"
+          ],
+          "expected_min_tests": 4,
+          "timeout_seconds": 1800,
+          "test_files": [
+            "asblock-backend/AssetBlock.Infrastructure.IntegrationTests/Persistence/Stores/CodeAnalysisReportFinalizerPostgresTests.TupleWorkflows.cs"
+          ]
+        }
+      ],
+      "gaps": [
+        "The HTTP stale test asserts that no decision is recorded; the no-publication assertion is in the PostgreSQL tuple lane.",
+        "The race test branch is not deterministic. The lane asserts only that the end state is one of two consistent states.",
+        "A superseded case may return NOT_ACTIVE rather than a literal STALE code; the tests assert their exact code.",
+        "The zero-effect checks cover asserted tables only, not every outbox or notification consumer.",
+        "The browser lane is simulated."
+      ]
+    },
+    {
+      "id": "D8",
+      "title": "Self-approval prevention",
+      "what_it_shows": "An owner who also holds the Moderator role cannot claim, decide or read the case or its evidence and queue for their own asset. The denial happens on the server.",
+      "intended_live_steps": "The owner, who also holds the Moderator role, tries claim, case read, evidence read, queue read and decision on their own asset; a separate Moderator is unaffected.",
+      "lanes_actually_do": "HTTP matrix tests call the claim, decision, case, case-evidence and queue routes for each caller class (owner, owner with the Moderator role, stranger, Admin without the Moderator role, revoked Moderator, other Moderator). Owner-Moderator and Admin denials assert Forbidden. Each denial step compares the audit-row delta with its expected value; the selected steps expect no new audit row except two owner-Moderator steps, which expect one. A decision test asserts no effect when the decider owns the case or the case is unclaimed. The browser lane drives the owner-Moderator attempt on the stub.",
+      "live_run_fixtures": [
+        "clean-original"
+      ],
+      "lanes": [
+        {
+          "id": "d8-http-role-ownership",
+          "evidence_kind": "http-postgres-test-host",
+          "cwd": "asblock-backend",
+          "executable": "dotnet",
+          "args": [
+            "test",
+            "AssetBlock.WebApi.IntegrationTests/AssetBlock.WebApi.IntegrationTests.csproj",
+            "--no-restore",
+            "--disable-build-servers",
+            "-nodeReuse:false",
+            "--filter",
+            "FullyQualifiedName~ClaimEndpoint_WhenCallerClassVaries|FullyQualifiedName~DecisionEndpoint_WhenCallerClassVaries|FullyQualifiedName~CaseEndpoint_WhenCallerClassVaries|FullyQualifiedName~Decision_WhenCaseIsUnclaimedOrOwnedByDeciderModerator_ShouldDenyWithoutEffects|FullyQualifiedName~CaseEvidenceEndpoint_WhenCallerClassVaries|FullyQualifiedName~QueueEndpoint_WhenCallerClassVaries"
+          ],
+          "expected_min_tests": 6,
+          "timeout_seconds": 1800,
+          "test_files": [
+            "asblock-backend/AssetBlock.WebApi.IntegrationTests/Controllers/ReviewAccessMatrixIntegrationTests.cs",
+            "asblock-backend/AssetBlock.WebApi.IntegrationTests/Controllers/ModerationDecisionIntegrationTests.cs"
+          ]
+        },
+        {
+          "id": "d8-browser-same-account",
+          "evidence_kind": "browser-stub",
+          "cwd": "asblock-frontend",
+          "executable": "node",
+          "args": [
+            "node_modules/@playwright/test/cli.js",
+            "test",
+            "e2e/moderation-journeys.spec.ts",
+            "--grep",
+            "moderator cannot open a case owned by the same account"
+          ],
+          "expected_min_tests": 1,
+          "timeout_seconds": 1800,
+          "test_files": [
+            "asblock-frontend/e2e/moderation-journeys.spec.ts"
+          ]
+        }
+      ],
+      "gaps": [
+        "Admin without the Moderator role gets Forbidden in the selected matrix tests. No Admin-only case list is tested outside those matrices.",
+        "Audit-row expectations are asserted per denial step, as described above; they are not a general audit-completeness check.",
+        "The browser lane is simulated; the hidden-button state is not server evidence."
+      ]
+    },
+    {
+      "id": "D9",
+      "title": "Private-evidence protection",
+      "what_it_shows": "Restricted own-excerpt evidence is returned only to an eligible Moderator, after a mandatory audit, with private and no-store responses. Other callers receive no content.",
+      "intended_live_steps": "Synthetic canaries in the restricted own excerpt; other actors try access; the Moderator reads with audit; a failed audit is checked.",
+      "lanes_actually_do": "HTTP tests read the restricted own-excerpt evidence through the Moderator route and assert the audit is written before the body, a failed audit releases no text, responses are private and no-store, and five denial cases. A canary test checks a synthetic sentinel across cross-seller responses, which is one 404 on the cross-seller check.",
+      "live_run_fixtures": [
+        "clean-original"
+      ],
+      "lanes": [
+        {
+          "id": "d9-canary-cross-seller",
+          "evidence_kind": "http-postgres-test-host",
+          "cwd": "asblock-backend",
+          "executable": "dotnet",
+          "args": [
+            "test",
+            "AssetBlock.WebApi.IntegrationTests/AssetBlock.WebApi.IntegrationTests.csproj",
+            "--no-restore",
+            "--disable-build-servers",
+            "-nodeReuse:false",
+            "--filter",
+            "FullyQualifiedName~PrivacyReviewCanaryIntegrationTests"
+          ],
+          "expected_min_tests": 1,
+          "timeout_seconds": 1800,
+          "test_files": [
+            "asblock-backend/AssetBlock.WebApi.IntegrationTests/Controllers/PrivacyReviewCanaryIntegrationTests.cs"
+          ]
+        },
+        {
+          "id": "d9-restricted-evidence-http",
+          "evidence_kind": "http-postgres-test-host",
+          "cwd": "asblock-backend",
+          "executable": "dotnet",
+          "args": [
+            "test",
+            "AssetBlock.WebApi.IntegrationTests/AssetBlock.WebApi.IntegrationTests.csproj",
+            "--no-restore",
+            "--disable-build-servers",
+            "-nodeReuse:false",
+            "--filter",
+            "FullyQualifiedName~RestrictedReviewEvidenceIntegrationTests"
+          ],
+          "expected_min_tests": 10,
+          "timeout_seconds": 1800,
+          "test_files": [
+            "asblock-backend/AssetBlock.WebApi.IntegrationTests/Controllers/RestrictedReviewEvidenceIntegrationTests.cs"
+          ]
+        }
+      ],
+      "gaps": [
+        "No foreign-comparison evidence kind or buyer read is exercised by these lanes.",
+        "Browser screenshots cannot prove sinks. No browser lane is listed for this scenario.",
+        "Buyer body, BFF, cache, dispatched notification payloads and structured logs are not reached by these lanes.",
+        "No whole-flow privacy claim is made."
+      ]
+    }
+  ]
+}
