@@ -5,8 +5,9 @@ using AssetBlock.Domain.Core.Constants;
 namespace AssetBlock.Application.Tests;
 
 /// <summary>
-/// Backend error messages are user-facing copy. They must not state a verdict about originality or ownership.
-/// Frontend copy is audited separately; this applies the same denylist to every backend message.
+/// Backend error messages (every declared ErrorCodes message) are user-facing copy and must not state a verdict about
+/// originality or ownership. This test checks those messages for the terms listed below. It is not the frontend
+/// denylist: it does not check notification text, and its patterns are narrower than the frontend audit's.
 /// </summary>
 public sealed class ErrorMessageVerdictDenylistTests
 {

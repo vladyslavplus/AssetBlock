@@ -527,7 +527,8 @@ def evaluate_claim_gates(summary, *, gates, minimum_counts, baselines=None, pair
                          required_baselines=()):
     """Per language and overall VALIDATED / UNVALIDATED / FAILED; a failure is never softened.
 
-    An overall claim needs every supported language group and the TSX dialect adequately sampled.
+    An overall claim needs every supported language group, both TypeScript dialects (tsx and ts) and every
+    frozen stratum adequately sampled.
     """
     per_group = {language: _group_result(core, gates, minimum_counts["perLanguage"])
                  for language, core in summary["perLanguage"].items()}

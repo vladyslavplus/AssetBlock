@@ -58,13 +58,13 @@ class PrepareTests(unittest.TestCase):
         self.assertIn("java", prepared["counts"]["perLanguage"])
         self.assertEqual(below["missingLanguages"], ["csharp", "javascript", "typescript"])
 
-    def test_family_in_two_partition_roles_is_refused(self):
+    def test_a_family_split_into_a_non_evaluation_partition_is_refused(self):
         def change(document):
             document["files"][0]["partition"] = "train"
             document["files"][1]["family"] = document["files"][0]["family"]
         with self.assertRaises(ValueError) as context:
             self.ws.prepare(corpus=self.mutated(change))
-        self.assertIn("partition", str(context.exception))
+        self.assertIn("evaluation partition", str(context.exception))
 
     def test_gallery_file_outside_the_evaluation_partition_is_refused(self):
         def change(document):

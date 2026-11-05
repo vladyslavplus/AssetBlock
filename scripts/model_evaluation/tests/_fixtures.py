@@ -100,7 +100,7 @@ def manifest_inputs():
         "candidateBudget": {"tokenTop": 20, "semanticTop": 20, "maxCandidates": 40, "verifierWindowPairs": 3},
         "pooling": {"rule": "UNION_TOKEN_E0_E3_PLUS_RANDOM_SAMPLE", "depthK": 20,
                     "randomRecallSampleSize": 25, "randomSeed": 7, "unjudgedLabel": "UNKNOWN"},
-        "bootstrap": {"procedure": "FAMILY_CLUSTERED_PERCENTILE_WITHIN_LANGUAGE", "resamples": 2000, "seed": 20261103,
+        "bootstrap": {"procedure": manifest.BOOTSTRAP_PROCEDURE, "resamples": 2000, "seed": 20261103,
                       "unit": "family", "confidence": 0.95},
         "minimumCounts": {"perLanguage": {"positiveQueries": 10, "families": 10, "noMatchQueries": 5},
                           "tsxDialect": {"positiveQueries": 10, "families": 10, "noMatchQueries": 5},

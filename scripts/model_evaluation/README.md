@@ -41,7 +41,7 @@ Run ids match `[A-Za-z0-9][A-Za-z0-9_-]{0,79}`.
 Each judgment is `{label, provenance}` with a label of `RELEVANT`, `NOT_RELEVANT` or `UNKNOWN` and the
 pooling sources (`TOKEN`, `E0`, `E3`, `RANDOM_SAMPLE`, `EXHAUSTIVE`) that proposed the file. Gallery files
 without a judgment become `UNKNOWN` (no provenance), never negatives; an explicit `UNKNOWN` with provenance is a
-judged-unknown. A family in more than one partition role, a query outside the closed role allowlist (`evaluation`),
+judged-unknown. A query outside the closed role allowlist (`evaluation`),
 a file whose declared `source` is on the frozen `excludedSources` list (or is undeclared) or a judgment outside the
 query language gallery is refused. Every gallery file must be in the `evaluation` partition, and a `RELEVANT` judgment must name a gallery file whose family equals the query's family; `prepare` refuses both. Counts per
 language, stratum and TSX are compared with the frozen minimum counts and recorded as `belowMinimum`.
@@ -92,6 +92,12 @@ stay separate: the run completed, the numeric claim-gate outcome per pipeline, a
 environment identity records the interpreter and a digest of the installed package list.
 
 Read closure. `validate-evidence` reads the five chain documents from its four named run directories, and lists the file names in each of those directories. It reads the scoring registry (every ordinary key directory and its `attempt-*.json` files), the result of each registered attempt for the same models, and it lists the run root to find unregistered results (a stat of each ordinary entry's result file). Entries whose names carry a restricted marker are skipped by name before any stat or open, and the number skipped is printed as `skippedRestrictedNamedRunEntries`. Code identity reads the git state and the loaded source modules under `scripts/` and `services/code-analysis/app`. `evidence.validate`, `score` claim-gate computation and `candidates.check_identities` do no file I/O.
+
+Restricted-named entries of the run root and the registry are skipped by name, before any stat or open. The count of
+skipped run-root entries is written to the evidence package as `skippedRestrictedNamedRunEntries`, with a limitation
+note when it is above zero; no names are recorded. A registered scoring attempt whose run id carries a restricted
+marker is refused on listing. `score` refuses such run ids when they are given to it, so such an attempt can only come
+from outside the pipeline.
 
 ## Resource measurement
 

@@ -47,7 +47,7 @@ AGGREGATION = {"caseWithinSeed": "mean", "seedWithinLanguage": "mean", "language
 RERUN_RULE = {"allowedReasons": list(guards.RERUN_REASONS), "maxFreeScoringRuns": 1,
               "firstRunRetained": True, "rerunOnUnfavorableResult": False}
 REPLACEMENT_BASELINES = ["PRODUCT", "TOKEN_RANK_CUT"]
-BOOTSTRAP_PROCEDURE = "FAMILY_CLUSTERED_PERCENTILE_WITHIN_LANGUAGE"
+BOOTSTRAP_PROCEDURE = "FAMILY_CLUSTERED_PERCENTILE_WITHIN_LANGUAGE_AND_KIND"
 CONSTANT_SECTIONS = {"claimGates": CLAIM_GATES, "replacementBaselines": REPLACEMENT_BASELINES,
                      "metrics": {"names": list(METRIC_NAMES), "judgments": ["RELEVANT", "NOT_RELEVANT", "UNKNOWN"]},
                      "aggregation": AGGREGATION, "rerunRule": RERUN_RULE}

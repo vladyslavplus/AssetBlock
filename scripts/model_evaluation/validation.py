@@ -84,7 +84,7 @@ def package_statuses(result_document, recomputed_gates):
             "reviewerAcceptance": REVIEWER_ACCEPTANCE}
 
 
-def limitations(manifest, prepared, result, registry_attempts):
+def limitations(manifest, prepared, result, registry_attempts, skipped_restricted=0):
     notes = []
     gate_outcomes = result["statuses"]["claimGateOutcome"]
     product = gate_outcomes.get("PRODUCT", {})
@@ -103,6 +103,9 @@ def limitations(manifest, prepared, result, registry_attempts):
     if registry_attempts > 1:
         notes.append("%d scoring attempts are registered for these models; earlier attempts are retained."
                      % registry_attempts)
+    if skipped_restricted:
+        notes.append("%d run-root entries with restricted-marked names were skipped by name and not inspected; "
+                     "the count is recorded and the names are not." % skipped_restricted)
     notes.append("Reviewer acceptance is %s." % REVIEWER_ACCEPTANCE)
     return notes
 
@@ -124,14 +127,19 @@ def _attempt_records(registry_root, models, registration, prepared):
 
 
 def attempt_listing(registry_root, run_root, models, registration, attempt_results, prepared):
-    """Every registered attempt with its result hash and label hash. Only a sole attempt may stand alone."""
+    """Every registered attempt with its result hash and label hash. Only a sole attempt may stand alone.
+
+    A registered attempt whose run id carries a restricted marker is refused: score refuses such run ids when
+    they are given to it, so one in the registry did not come from the pipeline.
+    """
     attempts = _attempt_records(registry_root, models, registration, prepared)
     listing = []
     for attempt in attempts:
-        restricted = guards.has_sealed_marker(attempt["runId"])
-        found = None if restricted else Path(run_root) / attempt["runId"] / score_module.RESULT_NAME
+        if guards.has_sealed_marker(attempt["runId"]):
+            raise ValueError("a registered scoring attempt carries a restricted-marked run id; refused")
+        found = Path(run_root) / attempt["runId"] / score_module.RESULT_NAME
         recorded = (attempt_results or {}).get(attempt["runId"])
-        actual = digest(found.read_bytes()) if found is not None and found.is_file() else None
+        actual = digest(found.read_bytes()) if found.is_file() else None
         listing.append({"runId": attempt["runId"], "sequence": attempt["sequence"],
                         "manifestSha256": attempt["manifestSha256"], "reason": attempt["reason"],
                         "rerunOf": attempt["rerunOf"], "labelSha256": attempt["labelSha256"],
@@ -259,7 +267,8 @@ def run(*, run_id, freeze_run_id, prepare_run_id, candidates_run_id, score_run_i
                         "--manifest-sha256 <hash> --candidates-sha256 <hash>",
              "outputSha256": shas["result"]}],
         "withheldTextReferences": references, "scoringAttempts": attempts,
-        "limitations": limitations(bound, prepared, result, len(attempts))}
+        "limitations": limitations(bound, prepared, result, len(attempts), skipped_restricted),
+        "skippedRestrictedNamedRunEntries": skipped_restricted}
     evidence.validate(package)
     raw = canonical(package)
     guards.write_output(Path(target) / PACKAGE_NAME, raw, run_root)

@@ -18,7 +18,6 @@ CORPUS_SCHEMA = "model-evaluation-corpus-v1"
 PREPARED_SCHEMA = "model-evaluation-prepared-corpus-v1"
 PREPARED_NAME = "prepared-corpus.json"
 MAX_CORPUS_BYTES = 64 * 1024 * 1024
-PARTITIONS = ("train", "validation", "evaluation")
 KINDS = ("gallery", "query")
 POOL_SOURCES = ("TOKEN", "E0", "E3", "RANDOM_SAMPLE", "EXHAUSTIVE")
 FILE_KEYS = {"fileId", "sha256", "language", "family", "partition", "kind", "source"}
@@ -41,7 +40,7 @@ def source_excluded(source, excluded_sources):
 def _validate_files(files, excluded_sources):
     if not isinstance(files, list) or not files:
         raise ValueError("corpus needs files")
-    by_id, family_roles = {}, {}
+    by_id = {}
     for row in files:
         if not isinstance(row, dict) or not FILE_KEYS <= set(row) <= FILE_KEYS | OPTIONAL_FILE_KEYS:
             raise ValueError("corpus file keys differ from the contract")
@@ -52,16 +51,12 @@ def _validate_files(files, excluded_sources):
         sha(row["sha256"])
         if row["fileId"] in by_id:
             raise ValueError("corpus file identity is duplicated")
-        if row["language"] not in LANGUAGES or row["partition"] not in PARTITIONS or row["kind"] not in KINDS:
-            raise ValueError("corpus file language, partition or kind is unsupported")
+        if row["language"] not in LANGUAGES or row["kind"] not in KINDS:
+            raise ValueError("corpus file language or kind is unsupported")
         if row["partition"] != guards.CORPUS_ROLE:
             raise ValueError("corpus file partition is not the evaluation partition: " + row["partition"])
         _text(row["family"], "family")
-        family_roles.setdefault(row["family"], set()).add(row["partition"])
         by_id[row["fileId"]] = row
-    for family, roles in family_roles.items():
-        if len(roles) > 1:
-            raise ValueError("family appears in more than one partition role: " + family)
     return by_id
 
 

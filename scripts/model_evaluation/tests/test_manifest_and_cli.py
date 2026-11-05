@@ -12,7 +12,7 @@ from scripts.model_evaluation import candidates, cli, components, guards, manife
 from scripts.model_evaluation.tests._fixtures import HEX, STATE, manifest_inputs, write_packages
 
 # Hash of the canonical manifest built from the fixture inputs; any change to the contract moves it.
-FIXTURE_MANIFEST_SHA256 = "9cc609ad5832ec943315e8b67a2be289446232938871af557fa89035b32b26f3"
+FIXTURE_MANIFEST_SHA256 = "10e3463c5f7150172c41a85e05e2f95f862553fcbb0f17ee4f4052076e3c9ddb"
 
 
 class ManifestTests(unittest.TestCase):
