@@ -66,6 +66,22 @@ class PrepareTests(unittest.TestCase):
             self.ws.prepare(corpus=self.mutated(change))
         self.assertIn("partition", str(context.exception))
 
+    def test_gallery_file_outside_the_evaluation_partition_is_refused(self):
+        def change(document):
+            gallery = next(row for row in document["files"] if row["fileId"] == fid("g2"))
+            gallery["partition"] = "validation"
+        with self.assertRaises(ValueError) as context:
+            self.ws.prepare(corpus=self.mutated(change))
+        self.assertIn("partition", str(context.exception))
+
+    def test_relevant_gallery_file_must_share_the_query_family(self):
+        def change(document):
+            gallery = next(row for row in document["files"] if row["fileId"] == fid("g1"))
+            gallery["family"] = "other-family"
+        with self.assertRaises(ValueError) as context:
+            self.ws.prepare(corpus=self.mutated(change))
+        self.assertIn("family", str(context.exception))
+
     def test_invalid_corpora_are_refused(self):
         cases = {
             "query from a training partition": lambda d: d["files"].__setitem__(

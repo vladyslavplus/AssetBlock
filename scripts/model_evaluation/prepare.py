@@ -54,6 +54,8 @@ def _validate_files(files, excluded_sources):
             raise ValueError("corpus file identity is duplicated")
         if row["language"] not in LANGUAGES or row["partition"] not in PARTITIONS or row["kind"] not in KINDS:
             raise ValueError("corpus file language, partition or kind is unsupported")
+        if row["partition"] != guards.CORPUS_ROLE:
+            raise ValueError("corpus file partition is not the evaluation partition: " + row["partition"])
         _text(row["family"], "family")
         family_roles.setdefault(row["family"], set()).add(row["partition"])
         by_id[row["fileId"]] = row
@@ -103,6 +105,8 @@ def _validate_queries(queries, files):
                 raise ValueError("judgment entry is invalid")
             if entry["label"] != metrics.UNKNOWN and not entry["provenance"]:
                 raise ValueError("a judged file needs pooling provenance")
+            if entry["label"] == metrics.RELEVANT and files[file_id]["family"] != query["family"]:
+                raise ValueError("relevant gallery file family differs from the query family")
             full[file_id] = {"label": entry["label"], "provenance": sorted(entry["provenance"])}
         record = {key: query[key] for key in ("queryId", "queryFileId", "language", "family", "seedGroup",
                                               "stratum")}

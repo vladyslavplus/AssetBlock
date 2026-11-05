@@ -25,7 +25,7 @@ class RegistryKeyTests(unittest.TestCase):
 
     def setUp(self):
         self.ws = Workspace(self)
-        self.prepared, self.cands = self.ws.full_run()
+        self.prepared, self.cands = self.ws.full_run(corpus=corpus_document(extras=True))
         self.ws.score(self.prepared, self.cands)
 
     def second_chain(self, corpus):
@@ -48,13 +48,15 @@ class RegistryKeyTests(unittest.TestCase):
         self.assertEqual(done["outcome"], "SUCCEEDED")
 
     def test_an_added_query_does_not_buy_a_fresh_first_run(self):
-        corpus = corpus_document()
+        corpus = corpus_document(extras=True)
         corpus["files"].append({"fileId": fid("file-qx"), "sha256": digest(G1.encode()), "language": "python",
                                 "family": "fx", "partition": "evaluation", "kind": "query",
                                 "source": "synthetic-source-2"})
         template = next(q for q in corpus["queries"] if q["queryId"] == "qa")
+        judgments = {key: {**value, "label": "NOT_RELEVANT"} if value["label"] == "RELEVANT" else value
+                     for key, value in copy.deepcopy(template["judgments"]).items()}
         corpus["queries"].append({**copy.deepcopy(template), "queryId": "qx", "queryFileId": fid("file-qx"),
-                                  "family": "fx", "seedGroup": "seed-fx"})
+                                  "family": "fx", "seedGroup": "seed-fx", "judgments": judgments})
         prepared, cands = self.second_chain(corpus)
         with self.assertRaises(guards.ScoringRunRefused):
             self.score_two(prepared, cands)

@@ -98,10 +98,6 @@ def limitations(manifest, prepared, result, registry_attempts):
     short = sorted(language for language, flags in below["languages"].items() if any(flags.values()))
     notes.append("Languages below the frozen minimum counts: %s; languages without queries: %s." % (
         ", ".join(short) or "none", ", ".join(below["missingLanguages"]) or "none"))
-    validation_files = sum(1 for row in prepared["files"] if row["partition"] != "evaluation")
-    if validation_files:
-        notes.append("%d gallery files come from non-evaluation partitions; numbers that touch them are "
-                     "selection-contaminated." % validation_files)
     notes.append("Independence of the evaluation set rests on the recorded family partitions and the frozen "
                  "excluded-source list; no owner decision is bound.")
     if registry_attempts > 1:
@@ -117,7 +113,7 @@ def _attempt_records(registry_root, models, registration, prepared):
     triples = guards.model_triples(models)
     directory = Path(registry_root) / key
     expected = canonical(registration)
-    if not any(entry.read_bytes() == expected for entry in directory.glob("attempt-*.json")):
+    if not any(path.read_bytes() == expected for path in guards.attempt_files(directory)):
         raise ValueError("result registration differs from the scoring registry record")
     if (registration["corpusIdentitySha256"], registration["labelSha256"], registration["modelKeySha256"],
             registration["packageTripleSha256"], registration["stateTripleSha256"]) != (
@@ -132,9 +128,10 @@ def attempt_listing(registry_root, run_root, models, registration, attempt_resul
     attempts = _attempt_records(registry_root, models, registration, prepared)
     listing = []
     for attempt in attempts:
-        found = (Path(run_root) / attempt["runId"] / score_module.RESULT_NAME)
+        restricted = guards.has_sealed_marker(attempt["runId"])
+        found = None if restricted else Path(run_root) / attempt["runId"] / score_module.RESULT_NAME
         recorded = (attempt_results or {}).get(attempt["runId"])
-        actual = digest(found.read_bytes()) if found.is_file() else None
+        actual = digest(found.read_bytes()) if found is not None and found.is_file() else None
         listing.append({"runId": attempt["runId"], "sequence": attempt["sequence"],
                         "manifestSha256": attempt["manifestSha256"], "reason": attempt["reason"],
                         "rerunOf": attempt["rerunOf"], "labelSha256": attempt["labelSha256"],
@@ -147,6 +144,17 @@ def attempt_listing(registry_root, run_root, models, registration, attempt_resul
             if (attempt_results[row["runId"]] != row["resultSha256"]) or row["resultSha256"] is None:
                 raise ValueError("attempt result hash differs for " + row["runId"])
     return listing
+
+
+def unregistered_results(run_root, registered):
+    """Run directories holding a result that the registry does not list, and the restricted-named entries skipped.
+
+    A restricted-named entry is skipped by name: it is never stat-ed or opened.
+    """
+    names, skipped = guards.ordinary_names(run_root)
+    found = sorted(name for name in names if (Path(run_root) / name / score_module.RESULT_NAME).is_file()
+                   and name not in registered)
+    return found, skipped
 
 
 def run(*, run_id, freeze_run_id, prepare_run_id, candidates_run_id, score_run_id, run_root=guards.RUN_ROOT,
@@ -206,8 +214,7 @@ def run(*, run_id, freeze_run_id, prepare_run_id, candidates_run_id, score_run_i
     attempts = attempt_listing(registry_root, run_root, bound["models"], result["registration"],
                                attempt_results, prepared)
     registered = guards.registered_run_ids(registry_root)
-    unregistered = sorted(entry.name for entry in Path(run_root).iterdir()
-                          if (entry / score_module.RESULT_NAME).is_file() and entry.name not in registered)
+    unregistered, skipped_restricted = unregistered_results(run_root, registered)
     if unregistered:
         raise ValueError("score results exist that are not in the scoring registry: " + ", ".join(unregistered))
     identity = capture()
@@ -257,4 +264,4 @@ def run(*, run_id, freeze_run_id, prepare_run_id, candidates_run_id, score_run_i
     raw = canonical(package)
     guards.write_output(Path(target) / PACKAGE_NAME, raw, run_root)
     return {"outcome": "SUCCEEDED", "runId": run_id, "directory": target, "packageSha256": digest(raw),
-            "statuses": package["statuses"]}
+            "statuses": package["statuses"], "skippedRestrictedNamedRunEntries": skipped_restricted}

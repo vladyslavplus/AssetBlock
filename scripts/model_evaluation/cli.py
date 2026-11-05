@@ -118,7 +118,8 @@ def _validate(args):
                             attempt_results=_pairs(args.attempt_result) or None)
     return {"command": args.command, "outcome": result["outcome"], "runId": args.run_id,
             "directory": str(result["directory"]), "packageSha256": result["packageSha256"],
-            "statuses": result["statuses"]}
+            "statuses": result["statuses"],
+            "skippedRestrictedNamedRunEntries": result["skippedRestrictedNamedRunEntries"]}
 
 
 def _parity(args):

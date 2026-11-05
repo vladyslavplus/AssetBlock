@@ -340,7 +340,7 @@ class CliCompletionTests(unittest.TestCase):
     def test_validate_evidence_and_parity_are_wired(self):
         done = {"outcome": "SUCCEEDED", "directory": Path("d"), "packageSha256": "a" * 64,
                 "statuses": {"runCompleted": True}, "reportSha256": "b" * 64, "exactMatchRate": 1.0,
-                "disagreements": 0}
+                "disagreements": 0, "skippedRestrictedNamedRunEntries": 0}
         with patch.object(validation, "run", return_value=done) as stage:
             code, out, _ = self.run_cli(["validate-evidence", "--run-id", "e1", "--freeze-run-id", "f1",
                                          "--prepare-run-id", "p1", "--candidates-run-id", "c1",

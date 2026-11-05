@@ -2,8 +2,7 @@
 
 Pre-registered, write-once evaluation of the retrieval pipelines and the pair verifier.
 The package freezes every choice that could change a result in a hashed manifest before
-anything is scored, computes end-to-end metrics over full galleries, and refuses
-withheld material by construction.
+anything is scored, computes end-to-end metrics over full galleries, and refuses inputs named or declared as withheld. It cannot recognise renamed content, and no content comparison exists.
 
 Status: the harness has passed its synthetic test suite, but no held-out source corpus has been admitted and no model-quality result is available. Command availability and synthetic tests do not establish an executed evaluation.
 
@@ -44,7 +43,7 @@ pooling sources (`TOKEN`, `E0`, `E3`, `RANDOM_SAMPLE`, `EXHAUSTIVE`) that propos
 without a judgment become `UNKNOWN` (no provenance), never negatives; an explicit `UNKNOWN` with provenance is a
 judged-unknown. A family in more than one partition role, a query outside the closed role allowlist (`evaluation`),
 a file whose declared `source` is on the frozen `excludedSources` list (or is undeclared) or a judgment outside the
-query language gallery is refused. Counts per
+query language gallery is refused. Every gallery file must be in the `evaluation` partition, and a `RELEVANT` judgment must name a gallery file whose family equals the query's family; `prepare` refuses both. Counts per
 language, stratum and TSX are compared with the frozen minimum counts and recorded as `belowMinimum`.
 
 ### Pipelines
@@ -92,6 +91,8 @@ stay separate: the run completed, the numeric claim-gate outcome per pipeline, a
 `NOT_RECORDED`. Code identity records the git commit, the dirty flag and the hashes of the executed source closure; the
 environment identity records the interpreter and a digest of the installed package list.
 
+Read closure. `validate-evidence` reads the five chain documents from its four named run directories, and lists the file names in each of those directories. It reads the scoring registry (every ordinary key directory and its `attempt-*.json` files), the result of each registered attempt for the same models, and it lists the run root to find unregistered results (a stat of each ordinary entry's result file). Entries whose names carry a restricted marker are skipped by name before any stat or open, and the number skipped is printed as `skippedRestrictedNamedRunEntries`. Code identity reads the git state and the loaded source modules under `scripts/` and `services/code-analysis/app`. `evidence.validate`, `score` claim-gate computation and `candidates.check_identities` do no file I/O.
+
 ## Resource measurement
 
 The candidate artifact records per-stage wall time (p50, p95, max, total) with warmup samples excluded: preprocessing,
@@ -125,7 +126,11 @@ Judgments are `RELEVANT`, `NOT_RELEVANT` or `UNKNOWN` over the full gallery.
 - `UNKNOWN` is excluded from every quality denominator and counted, never treated as negative.
 - A query with no relevant file but reviewed negatives is a no-match query; the spurious-alert
   rate is the share of fully reviewed no-match queries with at least one emitted finding.
-- A pipeline may emit nothing; abstention coverage is reported next to precision.
+- A pipeline may emit nothing. A positive query with no judged finding (abstained, or emitting only UNKNOWN files)
+  has per-query precision 0 and F1 0 in the macro values, while micro precision omits that query's emissions.
+  This matches the pair-verification convention.
+- `abstentionCoverage` counts emissions on no-match queries as answered, so false alarms raise it.
+  `coverageOnPositiveQueries` is the clean value.
 - Per-query values are averaged within a seed, seeds equally within a language and languages
   equally (language-equal macro); micro values are reported beside them.
 - Strata and the TypeScript dialects (`ts`, `tsx`) each report their own denominators.
@@ -153,12 +158,12 @@ verify the manifest against a hash supplied on the command line, not against the
 ## Claim gates
 
 Gates are named constants in `manifest.py`. An overall claim (detector, replacement, product) needs every supported language
-group (javascript, typescript, python, java, csharp) and the TSX dialect adequately sampled; otherwise it is
-`UNVALIDATED` and names the missing groups, and a failed group stays `FAILED`. The overall values, their bootstrap intervals
+group (javascript, typescript, python, java, csharp) and the `ts` and `tsx` dialects and every frozen stratum adequately sampled; otherwise it is
+`UNVALIDATED` and names the missing groups or strata (`minimumCounts:<group>`, `minimumCounts:stratum:<label>`), and a failed group stays `FAILED`. A `ts` dialect group uses the language minimum counts; a `tsx` group uses the TSX minimum counts. The overall values, their bootstrap intervals
 and the point estimates use the same population. Replacement is judged against the stronger of the two pre-registered
 baselines on the same queries: the margin and floor gates, the per-language loss gate, every detector gate (false findings
 per positive query, spurious-alert rate) and a paired family-bootstrap lower bound of the F1 difference above zero; a
-non-positive lower bound is `UNVALIDATED` (inconclusive). The bootstrap resamples whole families inside each language; a
+non-positive lower bound is `UNVALIDATED` (inconclusive). The bootstrap draws whole families with replacement inside each (language, positive or no-match) group. A family is positive when any of its queries is positive, so every draw keeps each language's positive-family count. A draw that loses a language's positive queries is an undefined resample, never averaged over fewer languages. A
 seed group belongs to exactly one family.
 
 ## Pooling
@@ -174,8 +179,7 @@ unconditionally; there is no flag or other form that admits it, and no scoring o
 Identifiers are normalised before the marker check (Unicode compatibility folding, removal of zero-width and
 combining characters, common Cyrillic and Greek lookalikes, case, separators, and the digit substitutions
 1, 0 and 3), and the markers `seal`, `finaltest`, `heldout`, `holdout` and `withheld` are matched inside the
-result; `test` and `testing` are refused as roles. The corpus role allowlist is `evaluation` only. Structural
-protection does not depend on spelling: the frozen `excludedSources` list names source repositories supplied by the
+result; `test` and `testing` are refused as roles. The corpus role allowlist is `evaluation` only. The guard works on names and declarations only: it refuses inputs named or declared as withheld and cannot recognise renamed content. The frozen `excludedSources` list names source repositories supplied by the
 coordinator, and `prepare` refuses any file whose declared source is on it or is undeclared. A components description
 is scanned for markers before it is used. Documents in an evidence chain are scanned the same way, so ordinary prose
 that happens to spell a marker across a word boundary is refused too (fail closed).

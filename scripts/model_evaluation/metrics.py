@@ -282,13 +282,30 @@ def percentile(sorted_values, quantile):
     return sorted_values[low] + (sorted_values[high] - sorted_values[low]) * (position - low)
 
 
+class UndefinedResample(ValueError):
+    """A resample that lost the positive queries of a language: counted as undefined, never averaged."""
+
+
+def _positive_languages(rows):
+    return {row["language"] for row in rows if query_outcome(row)["kind"] == POSITIVE}
+
+
 def _family_groups(queries):
-    """Families grouped within their language: ``{language: [family queries, ...]}``."""
-    groups = defaultdict(lambda: defaultdict(list))
+    """Families grouped by language and kind: ``{(language, POSITIVE | NO_MATCH): [family queries, ...]}``.
+
+    A family is POSITIVE when any of its queries is a positive query and NO_MATCH otherwise, so a draw keeps
+    every language's positive-family count.
+    """
+    families = defaultdict(lambda: defaultdict(list))
     for query in queries:
-        groups[query["language"]][query["family"]].append(query)
-    return {language: [families[family] for family in sorted(families)]
-            for language, families in sorted(groups.items())}
+        families[query["language"]][query["family"]].append(query)
+    groups = defaultdict(list)
+    for language in sorted(families):
+        for family in sorted(families[language]):
+            members = families[language][family]
+            kind = POSITIVE if any(query_outcome(item)["kind"] == POSITIVE for item in members) else NO_MATCH
+            groups[(language, kind)].append(members)
+    return dict(sorted(groups.items()))
 
 
 def family_count(groups):
@@ -312,9 +329,16 @@ def _clone(picked_groups):
 
 
 def resample_families(groups, rng, picks=None):
-    """Draw whole families with replacement, separately inside every language."""
+    """Draw whole families with replacement, separately inside each (language, positive or no-match) group."""
     picks = draw_picks(groups, rng) if picks is None else picks
-    return _clone([groups[language][index] for language in groups for index in picks[language]])
+    return _clone([groups[key][index] for key in groups for index in picks[key]])
+
+
+def _resampled(groups, rng, population, picks=None):
+    sample = resample_families(groups, rng, picks)
+    if _positive_languages(sample) != population:
+        raise UndefinedResample("resample lost the positive queries of a language")
+    return sample
 
 
 def _interval(values, confidence):
@@ -339,12 +363,18 @@ def bootstrap_ci(queries, *, resamples, seed, confidence=0.95, statistics=headli
     if not groups:
         raise ValueError("bootstrap needs queries")
     rng = random.Random(seed)
-    draws = [statistics(resample_families(groups, rng)) for _ in range(resamples)]
+    population = _positive_languages(queries)
+    point = statistics(list(queries))
+    draws = []
+    for _ in range(resamples):
+        try:
+            draws.append(statistics(_resampled(groups, rng, population)))
+        except UndefinedResample:
+            draws.append({name: None for name in point})
     return {"unit": "family", "resamples": resamples, "seed": seed, "confidence": confidence,
             "families": family_count(groups),
-            "point": statistics(list(queries)),
-            "statistics": {name: _interval([draw[name] for draw in draws], confidence)
-                           for name in draws[0]}}
+            "point": point,
+            "statistics": {name: _interval([draw[name] for draw in draws], confidence) for name in point}}
 
 
 def paired_bootstrap_delta(primary, baseline, *, resamples, seed, confidence=0.95,
@@ -361,23 +391,28 @@ def paired_bootstrap_delta(primary, baseline, *, resamples, seed, confidence=0.9
                                                      "dialect", "judgments")):
             raise ValueError("paired pipelines disagree on query metadata or judgments")
     left_groups = _family_groups(list(primary))
-    right_groups = {language: [[right[query["queryId"]] for query in group] for group in families]
-                    for language, families in left_groups.items()}
+    right_groups = {key: [[right[query["queryId"]] for query in group] for group in families]
+                    for key, families in left_groups.items()}
+    population = _positive_languages(primary)
     rng = random.Random(seed)
+    point_a, point_b = statistics(list(primary)), statistics(list(baseline))
     deltas = []
     for _ in range(resamples):
         picks = draw_picks(left_groups, rng)
-        a = statistics(resample_families(left_groups, rng, picks))
-        b = statistics(resample_families(right_groups, rng, picks))
+        try:
+            a = statistics(_resampled(left_groups, rng, population, picks))
+            b = statistics(_resampled(right_groups, rng, population, picks))
+        except UndefinedResample:
+            deltas.append({name: None for name in point_a})
+            continue
         deltas.append({name: None if a[name] is None or b[name] is None else a[name] - b[name]
                        for name in a})
-    point_a, point_b = statistics(list(primary)), statistics(list(baseline))
     return {"unit": "family", "resamples": resamples, "seed": seed, "confidence": confidence,
             "families": family_count(left_groups),
             "point": {name: None if point_a[name] is None or point_b[name] is None
                       else point_a[name] - point_b[name] for name in point_a},
             "statistics": {name: _interval([draw[name] for draw in deltas], confidence)
-                           for name in deltas[0]}}
+                           for name in point_a}}
 
 
 # --- claim gates -----------------------------------------------------------------------------
@@ -496,12 +531,14 @@ def evaluate_claim_gates(summary, *, gates, minimum_counts, baselines=None, pair
     """
     per_group = {language: _group_result(core, gates, minimum_counts["perLanguage"])
                  for language, core in summary["perLanguage"].items()}
-    if "tsx" in summary["perDialect"]:
-        per_group["typescript:tsx"] = _group_result(summary["perDialect"]["tsx"], gates,
-                                                    minimum_counts["tsxDialect"])
-    else:
-        per_group["typescript:tsx"] = {"status": UNVALIDATED, "adequatelySampled": False,
-                                       "failedGates": [], "unevaluatedGates": ["minimumCounts"]}
+    dialect_minimum = {"tsx": minimum_counts["tsxDialect"], "ts": minimum_counts["perLanguage"]}
+    for dialect in DIALECTS:
+        name = "typescript:" + dialect
+        if dialect in summary["perDialect"]:
+            per_group[name] = _group_result(summary["perDialect"][dialect], gates, dialect_minimum[dialect])
+        else:
+            per_group[name] = {"status": UNVALIDATED, "adequatelySampled": False, "failedGates": [],
+                               "unevaluatedGates": ["minimumCounts"]}
     adequate = [language for language in summary["perLanguage"]
                 if per_group[language]["adequatelySampled"]]
     strata = {label: {"queries": core["counts"]["positiveQueries"] + core["counts"]["noMatchQueries"],
@@ -510,8 +547,9 @@ def evaluate_claim_gates(summary, *, gates, minimum_counts, baselines=None, pair
               for label, core in summary["perStratum"].items()}
     strata.update({label: {"queries": 0, "adequatelySampled": False}
                    for label in minimum_counts["perStratum"] if label not in strata})
-    required_groups = (*LANGUAGES, "typescript:tsx")
+    required_groups = (*LANGUAGES, "typescript:tsx", "typescript:ts")
     inadequate = [name for name in required_groups if not per_group.get(name, {}).get("adequatelySampled")]
+    inadequate += ["stratum:" + label for label, row in strata.items() if not row["adequatelySampled"]]
     group_failures = ["languageGate:" + name for name, result in per_group.items() if result["status"] == FAILED]
     if inadequate:
         unevaluated = ["minimumCounts:" + name for name in inadequate]

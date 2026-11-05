@@ -77,7 +77,7 @@ def no_match_set(language, count, *, prefix, alarms=0, dialect=None):
     for index in range(count):
         name = "%s-%s-nm%02d" % (prefix, language, index)
         rows.append(query(name, language=language, judgments={"a": N, "b": N},
-                          findings=["a"] if index < alarms else [], dialect=dialect))
+                          findings=["a"] if index < alarms else [], dialect=dialect, stratum="hard negative"))
     return rows
 
 

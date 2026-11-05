@@ -121,11 +121,18 @@ def fake_components(threshold=0.9, device="cpu"):
                       e3=HistogramEncoder("e3", shift=1, device=device), verifier=TrigramVerifier(threshold, device))
 
 
-def corpus_document(*, swap=False):
-    """Handcrafted corpus. ``swap`` mislabels the copies so the product precision drops to zero."""
-    gallery = [("g1", G1, "python", "ga"), ("g1b", G1, "python", "ga2"), ("g2", G2, "python", "gb"),
-               ("g3", G3, "python", "gc"), ("g4", G4, "python", "gd"), ("g5", G5, "python", "ge"),
-               ("j1", J1, "java", "gj1"), ("j2", J2, "java", "gj2")]
+def corpus_document(*, swap=False, extras=False):
+    """Handcrafted corpus. ``swap`` mislabels the copies so the product precision drops to zero.
+
+    ``extras`` adds one gallery file per query family (the relevant files of the swapped labels); ``swap``
+    implies them. Without them the gallery is the plain one used by the candidate-stage tests.
+    """
+    # A RELEVANT gallery file shares the family of its query; the other gallery files are negatives.
+    gallery = [("g1", G1, "python", "fa"), ("g1b", G1, "python", "fa"), ("g2", G2, "python", "gb"),
+               ("g3", G3, "python", "fb"), ("g4", G4, "python", "fc"), ("g5", G5, "python", "ge"),
+               ("j1", J1, "java", "fj"), ("j2", J2, "java", "gj2")]
+    if swap or extras:
+        gallery += [("g2a", G2, "python", "fa"), ("g2b", G2, "python", "fb"), ("g2c", G2, "python", "fc")]
     queries = [("qa", G1, "python", "fa", "exact copy"), ("qb", G3, "python", "fb", "exact copy"),
                ("qc", G4, "python", "fc", "exact copy"), ("qn1", NOVEL_1, "python", "fn1", "hard negative"),
                ("qn2", NOVEL_2, "python", "fn2", "hard negative"), ("qj", J1, "java", "fj", "exact copy")]
@@ -139,7 +146,7 @@ def corpus_document(*, swap=False):
     relevant = {"qa": {"g1", "g1b"}, "qb": {"g3"}, "qc": {"g4"}, "qn1": set(), "qn2": set(), "qj": {"j1"}}
     unknown = {"qa": {"g5"}, "qc": {"g5"}, "qn2": {"g5"}}
     if swap:
-        relevant["qa"], relevant["qb"], relevant["qc"] = {"g2"}, {"g2"}, {"g2"}
+        relevant = {"qa": {"g2a"}, "qb": {"g2b"}, "qc": {"g2c"}, "qn1": set(), "qn2": set(), "qj": {"j1"}}
     documents = []
     for name, _, language, family, stratum in queries:
         judgments = {}
@@ -232,7 +239,8 @@ class Workspace:
         sources = {fid(n): t for n, t in [("g1", G1), ("g1b", G1), ("g2", G2), ("g3", G3), ("g4", G4),
                                           ("g5", G5), ("j1", J1), ("j2", J2), ("file-qa", G1),
                                           ("file-qb", G3), ("file-qc", G4), ("file-qn1", NOVEL_1),
-                                          ("file-qn2", NOVEL_2), ("file-qj", J1)]}
+                                          ("file-qn2", NOVEL_2), ("file-qj", J1), ("g2a", G2), ("g2b", G2),
+                                          ("g2c", G2)]}
         texts.update(sources)
         self.materialise(texts)
         self.freeze()

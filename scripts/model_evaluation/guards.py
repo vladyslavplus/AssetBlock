@@ -5,6 +5,7 @@ role, manifest section or command-line argument raises, whatever flag accompanie
 No scoring of such material exists in this package. Nothing here opens a referenced file.
 """
 
+import os
 import re
 import unicodedata
 from pathlib import Path
@@ -227,21 +228,38 @@ def verify_manifest_bytes(raw, frozen_sha256):
     return value
 
 
+def ordinary_names(directory):
+    """Sorted entry names of ``directory`` without a restricted marker, and how many names were skipped.
+
+    Names come from ``os.listdir``. A restricted-named entry is dropped here by name, so no later call stats
+    or opens it.
+    """
+    if not Path(directory).is_dir():
+        return [], 0
+    names = sorted(os.listdir(directory))
+    kept = [name for name in names if not has_sealed_marker(name)]
+    return kept, len(names) - len(kept)
+
+
+def attempt_files(directory):
+    """The ordinary ``attempt-*.json`` files of a registry key directory."""
+    names, _ = ordinary_names(directory)
+    return [Path(directory) / name for name in names if name.startswith("attempt-") and name.endswith(".json")]
+
+
 def read_attempts(directory):
-    directory = Path(directory)
-    return [inputs.parse_json(entry.read_bytes(), "scoring attempt") for entry in sorted(directory.glob("attempt-*.json"))]
+    return [inputs.parse_json(path.read_bytes(), "scoring attempt") for path in attempt_files(directory)]
 
 
 MODEL_ORDER = ("e0", "e3", "verifier")
 
 
 def registered_run_ids(root):
-    """Run ids of every attempt in the registry, whatever the models."""
+    """Run ids of every attempt in the registry, whatever the models. Restricted-named key directories are skipped."""
     root = Path(root)
-    if not root.is_dir():
-        return set()
-    return {attempt["runId"] for directory in root.glob("*") if directory.is_dir()
-            for attempt in read_attempts(directory)}
+    names, _ = ordinary_names(root)
+    return {attempt["runId"] for name in names if (root / name).is_dir()
+            for attempt in read_attempts(root / name)}
 
 
 def model_triples(models):
@@ -264,7 +282,9 @@ def matching_attempts(root, package_triple_sha256, state_triple_sha256):
     therefore a further scoring run of the same models and needs a reason.
     """
     found = []
-    for directory in sorted(Path(root).glob("*")):
+    names, _ = ordinary_names(root)
+    for name in names:
+        directory = Path(root) / name
         if directory.is_dir():
             for attempt in read_attempts(directory):
                 if (attempt.get("packageTripleSha256") == package_triple_sha256

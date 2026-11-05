@@ -80,13 +80,14 @@ SUPPORTED = metrics.LANGUAGES
 BASELINES = tuple(manifest.REPLACEMENT_BASELINES)
 
 
-def all_languages(prefix="c", *, false_finding=(), alarms=()):
-    """Ten positive and five no-match queries in every supported language (TypeScript as TSX)."""
+def all_languages(prefix="c", *, false_finding=(), alarms=(), dialects=("ts", "tsx")):
+    """Ten positive and five no-match queries per language; TypeScript is split into the given dialects."""
     rows = []
     for language in SUPPORTED:
-        dialect = "tsx" if language == "typescript" else None
-        rows += positive_set(language, 10, prefix=prefix, false_finding=language in false_finding, dialect=dialect)
-        rows += no_match_set(language, 5, prefix=prefix, alarms=1 if language in alarms else 0, dialect=dialect)
+        for dialect in (dialects if language == "typescript" else (None,)):
+            tag = prefix if dialect is None else "%s-%s" % (prefix, dialect)
+            rows += positive_set(language, 10, prefix=tag, false_finding=language in false_finding, dialect=dialect)
+            rows += no_match_set(language, 5, prefix=tag, alarms=1 if language in alarms else 0, dialect=dialect)
     return dataset(rows)
 
 
@@ -138,6 +139,24 @@ class ClaimGateTests(unittest.TestCase):
             self.assertEqual(result["perGroup"][name]["status"], metrics.VALIDATED, name)
         self.assertEqual(result["overall"]["detector"]["status"], metrics.VALIDATED)
         self.assertEqual(result["overall"]["product"]["status"], metrics.VALIDATED)
+
+    def test_frozen_stratum_without_queries_makes_the_overall_claim_unvalidated(self):
+        minimum = minimum_counts()
+        minimum["perStratum"]["near miss"] = 5
+        summary = metrics.summarize(all_languages())
+        result = metrics.evaluate_claim_gates(summary, gates=GATES, minimum_counts=minimum, baselines=None,
+                                              paired_deltas=None, required_baselines=BASELINES)
+        self.assertFalse(result["strata"]["near miss"]["adequatelySampled"])
+        for claim in ("detector", "replacement", "product"):
+            self.assertEqual(result["overall"][claim]["status"], metrics.UNVALIDATED, claim)
+        self.assertIn("minimumCounts:stratum:near miss", result["overall"]["detector"]["unevaluatedGates"])
+
+    def test_tsx_only_typescript_positives_leave_the_ts_dialect_unvalidated(self):
+        result = self.evaluate(all_languages(dialects=("tsx",)))
+        self.assertEqual(result["perGroup"]["typescript:tsx"]["status"], metrics.VALIDATED)
+        self.assertEqual(result["perGroup"]["typescript:ts"]["status"], metrics.UNVALIDATED)
+        self.assertEqual(result["overall"]["detector"]["status"], metrics.UNVALIDATED)
+        self.assertIn("minimumCounts:typescript:ts", result["overall"]["detector"]["unevaluatedGates"])
 
     def test_one_adequate_language_alone_never_validates_overall(self):
         result = self.evaluate(validated_languages(), bootstrap={"resamples": 40, "seed": 1})
@@ -293,7 +312,7 @@ class ClaimGateTests(unittest.TestCase):
 
     def test_a_small_real_improvement_has_a_lower_bound_that_does_not_clear_zero(self):
         candidate = all_languages()
-        flawed = {"c-python-00", "c-python-01", "c-python-02"}
+        flawed = {"c-python-00", "c-python-01", "c-java-00"}
         slightly_worse = [{**row, "findings": ["r", "n"]} if row["queryId"] in flawed else row for row in candidate]
         replacement = self.evaluate(candidate, baselines={"PRODUCT": slightly_worse,
                                                           "TOKEN_RANK_CUT": slightly_worse})["overall"]["replacement"]
@@ -323,8 +342,8 @@ class ClaimGateTests(unittest.TestCase):
 
     def test_strata_adequacy_is_reported_with_denominators(self):
         result = self.evaluate(validated_languages())
-        self.assertEqual(result["strata"]["exact copy"], {"queries": 15, "adequatelySampled": True})
-        self.assertEqual(result["strata"]["hard negative"], {"queries": 0, "adequatelySampled": False})
+        self.assertEqual(result["strata"]["exact copy"], {"queries": 10, "adequatelySampled": True})
+        self.assertEqual(result["strata"]["hard negative"], {"queries": 5, "adequatelySampled": True})
 
 
 class SamplingStructureTests(unittest.TestCase):
@@ -341,13 +360,31 @@ class SamplingStructureTests(unittest.TestCase):
                 query("b", language="java", family="f2", seed="s1", judgments={"r": R})]
         self.assertEqual(len(metrics.normalize_queries(rows)), 2)
 
+    def test_every_resample_keeps_each_language_positive_family_count(self):
+        data = all_languages()
+        groups = metrics._family_groups(data)
+
+        def positive_family_counts(rows):
+            found = {}
+            for row in rows:
+                if metrics.query_outcome(row)["kind"] == metrics.POSITIVE:
+                    found[row["family"]] = row["language"]
+            return Counter(found.values())
+
+        expected = positive_family_counts(data)
+        for seed in range(60):
+            sample = metrics.resample_families(groups, random.Random(seed))
+            self.assertEqual(positive_family_counts(sample), expected, seed)
+
     def test_resampling_draws_families_inside_every_language(self):
-        groups = metrics._family_groups(all_languages())
+        data = all_languages()
+        groups = metrics._family_groups(data)
+        per_language = Counter(row["language"] for row in data)
         for seed in range(25):
             sample = metrics.resample_families(groups, random.Random(seed))
             drawn = Counter(row["language"] for row in sample)
             for language in SUPPORTED:
-                self.assertEqual(drawn[language], 15, (seed, language))
+                self.assertEqual(drawn[language], per_language[language], (seed, language))
 
 
 if __name__ == "__main__":
