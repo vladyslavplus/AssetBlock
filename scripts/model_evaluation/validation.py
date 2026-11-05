@@ -98,6 +98,10 @@ def limitations(manifest, prepared, result, registry_attempts, skipped_restricte
     short = sorted(language for language, flags in below["languages"].items() if any(flags.values()))
     notes.append("Languages below the frozen minimum counts: %s; languages without queries: %s." % (
         ", ".join(short) or "none", ", ".join(below["missingLanguages"]) or "none"))
+    dialects = [name.replace("Dialect", "") for name in ("tsxDialect", "tsDialect") if any(below[name].values())]
+    strata = sorted(label for label, short_stratum in below["strata"].items() if short_stratum)
+    notes.append("Dialects below the frozen minimum counts: %s; strata below the frozen minimum counts: %s." % (
+        ", ".join(dialects) or "none", ", ".join(strata) or "none"))
     notes.append("Independence of the evaluation set rests on the recorded family partitions and the frozen "
                  "excluded-source list; no owner decision is bound.")
     if registry_attempts > 1:

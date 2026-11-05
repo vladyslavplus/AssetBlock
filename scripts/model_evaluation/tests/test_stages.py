@@ -57,6 +57,7 @@ class PrepareTests(unittest.TestCase):
         self.assertTrue(below["tsxDialect"]["positiveQueries"])
         self.assertIn("java", prepared["counts"]["perLanguage"])
         self.assertEqual(below["missingLanguages"], ["csharp", "javascript", "typescript"])
+        self.assertTrue(below["tsDialect"]["positiveQueries"])
 
     def test_a_family_split_into_a_non_evaluation_partition_is_refused(self):
         def change(document):
@@ -73,6 +74,23 @@ class PrepareTests(unittest.TestCase):
         with self.assertRaises(ValueError) as context:
             self.ws.prepare(corpus=self.mutated(change))
         self.assertIn("partition", str(context.exception))
+
+    def test_a_null_gallery_partition_is_refused_as_a_value_error(self):
+        def change(document):
+            gallery = next(row for row in document["files"] if row["fileId"] == fid("g2"))
+            gallery["partition"] = None
+        with self.assertRaises(ValueError) as context:
+            self.ws.prepare(corpus=self.mutated(change))
+        self.assertIn("must be a string", str(context.exception))
+
+    def test_a_marker_named_gallery_partition_is_a_refusal_that_does_not_echo_the_name(self):
+        marker = "decoy-" + guards.SEAL
+        def change(document):
+            gallery = next(row for row in document["files"] if row["fileId"] == fid("g2"))
+            gallery["partition"] = marker
+        with self.assertRaises(guards.SealedInputRefused) as context:
+            self.ws.prepare(corpus=self.mutated(change))
+        self.assertNotIn(marker, str(context.exception))
 
     def test_relevant_gallery_file_must_share_the_query_family(self):
         def change(document):

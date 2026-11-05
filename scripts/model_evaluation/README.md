@@ -36,7 +36,7 @@ Run ids match `[A-Za-z0-9][A-Za-z0-9_-]{0,79}`.
 ### Corpus manifest
 
 `schema` `model-evaluation-corpus-v1`, `files` (`fileId` and `sha256` as 64 hex characters, `language`,
-`family`, `partition` in `train|validation|evaluation`, `kind` `gallery|query`, `source` naming the source repository, optional `dialect`) and `queries` (`queryId`,
+`family`, `partition` (only `evaluation` is accepted), `kind` `gallery|query`, `source` naming the source repository, optional `dialect`) and `queries` (`queryId`,
 `queryFileId`, `language`, `family`, `seedGroup`, `stratum`, `dialect` for TypeScript, `judgments`).
 Each judgment is `{label, provenance}` with a label of `RELEVANT`, `NOT_RELEVANT` or `UNKNOWN` and the
 pooling sources (`TOKEN`, `E0`, `E3`, `RANDOM_SAMPLE`, `EXHAUSTIVE`) that proposed the file. Gallery files
@@ -44,7 +44,7 @@ without a judgment become `UNKNOWN` (no provenance), never negatives; an explici
 judged-unknown. A query outside the closed role allowlist (`evaluation`),
 a file whose declared `source` is on the frozen `excludedSources` list (or is undeclared) or a judgment outside the
 query language gallery is refused. Every gallery file must be in the `evaluation` partition, and a `RELEVANT` judgment must name a gallery file whose family equals the query's family; `prepare` refuses both. Counts per
-language, stratum and TSX are compared with the frozen minimum counts and recorded as `belowMinimum`.
+language, stratum, TSX and TypeScript (`ts`) dialect are compared with the frozen minimum counts and recorded as `belowMinimum`.
 
 ### Pipelines
 
@@ -180,7 +180,7 @@ rule, its provenance names every system whose top-`depthK` holds it; the refusal
 
 ## Withheld material
 
-Final-test and sealed material is never read, listed, hashed or inspected by this package. A marker is refused
+Withheld-partition material is never stat-ed, opened, read or hashed by this package. A directory listing may return such a name: a run-root listing discards it by name, and a scoring registry refuses the whole listing. A marker is refused
 unconditionally; there is no flag or other form that admits it, and no scoring of such material exists here.
 Identifiers are normalised before the marker check (Unicode compatibility folding, removal of zero-width and
 combining characters, common Cyrillic and Greek lookalikes, case, separators, and the digit substitutions

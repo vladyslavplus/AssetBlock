@@ -241,9 +241,22 @@ def ordinary_names(directory):
     return kept, len(names) - len(kept)
 
 
+def refused_listing(directory):
+    """Sorted entry names of a scoring registry directory. A restricted-named entry refuses the registry.
+
+    The name alone decides: nothing under the entry is stat-ed or opened, and the name is not echoed.
+    """
+    if not Path(directory).is_dir():
+        return []
+    names = sorted(os.listdir(directory))
+    if any(has_sealed_marker(name) for name in names):
+        raise SealedInputRefused("scoring registry holds a restricted-named entry")
+    return names
+
+
 def attempt_files(directory):
-    """The ordinary ``attempt-*.json`` files of a registry key directory."""
-    names, _ = ordinary_names(directory)
+    """The ``attempt-*.json`` files of a registry key directory."""
+    names = refused_listing(directory)
     return [Path(directory) / name for name in names if name.startswith("attempt-") and name.endswith(".json")]
 
 
@@ -257,7 +270,7 @@ MODEL_ORDER = ("e0", "e3", "verifier")
 def registered_run_ids(root):
     """Run ids of every attempt in the registry, whatever the models. Restricted-named key directories are skipped."""
     root = Path(root)
-    names, _ = ordinary_names(root)
+    names = refused_listing(root)
     return {attempt["runId"] for name in names if (root / name).is_dir()
             for attempt in read_attempts(root / name)}
 
@@ -282,7 +295,7 @@ def matching_attempts(root, package_triple_sha256, state_triple_sha256):
     therefore a further scoring run of the same models and needs a reason.
     """
     found = []
-    names, _ = ordinary_names(root)
+    names = refused_listing(root)
     for name in names:
         directory = Path(root) / name
         if directory.is_dir():

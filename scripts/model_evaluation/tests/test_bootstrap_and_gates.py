@@ -3,7 +3,7 @@ import unittest
 from collections import Counter
 
 from scripts.model_evaluation import manifest, metrics
-from scripts.model_evaluation.tests._fixtures import N, R, minimum_counts, no_match_set, positive_set, query
+from scripts.model_evaluation.tests._fixtures import N, R, U, minimum_counts, no_match_set, positive_set, query
 
 GATES = manifest.CLAIM_GATES
 
@@ -149,6 +149,24 @@ class ClaimGateTests(unittest.TestCase):
         self.assertFalse(result["strata"]["near miss"]["adequatelySampled"])
         for claim in ("detector", "replacement", "product"):
             self.assertEqual(result["overall"][claim]["status"], metrics.UNVALIDATED, claim)
+        self.assertIn("minimumCounts:stratum:near miss", result["overall"]["detector"]["unevaluatedGates"])
+
+    def test_no_match_queries_without_full_review_do_not_fill_a_frozen_stratum(self):
+        minimum = minimum_counts()
+        minimum["perStratum"]["near miss"] = 5
+        rows = []
+        for language in SUPPORTED:
+            for dialect in (("ts", "tsx") if language == "typescript" else (None,)):
+                tag = "c" if dialect is None else "c-%s" % dialect
+                rows += positive_set(language, 10, prefix=tag, dialect=dialect)
+                rows += no_match_set(language, 5, prefix=tag, dialect=dialect)
+        unreviewed = [query("nm-unknown-%d" % index, judgments={"a": N, "b": U}, stratum="near miss")
+                      for index in range(5)]
+        summary = metrics.summarize(dataset(rows, unreviewed))
+        result = metrics.evaluate_claim_gates(summary, gates=GATES, minimum_counts=minimum, baselines=None,
+                                              paired_deltas=None, required_baselines=BASELINES)
+        self.assertFalse(result["strata"]["near miss"]["adequatelySampled"])
+        self.assertEqual(result["overall"]["detector"]["status"], metrics.UNVALIDATED)
         self.assertIn("minimumCounts:stratum:near miss", result["overall"]["detector"]["unevaluatedGates"])
 
     def test_tsx_only_typescript_positives_leave_the_ts_dialect_unvalidated(self):

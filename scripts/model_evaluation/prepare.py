@@ -53,8 +53,11 @@ def _validate_files(files, excluded_sources):
             raise ValueError("corpus file identity is duplicated")
         if row["language"] not in LANGUAGES or row["kind"] not in KINDS:
             raise ValueError("corpus file language or kind is unsupported")
+        if not isinstance(row["partition"], str):
+            raise ValueError("corpus file partition must be a string")
+        guards.refuse_sealed(roles=[row["partition"]])
         if row["partition"] != guards.CORPUS_ROLE:
-            raise ValueError("corpus file partition is not the evaluation partition: " + row["partition"])
+            raise ValueError("corpus file partition is not the evaluation partition")
         _text(row["family"], "family")
         by_id[row["fileId"]] = row
     return by_id
@@ -128,12 +131,15 @@ def below_minimum(summary, minimum_counts):
     languages = {language: short(core, minimum_counts["perLanguage"])
                  for language, core in summary["perLanguage"].items()}
     tsx = summary["perDialect"].get("tsx")
+    ts = summary["perDialect"].get("ts")
     strata = {label: (summary["perStratum"][label]["counts"]["positiveQueries"]
-                      + summary["perStratum"][label]["counts"]["noMatchQueries"]) < minimum
+                      + summary["perStratum"][label]["counts"]["noMatchFullyReviewed"]) < minimum
               if label in summary["perStratum"] else True
               for label, minimum in minimum_counts["perStratum"].items()}
     return {"languages": languages,
             "tsxDialect": short(tsx, minimum_counts["tsxDialect"]) if tsx else
+            {"positiveQueries": True, "families": True, "noMatchQueries": True},
+            "tsDialect": short(ts, minimum_counts["perLanguage"]) if ts else
             {"positiveQueries": True, "families": True, "noMatchQueries": True},
             "strata": strata,
             "missingLanguages": sorted(set(LANGUAGES) - set(summary["perLanguage"]))}

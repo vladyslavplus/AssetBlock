@@ -28,6 +28,19 @@ def run_recording_path_access(call):
     return result, touched
 
 
+def refusal_with_recorded_access(call):
+    """Run ``call``, which must refuse with SealedInputRefused; return (refused, every Path access)."""
+    touched = []
+    with contextlib.ExitStack() as stack:
+        for name in SPIED:
+            stack.enter_context(mock.patch.object(Path, name, _recording(name, getattr(Path, name), touched)))
+        try:
+            call()
+        except guards.SealedInputRefused:
+            return True, touched
+    return False, touched
+
+
 class ReadClosureTests(unittest.TestCase):
     """Restricted-named entries are skipped by name, before any stat or open."""
 
@@ -57,9 +70,9 @@ class ReadClosureTests(unittest.TestCase):
         self.assertFalse([item for item in touched if self.decoy in item[1]], touched)
         self.assertTrue([item for item in touched if "score-01" in item[1]])
 
-    def test_restricted_named_registry_directory_is_never_read(self):
-        registered, touched = run_recording_path_access(lambda: guards.registered_run_ids(self.registry))
-        self.assertEqual(registered, set())
+    def test_restricted_named_registry_entry_refuses_the_registry_without_stat_or_open(self):
+        refused, touched = refusal_with_recorded_access(lambda: guards.registered_run_ids(self.registry))
+        self.assertTrue(refused)
         self.assertFalse([item for item in touched if self.decoy in item[1]], touched)
 
     def test_ordinary_names_separates_kept_and_skipped_entries(self):
@@ -84,11 +97,21 @@ class RegistryAndListingTests(unittest.TestCase):
             directory.mkdir(parents=True)
             (directory / "attempt-0001.json").write_text(json.dumps(attempt), encoding="utf-8")
 
-    def test_matching_attempts_returns_ordinary_matches_and_never_opens_restricted_directories(self):
-        found, touched = run_recording_path_access(
+    def test_matching_attempts_refuses_a_restricted_named_registry_entry_without_opening_it(self):
+        refused, touched = refusal_with_recorded_access(
             lambda: guards.matching_attempts(self.registry, "p" * 64, "x" * 64))
-        self.assertEqual([attempt["runId"] for attempt in found], ["score-01"])
+        self.assertTrue(refused)
         self.assertFalse([item for item in touched if self.decoy in item[1]], touched)
+
+    def test_matching_attempts_returns_ordinary_matches_from_a_clean_registry(self):
+        clean = self.registry.parent / "clean-registry"
+        matched = {"runId": "score-01", "sequence": 1, "packageTripleSha256": "p" * 64, "stateTripleSha256": "s" * 64}
+        other = {"runId": "score-02", "sequence": 2, "packageTripleSha256": "q" * 64, "stateTripleSha256": "t" * 64}
+        for key, attempt in (("key-a", matched), ("key-b", other)):
+            (clean / key).mkdir(parents=True)
+            (clean / key / "attempt-0001.json").write_text(json.dumps(attempt), encoding="utf-8")
+        found, _ = run_recording_path_access(lambda: guards.matching_attempts(clean, "p" * 64, "x" * 64))
+        self.assertEqual([attempt["runId"] for attempt in found], ["score-01"])
 
     def test_attempt_listing_refuses_a_restricted_registered_attempt(self):
         restricted = {"runId": self.decoy, "sequence": 1, "manifestSha256": "0" * 64, "reason": "first",

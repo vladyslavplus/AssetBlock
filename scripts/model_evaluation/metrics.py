@@ -542,8 +542,9 @@ def evaluate_claim_gates(summary, *, gates, minimum_counts, baselines=None, pair
                                "unevaluatedGates": ["minimumCounts"]}
     adequate = [language for language in summary["perLanguage"]
                 if per_group[language]["adequatelySampled"]]
-    strata = {label: {"queries": core["counts"]["positiveQueries"] + core["counts"]["noMatchQueries"],
-                      "adequatelySampled": core["counts"]["positiveQueries"] + core["counts"]["noMatchQueries"]
+    strata = {label: {"queries": core["counts"]["positiveQueries"] + core["counts"]["noMatchFullyReviewed"],
+                      "adequatelySampled": core["counts"]["positiveQueries"]
+                      + core["counts"]["noMatchFullyReviewed"]
                       >= minimum_counts["perStratum"].get(label, math.inf)}
               for label, core in summary["perStratum"].items()}
     strata.update({label: {"queries": 0, "adequatelySampled": False}
