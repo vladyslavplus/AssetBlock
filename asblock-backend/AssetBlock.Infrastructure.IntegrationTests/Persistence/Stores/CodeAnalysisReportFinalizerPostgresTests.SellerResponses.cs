@@ -347,7 +347,8 @@ public sealed partial class CodeAnalysisReportFinalizerPostgresTests
         }
     }
 
-    private sealed record ResponseReviewSeed(SeedContext Source, Guid WorkspaceId, Guid ReportId, Guid[] Findings);
+    /// <summary>AcceptedBody is the exact finalization payload that the seed committed, for duplicate-delivery tests.</summary>
+    private sealed record ResponseReviewSeed(SeedContext Source, Guid WorkspaceId, Guid ReportId, Guid[] Findings, string AcceptedBody);
     private static ModerationFoundationStore ResponseStore(ApplicationDbContext db) => new(db, new AssetStore(db), new UserStore(db), new EfUnitOfWork(db));
     private static CodeAnalysisSellerStore ResponseAnalysisStore(ApplicationDbContext db) => new(db,
         Substitute.For<IAnalysisRunEnqueuer>(), Substitute.For<ISecurityProvenanceStore>(), Substitute.For<IAuditWriter>(), TimeProvider.System,
@@ -430,9 +431,10 @@ public sealed partial class CodeAnalysisReportFinalizerPostgresTests
             body["stages"]!.AsArray().Single(s => s!["stage"]!.GetValue<string>() == "UNION")!["counts"]!["unionFindings"] = 2;
         }
         var finalizer = new CodeAnalysisReportFinalizer(db, new CodeAnalysisReportValidator(), NullLogger<CodeAnalysisReportFinalizer>.Instance);
-        (await finalizer.FinalizeConfirmed(job.JobId, job.LeaseToken, PythonAnalysisEnvelope.RegenerateDerivedIdentity(body).ToJsonString())).Should().BeOfType<AssetProcessingJobOutcome.AtomicCommitted>();
+        var acceptedBody = PythonAnalysisEnvelope.RegenerateDerivedIdentity(body).ToJsonString();
+        (await finalizer.FinalizeConfirmed(job.JobId, job.LeaseToken, acceptedBody)).Should().BeOfType<AssetProcessingJobOutcome.AtomicCommitted>();
         Guid reportId = await db.CodeAnalysisReportHeaders.Select(h => h.Id).SingleAsync();
         Guid[] findings = await db.CodeAnalysisReportFindings.OrderBy(f => f.FindingKey).Select(f => f.Id).ToArrayAsync();
-        return new(seed, workspace.Id, reportId, findings);
+        return new(seed, workspace.Id, reportId, findings, acceptedBody);
     }
 }

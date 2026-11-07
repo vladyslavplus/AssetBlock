@@ -1,0 +1,209 @@
+"""Build and verify the authored demonstration fixtures.
+
+    python -B -m scripts.demonstration.fixtures build --out <dir>
+    python -B -m scripts.demonstration.fixtures verify --dir <dir>
+
+The builder writes deterministic ZIP archives (sorted entries, fixed 1980-01-01 timestamps, deflate,
+fixed Unix permissions, LF line endings) plus declaration.json and fixture-manifest.json. The unsafe
+archive is generated at build time only and is never stored in the repository. Fixtures are illustrative
+demonstration inputs. They must never be used for research training, evaluation or threshold tuning.
+"""
+
+import argparse
+import hashlib
+import io
+import json
+import sys
+import zipfile
+from pathlib import Path
+
+SOURCE_ROOT = Path(__file__).with_name("fixtures")
+MANIFEST_NAME = "fixture-manifest.json"
+DECLARATION_NAME = "declaration.json"
+MANIFEST_SCHEMA = "demonstration-fixture-manifest-v1"
+ZIP_TIMESTAMP = (1980, 1, 1, 0, 0, 0)
+UNIX_FILE_MODE = 0o644
+CREATE_SYSTEM_UNIX = 3
+USAGE_RESTRICTION = ("Illustrative demonstration inputs only. Never use for research training, evaluation, "
+                     "or threshold tuning.")
+UNSAFE_ENTRIES = (
+    ("README.txt", b"Demonstration traversal probe. Generated at build time. Contains no executable content.\n"),
+    ("../outside/traversal-probe.txt", b"This entry must be rejected by the archive inspection.\n"),
+)
+FIXTURE_IDS = ("clean-original", "declared-third-party", "independent-pair-a", "independent-pair-b",
+               "corrected-resubmission", "unsafe-archive")
+EXCLUDED_FROM_ARCHIVE = frozenset((DECLARATION_NAME,))
+SPECS = {
+    "clean-original": {
+        "purpose": "Plain authored utility library used as the clean base submission.",
+        "scenarios": ["D1", "D5", "D6", "D7", "D8", "D9"],
+        "expected_processing_state": "Archive and malware checks pass; required checks become successful; "
+                                     "no finding is promised.",
+        "rights": "Authored for the demonstration; public-domain style dedication (CC0 1.0 style) in LICENSE.txt.",
+        "provenance": "Authored by the demonstration fixture author.",
+    },
+    "declared-third-party": {
+        "purpose": "Clean base plus a stand-in third-party component with license text, notices and declared "
+                   "changes.",
+        "scenarios": ["D2"],
+        "expected_processing_state": "Declaration is accepted only with matching notices; a match is reported "
+                                     "only if a live analysis host with a reference index runs, which this "
+                                     "demonstration does not do.",
+        "rights": "The stand-in component is authored and MIT-licensed by the demonstration fixture author. "
+                  "It has no upstream project.",
+        "provenance": "Authored by the demonstration fixture author; declaration.json is an example for the "
+                      "seller declaration fields.",
+    },
+    "independent-pair-a": {
+        "purpose": "First of two separately authored implementations of one bounded moving-average task.",
+        "scenarios": ["D3"],
+        "expected_processing_state": "Checks pass; a similarity finding is possible only with a live reference "
+                                     "index and is not promised.",
+        "rights": "Authored for the demonstration; CC0 1.0 style dedication.",
+        "provenance": "Authored by the demonstration fixture author in the same session as pair B; see "
+                      "provenance.md. Independence is structural only.",
+    },
+    "independent-pair-b": {
+        "purpose": "Second implementation of the same task with a different structure and naming.",
+        "scenarios": ["D3"],
+        "expected_processing_state": "Checks pass; a similarity finding is possible only with a live reference "
+                                     "index and is not promised.",
+        "rights": "Authored for the demonstration; CC0 1.0 style dedication.",
+        "provenance": "Authored by the demonstration fixture author in the same session as pair A; see "
+                      "provenance.md. Independence is structural only.",
+    },
+    "corrected-resubmission": {
+        "purpose": "Byte-changing correction of clean-original (median of even-length lists), used as v2.",
+        "scenarios": ["D5", "D6"],
+        "expected_processing_state": "New version: archive and malware checks run again; approval is explicit.",
+        "rights": "Authored for the demonstration; CC0 1.0 style dedication.",
+        "provenance": "Authored by the demonstration fixture author as a correction of clean-original.",
+    },
+    "unsafe-archive": {
+        "purpose": "Archive with a path-traversal entry, generated at build time only.",
+        "scenarios": ["D4"],
+        "expected_processing_state": "Rejected by archive inspection with ARCHIVE_PATH_TRAVERSAL; no downstream "
+                                     "job.",
+        "rights": "Generated by the builder; contains no executable or malicious content.",
+        "provenance": "Generated by scripts/demonstration/fixtures.py at build time.",
+    },
+}
+
+
+def normalized_bytes(path):
+    return path.read_bytes().replace(b"\r\n", b"\n")
+
+
+def source_entries(directory):
+    """Sorted (archive name, bytes) pairs of an authored fixture directory."""
+    rows = []
+    for path in sorted(Path(directory).rglob("*")):
+        if not path.is_file() or "__pycache__" in path.parts or path.name in EXCLUDED_FROM_ARCHIVE:
+            continue
+        rows.append((path.relative_to(directory).as_posix(), normalized_bytes(path)))
+    return sorted(rows)
+
+
+def archive_bytes(entries):
+    """Deterministic ZIP bytes for (name, data) pairs."""
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(buffer, "w") as archive:
+        for name, data in sorted(entries):
+            info = zipfile.ZipInfo(name, date_time=ZIP_TIMESTAMP)
+            info.compress_type = zipfile.ZIP_DEFLATED
+            info.create_system = CREATE_SYSTEM_UNIX
+            info.external_attr = UNIX_FILE_MODE << 16
+            archive.writestr(info, data)
+    return buffer.getvalue()
+
+
+def fixture_entries(fixture_id):
+    if fixture_id == "unsafe-archive":
+        return list(UNSAFE_ENTRIES)
+    return source_entries(SOURCE_ROOT / fixture_id)
+
+
+def sha256(data):
+    return hashlib.sha256(data).hexdigest()
+
+
+def declaration_bytes():
+    """The declaration file is authored in the fixture tree and copied unchanged (normalized)."""
+    return normalized_bytes(SOURCE_ROOT / "declared-third-party" / DECLARATION_NAME)
+
+
+def build(out_dir):
+    out = Path(out_dir)
+    out.mkdir(parents=True, exist_ok=True)
+    fixtures = []
+    for fixture_id in FIXTURE_IDS:
+        entries = fixture_entries(fixture_id)
+        data = archive_bytes(entries)
+        name = fixture_id + ".zip"
+        (out / name).write_bytes(data)
+        spec = SPECS[fixture_id]
+        fixtures.append({
+            "id": fixture_id, "archive": name, "sha256": sha256(data), "bytes": len(data),
+            "purpose": spec["purpose"], "scenarios": spec["scenarios"],
+            "expected_processing_state": spec["expected_processing_state"], "rights": spec["rights"],
+            "provenance": spec["provenance"],
+            "entries": [{"name": entry, "bytes": len(content), "sha256": sha256(content)}
+                        for entry, content in sorted(entries)],
+        })
+    declaration = declaration_bytes()
+    (out / DECLARATION_NAME).write_bytes(declaration)
+    manifest = {"schema": MANIFEST_SCHEMA, "generator": "scripts/demonstration/fixtures.py",
+                "usage_restriction": USAGE_RESTRICTION, "fixtures": fixtures,
+                "declaration": {"file": DECLARATION_NAME, "sha256": sha256(declaration),
+                                "bytes": len(declaration),
+                                "purpose": "Example seller declaration for the declared-third-party fixture; "
+                                           "the field names follow the seller declaration payload."}}
+    (out / MANIFEST_NAME).write_text(json.dumps(manifest, indent=2, ensure_ascii=False) + "\n", encoding="utf-8",
+                                     newline="\n")
+    return manifest
+
+
+def verify(directory):
+    """Recompute hashes and entries; return a list of (fixture id or file, MATCH|MISMATCH) rows."""
+    root = Path(directory)
+    manifest = json.loads((root / MANIFEST_NAME).read_text(encoding="utf-8"))
+    rows = []
+    for fixture in manifest["fixtures"]:
+        path = root / fixture["archive"]
+        data = path.read_bytes() if path.is_file() else b""
+        ok = path.is_file() and sha256(data) == fixture["sha256"] and len(data) == fixture["bytes"]
+        if ok:
+            with zipfile.ZipFile(io.BytesIO(data)) as archive:
+                listed = [(info.filename, sha256(archive.read(info.filename))) for info in archive.infolist()]
+            ok = listed == [(entry["name"], entry["sha256"]) for entry in fixture["entries"]]
+        rows.append((fixture["id"], "MATCH" if ok else "MISMATCH"))
+    declaration = root / manifest["declaration"]["file"]
+    data = declaration.read_bytes() if declaration.is_file() else b""
+    rows.append((manifest["declaration"]["file"],
+                 "MATCH" if declaration.is_file() and sha256(data) == manifest["declaration"]["sha256"]
+                 else "MISMATCH"))
+    return rows
+
+
+def main(argv=None):
+    parser = argparse.ArgumentParser(prog="fixtures")
+    sub = parser.add_subparsers(dest="command", required=True)
+    build_parser = sub.add_parser("build")
+    build_parser.add_argument("--out", required=True)
+    verify_parser = sub.add_parser("verify")
+    verify_parser.add_argument("--dir", required=True)
+    args = parser.parse_args(argv)
+    if args.command == "build":
+        manifest = build(args.out)
+        for fixture in manifest["fixtures"]:
+            print("%s %s %d bytes" % (fixture["archive"], fixture["sha256"], fixture["bytes"]))
+        print("manifest written to %s" % (Path(args.out) / MANIFEST_NAME))
+        return 0
+    rows = verify(args.dir)
+    for name, status in rows:
+        print("%s %s" % (status, name))
+    return 0 if all(status == "MATCH" for _, status in rows) else 1
+
+
+if __name__ == "__main__":
+    sys.exit(main())

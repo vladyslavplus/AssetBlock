@@ -24,7 +24,10 @@ import {
   parsePublishVersionMetadata,
   validateArchiveUploadFilename,
 } from '../lib/seller/seller-multipart-schemas.ts'
-import { pagedNotificationsSchema } from '../lib/notifications/notification-types.ts'
+import {
+  moderationCaseChangedMessageSchema,
+  pagedNotificationsSchema,
+} from '../lib/notifications/notification-types.ts'
 import { tokensResponseSchema } from '../lib/auth/tokens-schema.ts'
 import {
   sellerAnalysisFindingsPageSchema,
@@ -121,14 +124,26 @@ const collectionDetail = {
   ],
 }
 
+function corsHeaders(res) {
+  const origin = res.req?.headers.origin
+  const requestHeaders = res.req?.headers['access-control-request-headers']
+  return {
+    'Access-Control-Allow-Origin': origin ?? '*',
+    ...(origin ? { 'Access-Control-Allow-Credentials': 'true', Vary: 'Origin' } : {}),
+    'Access-Control-Allow-Headers':
+      requestHeaders ?? 'content-type,authorization,x-requested-with,x-signalr-user-agent',
+    'Access-Control-Allow-Methods': 'GET,POST,PUT,PATCH,DELETE,OPTIONS',
+  }
+}
+
+function sendText(res, status, body) {
+  res.writeHead(status, { ...corsHeaders(res), 'Content-Type': 'text/plain; charset=UTF-8' })
+  res.end(body)
+}
+
 function send(res, status, body) {
   const json = JSON.stringify(body)
-  res.writeHead(status, {
-    'Content-Type': 'application/json',
-    'Access-Control-Allow-Origin': '*',
-    'Access-Control-Allow-Headers': 'content-type,authorization',
-    'Access-Control-Allow-Methods': 'GET,POST,PUT,PATCH,DELETE,OPTIONS',
-  })
+  res.writeHead(status, { ...corsHeaders(res), 'Content-Type': 'application/json' })
   res.end(json)
 }
 
@@ -146,6 +161,25 @@ const sessionUser = {
 }
 const refreshByToken = Object.create(null)
 const mutationReceipts = new Map()
+const signalRConnections = new Map()
+const signalRStats = {
+  tokenRequests: 0,
+  negotiations: 0,
+  polls: 0,
+  transportPosts: 0,
+  handshakeBodyBytes: 0,
+  handshakes: 0,
+}
+
+function sendSignalREvent(connection, event) {
+  if (connection.pendingPoll) {
+    const response = connection.pendingPoll
+    connection.pendingPoll = null
+    sendText(response, 200, event)
+  } else {
+    connection.messages.push(event)
+  }
+}
 
 const e2eResetRequestSchema = z
   .object({
@@ -192,6 +226,7 @@ const journey = {
   workspaceRevision: 1,
   evidenceRevision: 0,
   notificationRead: false,
+  publicVersionId: null,
 }
 let versionJourneys = new Map()
 
@@ -214,8 +249,9 @@ function resetJourney(body = {}) {
   journey.coverageLevel = journey.name === 'coverage' ? 'PARTIAL' : 'FULL'
   journey.coverageAssessed = false
   journey.workspaceRevision = 1
-  journey.evidenceRevision = 0
+  journey.evidenceRevision = body.answered === true ? 1 : 0
   journey.notificationRead = false
+  journey.publicVersionId = null
   mutationReceipts.clear()
   versionJourneys = new Map()
   if (journey.name === 'approved-v1-pending-v2') {
@@ -751,6 +787,12 @@ async function readJson(req) {
   }
 }
 
+async function readRaw(req) {
+  const chunks = []
+  for await (const chunk of req) chunks.push(chunk)
+  return Buffer.concat(chunks).toString('utf8')
+}
+
 const server = http.createServer((req, res) => {
   const url = new URL(req.url ?? '/', `http://127.0.0.1:${PORT}`)
   const pathname = url.pathname
@@ -758,6 +800,74 @@ const server = http.createServer((req, res) => {
   if (req.method === 'OPTIONS') {
     send(res, 204, {})
     return
+  }
+
+  if (pathname === '/hubs/notifications/negotiate' && req.method === 'POST') {
+    signalRStats.negotiations += 1
+    const connectionId = 'playwright-notification-connection'
+    signalRConnections.set(connectionId, {
+      messages: [],
+      pendingPoll: null,
+      initialPoll: true,
+      handshaken: false,
+    })
+    send(res, 200, {
+      negotiateVersion: 1,
+      connectionId,
+      connectionToken: connectionId,
+      availableTransports: [{ transport: 'LongPolling', transferFormats: ['Text'] }],
+    })
+    return
+  }
+
+  if (pathname === '/hubs/notifications' && url.searchParams.has('id')) {
+    const connection = signalRConnections.get(url.searchParams.get('id'))
+    if (!connection) {
+      send(res, 404, {})
+      return
+    }
+    if (req.method === 'GET') {
+      signalRStats.polls += 1
+      const message = connection.messages.shift()
+      if (message) {
+        sendText(res, 200, message)
+      } else if (connection.initialPoll) {
+        connection.initialPoll = false
+        sendText(res, 200, '')
+      } else if (connection.pendingPoll) {
+        sendText(connection.pendingPoll, 200, '')
+        connection.pendingPoll = res
+      } else {
+        // LongPolling's initial request completes transport setup before the hub handshake.
+        connection.pendingPoll = res
+        res.on('close', () => {
+          if (connection.pendingPoll === res) connection.pendingPoll = null
+        })
+      }
+      return
+    }
+    if (req.method === 'POST') {
+      void readRaw(req).then((message) => {
+        signalRStats.transportPosts += 1
+        signalRStats.handshakeBodyBytes = Buffer.byteLength(message)
+        if (message.includes('"protocol":"json"')) {
+          signalRStats.handshakes += 1
+          connection.handshaken = true
+          sendSignalREvent(connection, '{}\u001e')
+        }
+        send(res, 200, {})
+      })
+      return
+    }
+    if (req.method === 'DELETE') {
+      if (connection.pendingPoll) {
+        send(connection.pendingPoll, 204, {})
+        connection.pendingPoll = null
+      }
+      signalRConnections.delete(url.searchParams.get('id'))
+      send(res, 202, {})
+      return
+    }
   }
 
   if (pathname === '/health') {
@@ -769,15 +879,75 @@ const server = http.createServer((req, res) => {
     void readValidatedJson(req, res, e2eResetRequestSchema).then((body) => {
       if (!body) return
       resetJourney(body)
+      signalRConnections.clear()
+      signalRStats.tokenRequests = 0
+      signalRStats.negotiations = 0
+      signalRStats.polls = 0
+      signalRStats.transportPosts = 0
+      signalRStats.handshakeBodyBytes = 0
+      signalRStats.handshakes = 0
       checked(res, 200, { ok: true }, e2eResetResponseSchema, 'reset')
     })
     return
   }
 
+  if (pathname === '/__e2e/role' && req.method === 'POST') {
+    void readJson(req).then((body) => {
+      if (body.role !== 'User' && body.role !== 'Moderator') {
+        send(res, 400, { error: 'Invalid test role.' })
+        return
+      }
+      journey.role = body.role
+      send(res, 200, { ok: true })
+    })
+    return
+  }
+
+  if (pathname === '/__e2e/state' && req.method === 'POST') {
+    void readJson(req).then((body) => {
+      if (body.state !== 'APPROVED') {
+        send(res, 400, { error: 'Unsupported test state.' })
+        return
+      }
+      journey.state = body.state
+      journey.outcome = body.state
+      journey.publicVersionId = versionId
+      journey.activeSubmission = null
+      send(res, 200, { ok: true })
+    })
+    return
+  }
+
   if (pathname === '/__e2e/event' && req.method === 'POST') {
-    // The deterministic stub has no SignalR transport; callers can still use
-    // this endpoint to advance data before a page-level refetch assertion.
-    void readJson(req).then(() => send(res, 204, {}))
+    void readJson(req).then((body) => {
+      const parsed = moderationCaseChangedMessageSchema.safeParse(body)
+      if (!parsed.success) {
+        send(res, 400, { error: 'Invalid moderation notification fixture.' })
+        return
+      }
+      journey.state = parsed.data.state
+      journey.caseRevision = parsed.data.revision
+      if (journey.activeSubmission) {
+        journey.activeSubmission.state = parsed.data.state
+        journey.activeSubmission.caseRevision = parsed.data.revision
+      }
+      const event = `${JSON.stringify({
+        type: 1,
+        target: 'ModerationCaseChanged',
+        arguments: [parsed.data],
+      })}\u001e`
+      for (const connection of signalRConnections.values()) sendSignalREvent(connection, event)
+      send(res, 204, {})
+    })
+    return
+  }
+
+  if (pathname === '/__e2e/signalr' && req.method === 'GET') {
+    send(res, 200, {
+      connected: [...signalRConnections.values()].filter((connection) => connection.handshaken)
+        .length,
+      ...signalRStats,
+    })
     return
   }
 
@@ -789,6 +959,17 @@ const server = http.createServer((req, res) => {
   if (pathname === '/debug/auth') {
     const token = url.searchParams.get('token') ?? ''
     send(res, 200, refreshByToken[token] ?? { ok: 0, fail: 0 })
+    return
+  }
+
+  if (pathname === '/api/auth/signalr-access' && req.method === 'GET') {
+    send(res, 200, { hubToken: 'playwright-hub-token' })
+    return
+  }
+
+  if (pathname === '/api/auth/signalr-token' && req.method === 'POST') {
+    signalRStats.tokenRequests += 1
+    send(res, 200, { hubToken: 'playwright-hub-token', expiresAt: '2026-01-04T00:00:00Z' })
     return
   }
 
@@ -1112,6 +1293,10 @@ const server = http.createServer((req, res) => {
         if (!body) return
         const respond = beginMutation(res, pathname, body)
         if (!respond) return
+        if (journey.name === 'decision-session-expired') {
+          send(res, 401, { title: 'Session expired', code: 'ERR_AUTH_TOKEN_EXPIRED' })
+          return
+        }
         if (journey.staleDecision) {
           journey.caseRevision += 1
           send(res, 409, { title: 'Case changed', code: 'ERR_MODERATION_CASE_STALE' })
@@ -1139,6 +1324,7 @@ const server = http.createServer((req, res) => {
               ? 'APPROVED'
               : body.outcome
         journey.state = journey.outcome
+        if (journey.outcome === 'APPROVED') journey.publicVersionId = versionId
         respond(
           200,
           {
@@ -1210,6 +1396,10 @@ const server = http.createServer((req, res) => {
   }
 
   if (pathname === `/api/assets/${assetId}`) {
+    if (['moderator-approval'].includes(journey.name) && journey.publicVersionId !== versionId) {
+      send(res, 404, { title: 'Not found', code: 'ERR_ASSET_NOT_FOUND' })
+      return
+    }
     send(res, 200, assetDetail)
     return
   }
@@ -1446,6 +1636,24 @@ const server = http.createServer((req, res) => {
 
   send(res, 404, { title: 'Not found' })
 })
+
+let shuttingDown = false
+const shutdown = () => {
+  if (shuttingDown) return
+  shuttingDown = true
+  process.stdin.pause()
+  if (!server.listening) return
+  server.close(() => {
+    process.exitCode = 0
+  })
+  server.closeAllConnections()
+}
+
+process.stdin.resume()
+process.stdin.once('end', shutdown)
+process.stdin.once('close', shutdown)
+process.once('SIGINT', shutdown)
+process.once('SIGTERM', shutdown)
 
 server.listen(PORT, '127.0.0.1', () => {
   process.stdout.write(`playwright stub API listening on 127.0.0.1:${PORT}\n`)

@@ -1,0 +1,16 @@
+Demonstration fixtures notice
+
+Every fixture source file under this directory was written by the demonstration fixture author for the
+AssetBlock demonstration. The authored files are released under a public-domain style dedication
+(CC0 1.0 Universal style). No file was copied from a third-party project.
+
+The stand-in third-party component under declared-third-party/vendor/stand-in-moving-average is also authored
+for the demonstration. It is licensed under the MIT license as stated in its own LICENSE.txt. It has no
+upstream project, no upstream revision and no upstream maintainer. Its declared source URL and version string
+are labelled stand-ins and must not be read as references to a real project.
+
+The unsafe archive used by the upload-safety scenario is not stored here. scripts/demonstration/fixtures.py
+generates it at build time with a path-traversal entry. It contains no executable or malicious content.
+
+Fixtures are illustrative demonstration inputs only. They must never be used for research training,
+evaluation, or threshold tuning.

@@ -32,6 +32,10 @@ score thresholds, a per-query token-rank top-1 cut, and retrieval-list controls.
 score threshold; its headline F1 must be read as a top-1 rank baseline. Latency excludes tokenization and E0 window
 alignment. Research evaluation does not authorize product use or checkpoint redistribution.
 
+## Model evaluation tooling
+
+The local retrieval evaluation harness is validated on synthetic fixtures, but no held-out source corpus has been admitted and no model-quality result is available. Its command stages do not imply a completed evaluation or authorize product use.
+
 ## Backend (`asblock-backend`)
 
 **Stack:** .NET 10, ASP.NET Core Web API, **Clean Architecture** (Domain / Application / Infrastructure / WebApi), CQRS-style use cases with an in-process mediator, **FluentValidation**, **Ardalis.Result**, Entity Framework Core with PostgreSQL (catalog FTS via `tsvector` + `pg_trgm`), optional **Redis-protocol caching** (local Valkey), **provider-selectable S3-compatible storage** (SeaweedFS by default locally; MinIO via Compose profile) for encrypted asset storage, **Stripe** Checkout and webhooks, **SignalR** for real-time notifications, **Serilog** for structured logging.
@@ -88,6 +92,7 @@ Seller-facing analytics live under **`/sell` → Analytics** (UTC date ranges, g
 - **Interactive API:** Swagger UI when the Web API is running in Development.
 - **Liveness:** `GET /health/live` checks that the API process can serve requests.
 - **Readiness:** `GET /health/ready` checks PostgreSQL, the configured storage provider, and Redis connection when configured (Valkey locally).
+- **Demonstration runbook:** `docs/demonstration.md`; scenario runner `scripts/demonstration/run_scenarios.py` (lanes, counts and limitations).
 
 ## Contributing / quality
 

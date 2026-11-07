@@ -9,7 +9,9 @@ using Microsoft.Extensions.DependencyInjection.Extensions;
 namespace AssetBlock.WebApi.IntegrationTests.Support;
 
 /// <summary>WebApplicationFactory with Postgres connection string and integration-only settings.</summary>
-public sealed class AssetBlockWebApplicationFactory(string connectionString) : WebApplicationFactory<Program>
+public sealed class AssetBlockWebApplicationFactory(
+    string connectionString,
+    IReadOnlyDictionary<string, string?>? settings = null) : WebApplicationFactory<Program>
 {
     internal const string TEST_ANALYTICS_BFF_SIGNING_SECRET =
         "integration_test_analytics_bff_signing_secret_32chars";
@@ -19,6 +21,7 @@ public sealed class AssetBlockWebApplicationFactory(string connectionString) : W
     private const string TEST_ENCRYPTION_KEY_BASE64 = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=";
 
     private readonly string _connectionString = connectionString ?? throw new ArgumentNullException(nameof(connectionString));
+    private readonly IReadOnlyDictionary<string, string?> _settings = settings ?? new Dictionary<string, string?>();
 
     private RecordingEmailSender RecordingEmailSender { get; } = new();
 
@@ -72,6 +75,10 @@ public sealed class AssetBlockWebApplicationFactory(string connectionString) : W
             "DataProtection:KeysPath",
             Path.Combine(Path.GetTempPath(), $"assetblock-dataprotection-keys-{Guid.NewGuid():N}"));
         builder.UseSetting("DataProtection:ProtectionMode", "None");
+        foreach (var key in _settings.Keys)
+        {
+            builder.UseSetting(key, _settings[key] ?? string.Empty);
+        }
 
         builder.ConfigureTestServices(services =>
         {

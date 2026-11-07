@@ -14,6 +14,7 @@ export default defineConfig({
   reporter: process.env.CI ? [['github'], ['html', { open: 'never' }]] : [['list']],
   timeout: 60_000,
   expect: { timeout: 10_000 },
+  globalSetup: './e2e/next-server.mjs',
   use: {
     baseURL,
     trace: 'retain-on-failure',
@@ -23,19 +24,4 @@ export default defineConfig({
     viewport: { width: 1280, height: 720 },
   },
   projects: [{ name: 'chromium', use: { ...devices['Desktop Chrome'] } }],
-  webServer: [
-    {
-      command:
-        'node --experimental-strip-types --experimental-loader ./e2e/schema-loader.mjs e2e/stub-api.mjs',
-      url: 'http://127.0.0.1:3999/health',
-      reuseExistingServer: false,
-      timeout: 30_000,
-    },
-    {
-      command: 'node e2e/next-server.mjs',
-      url: baseURL,
-      reuseExistingServer: false,
-      timeout: 180_000,
-    },
-  ],
 })

@@ -2,10 +2,12 @@
 
 This is a navigation map, not a copy of implementation or a completion ledger. Paths are repository-relative. Read only the row relevant to the task, then confirm current code and callers. Update this map when a mapped entry point moves or a trust boundary changes.
 
+Demonstration runbook and scenario evidence: `docs/demonstration.md`; runner `scripts/demonstration/run_scenarios.py`.
+
 | Concern | Backend entry and implementation | Frontend entry | Invariant / focused evidence |
 | --- | --- | --- | --- |
 | Authentication/session | `asblock-backend/AssetBlock.WebApi/Controllers/AuthController.cs`; `AssetBlock.Application/UseCases/Auth/` | `asblock-frontend/app/api/auth/`; `lib/server/refresh-session.ts`, `backend-authorized.ts`, `auth-cookies.ts` | Tokens remain behind BFF cookies; inspect auth/session helper tests and matching WebApi tests. |
-| Catalog/detail/search | `AssetsController.cs`; `UseCases/Assets/GetAssets/`; `AssetBlock.Infrastructure/Persistence/Stores/AssetStore.cs` | `app/assets/`; `lib/catalog/` | Public visibility requires nondeleted/current READY; exact lexical pagination and bounded relevance have different contracts. |
+| Catalog/detail/search | `AssetsController.cs`; `UseCases/Assets/GetAssets/`; `AssetBlock.Infrastructure/Persistence/Stores/AssetStore.cs` | `app/assets/`; `lib/catalog/` | Public visibility requires a nondeleted asset whose approved trusted publication snapshot is READY, has no safety restriction and matches the content (`Persistence/Publication/PublicationEligibilityQuery.cs`); exact lexical pagination and bounded relevance have different contracts. |
 | Upload/version processing | `AssetsController.cs`, `UsersController.cs`; `UseCases/Assets/UploadAsset/`, `PublishAssetVersion/`; `Infrastructure/HostedServices/AssetProcessing/` | `app/sell/`; draft-first flow: `components/sell/asset-upload-form.tsx` (creates draft without file), `asset-edit-form.tsx` (material/price saves), `source-declaration-editor.tsx` (declaration CAS saves), `publish-version-form.tsx` (workspace-scoped upload), `version-checks-panel.tsx` (checks/publication summary); `lib/seller/` schemas/queries | Encrypt before storage; processing precedes publication and READY never proves publication (approved public offering identity comes from the owner-safe `PublicVersionId` projection in seller DTOs); uploads must carry the fresh `workspaceId` + `expectedWorkspaceRevision` (409 stale keeps input). |
 | Users role management and moderation access | `AdminUsersController.cs` (GET users, PATCH role with `expectedRoleRevision`, User/Moderator only) | `app/admin/` Users tab (`components/admin/admin-users-section.tsx`, `lib/admin/admin-users-query.ts`); `app/moderation/layout.tsx` role guard | Admin assignment uses CAS (`expectedRoleRevision`); Admin rows protected; `/moderation` requires Moderator role (Admin without Moderator is denied); client guards are UX only, backend authorization is authoritative. |
 | Copilot | `UseCases/Assets/EnqueueListingCopilot/`; `Infrastructure/HostedServices/AssetProcessing/Handlers/ListingCopilotJobHandler.cs` | `components/sell/listing-copilot-panel.tsx` | Sanitized bounded inputs, taxonomy allowlist, selective apply; no automatic save/publication. |
@@ -23,6 +25,10 @@ This is a navigation map, not a copy of implementation or a completion ledger. P
 Backend paths after the first row are relative to `asblock-backend/AssetBlock.WebApi/Controllers/`, `AssetBlock.Application/`, or `AssetBlock.Infrastructure/` as indicated. Search exact symbols when a feature folder differs; never infer absence from this abbreviated map.
 
 Backend tests mirror production areas under `AssetBlock.Application.Tests`, `AssetBlock.Infrastructure.Tests`, `AssetBlock.Infrastructure.IntegrationTests`, `AssetBlock.WebApi.Tests`, and `AssetBlock.WebApi.IntegrationTests`. Frontend tests are feature-local `.test.ts`/`.test.tsx`; browser flows are in `asblock-frontend/e2e/`. Test existence is not passing evidence.
+
+## Model evaluation harness
+
+The local CLI entry point is `python -m scripts.model_evaluation` (`scripts/model_evaluation/cli.py`). Stages are `freeze`, `prepare`, `candidates`, `score`, `validate-evidence`, `parity`, and `models-check`; the package README documents each command. Use `artifacts/code_analysis/env/ml/Scripts/python.exe` for CPU and evidence stages and the existing `artifacts/feasibility_pilot/env/ml/Scripts/python.exe` for encoder stages. Package tests use `artifacts/code_analysis/env/ml/Scripts/python.exe -B -m unittest discover -s scripts/model_evaluation/tests -t .`. Synthetic harness validation is not held-out evaluation: no source corpus is admitted and no model-quality result is available.
 
 ## Isolated code analysis tooling
 

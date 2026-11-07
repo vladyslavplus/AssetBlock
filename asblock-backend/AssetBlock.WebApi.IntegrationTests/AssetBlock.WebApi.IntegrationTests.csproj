@@ -28,6 +28,7 @@
 
     <ItemGroup>
         <Compile Include="..\AssetBlock.Infrastructure.IntegrationTests\Support\AdmittedReportTestEvidence.cs" Link="Support\AdmittedReportTestEvidence.cs" />
+        <Compile Include="..\AssetBlock.Infrastructure.IntegrationTests\Support\ClamAvTestSupport.cs" Link="Support\ClamAvTestSupport.cs" />
     </ItemGroup>
 
 </Project>
